@@ -1,0 +1,103 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Prismedia: API",
+      "type": "dotnet",
+      "request": "launch",
+      "projectPath": "${workspaceFolder}/apps/backend/src/Prismedia.Api/Prismedia.Api.csproj",
+      "preLaunchTask": "Prismedia: Docker Up"
+    },
+    {
+      "name": "Prismedia: Worker",
+      "type": "dotnet",
+      "request": "launch",
+      "projectPath": "${workspaceFolder}/apps/backend/src/Prismedia.Worker/Prismedia.Worker.csproj",
+      "preLaunchTask": "Prismedia: Docker Up"
+    },
+    {
+      "name": "Prismedia: Chrome",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:8008",
+      "webRoot": "${workspaceFolder}/apps/web-svelte",
+      "sourceMaps": true
+    },
+    {
+      "name": "Prismedia: Kill Orphans",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["dev:kill"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "name": "Prismedia Docs: Dev Site",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "docs:dev",
+        "--",
+        "--port",
+        "3010",
+        "--host",
+        "127.0.0.1"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"],
+      "serverReadyAction": {
+        "pattern": "(https?://127\\.0\\.0\\.1:3010/Prismedia/)",
+        "uriFormat": "%s",
+        "action": "openExternally"
+      }
+    },
+    {
+      "name": "Prismedia Docs: Preview Build",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "docs:serve",
+        "--",
+        "--port",
+        "3010",
+        "--host",
+        "127.0.0.1"
+      ],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**"],
+      "preLaunchTask": "Prismedia Docs: Build",
+      "serverReadyAction": {
+        "pattern": "(https?://127\\.0\\.0\\.1:3010/Prismedia/)",
+        "uriFormat": "%s",
+        "action": "openExternally"
+      }
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Prismedia: Full Stack",
+      "configurations": [
+        "Prismedia: API",
+        "Prismedia: Worker"
+      ],
+      "preLaunchTask": "Prismedia: Full Prebuild",
+      "stopAll": true
+    },
+    {
+      "name": "Prismedia: Full Stack + Chrome",
+      "configurations": [
+        "Prismedia: API",
+        "Prismedia: Worker",
+        "Prismedia: Chrome"
+      ],
+      "preLaunchTask": "Prismedia: Full Prebuild",
+      "stopAll": true
+    }
+  ]
+}

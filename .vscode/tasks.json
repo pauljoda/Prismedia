@@ -1,0 +1,104 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Prismedia: Docker Up",
+      "type": "shell",
+      "command": "docker compose -f infra/docker/docker-compose.yml up -d postgres",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared"
+      },
+      "problemMatcher": [],
+      "detail": "Boots the dev Postgres container."
+    },
+    {
+      "label": "Prismedia: Vite Dev",
+      "type": "shell",
+      "command": "pnpm --filter @prismedia/web-svelte dev",
+      "options": { "cwd": "${workspaceFolder}" },
+      "isBackground": true,
+      "problemMatcher": {
+        "pattern": { "regexp": "^$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^\\s*VITE",
+          "endsPattern": "Local:\\s+http"
+        }
+      },
+      "presentation": {
+        "reveal": "silent",
+        "panel": "dedicated",
+        "group": "prismedia-dev"
+      },
+      "detail": "Starts the Vite dev server with HMR on port 5173. The .NET API on 8008 proxies page requests here."
+    },
+    {
+      "label": "Prismedia: Web Build",
+      "type": "shell",
+      "command": "pnpm --filter @prismedia/web-svelte build",
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": "build",
+      "problemMatcher": [],
+      "detail": "Production-builds the Svelte SPA into apps/web-svelte/build."
+    },
+    {
+      "label": "Prismedia: .NET Build",
+      "type": "shell",
+      "command": "dotnet build apps/backend/Prismedia.slnx",
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": "build",
+      "problemMatcher": "$msCompile",
+      "detail": "Builds the entire .NET backend solution."
+    },
+    {
+      "label": "Prismedia: .NET Test",
+      "type": "shell",
+      "command": "dotnet test apps/backend/Prismedia.slnx",
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": "test",
+      "problemMatcher": "$msCompile",
+      "detail": "Runs all .NET backend tests."
+    },
+    {
+      "label": "Prismedia: Full Stack Launch",
+      "dependsOn": [
+        "Prismedia: Docker Up",
+        "Prismedia: Vite Dev",
+        "Prismedia: .NET Build"
+      ],
+      "dependsOrder": "parallel",
+      "problemMatcher": [],
+      "detail": "Boots Postgres, starts the Vite dev server (HMR), and compiles the .NET backend in parallel."
+    },
+    {
+      "label": "Prismedia: Full Prebuild",
+      "dependsOn": [
+        "Prismedia: Kill Orphans",
+        "Prismedia: Full Stack Launch"
+      ],
+      "dependsOrder": "sequence",
+      "problemMatcher": [],
+      "detail": "Clears stale dev processes, then boots Postgres, starts Vite, and compiles the .NET backend."
+    },
+    {
+      "label": "Prismedia Docs: Build",
+      "type": "shell",
+      "command": "pnpm docs:build",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "detail": "Builds the Docusaurus documentation site."
+    },
+    {
+      "label": "Prismedia: Kill Orphans",
+      "type": "shell",
+      "command": "bash scripts/dev/kill-orphans.sh",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "detail": "Kills orphaned dev processes (.NET, Vite, Docusaurus) and frees dev ports."
+    }
+  ]
+}
