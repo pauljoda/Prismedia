@@ -1,8 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Jobs.Ports;
+using Prismedia.Application.Settings;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
+using Prismedia.Infrastructure.Settings;
 
 namespace Prismedia.Infrastructure.Media.Persistence;
 
@@ -26,22 +28,18 @@ public sealed class LibraryScanPersistenceService(PrismediaDbContext db) : ILibr
     }
 
     public async Task<LibrarySettingsData> GetSettingsAsync(CancellationToken cancellationToken) {
-        var row = await db.LibrarySettings.AsNoTracking()
-            .FirstOrDefaultAsync(cancellationToken);
-        if (row is null) {
-            return new LibrarySettingsData(true, true, false, true, true, 10, 8, 2, 2);
-        }
-
+        var settings = await new SettingsService(new EfSettingsPersistence(db))
+            .GetGenerationSettingsAsync(cancellationToken);
         return new LibrarySettingsData(
-            row.AutoGenerateMetadata,
-            row.AutoGenerateFingerprints,
-            row.GeneratePhash,
-            row.AutoGeneratePreview,
-            row.GenerateTrickplay,
-            row.TrickplayIntervalSeconds,
-            row.PreviewClipDurationSeconds,
-            row.ThumbnailQuality,
-            row.TrickplayQuality);
+            settings.AutoGenerateMetadata,
+            settings.AutoGenerateFingerprints,
+            settings.GeneratePhash,
+            settings.AutoGeneratePreview,
+            settings.GenerateTrickplay,
+            settings.TrickplayIntervalSeconds,
+            settings.PreviewClipDurationSeconds,
+            settings.ThumbnailQuality,
+            settings.TrickplayQuality);
     }
 
     public async Task UpdateRootLastScannedAsync(Guid rootId, CancellationToken cancellationToken) {

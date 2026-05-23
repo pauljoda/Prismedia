@@ -4,8 +4,8 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { JsonElement } from './jsonElement';
 
-export interface SettingsResponse {
-  hideNsfw: boolean;
-  enableCastControls: boolean;
+export interface SettingUpdateRequest {
+  value: JsonElement;
 }

@@ -36,15 +36,16 @@ public sealed class JobScheduler(
         var settings = scope.ServiceProvider.GetRequiredService<SettingsService>();
         var queue = scope.ServiceProvider.GetRequiredService<IJobQueueService>();
 
-        var config = await settings.GetLibraryConfigAsync(cancellationToken);
-        if (!config.Settings.AutoScanEnabled || config.Settings.ScanIntervalMinutes <= 0) {
+        var scanSettings = await settings.GetScanSettingsAsync(cancellationToken);
+        if (!scanSettings.AutoScanEnabled || scanSettings.IntervalMinutes <= 0) {
             return;
         }
 
-        var scanInterval = TimeSpan.FromMinutes(config.Settings.ScanIntervalMinutes);
+        var roots = await settings.ListLibraryRootsAsync(cancellationToken);
+        var scanInterval = TimeSpan.FromMinutes(scanSettings.IntervalMinutes);
         var now = DateTimeOffset.UtcNow;
 
-        foreach (var root in config.Roots) {
+        foreach (var root in roots) {
             if (!root.Enabled) {
                 continue;
             }

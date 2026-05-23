@@ -8,4 +8,5 @@
 export type GetFileContentParams = {
 rootId: string;
 path?: string;
+hideNsfw?: boolean;
 };

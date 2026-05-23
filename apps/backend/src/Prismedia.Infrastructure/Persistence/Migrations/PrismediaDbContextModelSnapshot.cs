@@ -22,6 +22,31 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.AppSettingRow", b =>
+                {
+                    b.Property<string>("Key")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("key");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("ValueJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("value_json");
+
+                    b.HasKey("Key");
+
+                    b.ToTable("app_settings", (string)null);
+                });
+
             modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.AudioLibraryDetailRow", b =>
                 {
                     b.Property<Guid>("EntityId")
@@ -1435,146 +1460,6 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("library_roots", (string)null);
-                });
-
-            modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.LibrarySettingsRow", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<string>("AudioPreferredLanguages")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("audio_preferred_languages");
-
-                    b.Property<bool>("AutoGenerateFingerprints")
-                        .HasColumnType("boolean")
-                        .HasColumnName("auto_generate_fingerprints");
-
-                    b.Property<bool>("AutoGenerateMetadata")
-                        .HasColumnType("boolean")
-                        .HasColumnName("auto_generate_metadata");
-
-                    b.Property<bool>("AutoGeneratePreview")
-                        .HasColumnType("boolean")
-                        .HasColumnName("auto_generate_preview");
-
-                    b.Property<bool>("AutoScanEnabled")
-                        .HasColumnType("boolean")
-                        .HasColumnName("auto_scan_enabled");
-
-                    b.Property<int>("BackgroundWorkerConcurrency")
-                        .HasColumnType("integer")
-                        .HasColumnName("background_worker_concurrency");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("DefaultPlaybackMode")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("default_playback_mode");
-
-                    b.Property<bool>("GeneratePhash")
-                        .HasColumnType("boolean")
-                        .HasColumnName("generate_phash");
-
-                    b.Property<bool>("GenerateTrickplay")
-                        .HasColumnType("boolean")
-                        .HasColumnName("generate_trickplay");
-
-                    b.Property<bool>("HideNsfw")
-                        .HasColumnType("boolean")
-                        .HasColumnName("hide_nsfw");
-
-                    b.Property<string>("HlsFfmpegPath")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("text")
-                        .HasDefaultValue("ffmpeg")
-                        .HasColumnName("hls_ffmpeg_path");
-
-                    b.Property<string>("HlsTranscoderProfile")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("text")
-                        .HasDefaultValue("Software")
-                        .HasColumnName("hls_transcoder_profile");
-
-                    b.Property<string>("HlsVaapiDevice")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("text")
-                        .HasDefaultValue("/dev/dri/renderD128")
-                        .HasColumnName("hls_vaapi_device");
-
-                    b.Property<bool>("MetadataStorageDedicated")
-                        .HasColumnType("boolean")
-                        .HasColumnName("metadata_storage_dedicated");
-
-                    b.Property<bool>("NsfwLanAutoEnable")
-                        .HasColumnType("boolean")
-                        .HasColumnName("nsfw_lan_auto_enable");
-
-                    b.Property<int>("PreviewClipDurationSeconds")
-                        .HasColumnType("integer")
-                        .HasColumnName("preview_clip_duration_seconds");
-
-                    b.Property<int>("ScanIntervalMinutes")
-                        .HasColumnType("integer")
-                        .HasColumnName("scan_interval_minutes");
-
-                    b.Property<bool>("ShowCastControls")
-                        .HasColumnType("boolean")
-                        .HasColumnName("show_cast_controls");
-
-                    b.Property<float>("SubtitleFontScale")
-                        .HasColumnType("real")
-                        .HasColumnName("subtitle_font_scale");
-
-                    b.Property<float>("SubtitleOpacity")
-                        .HasColumnType("real")
-                        .HasColumnName("subtitle_opacity");
-
-                    b.Property<float>("SubtitlePositionPercent")
-                        .HasColumnType("real")
-                        .HasColumnName("subtitle_position_percent");
-
-                    b.Property<string>("SubtitleStyle")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("subtitle_style");
-
-                    b.Property<bool>("SubtitlesAutoEnable")
-                        .HasColumnType("boolean")
-                        .HasColumnName("subtitles_auto_enable");
-
-                    b.Property<string>("SubtitlesPreferredLanguages")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("subtitles_preferred_languages");
-
-                    b.Property<int>("ThumbnailQuality")
-                        .HasColumnType("integer")
-                        .HasColumnName("thumbnail_quality");
-
-                    b.Property<int>("TrickplayIntervalSeconds")
-                        .HasColumnType("integer")
-                        .HasColumnName("trickplay_interval_seconds");
-
-                    b.Property<int>("TrickplayQuality")
-                        .HasColumnType("integer")
-                        .HasColumnName("trickplay_quality");
-
-                    b.Property<DateTimeOffset>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("library_settings", (string)null);
                 });
 
             modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.MediaFileIgnoreRow", b =>

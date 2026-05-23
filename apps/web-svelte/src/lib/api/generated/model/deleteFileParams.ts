@@ -8,4 +8,5 @@
 export type DeleteFileParams = {
 rootId: string;
 path: string;
+hideNsfw?: boolean;
 };

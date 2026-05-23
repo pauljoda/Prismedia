@@ -21,8 +21,14 @@ export interface EntityCapabilityProgressCapability {
   completedAt: string | null;
   /** @nullable */
   updatedAt: string | null;
-  /** @nullable */
+  /**
+     * @nullable
+     * @pattern ^-?(?:0|[1-9]\d*)$
+     */
   workIndex?: number | string | null;
-  /** @nullable */
+  /**
+     * @nullable
+     * @pattern ^-?(?:0|[1-9]\d*)$
+     */
   workTotal?: number | string | null;
 }

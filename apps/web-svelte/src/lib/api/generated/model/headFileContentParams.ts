@@ -8,4 +8,5 @@
 export type HeadFileContentParams = {
 rootId: string;
 path?: string;
+hideNsfw?: boolean;
 };

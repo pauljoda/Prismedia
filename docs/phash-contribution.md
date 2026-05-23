@@ -64,7 +64,7 @@ the binary keep running.
 ### Worker integration
 
 The .NET fingerprint job reads the
-`library_settings.generate_phash` flag. When enabled and the scene has a known
+`generation.generatePhash` app setting. When enabled and the scene has a known
 duration, it runs `computePhash(filePath, duration)` after md5/oshash and
 writes the result to `scenes.phash`.
 

@@ -1,0 +1,116 @@
+using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using Prismedia.Application.Settings;
+using Prismedia.Infrastructure.Persistence;
+using Prismedia.Infrastructure.Settings;
+
+namespace Prismedia.Infrastructure.Tests;
+
+public sealed class AppSettingsRegistryTests {
+    [Fact]
+    public void RegistryDefinesUniqueKeysWithValidDefaults() {
+        var definitions = AppSettingsRegistry.Definitions;
+
+        Assert.NotEmpty(definitions);
+        Assert.Equal(definitions.Count, definitions.Select(definition => definition.Key).Distinct(StringComparer.Ordinal).Count());
+        Assert.Contains(definitions, definition =>
+            definition.Key == AppSettingKeys.VisibilityDefaultMode &&
+            definition.Type == SettingValueType.Select &&
+            definition.DefaultValue.GetString() == "off");
+        Assert.Contains(definitions, definition =>
+            definition.Key == AppSettingKeys.JobsBackgroundConcurrency &&
+            definition.Type == SettingValueType.Integer &&
+            definition.Constraints?.Min == 1 &&
+            definition.Constraints?.Max == 32);
+
+        foreach (var definition in definitions) {
+            var validated = definition.Validate(definition.DefaultValue);
+            Assert.True(validated.IsValid, $"{definition.Key}: {validated.Error}");
+        }
+    }
+
+    [Fact]
+    public async Task ValuesUseDefaultsUntilOverridesAreSaved() {
+        await using var db = CreateContext();
+        var service = new SettingsService(new EfSettingsPersistence(db));
+
+        var defaults = await service.GetValuesAsync(
+            new[] { AppSettingKeys.VisibilityDefaultMode, AppSettingKeys.JobsBackgroundConcurrency },
+            CancellationToken.None);
+
+        Assert.Equal("off", defaults.Values[AppSettingKeys.VisibilityDefaultMode].GetString());
+        Assert.Equal(1, defaults.Values[AppSettingKeys.JobsBackgroundConcurrency].GetInt32());
+        Assert.Empty(await db.AppSettings.ToArrayAsync());
+
+        var updated = await service.UpdateSettingAsync(
+            AppSettingKeys.JobsBackgroundConcurrency,
+            JsonSerializer.SerializeToElement(4),
+            CancellationToken.None);
+
+        Assert.Equal(4, updated.Value.GetInt32());
+        Assert.False(updated.IsDefault);
+        Assert.Single(await db.AppSettings.ToArrayAsync());
+    }
+
+    [Fact]
+    public async Task ResettingSettingRemovesOverrideAndRestoresDefault() {
+        await using var db = CreateContext();
+        var service = new SettingsService(new EfSettingsPersistence(db));
+
+        await service.UpdateSettingAsync(
+            AppSettingKeys.PlaybackDefaultMode,
+            JsonSerializer.SerializeToElement("hls"),
+            CancellationToken.None);
+
+        var reset = await service.ResetSettingAsync(AppSettingKeys.PlaybackDefaultMode, CancellationToken.None);
+
+        Assert.Equal("direct", reset.Value.GetString());
+        Assert.True(reset.IsDefault);
+        Assert.Empty(await db.AppSettings.ToArrayAsync());
+    }
+
+    [Fact]
+    public async Task InvalidValuesAreRejectedWithSettingKey() {
+        await using var db = CreateContext();
+        var service = new SettingsService(new EfSettingsPersistence(db));
+
+        var ex = await Assert.ThrowsAsync<SettingValidationException>(() =>
+            service.UpdateSettingAsync(
+                AppSettingKeys.JobsBackgroundConcurrency,
+                JsonSerializer.SerializeToElement(99),
+                CancellationToken.None));
+
+        Assert.Equal(AppSettingKeys.JobsBackgroundConcurrency, ex.Key);
+        Assert.Contains("between 1 and 32", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task SnapshotsExposeTypedValuesForBackendConsumers() {
+        await using var db = CreateContext();
+        var service = new SettingsService(new EfSettingsPersistence(db));
+
+        await service.UpdateSettingsAsync(
+            new Dictionary<string, JsonElement> {
+                [AppSettingKeys.ScanAutoScanEnabled] = JsonSerializer.SerializeToElement(true),
+                [AppSettingKeys.ScanIntervalMinutes] = JsonSerializer.SerializeToElement(15),
+                [AppSettingKeys.PlaybackAudioPreferredLanguages] =
+                    JsonSerializer.SerializeToElement(new[] { "ja", "jpn" }),
+            },
+            CancellationToken.None);
+
+        var scan = await service.GetScanSettingsAsync(CancellationToken.None);
+        var playback = await service.GetPlaybackSettingsAsync(CancellationToken.None);
+
+        Assert.True(scan.AutoScanEnabled);
+        Assert.Equal(15, scan.IntervalMinutes);
+        Assert.Equal(["ja", "jpn"], playback.AudioPreferredLanguages);
+    }
+
+    private static PrismediaDbContext CreateContext() {
+        var options = new DbContextOptionsBuilder<PrismediaDbContext>()
+            .UseInMemoryDatabase($"app-settings-{Guid.NewGuid():N}")
+            .Options;
+
+        return new PrismediaDbContext(options);
+    }
+}

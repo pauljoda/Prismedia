@@ -95,7 +95,7 @@ public static class DependencyInjection {
             new MediaAssetGeneratorAdapter(
                 provider.GetRequiredService<ThumbnailService>(),
                 provider.GetRequiredService<AssetPathService>(),
-                provider.GetRequiredService<ISettingsPersistence>(),
+                provider.GetRequiredService<SettingsService>(),
                 provider.GetRequiredService<MediaToolOptions>()));
         services.AddScoped<ILibraryScanPersistence, LibraryScanPersistenceService>();
         services.AddScoped<IMaintenancePersistence>(provider =>

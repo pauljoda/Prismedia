@@ -3,22 +3,30 @@ using Prismedia.Contracts.Settings;
 namespace Prismedia.Application.Settings;
 
 /// <summary>
-/// Application port for settings persistence. Implementation lives in Infrastructure and is
-/// responsible for reading and writing library settings and watched library roots. The
-/// orchestration tier in <see cref="SettingsService"/> owns validation, clamping, default
-/// derivation, and any non-persistence logic.
+/// Application port for settings persistence. Implementations store raw app-setting
+/// overrides and watched library roots; <see cref="SettingsService"/> owns registry
+/// validation, default derivation, and typed snapshots.
 /// </summary>
 public interface ISettingsPersistence {
     /// <summary>
-    /// Loads the singleton library settings row, creating it with defaults when none exists.
+    /// Loads every persisted app-setting override keyed by setting key.
     /// </summary>
-    Task<LibrarySettings> GetLibrarySettingsAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyDictionary<string, string>> LoadSettingOverridesAsync(CancellationToken cancellationToken);
 
     /// <summary>
-    /// Persists the full library settings state. Implementations are expected to overwrite
-    /// every modifiable column from the supplied state and update the timestamp.
+    /// Saves one normalized setting override as raw JSON.
     /// </summary>
-    Task<LibrarySettings> SaveLibrarySettingsAsync(LibrarySettings state, CancellationToken cancellationToken);
+    Task SaveSettingOverrideAsync(string key, string valueJson, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Saves several normalized setting overrides as raw JSON in one persistence operation.
+    /// </summary>
+    Task SaveSettingOverridesAsync(IReadOnlyDictionary<string, string> values, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Deletes one persisted setting override. Missing overrides are ignored.
+    /// </summary>
+    Task DeleteSettingOverrideAsync(string key, CancellationToken cancellationToken);
 
     /// <summary>
     /// Lists every watched library root in stable display order.

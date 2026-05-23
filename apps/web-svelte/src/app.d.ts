@@ -9,6 +9,7 @@ declare global {
     // interface Locals {}
     interface PageData {
       initialCollapsed?: boolean;
+      hasNsfwModeCookie?: boolean;
       initialNsfwMode?: NsfwMode;
       lanAutoEnable?: boolean;
     }

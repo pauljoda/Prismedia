@@ -33,7 +33,11 @@ import {
   updateEntityMarker as updateEntityMarkerRequest,
   updateEntityPlayback as updateEntityPlaybackRequest,
   updateEntityRating as updateEntityRatingRequest,
+  getSetting as getSettingRequest,
   getSettings,
+  resetSetting as resetSettingRequest,
+  updateSetting as updateSettingRequest,
+  updateSettings as updateSettingsRequest,
   uploadFiles as uploadFilesRequest,
   getVideoSeries,
   getVideo,
@@ -60,7 +64,6 @@ import {
   listImages,
   getVideoSeason,
   updateLibraryRoot as updateLibraryRootRequest,
-  updateLibrarySettings as updateLibrarySettingsRequest,
 } from "./generated/prismedia";
 import type {
   AudioLibraryDetail as GeneratedAudioLibraryDetail,
@@ -88,12 +91,16 @@ import type {
   JobListResponse as GeneratedJobListResponse,
   JobRun as GeneratedJobRun,
   LibraryBrowseResponse as GeneratedLibraryBrowseResponse,
+  LibraryConfigResponse as GeneratedLibraryConfigResponse,
   LibraryRoot as GeneratedLibraryRoot,
-  LibrarySettings as GeneratedLibrarySettings,
   PersonDetail as GeneratedPersonDetail,
   PlaybackSessionRequest as GeneratedPlaybackSessionRequest,
   PlaybackUpdateRequest as GeneratedPlaybackUpdateRequest,
-  SettingsResponse as GeneratedSettingsResponse,
+  SettingConstraints as GeneratedSettingConstraints,
+  SettingDescriptor as GeneratedSettingDescriptor,
+  SettingsCatalogResponse as GeneratedSettingsCatalogResponse,
+  SettingsGroup as GeneratedSettingsGroup,
+  SettingsValuesResponse as GeneratedSettingsValuesResponse,
   StudioDetail as GeneratedStudioDetail,
   TagDetail as GeneratedTagDetail,
   VideoDetail as GeneratedVideoDetail,
@@ -146,7 +153,34 @@ export type TagDetail = GeneratedTagDetail;
 export type CollectionDetail = GeneratedCollectionDetail;
 export type CollectionListResponse = GeneratedEntityListResponse;
 export type TaxonomyListResponse = GeneratedEntityListResponse;
-export type SettingsResponse = GeneratedSettingsResponse;
+export type SettingValue = boolean | number | string | string[];
+export interface SettingConstraints {
+  min?: number | null;
+  max?: number | null;
+  step?: number | null;
+  minItems?: number | null;
+  maxItems?: number | null;
+}
+export type SettingDescriptor = Omit<
+  GeneratedSettingDescriptor,
+  "value" | "defaultValue" | "order" | "constraints"
+> & {
+  value: SettingValue;
+  defaultValue: SettingValue;
+  order: number;
+  constraints: SettingConstraints | null;
+};
+export type SettingsGroup = Omit<GeneratedSettingsGroup, "settings" | "order"> & {
+  order: number;
+  settings: SettingDescriptor[];
+};
+export interface SettingsCatalogResponse {
+  groups: SettingsGroup[];
+}
+export type SettingsResponse = SettingsCatalogResponse;
+export interface SettingsValuesResponse {
+  values: Record<string, SettingValue>;
+}
 export type MediaListResponse = GeneratedEntityListResponse;
 export interface EntityReference {
   id: string;
@@ -154,20 +188,35 @@ export interface EntityReference {
   title: string;
   thumbnailUrl?: string | null;
 }
-type NumericLibrarySettingsFields =
-  | "scanIntervalMinutes"
-  | "trickplayIntervalSeconds"
-  | "previewClipDurationSeconds"
-  | "thumbnailQuality"
-  | "trickplayQuality"
-  | "backgroundWorkerConcurrency"
-  | "subtitleFontScale"
-  | "subtitlePositionPercent"
-  | "subtitleOpacity";
-
-export type LibrarySettings = Omit<GeneratedLibrarySettings, NumericLibrarySettingsFields> & {
-  [K in NumericLibrarySettingsFields]: number;
-};
+export interface LibrarySettings {
+  visibilityDefaultMode: "off" | "show";
+  nsfwLanAutoEnable: boolean;
+  autoScanEnabled: boolean;
+  scanIntervalMinutes: number;
+  autoGenerateMetadata: boolean;
+  autoGenerateFingerprints: boolean;
+  generatePhash: boolean;
+  autoGeneratePreview: boolean;
+  generateTrickplay: boolean;
+  metadataStorageDedicated: boolean;
+  trickplayIntervalSeconds: number;
+  previewClipDurationSeconds: number;
+  thumbnailQuality: number;
+  trickplayQuality: number;
+  backgroundWorkerConcurrency: number;
+  defaultPlaybackMode: "direct" | "hls";
+  showCastControls: boolean;
+  audioPreferredLanguages: string;
+  subtitlesAutoEnable: boolean;
+  subtitlesPreferredLanguages: string;
+  subtitleStyle: string;
+  subtitleFontScale: number;
+  subtitlePositionPercent: number;
+  subtitleOpacity: number;
+  hlsTranscoderProfile: string;
+  hlsFfmpegPath: string;
+  hlsVaapiDevice: string;
+}
 export type LibraryRoot = GeneratedLibraryRoot;
 export type LibraryBrowse = GeneratedLibraryBrowseResponse;
 export type FileRoot = GeneratedFileRoot;
@@ -187,7 +236,7 @@ type FileRootsResponse = GeneratedFileRootsResponse;
 type PlaybackSessionRequest = GeneratedPlaybackSessionRequest;
 type PlaybackUpdateRequest = GeneratedPlaybackUpdateRequest;
 export interface LibraryConfigResponse {
-  settings: LibrarySettings;
+  settings: SettingsCatalogResponse;
   roots: LibraryRoot[];
 }
 
@@ -318,6 +367,10 @@ export interface EntityMetadataUpdateRequest {
   patch: EntityMetadataPatch;
 }
 
+function requestInit(options?: RequestOptions): RequestInit | undefined {
+  return options?.signal ? { signal: options.signal } : undefined;
+}
+
 type GeneratedResponse<T> = {
   data: T;
   status: number;
@@ -348,12 +401,72 @@ function unwrapGenerated<T>(
   return response.data;
 }
 
+function toNumber(value: number | string | null | undefined): number | null {
+  if (value === null || value === undefined) return null;
+  const next = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(next) ? next : null;
+}
+
+function normalizeSettingValue(value: unknown): SettingValue {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item).trim()).filter(Boolean);
+  }
+
+  if (typeof value === "boolean" || typeof value === "string") return value;
+  if (typeof value === "number") return value;
+  return "";
+}
+
+function normalizeConstraints(
+  constraints: GeneratedSettingConstraints | null | undefined,
+): SettingConstraints | null {
+  if (!constraints) return null;
+  return {
+    min: toNumber(constraints.min),
+    max: toNumber(constraints.max),
+    step: toNumber(constraints.step),
+    minItems: toNumber(constraints.minItems),
+    maxItems: toNumber(constraints.maxItems),
+  };
+}
+
+function normalizeSettingDescriptor(descriptor: GeneratedSettingDescriptor): SettingDescriptor {
+  return {
+    ...descriptor,
+    value: normalizeSettingValue(descriptor.value),
+    defaultValue: normalizeSettingValue(descriptor.defaultValue),
+    order: Number(descriptor.order),
+    constraints: normalizeConstraints(descriptor.constraints),
+  };
+}
+
+function normalizeSettingsCatalog(catalog: GeneratedSettingsCatalogResponse): SettingsCatalogResponse {
+  return {
+    groups: catalog.groups.map((group) => ({
+      ...group,
+      order: Number(group.order),
+      settings: group.settings.map(normalizeSettingDescriptor),
+    })),
+  };
+}
+
+function normalizeSettingsValues(response: GeneratedSettingsValuesResponse): SettingsValuesResponse {
+  return {
+    values: Object.fromEntries(
+      Object.entries(response.values ?? {}).map(([key, value]) => [
+        key,
+        normalizeSettingValue(value),
+      ]),
+    ),
+  };
+}
+
 export function fetchEntities(
   params?: { kind?: string; query?: string; cursor?: string; hideNsfw?: boolean; limit?: number },
   options?: RequestOptions,
 ): Promise<EntityListResponse> {
   // Cast: hideNsfw is accepted by the backend but not yet in the generated OpenAPI type.
-  return listEntities(params as Record<string, string | boolean | undefined>, { signal: options?.signal }).then((response) => {
+  return listEntities(params as Record<string, string | boolean | undefined>, requestInit(options)).then((response) => {
     if (response.status !== 200) {
       throw new Error(response.data.message);
     }
@@ -369,12 +482,12 @@ export async function fetchEntityThumbnails(
   const uniqueIds = [...new Set(ids.filter(Boolean))];
   if (uniqueIds.length === 0) return [];
 
-  const response = await getEntityThumbnails({ ids: uniqueIds }, { signal: options?.signal });
+  const response = await getEntityThumbnails({ ids: uniqueIds }, undefined, requestInit(options));
   return (response.data as EntityThumbnailBatchResponse).items;
 }
 
 export function fetchEntity(id: string, options?: RequestOptions): Promise<EntityCardFull> {
-  return getEntity(id, { signal: options?.signal }).then((response) => {
+  return getEntity(id, undefined, requestInit(options)).then((response) => {
     if (response.status !== 200) {
       throw new Error(response.data.message);
     }
@@ -386,14 +499,14 @@ export function fetchEntity(id: string, options?: RequestOptions): Promise<Entit
 export function fetchVideos(
   options?: RequestOptions,
 ): Promise<VideoListResponse> {
-  return listVideos(undefined, { signal: options?.signal }).then((response) => response.data);
+  return listVideos(undefined, requestInit(options)).then((response) => response.data);
 }
 
 export function fetchVideo(
   id: string,
   options?: RequestOptions,
 ): Promise<VideoDetail> {
-  return getVideo(id, { signal: options?.signal }).then((response) => {
+  return getVideo(id, undefined, requestInit(options)).then((response) => {
     if (response.status !== 200) {
       throw new Error(response.data.message);
     }
@@ -427,16 +540,16 @@ export async function postJellyfinSessionProgress(
   const payload = request as PlaybackSessionRequest;
   switch (path) {
     case "Playing":
-      await postJellyfinSessionPlaying(payload, { signal: options?.signal });
+      await postJellyfinSessionPlaying(payload, requestInit(options));
       return;
     case "Playing/Progress":
-      await postJellyfinSessionProgressRequest(payload, { signal: options?.signal });
+      await postJellyfinSessionProgressRequest(payload, requestInit(options));
       return;
     case "Playing/Ping":
-      await postJellyfinSessionPing(payload, { signal: options?.signal });
+      await postJellyfinSessionPing(payload, requestInit(options));
       return;
     case "Playing/Stopped":
-      await postJellyfinSessionStopped(payload, { signal: options?.signal });
+      await postJellyfinSessionStopped(payload, requestInit(options));
   }
 }
 
@@ -446,23 +559,23 @@ export async function markJellyfinUserPlayedItem(
   options?: RequestOptions,
 ): Promise<void> {
   if (played) {
-    await postJellyfinUserPlayedItem(itemId, { signal: options?.signal });
+    await postJellyfinUserPlayedItem(itemId, requestInit(options));
   } else {
-    await deleteJellyfinUserPlayedItem(itemId, { signal: options?.signal });
+    await deleteJellyfinUserPlayedItem(itemId, requestInit(options));
   }
 }
 
 export function fetchSeriesList(
   options?: RequestOptions,
 ): Promise<VideoSeriesListResponse> {
-  return listVideoSeries(undefined, { signal: options?.signal }).then((response) => response.data);
+  return listVideoSeries(undefined, requestInit(options)).then((response) => response.data);
 }
 
 export function fetchSeries(
   id: string,
   options?: RequestOptions,
 ): Promise<VideoSeriesDetail> {
-  return getVideoSeries(id, { signal: options?.signal }).then((response) => {
+  return getVideoSeries(id, undefined, requestInit(options)).then((response) => {
     if (response.status !== 200) {
       throw new Error(response.data.message);
     }
@@ -476,7 +589,7 @@ export function fetchSeason(
   seasonId: string,
   options?: RequestOptions,
 ): Promise<VideoSeasonDetail> {
-  return getVideoSeason(seriesId, seasonId, { signal: options?.signal }).then((response) => {
+  return getVideoSeason(seriesId, seasonId, undefined, requestInit(options)).then((response) => {
     if (response.status !== 200) {
       throw new Error(response.data.message);
     }
@@ -486,102 +599,102 @@ export function fetchSeason(
 }
 
 export function fetchImages(options?: RequestOptions): Promise<MediaListResponse> {
-  return listImages(undefined, { signal: options?.signal }).then((response) => response.data);
+  return listImages(undefined, requestInit(options)).then((response) => response.data);
 }
 
 export function fetchGalleries(options?: RequestOptions): Promise<MediaListResponse> {
-  return listGalleries(undefined, { signal: options?.signal }).then((response) => response.data);
+  return listGalleries(undefined, requestInit(options)).then((response) => response.data);
 }
 
 export function fetchBooks(options?: RequestOptions): Promise<MediaListResponse> {
-  return listBooks(undefined, { signal: options?.signal }).then((response) => response.data);
+  return listBooks(undefined, requestInit(options)).then((response) => response.data);
 }
 
 export function fetchAudioLibraries(options?: RequestOptions): Promise<MediaListResponse> {
-  return listAudioLibraries(undefined, { signal: options?.signal }).then((response) => response.data);
+  return listAudioLibraries(undefined, requestInit(options)).then((response) => response.data);
 }
 
 export function fetchAudioTracks(options?: RequestOptions): Promise<MediaListResponse> {
-  return listAudioTracks(undefined, { signal: options?.signal }).then((response) => response.data);
+  return listAudioTracks(undefined, requestInit(options)).then((response) => response.data);
 }
 
 export function fetchImage(id: string, options?: RequestOptions): Promise<ImageDetail> {
-  return getImage(id, { signal: options?.signal }).then((response) => {
+  return getImage(id, undefined, requestInit(options)).then((response) => {
     if (response.status !== 200) throw new Error(response.data.message);
     return response.data;
   });
 }
 
 export function fetchGallery(id: string, options?: RequestOptions): Promise<GalleryDetail> {
-  return getGallery(id, { signal: options?.signal }).then((response) => {
+  return getGallery(id, undefined, requestInit(options)).then((response) => {
     if (response.status !== 200) throw new Error(response.data.message);
     return response.data;
   });
 }
 
 export function fetchBook(id: string, options?: RequestOptions): Promise<BookDetail> {
-  return getBook(id, { signal: options?.signal }).then((response) => {
+  return getBook(id, undefined, requestInit(options)).then((response) => {
     if (response.status !== 200) throw new Error(response.data.message);
     return response.data;
   });
 }
 
 export function fetchAudioLibrary(id: string, options?: RequestOptions): Promise<AudioLibraryDetail> {
-  return getAudioLibrary(id, { signal: options?.signal }).then((response) => {
+  return getAudioLibrary(id, undefined, requestInit(options)).then((response) => {
     if (response.status !== 200) throw new Error(response.data.message);
     return response.data;
   });
 }
 
 export function fetchAudioTrack(id: string, options?: RequestOptions): Promise<AudioTrackDetail> {
-  return getAudioTrack(id, { signal: options?.signal }).then((response) => {
+  return getAudioTrack(id, undefined, requestInit(options)).then((response) => {
     if (response.status !== 200) throw new Error(response.data.message);
     return response.data;
   });
 }
 
 export function fetchPerson(id: string, options?: RequestOptions): Promise<PersonDetail> {
-  return getPerson(id, { signal: options?.signal }).then((response) => {
+  return getPerson(id, undefined, requestInit(options)).then((response) => {
     if (response.status !== 200) throw new Error(response.data.message);
     return response.data;
   });
 }
 
 export function fetchStudio(id: string, options?: RequestOptions): Promise<StudioDetail> {
-  return getStudio(id, { signal: options?.signal }).then((response) => {
+  return getStudio(id, undefined, requestInit(options)).then((response) => {
     if (response.status !== 200) throw new Error(response.data.message);
     return response.data;
   });
 }
 
 export function fetchTag(id: string, options?: RequestOptions): Promise<TagDetail> {
-  return getTag(id, { signal: options?.signal }).then((response) => {
+  return getTag(id, undefined, requestInit(options)).then((response) => {
     if (response.status !== 200) throw new Error(response.data.message);
     return response.data;
   });
 }
 
 export function fetchPeople(options?: RequestOptions): Promise<TaxonomyListResponse> {
-  return listPeople(undefined, { signal: options?.signal }).then((response) => response.data);
+  return listPeople(undefined, requestInit(options)).then((response) => response.data);
 }
 
 export function fetchStudios(options?: RequestOptions): Promise<TaxonomyListResponse> {
-  return listStudios(undefined, { signal: options?.signal }).then((response) => response.data);
+  return listStudios(undefined, requestInit(options)).then((response) => response.data);
 }
 
 export function fetchTags(options?: RequestOptions): Promise<TaxonomyListResponse> {
-  return listTags(undefined, { signal: options?.signal }).then((response) => response.data);
+  return listTags(undefined, requestInit(options)).then((response) => response.data);
 }
 
 export function fetchCollection(id: string, options?: RequestOptions): Promise<CollectionDetail> {
-  return getCollection(id, { signal: options?.signal }).then((response) => {
+  return getCollection(id, undefined, requestInit(options)).then((response) => {
     if (response.status !== 200) throw new Error(response.data.message);
     return response.data;
   });
 }
 
 export function fetchCollections(options?: RequestOptions): Promise<CollectionListResponse> {
-  return listCollections(undefined, { signal: options?.signal }).then((response) => response.data);
+  return listCollections(undefined, requestInit(options)).then((response) => response.data);
 }
 
 export function updateEntityRating(
@@ -726,14 +839,14 @@ export function deleteEntityMarker(
 }
 
 export function fetchJobs(options?: RequestOptions): Promise<JobListResponse> {
-  return listJobs({ signal: options?.signal }).then((response) => response.data);
+  return listJobs(undefined, requestInit(options)).then((response) => response.data);
 }
 
 export async function createJob(
   type: string,
   options?: RequestOptions,
 ): Promise<JobCreateResponse> {
-  const response = await createJobRequest(type, { signal: options?.signal });
+  const response = await createJobRequest(type, requestInit(options));
   return unwrapGenerated(
     response as unknown as GeneratedResponse<JobCreateResponse>,
     `Failed to queue ${type}`,
@@ -745,7 +858,7 @@ export async function cancelJobs(
   type?: string | null,
   options?: RequestOptions,
 ): Promise<JobCancelResponse> {
-  const response = await cancelJobsRequest(type ? { type } : undefined, { signal: options?.signal });
+  const response = await cancelJobsRequest(type ? { type } : undefined, requestInit(options));
   return unwrapGenerated(
     response as unknown as GeneratedResponse<JobCancelResponse>,
     "Failed to cancel jobs",
@@ -756,7 +869,7 @@ export async function cancelJobRun(
   id: string,
   options?: RequestOptions,
 ): Promise<JobCancelResponse> {
-  const response = await cancelJobRunRequest(id, { signal: options?.signal });
+  const response = await cancelJobRunRequest(id, requestInit(options));
   return unwrapGenerated(
     response as unknown as GeneratedResponse<JobCancelResponse>,
     "Failed to cancel job",
@@ -767,37 +880,96 @@ export async function clearJobFailures(
   type?: string | null,
   options?: RequestOptions,
 ): Promise<JobFailureClearResponse> {
-  const response = await clearJobFailuresRequest(type ? { type } : undefined, { signal: options?.signal });
+  const response = await clearJobFailuresRequest(type ? { type } : undefined, requestInit(options));
   return unwrapGenerated(
     response as unknown as GeneratedResponse<JobFailureClearResponse>,
     "Failed to clear job failures",
   );
 }
 
-export function fetchSettings(options?: RequestOptions): Promise<SettingsResponse> {
-  return getSettings({ signal: options?.signal }).then((response) => response.data);
+export async function fetchSettings(options?: RequestOptions): Promise<SettingsResponse> {
+  const response = unwrapGenerated(await getSettings(requestInit(options)), "Failed to load settings");
+  return normalizeSettingsCatalog(response);
 }
 
-export async function fetchLibraryConfig(
+export async function fetchSetting(
+  key: string,
   options?: RequestOptions,
-): Promise<LibraryConfigResponse> {
-  return unwrapGenerated(
-    await getLibraryConfig({ signal: options?.signal }),
-    "Failed to load settings",
-  ) as unknown as LibraryConfigResponse;
+): Promise<SettingDescriptor> {
+  const response = unwrapGenerated(
+    await getSettingRequest(key, requestInit(options)) as unknown as GeneratedResponse<GeneratedSettingDescriptor>,
+    "Failed to load setting",
+  );
+  return normalizeSettingDescriptor(response);
 }
 
-export async function updateLibrarySettings(
-  payload: Partial<LibrarySettings>,
+export async function fetchSettingsValues(
+  keys: string[] = [],
   options?: RequestOptions,
-): Promise<LibrarySettings> {
-  return unwrapGenerated(
-    await updateLibrarySettingsRequest(
-      payload as unknown as Parameters<typeof updateLibrarySettingsRequest>[0],
-      { signal: options?.signal },
-    ),
+): Promise<SettingsValuesResponse> {
+  const search = new URLSearchParams();
+  for (const key of keys) {
+    search.append("keys", key);
+  }
+
+  const query = search.toString();
+  const response = await fetchApi<GeneratedSettingsValuesResponse>(
+    query ? `/settings/values?${query}` : "/settings/values",
+    { signal: options?.signal },
+  );
+  return normalizeSettingsValues(response);
+}
+
+export async function updateSetting(
+  key: string,
+  value: SettingValue,
+  options?: RequestOptions,
+): Promise<SettingDescriptor> {
+  const response = unwrapGenerated(
+    await updateSettingRequest(
+      key,
+      { value } as unknown as Parameters<typeof updateSettingRequest>[1],
+      requestInit(options),
+    ) as unknown as GeneratedResponse<GeneratedSettingDescriptor>,
+    "Failed to save setting",
+  );
+  return normalizeSettingDescriptor(response);
+}
+
+export async function updateSettings(
+  values: Record<string, SettingValue>,
+  options?: RequestOptions,
+): Promise<SettingsCatalogResponse> {
+  const response = unwrapGenerated(
+    await updateSettingsRequest(
+      { values } as unknown as Parameters<typeof updateSettingsRequest>[0],
+      requestInit(options),
+    ) as unknown as GeneratedResponse<GeneratedSettingsCatalogResponse>,
     "Failed to save settings",
-  ) as unknown as LibrarySettings;
+  );
+  return normalizeSettingsCatalog(response);
+}
+
+export async function resetSetting(
+  key: string,
+  options?: RequestOptions,
+): Promise<SettingDescriptor> {
+  const response = unwrapGenerated(
+    await resetSettingRequest(key, requestInit(options)) as unknown as GeneratedResponse<GeneratedSettingDescriptor>,
+    "Failed to reset setting",
+  );
+  return normalizeSettingDescriptor(response);
+}
+
+export async function fetchLibraryConfig(options?: RequestOptions): Promise<LibraryConfigResponse> {
+  const response = unwrapGenerated(
+    await getLibraryConfig(requestInit(options)),
+    "Failed to load settings",
+  ) as GeneratedLibraryConfigResponse;
+  return {
+    settings: normalizeSettingsCatalog(response.settings),
+    roots: response.roots,
+  };
 }
 
 export async function browseLibraryPath(
@@ -805,7 +977,7 @@ export async function browseLibraryPath(
   options?: RequestOptions,
 ): Promise<LibraryBrowse> {
   return unwrapGenerated(
-    await browseLibraryPathRequest(targetPath ? { path: targetPath } : undefined, { signal: options?.signal }),
+    await browseLibraryPathRequest(targetPath ? { path: targetPath } : undefined, requestInit(options)),
     "Failed to browse folders",
   );
 }
@@ -815,7 +987,7 @@ export async function createLibraryRoot(
   options?: RequestOptions,
 ): Promise<LibraryRoot> {
   return unwrapGenerated(
-    await createLibraryRootRequest(payload as unknown as Parameters<typeof createLibraryRootRequest>[0], { signal: options?.signal }),
+    await createLibraryRootRequest(payload as unknown as Parameters<typeof createLibraryRootRequest>[0], requestInit(options)),
     "Failed to add library root",
   );
 }
@@ -828,7 +1000,7 @@ export async function updateLibraryRoot(
   const response = await updateLibraryRootRequest(
     id,
     payload as unknown as Parameters<typeof updateLibraryRootRequest>[1],
-    { signal: options?.signal },
+    requestInit(options),
   );
   return unwrapGenerated(
     response as unknown as GeneratedResponse<LibraryRoot>,
@@ -840,7 +1012,7 @@ export async function deleteLibraryRoot(
   id: string,
   options?: RequestOptions,
 ): Promise<{ ok: true }> {
-  const response = await deleteLibraryRootRequest(id, { signal: options?.signal });
+  const response = await deleteLibraryRootRequest(id, requestInit(options));
   return unwrapGenerated(
     response as unknown as GeneratedResponse<{ ok: true }>,
     "Failed to remove library root",
@@ -851,7 +1023,7 @@ export async function fetchFileRoots(
   options?: RequestOptions,
 ): Promise<FileRootsResponse> {
   return unwrapGenerated(
-    await listFileRoots({ signal: options?.signal }),
+    await listFileRoots(undefined, requestInit(options)),
     "Failed to load file roots",
   );
 }
@@ -862,7 +1034,7 @@ export async function fetchFileChildren(
   options?: RequestOptions,
 ): Promise<FileChildrenResponse> {
   return unwrapGenerated(
-    await listFileChildren({ rootId, ...(path ? { path } : {}) }, { signal: options?.signal }),
+    await listFileChildren({ rootId, ...(path ? { path } : {}) }, requestInit(options)),
     "Failed to load folder",
   );
 }
@@ -873,9 +1045,9 @@ export async function fetchFileDetail(
   options?: RequestOptions,
 ): Promise<FileDetail> {
   return unwrapGenerated(
-    await getFileDetail({ rootId, ...(path ? { path } : {}) }, { signal: options?.signal }),
+    await getFileDetail({ rootId, ...(path ? { path } : {}) }, requestInit(options)),
     "Failed to load file details",
-  );
+  ) as unknown as FileDetail;
 }
 
 export function fileContentUrl(rootId: string, path = ""): string {
@@ -891,7 +1063,7 @@ export async function createFileFolder(
   options?: RequestOptions,
 ): Promise<FileOperationResponse> {
   return unwrapGenerated(
-    await createFileFolderRequest(payload, { signal: options?.signal }),
+    await createFileFolderRequest(payload, undefined, requestInit(options)),
     "Failed to create folder",
   );
 }
@@ -921,7 +1093,7 @@ export async function renameFile(
   options?: RequestOptions,
 ): Promise<FileOperationResponse> {
   return unwrapGenerated(
-    await renameFileRequest(payload, { signal: options?.signal }),
+    await renameFileRequest(payload, undefined, requestInit(options)),
     "Failed to rename file",
   );
 }
@@ -931,7 +1103,7 @@ export async function moveFile(
   options?: RequestOptions,
 ): Promise<FileOperationResponse> {
   return unwrapGenerated(
-    await moveFileRequest(payload, { signal: options?.signal }),
+    await moveFileRequest(payload, undefined, requestInit(options)),
     "Failed to move file",
   );
 }
@@ -952,7 +1124,7 @@ export async function rescanFileRoot(
   options?: RequestOptions,
 ): Promise<FileOperationResponse> {
   return unwrapGenerated(
-    await rescanFileRootRequest(payload, { signal: options?.signal }),
+    await rescanFileRootRequest(payload, undefined, requestInit(options)),
     "Failed to queue file rescan",
   );
 }

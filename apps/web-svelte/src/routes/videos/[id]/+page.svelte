@@ -13,7 +13,7 @@
   import { cn } from "@prismedia/ui-svelte";
   import {
     fetchVideo,
-    fetchLibraryConfig,
+    fetchSettingsValues,
     fetchJellyfinPlaybackInfo,
     markJellyfinUserPlayedItem,
     postJellyfinSessionProgress,
@@ -24,6 +24,7 @@
     type VideoDetail,
     type LibrarySettings,
   } from "$lib/api/prismedia";
+  import { settingKeys, valuesToLibrarySettings } from "$lib/settings/app-settings";
   import { getCapability } from "$lib/api/capabilities";
   import {
     toggleOptimisticEntityFlag,
@@ -237,9 +238,18 @@
     updateViewport();
     mq.addEventListener("change", updateViewport);
 
-    void fetchLibraryConfig()
+    void fetchSettingsValues([
+      settingKeys.playbackDefaultMode,
+      settingKeys.playbackShowCastControls,
+      settingKeys.subtitlesAutoEnable,
+      settingKeys.subtitlesPreferredLanguages,
+      settingKeys.subtitlesStyle,
+      settingKeys.subtitlesFontScale,
+      settingKeys.subtitlesPositionPercent,
+      settingKeys.subtitlesOpacity,
+    ])
       .then((config) => {
-        if (!cancelled) librarySettings = config.settings;
+        if (!cancelled) librarySettings = valuesToLibrarySettings(config.values);
       })
       .catch(() => {});
 

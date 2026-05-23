@@ -101,8 +101,8 @@ public sealed class QueueWorker(
             await using var scope = scopeFactory.CreateAsyncScope();
             var settings = scope.ServiceProvider.GetService<SettingsService>();
             if (settings is not null) {
-                var config = await settings.GetLibraryConfigAsync(cancellationToken);
-                return Math.Max(1, config.Settings.BackgroundWorkerConcurrency);
+                var worker = await settings.GetWorkerSettingsAsync(cancellationToken);
+                return Math.Max(1, worker.BackgroundConcurrency);
             }
         } catch (Exception ex) {
             logger.LogWarning(ex, "Could not load worker concurrency setting, defaulting to 1.");

@@ -17,8 +17,9 @@
     clearJobFailures,
     createJob,
     fetchJobs,
-    fetchLibraryConfig,
+    fetchSettingsValues,
   } from "$lib/api/prismedia";
+  import { settingKeys, valuesToLibrarySettings } from "$lib/settings/app-settings";
   import type { JobRun, JobsDashboard } from "$lib/jobs/models";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import {
@@ -90,10 +91,14 @@
 
   async function loadSchedule() {
     try {
-      const config = await fetchLibraryConfig();
+      const config = await fetchSettingsValues([
+        settingKeys.scanAutoScanEnabled,
+        settingKeys.scanIntervalMinutes,
+      ]);
+      const settings = valuesToLibrarySettings(config.values);
       scheduleInfo = {
-        enabled: config.settings.autoScanEnabled,
-        intervalMinutes: config.settings.scanIntervalMinutes,
+        enabled: settings.autoScanEnabled,
+        intervalMinutes: settings.scanIntervalMinutes,
       };
     } catch {
       // schedule info is best-effort; jobs still load fine without it

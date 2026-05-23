@@ -14,6 +14,7 @@ import type {
   CancelJobsParams,
   ClearJobFailuresParams,
   CollectionDetail,
+  CreateFileFolderParams,
   DeleteFileParams,
   EntityCard,
   EntityFlagsUpdateRequest,
@@ -21,6 +22,8 @@ import type {
   EntityMarkerWriteRequest,
   EntityMetadataProposal,
   EntityMetadataUpdateRequest,
+  EntityProgressUpdateRequest,
+  EntityRefreshResponse,
   EntityThumbnailBatchRequest,
   EntityThumbnailBatchResponse,
   FileChildrenResponse,
@@ -32,15 +35,31 @@ import type {
   FileRescanRequest,
   FileRootsResponse,
   GalleryDetail,
+  GetAudioLibraryParams,
+  GetAudioTrackParams,
+  GetBookParams,
+  GetCollectionParams,
+  GetEntityParams,
+  GetEntityThumbnailsParams,
   GetFileContentParams,
   GetFileDetailParams,
+  GetGalleryParams,
+  GetImageParams,
   GetJellyfinVideoHlsRelativeAssetParams,
   GetJellyfinVideoHlsSegmentParams,
   GetJellyfinVideoMasterPlaylistParams,
   GetOrganizePlanParams,
+  GetPersonParams,
+  GetSettingValuesParams,
+  GetStudioParams,
+  GetTagParams,
+  GetVideoParams,
+  GetVideoSeasonParams,
+  GetVideoSeriesParams,
   HeadFileContentParams,
   IdentifyBulkSession,
   IdentifyBulkStartRequest,
+  IdentifyEntityParams,
   IdentifyEntityRequest,
   ImageDetail,
   JobListResponse,
@@ -49,22 +68,23 @@ import type {
   LibraryRoot,
   LibraryRootCreateRequest,
   LibraryRootUpdateRequest,
-  LibrarySettings,
-  LibrarySettingsUpdateRequest,
   ListAudioLibrariesParams,
   ListAudioTracksParams,
   ListBooksParams,
   ListCollectionsParams,
   ListEntitiesParams,
   ListFileChildrenParams,
+  ListFileRootsParams,
   ListGalleriesParams,
   ListIdentifyProvidersParams,
   ListImagesParams,
+  ListJobsParams,
   ListPeopleParams,
   ListStudiosParams,
   ListTagsParams,
   ListVideoSeriesParams,
   ListVideosParams,
+  MoveFileParams,
   OrganizeApplyResponse,
   OrganizePlanRequest,
   OrganizePlanResponse,
@@ -75,9 +95,16 @@ import type {
   PlaybackUpdateRequest,
   PluginAuthUpdateRequest,
   PluginProvider,
+  ProblemDetails,
   RatingUpdateRequest,
-  SettingsResponse,
-  SettingsUpdateRequest,
+  RenameFileParams,
+  RescanFileRootParams,
+  SettingDescriptor,
+  SettingUpdateRequest,
+  SettingsBatchUpdateRequest,
+  SettingsCatalogResponse,
+  SettingsValuesResponse,
+  StartBulkIdentifyParams,
   StudioDetail,
   TagDetail,
   VideoDetail,
@@ -143,18 +170,27 @@ export type getVideoSeasonResponseError = (getVideoSeasonResponse404) & {
 export type getVideoSeasonResponse = (getVideoSeasonResponseSuccess | getVideoSeasonResponseError)
 
 export const getGetVideoSeasonUrl = (id: string,
-    seasonId: string,) => {
+    seasonId: string,
+    params?: GetVideoSeasonParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/series/${id}/seasons/${seasonId}`
+  return stringifiedParams.length > 0 ? `/api/series/${id}/seasons/${seasonId}?${stringifiedParams}` : `/api/series/${id}/seasons/${seasonId}`
 }
 
 export const getVideoSeason = async (id: string,
-    seasonId: string, options?: RequestInit): Promise<getVideoSeasonResponse> => {
+    seasonId: string,
+    params?: GetVideoSeasonParams, options?: RequestInit): Promise<getVideoSeasonResponse> => {
 
-  return orvalFetch<getVideoSeasonResponse>(getGetVideoSeasonUrl(id,seasonId),
+  return orvalFetch<getVideoSeasonResponse>(getGetVideoSeasonUrl(id,seasonId,params),
   {
     ...options,
     method: 'GET'
@@ -893,17 +929,26 @@ export type getEntityResponseError = (getEntityResponse404) & {
 
 export type getEntityResponse = (getEntityResponseSuccess | getEntityResponseError)
 
-export const getGetEntityUrl = (id: string,) => {
+export const getGetEntityUrl = (id: string,
+    params?: GetEntityParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/entities/${id}`
+  return stringifiedParams.length > 0 ? `/api/entities/${id}?${stringifiedParams}` : `/api/entities/${id}`
 }
 
-export const getEntity = async (id: string, options?: RequestInit): Promise<getEntityResponse> => {
+export const getEntity = async (id: string,
+    params?: GetEntityParams, options?: RequestInit): Promise<getEntityResponse> => {
 
-  return orvalFetch<getEntityResponse>(getGetEntityUrl(id),
+  return orvalFetch<getEntityResponse>(getGetEntityUrl(id,params),
   {
     ...options,
     method: 'GET'
@@ -973,17 +1018,25 @@ export type getEntityThumbnailsResponseSuccess = (getEntityThumbnailsResponse200
 
 export type getEntityThumbnailsResponse = (getEntityThumbnailsResponseSuccess)
 
-export const getGetEntityThumbnailsUrl = () => {
+export const getGetEntityThumbnailsUrl = (params?: GetEntityThumbnailsParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/entities/thumbnails`
+  return stringifiedParams.length > 0 ? `/api/entities/thumbnails?${stringifiedParams}` : `/api/entities/thumbnails`
 }
 
-export const getEntityThumbnails = async (entityThumbnailBatchRequest: EntityThumbnailBatchRequest, options?: RequestInit): Promise<getEntityThumbnailsResponse> => {
+export const getEntityThumbnails = async (entityThumbnailBatchRequest: EntityThumbnailBatchRequest,
+    params?: GetEntityThumbnailsParams, options?: RequestInit): Promise<getEntityThumbnailsResponse> => {
 
-  return orvalFetch<getEntityThumbnailsResponse>(getGetEntityThumbnailsUrl(),
+  return orvalFetch<getEntityThumbnailsResponse>(getGetEntityThumbnailsUrl(params),
   {
     ...options,
     method: 'POST',
@@ -1079,6 +1132,94 @@ export const updateEntityFlags = async (id: string,
 
 
 
+export type getEntityFileResponse200 = {
+  data: void
+  status: 200
+}
+
+export type getEntityFileResponse206 = {
+  data: void
+  status: 206
+}
+
+export type getEntityFileResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type getEntityFileResponseSuccess = (getEntityFileResponse200 | getEntityFileResponse206) & {
+  headers: Headers;
+};
+export type getEntityFileResponseError = (getEntityFileResponse404) & {
+  headers: Headers;
+};
+
+export type getEntityFileResponse = (getEntityFileResponseSuccess | getEntityFileResponseError)
+
+export const getGetEntityFileUrl = (id: string,
+    role: string,) => {
+
+
+
+
+  return `/api/entities/${id}/files/${role}`
+}
+
+/**
+ * @summary Streams an entity-attached file by semantic role.
+ */
+export const getEntityFile = async (id: string,
+    role: string, options?: RequestInit): Promise<getEntityFileResponse> => {
+
+  return orvalFetch<getEntityFileResponse>(getGetEntityFileUrl(id,role),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type headEntityFileResponse200 = {
+  data: void
+  status: 200
+}
+
+export type headEntityFileResponseSuccess = (headEntityFileResponse200) & {
+  headers: Headers;
+};
+;
+
+export type headEntityFileResponse = (headEntityFileResponseSuccess)
+
+export const getHeadEntityFileUrl = (id: string,
+    role: string,) => {
+
+
+
+
+  return `/api/entities/${id}/files/${role}`
+}
+
+/**
+ * @summary Probes an entity-attached file by semantic role.
+ */
+export const headEntityFile = async (id: string,
+    role: string, options?: RequestInit): Promise<headEntityFileResponse> => {
+
+  return orvalFetch<headEntityFileResponse>(getHeadEntityFileUrl(id,role),
+  {
+    ...options,
+    method: 'HEAD'
+
+
+  }
+);}
+
+
+
 export type updateEntityPlaybackResponse200 = {
   data: EntityCard
   status: 200
@@ -1116,6 +1257,48 @@ export const updateEntityPlayback = async (id: string,
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       playbackUpdateRequest,)
+  }
+);}
+
+
+
+export type updateEntityProgressResponse200 = {
+  data: EntityCard
+  status: 200
+}
+
+export type updateEntityProgressResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type updateEntityProgressResponseSuccess = (updateEntityProgressResponse200) & {
+  headers: Headers;
+};
+export type updateEntityProgressResponseError = (updateEntityProgressResponse404) & {
+  headers: Headers;
+};
+
+export type updateEntityProgressResponse = (updateEntityProgressResponseSuccess | updateEntityProgressResponseError)
+
+export const getUpdateEntityProgressUrl = (id: string,) => {
+
+
+
+
+  return `/api/entities/${id}/progress`
+}
+
+export const updateEntityProgress = async (id: string,
+    entityProgressUpdateRequest: EntityProgressUpdateRequest, options?: RequestInit): Promise<updateEntityProgressResponse> => {
+
+  return orvalFetch<updateEntityProgressResponse>(getUpdateEntityProgressUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      entityProgressUpdateRequest,)
   }
 );}
 
@@ -1249,6 +1432,39 @@ export const deleteEntityMarker = async (id: string,
 
 
 
+export type refreshEntityResponse200 = {
+  data: EntityRefreshResponse
+  status: 200
+}
+
+export type refreshEntityResponseSuccess = (refreshEntityResponse200) & {
+  headers: Headers;
+};
+;
+
+export type refreshEntityResponse = (refreshEntityResponseSuccess)
+
+export const getRefreshEntityUrl = (id: string,) => {
+
+
+
+
+  return `/api/entities/${id}/refresh`
+}
+
+export const refreshEntity = async (id: string, options?: RequestInit): Promise<refreshEntityResponse> => {
+
+  return orvalFetch<refreshEntityResponse>(getRefreshEntityUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
 export type listVideosResponse200 = {
   data: EntityListResponse
   status: 200
@@ -1308,17 +1524,26 @@ export type getVideoResponseError = (getVideoResponse404) & {
 
 export type getVideoResponse = (getVideoResponseSuccess | getVideoResponseError)
 
-export const getGetVideoUrl = (id: string,) => {
+export const getGetVideoUrl = (id: string,
+    params?: GetVideoParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/videos/${id}`
+  return stringifiedParams.length > 0 ? `/api/videos/${id}?${stringifiedParams}` : `/api/videos/${id}`
 }
 
-export const getVideo = async (id: string, options?: RequestInit): Promise<getVideoResponse> => {
+export const getVideo = async (id: string,
+    params?: GetVideoParams, options?: RequestInit): Promise<getVideoResponse> => {
 
-  return orvalFetch<getVideoResponse>(getGetVideoUrl(id),
+  return orvalFetch<getVideoResponse>(getGetVideoUrl(id,params),
   {
     ...options,
     method: 'GET'
@@ -1525,17 +1750,26 @@ export type getVideoSeriesResponseError = (getVideoSeriesResponse404) & {
 
 export type getVideoSeriesResponse = (getVideoSeriesResponseSuccess | getVideoSeriesResponseError)
 
-export const getGetVideoSeriesUrl = (id: string,) => {
+export const getGetVideoSeriesUrl = (id: string,
+    params?: GetVideoSeriesParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/series/${id}`
+  return stringifiedParams.length > 0 ? `/api/series/${id}?${stringifiedParams}` : `/api/series/${id}`
 }
 
-export const getVideoSeries = async (id: string, options?: RequestInit): Promise<getVideoSeriesResponse> => {
+export const getVideoSeries = async (id: string,
+    params?: GetVideoSeriesParams, options?: RequestInit): Promise<getVideoSeriesResponse> => {
 
-  return orvalFetch<getVideoSeriesResponse>(getGetVideoSeriesUrl(id),
+  return orvalFetch<getVideoSeriesResponse>(getGetVideoSeriesUrl(id,params),
   {
     ...options,
     method: 'GET'
@@ -1652,17 +1886,26 @@ export type getImageResponseError = (getImageResponse404) & {
 
 export type getImageResponse = (getImageResponseSuccess | getImageResponseError)
 
-export const getGetImageUrl = (id: string,) => {
+export const getGetImageUrl = (id: string,
+    params?: GetImageParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/images/${id}`
+  return stringifiedParams.length > 0 ? `/api/images/${id}?${stringifiedParams}` : `/api/images/${id}`
 }
 
-export const getImage = async (id: string, options?: RequestInit): Promise<getImageResponse> => {
+export const getImage = async (id: string,
+    params?: GetImageParams, options?: RequestInit): Promise<getImageResponse> => {
 
-  return orvalFetch<getImageResponse>(getGetImageUrl(id),
+  return orvalFetch<getImageResponse>(getGetImageUrl(id,params),
   {
     ...options,
     method: 'GET'
@@ -1779,17 +2022,26 @@ export type getGalleryResponseError = (getGalleryResponse404) & {
 
 export type getGalleryResponse = (getGalleryResponseSuccess | getGalleryResponseError)
 
-export const getGetGalleryUrl = (id: string,) => {
+export const getGetGalleryUrl = (id: string,
+    params?: GetGalleryParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/galleries/${id}`
+  return stringifiedParams.length > 0 ? `/api/galleries/${id}?${stringifiedParams}` : `/api/galleries/${id}`
 }
 
-export const getGallery = async (id: string, options?: RequestInit): Promise<getGalleryResponse> => {
+export const getGallery = async (id: string,
+    params?: GetGalleryParams, options?: RequestInit): Promise<getGalleryResponse> => {
 
-  return orvalFetch<getGalleryResponse>(getGetGalleryUrl(id),
+  return orvalFetch<getGalleryResponse>(getGetGalleryUrl(id,params),
   {
     ...options,
     method: 'GET'
@@ -1906,17 +2158,26 @@ export type getBookResponseError = (getBookResponse404) & {
 
 export type getBookResponse = (getBookResponseSuccess | getBookResponseError)
 
-export const getGetBookUrl = (id: string,) => {
+export const getGetBookUrl = (id: string,
+    params?: GetBookParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/books/${id}`
+  return stringifiedParams.length > 0 ? `/api/books/${id}?${stringifiedParams}` : `/api/books/${id}`
 }
 
-export const getBook = async (id: string, options?: RequestInit): Promise<getBookResponse> => {
+export const getBook = async (id: string,
+    params?: GetBookParams, options?: RequestInit): Promise<getBookResponse> => {
 
-  return orvalFetch<getBookResponse>(getGetBookUrl(id),
+  return orvalFetch<getBookResponse>(getGetBookUrl(id,params),
   {
     ...options,
     method: 'GET'
@@ -2033,17 +2294,26 @@ export type getAudioLibraryResponseError = (getAudioLibraryResponse404) & {
 
 export type getAudioLibraryResponse = (getAudioLibraryResponseSuccess | getAudioLibraryResponseError)
 
-export const getGetAudioLibraryUrl = (id: string,) => {
+export const getGetAudioLibraryUrl = (id: string,
+    params?: GetAudioLibraryParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/audio-libraries/${id}`
+  return stringifiedParams.length > 0 ? `/api/audio-libraries/${id}?${stringifiedParams}` : `/api/audio-libraries/${id}`
 }
 
-export const getAudioLibrary = async (id: string, options?: RequestInit): Promise<getAudioLibraryResponse> => {
+export const getAudioLibrary = async (id: string,
+    params?: GetAudioLibraryParams, options?: RequestInit): Promise<getAudioLibraryResponse> => {
 
-  return orvalFetch<getAudioLibraryResponse>(getGetAudioLibraryUrl(id),
+  return orvalFetch<getAudioLibraryResponse>(getGetAudioLibraryUrl(id,params),
   {
     ...options,
     method: 'GET'
@@ -2160,17 +2430,26 @@ export type getAudioTrackResponseError = (getAudioTrackResponse404) & {
 
 export type getAudioTrackResponse = (getAudioTrackResponseSuccess | getAudioTrackResponseError)
 
-export const getGetAudioTrackUrl = (id: string,) => {
+export const getGetAudioTrackUrl = (id: string,
+    params?: GetAudioTrackParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/audio-tracks/${id}`
+  return stringifiedParams.length > 0 ? `/api/audio-tracks/${id}?${stringifiedParams}` : `/api/audio-tracks/${id}`
 }
 
-export const getAudioTrack = async (id: string, options?: RequestInit): Promise<getAudioTrackResponse> => {
+export const getAudioTrack = async (id: string,
+    params?: GetAudioTrackParams, options?: RequestInit): Promise<getAudioTrackResponse> => {
 
-  return orvalFetch<getAudioTrackResponse>(getGetAudioTrackUrl(id),
+  return orvalFetch<getAudioTrackResponse>(getGetAudioTrackUrl(id,params),
   {
     ...options,
     method: 'GET'
@@ -2287,17 +2566,26 @@ export type getPersonResponseError = (getPersonResponse404) & {
 
 export type getPersonResponse = (getPersonResponseSuccess | getPersonResponseError)
 
-export const getGetPersonUrl = (id: string,) => {
+export const getGetPersonUrl = (id: string,
+    params?: GetPersonParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/people/${id}`
+  return stringifiedParams.length > 0 ? `/api/people/${id}?${stringifiedParams}` : `/api/people/${id}`
 }
 
-export const getPerson = async (id: string, options?: RequestInit): Promise<getPersonResponse> => {
+export const getPerson = async (id: string,
+    params?: GetPersonParams, options?: RequestInit): Promise<getPersonResponse> => {
 
-  return orvalFetch<getPersonResponse>(getGetPersonUrl(id),
+  return orvalFetch<getPersonResponse>(getGetPersonUrl(id,params),
   {
     ...options,
     method: 'GET'
@@ -2414,17 +2702,26 @@ export type getStudioResponseError = (getStudioResponse404) & {
 
 export type getStudioResponse = (getStudioResponseSuccess | getStudioResponseError)
 
-export const getGetStudioUrl = (id: string,) => {
+export const getGetStudioUrl = (id: string,
+    params?: GetStudioParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/studios/${id}`
+  return stringifiedParams.length > 0 ? `/api/studios/${id}?${stringifiedParams}` : `/api/studios/${id}`
 }
 
-export const getStudio = async (id: string, options?: RequestInit): Promise<getStudioResponse> => {
+export const getStudio = async (id: string,
+    params?: GetStudioParams, options?: RequestInit): Promise<getStudioResponse> => {
 
-  return orvalFetch<getStudioResponse>(getGetStudioUrl(id),
+  return orvalFetch<getStudioResponse>(getGetStudioUrl(id,params),
   {
     ...options,
     method: 'GET'
@@ -2541,17 +2838,26 @@ export type getTagResponseError = (getTagResponse404) & {
 
 export type getTagResponse = (getTagResponseSuccess | getTagResponseError)
 
-export const getGetTagUrl = (id: string,) => {
+export const getGetTagUrl = (id: string,
+    params?: GetTagParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/tags/${id}`
+  return stringifiedParams.length > 0 ? `/api/tags/${id}?${stringifiedParams}` : `/api/tags/${id}`
 }
 
-export const getTag = async (id: string, options?: RequestInit): Promise<getTagResponse> => {
+export const getTag = async (id: string,
+    params?: GetTagParams, options?: RequestInit): Promise<getTagResponse> => {
 
-  return orvalFetch<getTagResponse>(getGetTagUrl(id),
+  return orvalFetch<getTagResponse>(getGetTagUrl(id,params),
   {
     ...options,
     method: 'GET'
@@ -2668,17 +2974,26 @@ export type getCollectionResponseError = (getCollectionResponse404) & {
 
 export type getCollectionResponse = (getCollectionResponseSuccess | getCollectionResponseError)
 
-export const getGetCollectionUrl = (id: string,) => {
+export const getGetCollectionUrl = (id: string,
+    params?: GetCollectionParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/collections/${id}`
+  return stringifiedParams.length > 0 ? `/api/collections/${id}?${stringifiedParams}` : `/api/collections/${id}`
 }
 
-export const getCollection = async (id: string, options?: RequestInit): Promise<getCollectionResponse> => {
+export const getCollection = async (id: string,
+    params?: GetCollectionParams, options?: RequestInit): Promise<getCollectionResponse> => {
 
-  return orvalFetch<getCollectionResponse>(getGetCollectionUrl(id),
+  return orvalFetch<getCollectionResponse>(getGetCollectionUrl(id,params),
   {
     ...options,
     method: 'GET'
@@ -2748,20 +3063,27 @@ export type listJobsResponseSuccess = (listJobsResponse200) & {
 
 export type listJobsResponse = (listJobsResponseSuccess)
 
-export const getListJobsUrl = () => {
+export const getListJobsUrl = (params?: ListJobsParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/jobs`
+  return stringifiedParams.length > 0 ? `/api/jobs?${stringifiedParams}` : `/api/jobs`
 }
 
 /**
  * @summary Lists Prismedia background job runs for the operations dashboard.
  */
-export const listJobs = async ( options?: RequestInit): Promise<listJobsResponse> => {
+export const listJobs = async (params?: ListJobsParams, options?: RequestInit): Promise<listJobsResponse> => {
 
-  return orvalFetch<listJobsResponse>(getListJobsUrl(),
+  return orvalFetch<listJobsResponse>(getListJobsUrl(params),
   {
     ...options,
     method: 'GET'
@@ -3003,7 +3325,7 @@ export const backfillFingerprints = async ( options?: RequestInit): Promise<back
 
 
 export type getSettingsResponse200 = {
-  data: SettingsResponse
+  data: SettingsCatalogResponse
   status: 200
 }
 
@@ -3023,7 +3345,7 @@ export const getGetSettingsUrl = () => {
 }
 
 /**
- * @summary Gets application settings.
+ * @summary Gets the app-global settings catalog.
  */
 export const getSettings = async ( options?: RequestInit): Promise<getSettingsResponse> => {
 
@@ -3039,16 +3361,28 @@ export const getSettings = async ( options?: RequestInit): Promise<getSettingsRe
 
 
 export type updateSettingsResponse200 = {
-  data: SettingsResponse
+  data: SettingsCatalogResponse
   status: 200
+}
+
+export type updateSettingsResponse400 = {
+  data: ProblemDetails
+  status: 400
+}
+
+export type updateSettingsResponse404 = {
+  data: ProblemDetails
+  status: 404
 }
 
 export type updateSettingsResponseSuccess = (updateSettingsResponse200) & {
   headers: Headers;
 };
-;
+export type updateSettingsResponseError = (updateSettingsResponse400 | updateSettingsResponse404) & {
+  headers: Headers;
+};
 
-export type updateSettingsResponse = (updateSettingsResponseSuccess)
+export type updateSettingsResponse = (updateSettingsResponseSuccess | updateSettingsResponseError)
 
 export const getUpdateSettingsUrl = () => {
 
@@ -3059,9 +3393,9 @@ export const getUpdateSettingsUrl = () => {
 }
 
 /**
- * @summary Updates application settings.
+ * @summary Updates multiple app-global settings.
  */
-export const updateSettings = async (settingsUpdateRequest: SettingsUpdateRequest, options?: RequestInit): Promise<updateSettingsResponse> => {
+export const updateSettings = async (settingsBatchUpdateRequest: SettingsBatchUpdateRequest, options?: RequestInit): Promise<updateSettingsResponse> => {
 
   return orvalFetch<updateSettingsResponse>(getUpdateSettingsUrl(),
   {
@@ -3069,7 +3403,50 @@ export const updateSettings = async (settingsUpdateRequest: SettingsUpdateReques
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
-      settingsUpdateRequest,)
+      settingsBatchUpdateRequest,)
+  }
+);}
+
+
+
+export type getSettingValuesResponse200 = {
+  data: SettingsValuesResponse
+  status: 200
+}
+
+export type getSettingValuesResponseSuccess = (getSettingValuesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getSettingValuesResponse = (getSettingValuesResponseSuccess)
+
+export const getGetSettingValuesUrl = (params?: GetSettingValuesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/settings/values?${stringifiedParams}` : `/api/settings/values`
+}
+
+/**
+ * @summary Gets lightweight app-global setting values.
+ */
+export const getSettingValues = async (params?: GetSettingValuesParams, options?: RequestInit): Promise<getSettingValuesResponse> => {
+
+  return orvalFetch<getSettingValuesResponse>(getGetSettingValuesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
   }
 );}
 
@@ -3096,7 +3473,7 @@ export const getGetLibraryConfigUrl = () => {
 }
 
 /**
- * @summary Gets settings and watched roots for the migrated settings page.
+ * @summary Gets the settings catalog and watched roots for the settings page.
  */
 export const getLibraryConfig = async ( options?: RequestInit): Promise<getLibraryConfigResponse> => {
 
@@ -3111,38 +3488,210 @@ export const getLibraryConfig = async ( options?: RequestInit): Promise<getLibra
 
 
 
-export type updateLibrarySettingsResponse200 = {
-  data: LibrarySettings
+export type getSettingResponse200 = {
+  data: SettingDescriptor
   status: 200
 }
 
-export type updateLibrarySettingsResponseSuccess = (updateLibrarySettingsResponse200) & {
+export type getSettingResponse404 = {
+  data: ProblemDetails
+  status: 404
+}
+
+export type getSettingResponseSuccess = (getSettingResponse200) & {
+  headers: Headers;
+};
+export type getSettingResponseError = (getSettingResponse404) & {
+  headers: Headers;
+};
+
+export type getSettingResponse = (getSettingResponseSuccess | getSettingResponseError)
+
+export const getGetSettingUrl = (key: string,) => {
+
+
+
+
+  return `/api/settings/${key}`
+}
+
+/**
+ * @summary Gets one app-global setting descriptor.
+ */
+export const getSetting = async (key: string, options?: RequestInit): Promise<getSettingResponse> => {
+
+  return orvalFetch<getSettingResponse>(getGetSettingUrl(key),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type updateSettingResponse200 = {
+  data: SettingDescriptor
+  status: 200
+}
+
+export type updateSettingResponse400 = {
+  data: ProblemDetails
+  status: 400
+}
+
+export type updateSettingResponse404 = {
+  data: ProblemDetails
+  status: 404
+}
+
+export type updateSettingResponseSuccess = (updateSettingResponse200) & {
+  headers: Headers;
+};
+export type updateSettingResponseError = (updateSettingResponse400 | updateSettingResponse404) & {
+  headers: Headers;
+};
+
+export type updateSettingResponse = (updateSettingResponseSuccess | updateSettingResponseError)
+
+export const getUpdateSettingUrl = (key: string,) => {
+
+
+
+
+  return `/api/settings/${key}`
+}
+
+/**
+ * @summary Updates one app-global setting.
+ */
+export const updateSetting = async (key: string,
+    settingUpdateRequest: SettingUpdateRequest, options?: RequestInit): Promise<updateSettingResponse> => {
+
+  return orvalFetch<updateSettingResponse>(getUpdateSettingUrl(key),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      settingUpdateRequest,)
+  }
+);}
+
+
+
+export type resetSettingResponse200 = {
+  data: SettingDescriptor
+  status: 200
+}
+
+export type resetSettingResponse404 = {
+  data: ProblemDetails
+  status: 404
+}
+
+export type resetSettingResponseSuccess = (resetSettingResponse200) & {
+  headers: Headers;
+};
+export type resetSettingResponseError = (resetSettingResponse404) & {
+  headers: Headers;
+};
+
+export type resetSettingResponse = (resetSettingResponseSuccess | resetSettingResponseError)
+
+export const getResetSettingUrl = (key: string,) => {
+
+
+
+
+  return `/api/settings/${key}`
+}
+
+/**
+ * @summary Removes one app-global setting override.
+ */
+export const resetSetting = async (key: string, options?: RequestInit): Promise<resetSettingResponse> => {
+
+  return orvalFetch<resetSettingResponse>(getResetSettingUrl(key),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type listLibraryRootsResponse200 = {
+  data: LibraryRoot[]
+  status: 200
+}
+
+export type listLibraryRootsResponseSuccess = (listLibraryRootsResponse200) & {
   headers: Headers;
 };
 ;
 
-export type updateLibrarySettingsResponse = (updateLibrarySettingsResponseSuccess)
+export type listLibraryRootsResponse = (listLibraryRootsResponseSuccess)
 
-export const getUpdateLibrarySettingsUrl = () => {
-
-
+export const getListLibraryRootsUrl = () => {
 
 
-  return `/api/settings/library`
+
+
+  return `/api/libraries`
 }
 
 /**
- * @summary Updates settings from the migrated settings page.
+ * @summary Lists watched media roots.
  */
-export const updateLibrarySettings = async (librarySettingsUpdateRequest: LibrarySettingsUpdateRequest, options?: RequestInit): Promise<updateLibrarySettingsResponse> => {
+export const listLibraryRoots = async ( options?: RequestInit): Promise<listLibraryRootsResponse> => {
 
-  return orvalFetch<updateLibrarySettingsResponse>(getUpdateLibrarySettingsUrl(),
+  return orvalFetch<listLibraryRootsResponse>(getListLibraryRootsUrl(),
   {
     ...options,
-    method: 'PUT',
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type createLibraryRootResponse200 = {
+  data: LibraryRoot
+  status: 200
+}
+
+export type createLibraryRootResponseSuccess = (createLibraryRootResponse200) & {
+  headers: Headers;
+};
+;
+
+export type createLibraryRootResponse = (createLibraryRootResponseSuccess)
+
+export const getCreateLibraryRootUrl = () => {
+
+
+
+
+  return `/api/libraries`
+}
+
+/**
+ * @summary Adds a watched media root.
+ */
+export const createLibraryRoot = async (libraryRootCreateRequest: LibraryRootCreateRequest, options?: RequestInit): Promise<createLibraryRootResponse> => {
+
+  return orvalFetch<createLibraryRootResponse>(getCreateLibraryRootUrl(),
+  {
+    ...options,
+    method: 'POST',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
-      librarySettingsUpdateRequest,)
+      libraryRootCreateRequest,)
   }
 );}
 
@@ -3186,43 +3735,6 @@ export const browseLibraryPath = async (params?: BrowseLibraryPathParams, option
     method: 'GET'
 
 
-  }
-);}
-
-
-
-export type createLibraryRootResponse200 = {
-  data: LibraryRoot
-  status: 200
-}
-
-export type createLibraryRootResponseSuccess = (createLibraryRootResponse200) & {
-  headers: Headers;
-};
-;
-
-export type createLibraryRootResponse = (createLibraryRootResponseSuccess)
-
-export const getCreateLibraryRootUrl = () => {
-
-
-
-
-  return `/api/libraries`
-}
-
-/**
- * @summary Adds a watched media root.
- */
-export const createLibraryRoot = async (libraryRootCreateRequest: LibraryRootCreateRequest, options?: RequestInit): Promise<createLibraryRootResponse> => {
-
-  return orvalFetch<createLibraryRootResponse>(getCreateLibraryRootUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(
-      libraryRootCreateRequest,)
   }
 );}
 
@@ -3314,20 +3826,27 @@ export type listFileRootsResponseSuccess = (listFileRootsResponse200) & {
 
 export type listFileRootsResponse = (listFileRootsResponseSuccess)
 
-export const getListFileRootsUrl = () => {
+export const getListFileRootsUrl = (params?: ListFileRootsParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/files/roots`
+  return stringifiedParams.length > 0 ? `/api/files/roots?${stringifiedParams}` : `/api/files/roots`
 }
 
 /**
  * @summary Lists watched roots for the Files page.
  */
-export const listFileRoots = async ( options?: RequestInit): Promise<listFileRootsResponse> => {
+export const listFileRoots = async (params?: ListFileRootsParams, options?: RequestInit): Promise<listFileRootsResponse> => {
 
-  return orvalFetch<listFileRootsResponse>(getListFileRootsUrl(),
+  return orvalFetch<listFileRootsResponse>(getListFileRootsUrl(params),
   {
     ...options,
     method: 'GET'
@@ -3522,20 +4041,28 @@ export type createFileFolderResponseSuccess = (createFileFolderResponse200) & {
 
 export type createFileFolderResponse = (createFileFolderResponseSuccess)
 
-export const getCreateFileFolderUrl = () => {
+export const getCreateFileFolderUrl = (params?: CreateFileFolderParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/files/folders`
+  return stringifiedParams.length > 0 ? `/api/files/folders?${stringifiedParams}` : `/api/files/folders`
 }
 
 /**
  * @summary Creates a folder under a watched root.
  */
-export const createFileFolder = async (fileCreateFolderRequest: FileCreateFolderRequest, options?: RequestInit): Promise<createFileFolderResponse> => {
+export const createFileFolder = async (fileCreateFolderRequest: FileCreateFolderRequest,
+    params?: CreateFileFolderParams, options?: RequestInit): Promise<createFileFolderResponse> => {
 
-  return orvalFetch<createFileFolderResponse>(getCreateFileFolderUrl(),
+  return orvalFetch<createFileFolderResponse>(getCreateFileFolderUrl(params),
   {
     ...options,
     method: 'POST',
@@ -3595,20 +4122,28 @@ export type renameFileResponseSuccess = (renameFileResponse200) & {
 
 export type renameFileResponse = (renameFileResponseSuccess)
 
-export const getRenameFileUrl = () => {
+export const getRenameFileUrl = (params?: RenameFileParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/files/rename`
+  return stringifiedParams.length > 0 ? `/api/files/rename?${stringifiedParams}` : `/api/files/rename`
 }
 
 /**
  * @summary Renames a watched-root file or folder.
  */
-export const renameFile = async (fileRenameRequest: FileRenameRequest, options?: RequestInit): Promise<renameFileResponse> => {
+export const renameFile = async (fileRenameRequest: FileRenameRequest,
+    params?: RenameFileParams, options?: RequestInit): Promise<renameFileResponse> => {
 
-  return orvalFetch<renameFileResponse>(getRenameFileUrl(),
+  return orvalFetch<renameFileResponse>(getRenameFileUrl(params),
   {
     ...options,
     method: 'PATCH',
@@ -3632,20 +4167,28 @@ export type moveFileResponseSuccess = (moveFileResponse200) & {
 
 export type moveFileResponse = (moveFileResponseSuccess)
 
-export const getMoveFileUrl = () => {
+export const getMoveFileUrl = (params?: MoveFileParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/files/move`
+  return stringifiedParams.length > 0 ? `/api/files/move?${stringifiedParams}` : `/api/files/move`
 }
 
 /**
  * @summary Moves a watched-root file or folder.
  */
-export const moveFile = async (fileMoveRequest: FileMoveRequest, options?: RequestInit): Promise<moveFileResponse> => {
+export const moveFile = async (fileMoveRequest: FileMoveRequest,
+    params?: MoveFileParams, options?: RequestInit): Promise<moveFileResponse> => {
 
-  return orvalFetch<moveFileResponse>(getMoveFileUrl(),
+  return orvalFetch<moveFileResponse>(getMoveFileUrl(params),
   {
     ...options,
     method: 'POST',
@@ -3712,20 +4255,28 @@ export type rescanFileRootResponseSuccess = (rescanFileRootResponse200) & {
 
 export type rescanFileRootResponse = (rescanFileRootResponseSuccess)
 
-export const getRescanFileRootUrl = () => {
+export const getRescanFileRootUrl = (params?: RescanFileRootParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/files/rescan`
+  return stringifiedParams.length > 0 ? `/api/files/rescan?${stringifiedParams}` : `/api/files/rescan`
 }
 
 /**
  * @summary Queues scan jobs for a watched root.
  */
-export const rescanFileRoot = async (fileRescanRequest: FileRescanRequest, options?: RequestInit): Promise<rescanFileRootResponse> => {
+export const rescanFileRoot = async (fileRescanRequest: FileRescanRequest,
+    params?: RescanFileRootParams, options?: RequestInit): Promise<rescanFileRootResponse> => {
 
-  return orvalFetch<rescanFileRootResponse>(getRescanFileRootUrl(),
+  return orvalFetch<rescanFileRootResponse>(getRescanFileRootUrl(params),
   {
     ...options,
     method: 'POST',
@@ -4074,21 +4625,30 @@ export type identifyEntityResponseError = (identifyEntityResponse400) & {
 
 export type identifyEntityResponse = (identifyEntityResponseSuccess | identifyEntityResponseError)
 
-export const getIdentifyEntityUrl = (entityId: string,) => {
+export const getIdentifyEntityUrl = (entityId: string,
+    params?: IdentifyEntityParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/identify/entities/${entityId}`
+  return stringifiedParams.length > 0 ? `/api/identify/entities/${entityId}?${stringifiedParams}` : `/api/identify/entities/${entityId}`
 }
 
 /**
  * @summary Runs one transient metadata identify lookup for an entity.
  */
 export const identifyEntity = async (entityId: string,
-    identifyEntityRequest: IdentifyEntityRequest, options?: RequestInit): Promise<identifyEntityResponse> => {
+    identifyEntityRequest: IdentifyEntityRequest,
+    params?: IdentifyEntityParams, options?: RequestInit): Promise<identifyEntityResponse> => {
 
-  return orvalFetch<identifyEntityResponse>(getIdentifyEntityUrl(entityId),
+  return orvalFetch<identifyEntityResponse>(getIdentifyEntityUrl(entityId,params),
   {
     ...options,
     method: 'POST',
@@ -4169,20 +4729,28 @@ export type startBulkIdentifyResponseError = (startBulkIdentifyResponse400) & {
 
 export type startBulkIdentifyResponse = (startBulkIdentifyResponseSuccess | startBulkIdentifyResponseError)
 
-export const getStartBulkIdentifyUrl = () => {
+export const getStartBulkIdentifyUrl = (params?: StartBulkIdentifyParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/identify/bulk`
+  return stringifiedParams.length > 0 ? `/api/identify/bulk?${stringifiedParams}` : `/api/identify/bulk`
 }
 
 /**
  * @summary Starts a transient in-memory bulk identify review session.
  */
-export const startBulkIdentify = async (identifyBulkStartRequest: IdentifyBulkStartRequest, options?: RequestInit): Promise<startBulkIdentifyResponse> => {
+export const startBulkIdentify = async (identifyBulkStartRequest: IdentifyBulkStartRequest,
+    params?: StartBulkIdentifyParams, options?: RequestInit): Promise<startBulkIdentifyResponse> => {
 
-  return orvalFetch<startBulkIdentifyResponse>(getStartBulkIdentifyUrl(),
+  return orvalFetch<startBulkIdentifyResponse>(getStartBulkIdentifyUrl(params),
   {
     ...options,
     method: 'POST',

@@ -8,4 +8,5 @@
 export type ListFileChildrenParams = {
 rootId: string;
 path?: string;
+hideNsfw?: boolean;
 };

@@ -2,9 +2,11 @@ using System.Collections.Concurrent;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Prismedia.Application.Settings;
 using Prismedia.Application.Videos;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Processes;
+using Prismedia.Infrastructure.Settings;
 
 namespace Prismedia.Infrastructure.Videos;
 
@@ -1079,25 +1081,14 @@ public sealed class HlsAssetService : IHlsAssetService {
             return _options;
         }
 
-        var settings = await _db.LibrarySettings
-            .AsNoTracking()
-            .OrderBy(row => row.CreatedAt)
-            .Select(row => new {
-                row.HlsTranscoderProfile,
-                row.HlsFfmpegPath,
-                row.HlsVaapiDevice
-            })
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (settings is null) {
-            return _options;
-        }
+        var settings = await new SettingsService(new EfSettingsPersistence(_db))
+            .GetHlsSettingsAsync(cancellationToken);
 
         return new HlsAssetServiceOptions(
             _options.CacheRoot,
-            HlsTranscoderProfiles.ParseOrDefault(settings.HlsTranscoderProfile, _options.TranscoderProfile),
-            ResolveConfiguredFfmpegPath(settings.HlsFfmpegPath, _options.FfmpegPath),
-            string.IsNullOrWhiteSpace(settings.HlsVaapiDevice) ? _options.VaapiDevice : settings.HlsVaapiDevice.Trim());
+            HlsTranscoderProfiles.ParseOrDefault(settings.TranscoderProfile, _options.TranscoderProfile),
+            ResolveConfiguredFfmpegPath(settings.FfmpegPath, _options.FfmpegPath),
+            string.IsNullOrWhiteSpace(settings.VaapiDevice) ? _options.VaapiDevice : settings.VaapiDevice.Trim());
     }
 
     private static string ResolveConfiguredFfmpegPath(string? savedPath, string defaultPath) =>

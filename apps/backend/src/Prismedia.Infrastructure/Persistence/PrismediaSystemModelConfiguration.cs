@@ -24,6 +24,15 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
         });
 
+        modelBuilder.Entity<AppSettingRow>(entity => {
+            entity.ToTable("app_settings");
+            entity.HasKey(row => row.Key);
+            entity.Property(row => row.Key).HasColumnName("key").HasMaxLength(128);
+            entity.Property(row => row.ValueJson).HasColumnName("value_json").HasColumnType("jsonb");
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+        });
+
         modelBuilder.Entity<ProviderConfigRow>(entity => {
             entity.ToTable("provider_configs");
             entity.HasKey(row => row.Id);

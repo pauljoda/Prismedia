@@ -308,49 +308,60 @@ export interface LibraryBrowseDto {
   directories: LibraryBrowseEntryDto[];
 }
 
-export interface LibrarySettingsDto {
-  id: string;
-  autoScanEnabled: boolean;
-  scanIntervalMinutes: number;
-  autoGenerateMetadata: boolean;
-  autoGenerateFingerprints: boolean;
-  /** When true, the worker computes a Stash-compatible perceptual hash during fingerprint jobs. CPU-heavy; required for contributing fingerprints to StashDB/ThePornDB. */
-  generatePhash: boolean;
-  autoGeneratePreview: boolean;
-  generateTrickplay: boolean;
-  trickplayIntervalSeconds: number;
-  previewClipDurationSeconds: number;
-  thumbnailQuality: number;
-  trickplayQuality: number;
-  /** Parallel jobs per queue in the worker process (1–32). */
-  backgroundWorkerConcurrency: number;
-  nsfwLanAutoEnable: boolean;
-  /** Video derivatives (thumb, preview, sprite, trickplay) in cache dir vs next to media. */
-  metadataStorageDedicated: boolean;
-  /** When true, player auto-enables a subtitle track on load if a matching language is available. */
-  subtitlesAutoEnable: boolean;
-  /** Comma-separated BCP-47 / ISO 639 preference list (e.g. "en,eng,en-US"). First match wins. */
-  subtitlesPreferredLanguages: string;
-  /** Visual style applied to the caption overlay. */
-  subtitleStyle: SubtitleDisplayStyle;
-  /** Font scale multiplier (1.0 = default). Clamped to [0.5, 3.0]. */
-  subtitleFontScale: number;
-  /** Vertical position as a 0–100 percentage from the top of the video frame. */
-  subtitlePositionPercent: number;
-  /** Overall caption layer opacity (0.2–1.0). Applied to the full overlay including text, box, and shadows. */
-  subtitleOpacity: number;
-  /** Default playback mode the video player boots into on each new source. */
-  defaultPlaybackMode: PlaybackMode;
-  /** When true, the video player shows remote playback / casting controls. */
-  showCastControls: boolean;
-  /** Encoder profile used when the adaptive HLS pipeline generates new segments. */
-  hlsTranscoderProfile: HlsTranscoderProfile;
-  /** Executable name or absolute path used to launch ffmpeg for adaptive HLS. */
-  hlsFfmpegPath: string;
-  /** Linux render device used by the VA-API HLS transcoder profile. */
-  hlsVaapiDevice: string;
-  createdAt: string;
-  updatedAt: string;
+export type AppSettingType =
+  | "boolean"
+  | "integer"
+  | "decimal"
+  | "string"
+  | "stringList"
+  | "select";
+
+export type AppSettingValue = boolean | number | string | string[];
+
+export interface AppSettingConstraintsDto {
+  min?: number | null;
+  max?: number | null;
+  step?: number | null;
+  minItems?: number | null;
+  maxItems?: number | null;
+}
+
+export interface AppSettingOptionDto {
+  value: string;
+  label: string;
+  description?: string | null;
+}
+
+export interface AppSettingDescriptorDto {
+  key: string;
+  groupKey: string;
+  label: string;
+  description: string;
+  type: AppSettingType;
+  value: AppSettingValue;
+  defaultValue: AppSettingValue;
+  isDefault: boolean;
+  order: number;
+  constraints: AppSettingConstraintsDto | null;
+  options: AppSettingOptionDto[];
+  inputKind?: string | null;
+  applyHint?: string | null;
+}
+
+export interface AppSettingsGroupDto {
+  key: string;
+  label: string;
+  description: string;
+  order: number;
+  settings: AppSettingDescriptorDto[];
+}
+
+export interface AppSettingsCatalogDto {
+  groups: AppSettingsGroupDto[];
+}
+
+export interface AppSettingsValuesDto {
+  values: Record<string, AppSettingValue>;
 }
 
 export const playbackModes = ["direct", "hls"] as const;

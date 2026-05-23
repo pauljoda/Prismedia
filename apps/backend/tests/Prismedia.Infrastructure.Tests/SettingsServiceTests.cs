@@ -1,6 +1,6 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Settings;
-using Prismedia.Contracts.Settings;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Settings;
 
@@ -8,64 +8,73 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class SettingsServiceTests {
     [Fact]
-    public async Task GetCreatesDefaultRowWhenSettingsAreMissing() {
+    public async Task CatalogUsesRegistryDefaultsWithoutCreatingRows() {
         await using var db = CreateContext();
         var service = new SettingsService(new EfSettingsPersistence(db));
 
-        var settings = await service.GetAsync(CancellationToken.None);
+        var catalog = await service.GetCatalogAsync(CancellationToken.None);
+        var castControls = catalog.Groups
+            .SelectMany(group => group.Settings)
+            .Single(setting => setting.Key == AppSettingKeys.PlaybackShowCastControls);
 
-        Assert.False(settings.HideNsfw);
-        Assert.True(settings.EnableCastControls);
-        Assert.Equal(1, await db.LibrarySettings.CountAsync());
+        Assert.True(castControls.Value.GetBoolean());
+        Assert.True(castControls.IsDefault);
+        Assert.Empty(await db.AppSettings.ToArrayAsync());
     }
 
     [Fact]
-    public async Task UpdatePersistsSettingsToLibrarySettings() {
+    public async Task UpdatePersistsOnlyNonDefaultOverrides() {
         await using var db = CreateContext();
         var service = new SettingsService(new EfSettingsPersistence(db));
 
-        await service.UpdateAsync(new SettingsUpdateRequest(true, false), CancellationToken.None);
-        var settings = await service.GetAsync(CancellationToken.None);
-
-        Assert.True(settings.HideNsfw);
-        Assert.False(settings.EnableCastControls);
-    }
-
-    [Fact]
-    public async Task UpdateLibrarySettingsPersistsPreferredAudioLanguages() {
-        await using var db = CreateContext();
-        var service = new SettingsService(new EfSettingsPersistence(db));
-
-        var settings = await service.UpdateLibrarySettingsAsync(
-            new LibrarySettingsUpdateRequest(
-                null, null, null, null, null, null, null, null, null, null, null,
-                null, null, null, null, null, "ja,jpn", null, null, null, null, null, null,
-                null, null, null),
+        await service.UpdateSettingAsync(
+            AppSettingKeys.HlsTranscoderProfile,
+            JsonSerializer.SerializeToElement("VideoToolbox"),
             CancellationToken.None);
 
-        Assert.Equal("ja,jpn", settings.AudioPreferredLanguages);
-        Assert.Equal("ja,jpn", (await db.LibrarySettings.SingleAsync()).AudioPreferredLanguages);
+        var row = await db.AppSettings.SingleAsync();
+        Assert.Equal(AppSettingKeys.HlsTranscoderProfile, row.Key);
+        Assert.Equal("\"VideoToolbox\"", row.ValueJson);
     }
 
     [Fact]
-    public async Task UpdateLibrarySettingsPersistsHlsTranscoderSettings() {
+    public async Task BatchUpdatePersistsStringListAndPaths() {
         await using var db = CreateContext();
         var service = new SettingsService(new EfSettingsPersistence(db));
 
-        var settings = await service.UpdateLibrarySettingsAsync(
-            new LibrarySettingsUpdateRequest(
-                null, null, null, null, null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null, null, null,
-                "VideoToolbox", "/opt/homebrew/bin/ffmpeg", "/dev/dri/renderD129"),
+        await service.UpdateSettingsAsync(
+            new Dictionary<string, JsonElement> {
+                [AppSettingKeys.PlaybackAudioPreferredLanguages] =
+                    JsonSerializer.SerializeToElement(new[] { "ja", "jpn" }),
+                [AppSettingKeys.HlsFfmpegPath] =
+                    JsonSerializer.SerializeToElement("/opt/homebrew/bin/ffmpeg"),
+            },
             CancellationToken.None);
 
-        var row = await db.LibrarySettings.SingleAsync();
-        Assert.Equal("VideoToolbox", settings.HlsTranscoderProfile);
-        Assert.Equal("/opt/homebrew/bin/ffmpeg", settings.HlsFfmpegPath);
-        Assert.Equal("/dev/dri/renderD129", settings.HlsVaapiDevice);
-        Assert.Equal("VideoToolbox", row.HlsTranscoderProfile);
-        Assert.Equal("/opt/homebrew/bin/ffmpeg", row.HlsFfmpegPath);
-        Assert.Equal("/dev/dri/renderD129", row.HlsVaapiDevice);
+        var playback = await service.GetPlaybackSettingsAsync(CancellationToken.None);
+        var hls = await service.GetHlsSettingsAsync(CancellationToken.None);
+
+        Assert.Equal(["ja", "jpn"], playback.AudioPreferredLanguages);
+        Assert.Equal("/opt/homebrew/bin/ffmpeg", hls.FfmpegPath);
+        Assert.Equal(2, await db.AppSettings.CountAsync());
+    }
+
+    [Fact]
+    public async Task SavingDecimalDefaultRemovesOverride() {
+        await using var db = CreateContext();
+        var service = new SettingsService(new EfSettingsPersistence(db));
+
+        await service.UpdateSettingAsync(
+            AppSettingKeys.SubtitlesOpacity,
+            JsonSerializer.SerializeToElement(0.8m),
+            CancellationToken.None);
+        var reset = await service.UpdateSettingAsync(
+            AppSettingKeys.SubtitlesOpacity,
+            JsonSerializer.SerializeToElement(1.0m),
+            CancellationToken.None);
+
+        Assert.True(reset.IsDefault);
+        Assert.Empty(await db.AppSettings.ToArrayAsync());
     }
 
     private static PrismediaDbContext CreateContext() {

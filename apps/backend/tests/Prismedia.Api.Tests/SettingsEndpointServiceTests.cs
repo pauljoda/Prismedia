@@ -1,4 +1,6 @@
+using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
@@ -9,67 +11,121 @@ namespace Prismedia.Api.Tests;
 
 public sealed class SettingsEndpointServiceTests {
     [Fact]
-    public async Task SettingsEndpointReadsAndUpdatesThroughService() {
-        using var factory = new WebApplicationFactory<Program>()
-            .WithWebHostBuilder(builder => {
-                builder.ConfigureServices(services => {
-                    services.AddScoped<ISettingsPersistence, FakeSettingsPersistence>();
-                });
-            });
+    public async Task SettingsCatalogEndpointReadsAndUpdatesThroughService() {
+        using var factory = CreateFactory();
         using var client = factory.CreateClient();
 
-        var before = await client.GetFromJsonAsync<SettingsResponse>("/api/settings");
-        var after = await client.PatchAsJsonAsync("/api/settings", new SettingsUpdateRequest(true, false));
-        var updated = await after.Content.ReadFromJsonAsync<SettingsResponse>();
+        var catalog = await client.GetFromJsonAsync<SettingsCatalogResponse>("/api/settings");
+        var updatedResponse = await client.PatchAsJsonAsync(
+            $"/api/settings/{AppSettingKeys.JobsBackgroundConcurrency}",
+            new SettingUpdateRequest(JsonSerializer.SerializeToElement(4)));
+        var updated = await updatedResponse.Content.ReadFromJsonAsync<SettingDescriptor>();
+        var values = await client.GetFromJsonAsync<SettingsValuesResponse>(
+            $"/api/settings/values?keys={Uri.EscapeDataString(AppSettingKeys.JobsBackgroundConcurrency)}");
 
-        Assert.NotNull(before);
-        Assert.False(before.HideNsfw);
-        Assert.True(before.EnableCastControls);
+        Assert.NotNull(catalog);
+        Assert.Contains(catalog.Groups.SelectMany(group => group.Settings), setting =>
+            setting.Key == AppSettingKeys.VisibilityDefaultMode &&
+            setting.Value.GetString() == "off" &&
+            setting.IsDefault);
+        Assert.True(updatedResponse.IsSuccessStatusCode);
         Assert.NotNull(updated);
-        Assert.True(updated.HideNsfw);
-        Assert.False(updated.EnableCastControls);
+        Assert.Equal(4, updated.Value.GetInt32());
+        Assert.False(updated.IsDefault);
+        Assert.NotNull(values);
+        Assert.Equal(4, values.Values[AppSettingKeys.JobsBackgroundConcurrency].GetInt32());
     }
 
     [Fact]
-    public async Task LibrarySettingsEndpointsUseSettingsService() {
-        using var factory = new WebApplicationFactory<Program>()
-            .WithWebHostBuilder(builder => {
-                builder.ConfigureServices(services => {
-                    services.AddScoped<ISettingsPersistence, FakeSettingsPersistence>();
-                });
-            });
+    public async Task SettingsBatchAndResetEndpointsUseCentralRegistry() {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+
+        var batch = await client.PatchAsJsonAsync(
+            "/api/settings",
+            new SettingsBatchUpdateRequest(new Dictionary<string, JsonElement> {
+                [AppSettingKeys.PlaybackDefaultMode] = JsonSerializer.SerializeToElement("hls"),
+                [AppSettingKeys.PlaybackAudioPreferredLanguages] =
+                    JsonSerializer.SerializeToElement(new[] { "ja", "jpn" }),
+            }));
+        var reset = await client.DeleteAsync($"/api/settings/{AppSettingKeys.PlaybackDefaultMode}");
+        var defaulted = await reset.Content.ReadFromJsonAsync<SettingDescriptor>();
+
+        Assert.True(batch.IsSuccessStatusCode);
+        Assert.True(reset.IsSuccessStatusCode);
+        Assert.NotNull(defaulted);
+        Assert.Equal("direct", defaulted.Value.GetString());
+        Assert.True(defaulted.IsDefault);
+    }
+
+    [Fact]
+    public async Task SettingsEndpointsReturnProblemDetailsForUnknownAndInvalidKeys() {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+
+        var unknown = await client.GetAsync("/api/settings/not.real");
+        var invalid = await client.PatchAsJsonAsync(
+            $"/api/settings/{AppSettingKeys.JobsBackgroundConcurrency}",
+            new SettingUpdateRequest(JsonSerializer.SerializeToElement(99)));
+        var invalidJson = await invalid.Content.ReadFromJsonAsync<JsonElement>();
+
+        Assert.Equal(HttpStatusCode.NotFound, unknown.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+        Assert.Equal(AppSettingKeys.JobsBackgroundConcurrency, invalidJson.GetProperty("key").GetString());
+    }
+
+    [Fact]
+    public async Task LibraryConfigPayloadIncludesCatalogAndWatchedRoots() {
+        using var factory = CreateFactory();
         using var client = factory.CreateClient();
 
         var config = await client.GetFromJsonAsync<LibraryConfigResponse>("/api/settings/library");
-        var updated = await client.PutAsJsonAsync(
-            "/api/settings/library",
-            new LibrarySettingsUpdateRequest(
-                null, 15, null, null, null, null, null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null, null, null,
-                null, null, null));
+        var roots = await client.GetFromJsonAsync<IReadOnlyList<LibraryRoot>>("/api/libraries");
         var root = await client.PostAsJsonAsync(
             "/api/libraries",
             new LibraryRootCreateRequest("/media/videos", "Videos", null, null, null, null, null, null, null));
 
         Assert.NotNull(config);
         Assert.Single(config.Roots);
-        Assert.True(updated.IsSuccessStatusCode);
+        Assert.NotEmpty(config.Settings.Groups);
+        Assert.NotNull(roots);
+        Assert.Single(roots);
         Assert.True(root.IsSuccessStatusCode);
     }
 
+    private static WebApplicationFactory<Program> CreateFactory() =>
+        new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(builder => {
+                builder.ConfigureServices(services => {
+                    services.AddSingleton<ISettingsPersistence, FakeSettingsPersistence>();
+                });
+            });
+
     private sealed class FakeSettingsPersistence : ISettingsPersistence {
-        private static readonly Guid SettingsId = Guid.Parse("11111111-1111-1111-1111-111111111111");
         private static readonly Guid RootId = Guid.Parse("22222222-2222-2222-2222-222222222222");
 
-        private LibrarySettings _settings = SampleSettings();
+        private readonly Dictionary<string, string> _settings = new(StringComparer.Ordinal);
         private readonly Dictionary<Guid, LibraryRoot> _roots = new() { [RootId] = SampleRoot() };
 
-        public Task<LibrarySettings> GetLibrarySettingsAsync(CancellationToken cancellationToken) =>
-            Task.FromResult(_settings);
+        public Task<IReadOnlyDictionary<string, string>> LoadSettingOverridesAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyDictionary<string, string>>(new Dictionary<string, string>(_settings, StringComparer.Ordinal));
 
-        public Task<LibrarySettings> SaveLibrarySettingsAsync(LibrarySettings state, CancellationToken cancellationToken) {
-            _settings = state with { UpdatedAt = DateTimeOffset.UtcNow };
-            return Task.FromResult(_settings);
+        public Task SaveSettingOverrideAsync(string key, string valueJson, CancellationToken cancellationToken) {
+            _settings[key] = valueJson;
+            return Task.CompletedTask;
+        }
+
+        public Task SaveSettingOverridesAsync(IReadOnlyDictionary<string, string> values, CancellationToken cancellationToken) {
+            foreach (var (key, valueJson) in values) {
+                _settings[key] = valueJson;
+            }
+
+            return Task.CompletedTask;
+        }
+
+        public Task DeleteSettingOverrideAsync(string key, CancellationToken cancellationToken) {
+            _settings.Remove(key);
+            return Task.CompletedTask;
         }
 
         public Task<IReadOnlyList<LibraryRoot>> ListLibraryRootsAsync(CancellationToken cancellationToken) =>
@@ -90,39 +146,6 @@ public sealed class SettingsEndpointServiceTests {
 
         public Task<bool> DeleteLibraryRootAsync(Guid id, CancellationToken cancellationToken) =>
             Task.FromResult(_roots.Remove(id));
-
-        private static LibrarySettings SampleSettings() =>
-            new(
-                SettingsId,
-                false,
-                60,
-                true,
-                true,
-                false,
-                true,
-                true,
-                10,
-                8,
-                2,
-                2,
-                1,
-                false,
-                true,
-                false,
-                "en,eng",
-                "en,eng,en-US",
-                "stylized",
-                1,
-                88,
-                1,
-                "direct",
-                true,
-                "Software",
-                "ffmpeg",
-                "/dev/dri/renderD128",
-                false,
-                DateTimeOffset.UnixEpoch,
-                DateTimeOffset.UnixEpoch);
 
         private static LibraryRoot SampleRoot() =>
             new(

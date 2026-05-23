@@ -32,11 +32,12 @@ export class NsfwStore {
   private hasAutoEnabled = false;
   private keydownAttached = false;
 
-  constructor(opts: { initialMode: NsfwMode; lanAutoEnable: boolean }) {
+  constructor(opts: { initialMode: NsfwMode; lanAutoEnable: boolean; hasExplicitMode?: boolean }) {
     this.mode = opts.initialMode;
 
-    const hasCookie = opts.initialMode !== "off" || !opts.lanAutoEnable;
-    this.initialized = hasCookie;
+    const hasExplicitMode = opts.hasExplicitMode ?? true;
+    const shouldProbeLan = !hasExplicitMode && opts.lanAutoEnable && opts.initialMode !== "show";
+    this.initialized = !shouldProbeLan;
 
     if (!browser) return;
 
@@ -94,7 +95,9 @@ export class NsfwStore {
   }
 }
 
-export function provideNsfw(getOpts: () => { initialMode: NsfwMode; lanAutoEnable: boolean }) {
+export function provideNsfw(
+  getOpts: () => { initialMode: NsfwMode; lanAutoEnable: boolean; hasExplicitMode?: boolean },
+) {
   const store = new NsfwStore(getOpts());
   setContext(KEY, store);
   return store;

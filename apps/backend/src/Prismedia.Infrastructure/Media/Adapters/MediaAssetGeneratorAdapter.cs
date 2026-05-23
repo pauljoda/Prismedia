@@ -10,7 +10,7 @@ namespace Prismedia.Infrastructure.Media.Adapters;
 public sealed class MediaAssetGeneratorAdapter(
     ThumbnailService thumbnails,
     AssetPathService paths,
-    ISettingsPersistence? settings = null,
+    SettingsService? settings = null,
     MediaToolOptions? defaultToolOptions = null) : IMediaAssetGenerator {
     public async Task<bool> GenerateVideoThumbnailAsync(
         string inputPath, string outputPath, double seekSeconds,
@@ -118,11 +118,11 @@ public sealed class MediaAssetGeneratorAdapter(
             return defaults;
         }
 
-        var librarySettings = await settings.GetLibrarySettingsAsync(cancellationToken);
-        var ffmpegPath = string.IsNullOrWhiteSpace(librarySettings.HlsFfmpegPath) ||
-            string.Equals(librarySettings.HlsFfmpegPath.Trim(), "ffmpeg", StringComparison.OrdinalIgnoreCase)
+        var hlsSettings = await settings.GetHlsSettingsAsync(cancellationToken);
+        var ffmpegPath = string.IsNullOrWhiteSpace(hlsSettings.FfmpegPath) ||
+            string.Equals(hlsSettings.FfmpegPath.Trim(), "ffmpeg", StringComparison.OrdinalIgnoreCase)
                 ? defaults.FfmpegPath
-                : librarySettings.HlsFfmpegPath.Trim();
+                : hlsSettings.FfmpegPath.Trim();
         return new MediaToolOptions(ffmpegPath, defaults.ConfiguredFfprobePath);
     }
 }

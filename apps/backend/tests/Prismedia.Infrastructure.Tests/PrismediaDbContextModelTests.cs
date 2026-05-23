@@ -42,7 +42,7 @@ public sealed class PrismediaDbContextModelTests {
     [InlineData(typeof(CollectionItemDetailRow), "collection_item_details")]
     [InlineData(typeof(LibraryRootRow), "library_roots")]
     [InlineData(typeof(MediaFileIgnoreRow), "media_file_ignores")]
-    [InlineData(typeof(LibrarySettingsRow), "library_settings")]
+    [InlineData(typeof(AppSettingRow), "app_settings")]
     [InlineData(typeof(UiPreferenceRow), "ui_prefs")]
     [InlineData(typeof(ProviderConfigRow), "provider_configs")]
     [InlineData(typeof(ProviderCredentialRow), "provider_credentials")]
@@ -178,12 +178,15 @@ public sealed class PrismediaDbContextModelTests {
     }
 
     [Fact]
-    public void InitialPrismediaMigrationIsDiscoverableByEfMigrator() {
+    public void PrismediaMigrationsAreDiscoverableByEfMigrator() {
         using var db = CreateContext();
-        var migrations = db.GetService<IMigrationsAssembly>().Migrations.Keys;
+        var migrations = db.GetService<IMigrationsAssembly>().Migrations.Keys.ToArray();
 
-        Assert.Single(migrations);
-        Assert.Contains("InitialPrismediaSchema", migrations.Single(), StringComparison.Ordinal);
+        Assert.Contains(migrations, migration =>
+            migration.EndsWith("InitialPrismediaSchema", StringComparison.Ordinal));
+        Assert.Contains(migrations, migration =>
+            migration.EndsWith("CentralizedSettingsRegistry", StringComparison.Ordinal));
+        Assert.Equal(migrations.Order(StringComparer.Ordinal), migrations);
     }
 
     [Theory]
@@ -204,8 +207,7 @@ public sealed class PrismediaDbContextModelTests {
     [InlineData(typeof(EntityFlagRow), nameof(EntityFlagRow.IsFavorite), "is_favorite")]
     [InlineData(typeof(VideoDetailRow), nameof(VideoDetailRow.SubtitlesExtractedAt), "subtitles_extracted_at")]
     [InlineData(typeof(LibraryRootRow), nameof(LibraryRootRow.ScanVideos), "scan_videos")]
-    [InlineData(typeof(LibrarySettingsRow), nameof(LibrarySettingsRow.AutoScanEnabled), "auto_scan_enabled")]
-    [InlineData(typeof(LibrarySettingsRow), nameof(LibrarySettingsRow.HideNsfw), "hide_nsfw")]
+    [InlineData(typeof(AppSettingRow), nameof(AppSettingRow.ValueJson), "value_json")]
     [InlineData(typeof(DatabaseBackupRow), nameof(DatabaseBackupRow.BackupPath), "backup_path")]
     [InlineData(typeof(JobRunRow), nameof(JobRunRow.AvailableAt), "available_at")]
     public void ModelUsesSnakeCaseColumns(Type entityType, string propertyName, string columnName) {
@@ -232,8 +234,6 @@ public sealed class PrismediaDbContextModelTests {
     [InlineData(typeof(DatabaseBackupRow), nameof(DatabaseBackupRow.Status), typeof(DatabaseBackupStatus))]
     [InlineData(typeof(JobRunRow), nameof(JobRunRow.Type), typeof(JobType))]
     [InlineData(typeof(JobRunRow), nameof(JobRunRow.Status), typeof(JobRunStatus))]
-    [InlineData(typeof(LibrarySettingsRow), nameof(LibrarySettingsRow.SubtitleStyle), typeof(SubtitleStyle))]
-    [InlineData(typeof(LibrarySettingsRow), nameof(LibrarySettingsRow.DefaultPlaybackMode), typeof(PlaybackMode))]
     public void ModelUsesEnumsForClosedChoiceCodes(Type entityType, string propertyName, Type clrType) {
         using var db = CreateContext();
         var modelEntity = db.Model.FindEntityType(entityType);

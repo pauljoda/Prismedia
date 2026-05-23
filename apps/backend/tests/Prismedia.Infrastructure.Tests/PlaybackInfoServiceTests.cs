@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Prismedia.Application.Videos;
 using Prismedia.Infrastructure.Videos;
 using Prismedia.Application.Settings;
@@ -136,17 +137,29 @@ public sealed class PlaybackInfoServiceTests {
     }
 
     private sealed class FakeSettingsPersistence : ISettingsPersistence {
-        private readonly string _audioPreferredLanguages;
+        private readonly string[] _audioPreferredLanguages;
 
         public FakeSettingsPersistence(string audioPreferredLanguages) {
-            _audioPreferredLanguages = audioPreferredLanguages;
+            _audioPreferredLanguages = audioPreferredLanguages.Split(
+                ',',
+                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         }
 
-        public Task<LibrarySettings> GetLibrarySettingsAsync(CancellationToken cancellationToken) =>
-            Task.FromResult(SampleSettings());
+        public Task<IReadOnlyDictionary<string, string>> LoadSettingOverridesAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyDictionary<string, string>>(
+                new Dictionary<string, string> {
+                    [AppSettingKeys.PlaybackAudioPreferredLanguages] =
+                        JsonSerializer.Serialize(_audioPreferredLanguages),
+                });
 
-        public Task<LibrarySettings> SaveLibrarySettingsAsync(LibrarySettings state, CancellationToken cancellationToken) =>
-            Task.FromResult(state);
+        public Task SaveSettingOverrideAsync(string key, string valueJson, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task SaveSettingOverridesAsync(IReadOnlyDictionary<string, string> values, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task DeleteSettingOverrideAsync(string key, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
 
         public Task<IReadOnlyList<LibraryRoot>> ListLibraryRootsAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<LibraryRoot>>([]);
@@ -163,37 +176,5 @@ public sealed class PlaybackInfoServiceTests {
         public Task<bool> DeleteLibraryRootAsync(Guid id, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
-        private LibrarySettings SampleSettings() =>
-            new(
-                Guid.Parse("56565656-5656-5656-5656-565656565656"),
-                false,
-                60,
-                true,
-                true,
-                false,
-                true,
-                true,
-                10,
-                8,
-                2,
-                2,
-                1,
-                false,
-                true,
-                false,
-                "en,eng",
-                _audioPreferredLanguages,
-                "stylized",
-                1,
-                88,
-                1,
-                "direct",
-                true,
-                "Software",
-                "ffmpeg",
-                "/dev/dri/renderD128",
-                false,
-                DateTimeOffset.UnixEpoch,
-                DateTimeOffset.UnixEpoch);
     }
 }

@@ -5,9 +5,8 @@
  * OpenAPI spec version: 1.0.0
  */
 
-export interface SettingsUpdateRequest {
+export interface EntityRefreshResponse {
   /** @nullable */
-  hideNsfw: boolean | null;
-  /** @nullable */
-  enableCastControls: boolean | null;
+  jobId: string | null;
+  alreadyPending: boolean;
 }

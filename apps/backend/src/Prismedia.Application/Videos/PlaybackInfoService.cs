@@ -68,7 +68,7 @@ public sealed class PlaybackInfoService : IPlaybackInfoService {
         var fileInfo = new FileInfo(source.Path);
         var preferredAudioLanguages = _settings is null
             ? null
-            : (await _settings.GetLibraryConfigAsync(cancellationToken)).Settings.AudioPreferredLanguages;
+            : string.Join(",", (await _settings.GetPlaybackSettingsAsync(cancellationToken)).AudioPreferredLanguages);
         var selectedAudioStream = SelectAudioStream(source, request?.AudioStreamIndex, preferredAudioLanguages);
         var sourceInfo = new MediaSourceInfoResult(
             mediaSourceId,

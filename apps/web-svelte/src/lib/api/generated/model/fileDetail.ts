@@ -14,4 +14,14 @@ export interface FileDetail {
   createdAt: string | null;
   linkedEntities: FileLinkedEntity[];
   canPreview: boolean;
+  /**
+     * @nullable
+     * @pattern ^-?(?:0|[1-9]\d*)$
+     */
+  directoryFileCount?: number | string | null;
+  /**
+     * @nullable
+     * @pattern ^-?(?:0|[1-9]\d*)$
+     */
+  directoryTotalSizeBytes?: number | string | null;
 }

@@ -1,18 +1,15 @@
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Settings;
 using Prismedia.Contracts.Settings;
-using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
-using Prismedia.Infrastructure.Videos;
 
 namespace Prismedia.Infrastructure.Settings;
 
 /// <summary>
-/// EF Core adapter for <see cref="ISettingsPersistence"/>. Owns the row ↔ Contract DTO
-/// translation for both the singleton <c>library_settings</c> row and the watched library
-/// roots, and normalizes the HLS transcoder profile string on persist so callers downstream
-/// always see a value that maps to a supported encoder.
+/// EF Core adapter for <see cref="ISettingsPersistence"/>. Stores app-setting overrides
+/// as raw JSON in <c>app_settings</c> and owns row ↔ contract translation for watched
+/// library roots.
 /// </summary>
 public sealed class EfSettingsPersistence : ISettingsPersistence {
     private readonly PrismediaDbContext _db;
@@ -21,19 +18,67 @@ public sealed class EfSettingsPersistence : ISettingsPersistence {
         _db = db;
     }
 
-    public async Task<LibrarySettings> GetLibrarySettingsAsync(CancellationToken cancellationToken) {
-        var row = await EnsureRowAsync(cancellationToken);
-        return ToContract(row);
+    public async Task<IReadOnlyDictionary<string, string>> LoadSettingOverridesAsync(CancellationToken cancellationToken) =>
+        await _db.AppSettings
+            .AsNoTracking()
+            .ToDictionaryAsync(row => row.Key, row => row.ValueJson, StringComparer.Ordinal, cancellationToken);
+
+    public async Task SaveSettingOverrideAsync(string key, string valueJson, CancellationToken cancellationToken) {
+        var now = DateTimeOffset.UtcNow;
+        var row = await _db.AppSettings.FindAsync([key], cancellationToken);
+        if (row is null) {
+            _db.AppSettings.Add(new AppSettingRow {
+                Key = key,
+                ValueJson = valueJson,
+                CreatedAt = now,
+                UpdatedAt = now,
+            });
+        } else {
+            row.ValueJson = valueJson;
+            row.UpdatedAt = now;
+        }
+
+        await _db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<LibrarySettings> SaveLibrarySettingsAsync(
-        LibrarySettings state,
+    public async Task SaveSettingOverridesAsync(
+        IReadOnlyDictionary<string, string> values,
         CancellationToken cancellationToken) {
-        var row = await EnsureRowAsync(cancellationToken);
-        ApplyToRow(row, state);
-        row.UpdatedAt = DateTimeOffset.UtcNow;
+        if (values.Count == 0) {
+            return;
+        }
+
+        var keys = values.Keys.ToArray();
+        var existing = await _db.AppSettings
+            .Where(row => keys.Contains(row.Key))
+            .ToDictionaryAsync(row => row.Key, StringComparer.Ordinal, cancellationToken);
+        var now = DateTimeOffset.UtcNow;
+
+        foreach (var (key, valueJson) in values) {
+            if (existing.TryGetValue(key, out var row)) {
+                row.ValueJson = valueJson;
+                row.UpdatedAt = now;
+            } else {
+                _db.AppSettings.Add(new AppSettingRow {
+                    Key = key,
+                    ValueJson = valueJson,
+                    CreatedAt = now,
+                    UpdatedAt = now,
+                });
+            }
+        }
+
         await _db.SaveChangesAsync(cancellationToken);
-        return ToContract(row);
+    }
+
+    public async Task DeleteSettingOverrideAsync(string key, CancellationToken cancellationToken) {
+        var row = await _db.AppSettings.FindAsync([key], cancellationToken);
+        if (row is null) {
+            return;
+        }
+
+        _db.AppSettings.Remove(row);
+        await _db.SaveChangesAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyList<LibraryRoot>> ListLibraryRootsAsync(CancellationToken cancellationToken) {
@@ -102,98 +147,6 @@ public sealed class EfSettingsPersistence : ISettingsPersistence {
         await _db.SaveChangesAsync(cancellationToken);
         return true;
     }
-
-    private async Task<LibrarySettingsRow> EnsureRowAsync(CancellationToken cancellationToken) {
-        var row = await _db.LibrarySettings
-            .OrderBy(settings => settings.CreatedAt)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (row is not null) {
-            return row;
-        }
-
-        var now = DateTimeOffset.UtcNow;
-        row = new LibrarySettingsRow {
-            Id = Guid.NewGuid(),
-            CreatedAt = now,
-            UpdatedAt = now,
-        };
-
-        _db.LibrarySettings.Add(row);
-        await _db.SaveChangesAsync(cancellationToken);
-        return row;
-    }
-
-    private static void ApplyToRow(LibrarySettingsRow row, LibrarySettings state) {
-        row.AutoScanEnabled = state.AutoScanEnabled;
-        row.ScanIntervalMinutes = state.ScanIntervalMinutes;
-        row.AutoGenerateMetadata = state.AutoGenerateMetadata;
-        row.AutoGenerateFingerprints = state.AutoGenerateFingerprints;
-        row.GeneratePhash = state.GeneratePhash;
-        row.AutoGeneratePreview = state.AutoGeneratePreview;
-        row.GenerateTrickplay = state.GenerateTrickplay;
-        row.TrickplayIntervalSeconds = state.TrickplayIntervalSeconds;
-        row.PreviewClipDurationSeconds = state.PreviewClipDurationSeconds;
-        row.ThumbnailQuality = state.ThumbnailQuality;
-        row.TrickplayQuality = state.TrickplayQuality;
-        row.BackgroundWorkerConcurrency = state.BackgroundWorkerConcurrency;
-        row.NsfwLanAutoEnable = state.NsfwLanAutoEnable;
-        row.HideNsfw = state.HideNsfw;
-        row.MetadataStorageDedicated = state.MetadataStorageDedicated;
-        row.SubtitlesAutoEnable = state.SubtitlesAutoEnable;
-        row.SubtitlesPreferredLanguages = state.SubtitlesPreferredLanguages;
-        row.AudioPreferredLanguages = state.AudioPreferredLanguages;
-        if (state.SubtitleStyle.TryDecodeAs<SubtitleStyle>(out var subtitleStyle)) {
-            row.SubtitleStyle = subtitleStyle;
-        }
-
-        row.SubtitleFontScale = state.SubtitleFontScale;
-        row.SubtitlePositionPercent = state.SubtitlePositionPercent;
-        row.SubtitleOpacity = state.SubtitleOpacity;
-        if (state.DefaultPlaybackMode.TryDecodeAs<PlaybackMode>(out var playbackMode)) {
-            row.DefaultPlaybackMode = playbackMode;
-        }
-
-        row.ShowCastControls = state.ShowCastControls;
-        row.HlsTranscoderProfile = HlsTranscoderProfiles
-            .ParseOrDefault(state.HlsTranscoderProfile, HlsTranscoderProfile.Software)
-            .ToString();
-        row.HlsFfmpegPath = string.IsNullOrWhiteSpace(state.HlsFfmpegPath) ? "ffmpeg" : state.HlsFfmpegPath.Trim();
-        row.HlsVaapiDevice = string.IsNullOrWhiteSpace(state.HlsVaapiDevice) ? "/dev/dri/renderD128" : state.HlsVaapiDevice.Trim();
-    }
-
-    private static LibrarySettings ToContract(LibrarySettingsRow row) =>
-        new(
-            row.Id,
-            row.AutoScanEnabled,
-            row.ScanIntervalMinutes,
-            row.AutoGenerateMetadata,
-            row.AutoGenerateFingerprints,
-            row.GeneratePhash,
-            row.AutoGeneratePreview,
-            row.GenerateTrickplay,
-            row.TrickplayIntervalSeconds,
-            row.PreviewClipDurationSeconds,
-            row.ThumbnailQuality,
-            row.TrickplayQuality,
-            row.BackgroundWorkerConcurrency,
-            row.NsfwLanAutoEnable,
-            row.MetadataStorageDedicated,
-            row.SubtitlesAutoEnable,
-            row.SubtitlesPreferredLanguages,
-            row.AudioPreferredLanguages,
-            row.SubtitleStyle.ToCode(),
-            row.SubtitleFontScale,
-            row.SubtitlePositionPercent,
-            row.SubtitleOpacity,
-            row.DefaultPlaybackMode.ToCode(),
-            row.ShowCastControls,
-            row.HlsTranscoderProfile,
-            row.HlsFfmpegPath,
-            row.HlsVaapiDevice,
-            row.HideNsfw,
-            row.CreatedAt,
-            row.UpdatedAt);
 
     private static LibraryRoot ToContract(LibraryRootRow row) =>
         new(

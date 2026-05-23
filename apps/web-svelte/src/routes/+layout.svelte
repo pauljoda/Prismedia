@@ -19,16 +19,20 @@
   import { provideSearch } from "$lib/stores/search.svelte";
   import { providePlaylist } from "$lib/stores/playlist.svelte";
 
-  function readNsfwCookie(): NsfwMode {
-    if (!browser) return "off";
+  function readNsfwCookie(): NsfwMode | null {
+    if (!browser) return null;
     const match = document.cookie.match(/(?:^|;\s*)prismedia-nsfw-mode=([^;]*)/);
-    return parseNsfwModeCookie(match ? decodeURIComponent(match[1]) : undefined);
+    return match ? parseNsfwModeCookie(decodeURIComponent(match[1])) : null;
   }
 
   const defaultLayoutData: Required<
-    Pick<App.PageData, "initialNsfwMode" | "lanAutoEnable" | "initialCollapsed">
+    Pick<
+      App.PageData,
+      "hasNsfwModeCookie" | "initialNsfwMode" | "lanAutoEnable" | "initialCollapsed"
+    >
   > = {
-    initialNsfwMode: readNsfwCookie(),
+    hasNsfwModeCookie: readNsfwCookie() !== null,
+    initialNsfwMode: readNsfwCookie() ?? "off",
     lanAutoEnable: false,
     initialCollapsed: false,
   };
@@ -39,8 +43,9 @@
   // Wire all context providers once at the root. The stores themselves
   // attach keyboard listeners (Cmd+K, ⌘⇧Z) via $effect.root on client boot.
   provideNsfw(() => ({
-    initialMode: layoutData.initialNsfwMode,
+    initialMode: readNsfwCookie() ?? layoutData.initialNsfwMode,
     lanAutoEnable: layoutData.lanAutoEnable,
+    hasExplicitMode: readNsfwCookie() !== null || layoutData.hasNsfwModeCookie,
   }));
   const chrome = provideAppChrome(() => layoutData.initialCollapsed);
   provideSearch();

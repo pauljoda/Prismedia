@@ -5,9 +5,9 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { LibraryRoot } from './libraryRoot';
-import type { LibrarySettings } from './librarySettings';
+import type { SettingsCatalogResponse } from './settingsCatalogResponse';
 
 export interface LibraryConfigResponse {
-  settings: LibrarySettings;
+  settings: SettingsCatalogResponse;
   roots: LibraryRoot[];
 }

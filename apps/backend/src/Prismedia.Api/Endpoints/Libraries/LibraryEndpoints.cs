@@ -8,6 +8,13 @@ public static class LibraryEndpoints {
         var group = routes.MapGroup("/api/libraries")
             .WithTags("Settings");
 
+        group.MapGet("", (
+            SettingsService settings,
+            CancellationToken cancellationToken) =>
+            settings.ListLibraryRootsAsync(cancellationToken))
+            .WithName("ListLibraryRoots")
+            .WithSummary("Lists watched media roots.");
+
         group.MapGet("/browse", (
             string? path,
             SettingsService settings,

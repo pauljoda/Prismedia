@@ -1,65 +1,272 @@
+using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Prismedia.Contracts.Settings;
 
 namespace Prismedia.Application.Settings;
 
 /// <summary>
-/// Application use-case service for shell and library settings. Owns input validation,
-/// clamping, default derivation, and the local directory browser. Delegates raw row
-/// persistence to <see cref="ISettingsPersistence"/>.
+/// Application use-case service for app-global settings and watched library roots.
+/// Owns registry validation, default derivation, typed settings snapshots, and local
+/// directory browsing while delegating raw persistence to <see cref="ISettingsPersistence"/>.
 /// </summary>
 public sealed class SettingsService {
     private readonly ISettingsPersistence _persistence;
+    private readonly ILogger<SettingsService>? _logger;
 
     /// <summary>
     /// Creates the service over the settings persistence port.
     /// </summary>
     /// <param name="persistence">Persistence adapter implemented by Infrastructure.</param>
-    public SettingsService(ISettingsPersistence persistence) {
+    /// <param name="logger">Optional logger for invalid persisted setting values.</param>
+    public SettingsService(ISettingsPersistence persistence, ILogger<SettingsService>? logger = null) {
         _persistence = persistence;
+        _logger = logger;
     }
 
     /// <summary>
-    /// Returns the small shell-settings subset used by the top-level app chrome.
+    /// Returns the full app-global settings catalog with effective values.
     /// </summary>
-    public async Task<SettingsResponse> GetAsync(CancellationToken cancellationToken) {
-        var state = await _persistence.GetLibrarySettingsAsync(cancellationToken);
-        return ToShell(state);
+    public async Task<SettingsCatalogResponse> GetCatalogAsync(CancellationToken cancellationToken) {
+        var overrides = await _persistence.LoadSettingOverridesAsync(cancellationToken);
+        var descriptors = AppSettingsRegistry.Definitions
+            .Select(definition => {
+                var (value, isDefault) = ResolveEffectiveValue(definition, overrides);
+                return definition.ToDescriptor(value, isDefault);
+            })
+            .ToArray();
+
+        var groups = descriptors
+            .GroupBy(descriptor => descriptor.GroupKey)
+            .Select(group => {
+                var definition = AppSettingsRegistry.Definitions.First(d => d.GroupKey == group.Key);
+                return new SettingsGroup(
+                    definition.GroupKey,
+                    definition.GroupLabel,
+                    definition.GroupDescription,
+                    definition.GroupOrder,
+                    group.OrderBy(setting => setting.Order).ToArray());
+            })
+            .OrderBy(group => group.Order)
+            .ToArray();
+
+        return new SettingsCatalogResponse(groups);
     }
 
     /// <summary>
-    /// Applies a partial update to the shell-settings subset and returns the new state.
+    /// Returns one setting descriptor by stable setting key.
     /// </summary>
-    public async Task<SettingsResponse> UpdateAsync(SettingsUpdateRequest request, CancellationToken cancellationToken) {
-        var state = await _persistence.GetLibrarySettingsAsync(cancellationToken);
-        var next = state with {
-            HideNsfw = request.HideNsfw ?? state.HideNsfw,
-            ShowCastControls = request.EnableCastControls ?? state.ShowCastControls,
-        };
-
-        var updated = await _persistence.SaveLibrarySettingsAsync(next, cancellationToken);
-        return ToShell(updated);
+    public async Task<SettingDescriptor> GetSettingAsync(string key, CancellationToken cancellationToken) {
+        var definition = RequireDefinition(key);
+        var overrides = await _persistence.LoadSettingOverridesAsync(cancellationToken);
+        var (value, isDefault) = ResolveEffectiveValue(definition, overrides);
+        return definition.ToDescriptor(value, isDefault);
     }
 
     /// <summary>
-    /// Returns the full library settings + watched roots payload for the library settings page.
+    /// Returns effective setting values keyed by setting key. An empty key list returns all values.
+    /// </summary>
+    public async Task<SettingsValuesResponse> GetValuesAsync(
+        IEnumerable<string> keys,
+        CancellationToken cancellationToken) {
+        var requested = keys.Where(key => !string.IsNullOrWhiteSpace(key)).Distinct(StringComparer.Ordinal).ToArray();
+        var definitions = requested.Length == 0
+            ? AppSettingsRegistry.Definitions
+            : requested.Select(RequireDefinition).ToArray();
+        var overrides = await _persistence.LoadSettingOverridesAsync(cancellationToken);
+        var values = definitions.ToDictionary(
+            definition => definition.Key,
+            definition => ResolveEffectiveValue(definition, overrides).Value,
+            StringComparer.Ordinal);
+        return new SettingsValuesResponse(values);
+    }
+
+    /// <summary>
+    /// Validates and saves one setting override, or removes the override when the saved value
+    /// equals the registry default.
+    /// </summary>
+    public async Task<SettingDescriptor> UpdateSettingAsync(
+        string key,
+        JsonElement value,
+        CancellationToken cancellationToken) {
+        var definition = RequireDefinition(key);
+        var normalized = ValidateOrThrow(definition, value);
+        if (SameJson(normalized, definition.DefaultValue)) {
+            await _persistence.DeleteSettingOverrideAsync(definition.Key, cancellationToken);
+        } else {
+            await _persistence.SaveSettingOverrideAsync(definition.Key, normalized.GetRawText(), cancellationToken);
+        }
+
+        return definition.ToDescriptor(normalized, SameJson(normalized, definition.DefaultValue));
+    }
+
+    /// <summary>
+    /// Validates and saves a batch of setting values. All values are validated before any
+    /// persistence operation is attempted.
+    /// </summary>
+    public async Task<SettingsCatalogResponse> UpdateSettingsAsync(
+        IReadOnlyDictionary<string, JsonElement> values,
+        CancellationToken cancellationToken) {
+        var normalized = new Dictionary<SettingDefinition, JsonElement>();
+        foreach (var (key, value) in values) {
+            var definition = RequireDefinition(key);
+            normalized[definition] = ValidateOrThrow(definition, value);
+        }
+
+        var overrides = normalized
+            .Where(pair => !SameJson(pair.Value, pair.Key.DefaultValue))
+            .ToDictionary(pair => pair.Key.Key, pair => pair.Value.GetRawText(), StringComparer.Ordinal);
+        await _persistence.SaveSettingOverridesAsync(overrides, cancellationToken);
+
+        foreach (var (definition, value) in normalized.Where(pair => SameJson(pair.Value, pair.Key.DefaultValue))) {
+            await _persistence.DeleteSettingOverrideAsync(definition.Key, cancellationToken);
+        }
+
+        return await GetCatalogAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Removes one setting override and returns the defaulted descriptor.
+    /// </summary>
+    public async Task<SettingDescriptor> ResetSettingAsync(string key, CancellationToken cancellationToken) {
+        var definition = RequireDefinition(key);
+        await _persistence.DeleteSettingOverrideAsync(definition.Key, cancellationToken);
+        return definition.ToDescriptor(definition.DefaultValue, isDefault: true);
+    }
+
+    /// <summary>
+    /// Returns app-global visibility defaults.
+    /// </summary>
+    public async Task<VisibilitySettings> GetVisibilitySettingsAsync(CancellationToken cancellationToken) {
+        var values = await GetValueMapAsync([
+            AppSettingKeys.VisibilityDefaultMode,
+            AppSettingKeys.VisibilityLanAutoEnable,
+        ], cancellationToken);
+
+        return new VisibilitySettings(
+            GetString(values, AppSettingKeys.VisibilityDefaultMode),
+            GetBoolean(values, AppSettingKeys.VisibilityLanAutoEnable));
+    }
+
+    /// <summary>
+    /// Returns scan scheduling settings.
+    /// </summary>
+    public async Task<ScanSettings> GetScanSettingsAsync(CancellationToken cancellationToken) {
+        var values = await GetValueMapAsync([
+            AppSettingKeys.ScanAutoScanEnabled,
+            AppSettingKeys.ScanIntervalMinutes,
+        ], cancellationToken);
+
+        return new ScanSettings(
+            GetBoolean(values, AppSettingKeys.ScanAutoScanEnabled),
+            GetInt(values, AppSettingKeys.ScanIntervalMinutes));
+    }
+
+    /// <summary>
+    /// Returns generation-pipeline settings used by scan and maintenance jobs.
+    /// </summary>
+    public async Task<GenerationSettings> GetGenerationSettingsAsync(CancellationToken cancellationToken) {
+        var values = await GetValueMapAsync([
+            AppSettingKeys.GenerationAutoGenerateMetadata,
+            AppSettingKeys.GenerationAutoGenerateFingerprints,
+            AppSettingKeys.GenerationGeneratePhash,
+            AppSettingKeys.GenerationAutoGeneratePreview,
+            AppSettingKeys.GenerationGenerateTrickplay,
+            AppSettingKeys.GenerationTrickplayIntervalSeconds,
+            AppSettingKeys.GenerationPreviewClipDurationSeconds,
+            AppSettingKeys.GenerationThumbnailQuality,
+            AppSettingKeys.GenerationTrickplayQuality,
+            AppSettingKeys.GenerationMetadataStorageDedicated,
+        ], cancellationToken);
+
+        return new GenerationSettings(
+            GetBoolean(values, AppSettingKeys.GenerationAutoGenerateMetadata),
+            GetBoolean(values, AppSettingKeys.GenerationAutoGenerateFingerprints),
+            GetBoolean(values, AppSettingKeys.GenerationGeneratePhash),
+            GetBoolean(values, AppSettingKeys.GenerationAutoGeneratePreview),
+            GetBoolean(values, AppSettingKeys.GenerationGenerateTrickplay),
+            GetInt(values, AppSettingKeys.GenerationTrickplayIntervalSeconds),
+            GetInt(values, AppSettingKeys.GenerationPreviewClipDurationSeconds),
+            GetInt(values, AppSettingKeys.GenerationThumbnailQuality),
+            GetInt(values, AppSettingKeys.GenerationTrickplayQuality),
+            GetBoolean(values, AppSettingKeys.GenerationMetadataStorageDedicated));
+    }
+
+    /// <summary>
+    /// Returns worker throughput settings.
+    /// </summary>
+    public async Task<WorkerSettings> GetWorkerSettingsAsync(CancellationToken cancellationToken) {
+        var values = await GetValueMapAsync([AppSettingKeys.JobsBackgroundConcurrency], cancellationToken);
+        return new WorkerSettings(GetInt(values, AppSettingKeys.JobsBackgroundConcurrency));
+    }
+
+    /// <summary>
+    /// Returns playback defaults.
+    /// </summary>
+    public async Task<PlaybackSettings> GetPlaybackSettingsAsync(CancellationToken cancellationToken) {
+        var values = await GetValueMapAsync([
+            AppSettingKeys.PlaybackDefaultMode,
+            AppSettingKeys.PlaybackShowCastControls,
+            AppSettingKeys.PlaybackAudioPreferredLanguages,
+        ], cancellationToken);
+
+        return new PlaybackSettings(
+            GetString(values, AppSettingKeys.PlaybackDefaultMode),
+            GetBoolean(values, AppSettingKeys.PlaybackShowCastControls),
+            GetStringList(values, AppSettingKeys.PlaybackAudioPreferredLanguages));
+    }
+
+    /// <summary>
+    /// Returns subtitle behavior and appearance defaults.
+    /// </summary>
+    public async Task<SubtitleSettings> GetSubtitleSettingsAsync(CancellationToken cancellationToken) {
+        var values = await GetValueMapAsync([
+            AppSettingKeys.SubtitlesAutoEnable,
+            AppSettingKeys.SubtitlesPreferredLanguages,
+            AppSettingKeys.SubtitlesStyle,
+            AppSettingKeys.SubtitlesFontScale,
+            AppSettingKeys.SubtitlesPositionPercent,
+            AppSettingKeys.SubtitlesOpacity,
+        ], cancellationToken);
+
+        return new SubtitleSettings(
+            GetBoolean(values, AppSettingKeys.SubtitlesAutoEnable),
+            GetStringList(values, AppSettingKeys.SubtitlesPreferredLanguages),
+            GetString(values, AppSettingKeys.SubtitlesStyle),
+            GetFloat(values, AppSettingKeys.SubtitlesFontScale),
+            GetFloat(values, AppSettingKeys.SubtitlesPositionPercent),
+            GetFloat(values, AppSettingKeys.SubtitlesOpacity));
+    }
+
+    /// <summary>
+    /// Returns HLS transcoder and ffmpeg settings.
+    /// </summary>
+    public async Task<HlsSettings> GetHlsSettingsAsync(CancellationToken cancellationToken) {
+        var values = await GetValueMapAsync([
+            AppSettingKeys.HlsTranscoderProfile,
+            AppSettingKeys.HlsFfmpegPath,
+            AppSettingKeys.HlsVaapiDevice,
+        ], cancellationToken);
+
+        return new HlsSettings(
+            GetString(values, AppSettingKeys.HlsTranscoderProfile),
+            GetString(values, AppSettingKeys.HlsFfmpegPath),
+            GetString(values, AppSettingKeys.HlsVaapiDevice));
+    }
+
+    /// <summary>
+    /// Returns the registry catalog plus watched roots for the settings page.
     /// </summary>
     public async Task<LibraryConfigResponse> GetLibraryConfigAsync(CancellationToken cancellationToken) {
-        var settings = await _persistence.GetLibrarySettingsAsync(cancellationToken);
+        var catalog = await GetCatalogAsync(cancellationToken);
         var roots = await _persistence.ListLibraryRootsAsync(cancellationToken);
-        return new LibraryConfigResponse(settings, roots);
+        return new LibraryConfigResponse(catalog, roots);
     }
 
     /// <summary>
-    /// Applies a partial update to the full library settings record, clamping numeric ranges
-    /// and trimming string inputs.
+    /// Lists every watched library root in stable display order.
     /// </summary>
-    public async Task<LibrarySettings> UpdateLibrarySettingsAsync(
-        LibrarySettingsUpdateRequest request,
-        CancellationToken cancellationToken) {
-        var state = await _persistence.GetLibrarySettingsAsync(cancellationToken);
-        var next = ApplyLibraryPatch(state, request);
-        return await _persistence.SaveLibrarySettingsAsync(next, cancellationToken);
-    }
+    public Task<IReadOnlyList<LibraryRoot>> ListLibraryRootsAsync(CancellationToken cancellationToken) =>
+        _persistence.ListLibraryRootsAsync(cancellationToken);
 
     /// <summary>
     /// Lists subdirectories under <paramref name="path"/> for the watched-root folder picker.
@@ -157,63 +364,90 @@ public sealed class SettingsService {
     public Task<bool> DeleteLibraryRootAsync(Guid id, CancellationToken cancellationToken) =>
         _persistence.DeleteLibraryRootAsync(id, cancellationToken);
 
-    private static SettingsResponse ToShell(LibrarySettings state) =>
-        new(HideNsfw: state.HideNsfw, EnableCastControls: state.ShowCastControls);
+    private async Task<IReadOnlyDictionary<string, JsonElement>> GetValueMapAsync(
+        IEnumerable<string> keys,
+        CancellationToken cancellationToken) =>
+        (await GetValuesAsync(keys, cancellationToken)).Values;
 
-    private static LibrarySettings ApplyLibraryPatch(LibrarySettings state, LibrarySettingsUpdateRequest request) =>
-        state with {
-            AutoScanEnabled = request.AutoScanEnabled ?? state.AutoScanEnabled,
-            ScanIntervalMinutes = request.ScanIntervalMinutes is { } scanInterval
-                ? Math.Clamp(scanInterval, 5, 1440)
-                : state.ScanIntervalMinutes,
-            AutoGenerateMetadata = request.AutoGenerateMetadata ?? state.AutoGenerateMetadata,
-            AutoGenerateFingerprints = request.AutoGenerateFingerprints ?? state.AutoGenerateFingerprints,
-            GeneratePhash = request.GeneratePhash ?? state.GeneratePhash,
-            AutoGeneratePreview = request.AutoGeneratePreview ?? state.AutoGeneratePreview,
-            GenerateTrickplay = request.GenerateTrickplay ?? state.GenerateTrickplay,
-            TrickplayIntervalSeconds = request.TrickplayIntervalSeconds is { } trickplayInterval
-                ? Math.Clamp(trickplayInterval, 1, 60)
-                : state.TrickplayIntervalSeconds,
-            PreviewClipDurationSeconds = request.PreviewClipDurationSeconds is { } previewClip
-                ? Math.Clamp(previewClip, 2, 60)
-                : state.PreviewClipDurationSeconds,
-            ThumbnailQuality = request.ThumbnailQuality is { } thumbnailQuality
-                ? Math.Clamp(thumbnailQuality, 1, 5)
-                : state.ThumbnailQuality,
-            TrickplayQuality = request.TrickplayQuality is { } trickplayQuality
-                ? Math.Clamp(trickplayQuality, 1, 5)
-                : state.TrickplayQuality,
-            BackgroundWorkerConcurrency = request.BackgroundWorkerConcurrency is { } concurrency
-                ? Math.Clamp(concurrency, 1, 32)
-                : state.BackgroundWorkerConcurrency,
-            NsfwLanAutoEnable = request.NsfwLanAutoEnable ?? state.NsfwLanAutoEnable,
-            MetadataStorageDedicated = request.MetadataStorageDedicated ?? state.MetadataStorageDedicated,
-            SubtitlesAutoEnable = request.SubtitlesAutoEnable ?? state.SubtitlesAutoEnable,
-            SubtitlesPreferredLanguages = request.SubtitlesPreferredLanguages ?? state.SubtitlesPreferredLanguages,
-            AudioPreferredLanguages = request.AudioPreferredLanguages ?? state.AudioPreferredLanguages,
-            SubtitleStyle = request.SubtitleStyle ?? state.SubtitleStyle,
-            SubtitleFontScale = request.SubtitleFontScale is { } subtitleFontScale
-                ? Math.Clamp(subtitleFontScale, 0.5f, 3f)
-                : state.SubtitleFontScale,
-            SubtitlePositionPercent = request.SubtitlePositionPercent is { } subtitlePosition
-                ? Math.Clamp(subtitlePosition, 0f, 100f)
-                : state.SubtitlePositionPercent,
-            SubtitleOpacity = request.SubtitleOpacity is { } subtitleOpacity
-                ? Math.Clamp(subtitleOpacity, 0.2f, 1f)
-                : state.SubtitleOpacity,
-            DefaultPlaybackMode = request.DefaultPlaybackMode ?? state.DefaultPlaybackMode,
-            ShowCastControls = request.ShowCastControls ?? state.ShowCastControls,
-            HlsTranscoderProfile = request.HlsTranscoderProfile ?? state.HlsTranscoderProfile,
-            HlsFfmpegPath = NormalizeOptionalPath(request.HlsFfmpegPath, state.HlsFfmpegPath),
-            HlsVaapiDevice = NormalizeOptionalPath(request.HlsVaapiDevice, state.HlsVaapiDevice),
-        };
-
-    private static string NormalizeOptionalPath(string? value, string current) {
-        if (value is null) {
-            return current;
+    private (JsonElement Value, bool IsDefault) ResolveEffectiveValue(
+        SettingDefinition definition,
+        IReadOnlyDictionary<string, string> overrides) {
+        if (!overrides.TryGetValue(definition.Key, out var rawJson) || string.IsNullOrWhiteSpace(rawJson)) {
+            return (definition.DefaultValue.Clone(), true);
         }
 
-        var trimmed = value.Trim();
-        return string.IsNullOrEmpty(trimmed) ? current : trimmed;
+        try {
+            using var document = JsonDocument.Parse(rawJson);
+            var validated = definition.Validate(document.RootElement);
+            if (validated.IsValid) {
+                return (validated.Value.Clone(), false);
+            }
+
+            _logger?.LogWarning(
+                "Stored setting override {SettingKey} is invalid and will be ignored: {Reason}",
+                definition.Key,
+                validated.Error);
+        } catch (JsonException ex) {
+            _logger?.LogWarning(ex, "Stored setting override {SettingKey} is invalid JSON and will be ignored.", definition.Key);
+        }
+
+        return (definition.DefaultValue.Clone(), true);
     }
+
+    private static SettingDefinition RequireDefinition(string key) =>
+        AppSettingsRegistry.Find(key) ?? throw new SettingNotFoundException(key);
+
+    private static JsonElement ValidateOrThrow(SettingDefinition definition, JsonElement value) {
+        var validated = definition.Validate(value);
+        if (!validated.IsValid) {
+            throw new SettingValidationException(definition.Key, validated.Error ?? $"{definition.Key} is invalid.");
+        }
+
+        return validated.Value.Clone();
+    }
+
+    private static bool SameJson(JsonElement left, JsonElement right) {
+        if (left.ValueKind != right.ValueKind) {
+            return left.ValueKind == JsonValueKind.Number &&
+                right.ValueKind == JsonValueKind.Number &&
+                left.TryGetDecimal(out var leftNumber) &&
+                right.TryGetDecimal(out var rightNumber) &&
+                leftNumber == rightNumber;
+        }
+
+        return left.ValueKind switch {
+            JsonValueKind.True or JsonValueKind.False => left.GetBoolean() == right.GetBoolean(),
+            JsonValueKind.Number => left.TryGetDecimal(out var leftNumber) &&
+                right.TryGetDecimal(out var rightNumber) &&
+                leftNumber == rightNumber,
+            JsonValueKind.String => string.Equals(left.GetString(), right.GetString(), StringComparison.Ordinal),
+            JsonValueKind.Array => left.EnumerateArray().SequenceEqual(right.EnumerateArray(), JsonElementEqualityComparer.Instance),
+            JsonValueKind.Null or JsonValueKind.Undefined => true,
+            _ => string.Equals(left.GetRawText(), right.GetRawText(), StringComparison.Ordinal)
+        };
+    }
+
+    private sealed class JsonElementEqualityComparer : IEqualityComparer<JsonElement> {
+        public static JsonElementEqualityComparer Instance { get; } = new();
+
+        public bool Equals(JsonElement x, JsonElement y) => SameJson(x, y);
+
+        public int GetHashCode(JsonElement obj) => obj.GetRawText().GetHashCode(StringComparison.Ordinal);
+    }
+
+    private static bool GetBoolean(IReadOnlyDictionary<string, JsonElement> values, string key) => values[key].GetBoolean();
+
+    private static int GetInt(IReadOnlyDictionary<string, JsonElement> values, string key) => values[key].GetInt32();
+
+    private static float GetFloat(IReadOnlyDictionary<string, JsonElement> values, string key) =>
+        (float)values[key].GetDouble();
+
+    private static string GetString(IReadOnlyDictionary<string, JsonElement> values, string key) =>
+        values[key].GetString() ?? string.Empty;
+
+    private static IReadOnlyList<string> GetStringList(IReadOnlyDictionary<string, JsonElement> values, string key) =>
+        values[key].EnumerateArray()
+            .Select(item => item.GetString() ?? string.Empty)
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .ToArray();
 }

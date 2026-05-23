@@ -1,5 +1,7 @@
+using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Application.Settings;
 using Prismedia.Application.Videos;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
@@ -321,14 +323,10 @@ public sealed class HlsAssetServiceTests : IDisposable {
         var videoId = Guid.Parse("45454545-4545-4545-4545-454545454545");
         var sourcePath = Path.Combine(_cacheRoot, "source.mkv");
         await File.WriteAllTextAsync(sourcePath, "source");
-        db.LibrarySettings.Add(new LibrarySettingsRow {
-            Id = Guid.NewGuid(),
-            HlsTranscoderProfile = "Vaapi",
-            HlsFfmpegPath = "/usr/local/bin/ffmpeg-gpu",
-            HlsVaapiDevice = "/dev/dri/renderD129",
-            CreatedAt = DateTimeOffset.UtcNow,
-            UpdatedAt = DateTimeOffset.UtcNow
-        });
+        db.AppSettings.AddRange(
+            SettingRow(AppSettingKeys.HlsTranscoderProfile, "Vaapi"),
+            SettingRow(AppSettingKeys.HlsFfmpegPath, "/usr/local/bin/ffmpeg-gpu"),
+            SettingRow(AppSettingKeys.HlsVaapiDevice, "/dev/dri/renderD129"));
         await db.SaveChangesAsync();
         var process = new ManifestWritingProcessExecutor();
         var service = new HlsAssetService(
@@ -360,14 +358,10 @@ public sealed class HlsAssetServiceTests : IDisposable {
         var videoId = Guid.Parse("56565656-5656-5656-5656-565656565656");
         var sourcePath = Path.Combine(_cacheRoot, "source.mkv");
         await File.WriteAllTextAsync(sourcePath, "source");
-        db.LibrarySettings.Add(new LibrarySettingsRow {
-            Id = Guid.NewGuid(),
-            HlsTranscoderProfile = "Software",
-            HlsFfmpegPath = "ffmpeg",
-            HlsVaapiDevice = "/dev/dri/renderD128",
-            CreatedAt = DateTimeOffset.UtcNow,
-            UpdatedAt = DateTimeOffset.UtcNow
-        });
+        db.AppSettings.AddRange(
+            SettingRow(AppSettingKeys.HlsTranscoderProfile, "Software"),
+            SettingRow(AppSettingKeys.HlsFfmpegPath, "ffmpeg"),
+            SettingRow(AppSettingKeys.HlsVaapiDevice, "/dev/dri/renderD128"));
         await db.SaveChangesAsync();
         var process = new ManifestWritingProcessExecutor();
         var service = new HlsAssetService(
@@ -787,6 +781,16 @@ public sealed class HlsAssetServiceTests : IDisposable {
             .Options;
 
         return new PrismediaDbContext(options);
+    }
+
+    private static AppSettingRow SettingRow(string key, string value) {
+        var now = DateTimeOffset.UtcNow;
+        return new AppSettingRow {
+            Key = key,
+            ValueJson = JsonSerializer.Serialize(value),
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
     }
 
     private sealed class FakeVideoSourceService : IVideoSourceService {

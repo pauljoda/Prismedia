@@ -15,6 +15,13 @@ public sealed class UiPreferenceRow {
     public DateTimeOffset UpdatedAt { get; set; }
 }
 
+public sealed class AppSettingRow {
+    public string Key { get; set; } = string.Empty;
+    public string ValueJson { get; set; } = "{}";
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
 public sealed class ProviderConfigRow {
     public Guid Id { get; set; }
     public string ProviderCode { get; set; } = string.Empty;
