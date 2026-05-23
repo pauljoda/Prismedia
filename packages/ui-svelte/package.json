@@ -1,0 +1,42 @@
+{
+  "name": "@prismedia/ui-svelte",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "svelte": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "svelte": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./lib/utils": "./src/lib/utils.ts",
+    "./lib/trickplay": "./src/lib/trickplay.ts",
+    "./lib/tree": "./src/lib/tree.ts",
+    "./primitives/Button.svelte": "./src/primitives/Button.svelte",
+    "./primitives/Badge.svelte": "./src/primitives/Badge.svelte",
+    "./primitives/Checkbox.svelte": "./src/primitives/Checkbox.svelte",
+    "./composed/MediaCard.svelte": "./src/composed/MediaCard.svelte",
+    "./composed/Meter.svelte": "./src/composed/Meter.svelte",
+    "./composed/StatusLed.svelte": "./src/composed/StatusLed.svelte",
+    "./composed/Panel.svelte": "./src/composed/Panel.svelte",
+    "./navigation/app-shell-sections": "./src/navigation/app-shell-sections.ts",
+    "./motion/transitions": "./src/motion/transitions.ts"
+  },
+  "scripts": {
+    "lint": "svelte-check --tsconfig ./tsconfig.json",
+    "typecheck": "svelte-check --tsconfig ./tsconfig.json"
+  },
+  "devDependencies": {
+    "svelte": "^5.55.9",
+    "svelte-check": "^4.4.8",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "@lucide/svelte": "^1.16.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^3.6.0"
+  }
+}

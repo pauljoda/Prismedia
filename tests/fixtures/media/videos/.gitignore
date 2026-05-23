@@ -1,0 +1,12 @@
+*.mp4
+*.mov
+*.mkv
+*.avi
+*.webm
+.thumbs/
+*.nfo
+*.jpg
+*.jpeg
+*.png
+.DS_Store
+!.gitkeep

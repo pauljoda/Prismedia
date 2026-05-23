@@ -1,0 +1,874 @@
+/* =============================================================================
+ * Prismedia Documentation — Dark Room theme
+ * Implements the design language at docs/design-language.md against Docusaurus.
+ * ============================================================================= */
+
+@import '@fontsource/geist-sans/400.css';
+@import '@fontsource/geist-sans/600.css';
+@import '@fontsource/geist-sans/700.css';
+@import '@fontsource/geist-sans/800.css';
+@import '@fontsource-variable/inter/index.css';
+@import '@fontsource-variable/jetbrains-mono/index.css';
+
+/* -----------------------------------------------------------------------------
+ * Tokens
+ * ---------------------------------------------------------------------------*/
+
+:root {
+  /* Surfaces */
+  --prismedia-bg: #07080b;
+  --prismedia-surface-1: #0c0f15;
+  --prismedia-surface-2: #101420;
+  --prismedia-surface-3: #151a28;
+  --prismedia-surface-4: #1c2235;
+
+  /* Glass */
+  --prismedia-glass-1: rgba(12, 15, 21, 0.72);
+  --prismedia-glass-2: rgba(16, 20, 32, 0.82);
+  --prismedia-glass-3: rgba(21, 26, 40, 0.92);
+
+  /* Brass accent */
+  --prismedia-brass: #c49a5a;
+  --prismedia-brass-300: #e0c48e;
+  --prismedia-brass-400: #d4af74;
+  --prismedia-brass-600: #7a5e2c;
+  --prismedia-brass-700: #5a4620;
+
+  /* Text */
+  --prismedia-text-primary: #f2eed8;
+  --prismedia-text-secondary: #c4c9d4;
+  --prismedia-text-muted: #8a93a6;
+  --prismedia-text-disabled: #4a5260;
+
+  /* Borders */
+  --prismedia-border-subtle: rgba(148, 158, 178, 0.07);
+  --prismedia-border-default: rgba(148, 158, 178, 0.13);
+  --prismedia-border-accent: rgba(196, 154, 90, 0.25);
+  --prismedia-border-accent-strong: rgba(196, 154, 90, 0.5);
+  --prismedia-border-glow: rgba(196, 154, 90, 0.8);
+
+  /* Status (LED) */
+  --prismedia-success: #4e8a62;
+  --prismedia-success-bg: rgba(78, 138, 98, 0.12);
+  --prismedia-success-text: #80b898;
+  --prismedia-warning: #b09040;
+  --prismedia-warning-bg: rgba(176, 144, 64, 0.12);
+  --prismedia-warning-text: #ccb060;
+  --prismedia-error: #a84850;
+  --prismedia-error-bg: rgba(168, 72, 80, 0.12);
+  --prismedia-error-text: #cc7880;
+  --prismedia-info: #4478a8;
+  --prismedia-info-bg: rgba(68, 120, 168, 0.12);
+  --prismedia-info-text: #70a4cc;
+
+  /* Glow */
+  --prismedia-glow-subtle: 0 0 0 1px rgba(196, 154, 90, 0.35), 0 0 8px rgba(196, 154, 90, 0.15);
+  --prismedia-glow-full: 0 0 0 1px rgba(196, 154, 90, 0.6), 0 0 16px rgba(196, 154, 90, 0.3),
+    0 0 32px rgba(196, 154, 90, 0.1);
+
+  /* Infima primary scale (drives links, sidebar active, etc.) */
+  --ifm-color-primary: #c49a5a;
+  --ifm-color-primary-dark: #b48748;
+  --ifm-color-primary-darker: #a97e42;
+  --ifm-color-primary-darkest: #805d2f;
+  --ifm-color-primary-light: #d0ab70;
+  --ifm-color-primary-lighter: #d9b981;
+  --ifm-color-primary-lightest: #efd6aa;
+
+  /* Infima base */
+  --ifm-background-color: var(--prismedia-bg);
+  --ifm-background-surface-color: var(--prismedia-surface-1);
+  --ifm-font-color-base: var(--prismedia-text-secondary);
+  --ifm-font-color-secondary: var(--prismedia-text-muted);
+  --ifm-heading-color: var(--prismedia-text-primary);
+  --ifm-link-color: var(--prismedia-brass-400);
+  --ifm-link-hover-color: var(--prismedia-brass-300);
+
+  /* Typography */
+  --ifm-font-family-base: 'Inter Variable', Inter, system-ui, sans-serif;
+  --ifm-heading-font-family: 'Geist Sans', 'Inter Variable', system-ui, sans-serif;
+  --ifm-font-family-monospace: 'JetBrains Mono Variable', 'JetBrains Mono', monospace;
+  --ifm-font-size-base: 16px;
+  --ifm-line-height-base: 1.7;
+  --ifm-h1-font-size: 2.6rem;
+  --ifm-h2-font-size: 1.8rem;
+  --ifm-h3-font-size: 1.3rem;
+  --ifm-h4-font-size: 1.05rem;
+  --ifm-heading-line-height: 1.18;
+  --ifm-heading-font-weight: 700;
+  --ifm-code-font-size: 92%;
+
+  /* Geometry — sharp corners everywhere */
+  --ifm-global-radius: 0;
+  --ifm-button-border-radius: 0;
+  --ifm-pagination-nav-border-radius: 0;
+  --ifm-breadcrumb-border-radius: 0;
+  --ifm-alert-border-radius: 0;
+  --ifm-card-border-radius: 0;
+
+  /* Chrome */
+  --ifm-navbar-height: 60px;
+  --ifm-navbar-background-color: rgba(7, 8, 11, 0.78);
+  --ifm-footer-background-color: var(--prismedia-bg);
+  --ifm-card-background-color: var(--prismedia-surface-2);
+  --ifm-toc-link-color: var(--prismedia-text-muted);
+  --ifm-menu-color: var(--prismedia-text-secondary);
+  --ifm-menu-color-active: var(--prismedia-brass-300);
+  --ifm-menu-color-background-active: rgba(196, 154, 90, 0.08);
+  --ifm-menu-color-background-hover: rgba(196, 154, 90, 0.05);
+  --ifm-hr-background-color: var(--prismedia-border-default);
+  --ifm-table-stripe-background: rgba(196, 154, 90, 0.03);
+  --ifm-table-border-color: var(--prismedia-border-subtle);
+  --ifm-blockquote-color: var(--prismedia-text-muted);
+  --ifm-blockquote-border-color: var(--prismedia-brass-600);
+
+  /* Code highlighting */
+  --docusaurus-highlighted-code-line-bg: rgba(196, 154, 90, 0.12);
+}
+
+[data-theme='dark'] {
+  --ifm-background-color: var(--prismedia-bg);
+  --ifm-background-surface-color: var(--prismedia-surface-1);
+}
+
+/* -----------------------------------------------------------------------------
+ * Sharp corners — no exceptions
+ * ---------------------------------------------------------------------------*/
+
+* {
+  border-radius: 0 !important;
+}
+
+/* -----------------------------------------------------------------------------
+ * Page chrome
+ * ---------------------------------------------------------------------------*/
+
+html {
+  background: var(--prismedia-bg);
+}
+
+body {
+  background:
+    radial-gradient(1200px 600px at 12% -10%, rgba(196, 154, 90, 0.08), transparent 60%),
+    radial-gradient(900px 500px at 100% 0%, rgba(68, 120, 168, 0.05), transparent 60%),
+    var(--prismedia-bg);
+  color: var(--prismedia-text-secondary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbars */
+* {
+  scrollbar-color: rgba(196, 154, 90, 0.25) transparent;
+  scrollbar-width: thin;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(196, 154, 90, 0.18);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(196, 154, 90, 0.35);
+  background-clip: padding-box;
+}
+
+/* Selection */
+::selection {
+  background: rgba(196, 154, 90, 0.35);
+  color: var(--prismedia-text-primary);
+}
+
+/* -----------------------------------------------------------------------------
+ * Navbar
+ * ---------------------------------------------------------------------------*/
+
+.navbar {
+  background: rgba(7, 8, 11, 0.72);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  border-bottom: 1px solid var(--prismedia-border-accent);
+  box-shadow: 0 1px 0 rgba(196, 154, 90, 0.05);
+}
+
+/* Mobile sidebar — backdrop-filter on .navbar creates a containing block in
+ * Chromium that traps fixed-positioned descendants. Force the sidebar back to
+ * the viewport so the drawer expands to full height. */
+.navbar-sidebar {
+  height: 100dvh;
+  height: 100vh;
+  background: linear-gradient(180deg, var(--prismedia-surface-1), var(--prismedia-bg));
+  border-right: 1px solid var(--prismedia-border-accent);
+}
+
+.navbar-sidebar__brand {
+  background: rgba(7, 8, 11, 0.85);
+  border-bottom: 1px solid var(--prismedia-border-subtle);
+  box-shadow: inset 0 -1px 0 rgba(196, 154, 90, 0.08);
+}
+
+.navbar-sidebar__items {
+  background: transparent;
+}
+
+.navbar-sidebar__back {
+  background: rgba(196, 154, 90, 0.06);
+  color: var(--prismedia-brass-300);
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  border-bottom: 1px solid var(--prismedia-border-subtle);
+}
+
+.navbar-sidebar .menu__link {
+  color: var(--prismedia-text-secondary);
+}
+
+.navbar-sidebar .menu__link--active {
+  color: var(--prismedia-brass-300);
+}
+
+.navbar__title {
+  font-family: var(--ifm-heading-font-family);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  font-size: 1.05rem;
+  color: var(--prismedia-text-primary);
+}
+
+.navbar__logo {
+  margin-right: 0.6rem;
+}
+
+.navbar__link {
+  font-weight: 500;
+  font-size: 0.9rem;
+  color: var(--prismedia-text-secondary);
+  position: relative;
+  transition: color 160ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.navbar__link:hover {
+  color: var(--prismedia-brass-300);
+}
+.navbar__link--active {
+  color: var(--prismedia-brass-300);
+}
+.navbar__link--active::after {
+  content: '';
+  position: absolute;
+  left: 0.75rem;
+  right: 0.75rem;
+  bottom: -2px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--prismedia-brass), transparent);
+  box-shadow: 0 0 8px rgba(196, 154, 90, 0.4);
+}
+
+/* -----------------------------------------------------------------------------
+ * Sidebar
+ * ---------------------------------------------------------------------------*/
+
+.theme-doc-sidebar-container {
+  background: linear-gradient(180deg, rgba(12, 15, 21, 0.6), rgba(7, 8, 11, 0.6));
+  border-right: 1px solid var(--prismedia-border-subtle) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.menu {
+  background: transparent;
+  padding: 1rem 0.75rem;
+  font-size: 0.88rem;
+}
+
+.menu__list-item-collapsible,
+.menu__link {
+  font-weight: 500;
+}
+
+.menu__link {
+  padding: 0.45rem 0.75rem;
+  color: var(--prismedia-text-secondary);
+  position: relative;
+  transition: color 140ms ease, background-color 140ms ease;
+}
+.menu__link:hover {
+  background: rgba(196, 154, 90, 0.05);
+  color: var(--prismedia-brass-300);
+}
+.menu__link--active {
+  color: var(--prismedia-brass-300);
+  background: rgba(196, 154, 90, 0.08);
+  font-weight: 600;
+}
+.menu__link--active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.35rem;
+  bottom: 0.35rem;
+  width: 2px;
+  background: var(--prismedia-brass);
+  box-shadow: 0 0 10px rgba(196, 154, 90, 0.55), 0 0 22px rgba(196, 154, 90, 0.25);
+}
+
+.menu__caret {
+  background: transparent;
+}
+.menu__caret:hover {
+  background: rgba(196, 154, 90, 0.05);
+}
+
+/* Category labels — kicker treatment */
+.theme-doc-sidebar-item-category > .menu__list-item-collapsible > .menu__link,
+.menu__list .menu__list-item:not(.menu__list-item--collapsed)
+  > .menu__list-item-collapsible
+  > .menu__link {
+  font-family: var(--ifm-heading-font-family);
+  font-weight: 700;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--prismedia-text-muted);
+}
+
+/* -----------------------------------------------------------------------------
+ * Doc layout
+ * ---------------------------------------------------------------------------*/
+
+.theme-doc-markdown {
+  font-size: 1rem;
+  line-height: 1.78;
+  color: var(--prismedia-text-secondary);
+  max-width: 78ch;
+}
+
+.theme-doc-markdown > *:first-child {
+  margin-top: 0;
+}
+
+.theme-doc-markdown p {
+  margin-bottom: 1rem;
+}
+
+.theme-doc-markdown h1,
+.theme-doc-markdown h2,
+.theme-doc-markdown h3,
+.theme-doc-markdown h4 {
+  font-family: var(--ifm-heading-font-family);
+  color: var(--prismedia-text-primary);
+  letter-spacing: -0.02em;
+}
+
+.theme-doc-markdown h1 {
+  font-size: clamp(2.2rem, 5vw, 3rem);
+  line-height: 1.05;
+  margin-bottom: 1.4rem;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+}
+
+.theme-doc-markdown h2 {
+  margin-top: 3rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--prismedia-border-subtle);
+  font-size: 1.6rem;
+}
+
+.theme-doc-markdown h3 {
+  margin-top: 2.2rem;
+  font-size: 1.2rem;
+  color: var(--prismedia-text-primary);
+}
+
+.theme-doc-markdown h4 {
+  margin-top: 1.8rem;
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--prismedia-brass-300);
+  font-weight: 700;
+}
+
+/* Anchor links on headings */
+.hash-link {
+  color: var(--prismedia-brass);
+  opacity: 0.55;
+  transition: opacity 120ms ease;
+}
+.hash-link:hover {
+  opacity: 1;
+  text-shadow: 0 0 8px rgba(196, 154, 90, 0.5);
+}
+
+/* Lists */
+.theme-doc-markdown ul,
+.theme-doc-markdown ol {
+  padding-left: 1.4rem;
+}
+.theme-doc-markdown li {
+  margin: 0.35rem 0;
+}
+.theme-doc-markdown li::marker {
+  color: var(--prismedia-brass);
+}
+
+/* Inline links */
+.theme-doc-markdown a:not(.hash-link):not(.card) {
+  color: var(--prismedia-brass-300);
+  text-decoration: none;
+  background-image: linear-gradient(transparent calc(100% - 1px), var(--prismedia-brass) 1px);
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  padding-bottom: 1px;
+  transition: color 140ms ease, text-shadow 140ms ease;
+}
+.theme-doc-markdown a:not(.hash-link):not(.card):hover {
+  color: var(--prismedia-brass-300);
+  text-shadow: 0 0 10px rgba(196, 154, 90, 0.4);
+}
+
+/* Horizontal rule */
+.theme-doc-markdown hr {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--prismedia-border-accent), transparent);
+  border: 0;
+  margin: 3rem 0;
+}
+
+/* -----------------------------------------------------------------------------
+ * Inline code
+ * ---------------------------------------------------------------------------*/
+
+code {
+  background: rgba(196, 154, 90, 0.08);
+  border: 1px solid rgba(196, 154, 90, 0.18);
+  color: var(--prismedia-brass-300);
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.85em;
+  padding: 0.12em 0.4em;
+  vertical-align: baseline;
+}
+
+a code {
+  color: var(--prismedia-brass-300);
+  background: rgba(196, 154, 90, 0.12);
+}
+
+/* -----------------------------------------------------------------------------
+ * Code blocks
+ * ---------------------------------------------------------------------------*/
+
+.theme-code-block,
+pre {
+  background: linear-gradient(160deg, var(--prismedia-surface-2) 0%, var(--prismedia-surface-1) 100%) !important;
+  border: 1px solid var(--prismedia-border-subtle);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03), 0 4px 24px rgba(0, 0, 0, 0.4);
+}
+
+.prism-code {
+  background: transparent !important;
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.86rem;
+  line-height: 1.65;
+}
+
+.prism-code code {
+  background: transparent;
+  border: 0;
+  color: var(--prismedia-text-secondary);
+  padding: 0;
+}
+
+/* Highlighted lines */
+.theme-code-block-highlighted-line {
+  background-color: rgba(196, 154, 90, 0.1) !important;
+  box-shadow: inset 3px 0 0 0 var(--prismedia-brass);
+}
+
+/* Copy button */
+button[class*='copyButton_'] {
+  background: rgba(196, 154, 90, 0.12) !important;
+  color: var(--prismedia-brass-300) !important;
+  border: 1px solid rgba(196, 154, 90, 0.2) !important;
+  transition: background 140ms ease, box-shadow 140ms ease;
+}
+button[class*='copyButton_']:hover {
+  background: rgba(196, 154, 90, 0.2) !important;
+  box-shadow: var(--prismedia-glow-subtle);
+}
+
+/* -----------------------------------------------------------------------------
+ * Admonitions — LED-style instrument readouts
+ * ---------------------------------------------------------------------------*/
+
+.theme-admonition,
+.alert {
+  background: var(--prismedia-surface-2);
+  border: 1px solid var(--prismedia-border-default);
+  border-left-width: 3px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  padding: 1rem 1.1rem;
+  color: var(--prismedia-text-secondary);
+}
+
+.theme-admonition .admonition-heading,
+.alert .alert__heading,
+.alert div[class*='admonitionHeading'] {
+  font-family: var(--ifm-heading-font-family);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin-bottom: 0.55rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.alert--info,
+.theme-admonition-note,
+.theme-admonition-info {
+  background: linear-gradient(180deg, var(--prismedia-info-bg), transparent 80%),
+    var(--prismedia-surface-2);
+  border-left-color: var(--prismedia-info);
+  box-shadow: inset 3px 0 0 0 var(--prismedia-info), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+.alert--info .alert__heading,
+.theme-admonition-note .admonition-heading,
+.theme-admonition-info .admonition-heading {
+  color: var(--prismedia-info-text);
+  text-shadow: 0 0 8px rgba(68, 120, 168, 0.35);
+}
+
+.alert--success,
+.theme-admonition-tip {
+  background: linear-gradient(180deg, var(--prismedia-success-bg), transparent 80%),
+    var(--prismedia-surface-2);
+  border-left-color: var(--prismedia-success);
+  box-shadow: inset 3px 0 0 0 var(--prismedia-success), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+.alert--success .alert__heading,
+.theme-admonition-tip .admonition-heading {
+  color: var(--prismedia-success-text);
+  text-shadow: 0 0 8px rgba(78, 138, 98, 0.35);
+}
+
+.alert--warning,
+.theme-admonition-warning,
+.theme-admonition-caution {
+  background: linear-gradient(180deg, var(--prismedia-warning-bg), transparent 80%),
+    var(--prismedia-surface-2);
+  border-left-color: var(--prismedia-warning);
+  box-shadow: inset 3px 0 0 0 var(--prismedia-warning), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+.alert--warning .alert__heading,
+.theme-admonition-warning .admonition-heading,
+.theme-admonition-caution .admonition-heading {
+  color: var(--prismedia-warning-text);
+  text-shadow: 0 0 8px rgba(176, 144, 64, 0.35);
+}
+
+.alert--danger,
+.theme-admonition-danger {
+  background: linear-gradient(180deg, var(--prismedia-error-bg), transparent 80%),
+    var(--prismedia-surface-2);
+  border-left-color: var(--prismedia-error);
+  box-shadow: inset 3px 0 0 0 var(--prismedia-error), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+.alert--danger .alert__heading,
+.theme-admonition-danger .admonition-heading {
+  color: var(--prismedia-error-text);
+  text-shadow: 0 0 8px rgba(168, 72, 80, 0.35);
+}
+
+/* -----------------------------------------------------------------------------
+ * Tables
+ * ---------------------------------------------------------------------------*/
+
+.theme-doc-markdown table {
+  display: table;
+  width: 100%;
+  margin: 1.5rem 0;
+  background: linear-gradient(160deg, var(--prismedia-surface-2) 0%, var(--prismedia-surface-1) 100%);
+  border: 1px solid var(--prismedia-border-subtle);
+  border-collapse: collapse;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.theme-doc-markdown th {
+  background: rgba(7, 8, 11, 0.6);
+  color: var(--prismedia-brass-300);
+  font-family: var(--ifm-heading-font-family);
+  font-weight: 700;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 0.85rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid var(--prismedia-border-accent);
+}
+
+.theme-doc-markdown td {
+  padding: 0.7rem 1rem;
+  border-top: 1px solid var(--prismedia-border-subtle);
+  color: var(--prismedia-text-secondary);
+  vertical-align: top;
+}
+
+.theme-doc-markdown tr:nth-child(2n) td {
+  background: rgba(196, 154, 90, 0.025);
+}
+
+/* -----------------------------------------------------------------------------
+ * Blockquotes
+ * ---------------------------------------------------------------------------*/
+
+.theme-doc-markdown blockquote {
+  background: linear-gradient(180deg, rgba(196, 154, 90, 0.06), transparent);
+  border-left: 3px solid var(--prismedia-brass-600);
+  padding: 0.9rem 1.1rem;
+  color: var(--prismedia-text-muted);
+  font-style: normal;
+  margin: 1.5rem 0;
+}
+
+.theme-doc-markdown blockquote p {
+  margin: 0.4rem 0;
+}
+
+/* -----------------------------------------------------------------------------
+ * Images
+ * ---------------------------------------------------------------------------*/
+
+.theme-doc-markdown img {
+  max-width: 100%;
+  border: 1px solid var(--prismedia-border-accent);
+  box-shadow: 0 12px 50px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(196, 154, 90, 0.1);
+  display: block;
+  margin: 1.5rem auto;
+}
+
+/* -----------------------------------------------------------------------------
+ * Table of contents
+ * ---------------------------------------------------------------------------*/
+
+.theme-doc-toc-desktop,
+.table-of-contents {
+  background: transparent;
+  border-left: 1px solid var(--prismedia-border-subtle);
+  font-size: 0.82rem;
+}
+
+.table-of-contents__link {
+  color: var(--prismedia-text-muted);
+  padding: 0.3rem 0;
+  transition: color 140ms ease;
+}
+
+.table-of-contents__link:hover,
+.table-of-contents__link--active {
+  color: var(--prismedia-brass-300);
+  text-decoration: none;
+}
+
+.table-of-contents__link--active {
+  font-weight: 600;
+  position: relative;
+}
+.table-of-contents__link--active::before {
+  content: '';
+  position: absolute;
+  left: -17px;
+  top: 0.6rem;
+  width: 6px;
+  height: 6px;
+  background: var(--prismedia-brass);
+  box-shadow: 0 0 10px rgba(196, 154, 90, 0.7), 0 0 18px rgba(196, 154, 90, 0.3);
+}
+
+/* -----------------------------------------------------------------------------
+ * Pagination nav (Prev / Next)
+ * ---------------------------------------------------------------------------*/
+
+.pagination-nav {
+  margin-top: 3rem;
+  gap: 1rem;
+}
+
+.pagination-nav__link {
+  background: var(--prismedia-glass-1);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--prismedia-border-default);
+  padding: 1rem 1.2rem;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.pagination-nav__link:hover {
+  border-color: var(--prismedia-border-accent-strong);
+  box-shadow: var(--prismedia-glow-subtle);
+}
+
+.pagination-nav__sublabel {
+  color: var(--prismedia-text-muted);
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.4rem;
+}
+
+.pagination-nav__label {
+  color: var(--prismedia-text-primary);
+  font-family: var(--ifm-heading-font-family);
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+/* -----------------------------------------------------------------------------
+ * Breadcrumbs
+ * ---------------------------------------------------------------------------*/
+
+.theme-doc-breadcrumbs {
+  margin-bottom: 1.4rem;
+}
+
+.breadcrumbs__link {
+  color: var(--prismedia-text-muted);
+  font-size: 0.78rem;
+  font-family: var(--ifm-font-family-monospace);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  background: transparent !important;
+  padding: 0;
+}
+
+.breadcrumbs__link:hover {
+  color: var(--prismedia-brass-300);
+}
+
+.breadcrumbs__item--active .breadcrumbs__link {
+  color: var(--prismedia-brass-300);
+  background: transparent !important;
+}
+
+.breadcrumbs__item:not(:last-child)::after {
+  background: none;
+  content: '/';
+  color: var(--prismedia-text-disabled);
+  margin: 0 0.4rem;
+}
+
+/* -----------------------------------------------------------------------------
+ * Footer
+ * ---------------------------------------------------------------------------*/
+
+.footer {
+  border-top: 1px solid var(--prismedia-border-accent);
+  background: linear-gradient(180deg, var(--prismedia-bg), #04050a);
+  padding: 3rem 0 2rem;
+  position: relative;
+}
+
+.footer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--prismedia-brass), transparent);
+  opacity: 0.55;
+}
+
+.footer__title {
+  font-family: var(--ifm-heading-font-family);
+  font-weight: 700;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--prismedia-brass-300);
+  margin-bottom: 0.8rem;
+}
+
+.footer__link-item {
+  color: var(--prismedia-text-muted);
+  transition: color 140ms ease;
+}
+.footer__link-item:hover {
+  color: var(--prismedia-brass-300);
+}
+
+.footer__copyright {
+  color: var(--prismedia-text-disabled);
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+/* -----------------------------------------------------------------------------
+ * Search box (placeholder)
+ * ---------------------------------------------------------------------------*/
+
+.navbar__search-input {
+  background: var(--prismedia-surface-1);
+  border: 1px solid var(--prismedia-border-default);
+  color: var(--prismedia-text-primary);
+}
+.navbar__search-input:focus {
+  border-color: var(--prismedia-border-accent-strong);
+  box-shadow: var(--prismedia-glow-subtle);
+  outline: none;
+}
+
+/* -----------------------------------------------------------------------------
+ * Edit-this-page / last-updated
+ * ---------------------------------------------------------------------------*/
+
+.theme-edit-this-page,
+.theme-last-updated {
+  color: var(--prismedia-text-muted);
+  font-size: 0.8rem;
+}
+.theme-edit-this-page svg {
+  color: var(--prismedia-brass);
+}
+
+/* -----------------------------------------------------------------------------
+ * Mobile tweaks
+ * ---------------------------------------------------------------------------*/
+
+@media (max-width: 996px) {
+  .theme-doc-markdown {
+    font-size: 0.96rem;
+  }
+  .theme-doc-markdown h1 {
+    font-size: 2rem;
+  }
+  .theme-doc-markdown h2 {
+    font-size: 1.4rem;
+  }
+}
+
+/* -----------------------------------------------------------------------------
+ * Brass keyframe — optional pulse for active markers
+ * ---------------------------------------------------------------------------*/
+
+@keyframes prismedia-glow-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 6px rgba(196, 154, 90, 0.35), 0 0 14px rgba(196, 154, 90, 0.15);
+  }
+  50% {
+    box-shadow: 0 0 12px rgba(196, 154, 90, 0.55), 0 0 28px rgba(196, 154, 90, 0.25);
+  }
+}

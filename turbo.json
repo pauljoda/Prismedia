@@ -1,0 +1,31 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalEnv": [
+    "DATABASE_URL",
+    "PUBLIC_API_URL",
+    "PUBLIC_APP_URL",
+    "NODE_ENV",
+    "PORT",
+    "HOST"
+  ],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", "build/**", ".svelte-kit/**"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "lint": {
+      "dependsOn": ["^lint"]
+    },
+    "typecheck": {
+      "dependsOn": ["^typecheck"]
+    },
+    "test": {
+      "dependsOn": ["^test"],
+      "outputs": ["coverage/**"]
+    }
+  }
+}

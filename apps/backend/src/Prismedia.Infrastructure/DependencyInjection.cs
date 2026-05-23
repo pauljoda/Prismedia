@@ -1,0 +1,233 @@
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
+using Prismedia.Domain.Entities;
+using Prismedia.Application.Entities;
+using Prismedia.Application.Files;
+using Prismedia.Application.Jobs;
+using Prismedia.Application.Jobs.Ports;
+using Prismedia.Application.Organization;
+using Prismedia.Application.Settings;
+using Prismedia.Application.UserState;
+using Prismedia.Application.Videos;
+using Prismedia.Infrastructure.Collections;
+using Prismedia.Infrastructure.Database;
+using Prismedia.Infrastructure.Entities;
+using Prismedia.Infrastructure.Entities.Mappers;
+using Prismedia.Infrastructure.Files;
+using Prismedia.Infrastructure.Media.Adapters;
+using Prismedia.Infrastructure.Media.Persistence;
+using Prismedia.Infrastructure.Media.Processing;
+using Prismedia.Infrastructure.Organization;
+using Prismedia.Infrastructure.Persistence;
+using Prismedia.Infrastructure.Plugins;
+using Prismedia.Infrastructure.Processes;
+using Prismedia.Infrastructure.Queue;
+using Prismedia.Infrastructure.Settings;
+using Prismedia.Infrastructure.UserState;
+using Prismedia.Infrastructure.Videos;
+
+namespace Prismedia.Infrastructure;
+
+public static class DependencyInjection {
+    public static IServiceCollection AddPrismediaInfrastructure(
+        this IServiceCollection services,
+        IConfiguration configuration,
+        string? contentRootPath = null) {
+        var configuredConnectionString =
+            configuration["DATABASE_URL"] ??
+            configuration.GetConnectionString("Prismedia") ??
+            throw new InvalidOperationException("Prismedia requires DATABASE_URL or ConnectionStrings:Prismedia.");
+
+        var connectionString = PostgresConnectionString.Normalize(configuredConnectionString);
+        var pathBase = contentRootPath ?? Directory.GetCurrentDirectory();
+        var dataDir = NormalizePath(configuration["PRISMEDIA_DATA_DIR"] ??
+            configuration["Prismedia:DataDir"] ??
+            "/data", pathBase);
+        var cacheDir = NormalizePath(configuration["PRISMEDIA_CACHE_DIR"] ??
+            configuration["Prismedia:CacheDir"] ??
+            Path.Combine(dataDir, "cache"), pathBase);
+
+        services.AddSingleton(_ => NpgsqlDataSource.Create(connectionString));
+        services.AddDbContext<PrismediaDbContext>((provider, options) =>
+            options.UseNpgsql(provider.GetRequiredService<NpgsqlDataSource>()));
+        services.AddSingleton<ProcessExecutor>();
+        var mediaToolOptions = MediaToolOptions.FromConfiguration(
+            configuration["PRISMEDIA_FFMPEG_PATH"] ?? configuration["Prismedia:Hls:FfmpegPath"],
+            configuration["PRISMEDIA_FFPROBE_PATH"] ?? configuration["Prismedia:Hls:FfprobePath"]);
+
+        services.AddSingleton(mediaToolOptions);
+        services.AddSingleton<MediaToolService>();
+        services.AddSingleton<FileDiscoveryService>();
+        services.AddSingleton(new AssetPathService(dataDir));
+        services.AddSingleton(provider => new MediaProbeService(
+            provider.GetRequiredService<ProcessExecutor>(),
+            provider.GetRequiredService<MediaToolOptions>()));
+        services.AddSingleton(provider => new ThumbnailService(
+            provider.GetRequiredService<ProcessExecutor>(),
+            provider.GetRequiredService<MediaProbeService>(),
+            provider.GetRequiredService<MediaToolOptions>()));
+        services.AddSingleton<HashingService>();
+        services.AddSingleton(new PluginCatalogOptions(
+            ResolvePluginDevPaths(configuration, pathBase),
+            cacheDir,
+            ResolveCurrentVersion(configuration, pathBase)));
+        services.AddSingleton<DotnetPluginProcessRunner>();
+        services.AddScoped<PluginCatalogService>();
+        services.AddScoped<IdentifyMatchHintResolver>();
+        services.AddScoped(provider => new EntityMetadataApplyService(
+            provider.GetRequiredService<PrismediaDbContext>(),
+            new PluginArtworkServiceOptions(cacheDir),
+            provider.GetService<HttpClient>()));
+        services.AddScoped<IEntityMetadataPatchService>(provider =>
+            provider.GetRequiredService<EntityMetadataApplyService>());
+        services.AddScoped<IdentifyPluginService>();
+        services.AddSingleton<IdentifySessionStore>();
+
+        services.AddSingleton<IFileDiscovery>(provider =>
+            new FileDiscoveryAdapter(provider.GetRequiredService<FileDiscoveryService>()));
+        services.AddSingleton<IMediaProbe>(provider =>
+            new MediaProbeAdapter(provider.GetRequiredService<MediaProbeService>()));
+        services.AddSingleton<IMediaHashing>(provider =>
+            new MediaHashingAdapter(provider.GetRequiredService<HashingService>()));
+        services.AddScoped<IMediaAssetGenerator>(provider =>
+            new MediaAssetGeneratorAdapter(
+                provider.GetRequiredService<ThumbnailService>(),
+                provider.GetRequiredService<AssetPathService>(),
+                provider.GetRequiredService<ISettingsPersistence>(),
+                provider.GetRequiredService<MediaToolOptions>()));
+        services.AddScoped<ILibraryScanPersistence, LibraryScanPersistenceService>();
+        services.AddScoped<IMaintenancePersistence>(provider =>
+            new MaintenancePersistenceService(provider.GetRequiredService<PrismediaDbContext>(), dataDir));
+        services.AddScoped<ICollectionRuleEngine, CollectionRuleEngine>();
+        services.AddScoped<ICollectionRefreshPersistence, CollectionRefreshPersistenceService>();
+        RegisterEntityMappers(services);
+        services.AddScoped<EfEntityRepository>();
+        services.AddScoped<IEntityWriteRepository>(provider => provider.GetRequiredService<EfEntityRepository>());
+        services.AddScoped<IEntityReadService, EfEntityReadService>();
+        services.AddScoped<IEntityFileContentService, EfEntityFileContentService>();
+        services.AddScoped<IOrganizePersistence, EfOrganizePersistence>();
+        services.AddScoped<IFilesPersistence, EfFilesPersistence>();
+        services.AddSingleton<IManagedFileStorage, LocalManagedFileStorage>();
+        services.AddScoped<IVideoSourceService, VideoSourceService>();
+        services.AddSingleton(new HlsAssetServiceOptions(
+            cacheDir,
+            HlsTranscoderProfiles.ParseOrDefault(configuration["PRISMEDIA_HLS_TRANSCODER"] ?? configuration["Prismedia:Hls:Transcoder"]),
+            mediaToolOptions.FfmpegPath,
+            configuration["PRISMEDIA_VAAPI_DEVICE"] ?? configuration["Prismedia:Hls:VaapiDevice"] ?? "/dev/dri/renderD128"));
+        services.AddSingleton<ITranscodeSessionService, TranscodeSessionService>();
+        services.AddScoped<IHlsAssetService, HlsAssetService>();
+        services.AddScoped<IPlaybackInfoService, PlaybackInfoService>();
+        services.AddScoped<IPlaybackSessionService, PlaybackSessionService>();
+        services.AddScoped<ITrickplayService, TrickplayService>();
+        services.AddScoped<IVideoSubtitleAssetService, VideoSubtitleAssetService>();
+        services.AddScoped<IJobQueueService, JobQueueService>();
+        services.AddScoped<ISettingsPersistence, EfSettingsPersistence>();
+        services.AddScoped<IUserStatePersistence, EfUserStatePersistence>();
+
+        return services;
+    }
+
+    private static void RegisterEntityMappers(IServiceCollection services) {
+        var assembly = typeof(IEntityKindMapper).Assembly;
+        var implementations = assembly.GetTypes()
+            .Where(type => type is { IsClass: true, IsAbstract: false });
+
+        var explicitKindTypes = implementations
+            .Where(type => typeof(IEntityKindMapper).IsAssignableFrom(type) &&
+                           type != typeof(EntityMappers.ConventionEntityKindMapper))
+            .ToArray();
+        foreach (var type in explicitKindTypes) {
+            services.AddScoped(typeof(IEntityKindMapper), type);
+        }
+
+        var explicitKindNames = explicitKindTypes
+            .Select(type => type.Name)
+            .ToHashSet(StringComparer.Ordinal);
+        foreach (var descriptor in EntityKindRegistry.All.Where(descriptor =>
+                     descriptor.ClrType is not null &&
+                     !explicitKindNames.Contains($"{descriptor.Value}KindMapper"))) {
+            services.AddScoped<IEntityKindMapper>(_ => new EntityMappers.ConventionEntityKindMapper(descriptor));
+        }
+
+        foreach (var type in implementations.Where(type => typeof(IEntityCapabilityMapper).IsAssignableFrom(type))) {
+            services.AddScoped(typeof(IEntityCapabilityMapper), type);
+        }
+    }
+
+    private static string NormalizePath(string path, string basePath) =>
+        Path.GetFullPath(Path.IsPathRooted(path)
+            ? path
+            : Path.Combine(basePath, path));
+
+    private static IReadOnlyList<string> ResolvePluginDevPaths(IConfiguration configuration, string basePath) {
+        var configured = configuration["PRISMEDIA_PLUGIN_DEV_PATHS"] ??
+            configuration["Prismedia:Plugins:DevPaths"];
+        var paths = new List<string>();
+        if (!string.IsNullOrWhiteSpace(configured)) {
+            paths.AddRange(configured
+                .Split([',', ';'], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                .Select(path => NormalizePath(path, basePath)));
+        }
+
+        var repoRoot = FindRepoRoot(basePath);
+        if (repoRoot is not null) {
+            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            if (!string.IsNullOrWhiteSpace(home)) {
+                var prismediaPluginsRepo = Path.Combine(home, "Dev", "Prismedia-Plugins");
+                if (Directory.Exists(prismediaPluginsRepo)) {
+                    paths.Add(prismediaPluginsRepo);
+                }
+            }
+
+            paths.Add(Path.Combine(repoRoot, "packages", "plugins"));
+        }
+
+        return paths.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    private static string ResolveCurrentVersion(IConfiguration configuration, string basePath) {
+        var configured = configuration["PRISMEDIA_VERSION"] ??
+            configuration["Prismedia:Version"];
+        if (!string.IsNullOrWhiteSpace(configured)) {
+            return configured;
+        }
+
+        var repoRoot = FindRepoRoot(basePath);
+        if (repoRoot is null) {
+            return "1.0.0";
+        }
+
+        var packageJson = Path.Combine(repoRoot, "package.json");
+        if (!File.Exists(packageJson)) {
+            return "1.0.0";
+        }
+
+        try {
+            using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(packageJson));
+            return document.RootElement.TryGetProperty("version", out var version)
+                ? version.GetString() ?? "1.0.0"
+                : "1.0.0";
+        } catch (System.Text.Json.JsonException) {
+            return "1.0.0";
+        } catch (IOException) {
+            return "1.0.0";
+        }
+    }
+
+    private static string? FindRepoRoot(string start) {
+        var directory = new DirectoryInfo(start);
+        while (directory is not null) {
+            if (File.Exists(Path.Combine(directory.FullName, "pnpm-workspace.yaml")) &&
+                File.Exists(Path.Combine(directory.FullName, "package.json"))) {
+                return directory.FullName;
+            }
+
+            directory = directory.Parent;
+        }
+
+        return null;
+    }
+
+}

@@ -1,0 +1,24 @@
+{
+  "name": "@prismedia/plugins",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "lint": "tsc --project tsconfig.json --noEmit",
+    "typecheck": "tsc --project tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@prismedia/contracts": "workspace:*",
+    "@prismedia/media-core": "workspace:*",
+    "@prismedia/stash-compat": "workspace:*",
+    "js-yaml": "^4.1.1"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.19.19",
+    "typescript": "^5.9.3"
+  }
+}

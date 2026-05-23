@@ -1,0 +1,1050 @@
+using Microsoft.EntityFrameworkCore;
+using Prismedia.Application.Entities;
+using Prismedia.Contracts.Entities;
+using Prismedia.Contracts.Plugins;
+using Prismedia.Domain.Entities;
+using Prismedia.Infrastructure.Persistence;
+using Prismedia.Infrastructure.Persistence.Entities;
+using Prismedia.Infrastructure.Plugins;
+
+namespace Prismedia.Infrastructure.Tests;
+
+public sealed class EntityMetadataApplyServiceTests {
+    [Fact]
+    public async Task ApplyPatchUpdatesEditableEntityMetadataAndCanClearNullableFields() {
+        await using var db = CreateContext();
+        var entityId = Guid.Parse("18181818-1818-1818-1818-181818181818");
+        SeedEntity(db, entityId, "video", "Old Title");
+        db.EntityDescriptions.Add(new EntityDescriptionRow {
+            EntityId = entityId,
+            Value = "Old description",
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        db.EntityUrls.Add(new EntityUrlRow {
+            Id = Guid.NewGuid(),
+            EntityId = entityId,
+            Url = "https://old.example.test",
+            SortOrder = 0,
+            CreatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+        var applied = await service.ApplyPatchAsync(
+            entityId,
+            new EntityMetadataUpdateRequest(
+                Fields: ["title", "description", "urls", "rating", "flags"],
+                Patch: EmptyPatch() with {
+                    Title = "New Title",
+                    Description = null,
+                    Urls = ["https://new.example.test"],
+                    Rating = 4,
+                    Flags = new EntityMetadataFlagsPatch(IsFavorite: true, IsNsfw: false, IsOrganized: true)
+                }),
+            CancellationToken.None);
+
+        Assert.True(applied);
+        Assert.Equal("New Title", (await db.Entities.FindAsync([entityId]))?.Title);
+        Assert.Null(await db.EntityDescriptions.FindAsync([entityId]));
+        Assert.Equal("https://new.example.test", await db.EntityUrls.Where(row => row.EntityId == entityId).Select(row => row.Url).SingleAsync());
+        Assert.Equal(4, (await db.EntityRatings.FindAsync([entityId]))?.Value);
+        var flags = await db.EntityFlags.FindAsync([entityId]);
+        Assert.True(flags?.IsFavorite);
+        Assert.False(flags?.IsNsfw);
+        Assert.True(flags?.IsOrganized);
+    }
+
+    [Fact]
+    public async Task ApplyPatchReplacesIncludedMapsAndLeavesOmittedFieldsUnchanged() {
+        await using var db = CreateContext();
+        var entityId = Guid.Parse("19191919-1919-1919-1919-191919191919");
+        SeedEntity(db, entityId, "video", "Keep Title");
+        db.EntityDates.Add(new EntityDateRow {
+            EntityId = entityId,
+            Code = "released",
+            Value = "2020-01-01",
+            SortableValue = new DateOnly(2020, 1, 1),
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        db.EntityStats.Add(new EntityStatRow {
+            EntityId = entityId,
+            Code = "runtime",
+            Value = 90,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        db.EntityPositions.Add(new EntityPositionRow {
+            EntityId = entityId,
+            Code = "episode",
+            Value = 1,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        db.EntityClassifications.Add(new EntityClassificationRow {
+            EntityId = entityId,
+            Value = "old",
+            System = null,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+        var applied = await service.ApplyPatchAsync(
+            entityId,
+            new EntityMetadataUpdateRequest(
+                Fields: ["dates", "stats", "positions", "classification"],
+                Patch: EmptyPatch() with {
+                    Dates = new Dictionary<string, string> { ["aired"] = "2026-05-21" },
+                    Stats = new Dictionary<string, int> { ["votes"] = 12 },
+                    Positions = new Dictionary<string, int> { ["season"] = 2 },
+                    Classification = "episode"
+                }),
+            CancellationToken.None);
+
+        Assert.True(applied);
+        Assert.Equal("Keep Title", (await db.Entities.FindAsync([entityId]))?.Title);
+        Assert.Null(await db.EntityDates.FindAsync([entityId, "released"]));
+        Assert.Equal("2026-05-21", (await db.EntityDates.FindAsync([entityId, "aired"]))?.Value);
+        Assert.Null(await db.EntityStats.FindAsync([entityId, "runtime"]));
+        Assert.Equal(12, (await db.EntityStats.FindAsync([entityId, "votes"]))?.Value);
+        Assert.Null(await db.EntityPositions.FindAsync([entityId, "episode"]));
+        Assert.Equal(2, (await db.EntityPositions.FindAsync([entityId, "season"]))?.Value);
+        Assert.Equal("episode", (await db.EntityClassifications.FindAsync([entityId]))?.Value);
+    }
+
+    [Fact]
+    public async Task ApplyPatchRejectsInvalidTitleRatingAndUrls() {
+        await using var db = CreateContext();
+        var entityId = Guid.Parse("20202020-2020-2020-2020-202020202020");
+        SeedEntity(db, entityId, "video", "Video");
+        await db.SaveChangesAsync();
+
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() => service.ApplyPatchAsync(
+            entityId,
+            new EntityMetadataUpdateRequest(
+                Fields: ["title", "rating", "urls"],
+                Patch: EmptyPatch() with {
+                    Title = " ",
+                    Rating = 6,
+                    Urls = ["not-a-url"]
+                }),
+            CancellationToken.None));
+
+        Assert.Contains("title", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("Video", (await db.Entities.FindAsync([entityId]))?.Title);
+    }
+
+    [Fact]
+    public async Task ApplyPatchReturnsFalseForMissingEntity() {
+        await using var db = CreateContext();
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+
+        var applied = await service.ApplyPatchAsync(
+            Guid.Parse("21212121-2121-2121-2121-212121212121"),
+            new EntityMetadataUpdateRequest(Fields: ["title"], Patch: EmptyPatch() with { Title = "Missing" }),
+            CancellationToken.None);
+
+        Assert.False(applied);
+    }
+
+    [Fact]
+    public async Task ApplyPatchRejectsKindMismatchWithoutMutatingEntity() {
+        await using var db = CreateContext();
+        var entityId = Guid.Parse("23232323-2323-2323-2323-232323232323");
+        SeedEntity(db, entityId, "video", "Original Title");
+        await db.SaveChangesAsync();
+
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+
+        var result = await service.ApplyPatchAsync(
+            entityId,
+            new EntityMetadataUpdateRequest(Fields: ["title"], Patch: EmptyPatch() with { Title = "Wrong Kind" }),
+            expectedKind: "video-series",
+            CancellationToken.None);
+
+        Assert.Equal(EntityMetadataPatchResult.KindMismatch, result);
+        Assert.Equal("Original Title", (await db.Entities.FindAsync([entityId]))?.Title);
+    }
+
+    [Fact]
+    public async Task ApplySelectedFieldsPersistsProviderIdentityAndCapabilityRows() {
+        await using var db = CreateContext();
+        var entityId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        SeedEntity(db, entityId, "video", "Old Title");
+        await db.SaveChangesAsync();
+
+        var proposal = new EntityMetadataProposal(
+            ProposalId: "tmdb:movie:123",
+            Provider: "tmdb",
+            TargetKind: "video",
+            Confidence: 1,
+            MatchReason: "external-id",
+            Patch: new EntityMetadataPatch(
+                Title: "New Movie",
+                Description: "A better description.",
+                ExternalIds: new Dictionary<string, string> { ["tmdb"] = "123" },
+                Urls: ["https://www.themoviedb.org/movie/123"],
+                Tags: ["Drama", "Mystery"],
+                Studio: "Prismedia Pictures",
+                Credits: [new CreditPatch("Ada Actor", "person", "Lead", 0)],
+                Dates: new Dictionary<string, string> { ["released"] = "2026-05-16" },
+                Stats: new Dictionary<string, int> { ["runtime-minutes"] = 90, ["votes"] = 42 },
+                Positions: new Dictionary<string, int>(),
+                Classification: "movie"),
+            Images: [],
+            Children: [],
+            Candidates: []);
+
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+        await service.ApplyAsync(
+            entityId,
+            proposal,
+            ["title", "description", "externalIds", "urls", "tags", "studio", "credits", "dates", "counters", "stats", "classification"],
+            selectedImages: null,
+            CancellationToken.None);
+
+        var entity = await db.Entities.SingleAsync(row => row.Id == entityId);
+        Assert.Equal("New Movie", entity.Title);
+        Assert.Equal("A better description.", (await db.EntityDescriptions.FindAsync([entityId]))?.Value);
+        var externalId = await db.EntityExternalIds.SingleAsync();
+        Assert.Equal("tmdb", externalId.Provider);
+        Assert.Equal("123", externalId.Value);
+        Assert.Equal("https://www.themoviedb.org/movie/123", externalId.Url);
+        Assert.Equal(["Drama", "Mystery"], await db.Entities
+            .Where(row => row.KindCode == "tag")
+            .OrderBy(row => row.Title)
+            .Select(row => row.Title)
+            .ToArrayAsync());
+        Assert.Equal("Prismedia Pictures", await db.Entities
+            .Where(row => row.KindCode == "studio")
+            .Select(row => row.Title)
+            .SingleAsync());
+        Assert.Equal("Ada Actor", await db.Entities
+            .Where(row => row.KindCode == "person")
+            .Select(row => row.Title)
+            .SingleAsync());
+        Assert.Equal("2026-05-16", (await db.EntityDates.FindAsync([entityId, "released"]))?.Value);
+        Assert.Equal(90, (await db.EntityStats.FindAsync([entityId, "runtime-minutes"]))?.Value);
+        Assert.Equal(42, (await db.EntityStats.FindAsync([entityId, "votes"]))?.Value);
+        Assert.Equal("movie", (await db.EntityClassifications.FindAsync([entityId]))?.Value);
+    }
+
+    [Fact]
+    public async Task ApplySeriesCascadePersistsEpisodeMetadataAndCredits() {
+        await using var db = CreateContext();
+        var seriesId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        var seasonId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+        var episodeId = Guid.Parse("44444444-4444-4444-4444-444444444444");
+        SeedEntity(db, seriesId, "video-series", "Old Series");
+        SeedEntity(db, seasonId, "video-season", "Old Season", parentEntityId: seriesId, sortOrder: 1);
+        SeedEntity(db, episodeId, "video", "Old Episode", parentEntityId: seasonId, sortOrder: 1);
+        db.EntityPositions.Add(new EntityPositionRow {
+            EntityId = episodeId,
+            Code = "episodeNumber",
+            Value = 1,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var episodePatch = new EntityMetadataPatch(
+            Title: "Pilot",
+            Description: "The story starts.",
+            ExternalIds: new Dictionary<string, string> { ["tmdb"] = "9001" },
+            Urls: ["https://www.themoviedb.org/tv/12/season/1/episode/1"],
+            Tags: ["Guest Heavy"],
+            Studio: null,
+            Credits: [new CreditPatch("Guest Actor", "guest", "Visitor", 3)],
+            Dates: new Dictionary<string, string> { ["air"] = "2026-05-16" },
+            Stats: new Dictionary<string, int> { ["runtimeMinutes"] = 33, ["voteAverage"] = 8 },
+            Positions: new Dictionary<string, int> { ["seasonNumber"] = 1, ["episodeNumber"] = 1 },
+            Classification: "episode");
+        var proposal = new EntityMetadataProposal(
+            ProposalId: "tmdb:tv:12",
+            Provider: "tmdb",
+            TargetKind: "video-series",
+            Confidence: 1,
+            MatchReason: "external-id",
+            Patch: EmptyPatch(),
+            Images: [],
+            Children:
+            [
+                new EntityMetadataProposal(
+                    ProposalId: "tmdb:tv:12:season:1",
+                    Provider: "tmdb",
+                    TargetKind: "video-season",
+                    TargetEntityId: seasonId,
+                    Confidence: 0.9m,
+                    MatchReason: "cascade",
+                    Patch: EmptyPatch() with
+                    {
+                        Title = "Season 1",
+                        Positions = new Dictionary<string, int> { ["seasonNumber"] = 1 }
+                    },
+                    Images: [],
+                    Children:
+                    [
+                        new EntityMetadataProposal(
+                            ProposalId: "tmdb:tv:12:s1:e1",
+                            Provider: "tmdb",
+                            TargetKind: "video-episode",
+                            TargetEntityId: episodeId,
+                            Confidence: 0.9m,
+                            MatchReason: "cascade",
+                            Patch: episodePatch,
+                            Images: [],
+                            Children: [],
+                            Candidates: [])
+                    ],
+                    Candidates: [])
+            ],
+            Candidates: []);
+
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+        await service.ApplyAsync(
+            seriesId,
+            proposal,
+            selectedFields: ["externalIds"],
+            selectedImages: null,
+            CancellationToken.None);
+
+        Assert.Equal("Season 1", (await db.Entities.FindAsync([seasonId]))?.Title);
+        Assert.Equal("Pilot", (await db.Entities.FindAsync([episodeId]))?.Title);
+        Assert.Equal("The story starts.", (await db.EntityDescriptions.FindAsync([episodeId]))?.Value);
+        Assert.Equal("9001", (await db.EntityExternalIds.SingleAsync(row => row.EntityId == episodeId)).Value);
+        Assert.Equal("https://www.themoviedb.org/tv/12/season/1/episode/1", await db.EntityUrls
+            .Where(row => row.EntityId == episodeId)
+            .Select(row => row.Url)
+            .SingleAsync());
+        Assert.Equal("Guest Actor", await db.Entities
+            .Where(row => row.KindCode == "person")
+            .Select(row => row.Title)
+            .SingleAsync());
+        Assert.Contains("Visitor", (await db.EntityRelationshipLinks
+            .Where(row => row.EntityId == episodeId && row.RelationshipCode == "cast")
+            .Select(row => row.MetadataJson)
+            .SingleAsync()) ?? string.Empty);
+        Assert.Equal("2026-05-16", (await db.EntityDates.FindAsync([episodeId, "air"]))?.Value);
+        Assert.Equal(33, (await db.EntityStats.FindAsync([episodeId, "runtimeMinutes"]))?.Value);
+        Assert.Equal(8, (await db.EntityStats.FindAsync([episodeId, "voteAverage"]))?.Value);
+        Assert.Equal("episode", (await db.EntityClassifications.FindAsync([episodeId]))?.Value);
+    }
+
+    [Fact]
+    public async Task ApplySeriesCascadeSavesSeasonPosterArtwork() {
+        await using var db = CreateContext();
+        var seriesId = Guid.Parse("37373737-3737-3737-3737-373737373737");
+        var seasonId = Guid.Parse("38383838-3838-3838-3838-383838383838");
+        SeedEntity(db, seriesId, "video-series", "Old Series");
+        SeedEntity(db, seasonId, "video-season", "Old Season", parentEntityId: seriesId, sortOrder: 1);
+        await db.SaveChangesAsync();
+
+        var proposal = new EntityMetadataProposal(
+            ProposalId: "tmdb:tv:12",
+            Provider: "tmdb",
+            TargetKind: "video-series",
+            TargetEntityId: seriesId,
+            Confidence: 1,
+            MatchReason: "external-id",
+            Patch: EmptyPatch(),
+            Images: [],
+            Children:
+            [
+                new EntityMetadataProposal(
+                    ProposalId: "tmdb:tv:12:season:1",
+                    Provider: "tmdb",
+                    TargetKind: "video-season",
+                    TargetEntityId: seasonId,
+                    Confidence: 0.9m,
+                    MatchReason: "cascade",
+                    Patch: EmptyPatch() with { Title = "Season 1" },
+                    Images: [new ImageCandidate("poster", "https://example.test/season.jpg", "tmdb", null, null, null, null)],
+                    Children: [],
+                    Candidates: [])
+            ],
+            Candidates: []);
+
+        var service = new EntityMetadataApplyService(
+            db,
+            new PluginArtworkServiceOptions(Path.GetTempPath()),
+            new HttpClient(new FixedImageHandler()));
+        await service.ApplyAsync(seriesId, proposal, selectedFields: ["externalIds"], selectedImages: null, CancellationToken.None);
+
+        var file = await db.EntityFiles.SingleAsync(row => row.EntityId == seasonId && row.Role == EntityFileRole.Poster);
+        Assert.StartsWith($"/assets/plugins/artwork/{seasonId}/poster-", file.Path);
+        Assert.EndsWith(".jpg", file.Path);
+    }
+
+    [Fact]
+    public async Task ApplySeriesCascadeReplacesExistingSeasonPosterArtwork() {
+        await using var db = CreateContext();
+        var seriesId = Guid.Parse("39393939-3939-3939-3939-393939393939");
+        var seasonId = Guid.Parse("40404040-4040-4040-4040-404040404040");
+        SeedEntity(db, seriesId, "video-series", "Old Series");
+        SeedEntity(db, seasonId, "video-season", "Old Season", parentEntityId: seriesId, sortOrder: 1);
+        db.EntityFiles.Add(new EntityFileRow {
+            Id = Guid.NewGuid(),
+            EntityId = seasonId,
+            Role = EntityFileRole.Poster,
+            Path = "/assets/plugins/artwork/old-season-poster.jpg",
+            MimeType = "image/jpeg",
+            CreatedAt = DateTimeOffset.UtcNow.AddDays(-1),
+            UpdatedAt = DateTimeOffset.UtcNow.AddDays(-1)
+        });
+        await db.SaveChangesAsync();
+
+        var proposal = new EntityMetadataProposal(
+            ProposalId: "tmdb:tv:12",
+            Provider: "tmdb",
+            TargetKind: "video-series",
+            TargetEntityId: seriesId,
+            Confidence: 1,
+            MatchReason: "external-id",
+            Patch: EmptyPatch(),
+            Images: [],
+            Children:
+            [
+                new EntityMetadataProposal(
+                    ProposalId: "tmdb:tv:12:season:1",
+                    Provider: "tmdb",
+                    TargetKind: "video-season",
+                    TargetEntityId: seasonId,
+                    Confidence: 0.9m,
+                    MatchReason: "cascade",
+                    Patch: EmptyPatch() with { Title = "Season 1" },
+                    Images: [new ImageCandidate("poster", "https://example.test/season-new.jpg", "tmdb", null, null, null, null)],
+                    Children: [],
+                    Candidates: [])
+            ],
+            Candidates: []);
+
+        var service = new EntityMetadataApplyService(
+            db,
+            new PluginArtworkServiceOptions(Path.GetTempPath()),
+            new HttpClient(new FixedImageHandler()));
+        await service.ApplyAsync(seriesId, proposal, selectedFields: ["externalIds"], selectedImages: null, CancellationToken.None);
+
+        var file = await db.EntityFiles.SingleAsync(row => row.EntityId == seasonId && row.Role == EntityFileRole.Poster);
+        Assert.StartsWith($"/assets/plugins/artwork/{seasonId}/poster-", file.Path);
+        Assert.EndsWith(".jpg", file.Path);
+    }
+
+    [Fact]
+    public async Task ApplyProposalChildrenWithTargetEntityIdsRecursesThroughGenericStructure() {
+        await using var db = CreateContext();
+        var parentId = Guid.Parse("55555555-5555-5555-5555-555555555555");
+        var childId = Guid.Parse("66666666-6666-6666-6666-666666666666");
+        var grandchildId = Guid.Parse("77777777-7777-7777-7777-777777777777");
+        SeedEntity(db, parentId, "video-series", "Old Series");
+        SeedEntity(db, childId, "video-season", "Old Season", parentEntityId: parentId, sortOrder: 1);
+        SeedEntity(db, grandchildId, "video", "Old Episode", parentEntityId: childId, sortOrder: 1);
+        await db.SaveChangesAsync();
+
+        var proposal = new EntityMetadataProposal(
+            ProposalId: "provider:series:1",
+            Provider: "provider",
+            TargetKind: "video-series",
+            TargetEntityId: parentId,
+            Confidence: 1,
+            MatchReason: "external-id",
+            Patch: EmptyPatch() with { Title = "New Series" },
+            Images: [],
+            Children:
+            [
+                new EntityMetadataProposal(
+                    ProposalId: "provider:season:1",
+                    Provider: "provider",
+                    TargetKind: "video-season",
+                    TargetEntityId: childId,
+                    Confidence: 1,
+                    MatchReason: "structural-child",
+                    Patch: EmptyPatch() with
+                    {
+                        Title = "New Season",
+                        Dates = new Dictionary<string, string> { ["air"] = "2026-01-01" }
+                    },
+                    Images: [],
+                    Children:
+                    [
+                        new EntityMetadataProposal(
+                            ProposalId: "provider:episode:1",
+                            Provider: "provider",
+                            TargetKind: "video",
+                            TargetEntityId: grandchildId,
+                            Confidence: 1,
+                            MatchReason: "structural-child",
+                            Patch: EmptyPatch() with
+                            {
+                                Title = "New Episode",
+                                Description = "Episode metadata from its own proposal.",
+                                Positions = new Dictionary<string, int> { ["episodeNumber"] = 1 }
+                            },
+                            Images: [],
+                            Children: [],
+                            Candidates: [])
+                    ],
+                    Candidates: [])
+            ],
+            Candidates: []);
+
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+        await service.ApplyAsync(parentId, proposal, selectedFields: ["title"], selectedImages: null, CancellationToken.None);
+
+        Assert.Equal("New Series", (await db.Entities.FindAsync([parentId]))?.Title);
+        Assert.Equal("New Season", (await db.Entities.FindAsync([childId]))?.Title);
+        Assert.Equal("2026-01-01", (await db.EntityDates.FindAsync([childId, "air"]))?.Value);
+        Assert.Equal("New Episode", (await db.Entities.FindAsync([grandchildId]))?.Title);
+        Assert.Equal("Episode metadata from its own proposal.", (await db.EntityDescriptions.FindAsync([grandchildId]))?.Value);
+        Assert.Equal(1, (await db.EntityPositions.FindAsync([grandchildId, "episode"]))?.Value);
+    }
+
+    [Fact]
+    public async Task ApplyCascadePositionsUpdatesCanonicalPositionsAndStructuralSortOrder() {
+        await using var db = CreateContext();
+        var seriesId = Guid.Parse("88888888-8888-8888-8888-888888888888");
+        var seasonId = Guid.Parse("99999999-9999-9999-9999-999999999999");
+        var episodeId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        SeedEntity(db, seriesId, "video-series", "Series");
+        SeedEntity(db, seasonId, "video-season", "Season", parentEntityId: seriesId, sortOrder: 1);
+        SeedEntity(db, episodeId, "video", "Episode", parentEntityId: seasonId, sortOrder: 1);
+        await db.SaveChangesAsync();
+
+        var proposal = new EntityMetadataProposal(
+            ProposalId: "provider:series:positions",
+            Provider: "provider",
+            TargetKind: "video-series",
+            TargetEntityId: seriesId,
+            Confidence: 1,
+            MatchReason: "external-id",
+            Patch: EmptyPatch(),
+            Images: [],
+            Children:
+            [
+                new EntityMetadataProposal(
+                    ProposalId: "provider:season:3",
+                    Provider: "provider",
+                    TargetKind: "video-season",
+                    TargetEntityId: seasonId,
+                    Confidence: 1,
+                    MatchReason: "structural-child",
+                    Patch: EmptyPatch() with
+                    {
+                        Positions = new Dictionary<string, int> { ["seasonNumber"] = 3 }
+                    },
+                    Images: [],
+                    Children:
+                    [
+                        new EntityMetadataProposal(
+                            ProposalId: "provider:episode:2",
+                            Provider: "provider",
+                            TargetKind: "video",
+                            TargetEntityId: episodeId,
+                            Confidence: 1,
+                            MatchReason: "structural-child",
+                            Patch: EmptyPatch() with
+                            {
+                                Positions = new Dictionary<string, int> { ["episodeNumber"] = 2 }
+                            },
+                            Images: [],
+                            Children: [],
+                            Candidates: [])
+                    ],
+                    Candidates: [])
+            ],
+            Candidates: []);
+
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+        await service.ApplyAsync(seriesId, proposal, selectedFields: [], selectedImages: null, CancellationToken.None);
+
+        Assert.Equal(3, (await db.Entities.FindAsync([seasonId]))?.SortOrder);
+        Assert.Equal(2, (await db.Entities.FindAsync([episodeId]))?.SortOrder);
+        Assert.Equal(3, (await db.EntityPositions.FindAsync([seasonId, "season"]))?.Value);
+        Assert.Equal(2, (await db.EntityPositions.FindAsync([episodeId, "episode"]))?.Value);
+        Assert.Null(await db.EntityPositions.FindAsync([seasonId, "seasonNumber"]));
+        Assert.Null(await db.EntityPositions.FindAsync([episodeId, "episodeNumber"]));
+    }
+
+    [Fact]
+    public async Task ApplyStructuralChildCreditsDeduplicatesRepeatedPeople() {
+        await using var db = CreateContext();
+        var seriesId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        var episodeId = Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc");
+        var personId = Guid.Parse("dddddddd-dddd-dddd-dddd-dddddddddddd");
+        SeedEntity(db, seriesId, "video-series", "Series");
+        SeedEntity(db, episodeId, "video", "Episode", parentEntityId: seriesId, sortOrder: 1);
+        SeedEntity(db, personId, "person", "Returning Actor");
+        await db.SaveChangesAsync();
+
+        var proposal = new EntityMetadataProposal(
+            ProposalId: "provider:series:credits",
+            Provider: "provider",
+            TargetKind: "video-series",
+            TargetEntityId: seriesId,
+            Confidence: 1,
+            MatchReason: "external-id",
+            Patch: EmptyPatch(),
+            Images: [],
+            Children:
+            [
+                new EntityMetadataProposal(
+                    ProposalId: "provider:episode:credits",
+                    Provider: "provider",
+                    TargetKind: "video",
+                    TargetEntityId: episodeId,
+                    Confidence: 1,
+                    MatchReason: "structural-child",
+                    Patch: EmptyPatch() with
+                    {
+                        Credits =
+                        [
+                            new CreditPatch("Returning Actor", "person", "New Character", 0),
+                            new CreditPatch("Returning Actor", "person", "Duplicate Character", 1)
+                        ]
+                    },
+                    Images: [],
+                    Children: [],
+                    Candidates: [])
+            ],
+            Candidates: []);
+
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+        await service.ApplyAsync(seriesId, proposal, selectedFields: [], selectedImages: null, CancellationToken.None);
+
+        var credit = await db.EntityRelationshipLinks.SingleAsync(row => row.EntityId == episodeId && row.RelationshipCode == "cast");
+        Assert.Equal(personId, credit.TargetEntityId);
+        Assert.Contains("New Character", credit.MetadataJson ?? string.Empty, StringComparison.Ordinal);
+        Assert.Equal(0, credit.SortOrder);
+    }
+
+    [Fact]
+    public async Task ApplyStructuralChildArtworkDeduplicatesRepeatedLinkedPersonImages() {
+        await using var db = CreateContext();
+        var seriesId = Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee");
+        var episodeId = Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff");
+        var personId = Guid.Parse("12121212-1212-1212-1212-121212121212");
+        SeedEntity(db, seriesId, "video-series", "Series");
+        SeedEntity(db, episodeId, "video", "Episode", parentEntityId: seriesId, sortOrder: 1);
+        SeedEntity(db, personId, "person", "Returning Actor");
+        await db.SaveChangesAsync();
+
+        var personImage = new ImageCandidate(
+            Kind: "poster",
+            Url: "https://example.test/actor.jpg",
+            Source: "provider",
+            Rank: null,
+            Language: null,
+            Width: null,
+            Height: null);
+        var duplicatePersonChild = new EntityMetadataProposal(
+            ProposalId: "provider:person:actor",
+            Provider: "provider",
+            TargetKind: "person",
+            Confidence: 1,
+            MatchReason: "credit",
+            Patch: EmptyPatch() with { Title = "Returning Actor" },
+            Images: [personImage],
+            Children: [],
+            Candidates: []);
+        var proposal = new EntityMetadataProposal(
+            ProposalId: "provider:series:artwork",
+            Provider: "provider",
+            TargetKind: "video-series",
+            TargetEntityId: seriesId,
+            Confidence: 1,
+            MatchReason: "external-id",
+            Patch: EmptyPatch(),
+            Images: [],
+            Children:
+            [
+                new EntityMetadataProposal(
+                    ProposalId: "provider:episode:artwork",
+                    Provider: "provider",
+                    TargetKind: "video",
+                    TargetEntityId: episodeId,
+                    Confidence: 1,
+                    MatchReason: "structural-child",
+                    Patch: EmptyPatch() with
+                    {
+                        Credits = [new CreditPatch("Returning Actor", "person", "Character", 0)]
+                    },
+                    Images: [],
+                    Children: [duplicatePersonChild, duplicatePersonChild],
+                    Candidates: [])
+            ],
+            Candidates: []);
+
+        var service = new EntityMetadataApplyService(
+            db,
+            new PluginArtworkServiceOptions(Path.GetTempPath()),
+            new HttpClient(new FixedImageHandler()));
+        await service.ApplyAsync(seriesId, proposal, selectedFields: [], selectedImages: null, CancellationToken.None);
+
+        var file = await db.EntityFiles.SingleAsync(row => row.EntityId == personId && row.Role == EntityFileRole.Poster);
+        Assert.Equal("/assets/plugins/artwork/12121212-1212-1212-1212-121212121212/poster-bcec36434214.jpg", file.Path);
+    }
+
+    [Fact]
+    public async Task ApplyDownloadsRelationshipArtworkFromSeparatedRelationshipProposals() {
+        await using var db = CreateContext();
+        var seriesId = Guid.Parse("13131313-1313-1313-1313-131313131313");
+        var episodeId = Guid.Parse("14141414-1414-1414-1414-141414141414");
+        SeedEntity(db, seriesId, "video-series", "The Chair Company");
+        SeedEntity(db, episodeId, "video", "Old Episode", parentEntityId: seriesId, sortOrder: 1);
+        await db.SaveChangesAsync();
+
+        var personRelationship = new EntityMetadataProposal(
+            ProposalId: "tmdb:person:guest",
+            Provider: "tmdb",
+            TargetKind: "person",
+            Confidence: 1,
+            MatchReason: "credit",
+            Patch: EmptyPatch() with { Title = "Guest Actor" },
+            Images: [new ImageCandidate("poster", "https://example.test/guest.jpg", "tmdb", null, null, null, null)],
+            Children: [],
+            Candidates: []);
+        var proposal = new EntityMetadataProposal(
+            ProposalId: "tmdb:tv:the-chair-company",
+            Provider: "tmdb",
+            TargetKind: "video-series",
+            TargetEntityId: seriesId,
+            Confidence: 1,
+            MatchReason: "external-id",
+            Patch: EmptyPatch(),
+            Images: [],
+            Children:
+            [
+                new EntityMetadataProposal(
+                    ProposalId: "tmdb:tv:the-chair-company:s1:e1",
+                    Provider: "tmdb",
+                    TargetKind: "video",
+                    TargetEntityId: episodeId,
+                    Confidence: 1,
+                    MatchReason: "structural-child",
+                    Patch: EmptyPatch() with
+                    {
+                        Title = "Episode One",
+                        Credits = [new CreditPatch("Guest Actor", "guest", "Company Man", 0)]
+                    },
+                    Images: [],
+                    Children: [],
+                    Candidates: [],
+                    Relationships: [personRelationship])
+            ],
+            Candidates: []);
+
+        var service = new EntityMetadataApplyService(
+            db,
+            new PluginArtworkServiceOptions(Path.GetTempPath()),
+            new HttpClient(new FixedImageHandler()));
+        await service.ApplyAsync(seriesId, proposal, selectedFields: [], selectedImages: null, CancellationToken.None);
+
+        var personId = await db.Entities
+            .Where(row => row.KindCode == "person" && row.Title == "Guest Actor")
+            .Select(row => row.Id)
+            .SingleAsync();
+        Assert.Equal("Episode One", (await db.Entities.FindAsync([episodeId]))?.Title);
+        Assert.Equal(personId, (await db.EntityRelationshipLinks.SingleAsync(row => row.EntityId == episodeId)).TargetEntityId);
+        Assert.Equal("/assets/plugins/artwork/" + personId + "/poster-af1fa5679394.jpg", (await db.EntityFiles.SingleAsync(row => row.EntityId == personId)).Path);
+    }
+
+    [Fact]
+    public async Task ApplyRootCreditsAndStudioUseSeparatedRelationshipArtwork() {
+        await using var db = CreateContext();
+        var movieId = Guid.Parse("15151515-1515-1515-1515-151515151515");
+        SeedEntity(db, movieId, "video", "Old Movie");
+        await db.SaveChangesAsync();
+
+        var actorRelationship = new EntityMetadataProposal(
+            ProposalId: "tmdb:person:lead",
+            Provider: "tmdb",
+            TargetKind: "person",
+            Confidence: 1,
+            MatchReason: "credit",
+            Patch: EmptyPatch() with { Title = "Lead Actor" },
+            Images: [new ImageCandidate("poster", "https://example.test/lead.jpg", "tmdb", null, null, null, null)],
+            Children: [],
+            Candidates: []);
+        var studioRelationship = new EntityMetadataProposal(
+            ProposalId: "tmdb:studio:chair-pictures",
+            Provider: "tmdb",
+            TargetKind: "studio",
+            Confidence: 1,
+            MatchReason: "studio",
+            Patch: EmptyPatch() with { Title = "Chair Pictures" },
+            Images: [new ImageCandidate("logo", "https://example.test/studio.png", "tmdb", null, null, null, null)],
+            Children: [],
+            Candidates: []);
+        var proposal = new EntityMetadataProposal(
+            ProposalId: "tmdb:movie:chair",
+            Provider: "tmdb",
+            TargetKind: "video",
+            Confidence: 1,
+            MatchReason: "external-id",
+            Patch: EmptyPatch() with {
+                Studio = "Chair Pictures",
+                Credits = [new CreditPatch("Lead Actor", "cast", "Lead", 0)]
+            },
+            Images: [],
+            Children: [],
+            Candidates: [],
+            Relationships: [actorRelationship, studioRelationship]);
+
+        var service = new EntityMetadataApplyService(
+            db,
+            new PluginArtworkServiceOptions(Path.GetTempPath()),
+            new HttpClient(new FixedImageHandler()));
+        await service.ApplyAsync(movieId, proposal, selectedFields: ["credits", "studio"], selectedImages: null, CancellationToken.None);
+
+        var actorId = await db.Entities.Where(row => row.KindCode == "person" && row.Title == "Lead Actor").Select(row => row.Id).SingleAsync();
+        var studioId = await db.Entities.Where(row => row.KindCode == "studio" && row.Title == "Chair Pictures").Select(row => row.Id).SingleAsync();
+        Assert.Equal(EntityFileRole.Poster, (await db.EntityFiles.SingleAsync(row => row.EntityId == actorId)).Role);
+        Assert.Equal(EntityFileRole.Logo, (await db.EntityFiles.SingleAsync(row => row.EntityId == studioId)).Role);
+    }
+
+    [Fact]
+    public async Task ApplyRelationshipProposalsHydratesLinkedEntityMetadata() {
+        await using var db = CreateContext();
+        var movieId = Guid.Parse("24242424-2424-2424-2424-242424242424");
+        SeedEntity(db, movieId, "video", "Old Movie");
+        await db.SaveChangesAsync();
+
+        var actorRelationship = new EntityMetadataProposal(
+            ProposalId: "tmdb:person:31",
+            Provider: "tmdb",
+            TargetKind: "person",
+            Confidence: 1,
+            MatchReason: "credit",
+            Patch: EmptyPatch() with {
+                Title = "Lead Actor",
+                Description = "Actor biography.",
+                ExternalIds = new Dictionary<string, string> { ["tmdb"] = "31" },
+                Urls = ["https://www.themoviedb.org/person/31"],
+                Stats = new Dictionary<string, int> { ["popularity"] = 12 }
+            },
+            Images: [new ImageCandidate("poster", "https://example.test/lead.jpg", "tmdb", null, null, null, null)],
+            Children: [],
+            Candidates: []);
+        var proposal = new EntityMetadataProposal(
+            ProposalId: "tmdb:movie:1",
+            Provider: "tmdb",
+            TargetKind: "video",
+            Confidence: 1,
+            MatchReason: "external-id",
+            Patch: EmptyPatch() with {
+                Credits = [new CreditPatch("Lead Actor", "cast", "Lead", 0)]
+            },
+            Images: [],
+            Children: [],
+            Candidates: [],
+            Relationships: [actorRelationship]);
+
+        var service = new EntityMetadataApplyService(
+            db,
+            new PluginArtworkServiceOptions(Path.GetTempPath()),
+            new HttpClient(new FixedImageHandler()));
+        await service.ApplyAsync(movieId, proposal, selectedFields: ["credits"], selectedImages: null, CancellationToken.None);
+
+        var actorId = await db.Entities
+            .Where(row => row.KindCode == "person" && row.Title == "Lead Actor")
+            .Select(row => row.Id)
+            .SingleAsync();
+        Assert.Equal("Actor biography.", (await db.EntityDescriptions.FindAsync([actorId]))?.Value);
+        Assert.Equal("31", (await db.EntityExternalIds.SingleAsync(row => row.EntityId == actorId)).Value);
+        Assert.Equal("https://www.themoviedb.org/person/31", await db.EntityUrls
+            .Where(row => row.EntityId == actorId)
+            .Select(row => row.Url)
+            .SingleAsync());
+        Assert.Equal(12, (await db.EntityStats.FindAsync([actorId, "popularity"]))?.Value);
+        Assert.Equal(EntityFileRole.Poster, (await db.EntityFiles.SingleAsync(row => row.EntityId == actorId)).Role);
+    }
+
+    [Fact]
+    public async Task ApplyRelationshipProposalsReplacesExistingLinkedArtwork() {
+        await using var db = CreateContext();
+        var movieId = Guid.Parse("29292929-2929-2929-2929-292929292929");
+        var actorId = Guid.Parse("30303030-3030-3030-3030-303030303030");
+        SeedEntity(db, movieId, "video", "Old Movie");
+        SeedEntity(db, actorId, "person", "Lead Actor");
+        db.EntityFiles.Add(new EntityFileRow {
+            Id = Guid.NewGuid(),
+            EntityId = actorId,
+            Role = EntityFileRole.Poster,
+            Path = "/assets/plugins/artwork/old-poster.jpg",
+            MimeType = "image/jpeg",
+            CreatedAt = DateTimeOffset.UtcNow.AddDays(-1),
+            UpdatedAt = DateTimeOffset.UtcNow.AddDays(-1)
+        });
+        await db.SaveChangesAsync();
+
+        var actorRelationship = new EntityMetadataProposal(
+            ProposalId: "tmdb:person:31",
+            Provider: "tmdb",
+            TargetKind: "person",
+            Confidence: 1,
+            MatchReason: "credit",
+            Patch: EmptyPatch() with { Title = "Lead Actor" },
+            Images: [new ImageCandidate("poster", "https://example.test/lead-new.jpg", "tmdb", null, null, null, null)],
+            Children: [],
+            Candidates: []);
+        var proposal = new EntityMetadataProposal(
+            ProposalId: "tmdb:movie:chair",
+            Provider: "tmdb",
+            TargetKind: "video",
+            Confidence: 1,
+            MatchReason: "external-id",
+            Patch: EmptyPatch() with {
+                Credits = [new CreditPatch("Lead Actor", "cast", "Lead", 0)]
+            },
+            Images: [],
+            Children: [],
+            Candidates: [],
+            Relationships: [actorRelationship]);
+
+        var service = new EntityMetadataApplyService(
+            db,
+            new PluginArtworkServiceOptions(Path.GetTempPath()),
+            new HttpClient(new FixedImageHandler()));
+        await service.ApplyAsync(movieId, proposal, selectedFields: ["credits"], selectedImages: null, CancellationToken.None);
+
+        var file = await db.EntityFiles.SingleAsync(row => row.EntityId == actorId && row.Role == EntityFileRole.Poster);
+        Assert.StartsWith($"/assets/plugins/artwork/{actorId}/poster-", file.Path);
+        Assert.EndsWith(".jpg", file.Path);
+    }
+
+    [Fact]
+    public async Task ApplyRelationshipProposalsUpsertsRepeatedExternalIdsWithinOneSave() {
+        await using var db = CreateContext();
+        var movieId = Guid.Parse("34343434-3434-3434-3434-343434343434");
+        SeedEntity(db, movieId, "video", "Old Movie");
+        await db.SaveChangesAsync();
+
+        static EntityMetadataProposal ActorRelationship(string description) => new(
+            ProposalId: $"tmdb:person:31:{description}",
+            Provider: "tmdb",
+            TargetKind: "person",
+            Confidence: 1,
+            MatchReason: "credit",
+            Patch: EmptyPatch() with {
+                Title = "Lead Actor",
+                Description = description,
+                ExternalIds = new Dictionary<string, string> { ["tmdb"] = "31" },
+                Urls = ["https://www.themoviedb.org/person/31"]
+            },
+            Images: [],
+            Children: [],
+            Candidates: []);
+
+        var proposal = new EntityMetadataProposal(
+            ProposalId: "tmdb:movie:1",
+            Provider: "tmdb",
+            TargetKind: "video",
+            Confidence: 1,
+            MatchReason: "external-id",
+            Patch: EmptyPatch() with {
+                Credits = [new CreditPatch("Lead Actor", "cast", "Lead", 0)]
+            },
+            Images: [],
+            Children: [],
+            Candidates: [],
+            Relationships: [ActorRelationship("First hydrate."), ActorRelationship("Second hydrate.")]);
+
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+        await service.ApplyAsync(movieId, proposal, selectedFields: ["credits"], selectedImages: null, CancellationToken.None);
+
+        var actorId = await db.Entities
+            .Where(row => row.KindCode == "person" && row.Title == "Lead Actor")
+            .Select(row => row.Id)
+            .SingleAsync();
+        Assert.Equal("Second hydrate.", (await db.EntityDescriptions.FindAsync([actorId]))?.Value);
+        Assert.Equal("31", (await db.EntityExternalIds.SingleAsync(row => row.EntityId == actorId && row.Provider == "tmdb")).Value);
+        Assert.Equal("https://www.themoviedb.org/person/31", await db.EntityUrls
+            .Where(row => row.EntityId == actorId)
+            .Select(row => row.Url)
+            .SingleAsync());
+    }
+
+    [Fact]
+    public async Task ApplyMergesMultipleCreditRolesForSamePersonIntoOneRelationship() {
+        await using var db = CreateContext();
+        var episodeId = Guid.Parse("17171717-1717-1717-1717-171717171717");
+        SeedEntity(db, episodeId, "video", "Old Episode");
+        await db.SaveChangesAsync();
+
+        var proposal = new EntityMetadataProposal(
+            ProposalId: "tmdb:tv:chair:s1:e1",
+            Provider: "tmdb",
+            TargetKind: "video",
+            TargetEntityId: episodeId,
+            Confidence: 1,
+            MatchReason: "external-id",
+            Patch: EmptyPatch() with {
+                Credits =
+                [
+                    new CreditPatch("Tim Robinson", "cast", "Ron Trosper", 0),
+                    new CreditPatch("Tim Robinson", "writer", null, 20),
+                    new CreditPatch("Tim Robinson", "creator", null, 21)
+                ]
+            },
+            Images: [],
+            Children: [],
+            Candidates: []);
+
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+        await service.ApplyAsync(episodeId, proposal, selectedFields: ["credits"], selectedImages: null, CancellationToken.None);
+
+        var credit = await db.EntityRelationshipLinks.SingleAsync(row => row.EntityId == episodeId && row.RelationshipCode == "cast");
+        Assert.Equal("Tim Robinson", await db.Entities
+            .Where(row => row.Id == credit.TargetEntityId)
+            .Select(row => row.Title)
+            .SingleAsync());
+        Assert.Equal(0, credit.SortOrder);
+        Assert.Contains("\"role\":\"cast\"", credit.MetadataJson ?? string.Empty, StringComparison.Ordinal);
+        Assert.Contains("\"roles\":[\"cast\",\"writer\",\"creator\"]", credit.MetadataJson ?? string.Empty, StringComparison.Ordinal);
+        Assert.Contains("Ron Trosper", credit.MetadataJson ?? string.Empty, StringComparison.Ordinal);
+    }
+
+    private static PrismediaDbContext CreateContext() {
+        var options = new DbContextOptionsBuilder<PrismediaDbContext>()
+            .UseInMemoryDatabase($"metadata-apply-{Guid.NewGuid():N}")
+            .Options;
+
+        return new PrismediaDbContext(options);
+    }
+
+    private static void SeedEntity(
+        PrismediaDbContext db,
+        Guid id,
+        string kind,
+        string title,
+        Guid? parentEntityId = null,
+        int? sortOrder = null) {
+        db.Entities.Add(new EntityRow {
+            Id = id,
+            KindCode = kind,
+            Title = title,
+            ParentEntityId = parentEntityId,
+            SortOrder = sortOrder,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+    }
+
+    private static EntityMetadataPatch EmptyPatch() => new(
+        Title: null,
+        Description: null,
+        ExternalIds: new Dictionary<string, string>(),
+        Urls: [],
+        Tags: [],
+        Studio: null,
+        Credits: [],
+        Dates: new Dictionary<string, string>(),
+        Stats: new Dictionary<string, int>(),
+        Positions: new Dictionary<string, int>(),
+        Classification: null);
+
+    private sealed class FixedImageHandler : HttpMessageHandler {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK) {
+                Content = new ByteArrayContent([1, 2, 3])
+            });
+    }
+}

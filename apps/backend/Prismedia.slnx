@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Prismedia.Application/Prismedia.Application.csproj" />
+    <Project Path="src/Prismedia.Api/Prismedia.Api.csproj" />
+    <Project Path="src/Prismedia.Contracts/Prismedia.Contracts.csproj" />
+    <Project Path="src/Prismedia.Domain/Prismedia.Domain.csproj" />
+    <Project Path="src/Prismedia.Infrastructure/Prismedia.Infrastructure.csproj" />
+    <Project Path="src/Prismedia.Worker/Prismedia.Worker.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Prismedia.Api.Tests/Prismedia.Api.Tests.csproj" />
+    <Project Path="tests/Prismedia.Domain.Tests/Prismedia.Domain.Tests.csproj" />
+    <Project Path="tests/Prismedia.Infrastructure.Tests/Prismedia.Infrastructure.Tests.csproj" />
+  </Folder>
+</Solution>

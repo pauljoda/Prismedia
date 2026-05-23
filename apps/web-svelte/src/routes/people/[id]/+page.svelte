@@ -1,0 +1,236 @@
+<script lang="ts">
+  import { onMount } from "svelte";
+  import { page } from "$app/state";
+  import { ArrowLeft, Film, Layers, BookOpen, Music } from "@lucide/svelte";
+  import {
+    fetchPerson,
+    fetchEntities,
+    updateEntityRating,
+    updateEntityFlags,
+    updateEntityMetadata,
+    type PersonDetail,
+  } from "$lib/api/prismedia";
+  import { getCapability } from "$lib/api/capabilities";
+  import {
+    toggleOptimisticEntityFlag,
+    updateOptimisticEntityRating,
+  } from "$lib/entities/entity-detail-state";
+  import { entityCardToDetailCard, type EntityDetailCardFull } from "$lib/entities/entity-detail";
+  import { entityCardToThumbnailCard } from "$lib/entities/entity-grid";
+  import { resolveEntityHref } from "$lib/entities/entity-routes";
+  import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
+  import type { EntityCard } from "$lib/api/generated/model";
+  import EntityDetail, {
+    type EntityMetadataUpdateRequest,
+  } from "$lib/components/entities/EntityDetail.svelte";
+  import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
+  import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
+  import { useNsfw } from "$lib/nsfw/store.svelte";
+
+  type LoadState = "loading" | "ready" | "error";
+
+  const nsfw = useNsfw();
+
+  let loadState: LoadState = $state("loading");
+  let person = $state<PersonDetail | null>(null);
+  let relatedCards = $state<EntityThumbnailCard[]>([]);
+  let errorMessage: string | null = $state(null);
+  let lastNsfwMode = $state(nsfw.mode);
+  let ratingBusy = $state(false);
+
+  const card = $derived.by((): EntityDetailCardFull | null => {
+    if (!person) return null;
+    return entityCardToDetailCard(person);
+  });
+
+  const dates = $derived.by(() => {
+    if (!person) return [];
+    const cap = getCapability(person.capabilities, "dates");
+    return cap?.items ?? [];
+  });
+
+  interface DetailRow { label: string; value: string }
+  const bioRows = $derived.by((): DetailRow[] => {
+    if (!person) return [];
+    const rows: DetailRow[] = [];
+    if (person.gender) rows.push({ label: "Gender", value: person.gender });
+    if (person.country) rows.push({ label: "Country", value: person.country });
+    if (person.ethnicity) rows.push({ label: "Ethnicity", value: person.ethnicity });
+    if (person.eyeColor) rows.push({ label: "Eyes", value: person.eyeColor });
+    if (person.hairColor) rows.push({ label: "Hair", value: person.hairColor });
+    if (person.height != null) rows.push({ label: "Height", value: `${person.height} cm` });
+    if (person.weight != null) rows.push({ label: "Weight", value: `${person.weight} kg` });
+    if (person.measurements) rows.push({ label: "Measurements", value: person.measurements });
+    if (person.tattoos) rows.push({ label: "Tattoos", value: person.tattoos });
+    if (person.piercings) rows.push({ label: "Piercings", value: person.piercings });
+    if (person.disambiguation) rows.push({ label: "Disambiguation", value: person.disambiguation });
+    return rows;
+  });
+
+  onMount(() => {
+    void loadPerson();
+  });
+
+  $effect(() => {
+    if (nsfw.mode === lastNsfwMode) return;
+    lastNsfwMode = nsfw.mode;
+    void loadPerson();
+  });
+
+  async function loadPerson() {
+    loadState = "loading";
+    errorMessage = null;
+    try {
+      const id = page.params.id ?? "";
+      person = await fetchPerson(id);
+      const statsCapability = getCapability(person.capabilities, "stats");
+      const creditCount = statsCapability?.items.find((i) => i.code === "credit-count");
+      if (creditCount && Number(creditCount.value) > 0) {
+        await loadRelated(id);
+      }
+      loadState = "ready";
+    } catch (err) {
+      if (redirectHiddenEntityNotFound(err, nsfw.mode)) return;
+      errorMessage = err instanceof Error ? err.message : String(err);
+      loadState = "error";
+    }
+  }
+
+  async function loadRelated(personId: string) {
+    try {
+      const response = await fetchEntities({ query: personId });
+      relatedCards = response.items.map((item) => entityCardToThumbnailCard(item, resolveEntityHref(item.kind, item.id)));
+    } catch {
+      relatedCards = [];
+    }
+  }
+
+  async function handleRatingChange(value: number | null) {
+    if (!person || ratingBusy) return;
+    ratingBusy = true;
+    try {
+      await updateOptimisticEntityRating(person, value, (next) => (person = next), updateEntityRating);
+    } finally {
+      ratingBusy = false;
+    }
+  }
+
+  async function handleFavoriteToggle() {
+    if (!person) return;
+    await toggleOptimisticEntityFlag(person, "isFavorite", (next) => (person = next), updateEntityFlags);
+  }
+
+  async function handleOrganizedToggle() {
+    if (!person) return;
+    await toggleOptimisticEntityFlag(person, "isOrganized", (next) => (person = next), updateEntityFlags);
+  }
+
+  async function handleMetadataSave(request: EntityMetadataUpdateRequest) {
+    if (!person) return;
+    await updateEntityMetadata(person.id, request, { kind: person.kind });
+    await loadPerson();
+  }
+</script>
+
+<svelte:head>
+  <title>{person?.title ?? "Person"} · Prismedia</title>
+</svelte:head>
+
+<div class="detail-page">
+  <a href="/people" class="back-link">
+    <ArrowLeft class="h-4 w-4" />
+    People
+  </a>
+
+  {#if loadState === "loading"}
+    <div class="loading-shell" aria-busy="true"></div>
+  {:else if loadState === "error"}
+    <div class="error-notice">
+      <p>{errorMessage ?? "Failed to load person."}</p>
+      <button type="button" onclick={() => void loadPerson()}>Retry</button>
+    </div>
+  {:else if card && person}
+    <EntityDetail
+      {card}
+      onRatingChange={handleRatingChange}
+      onFavoriteToggle={handleFavoriteToggle}
+      onOrganizedToggle={handleOrganizedToggle}
+      onMetadataSave={handleMetadataSave}
+      {ratingBusy}
+      posterSize="large"
+    >
+      {#snippet heroMeta()}
+        {#if person?.gender}
+          <span class="meta-item">{person.gender}</span>
+        {/if}
+        {#if person?.country}
+          {#if person.gender}<span class="meta-sep"></span>{/if}
+          <span class="meta-item">{person.country}</span>
+        {/if}
+        {#each dates as date, i (date.code)}
+          <span class="meta-sep"></span>
+          <span class="meta-item">{date.value}</span>
+        {/each}
+      {/snippet}
+
+      {#snippet afterBody()}
+        {#if bioRows.length > 0}
+          <div class="bio-section">
+            <h2 class="section-label">Details</h2>
+            <dl class="bio-grid">
+              {#each bioRows as row (row.label)}
+                <div class="bio-row">
+                  <dt>{row.label}</dt>
+                  <dd>{row.value}</dd>
+                </div>
+              {/each}
+            </dl>
+          </div>
+        {/if}
+      {/snippet}
+    </EntityDetail>
+
+    {#if relatedCards.length > 0}
+      <section class="content-section">
+        <h2 class="content-heading">
+          <Film class="h-4 w-4" />
+          Appearances
+          <span class="content-count">{relatedCards.length}</span>
+        </h2>
+        <EntityGrid
+          cards={relatedCards}
+          prefsKey={`person-${person?.id}-appearances`}
+          selectable={false}
+          emptyTitle="No appearances"
+          emptyMessage="No content linked to this person."
+        />
+      </section>
+    {/if}
+  {/if}
+</div>
+
+<style>
+  .detail-page { display: grid; gap: 1.25rem; padding: clamp(1rem, 3vw, 2rem); max-width: 72rem; margin: 0 auto; }
+  .back-link { display: inline-flex; align-items: center; gap: 0.4rem; color: var(--color-text-muted, #8a93a6); font-size: 0.78rem; text-decoration: none; font-family: var(--font-mono, "JetBrains Mono", monospace); text-transform: uppercase; letter-spacing: 0.04em; transition: color 0.15s; }
+  .back-link:hover { color: var(--color-text-primary, #f2eed8); }
+  .loading-shell { min-height: 28rem; border: 1px solid var(--color-border, #1c2235); background: var(--color-surface-2, #101420); animation: pulse 1.2s ease-in-out infinite; }
+  .error-notice { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem; border: 1px solid color-mix(in srgb, #ef4444 50%, var(--color-border, #1c2235)); background: var(--color-surface-2, #101420); color: var(--color-text-muted, #8a93a6); font-size: 0.85rem; }
+  .error-notice button { border: 1px solid var(--color-border, #1c2235); background: var(--color-surface-3, #151a28); color: var(--color-text-muted, #8a93a6); padding: 0.4rem 0.8rem; font-size: 0.78rem; cursor: pointer; }
+
+  :global(.meta-item) { white-space: nowrap; font-size: 0.82rem; }
+  :global(.meta-sep) { display: inline-block; width: 3px; height: 3px; margin: 0 0.5rem; background: var(--color-text-muted, #8a93a6); opacity: 0.5; }
+
+  .bio-section { padding: 1rem 1.5rem; border-top: 1px solid var(--color-border, #1c2235); }
+  .section-label { display: flex; align-items: center; gap: 0.45rem; margin: 0 0 0.75rem; font-family: var(--font-mono, "JetBrains Mono", monospace); font-size: 0.68rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-text-muted, #8a93a6); }
+  .bio-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: 0.5rem 1.5rem; margin: 0; }
+  .bio-row { display: flex; justify-content: space-between; gap: 0.75rem; padding: 0.3rem 0; border-bottom: 1px solid var(--color-border-subtle, rgba(28, 34, 53, 0.5)); }
+  .bio-row dt { font-family: var(--font-mono, "JetBrains Mono", monospace); font-size: 0.7rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--color-text-muted, #8a93a6); }
+  .bio-row dd { margin: 0; font-size: 0.8rem; color: var(--color-text-secondary, #c4c9d4); text-align: right; }
+
+  .content-section { display: grid; gap: 0.75rem; }
+  .content-heading { display: flex; align-items: center; gap: 0.5rem; margin: 0; font-family: var(--font-heading, Geist, sans-serif); font-size: 1.1rem; font-weight: 600; color: var(--color-text-primary, #f2eed8); }
+  .content-count { font-family: var(--font-mono, "JetBrains Mono", monospace); font-size: 0.68rem; font-weight: 600; color: var(--color-text-muted, #8a93a6); padding: 0.1rem 0.4rem; border: 1px solid var(--color-border, #1c2235); background: var(--color-surface-3, #151a28); }
+
+  @media (min-width: 640px) { .bio-section { padding: 1rem 2rem; } }
+  @keyframes pulse { 0%, 100% { opacity: 0.45; } 50% { opacity: 0.85; } }
+</style>

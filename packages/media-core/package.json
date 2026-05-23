@@ -1,0 +1,23 @@
+{
+  "name": "@prismedia/media-core",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "lint": "tsc --project tsconfig.json --noEmit",
+    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "test": "pnpm test:unit",
+    "test:unit": "vitest run --config vitest.config.ts"
+  },
+  "devDependencies": {
+    "@types/adm-zip": "^0.5.8",
+    "@types/node": "^22.19.19",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "adm-zip": "^0.5.17"
+  }
+}

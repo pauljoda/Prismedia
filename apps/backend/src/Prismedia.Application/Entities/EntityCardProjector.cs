@@ -1,0 +1,204 @@
+using Prismedia.Contracts.Entities;
+using Prismedia.Domain.Capabilities;
+using Prismedia.Domain.Entities;
+using Prismedia.Domain.Media;
+using ContractCapability = Prismedia.Contracts.Entities.EntityCapability;
+
+namespace Prismedia.Application.Entities;
+
+/// <summary>
+/// The single projection from a hydrated domain <see cref="Entity"/> to the API
+/// <see cref="EntityCard"/> contract. This is the only place domain capabilities are
+/// mapped to contract capabilities; the row-based browse/thumbnail path in
+/// Infrastructure is the one deliberate read-optimized exception and does not flow
+/// through here.
+/// </summary>
+public static class EntityCardProjector {
+    /// <summary>Projects a hydrated domain entity to the shared entity card contract.</summary>
+    public static EntityCard ToCard(Entity entity) =>
+        new() {
+            Id = entity.Id,
+            Kind = EntityKindRegistry.ToCode(entity.Kind),
+            Title = entity.Title,
+            ParentEntityId = entity.ParentEntityId,
+            SortOrder = entity.SortOrder,
+            Capabilities = MapCapabilities(entity),
+            ChildrenByKind = ToGroups(entity.ChildrenByKind),
+            Relationships = ToGroups(entity.RelationshipsByKind),
+        };
+
+    /// <summary>Projects the credited people exposed on detail routes.</summary>
+    public static IReadOnlyList<EntityCreditMetadata> CreditMetadata(Entity entity) =>
+        entity.Credits?.Credits
+            .Select(credit => new EntityCreditMetadata(
+                credit.Person.Id,
+                credit.Role.ToCode(),
+                credit.Label))
+            .ToArray() ?? [];
+
+    private static IReadOnlyList<ContractCapability> MapCapabilities(Entity entity) {
+        var capabilities = new List<ContractCapability>();
+
+        if (entity.Rating is { } rating) {
+            capabilities.Add(new RatingCapability(rating.Value));
+        }
+
+        if (entity.Flags is { } flags) {
+            capabilities.Add(new FlagsCapability(flags.IsFavorite, flags.IsNsfw, flags.IsOrganized));
+        }
+
+        if (entity.Description is { } description) {
+            capabilities.Add(new DescriptionCapability(description.Value));
+        }
+
+        if (entity.Playback is { } playback) {
+            capabilities.Add(new PlaybackCapability(
+                playback.PlayCount,
+                playback.PlayDuration.TotalSeconds,
+                playback.ResumeTime.TotalSeconds,
+                playback.LastPlayedAt,
+                playback.CompletedAt));
+        }
+
+        if (entity.MarkerCapability is { } markers) {
+            capabilities.Add(new MarkersCapability(markers.Items));
+        }
+
+        if (entity.Technical is { } technical) {
+            capabilities.Add(new TechnicalCapability(
+                technical.Duration,
+                technical.Width,
+                technical.Height,
+                technical.FrameRate,
+                technical.BitRate,
+                technical.SampleRate,
+                technical.Channels,
+                technical.Codec,
+                technical.Container,
+                technical.Format));
+        }
+
+        var images = ProjectImages(entity);
+        if (images is not null) {
+            capabilities.Add(images);
+        }
+
+        if (entity.Files is { } files) {
+            capabilities.Add(new FilesCapability(files.Items));
+        }
+
+        if (entity.GetCapability<CapabilityLinks>() is { } links) {
+            capabilities.Add(new LinksCapability(links.Urls, links.ExternalIds));
+        }
+
+        if (entity.SubtitleCapability is { } subtitles) {
+            capabilities.Add(new SubtitlesCapability(subtitles.Items));
+        }
+
+        if (entity.GetCapability<CapabilityFingerprints>() is { } fingerprints) {
+            capabilities.Add(new FingerprintsCapability(fingerprints.Items));
+        }
+
+        if (entity.Stats is { } stats) {
+            capabilities.Add(new StatsCapability(stats.Items));
+        }
+
+        if (entity.Dates is { } dates) {
+            capabilities.Add(new DatesCapability(dates.Items));
+        }
+
+        if (entity.Lifetime is { } lifetime) {
+            capabilities.Add(new LifetimeCapability(lifetime.Start, lifetime.End, lifetime.Label));
+        }
+
+        if (entity.Source is { } source) {
+            capabilities.Add(new SourceCapability(source.Items));
+        }
+
+        if (entity.Progress is { } progress) {
+            capabilities.Add(new ProgressCapability(
+                progress.CurrentEntityId,
+                progress.Unit,
+                progress.Index,
+                progress.Total,
+                progress.Mode,
+                progress.CompletedAt,
+                progress.UpdatedAt));
+        }
+
+        if (entity.Position is { } position) {
+            capabilities.Add(new PositionCapability(position.Items));
+        }
+
+        if (entity.Classification is { } classification) {
+            capabilities.Add(new ClassificationCapability(classification.Value, classification.System));
+        }
+
+        return capabilities;
+    }
+
+    private static ImagesCapability? ProjectImages(Entity entity) {
+        var files = entity.Files?.Items ?? [];
+        var assets = files
+            .Where(file => file.Role is EntityFileRole.Thumbnail or EntityFileRole.Poster
+                or EntityFileRole.Cover or EntityFileRole.Backdrop)
+            .OrderBy(file => file.Role switch {
+                EntityFileRole.Thumbnail => 0,
+                EntityFileRole.Poster => 1,
+                EntityFileRole.Cover => 2,
+                _ => 3
+            })
+            .Select(file => new EntityImageAsset(file.Role, file.Path, file.MimeType))
+            .ToArray();
+
+        if (assets.Length == 0) {
+            return null;
+        }
+
+        return new ImagesCapability([], assets, assets[0].Path, assets[0].Path);
+    }
+
+    private static IReadOnlyList<EntityGroup> ToGroups(
+        IReadOnlyDictionary<EntityKind, IReadOnlyList<Entity>> map) =>
+        map.Select(pair => new EntityGroup(
+                EntityKindRegistry.ToCode(pair.Key),
+                EntityKindRegistry.Describe(pair.Key).GroupLabel,
+                pair.Value
+                    .OrderBy(child => child.SortOrder ?? int.MaxValue)
+                    .ThenBy(child => child.Title)
+                    .Select(ToThumbnail)
+                    .ToArray()))
+            .ToArray();
+
+    private static EntityThumbnail ToThumbnail(Entity entity) {
+        var cover = (entity.Files?.Items ?? [])
+            .Where(file => file.Role is EntityFileRole.Thumbnail or EntityFileRole.Poster
+                or EntityFileRole.Cover or EntityFileRole.Backdrop)
+            .OrderBy(file => file.Role switch {
+                EntityFileRole.Thumbnail => 0,
+                EntityFileRole.Poster => 1,
+                EntityFileRole.Cover => 2,
+                _ => 3
+            })
+            .Select(file => file.Path)
+            .FirstOrDefault();
+        var flags = entity.Flags;
+
+        return new EntityThumbnail(
+            entity.Id,
+            EntityKindRegistry.ToCode(entity.Kind),
+            entity.Title,
+            entity.ParentEntityId,
+            entity.SortOrder,
+            cover,
+            "none",
+            null,
+            [],
+            [],
+            entity.Rating?.Value,
+            flags?.IsFavorite ?? false,
+            flags?.IsNsfw ?? false,
+            flags?.IsOrganized ?? false);
+    }
+
+}

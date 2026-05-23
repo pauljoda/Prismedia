@@ -1,0 +1,2745 @@
+<script module lang="ts">
+  export interface VideoPlayerHandle {
+    seekTo: (time: number) => void;
+    seekBy: (delta: number) => void;
+    toggleMute: () => void;
+    togglePlay: () => void;
+  }
+
+  export interface ActiveCue {
+    start: number;
+    end: number;
+    text: string;
+  }
+
+  export interface VideoPlayerMarker {
+    id: string;
+    time: number;
+    endTime?: number | null;
+    title: string;
+  }
+
+  export interface VideoPlayerAudioTrack {
+    id: string;
+    streamIndex: number;
+    label: string;
+    selected: boolean;
+  }
+</script>
+
+<script lang="ts">
+  import "vidstack/player";
+  import "vidstack/player/ui";
+
+  import { onMount } from "svelte";
+  import {
+    Captions,
+    Cast,
+    ChevronLeft,
+    ChevronDown,
+    Gauge,
+    Loader,
+    Maximize,
+    Pause,
+    Play,
+    RotateCcw,
+    RotateCw,
+    PanelRightOpen,
+    Settings2,
+    Sliders,
+    Volume2,
+    VolumeX,
+    Wifi,
+  } from "@lucide/svelte";
+  import {
+    cn,
+    findFrameAtTime,
+    loadTrickplayFrames,
+    type TrickplayFrame,
+  } from "@prismedia/ui-svelte";
+  import {
+    isHLSProvider,
+    type AudioTrack,
+    type MediaCanPlayEvent,
+    type MediaErrorEvent,
+    type MediaProviderChangeEvent,
+    type MediaTimeUpdateEvent,
+    TextTrack,
+    type VTTCueInit,
+    type VideoQuality,
+  } from "vidstack";
+  import type { MediaPlayerElement } from "vidstack/elements";
+  import {
+    subtitleDisplayStyles,
+    type SubtitleAppearance,
+    type SubtitleCue,
+    type VideoSubtitleTrack,
+  } from "$lib/player/subtitle-types";
+  import { fetchVideoSubtitleCues } from "$lib/player/video-subtitles";
+  import {
+    enterMediaFullscreen,
+    exitDocumentFullscreen,
+    isDocumentFullscreen,
+  } from "$lib/fullscreen";
+  import {
+    adaptiveHlsBufferConfig,
+    canUseDirectPlayback,
+    fallbackPlaybackModeForError,
+    hlsStatusUrlForSrc,
+  } from "$lib/player/video-player-load";
+  import {
+    captionClassName,
+    pickPreferredSubtitleTrack,
+    readLocalSubtitleAppearance,
+    resolveSubtitleAppearance,
+    writeLocalSubtitleAppearance,
+  } from "$lib/player/subtitle-appearance";
+  import {
+    buildTimelineChapterCues,
+    findTimelineChapterTitle,
+  } from "$lib/player/timeline-chapters";
+  import AssSubtitleOverlay from "./AssSubtitleOverlay.svelte";
+  import FilmStrip from "./FilmStrip.svelte";
+
+  interface Props {
+    src?: string;
+    directSrc?: string;
+    codec?: string | null;
+    sourceWidth?: number | null;
+    sourceHeight?: number | null;
+    colorPipelineLabel?: string | null;
+    poster?: string;
+    markers?: VideoPlayerMarker[];
+    duration?: number;
+    onMarkerClick?: (marker: VideoPlayerMarker) => void;
+    onPlayStarted?: () => void;
+    onTimeUpdate?: (time: number) => void;
+    trickplayPlaylist?: string;
+    subtitleTracks?: VideoSubtitleTrack[];
+    audioTrackOptions?: VideoPlayerAudioTrack[];
+    onAudioTrackChange?: (streamIndex: number) => void | Promise<void>;
+    activeSubtitleTrackId?: string | null;
+    onActiveSubtitleTrackIdChange?: (id: string | null) => void;
+    onActiveCueChange?: (cue: ActiveCue | null) => void;
+    subtitleChoiceLocked?: boolean;
+    subtitleDefaults?: {
+      autoEnable: boolean;
+      preferredLanguages: string;
+      appearance: SubtitleAppearance;
+    };
+    isTranscriptSidecarOpen?: boolean;
+    onTranscriptSidecarToggle?: () => void;
+    defaultPlaybackMode?: "direct" | "hls";
+    showCastControls?: boolean;
+    chrome?: "full" | "minimal";
+    enableKeyboardShortcuts?: boolean;
+    initialMuted?: boolean;
+    onEnded?: () => void;
+    autoPlay?: boolean;
+    handle?: VideoPlayerHandle;
+  }
+
+  type PlaybackMode = "direct" | "hls";
+  type QualityMode = "direct" | "auto" | number;
+  type SettingsView = "root" | "quality" | "speed" | "audio" | "captions" | "subtitle-style";
+  type HlsStatus = {
+    state: "idle" | "pending" | "ready" | "error";
+    error?: string | null;
+  };
+  type CastWindow = Window &
+    typeof globalThis & {
+      chrome?: { cast?: { isAvailable?: boolean } };
+      cast?: { framework?: unknown };
+      __onGCastApiAvailable?: (isAvailable: boolean) => void;
+    };
+
+  interface QualityOption {
+    value: QualityMode;
+    label: string;
+  }
+
+  interface AudioTrackOption {
+    id: string;
+    index: number;
+    streamIndex: number | null;
+    label: string;
+    selected: boolean;
+    source: "native" | "external";
+  }
+
+  let {
+    src,
+    directSrc,
+    codec,
+    sourceWidth = null,
+    sourceHeight = null,
+    colorPipelineLabel = null,
+    poster,
+    markers = [],
+    duration: propDuration,
+    onMarkerClick,
+    onPlayStarted,
+    onTimeUpdate,
+    trickplayPlaylist,
+    subtitleTracks = [],
+    audioTrackOptions = [],
+    onAudioTrackChange,
+    activeSubtitleTrackId: controlledSubtitleId,
+    onActiveSubtitleTrackIdChange,
+    onActiveCueChange,
+    subtitleChoiceLocked = false,
+    subtitleDefaults,
+    isTranscriptSidecarOpen = false,
+    onTranscriptSidecarToggle,
+    defaultPlaybackMode,
+    showCastControls = true,
+    chrome = "full",
+    enableKeyboardShortcuts = true,
+    initialMuted = false,
+    onEnded,
+    autoPlay = false,
+    handle = $bindable(),
+  }: Props = $props();
+
+  const PLAYBACK_RATES = [0.75, 1, 1.25, 1.5, 2];
+  const HLS_RETRY_AFTER_SECONDS = 2;
+  const MARKER_CHAPTERS_TRACK_ID = "prismedia-marker-chapters";
+  const GOOGLE_CAST_SENDER_URL =
+    "https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1";
+
+  let containerEl: HTMLDivElement | undefined = $state();
+  let player: MediaPlayerElement | undefined = $state();
+  let videoEl: HTMLVideoElement | null = $state(null);
+  let directCapabilityProbe: HTMLVideoElement | null = $state(null);
+  let mediaMounted = $state(false);
+  let controlsTimeout: number | null = null;
+  let initialMutedSyncTimer: number | null = null;
+  let playTracked = false;
+  let endedTracked = false;
+  let lastSourceKey = "";
+  let muteTouched = false;
+  let lastNonZeroVolume = 1;
+  let pendingSeekTime: number | null = null;
+  let pendingAutoPlay = false;
+  let markerChaptersTrack: TextTrack | null = null;
+  let hlsReadySrc: string | undefined = $state();
+  let failedDirectSrc = $state<string | null>(null);
+
+  let playbackMode = $state<PlaybackMode>("hls");
+  let qualityMode = $state<QualityMode>("auto");
+  let currentTime = $state(0);
+  let duration = $state(0);
+  let playing = $state(false);
+  let buffering = $state(false);
+  // svelte-ignore state_referenced_locally
+  let muted = $state(initialMuted);
+  let volume = $state(1);
+  let playbackRate = $state(1);
+  let showControls = $state(true);
+  let bufferAhead = $state(0);
+  let bandwidthEstimate = $state<number | null>(null);
+  let droppedFrames = $state<number | null>(null);
+  let qualityOptions = $state<QualityOption[]>([{ value: "auto", label: "Auto" }]);
+  let activeQualityLabel = $state<string | null>(null);
+  let activeQualityDimensionsLabel = $state<string | null>(null);
+  let audioTracks = $state<AudioTrackOption[]>([]);
+  let selectedAudioTrackLabel = $state<string | null>(null);
+  let playerNotice = $state<string | null>(null);
+  let timelineHover = $state<{
+    chapterTitle: string | null;
+    markerTitles: string[];
+    percent: number;
+    time: number;
+  } | null>(null);
+  let timelineTrickplayFrames = $state<TrickplayFrame[] | null>(null);
+  let timelineTrickplayError = $state(false);
+
+  let settingsMenuRendered = $state(false);
+  let settingsMenuClosing = $state(false);
+  let settingsView = $state<SettingsView>("root");
+  let settingsCloseTimer: number | null = null;
+
+  let internalSubtitleId = $state<string | null>(null);
+  let activeTrackCues = $state<SubtitleCue[]>([]);
+  let activeCueText = $state<string | null>(null);
+  let localAppearance = $state<Partial<SubtitleAppearance> | null>(null);
+  let autoSelected = false;
+  let googleCastFrameworkPromise: Promise<boolean> | null = null;
+  let googleCastFrameworkAvailable = false;
+
+  const directPlayable = $derived.by(() => {
+    const video = (videoEl ?? directCapabilityProbe) as HTMLVideoElement | null;
+    return canUseDirectPlayback({
+      directSrc,
+      codec,
+      canPlayType: video ? video.canPlayType.bind(video) : undefined,
+    });
+  });
+  const directAvailable = $derived(Boolean(directSrc && directPlayable && failedDirectSrc !== directSrc));
+  const effectiveMode = $derived<PlaybackMode>(
+    playbackMode === "direct" && directAvailable ? "direct" : "hls",
+  );
+  const requestedPlayerSrc = $derived(effectiveMode === "direct" ? directSrc : src);
+  const playerSrc = $derived(requestedPlayerSrc === hlsReadySrc ? requestedPlayerSrc : undefined);
+  const hasFilmStrip = $derived(Boolean(trickplayPlaylist && duration > 0));
+  const markerChapterCues = $derived(buildTimelineChapterCues(markers, duration));
+  const timelinePreviewFrame = $derived.by(() => {
+    if (
+      timelineTrickplayError ||
+      !timelineHover ||
+      !timelineTrickplayFrames ||
+      timelineTrickplayFrames.length === 0
+    ) {
+      return null;
+    }
+    return timelineTrickplayFrames[findFrameAtTime(timelineTrickplayFrames, timelineHover.time)] ?? null;
+  });
+  const timelinePreviewSpriteDims = $derived.by(() => {
+    if (!timelineTrickplayFrames) return { width: 0, height: 0 };
+    return {
+      width: timelineTrickplayFrames.reduce((max, frame) => Math.max(max, frame.x + frame.width), 0),
+      height: timelineTrickplayFrames.reduce((max, frame) => Math.max(max, frame.y + frame.height), 0),
+    };
+  });
+  const activeSubtitleId = $derived(
+    controlledSubtitleId !== undefined ? controlledSubtitleId : internalSubtitleId,
+  );
+  const appearance = $derived(
+    resolveSubtitleAppearance(subtitleDefaults?.appearance ?? null, localAppearance),
+  );
+  const selectedQualityLabel = $derived(
+    effectiveMode === "direct"
+      ? "Direct"
+      : qualityMode === "auto"
+        ? `Auto${activeQualityLabel ? ` · ${activeQualityLabel}` : ""}`
+        : activeQualityLabel ?? "Quality",
+  );
+  const sourceResolutionLabel = $derived(formatDimensions(sourceWidth, sourceHeight));
+  const activeQualityDetailLabel = $derived.by(() => {
+    if (activeQualityDimensionsLabel && sourceResolutionLabel) {
+      if (activeQualityDimensionsLabel === sourceResolutionLabel) {
+        return `Native ${sourceResolutionLabel}`;
+      }
+      return `Current ${activeQualityDimensionsLabel} · Native ${sourceResolutionLabel}`;
+    }
+    if (activeQualityDimensionsLabel) return `Current ${activeQualityDimensionsLabel}`;
+    if (sourceResolutionLabel) return `Native ${sourceResolutionLabel}`;
+    return null;
+  });
+  const activePlaybackLabel = $derived(
+    effectiveMode === "direct" ? "Direct Playback" : "Adaptive HLS",
+  );
+  const fullChrome = $derived(chrome === "full");
+  const activePlaybackDetailLabel = $derived(
+    colorPipelineLabel ?? (effectiveMode === "direct" ? null : "SDR -> H.264 SDR"),
+  );
+  const playbackProgressPercent = $derived(
+    duration > 0 ? Math.max(0, Math.min(100, (currentTime / duration) * 100)) : 0,
+  );
+  const bufferedProgressPercent = $derived(
+    duration > 0
+      ? Math.max(
+          playbackProgressPercent,
+          Math.max(0, Math.min(100, ((currentTime + bufferAhead) / duration) * 100)),
+        )
+      : 0,
+  );
+  const displayedAudioTracks = $derived<AudioTrackOption[]>(
+    audioTrackOptions.length > 1
+      ? audioTrackOptions.map((track) => ({
+          id: track.id,
+          index: -1,
+          streamIndex: track.streamIndex,
+          label: track.label,
+          selected: track.selected,
+          source: "external" as const,
+        }))
+      : audioTracks.length > 0
+        ? audioTracks
+        : [
+            {
+              id: "default-audio",
+              index: -1,
+              streamIndex: null,
+              label: "Default audio",
+              selected: true,
+              source: "external",
+            },
+          ],
+  );
+  const displayedAudioTrackLabel = $derived(
+    selectedAudioTrackLabel ?? displayedAudioTracks.find((track) => track.selected)?.label ?? "Audio",
+  );
+  const activeSubtitleLabel = $derived.by(() => {
+    if (!activeSubtitleId) return "Off";
+    const track = subtitleTracks.find((candidate) => candidate.id === activeSubtitleId);
+    if (!track) return "On";
+    const lang = languageLabel(track.language);
+    return track.label ? `${lang} - ${track.label}` : lang;
+  });
+
+  const assTrackForRender = $derived.by(() => {
+    if (!activeSubtitleId) return null;
+    const track = subtitleTracks.find((t) => t.id === activeSubtitleId);
+    if (!track) return null;
+    if (track.sourceFormat !== "ass" && track.sourceFormat !== "ssa") return null;
+    if (!track.sourceUrl) return null;
+    return track;
+  });
+
+  function initialPlaybackMode(): PlaybackMode {
+    if (defaultPlaybackMode === "hls") return "hls";
+    return directAvailable ? "direct" : "hls";
+  }
+
+  function formatTime(seconds: number) {
+    const safe = Number.isFinite(seconds) ? Math.max(0, seconds) : 0;
+    const h = Math.floor(safe / 3600);
+    const m = Math.floor((safe % 3600) / 60);
+    const s = Math.floor(safe % 60);
+    if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+    return `${m}:${String(s).padStart(2, "0")}`;
+  }
+
+  function formatBandwidth(bps: number | null) {
+    if (!bps || !Number.isFinite(bps)) return "—";
+    if (bps >= 1_000_000) {
+      const mbps = bps / 1_000_000;
+      return `${Number.isInteger(mbps) ? mbps.toFixed(0) : mbps.toFixed(1)} Mbps`;
+    }
+    return `${Math.round(bps / 1_000)} Kbps`;
+  }
+
+  function formatDimensions(width: number | null | undefined, height: number | null | undefined) {
+    const safeWidth = typeof width === "number" && Number.isFinite(width) && width > 0
+      ? Math.round(width)
+      : null;
+    const safeHeight = typeof height === "number" && Number.isFinite(height) && height > 0
+      ? Math.round(height)
+      : null;
+    if (safeWidth && safeHeight) return `${safeWidth}x${safeHeight}`;
+    return null;
+  }
+
+  function languageLabel(language: string): string {
+    if (!language || language === "und") return "Unknown";
+    try {
+      const displayNames = new Intl.DisplayNames(undefined, { type: "language" });
+      return displayNames.of(language) ?? language.toUpperCase();
+    } catch {
+      return language.toUpperCase();
+    }
+  }
+
+  function isAssTrackActive(
+    id: string | null | undefined,
+    tracks: readonly VideoSubtitleTrack[],
+  ): boolean {
+    if (!id) return false;
+    const track = tracks.find((x) => x.id === id);
+    if (!track) return false;
+    return (track.sourceFormat === "ass" || track.sourceFormat === "ssa") && !!track.sourceUrl;
+  }
+
+  function mediaElement() {
+    const video = videoEl ?? player?.querySelector("video") ?? containerEl?.querySelector("video") ?? null;
+    if (video && video !== videoEl) videoEl = video;
+    return video;
+  }
+
+  function syncVideoElement() {
+    const video = player?.querySelector("video") ?? containerEl?.querySelector("video") ?? null;
+    if (video !== videoEl) videoEl = video;
+    return video;
+  }
+
+  function closeMenus() {
+    closeSettings();
+  }
+
+  function clearControlsTimer() {
+    if (controlsTimeout) {
+      window.clearTimeout(controlsTimeout);
+      controlsTimeout = null;
+    }
+  }
+
+  function clearSettingsCloseTimer() {
+    if (settingsCloseTimer) {
+      window.clearTimeout(settingsCloseTimer);
+      settingsCloseTimer = null;
+    }
+  }
+
+  function scheduleControlsHide() {
+    clearControlsTimer();
+    if (!playing) return;
+    controlsTimeout = window.setTimeout(() => {
+      showControls = false;
+      closeMenus();
+    }, 2400);
+  }
+
+  function surfaceControls() {
+    showControls = true;
+    scheduleControlsHide();
+  }
+
+  function updateBuffered() {
+    const video = mediaElement();
+    if (!video || duration <= 0) {
+      bufferAhead = 0;
+      return;
+    }
+    let bufferedEnd = 0;
+    for (let i = 0; i < video.buffered.length; i += 1) {
+      const start = video.buffered.start(i);
+      const end = video.buffered.end(i);
+      if (video.currentTime >= start && video.currentTime <= end) {
+        bufferedEnd = end;
+        break;
+      }
+      bufferedEnd = Math.max(bufferedEnd, end);
+    }
+    bufferAhead = Math.max(0, bufferedEnd - video.currentTime);
+  }
+
+  function notifyPlaybackEnded() {
+    if (endedTracked) return;
+    endedTracked = true;
+    onEnded?.();
+  }
+
+  function qualityLabel(quality: VideoQuality, index: number) {
+    if (quality.bitrate) return formatBandwidth(quality.bitrate);
+    return `Level ${index + 1}`;
+  }
+
+  function qualityDimensionsLabel(quality: VideoQuality) {
+    return formatDimensions(quality.width, quality.height);
+  }
+
+  function refreshQualities() {
+    if (!player || effectiveMode === "direct") {
+      qualityOptions = [
+        ...(directAvailable ? [{ value: "direct" as const, label: "Direct" }] : []),
+        { value: "auto" as const, label: "Auto" },
+      ];
+      activeQualityLabel = null;
+      activeQualityDimensionsLabel = null;
+      return;
+    }
+    const qualities = player.qualities?.toArray?.() ?? [];
+    const options = qualities
+      .map((quality, index) => ({
+        value: index,
+        label: qualityLabel(quality, index),
+        bitrate: quality.bitrate ?? 0,
+      }))
+      .sort((a, b) => b.bitrate - a.bitrate);
+    qualityOptions = [
+      ...(directAvailable ? [{ value: "direct" as const, label: "Direct" }] : []),
+      { value: "auto" as const, label: "Auto" },
+      ...options.map(({ value, label }) => ({ value, label })),
+    ];
+    const selected = qualities.find((quality) => quality.selected);
+    activeQualityLabel = selected
+      ? qualityLabel(selected, qualities.indexOf(selected))
+      : activeQualityLabel;
+    activeQualityDimensionsLabel = selected
+      ? qualityDimensionsLabel(selected)
+      : activeQualityDimensionsLabel;
+    if (player.qualities?.auto) qualityMode = "auto";
+  }
+
+  function audioTrackLabel(track: AudioTrack, index: number): string {
+    const label = track.label || track.language || track.kind || `Track ${index + 1}`;
+    return track.language && !label.toLowerCase().includes(track.language.toLowerCase())
+      ? `${label} · ${track.language}`
+      : label;
+  }
+
+  function refreshAudioTracks() {
+    const tracks = player?.audioTracks?.toArray?.() ?? [];
+    audioTracks = tracks.map((track, index) => ({
+      id: track.id,
+      index,
+      streamIndex: null,
+      label: audioTrackLabel(track, index),
+      selected: track.selected,
+      source: "native",
+    }));
+    selectedAudioTrackLabel =
+      audioTracks.find((track) => track.selected)?.label ?? audioTracks[0]?.label ?? null;
+  }
+
+  function selectAudioTrack(trackOption: AudioTrackOption) {
+    if (trackOption.source === "external") {
+      if (trackOption.streamIndex !== null) {
+        pendingSeekTime = currentTime > 0.25 ? currentTime : null;
+        pendingAutoPlay = playing;
+        selectedAudioTrackLabel = trackOption.label;
+        void onAudioTrackChange?.(trackOption.streamIndex);
+      }
+      closeMenus();
+      return;
+    }
+    if (trackOption.index < 0) {
+      selectedAudioTrackLabel = displayedAudioTrackLabel;
+      closeMenus();
+      return;
+    }
+    const track = player?.audioTracks?.toArray?.()[trackOption.index];
+    if (!track) return;
+    track.selected = true;
+    selectedAudioTrackLabel = audioTrackLabel(track, trackOption.index);
+    refreshAudioTracks();
+    closeMenus();
+  }
+
+  function requestPlaybackMode(nextQualityMode: QualityMode) {
+    pendingSeekTime = currentTime > 0.25 ? currentTime : null;
+    pendingAutoPlay = playing;
+    if (nextQualityMode === "direct") {
+      playbackMode = "direct";
+      qualityMode = "direct";
+      closeMenus();
+      return;
+    }
+    playbackMode = "hls";
+    qualityMode = nextQualityMode;
+    closeMenus();
+    if (!player || typeof nextQualityMode === "string") {
+      if (nextQualityMode === "auto") player?.qualities?.autoSelect?.();
+      return;
+    }
+    const quality = player.qualities?.toArray?.()[nextQualityMode];
+    const remote = (player as unknown as {
+      remoteControl?: { changeQuality?: (index: number, trigger?: Event) => void };
+    }).remoteControl;
+    remote?.changeQuality?.(nextQualityMode);
+    if (quality) quality.selected = true;
+    activeQualityLabel = quality ? qualityLabel(quality, nextQualityMode) : activeQualityLabel;
+    activeQualityDimensionsLabel = quality
+      ? qualityDimensionsLabel(quality)
+      : activeQualityDimensionsLabel;
+  }
+
+  function selectSubtitle(id: string | null) {
+    if (controlledSubtitleId === undefined) internalSubtitleId = id;
+    onActiveSubtitleTrackIdChange?.(id);
+    closeMenus();
+  }
+
+  function rangeProgress(value: number, min: number, max: number): string {
+    if (max <= min) return "0%";
+    const pct = ((value - min) / (max - min)) * 100;
+    return `${Math.max(0, Math.min(100, pct))}%`;
+  }
+
+  function handleAppearanceChange(next: SubtitleAppearance) {
+    localAppearance = next;
+    writeLocalSubtitleAppearance(next);
+  }
+
+  function handleAppearanceReset() {
+    localAppearance = null;
+    writeLocalSubtitleAppearance(null);
+  }
+
+  function togglePlay() {
+    if (!player) return;
+    const video = mediaElement();
+    if (player.paused && video?.paused !== false) void playWithFallback();
+    else {
+      void player.pause();
+      mediaElement()?.pause();
+      playing = false;
+      showControls = true;
+      clearControlsTimer();
+    }
+  }
+
+  function handleMinimalSurfaceClick(event: MouseEvent) {
+    if (!fullChrome) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      togglePlay();
+    }
+  }
+
+  function clearInitialMutedSync() {
+    if (!initialMutedSyncTimer) return;
+    window.clearTimeout(initialMutedSyncTimer);
+    initialMutedSyncTimer = null;
+  }
+
+  function syncMutedState(nextMuted: boolean, nextVolume?: number) {
+    const video = mediaElement();
+    const effectiveVolume = nextVolume ?? volume;
+    if (player) {
+      player.muted = nextMuted;
+      if (nextVolume !== undefined) player.volume = effectiveVolume;
+      if (nextMuted) player.setAttribute("muted", "");
+      else player.removeAttribute("muted");
+    }
+    if (video) {
+      video.muted = nextMuted;
+      video.defaultMuted = nextMuted;
+      if (nextVolume !== undefined) video.volume = effectiveVolume;
+      if (nextMuted) video.setAttribute("muted", "");
+      else video.removeAttribute("muted");
+    }
+    muted = nextMuted;
+    if (nextVolume !== undefined) {
+      volume = effectiveVolume;
+      if (effectiveVolume > 0) lastNonZeroVolume = effectiveVolume;
+    } else {
+      volume = player?.volume ?? video?.volume ?? volume;
+      if (volume > 0) lastNonZeroVolume = volume;
+    }
+  }
+
+  function applyInitialMuted() {
+    if (!initialMuted || muteTouched) return;
+    syncMutedState(true, 0);
+  }
+
+  function scheduleInitialMutedSync() {
+    if (!initialMuted || muteTouched) return;
+    clearInitialMutedSync();
+    let attempts = 0;
+    const sync = () => {
+      if (muteTouched) {
+        initialMutedSyncTimer = null;
+        return;
+      }
+      syncVideoElement();
+      applyInitialMuted();
+      attempts += 1;
+      if (attempts < 16) {
+        initialMutedSyncTimer = window.setTimeout(sync, 75);
+      } else {
+        initialMutedSyncTimer = null;
+      }
+    };
+    sync();
+  }
+
+  async function playWithFallback() {
+    if (!player) return;
+    try {
+      await player.play();
+      const video = mediaElement();
+      if (video?.paused) {
+        await video.play();
+      }
+    } catch (error) {
+      if (applyPlaybackFallback()) {
+        pendingAutoPlay = true;
+        return;
+      }
+      console.error("ERROR MediaPlayer [vidstack] play request failed", error);
+    }
+  }
+
+  function applyPlaybackFallback(): boolean {
+    const nextMode = fallbackPlaybackModeForError({
+      effectiveMode,
+      hlsSrc: src,
+      directSrc,
+      directPlayable: directAvailable,
+      directFailed: failedDirectSrc === directSrc,
+    });
+    if (!nextMode) return false;
+
+    pendingSeekTime = currentTime > 0.25 ? currentTime : null;
+    pendingAutoPlay = playing || autoPlay || pendingAutoPlay;
+    if (effectiveMode === "direct" && directSrc) {
+      failedDirectSrc = directSrc;
+      playerNotice = "Direct playback unavailable; trying adaptive HLS.";
+    } else {
+      playerNotice = "Adaptive playback unavailable; trying direct playback.";
+    }
+    playbackMode = nextMode;
+    qualityMode = nextMode === "direct" ? "direct" : "auto";
+    buffering = true;
+    return true;
+  }
+
+  function seek(delta: number) {
+    seekTo(currentTime + delta);
+  }
+
+  function seekBy(delta: number) {
+    seek(delta);
+  }
+
+  function seekTo(time: number) {
+    if (!player) return;
+    const target = Math.max(0, Math.min(duration || time, time));
+    player.currentTime = target;
+    const video = mediaElement();
+    if (video && Math.abs(video.currentTime - target) > 0.15) {
+      video.currentTime = target;
+    }
+    currentTime = target;
+    onTimeUpdate?.(target);
+    updateBuffered();
+  }
+
+  function toggleMute() {
+    muteTouched = true;
+    clearInitialMutedSync();
+    const video = mediaElement();
+    const nextMuted = !(player?.muted || video?.muted || muted);
+    syncMutedState(nextMuted, nextMuted ? 0 : lastNonZeroVolume || 1);
+  }
+
+  function handleVolumeChange(next: number) {
+    muteTouched = true;
+    clearInitialMutedSync();
+    syncMutedState(next === 0, next);
+  }
+
+  function applyPlaybackRate(nextRate: number) {
+    if (!player) return;
+    player.playbackRate = nextRate;
+    playbackRate = nextRate;
+    closeMenus();
+  }
+
+  function castWindow(): CastWindow | null {
+    if (typeof window === "undefined") return null;
+    return window as CastWindow;
+  }
+
+  function isGoogleCastFrameworkAvailable(): boolean {
+    const target = castWindow();
+    return Boolean(googleCastFrameworkAvailable || target?.chrome?.cast?.isAvailable);
+  }
+
+  function loadGoogleCastFramework(): Promise<boolean> {
+    const target = castWindow();
+    if (!target || typeof document === "undefined") return Promise.resolve(false);
+    if (isGoogleCastFrameworkAvailable()) {
+      googleCastFrameworkAvailable = true;
+      return Promise.resolve(true);
+    }
+    if (googleCastFrameworkPromise) return googleCastFrameworkPromise;
+
+    googleCastFrameworkPromise = new Promise<boolean>((resolve) => {
+      let settled = false;
+      let timeoutId: number;
+      const finish = (available: boolean) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeoutId);
+        googleCastFrameworkAvailable = available;
+        resolve(available);
+      };
+      const previousCallback = target.__onGCastApiAvailable;
+      target.__onGCastApiAvailable = (available: boolean) => {
+        previousCallback?.(available);
+        finish(Boolean(available));
+      };
+      timeoutId = window.setTimeout(
+        () => finish(Boolean(target.chrome?.cast?.isAvailable)),
+        10000,
+      );
+      let script = document.querySelector<HTMLScriptElement>(
+        `script[src="${GOOGLE_CAST_SENDER_URL}"]`,
+      );
+      if (!script) {
+        script = document.createElement("script");
+        script.src = GOOGLE_CAST_SENDER_URL;
+        script.async = true;
+        document.head.appendChild(script);
+      }
+      script.addEventListener("error", () => finish(false), { once: true });
+      script.addEventListener(
+        "load",
+        () => {
+          if (target.chrome?.cast?.isAvailable) finish(true);
+        },
+        { once: true },
+      );
+    }).finally(() => {
+      googleCastFrameworkPromise = null;
+    });
+
+    return googleCastFrameworkPromise;
+  }
+
+  function animateControlPress(event: MouseEvent) {
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLElement)) return;
+    target.classList.remove("is-pressed");
+    void target.offsetWidth;
+    target.classList.add("is-pressed");
+    window.setTimeout(() => target.classList.remove("is-pressed"), 180);
+  }
+
+  async function requestCast(event: MouseEvent) {
+    if (!player) return;
+    const remote = (player as unknown as {
+      remoteControl?: {
+        requestAirPlay?: (trigger?: Event) => void;
+        requestGoogleCast?: (trigger?: Event) => void;
+      };
+    }).remoteControl;
+    if (!remote?.requestAirPlay && !remote?.requestGoogleCast) {
+      playerNotice = "Casting is not available for this player.";
+      return;
+    }
+    if ("WebKitPlaybackTargetAvailabilityEvent" in window) {
+      if (remote.requestAirPlay) {
+        playerNotice = null;
+        remote.requestAirPlay(event);
+        return;
+      }
+      playerNotice = "AirPlay is not available for this player.";
+      return;
+    }
+
+    if (!remote.requestGoogleCast) {
+      playerNotice = "Google Cast is not available for this player.";
+      return;
+    }
+
+    if (!(await loadGoogleCastFramework())) {
+      playerNotice = "Google Cast is not available for this browser.";
+      return;
+    }
+    try {
+      remote.requestGoogleCast(event);
+      playerNotice = null;
+      return;
+    } catch (error) {
+      console.error("ERROR MediaPlayer [vidstack] Google Cast request failed", error);
+      playerNotice = "Google Cast is not available for this browser.";
+    }
+  }
+
+  function openSettings(view: SettingsView = "root") {
+    clearSettingsCloseTimer();
+    settingsView = view;
+    settingsMenuRendered = true;
+    settingsMenuClosing = false;
+  }
+
+  function closeSettings() {
+    if (!settingsMenuRendered || settingsMenuClosing) return;
+    clearSettingsCloseTimer();
+    settingsMenuClosing = true;
+    settingsCloseTimer = window.setTimeout(() => {
+      settingsMenuRendered = false;
+      settingsMenuClosing = false;
+      settingsView = "root";
+      settingsCloseTimer = null;
+    }, 180);
+  }
+
+  function toggleSettings() {
+    if (settingsMenuRendered && !settingsMenuClosing) {
+      closeSettings();
+      return;
+    }
+    openSettings();
+  }
+
+  async function toggleFullscreen() {
+    if (isDocumentFullscreen()) {
+      exitDocumentFullscreen();
+      return;
+    }
+    if (!containerEl) return;
+    const entered = await enterMediaFullscreen(containerEl, videoEl);
+    playerNotice = entered ? null : "Fullscreen is not available for this browser.";
+  }
+
+  function updateTimelineHover(clientX: number, rect: DOMRect) {
+    if (duration <= 0) {
+      timelineHover = null;
+      return;
+    }
+    const percent = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    const time = percent * duration;
+    const windowSec = Math.max(duration * 0.01, 1.5);
+    const markerTitles = markers
+      .filter((marker) => Math.abs(marker.time - time) <= windowSec)
+      .map((marker) => marker.title);
+    const chapterTitle = findTimelineChapterTitle(markerChapterCues, time);
+    timelineHover = { chapterTitle, markerTitles, percent: percent * 100, time };
+  }
+
+  function removeMarkerChapterTrack(target: MediaPlayerElement) {
+    const existing = markerChaptersTrack ?? target.textTracks.getById(MARKER_CHAPTERS_TRACK_ID);
+    if (existing) target.textTracks.remove(existing);
+    markerChaptersTrack = null;
+  }
+
+  function setMarkerChapterTrack(target: MediaPlayerElement, cues: readonly VTTCueInit[]) {
+    removeMarkerChapterTrack(target);
+    if (cues.length === 0) return;
+
+    const track = new TextTrack({
+      id: MARKER_CHAPTERS_TRACK_ID,
+      kind: "chapters",
+      label: "Markers",
+      default: true,
+    });
+    for (const cue of cues) {
+      track.addCue(new window.VTTCue(cue.startTime, cue.endTime, cue.text));
+    }
+    target.textTracks.add(track);
+    markerChaptersTrack = track;
+  }
+
+  function syncMarkerChapterTrack() {
+    if (!player?.textTracks) return;
+    setMarkerChapterTrack(player, markerChapterCues);
+  }
+
+  function handleFilmStripInteraction(active: boolean) {
+    if (active) {
+      clearControlsTimer();
+      showControls = false;
+      closeMenus();
+    } else {
+      surfaceControls();
+    }
+  }
+
+  function wait(ms: number) {
+    return new Promise((resolve) => window.setTimeout(resolve, ms));
+  }
+
+  function updateActiveCue() {
+    if (!activeSubtitleId || activeTrackCues.length === 0) {
+      if (activeCueText !== null) {
+        activeCueText = null;
+        onActiveCueChange?.(null);
+      }
+      return;
+    }
+    const cue = activeTrackCues.find((candidate) => (
+      currentTime >= candidate.start && currentTime < candidate.end
+    ));
+    const text = cue?.text.replace(/<[^>]+>/g, "") || null;
+    if (text === activeCueText) return;
+    activeCueText = text;
+    onActiveCueChange?.(cue && text ? { start: cue.start, end: cue.end, text } : null);
+  }
+
+  $effect(() => {
+    handle = {
+      seekTo,
+      seekBy,
+      toggleMute,
+      togglePlay,
+    };
+  });
+
+  $effect(() => {
+    const nextKey = `${src ?? ""}|${directSrc ?? ""}|${defaultPlaybackMode ?? ""}|${directPlayable ? "direct" : "adaptive"}`;
+    if (nextKey === lastSourceKey) return;
+    lastSourceKey = nextKey;
+    failedDirectSrc = null;
+    playbackMode = initialPlaybackMode();
+    qualityMode = playbackMode === "direct" ? "direct" : "auto";
+    currentTime = 0;
+    duration = propDuration ?? 0;
+    bufferAhead = 0;
+    playerNotice = null;
+    activeQualityLabel = null;
+    playTracked = false;
+    endedTracked = false;
+    muteTouched = false;
+    lastNonZeroVolume = 1;
+    autoSelected = false;
+    scheduleInitialMutedSync();
+  });
+
+  $effect(() => {
+    const nextSrc = requestedPlayerSrc;
+    if (!nextSrc) {
+      hlsReadySrc = undefined;
+      return;
+    }
+
+    const statusUrl = effectiveMode === "hls" ? hlsStatusUrlForSrc(nextSrc) : null;
+    if (!statusUrl) {
+      hlsReadySrc = nextSrc;
+      return;
+    }
+
+    let cancelled = false;
+    hlsReadySrc = undefined;
+    buffering = true;
+    playerNotice = "Preparing adaptive stream...";
+
+    const poll = async () => {
+      while (!cancelled) {
+        try {
+          const response = await fetch(statusUrl, { cache: "no-store" });
+          if (!response.ok) {
+            throw new Error(`HLS status failed (${response.status})`);
+          }
+          const status = (await response.json()) as HlsStatus;
+          if (status.state === "ready") {
+            if (!cancelled) {
+              hlsReadySrc = nextSrc;
+              playerNotice = null;
+            }
+            return;
+          }
+          if (status.state === "error") {
+            throw new Error(status.error ?? "HLS generation failed");
+          }
+        } catch (error) {
+          if (!cancelled) {
+            playerNotice = error instanceof Error ? error.message : String(error);
+            buffering = false;
+          }
+          return;
+        }
+        await wait(HLS_RETRY_AFTER_SECONDS * 1000);
+      }
+    };
+
+    void poll();
+
+    return () => {
+      cancelled = true;
+    };
+  });
+
+  $effect(() => {
+    if (propDuration && propDuration > duration) duration = propDuration;
+  });
+
+  $effect(() => {
+    const el = player;
+    const cues = markerChapterCues;
+    if (!el?.textTracks) return;
+
+    setMarkerChapterTrack(el, cues);
+    return () => removeMarkerChapterTrack(el);
+  });
+
+  $effect(() => {
+    const playlist = trickplayPlaylist;
+    timelineTrickplayFrames = null;
+    timelineTrickplayError = false;
+    if (!playlist) return;
+
+    let cancelled = false;
+    loadTrickplayFrames(playlist)
+      .then((frames) => {
+        if (!cancelled) timelineTrickplayFrames = frames;
+      })
+      .catch(() => {
+        if (!cancelled) timelineTrickplayError = true;
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  });
+
+  $effect(() => {
+    if (autoSelected) return;
+    if (subtitleChoiceLocked) {
+      autoSelected = true;
+      return;
+    }
+    if (controlledSubtitleId !== undefined && controlledSubtitleId !== null) {
+      autoSelected = true;
+      return;
+    }
+    if (!subtitleDefaults?.autoEnable || subtitleTracks.length === 0) return;
+    const picked = pickPreferredSubtitleTrack(
+      subtitleTracks.map((track) => ({ id: track.id, language: track.language })),
+      subtitleDefaults.preferredLanguages,
+    );
+    if (picked) {
+      autoSelected = true;
+      selectSubtitle(picked);
+    }
+  });
+
+  $effect(() => {
+    if (!activeSubtitleId) {
+      activeTrackCues = [];
+      activeCueText = null;
+      onActiveCueChange?.(null);
+      return;
+    }
+    const track = subtitleTracks.find((candidate) => candidate.id === activeSubtitleId);
+    if (!track || isAssTrackActive(track.id, subtitleTracks)) {
+      activeTrackCues = [];
+      activeCueText = null;
+      onActiveCueChange?.(null);
+      return;
+    }
+
+    let cancelled = false;
+    fetchVideoSubtitleCues(track)
+      .then(({ cues }) => {
+        if (!cancelled) activeTrackCues = cues;
+      })
+      .catch(() => {
+        if (!cancelled) activeTrackCues = [];
+      });
+    return () => {
+      cancelled = true;
+    };
+  });
+
+  $effect(() => {
+    currentTime;
+    activeTrackCues;
+    activeSubtitleId;
+    updateActiveCue();
+  });
+
+  $effect(() => {
+    const el = player;
+    if (!el) return;
+    scheduleInitialMutedSync();
+
+    const listeners: Array<[string, EventListener]> = [
+      ["provider-change", handleProviderChange],
+      ["can-play", handleCanPlay],
+      ["time-update", handleTimeUpdate],
+      ["play", handlePlay],
+      ["playing", handlePlaying],
+      ["pause", handlePause],
+      ["ended", handleEnded],
+      ["waiting", handleWaiting],
+      ["seeking", handleWaiting],
+      ["seeked", handleSeeked],
+      ["volume-change", handleVolumeChangeEvent],
+      ["rate-change", handleRateChange],
+      ["progress", handleProgress],
+      ["audio-tracks-change", handleAudioTracksChange],
+      ["audio-track-change", handleAudioTrackChange],
+      ["qualities-change", handleQualitiesChange],
+      ["quality-change", handleQualityChange],
+      ["error", handleError],
+    ];
+
+    for (const [type, listener] of listeners) el.addEventListener(type, listener);
+    return () => {
+      for (const [type, listener] of listeners) el.removeEventListener(type, listener);
+    };
+  });
+
+  $effect(() => {
+    const video = videoEl;
+    if (!video) return;
+    scheduleInitialMutedSync();
+    const onProgress = () => updateBuffered();
+    const onNativeTimeUpdate = () => {
+      currentTime = video.currentTime;
+      onTimeUpdate?.(video.currentTime);
+      updateBuffered();
+    };
+    const onLoadedMetadata = () => {
+      duration = Math.max(video.duration || 0, propDuration ?? 0);
+      updateBuffered();
+    };
+    const onNativePlay = () => {
+      playing = true;
+      endedTracked = false;
+      if (!playTracked) {
+        playTracked = true;
+        onPlayStarted?.();
+      }
+      scheduleControlsHide();
+    };
+    const onNativePlaying = () => {
+      buffering = false;
+      playing = true;
+      scheduleControlsHide();
+    };
+    const onNativePause = () => {
+      playing = false;
+      showControls = true;
+      clearControlsTimer();
+    };
+    const onNativeEnded = () => {
+      playing = false;
+      showControls = true;
+      clearControlsTimer();
+      notifyPlaybackEnded();
+    };
+    const onNativeWaiting = () => {
+      buffering = true;
+    };
+    const onNativeSeeked = () => {
+      buffering = false;
+      playing = !video.paused;
+      updateBuffered();
+    };
+    const onNativeVolumeChange = () => {
+      muted = video.muted || video.volume === 0;
+      volume = video.volume;
+    };
+    const onNativeRateChange = () => {
+      playbackRate = video.playbackRate;
+    };
+    video.addEventListener("timeupdate", onNativeTimeUpdate);
+    video.addEventListener("progress", onProgress);
+    video.addEventListener("loadedmetadata", onLoadedMetadata);
+    video.addEventListener("play", onNativePlay);
+    video.addEventListener("playing", onNativePlaying);
+    video.addEventListener("pause", onNativePause);
+    video.addEventListener("ended", onNativeEnded);
+    video.addEventListener("waiting", onNativeWaiting);
+    video.addEventListener("seeking", onNativeWaiting);
+    video.addEventListener("seeked", onNativeSeeked);
+    video.addEventListener("volumechange", onNativeVolumeChange);
+    video.addEventListener("ratechange", onNativeRateChange);
+    return () => {
+      video.removeEventListener("timeupdate", onNativeTimeUpdate);
+      video.removeEventListener("progress", onProgress);
+      video.removeEventListener("loadedmetadata", onLoadedMetadata);
+      video.removeEventListener("play", onNativePlay);
+      video.removeEventListener("playing", onNativePlaying);
+      video.removeEventListener("pause", onNativePause);
+      video.removeEventListener("ended", onNativeEnded);
+      video.removeEventListener("waiting", onNativeWaiting);
+      video.removeEventListener("seeking", onNativeWaiting);
+      video.removeEventListener("seeked", onNativeSeeked);
+      video.removeEventListener("volumechange", onNativeVolumeChange);
+      video.removeEventListener("ratechange", onNativeRateChange);
+    };
+  });
+
+  onMount(() => {
+    mediaMounted = true;
+    directCapabilityProbe = document.createElement("video");
+    localAppearance = readLocalSubtitleAppearance();
+    syncVideoElement();
+    scheduleInitialMutedSync();
+    if (showCastControls && fullChrome) void loadGoogleCastFramework();
+
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+      switch (event.key.toLowerCase()) {
+        case " ":
+        case "k":
+          if (event.key.toLowerCase() === "k" && (event.metaKey || event.ctrlKey)) break;
+          event.preventDefault();
+          togglePlay();
+          break;
+        case "arrowleft":
+          seek(-5);
+          break;
+        case "arrowright":
+          seek(5);
+          break;
+        case "j":
+          seek(-10);
+          break;
+        case "l":
+          seek(10);
+          break;
+        case "m":
+          toggleMute();
+          break;
+        case "f":
+          void toggleFullscreen();
+          break;
+      }
+    };
+
+    if (enableKeyboardShortcuts) {
+      window.addEventListener("keydown", handleKey);
+    }
+    return () => {
+      clearControlsTimer();
+      clearSettingsCloseTimer();
+      clearInitialMutedSync();
+      if (enableKeyboardShortcuts) {
+        window.removeEventListener("keydown", handleKey);
+      }
+      onActiveCueChange?.(null);
+    };
+  });
+
+  function handleProviderChange(event: Event) {
+    const provider = (event as MediaProviderChangeEvent).detail;
+    if (isHLSProvider(provider)) {
+      provider.config = {
+        ...adaptiveHlsBufferConfig(),
+      };
+    }
+    syncVideoElement();
+    scheduleInitialMutedSync();
+  }
+
+  function handleCanPlay(event: Event) {
+    const detail = (event as MediaCanPlayEvent).detail;
+    duration = Math.max(detail.duration || 0, propDuration ?? 0);
+    buffering = false;
+    syncVideoElement();
+    scheduleInitialMutedSync();
+    refreshQualities();
+    refreshAudioTracks();
+    syncMarkerChapterTrack();
+    updateBuffered();
+    if (pendingSeekTime !== null) {
+      player!.currentTime = Math.min(duration || pendingSeekTime, pendingSeekTime);
+      pendingSeekTime = null;
+    }
+    if ((pendingAutoPlay || autoPlay) && player?.paused) {
+      pendingAutoPlay = false;
+      void playWithFallback();
+    }
+  }
+
+  function handleTimeUpdate(event: Event) {
+    const detail = (event as MediaTimeUpdateEvent).detail;
+    currentTime = detail.currentTime;
+    onTimeUpdate?.(detail.currentTime);
+    updateBuffered();
+  }
+
+  function handlePlay(_event: Event) {
+    playing = true;
+    endedTracked = false;
+    if (!playTracked) {
+      playTracked = true;
+      onPlayStarted?.();
+    }
+    scheduleControlsHide();
+  }
+
+  function handlePlaying(_event: Event) {
+    buffering = false;
+    playing = true;
+    scheduleControlsHide();
+  }
+
+  function handlePause(_event: Event) {
+    playing = false;
+    showControls = true;
+    clearControlsTimer();
+  }
+
+  function handleEnded(_event: Event) {
+    playing = false;
+    showControls = true;
+    clearControlsTimer();
+    notifyPlaybackEnded();
+  }
+
+  function handleWaiting(_event: Event) {
+    buffering = true;
+  }
+
+  function handleSeeked(_event: Event) {
+    buffering = false;
+    playing = player ? !player.paused : false;
+  }
+
+  function handleVolumeChangeEvent(_event: Event) {
+    const video = mediaElement();
+    muted = Boolean(player?.muted || video?.muted || player?.volume === 0 || video?.volume === 0);
+    volume = player?.volume ?? video?.volume ?? volume;
+    if (volume > 0) lastNonZeroVolume = volume;
+  }
+
+  function handleRateChange(_event: Event) {
+    if (player) playbackRate = player.playbackRate;
+  }
+
+  function handleProgress(_event: Event) {
+    updateBuffered();
+  }
+
+  function handleAudioTracksChange(_event: Event) {
+    refreshAudioTracks();
+  }
+
+  function handleAudioTrackChange(_event: Event) {
+    refreshAudioTracks();
+  }
+
+  function handleQualitiesChange(_event: Event) {
+    refreshQualities();
+  }
+
+  function handleQualityChange(_event: Event) {
+    refreshQualities();
+  }
+
+  function handleError(event: Event) {
+    const detail = (event as MediaErrorEvent).detail;
+    const message = detail instanceof Error ? detail.message : "Playback failed.";
+    if (applyPlaybackFallback()) return;
+    playerNotice = `${effectiveMode === "direct" ? "Direct" : "Adaptive"} playback error: ${message}`;
+    buffering = false;
+  }
+</script>
+
+<div class="space-y-1" data-testid="vidstack-video-player">
+  <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
+  <div
+    bind:this={containerEl}
+    class="prismedia-player-surface relative surface-media-well bg-black"
+    onmousemove={surfaceControls}
+    onclickcapture={handleMinimalSurfaceClick}
+    onmouseleave={() => {
+      if (playing) showControls = false;
+    }}
+    ontouchstart={surfaceControls}
+  >
+    {#if playerSrc && mediaMounted}
+      <!-- svelte-ignore a11y_click_events_have_key_events -->
+      <media-player
+        class="prismedia-media-engine"
+        title="Prismedia video"
+        src={playerSrc}
+        poster={poster}
+        streamType="on-demand"
+        crossOrigin
+        playsInline
+        autoPlay={autoPlay}
+        muted={initialMuted}
+        bind:this={player}
+        onclick={(event) => {
+          if (!fullChrome) {
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+            togglePlay();
+            return;
+          }
+          if (event.target === event.currentTarget || event.target instanceof HTMLVideoElement) {
+            togglePlay();
+          }
+        }}
+      >
+        <media-provider>
+          {#if poster}
+            <media-poster class="vds-poster" src={poster} alt="Video poster"></media-poster>
+          {/if}
+        </media-provider>
+        <media-time-slider
+          class={cn(
+            "video-time-slider mobile-video-progress group/track",
+            showControls ? "opacity-100" : "opacity-0",
+          )}
+          style:--prismedia-slider-fill={`${playbackProgressPercent}%`}
+          style:--prismedia-buffer-progress={`${bufferedProgressPercent}%`}
+          data-testid="video-progress-track"
+          aria-label="Seek"
+          onpointerdown={(event) => event.stopPropagation()}
+          onpointermove={(event) => {
+            const rect = event.currentTarget.getBoundingClientRect();
+            updateTimelineHover(event.clientX, rect);
+          }}
+          onpointerleave={() => (timelineHover = null)}
+        >
+          {#if timelineHover}
+            <div
+              class="pointer-events-none absolute bottom-[calc(100%+0.6rem)] z-20 w-[min(11rem,54vw)] -translate-x-1/2 border border-white/10 bg-black/88 p-1.5 text-center shadow-[0_0_16px_rgba(0,0,0,0.35)]"
+              style:left="{timelineHover.percent}%"
+            >
+              {#if timelinePreviewFrame && timelinePreviewSpriteDims.width > 0 && timelinePreviewSpriteDims.height > 0}
+                <div
+                  class="timeline-trickplay-preview"
+                  data-testid="timeline-trickplay-preview"
+                  style:aspect-ratio="{timelinePreviewFrame.width} / {timelinePreviewFrame.height}"
+                  style:background-image="url({timelinePreviewFrame.url})"
+                  style:background-size="{(timelinePreviewSpriteDims.width / timelinePreviewFrame.width) * 100}% {(timelinePreviewSpriteDims.height / timelinePreviewFrame.height) * 100}%"
+                  style:background-position="{timelinePreviewSpriteDims.width <= timelinePreviewFrame.width
+                    ? 0
+                    : (timelinePreviewFrame.x / (timelinePreviewSpriteDims.width - timelinePreviewFrame.width)) * 100}% {timelinePreviewSpriteDims.height <= timelinePreviewFrame.height
+                    ? 0
+                    : (timelinePreviewFrame.y / (timelinePreviewSpriteDims.height - timelinePreviewFrame.height)) * 100}%"
+                  style:background-repeat="no-repeat"
+                ></div>
+              {/if}
+              <div class="text-mono-tabular text-[0.65rem] text-white/82">
+                {formatTime(timelineHover.time)}
+              </div>
+              {#if timelineHover.chapterTitle}
+                <div class="mt-1 max-w-48 text-[0.65rem] font-medium leading-snug text-accent-100">
+                  {timelineHover.chapterTitle}
+                </div>
+              {:else if timelineHover.markerTitles.length > 0}
+                <div class="mt-1 max-w-48 text-[0.65rem] font-medium leading-snug text-accent-100">
+                  {timelineHover.markerTitles.join(" • ")}
+                </div>
+              {/if}
+            </div>
+          {/if}
+          <div class="video-slider-native-progress is-buffered"></div>
+          <div class="video-slider-native-progress is-played"></div>
+          <media-slider-chapters>
+            <template>
+              <div class="video-slider-chapter">
+                <div class="video-slider-track"></div>
+                <div class="video-slider-track-progress"></div>
+                <div class="video-slider-track-fill"></div>
+              </div>
+            </template>
+          </media-slider-chapters>
+          <media-slider-preview class="video-slider-preview">
+            <span data-part="chapter-title" class="video-slider-chapter-title"></span>
+            <media-slider-value type="pointer" class="video-slider-time"></media-slider-value>
+          </media-slider-preview>
+          <div class="video-slider-thumb"></div>
+        </media-time-slider>
+      </media-player>
+    {:else if requestedPlayerSrc}
+      <div class="prismedia-media-engine flex items-center justify-center">
+        <Loader class="h-5 w-5 animate-spin text-white/40" />
+      </div>
+    {:else}
+      <div class="flex aspect-video items-center justify-center bg-surface-1">
+        <div class="text-center">
+          <Play class="mx-auto mb-3 h-16 w-16 text-text-disabled" />
+          <p class="text-sm text-text-muted">No video source</p>
+          <p class="mt-1 text-xs text-text-disabled">Video playback will appear here</p>
+        </div>
+      </div>
+    {/if}
+
+    {#if assTrackForRender}
+      {#key assTrackForRender.id}
+        <AssSubtitleOverlay
+          videoEl={videoEl ?? null}
+          sourceUrl={assTrackForRender.sourceUrl ?? ""}
+          opacity={appearance.opacity}
+        />
+      {/key}
+    {/if}
+
+    {#if activeCueText && !isAssTrackActive(activeSubtitleId, subtitleTracks)}
+      <div
+        class="pointer-events-none absolute inset-x-0 flex justify-center px-4"
+        style:top="{appearance.positionPercent}%"
+        style:transform="translateY(-100%)"
+        style:opacity={appearance.opacity}
+      >
+        <div
+          class={cn(
+            captionClassName(appearance.style),
+            "max-w-[86%] whitespace-pre-line text-center font-medium leading-snug",
+          )}
+          style:font-size="{appearance.fontScale * 1.05}rem"
+        >
+          {activeCueText}
+        </div>
+      </div>
+    {/if}
+
+    {#if fullChrome}
+      <div
+        class={cn(
+          "pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-2 bg-gradient-to-b from-black/75 via-black/30 to-transparent px-3 sm:px-4 pb-8 sm:pb-12 pt-3 sm:pt-4 transition-opacity duration-normal",
+          showControls ? "opacity-100" : "opacity-0",
+        )}
+      >
+      <div class="flex flex-wrap gap-1.5 sm:gap-2">
+        <span class="pointer-events-auto player-chip flex max-w-[14rem] flex-col border-accent-500/40 px-2 py-0.5 text-[0.55rem] font-semibold uppercase tracking-[0.18em] text-accent-100 sm:px-2.5 sm:py-1 sm:text-[0.62rem]">
+          <span class="truncate">{activePlaybackLabel}</span>
+          {#if activePlaybackDetailLabel}
+            <span class="truncate text-[0.5rem] tracking-[0.12em] text-white/50 sm:text-[0.56rem]">
+              {activePlaybackDetailLabel}
+            </span>
+          {/if}
+        </span>
+        {#if effectiveMode !== "direct"}
+          <span
+            data-testid="playback-quality-chip"
+            title={activeQualityDetailLabel ?? selectedQualityLabel}
+            class="pointer-events-auto player-chip flex max-w-[14rem] flex-col border-white/10 px-2 py-0.5 text-[0.6rem] text-white/80 sm:px-2.5 sm:py-1 sm:text-[0.7rem]"
+          >
+            <span class="truncate">{selectedQualityLabel}</span>
+            {#if activeQualityDetailLabel}
+              <span class="truncate text-[0.52rem] uppercase tracking-[0.12em] text-white/45 sm:text-[0.58rem]">
+                {activeQualityDetailLabel}
+              </span>
+            {/if}
+          </span>
+        {/if}
+        {#if playerNotice}
+          <span class="player-chip border-warning/20 px-2 sm:px-2.5 py-0.5 sm:py-1 text-[0.6rem] sm:text-[0.7rem] text-white/80">
+            {playerNotice}
+          </span>
+        {/if}
+      </div>
+
+      <div
+        class={cn(
+          "hidden sm:grid gap-2 text-right text-[0.68rem] text-white/70",
+          effectiveMode === "direct" ? "min-w-[120px] grid-cols-2" : "min-w-[184px] grid-cols-3",
+        )}
+      >
+        {#if effectiveMode !== "direct"}
+          <div class="player-chip px-2 py-1.5">
+            <div class="mb-0.5 flex items-center justify-end gap-1 text-white/50">
+              <Wifi class="h-3.5 w-3.5" />
+              <span class="text-[0.58rem] uppercase tracking-[0.16em]">ABR</span>
+            </div>
+            <div class="truncate text-mono-tabular text-glow-phosphor text-[0.72rem] font-medium">
+              {formatBandwidth(bandwidthEstimate)}
+            </div>
+          </div>
+        {/if}
+        <div class="player-chip px-2 py-1.5">
+          <div class="mb-0.5 flex items-center justify-end gap-1 text-white/50">
+            <Gauge class="h-3.5 w-3.5" />
+            <span class="text-[0.58rem] uppercase tracking-[0.16em]">Buffer</span>
+          </div>
+          <div class="truncate text-mono-tabular text-glow-phosphor text-[0.72rem] font-medium">
+            {bufferAhead.toFixed(1)}s
+          </div>
+        </div>
+        <div class="player-chip px-2 py-1.5">
+          <div class="mb-0.5 flex items-center justify-end gap-1 text-white/50">
+            <Settings2 class="h-3.5 w-3.5" />
+            <span class="text-[0.58rem] uppercase tracking-[0.16em]">Drop</span>
+          </div>
+          <div class="truncate text-mono-tabular text-glow-phosphor text-[0.72rem] font-medium">
+            {droppedFrames == null ? "—" : String(droppedFrames)}
+          </div>
+        </div>
+      </div>
+      </div>
+
+      <div
+        class={cn(
+          "pointer-events-none absolute inset-0 z-30 flex items-center justify-center transition-opacity duration-normal sm:hidden",
+          showControls ? "opacity-100" : "opacity-0",
+        )}
+      >
+      <div class="pointer-events-auto flex items-center gap-3">
+        <button
+          type="button"
+          onclick={(event) => {
+            event.stopPropagation();
+            seek(-10);
+          }}
+          class="relative flex h-7 w-7 items-center justify-center text-white/72 transition-colors hover:text-white"
+          title="Skip back 10s"
+          aria-label="Skip back 10s"
+        >
+          <RotateCcw class="h-4 w-4" />
+          <span class="absolute mt-[1px] text-[0.42rem] font-bold">10</span>
+        </button>
+        <button
+          type="button"
+          onclick={(event) => {
+            event.stopPropagation();
+            togglePlay();
+          }}
+          class="flex h-8 w-8 items-center justify-center bg-gradient-to-b from-accent-400 to-accent-500 text-accent-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_0_12px_rgba(199,155,92,0.2)] transition-all hover:from-accent-300 hover:to-accent-400 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_0_16px_rgba(199,155,92,0.28)]"
+          aria-label={playing ? "Pause" : "Play"}
+        >
+          {#if buffering}
+            <Loader class="h-3.5 w-3.5 animate-spin" />
+          {:else if playing}
+            <Pause class="h-3.5 w-3.5" fill="currentColor" />
+          {:else}
+            <span class="play-glyph" aria-hidden="true"></span>
+          {/if}
+        </button>
+        <button
+          type="button"
+          onclick={(event) => {
+            event.stopPropagation();
+            seek(10);
+          }}
+          class="relative flex h-7 w-7 items-center justify-center text-white/72 transition-colors hover:text-white"
+          title="Skip forward 10s"
+          aria-label="Skip forward 10s"
+        >
+          <RotateCw class="h-4 w-4" />
+          <span class="absolute mt-[1px] text-[0.42rem] font-bold">10</span>
+        </button>
+      </div>
+      </div>
+
+      <div
+        class={cn(
+          "pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/92 via-black/58 to-transparent px-3 pb-1.5 pt-8 transition-opacity duration-normal sm:px-4 sm:pb-4 sm:pt-20",
+          showControls ? "opacity-100" : "opacity-0",
+        )}
+      >
+      <div class="flex flex-col gap-2">
+        {#if markers.length > 0}
+          <div class="pointer-events-auto order-3 hidden flex-wrap gap-1.5 sm:flex">
+            {#each markers as marker (marker.id)}
+              <button
+                type="button"
+                data-testid="video-marker-chip"
+                onpointerdown={(event) => event.stopPropagation()}
+                onclick={(event) => {
+                  event.stopPropagation();
+                  seekTo(marker.time);
+                  onMarkerClick?.(marker);
+                }}
+                title={`Seek to ${marker.title}`}
+                aria-label={`Seek to ${marker.title}`}
+                class="player-chip px-2.5 py-1 text-[0.68rem] text-white/72 transition-colors hover:border-accent-400/35 hover:text-white"
+              >
+                {marker.title}
+              </button>
+            {/each}
+          </div>
+        {/if}
+
+        <div class="pointer-events-auto order-1 flex flex-col gap-2 sm:order-2 sm:flex-row sm:items-center sm:justify-between">
+          <div class="flex w-full items-center justify-end gap-2 sm:w-auto sm:justify-start sm:gap-2.5">
+            <div class="hidden items-center gap-2.5 sm:flex">
+              <button
+                type="button"
+                onclick={() => seek(-10)}
+                class="relative flex h-9 w-7 items-center justify-center text-white/70 transition-colors hover:text-white"
+                title="Skip back 10s"
+                aria-label="Skip back 10s"
+              >
+                <RotateCcw class="h-4 w-4" />
+                <span class="absolute mt-[1px] text-[0.45rem] font-bold">10</span>
+              </button>
+              <button
+                type="button"
+                onclick={togglePlay}
+                class="flex h-9 w-9 items-center justify-center bg-gradient-to-b from-accent-400 to-accent-500 text-accent-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_0_14px_rgba(199,155,92,0.2)] transition-all hover:from-accent-300 hover:to-accent-400 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_0_20px_rgba(199,155,92,0.28)]"
+                aria-label={playing ? "Pause" : "Play"}
+              >
+                {#if buffering}
+                  <Loader class="h-3.5 w-3.5 animate-spin" />
+                {:else if playing}
+                  <Pause class="h-3.5 w-3.5" fill="currentColor" />
+                {:else}
+                  <span class="play-glyph" aria-hidden="true"></span>
+                {/if}
+              </button>
+              <button
+                type="button"
+                onclick={() => seek(10)}
+                class="relative flex h-9 w-7 items-center justify-center text-white/70 transition-colors hover:text-white"
+                title="Skip forward 10s"
+                aria-label="Skip forward 10s"
+              >
+                <RotateCw class="h-4 w-4" />
+                <span class="absolute mt-[1px] text-[0.45rem] font-bold">10</span>
+              </button>
+            </div>
+
+            <div class="hidden sm:flex items-center gap-2 text-white/80">
+              <button type="button" onclick={toggleMute} class="transition-colors hover:text-white" aria-label={muted ? "Unmute" : "Mute"}>
+                {#if muted}<VolumeX class="h-4 w-4" />{:else}<Volume2 class="h-4 w-4" />{/if}
+              </button>
+              <input
+                aria-label="Volume"
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={muted ? 0 : volume}
+                oninput={(event) => handleVolumeChange(Number(event.currentTarget.value))}
+                class="prismedia-range h-1.5 w-20"
+              />
+            </div>
+
+            <span class="shrink-0 whitespace-nowrap text-mono-tabular text-glow-phosphor text-[0.7rem] sm:text-xs">
+              {formatTime(currentTime)} / {formatTime(duration)}
+            </span>
+          </div>
+
+          <div class="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-start">
+            <div class="flex min-w-0 shrink items-center gap-2">
+              {#if subtitleTracks.length > 0 && onTranscriptSidecarToggle}
+                <button
+                  type="button"
+                  onclick={(event) => {
+                    animateControlPress(event);
+                    onTranscriptSidecarToggle();
+                  }}
+                  aria-label={isTranscriptSidecarOpen ? "Hide transcript sidecar" : "Show transcript sidecar"}
+                  title={isTranscriptSidecarOpen ? "Hide transcript sidecar" : "Show transcript sidecar"}
+                  class={cn(
+                    "player-control-button sidecar-control-button text-[0.56rem] sm:text-[0.72rem]",
+                    isTranscriptSidecarOpen
+                      ? "border-accent-500/45 bg-accent-500/12 text-accent-100 shadow-[var(--shadow-glow-accent)]"
+                      : "text-white/82",
+                  )}
+                >
+                  <PanelRightOpen class="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                </button>
+              {/if}
+            </div>
+
+            <div class="relative flex min-w-0 items-center justify-end gap-2">
+              <button
+                type="button"
+                onclick={(event) => {
+                  animateControlPress(event);
+                  toggleSettings();
+                }}
+                class={cn(
+                  "player-control-button justify-center p-0 text-white/80",
+                  settingsMenuRendered &&
+                    !settingsMenuClosing &&
+                    "border-accent-500/40 text-accent-100 shadow-[var(--shadow-glow-accent)]",
+                )}
+                aria-label="Player settings"
+                aria-expanded={settingsMenuRendered && !settingsMenuClosing}
+              >
+                <Settings2 class="h-3 w-3 sm:h-4 sm:w-4" />
+              </button>
+
+              {#if showCastControls}
+                <button
+                  type="button"
+                  onclick={(event) => {
+                    animateControlPress(event);
+                    void requestCast(event);
+                  }}
+                  class="player-control-button justify-center p-0 text-white/80"
+                  aria-label="Cast"
+                  title="Cast"
+                >
+                  <Cast class="h-3 w-3 sm:h-4 sm:w-4" />
+                </button>
+              {/if}
+
+              <button
+                type="button"
+                onclick={(event) => {
+                  animateControlPress(event);
+                  void toggleFullscreen();
+                }}
+                class="player-control-button justify-center p-0 text-white/80"
+                aria-label="Fullscreen"
+              >
+                <Maximize class="h-3 w-3 sm:h-4 sm:w-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      </div>
+
+      {#if settingsMenuRendered}
+      <button
+        type="button"
+        class={cn("player-settings-backdrop", settingsMenuClosing && "is-closing")}
+        aria-label="Close player settings"
+        onclick={(event) => {
+          event.stopPropagation();
+          closeSettings();
+        }}
+      ></button>
+      <div
+        class={cn("player-settings-menu player-dropdown", settingsMenuClosing && "is-closing")}
+        role="menu"
+        aria-label="Player settings menu"
+      >
+        {#if settingsView !== "root"}
+          <button
+            type="button"
+            class="player-settings-back"
+            onclick={() => (settingsView = "root")}
+          >
+            <ChevronLeft class="h-4 w-4" />
+            <span>
+              {settingsView === "quality"
+                ? "Quality"
+                : settingsView === "speed"
+                  ? "Speed"
+                  : settingsView === "audio"
+                    ? "Audio"
+                    : settingsView === "captions"
+                      ? "Captions"
+                      : "Subtitle style"}
+            </span>
+          </button>
+        {/if}
+
+        {#if settingsView === "root"}
+          <button type="button" class="player-settings-row" onclick={() => openSettings("quality")}>
+            <Gauge class="h-4 w-4" />
+            <span>Quality</span>
+            <span class="player-settings-value">{selectedQualityLabel ?? "Auto"}</span>
+            <ChevronDown class="h-3.5 w-3.5 -rotate-90" />
+          </button>
+          <button type="button" class="player-settings-row" onclick={() => openSettings("speed")}>
+            <RotateCw class="h-4 w-4" />
+            <span>Speed</span>
+            <span class="player-settings-value">{playbackRate === 1 ? "Normal" : `${playbackRate}x`}</span>
+            <ChevronDown class="h-3.5 w-3.5 -rotate-90" />
+          </button>
+          <button type="button" class="player-settings-row" onclick={() => openSettings("audio")}>
+            <Volume2 class="h-4 w-4" />
+            <span>Audio</span>
+            <span class="player-settings-value">{displayedAudioTrackLabel}</span>
+            <ChevronDown class="h-3.5 w-3.5 -rotate-90" />
+          </button>
+          {#if subtitleTracks.length > 0}
+            <button type="button" class="player-settings-row" onclick={() => openSettings("captions")}>
+              <Captions class="h-4 w-4" />
+              <span>Captions</span>
+              <span class="player-settings-value">{activeSubtitleLabel}</span>
+              <ChevronDown class="h-3.5 w-3.5 -rotate-90" />
+            </button>
+            <button type="button" class="player-settings-row" onclick={() => openSettings("subtitle-style")}>
+              <Sliders class="h-4 w-4" />
+              <span>Subtitle style</span>
+              <span class="player-settings-value">Custom</span>
+              <ChevronDown class="h-3.5 w-3.5 -rotate-90" />
+            </button>
+          {/if}
+        {:else if settingsView === "quality"}
+          {#each qualityOptions as option (String(option.value))}
+            <button
+              type="button"
+              onclick={() => requestPlaybackMode(option.value)}
+              class={cn("player-settings-option", qualityMode === option.value && "is-active")}
+            >
+              <span>{option.label}</span>
+              {#if option.value === "auto" && qualityMode === "auto" && activeQualityLabel}
+                <span>{activeQualityLabel}</span>
+              {:else if qualityMode === option.value}
+                <span>On</span>
+              {/if}
+            </button>
+          {/each}
+        {:else if settingsView === "speed"}
+          {#each PLAYBACK_RATES as rate (rate)}
+            <button
+              type="button"
+              onclick={() => applyPlaybackRate(rate)}
+              class={cn("player-settings-option", playbackRate === rate && "is-active")}
+            >
+              <span>{rate === 1 ? "Normal" : `${rate}x`}</span>
+              {#if playbackRate === rate}<span>On</span>{/if}
+            </button>
+          {/each}
+        {:else if settingsView === "audio"}
+          {#each displayedAudioTracks as track (track.id)}
+            <button
+              type="button"
+              onclick={() => selectAudioTrack(track)}
+              class={cn("player-settings-option", track.selected && "is-active")}
+            >
+              <span class="min-w-0 truncate">{track.label}</span>
+              {#if track.selected}<span>On</span>{/if}
+            </button>
+          {/each}
+        {:else if settingsView === "captions"}
+          <button
+            type="button"
+            onclick={() => selectSubtitle(null)}
+            class={cn("player-settings-option", !activeSubtitleId && "is-active")}
+          >
+            <span>Off</span>
+            {#if !activeSubtitleId}<span>On</span>{/if}
+          </button>
+          {#each subtitleTracks as track (track.id)}
+            {@const isActive = activeSubtitleId === track.id}
+            {@const lang = languageLabel(track.language)}
+            {@const displayName = track.label ? `${lang} - ${track.label}` : lang}
+            <button
+              type="button"
+              onclick={() => selectSubtitle(track.id)}
+              class={cn("player-settings-option", isActive && "is-active")}
+            >
+              <span class="player-settings-option-label min-w-0 flex-1">{displayName}</span>
+              <span>{isActive ? "On" : track.source}</span>
+            </button>
+          {/each}
+        {:else if settingsView === "subtitle-style"}
+          {#each subtitleDisplayStyles as style (style)}
+            <button
+              type="button"
+              onclick={() => handleAppearanceChange({ ...appearance, style })}
+              class={cn("player-settings-option", appearance.style === style && "is-active")}
+            >
+              <span class="capitalize">{style}</span>
+              {#if appearance.style === style}<span>On</span>{/if}
+            </button>
+          {/each}
+
+          <div class="player-settings-separator"></div>
+
+          <label class="player-settings-control">
+            <span>Text size</span>
+            <span class="player-settings-control-value">{appearance.fontScale.toFixed(2)}x</span>
+            <input
+              type="range"
+              min="0.5"
+              max="3"
+              step="0.05"
+              value={appearance.fontScale}
+              style={`--range-progress: ${rangeProgress(appearance.fontScale, 0.5, 3)}`}
+              oninput={(event) =>
+                handleAppearanceChange({ ...appearance, fontScale: Number(event.currentTarget.value) })}
+            />
+          </label>
+
+          <label class="player-settings-control">
+            <span>Position</span>
+            <span class="player-settings-control-value">{Math.round(appearance.positionPercent)}%</span>
+            <input
+              type="range"
+              min="10"
+              max="98"
+              step="1"
+              value={appearance.positionPercent}
+              style={`--range-progress: ${rangeProgress(appearance.positionPercent, 10, 98)}`}
+              oninput={(event) =>
+                handleAppearanceChange({
+                  ...appearance,
+                  positionPercent: Number(event.currentTarget.value),
+                })}
+            />
+          </label>
+
+          <label class="player-settings-control">
+            <span>Opacity</span>
+            <span class="player-settings-control-value">{Math.round(appearance.opacity * 100)}%</span>
+            <input
+              type="range"
+              min="0.2"
+              max="1"
+              step="0.05"
+              value={appearance.opacity}
+              style={`--range-progress: ${rangeProgress(appearance.opacity, 0.2, 1)}`}
+              oninput={(event) =>
+                handleAppearanceChange({ ...appearance, opacity: Number(event.currentTarget.value) })}
+            />
+          </label>
+
+          <button
+            type="button"
+            onclick={handleAppearanceReset}
+            disabled={localAppearance == null}
+            class={cn("player-settings-option player-settings-reset", localAppearance == null && "is-disabled")}
+          >
+            <span>Reset to library defaults</span>
+          </button>
+        {/if}
+      </div>
+      {/if}
+    {/if}
+  </div>
+
+  {#if fullChrome && hasFilmStrip}
+    <div class="border border-border-subtle bg-black overflow-hidden">
+      <FilmStrip
+        playlistUrl={trickplayPlaylist!}
+        videoEl={videoEl ?? null}
+        currentTime={currentTime}
+        {duration}
+        onSeek={seekTo}
+        {markers}
+        onStripInteractionChange={handleFilmStripInteraction}
+      />
+    </div>
+  {/if}
+</div>
+
+<style>
+  .prismedia-media-engine {
+    -webkit-tap-highlight-color: transparent;
+    aspect-ratio: 16 / 9;
+    background: #000;
+    color: #f2eee7;
+    display: block;
+    margin-inline: auto;
+    max-width: calc((100dvh - 14rem) * 16 / 9);
+    position: relative;
+    width: 100%;
+  }
+
+  .prismedia-player-surface,
+  .prismedia-media-engine,
+  .prismedia-media-engine :global(media-provider),
+  .prismedia-media-engine :global(video),
+  .prismedia-media-engine :global(media-poster) {
+    outline: none;
+  }
+
+  .prismedia-player-surface:focus,
+  .prismedia-player-surface:focus-visible,
+  .prismedia-media-engine:focus,
+  .prismedia-media-engine:focus-visible,
+  .prismedia-media-engine :global(video:focus),
+  .prismedia-media-engine :global(video:focus-visible),
+  .prismedia-media-engine :global(media-poster:focus),
+  .prismedia-media-engine :global(media-poster:focus-visible) {
+    box-shadow: none;
+    outline: none;
+  }
+
+  .prismedia-media-engine :global(media-provider) {
+    display: block;
+    height: 100%;
+    inset: 0;
+    position: absolute;
+    width: 100%;
+  }
+
+  .prismedia-media-engine :global(video),
+  .prismedia-media-engine :global(media-poster) {
+    -webkit-tap-highlight-color: transparent;
+    background: #000;
+    border-radius: 0;
+    height: 100%;
+    inset: 0;
+    object-fit: contain;
+    position: absolute;
+    width: 100%;
+  }
+
+  :global(.prismedia-media-engine[data-started] media-poster),
+  :global(.prismedia-media-engine[data-playing] media-poster) {
+    opacity: 0;
+    visibility: hidden;
+  }
+
+  .prismedia-player-surface:fullscreen,
+  .prismedia-player-surface:-webkit-full-screen {
+    align-items: center;
+    background: #000;
+    display: flex;
+    height: 100dvh;
+    justify-content: center;
+    width: 100vw;
+  }
+
+  .prismedia-player-surface:fullscreen .prismedia-media-engine,
+  .prismedia-player-surface:-webkit-full-screen .prismedia-media-engine {
+    aspect-ratio: auto;
+    height: 100dvh;
+    max-width: none;
+    width: 100vw;
+  }
+
+  .prismedia-range {
+    appearance: none;
+    background: rgba(255, 255, 255, 0.18);
+    border-radius: 0;
+    cursor: pointer;
+  }
+
+  .prismedia-range::-webkit-slider-thumb {
+    appearance: none;
+    width: 0.72rem;
+    height: 0.72rem;
+    border-radius: 0;
+    background: var(--color-accent-300);
+    box-shadow: 0 0 10px rgba(199, 155, 92, 0.65);
+  }
+
+  .prismedia-range::-moz-range-thumb {
+    width: 0.72rem;
+    height: 0.72rem;
+    border: 0;
+    border-radius: 0;
+    background: var(--color-accent-300);
+    box-shadow: 0 0 10px rgba(199, 155, 92, 0.65);
+  }
+
+  .player-control-button {
+    align-items: center;
+    background: rgba(17, 21, 28, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 0;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.06),
+      inset 0 0 0 0.5px rgba(255, 255, 255, 0.04),
+      0 2px 8px rgba(0, 0, 0, 0.3);
+    display: flex;
+    height: 1.75rem;
+    min-height: 1.75rem;
+    min-width: 1.75rem;
+    transform: translateY(0) scale(1);
+    transition:
+      background-color 120ms ease,
+      border-color 120ms ease,
+      box-shadow 120ms ease,
+      color 120ms ease,
+      transform 120ms ease;
+  }
+
+  .player-control-button:hover,
+  .player-control-button:focus-visible {
+    background: rgba(26, 31, 41, 0.96);
+    border-color: rgba(196, 154, 90, 0.42);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      0 0 18px rgba(196, 154, 90, 0.28),
+      0 4px 16px rgba(0, 0, 0, 0.36);
+    color: white;
+  }
+
+  .player-control-button:focus-visible {
+    outline: 1px solid rgba(196, 154, 90, 0.72);
+    outline-offset: 2px;
+  }
+
+  .player-control-button:active,
+  .player-control-button.is-pressed {
+    background: rgba(33, 39, 51, 0.98);
+    border-color: rgba(196, 154, 90, 0.58);
+    box-shadow:
+      inset 0 0 14px rgba(196, 154, 90, 0.18),
+      0 0 20px rgba(196, 154, 90, 0.34);
+    transform: translateY(1px) scale(0.94);
+  }
+
+  .play-glyph {
+    display: block;
+    height: 0.875rem;
+    position: relative;
+    width: 0.875rem;
+  }
+
+  .play-glyph::before {
+    border-bottom: 0.36rem solid transparent;
+    border-left: 0.56rem solid currentColor;
+    border-top: 0.36rem solid transparent;
+    content: "";
+    left: 50%;
+    position: absolute;
+    top: 50%;
+    transform: translate(-42%, -50%);
+  }
+
+  .play-glyph-lg {
+    height: 1rem;
+    width: 1rem;
+  }
+
+  .play-glyph-lg::before {
+    border-bottom-width: 0.42rem;
+    border-left-width: 0.64rem;
+    border-top-width: 0.42rem;
+  }
+
+  .sidecar-control-button {
+    justify-content: center;
+    padding: 0;
+    width: 1.75rem;
+  }
+
+  .player-settings-menu {
+    animation: player-settings-sheet-in 180ms ease-out;
+    backdrop-filter: blur(18px);
+    background: rgba(7, 10, 16, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.06),
+      0 20px 60px rgba(0, 0, 0, 0.55);
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    height: min(34dvh, 18rem);
+    left: max(0.75rem, env(safe-area-inset-left, 0px));
+    max-height: calc(100dvh - 1.5rem);
+    min-width: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0.35rem;
+    position: fixed;
+    right: max(0.75rem, env(safe-area-inset-right, 0px));
+    transform-origin: bottom right;
+    top: auto;
+    width: auto;
+    z-index: 1005;
+  }
+
+  .player-settings-menu.is-closing {
+    animation: player-settings-sheet-out 160ms ease-in forwards;
+  }
+
+  .player-settings-backdrop {
+    background: rgba(0, 0, 0, 0.38);
+    border: 0;
+    bottom: 0;
+    left: 0;
+    position: fixed;
+    right: 0;
+    top: 0;
+    z-index: 1000;
+  }
+
+  .player-settings-backdrop.is-closing {
+    animation: player-settings-backdrop-out 160ms ease-in forwards;
+  }
+
+  .player-settings-row,
+  .player-settings-option,
+  .player-settings-back {
+    align-items: center;
+    border: 1px solid transparent;
+    color: rgba(255, 255, 255, 0.82);
+    display: grid;
+    gap: 0.75rem;
+    min-height: 2.5rem;
+    padding: 0.55rem 0.7rem;
+    text-align: left;
+    transition:
+      background-color 120ms ease,
+      border-color 120ms ease,
+      color 120ms ease;
+    width: 100%;
+  }
+
+  .player-settings-row {
+    grid-template-columns: auto minmax(5rem, 1fr) minmax(0, 52%) auto;
+    overflow: hidden;
+  }
+
+  .player-settings-option {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .player-settings-option-label {
+    line-height: 1.18;
+    overflow-wrap: anywhere;
+  }
+
+  .player-settings-back {
+    border-bottom-color: rgba(255, 255, 255, 0.1);
+    font-size: 0.75rem;
+    font-weight: 600;
+    grid-template-columns: auto minmax(0, 1fr);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  .player-settings-row:hover,
+  .player-settings-option:hover,
+  .player-settings-back:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.12);
+    color: #fff;
+  }
+
+  .player-settings-option.is-active {
+    background: rgba(196, 154, 90, 0.16);
+    border-color: rgba(196, 154, 90, 0.42);
+    color: var(--color-accent-100);
+  }
+
+  .player-settings-value {
+    color: rgba(255, 255, 255, 0.58);
+    font-size: 0.7rem;
+    min-width: 0;
+    overflow: hidden;
+    text-align: right;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .player-settings-separator {
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    margin: 0.2rem 0;
+  }
+
+  .player-settings-control {
+    border: 1px solid transparent;
+    color: rgba(255, 255, 255, 0.82);
+    display: grid;
+    font-size: 0.74rem;
+    gap: 0.55rem;
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: 0.65rem 0.7rem 0.75rem;
+  }
+
+  .player-settings-control-value {
+    color: var(--color-accent-300);
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.04em;
+  }
+
+  .player-settings-control input[type="range"] {
+    appearance: none;
+    background:
+      linear-gradient(
+        to right,
+        var(--color-accent-400) 0 var(--range-progress),
+        rgba(255, 255, 255, 0.22) var(--range-progress) 100%
+      );
+    border: 1px solid rgba(255, 255, 255, 0.32);
+    border-radius: 0;
+    grid-column: 1 / -1;
+    height: 0.45rem;
+    width: 100%;
+  }
+
+  .player-settings-control input[type="range"]::-webkit-slider-thumb {
+    appearance: none;
+    background: var(--color-accent-400);
+    border: 1px solid rgba(0, 0, 0, 0.45);
+    border-radius: 0;
+    box-shadow: 0 0 14px rgba(196, 154, 90, 0.34);
+    height: 1rem;
+    width: 0.55rem;
+  }
+
+  .player-settings-control input[type="range"]::-moz-range-thumb {
+    background: var(--color-accent-400);
+    border: 1px solid rgba(0, 0, 0, 0.45);
+    border-radius: 0;
+    box-shadow: 0 0 14px rgba(196, 154, 90, 0.34);
+    height: 1rem;
+    width: 0.55rem;
+  }
+
+  .player-settings-reset:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .player-settings-reset.is-disabled {
+    border-color: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.3);
+    cursor: not-allowed;
+  }
+
+  @keyframes player-settings-sheet-in {
+    from {
+      opacity: 0;
+      transform: translateY(calc(100% + 1.25rem));
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes player-settings-sheet-out {
+    from {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    to {
+      opacity: 0;
+      transform: translateY(calc(100% + 1.25rem));
+    }
+  }
+
+  @keyframes player-settings-backdrop-out {
+    from {
+      opacity: 1;
+    }
+
+    to {
+      opacity: 0;
+    }
+  }
+
+  @keyframes player-settings-flyout-in {
+    from {
+      opacity: 0;
+      transform: translateX(1.25rem);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes player-settings-flyout-out {
+    from {
+      opacity: 1;
+      transform: translateX(0);
+    }
+
+    to {
+      opacity: 0;
+      transform: translateX(1.25rem);
+    }
+  }
+
+  .mobile-video-progress {
+    height: 5px;
+  }
+
+  .mobile-video-progress:hover {
+    height: 6px;
+  }
+
+  .video-time-slider {
+    --media-slider-track-bg: rgba(255, 255, 255, 0.22);
+    --media-slider-track-fill-bg: linear-gradient(90deg, var(--color-accent-400), var(--color-accent-300));
+    --media-slider-track-progress-bg: transparent;
+    --media-slider-chapter-hover-transform: scaleY(1.9);
+    bottom: 4.85rem;
+    cursor: pointer;
+    display: block;
+    left: 1rem;
+    position: absolute;
+    right: 1rem;
+    touch-action: none;
+    transition: height 120ms ease;
+    z-index: 45;
+  }
+
+  .video-time-slider media-slider-chapters {
+    align-items: center;
+    display: flex;
+    height: 100%;
+    position: relative;
+    width: 100%;
+  }
+
+  .video-slider-chapter {
+    height: 100%;
+    margin-right: 2px;
+    min-width: 0.35rem;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .video-slider-chapter:last-child {
+    margin-right: 0;
+  }
+
+  .video-slider-track,
+  .video-slider-track-progress,
+  .video-slider-track-fill {
+    height: 100%;
+    left: 0;
+    position: absolute;
+    top: 0;
+  }
+
+  .video-slider-track {
+    background: var(--media-slider-track-bg);
+    width: 100%;
+  }
+
+  .video-slider-track-progress {
+    background: var(--media-slider-track-progress-bg);
+    width: var(--chapter-progress, 0%);
+    z-index: 1;
+  }
+
+  .video-slider-track-fill {
+    background: var(--media-slider-track-fill-bg);
+    box-shadow: 0 0 10px rgba(196, 154, 90, 0.35);
+    width: var(--chapter-fill, 0%);
+    z-index: 2;
+  }
+
+  .video-slider-native-progress {
+    height: 100%;
+    left: 0;
+    pointer-events: none;
+    position: absolute;
+    top: 0;
+  }
+
+  .video-slider-native-progress.is-buffered {
+    background: rgba(255, 255, 255, 0.34);
+    width: var(--prismedia-buffer-progress, 0%);
+    z-index: 2;
+  }
+
+  .video-slider-native-progress.is-played {
+    background: var(--media-slider-track-fill-bg);
+    box-shadow: 0 0 10px rgba(196, 154, 90, 0.35);
+    width: var(--prismedia-slider-fill, 0%);
+    z-index: 3;
+  }
+
+  .video-slider-thumb {
+    background: var(--color-accent-400);
+    box-shadow: 0 0 12px rgba(196, 154, 90, 0.55);
+    height: 0.95rem;
+    left: var(--prismedia-slider-fill, var(--slider-fill, 0%));
+    pointer-events: none;
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 0.45rem;
+    z-index: 4;
+  }
+
+  .video-slider-preview {
+    display: none;
+  }
+
+  .video-slider-chapter-title,
+  .video-slider-time {
+    display: none;
+  }
+
+  .timeline-trickplay-preview {
+    background-color: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    margin-bottom: 0.4rem;
+    width: 100%;
+  }
+
+  @media (min-width: 640px) {
+    .video-time-slider {
+      bottom: 5.75rem;
+    }
+
+    .mobile-video-progress {
+      height: 8px;
+    }
+
+    .mobile-video-progress:hover {
+      height: 10px;
+    }
+
+    .player-control-button {
+      height: 2.25rem;
+      min-height: 2.25rem;
+      min-width: 2.25rem;
+    }
+
+    .sidecar-control-button {
+      padding: 0;
+      width: 2.25rem;
+    }
+
+    .player-settings-menu {
+      animation: player-settings-flyout-in 160ms ease-out;
+      background: rgba(7, 10, 16, 0.76);
+      bottom: 7.25rem;
+      height: auto;
+      left: auto;
+      max-height: none;
+      min-width: min(19rem, calc(100vw - 2rem));
+      transform-origin: bottom right;
+      position: absolute;
+      right: 1rem;
+      top: 4.75rem;
+      width: min(28rem, calc(100% - 2rem));
+      z-index: 60;
+    }
+
+    .player-settings-menu.is-closing {
+      animation: player-settings-flyout-out 140ms ease-in forwards;
+    }
+
+    .player-settings-backdrop {
+      background: transparent;
+      position: absolute;
+      z-index: 55;
+    }
+  }
+</style>

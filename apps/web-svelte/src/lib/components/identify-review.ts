@@ -1,0 +1,273 @@
+import type {
+  EntityCard,
+  EntityThumbnail,
+} from "$lib/api/generated/model";
+import type {
+  CreditPatch,
+  EntityMetadataPatch,
+  EntityMetadataProposal,
+  ImageCandidate,
+} from "$lib/api/identify";
+
+const fieldKeys = [
+  "title",
+  "description",
+  "externalIds",
+  "urls",
+  "tags",
+  "studio",
+  "credits",
+  "dates",
+  "stats",
+  "positions",
+  "classification",
+  "images",
+];
+
+export interface IdentifyReviewSelectionState {
+  selectedFieldsByProposal: Record<string, Record<string, boolean>>;
+  selectedImagesByProposal: Record<string, Record<string, string | null>>;
+  selectedCreditsByProposal: Record<string, Record<string, boolean>>;
+  selectedTagsByProposal: Record<string, Record<string, boolean>>;
+  selectedCascade: Record<string, boolean>;
+}
+
+export interface IdentifyRelationshipTitles {
+  tags: string[];
+  credits: string[];
+}
+
+export interface IdentifyProposalRow {
+  id: string;
+  label: string;
+  proposals: EntityMetadataProposal[];
+}
+
+export function structuralChildProposals(result: EntityMetadataProposal): EntityMetadataProposal[] {
+  return (result.children ?? []).filter((child) => !isRelationshipKind(child.targetKind));
+}
+
+export function relationshipProposals(result: EntityMetadataProposal): EntityMetadataProposal[] {
+  const proposals = [
+    ...(result.relationships ?? []),
+    ...(result.children ?? []).filter((child) => isRelationshipKind(child.targetKind)),
+  ];
+  const seen = new Set<string>();
+  return proposals.filter((child) => {
+    if (seen.has(child.proposalId)) return false;
+    seen.add(child.proposalId);
+    return true;
+  });
+}
+
+export function reviewChildProposals(result: EntityMetadataProposal): EntityMetadataProposal[] {
+  return [
+    ...structuralChildProposals(result),
+    ...relationshipProposals(result),
+  ];
+}
+
+export function groupProposalRows(proposals: EntityMetadataProposal[]): IdentifyProposalRow[] {
+  const groups = new Map<string, EntityMetadataProposal[]>();
+  for (const proposal of proposals) {
+    const id = proposal.targetKind;
+    groups.set(id, [...(groups.get(id) ?? []), proposal]);
+  }
+
+  return Array.from(groups, ([id, rows]) => ({
+    id,
+    label: entityKindLabel(id),
+    proposals: rows,
+  }));
+}
+
+export function findRelationshipImage(
+  result: EntityMetadataProposal,
+  targetKind: string,
+  name: string,
+): string | null {
+  const child = relationshipProposals(result).find(
+    (candidate) =>
+      candidate.targetKind === targetKind &&
+      (candidate.patch.title ?? "").localeCompare(name, undefined, { sensitivity: "accent" }) === 0,
+  );
+  if (!child?.images.length) return null;
+  const preferred = child.images.find((img) => img.kind === "poster") ??
+    child.images.find((img) => img.kind === "logo") ??
+    child.images[0];
+  return preferred?.url ?? null;
+}
+
+export function relationshipTitlesFromEntityThumbnails(
+  entity: Pick<EntityCard, "relationships">,
+  thumbnails: EntityThumbnail[],
+): IdentifyRelationshipTitles {
+  const byId = new Map(thumbnails.map((thumbnail) => [thumbnail.id, thumbnail.title]));
+  return {
+    tags: titlesForRelationship(entity, byId, "tag"),
+    credits: titlesForRelationship(entity, byId, "person"),
+  };
+}
+
+export function isNewRelationshipTitle(title: string, existingTitles: string[]): boolean {
+  return !existingTitles.some((existing) => existing.localeCompare(title, undefined, { sensitivity: "accent" }) === 0);
+}
+
+export function buildProposalForApply(
+  result: EntityMetadataProposal,
+  selections: IdentifyReviewSelectionState,
+): EntityMetadataProposal {
+  const fields = selections.selectedFieldsByProposal[result.proposalId] ??
+    Object.fromEntries(fieldKeys.map((field) => [field, hasField(result, field)]));
+  const selectedResultCredits = selections.selectedCreditsByProposal[result.proposalId] ?? {};
+  const selectedResultTags = selections.selectedTagsByProposal[result.proposalId] ?? {};
+  const credits = result.patch.credits
+    .filter((credit, index) => selectedResultCredits[creditKey(credit, index)] !== false)
+    .filter((credit) => !isDeselectedRelationshipTitle(result, "person", credit.name, selections.selectedCascade));
+  const tags = result.patch.tags.filter((tag) => selectedResultTags[tag] !== false);
+  const patch = patchForSelectedFields(result, fields, credits, tags, selections.selectedCascade);
+
+  return {
+    ...result,
+    patch,
+    images: imagesForSelectedProposal(result, selections, fields),
+    children: structuralChildProposals(result)
+      .filter((child) => selections.selectedCascade[child.proposalId] !== false)
+      .map((child) => buildProposalForApply(child, selections)),
+    relationships: relationshipProposals(result)
+      .filter((child) => selections.selectedCascade[child.proposalId] !== false)
+      .filter((child) => shouldKeepRelationship(child, patch, fields))
+      .map((child) => buildProposalForApply(child, selections)),
+  };
+}
+
+function shouldKeepRelationship(
+  child: EntityMetadataProposal,
+  patch: EntityMetadataPatch,
+  fields: Record<string, boolean>,
+): boolean {
+  if (child.targetKind === "person") {
+    if (!fields.credits) return false;
+    const title = child.patch.title ?? "";
+    return patch.credits.some((credit) => credit.name.localeCompare(title, undefined, { sensitivity: "accent" }) === 0);
+  }
+
+  if (child.targetKind === "studio") {
+    if (!fields.studio || !patch.studio) return false;
+    return (child.patch.title ?? "").localeCompare(patch.studio, undefined, { sensitivity: "accent" }) === 0;
+  }
+
+  if (child.targetKind === "tag") {
+    return fields.tags !== false;
+  }
+
+  return true;
+}
+
+function patchForSelectedFields(
+  result: EntityMetadataProposal,
+  fields: Record<string, boolean>,
+  credits: CreditPatch[],
+  tags: string[],
+  selectedCascade: Record<string, boolean>,
+): EntityMetadataPatch {
+  const patch = result.patch;
+  const studio = isDeselectedRelationshipTitle(result, "studio", patch.studio, selectedCascade) ? null : patch.studio;
+  return {
+    title: fields.title ? patch.title : null,
+    description: fields.description ? patch.description : null,
+    externalIds: fields.externalIds ? patch.externalIds : {},
+    urls: fields.urls ? patch.urls : [],
+    tags: fields.tags ? tags : [],
+    studio: fields.studio ? studio : null,
+    credits: fields.credits ? credits : [],
+    dates: fields.dates ? patch.dates : {},
+    stats: fields.stats ? patch.stats : {},
+    positions: fields.positions ? patch.positions : {},
+    classification: fields.classification ? patch.classification : null,
+  };
+}
+
+function isDeselectedRelationshipTitle(
+  result: EntityMetadataProposal,
+  targetKind: string,
+  title: string | null | undefined,
+  selectedCascade: Record<string, boolean>,
+): boolean {
+  if (!title) return false;
+  return relationshipProposals(result).some((child) =>
+    child.targetKind === targetKind &&
+    selectedCascade[child.proposalId] === false &&
+    (child.patch.title ?? "").localeCompare(title, undefined, { sensitivity: "accent" }) === 0,
+  );
+}
+
+function imagesForSelectedProposal(
+  result: EntityMetadataProposal,
+  selections: IdentifyReviewSelectionState,
+  fields: Record<string, boolean>,
+): ImageCandidate[] {
+  if (fields.images === false) return [];
+  const selected = selections.selectedImagesByProposal[result.proposalId];
+  if (!selected) return result.images;
+  return result.images.filter((image) => selected[image.kind] === image.url);
+}
+
+function hasField(result: EntityMetadataProposal, field: string): boolean {
+  return fieldValue(result, field).trim().length > 0;
+}
+
+function fieldValue(result: EntityMetadataProposal, field: string): string {
+  const patch = result.patch;
+  if (field === "title") return patch.title ?? "";
+  if (field === "description") return patch.description ?? "";
+  if (field === "externalIds") return entries(patch.externalIds).join(", ");
+  if (field === "urls") return patch.urls.join(", ");
+  if (field === "tags") return patch.tags.join(", ");
+  if (field === "studio") return patch.studio ?? "";
+  if (field === "credits") return patch.credits.length > 0 ? `${patch.credits.length}` : "";
+  if (field === "dates") return entries(patch.dates).join(", ");
+  if (field === "stats") return entries(patch.stats).join(", ");
+  if (field === "positions") return entries(patch.positions).join(", ");
+  if (field === "classification") return patch.classification ?? "";
+  if (field === "images") return result.images.length > 0 ? `${result.images.length}` : "";
+  return "";
+}
+
+function entries(record: Record<string, string | number>): string[] {
+  return Object.entries(record).map(([key, value]) => `${key}: ${value}`);
+}
+
+function titlesForRelationship(
+  entity: Pick<EntityCard, "relationships">,
+  byId: Map<string, string>,
+  kind: string,
+): string[] {
+  return (entity.relationships ?? [])
+    .filter((group) => group.kind === kind)
+    .flatMap((group) => group.entities)
+    .map((thumbnail) => byId.get(thumbnail.id) ?? thumbnail.title)
+    .filter((title): title is string => Boolean(title));
+}
+
+function isRelationshipKind(kind: string): boolean {
+  const normalized = kind.toLowerCase();
+  return normalized === "person" || normalized === "studio" || normalized === "tag";
+}
+
+function entityKindLabel(kind: string): string {
+  const normalized = kind.toLowerCase();
+  if (normalized === "person") return "People";
+  if (normalized === "studio") return "Studios";
+  if (normalized === "tag") return "Tags";
+  if (normalized.includes("episode")) return "Episodes";
+  if (normalized.includes("season")) return "Seasons";
+  if (normalized.includes("series")) return "Series";
+  if (normalized.includes("chapter")) return "Chapters";
+  if (normalized.includes("volume")) return "Volumes";
+  return "Items";
+}
+
+function creditKey(credit: CreditPatch, index: number): string {
+  return `${credit.role}:${credit.name}:${credit.character ?? ""}:${index}`;
+}

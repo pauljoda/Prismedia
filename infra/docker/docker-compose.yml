@@ -1,0 +1,66 @@
+services:
+  web:
+    build:
+      context: ../..
+      dockerfile: infra/docker/web.Dockerfile
+      target: builder
+    command: pnpm --filter @prismedia/web-svelte dev
+    env_file:
+      - ../../.env.example
+    environment:
+      DATABASE_URL: postgresql://prismedia:prismedia@postgres:5432/prismedia
+      PRISMEDIA_CACHE_DIR: /data/cache
+      PRISMEDIA_DATA_DIR: /data
+    ports:
+      - "5173:5173"
+    depends_on:
+      - postgres
+    volumes:
+      - cache-data:/data/cache
+
+  backend:
+    image: mcr.microsoft.com/dotnet/sdk:10.0
+    working_dir: /app
+    command: dotnet watch --project apps/backend/src/Prismedia.Api/Prismedia.Api.csproj run --urls http://0.0.0.0:8008
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      DATABASE_URL: postgresql://prismedia:prismedia@postgres:5432/prismedia
+      PRISMEDIA_CACHE_DIR: /data/cache
+      PRISMEDIA_DATA_DIR: /data
+    ports:
+      - "8008:8008"
+    depends_on:
+      - postgres
+    volumes:
+      - ../..:/app
+      - cache-data:/data/cache
+
+  backend-worker:
+    image: mcr.microsoft.com/dotnet/sdk:10.0
+    working_dir: /app
+    command: dotnet watch --project apps/backend/src/Prismedia.Worker/Prismedia.Worker.csproj run
+    environment:
+      DOTNET_USE_POLLING_FILE_WATCHER: "1"
+      DATABASE_URL: postgresql://prismedia:prismedia@postgres:5432/prismedia
+      PRISMEDIA_CACHE_DIR: /data/cache
+      PRISMEDIA_DATA_DIR: /data
+    depends_on:
+      - postgres
+    volumes:
+      - ../..:/app
+      - cache-data:/data/cache
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: prismedia
+      POSTGRES_USER: prismedia
+      POSTGRES_PASSWORD: prismedia
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+volumes:
+  postgres-data:
+  cache-data:

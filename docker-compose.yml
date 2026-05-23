@@ -1,0 +1,12 @@
+services:
+  prismedia:
+    image: ghcr.io/pauljoda/prismedia:latest
+    ports:
+      - "8008:8008"
+    volumes:
+      - prismedia-data:/data
+      - /path/to/your/media:/media
+    restart: unless-stopped
+
+volumes:
+  prismedia-data:

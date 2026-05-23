@@ -1,0 +1,389 @@
+import type {
+  CommunityIndexEntryDto,
+  MetadataProviderDto,
+  NormalizedPerformerResult,
+  NormalizedSceneScrapeResultDto,
+  NormalizedStudioScrapeResultDto,
+  NormalizedTagScrapeResultDto,
+  PluginIndexEntryDto,
+  PluginPackageDto,
+  ScrapeResultDto,
+  ScraperPackageDto,
+  StashBoxEndpointDto,
+  StashBoxStudioResultDto,
+  StashBoxTagResultDto,
+  StashIdEntryDto,
+} from "@prismedia/contracts";
+import { apiPath } from "$lib/api/orval-fetch";
+
+export type ScraperPackage = ScraperPackageDto;
+export type CommunityIndexEntry = CommunityIndexEntryDto;
+export type ScrapeResult = ScrapeResultDto;
+export type NormalizedScrapeResult = NormalizedSceneScrapeResultDto;
+export type NormalizedPerformerScrapeResult = NormalizedPerformerResult;
+export type NormalizedStudioScrapeResult = NormalizedStudioScrapeResultDto;
+export type NormalizedTagScrapeResult = NormalizedTagScrapeResultDto;
+export type StashBoxEndpoint = StashBoxEndpointDto;
+export type MetadataProvider = MetadataProviderDto;
+export type StashIdEntry = StashIdEntryDto;
+export type StashBoxStudioResult = StashBoxStudioResultDto;
+export type StashBoxTagResult = StashBoxTagResultDto;
+export type PrismediaPluginIndexEntry = PluginIndexEntryDto & {
+  localPath?: string;
+  updateAvailable?: boolean;
+};
+export type InstalledPlugin = PluginPackageDto;
+
+export interface PluginUpdateStatus {
+  pluginId: string;
+  installedVersion: string;
+  availableVersion: string | null;
+  updateAvailable: boolean;
+  zipUrl: string | null;
+  sha256: string | null;
+}
+
+export interface PluginExecuteResult {
+  ok: boolean;
+  result: unknown;
+  normalized?: NormalizedScrapeResult;
+  pluginId: string;
+  action: string;
+}
+
+async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers = new Headers(init?.headers);
+  if (init?.body && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  const response = await fetch(apiPath(path), {
+    ...init,
+    headers,
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `API ${response.status}: ${response.statusText}`);
+  }
+
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
+  return (await response.json()) as T;
+}
+
+function query(params: Record<string, string | number | boolean | null | undefined>): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value != null && value !== "") search.set(key, String(value));
+  }
+  const qs = search.toString();
+  return qs ? `?${qs}` : "";
+}
+
+export function fetchCommunityIndex(
+  force = false,
+): Promise<{ entries: CommunityIndexEntry[] }> {
+  return apiJson(`/scrapers/index${force ? "?force=true" : ""}`);
+}
+
+export function fetchInstalledScrapers(): Promise<{ packages: ScraperPackage[] }> {
+  return apiJson("/scrapers/packages");
+}
+
+export function installScraper(packageId: string): Promise<ScraperPackage> {
+  return apiJson("/scrapers/packages", {
+    method: "POST",
+    body: JSON.stringify({ packageId }),
+  });
+}
+
+export function uninstallScraper(id: string): Promise<{ ok: true }> {
+  return apiJson(`/scrapers/packages/${id}`, { method: "DELETE" });
+}
+
+export function toggleScraper(id: string, enabled: boolean): Promise<ScraperPackage> {
+  return apiJson(`/scrapers/packages/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ enabled }),
+  });
+}
+
+export function scrapeVideo(
+  scraperId: string,
+  videoId: string,
+  action = "auto",
+  options?: { url?: string; query?: string },
+): Promise<{
+  result?: ScrapeResult;
+  normalized?: NormalizedScrapeResult;
+  results?: NormalizedScrapeResult[];
+  message?: string;
+  action?: string;
+  triedActions?: string[];
+}> {
+  return apiJson(`/scrapers/${scraperId}/scrape`, {
+    method: "POST",
+    body: JSON.stringify({
+      videoId,
+      action,
+      url: options?.url,
+      query: options?.query,
+    }),
+  });
+}
+
+export function fetchScrapeResults(params?: {
+  status?: string;
+  videoId?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<{ results: ScrapeResult[]; total: number; limit: number; offset: number }> {
+  return apiJson(`/scrapers/results${query(params ?? {})}`);
+}
+
+const SCRAPE_RESULTS_PAGE_SIZE = 500;
+
+export async function fetchAllScrapeResults(params?: {
+  status?: string;
+  videoId?: string;
+}): Promise<{ results: ScrapeResult[]; total: number }> {
+  const results: ScrapeResult[] = [];
+  let offset = 0;
+  let total = 0;
+
+  for (;;) {
+    const page = await fetchScrapeResults({
+      ...params,
+      limit: SCRAPE_RESULTS_PAGE_SIZE,
+      offset,
+    });
+    total = page.total;
+    results.push(...page.results);
+    if (page.results.length < SCRAPE_RESULTS_PAGE_SIZE || results.length >= total) break;
+    offset += SCRAPE_RESULTS_PAGE_SIZE;
+  }
+
+  return { results, total };
+}
+
+export function fetchScrapeResult(id: string): Promise<ScrapeResult> {
+  return apiJson(`/scrapers/results/${id}`);
+}
+
+export function acceptScrapeResult(
+  id: string,
+  fields?: string[],
+  options?: { excludePerformers?: string[]; excludeTags?: string[] },
+): Promise<{ ok: true; videoId: string }> {
+  return apiJson(`/scrapers/results/${id}/accept`, {
+    method: "POST",
+    body: JSON.stringify({
+      fields,
+      excludePerformers: options?.excludePerformers,
+      excludeTags: options?.excludeTags,
+    }),
+  });
+}
+
+export function rejectScrapeResult(id: string): Promise<{ ok: true }> {
+  return apiJson(`/scrapers/results/${id}/reject`, { method: "POST" });
+}
+
+export function fetchStashBoxEndpoints(): Promise<{ endpoints: StashBoxEndpoint[] }> {
+  return apiJson("/stashbox-endpoints");
+}
+
+export function createStashBoxEndpoint(data: {
+  name: string;
+  endpoint: string;
+  apiKey: string;
+}): Promise<StashBoxEndpoint> {
+  return apiJson("/stashbox-endpoints", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateStashBoxEndpoint(
+  id: string,
+  data: { name?: string; endpoint?: string; apiKey?: string; enabled?: boolean },
+): Promise<StashBoxEndpoint> {
+  return apiJson(`/stashbox-endpoints/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteStashBoxEndpoint(id: string): Promise<{ ok: true }> {
+  return apiJson(`/stashbox-endpoints/${id}`, { method: "DELETE" });
+}
+
+export function testStashBoxEndpoint(
+  id: string,
+): Promise<{ valid: boolean; error?: string }> {
+  return apiJson(`/stashbox-endpoints/${id}/test`, { method: "POST" });
+}
+
+export function identifyViaStashBox(
+  endpointId: string,
+  videoId: string,
+): Promise<{
+  result?: ScrapeResult;
+  normalized?: NormalizedScrapeResult;
+  matchType?: string;
+  message?: string;
+  triedMethods?: string[];
+}> {
+  return apiJson(`/stashbox-endpoints/${endpointId}/identify`, {
+    method: "POST",
+    body: JSON.stringify({ videoId }),
+  });
+}
+
+export function identifyPerformerViaStashBox(
+  endpointId: string,
+  performerId: string,
+): Promise<{
+  results?: NormalizedPerformerScrapeResult[];
+  result?: null;
+  message?: string;
+}> {
+  return apiJson(`/stashbox-endpoints/${endpointId}/identify-performer`, {
+    method: "POST",
+    body: JSON.stringify({ performerId }),
+  });
+}
+
+export function fetchMetadataProviders(): Promise<{ providers: MetadataProvider[] }> {
+  return apiJson("/metadata-providers");
+}
+
+export function fetchStashIds(
+  entityType: string,
+  entityId: string,
+): Promise<{ stashIds: StashIdEntry[] }> {
+  return apiJson(`/stash-ids${query({ entityType, entityId })}`);
+}
+
+export function createStashId(data: {
+  entityType: string;
+  entityId: string;
+  stashBoxEndpointId: string;
+  stashId: string;
+}): Promise<StashIdEntry> {
+  return apiJson("/stash-ids", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteStashId(id: string): Promise<{ ok: true }> {
+  return apiJson(`/stash-ids/${id}`, { method: "DELETE" });
+}
+
+export function lookupStudioViaStashBox(
+  endpointId: string,
+  lookupQuery: string,
+): Promise<{ studio: StashBoxStudioResult | null }> {
+  return apiJson(`/stashbox-endpoints/${endpointId}/lookup/studio`, {
+    method: "POST",
+    body: JSON.stringify({ query: lookupQuery }),
+  });
+}
+
+export function lookupTagViaStashBox(
+  endpointId: string,
+  lookupQuery: string,
+): Promise<{ tags: StashBoxTagResult[] }> {
+  return apiJson(`/stashbox-endpoints/${endpointId}/lookup/tag`, {
+    method: "POST",
+    body: JSON.stringify({ query: lookupQuery }),
+  });
+}
+
+export function lookupPerformerViaStashBox(
+  endpointId: string,
+  lookupQuery: string,
+): Promise<{
+  performers: NormalizedPerformerScrapeResult[];
+  rawPerformers: unknown[];
+}> {
+  return apiJson(`/stashbox-endpoints/${endpointId}/lookup/performer`, {
+    method: "POST",
+    body: JSON.stringify({ query: lookupQuery }),
+  });
+}
+
+export function fetchPrismediaPluginIndex(
+  options: { refresh?: boolean } = {},
+): Promise<PrismediaPluginIndexEntry[]> {
+  return apiJson(`/plugins/prismedia-index${options.refresh ? "?refresh=1" : ""}`);
+}
+
+export function fetchPluginUpdates(
+  options: { refresh?: boolean } = {},
+): Promise<PluginUpdateStatus[]> {
+  return apiJson(`/plugins/check-updates${options.refresh ? "?refresh=1" : ""}`);
+}
+
+export function installPrismediaPlugin(
+  pluginId: string,
+  options: { localPath?: string; zipUrl?: string; sha256?: string },
+): Promise<{ ok: boolean; pluginId: string }> {
+  return apiJson("/plugins/packages", {
+    method: "POST",
+    body: JSON.stringify({ pluginId, ...options }),
+  });
+}
+
+export function fetchInstalledPlugins(): Promise<InstalledPlugin[]> {
+  return apiJson("/plugins/packages");
+}
+
+export function togglePlugin(id: string, enabled: boolean): Promise<{ ok: boolean }> {
+  return apiJson(`/plugins/packages/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ enabled }),
+  });
+}
+
+export function uninstallPlugin(id: string): Promise<{ ok: boolean }> {
+  return apiJson(`/plugins/packages/${id}`, { method: "DELETE" });
+}
+
+export function acceptPluginResult(
+  resultId: string,
+  fields?: string[],
+  selectedImages?: Record<string, string | null | undefined>,
+): Promise<{ ok: boolean }> {
+  return apiJson(`/plugins/results/${resultId}/accept`, {
+    method: "POST",
+    body: JSON.stringify({ fields, selectedImages }),
+  });
+}
+
+export function executePlugin(
+  pluginDbId: string,
+  action: string,
+  input?: Record<string, unknown>,
+  options?: { saveResult?: boolean; entityId?: string },
+): Promise<PluginExecuteResult> {
+  return apiJson(`/plugins/${pluginDbId}/execute`, {
+    method: "POST",
+    body: JSON.stringify({ action, input, ...options }),
+  });
+}
+
+export function savePluginAuthKey(
+  pluginDbId: string,
+  authKey: string,
+  value: string,
+): Promise<{ ok: boolean }> {
+  return apiJson(`/plugins/packages/${pluginDbId}/auth/${authKey}`, {
+    method: "PUT",
+    body: JSON.stringify({ value }),
+  });
+}
