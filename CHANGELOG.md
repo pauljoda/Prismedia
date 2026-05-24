@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated web app manifest and mobile browser metadata for home-screen installation and browser UI theme colors.
 
 ### Fixed
+- Restored richer running and queued job rows with job-kind grouping, target details, and live status messages.
 - Fixed generated thumbnail and preview asset serving on fresh startup by creating and mounting the media cache directory before assets are requested.
 - Fixed Prismedia logo PNG transparency so the app brand mark no longer carries a black square background.
 - Reduced thumbnail grid scroll jank by deferring hover previews during scroll and avoiding unnecessary player/lightbox loading on non-lightbox library pages.

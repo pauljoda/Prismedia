@@ -3,6 +3,7 @@ import type { JobQueueCountDto } from "$lib/api/generated/model";
 import {
   queueDefinitions,
   type JobRun as DashboardJobRun,
+  type JobRunGroup,
   type JobsDashboard,
   type JobStatus,
   type QueueName,
@@ -167,7 +168,7 @@ function queueSummaryBase(definition: JobDefinition): QueueSummary {
   const queueDefinition = queueDefinitionByName.get(definition.queueName);
   return {
     name: definition.queueName,
-    label: definition.label || queueDefinition?.label || definition.queueName,
+    label: queueDefinition?.label || definition.label || definition.queueName,
     description: definition.description || queueDefinition?.description || "",
     status: "idle",
     concurrency: queueDefinition?.concurrency ?? 1,
@@ -204,27 +205,67 @@ function normalizeProgress(progress: ApiJobRun["progress"]): number {
 
 export function mapJobRun(job: ApiJobRun): DashboardJobRun {
   const definition = definitionForJob(job.type);
+  const queueDefinition = queueDefinitionByName.get(definition.queueName);
   const status = mapJobStatus(job.status);
 
   return {
     id: job.id,
+    jobType: job.type,
+    jobLabel: definition.label,
+    jobDescription: definition.description,
     queueName: definition.queueName,
-    queueLabel: definition.label,
+    queueLabel: queueDefinition?.label ?? definition.label,
     status,
     targetType: job.targetKind ?? job.type,
     targetId: job.targetId ?? null,
-    targetLabel: job.targetLabel ?? definition.label,
+    targetLabel: job.targetLabel ?? null,
     triggeredBy: "system",
     triggerLabel: "Queued by jobs",
     jobKind: "standard",
     progress: normalizeProgress(job.progress),
     attempts: 0,
+    statusMessage: job.message,
     error: status === "failed" ? job.message : null,
     startedAt: job.startedAt,
     finishedAt: job.finishedAt,
     createdAt: job.createdAt,
     updatedAt: job.finishedAt ?? job.startedAt ?? job.createdAt,
   };
+}
+
+export function groupJobRunsByKind(jobs: readonly DashboardJobRun[]): JobRunGroup[] {
+  const groups = new Map<string, JobRunGroup>();
+
+  for (const job of jobs) {
+    let group = groups.get(job.jobType);
+    if (!group) {
+      group = {
+        key: job.jobType,
+        jobType: job.jobType,
+        jobLabel: job.jobLabel,
+        jobDescription: job.jobDescription,
+        queueName: job.queueName,
+        queueLabel: job.queueLabel,
+        jobs: [],
+        activeCount: 0,
+        waitingCount: 0,
+        totalCount: 0,
+      };
+      groups.set(job.jobType, group);
+    }
+
+    group.jobs.push(job);
+    group.totalCount += 1;
+    if (job.status === "active") group.activeCount += 1;
+    if (job.status === "waiting" || job.status === "delayed") group.waitingCount += 1;
+  }
+
+  return [...groups.values()].sort(
+    (a, b) =>
+      b.activeCount - a.activeCount ||
+      b.waitingCount - a.waitingCount ||
+      a.jobLabel.localeCompare(b.jobLabel),
+  );
 }
 
 export interface ScheduleInfo {

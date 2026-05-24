@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildJobsDashboard, mapJobRun } from "./jobs-dashboard";
+import { buildJobsDashboard, groupJobRunsByKind, mapJobRun } from "./jobs-dashboard";
 import type { JobRun } from "$lib/api/prismedia";
 
 const baseJob: JobRun = {
@@ -22,6 +22,47 @@ describe("jobs dashboard adapter", () => {
     expect(mapJobRun({ ...baseJob, status: "running" }).status).toBe("active");
     expect(mapJobRun({ ...baseJob, status: "completed" }).status).toBe("completed");
     expect(mapJobRun({ ...baseJob, status: "failed", message: "boom" }).error).toBe("boom");
+  });
+
+  it("preserves job kind and status detail separately from the target label", () => {
+    const job = mapJobRun({
+      ...baseJob,
+      type: "generate-book-page-thumbnail",
+      status: "running",
+      progress: 60,
+      message: "Generating thumbnail",
+      targetKind: "book-page",
+      targetId: "page-14",
+      targetLabel: "14",
+    });
+
+    expect(job.jobType).toBe("generate-book-page-thumbnail");
+    expect(job.jobLabel).toBe("Book Page Thumbnail");
+    expect(job.jobDescription).toBe("Generates thumbnails for comic book pages.");
+    expect(job.queueLabel).toBe("Book Page Thumbnail");
+    expect(job.targetLabel).toBe("14");
+    expect(job.statusMessage).toBe("Generating thumbnail");
+  });
+
+  it("groups visible live jobs by job kind", () => {
+    const jobs = [
+      mapJobRun({ ...baseJob, id: "page-14", type: "generate-book-page-thumbnail", status: "running" }),
+      mapJobRun({ ...baseJob, id: "page-13", type: "generate-book-page-thumbnail", status: "queued" }),
+      mapJobRun({ ...baseJob, id: "probe", type: "probe-video", status: "queued" }),
+    ];
+
+    const groups = groupJobRunsByKind(jobs);
+
+    expect(groups.map((group) => group.jobLabel)).toEqual([
+      "Book Page Thumbnail",
+      "Video Probe",
+    ]);
+    expect(groups[0]).toMatchObject({
+      activeCount: 1,
+      waitingCount: 1,
+      totalCount: 2,
+    });
+    expect(groups[0].jobs.map((job) => job.id)).toEqual(["page-14", "page-13"]);
   });
 
   it("builds queue summaries and dashboard buckets from jobs", () => {

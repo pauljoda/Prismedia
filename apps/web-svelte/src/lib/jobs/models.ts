@@ -147,6 +147,9 @@ export interface QueueSummary {
 
 export interface JobRun {
   id: string;
+  jobType: string;
+  jobLabel: string;
+  jobDescription: string;
   queueName: QueueName;
   queueLabel: string;
   status: JobStatus;
@@ -158,11 +161,25 @@ export interface JobRun {
   jobKind: JobKind | null;
   progress: number;
   attempts: number;
+  statusMessage: string | null;
   error: string | null;
   startedAt: string | null;
   finishedAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface JobRunGroup {
+  key: string;
+  jobType: string;
+  jobLabel: string;
+  jobDescription: string;
+  queueName: QueueName;
+  queueLabel: string;
+  jobs: JobRun[];
+  activeCount: number;
+  waitingCount: number;
+  totalCount: number;
 }
 
 export interface JobsDashboard {

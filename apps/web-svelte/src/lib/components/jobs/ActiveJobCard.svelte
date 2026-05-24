@@ -3,7 +3,10 @@
   import { StatusLed, cn } from "@prismedia/ui-svelte";
   import type { JobRun } from "$lib/jobs/models";
   import {
+    displayJobDetail,
     displayJobHeading,
+    displayJobKind,
+    formatTargetDetail,
     formatElapsed,
     isForceRebuildJob,
     statusLabel,
@@ -22,6 +25,7 @@
   const isRunning = $derived(job.status === "active");
   const isCancelling = $derived(cancellingJobRunId === job.id);
   const forceRebuild = $derived(isForceRebuildJob(job));
+  const targetDetail = $derived(formatTargetDetail(job));
 </script>
 
 <div
@@ -30,13 +34,22 @@
     forceRebuild && "bg-status-error/[0.03]",
   )}
 >
-  <div class="flex items-center gap-3 px-3 py-2.5">
+  <div class="flex items-start gap-3 px-3 py-2.5">
     <StatusLed status={toneForJob(job)} pulse={isRunning} />
 
     <div class="min-w-0 flex-1">
       <p class="truncate text-[0.82rem] font-medium text-text-primary">
         {displayJobHeading(job, nsfwMode)}
       </p>
+      <div class="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[0.68rem] leading-snug text-text-disabled">
+        <span class="font-mono uppercase tracking-[0.08em] text-text-muted">
+          {displayJobKind(job, nsfwMode)}
+        </span>
+        {#if targetDetail}
+          <span class="min-w-0 truncate">{targetDetail}</span>
+        {/if}
+        <span class="min-w-0 truncate text-text-muted">{displayJobDetail(job, nsfwMode)}</span>
+      </div>
     </div>
 
     {#if isRunning}

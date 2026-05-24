@@ -26,6 +26,7 @@
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import {
     buildJobsDashboard,
+    groupJobRunsByKind,
     jobTypesForQueue,
     type ScheduleInfo,
   } from "$lib/jobs/jobs-dashboard";
@@ -247,6 +248,8 @@
       (j) => j.status === "waiting" || j.status === "delayed",
     ),
   );
+  const runningGroups = $derived(groupJobRunsByKind(runningJobs));
+  const queuedGroups = $derived(groupJobRunsByKind(queuedJobs));
 
   const runningOverflow = $derived(Math.max(0, totalActive - runningJobs.length));
   const queuedOverflow = $derived(Math.max(0, totalQueued - queuedJobs.length));
@@ -422,13 +425,30 @@
             "border-border-accent shadow-[var(--shadow-glow-accent)]",
           )}
         >
-          {#each runningJobs as job (job.id)}
-            <ActiveJobCard
-              {job}
-              nsfwMode={nsfw.mode}
-              {cancellingJobRunId}
-              onCancelJob={handleCancelJob}
-            />
+          {#each runningGroups as group (group.key)}
+            <div class="border-b border-border-subtle/50 last:border-0">
+              <div class="flex items-start justify-between gap-3 bg-surface-2/45 px-3 py-2">
+                <div class="min-w-0">
+                  <h3 class="truncate text-[0.72rem] font-semibold uppercase tracking-[0.12em] text-text-accent">
+                    {group.jobLabel}
+                  </h3>
+                  <p class="mt-0.5 line-clamp-1 text-[0.68rem] text-text-disabled">
+                    {group.jobDescription}
+                  </p>
+                </div>
+                <span class="shrink-0 text-[0.65rem] text-text-disabled">
+                  {group.activeCount} running
+                </span>
+              </div>
+              {#each group.jobs as job (job.id)}
+                <ActiveJobCard
+                  {job}
+                  nsfwMode={nsfw.mode}
+                  {cancellingJobRunId}
+                  onCancelJob={handleCancelJob}
+                />
+              {/each}
+            </div>
           {/each}
           {#if runningOverflow > 0}
             <div class="border-t border-border-subtle/40 bg-surface-2/30 px-3 py-1.5 text-center text-[0.65rem] text-text-disabled">
@@ -458,13 +478,30 @@
       </div>
       {#if queuedJobs.length > 0}
         <div class="surface-card no-lift overflow-hidden">
-          {#each queuedJobs as job (job.id)}
-            <ActiveJobCard
-              {job}
-              nsfwMode={nsfw.mode}
-              {cancellingJobRunId}
-              onCancelJob={handleCancelJob}
-            />
+          {#each queuedGroups as group (group.key)}
+            <div class="border-b border-border-subtle/50 last:border-0">
+              <div class="flex items-start justify-between gap-3 bg-surface-2/35 px-3 py-2">
+                <div class="min-w-0">
+                  <h3 class="truncate text-[0.72rem] font-semibold uppercase tracking-[0.12em] text-text-muted">
+                    {group.jobLabel}
+                  </h3>
+                  <p class="mt-0.5 line-clamp-1 text-[0.68rem] text-text-disabled">
+                    {group.jobDescription}
+                  </p>
+                </div>
+                <span class="shrink-0 text-[0.65rem] text-text-disabled">
+                  {group.waitingCount} queued
+                </span>
+              </div>
+              {#each group.jobs as job (job.id)}
+                <ActiveJobCard
+                  {job}
+                  nsfwMode={nsfw.mode}
+                  {cancellingJobRunId}
+                  onCancelJob={handleCancelJob}
+                />
+              {/each}
+            </div>
           {/each}
           {#if queuedOverflow > 0}
             <div class="border-t border-border-subtle/40 bg-surface-2/30 px-3 py-1.5 text-center text-[0.65rem] text-text-disabled">

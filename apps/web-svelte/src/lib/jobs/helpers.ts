@@ -113,7 +113,16 @@ export function statusLabel(status: JobRun["status"]): string {
 }
 
 export function jobHeading(job: JobRun): string {
-  return job.targetLabel ?? `${job.queueLabel} task`;
+  return job.targetLabel ?? job.jobLabel;
+}
+
+export function formatTargetDetail(job: JobRun): string | null {
+  const targetType = job.targetType?.trim();
+  const targetId = job.targetId?.trim();
+  if (!targetType && !targetId) return null;
+
+  const label = targetType ? targetType.replaceAll("-", " ") : "target";
+  return targetId ? `${label} ${targetId}` : label;
 }
 
 export function maintenanceJobLogRedacted(job: JobRun, nsfwMode: string) {
@@ -128,6 +137,16 @@ export function displayJobHeading(job: JobRun, nsfwMode: string): string {
 export function displayDescribeTrigger(job: JobRun, nsfwMode: string): string {
   if (maintenanceJobLogRedacted(job, nsfwMode)) return "Background file layout task";
   return describeTrigger(job);
+}
+
+export function displayJobKind(job: JobRun, nsfwMode: string): string {
+  if (maintenanceJobLogRedacted(job, nsfwMode)) return "Library Maintenance";
+  return job.jobLabel;
+}
+
+export function displayJobDetail(job: JobRun, nsfwMode: string): string {
+  if (maintenanceJobLogRedacted(job, nsfwMode)) return "Background file layout task";
+  return job.statusMessage?.trim() || describeTrigger(job);
 }
 
 export function jobBadgeVariant(job: JobRun): BadgeVariant {
