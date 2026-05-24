@@ -752,7 +752,7 @@ public sealed class IdentifyPluginService {
         manifest.Supports.Any(support => support.EntityKind.Equals(kind, StringComparison.OrdinalIgnoreCase));
 
     private static IReadOnlyList<EntityMetadataProposal> StructuralChildProposals(EntityMetadataProposal proposal) =>
-        proposal.Children
+        (proposal.Children ?? [])
             .Where(child => !IsRelationshipMetadataKind(child.TargetKind))
             .ToArray();
 
@@ -762,7 +762,7 @@ public sealed class IdentifyPluginService {
             relationships.AddRange(proposal.Relationships);
         }
 
-        relationships.AddRange(proposal.Children.Where(child => IsRelationshipMetadataKind(child.TargetKind)));
+        relationships.AddRange((proposal.Children ?? []).Where(child => IsRelationshipMetadataKind(child.TargetKind)));
 
         return relationships
             .GroupBy(child => child.ProposalId, StringComparer.Ordinal)

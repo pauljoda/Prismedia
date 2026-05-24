@@ -800,7 +800,7 @@
             {#each ["all", "scene", "performer"] as const as filter (filter)}
               <button
                 onclick={() => (capFilter = filter)}
-                class={"flex items-center gap-1.5 px-2.5 py-1.5 text-xs transition-all duration-fast " +
+                class={"flex items-center gap-1.5 px-2.5 py-1.5 rounded-xs text-xs transition-all duration-fast " +
                   (capFilter === filter
                     ? "bg-accent-950 text-text-accent border border-border-accent"
                     : "text-text-muted hover:text-text-secondary border border-transparent")}
@@ -864,20 +864,17 @@
                     <div class="min-w-0 flex-1">
                       <div class="flex items-center gap-2.5 flex-wrap">
                         <p class="text-sm font-semibold">{plugin.name}</p>
-                        <span class="tag-chip tag-chip-accent text-[0.55rem]"></span>
                         <Badge variant={plugin.installed && plugin.enabled ? "accent" : "default"}>
                           {#snippet children()}{plugin.installed && plugin.enabled ? "Installed" : "Available"}{/snippet}
                         </Badge>
                         {#if plugin.missingAuthKeys.length === 0 && hasAuth}
-                          <span class="inline-flex items-center gap-1 text-[0.55rem] px-1.5 py-0.5 bg-status-success/10 text-status-success-text border border-status-success/20">
-                            <Check class="h-2.5 w-2.5" />
-                            Auth OK
-                          </span>
+                          <Badge variant="success">
+                            {#snippet children()}<Check class="h-2.5 w-2.5" />Auth OK{/snippet}
+                          </Badge>
                         {:else if plugin.missingAuthKeys.length > 0}
-                          <span class="inline-flex items-center gap-1 text-[0.55rem] px-1.5 py-0.5 bg-status-warning/10 text-status-warning-text border border-status-warning/20">
-                            <AlertCircle class="h-2.5 w-2.5" />
-                            Auth Required
-                          </span>
+                          <Badge variant="warning">
+                            {#snippet children()}<AlertCircle class="h-2.5 w-2.5" />Auth Required{/snippet}
+                          </Badge>
                         {/if}
                       </div>
                       <p class="text-mono-sm text-text-disabled mt-0.5">
@@ -1027,22 +1024,19 @@
                           {#snippet children()}{plugin.enabled ? "Enabled" : "Disabled"}{/snippet}
                         </Badge>
                         {#if update?.updateAvailable}
-                          <span class="inline-flex items-center gap-1 text-[0.55rem] px-1.5 py-0.5 bg-status-success/10 text-status-success-text border border-status-success/20">
-                            <Sparkles class="h-2.5 w-2.5" />
-                            Update available
-                          </span>
+                          <Badge variant="success">
+                            {#snippet children()}<Sparkles class="h-2.5 w-2.5" />Update available{/snippet}
+                          </Badge>
                         {/if}
                         {#if hasAuth}
                           {#if plugin.authStatus === "ok"}
-                            <span class="inline-flex items-center gap-1 text-[0.55rem] px-1.5 py-0.5 bg-status-success/10 text-status-success-text border border-status-success/20">
-                              <Check class="h-2.5 w-2.5" />
-                              Auth OK
-                            </span>
+                            <Badge variant="success">
+                              {#snippet children()}<Check class="h-2.5 w-2.5" />Auth OK{/snippet}
+                            </Badge>
                           {:else}
-                            <span class="inline-flex items-center gap-1 text-[0.55rem] px-1.5 py-0.5 bg-status-warning/10 text-status-warning-text border border-status-warning/20">
-                              <AlertCircle class="h-2.5 w-2.5" />
-                              Auth Required
-                            </span>
+                            <Badge variant="warning">
+                              {#snippet children()}<AlertCircle class="h-2.5 w-2.5" />Auth Required{/snippet}
+                            </Badge>
                           {/if}
                         {/if}
                       </div>
@@ -1198,7 +1192,7 @@
                     {#if caps.length > 0}
                       <div class="flex flex-wrap items-center gap-1.5 mt-2.5">
                         {#each caps as key (key)}
-                          <span class={"text-[0.6rem] px-1.5 py-0.5 " + (CAPABILITY_META[key]?.category === "performer" ? "bg-accent-950/80 text-text-accent border border-border-accent/30" : "tag-chip-default")}>
+                          <span class={"rounded-xs text-[0.6rem] px-1.5 py-0.5 " + (CAPABILITY_META[key]?.category === "performer" ? "bg-accent-950/80 text-text-accent border border-border-accent/30" : "tag-chip-default")}>
                             {CAPABILITY_META[key]?.label ?? key}
                           </span>
                         {/each}
@@ -1293,7 +1287,6 @@
                 <div class="min-w-0 flex-1">
                   <div class="flex items-center gap-2 flex-wrap">
                     <p class="text-sm font-medium">{plugin.name}</p>
-                    <span class="tag-chip tag-chip-accent text-[0.55rem]"></span>
                     <span class="text-mono-sm text-text-disabled">v{plugin.version}</span>
                     {#if plugin.installed}
                       <Badge variant={plugin.enabled ? "accent" : "default"}>
@@ -1301,15 +1294,13 @@
                       </Badge>
                     {/if}
                     {#if plugin.missingAuthKeys.length === 0 && hasAuth}
-                      <span class="inline-flex items-center gap-1 text-[0.55rem] px-1.5 py-0.5 bg-status-success/10 text-status-success-text border border-status-success/20">
-                        <Check class="h-2.5 w-2.5" />
-                        Auth OK
-                      </span>
+                      <Badge variant="success">
+                        {#snippet children()}<Check class="h-2.5 w-2.5" />Auth OK{/snippet}
+                      </Badge>
                     {:else if plugin.missingAuthKeys.length > 0}
-                      <span class="inline-flex items-center gap-1 text-[0.55rem] px-1.5 py-0.5 bg-status-warning/10 text-status-warning-text border border-status-warning/20">
-                        <AlertCircle class="h-2.5 w-2.5" />
-                        Auth Required
-                      </span>
+                      <Badge variant="warning">
+                        {#snippet children()}<AlertCircle class="h-2.5 w-2.5" />Auth Required{/snippet}
+                      </Badge>
                     {/if}
                   </div>
                   <p class="text-text-disabled text-[0.65rem] mt-0.5 font-mono">
@@ -1575,7 +1566,7 @@
                   onclick={() => void testEndpoint(ep)}
                   disabled={sbTesting === ep.id}
                   aria-label="Test connection"
-                  class="p-1.5 text-text-muted transition-colors hover:bg-surface-2 hover:text-text-primary"
+                  class="p-1.5 rounded-xs text-text-muted transition-colors hover:bg-surface-2 hover:text-text-primary"
                 >
                   {#if sbTesting === ep.id}
                     <Loader2 class="h-3.5 w-3.5 animate-spin text-accent-400" />
@@ -1586,14 +1577,14 @@
                 <button
                   onclick={() => openEditStashBox(ep)}
                   aria-label="Edit"
-                  class="p-1.5 text-text-muted transition-colors hover:bg-surface-2 hover:text-text-primary"
+                  class="p-1.5 rounded-xs text-text-muted transition-colors hover:bg-surface-2 hover:text-text-primary"
                 >
                   <Pencil class="h-3.5 w-3.5" />
                 </button>
                 <button
                   onclick={() => void toggleEndpointEnabled(ep)}
                   aria-label={ep.enabled ? "Disable" : "Enable"}
-                  class="p-1.5 text-text-muted transition-colors hover:bg-surface-2 hover:text-text-primary"
+                  class="p-1.5 rounded-xs text-text-muted transition-colors hover:bg-surface-2 hover:text-text-primary"
                 >
                   {#if ep.enabled}
                     <ToggleRight class="h-3.5 w-3.5 text-text-accent" />
@@ -1604,7 +1595,7 @@
                 <button
                   onclick={() => void deleteEndpoint(ep)}
                   aria-label="Remove"
-                  class="p-1.5 text-text-muted transition-colors hover:bg-status-error/10 hover:text-status-error-text"
+                  class="p-1.5 rounded-xs text-text-muted transition-colors hover:bg-status-error/10 hover:text-status-error-text"
                 >
                   <Trash2 class="h-3.5 w-3.5" />
                 </button>
@@ -1654,7 +1645,7 @@
                         sbEndpoint = preset.url;
                         if (!sbName) sbName = preset.label;
                       }}
-                      class="border border-border-subtle px-1.5 py-0.5 text-[0.6rem] text-text-disabled transition-colors hover:border-border-default hover:text-text-muted"
+                      class="border border-border-subtle rounded-xs px-1.5 py-0.5 text-[0.6rem] text-text-disabled transition-colors hover:border-border-default hover:text-text-muted"
                     >
                       {preset.label}
                     </button>

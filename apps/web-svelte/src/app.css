@@ -1099,36 +1099,42 @@
     background: var(--color-surface-3);
     color: var(--color-text-muted);
     border: 1px solid transparent;
+    border-radius: var(--radius-xs);
   }
 
   .tag-chip-accent {
     background: rgba(242, 194, 106, 0.1);
     color: var(--color-accent-400);
     border: 1px solid rgba(242, 194, 106, 0.15);
+    border-radius: var(--radius-xs);
   }
 
   .tag-chip-info {
     background: rgba(74, 128, 179, 0.1);
     color: var(--color-info-text);
     border: 1px solid rgba(74, 128, 179, 0.15);
+    border-radius: var(--radius-xs);
   }
 
   .tag-chip-success {
     background: rgba(90, 150, 112, 0.1);
     color: var(--color-success-text);
     border: 1px solid rgba(90, 150, 112, 0.15);
+    border-radius: var(--radius-xs);
   }
 
   .tag-chip-warning {
     background: rgba(184, 149, 69, 0.1);
     color: var(--color-warning-text);
     border: 1px solid rgba(184, 149, 69, 0.15);
+    border-radius: var(--radius-xs);
   }
 
   .tag-chip-error {
     background: rgba(179, 79, 86, 0.1);
     color: var(--color-error-text);
     border: 1px solid rgba(179, 79, 86, 0.15);
+    border-radius: var(--radius-xs);
   }
 
   /* ── Chip input (editable tag/performer tokens) ── */
