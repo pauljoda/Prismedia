@@ -51,6 +51,9 @@ export interface IdentifyRootReviewApplyInput {
   selectedTags?: Record<string, boolean>;
   selectedCredits?: Record<string, boolean>;
   selectedCascade?: Record<string, boolean>;
+  selectedFieldsByProposal?: Record<string, Record<string, boolean>>;
+  selectedImagesByProposal?: Record<string, Record<string, string | null>>;
+  selectedTagsByProposal?: Record<string, Record<string, boolean>>;
 }
 
 export interface IdentifyRootReviewApplyPayload {
@@ -164,11 +167,23 @@ export function buildRootReviewApplyPayload(
     fieldKeys.map((field) => [field, input.selectedFields[field] === true]),
   );
   const selectedImages = selectedReviewImages(input.selectedImages);
+  const selectedFieldsByProposal = {
+    ...(input.selectedFieldsByProposal ?? {}),
+    [result.proposalId]: fields,
+  };
+  const selectedImagesByProposal = {
+    ...(input.selectedImagesByProposal ?? {}),
+    [result.proposalId]: selectedImages,
+  };
+  const selectedTagsByProposal = {
+    ...(input.selectedTagsByProposal ?? {}),
+    [result.proposalId]: input.selectedTags ?? {},
+  };
   const proposal = buildProposalForApply(result, {
-    selectedFieldsByProposal: { [result.proposalId]: fields },
-    selectedImagesByProposal: { [result.proposalId]: selectedImages },
+    selectedFieldsByProposal,
+    selectedImagesByProposal,
     selectedCreditsByProposal: { [result.proposalId]: input.selectedCredits ?? {} },
-    selectedTagsByProposal: { [result.proposalId]: input.selectedTags ?? {} },
+    selectedTagsByProposal,
     selectedCascade: input.selectedCascade ?? {},
   });
 

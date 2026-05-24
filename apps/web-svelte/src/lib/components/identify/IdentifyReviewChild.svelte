@@ -6,8 +6,6 @@
     Images,
     Info,
     Layers,
-    Loader2,
-    SkipForward,
     Users,
   } from "@lucide/svelte";
   import { cn, StatusLed } from "@prismedia/ui-svelte";
@@ -67,6 +65,9 @@
   const nonCreditRelationships = $derived(relationships.filter((r) => r.targetKind !== "person"));
   const imageGroups = $derived(groupImages(reviewableImages(proposal.images ?? [])));
   const artworkCandidateCount = $derived(imageGroups.reduce((count, group) => count + group.images.length, 0));
+  const selectedChildCount = $derived(
+    children.filter((child) => store.isReviewProposalSelected(child.proposalId)).length,
+  );
 
   const parentChildren = $derived(structuralChildProposals(parentProposal));
   const currentIndex = $derived(parentChildren.findIndex((c) => c.proposalId === proposal.proposalId));
@@ -76,8 +77,12 @@
   $effect(() => {
     if (reviewStateProposalId === proposal.proposalId) return;
     reviewStateProposalId = proposal.proposalId;
-    selectedFields = Object.fromEntries(FIELD_KEYS.map((k) => [k, hasField(k)]));
-    selectedImages = defaultImageSelectionForReview(proposal);
+    selectedFields = store.getReviewFieldSelections(proposal.proposalId) ??
+      Object.fromEntries(FIELD_KEYS.map((k) => [k, hasField(k)]));
+    selectedImages = store.getReviewImageSelections(proposal.proposalId) ??
+      defaultImageSelectionForReview(proposal);
+    store.setReviewFieldSelections(proposal.proposalId, selectedFields);
+    store.setReviewImageSelections(proposal.proposalId, selectedImages);
   });
 
   function hasField(field: string): boolean {
@@ -162,6 +167,26 @@
 
   function setRelationshipSelected(result: EntityMetadataProposal, selected: boolean) {
     store.setReviewProposalSelected(result.proposalId, selected);
+  }
+
+  function setFieldSelected(field: string, selected: boolean) {
+    selectedFields = {
+      ...selectedFields,
+      [field]: selected,
+    };
+    store.setReviewFieldSelected(proposal.proposalId, field, selected);
+  }
+
+  function setImageSelected(kind: string, url: string | null) {
+    selectedImages = {
+      ...selectedImages,
+      [kind]: url,
+    };
+    store.setReviewImageSelected(proposal.proposalId, kind, url);
+  }
+
+  function setChildSelected(child: EntityMetadataProposal, selected: boolean) {
+    store.setReviewProposalSelected(child.proposalId, selected);
   }
 
   function goBackToParent() {
@@ -286,7 +311,12 @@
       {#if hasField(field)}
         <div class="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 border-b border-border-subtle px-3.5 py-3 last:border-b-0 md:grid-cols-[auto_110px_1fr_1fr]">
           <label class="flex items-center">
-            <input type="checkbox" class="h-4 w-4 accent-accent-500" bind:checked={selectedFields[field]} />
+            <input
+              type="checkbox"
+              class="h-4 w-4 accent-accent-500"
+              checked={selectedFields[field]}
+              onchange={(event) => setFieldSelected(field, event.currentTarget.checked)}
+            />
           </label>
           <div class="md:contents">
             <div>
@@ -389,7 +419,7 @@
                       : "border-border-default hover:border-border-accent",
                   )}
                   style="aspect-ratio: {group.kind === 'poster' ? '2/3' : '16/9'};"
-                  onclick={() => (selectedImages[group.kind] = image.url)}
+                  onclick={() => setImageSelected(group.kind, image.url)}
                 >
                   <img src={image.url} alt="" class="h-full w-full object-cover" />
                   {#if selectedImages[group.kind] === image.url}
@@ -414,28 +444,30 @@
       <header class="flex items-center gap-2.5 border-b border-border-subtle bg-surface-2 px-3.5 py-2.5">
         <Layers class="h-3.5 w-3.5 text-text-accent" />
         <span class="text-kicker text-text-accent">Children</span>
-        <span class="font-mono text-[0.7rem] text-text-muted">{children.length} matched</span>
-        <div class="flex-1"></div>
-        <button
-          type="button"
-          class="inline-flex h-7 items-center gap-1 rounded-xs border border-border-default bg-surface-2 px-2 text-[0.72rem] text-text-primary transition-colors hover:bg-surface-3"
-        >
-          <Check class="h-3 w-3" />
-          Accept all
-        </button>
+        <span class="font-mono text-[0.7rem] text-text-muted">{selectedChildCount} of {children.length} selected</span>
       </header>
-      <div class="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 lg:grid-cols-4">
+      <div class="grid grid-cols-1 gap-2 p-3.5 sm:grid-cols-2">
         {#each children as child, i (child.proposalId)}
+          {@const childImage = preferredProposalImage(child)}
           {@const childCard = {
             entity: { id: child.proposalId, kind: child.targetKind, title: child.patch?.title ?? `Episode ${i + 1}`, parentEntityId: null, sortOrder: i, capabilities: [], childrenByKind: [], relationships: [] },
             aspectRatio: "video" as const,
-            cover: child.images[0] ? { src: child.images[0].url, alt: child.patch?.title ?? "" } : null,
+            cover: childImage ? { src: childImage.url, alt: child.patch?.title ?? "" } : null,
             hover: { kind: "none" } as const,
             subtitle: child.targetKind,
             custom: child.patch?.positions?.episode ? { bottomLeft: { label: `E${String(child.patch?.positions.episode).padStart(2, "0")}` } } : undefined,
-            meta: [],
+            meta: child.confidence ? [{ icon: "count" as const, label: `${Math.round(child.confidence * 100)}%` }] : [],
           }}
-          <EntityThumbnail card={childCard} linkable={false} onActivate={() => goToChild(child)} />
+          <EntityThumbnail
+            card={childCard}
+            layout="list"
+            linkable={false}
+            onActivate={() => goToChild(child)}
+            selectable
+            selectMode
+            selected={store.isReviewProposalSelected(child.proposalId)}
+            onSelectedChange={(selected) => setChildSelected(child, selected)}
+          />
         {/each}
       </div>
     </section>
@@ -477,23 +509,5 @@
         {/if}
       </div>
     {/if}
-    <div class="flex-1"></div>
-    <button
-      type="button"
-      class="inline-flex h-9 items-center gap-1.5 rounded-xs border border-border-default bg-surface-2 px-3 text-[0.78rem] text-text-muted transition-colors hover:bg-surface-3"
-      onclick={() => nextChild ? goToSibling(nextChild) : goBackToParent()}
-    >
-      <SkipForward class="h-3.5 w-3.5" />
-      Skip
-    </button>
-    <button
-      type="button"
-      class="inline-flex h-9 items-center gap-1.5 rounded-xs border border-border-accent-strong px-3 text-[0.78rem] text-text-primary transition-all"
-      style="background: linear-gradient(135deg, rgba(242,194,106,0.24), rgba(242,194,106,0.1)); box-shadow: 0 0 18px rgba(242,194,106,0.16);"
-      onclick={() => nextChild ? goToSibling(nextChild) : goBackToParent()}
-    >
-      <Check class="h-4 w-4" />
-      Accept {proposal.patch?.title ?? ""}
-    </button>
   </div>
 </div>

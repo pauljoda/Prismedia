@@ -215,6 +215,46 @@ describe("identify review helpers", () => {
     expect(payload.proposal.relationships).toEqual([]);
     expect(payload.proposal.images.map((image) => image.kind)).toEqual(["poster"]);
   });
+
+  it("carries walked child field and artwork choices into the root apply payload", () => {
+    const episode = proposal("episode-1", "video", {
+      title: "Episode 1",
+      imageKind: "poster",
+      imageUrl: "https://example.test/episode-poster.jpg",
+    });
+    episode.patch.description = "Episode description";
+    episode.images.push({ kind: "backdrop", url: "https://example.test/episode-backdrop.jpg", source: "tmdb" });
+    const root = proposal("series", "video-series", {
+      title: "Series",
+      children: [episode],
+    });
+
+    const payload = buildRootReviewApplyPayload(root, {
+      selectedFields: {
+        title: true,
+        images: true,
+      },
+      selectedImages: {},
+      selectedFieldsByProposal: {
+        "episode-1": {
+          title: true,
+          description: false,
+          images: true,
+        },
+      },
+      selectedImagesByProposal: {
+        "episode-1": {
+          poster: "https://example.test/episode-poster.jpg",
+          backdrop: null,
+        },
+      },
+    });
+
+    const payloadEpisode = expectSingle(payload.proposal.children);
+    expect(payloadEpisode.patch.title).toBe("Episode 1");
+    expect(payloadEpisode.patch.description).toBeNull();
+    expect(payloadEpisode.images.map((image) => image.url)).toEqual(["https://example.test/episode-poster.jpg"]);
+  });
 });
 
 function proposal(

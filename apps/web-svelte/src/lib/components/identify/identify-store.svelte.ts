@@ -82,6 +82,9 @@ export class IdentifyStore {
   returnEntityId = $state<string | null>(null);
   reviewRootProposalId = $state<string | null>(null);
   reviewCascadeSelections = $state<Record<string, boolean>>({});
+  reviewFieldSelections = $state<Record<string, Record<string, boolean>>>({});
+  reviewImageSelections = $state<Record<string, Record<string, string | null>>>({});
+  reviewTagSelections = $state<Record<string, Record<string, boolean>>>({});
 
   supportedKinds = $derived.by((): IdentifyKindInfo[] => {
     const kindMap = new Map<string, IdentifyKindInfo>();
@@ -149,7 +152,9 @@ export class IdentifyStore {
         addIdentifyQueueItem(entityId),
         fetchEntityDetail(entityId),
       ]);
+      const queue = await fetchIdentifyQueue();
       this.providers = providers;
+      this.queue = queue.map((queued) => queueItemFromApi(queued));
       this.#upsertQueueItem(queueItemFromApi(item, undefined, detail));
       return item;
     } catch (err) {
@@ -227,12 +232,21 @@ export class IdentifyStore {
     proposal: EntityMetadataProposal,
     selectedFields: string[],
     selectedImages?: Record<string, string | null>,
+    options: { navigateNext?: boolean } = {},
   ) {
     this.applying = true;
     this.error = null;
     try {
       const item = await applyIdentifyQueueItem(entity.id, proposal, selectedFields, selectedImages);
       this.#removeActiveQueueItem(item.entityId);
+      if (options.navigateNext) {
+        const next = this.nextQueueItem(item.entityId);
+        if (next) {
+          this.reviewQueueItem(next);
+          return;
+        }
+      }
+
       if (this.returnEntityId) {
         const href = await resolveEntityHrefById(this.returnEntityId);
         if (href) {
@@ -338,6 +352,9 @@ export class IdentifyStore {
     if (this.reviewRootProposalId === proposal.proposalId) return;
     this.reviewRootProposalId = proposal.proposalId;
     this.reviewCascadeSelections = {};
+    this.reviewFieldSelections = {};
+    this.reviewImageSelections = {};
+    this.reviewTagSelections = {};
   }
 
   isReviewProposalSelected(proposalId: string): boolean {
@@ -356,6 +373,70 @@ export class IdentifyStore {
       ...this.reviewCascadeSelections,
       [proposalId]: false,
     };
+  }
+
+  nextQueueItem(currentEntityId: string): IdentifyQueueItem | null {
+    return this.queue.find((item) =>
+      item.entityId !== currentEntityId &&
+      (item.state === "proposal" || item.state === "search" || item.state === "error"),
+    ) ?? null;
+  }
+
+  getReviewFieldSelections(proposalId: string): Record<string, boolean> | null {
+    const selected = this.reviewFieldSelections[proposalId];
+    return selected ? { ...selected } : null;
+  }
+
+  setReviewFieldSelections(proposalId: string, selectedFields: Record<string, boolean>) {
+    this.reviewFieldSelections = {
+      ...this.reviewFieldSelections,
+      [proposalId]: { ...selectedFields },
+    };
+  }
+
+  setReviewFieldSelected(proposalId: string, field: string, selected: boolean) {
+    this.setReviewFieldSelections(proposalId, {
+      ...(this.reviewFieldSelections[proposalId] ?? {}),
+      [field]: selected,
+    });
+  }
+
+  getReviewImageSelections(proposalId: string): Record<string, string | null> | null {
+    const selected = this.reviewImageSelections[proposalId];
+    return selected ? { ...selected } : null;
+  }
+
+  setReviewImageSelections(proposalId: string, selectedImages: Record<string, string | null>) {
+    this.reviewImageSelections = {
+      ...this.reviewImageSelections,
+      [proposalId]: { ...selectedImages },
+    };
+  }
+
+  setReviewImageSelected(proposalId: string, kind: string, url: string | null) {
+    this.setReviewImageSelections(proposalId, {
+      ...(this.reviewImageSelections[proposalId] ?? {}),
+      [kind]: url,
+    });
+  }
+
+  getReviewTagSelections(proposalId: string): Record<string, boolean> | null {
+    const selected = this.reviewTagSelections[proposalId];
+    return selected ? { ...selected } : null;
+  }
+
+  setReviewTagSelections(proposalId: string, selectedTags: Record<string, boolean>) {
+    this.reviewTagSelections = {
+      ...this.reviewTagSelections,
+      [proposalId]: { ...selectedTags },
+    };
+  }
+
+  setReviewTagSelected(proposalId: string, tag: string, selected: boolean) {
+    this.setReviewTagSelections(proposalId, {
+      ...(this.reviewTagSelections[proposalId] ?? {}),
+      [tag]: selected,
+    });
   }
 
   destroy() {

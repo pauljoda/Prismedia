@@ -26,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated web app manifest and mobile browser metadata for home-screen installation and browser UI theme colors.
 
 ### Fixed
+- Fixed Identify proposal review so structural children use selectable thumbnails for inclusion and final accept actions stay on the root review.
 - Fixed Identify search results so candidates show provider artwork and descriptions in list rows, and clicking a candidate selects it instead of navigating.
 - Fixed Identify proposal review so current metadata, artwork selections, scoped credits, and tag toggles reflect what will actually be applied.
 - Fixed Identify relationship review so selectable thumbnail cards can disable cast, studio, and related entities before apply.

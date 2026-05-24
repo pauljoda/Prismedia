@@ -84,15 +84,25 @@
   const selectedRelationshipCount = $derived(
     relationships.filter((relationship) => store.isReviewProposalSelected(relationship.proposalId)).length,
   );
+  const selectedChildCount = $derived(
+    children.filter((child) => store.isReviewProposalSelected(child.proposalId)).length,
+  );
+  const nextQueueItem = $derived(store.nextQueueItem(entity.id));
   const contextPosterUrl = $derived(entity.coverUrl ?? proposalImageUrl(["poster", "thumbnail", "cover"]));
 
   $effect(() => {
     if (reviewStateProposalId === proposal.proposalId) return;
     reviewStateProposalId = proposal.proposalId;
     store.beginProposalReview(proposal);
-    selectedFields = Object.fromEntries(FIELD_KEYS.map((k) => [k, hasField(k)]));
-    selectedImages = defaultImageSelectionForReview(proposal);
-    selectedTags = defaultTagSelection();
+    selectedFields = store.getReviewFieldSelections(proposal.proposalId) ??
+      Object.fromEntries(FIELD_KEYS.map((k) => [k, hasField(k)]));
+    selectedImages = store.getReviewImageSelections(proposal.proposalId) ??
+      defaultImageSelectionForReview(proposal);
+    selectedTags = store.getReviewTagSelections(proposal.proposalId) ??
+      defaultTagSelection();
+    store.setReviewFieldSelections(proposal.proposalId, selectedFields);
+    store.setReviewImageSelections(proposal.proposalId, selectedImages);
+    store.setReviewTagSelections(proposal.proposalId, selectedTags);
   });
 
   function hasField(field: string): boolean {
@@ -257,26 +267,61 @@
   function setRelationshipSelected(result: EntityMetadataProposal, selected: boolean) {
     store.setReviewProposalSelected(result.proposalId, selected);
     if (result.targetKind === "tag") {
-      selectedTags[proposalTitle(result)] = selected;
+      setTagSelected(proposalTitle(result), selected);
     }
   }
 
   function setTagSelected(tag: string, selected: boolean) {
-    selectedTags[tag] = selected;
+    selectedTags = {
+      ...selectedTags,
+      [tag]: selected,
+    };
+    store.setReviewTagSelected(proposal.proposalId, tag, selected);
     const relationship = tagRelationshipForTitle(tag);
     if (relationship) {
       store.setReviewProposalSelected(relationship.proposalId, selected);
     }
   }
 
-  function handleApply() {
+  function setFieldSelected(field: string, selected: boolean) {
+    selectedFields = {
+      ...selectedFields,
+      [field]: selected,
+    };
+    store.setReviewFieldSelected(proposal.proposalId, field, selected);
+  }
+
+  function setAllFields(selected: boolean) {
+    selectedFields = Object.fromEntries(FIELD_KEYS.map((k) => [k, selected ? hasField(k) : false]));
+    store.setReviewFieldSelections(proposal.proposalId, selectedFields);
+  }
+
+  function setImageSelected(kind: string, url: string | null) {
+    selectedImages = {
+      ...selectedImages,
+      [kind]: url,
+    };
+    store.setReviewImageSelected(proposal.proposalId, kind, url);
+  }
+
+  function setChildSelected(child: EntityMetadataProposal, selected: boolean) {
+    store.setReviewProposalSelected(child.proposalId, selected);
+  }
+
+  function handleApply(navigateNext = false) {
+    store.setReviewFieldSelections(proposal.proposalId, selectedFields);
+    store.setReviewImageSelections(proposal.proposalId, selectedImages);
+    store.setReviewTagSelections(proposal.proposalId, selectedTags);
     const payload = buildRootReviewApplyPayload(proposal, {
       selectedFields,
       selectedImages,
       selectedTags,
       selectedCascade: store.reviewCascadeSelections,
+      selectedFieldsByProposal: store.reviewFieldSelections,
+      selectedImagesByProposal: store.reviewImageSelections,
+      selectedTagsByProposal: store.reviewTagSelections,
     });
-    void store.applyProposal(entity, payload.proposal, payload.selectedFields, payload.selectedImages);
+    void store.applyProposal(entity, payload.proposal, payload.selectedFields, payload.selectedImages, { navigateNext });
   }
 
   function walkChild(child: EntityMetadataProposal) {
@@ -369,14 +414,14 @@
       <button
         type="button"
         class="text-[0.72rem] text-text-muted transition-colors hover:text-text-primary"
-        onclick={() => { selectedFields = Object.fromEntries(FIELD_KEYS.map((k) => [k, hasField(k)])); }}
+        onclick={() => setAllFields(true)}
       >
         All
       </button>
       <button
         type="button"
         class="text-[0.72rem] text-text-muted transition-colors hover:text-text-primary"
-        onclick={() => { selectedFields = Object.fromEntries(FIELD_KEYS.map((k) => [k, false])); }}
+        onclick={() => setAllFields(false)}
       >
         None
       </button>
@@ -398,7 +443,8 @@
             <input
               type="checkbox"
               class="h-4 w-4 accent-accent-500"
-              bind:checked={selectedFields[field]}
+              checked={selectedFields[field]}
+              onchange={(event) => setFieldSelected(field, event.currentTarget.checked)}
             />
           </label>
           <div class="md:contents">
@@ -506,7 +552,7 @@
                       : "border-border-default hover:border-border-accent",
                   )}
                   style="aspect-ratio: {group.kind === 'poster' ? '2/3' : group.kind === 'backdrop' ? '16/9' : '2/1'};"
-                  onclick={() => (selectedImages[group.kind] = image.url)}
+                  onclick={() => setImageSelected(group.kind, image.url)}
                 >
                   <img src={image.url} alt="" class="h-full w-full object-cover" />
                   {#if selectedImages[group.kind] === image.url}
@@ -579,36 +625,29 @@
       <header class="flex items-center gap-2.5 border-b border-border-subtle bg-surface-2 px-3.5 py-2.5">
         <Layers class="h-3.5 w-3.5 text-text-accent" />
         <span class="text-kicker text-text-accent">Children</span>
-        <span class="font-mono text-[0.7rem] text-text-muted">{children.length} returned</span>
-        <div class="flex-1"></div>
-        <button
-          type="button"
-          class="inline-flex h-7 items-center gap-1 rounded-xs border border-border-default bg-surface-2 px-2 text-[0.72rem] text-text-primary transition-colors hover:bg-surface-3"
-        >
-          <Check class="h-3 w-3" />
-          Accept all
-        </button>
+        <span class="font-mono text-[0.7rem] text-text-muted">{selectedChildCount} of {children.length} selected</span>
       </header>
-      <div class="grid grid-cols-2 gap-4 p-4 sm:grid-cols-3 lg:grid-cols-4">
+      <div class="grid grid-cols-1 gap-2 p-3.5 sm:grid-cols-2">
         {#each children as child, i (child.proposalId)}
+          {@const childImage = preferredProposalImage(child)}
           {@const childCard = {
             entity: { id: child.proposalId, kind: child.targetKind, title: child.patch?.title ?? `Child ${i + 1}`, parentEntityId: null, sortOrder: i, capabilities: [], childrenByKind: [], relationships: [] },
             aspectRatio: "poster" as const,
-            cover: child.images[0] ? { src: child.images[0].url, alt: child.patch?.title ?? "" } : null,
+            cover: childImage ? { src: childImage.url, alt: child.patch?.title ?? "" } : null,
             hover: { kind: "none" } as const,
             subtitle: child.targetKind,
-            meta: [],
+            meta: child.confidence ? [{ icon: "count" as const, label: `${Math.round(child.confidence * 100)}%` }] : [],
           }}
-          <div class="relative flex flex-col gap-2">
-            <div class="absolute -top-2 right-2.5 z-10 flex gap-1">
-              {#if child.confidence}
-                <span class="rounded-xs border border-phosphor-600/20 bg-surface-3 px-1.5 py-0.5 font-mono text-[0.58rem] text-phosphor-600">
-                  {Math.round(child.confidence * 100)}%
-                </span>
-              {/if}
-            </div>
-            <EntityThumbnail card={childCard} linkable={false} onActivate={() => walkChild(child)} />
-          </div>
+          <EntityThumbnail
+            card={childCard}
+            layout="list"
+            linkable={false}
+            onActivate={() => walkChild(child)}
+            selectable
+            selectMode
+            selected={store.isReviewProposalSelected(child.proposalId)}
+            onSelectedChange={(selected) => setChildSelected(child, selected)}
+          />
         {/each}
       </div>
     </section>
@@ -629,6 +668,7 @@
       · {Object.values(selectedImages).filter(Boolean).length} imgs
       · {selectedRelationshipCount} rels
       · {selectedTagCount} tags
+      · {selectedChildCount} children
     </span>
     <div class="flex-1"></div>
     <button
@@ -644,17 +684,30 @@
       class="inline-flex h-9 items-center gap-1.5 rounded-xs border border-border-accent-strong px-3 text-[0.78rem] text-text-primary transition-all disabled:cursor-not-allowed disabled:opacity-40"
       style="background: linear-gradient(135deg, rgba(242,194,106,0.24), rgba(242,194,106,0.1)); box-shadow: 0 0 18px rgba(242,194,106,0.16);"
       disabled={store.applying}
-      onclick={handleApply}
+      onclick={() => handleApply(false)}
     >
       {#if store.applying}
         <Loader2 class="h-4 w-4 animate-spin" />
       {:else}
         <Check class="h-4 w-4" />
       {/if}
-      Apply
-      {#if children.length > 0}
-        & walk children
-      {/if}
+      Accept
     </button>
+    {#if nextQueueItem}
+      <button
+        type="button"
+        class="inline-flex h-9 items-center gap-1.5 rounded-xs border border-border-accent-strong px-3 text-[0.78rem] text-text-primary transition-all disabled:cursor-not-allowed disabled:opacity-40"
+        style="background: linear-gradient(135deg, rgba(242,194,106,0.24), rgba(242,194,106,0.1)); box-shadow: 0 0 18px rgba(242,194,106,0.16);"
+        disabled={store.applying}
+        onclick={() => handleApply(true)}
+      >
+        {#if store.applying}
+          <Loader2 class="h-4 w-4 animate-spin" />
+        {:else}
+          <Check class="h-4 w-4" />
+        {/if}
+        Accept and Next
+      </button>
+    {/if}
   </div>
 </div>
