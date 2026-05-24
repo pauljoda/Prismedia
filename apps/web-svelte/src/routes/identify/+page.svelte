@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
+  import { page } from "$app/state";
   import {
     AlertCircle,
     Check,
@@ -26,7 +27,13 @@
   setIdentifyStore(store);
 
   onMount(() => {
-    void store.loadInitial();
+    const entityId = page.url.searchParams.get("entity");
+    const from = page.url.searchParams.get("from");
+    if (entityId) {
+      void store.seedEntity(entityId, from);
+    } else {
+      void store.loadInitial();
+    }
   });
 
   onDestroy(() => {

@@ -352,15 +352,7 @@
 
       {#snippet extraActions()}
         {#if book}
-        <IdentifyButton
-          entityKind="book"
-          entityId={bookId}
-          title={bookTitle}
-          existingCreditNames={creditCards.map((credit) => credit.entity.title)}
-          existingTags={relationshipTags.map((tag) => tag.title)}
-          label="Identify"
-          onApplied={loadBook}
-        />
+        <IdentifyButton entityId={bookId} />
         {#if readerPageCount > 0}
           <button type="button" class="reader-action" onclick={openSelectedReader}>
             <Play class="h-3.5 w-3.5" />

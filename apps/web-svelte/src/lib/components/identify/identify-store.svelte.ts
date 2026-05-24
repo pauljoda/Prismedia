@@ -1,6 +1,8 @@
 import { getContext, setContext } from "svelte";
+import { goto } from "$app/navigation";
 import {
   fetchIdentifyEntities,
+  fetchIdentifyEntity,
   fetchPluginProviders,
   identifyEntity,
   applyIdentifyProposal,
@@ -64,6 +66,7 @@ export class IdentifyStore {
   applying = $state(false);
   bulkSession = $state<IdentifyBulkSession | null>(null);
   bulkStarting = $state(false);
+  returnPath = $state<string | null>(null);
 
   #pollTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -109,6 +112,38 @@ export class IdentifyStore {
     this.error = null;
     try {
       this.providers = await fetchPluginProviders();
+    } catch (err) {
+      this.error = readError(err);
+    } finally {
+      this.loading = false;
+    }
+  }
+
+  async seedEntity(entityId: string, returnPath: string | null) {
+    this.returnPath = returnPath;
+    this.loading = true;
+    this.error = null;
+    try {
+      this.providers = await fetchPluginProviders();
+      const detail = await fetchIdentifyEntity(entityId);
+      const entity: EntityCard = {
+        id: detail.id,
+        kind: detail.kind,
+        title: detail.title,
+        parentEntityId: detail.parentEntityId ?? null,
+        sortOrder: detail.sortOrder ?? null,
+        coverUrl: null,
+        hoverKind: "none",
+        hoverUrl: null,
+        hoverImages: [],
+        meta: [],
+        rating: null,
+        isFavorite: false,
+        isNsfw: false,
+        isOrganized: false,
+      };
+      this.addToQueue(entity, "not-searched");
+      this.navigateToKind(entity.kind);
     } catch (err) {
       this.error = readError(err);
     } finally {
@@ -184,6 +219,10 @@ export class IdentifyStore {
     try {
       await applyIdentifyProposal(entity.id, proposal, selectedFields, selectedImages);
       this.removeFromQueue(entity.id);
+      if (this.returnPath && this.queue.length === 0) {
+        void goto(this.returnPath);
+        return;
+      }
       this.message = `${proposal.patch.title ?? entity.title} identified`;
       this.navigateToDashboard();
     } catch (err) {
