@@ -86,6 +86,7 @@ public static class DependencyInjection {
         services.AddTransient<IJobHandler, LibraryMaintenanceJobHandler>();
 
         // Background services
+        services.AddSingleton<WorkerRuntimeIdentity>();
         services.AddHostedService<WorkerHeartbeatPublisher>();
         services.AddHostedService<QueueWorker>();
         services.AddHostedService<JobScheduler>();

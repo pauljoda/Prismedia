@@ -8,9 +8,9 @@ namespace Prismedia.Application.Health;
 /// </summary>
 public sealed class WorkerHeartbeatPublisher(
     IWorkerHeartbeatStore heartbeatStore,
+    WorkerRuntimeIdentity workerIdentity,
     ILogger<WorkerHeartbeatPublisher> logger) : BackgroundService {
     private static readonly TimeSpan HeartbeatInterval = TimeSpan.FromSeconds(10);
-    private readonly string _workerId = $"{Environment.MachineName}-{Guid.NewGuid():N}";
 
     /// <summary>
     /// Publishes a worker heartbeat until the host shuts down.
@@ -19,7 +19,7 @@ public sealed class WorkerHeartbeatPublisher(
     protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
         while (!stoppingToken.IsCancellationRequested) {
             try {
-                await heartbeatStore.WriteAsync(_workerId, DateTimeOffset.UtcNow, stoppingToken);
+                await heartbeatStore.WriteAsync(workerIdentity.WorkerId, DateTimeOffset.UtcNow, stoppingToken);
             } catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) {
                 throw;
             } catch (Exception ex) {

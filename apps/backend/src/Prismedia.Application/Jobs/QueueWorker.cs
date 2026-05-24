@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Prismedia.Application.Health;
 using Prismedia.Application.Settings;
 using Prismedia.Domain.Entities;
 
@@ -12,10 +13,13 @@ namespace Prismedia.Application.Jobs;
 /// </summary>
 public sealed class QueueWorker(
     IServiceScopeFactory scopeFactory,
+    WorkerRuntimeIdentity workerIdentity,
     ILogger<QueueWorker> logger) : BackgroundService {
     private static readonly TimeSpan IdleDelay = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(30);
-    private readonly string _workerId = $"{Environment.MachineName}-{Guid.NewGuid():N}";
+    private static readonly TimeSpan StaleLeaseTimeout = TimeSpan.FromMinutes(2);
+    private static readonly TimeSpan StaleLeaseRecoveryInterval = TimeSpan.FromSeconds(30);
+    private readonly string _workerId = workerIdentity.WorkerId;
 
     /// <summary>
     /// Runs the worker loop until the host shuts down. Supports concurrent job processing
@@ -29,6 +33,7 @@ public sealed class QueueWorker(
             "Prismedia .NET worker {WorkerId} started with concurrency {Concurrency}.",
             _workerId, concurrency);
 
+        var nextRecoveryAt = DateTimeOffset.MinValue;
         while (!stoppingToken.IsCancellationRequested) {
             await semaphore.WaitAsync(stoppingToken);
 
@@ -36,6 +41,16 @@ public sealed class QueueWorker(
             try {
                 await using var claimScope = scopeFactory.CreateAsyncScope();
                 var queue = claimScope.ServiceProvider.GetRequiredService<IJobQueueService>();
+                var now = DateTimeOffset.UtcNow;
+                if (now >= nextRecoveryAt) {
+                    var recovered = await queue.RecoverStaleRunningAsync(_workerId, StaleLeaseTimeout, stoppingToken);
+                    if (recovered > 0) {
+                        logger.LogWarning("Recovered {JobCount} stale running job leases.", recovered);
+                    }
+
+                    nextRecoveryAt = now.Add(StaleLeaseRecoveryInterval);
+                }
+
                 job = await queue.ClaimNextAsync(_workerId, stoppingToken);
             } catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) {
                 semaphore.Release();

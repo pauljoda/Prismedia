@@ -226,6 +226,8 @@ public sealed class FilesServiceTests : IDisposable {
             throw new NotSupportedException();
         public Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
+        public Task<int> RecoverStaleRunningAsync(string currentWorkerId, TimeSpan staleAfter, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
         public Task UpdateProgressAsync(Guid id, int progress, string? message, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
         public Task CompleteAsync(Guid id, string? message, CancellationToken cancellationToken) =>

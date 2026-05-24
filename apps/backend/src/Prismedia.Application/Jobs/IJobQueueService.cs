@@ -54,6 +54,11 @@ public interface IJobQueueService {
     Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Requeues running jobs whose worker lease is stale and not owned by the current worker process.
+    /// </summary>
+    Task<int> RecoverStaleRunningAsync(string currentWorkerId, TimeSpan staleAfter, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Updates progress on a running job for dashboard display.
     /// </summary>
     Task UpdateProgressAsync(Guid id, int progress, string? message, CancellationToken cancellationToken);

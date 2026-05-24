@@ -154,6 +154,42 @@ public sealed class JobQueueServiceTests {
     }
 
     [Fact]
+    public async Task RecoverStaleRunningJobsRequeuesOnlyExpiredRunsFromOtherWorkers() {
+        await using var db = CreateContext();
+        var service = new JobQueueService(db);
+        var now = DateTimeOffset.UtcNow;
+
+        var staleOtherWorker = NewJobRun(JobType.GenerateBookPageThumbnail, JobRunStatus.Running, now.AddMinutes(-30));
+        staleOtherWorker.LockedAt = now.AddMinutes(-25);
+        staleOtherWorker.LockedBy = "worker-old";
+        staleOtherWorker.Progress = 60;
+        staleOtherWorker.Message = "Generating thumbnail";
+
+        var freshOtherWorker = NewJobRun(JobType.ProbeVideo, JobRunStatus.Running, now.AddMinutes(-2));
+        freshOtherWorker.LockedAt = now.AddMinutes(-1);
+        freshOtherWorker.LockedBy = "worker-old";
+
+        var currentWorker = NewJobRun(JobType.GeneratePreview, JobRunStatus.Running, now.AddMinutes(-30));
+        currentWorker.LockedAt = now.AddMinutes(-25);
+        currentWorker.LockedBy = "worker-live";
+
+        db.JobRuns.AddRange(staleOtherWorker, freshOtherWorker, currentWorker);
+        await db.SaveChangesAsync();
+
+        var recovered = await service.RecoverStaleRunningAsync("worker-live", TimeSpan.FromMinutes(5), CancellationToken.None);
+
+        Assert.Equal(1, recovered);
+        Assert.Equal(JobRunStatus.Queued, staleOtherWorker.Status);
+        Assert.Equal(0, staleOtherWorker.Progress);
+        Assert.Equal("Recovered from stale worker lease", staleOtherWorker.Message);
+        Assert.Null(staleOtherWorker.LockedAt);
+        Assert.Null(staleOtherWorker.LockedBy);
+        Assert.Null(staleOtherWorker.StartedAt);
+        Assert.Equal(JobRunStatus.Running, freshOtherWorker.Status);
+        Assert.Equal(JobRunStatus.Running, currentWorker.Status);
+    }
+
+    [Fact]
     public async Task CancelAndClearFailuresMoveRunsOutOfActiveBuckets() {
         await using var db = CreateContext();
         var service = new JobQueueService(db);

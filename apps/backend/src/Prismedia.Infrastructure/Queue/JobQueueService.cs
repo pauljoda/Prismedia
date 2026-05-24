@@ -251,6 +251,43 @@ public sealed class JobQueueService : IJobQueueService {
         return ToSnapshot(row);
     }
 
+    public async Task<int> RecoverStaleRunningAsync(
+        string currentWorkerId,
+        TimeSpan staleAfter,
+        CancellationToken cancellationToken) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(currentWorkerId);
+        if (staleAfter <= TimeSpan.Zero) {
+            throw new ArgumentOutOfRangeException(nameof(staleAfter), staleAfter, "Stale timeout must be positive.");
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var cutoff = now.Subtract(staleAfter);
+        var rows = await _db.JobRuns
+            .Where(job =>
+                job.Status == JobRunStatus.Running &&
+                job.LockedAt != null &&
+                job.LockedAt <= cutoff &&
+                job.LockedBy != currentWorkerId)
+            .ToListAsync(cancellationToken);
+
+        foreach (var row in rows) {
+            row.Status = JobRunStatus.Queued;
+            row.Progress = 0;
+            row.Message = "Recovered from stale worker lease";
+            row.AvailableAt = now;
+            row.LockedAt = null;
+            row.LockedBy = null;
+            row.StartedAt = null;
+            row.FinishedAt = null;
+        }
+
+        if (rows.Count > 0) {
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+
+        return rows.Count;
+    }
+
     public async Task UpdateProgressAsync(Guid id, int progress, string? message, CancellationToken cancellationToken) {
         var row = await _db.JobRuns.FindAsync([id], cancellationToken);
         if (row is null || row.Status != JobRunStatus.Running) {

@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated web app manifest and mobile browser metadata for home-screen installation and browser UI theme colors.
 
 ### Fixed
+- Recovered stale running jobs from previous worker processes so the queue no longer appears stuck after a worker restart.
 - Restored richer running and queued job rows with job-kind grouping, target details, and live status messages.
 - Fixed generated thumbnail and preview asset serving on fresh startup by creating and mounting the media cache directory before assets are requested.
 - Fixed Prismedia logo PNG transparency so the app brand mark no longer carries a black square background.
