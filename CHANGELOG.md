@@ -15,6 +15,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a media wall toggle to entity grids for browsing thumbnail-only library layouts.
 
 ### Changed
+- Updated README, docs, browser, and install branding surfaces to prefer the red accent logo while keeping the in-app logo mode-aware.
+- Added a subtle sidebar logo glow so the transparent mark reads clearly against the dark rail.
 - Updated app branding to use the cleaned normal/NSFW logo assets and promoted the mono mark to SVG for scalable uses.
 - Updated web app manifest and mobile browser metadata for home-screen installation and browser UI theme colors.
 

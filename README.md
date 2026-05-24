@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/logo.png" width="128" height="128" alt="Prismedia" />
+  <img src="docs/logo-nsfw.png" width="128" height="128" alt="Prismedia" />
 </p>
 
 <h1 align="center">Prismedia</h1>

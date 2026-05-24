@@ -7,6 +7,7 @@
   import { appShellNavIconMap } from "./app-shell-nav-icon-map";
   import LogoMark from "./LogoMark.svelte";
   import ChangelogDialog from "./ChangelogDialog.svelte";
+  import { useNsfw } from "$lib/nsfw/store.svelte";
   import { APP_VERSION, fetchReleaseUpdateStatus, type ReleaseUpdateStatus } from "$lib/version";
 
   interface Props {
@@ -17,8 +18,10 @@
   let { collapsed, onToggle }: Props = $props();
   let hovered = $state(false);
   let releaseStatus = $state<ReleaseUpdateStatus | null>(null);
+  const nsfw = useNsfw();
   const isExpanded = $derived(!collapsed || hovered);
   const brandLogoSize = $derived(isExpanded ? 40 : 34);
+  const brandLogoNsfw = $derived(nsfw.mode === "show");
   const updateAvailable = $derived(releaseStatus?.updateAvailable === true);
   const pathname = $derived(page.url.pathname);
   const docsHref = "https://pauljoda.github.io/Prismedia/docs/users/quick-start";
@@ -60,13 +63,14 @@
     >
       <div
         class={cn(
-          "flex shrink-0 items-center justify-center transition-[width,height] duration-moderate",
+          "brand-mark-backdrop flex shrink-0 items-center justify-center transition-[width,height] duration-moderate",
           isExpanded ? "h-11 w-11" : "h-9 w-9",
+          brandLogoNsfw && "brand-mark-backdrop-nsfw",
         )}
       >
         <LogoMark
           size={brandLogoSize}
-          class="drop-shadow-[0_0_18px_rgba(196,154,90,0.35)]"
+          class="relative z-10"
         />
       </div>
       <div
@@ -233,3 +237,41 @@
     </a>
   </div>
 </aside>
+
+<style>
+  .brand-mark-backdrop {
+    position: relative;
+    isolation: isolate;
+  }
+
+  .brand-mark-backdrop::before {
+    content: "";
+    position: absolute;
+    inset: -0.25rem;
+    z-index: 0;
+    background:
+      radial-gradient(circle at 50% 47%, rgb(244 204 134 / 0.22), transparent 38%),
+      radial-gradient(circle at 50% 52%, rgb(196 154 90 / 0.18), transparent 68%);
+    filter: blur(0.18rem);
+    opacity: 0.95;
+    pointer-events: none;
+  }
+
+  .brand-mark-backdrop :global(img) {
+    filter:
+      drop-shadow(0 0 8px rgb(244 204 134 / 0.42))
+      drop-shadow(0 0 22px rgb(196 154 90 / 0.28));
+  }
+
+  .brand-mark-backdrop-nsfw::before {
+    background:
+      radial-gradient(circle at 50% 47%, rgb(255 78 70 / 0.25), transparent 38%),
+      radial-gradient(circle at 50% 52%, rgb(190 35 35 / 0.2), transparent 68%);
+  }
+
+  .brand-mark-backdrop-nsfw :global(img) {
+    filter:
+      drop-shadow(0 0 8px rgb(255 90 82 / 0.42))
+      drop-shadow(0 0 22px rgb(190 35 35 / 0.3));
+  }
+</style>
