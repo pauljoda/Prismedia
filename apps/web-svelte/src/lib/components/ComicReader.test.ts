@@ -67,6 +67,22 @@ describe("ComicReader", () => {
     expect(container.querySelector('[role="dialog"]')).toBeNull();
   });
 
+  it("can render as a route page with a back control instead of a portaled overlay", () => {
+    const { container, getByLabelText } = render(ComicReader, {
+      props: {
+        images,
+        initialIndex: 0,
+        title: "Comic",
+        presentation: "page",
+        closeIcon: "back",
+        onClose: vi.fn(),
+      },
+    });
+
+    expect(container.querySelector('[role="dialog"]')).toBeInTheDocument();
+    expect(getByLabelText("Back")).toBeInTheDocument();
+  });
+
   it("keeps controls hidden while navigating with side taps", async () => {
     const { container } = render(ComicReader, {
       props: {

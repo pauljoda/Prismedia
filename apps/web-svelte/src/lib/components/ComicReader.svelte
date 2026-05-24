@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick, untrack } from "svelte";
   import {
+    ArrowLeft,
     BookOpen,
     Columns2,
     Rows3,
@@ -32,6 +33,8 @@
     initialMode?: ReaderMode;
     title?: string;
     nextChapterLabel?: string | null;
+    presentation?: "overlay" | "page";
+    closeIcon?: "close" | "back";
     onClose: () => void;
     onIndexChange?: (index: number) => void;
     onModeChange?: (mode: ReaderMode) => void;
@@ -44,6 +47,8 @@
     initialMode = "paged",
     title = "Comic",
     nextChapterLabel = null,
+    presentation = "overlay",
+    closeIcon = "close",
     onClose,
     onIndexChange,
     onModeChange,
@@ -61,6 +66,8 @@
   let nextChapterBusy = $state(false);
 
   const hasNextChapter = $derived(Boolean(onNextChapter));
+  const closeLabel = $derived(closeIcon === "back" ? "Back" : "Close");
+  const closeTitle = $derived(closeIcon === "back" ? "Back (Esc)" : "Close (Esc)");
   const hasEndAction = $derived(images.length > 0);
   const nextChapterTitle = $derived(nextChapterLabel?.trim() ? nextChapterLabel : "Next chapter");
   const chapterEndTitle = $derived(hasNextChapter ? nextChapterTitle : "No next chapter");
@@ -225,6 +232,11 @@
     setReaderIndex(nextIndex);
   }
 
+  function readerPortal(node: HTMLElement, enabled: boolean) {
+    if (!enabled) return { destroy: () => {} };
+    return portal(node);
+  }
+
   async function scrollWebtoonToIndex(targetIndex: number) {
     await tick();
     if (!webtoonStage) return;
@@ -300,8 +312,8 @@
 </svelte:head>
 
 <div
-  use:portal
-  class="reader-overlay fixed inset-0 flex flex-col bg-black/95 backdrop-blur-sm"
+  use:readerPortal={presentation === "overlay"}
+  class={`reader-overlay fixed inset-0 flex flex-col bg-black backdrop-blur-sm ${presentation === "page" ? "reader-page-presentation" : ""}`}
   role="dialog"
   aria-modal="true"
   in:fade={{ duration: dur.normal, easing: ease.enter }}
@@ -328,10 +340,14 @@
       type="button"
       onclick={onClose}
       class="reader-icon-button"
-      aria-label="Close"
-      title="Close (Esc)"
+      aria-label={closeLabel}
+      title={closeTitle}
     >
-      <X class="h-5 w-5" />
+      {#if closeIcon === "back"}
+        <ArrowLeft class="h-5 w-5" />
+      {:else}
+        <X class="h-5 w-5" />
+      {/if}
     </button>
 
     <div class="min-w-0 flex-1">
@@ -566,6 +582,10 @@
 
   .reader-overlay {
     z-index: 2147483000;
+  }
+
+  .reader-page-presentation {
+    z-index: 90;
   }
 
   .reader-stage {
