@@ -693,24 +693,7 @@ public sealed class IdentifyPluginService {
             return response;
         }
 
-        // Auto-resolve single candidate: when the plugin returns exactly one candidate
-        // with no patch, re-query with the candidate's external IDs to get the full proposal.
-        if (response.Result.Patch is null &&
-            response.Result.Candidates is { Count: 1 } singleCandidates) {
-            var candidate = singleCandidates[0];
-            var lookupQuery = new IdentifyQuery(null, null, candidate.ExternalIds);
-            var lookupRequest = request with {
-                Action = "lookup-id",
-                Query = lookupQuery,
-            };
-            var resolved = await _runner.IdentifyAsync(descriptor, lookupRequest, cancellationToken);
-            if (resolved.Ok && resolved.Result?.Patch is not null) {
-                response = resolved;
-            } else {
-                visited.Remove(entity.Id);
-                return response;
-            }
-        } else if (response.Result.Patch is null) {
+        if (response.Result.Patch is null) {
             visited.Remove(entity.Id);
             return response;
         }

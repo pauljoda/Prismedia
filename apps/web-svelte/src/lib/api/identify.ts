@@ -102,6 +102,25 @@ export interface IdentifyBulkSession {
   createdAt: string;
 }
 
+export type IdentifyQueueState = "search" | "proposal" | "done" | "deleted" | "error";
+
+export interface IdentifyQueueItem {
+  id: string;
+  entityId: string;
+  entityKind: string;
+  title: string;
+  state: IdentifyQueueState;
+  provider?: string | null;
+  action: string;
+  query?: IdentifyQuery | null;
+  candidates: EntitySearchCandidate[];
+  proposal?: EntityMetadataProposal | null;
+  error?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string | null;
+}
+
 async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
   if (init?.body && !headers.has("Content-Type")) {
@@ -181,6 +200,45 @@ export function applyIdentifyProposal(
     method: "POST",
     body: JSON.stringify({ proposal, selectedFields, selectedImages }),
   });
+}
+
+export function fetchIdentifyQueue(includeCompleted = false): Promise<IdentifyQueueItem[]> {
+  return apiJson(`/identify/queue${query({ includeCompleted })}`);
+}
+
+export function addIdentifyQueueItem(entityId: string): Promise<IdentifyQueueItem> {
+  return apiJson(`/identify/queue/entities/${entityId}`, { method: "POST" });
+}
+
+export function fetchIdentifyQueueItem(entityId: string): Promise<IdentifyQueueItem> {
+  return apiJson(`/identify/queue/entities/${entityId}`);
+}
+
+export function searchIdentifyQueueItem(
+  entityId: string,
+  provider: string,
+  identifyQuery?: IdentifyQuery,
+): Promise<IdentifyQueueItem> {
+  return apiJson(`/identify/queue/entities/${entityId}/search`, {
+    method: "POST",
+    body: JSON.stringify({ provider, query: identifyQuery ?? null }),
+  });
+}
+
+export function applyIdentifyQueueItem(
+  entityId: string,
+  proposal: EntityMetadataProposal | null,
+  selectedFields: string[],
+  selectedImages?: Record<string, string | null>,
+): Promise<IdentifyQueueItem> {
+  return apiJson(`/identify/queue/entities/${entityId}/apply`, {
+    method: "POST",
+    body: JSON.stringify({ proposal, selectedFields, selectedImages }),
+  });
+}
+
+export function deleteIdentifyQueueItem(entityId: string): Promise<IdentifyQueueItem> {
+  return apiJson(`/identify/queue/entities/${entityId}`, { method: "DELETE" });
 }
 
 export function startBulkIdentify(

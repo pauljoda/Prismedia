@@ -57,6 +57,21 @@ public sealed class IdentifyResultRow {
     public DateTimeOffset UpdatedAt { get; set; }
 }
 
+public sealed class IdentifyQueueItemRow {
+    public Guid Id { get; set; }
+    public Guid EntityId { get; set; }
+    public IdentifyQueueState State { get; set; } = IdentifyQueueState.Search;
+    public string? ProviderCode { get; set; }
+    public string Action { get; set; } = "search";
+    public string? QueryJson { get; set; }
+    public string? CandidatesJson { get; set; }
+    public string? ProposalJson { get; set; }
+    public string? Error { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+    public DateTimeOffset? CompletedAt { get; set; }
+}
+
 public sealed class FingerprintSubmissionRow {
     public Guid Id { get; set; }
     public Guid EntityId { get; set; }

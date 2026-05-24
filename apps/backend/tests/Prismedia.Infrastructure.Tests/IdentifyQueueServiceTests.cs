@@ -1,0 +1,327 @@
+using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using Prismedia.Contracts.Plugins;
+using Prismedia.Domain.Entities;
+using Prismedia.Infrastructure.Persistence;
+using Prismedia.Infrastructure.Persistence.Entities;
+using Prismedia.Infrastructure.Plugins;
+using Prismedia.Infrastructure.Processes;
+
+namespace Prismedia.Infrastructure.Tests;
+
+public sealed class IdentifyQueueServiceTests : IDisposable {
+    private readonly string _tempRoot = Path.Combine(Path.GetTempPath(), $"prismedia-identify-queue-{Guid.NewGuid():N}");
+
+    [Fact]
+    public async Task AddAsyncCreatesDurableSearchItemForEntity() {
+        await using var db = CreateContext();
+        var entityId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        SeedEntity(db, entityId, "video-series", "Mystery Show");
+        await db.SaveChangesAsync();
+        var service = CreateQueueService(db, new CandidateProcessExecutor(), _tempRoot);
+
+        var item = await service.AddAsync(entityId, CancellationToken.None);
+
+        Assert.Equal(entityId, item.EntityId);
+        Assert.Equal("video-series", item.EntityKind);
+        Assert.Equal("Mystery Show", item.Title);
+        Assert.Equal("search", item.State);
+        Assert.Null(item.Provider);
+        Assert.Empty(item.Candidates);
+        Assert.Null(item.Proposal);
+        Assert.Single(await db.IdentifyQueueItems.ToArrayAsync());
+    }
+
+    [Fact]
+    public async Task SearchAsyncKeepsProviderCandidatesInSearchState() {
+        await using var db = CreateContext();
+        var entityId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        SeedProvider(db);
+        SeedEntity(db, entityId, "video", "Ambiguous Movie");
+        await db.SaveChangesAsync();
+        var service = CreateQueueService(db, new CandidateThenProposalProcessExecutor(), _tempRoot);
+        await service.AddAsync(entityId, CancellationToken.None);
+
+        var item = await service.SearchAsync(entityId, new IdentifyQueueSearchRequest("tmdb", new IdentifyQuery("Ambiguous", null, null)), hideNsfw: false, CancellationToken.None);
+
+        Assert.Equal("search", item.State);
+        Assert.Equal("tmdb", item.Provider);
+        Assert.Null(item.Proposal);
+        var candidate = Assert.Single(item.Candidates);
+        Assert.Equal("Ambiguous Movie (2005)", candidate.Title);
+        var persisted = await db.IdentifyQueueItems.SingleAsync();
+        Assert.Equal(IdentifyQueueState.Search, persisted.State);
+        Assert.NotNull(persisted.CandidatesJson);
+        Assert.Null(persisted.ProposalJson);
+    }
+
+    [Fact]
+    public async Task SearchAsyncStoresConfirmedProposalForReview() {
+        await using var db = CreateContext();
+        var entityId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+        SeedProvider(db);
+        SeedEntity(db, entityId, "video", "Known Movie");
+        await db.SaveChangesAsync();
+        var service = CreateQueueService(db, new ProposalProcessExecutor(), _tempRoot);
+        await service.AddAsync(entityId, CancellationToken.None);
+
+        var item = await service.SearchAsync(entityId, new IdentifyQueueSearchRequest("tmdb", new IdentifyQuery(null, null, new Dictionary<string, string> { ["tmdb"] = "123" })), hideNsfw: false, CancellationToken.None);
+
+        Assert.Equal("proposal", item.State);
+        Assert.Equal("tmdb", item.Provider);
+        Assert.Empty(item.Candidates);
+        Assert.NotNull(item.Proposal);
+        Assert.Equal(entityId, item.Proposal.TargetEntityId);
+        Assert.Equal("Known Movie identified", item.Proposal.Patch.Title);
+        var persisted = await db.IdentifyQueueItems.SingleAsync();
+        Assert.Equal(IdentifyQueueState.Proposal, persisted.State);
+        Assert.NotNull(persisted.ProposalJson);
+    }
+
+    [Fact]
+    public async Task ApplyAsyncUsesReviewedProposalAndMarksItemDone() {
+        await using var db = CreateContext();
+        var entityId = Guid.Parse("44444444-4444-4444-4444-444444444444");
+        SeedEntity(db, entityId, "video", "Old Title");
+        var proposal = Proposal(entityId, "Reviewed Title");
+        db.IdentifyQueueItems.Add(new IdentifyQueueItemRow {
+            Id = Guid.NewGuid(),
+            EntityId = entityId,
+            State = IdentifyQueueState.Proposal,
+            ProviderCode = "tmdb",
+            Action = "lookup-id",
+            ProposalJson = JsonSerializer.Serialize(proposal, JsonOptions),
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var service = CreateQueueService(db, new ProposalProcessExecutor(), _tempRoot);
+
+        var applied = await service.ApplyAsync(
+            entityId,
+            new ApplyIdentifyQueueItemRequest(
+                proposal,
+                ["title"],
+                null),
+            CancellationToken.None);
+
+        Assert.Equal("done", applied.State);
+        Assert.NotNull(applied.CompletedAt);
+        Assert.Equal("Reviewed Title", (await db.Entities.SingleAsync(row => row.Id == entityId)).Title);
+        Assert.Empty(await service.ListAsync(includeCompleted: false, CancellationToken.None));
+    }
+
+    public void Dispose() {
+        if (Directory.Exists(_tempRoot)) {
+            Directory.Delete(_tempRoot, recursive: true);
+        }
+    }
+
+    private static PrismediaDbContext CreateContext() {
+        var options = new DbContextOptionsBuilder<PrismediaDbContext>()
+            .UseInMemoryDatabase($"identify-queue-{Guid.NewGuid():N}")
+            .Options;
+
+        return new PrismediaDbContext(options);
+    }
+
+    private static IdentifyQueueService CreateQueueService(
+        PrismediaDbContext db,
+        ProcessExecutor executor,
+        string tempRoot) {
+        WriteManifest(tempRoot);
+        var identify = new IdentifyPluginService(
+            db,
+            new PluginCatalogService(db, new PluginCatalogOptions([tempRoot], tempRoot, "1.0.0")),
+            new IdentifyMatchHintResolver(db),
+            new DotnetPluginProcessRunner(executor, new PluginCatalogOptions([], tempRoot, "1.0.0")),
+            new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(tempRoot)));
+
+        return new IdentifyQueueService(db, identify);
+    }
+
+    private static void WriteManifest(string root) {
+        Directory.CreateDirectory(root);
+        File.WriteAllText(
+            Path.Combine(root, "manifest.json"),
+            """
+            {
+              "manifestVersion": 1,
+              "apiTags": ["prismedia"],
+              "id": "tmdb",
+              "name": "TMDB",
+              "version": "1.0.0",
+              "runtime": "dotnet-process",
+              "entry": "Prismedia.Plugin.Tmdb.dll",
+              "compat": {
+                "pluginApiMin": "1.0.0",
+                "pluginApiMax": null,
+                "prismediaMin": "1.0.0",
+                "prismediaMax": null
+              },
+              "auth": [
+                { "key": "apiKey", "label": "API key", "required": true }
+              ],
+              "supports": [
+                { "entityKind": "video", "actions": ["lookup-id", "lookup-url", "search"] },
+                { "entityKind": "video-series", "actions": ["lookup-id", "lookup-url", "search"] }
+              ]
+            }
+            """);
+    }
+
+    private static void SeedProvider(PrismediaDbContext db) {
+        var now = DateTimeOffset.UtcNow;
+        var providerConfig = new ProviderConfigRow {
+            Id = Guid.NewGuid(),
+            ProviderCode = "tmdb",
+            DisplayName = "TMDB",
+            ProviderType = ProviderType.ExternalProcess,
+            Enabled = true,
+            SettingsJson = "{}",
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+        db.ProviderConfigs.Add(providerConfig);
+        db.ProviderCredentials.Add(new ProviderCredentialRow {
+            Id = Guid.NewGuid(),
+            ProviderConfigId = providerConfig.Id,
+            CredentialKey = "apiKey",
+            EncryptedValue = "secret",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+    }
+
+    private static void SeedEntity(PrismediaDbContext db, Guid id, string kind, string title) {
+        db.Entities.Add(new EntityRow {
+            Id = id,
+            KindCode = kind,
+            Title = title,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+    }
+
+    private static EntityMetadataProposal Proposal(Guid entityId, string title) =>
+        new(
+            "tmdb:123",
+            "tmdb",
+            "video",
+            1,
+            "external-id",
+            new EntityMetadataPatch(
+                title,
+                null,
+                new Dictionary<string, string> { ["tmdb"] = "123" },
+                [],
+                [],
+                null,
+                [],
+                new Dictionary<string, string>(),
+                new Dictionary<string, int>(),
+                new Dictionary<string, int>(),
+                null),
+            [],
+            [],
+            [],
+            TargetEntityId: entityId,
+            Relationships: []);
+
+    private static string SerializeWireProposal(Guid entityId, string title) =>
+        JsonSerializer.Serialize(
+            new {
+                ok = true,
+                result = new {
+                    type = "proposal",
+                    proposal = Proposal(entityId, title),
+                    candidates = Array.Empty<object>()
+                },
+                error = (string?)null
+            },
+            JsonOptions);
+
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) {
+        PropertyNameCaseInsensitive = true
+    };
+
+    private sealed class CandidateProcessExecutor : ProcessExecutor {
+        public override Task<ProcessExecutionResult> RunAsync(
+            string fileName,
+            IReadOnlyList<string> arguments,
+            IReadOnlyDictionary<string, string>? environment,
+            CancellationToken cancellationToken) {
+            var wire = new {
+                ok = true,
+                result = new {
+                    type = "candidates",
+                    proposal = (object?)null,
+                    candidates = new[] {
+                        new EntitySearchCandidate(
+                            new Dictionary<string, string> { ["tmdb"] = "2005" },
+                            "Ambiguous Movie (2005)",
+                            2005,
+                            "A search result that still needs user confirmation.",
+                            "https://example.test/poster.jpg",
+                            9.1m)
+                    }
+                },
+                error = (string?)null
+            };
+
+            return Task.FromResult(new ProcessExecutionResult(0, JsonSerializer.Serialize(wire, JsonOptions), string.Empty));
+        }
+    }
+
+    private sealed class ProposalProcessExecutor : ProcessExecutor {
+        public override async Task<ProcessExecutionResult> RunAsync(
+            string fileName,
+            IReadOnlyList<string> arguments,
+            IReadOnlyDictionary<string, string>? environment,
+            CancellationToken cancellationToken) {
+            var requestJson = await File.ReadAllTextAsync(arguments[1], cancellationToken);
+            var request = JsonSerializer.Deserialize<IdentifyPluginRequest>(requestJson, JsonOptions)!;
+            return new ProcessExecutionResult(
+                0,
+                SerializeWireProposal(request.Entity.Id, $"{request.Entity.Title} identified"),
+                string.Empty);
+        }
+    }
+
+    private sealed class CandidateThenProposalProcessExecutor : ProcessExecutor {
+        public override async Task<ProcessExecutionResult> RunAsync(
+            string fileName,
+            IReadOnlyList<string> arguments,
+            IReadOnlyDictionary<string, string>? environment,
+            CancellationToken cancellationToken) {
+            var requestJson = await File.ReadAllTextAsync(arguments[1], cancellationToken);
+            var request = JsonSerializer.Deserialize<IdentifyPluginRequest>(requestJson, JsonOptions)!;
+            if (request.Action == "lookup-id") {
+                return new ProcessExecutionResult(
+                    0,
+                    SerializeWireProposal(request.Entity.Id, "Auto-resolved title"),
+                    string.Empty);
+            }
+
+            var wire = new {
+                ok = true,
+                result = new {
+                    type = "candidates",
+                    proposal = (object?)null,
+                    candidates = new[] {
+                        new EntitySearchCandidate(
+                            new Dictionary<string, string> { ["tmdb"] = "2005" },
+                            "Ambiguous Movie (2005)",
+                            2005,
+                            "A search result that still needs user confirmation.",
+                            "https://example.test/poster.jpg",
+                            9.1m)
+                    }
+                },
+                error = (string?)null
+            };
+
+            return new ProcessExecutionResult(0, JsonSerializer.Serialize(wire, JsonOptions), string.Empty);
+        }
+    }
+}

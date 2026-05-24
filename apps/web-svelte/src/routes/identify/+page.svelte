@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { onDestroy, onMount } from "svelte";
+  import { onMount } from "svelte";
+  import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import {
     AlertCircle,
@@ -12,8 +13,6 @@
   } from "@lucide/svelte";
   import { cn, StatusLed } from "@prismedia/ui-svelte";
   import {
-    IdentifyStore,
-    setIdentifyStore,
     useIdentifyStore,
   } from "$lib/components/identify/identify-store.svelte";
   import IdentifyDashboard from "$lib/components/identify/IdentifyDashboard.svelte";
@@ -23,21 +22,17 @@
   import IdentifyReviewChild from "$lib/components/identify/IdentifyReviewChild.svelte";
   import { entityKindIcon } from "$lib/components/identify/identify-icons";
 
-  const store = new IdentifyStore();
-  setIdentifyStore(store);
+  const store = useIdentifyStore();
 
   onMount(() => {
     const entityId = page.url.searchParams.get("entity");
-    const from = page.url.searchParams.get("from");
+    const returnId = page.url.searchParams.get("returnId");
     if (entityId) {
-      void store.seedEntity(entityId, from);
+      const query = returnId ? `?returnId=${encodeURIComponent(returnId)}` : "";
+      void goto(`/identify/${entityId}${query}`);
     } else {
       void store.loadInitial();
     }
-  });
-
-  onDestroy(() => {
-    store.destroy();
   });
 </script>
 
@@ -115,7 +110,7 @@
             )}
             onclick={() => store.navigateToKind(kindInfo.kind)}
           >
-            <svelte:component this={KindIcon} class="h-3.5 w-3.5" />
+            <KindIcon class="h-3.5 w-3.5" />
             <span>{kindInfo.label}</span>
             {#if kindInfo.pending > 0}
               <StatusLed status="accent" pulse size="sm" />

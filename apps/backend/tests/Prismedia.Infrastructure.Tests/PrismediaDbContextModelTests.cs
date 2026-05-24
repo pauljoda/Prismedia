@@ -47,6 +47,7 @@ public sealed class PrismediaDbContextModelTests {
     [InlineData(typeof(ProviderConfigRow), "provider_configs")]
     [InlineData(typeof(ProviderCredentialRow), "provider_credentials")]
     [InlineData(typeof(IdentifyResultRow), "identify_results")]
+    [InlineData(typeof(IdentifyQueueItemRow), "identify_queue_items")]
     [InlineData(typeof(FingerprintSubmissionRow), "fingerprint_submissions")]
     [InlineData(typeof(DatabaseBackupRow), "database_backups")]
     [InlineData(typeof(JobRunRow), "job_runs")]
@@ -208,6 +209,7 @@ public sealed class PrismediaDbContextModelTests {
     [InlineData(typeof(VideoDetailRow), nameof(VideoDetailRow.SubtitlesExtractedAt), "subtitles_extracted_at")]
     [InlineData(typeof(LibraryRootRow), nameof(LibraryRootRow.ScanVideos), "scan_videos")]
     [InlineData(typeof(AppSettingRow), nameof(AppSettingRow.ValueJson), "value_json")]
+    [InlineData(typeof(IdentifyQueueItemRow), nameof(IdentifyQueueItemRow.ProviderCode), "provider_code")]
     [InlineData(typeof(DatabaseBackupRow), nameof(DatabaseBackupRow.BackupPath), "backup_path")]
     [InlineData(typeof(JobRunRow), nameof(JobRunRow.AvailableAt), "available_at")]
     public void ModelUsesSnakeCaseColumns(Type entityType, string propertyName, string columnName) {
@@ -228,6 +230,7 @@ public sealed class PrismediaDbContextModelTests {
     [InlineData(typeof(CollectionItemDetailRow), nameof(CollectionItemDetailRow.Source), typeof(CollectionItemSource))]
     [InlineData(typeof(ProviderConfigRow), nameof(ProviderConfigRow.ProviderType), typeof(ProviderType))]
     [InlineData(typeof(IdentifyResultRow), nameof(IdentifyResultRow.Status), typeof(IdentifyResultStatus))]
+    [InlineData(typeof(IdentifyQueueItemRow), nameof(IdentifyQueueItemRow.State), typeof(IdentifyQueueState))]
     [InlineData(typeof(FingerprintSubmissionRow), nameof(FingerprintSubmissionRow.Status), typeof(FingerprintSubmissionStatus))]
     [InlineData(typeof(EntityFileRow), nameof(EntityFileRow.Role), typeof(EntityFileRole))]
     [InlineData(typeof(EntitySubtitleRow), nameof(EntitySubtitleRow.Source), typeof(EntitySubtitleSource))]

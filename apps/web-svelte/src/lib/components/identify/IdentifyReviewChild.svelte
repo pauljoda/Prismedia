@@ -27,9 +27,10 @@
     entity: EntityCard;
     proposal: EntityMetadataProposal;
     parentProposal: EntityMetadataProposal;
+    ancestors?: EntityMetadataProposal[];
   }
 
-  let { entity, proposal, parentProposal }: Props = $props();
+  let { entity, proposal, parentProposal, ancestors = [parentProposal] }: Props = $props();
 
   const store = useIdentifyStore();
 
@@ -104,7 +105,20 @@
   }
 
   function goBackToParent() {
-    store.navigateTo({ kind: "review-parent", entity, proposal: parentProposal });
+    if (ancestors.length <= 1) {
+      store.navigateTo({ kind: "review-parent", entity, proposal: parentProposal });
+      return;
+    }
+
+    const nextAncestors = ancestors.slice(0, -1);
+    const grandParent = nextAncestors[nextAncestors.length - 1];
+    store.navigateTo({
+      kind: "review-child",
+      entity,
+      proposal: parentProposal,
+      parentProposal: grandParent,
+      ancestors: nextAncestors,
+    });
   }
 
   function goToSibling(sibling: EntityMetadataProposal) {
@@ -113,6 +127,17 @@
       entity,
       proposal: sibling,
       parentProposal,
+      ancestors,
+    });
+  }
+
+  function goToChild(child: EntityMetadataProposal) {
+    store.navigateTo({
+      kind: "review-child",
+      entity,
+      proposal: child,
+      parentProposal: proposal,
+      ancestors: [...ancestors, proposal],
     });
   }
 </script>
@@ -310,7 +335,17 @@
             custom: child.patch?.positions?.episode ? { bottomLeft: { label: `E${String(child.patch?.positions.episode).padStart(2, "0")}` } } : undefined,
             meta: [],
           }}
-          <EntityThumbnail card={childCard} />
+          <EntityThumbnail card={childCard} onActivate={() => goToChild(child)} />
+          <div class="flex gap-1.5">
+            <button
+              type="button"
+              class="inline-flex h-7 flex-1 items-center justify-center gap-1 rounded-xs border border-border-accent-strong bg-accent-950/40 text-[0.72rem] text-text-accent transition-colors hover:bg-accent-950/60"
+              onclick={() => goToChild(child)}
+            >
+              Walk
+              <ChevronRight class="h-3 w-3" />
+            </button>
+          </div>
         {/each}
       </div>
     </section>

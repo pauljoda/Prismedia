@@ -7,6 +7,7 @@ public static class IdentifyEndpoints {
 
         group.MapIdentifyProviderEndpoints();
         group.MapIdentifyEntityEndpoints();
+        group.MapIdentifyQueueEndpoints();
         group.MapIdentifyBulkEndpoints();
 
         return group;

@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 - Added a centralized app settings registry and descriptor-driven settings UI for app-wide visibility, playback, subtitle, scan, generation, worker, and HLS defaults.
+- Added a durable Identify queue so search results and metadata proposals survive navigation and backend restarts.
 - Added a media wall toggle to entity grids for browsing thumbnail-only library layouts.
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
@@ -25,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated web app manifest and mobile browser metadata for home-screen installation and browser UI theme colors.
 
 ### Fixed
+- Fixed Identify proposal review so nested children can be walked more than one level deep without losing parent context.
 - Saved entity grid media-wall mode per grid, defaulted image/page grids to that view, and let book page cards show metadata again when media-wall mode is turned off.
 - Kept the library toolbar reset action on the active filter row so the main toolbar buttons no longer shift when reset becomes available.
 - Recovered stale running jobs from previous worker processes so the queue no longer appears stuck after a worker restart.

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { goto } from "$app/navigation";
   import {
     ChevronLeft,
     ChevronDown,
@@ -53,8 +54,8 @@
 
   function handleCardActivate(card: EntityThumbnailCard) {
     const entity = entities.find((e) => e.id === card.entity.id);
-    if (!entity || !defaultProvider) return;
-    void store.identifyEntity(entity, defaultProvider.id);
+    if (!entity) return;
+    void store.queueEntity(entity).then(() => goto(`/identify/${entity.id}`));
   }
 
   async function handleBulkQueue() {
@@ -86,7 +87,7 @@
     style="box-shadow: var(--shadow-glow-accent);"
   >
     <div class="grid h-12 w-12 place-items-center rounded-xs border border-border-accent bg-accent-950/50 text-text-accent-bright">
-      <svelte:component this={KindIcon} class="h-6 w-6" />
+      <KindIcon class="h-6 w-6" />
     </div>
     <div>
       <span class="text-kicker text-text-accent">Identify scope</span>

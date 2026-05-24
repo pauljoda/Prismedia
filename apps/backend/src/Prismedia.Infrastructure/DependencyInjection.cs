@@ -86,6 +86,7 @@ public static class DependencyInjection {
         services.AddScoped<IEntityMetadataPatchService>(provider =>
             provider.GetRequiredService<EntityMetadataApplyService>());
         services.AddScoped<IdentifyPluginService>();
+        services.AddScoped<IdentifyQueueService>();
         services.AddSingleton<IdentifySessionStore>();
 
         services.AddSingleton<IFileDiscovery>(provider =>

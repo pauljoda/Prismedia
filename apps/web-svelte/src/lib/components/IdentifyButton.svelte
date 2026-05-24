@@ -1,10 +1,11 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
-  import { page } from "$app/state";
   import { ScanSearch } from "@lucide/svelte";
 
   interface Props {
     entityId: string;
+    entityKind?: string;
+    title?: string;
     label?: string;
     class?: string;
   }
@@ -12,8 +13,7 @@
   let { entityId, label = "Identify", class: className }: Props = $props();
 
   function navigate() {
-    const from = page.url.pathname;
-    void goto(`/identify?entity=${entityId}&from=${encodeURIComponent(from)}`);
+    void goto(`/identify/${entityId}?returnId=${entityId}`);
   }
 </script>
 

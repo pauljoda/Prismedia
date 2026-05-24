@@ -12,7 +12,7 @@
   import { cn, StatusLed } from "@prismedia/ui-svelte";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
   import { entityCardToThumbnailCard } from "$lib/entities/entity-grid";
-  import { identifyEntity, type EntitySearchCandidate } from "$lib/api/identify";
+  import type { EntitySearchCandidate } from "$lib/api/identify";
   import type { EntityCard } from "$lib/api/prismedia";
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
   import { useIdentifyStore } from "./identify-store.svelte";
@@ -20,27 +20,35 @@
   interface Props {
     entity: EntityCard;
     candidates: EntitySearchCandidate[];
+    providerId?: string | null;
   }
 
-  let { entity, candidates }: Props = $props();
+  let { entity, candidates, providerId = null }: Props = $props();
 
   const store = useIdentifyStore();
-  const defaultProvider = $derived(store.providersForKind(entity.kind)[0] ?? null);
+  const defaultProvider = $derived(
+    (providerId ? store.providers.find((provider) => provider.id === providerId) : null) ??
+      store.providersForKind(entity.kind)[0] ??
+      null,
+  );
 
   let searchTitle = $state("");
   let searchYear = $state("");
   let searching = $state(false);
-  let localCandidates = $state<EntitySearchCandidate[]>(candidates);
+  let searchedCandidates = $state<EntitySearchCandidate[] | null>(null);
+  const localCandidates = $derived(searchedCandidates ?? candidates);
 
   async function handleSearch() {
     if (!defaultProvider || !searchTitle.trim()) return;
     searching = true;
     store.error = null;
     try {
-      const result = await identifyEntity(entity.id, defaultProvider.id, {
+      const result = await store.identifyEntity(entity, defaultProvider.id, {
         title: searchTitle.trim() || undefined,
-      } as any);
-      localCandidates = result.candidates;
+      });
+      if (result?.state === "search") {
+        searchedCandidates = result.candidates;
+      }
     } catch (err) {
       store.error = err instanceof Error ? err.message : "Search failed";
     } finally {

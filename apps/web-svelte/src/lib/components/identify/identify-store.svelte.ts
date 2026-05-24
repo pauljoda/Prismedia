@@ -1,39 +1,49 @@
 import { getContext, setContext } from "svelte";
 import { goto } from "$app/navigation";
 import {
-  fetchIdentifyEntities,
-  fetchIdentifyEntity,
-  fetchPluginProviders,
-  identifyEntity,
-  applyIdentifyProposal,
-  startBulkIdentify,
-  fetchBulkIdentifySession,
+  addIdentifyQueueItem,
+  applyIdentifyQueueItem,
   closeBulkIdentifySession,
+  deleteIdentifyQueueItem,
+  fetchIdentifyQueue,
+  fetchPluginProviders,
+  searchIdentifyQueueItem,
   type EntityMetadataProposal,
   type EntitySearchCandidate,
   type IdentifyBulkSession,
+  type IdentifyQueueItem as ApiIdentifyQueueItem,
+  type IdentifyQueueState,
   type PluginProvider,
 } from "$lib/api/identify";
 import type { EntityCard } from "$lib/api/prismedia";
-import { entityCardToThumbnailCard } from "$lib/entities/entity-grid";
-import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
+import { resolveEntityHrefById } from "$lib/entities/entity-route-resolver";
 
 export type IdentifyView =
   | { kind: "dashboard" }
   | { kind: "kind-tab"; entityKind: string }
   | { kind: "review-choice"; entity: EntityCard; candidates: EntitySearchCandidate[] }
   | { kind: "review-parent"; entity: EntityCard; proposal: EntityMetadataProposal }
-  | { kind: "review-child"; entity: EntityCard; proposal: EntityMetadataProposal; parentProposal: EntityMetadataProposal };
+  | {
+      kind: "review-child";
+      entity: EntityCard;
+      proposal: EntityMetadataProposal;
+      parentProposal: EntityMetadataProposal;
+      ancestors: EntityMetadataProposal[];
+    };
 
 export interface IdentifyQueueItem {
+  id: string;
   entityId: string;
   entityKind: string;
   title: string;
-  state: "not-searched" | "pending-choice" | "pending-review" | "complete" | "error";
-  provider?: string;
-  proposal?: EntityMetadataProposal;
-  errorMessage?: string;
+  state: IdentifyQueueState;
+  provider?: string | null;
+  action: string;
+  candidates: EntitySearchCandidate[];
+  proposal?: EntityMetadataProposal | null;
+  errorMessage?: string | null;
   entity: EntityCard;
+  completedAt?: string | null;
 }
 
 export interface IdentifyKindInfo {
@@ -66,9 +76,7 @@ export class IdentifyStore {
   applying = $state(false);
   bulkSession = $state<IdentifyBulkSession | null>(null);
   bulkStarting = $state(false);
-  returnPath = $state<string | null>(null);
-
-  #pollTimer: ReturnType<typeof setTimeout> | null = null;
+  returnEntityId = $state<string | null>(null);
 
   supportedKinds = $derived.by((): IdentifyKindInfo[] => {
     const kindMap = new Map<string, IdentifyKindInfo>();
@@ -89,9 +97,7 @@ export class IdentifyStore {
     }
     for (const item of this.queue) {
       const info = kindMap.get(item.entityKind);
-      if (info) {
-        info.pending++;
-      }
+      if (info) info.pending++;
     }
     return [...kindMap.values()].sort((a, b) => a.label.localeCompare(b.label));
   });
@@ -103,7 +109,11 @@ export class IdentifyStore {
 
   providersForKind(kind: string): PluginProvider[] {
     return this.providers.filter(
-      (p) => p.installed && p.enabled && p.supports.some((s) => s.entityKind === kind),
+      (provider) =>
+        provider.installed &&
+        provider.enabled &&
+        provider.missingAuthKeys.length === 0 &&
+        provider.supports.some((support) => support.entityKind === kind),
     );
   }
 
@@ -111,7 +121,12 @@ export class IdentifyStore {
     this.loading = true;
     this.error = null;
     try {
-      this.providers = await fetchPluginProviders();
+      const [providers, queue] = await Promise.all([
+        fetchPluginProviders(),
+        fetchIdentifyQueue(),
+      ]);
+      this.providers = providers;
+      this.queue = queue.map((item) => queueItemFromApi(item));
     } catch (err) {
       this.error = readError(err);
     } finally {
@@ -119,36 +134,31 @@ export class IdentifyStore {
     }
   }
 
-  async seedEntity(entityId: string, returnPath: string | null) {
-    this.returnPath = returnPath;
+  async seedEntity(entityId: string, returnEntityId: string | null) {
+    this.returnEntityId = returnEntityId;
     this.loading = true;
     this.error = null;
     try {
-      this.providers = await fetchPluginProviders();
-      const detail = await fetchIdentifyEntity(entityId);
-      const entity: EntityCard = {
-        id: detail.id,
-        kind: detail.kind,
-        title: detail.title,
-        parentEntityId: detail.parentEntityId ?? null,
-        sortOrder: detail.sortOrder ?? null,
-        coverUrl: null,
-        hoverKind: "none",
-        hoverUrl: null,
-        hoverImages: [],
-        meta: [],
-        rating: null,
-        isFavorite: false,
-        isNsfw: false,
-        isOrganized: false,
-      };
-      this.addToQueue(entity, "not-searched");
-      this.navigateToKind(entity.kind);
+      const [providers, item] = await Promise.all([
+        fetchPluginProviders(),
+        addIdentifyQueueItem(entityId),
+      ]);
+      this.providers = providers;
+      this.#upsertQueueItem(queueItemFromApi(item));
+      return item;
     } catch (err) {
       this.error = readError(err);
+      return null;
     } finally {
       this.loading = false;
     }
+  }
+
+  async refreshQueueItem(entityId: string) {
+    const item = await addIdentifyQueueItem(entityId);
+    const mapped = queueItemFromApi(item);
+    this.#upsertQueueItem(mapped);
+    return mapped;
   }
 
   navigateTo(view: IdentifyView) {
@@ -159,53 +169,44 @@ export class IdentifyStore {
 
   navigateToDashboard() {
     this.navigateTo({ kind: "dashboard" });
+    void goto("/identify");
   }
 
   navigateToKind(entityKind: string) {
     this.navigateTo({ kind: "kind-tab", entityKind });
   }
 
-  async identifyEntity(entity: EntityCard, providerId: string, query?: { externalIds?: Record<string, string> }) {
+  async queueEntity(entity: EntityCard) {
+    const item = await addIdentifyQueueItem(entity.id);
+    const mapped = queueItemFromApi(item, entity);
+    this.#upsertQueueItem(mapped);
+    return mapped;
+  }
+
+  async identifyEntity(
+    entity: EntityCard,
+    providerId: string,
+    query?: { title?: string | null; externalIds?: Record<string, string> | null },
+  ) {
     this.identifyingId = entity.id;
     this.error = null;
     try {
-      const result = await identifyEntity(entity.id, providerId, query);
-      if (!result.patch) {
-        this.error = "Provider returned an incomplete proposal (no metadata).";
-        this.#markQueueError(entity.id, "Provider returned no metadata");
-        return;
-      }
-      const candidates = result.candidates ?? [];
-      if (candidates.length > 1 && !query) {
-        this.navigateTo({ kind: "review-choice", entity, candidates });
-      } else {
-        this.navigateTo({ kind: "review-parent", entity, proposal: result });
-        this.addToQueue(entity, "pending-review", providerId, result);
-      }
+      const item = await searchIdentifyQueueItem(entity.id, providerId, query);
+      const mapped = queueItemFromApi(item, entity);
+      this.#upsertQueueItem(mapped);
+      this.reviewResolvedQueueItem(mapped);
+      return mapped;
     } catch (err) {
       this.error = readError(err);
       this.#markQueueError(entity.id, readError(err));
+      return null;
     } finally {
       this.identifyingId = null;
     }
   }
 
   async identifyWithCandidate(entity: EntityCard, providerId: string, candidate: EntitySearchCandidate) {
-    this.identifyingId = entity.id;
-    this.error = null;
-    try {
-      const result = await identifyEntity(entity.id, providerId, { externalIds: candidate.externalIds });
-      if (!result.patch) {
-        this.error = "Provider returned an incomplete proposal (no metadata).";
-        return;
-      }
-      this.navigateTo({ kind: "review-parent", entity, proposal: result });
-      this.addToQueue(entity, "pending-review", providerId, result);
-    } catch (err) {
-      this.error = readError(err);
-    } finally {
-      this.identifyingId = null;
-    }
+    return this.identifyEntity(entity, providerId, { externalIds: candidate.externalIds });
   }
 
   async applyProposal(
@@ -217,12 +218,16 @@ export class IdentifyStore {
     this.applying = true;
     this.error = null;
     try {
-      await applyIdentifyProposal(entity.id, proposal, selectedFields, selectedImages);
-      this.removeFromQueue(entity.id);
-      if (this.returnPath && this.queue.length === 0) {
-        void goto(this.returnPath);
-        return;
+      const item = await applyIdentifyQueueItem(entity.id, proposal, selectedFields, selectedImages);
+      this.#removeActiveQueueItem(item.entityId);
+      if (this.returnEntityId) {
+        const href = await resolveEntityHrefById(this.returnEntityId);
+        if (href) {
+          void goto(href);
+          return;
+        }
       }
+
       this.message = `${proposal.patch.title ?? entity.title} identified`;
       this.navigateToDashboard();
     } catch (err) {
@@ -232,21 +237,36 @@ export class IdentifyStore {
     }
   }
 
+  async deleteQueueItem(entityId: string) {
+    this.error = null;
+    try {
+      const item = await deleteIdentifyQueueItem(entityId);
+      this.#removeActiveQueueItem(item.entityId);
+      if (this.returnEntityId) {
+        const href = await resolveEntityHrefById(this.returnEntityId);
+        if (href) {
+          void goto(href);
+          return;
+        }
+      }
+      this.navigateToDashboard();
+    } catch (err) {
+      this.error = readError(err);
+    }
+  }
+
   async startBulk(providerId: string, entities: EntityCard[]) {
     this.bulkStarting = true;
     this.error = null;
-    const providerName = this.providers.find((p) => p.id === providerId)?.name;
-    for (const entity of entities) {
-      this.addToQueue(entity, "not-searched", providerName);
-    }
     try {
-      this.bulkSession = await startBulkIdentify(providerId, entities.map((e) => e.id));
-      this.#schedulePoll();
+      for (const entity of entities) {
+        const queued = await this.queueEntity(entity);
+        if (queued.state === "search" && queued.candidates.length === 0) {
+          await this.identifyEntity(entity, providerId);
+        }
+      }
     } catch (err) {
       this.error = readError(err);
-      for (const entity of entities) {
-        this.removeFromQueue(entity.id);
-      }
     } finally {
       this.bulkStarting = false;
     }
@@ -256,98 +276,111 @@ export class IdentifyStore {
     if (!this.bulkSession) return;
     const id = this.bulkSession.id;
     this.bulkSession = null;
-    if (this.#pollTimer) clearTimeout(this.#pollTimer);
-    this.#pollTimer = null;
     await closeBulkIdentifySession(id).catch(() => undefined);
   }
 
-  addToQueue(entity: EntityCard, state: IdentifyQueueItem["state"], provider?: string, proposal?: EntityMetadataProposal) {
-    const existing = this.queue.find((q) => q.entityId === entity.id);
-    if (existing) {
-      existing.state = state;
-      existing.provider = provider;
-      existing.proposal = proposal;
-    } else {
-      this.queue = [
-        ...this.queue,
-        {
-          entityId: entity.id,
-          entityKind: entity.kind,
-          title: entity.title,
-          state,
-          provider,
-          proposal,
-          entity,
-        },
-      ];
-    }
+  addToQueue(
+    entity: EntityCard,
+    state: IdentifyQueueItem["state"],
+    provider?: string,
+    proposal?: EntityMetadataProposal,
+  ) {
+    this.#upsertQueueItem({
+      id: entity.id,
+      entityId: entity.id,
+      entityKind: entity.kind,
+      title: entity.title,
+      state,
+      provider,
+      action: "search",
+      candidates: [],
+      proposal,
+      entity,
+    });
   }
 
   removeFromQueue(entityId: string) {
-    this.queue = this.queue.filter((q) => q.entityId !== entityId);
+    this.#removeActiveQueueItem(entityId);
   }
 
   resumeNext() {
-    const next = this.queue.find(
-      (q) => q.state === "pending-review" || q.state === "pending-choice" || q.state === "not-searched",
-    );
+    const next = this.queue.find((item) => item.state === "proposal" || item.state === "search" || item.state === "error");
     if (next) this.reviewQueueItem(next);
   }
 
   reviewQueueItem(item: IdentifyQueueItem) {
-    if (item.state === "pending-review" && item.proposal) {
+    void goto(`/identify/${item.entityId}`);
+  }
+
+  reviewResolvedQueueItem(item: IdentifyQueueItem) {
+    if (item.state === "proposal" && item.proposal) {
       this.navigateTo({ kind: "review-parent", entity: item.entity, proposal: item.proposal });
-    } else if (item.state === "pending-choice" && item.proposal?.candidates) {
-      this.navigateTo({ kind: "review-choice", entity: item.entity, candidates: item.proposal.candidates });
-    } else if (item.state === "not-searched" || item.state === "error") {
-      const provider = this.providersForKind(item.entityKind)[0];
-      if (provider) {
-        item.state = "not-searched";
-        item.errorMessage = undefined;
-        void this.identifyEntity(item.entity, provider.id);
-      }
+    } else if (item.state === "search" && item.candidates.length > 0) {
+      this.navigateTo({ kind: "review-choice", entity: item.entity, candidates: item.candidates });
     }
   }
 
   destroy() {
-    if (this.#pollTimer) clearTimeout(this.#pollTimer);
+  }
+
+  #upsertQueueItem(item: IdentifyQueueItem) {
+    const index = this.queue.findIndex((queued) => queued.entityId === item.entityId);
+    if (index >= 0) {
+      this.queue[index] = item;
+      return;
+    }
+
+    this.queue = [...this.queue, item];
+  }
+
+  #removeActiveQueueItem(entityId: string) {
+    this.queue = this.queue.filter((item) => item.entityId !== entityId);
   }
 
   #markQueueError(entityId: string, message: string) {
-    const item = this.queue.find((q) => q.entityId === entityId);
+    const item = this.queue.find((queued) => queued.entityId === entityId);
     if (item) {
       item.state = "error";
       item.errorMessage = message;
     }
   }
+}
 
-  #schedulePoll() {
-    if (!this.bulkSession || this.bulkSession.status === "completed") return;
-    this.#pollTimer = setTimeout(async () => {
-      if (!this.bulkSession) return;
-      try {
-        this.bulkSession = await fetchBulkIdentifySession(this.bulkSession.id);
-        for (const result of this.bulkSession.results) {
-          const existing = this.queue.find((q) => q.entityId === result.entityId);
-          if (!existing) continue;
-          if (result.response.ok && result.response.result?.patch) {
-            existing.state = "pending-review";
-            existing.proposal = result.response.result;
-          } else if (result.response.ok && !result.response.result?.patch) {
-            existing.state = "error";
-            existing.errorMessage = "Provider returned no metadata";
-          } else if (!result.response.ok) {
-            existing.state = "error";
-            existing.errorMessage = result.response.error ?? "Identification failed";
-          }
-        }
-      } catch (err) {
-        this.error = readError(err);
-        return;
-      }
-      this.#schedulePoll();
-    }, 1200);
-  }
+function queueItemFromApi(item: ApiIdentifyQueueItem, entity?: EntityCard): IdentifyQueueItem {
+  const card = entity ?? entityCardFromQueueItem(item);
+  return {
+    id: item.id,
+    entityId: item.entityId,
+    entityKind: item.entityKind,
+    title: item.title,
+    state: item.state,
+    provider: item.provider,
+    action: item.action,
+    candidates: item.candidates ?? [],
+    proposal: item.proposal ?? null,
+    errorMessage: item.error ?? null,
+    entity: card,
+    completedAt: item.completedAt ?? null,
+  };
+}
+
+function entityCardFromQueueItem(item: ApiIdentifyQueueItem): EntityCard {
+  return {
+    id: item.entityId,
+    kind: item.entityKind,
+    title: item.title,
+    parentEntityId: null,
+    sortOrder: null,
+    coverUrl: null,
+    hoverKind: "none",
+    hoverUrl: null,
+    hoverImages: [],
+    meta: [],
+    rating: null,
+    isFavorite: false,
+    isNsfw: false,
+    isOrganized: false,
+  };
 }
 
 function readError(err: unknown): string {

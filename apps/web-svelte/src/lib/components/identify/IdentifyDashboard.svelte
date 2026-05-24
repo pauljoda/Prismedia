@@ -14,11 +14,10 @@
 
   const store = useIdentifyStore();
 
-  const pendingCount = $derived(store.queue.filter((q) => q.state === "pending-review").length);
-  const choiceCount = $derived(store.queue.filter((q) => q.state === "pending-choice").length);
-  const errorCount = $derived(store.queue.filter((q) => q.state === "error").length);
+  const pendingCount = $derived(store.queue.filter((q) => q.state === "proposal").length);
+  const choiceCount = $derived(store.queue.filter((q) => q.state === "search").length);
   const hasReviewable = $derived(
-    store.queue.some((q) => q.state === "pending-review" || q.state === "pending-choice" || q.state === "not-searched"),
+    store.queue.some((q) => q.state === "proposal" || q.state === "search" || q.state === "error"),
   );
 </script>
 
@@ -118,8 +117,8 @@
       </div>
 
       {#each store.queue as item, i (item.entityId)}
-        {@const ledStatus = item.state === "pending-review" ? "accent" : item.state === "pending-choice" ? "warning" : item.state === "complete" ? "active" : item.state === "error" ? "error" : "idle"}
-        {@const stateLabel = { "pending-review": "REVIEW", "pending-choice": "PICK", "not-searched": "SEARCH", complete: "DONE", error: "ERROR" }[item.state]}
+        {@const ledStatus = item.state === "proposal" ? "accent" : item.state === "search" ? "warning" : item.state === "done" ? "active" : item.state === "error" ? "error" : "idle"}
+        {@const stateLabel = { proposal: "REVIEW", search: "SEARCH", done: "DONE", deleted: "DELETED", error: "ERROR" }[item.state]}
         <div
           class={cn(
             "grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-border-subtle px-3.5 py-2.5 transition-colors last:border-b-0 md:grid-cols-[80px_minmax(0,2fr)_minmax(0,1fr)_90px_80px_100px]",
@@ -127,15 +126,15 @@
           )}
         >
           <div class="flex items-center gap-2">
-            <StatusLed status={ledStatus} pulse={item.state === "pending-review"} size="sm" />
+            <StatusLed status={ledStatus} pulse={item.state === "proposal"} size="sm" />
             <span
               class={cn(
                 "font-mono text-[0.66rem] font-semibold",
-                item.state === "pending-review" && "text-text-accent",
-                item.state === "pending-choice" && "text-warning-text",
-                item.state === "complete" && "text-success-text",
+                item.state === "proposal" && "text-text-accent",
+                item.state === "search" && "text-warning-text",
+                item.state === "done" && "text-success-text",
                 item.state === "error" && "text-error-text",
-                item.state === "not-searched" && "text-text-disabled",
+                item.state === "deleted" && "text-text-disabled",
               )}
             >
               {stateLabel}
@@ -174,13 +173,13 @@
               type="button"
               class={cn(
                 "inline-flex h-7 items-center gap-1 rounded-xs border px-2 text-[0.72rem] font-medium transition-colors",
-                item.state === "pending-review"
+                item.state === "proposal"
                   ? "border-border-accent-strong bg-accent-950/40 text-text-accent hover:bg-accent-950/60"
                   : "border-border-default bg-surface-2 text-text-primary hover:bg-surface-3",
               )}
               onclick={() => store.reviewQueueItem(item)}
             >
-              {item.state === "pending-review" ? "Review" : item.state === "complete" ? "View" : item.state === "error" ? "Retry" : "Identify"}
+              {item.state === "proposal" ? "Review" : item.state === "done" ? "View" : item.state === "error" ? "Retry" : "Identify"}
               <ChevronRight class="h-3 w-3" />
             </button>
           </div>
@@ -198,6 +197,7 @@
     <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
       {#each store.supportedKinds as kindInfo (kindInfo.kind)}
         {@const hasPending = kindInfo.pending > 0}
+        {@const KindIcon = entityKindIcon(kindInfo.kind)}
         <button
           type="button"
           class={cn(
@@ -215,7 +215,7 @@
                   : "border-border-subtle bg-surface-3 text-text-secondary",
               )}
             >
-              <svelte:component this={entityKindIcon(kindInfo.kind)} class="h-[18px] w-[18px]" />
+              <KindIcon class="h-[18px] w-[18px]" />
             </div>
             {#if hasPending}
               <StatusLed status="accent" pulse />

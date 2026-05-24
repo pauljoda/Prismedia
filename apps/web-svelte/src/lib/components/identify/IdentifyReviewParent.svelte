@@ -118,6 +118,7 @@
       entity,
       proposal: child,
       parentProposal: proposal,
+      ancestors: [proposal],
     });
   }
 </script>
@@ -402,10 +403,10 @@
     <button
       type="button"
       class="inline-flex h-9 items-center gap-1.5 rounded-xs border border-border-default bg-transparent px-3 text-[0.78rem] text-text-muted transition-colors hover:bg-surface-2 hover:text-text-primary"
-      onclick={() => store.navigateToDashboard()}
+      onclick={() => void store.deleteQueueItem(entity.id)}
     >
       <X class="h-3.5 w-3.5" />
-      Reject
+      Delete
     </button>
     <span class="font-mono text-[0.7rem] text-text-muted">
       {Object.values(selectedFields).filter(Boolean).length} fields

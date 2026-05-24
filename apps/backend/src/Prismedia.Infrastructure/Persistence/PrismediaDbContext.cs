@@ -101,6 +101,8 @@ public sealed class PrismediaDbContext : DbContext {
 
     public DbSet<IdentifyResultRow> IdentifyResults => Set<IdentifyResultRow>();
 
+    public DbSet<IdentifyQueueItemRow> IdentifyQueueItems => Set<IdentifyQueueItemRow>();
+
     public DbSet<FingerprintSubmissionRow> FingerprintSubmissions => Set<FingerprintSubmissionRow>();
 
     public DbSet<DatabaseBackupRow> DatabaseBackups => Set<DatabaseBackupRow>();

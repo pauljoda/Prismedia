@@ -88,6 +88,30 @@ internal static partial class PrismediaModelConfiguration {
             entity.HasOne<ProviderConfigRow>().WithMany().HasForeignKey(row => row.ProviderConfigId).OnDelete(DeleteBehavior.SetNull);
         });
 
+        modelBuilder.Entity<IdentifyQueueItemRow>(entity => {
+            entity.ToTable("identify_queue_items");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(row => row.EntityId).HasColumnName("entity_id");
+            entity.Property(row => row.State)
+                .HasColumnName("state")
+                .HasMaxLength(32)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<IdentifyQueueState>())
+                .IsRequired();
+            entity.Property(row => row.ProviderCode).HasColumnName("provider_code").HasMaxLength(128);
+            entity.Property(row => row.Action).HasColumnName("action").HasMaxLength(128).IsRequired();
+            entity.Property(row => row.QueryJson).HasColumnName("query_json").HasColumnType("jsonb");
+            entity.Property(row => row.CandidatesJson).HasColumnName("candidates_json").HasColumnType("jsonb");
+            entity.Property(row => row.ProposalJson).HasColumnName("proposal_json").HasColumnType("jsonb");
+            entity.Property(row => row.Error).HasColumnName("error");
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            entity.Property(row => row.CompletedAt).HasColumnName("completed_at");
+            entity.HasIndex(row => row.EntityId).IsUnique();
+            entity.HasIndex(row => new { row.State, row.UpdatedAt });
+            entity.HasOne<EntityRow>().WithMany().HasForeignKey(row => row.EntityId).OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<FingerprintSubmissionRow>(entity => {
             entity.ToTable("fingerprint_submissions");
             entity.HasKey(row => row.Id);
