@@ -316,6 +316,23 @@ describe("EntityThumbnail", () => {
 
     expect(container.querySelector(".subtitle")?.classList.contains("title-align-center")).toBe(true);
   });
+
+  it("elevates NSFW, rating, and position badges into the thumbnail media", () => {
+    const { container } = render(EntityThumbnail, {
+      props: {
+        card: episodeCard(),
+      },
+    });
+
+    expect(container.querySelector(".top-badges .danger")?.getAttribute("aria-label")).toBe("NSFW");
+    expect(container.querySelector(".bottom-left-badges .position-badge")?.textContent?.trim()).toBe("S1 E2");
+    const ratingBadge = container.querySelector(".bottom-right-badges .rating-badge");
+    expect(ratingBadge?.textContent?.trim()).toBe("4");
+    expect(ratingBadge?.querySelectorAll("svg")).toHaveLength(1);
+    expect(container.querySelector(".chips")?.textContent).toContain("1080p");
+    expect(container.querySelector(".chips")?.textContent).not.toContain("S1 E2");
+    expect(container.querySelector(".chips")?.textContent).not.toContain("4");
+  });
 });
 
 function spriteCard(): EntityThumbnailCard {
@@ -384,6 +401,34 @@ function personCard(): EntityThumbnailCard {
     hover: {
       kind: "none",
     },
+  };
+}
+
+function episodeCard(): EntityThumbnailCard {
+  return {
+    ...spriteCard(),
+    custom: {
+      bottomLeft: {
+        label: "S1 E2",
+        title: "Season 1, Episode 2",
+      },
+    },
+    entity: {
+      ...spriteCard().entity,
+      capabilities: [
+        {
+          kind: "flags",
+          isFavorite: false,
+          isNsfw: true,
+          isOrganized: true,
+        },
+        {
+          kind: "rating",
+          value: 4,
+        },
+      ],
+    },
+    meta: [{ icon: "video", label: "1080p" }],
   };
 }
 

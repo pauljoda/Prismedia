@@ -1534,6 +1534,7 @@
           class={cn(
             "video-time-slider mobile-video-progress group/track",
             showControls ? "opacity-100" : "opacity-0",
+            markers.length === 0 && "no-markers",
           )}
           style:--prismedia-slider-fill={`${playbackProgressPercent}%`}
           style:--prismedia-buffer-progress={`${bufferedProgressPercent}%`}
@@ -1548,8 +1549,9 @@
         >
           {#if timelineHover}
             <div
-              class="pointer-events-none absolute bottom-[calc(100%+0.6rem)] z-20 w-[min(11rem,54vw)] -translate-x-1/2 border border-white/10 bg-black/88 p-1.5 text-center shadow-[0_0_16px_rgba(0,0,0,0.35)]"
-              style:left="{timelineHover.percent}%"
+              class="pointer-events-none absolute bottom-[calc(100%+0.6rem)] z-20 w-[min(11rem,54vw)] border border-border-default bg-[rgba(12,15,21,0.72)] p-1.5 text-center shadow-[0_2px_12px_rgba(0,0,0,0.35)] backdrop-blur-[12px] rounded-[10px] overflow-hidden"
+              style:left="clamp(0%, {timelineHover.percent}%, 100%)"
+              style:transform="translateX(clamp(-95%, calc(-1 * {timelineHover.percent}%), -5%))"
             >
               {#if timelinePreviewFrame && timelinePreviewSpriteDims.width > 0 && timelinePreviewSpriteDims.height > 0}
                 <div
@@ -1644,12 +1646,12 @@
     {#if fullChrome}
       <div
         class={cn(
-          "pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-2 bg-gradient-to-b from-black/75 via-black/30 to-transparent px-3 sm:px-4 pb-8 sm:pb-12 pt-3 sm:pt-4 transition-opacity duration-normal",
+          "player-top-bar pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-2 px-3 sm:px-4 pb-8 sm:pb-12 pt-3 sm:pt-4 transition-opacity duration-normal",
           showControls ? "opacity-100" : "opacity-0",
         )}
       >
       <div class="flex flex-wrap gap-1.5 sm:gap-2">
-        <span class="pointer-events-auto player-chip flex max-w-[14rem] flex-col border-accent-500/40 px-2 py-0.5 text-[0.55rem] font-semibold uppercase tracking-[0.18em] text-accent-100 sm:px-2.5 sm:py-1 sm:text-[0.62rem]">
+        <span class="pointer-events-auto player-mode-chip flex max-w-[14rem] flex-col px-2 py-0.5 text-[0.55rem] font-semibold uppercase tracking-[0.18em] text-accent-100 sm:px-2.5 sm:py-1 sm:text-[0.62rem]">
           <span class="truncate">{activePlaybackLabel}</span>
           {#if activePlaybackDetailLabel}
             <span class="truncate text-[0.5rem] tracking-[0.12em] text-white/50 sm:text-[0.56rem]">
@@ -1685,8 +1687,8 @@
         )}
       >
         {#if effectiveMode !== "direct"}
-          <div class="player-chip px-2 py-1.5">
-            <div class="mb-0.5 flex items-center justify-end gap-1 text-white/50">
+          <div class="player-instrument-chip px-2 py-1.5">
+            <div class="mb-0.5 flex items-center justify-end gap-1 text-white/40">
               <Wifi class="h-3.5 w-3.5" />
               <span class="text-[0.58rem] uppercase tracking-[0.16em]">ABR</span>
             </div>
@@ -1695,8 +1697,8 @@
             </div>
           </div>
         {/if}
-        <div class="player-chip px-2 py-1.5">
-          <div class="mb-0.5 flex items-center justify-end gap-1 text-white/50">
+        <div class="player-instrument-chip px-2 py-1.5">
+          <div class="mb-0.5 flex items-center justify-end gap-1 text-white/40">
             <Gauge class="h-3.5 w-3.5" />
             <span class="text-[0.58rem] uppercase tracking-[0.16em]">Buffer</span>
           </div>
@@ -1704,8 +1706,8 @@
             {bufferAhead.toFixed(1)}s
           </div>
         </div>
-        <div class="player-chip px-2 py-1.5">
-          <div class="mb-0.5 flex items-center justify-end gap-1 text-white/50">
+        <div class="player-instrument-chip px-2 py-1.5">
+          <div class="mb-0.5 flex items-center justify-end gap-1 text-white/40">
             <Settings2 class="h-3.5 w-3.5" />
             <span class="text-[0.58rem] uppercase tracking-[0.16em]">Drop</span>
           </div>
@@ -1722,14 +1724,14 @@
           showControls ? "opacity-100" : "opacity-0",
         )}
       >
-      <div class="pointer-events-auto flex items-center gap-3">
+      <div class="pointer-events-auto flex items-center gap-4">
         <button
           type="button"
           onclick={(event) => {
             event.stopPropagation();
             seek(-10);
           }}
-          class="relative flex h-7 w-7 items-center justify-center text-white/72 transition-colors hover:text-white"
+          class="player-skip-button relative flex h-8 w-8 items-center justify-center rounded-full text-white/72 transition-all hover:text-white"
           title="Skip back 10s"
           aria-label="Skip back 10s"
         >
@@ -1742,13 +1744,13 @@
             event.stopPropagation();
             togglePlay();
           }}
-          class="flex h-8 w-8 items-center justify-center bg-gradient-to-b from-accent-400 to-accent-500 text-accent-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_0_12px_rgba(199,155,92,0.2)] transition-all hover:from-accent-300 hover:to-accent-400 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_0_16px_rgba(199,155,92,0.28)]"
+          class="player-play-button flex h-11 w-11 items-center justify-center rounded-full text-accent-950 transition-all"
           aria-label={playing ? "Pause" : "Play"}
         >
           {#if buffering}
-            <Loader class="h-3.5 w-3.5 animate-spin" />
+            <Loader class="h-4 w-4 animate-spin" />
           {:else if playing}
-            <Pause class="h-3.5 w-3.5" fill="currentColor" />
+            <Pause class="h-4 w-4" fill="currentColor" />
           {:else}
             <span class="play-glyph" aria-hidden="true"></span>
           {/if}
@@ -1759,7 +1761,7 @@
             event.stopPropagation();
             seek(10);
           }}
-          class="relative flex h-7 w-7 items-center justify-center text-white/72 transition-colors hover:text-white"
+          class="player-skip-button relative flex h-8 w-8 items-center justify-center rounded-full text-white/72 transition-all hover:text-white"
           title="Skip forward 10s"
           aria-label="Skip forward 10s"
         >
@@ -1771,13 +1773,13 @@
 
       <div
         class={cn(
-          "pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/92 via-black/58 to-transparent px-3 pb-1.5 pt-8 transition-opacity duration-normal sm:px-4 sm:pb-4 sm:pt-20",
+          "player-control-bar pointer-events-none absolute inset-x-0 bottom-0 z-20 px-3 pb-5 pt-8 transition-opacity duration-normal sm:px-4 sm:pb-4 sm:pt-20",
           showControls ? "opacity-100" : "opacity-0",
         )}
       >
       <div class="flex flex-col gap-2">
         {#if markers.length > 0}
-          <div class="pointer-events-auto order-3 hidden flex-wrap gap-1.5 sm:flex">
+          <div class="pointer-events-auto order-3 hidden flex-wrap gap-1.5 sm:order-1 sm:flex">
             {#each markers as marker (marker.id)}
               <button
                 type="button"
@@ -1804,7 +1806,7 @@
               <button
                 type="button"
                 onclick={() => seek(-10)}
-                class="relative flex h-9 w-7 items-center justify-center text-white/70 transition-colors hover:text-white"
+                class="player-skip-button relative flex h-8 w-8 items-center justify-center rounded-full text-white/70 transition-all hover:text-white"
                 title="Skip back 10s"
                 aria-label="Skip back 10s"
               >
@@ -1814,13 +1816,13 @@
               <button
                 type="button"
                 onclick={togglePlay}
-                class="flex h-9 w-9 items-center justify-center bg-gradient-to-b from-accent-400 to-accent-500 text-accent-950 shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_0_14px_rgba(199,155,92,0.2)] transition-all hover:from-accent-300 hover:to-accent-400 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_0_20px_rgba(199,155,92,0.28)]"
+                class="player-play-button flex h-10 w-10 items-center justify-center rounded-full text-accent-950 transition-all"
                 aria-label={playing ? "Pause" : "Play"}
               >
                 {#if buffering}
-                  <Loader class="h-3.5 w-3.5 animate-spin" />
+                  <Loader class="h-4 w-4 animate-spin" />
                 {:else if playing}
-                  <Pause class="h-3.5 w-3.5" fill="currentColor" />
+                  <Pause class="h-4 w-4" fill="currentColor" />
                 {:else}
                   <span class="play-glyph" aria-hidden="true"></span>
                 {/if}
@@ -1828,7 +1830,7 @@
               <button
                 type="button"
                 onclick={() => seek(10)}
-                class="relative flex h-9 w-7 items-center justify-center text-white/70 transition-colors hover:text-white"
+                class="player-skip-button relative flex h-8 w-8 items-center justify-center rounded-full text-white/70 transition-all hover:text-white"
                 title="Skip forward 10s"
                 aria-label="Skip forward 10s"
               >
@@ -1849,7 +1851,7 @@
                 step="0.05"
                 value={muted ? 0 : volume}
                 oninput={(event) => handleVolumeChange(Number(event.currentTarget.value))}
-                class="prismedia-range h-1.5 w-20"
+                class="prismedia-range h-1 w-20"
               />
             </div>
 
@@ -2164,6 +2166,85 @@
     width: 100%;
   }
 
+  .player-top-bar {
+    background:
+      linear-gradient(
+        to bottom,
+        rgba(7, 8, 11, 0.88) 0%,
+        rgba(7, 8, 11, 0.50) 50%,
+        transparent 100%
+      );
+  }
+
+  .player-control-bar {
+    background:
+      linear-gradient(
+        to top,
+        rgba(7, 8, 11, 0.92) 0%,
+        rgba(7, 8, 11, 0.60) 50%,
+        transparent 100%
+      );
+  }
+
+  .player-play-button {
+    background: linear-gradient(135deg, var(--color-accent-300) 0%, var(--color-accent-500) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.20);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.25),
+      0 0 0 2px rgba(196, 154, 90, 0.25),
+      0 0 24px rgba(196, 154, 90, 0.40),
+      0 0 48px rgba(196, 154, 90, 0.15);
+  }
+
+  .player-play-button:hover {
+    background: linear-gradient(135deg, var(--color-accent-200) 0%, var(--color-accent-400) 100%);
+    border-color: rgba(255, 255, 255, 0.30);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.30),
+      0 0 0 2px rgba(196, 154, 90, 0.40),
+      0 0 32px rgba(196, 154, 90, 0.55),
+      0 0 64px rgba(196, 154, 90, 0.20);
+  }
+
+  .player-skip-button {
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  }
+
+  .player-skip-button:hover {
+    background: rgba(255, 255, 255, 0.14);
+    border-color: rgba(255, 255, 255, 0.22);
+    box-shadow:
+      0 0 12px rgba(255, 255, 255, 0.08),
+      0 2px 8px rgba(0, 0, 0, 0.30);
+  }
+
+  .player-mode-chip {
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    background: rgba(36, 30, 22, 0.75);
+    border: 1px solid rgba(196, 154, 90, 0.30);
+    border-radius: 8px;
+    box-shadow:
+      inset 0 1px 0 rgba(196, 154, 90, 0.10),
+      0 0 12px rgba(196, 154, 90, 0.12),
+      0 2px 8px rgba(0, 0, 0, 0.30);
+  }
+
+  .player-instrument-chip {
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    background: rgba(12, 15, 21, 0.70);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 8px;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.06),
+      0 2px 8px rgba(0, 0, 0, 0.35);
+  }
+
   .prismedia-player-surface,
   .prismedia-media-engine,
   .prismedia-media-engine :global(media-provider),
@@ -2212,77 +2293,91 @@
 
   .prismedia-player-surface:fullscreen,
   .prismedia-player-surface:-webkit-full-screen {
-    align-items: center;
     background: #000;
     display: flex;
-    height: 100dvh;
+    align-items: center;
     justify-content: center;
+    height: 100dvh;
+    inset: 0;
+    position: fixed;
     width: 100vw;
   }
 
   .prismedia-player-surface:fullscreen .prismedia-media-engine,
   .prismedia-player-surface:-webkit-full-screen .prismedia-media-engine {
     aspect-ratio: auto;
-    height: 100dvh;
+    height: 100%;
     max-width: none;
-    width: 100vw;
+    position: relative;
+    width: 100%;
   }
 
   .prismedia-range {
     appearance: none;
     background: rgba(255, 255, 255, 0.18);
-    border-radius: 0;
+    border-radius: 4px;
     cursor: pointer;
+    transition: background var(--duration-fast) var(--ease-default);
+  }
+
+  .prismedia-range:hover {
+    background: rgba(255, 255, 255, 0.24);
   }
 
   .prismedia-range::-webkit-slider-thumb {
     appearance: none;
     width: 0.72rem;
     height: 0.72rem;
-    border-radius: 0;
+    border-radius: 50%;
     background: var(--color-accent-300);
-    box-shadow: 0 0 10px rgba(199, 155, 92, 0.65);
+    box-shadow:
+      0 0 0 1px rgba(196, 154, 90, 0.35),
+      0 0 10px rgba(196, 154, 90, 0.65);
   }
 
   .prismedia-range::-moz-range-thumb {
     width: 0.72rem;
     height: 0.72rem;
     border: 0;
-    border-radius: 0;
+    border-radius: 50%;
     background: var(--color-accent-300);
-    box-shadow: 0 0 10px rgba(199, 155, 92, 0.65);
+    box-shadow:
+      0 0 0 1px rgba(196, 154, 90, 0.35),
+      0 0 10px rgba(196, 154, 90, 0.65);
   }
 
   .player-control-button {
     align-items: center;
-    background: rgba(17, 21, 28, 0.92);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 0;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    background: rgba(12, 15, 21, 0.78);
+    border: 1px solid rgba(148, 158, 178, 0.14);
+    border-radius: 8px;
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.06),
-      inset 0 0 0 0.5px rgba(255, 255, 255, 0.04),
-      0 2px 8px rgba(0, 0, 0, 0.3);
+      inset 0 1px 0 rgba(255, 255, 255, 0.07),
+      0 2px 10px rgba(0, 0, 0, 0.35);
     display: flex;
     height: 1.75rem;
     min-height: 1.75rem;
     min-width: 1.75rem;
     transform: translateY(0) scale(1);
     transition:
-      background-color 120ms ease,
-      border-color 120ms ease,
-      box-shadow 120ms ease,
-      color 120ms ease,
-      transform 120ms ease;
+      background-color var(--duration-fast) var(--ease-default),
+      border-color var(--duration-fast) var(--ease-default),
+      box-shadow var(--duration-fast) var(--ease-default),
+      color var(--duration-fast) var(--ease-default),
+      transform var(--duration-fast) var(--ease-default);
   }
 
   .player-control-button:hover,
   .player-control-button:focus-visible {
-    background: rgba(26, 31, 41, 0.96);
-    border-color: rgba(196, 154, 90, 0.42);
+    background: rgba(21, 26, 40, 0.88);
+    border-color: rgba(196, 154, 90, 0.45);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.08),
-      0 0 18px rgba(196, 154, 90, 0.28),
-      0 4px 16px rgba(0, 0, 0, 0.36);
+      inset 0 1px 0 rgba(255, 255, 255, 0.10),
+      0 0 0 1px rgba(196, 154, 90, 0.20),
+      0 0 20px rgba(196, 154, 90, 0.30),
+      0 4px 16px rgba(0, 0, 0, 0.40);
     color: white;
   }
 
@@ -2337,14 +2432,16 @@
   }
 
   .player-settings-menu {
-    animation: player-settings-sheet-in 180ms ease-out;
-    backdrop-filter: blur(18px);
-    background: rgba(7, 10, 16, 0.9);
-    border: 1px solid rgba(255, 255, 255, 0.14);
+    animation: player-settings-sheet-in var(--duration-moderate) var(--ease-enter);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    background: rgba(21, 26, 40, 0.92);
+    border: 1px solid var(--color-border-default, rgba(148, 158, 178, 0.13));
+    border-radius: 12px;
     bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.06),
-      0 20px 60px rgba(0, 0, 0, 0.55);
+      inset 0 1px 0 rgba(255, 255, 255, 0.05),
+      0 8px 40px rgba(0, 0, 0, 0.60);
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
@@ -2364,7 +2461,7 @@
   }
 
   .player-settings-menu.is-closing {
-    animation: player-settings-sheet-out 160ms ease-in forwards;
+    animation: player-settings-sheet-out var(--duration-normal) var(--ease-exit) forwards;
   }
 
   .player-settings-backdrop {
@@ -2379,7 +2476,7 @@
   }
 
   .player-settings-backdrop.is-closing {
-    animation: player-settings-backdrop-out 160ms ease-in forwards;
+    animation: player-settings-backdrop-out var(--duration-normal) var(--ease-exit) forwards;
   }
 
   .player-settings-row,
@@ -2387,16 +2484,17 @@
   .player-settings-back {
     align-items: center;
     border: 1px solid transparent;
+    border-radius: 8px;
     color: rgba(255, 255, 255, 0.82);
     display: grid;
     gap: 0.75rem;
     min-height: 2.5rem;
-    padding: 0.55rem 0.7rem;
+    padding: 8px 12px;
     text-align: left;
     transition:
-      background-color 120ms ease,
-      border-color 120ms ease,
-      color 120ms ease;
+      background-color var(--duration-fast) var(--ease-default),
+      border-color var(--duration-fast) var(--ease-default),
+      color var(--duration-fast) var(--ease-default);
     width: 100%;
   }
 
@@ -2415,7 +2513,7 @@
   }
 
   .player-settings-back {
-    border-bottom-color: rgba(255, 255, 255, 0.1);
+    border-bottom-color: var(--color-border-subtle, rgba(148, 158, 178, 0.07));
     font-size: 0.75rem;
     font-weight: 600;
     grid-template-columns: auto minmax(0, 1fr);
@@ -2427,13 +2525,14 @@
   .player-settings-option:hover,
   .player-settings-back:hover {
     background: rgba(255, 255, 255, 0.08);
-    border-color: rgba(255, 255, 255, 0.12);
+    border-color: var(--color-border-default, rgba(148, 158, 178, 0.13));
     color: #fff;
   }
 
   .player-settings-option.is-active {
     background: rgba(196, 154, 90, 0.16);
-    border-color: rgba(196, 154, 90, 0.42);
+    border-color: var(--color-border-accent-strong, rgba(196, 154, 90, 0.50));
+    box-shadow: 0 0 0 1px rgba(196, 154, 90, 0.20), 0 0 8px rgba(196, 154, 90, 0.10);
     color: var(--color-accent-100);
   }
 
@@ -2448,7 +2547,7 @@
   }
 
   .player-settings-separator {
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-top: 1px solid var(--color-border-subtle, rgba(148, 158, 178, 0.07));
     margin: 0.2rem 0;
   }
 
@@ -2475,10 +2574,10 @@
       linear-gradient(
         to right,
         var(--color-accent-400) 0 var(--range-progress),
-        rgba(255, 255, 255, 0.22) var(--range-progress) 100%
+        rgba(255, 255, 255, 0.18) var(--range-progress) 100%
       );
-    border: 1px solid rgba(255, 255, 255, 0.32);
-    border-radius: 0;
+    border: 1px solid var(--color-border-default, rgba(148, 158, 178, 0.13));
+    border-radius: 4px;
     grid-column: 1 / -1;
     height: 0.45rem;
     width: 100%;
@@ -2488,19 +2587,23 @@
     appearance: none;
     background: var(--color-accent-400);
     border: 1px solid rgba(0, 0, 0, 0.45);
-    border-radius: 0;
-    box-shadow: 0 0 14px rgba(196, 154, 90, 0.34);
-    height: 1rem;
-    width: 0.55rem;
+    border-radius: 50%;
+    box-shadow:
+      0 0 0 1px rgba(196, 154, 90, 0.30),
+      0 0 14px rgba(196, 154, 90, 0.40);
+    height: 0.85rem;
+    width: 0.85rem;
   }
 
   .player-settings-control input[type="range"]::-moz-range-thumb {
     background: var(--color-accent-400);
     border: 1px solid rgba(0, 0, 0, 0.45);
-    border-radius: 0;
-    box-shadow: 0 0 14px rgba(196, 154, 90, 0.34);
-    height: 1rem;
-    width: 0.55rem;
+    border-radius: 50%;
+    box-shadow:
+      0 0 0 1px rgba(196, 154, 90, 0.30),
+      0 0 14px rgba(196, 154, 90, 0.40);
+    height: 0.85rem;
+    width: 0.85rem;
   }
 
   .player-settings-reset:hover {
@@ -2572,7 +2675,7 @@
   }
 
   .mobile-video-progress {
-    height: 5px;
+    height: 3px;
   }
 
   .mobile-video-progress:hover {
@@ -2580,18 +2683,18 @@
   }
 
   .video-time-slider {
-    --media-slider-track-bg: rgba(255, 255, 255, 0.22);
-    --media-slider-track-fill-bg: linear-gradient(90deg, var(--color-accent-400), var(--color-accent-300));
+    --media-slider-track-bg: rgba(255, 255, 255, 0.18);
+    --media-slider-track-fill-bg: linear-gradient(90deg, var(--color-accent-500), var(--color-accent-300));
     --media-slider-track-progress-bg: transparent;
-    --media-slider-chapter-hover-transform: scaleY(1.9);
-    bottom: 4.85rem;
+    --media-slider-chapter-hover-transform: scaleY(2.2);
+    bottom: 0.75rem;
     cursor: pointer;
     display: block;
     left: 1rem;
     position: absolute;
     right: 1rem;
     touch-action: none;
-    transition: height 120ms ease;
+    transition: height var(--duration-fast) var(--ease-default);
     z-index: 45;
   }
 
@@ -2637,7 +2740,7 @@
 
   .video-slider-track-fill {
     background: var(--media-slider-track-fill-bg);
-    box-shadow: 0 0 10px rgba(196, 154, 90, 0.35);
+    box-shadow: 0 0 12px rgba(196, 154, 90, 0.40);
     width: var(--chapter-fill, 0%);
     z-index: 2;
   }
@@ -2651,28 +2754,31 @@
   }
 
   .video-slider-native-progress.is-buffered {
-    background: rgba(255, 255, 255, 0.34);
+    background: rgba(255, 255, 255, 0.22);
     width: var(--prismedia-buffer-progress, 0%);
     z-index: 2;
   }
 
   .video-slider-native-progress.is-played {
     background: var(--media-slider-track-fill-bg);
-    box-shadow: 0 0 10px rgba(196, 154, 90, 0.35);
+    box-shadow: 0 0 12px rgba(196, 154, 90, 0.40);
     width: var(--prismedia-slider-fill, 0%);
     z-index: 3;
   }
 
   .video-slider-thumb {
     background: var(--color-accent-400);
-    box-shadow: 0 0 12px rgba(196, 154, 90, 0.55);
-    height: 0.95rem;
+    border-radius: 50%;
+    box-shadow:
+      0 0 0 1px rgba(196, 154, 90, 0.35),
+      0 0 14px rgba(196, 154, 90, 0.55);
+    height: 0.75rem;
     left: var(--prismedia-slider-fill, var(--slider-fill, 0%));
     pointer-events: none;
     position: absolute;
     top: 50%;
     transform: translate(-50%, -50%);
-    width: 0.45rem;
+    width: 0.75rem;
     z-index: 4;
   }
 
@@ -2687,22 +2793,28 @@
 
   .timeline-trickplay-preview {
     background-color: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--color-border-default, rgba(148, 158, 178, 0.13));
+    border-radius: 6px;
     margin-bottom: 0.4rem;
+    overflow: hidden;
     width: 100%;
   }
 
   @media (min-width: 640px) {
     .video-time-slider {
-      bottom: 5.75rem;
+      bottom: 7rem;
+    }
+
+    .video-time-slider.no-markers {
+      bottom: 5.25rem;
     }
 
     .mobile-video-progress {
-      height: 8px;
+      height: 4px;
     }
 
     .mobile-video-progress:hover {
-      height: 10px;
+      height: 8px;
     }
 
     .player-control-button {
@@ -2717,9 +2829,16 @@
     }
 
     .player-settings-menu {
-      animation: player-settings-flyout-in 160ms ease-out;
-      background: rgba(7, 10, 16, 0.76);
+      animation: player-settings-flyout-in var(--duration-moderate) var(--ease-enter);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      background: rgba(16, 20, 32, 0.82);
+      border: 1px solid var(--color-border-default, rgba(148, 158, 178, 0.13));
+      border-radius: 12px;
       bottom: 7.25rem;
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.05),
+        0 8px 40px rgba(0, 0, 0, 0.60);
       height: auto;
       left: auto;
       max-height: none;
@@ -2733,7 +2852,7 @@
     }
 
     .player-settings-menu.is-closing {
-      animation: player-settings-flyout-out 140ms ease-in forwards;
+      animation: player-settings-flyout-out var(--duration-normal) var(--ease-exit) forwards;
     }
 
     .player-settings-backdrop {

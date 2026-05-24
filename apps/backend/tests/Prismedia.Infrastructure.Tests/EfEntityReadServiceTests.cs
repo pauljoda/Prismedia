@@ -172,7 +172,6 @@ public sealed class EfEntityReadServiceTests {
                 new EntityThumbnailMeta("duration", "09:56"),
                 new EntityThumbnailMeta("video", "1080p"),
                 new EntityThumbnailMeta("video", "H264"),
-                new EntityThumbnailMeta("video", "8 Mbps"),
                 new EntityThumbnailMeta("video", "MATROSKA")
             ],
             item.Meta);

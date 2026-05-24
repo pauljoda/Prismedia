@@ -1269,7 +1269,7 @@
         {/if}
 
         <div class="hero-text">
-          <h1>{card.entity.title}</h1>
+          <h1 class="hero-title">{card.entity.title}</h1>
 
           {#if heroMeta}
             <div class="meta-row">
@@ -1807,13 +1807,17 @@
     100% { transform: scale(1); }
   }
 
-  h1 {
+  .hero-title {
     margin: 0;
+    max-width: 100%;
+    min-width: 0;
     font-family: var(--font-heading, Geist, sans-serif);
     font-size: clamp(1.4rem, 3vw, 2rem);
     font-weight: 700;
     line-height: 1.15;
     color: var(--detail-text);
+    overflow-wrap: anywhere;
+    word-break: normal;
   }
 
   /* ── Meta row (studio · date · count) ─────────────────── */

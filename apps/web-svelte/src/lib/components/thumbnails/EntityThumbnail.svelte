@@ -27,7 +27,6 @@
     iconForKind,
     placeholderGradient,
     resolveEntityThumbnailHref,
-    toAspectRatioNumeric,
     toAspectRatioValue,
     type EntityThumbnailCard,
     type EntityThumbnailMetaIcon,
@@ -91,9 +90,7 @@
   const sequenceAssets = $derived(card.hover.kind === "image-sequence" ? card.hover.assets : []);
   const asset = $derived(getThumbnailAsset(card, hoverBroken || isSpriteHover ? null : pointerRatio));
   const aspectRatio = $derived(toAspectRatioValue(card.aspectRatio));
-  const aspectRatioNumeric = $derived(toAspectRatioNumeric(card.aspectRatio));
   const imageOnly = $derived(mediaOnly || card.entity.kind === ENTITY_KIND.bookPage);
-  const containerAspectRatio = $derived(imageOnly ? undefined : `${aspectRatioNumeric * 3} / 4`);
   const imageFit = $derived(card.fit ?? "cover");
   const placeholderIcon = $derived(iconForKind(card.entity.kind));
   const sequenceRestCover = $derived(
@@ -142,7 +139,6 @@
       spriteError = true;
     }
   }
-
 
   function clearHoverIntentTimer() {
     if (!hoverIntentTimer) return;
@@ -355,7 +351,7 @@
   class:is-list={layout === "list"}
   class:is-selected={selected}
   class:is-select-mode={inSelectMode}
-  style:aspect-ratio={layout === "list" ? undefined : containerAspectRatio ?? aspectRatio}
+  style:aspect-ratio={layout === "list" || !imageOnly ? undefined : aspectRatio}
   aria-label={card.entity.title}
   aria-checked={!onActivate && (inSelectMode || (!href && selectable)) ? selected : undefined}
   onblur={clearHover}
@@ -367,6 +363,7 @@
     class="media"
     class:has-placeholder={showPlaceholder}
     role="presentation"
+    style:aspect-ratio={layout === "list" ? undefined : aspectRatio}
     style:background={showPlaceholder ? gradient : undefined}
     onpointerenter={handlePointerEnter}
     onpointerdown={handlePointerDown}
@@ -461,10 +458,27 @@
       />
     {/if}
 
-    {#if !imageOnly && nsfw}
+    {#if nsfw}
       <div class="badges top-badges">
         <span class="badge danger icon-only" title="NSFW" aria-label="NSFW">
           <Flame size={13} />
+        </span>
+      </div>
+    {/if}
+
+    {#if bottomLeft}
+      <div class="badges bottom-left-badges">
+        <span class="badge position-badge" title={bottomLeft.title ?? bottomLeft.label}>
+          {bottomLeft.label}
+        </span>
+      </div>
+    {/if}
+
+    {#if rating > 0}
+      <div class="badges bottom-right-badges">
+        <span class="badge rating-badge" title={`Rating ${formatRating(rating)}`} aria-label={`Rating ${formatRating(rating)}`}>
+          {formatRating(rating)}
+          <Star size={11} />
         </span>
       </div>
     {/if}
@@ -489,13 +503,8 @@
         {/if}
       </div>
 
-      {#if bottomLeft || rating > 0 || card.meta?.length}
+      {#if card.meta?.length}
         <div class="chips">
-          {#if bottomLeft}
-            <span class="chip chip-accent" title={bottomLeft.title ?? bottomLeft.label}>
-              {bottomLeft.label}
-            </span>
-          {/if}
           {#if card.meta?.length}
             {#each card.meta as item (item.icon + item.label)}
               <span class="chip">
@@ -503,12 +512,6 @@
                 {item.label}
               </span>
             {/each}
-          {/if}
-          {#if rating > 0}
-            <span class="chip chip-rating" title="Rating">
-              <Star size={11} />
-              {formatRating(rating)}
-            </span>
           {/if}
         </div>
       {/if}
@@ -581,26 +584,27 @@
     display: flex;
     flex-direction: column;
     container-type: inline-size;
-    content-visibility: auto;
-    contain-intrinsic-size: auto 18rem;
     color: var(--color-text, #f4efe6);
     text-decoration: none;
     min-width: 0;
+    border: 1px solid var(--color-border-subtle, rgb(255 255 255 / 0.08));
+    border-radius: 6px;
+    box-shadow: var(--shadow-card);
     transition:
-      transform 200ms var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1));
+      transform 200ms var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1)),
+      border-color 200ms var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1)),
+      box-shadow 200ms var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1));
   }
 
   .entity-thumbnail:is(:hover, :focus-visible) {
     transform: translateY(-1px);
+    border-color: var(--color-border-accent, rgb(242 194 106 / 0.32));
+    box-shadow: var(--shadow-card-hover), var(--shadow-glow-accent);
   }
 
-  .entity-thumbnail.is-selected .media {
-    border-color: rgb(242 194 106 / 0.6);
-    box-shadow:
-      inset 0 0 0 1px rgb(242 194 106 / 0.28),
-      0 0 0 1px rgb(242 194 106 / 0.45),
-      0 0 26px rgb(242 194 106 / 0.18),
-      0 10px 22px rgb(0 0 0 / 0.4);
+  .entity-thumbnail.is-selected {
+    border-color: var(--color-border-accent-strong, rgb(242 194 106 / 0.6));
+    box-shadow: var(--shadow-focus-accent), var(--shadow-glow-accent-strong);
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -617,7 +621,6 @@
     flex-direction: row;
     inline-size: 100%;
     min-block-size: 5.25rem;
-    contain-intrinsic-size: auto 5.25rem;
     border: 1px solid rgb(255 255 255 / 0.08);
     background: rgb(12 12 13 / 0.92);
     box-shadow:
@@ -628,7 +631,7 @@
   .entity-thumbnail.is-list .media {
     flex: 0 0 auto;
     width: clamp(5.5rem, 30%, 7.5rem);
-    border: none;
+    border-radius: 5px 0 0 5px;
     box-shadow: none;
     border-right: 1px solid rgb(255 255 255 / 0.1);
   }
@@ -636,31 +639,19 @@
   .media {
     position: relative;
     z-index: 2;
-    flex: 3;
+    width: 100%;
     min-height: 0;
     overflow: hidden;
     touch-action: pan-y;
-    border: 1px solid rgb(255 255 255 / 0.08);
-    border-radius: 6px;
+    border-radius: 5px 5px 0 0;
     background:
       radial-gradient(circle at 50% 45%, rgb(255 255 255 / 0.08), transparent 34%),
       linear-gradient(135deg, rgb(15 16 18 / 0.96), rgb(28 25 20 / 0.92)),
       #111;
-    box-shadow:
-      inset 0 0 0 1px rgb(0 0 0 / 0.5),
-      0 2px 6px rgb(0 0 0 / 0.32);
-    transition:
-      border-color 200ms var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1)),
-      box-shadow 200ms var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1));
   }
 
-  .entity-thumbnail:is(:hover, :focus-visible) .media {
-    border-color: rgb(242 194 106 / 0.32);
-    box-shadow:
-      inset 0 0 0 1px rgb(0 0 0 / 0.5),
-      0 0 0 1px rgb(242 194 106 / 0.18),
-      0 10px 22px rgb(0 0 0 / 0.42),
-      0 0 24px rgb(242 194 106 / 0.07);
+  .entity-thumbnail.is-image-only .media {
+    border-radius: 5px;
   }
 
   .entity-thumbnail.is-list .media img {
@@ -809,33 +800,25 @@
   .glass-info {
     position: relative;
     z-index: 1;
-    flex: 1;
     display: flex;
     flex-direction: column;
     justify-content: center;
-    gap: 0.2em;
+    gap: 0.25rem;
     min-width: 0;
-    min-height: 0;
-    margin-top: -0.5rem;
-    padding: 0 0.65rem;
-    border: 1px solid rgb(255 255 255 / 0.07);
-    border-top: none;
-    border-radius: 0 0 6px 6px;
+    padding: 0.5rem 0.6rem;
+    border-top: 1px solid rgb(255 255 255 / 0.05);
     background:
       linear-gradient(
         180deg,
         rgb(20 22 26 / 0.95) 0%,
         rgb(13 14 17) 100%
       );
-    box-shadow:
-      0 4px 12px rgb(0 0 0 / 0.4),
-      inset 0 1px 0 rgb(255 255 255 / 0.04);
     overflow: hidden;
     pointer-events: none;
   }
 
   .glass-info.has-subtitle {
-    gap: 0.15em;
+    gap: 0.15rem;
   }
 
   .badges {
@@ -853,6 +836,23 @@
 
   .top-badges {
     top: 0.45rem;
+  }
+
+  .bottom-left-badges,
+  .bottom-right-badges {
+    bottom: 0.45rem;
+  }
+
+  .bottom-left-badges {
+    right: auto;
+    left: 0.45rem;
+    justify-content: flex-start;
+  }
+
+  .bottom-right-badges {
+    right: 0.45rem;
+    left: auto;
+    justify-content: flex-end;
   }
 
   .badge {
@@ -881,6 +881,26 @@
     border-color: rgb(255 92 67 / 0.42);
     background: rgb(40 13 10 / 0.76);
     box-shadow: 0 0 14px rgb(255 92 67 / 0.12);
+  }
+
+  .position-badge {
+    color: rgb(244 239 230 / 0.9);
+    border-color: rgb(242 194 106 / 0.34);
+    background: rgb(9 10 11 / 0.78);
+    box-shadow: 0 0 14px rgb(0 0 0 / 0.18);
+  }
+
+  .rating-badge {
+    gap: 0.18rem;
+    color: rgb(242 194 106 / 0.96);
+    border-color: rgb(242 194 106 / 0.38);
+    background: rgb(39 29 12 / 0.76);
+    box-shadow: 0 0 16px rgb(242 194 106 / 0.18);
+  }
+
+  .rating-badge :global(svg) {
+    fill: currentColor;
+    filter: drop-shadow(0 0 4px rgb(242 194 106 / 0.35));
   }
 
   .icon-only {
@@ -962,6 +982,7 @@
     display: flex;
     flex-direction: column;
     min-width: 0;
+    max-width: 100%;
   }
 
   .subtitle {
@@ -995,6 +1016,7 @@
 
   .entity-thumbnail.is-list .glass-info {
     flex: 1 1 0;
+    height: auto;
     min-width: 0;
     min-height: auto;
     justify-content: center;
@@ -1029,8 +1051,8 @@
     overflow: hidden;
     font-family: var(--font-heading, Geist, sans-serif);
     font-size: 0.82rem;
-    font-weight: 620;
-    line-height: 1.25;
+    font-weight: 600;
+    line-height: 1.3;
     letter-spacing: -0.01em;
     white-space: normal;
     text-overflow: ellipsis;
@@ -1038,9 +1060,9 @@
   }
 
   .title-size-compact {
-    font-size: 0.66rem;
-    font-weight: 620;
-    line-height: 1.15;
+    font-size: 0.72rem;
+    font-weight: 600;
+    line-height: 1.2;
   }
 
   .title-align-left {
@@ -1058,8 +1080,9 @@
   .chips {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.2rem;
-    max-block-size: 1.3rem;
+    gap: 0.25rem;
+    margin-top: 0.1rem;
+    max-block-size: 1.25rem;
     overflow: hidden;
   }
 
@@ -1074,10 +1097,10 @@
     background: rgb(255 255 255 / 0.06);
     color: rgb(244 239 230 / 0.72);
     font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.58rem;
+    font-size: 0.6rem;
     line-height: 1;
-    min-height: 1.15rem;
-    padding: 0.14rem 0.28rem;
+    min-height: 1.1rem;
+    padding: 0.12rem 0.28rem;
     text-shadow: 0 1px 2px rgb(0 0 0 / 0.5);
     white-space: nowrap;
     overflow: hidden;
@@ -1109,15 +1132,42 @@
     filter: drop-shadow(0 0 3px rgb(242 193 95 / 0.4));
   }
 
-  @container (max-width: 120px) {
+  @container (max-width: 220px) {
     .glass-info {
-      padding: 0 0.3rem;
+      padding: 0.35rem 0.45rem;
+      gap: 0.15rem;
+    }
+
+    h3 {
+      font-size: 0.72rem;
+    }
+
+    .chips {
+      gap: 0.15rem;
+      max-block-size: 1rem;
+    }
+
+    .chip {
+      font-size: 0.52rem;
+      min-height: 0.9rem;
+      padding: 0.08rem 0.2rem;
+    }
+
+    .subtitle {
+      display: none;
+    }
+  }
+
+  @container (max-width: 140px) {
+    .glass-info {
+      padding: 0.25rem 0.35rem;
+      gap: 0.1rem;
     }
 
     h3 {
       -webkit-line-clamp: 1;
       line-clamp: 1;
-      font-size: 0.6rem;
+      font-size: 0.62rem;
     }
 
     .subtitle,
@@ -1127,34 +1177,9 @@
     }
   }
 
-  @container (max-width: 200px) and (min-width: 121px) {
-    .glass-info {
-      padding: 0 0.4rem;
-    }
-
-    h3 {
-      font-size: 0.72rem;
-    }
-
-    .subtitle {
-      display: none;
-    }
-
-    .chip {
-      font-size: 0.5rem;
-      min-height: 1rem;
-      padding: 0.1rem 0.22rem;
-    }
-  }
-
   @media (max-width: 640px) {
     .badge {
       font-size: 0.61rem;
-    }
-
-    .chip {
-      font-size: 0.56rem;
-      min-height: 1.18rem;
     }
   }
 </style>

@@ -55,6 +55,7 @@
     initialPageSize?: number;
     initialSortBy?: EntityGridSort;
     initialSortDir?: EntityGridSortDir;
+    dockControls?: boolean;
     loading?: boolean;
     loadingMore?: boolean;
     loadMoreError?: string | null;
@@ -77,6 +78,7 @@
      */
     remoteTotalCount?: number | null;
     selectable?: boolean;
+    showPagination?: boolean;
     scrollBottomPadding?: number;
     scrollMaxHeight?: string | null | undefined;
     scrollMinHeight?: number;
@@ -91,6 +93,7 @@
     initialPageSize = DEFAULT_PAGE_SIZE,
     initialSortBy = "title",
     initialSortDir = "asc",
+    dockControls = true,
     loading = false,
     loadingMore = false,
     loadMoreError = null,
@@ -107,6 +110,7 @@
     prefsKey,
     remoteTotalCount = null,
     selectable = true,
+    showPagination = true,
     scrollBottomPadding = 24,
     scrollMaxHeight = undefined,
     scrollMinHeight = 320,
@@ -167,7 +171,6 @@
   let mediaWall = $state(false);
   let selectedIds = $state<string[]>([]);
   let viewportEl: HTMLDivElement | undefined = $state();
-  let paginationBarEl: HTMLElement | undefined = $state();
   let sectionEl: HTMLElement | undefined = $state();
   let measuredScrollMaxHeight = $state<string | null>(null);
   let measuredFillHeight = $state<string | null>(null);
@@ -210,11 +213,14 @@
     selectedCards.length > 0 && selectedCards.every((c) => isNsfw(c.entity.capabilities)),
   );
   const request = $derived(entityGridRequestFromState(gridState, filterOptions));
-  const effectiveScrollMaxHeight = $derived(scrollMaxHeight === undefined ? measuredScrollMaxHeight : scrollMaxHeight);
-  const containsScroll = $derived(scrollMaxHeight !== null);
+  const effectiveScrollMaxHeight = $derived(
+    dockControls ? scrollMaxHeight === undefined ? measuredScrollMaxHeight : scrollMaxHeight : null,
+  );
+  const containsScroll = $derived(dockControls && scrollMaxHeight !== null);
   const normalizedPageSizeOptions = $derived(
     Array.from(new Set([...pageSizeOptions, pageSize].map(normalizePageSize))).sort((a, b) => a - b),
   );
+  const paginationThreshold = $derived(normalizedPageSizeOptions[0] ?? normalizePageSize(initialPageSize));
   /**
    * Server total reflects what's matched by remote filters (kind, hideNsfw). When
    * the grid additionally applies a local search/capability filter we fall back to
@@ -246,6 +252,17 @@
   const canPageBack = $derived(currentPageIndex > 0);
   const canPageForward = $derived(currentPageIndex < pageCount - 1 || Boolean(hasMore && onLoadMore));
   const canSeekToEnd = $derived(currentPageIndex < pageCount - 1);
+  const shouldRenderPagination = $derived(
+    showPagination &&
+      !loading &&
+      visibleCards.length > 0 &&
+      (effectiveTotal > paginationThreshold ||
+        pageCount > 1 ||
+        currentPageIndex > 0 ||
+        Boolean(hasMore) ||
+        Boolean(loadMoreError)),
+  );
+  const showPageSizeMenu = $derived(pageSizeOpen && shouldRenderPagination);
   /** Widest possible string for the readout, used to reserve a stable layout slot. */
   const readoutPlaceholderWidth = $derived(
     Math.max(String(effectiveTotal).length, String(pageStart + 1).length, String(pageEnd).length) * 2 + 4,
@@ -310,9 +327,6 @@
     });
   });
 
-  let scheduleMeasureRef: (() => void) | null = $state(null);
-  let measureRef: (() => void) | null = $state(null);
-
   onMount(() => {
     let raf: number | null = null;
     let observer: ResizeObserver | null = null;
@@ -336,20 +350,16 @@
     }
 
     function measureViewport() {
-      if (!viewportEl || scrollMaxHeight !== undefined) {
+      if (!dockControls || !viewportEl || scrollMaxHeight !== undefined) {
         measuredScrollMaxHeight = null;
         measuredFillHeight = null;
         return;
       }
 
-      // The pagination bar now sits in normal flow below the scrollable grid,
-      // so its rendered height has to come out of the inner viewport's budget
-      // — otherwise the bar would push the bottom of the grid off-screen.
-      const paginationHeight = paginationBarEl?.getBoundingClientRect().height ?? 0;
       const containerBottom = findScrollAncestorBottom(viewportEl);
 
       measuredScrollMaxHeight = computeContainedScrollHeight({
-        bottomPadding: scrollBottomPadding + paginationHeight,
+        bottomPadding: scrollBottomPadding,
         minHeight: scrollMinHeight,
         top: viewportEl.getBoundingClientRect().top,
         viewportHeight: containerBottom,
@@ -358,10 +368,8 @@
       /*
        * Total fill height for the entity-grid flex column. We anchor against
        * the section's top edge (rather than the inner viewport's) so the
-       * toolbar/tabs above the viewport are included in the fill area. The
-       * column uses `margin-top: auto` on the pagination bar to push the bar
-       * to the bottom of this area when content doesn't fill it, instead of
-       * inflating the inner viewport with empty scrollable space.
+       * toolbar/tabs above the viewport are included in the fill area without
+       * inflating the card viewport with empty scrollable space.
        */
       if (sectionEl) {
         const sectionTop = sectionEl.getBoundingClientRect().top;
@@ -380,9 +388,6 @@
       });
     }
 
-    measureRef = measureViewport;
-    scheduleMeasureRef = scheduleMeasure;
-
     observer = new ResizeObserver(scheduleMeasure);
     if (viewportEl) observer.observe(viewportEl);
     if (sectionEl) observer.observe(sectionEl);
@@ -393,23 +398,7 @@
       observer?.disconnect();
       window.removeEventListener("resize", scheduleMeasure);
       if (raf !== null) cancelAnimationFrame(raf);
-      measureRef = null;
-      scheduleMeasureRef = null;
     };
-  });
-
-  /*
-   * The pagination element mounts and unmounts based on whether the grid has
-   * cards to page; observe its lifecycle separately so changes to its height
-   * (e.g. mobile reflow swapping between one- and two-row layouts) feed into
-   * the viewport height computation.
-   */
-  $effect(() => {
-    if (!paginationBarEl || !scheduleMeasureRef) return;
-    const observer = new ResizeObserver(scheduleMeasureRef);
-    observer.observe(paginationBarEl);
-    queueMicrotask(() => measureRef?.());
-    return () => observer.disconnect();
   });
 
   function clearScrollEndTimer() {
@@ -678,6 +667,7 @@
 <section
   bind:this={sectionEl}
   class="entity-grid"
+  class:is-static={!dockControls}
   style:--col-count={scale}
   style:--entity-grid-fill-height={measuredFillHeight ?? undefined}
 >
@@ -867,8 +857,8 @@
     {/if}
   </div>
 
-  {#if !loading && visibleCards.length > 0}
-    <div class="pagination-shell" bind:this={paginationBarEl}>
+  {#if shouldRenderPagination}
+    <div class="pagination-shell">
     <nav class="pagination-bar" aria-label="Entity grid pagination">
         <span
           class="pagination-progress"
@@ -961,7 +951,7 @@
                 {pageSize}
                 <ChevronDown class="h-3 w-3 text-text-disabled ml-1 shrink-0" />
               </button>
-              {#if pageSizeOpen}
+              {#if showPageSizeMenu}
                 <button
                   type="button"
                   class="fixed inset-0 z-40 cursor-default"
@@ -994,18 +984,20 @@
 
 <style>
   /*
-   * Use a flex column instead of a grid so the pagination bar can be pushed
-   * to the bottom of the section with `margin-top: auto`. The section's
-   * `min-height` is set from JS to fill the available area below the page
-   * header; when the viewport's content is short, the bar floats to the
-   * bottom of that area while the inner viewport stays at content height
-   * (rather than ballooning into a tall scrollable empty region).
+   * Use a flex column so the toolbar, tabs, cards, and pagination remain in
+   * normal document flow. The top toolbar can stay sticky independently, while
+   * the pagination controls live at the natural end of the list where paging
+   * decisions are made.
    */
   .entity-grid {
     display: flex;
     flex-direction: column;
     min-height: var(--entity-grid-fill-height, 0);
     min-width: 0;
+  }
+
+  .entity-grid.is-static {
+    min-height: 0;
   }
 
   /*
@@ -1022,8 +1014,9 @@
     margin-top: 0;
   }
 
-  .entity-grid > .pagination-shell {
-    margin-top: auto;
+  .entity-grid > .pagination-shell,
+  .entity-grid.is-static > .pagination-shell {
+    margin-top: 0.85rem;
   }
 
   .grid-viewport {
@@ -1036,11 +1029,9 @@
 
   /*
    * The viewport no longer establishes its own scrolling container. Cards
-   * flow naturally in the layout's main scroll, the sticky toolbar/pagination
-   * strip float over them, and the section's flex min-height keeps the
-   * pagination strip pinned to the bottom of the visible area on sparse
-   * grids. Without an inner overflow container, content can't be clipped
-   * behind the sticky toolbar — the cards just slide under it.
+   * flow naturally in the layout's main scroll, and the sticky toolbar floats
+   * over them. Without an inner overflow container, content can't be clipped
+   * behind the sticky toolbar - the cards just slide under it.
    */
   .grid-viewport.is-contained {
     min-height: 0;
@@ -1056,7 +1047,7 @@
     gap: 0.75rem;
     align-items: start;
     overflow-anchor: none;
-    contain: layout paint;
+    contain: layout;
     transition: grid-template-columns 240ms cubic-bezier(0.4, 0, 0.2, 1);
   }
 
@@ -1079,34 +1070,30 @@
    * transport hugs its content but always lands on the geometric centerline.
    */
   /*
-   * The pagination strip is a sibling of the scrolling .grid-viewport (not a
-   * child of it), so iOS/macOS overscroll bounce on the inner viewport does
-   * not shake the bar's anchored position. The outer .pagination-shell holds
-   * the sticky `bottom: 0` anchor and contributes a `padding-bottom: 0.5rem`
-   * opaque buffer between the bar and the scroll container's bottom edge —
-   * mirroring how `.toolbar-shell` offsets its own visible bar from the top
-   * edge with `padding-top: 0.5rem`. The inner `.pagination-bar` keeps the
-   * glass/border visual styling but no longer carries any sticky behavior.
+   * Pagination is intentionally not sticky. It should not participate in every
+   * scroll frame; users only need it once they reach the end of the current
+   * page, and keeping it in flow avoids thumbnail edge clipping behind it.
    */
   .pagination-shell {
-    position: sticky;
-    bottom: 0;
+    position: relative;
     z-index: 4;
-    padding-bottom: 0.5rem;
+    padding-bottom: 0;
     background: transparent;
-    pointer-events: none;
+    pointer-events: auto;
   }
 
   .pagination-shell::after {
-    content: "";
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    height: 0.5rem;
-    background: var(--color-bg, #07080b);
-    z-index: -1;
-    pointer-events: auto;
+    display: none;
+  }
+
+  .entity-grid.is-static :global(.toolbar-shell) {
+    position: relative;
+    top: auto;
+    padding-top: 0;
+  }
+
+  .entity-grid.is-static :global(.toolbar-shell::before) {
+    display: none;
   }
 
   .pagination-bar {

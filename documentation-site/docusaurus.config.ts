@@ -82,7 +82,7 @@ const config: Config = {
           position: 'right',
         },
         {
-          href: 'https://www.reddit.com/r/PrismediaMediaApp/',
+          href: 'https://www.reddit.com/r/Prismedia/',
           label: 'Reddit',
           position: 'right',
         },
@@ -130,7 +130,7 @@ const config: Config = {
             },
             {
               label: 'Subreddit',
-              href: 'https://www.reddit.com/r/PrismediaMediaApp/',
+              href: 'https://www.reddit.com/r/Prismedia/',
             },
           ],
         },

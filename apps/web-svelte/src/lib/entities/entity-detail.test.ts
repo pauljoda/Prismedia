@@ -80,4 +80,39 @@ describe("entity detail view model", () => {
     expect(detail.hero).toBeNull();
     expect(detail.poster?.src).toBe("/assets/books/book-1/cover.jpg");
   });
+
+  it("does not promote bitrate into detail metadata", () => {
+    const detail = entityCardToDetailCard({
+      id: "video-1",
+      kind: "video",
+      title: "Episode",
+      parentEntityId: null,
+      sortOrder: null,
+      capabilities: [
+        {
+          kind: "technical",
+          duration: "00:24:10",
+          width: 1920,
+          height: 1080,
+          frameRate: null,
+          bitRate: 10_200_000,
+          sampleRate: null,
+          channels: null,
+          codec: "h264",
+          container: "mkv",
+          format: null,
+        },
+      ],
+      childrenByKind: [],
+      relationships: [],
+    } satisfies EntityCard);
+
+    expect(detail.technical.map((row) => row.label)).toEqual([
+      "Duration",
+      "Resolution",
+      "Codec",
+      "Container",
+    ]);
+    expect(detail.technical.map((row) => row.value)).not.toContain("10.2 Mbps");
+  });
 });

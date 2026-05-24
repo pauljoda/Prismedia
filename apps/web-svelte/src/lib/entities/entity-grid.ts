@@ -130,6 +130,10 @@ function statIcon(code: string): EntityThumbnailMetaIcon {
   return "count";
 }
 
+function isBitrateLabel(label: string): boolean {
+  return /\b(?:[kmgt]bps|bps)\b/i.test(label);
+}
+
 
 function formatResolutionLabel(width: number, height: number): string {
   if (height >= 2160) return "4K";
@@ -227,10 +231,13 @@ function findSpriteHover(entity: EntityGridSourceEntity): { spriteUrl?: string; 
 
 function metaForEntity(entity: EntityGridSourceEntity): EntityThumbnailCard["meta"] {
   if (!isFullEntityCard(entity)) {
-    return entity.meta.map((item) => ({
-      icon: (item.icon as EntityThumbnailMetaIcon) ?? iconForKind(entity.kind),
-      label: item.label,
-    })).slice(0, 5);
+    return entity.meta
+      .filter((item) => !isBitrateLabel(item.label))
+      .map((item) => ({
+        icon: (item.icon as EntityThumbnailMetaIcon) ?? iconForKind(entity.kind),
+        label: item.label,
+      }))
+      .slice(0, 5);
   }
 
   const meta: EntityThumbnailCard["meta"] = [];
@@ -250,7 +257,7 @@ function metaForEntity(entity: EntityGridSourceEntity): EntityThumbnailCard["met
   if (entity.kind === ENTITY_KIND.video && technical?.container) {
     meta.push({ icon: "video", label: technical.container.toUpperCase() });
   }
-  for (const stat of stats.slice(0, 2)) {
+  for (const stat of stats.filter((s) => !s.code.includes("bit-rate") && !s.code.includes("bitrate")).slice(0, 2)) {
     meta.push({ icon: statIcon(stat.code), label: statLabel(stat.code, stat.value) });
   }
   if (!customOverlay?.bottomLeft) {

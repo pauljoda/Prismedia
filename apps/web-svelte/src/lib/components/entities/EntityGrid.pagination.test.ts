@@ -71,6 +71,39 @@ describe("EntityGrid pagination", () => {
     });
   });
 
+  it("omits pagination chrome for grids that do not exceed the smallest page size", async () => {
+    const cards = Array.from({ length: 100 }, (_, index) => card(index));
+    const { container } = render(EntityGrid, {
+      props: {
+        cards,
+        prefsKey: undefined,
+      },
+    });
+
+    await waitFor(() => {
+      expect(container.querySelectorAll(".entity-thumbnail")).toHaveLength(100);
+      expect(container.querySelector(".pagination-shell")).toBeNull();
+      expect(screen.queryByText("Page 1 / 1")).not.toBeInTheDocument();
+    });
+  });
+
+  it("keeps page-size controls for grids that exceed the smallest page size", async () => {
+    const cards = Array.from({ length: 150 }, (_, index) => card(index));
+    const { container } = render(EntityGrid, {
+      props: {
+        cards,
+        prefsKey: undefined,
+      },
+    });
+
+    await waitFor(() => {
+      expect(container.querySelectorAll(".entity-thumbnail")).toHaveLength(150);
+      expect(container.querySelector(".pagination-shell")).not.toBeNull();
+      expect(screen.getByLabelText("Per page")).toHaveTextContent("250");
+      expect(screen.getByText("Page 1 / 1")).toBeInTheDocument();
+    });
+  });
+
   it("passes the current rendered page to card activation handlers", async () => {
     const cards = Array.from({ length: 300 }, (_, index) => card(index));
     const onCardActivate = vi.fn();
@@ -108,6 +141,22 @@ describe("EntityGrid pagination", () => {
       expect(container.querySelector(".cards")?.classList.contains("is-media-wall")).toBe(true);
       expect(container.querySelector(".glass-info")).toBeNull();
     });
+  });
+
+  it("can render embedded grids without docked controls or pagination chrome", () => {
+    const cards = Array.from({ length: 6 }, (_, index) => card(index));
+    const { container } = render(EntityGrid, {
+      props: {
+        cards,
+        dockControls: false,
+        showPagination: false,
+        prefsKey: undefined,
+      },
+    });
+
+    expect(container.querySelector(".entity-grid")?.classList.contains("is-static")).toBe(true);
+    expect(container.querySelector(".pagination-shell")).toBeNull();
+    expect(screen.queryByText("Page 1 / 1")).not.toBeInTheDocument();
   });
 });
 

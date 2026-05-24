@@ -258,7 +258,9 @@
           cards={episodeCards}
           prefsKey={`season-${seasonId}-episodes`}
           initialSortBy="position"
+          dockControls={false}
           selectable={false}
+          showPagination={false}
           emptyTitle="No episodes"
           emptyMessage="No episodes found in this season."
         />

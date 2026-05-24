@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/svelte";
 import { FileText } from "@lucide/svelte";
+import { readFileSync } from "node:fs";
 import { createRawSnippet } from "svelte";
 import { describe, expect, it, vi } from "vitest";
 import type { EntityDetailCard, EntityDetailCardFull } from "$lib/entities/entity-detail";
@@ -60,6 +61,19 @@ describe("EntityDetail", () => {
 
     expect(heroChildren.indexOf(title)).toBeLessThan(heroChildren.indexOf(ratingRow!));
     expect(heroChildren.indexOf(ratingRow!)).toBeLessThan(heroChildren.indexOf(actionRow!));
+  });
+
+  it("allows long hero titles to wrap instead of clipping", () => {
+    const card = buildCard();
+    card.entity.title = "bbb_sunflower_2160p_60fps_normalized_really_long_source_filename";
+
+    render(EntityDetail, { props: { card } });
+
+    const title = screen.getByRole("heading", { name: card.entity.title });
+    const source = readFileSync("src/lib/components/entities/EntityDetail.svelte", "utf8");
+
+    expect(title).toHaveClass("hero-title");
+    expect(source).toContain("overflow-wrap: anywhere;");
   });
 
   it("renders detail poster artwork through the shared thumbnail component", () => {

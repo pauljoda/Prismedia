@@ -27,7 +27,7 @@
   <a href="#quick-start">Quick Start</a> &middot;
   <a href="#highlights">Highlights</a> &middot;
   <a href="#features">Features</a> &middot;
-  <a href="https://www.reddit.com/r/PrismediaMediaApp/">Subreddit</a> &middot;
+  <a href="https://www.reddit.com/r/Prismedia/">Subreddit</a> &middot;
   <a href="#configuration">Configuration</a> &middot;
   <a href="#development">Development</a>
 </p>
@@ -44,7 +44,7 @@ Prismedia is a **private, self-hosted home for your entire media collection.** V
 
 It runs as a single Docker container: PostgreSQL, ffmpeg, and the web server are all bundled together. Mount your media directories, open a browser, and you're watching. No external databases, no cloud accounts, no data leaves your network.
 
-Discussions and community updates live on the [Prismedia subreddit](https://www.reddit.com/r/PrismediaMediaApp/).
+Discussions and community updates live on the [Prismedia subreddit](https://www.reddit.com/r/Prismedia/).
 
 ---
 

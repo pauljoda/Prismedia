@@ -2,13 +2,13 @@
 
 ## Direction
 
-Prismedia uses a **Dark Room** visual system.
+Prismedia uses the **Prism Noir Luxe** visual system.
 
-The aesthetic is a precision monitoring environment: a darkened screening room where content commands full attention and controls recede until needed. Think color-grading suites, broadcast control rooms, and professional video hardware — zero ambient light, sharp instrument panels, and color used only when it carries meaning.
+The aesthetic is a refined industrial control room — Blackmagic DaVinci Resolve meets high-end audio rack gear. Every surface feels like a machined panel in a private console room. Content commands full attention; controls recede until needed. Color appears only when it carries meaning.
 
 ## Core Principles
 
-- **Sharp geometry.** All containers use `border-radius: 0`. No rounded corners anywhere in the UI.
+- **Controlled radii.** Tight, consistent radii from a unified scale (`XS 4px` through `2XL 24px`). Subtle softening, never bubbly. No default rounded corners from component libraries.
 - **Material base, glass overlay.** Base surfaces are solid dark material layers. Floating and interactive elements use glass (backdrop-blur + semi-transparent fill) layered above them.
 - **Color as signal.** Accent colors appear only on active, selected, or critical states. When they appear, they glow.
 - **Gradient fills for depth.** Subtle linear gradients distinguish surface planes. No flat solid fills on containers.
@@ -24,13 +24,13 @@ The aesthetic is a precision monitoring environment: a darkened screening room w
 
 Base surfaces are solid, near-black. Subtle linear gradients move from top-left (lighter) to bottom-right (darker) to establish surface weight. These are the material ground layer beneath any glass content.
 
-| Token       | Hex        | Usage                                   |
-|-------------|------------|-----------------------------------------|
-| `bg`        | `#07080b`  | Page root, outermost background         |
-| `surface-1` | `#0c0f15`  | Sidebar, inset wells, recessed areas    |
-| `surface-2` | `#101420`  | Cards, panels, primary containers       |
-| `surface-3` | `#151a28`  | Elevated panels, drawers                |
-| `surface-4` | `#1c2235`  | Tooltips, dropdowns, contextual overlays|
+| Token       | Hex        | Name      | Usage                                   |
+|-------------|------------|-----------|-----------------------------------------|
+| `bg`        | `#07080b`  | Noir      | Page root, outermost background         |
+| `surface-1` | `#0b0e12`  | Obsidian  | Sidebar, inset wells, recessed areas    |
+| `surface-2` | `#11161d`  | Graphite  | Cards, panels, primary containers       |
+| `surface-3` | `#202734`  | Slate Glass | Elevated panels, drawers              |
+| `surface-4` | `#2a3038`  | Carbon    | Tooltips, dropdowns, contextual overlays|
 
 ### Glass Layers — Floating Surfaces
 
@@ -38,87 +38,99 @@ Glass layers sit above material surfaces. They require `backdrop-filter: blur()`
 
 | Token     | Fill                          | Blur  | Usage                                  |
 |-----------|-------------------------------|-------|----------------------------------------|
-| `glass-1` | `rgba(12, 15, 21, 0.72)`      | `12px`| Media cards, interactive list items    |
-| `glass-2` | `rgba(16, 20, 32, 0.82)`      | `16px`| Command palette, floating panels       |
-| `glass-3` | `rgba(21, 26, 40, 0.92)`      | `24px`| Sheets, drawers, full-screen overlays  |
+| `glass-1` | `rgba(17, 22, 29, 0.72)`     | `12px`| Media cards, interactive list items    |
+| `glass-2` | `rgba(17, 22, 29, 0.80)`     | `16px`| Command palette, floating panels       |
+| `glass-3` | `rgba(17, 22, 29, 0.92)`     | `24px`| Sheets, drawers, full-screen overlays  |
 
 ### Accent — Brass Scale
 
-Brass is the primary accent register. It is warm, operational, and rare. Use `accent-500` as the base; use `accent-400` / `accent-300` as the luminous glow-layer color. Never use accent for decoration.
+Brass is the primary accent register. It is warm, operational, and rare. The primary accent (`accent-500`) is the golden brass used for active/selected labels and glow layers. The deeper amber (`accent-600`) anchors gradients and solid fills. Never use accent for decoration.
 
 | Token        | Hex        |
 |--------------|------------|
-| `accent-950` | `#131008`  |
-| `accent-900` | `#261f0f`  |
-| `accent-800` | `#3d3016`  |
-| `accent-700` | `#5a4620`  |
-| `accent-600` | `#7a5e2c`  |
-| `accent-500` | `#c49a5a`  |
-| `accent-400` | `#d4af74`  |
-| `accent-300` | `#e0c48e`  |
-| `accent-200` | `#ebdaaf`  |
-| `accent-100` | `#f5efd5`  |
-| `accent-50`  | `#faf6ea`  |
+| `accent-950` | `#1a1408`  |
+| `accent-900` | `#2d2210`  |
+| `accent-800` | `#4a3818`  |
+| `accent-700` | `#7a5e20`  |
+| `accent-600` | `#d59a2a`  |
+| `accent-500` | `#f2c26a`  |
+| `accent-400` | `#f5d48a`  |
+| `accent-300` | `#f7dfa0`  |
+| `accent-200` | `#faecc0`  |
+| `accent-100` | `#fdf5e0`  |
+| `accent-50`  | `#fefaf0`  |
 
 **Accent gradients** — use for fills and decorative rules, never as solid points:
 
 | Name               | Value                                                         |
 |--------------------|---------------------------------------------------------------|
-| Selection gradient | `linear-gradient(135deg, #c49a5a 0%, #e0c48e 100%)`          |
-| Active gradient    | `linear-gradient(135deg, #7a5e2c 0%, #c49a5a 100%)`          |
-| Subtle gradient    | `linear-gradient(180deg, rgba(196,154,90,0.12) 0%, rgba(196,154,90,0) 100%)` |
+| Selection gradient | `linear-gradient(135deg, #d59a2a 0%, #f2c26a 100%)`          |
+| Active gradient    | `linear-gradient(135deg, #7a5e20 0%, #d59a2a 100%)`          |
+| Subtle gradient    | `linear-gradient(180deg, rgba(242,194,106,0.12) 0%, rgba(242,194,106,0) 100%)` |
 
 **Glow values** — `box-shadow` for selected and focused states:
 
-| Name         | Value                                                                                             |
-|--------------|---------------------------------------------------------------------------------------------------|
-| Subtle glow  | `0 0 0 1px rgba(196,154,90,0.35), 0 0 8px rgba(196,154,90,0.15)`                                |
-| Full glow    | `0 0 0 1px rgba(196,154,90,0.60), 0 0 16px rgba(196,154,90,0.30), 0 0 32px rgba(196,154,90,0.10)` |
+| Name              | Value                                                                                    |
+|-------------------|------------------------------------------------------------------------------------------|
+| Subtle glow       | `0 0 25px rgba(242,194,106,0.10), 0 0 8px rgba(242,194,106,0.16)`                      |
+| Strong glow       | `0 0 30px rgba(242,194,106,0.18), 0 0 10px rgba(242,194,106,0.25)`                     |
+| Phosphor glow     | `0 0 20px rgba(255,255,255,0.10), 0 0 6px rgba(255,255,255,0.15)`                      |
+
+### Phosphor — Digital Accent
+
+A silver/platinum register for digital signals, secondary indicators, and cool-tone highlights.
+
+| Token           | Hex        |
+|-----------------|------------|
+| `phosphor-400`  | `#ffffff`  |
+| `phosphor-500`  | `#e2e8f0`  |
+| `phosphor-600`  | `#94a3b8`  |
 
 ### Text
 
-| Token           | Hex        | Usage                              |
-|-----------------|------------|------------------------------------|
-| `text-primary`  | `#f2eed8`  | Headings, primary labels           |
-| `text-secondary`| `#c4c9d4`  | Body text, descriptions            |
-| `text-muted`    | `#8a93a6`  | Metadata, secondary labels         |
-| `text-disabled` | `#4a5260`  | Disabled controls, placeholder     |
-| `text-accent`   | `#c49a5a`  | Active labels, accent text         |
+| Token              | Hex        | Usage                              |
+|--------------------|------------|------------------------------------|
+| `text-primary`     | `#f0ede3`  | Headings, primary labels           |
+| `text-secondary`   | `#c8ccd4`  | Body text, descriptions            |
+| `text-muted`       | `#a4acb9`  | Metadata, secondary labels         |
+| `text-disabled`    | `#5a6070`  | Disabled controls, placeholder     |
+| `text-accent`      | `#f2c26a`  | Active labels, accent text         |
+| `text-accent-bright` | `#f5d48a` | Bright accent hover/emphasis     |
 
-### Status Colors — Instrument LED Style
+### Status Colors — Signal Indicators
 
-Muted, realistic. Like LED indicators in a darkened control room, not bright SaaS badges. Each status has a glow value for animated indicator use.
+Vivid, confident signal colors. Like instrument readouts — clear and immediate, not pastel or muted.
 
-| State   | Default    | Muted (bg) | Text       | Glow                          |
-|---------|------------|------------|------------|-------------------------------|
-| Success | `#4e8a62`  | `#2a4a38`  | `#80b898`  | `rgba(78, 138, 98, 0.30)`    |
-| Warning | `#b09040`  | `#5c4c20`  | `#ccb060`  | `rgba(176, 144, 64, 0.30)`   |
-| Error   | `#a84850`  | `#5a2c30`  | `#cc7880`  | `rgba(168, 72, 80, 0.30)`    |
-| Info    | `#4478a8`  | `#283850`  | `#70a4cc`  | `rgba(68, 120, 168, 0.30)`   |
+| State   | Default    | Muted (bg) | Text       |
+|---------|------------|------------|------------|
+| Success | `#63c889`  | `#1a3d28`  | `#8ee0aa`  |
+| Warning | `#f2c26a`  | `#3d3010`  | `#f5d48a`  |
+| Error   | `#ff806f`  | `#4a1c18`  | `#ff9f92`  |
+| Info    | `#6fa8dc`  | `#1a2e44`  | `#92c0e8`  |
 
 ### Borders
 
-| Token                | Value                              |
-|----------------------|------------------------------------|
-| `border-subtle`      | `rgba(148, 158, 178, 0.07)`        |
-| `border-default`     | `rgba(148, 158, 178, 0.13)`        |
-| `border-accent`      | `rgba(196, 154, 90, 0.25)`         |
-| `border-accent-strong` | `rgba(196, 154, 90, 0.50)`       |
-| `border-glow`        | `rgba(196, 154, 90, 0.80)`         |
+| Token                  | Value                              |
+|------------------------|------------------------------------|
+| `border-subtle`        | `rgba(164, 172, 185, 0.07)`        |
+| `border-default`       | `rgba(164, 172, 185, 0.12)`        |
+| `border-accent`        | `rgba(242, 194, 106, 0.24)`        |
+| `border-accent-strong` | `rgba(242, 194, 106, 0.52)`        |
 
 ---
 
 ## Typography
 
-Three font voices loaded via local `@fontsource` packages:
+Four font voices loaded via `@fontsource` packages:
 
 | Voice   | Font           | Usage                                          |
 |---------|----------------|------------------------------------------------|
-| Heading | Geist          | Page titles, section headers, card titles      |
-| Body    | Inter          | Body copy, descriptions, form labels           |
+| Display | Cinzel         | Brand display text, cinematic headings         |
+| Heading | Geist Sans     | Product headings, section headers, card titles |
+| Body    | Inter Variable | Body copy, descriptions, form labels           |
 | Utility | JetBrains Mono | Metadata, timestamps, file paths, durations, counters |
 
-**Base size:** 14px (dense UI). Labels use uppercase + wide tracking for kicker treatment.
+**Base size:** 15px. Labels use uppercase + wide tracking for kicker treatment.
 
 **Type scale:**
 
@@ -133,9 +145,13 @@ Three font voices loaded via local `@fontsource` packages:
 | `body`     | 0.875rem | 400    | 1.55        | 0              |
 | `body-sm`  | 0.8rem   | 400    | 1.5         | 0              |
 | `label`    | 0.75rem  | 500    | 1.3         | +0.04em        |
-| `kicker`   | 0.68rem  | 600    | 1.3         | +0.10em        |
+| `kicker`   | 0.68rem  | 600    | 1.3         | +0.15em        |
 | `mono`     | 0.8rem   | 400    | 1.45        | 0              |
 | `mono-sm`  | 0.72rem  | 400    | 1.4         | 0              |
+
+**Text glow effects** — luminous text for active states:
+- `text-glow-accent`: brass text with glow text-shadow
+- `text-glow-phosphor`: silver/white text with phosphor glow
 
 ---
 
@@ -144,56 +160,53 @@ Three font voices loaded via local `@fontsource` packages:
 ### Material Panel (primary container)
 
 ```css
-background: linear-gradient(160deg, var(--surface-2) 0%, var(--surface-1) 100%);
+background: linear-gradient(160deg, var(--color-surface-2) 0%, var(--color-surface-1) 100%);
 border: 1px solid var(--border-subtle);
-border-radius: 0;
-box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 4px 24px rgba(0,0,0,0.40);
+border-radius: var(--radius-md);
+box-shadow: var(--shadow-panel);
 ```
 
-The inset top shadow reads as a lit panel edge — a material signal without fake 3D.
+The machined bevel (inset top/left highlights) reads as a lit panel edge — a material signal without fake 3D.
 
 ### Glass Card (media card, interactive list item)
 
 ```css
-background: rgba(12, 15, 21, 0.72);
+background: var(--color-overlay-glass);
 backdrop-filter: blur(12px);
 -webkit-backdrop-filter: blur(12px);
 border: 1px solid var(--border-default);
-border-radius: 0;
-box-shadow: 0 2px 12px rgba(0,0,0,0.35);
-transition: border-color 160ms cubic-bezier(0.25,0,0.25,1),
-            box-shadow   160ms cubic-bezier(0.25,0,0.25,1);
+border-radius: var(--radius-sm);
+box-shadow: var(--shadow-card);
+transition: border-color 180ms var(--ease-mechanical),
+            box-shadow   180ms var(--ease-mechanical);
 
 /* Hover */
 border-color: var(--border-accent);
-box-shadow: 0 2px 12px rgba(0,0,0,0.35), 0 0 0 1px rgba(196,154,90,0.20);
+box-shadow: var(--shadow-card-hover);
 
 /* Selected / Active */
 border-color: var(--border-accent-strong);
-box-shadow: 0 0 0 1px rgba(196,154,90,0.60),
-            0 0 16px rgba(196,154,90,0.30),
-            0 0 32px rgba(196,154,90,0.10);
+box-shadow: var(--shadow-glow-accent-strong);
 ```
 
 ### Glass Panel (floating surface — command palette, popover, drawer)
 
 ```css
-background: rgba(16, 20, 32, 0.82);
+background: var(--color-overlay-glass);
 backdrop-filter: blur(16px);
 -webkit-backdrop-filter: blur(16px);
 border: 1px solid var(--border-default);
-border-radius: 0;
-box-shadow: 0 8px 40px rgba(0,0,0,0.60),
-            inset 0 1px 0 rgba(255,255,255,0.05);
+border-radius: var(--radius-md);
+box-shadow: var(--shadow-elevated);
 ```
 
 ### Well (inset container — inputs, metadata blocks, code)
 
 ```css
-background: var(--surface-1);
+background: var(--color-surface-1);
 border: 1px solid var(--border-subtle);
-border-radius: 0;
-box-shadow: inset 0 2px 8px rgba(0,0,0,0.30);
+border-radius: var(--radius-sm);
+box-shadow: var(--shadow-well);
 ```
 
 ---
@@ -202,9 +215,17 @@ box-shadow: inset 0 2px 8px rgba(0,0,0,0.30);
 
 ### Border Radius
 
-`border-radius: 0` on all elements: panels, cards, buttons, inputs, badges, chips, modals, tooltips, dropdowns, popovers, separators, progress bars, avatars, and thumbnails.
+Controlled radii from a unified scale. Subtle softening that maintains the industrial precision feel without harsh zero-radius edges.
 
-Sharp edges are a core identity element. Softening them — even slightly — undermines the visual system.
+| Token        | Value    | Usage                                    |
+|--------------|----------|------------------------------------------|
+| `radius-xs`  | `4px`    | Small chips, badges, inline elements     |
+| `radius-sm`  | `6px`    | Cards, inputs, buttons                   |
+| `radius-md`  | `10px`   | Panels, modals, primary containers       |
+| `radius-lg`  | `14px`   | Large cards, drawers                     |
+| `radius-xl`  | `18px`   | Hero sections, feature panels            |
+| `radius-2xl` | `24px`   | Full-bleed containers                    |
+| `radius-full`| `9999px` | Pills, toggles, circular indicators      |
 
 ### Spacing Grid
 
@@ -263,12 +284,12 @@ Motion is precise and deliberate — like instrumentation in a darkened control 
 
 ### Durations
 
-| Token              | Value  |
-|--------------------|--------|
-| `duration-fast`    | `80ms` |
-| `duration-normal`  | `160ms`|
-| `duration-moderate`| `240ms`|
-| `duration-slow`    | `380ms`|
+| Token              | Value   |
+|--------------------|---------|
+| `duration-fast`    | `100ms` |
+| `duration-normal`  | `180ms` |
+| `duration-moderate`| `250ms` |
+| `duration-slow`    | `400ms` |
 
 ### Keyframe Animations
 
@@ -277,13 +298,13 @@ Motion is precise and deliberate — like instrumentation in a darkened control 
 ```css
 @keyframes glow-pulse {
   0%, 100% {
-    box-shadow: 0 0 0 1px rgba(196,154,90,0.50),
-                0 0 10px rgba(196,154,90,0.20);
+    box-shadow: 0 0 0 1px rgba(242,194,106,0.50),
+                0 0 10px rgba(242,194,106,0.20);
   }
   50% {
-    box-shadow: 0 0 0 1px rgba(196,154,90,0.80),
-                0 0 20px rgba(196,154,90,0.40),
-                0 0 40px rgba(196,154,90,0.15);
+    box-shadow: 0 0 0 1px rgba(242,194,106,0.80),
+                0 0 20px rgba(242,194,106,0.40),
+                0 0 40px rgba(242,194,106,0.15);
   }
 }
 /* Duration: 2.4s ease-in-out infinite */
@@ -296,7 +317,7 @@ Motion is precise and deliberate — like instrumentation in a darkened control 
   from { opacity: 0; transform: scale(0.97); }
   to   { opacity: 1; transform: scale(1); }
 }
-/* Duration: 240ms ease-enter */
+/* Duration: 250ms ease-enter */
 ```
 
 **Slide up** — mobile sheet and bottom-drawer entrance:
@@ -325,7 +346,7 @@ Motion is precise and deliberate — like instrumentation in a darkened control 
 
 ### LED Status Indicators
 
-8×8px squares (`border-radius: 0`). Glow via `box-shadow` using the status glow values. Colors: success green (active), warning amber (queued/warning), error red (failed), gray (idle), brass (highlighted). `led-pulse` animation for processing/loading state.
+Small squares with controlled radius (`radius-xs`). Glow via `box-shadow` using status colors. Colors: success green (active), warning amber (queued/warning), error red (failed), info blue (paused), brass (highlighted), phosphor (digital signal). `led-pulse` animation for processing/loading state.
 
 ### Selection State
 
@@ -337,22 +358,22 @@ Selected items express state through three layered signals:
 
 ### Accent Meter / Progress Bar
 
-Height: 3px. No `border-radius`. Fill: accent selection gradient (`accent-500` → `accent-300`). Used for job progress, disk usage, buffer position, and queue health.
+Height: 3px. Controlled radius. Fill: accent selection gradient (`accent-700` → `accent-500` → `accent-400`). Used for job progress, disk usage, buffer position, and queue health. Phosphor variant available for digital/system meters.
 
 ### Separator
 
-`1px solid var(--border-subtle)`. No gradient fade. Clean, hard horizontal rule — consistent with sharp geometry. Vertical separators use the same token.
+`1px solid var(--border-subtle)`. Clean, hard horizontal rule. Vertical separators use the same token.
 
 ---
 
 ## Anti-Patterns
 
-- **No rounded corners.** `border-radius` is forbidden. Sharp geometry is a core identity element.
 - **No default shadcn appearance** shipped without token and composition overrides.
 - **No purple-gradient startup aesthetic.**
 - **No flat solid fills** on major containers — always gradient surface or glass recipe.
-- **No bright saturated status colors** — muted LED palette only.
+- **No bright neon status colors** — vivid but controlled signal palette only.
 - **No hover-only primary actions.** Everything reachable by tap on mobile.
 - **No decorative glow** — glow appears only on selected, active, or processing states. Never for style alone.
 - **No bounce or spring easing.** All motion uses mechanical or standard bezier curves.
 - **No oversized empty cards on mobile** — density is maintained across breakpoints.
+- **No bubbly or pill-shaped containers** — radii stay tight and controlled from the scale.

@@ -332,7 +332,7 @@ function CtaBlock() {
           </Link>
           <Link
             className={styles.secondaryAction}
-            href="https://www.reddit.com/r/PrismediaMediaApp/"
+            href="https://www.reddit.com/r/Prismedia/"
           >
             Join the community
           </Link>

@@ -562,7 +562,6 @@
       </div>
     </div>
   {/if}
-
 </div>
 
 <style>
@@ -571,17 +570,18 @@
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
-    border: 1px solid rgb(255 255 255 / 0.14);
-    background: rgb(0 0 0 / 0.62);
+    border: 1px solid var(--color-border-default);
+    background: var(--color-overlay-heavy);
     padding: 0.45rem 0.65rem;
-    color: rgb(255 255 255 / 0.78);
+    border-radius: var(--radius-sm);
+    color: var(--color-text-secondary);
     font-size: 0.72rem;
     line-height: 1;
     backdrop-filter: blur(12px);
     transition:
-      border-color 150ms ease,
-      color 150ms ease,
-      box-shadow 150ms ease;
+      border-color var(--duration-normal) var(--ease-mechanical),
+      color var(--duration-normal) var(--ease-mechanical),
+      box-shadow var(--duration-normal) var(--ease-mechanical);
   }
 
   .reader-overlay {
@@ -629,18 +629,18 @@
     left: 0;
     right: 0;
     z-index: 20;
-    border-color: rgb(255 255 255 / 0.12);
+    border-color: var(--color-border-default);
     background: linear-gradient(
       to bottom,
-      rgb(0 0 0 / 0.78),
-      rgb(0 0 0 / 0.48) 68%,
-      rgb(0 0 0 / 0)
+      var(--color-overlay-heavy),
+      rgba(7, 8, 11, 0.48) 68%,
+      transparent
     );
     padding: max(0.5rem, env(safe-area-inset-top)) 0.75rem 1.25rem;
     backdrop-filter: blur(14px);
     transition:
-      opacity 180ms ease,
-      transform 180ms ease;
+      opacity var(--duration-normal) var(--ease-mechanical),
+      transform var(--duration-normal) var(--ease-mechanical);
   }
 
   .reader-top-layer {
@@ -649,7 +649,6 @@
     align-items: center;
     gap: 0.5rem;
   }
-
 
   .reader-layer-visible {
     opacity: 1;
@@ -666,7 +665,6 @@
     transform: translateY(-0.75rem);
   }
 
-
   .reader-icon-button {
     padding: 0.4rem;
   }
@@ -676,9 +674,9 @@
   .reader-icon-button:hover,
   .reader-icon-button:focus-visible,
   .active-reader-control {
-    border-color: rgb(196 154 90 / 0.55);
-    color: rgb(250 232 198);
-    box-shadow: 0 0 18px rgb(196 154 90 / 0.24);
+    border-color: var(--color-border-accent-strong);
+    color: var(--color-text-accent-bright);
+    box-shadow: var(--shadow-glow-accent);
     outline: none;
   }
 
@@ -692,27 +690,33 @@
     transform: translateY(-50%);
     align-items: center;
     justify-content: center;
-    border: 1px solid rgb(255 255 255 / 0.12);
-    background: rgb(0 0 0 / 0.56);
-    color: rgb(255 255 255 / 0.76);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--radius-sm);
+    background: var(--color-overlay-heavy);
+    color: var(--color-text-secondary);
     backdrop-filter: blur(12px);
+    transition:
+      border-color var(--duration-normal) var(--ease-mechanical),
+      color var(--duration-normal) var(--ease-mechanical),
+      box-shadow var(--duration-normal) var(--ease-mechanical);
   }
 
   .reader-nav-button:hover,
   .reader-nav-button:focus-visible {
-    border-color: rgb(196 154 90 / 0.55);
-    color: rgb(250 232 198);
-    box-shadow: 0 0 18px rgb(196 154 90 / 0.2);
+    border-color: var(--color-border-accent-strong);
+    color: var(--color-text-accent-bright);
+    box-shadow: var(--shadow-glow-accent);
     outline: none;
   }
 
   .reader-next-chapter-button,
   .reader-next-chapter-page {
-    border: 1px solid rgb(196 154 90 / 0.34);
+    border: 1px solid var(--color-border-accent);
+    border-radius: var(--radius-md);
     background:
-      linear-gradient(135deg, rgb(196 154 90 / 0.13), rgb(255 255 255 / 0.04)),
-      rgb(13 17 23 / 0.88);
-    box-shadow: 0 0 34px rgb(196 154 90 / 0.16);
+      linear-gradient(135deg, var(--color-overlay-glass-accent), rgba(255, 255, 255, 0.04)),
+      var(--color-overlay-heavy);
+    box-shadow: var(--shadow-glow-accent);
     backdrop-filter: blur(16px);
   }
 
@@ -721,17 +725,17 @@
     padding: 1.25rem;
     text-align: center;
     transition:
-      border-color 150ms ease,
-      box-shadow 150ms ease,
-      transform 150ms ease;
+      border-color var(--duration-normal) var(--ease-mechanical),
+      box-shadow var(--duration-normal) var(--ease-mechanical),
+      transform var(--duration-normal) var(--ease-mechanical);
   }
 
   .reader-next-chapter-button:hover,
   .reader-next-chapter-button:focus-visible,
   .reader-next-chapter-action:hover,
   .reader-next-chapter-action:focus-visible {
-    border-color: rgb(196 154 90 / 0.68);
-    box-shadow: 0 0 30px rgb(196 154 90 / 0.26);
+    border-color: var(--color-border-accent-strong);
+    box-shadow: var(--shadow-glow-accent-strong);
     outline: none;
   }
 
@@ -756,15 +760,16 @@
     display: inline-flex;
     align-items: center;
     gap: 0.45rem;
-    border: 1px solid rgb(196 154 90 / 0.46);
-    background: rgb(0 0 0 / 0.62);
+    border: 1px solid var(--color-border-accent);
+    border-radius: var(--radius-sm);
+    background: var(--color-overlay-heavy);
     padding: 0.7rem 0.95rem;
-    color: rgb(250 232 198);
+    color: var(--color-text-accent-bright);
     font-size: 0.78rem;
     font-weight: 600;
     transition:
-      border-color 150ms ease,
-      box-shadow 150ms ease;
+      border-color var(--duration-normal) var(--ease-mechanical),
+      box-shadow var(--duration-normal) var(--ease-mechanical);
   }
 
   .reader-next-chapter-button:disabled,
@@ -777,16 +782,17 @@
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
-    border: 1px solid rgb(255 255 255 / 0.14);
-    background: rgb(0 0 0 / 0.62);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--radius-sm);
+    background: var(--color-overlay-heavy);
     padding: 0.45rem 0.65rem;
-    color: rgb(255 255 255 / 0.76);
+    color: var(--color-text-secondary);
     font-size: 0.72rem;
     line-height: 1;
   }
 
   .reader-check input {
-    accent-color: #c49a5a;
+    accent-color: var(--color-accent-500);
   }
 
   @media (min-width: 640px) {
@@ -795,11 +801,10 @@
     }
 
     .reader-top-layer {
-      border-bottom: 1px solid rgb(255 255 255 / 0.12);
-      background: rgb(0 0 0 / 0.72);
+      border-bottom: 1px solid var(--color-border-default);
+      background: var(--color-overlay-glass);
       padding: 0.5rem 0.75rem;
     }
-
 
     .reader-nav-button {
       display: flex;

@@ -343,8 +343,6 @@ function resolveTechnical(capabilities: EntityCapability[]): EntityDetailTechnic
   if (width && height) rows.push({ label: "Resolution", value: formatResolution(width, height) });
   const frameRate = numberValue(tech.frameRate);
   if (frameRate) rows.push({ label: "Frame Rate", value: `${frameRate} fps` });
-  const bitRate = numberValue(tech.bitRate);
-  if (bitRate) rows.push({ label: "Bit Rate", value: bitRate >= 1_000_000 ? `${(bitRate / 1_000_000).toFixed(1)} Mbps` : `${Math.round(bitRate / 1000)} kbps` });
   const sampleRate = numberValue(tech.sampleRate);
   if (sampleRate) rows.push({ label: "Sample Rate", value: `${(sampleRate / 1000).toFixed(1)} kHz` });
   const channels = numberValue(tech.channels);

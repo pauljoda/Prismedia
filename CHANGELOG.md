@@ -16,6 +16,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Changed
+- Moved common thumbnail badges for NSFW, rating, and episode/season position onto the thumbnail image so below-title chips can focus on entity-specific metadata.
+- Removed bitrate from entity detail metadata chips because it is better treated as playback/runtime information than stable descriptive metadata.
 - Updated README, docs, browser, and install branding surfaces to prefer the red accent logo while keeping the in-app logo mode-aware.
 - Added a subtle sidebar logo glow so the transparent mark reads clearly against the dark rail.
 - Updated app branding to use the cleaned normal/NSFW logo assets and promoted the mono mark to SVG for scalable uses.
@@ -27,11 +29,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Fixed generated thumbnail and preview asset serving on fresh startup by creating and mounting the media cache directory before assets are requested.
 - Fixed Prismedia logo PNG transparency so the app brand mark no longer carries a black square background.
 - Reduced thumbnail grid scroll jank by deferring hover previews during scroll and avoiding unnecessary player/lightbox loading on non-lightbox library pages.
+- Fixed embedded episode grids so small season pages no longer use sticky grid chrome or viewport-edge thumbnail unloading.
+- Kept lightweight grids lean by hiding pagination chrome below the paging threshold and making grid pagination non-sticky.
+- Restored mobile thumbnail tap navigation while preserving horizontal drag scrubbing for previews.
 - Fixed chapter comic reader close behavior so readers opened from resume/start-over links do not immediately reopen.
 - Fixed comic reader flicker by moving book, volume, and chapter reading into a dedicated full-page reader route.
 - Removed the comic reader mobile bottom bar and let the routed reader extend behind mobile browser toolbar space.
 - Kept the comic reader toolbar hidden while touch-scrolling in webtoon mode so it only appears on intentional center taps.
 - Kept entity thumbnail preview lists on user-controlled scrubbing instead of auto-cycling, while preserving first-tap navigation.
+- Fixed long entity detail titles so filename-like text wraps instead of clipping on narrow screens.
 - Fixed video thumbnail grids so scan/probe metadata like duration, resolution, codec, bitrate, and container is shown on video cards.
 - Fixed touch drag scrubbing for trickplay sprites and segmented thumbnail previews.
 

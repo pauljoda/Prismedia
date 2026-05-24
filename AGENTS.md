@@ -91,12 +91,12 @@ docs/                  Architecture and design language docs.
 
 ## Design System Rules
 
-- Follow the `Dark Room` visual direction in `docs/design-language.md`.
-- Sharp corners everywhere: `border-radius: 0`.
+- Follow the `Prism Noir Luxe` visual direction in `docs/design-language.md`.
+- Controlled radii from a unified scale (`radius-xs: 4px` through `radius-2xl: 24px`). Tight, subtle softening — never bubbly or pill-shaped containers.
 - Material base plus glass overlay: solid dark surfaces as the ground layer; glass for floating and interactive elements.
-- Brass accent (`#c49a5a`) is for active and selected states and should glow rather than appear as flat color.
+- Brass accent (`#f2c26a` / `#d59a2a`) is for active and selected states and should glow rather than appear as flat color.
 - Mobile first. Desktop expands the mobile layout.
-- Font voices: Geist for headings, Inter for body, JetBrains Mono for utility and metadata.
+- Font voices: Cinzel for display/brand, Geist for product headings, Inter for body, JetBrains Mono for utility and metadata.
 - Glow and animation express state. Do not rely on color-only state changes.
 - Avoid generic SaaS styling and unmodified shadcn defaults.
 - Core actions must not depend on hover-only affordances.

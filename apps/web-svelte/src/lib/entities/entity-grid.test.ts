@@ -232,6 +232,20 @@ describe("entity grid helpers", () => {
       ],
     });
   });
+
+  it("filters bitrate labels from lightweight API thumbnail metadata", () => {
+    const thumbnail = entityCardToThumbnailCard({
+      ...thumbnailEntity("video-1", "video", "Episode"),
+      meta: [
+        { icon: "duration", label: "10:35" },
+        { icon: "video", label: "4K" },
+        { icon: "video", label: "8.5 Mbps" },
+        { icon: "video", label: "MOV" },
+      ],
+    });
+
+    expect(thumbnail.meta?.map((item) => item.label)).toEqual(["10:35", "4K", "MOV"]);
+  });
 });
 
 function thumbnailEntity(

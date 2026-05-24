@@ -753,7 +753,7 @@
         {@const Icon = tabIcon(t.key)}
         <button
           onclick={() => (tab = t.key)}
-          class={"flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all duration-fast whitespace-nowrap " +
+          class={"flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-sm transition-all duration-fast whitespace-nowrap " +
             (tab === t.key
               ? "bg-accent-950 text-text-accent border border-border-accent shadow-[var(--shadow-glow-accent)]"
               : "text-text-muted border border-transparent hover:text-text-secondary hover:bg-surface-3/40")}

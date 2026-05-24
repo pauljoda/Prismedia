@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Entities;
@@ -317,11 +316,9 @@ public sealed class EfEntityReadService : IEntityReadService {
 
         if (row.KindCode == EntityKindRegistry.Video.Code) {
             Add(meta, "video", technical.Codec?.ToUpperInvariant());
-            Add(meta, "video", FormatBitRate(technical.BitRate));
             Add(meta, "video", technical.Container?.ToUpperInvariant());
         } else if (row.KindCode == EntityKindRegistry.AudioTrack.Code) {
             Add(meta, "audio", technical.Codec?.ToUpperInvariant());
-            Add(meta, "audio", FormatBitRate(technical.BitRate));
         }
 
         return meta.Take(MaxThumbnailMeta).ToArray();
@@ -354,27 +351,6 @@ public sealed class EfEntityReadService : IEntityReadService {
         if (height >= 480) return "480p";
         return $"{width}x{height}";
     }
-
-    private static string? FormatBitRate(int? bitRate) {
-        if (bitRate is not { } value || value <= 0) {
-            return null;
-        }
-
-        if (value >= 1_000_000) {
-            return $"{FormatCompactNumber(value / 1_000_000d)} Mbps";
-        }
-
-        if (value >= 1_000) {
-            return $"{FormatCompactNumber(value / 1_000d)} Kbps";
-        }
-
-        return $"{value} bps";
-    }
-
-    private static string FormatCompactNumber(double value) =>
-        Math.Abs(value % 1) < 0.05
-            ? Math.Round(value).ToString(CultureInfo.InvariantCulture)
-            : value.ToString("0.#", CultureInfo.InvariantCulture);
 
     private async Task<IReadOnlyDictionary<Guid, IReadOnlyList<EntityThumbnailHoverImage>>> ProjectHoverImagesAsync(
         IReadOnlyList<EntityRow> rows,

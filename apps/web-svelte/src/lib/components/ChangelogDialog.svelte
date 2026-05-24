@@ -91,7 +91,7 @@
     },
     {
       label: "Reddit",
-      href: "https://www.reddit.com/r/PrismediaMediaApp/",
+      href: "https://www.reddit.com/r/Prismedia/",
       icon: "/icons/reddit.svg",
     },
   ];
