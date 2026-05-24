@@ -109,7 +109,7 @@
       ancestors={store.view.ancestors}
     />
   {:else if current.state === "proposal" && current.proposal}
-    <IdentifyReviewParent entity={current.entity} proposal={current.proposal} />
+    <IdentifyReviewParent entity={current.entity} proposal={current.proposal} detail={current.detail} />
   {:else if current.state === "search" && current.candidates.length > 0}
     <IdentifyReviewChoice
       entity={current.entity}

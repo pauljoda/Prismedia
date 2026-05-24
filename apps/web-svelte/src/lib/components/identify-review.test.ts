@@ -1,13 +1,17 @@
 import { describe, expect, it } from "vitest";
 import type { EntityMetadataProposal } from "$lib/api/identify";
 import {
+  buildRootReviewApplyPayload,
   buildProposalForApply,
+  defaultImageSelectionForReview,
   findRelationshipImage,
   groupProposalRows,
   isNewRelationshipTitle,
+  reviewableImages,
   reviewChildProposals,
   relationshipProposals,
   relationshipTitlesFromEntityThumbnails,
+  scopedCreditForProposal,
   structuralChildProposals,
 } from "./identify-review";
 
@@ -144,6 +148,59 @@ describe("identify review helpers", () => {
     expect(titles.credits).toEqual(["Tim Robinson"]);
     expect(isNewRelationshipTitle("Comedy", titles.tags)).toBe(false);
     expect(isNewRelationshipTitle("Mystery", titles.tags)).toBe(true);
+  });
+
+  it("builds a root apply payload from reviewed artwork, tags, and scoped credits", () => {
+    const actor = proposal("actor-1", "person", {
+      title: "Tim Robinson",
+      imageKind: "poster",
+      imageUrl: "https://example.test/tim.jpg",
+    });
+    const root = proposal("series", "video-series", {
+      title: "The Chair Company",
+      credits: [{ name: "Tim Robinson", role: "cast", character: "Ron Trosper", sortOrder: 0 }],
+      relationships: [actor],
+    });
+    root.patch.tags = ["Comedy", "Drama", "Mystery"];
+    root.images = [
+      { kind: "poster", url: "https://example.test/poster.jpg", source: "tmdb" },
+      { kind: "backdrop", url: "https://example.test/backdrop.jpg", source: "tmdb" },
+      { kind: "logo", url: "https://example.test/logo.png", source: "tmdb" },
+    ];
+
+    expect(reviewableImages(root.images).map((image) => image.kind)).toEqual(["poster", "backdrop"]);
+    expect(defaultImageSelectionForReview(root)).toEqual({
+      poster: "https://example.test/poster.jpg",
+      backdrop: "https://example.test/backdrop.jpg",
+    });
+    expect(scopedCreditForProposal(root, actor)).toMatchObject({
+      role: "cast",
+      character: "Ron Trosper",
+    });
+
+    const payload = buildRootReviewApplyPayload(root, {
+      selectedFields: {
+        title: true,
+        tags: true,
+        credits: true,
+        images: true,
+      },
+      selectedImages: {
+        poster: "https://example.test/poster.jpg",
+        backdrop: null,
+        logo: "https://example.test/logo.png",
+      },
+      selectedTags: {
+        Comedy: true,
+        Drama: false,
+        Mystery: true,
+      },
+    });
+
+    expect(payload.selectedFields).toContain("images");
+    expect(payload.selectedImages).toEqual({ poster: "https://example.test/poster.jpg" });
+    expect(payload.proposal.patch.tags).toEqual(["Comedy", "Mystery"]);
+    expect(payload.proposal.images.map((image) => image.kind)).toEqual(["poster"]);
   });
 });
 

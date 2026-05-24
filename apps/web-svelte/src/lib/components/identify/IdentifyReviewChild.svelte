@@ -13,10 +13,15 @@
   import { cn, StatusLed } from "@prismedia/ui-svelte";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
   import {
+    defaultImageSelectionForReview,
+    reviewableImages,
+    reviewFieldKeys,
     structuralChildProposals,
     relationshipProposals,
+    scopedCreditForProposal,
   } from "$lib/components/identify-review";
   import type {
+    CreditPatch,
     EntityMetadataProposal,
     ImageCandidate,
   } from "$lib/api/identify";
@@ -34,10 +39,7 @@
 
   const store = useIdentifyStore();
 
-  const FIELD_KEYS = [
-    "title", "description", "externalIds", "urls", "tags",
-    "studio", "credits", "dates", "stats", "positions", "classification",
-  ] as const;
+  const FIELD_KEYS = reviewFieldKeys;
 
   const FIELD_LABELS: Record<string, string> = {
     title: "Title",
@@ -51,21 +53,29 @@
     stats: "Stats",
     positions: "Positions",
     classification: "Classification",
+    images: "Artwork",
   };
 
-  let selectedFields = $state<Record<string, boolean>>(
-    Object.fromEntries(FIELD_KEYS.map((k) => [k, hasField(k)])),
-  );
-  let selectedImages = $state<Record<string, string | null>>(defaultImageSelection());
+  let selectedFields = $state<Record<string, boolean>>({});
+  let selectedImages = $state<Record<string, string | null>>({});
+  let reviewStateProposalId = $state<string | null>(null);
 
   const children = $derived(structuralChildProposals(proposal));
   const credits = $derived(relationshipProposals(proposal).filter((r) => r.targetKind === "person"));
-  const imageGroups = $derived(groupImages(proposal.images ?? []));
+  const imageGroups = $derived(groupImages(reviewableImages(proposal.images ?? [])));
+  const artworkCandidateCount = $derived(imageGroups.reduce((count, group) => count + group.images.length, 0));
 
   const parentChildren = $derived(structuralChildProposals(parentProposal));
   const currentIndex = $derived(parentChildren.findIndex((c) => c.proposalId === proposal.proposalId));
   const prevChild = $derived(currentIndex > 0 ? parentChildren[currentIndex - 1] : null);
   const nextChild = $derived(currentIndex < parentChildren.length - 1 ? parentChildren[currentIndex + 1] : null);
+
+  $effect(() => {
+    if (reviewStateProposalId === proposal.proposalId) return;
+    reviewStateProposalId = proposal.proposalId;
+    selectedFields = Object.fromEntries(FIELD_KEYS.map((k) => [k, hasField(k)]));
+    selectedImages = defaultImageSelectionForReview(proposal);
+  });
 
   function hasField(field: string): boolean {
     return fieldValue(field).trim().length > 0;
@@ -85,6 +95,7 @@
     if (field === "stats") return Object.entries(patch.stats ?? {}).map(([k, v]) => `${k}: ${v}`).join(", ");
     if (field === "positions") return Object.entries(patch.positions ?? {}).map(([k, v]) => `${k}: ${v}`).join(", ");
     if (field === "classification") return patch.classification ?? "";
+    if (field === "images") return imageGroups.map((group) => `${group.kind} (${group.images.length})`).join(", ");
     return "";
   }
 
@@ -96,12 +107,18 @@
     return Object.entries(groups).map(([kind, imgs]) => ({ kind, images: imgs }));
   }
 
-  function defaultImageSelection(): Record<string, string | null> {
-    const selected: Record<string, string | null> = {};
-    for (const group of groupImages(proposal.images ?? [])) {
-      selected[group.kind] = group.images[0]?.url ?? null;
-    }
-    return selected;
+  function preferredProposalImage(result: EntityMetadataProposal): ImageCandidate | null {
+    const images = reviewableImages(result.images ?? []);
+    return images.find((image) => image.kind === "poster") ??
+      images.find((image) => image.kind === "thumbnail") ??
+      images[0] ??
+      null;
+  }
+
+  function roleLabel(credit: CreditPatch | null | undefined): string {
+    const role = credit?.role?.trim();
+    if (!role) return "Cast";
+    return role.replaceAll("-", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
   }
 
   function goBackToParent() {
@@ -250,27 +267,29 @@
       </header>
       <div class="flex flex-col gap-2 p-3.5">
         {#each credits as credit (credit.proposalId)}
+          {@const scopedCredit = scopedCreditForProposal(proposal, credit)}
+          {@const image = preferredProposalImage(credit)}
           {@const card = {
             entity: { id: credit.proposalId, kind: "person", title: credit.patch?.title ?? "", parentEntityId: null, sortOrder: null, capabilities: [], childrenByKind: [], relationships: [] },
             aspectRatio: { width: 4, height: 5 },
-            cover: credit.images[0] ? { src: credit.images[0].url, alt: credit.patch?.title ?? "" } : null,
+            cover: image ? { src: image.url, alt: credit.patch?.title ?? "" } : null,
             hover: { kind: "none" } as const,
-            subtitle: credit.patch?.credits[0]?.character ? `as ${credit.patch?.credits[0].character}` : credit.patch?.credits[0]?.role ?? "",
-            meta: [{ icon: "person" as const, label: credit.patch?.credits[0]?.role ?? "Cast" }],
+            subtitle: scopedCredit?.character ? `as ${scopedCredit.character}` : roleLabel(scopedCredit),
+            meta: [{ icon: "person" as const, label: roleLabel(scopedCredit) }],
           }}
-          <EntityThumbnail {card} layout="list" />
+          <EntityThumbnail {card} layout="list" linkable={false} onActivate={() => goToChild(credit)} />
         {/each}
       </div>
     </section>
   {/if}
 
   <!-- Artwork -->
-  {#if (proposal.images ?? []).length > 0}
+  {#if artworkCandidateCount > 0}
     <section class="surface-panel overflow-hidden">
       <header class="flex items-center gap-2.5 border-b border-border-subtle bg-surface-2 px-3.5 py-2.5">
         <Images class="h-3.5 w-3.5 text-text-accent" />
         <span class="text-kicker text-text-accent">Artwork</span>
-        <span class="font-mono text-[0.7rem] text-text-muted">{(proposal.images ?? []).length} candidates</span>
+        <span class="font-mono text-[0.7rem] text-text-muted">{artworkCandidateCount} candidates</span>
       </header>
       <div class="p-3.5">
         {#each imageGroups as group (group.kind)}
@@ -335,17 +354,7 @@
             custom: child.patch?.positions?.episode ? { bottomLeft: { label: `E${String(child.patch?.positions.episode).padStart(2, "0")}` } } : undefined,
             meta: [],
           }}
-          <EntityThumbnail card={childCard} onActivate={() => goToChild(child)} />
-          <div class="flex gap-1.5">
-            <button
-              type="button"
-              class="inline-flex h-7 flex-1 items-center justify-center gap-1 rounded-xs border border-border-accent-strong bg-accent-950/40 text-[0.72rem] text-text-accent transition-colors hover:bg-accent-950/60"
-              onclick={() => goToChild(child)}
-            >
-              Walk
-              <ChevronRight class="h-3 w-3" />
-            </button>
-          </div>
+          <EntityThumbnail card={childCard} linkable={false} onActivate={() => goToChild(child)} />
         {/each}
       </div>
     </section>

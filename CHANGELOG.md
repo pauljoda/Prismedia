@@ -26,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated web app manifest and mobile browser metadata for home-screen installation and browser UI theme colors.
 
 ### Fixed
+- Fixed Identify proposal review so current metadata, artwork selections, scoped credits, and tag toggles reflect what will actually be applied.
 - Fixed Identify proposal review so nested children can be walked more than one level deep without losing parent context.
 - Saved entity grid media-wall mode per grid, defaulted image/page grids to that view, and let book page cards show metadata again when media-wall mode is turned off.
 - Kept the library toolbar reset action on the active filter row so the main toolbar buttons no longer shift when reset becomes available.

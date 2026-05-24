@@ -5,6 +5,7 @@ import {
   applyIdentifyQueueItem,
   closeBulkIdentifySession,
   deleteIdentifyQueueItem,
+  fetchIdentifyEntity,
   fetchIdentifyQueue,
   fetchPluginProviders,
   searchIdentifyQueueItem,
@@ -15,14 +16,15 @@ import {
   type IdentifyQueueState,
   type PluginProvider,
 } from "$lib/api/identify";
-import type { EntityCard } from "$lib/api/prismedia";
+import type { EntityCard, EntityDetailCard } from "$lib/api/prismedia";
+import { entityCardToThumbnailCard } from "$lib/entities/entity-grid";
 import { resolveEntityHrefById } from "$lib/entities/entity-route-resolver";
 
 export type IdentifyView =
   | { kind: "dashboard" }
   | { kind: "kind-tab"; entityKind: string }
   | { kind: "review-choice"; entity: EntityCard; candidates: EntitySearchCandidate[] }
-  | { kind: "review-parent"; entity: EntityCard; proposal: EntityMetadataProposal }
+  | { kind: "review-parent"; entity: EntityCard; proposal: EntityMetadataProposal; detail?: EntityDetailCard | null }
   | {
       kind: "review-child";
       entity: EntityCard;
@@ -43,6 +45,7 @@ export interface IdentifyQueueItem {
   proposal?: EntityMetadataProposal | null;
   errorMessage?: string | null;
   entity: EntityCard;
+  detail?: EntityDetailCard | null;
   completedAt?: string | null;
 }
 
@@ -139,12 +142,13 @@ export class IdentifyStore {
     this.loading = true;
     this.error = null;
     try {
-      const [providers, item] = await Promise.all([
+      const [providers, item, detail] = await Promise.all([
         fetchPluginProviders(),
         addIdentifyQueueItem(entityId),
+        fetchEntityDetail(entityId),
       ]);
       this.providers = providers;
-      this.#upsertQueueItem(queueItemFromApi(item));
+      this.#upsertQueueItem(queueItemFromApi(item, undefined, detail));
       return item;
     } catch (err) {
       this.error = readError(err);
@@ -155,8 +159,11 @@ export class IdentifyStore {
   }
 
   async refreshQueueItem(entityId: string) {
-    const item = await addIdentifyQueueItem(entityId);
-    const mapped = queueItemFromApi(item);
+    const [item, detail] = await Promise.all([
+      addIdentifyQueueItem(entityId),
+      fetchEntityDetail(entityId),
+    ]);
+    const mapped = queueItemFromApi(item, undefined, detail);
     this.#upsertQueueItem(mapped);
     return mapped;
   }
@@ -177,8 +184,11 @@ export class IdentifyStore {
   }
 
   async queueEntity(entity: EntityCard) {
-    const item = await addIdentifyQueueItem(entity.id);
-    const mapped = queueItemFromApi(item, entity);
+    const [item, detail] = await Promise.all([
+      addIdentifyQueueItem(entity.id),
+      fetchEntityDetail(entity.id),
+    ]);
+    const mapped = queueItemFromApi(item, entity, detail);
     this.#upsertQueueItem(mapped);
     return mapped;
   }
@@ -192,7 +202,8 @@ export class IdentifyStore {
     this.error = null;
     try {
       const item = await searchIdentifyQueueItem(entity.id, providerId, query);
-      const mapped = queueItemFromApi(item, entity);
+      const detail = this.queue.find((queued) => queued.entityId === entity.id)?.detail ?? await fetchEntityDetail(entity.id);
+      const mapped = queueItemFromApi(item, entity, detail);
       this.#upsertQueueItem(mapped);
       this.reviewResolvedQueueItem(mapped);
       return mapped;
@@ -314,7 +325,7 @@ export class IdentifyStore {
 
   reviewResolvedQueueItem(item: IdentifyQueueItem) {
     if (item.state === "proposal" && item.proposal) {
-      this.navigateTo({ kind: "review-parent", entity: item.entity, proposal: item.proposal });
+      this.navigateTo({ kind: "review-parent", entity: item.entity, proposal: item.proposal, detail: item.detail });
     } else if (item.state === "search" && item.candidates.length > 0) {
       this.navigateTo({ kind: "review-choice", entity: item.entity, candidates: item.candidates });
     }
@@ -346,8 +357,20 @@ export class IdentifyStore {
   }
 }
 
-function queueItemFromApi(item: ApiIdentifyQueueItem, entity?: EntityCard): IdentifyQueueItem {
-  const card = entity ?? entityCardFromQueueItem(item);
+async function fetchEntityDetail(entityId: string): Promise<EntityDetailCard | null> {
+  try {
+    return await fetchIdentifyEntity(entityId);
+  } catch {
+    return null;
+  }
+}
+
+function queueItemFromApi(
+  item: ApiIdentifyQueueItem,
+  entity?: EntityCard,
+  detail?: EntityDetailCard | null,
+): IdentifyQueueItem {
+  const card = detail ? entityThumbnailFromDetail(detail, entity) : entity ?? entityCardFromQueueItem(item);
   return {
     id: item.id,
     entityId: item.entityId,
@@ -360,7 +383,28 @@ function queueItemFromApi(item: ApiIdentifyQueueItem, entity?: EntityCard): Iden
     proposal: item.proposal ?? null,
     errorMessage: item.error ?? null,
     entity: card,
+    detail: detail ?? null,
     completedAt: item.completedAt ?? null,
+  };
+}
+
+function entityThumbnailFromDetail(detail: EntityDetailCard, fallback?: EntityCard): EntityCard {
+  const card = entityCardToThumbnailCard(detail);
+  return {
+    id: detail.id,
+    kind: detail.kind,
+    title: detail.title,
+    parentEntityId: detail.parentEntityId,
+    sortOrder: detail.sortOrder,
+    coverUrl: card.cover?.src ?? fallback?.coverUrl ?? null,
+    hoverKind: fallback?.hoverKind ?? "none",
+    hoverUrl: fallback?.hoverUrl ?? null,
+    hoverImages: fallback?.hoverImages ?? [],
+    meta: card.meta ?? fallback?.meta ?? [],
+    rating: fallback?.rating ?? null,
+    isFavorite: fallback?.isFavorite ?? false,
+    isNsfw: fallback?.isNsfw ?? false,
+    isOrganized: fallback?.isOrganized ?? false,
   };
 }
 

@@ -8,38 +8,43 @@
     Layers,
     Loader2,
     SkipForward,
+    Tag,
     Users,
     X,
   } from "@lucide/svelte";
   import { cn, StatusLed } from "@prismedia/ui-svelte";
+  import { getCapability, getDescription, getImagesCapability } from "$lib/api/capabilities";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
-  import { entityCardToThumbnailCard } from "$lib/entities/entity-grid";
+  import { CAPABILITY_KIND } from "$lib/entities/entity-codes";
   import {
-    reviewChildProposals,
+    buildRootReviewApplyPayload,
+    defaultImageSelectionForReview,
+    isNewRelationshipTitle,
     structuralChildProposals,
     relationshipProposals,
+    reviewableImages,
+    reviewFieldKeys,
+    scopedCreditForProposal,
   } from "$lib/components/identify-review";
   import type {
+    CreditPatch,
     EntityMetadataProposal,
     ImageCandidate,
   } from "$lib/api/identify";
-  import type { EntityCard } from "$lib/api/prismedia";
-  import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
+  import type { EntityCard, EntityDetailCard } from "$lib/api/prismedia";
   import { useIdentifyStore } from "./identify-store.svelte";
 
   interface Props {
     entity: EntityCard;
     proposal: EntityMetadataProposal;
+    detail?: EntityDetailCard | null;
   }
 
-  let { entity, proposal }: Props = $props();
+  let { entity, proposal, detail = null }: Props = $props();
 
   const store = useIdentifyStore();
 
-  const FIELD_KEYS = [
-    "title", "description", "externalIds", "urls", "tags",
-    "studio", "credits", "dates", "stats", "positions", "classification",
-  ] as const;
+  const FIELD_KEYS = reviewFieldKeys;
 
   const FIELD_LABELS: Record<string, string> = {
     title: "Title",
@@ -53,12 +58,13 @@
     stats: "Stats",
     positions: "Positions",
     classification: "Classification",
+    images: "Artwork",
   };
 
-  let selectedFields = $state<Record<string, boolean>>(
-    Object.fromEntries(FIELD_KEYS.map((k) => [k, hasField(k)])),
-  );
-  let selectedImages = $state<Record<string, string | null>>(defaultImageSelection());
+  let selectedFields = $state<Record<string, boolean>>({});
+  let selectedImages = $state<Record<string, string | null>>({});
+  let selectedTags = $state<Record<string, boolean>>({});
+  let reviewStateProposalId = $state<string | null>(null);
 
   const children = $derived(structuralChildProposals(proposal));
   const relationships = $derived(relationshipProposals(proposal));
@@ -66,7 +72,19 @@
     relationships.filter((r) => r.targetKind === "person"),
   );
   const tags = $derived(proposal.patch?.tags ?? []);
-  const imageGroups = $derived(groupImages(proposal.images ?? []));
+  const existingTagTitles = $derived(relationshipTitles("tag"));
+  const imageGroups = $derived(groupImages(reviewableImages(proposal.images ?? [])));
+  const artworkCandidateCount = $derived(imageGroups.reduce((count, group) => count + group.images.length, 0));
+  const selectedTagCount = $derived(Object.values(selectedTags).filter(Boolean).length);
+  const contextPosterUrl = $derived(entity.coverUrl ?? proposalImageUrl(["poster", "thumbnail", "cover"]));
+
+  $effect(() => {
+    if (reviewStateProposalId === proposal.proposalId) return;
+    reviewStateProposalId = proposal.proposalId;
+    selectedFields = Object.fromEntries(FIELD_KEYS.map((k) => [k, hasField(k)]));
+    selectedImages = defaultImageSelectionForReview(proposal);
+    selectedTags = defaultTagSelection();
+  });
 
   function hasField(field: string): boolean {
     return fieldValue(field).trim().length > 0;
@@ -86,6 +104,7 @@
     if (field === "stats") return Object.entries(patch.stats ?? {}).map(([k, v]) => `${k}: ${v}`).join(", ");
     if (field === "positions") return Object.entries(patch.positions ?? {}).map(([k, v]) => `${k}: ${v}`).join(", ");
     if (field === "classification") return patch.classification ?? "";
+    if (field === "images") return imageGroups.map((group) => `${group.kind} (${group.images.length})`).join(", ");
     return "";
   }
 
@@ -97,19 +116,91 @@
     return Object.entries(groups).map(([kind, imgs]) => ({ kind, images: imgs }));
   }
 
-  function defaultImageSelection(): Record<string, string | null> {
-    const selected: Record<string, string | null> = {};
-    for (const group of groupImages(proposal.images ?? [])) {
-      selected[group.kind] = group.images[0]?.url ?? null;
+  function defaultTagSelection(): Record<string, boolean> {
+    return Object.fromEntries((proposal.patch?.tags ?? []).map((tag) => [tag, true]));
+  }
+
+  function currentFieldValue(field: string): string {
+    if (field === "title") return detail?.title ?? entity.title ?? "";
+    if (!detail) return "";
+
+    const capabilities = detail.capabilities ?? [];
+    if (field === "description") return getDescription(capabilities) ?? "";
+    if (field === "externalIds") {
+      const links = getCapability(capabilities, CAPABILITY_KIND.links);
+      return (links?.externalIds ?? []).map((externalId) => `${externalId.provider}: ${externalId.value}`).join(", ");
     }
-    return selected;
+    if (field === "urls") {
+      const links = getCapability(capabilities, CAPABILITY_KIND.links);
+      return (links?.urls ?? []).map((url) => url.value).join(", ");
+    }
+    if (field === "tags") return relationshipTitles("tag").join(", ");
+    if (field === "studio") return relationshipTitles("studio")[0] ?? "";
+    if (field === "credits") return relationshipTitles("person").join(", ");
+    if (field === "dates") {
+      const dates = getCapability(capabilities, CAPABILITY_KIND.dates);
+      return (dates?.items ?? []).map((item) => `${item.code}: ${item.value}`).join(", ");
+    }
+    if (field === "stats") {
+      const stats = getCapability(capabilities, CAPABILITY_KIND.stats);
+      return (stats?.items ?? []).map((item) => `${item.code}: ${item.value}`).join(", ");
+    }
+    if (field === "positions") {
+      const positions = getCapability(capabilities, CAPABILITY_KIND.position);
+      return (positions?.items ?? []).map((item) => `${item.code}: ${item.value}`).join(", ");
+    }
+    if (field === "classification") {
+      const classification = getCapability(capabilities, CAPABILITY_KIND.classification);
+      return classification?.value ?? "";
+    }
+    if (field === "images") {
+      const images = getImagesCapability(capabilities);
+      return (images?.items ?? [])
+        .filter((image) => image.kind !== "source")
+        .map((image) => String(image.kind))
+        .join(", ");
+    }
+    return "";
+  }
+
+  function relationshipTitles(kind: string): string[] {
+    return (detail?.relationships ?? [])
+      .filter((group) => group.kind === kind)
+      .flatMap((group) => group.entities)
+      .map((item) => item.title)
+      .filter((title): title is string => Boolean(title));
+  }
+
+  function proposalImageUrl(kinds: string[]): string | null {
+    const images = reviewableImages(proposal.images ?? []);
+    for (const kind of kinds) {
+      const image = images.find((candidate) => candidate.kind === kind);
+      if (image) return image.url;
+    }
+    return images[0]?.url ?? null;
+  }
+
+  function preferredProposalImage(result: EntityMetadataProposal): ImageCandidate | null {
+    const images = reviewableImages(result.images ?? []);
+    return images.find((image) => image.kind === "poster") ??
+      images.find((image) => image.kind === "thumbnail") ??
+      images[0] ??
+      null;
+  }
+
+  function roleLabel(credit: CreditPatch | null | undefined): string {
+    const role = credit?.role?.trim();
+    if (!role) return "Cast";
+    return role.replaceAll("-", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
   }
 
   function handleApply() {
-    const fields = Object.entries(selectedFields)
-      .filter(([, on]) => on)
-      .map(([field]) => field);
-    void store.applyProposal(entity, proposal, fields, selectedImages);
+    const payload = buildRootReviewApplyPayload(proposal, {
+      selectedFields,
+      selectedImages,
+      selectedTags,
+    });
+    void store.applyProposal(entity, payload.proposal, payload.selectedFields, payload.selectedImages);
   }
 
   function walkChild(child: EntityMetadataProposal) {
@@ -155,8 +246,8 @@
 
   <!-- Context bar -->
   <div class="grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-4 rounded-sm border border-border-subtle bg-surface-1 p-3.5 shadow-well">
-    {#if entity.coverUrl}
-      <img src={entity.coverUrl} alt="" class="h-16 w-11 rounded-xs object-cover" />
+    {#if contextPosterUrl}
+      <img src={contextPosterUrl} alt="" class="h-16 w-11 rounded-xs object-cover" />
     {:else}
       <div class="grid h-16 w-11 place-items-center rounded-xs bg-surface-3">
         <Layers class="h-5 w-5 text-text-disabled" />
@@ -225,6 +316,7 @@
 
     {#each FIELD_KEYS as field (field)}
       {#if hasField(field)}
+        {@const current = currentFieldValue(field)}
         <div class="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 border-b border-border-subtle px-3.5 py-3 last:border-b-0 md:grid-cols-[auto_110px_1fr_1fr]">
           <label class="flex items-center">
             <input
@@ -238,7 +330,7 @@
               <span class="font-heading text-[0.76rem] font-semibold text-text-secondary">{FIELD_LABELS[field]}</span>
               <span class="ml-2 font-mono text-[0.62rem] text-text-disabled md:ml-0 md:block">{field}</span>
             </div>
-            <div class="hidden font-mono text-[0.74rem] text-text-disabled md:block">—</div>
+            <div class="hidden text-[0.76rem] leading-snug text-text-muted md:block">{current || "—"}</div>
             <div class="mt-1 text-[0.82rem] leading-snug text-text-primary md:mt-0">
               {fieldValue(field)}
             </div>
@@ -258,17 +350,21 @@
       </header>
       <div class="grid grid-cols-1 gap-2 p-3.5 sm:grid-cols-2">
         {#each credits as credit (credit.proposalId)}
+          {@const scopedCredit = scopedCreditForProposal(proposal, credit)}
+          {@const image = preferredProposalImage(credit)}
           {@const card = {
             entity: { id: credit.proposalId, kind: "person", title: credit.patch?.title ?? "", parentEntityId: null, sortOrder: null, capabilities: [], childrenByKind: [], relationships: [] },
             aspectRatio: { width: 4, height: 5 },
-            cover: credit.images[0] ? { src: credit.images[0].url, alt: credit.patch?.title ?? "" } : null,
+            cover: image ? { src: image.url, alt: credit.patch?.title ?? "" } : null,
             hover: { kind: "none" } as const,
-            subtitle: credit.patch?.credits[0]?.character ? `as ${credit.patch?.credits[0].character}` : credit.patch?.credits[0]?.role ?? "",
-            meta: [{ icon: "person" as const, label: credit.patch?.credits[0]?.role ?? "Cast" }],
+            subtitle: scopedCredit?.character ? `as ${scopedCredit.character}` : roleLabel(scopedCredit),
+            meta: [{ icon: "person" as const, label: roleLabel(scopedCredit) }],
           }}
           <EntityThumbnail
             {card}
             layout="list"
+            linkable={false}
+            onActivate={() => walkChild(credit)}
           />
         {/each}
       </div>
@@ -276,12 +372,12 @@
   {/if}
 
   <!-- Artwork -->
-  {#if (proposal.images ?? []).length > 0}
+  {#if artworkCandidateCount > 0}
     <section class="surface-panel overflow-hidden">
       <header class="flex items-center gap-2.5 border-b border-border-subtle bg-surface-2 px-3.5 py-2.5">
         <Images class="h-3.5 w-3.5 text-text-accent" />
         <span class="text-kicker text-text-accent">Artwork</span>
-        <span class="font-mono text-[0.7rem] text-text-muted">{proposal.images.length} candidates</span>
+        <span class="font-mono text-[0.7rem] text-text-muted">{artworkCandidateCount} candidates</span>
       </header>
       <div class="grid grid-cols-1 gap-4 p-3.5 md:grid-cols-3">
         {#each imageGroups as group (group.kind)}
@@ -328,17 +424,44 @@
 
   <!-- Tags -->
   {#if tags.length > 0}
-    <div class="flex flex-wrap items-center gap-2 rounded-sm border border-border-subtle bg-gradient-to-b from-surface-2 to-surface-1 px-3.5 py-2.5">
-      <span class="text-kicker text-text-accent">Tags</span>
-      <span class="font-mono text-[0.66rem] text-text-muted">{tags.length}</span>
-      <div class="mx-1 h-4 w-px bg-border-subtle"></div>
-      {#each tags as tag (tag)}
-        <span class="inline-flex items-center gap-1 rounded-xs border border-border-accent bg-accent-950/30 px-2 py-1 text-[0.76rem] text-text-primary">
-          <Check class="h-2.5 w-2.5 text-text-accent" />
-          {tag}
-        </span>
-      {/each}
-    </div>
+    <section class="surface-panel overflow-hidden">
+      <header class="flex items-center gap-2.5 border-b border-border-subtle bg-surface-2 px-3.5 py-2.5">
+        <Tag class="h-3.5 w-3.5 text-text-accent" />
+        <span class="text-kicker text-text-accent">Tags</span>
+        <span class="font-mono text-[0.7rem] text-text-muted">{selectedTagCount} of {tags.length} selected</span>
+      </header>
+      <div class="flex flex-wrap items-center gap-2 p-3.5">
+        {#each tags as tag (tag)}
+          {@const isExisting = !isNewRelationshipTitle(tag, existingTagTitles)}
+          <button
+            type="button"
+            class={cn(
+              "inline-flex min-h-8 items-center gap-1.5 rounded-xs border px-2.5 py-1 text-[0.76rem] transition-colors",
+              selectedTags[tag]
+                ? "border-border-accent bg-accent-950/30 text-text-primary"
+                : "border-border-default bg-surface-2 text-text-muted hover:bg-surface-3",
+            )}
+            aria-pressed={selectedTags[tag]}
+            onclick={() => (selectedTags[tag] = !selectedTags[tag])}
+          >
+            {#if selectedTags[tag]}
+              <Check class="h-3 w-3 text-text-accent" />
+            {:else}
+              <X class="h-3 w-3 text-text-disabled" />
+            {/if}
+            <span>{tag}</span>
+            <span class={cn(
+              "rounded-xs border px-1.5 py-0.5 font-mono text-[0.58rem]",
+              isExisting
+                ? "border-border-default bg-surface-3 text-text-muted"
+                : "border-border-accent bg-accent-950/40 text-text-accent",
+            )}>
+              {isExisting ? "Existing" : "New"}
+            </span>
+          </button>
+        {/each}
+      </div>
+    </section>
   {/if}
 
   <!-- Children -->
@@ -375,23 +498,7 @@
                 </span>
               {/if}
             </div>
-            <EntityThumbnail card={childCard} onActivate={() => walkChild(child)} />
-            <div class="flex gap-1.5">
-              <button
-                type="button"
-                class="inline-flex h-7 flex-1 items-center justify-center gap-1 rounded-xs border border-border-default bg-surface-2 text-[0.72rem] text-text-primary transition-colors hover:bg-surface-3"
-              >
-                Accept
-              </button>
-              <button
-                type="button"
-                class="inline-flex h-7 flex-1 items-center justify-center gap-1 rounded-xs border border-border-accent-strong bg-accent-950/40 text-[0.72rem] text-text-accent transition-colors hover:bg-accent-950/60"
-                onclick={() => walkChild(child)}
-              >
-                Walk
-                <ChevronRight class="h-3 w-3" />
-              </button>
-            </div>
+            <EntityThumbnail card={childCard} linkable={false} onActivate={() => walkChild(child)} />
           </div>
         {/each}
       </div>
@@ -412,7 +519,7 @@
       {Object.values(selectedFields).filter(Boolean).length} fields
       · {Object.values(selectedImages).filter(Boolean).length} imgs
       · {credits.length} credits
-      · {tags.length} tags
+      · {selectedTagCount} tags
     </span>
     <div class="flex-1"></div>
     <button

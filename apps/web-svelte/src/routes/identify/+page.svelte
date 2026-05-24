@@ -165,7 +165,7 @@
     {:else if store.view.kind === "review-choice"}
       <IdentifyReviewChoice entity={store.view.entity} candidates={store.view.candidates} />
     {:else if store.view.kind === "review-parent"}
-      <IdentifyReviewParent entity={store.view.entity} proposal={store.view.proposal} />
+      <IdentifyReviewParent entity={store.view.entity} proposal={store.view.proposal} detail={store.view.detail} />
     {:else if store.view.kind === "review-child"}
       <IdentifyReviewChild
         entity={store.view.entity}

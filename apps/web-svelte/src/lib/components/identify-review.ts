@@ -9,7 +9,7 @@ import type {
   ImageCandidate,
 } from "$lib/api/identify";
 
-const fieldKeys = [
+export const reviewFieldKeys = [
   "title",
   "description",
   "externalIds",
@@ -22,7 +22,9 @@ const fieldKeys = [
   "positions",
   "classification",
   "images",
-];
+] as const;
+
+const fieldKeys = reviewFieldKeys;
 
 export interface IdentifyReviewSelectionState {
   selectedFieldsByProposal: Record<string, Record<string, boolean>>;
@@ -41,6 +43,20 @@ export interface IdentifyProposalRow {
   id: string;
   label: string;
   proposals: EntityMetadataProposal[];
+}
+
+export interface IdentifyRootReviewApplyInput {
+  selectedFields: Record<string, boolean>;
+  selectedImages: Record<string, string | null>;
+  selectedTags?: Record<string, boolean>;
+  selectedCredits?: Record<string, boolean>;
+  selectedCascade?: Record<string, boolean>;
+}
+
+export interface IdentifyRootReviewApplyPayload {
+  proposal: EntityMetadataProposal;
+  selectedFields: string[];
+  selectedImages: Record<string, string>;
 }
 
 export function structuralChildProposals(result: EntityMetadataProposal): EntityMetadataProposal[] {
@@ -111,6 +127,58 @@ export function relationshipTitlesFromEntityThumbnails(
 
 export function isNewRelationshipTitle(title: string, existingTitles: string[]): boolean {
   return !existingTitles.some((existing) => existing.localeCompare(title, undefined, { sensitivity: "accent" }) === 0);
+}
+
+export function reviewableImages(images: ImageCandidate[]): ImageCandidate[] {
+  return images.filter((image) => image.kind.toLowerCase() !== "logo");
+}
+
+export function defaultImageSelectionForReview(result: EntityMetadataProposal): Record<string, string | null> {
+  const selected: Record<string, string | null> = {};
+  for (const image of reviewableImages(result.images ?? [])) {
+    selected[image.kind] ??= image.url;
+  }
+  return selected;
+}
+
+export function scopedCreditForProposal(
+  scope: EntityMetadataProposal,
+  personProposal: EntityMetadataProposal,
+): CreditPatch | null {
+  const title = personProposal.patch.title ?? "";
+  if (title) {
+    const scoped = scope.patch.credits.find((credit) =>
+      credit.name.localeCompare(title, undefined, { sensitivity: "accent" }) === 0,
+    );
+    if (scoped) return scoped;
+  }
+
+  return personProposal.patch.credits[0] ?? null;
+}
+
+export function buildRootReviewApplyPayload(
+  result: EntityMetadataProposal,
+  input: IdentifyRootReviewApplyInput,
+): IdentifyRootReviewApplyPayload {
+  const fields = Object.fromEntries(
+    fieldKeys.map((field) => [field, input.selectedFields[field] === true]),
+  );
+  const selectedImages = selectedReviewImages(input.selectedImages);
+  const proposal = buildProposalForApply(result, {
+    selectedFieldsByProposal: { [result.proposalId]: fields },
+    selectedImagesByProposal: { [result.proposalId]: selectedImages },
+    selectedCreditsByProposal: { [result.proposalId]: input.selectedCredits ?? {} },
+    selectedTagsByProposal: { [result.proposalId]: input.selectedTags ?? {} },
+    selectedCascade: input.selectedCascade ?? {},
+  });
+
+  return {
+    proposal,
+    selectedFields: Object.entries(fields)
+      .filter(([, selected]) => selected)
+      .map(([field]) => field),
+    selectedImages,
+  };
 }
 
 export function buildProposalForApply(
@@ -211,6 +279,15 @@ function imagesForSelectedProposal(
   const selected = selections.selectedImagesByProposal[result.proposalId];
   if (!selected) return result.images;
   return result.images.filter((image) => selected[image.kind] === image.url);
+}
+
+function selectedReviewImages(selectedImages: Record<string, string | null>): Record<string, string> {
+  const selected: Record<string, string> = {};
+  for (const [kind, url] of Object.entries(selectedImages)) {
+    if (!url || kind.toLowerCase() === "logo") continue;
+    selected[kind] = url;
+  }
+  return selected;
 }
 
 function hasField(result: EntityMetadataProposal, field: string): boolean {
