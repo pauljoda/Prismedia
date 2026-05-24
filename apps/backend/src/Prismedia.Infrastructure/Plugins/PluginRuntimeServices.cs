@@ -420,13 +420,55 @@ public sealed class DotnetPluginProcessRunner {
                         : result.StandardError.Trim());
             }
 
-            return JsonSerializer.Deserialize<IdentifyPluginResponse>(result.StandardOutput, JsonOptions)
-                ?? new IdentifyPluginResponse(false, null, "Plugin returned an empty response.");
+            var wire = JsonSerializer.Deserialize<PluginWireResponse>(result.StandardOutput, JsonOptions);
+            return wire is not null
+                ? ConvertWireResponse(wire)
+                : new IdentifyPluginResponse(false, null, "Plugin returned an empty response.");
         } catch (JsonException ex) {
             return new IdentifyPluginResponse(false, null, $"Plugin returned invalid JSON: {ex.Message}");
         } finally {
             TryDelete(requestPath);
         }
+    }
+
+    /// <summary>
+    /// Wire format matching the plugin's IdentifyPluginResult (Type/Proposal/Candidates)
+    /// nested inside its response envelope.
+    /// </summary>
+    private sealed record PluginWireResult(
+        string? Type,
+        EntityMetadataProposal? Proposal,
+        IReadOnlyList<EntitySearchCandidate>? Candidates);
+
+    private sealed record PluginWireResponse(bool Ok, PluginWireResult? Result, string? Error);
+
+    private static IdentifyPluginResponse ConvertWireResponse(PluginWireResponse wire) {
+        if (!wire.Ok || wire.Result is null) {
+            return new IdentifyPluginResponse(wire.Ok, null, wire.Error);
+        }
+
+        var result = wire.Result;
+        if (result.Type == "proposal" && result.Proposal is not null) {
+            return new IdentifyPluginResponse(true, result.Proposal, wire.Error);
+        }
+
+        if (result.Type == "candidates" && result.Candidates is { Count: > 0 }) {
+            var shell = new EntityMetadataProposal(
+                ProposalId: null!,
+                Provider: null!,
+                TargetKind: null!,
+                Confidence: null,
+                MatchReason: null,
+                Patch: null!,
+                Images: [],
+                Children: [],
+                Candidates: result.Candidates,
+                TargetEntityId: null,
+                Relationships: []);
+            return new IdentifyPluginResponse(true, shell, wire.Error);
+        }
+
+        return new IdentifyPluginResponse(true, null, wire.Error ?? "No TMDB match was found.");
     }
 
     private static void TryDelete(string path) {
@@ -508,7 +550,7 @@ public sealed class IdentifyPluginService {
         }
 
         var ancestors = await LoadAncestorSnapshotsAsync(entity, descriptor.Manifest.Id, cancellationToken);
-        return await IdentifyEntityWithStructuralContextAsync(
+        var directResult = await IdentifyEntityWithStructuralContextAsync(
             entity,
             descriptor,
             auth,
@@ -517,6 +559,71 @@ public sealed class IdentifyPluginService {
             parentSortOrder: entity.SortOrder,
             visited: [],
             cancellationToken);
+
+        if (directResult.Ok && directResult.Result?.Patch is not null) {
+            return directResult;
+        }
+
+        if (entity.ParentEntityId is not null) {
+            var cascadeResult = await CascadeFromParentAsync(entity, descriptor, auth, cancellationToken);
+            if (cascadeResult is not null) {
+                return cascadeResult;
+            }
+        }
+
+        return directResult;
+    }
+
+    /// <summary>
+    /// Walks up the parent chain looking for an ancestor the provider can identify,
+    /// then extracts the target entity's proposal from the ancestor's structural children.
+    /// </summary>
+    private async Task<IdentifyPluginResponse?> CascadeFromParentAsync(
+        EntityRow entity,
+        PluginDescriptor descriptor,
+        IReadOnlyDictionary<string, string> auth,
+        CancellationToken cancellationToken) {
+        var current = entity;
+        while (current.ParentEntityId is { } parentId) {
+            var parent = await _db.Entities
+                .AsNoTracking()
+                .FirstOrDefaultAsync(row => row.Id == parentId && row.DeletedAt == null, cancellationToken);
+            if (parent is null) break;
+
+            if (!SupportsKind(descriptor.Manifest, parent.KindCode)) {
+                current = parent;
+                continue;
+            }
+
+            var parentAncestors = await LoadAncestorSnapshotsAsync(parent, descriptor.Manifest.Id, cancellationToken);
+            var parentResult = await IdentifyEntityWithStructuralContextAsync(
+                parent, descriptor, auth, query: null, parentAncestors,
+                parentSortOrder: parent.SortOrder, visited: [], cancellationToken);
+
+            if (!parentResult.Ok || parentResult.Result?.Patch is null) {
+                current = parent;
+                continue;
+            }
+
+            var childProposal = FindEntityInProposalTree(entity.Id, parentResult.Result);
+            if (childProposal is not null) {
+                return new IdentifyPluginResponse(true, childProposal, null);
+            }
+
+            break;
+        }
+
+        return null;
+    }
+
+    private static EntityMetadataProposal? FindEntityInProposalTree(Guid entityId, EntityMetadataProposal proposal) {
+        if (proposal.TargetEntityId == entityId) return proposal;
+        foreach (var child in proposal.Children ?? []) {
+            var found = FindEntityInProposalTree(entityId, child);
+            if (found is not null) return found;
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -582,6 +689,28 @@ public sealed class IdentifyPluginService {
 
         var response = await _runner.IdentifyAsync(descriptor, request, cancellationToken);
         if (!response.Ok || response.Result is null) {
+            visited.Remove(entity.Id);
+            return response;
+        }
+
+        // Auto-resolve single candidate: when the plugin returns exactly one candidate
+        // with no patch, re-query with the candidate's external IDs to get the full proposal.
+        if (response.Result.Patch is null &&
+            response.Result.Candidates is { Count: 1 } singleCandidates) {
+            var candidate = singleCandidates[0];
+            var lookupQuery = new IdentifyQuery(null, null, candidate.ExternalIds);
+            var lookupRequest = request with {
+                Action = "lookup-id",
+                Query = lookupQuery,
+            };
+            var resolved = await _runner.IdentifyAsync(descriptor, lookupRequest, cancellationToken);
+            if (resolved.Ok && resolved.Result?.Patch is not null) {
+                response = resolved;
+            } else {
+                visited.Remove(entity.Id);
+                return response;
+            }
+        } else if (response.Result.Patch is null) {
             visited.Remove(entity.Id);
             return response;
         }

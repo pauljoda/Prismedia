@@ -564,35 +564,38 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             CapturedRequest = JsonSerializer.Deserialize<IdentifyPluginRequest>(
                 requestJson,
                 new JsonSerializerOptions(JsonSerializerDefaults.Web));
-            var response = new IdentifyPluginResponse(
-                true,
-                new EntityMetadataProposal(
-                    "tmdb:123",
-                    "tmdb",
-                    "video",
-                    1,
-                    "external-id",
-                    new EntityMetadataPatch(
-                        "Example",
-                        null,
-                        new Dictionary<string, string> { ["tmdb"] = "123" },
-                        [],
-                        [],
-                        null,
-                        [],
-                        new Dictionary<string, string>(),
-                        new Dictionary<string, int>(),
-                        new Dictionary<string, int>(),
-                        null),
-                    [],
-                    [],
-                    []),
-                null);
+            var wireJson = """
+                {
+                  "ok": true,
+                  "result": {
+                    "type": "proposal",
+                    "proposal": {
+                      "proposalId": "tmdb:123",
+                      "provider": "tmdb",
+                      "targetKind": "video",
+                      "confidence": 1,
+                      "matchReason": "external-id",
+                      "patch": {
+                        "title": "Example",
+                        "externalIds": { "tmdb": "123" },
+                        "urls": [],
+                        "tags": [],
+                        "credits": [],
+                        "dates": {},
+                        "stats": {},
+                        "positions": {}
+                      },
+                      "images": [],
+                      "children": [],
+                      "candidates": []
+                    },
+                    "candidates": []
+                  },
+                  "error": null
+                }
+                """;
 
-            return new ProcessExecutionResult(
-                0,
-                JsonSerializer.Serialize(response, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
-                string.Empty);
+            return new ProcessExecutionResult(0, wireJson, string.Empty);
         }
     }
 
@@ -610,35 +613,29 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
                 new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
             Requests.Add(request);
 
-            var response = new IdentifyPluginResponse(
-                true,
-                new EntityMetadataProposal(
-                    $"tmdb:{request.Entity.Kind}:{request.Entity.Id}",
-                    "tmdb",
-                    request.Entity.Kind,
-                    request.StructuralContext?.Ancestors.Count > 0 ? 0.9m : 1m,
-                    request.StructuralContext?.Ancestors.Count > 0 ? "structural-child" : "title-search",
-                    new EntityMetadataPatch(
-                        $"{request.Entity.Title} identified",
-                        null,
-                        new Dictionary<string, string>(),
-                        [],
-                        [],
-                        null,
-                        [],
-                        new Dictionary<string, string>(),
-                        new Dictionary<string, int>(),
-                        new Dictionary<string, int>(),
-                        null),
+            var proposal = new EntityMetadataProposal(
+                $"tmdb:{request.Entity.Kind}:{request.Entity.Id}",
+                "tmdb",
+                request.Entity.Kind,
+                request.StructuralContext?.Ancestors.Count > 0 ? 0.9m : 1m,
+                request.StructuralContext?.Ancestors.Count > 0 ? "structural-child" : "title-search",
+                new EntityMetadataPatch(
+                    $"{request.Entity.Title} identified",
+                    null,
+                    new Dictionary<string, string>(),
                     [],
                     [],
-                    []),
-                null);
+                    null,
+                    [],
+                    new Dictionary<string, string>(),
+                    new Dictionary<string, int>(),
+                    new Dictionary<string, int>(),
+                    null),
+                [],
+                [],
+                []);
 
-            return new ProcessExecutionResult(
-                0,
-                JsonSerializer.Serialize(response, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
-                string.Empty);
+            return new ProcessExecutionResult(0, SerializeAsWire(proposal), string.Empty);
         }
     }
 
@@ -704,30 +701,37 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
                 [new ImageCandidate("logo", "https://example.test/studio.png", "tmdb", null, null, null, null)],
                 [],
                 []);
-            var response = new IdentifyPluginResponse(
-                true,
-                new EntityMetadataProposal(
-                    "tmdb:tv:chair",
-                    "tmdb",
-                    "video-series",
-                    1,
-                    "external-id",
-                    EmptyPatch() with {
-                        Title = "The Chair Company",
-                        Studio = "Chair Pictures",
-                        Credits = [new CreditPatch("Series Actor", "cast", "Ron", 0)]
-                    },
-                    [new ImageCandidate("poster", "https://example.test/series.jpg", "tmdb", null, null, null, null)],
-                    [season],
-                    [],
-                    Relationships: [studioRelationship]),
-                null);
+            var proposal = new EntityMetadataProposal(
+                "tmdb:tv:chair",
+                "tmdb",
+                "video-series",
+                1,
+                "external-id",
+                EmptyPatch() with {
+                    Title = "The Chair Company",
+                    Studio = "Chair Pictures",
+                    Credits = [new CreditPatch("Series Actor", "cast", "Ron", 0)]
+                },
+                [new ImageCandidate("poster", "https://example.test/series.jpg", "tmdb", null, null, null, null)],
+                [season],
+                [],
+                Relationships: [studioRelationship]);
 
-            return new ProcessExecutionResult(
-                0,
-                JsonSerializer.Serialize(response, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
-                string.Empty);
+            return new ProcessExecutionResult(0, SerializeAsWire(proposal), string.Empty);
         }
+    }
+
+    private static string SerializeAsWire(EntityMetadataProposal proposal) {
+        var wire = new {
+            ok = true,
+            result = new {
+                type = "proposal",
+                proposal,
+                candidates = Array.Empty<object>()
+            },
+            error = (string?)null
+        };
+        return JsonSerializer.Serialize(wire, new JsonSerializerOptions(JsonSerializerDefaults.Web));
     }
 
     private static EntityMetadataPatch EmptyPatch() => new(
