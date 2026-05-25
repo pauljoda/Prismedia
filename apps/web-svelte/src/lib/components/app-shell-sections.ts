@@ -1,6 +1,6 @@
-import { dev } from "$app/environment";
 import { appShellSections as baseAppShellSections } from "@prismedia/ui-svelte";
 import type { AppRouteId } from "$lib/app-routes";
+import { shouldExposeDevRoutes } from "$lib/dev-routes";
 
 export interface AppShellNavItem {
   label: string;
@@ -31,6 +31,6 @@ const devSection: AppShellNavSection = {
   ],
 };
 
-export const appShellSections: AppShellNavSection[] = dev
+export const appShellSections: AppShellNavSection[] = shouldExposeDevRoutes()
   ? [...baseSections, devSection]
   : baseSections;

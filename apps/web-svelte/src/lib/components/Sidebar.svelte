@@ -9,6 +9,7 @@
   import ChangelogDialog from "./ChangelogDialog.svelte";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import { APP_VERSION, fetchReleaseUpdateStatus, type ReleaseUpdateStatus } from "$lib/version";
+  import { shouldExposeDevRoutes } from "$lib/dev-routes";
 
   interface Props {
     collapsed: boolean;
@@ -24,6 +25,7 @@
   const brandLogoNsfw = $derived(nsfw.mode === "show");
   const updateAvailable = $derived(releaseStatus?.updateAvailable === true);
   const pathname = $derived(page.url.pathname);
+  const showDevTools = shouldExposeDevRoutes();
   const docsHref = "https://pauljoda.github.io/Prismedia/docs/users/quick-start";
 
   function isActive(href: string): boolean {
@@ -170,26 +172,28 @@
 
   <!-- Footer actions -->
   <div class="shrink-0 space-y-1 border-t border-border-subtle px-3 py-3">
-    <a
-      href={resolve("/dev")}
-      aria-label="Open dev tools"
-      title={!isExpanded ? "Dev Tools" : undefined}
-      class="group flex h-8 items-center overflow-hidden whitespace-nowrap text-text-muted transition-colors duration-fast hover:bg-surface-2 hover:text-text-primary"
-    >
-      <div class="flex w-8 shrink-0 items-center justify-center">
-        <Wrench class="h-4 w-4 transition-colors group-hover:text-text-accent" />
-      </div>
-      <div
-        class={cn(
-          "overflow-hidden transition-[max-width,opacity] duration-moderate",
-          isExpanded ? "max-w-[160px] opacity-100 ml-1" : "max-w-0 opacity-0 ml-0",
-        )}
+    {#if showDevTools}
+      <a
+        href={resolve("/dev")}
+        aria-label="Open dev tools"
+        title={!isExpanded ? "Dev Tools" : undefined}
+        class="group flex h-8 items-center overflow-hidden whitespace-nowrap text-text-muted transition-colors duration-fast hover:bg-surface-2 hover:text-text-primary"
       >
-        <span class="text-mono-sm text-text-disabled transition-colors group-hover:text-text-accent">
-          Dev Tools
-        </span>
-      </div>
-    </a>
+        <div class="flex w-8 shrink-0 items-center justify-center">
+          <Wrench class="h-4 w-4 transition-colors group-hover:text-text-accent" />
+        </div>
+        <div
+          class={cn(
+            "overflow-hidden transition-[max-width,opacity] duration-moderate",
+            isExpanded ? "max-w-[160px] opacity-100 ml-1" : "max-w-0 opacity-0 ml-0",
+          )}
+        >
+          <span class="text-mono-sm text-text-disabled transition-colors group-hover:text-text-accent">
+            Dev Tools
+          </span>
+        </div>
+      </a>
+    {/if}
     <ChangelogDialog version={APP_VERSION}>
       <div
         class="group flex h-8 items-center overflow-hidden whitespace-nowrap text-text-muted transition-colors duration-fast hover:bg-surface-2 hover:text-text-primary"
