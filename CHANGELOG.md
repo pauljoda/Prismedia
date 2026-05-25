@@ -26,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated web app manifest and mobile browser metadata for home-screen installation and browser UI theme colors.
 
 ### Fixed
+- Fixed Identify dashboard navigation so returning to `/identify` from a review detail exits the stale detail view.
 - Fixed Identify child proposal review so walked children load current metadata, use the same field/artwork/tag selectors as roots, and keep rich selector fields out of the diff table.
 - Fixed Identify proposal review so structural children use selectable thumbnails for inclusion and final accept actions stay on the root review.
 - Fixed Identify search results so candidates show provider artwork and descriptions in list rows, and clicking a candidate selects it instead of navigating.

@@ -31,7 +31,7 @@
       const query = returnId ? `?returnId=${encodeURIComponent(returnId)}` : "";
       void goto(`/identify/${entityId}${query}`);
     } else {
-      void store.loadInitial();
+      void store.enterDashboardRoute();
     }
   });
 </script>

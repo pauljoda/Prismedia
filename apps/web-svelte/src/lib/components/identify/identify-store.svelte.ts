@@ -144,6 +144,11 @@ export class IdentifyStore {
     }
   }
 
+  async enterDashboardRoute() {
+    this.navigateTo({ kind: "dashboard" });
+    await this.loadInitial();
+  }
+
   async seedEntity(entityId: string, returnEntityId: string | null) {
     this.returnEntityId = returnEntityId;
     this.loading = true;
