@@ -31,6 +31,19 @@ public sealed class FilesVisibilityTests {
     }
 
     [Fact]
+    public async Task ListChildrenAsyncRejectsHiddenNsfwAssociatedFolders() {
+        var service = CreateService(hiddenPaths: new HashSet<string>(["/media/safe/hidden"], StringComparer.OrdinalIgnoreCase));
+
+        var error = await Assert.ThrowsAsync<FileOperationException>(() =>
+            service.ListChildrenAsync(
+                new FileChildrenRequest(SafeRootId, "hidden"),
+                hideNsfw: true,
+                CancellationToken.None));
+
+        Assert.Equal("not_found", error.Code);
+    }
+
+    [Fact]
     public async Task GetDetailAsyncRejectsHiddenNsfwAssociatedPaths() {
         var service = CreateService(hiddenPaths: new HashSet<string>(["/media/safe/hidden.mkv"], StringComparer.OrdinalIgnoreCase));
 

@@ -29,6 +29,7 @@ public sealed class FilesService(
         bool hideNsfw,
         CancellationToken cancellationToken) {
         var directory = await ResolveAsync(request.RootId, request.Path, hideNsfw, cancellationToken);
+        await EnsureVisiblePathAsync(directory, hideNsfw, cancellationToken);
         var entries = await storage.ListChildrenAsync(directory, cancellationToken);
         if (hideNsfw) {
             entries = await FilterVisibleEntriesAsync(directory, entries, cancellationToken);

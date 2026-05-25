@@ -23,6 +23,7 @@
   import {
     createFileTreeRegistry,
     fileTreeRootPath,
+    reconcileFileTreeEntries,
     type FileTreeNodeMeta,
     upsertFileTreeEntries,
   } from "$lib/files/file-tree-state";
@@ -64,10 +65,6 @@
     if (meta.kind === "directory") return meta;
     const parent = parentPath(meta.path);
     return [...registry.values()].find((candidate) => candidate.rootId === meta.rootId && candidate.path === parent) ?? meta;
-  }
-
-  function mergeTreePaths(paths: string[]): void {
-    treePaths = [...new Set([...treePaths, ...paths])];
   }
 
   async function loadRoots(): Promise<void> {
@@ -114,10 +111,11 @@
       const rootTreePath = [...registry.values()].find((candidate) => candidate.rootId === meta.rootId && candidate.path === "")?.treePath;
       if (!rootTreePath) return;
       const nextRegistry = new Map(registry);
-      const childPaths = upsertFileTreeEntries(nextRegistry, rootTreePath, response.entries);
+      const reconciled = reconcileFileTreeEntries(nextRegistry, treePaths, loadedKeys, rootTreePath, meta, response.entries);
+      const childPaths = reconciled.childPaths;
       registry = nextRegistry;
-      mergeTreePaths(childPaths);
-      loadedKeys = new Set([...loadedKeys, key]);
+      treePaths = reconciled.treePaths;
+      loadedKeys = new Set([...reconciled.loadedKeys, key]);
     } catch (loadError) {
       error = loadError instanceof Error ? loadError.message : "Failed to load folder";
     } finally {

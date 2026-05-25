@@ -62,6 +62,65 @@ export function upsertFileTreeEntries(
   return treePaths;
 }
 
+export interface ReconciledFileTree {
+  treePaths: string[];
+  loadedKeys: Set<string>;
+  childPaths: string[];
+}
+
+export function reconcileFileTreeEntries(
+  registry: Map<string, FileTreeNodeMeta>,
+  treePaths: string[],
+  loadedKeys: ReadonlySet<string>,
+  rootTreePath: string,
+  directory: Pick<FileTreeNodeMeta, "rootId" | "path">,
+  entries: FileEntry[],
+): ReconciledFileTree {
+  const nextEntryPaths = new Set(entries.map((entry) => entry.path));
+  const removedChildren = treePaths
+    .map((treePath) => registry.get(treePath))
+    .filter((meta): meta is FileTreeNodeMeta => Boolean(meta))
+    .filter((meta) => meta.rootId === directory.rootId)
+    .filter((meta) => parentPath(meta.path) === directory.path)
+    .filter((meta) => !nextEntryPaths.has(meta.path));
+  const removedSubtrees = removedChildren.map((meta) => meta.treePath);
+  const removedPaths = removedChildren.map((meta) => meta.path);
+
+  const removedTreePaths = new Set<string>();
+  for (const subtree of removedSubtrees) {
+    for (const treePath of treePaths) {
+      if (isSameOrDescendantTreePath(treePath, subtree)) {
+        removedTreePaths.add(treePath);
+      }
+    }
+  }
+
+  for (const treePath of removedTreePaths) {
+    registry.delete(treePath);
+  }
+
+  const childPaths = upsertFileTreeEntries(registry, rootTreePath, entries);
+  const childPathSet = new Set(childPaths);
+  const nextTreePaths = [
+    ...treePaths.filter((treePath) => !removedTreePaths.has(treePath)),
+    ...childPaths.filter((treePath) => !treePaths.includes(treePath)),
+  ];
+  const nextLoadedKeys = new Set(
+    [...loadedKeys].filter((key) => {
+      const [, path = ""] = key.split(/:(.*)/s);
+      return !removedPaths.some((removedPath) => path === removedPath || path.startsWith(`${removedPath}/`));
+    }),
+  );
+
+  return {
+    treePaths: nextTreePaths.filter((treePath, index, all) =>
+      all.indexOf(treePath) === index && (registry.has(treePath) || childPathSet.has(treePath)),
+    ),
+    loadedKeys: nextLoadedKeys,
+    childPaths,
+  };
+}
+
 export function unloadedExpandedDirectories(
   treePaths: readonly string[],
   registry: Map<string, FileTreeNodeMeta>,
@@ -76,3 +135,11 @@ export function unloadedExpandedDirectories(
     .filter((meta) => isExpandedDirectory(meta.treePath));
 }
 
+function parentPath(path: string): string {
+  return path.split("/").filter(Boolean).slice(0, -1).join("/");
+}
+
+function isSameOrDescendantTreePath(treePath: string, subtree: string): boolean {
+  if (treePath === subtree) return true;
+  return subtree.endsWith("/") && treePath.startsWith(subtree);
+}
