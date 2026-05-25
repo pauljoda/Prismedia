@@ -48,6 +48,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Fixed Identify search result rows so each candidate groups its thumbnail and description in one selectable card.
 - Fixed Identify search results so candidates show provider artwork and descriptions in list rows, and clicking a candidate selects it instead of navigating.
 - Fixed Identify proposal review so current metadata, artwork selections, scoped credits, and tag toggles reflect what will actually be applied.
+- Fixed Identify queueing so new items immediately attempt provider matching, fall back to title search on missed exact matches, and let proposal reviews return to candidate search without looping back to the same confident match.
+- Fixed Identify NSFW provider imports so metadata proposals and accepted root, child, credit, studio, and tag entities inherit the provider NSFW flag.
+- Fixed Identify accept so accepted child, credit, studio, and tag entities are marked organized with the root entity.
+- Fixed Identify review thumbnails so child and relationship selectors show New or Merge status consistently.
 - Fixed Identify relationship review so selectable thumbnail cards can disable cast, studio, and related entities before apply.
 - Fixed Identify proposal review so nested children can be walked more than one level deep without losing parent context.
 - Saved entity grid media-wall mode per grid, defaulted image/page grids to that view, and let book page cards show metadata again when media-wall mode is turned off.

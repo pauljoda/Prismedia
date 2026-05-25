@@ -47,6 +47,7 @@ public sealed record PluginEntitySupport(
 /// <param name="Entry">Entry assembly or executable path, relative to the manifest directory when not rooted.</param>
 /// <param name="Compat">Compatibility bounds for plugin protocol and Prismedia versions.</param>
 /// <param name="Auth">Credential fields requested by the plugin.</param>
+/// <param name="IsNsfw">Whether this plugin should mark imported metadata as NSFW by default.</param>
 /// <param name="Supports">Entity kind/action support declarations.</param>
 public sealed record PluginManifest(
     int ManifestVersion,
@@ -58,6 +59,7 @@ public sealed record PluginManifest(
     string Entry,
     PluginCompatibility Compat,
     IReadOnlyList<PluginAuthField> Auth,
+    bool IsNsfw,
     IReadOnlyList<PluginEntitySupport> Supports);
 
 /// <summary>
@@ -98,6 +100,7 @@ public sealed record PluginProvider(
     string Version,
     bool Installed,
     bool Enabled,
+    bool IsNsfw,
     IReadOnlyList<PluginEntitySupport> Supports,
     IReadOnlyList<PluginAuthField> Auth,
     IReadOnlyList<string> MissingAuthKeys);

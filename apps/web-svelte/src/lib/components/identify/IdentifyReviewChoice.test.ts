@@ -60,6 +60,7 @@ function provider() {
     version: "1.0.0",
     installed: true,
     enabled: true,
+    isNsfw: false,
     supports: [{ entityKind: "video-series", actions: ["search"] }],
     auth: [],
     missingAuthKeys: [],

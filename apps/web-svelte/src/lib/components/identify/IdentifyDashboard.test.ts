@@ -10,6 +10,7 @@ const store = vi.hoisted(() => ({
     version: string;
     installed: boolean;
     enabled: boolean;
+    isNsfw: boolean;
     supports: Array<{ entityKind: string; actions: string[] }>;
     auth: unknown[];
     missingAuthKeys: string[];
@@ -110,6 +111,7 @@ function provider() {
     version: "1.0.0",
     installed: true,
     enabled: true,
+    isNsfw: false,
     supports: [{ entityKind: "video", actions: ["search"] }],
     auth: [],
     missingAuthKeys: [],

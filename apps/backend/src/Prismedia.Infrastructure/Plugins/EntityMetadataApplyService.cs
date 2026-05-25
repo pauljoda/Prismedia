@@ -89,7 +89,7 @@ public sealed class EntityMetadataApplyService : IEntityMetadataPatchService {
         }
 
         if (request.Relationships is { Count: > 0 } &&
-            (fields.Contains("credits") || fields.Contains("studio"))) {
+            (fields.Contains("credits") || fields.Contains("studio") || fields.Contains("tags"))) {
             await ApplyRelationshipProposalsAsync(entityId, request.Relationships, now, cancellationToken);
         }
 
@@ -278,8 +278,12 @@ public sealed class EntityMetadataApplyService : IEntityMetadataPatchService {
             await DownloadSelectedImagesAsync(entityId, selectedImages, now, cancellationToken);
         }
 
+        if (patch.Flags?.IsNsfw == true) {
+            await UpsertFlagsAsync(entityId, new EntityMetadataFlagsPatch(null, true, null), now, cancellationToken);
+        }
+
         var relationshipProposals = RelationshipProposals(proposal);
-        if (relationshipProposals.Count > 0 && (selected.Contains("credits") || selected.Contains("studio"))) {
+        if (relationshipProposals.Count > 0 && (selected.Contains("credits") || selected.Contains("studio") || selected.Contains("tags"))) {
             await ApplyRelationshipProposalsAsync(entityId, relationshipProposals, now, cancellationToken);
         }
 
@@ -781,7 +785,7 @@ public sealed class EntityMetadataApplyService : IEntityMetadataPatchService {
                 continue;
             }
 
-            if (child.TargetKind is not ("person" or "studio")) {
+            if (child.TargetKind is not ("person" or "studio" or "tag")) {
                 continue;
             }
 
@@ -870,7 +874,8 @@ public sealed class EntityMetadataApplyService : IEntityMetadataPatchService {
 
             await ApplyPatchToEntityAsync(childEntity, child.Patch, child.Images, now, cancellationToken);
             var relationshipProposals = RelationshipProposals(child);
-            if (relationshipProposals.Count > 0 && (child.Patch.Credits.Count > 0 || !string.IsNullOrWhiteSpace(child.Patch.Studio))) {
+            if (relationshipProposals.Count > 0 &&
+                (child.Patch.Credits.Count > 0 || !string.IsNullOrWhiteSpace(child.Patch.Studio) || child.Patch.Tags.Count > 0)) {
                 await ApplyRelationshipProposalsAsync(childEntity.Id, relationshipProposals, now, cancellationToken);
             }
 
@@ -928,6 +933,10 @@ public sealed class EntityMetadataApplyService : IEntityMetadataPatchService {
 
         if (!string.IsNullOrWhiteSpace(patch.Classification)) {
             await UpsertClassificationAsync(entity.Id, patch.Classification, now, cancellationToken);
+        }
+
+        if (patch.Flags is not null) {
+            await UpsertFlagsAsync(entity.Id, patch.Flags, now, cancellationToken);
         }
 
         if (images.Count > 0) {

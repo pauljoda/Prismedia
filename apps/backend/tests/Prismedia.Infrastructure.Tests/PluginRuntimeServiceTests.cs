@@ -135,6 +135,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
                 "tmdb.dll",
                 new PluginCompatibility("1.0.0", null, "1.0.0", null),
                 [],
+                false,
                 []),
             ManifestPath: Path.Combine(_tempRoot, "manifest.json"),
             WorkingDirectory: _tempRoot,
@@ -346,6 +347,83 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
     }
 
     [Fact]
+    public async Task IdentifyUsesSearchWhenTitleQueryOverridesExactHints() {
+        var pluginDir = Path.Combine(_tempRoot, "tmdb");
+        Directory.CreateDirectory(pluginDir);
+        await File.WriteAllTextAsync(
+            Path.Combine(pluginDir, "manifest.json"),
+            """
+            {
+              "manifestVersion": 1,
+              "apiTags": ["prismedia"],
+              "id": "tmdb",
+              "name": "TMDB",
+              "version": "1.2.0",
+              "runtime": "dotnet-process",
+              "entry": "Prismedia.Plugin.Tmdb.dll",
+              "compat": {
+                "pluginApiMin": "1.0.0",
+                "pluginApiMax": null,
+                "prismediaMin": "1.0.0",
+                "prismediaMax": null
+              },
+              "auth": [
+                { "key": "apiKey", "label": "API key", "required": true, "url": "https://www.themoviedb.org/settings/api" }
+              ],
+              "supports": [
+                { "entityKind": "video", "actions": ["lookup-id", "lookup-url", "search"] }
+              ]
+            }
+            """);
+
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var providerConfig = new ProviderConfigRow {
+            Id = Guid.NewGuid(),
+            ProviderCode = "tmdb",
+            DisplayName = "TMDB",
+            ProviderType = ProviderType.ExternalProcess,
+            Enabled = true,
+            SettingsJson = "{}",
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+        var videoId = Guid.Parse("29292929-2929-2929-2929-292929292929");
+        db.ProviderConfigs.Add(providerConfig);
+        db.ProviderCredentials.Add(new ProviderCredentialRow {
+            Id = Guid.NewGuid(),
+            ProviderConfigId = providerConfig.Id,
+            CredentialKey = "apiKey",
+            EncryptedValue = "secret",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.Entities.Add(new EntityRow { Id = videoId, KindCode = "video", Title = "Wrong Exact Movie", CreatedAt = now, UpdatedAt = now });
+        db.EntityExternalIds.Add(new EntityExternalIdRow {
+            Id = Guid.NewGuid(),
+            EntityId = videoId,
+            Provider = "tmdb",
+            Value = "404",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+
+        var executor = new StructuralContextCapturingProcessExecutor();
+        var service = CreateIdentifyService(db, executor, pluginDir);
+
+        var response = await service.IdentifyAsync(
+            videoId,
+            "tmdb",
+            new IdentifyQuery("Friendship", null, null),
+            hideNsfw: false,
+            CancellationToken.None);
+
+        Assert.True(response.Ok);
+        Assert.Equal("search", Assert.Single(executor.Requests).Action);
+    }
+
+    [Fact]
     public async Task DirectChildIdentifyIncludesHydratedAncestorsWithoutWalkingUpward() {
         var pluginDir = Path.Combine(_tempRoot, "tmdb");
         Directory.CreateDirectory(pluginDir);
@@ -521,6 +599,81 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
         Assert.Equal(episodeId, episode.TargetEntityId);
         Assert.Equal("The Chair Company S01E02", episode.Patch.Title);
         Assert.Equal("Guest Actor", Assert.Single(episode.Relationships).Patch.Title);
+    }
+
+    [Fact]
+    public async Task IdentifyMarksFullProposalTreeNsfwWhenProviderIsNsfw() {
+        var pluginDir = Path.Combine(_tempRoot, "tmdb-nsfw");
+        Directory.CreateDirectory(pluginDir);
+        await File.WriteAllTextAsync(
+            Path.Combine(pluginDir, "manifest.json"),
+            """
+            {
+              "manifestVersion": 1,
+              "apiTags": ["prismedia"],
+              "id": "tmdb",
+              "name": "TMDB",
+              "version": "1.2.0",
+              "runtime": "dotnet-process",
+              "entry": "Prismedia.Plugin.Tmdb.dll",
+              "isNsfw": true,
+              "compat": {
+                "pluginApiMin": "1.0.0",
+                "pluginApiMax": null,
+                "prismediaMin": "1.0.0",
+                "prismediaMax": null
+              },
+              "auth": [
+                { "key": "apiKey", "label": "API key", "required": true, "url": "https://www.themoviedb.org/settings/api" }
+              ],
+              "supports": [
+                { "entityKind": "video-series", "actions": ["lookup-id", "search"] }
+              ]
+            }
+            """);
+
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var providerConfig = new ProviderConfigRow {
+            Id = Guid.NewGuid(),
+            ProviderCode = "tmdb",
+            DisplayName = "TMDB",
+            ProviderType = ProviderType.ExternalProcess,
+            Enabled = true,
+            SettingsJson = "{}",
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+        var seriesId = Guid.Parse("31313131-3131-3131-3131-313131313131");
+        var seasonId = Guid.Parse("32323232-3232-3232-3232-323232323232");
+        var episodeId = Guid.Parse("33333333-3131-3131-3131-313131313131");
+        db.ProviderConfigs.Add(providerConfig);
+        db.ProviderCredentials.Add(new ProviderCredentialRow {
+            Id = Guid.NewGuid(),
+            ProviderConfigId = providerConfig.Id,
+            CredentialKey = "apiKey",
+            EncryptedValue = "secret",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.Entities.AddRange(
+            new EntityRow { Id = seriesId, KindCode = "video-series", Title = "The Chair Company", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = seasonId, KindCode = "video-season", Title = "Season 1", ParentEntityId = seriesId, SortOrder = 1, CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = episodeId, KindCode = "video", Title = "Old Episode", ParentEntityId = seasonId, SortOrder = 2, CreatedAt = now, UpdatedAt = now });
+        await db.SaveChangesAsync();
+
+        var service = CreateIdentifyService(db, new FullTreeProcessExecutor(), pluginDir);
+
+        var response = await service.IdentifyAsync(seriesId, "tmdb", null, hideNsfw: false, CancellationToken.None);
+
+        Assert.True(response.Ok);
+        Assert.True(response.Result?.Patch.Flags?.IsNsfw);
+        var season = Assert.Single(response.Result!.Children);
+        Assert.True(season.Patch.Flags?.IsNsfw);
+        var episode = Assert.Single(season.Children);
+        Assert.True(episode.Patch.Flags?.IsNsfw);
+        Assert.True(Assert.Single(response.Result.Relationships).Patch.Flags?.IsNsfw);
+        Assert.True(Assert.Single(episode.Relationships).Patch.Flags?.IsNsfw);
     }
 
     public void Dispose() {

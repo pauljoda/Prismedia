@@ -405,6 +405,7 @@ function patchForSelectedFields(
     stats: fields.stats ? patch.stats : {},
     positions: fields.positions ? patch.positions : {},
     classification: fields.classification ? patch.classification : null,
+    flags: patch.flags ?? null,
   };
 }
 

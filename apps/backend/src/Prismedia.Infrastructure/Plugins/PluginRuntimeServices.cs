@@ -92,6 +92,7 @@ public sealed class PluginCatalogService {
                     descriptor.Manifest.Version,
                     Installed: config is not null,
                     Enabled: config?.Enabled ?? false,
+                    IsNsfw: descriptor.Manifest.IsNsfw || config?.IsNsfw == true,
                     descriptor.Manifest.Supports,
                     descriptor.Manifest.Auth,
                     missing);
@@ -144,7 +145,7 @@ public sealed class PluginCatalogService {
             descriptor.ManifestPath,
             descriptor.EntryPath), JsonOptions);
         config.Enabled = true;
-        config.IsNsfw = false;
+        config.IsNsfw = descriptor.Manifest.IsNsfw;
         config.UpdatedAt = now;
         await _db.SaveChangesAsync(cancellationToken);
 
@@ -568,6 +569,7 @@ public sealed class IdentifyPluginService {
             return new IdentifyPluginResponse(false, null, $"No compatible provider '{providerId}' supports '{entity.KindCode}'.");
         }
 
+        var providerIsNsfw = await ProviderIsNsfwAsync(descriptor, cancellationToken);
         var auth = await _catalog.GetAuthAsync(descriptor.Manifest, cancellationToken);
         var missingAuth = descriptor.Manifest.Auth
             .Where(field => field.Required && !auth.ContainsKey(field.Key))
@@ -589,18 +591,49 @@ public sealed class IdentifyPluginService {
             cancellationToken);
 
         if (directResult.Ok && directResult.Result?.Patch is not null) {
-            return directResult;
+            return MarkNsfwIfNeeded(directResult, providerIsNsfw);
         }
 
         if (entity.ParentEntityId is not null) {
             var cascadeResult = await CascadeFromParentAsync(entity, descriptor, auth, cancellationToken);
             if (cascadeResult is not null) {
-                return cascadeResult;
+                return MarkNsfwIfNeeded(cascadeResult, providerIsNsfw);
             }
         }
 
-        return directResult;
+        return MarkNsfwIfNeeded(directResult, providerIsNsfw);
     }
+
+    private async Task<bool> ProviderIsNsfwAsync(PluginDescriptor descriptor, CancellationToken cancellationToken) =>
+        descriptor.Manifest.IsNsfw ||
+        await _db.ProviderConfigs
+            .AsNoTracking()
+            .Where(row => row.ProviderCode == descriptor.Manifest.Id && row.Enabled)
+            .AnyAsync(row => row.IsNsfw, cancellationToken);
+
+    private static IdentifyPluginResponse MarkNsfwIfNeeded(IdentifyPluginResponse response, bool providerIsNsfw) =>
+        providerIsNsfw && response.Ok && response.Result is not null
+            ? response with { Result = MarkProposalTreeNsfw(response.Result) }
+            : response;
+
+    private static EntityMetadataProposal MarkProposalTreeNsfw(EntityMetadataProposal proposal) {
+        if (proposal.Patch is null) {
+            return proposal;
+        }
+
+        return proposal with {
+            Patch = MarkPatchNsfw(proposal.Patch),
+            Children = proposal.Children.Select(MarkProposalTreeNsfw).ToArray(),
+            Relationships = (proposal.Relationships ?? []).Select(MarkProposalTreeNsfw).ToArray()
+        };
+    }
+
+    private static EntityMetadataPatch MarkPatchNsfw(EntityMetadataPatch patch) =>
+        patch with {
+            Flags = patch.Flags is null
+                ? new EntityMetadataFlagsPatch(null, true, null)
+                : patch.Flags with { IsNsfw = true }
+        };
 
     /// <summary>
     /// Walks up the parent chain looking for an ancestor the provider can identify,
@@ -674,6 +707,14 @@ public sealed class IdentifyPluginService {
             .Where(support => support.EntityKind.Equals(entityKind, StringComparison.OrdinalIgnoreCase))
             .SelectMany(support => support.Actions)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var hasQueryTitle = !string.IsNullOrWhiteSpace(query?.Title);
+        var hasQueryId = query?.ExternalIds?.ContainsKey(manifest.Id) == true;
+        var hasQueryUrl = !string.IsNullOrWhiteSpace(query?.Url);
+
+        if (hasQueryTitle && !hasQueryId && !hasQueryUrl && supports.Contains("search")) {
+            return "search";
+        }
+
         var hasExplicitId = query?.ExternalIds?.ContainsKey(manifest.Id) == true ||
             hints.ExternalIds.ContainsKey(manifest.Id);
 

@@ -57,6 +57,13 @@
     searching = false;
   }
 
+  async function backToSearch() {
+    if (!current || !activeProvider) return;
+    searching = true;
+    await store.backToSearch(current.entity, activeProvider.id);
+    searching = false;
+  }
+
   function cancelItem() {
     if (current) void store.deleteQueueItem(current.entityId);
   }
@@ -128,6 +135,21 @@
     <div class="hidden flex-1 md:block"></div>
 
     {#if current}
+      {#if current.state === "proposal" && activeProvider}
+        <button
+          type="button"
+          class="hidden h-8 items-center gap-1.5 rounded-xs border border-border-default bg-surface-2 px-2.5 text-[0.76rem] text-text-muted transition-colors hover:border-border-accent hover:text-text-accent disabled:cursor-not-allowed disabled:opacity-40 md:inline-flex"
+          disabled={searching || store.identifyingId === current.entityId}
+          onclick={backToSearch}
+        >
+          {#if searching || store.identifyingId === current.entityId}
+            <Loader2 class="h-3.5 w-3.5 animate-spin" />
+          {:else}
+            <Search class="h-3.5 w-3.5" />
+          {/if}
+          Back to Search
+        </button>
+      {/if}
       <button
         type="button"
         class="hidden h-8 items-center gap-1.5 rounded-xs border border-border-default bg-surface-2 px-2.5 text-[0.76rem] text-text-muted transition-colors hover:border-error/50 hover:text-error-text md:inline-flex"

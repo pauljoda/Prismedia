@@ -98,6 +98,33 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
     }
 
     [Fact]
+    public async Task SearchAsyncKeepsManualTitleSearchInCandidateStateWhenChoiceRequired() {
+        await using var db = CreateContext();
+        var entityId = Guid.Parse("33333333-3333-3333-3333-333333333334");
+        SeedProvider(db);
+        SeedEntity(db, entityId, "video", "Known Movie");
+        await db.SaveChangesAsync();
+        var service = CreateQueueService(db, new ProposalProcessExecutor(), _tempRoot);
+        await service.AddAsync(entityId, CancellationToken.None);
+
+        var item = await service.SearchAsync(
+            entityId,
+            new IdentifyQueueSearchRequest("tmdb", new IdentifyQuery("Different Movie", null, null, RequireChoice: true)),
+            hideNsfw: false,
+            CancellationToken.None);
+
+        Assert.Equal("search", item.State);
+        Assert.Null(item.Proposal);
+        var candidate = Assert.Single(item.Candidates);
+        Assert.Equal("Known Movie identified", candidate.Title);
+        Assert.Equal("123", candidate.ExternalIds["tmdb"]);
+        var persisted = await db.IdentifyQueueItems.SingleAsync();
+        Assert.Equal(IdentifyQueueState.Search, persisted.State);
+        Assert.NotNull(persisted.CandidatesJson);
+        Assert.Null(persisted.ProposalJson);
+    }
+
+    [Fact]
     public async Task ApplyAsyncUsesReviewedProposalAndMarksItemDone() {
         await using var db = CreateContext();
         var entityId = Guid.Parse("44444444-4444-4444-4444-444444444444");
@@ -128,6 +155,56 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         Assert.NotNull(applied.CompletedAt);
         Assert.Equal("Reviewed Title", (await db.Entities.SingleAsync(row => row.Id == entityId)).Title);
         Assert.Empty(await service.ListAsync(includeCompleted: false, hideNsfw: false, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ApplyAsyncMarksFlagsAcrossAcceptedProposalTree() {
+        await using var db = CreateContext();
+        var seriesId = Guid.Parse("55555555-5555-5555-5555-555555555555");
+        var seasonId = Guid.Parse("66666666-6666-6666-6666-666666666666");
+        SeedEntity(db, seriesId, "video-series", "Series");
+        var season = SeedEntity(db, seasonId, "video-season", "Season 1");
+        season.ParentEntityId = seriesId;
+        season.SortOrder = 1;
+        var proposal = NsfwTreeProposal(seriesId, seasonId);
+        db.IdentifyQueueItems.Add(new IdentifyQueueItemRow {
+            Id = Guid.NewGuid(),
+            EntityId = seriesId,
+            State = IdentifyQueueState.Proposal,
+            ProviderCode = "tmdb",
+            Action = "lookup-id",
+            ProposalJson = JsonSerializer.Serialize(proposal, JsonOptions),
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var service = CreateQueueService(db, new ProposalProcessExecutor(), _tempRoot);
+
+        await service.ApplyAsync(
+            seriesId,
+            new ApplyIdentifyQueueItemRequest(
+                proposal,
+                ["tags", "credits"],
+                null),
+            CancellationToken.None);
+
+        var flags = await db.EntityFlags.ToDictionaryAsync(row => row.EntityId);
+        Assert.True(flags[seriesId].IsNsfw);
+        Assert.True(flags[seriesId].IsOrganized);
+        Assert.True(flags[seasonId].IsNsfw);
+        Assert.True(flags[seasonId].IsOrganized);
+        var personId = await db.Entities
+            .Where(row => row.KindCode == "person" && row.Title == "NSFW Actor")
+            .Select(row => row.Id)
+            .SingleAsync();
+        var tagId = await db.Entities
+            .Where(row => row.KindCode == "tag" && row.Title == "NSFW Tag")
+            .Select(row => row.Id)
+            .SingleAsync();
+        Assert.True(flags[personId].IsNsfw);
+        Assert.True(flags[personId].IsOrganized);
+        Assert.True(flags[tagId].IsNsfw);
+        Assert.True(flags[tagId].IsOrganized);
     }
 
     [Fact]
@@ -233,14 +310,15 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         });
     }
 
-    private static void SeedEntity(PrismediaDbContext db, Guid id, string kind, string title, bool isNsfw = false) {
-        db.Entities.Add(new EntityRow {
+    private static EntityRow SeedEntity(PrismediaDbContext db, Guid id, string kind, string title, bool isNsfw = false) {
+        var entity = new EntityRow {
             Id = id,
             KindCode = kind,
             Title = title,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
-        });
+        };
+        db.Entities.Add(entity);
         if (isNsfw) {
             db.EntityFlags.Add(new EntityFlagRow {
                 EntityId = id,
@@ -248,6 +326,8 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
                 UpdatedAt = DateTimeOffset.UtcNow
             });
         }
+
+        return entity;
     }
 
     private static EntityMetadataProposal Proposal(Guid entityId, string title) =>
@@ -274,6 +354,74 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             [],
             TargetEntityId: entityId,
             Relationships: []);
+
+    private static EntityMetadataProposal NsfwTreeProposal(Guid seriesId, Guid seasonId) {
+        var person = new EntityMetadataProposal(
+            "tmdb:person:nsfw",
+            "tmdb",
+            "person",
+            1,
+            "credit",
+            EmptyPatch("NSFW Actor") with { Flags = new EntityMetadataFlagsPatch(null, true, null) },
+            [],
+            [],
+            [],
+            Relationships: []);
+        var tag = new EntityMetadataProposal(
+            "tmdb:tag:nsfw",
+            "tmdb",
+            "tag",
+            1,
+            "tag",
+            EmptyPatch("NSFW Tag") with { Flags = new EntityMetadataFlagsPatch(null, true, null) },
+            [],
+            [],
+            [],
+            Relationships: []);
+        var season = new EntityMetadataProposal(
+            "tmdb:season:1",
+            "tmdb",
+            "video-season",
+            1,
+            "cascade",
+            EmptyPatch("Season 1") with { Flags = new EntityMetadataFlagsPatch(null, true, null) },
+            [],
+            [],
+            [],
+            TargetEntityId: seasonId,
+            Relationships: []);
+
+        return new EntityMetadataProposal(
+            "tmdb:series:1",
+            "tmdb",
+            "video-series",
+            1,
+            "external-id",
+            EmptyPatch("Series") with {
+                Tags = ["NSFW Tag"],
+                Credits = [new CreditPatch("NSFW Actor", "cast", null, 0)],
+                Flags = new EntityMetadataFlagsPatch(null, true, null)
+            },
+            [],
+            [season],
+            [],
+            TargetEntityId: seriesId,
+            Relationships: [person, tag]);
+    }
+
+    private static EntityMetadataPatch EmptyPatch(string? title) =>
+        new(
+            title,
+            null,
+            new Dictionary<string, string>(),
+            [],
+            [],
+            null,
+            [],
+            new Dictionary<string, string>(),
+            new Dictionary<string, int>(),
+            new Dictionary<string, int>(),
+            null);
 
     private static string SerializeWireProposal(Guid entityId, string title) =>
         JsonSerializer.Serialize(

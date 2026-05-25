@@ -7,6 +7,8 @@ import { MAIN_SCROLL_TOP_EVENT } from "$lib/stores/main-scroll";
 const fetchPluginProviders = vi.fn();
 const fetchIdentifyQueue = vi.fn();
 const fetchIdentifyEntity = vi.fn();
+const addIdentifyQueueItem = vi.fn();
+const searchIdentifyQueueItem = vi.fn();
 
 vi.mock("$lib/api/identify", async (importOriginal) => {
   const actual = await importOriginal<typeof import("$lib/api/identify")>();
@@ -15,6 +17,8 @@ vi.mock("$lib/api/identify", async (importOriginal) => {
     fetchPluginProviders: (...args: unknown[]) => fetchPluginProviders(...args),
     fetchIdentifyQueue: (...args: unknown[]) => fetchIdentifyQueue(...args),
     fetchIdentifyEntity: (...args: unknown[]) => fetchIdentifyEntity(...args),
+    addIdentifyQueueItem: (...args: unknown[]) => addIdentifyQueueItem(...args),
+    searchIdentifyQueueItem: (...args: unknown[]) => searchIdentifyQueueItem(...args),
   };
 });
 
@@ -23,9 +27,13 @@ describe("IdentifyStore", () => {
     fetchPluginProviders.mockReset();
     fetchIdentifyQueue.mockReset();
     fetchIdentifyEntity.mockReset();
+    addIdentifyQueueItem.mockReset();
+    searchIdentifyQueueItem.mockReset();
     fetchPluginProviders.mockResolvedValue([]);
     fetchIdentifyQueue.mockResolvedValue([]);
     fetchIdentifyEntity.mockResolvedValue(null);
+    addIdentifyQueueItem.mockResolvedValue(queueItem("video-1"));
+    searchIdentifyQueueItem.mockResolvedValue(queueItem("video-1", { state: "search" }));
   });
 
   it("resets stale review state when entering the dashboard route", async () => {
@@ -129,22 +137,132 @@ describe("IdentifyStore", () => {
 
     expect(dispatchEvent.mock.calls.some(([event]) => event.type === MAIN_SCROLL_TOP_EVENT)).toBe(true);
   });
+
+  it("auto-identifies a queued entity with the selected provider", async () => {
+    const store = new IdentifyStore();
+    const movie = entity("video-1", { kind: "video", title: "Friendship" });
+    addIdentifyQueueItem.mockResolvedValue(queueItem("video-1", { title: "Friendship" }));
+    fetchIdentifyEntity.mockResolvedValue(detail("video-1", { kind: "video", title: "Friendship" }));
+    searchIdentifyQueueItem.mockResolvedValue(queueItem("video-1", {
+      state: "proposal",
+      provider: "tmdb",
+      proposal: proposal("tmdb:movie:123", { targetKind: "video", title: "Friendship" }),
+    }));
+
+    const queued = await store.queueEntity(movie, "tmdb");
+
+    expect(addIdentifyQueueItem).toHaveBeenCalledWith("video-1");
+    expect(searchIdentifyQueueItem).toHaveBeenCalledWith("video-1", "tmdb", undefined);
+    expect(queued?.state).toBe("proposal");
+    expect(store.view.kind).toBe("review-parent");
+  });
+
+  it("falls back to a title search when an exact identify attempt misses", async () => {
+    const store = new IdentifyStore();
+    const movie = entity("video-1", { kind: "video", title: "Friendship" });
+    store.queue = [{
+      ...queueItem("video-1"),
+      entity: movie,
+      detail: detail("video-1", { kind: "video", title: "Friendship" }),
+    }];
+    searchIdentifyQueueItem
+      .mockResolvedValueOnce(queueItem("video-1", {
+        state: "error",
+        provider: "tmdb",
+        error: "No exact match",
+      }))
+      .mockResolvedValueOnce(queueItem("video-1", {
+        state: "search",
+        provider: "tmdb",
+        candidates: [
+          {
+            externalIds: { tmdb: "123" },
+            title: "Friendship",
+            year: 2025,
+            overview: null,
+            posterUrl: null,
+            popularity: null,
+          },
+        ],
+      }));
+
+    const resolved = await store.identifyEntity(movie, "tmdb");
+
+    expect(searchIdentifyQueueItem).toHaveBeenNthCalledWith(1, "video-1", "tmdb", undefined);
+    expect(searchIdentifyQueueItem).toHaveBeenNthCalledWith(2, "video-1", "tmdb", { title: "Friendship" });
+    expect(resolved?.state).toBe("search");
+    expect(store.view.kind).toBe("review-choice");
+  });
+
+  it("requires a candidate pick when returning from a proposal to search", async () => {
+    const store = new IdentifyStore();
+    const movie = entity("video-1", { kind: "video", title: "Friendship" });
+    store.queue = [{
+      ...queueItem("video-1", {
+        state: "proposal",
+        provider: "tmdb",
+        proposal: proposal("tmdb:movie:123", { targetKind: "video", title: "Friendship" }),
+      }),
+      entity: movie,
+      detail: detail("video-1", { kind: "video", title: "Friendship" }),
+    }];
+    searchIdentifyQueueItem.mockResolvedValue(queueItem("video-1", {
+      state: "search",
+      provider: "tmdb",
+      candidates: [
+        {
+          externalIds: { tmdb: "456" },
+          title: "Friendship!",
+          year: 2010,
+          overview: null,
+          posterUrl: null,
+          popularity: null,
+        },
+      ],
+    }));
+
+    await store.backToSearch(movie, "tmdb");
+
+    expect(searchIdentifyQueueItem).toHaveBeenCalledWith("video-1", "tmdb", {
+      title: "Friendship",
+      requireChoice: true,
+    });
+    expect(store.view.kind).toBe("review-choice");
+  });
 });
 
-function queueItem(id: string, options: { isNsfw?: boolean } = {}) {
+function queueItem(
+  id: string,
+  options: {
+    isNsfw?: boolean;
+    state?: "search" | "proposal" | "done" | "deleted" | "error";
+    provider?: string | null;
+    title?: string;
+    candidates?: Array<{
+      externalIds: Record<string, string>;
+      title: string;
+      year?: number | null;
+      overview?: string | null;
+      posterUrl?: string | null;
+      popularity?: number | null;
+    }>;
+    proposal?: EntityMetadataProposal | null;
+    error?: string | null;
+  } = {},
+) {
   return {
     id: `queue-${id}`,
     entityId: id,
     entityKind: "video",
-    title: "Queued Movie",
+    title: options.title ?? "Queued Movie",
     isNsfw: options.isNsfw ?? false,
-    state: "search",
-    provider: null,
+    state: options.state ?? "search",
+    provider: options.provider ?? null,
     action: "search",
     query: null,
-    candidates: [],
-    proposal: null,
-    error: null,
+    candidates: options.candidates ?? [],
+    proposal: options.proposal ?? null,
+    error: options.error ?? null,
     createdAt: "2026-05-25T00:00:00Z",
     updatedAt: "2026-05-25T00:00:00Z",
     completedAt: null,

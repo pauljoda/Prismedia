@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/svelte";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { EntityMetadataPatch, EntityMetadataProposal } from "$lib/api/identify";
-import type { EntityCard } from "$lib/api/prismedia";
+import type { EntityCard, EntityDetailCard } from "$lib/api/prismedia";
 import IdentifyReviewChild from "./IdentifyReviewChild.svelte";
 import IdentifyReviewParent from "./IdentifyReviewParent.svelte";
 
@@ -11,6 +11,7 @@ const store = vi.hoisted(() => ({
   reviewFieldSelections: {},
   reviewImageSelections: {},
   reviewTagSelections: {},
+  queue: [] as unknown[],
   beginProposalReview: vi.fn(),
   getReviewDetailForProposal: vi.fn(),
   getReviewFieldSelections: vi.fn(),
@@ -38,6 +39,7 @@ vi.mock("./identify-store.svelte", () => ({
 describe("Identify review surfaces", () => {
   beforeEach(() => {
     store.applying = false;
+    store.queue = [];
     store.beginProposalReview.mockReset();
     store.getReviewDetailForProposal.mockReset();
     store.getReviewFieldSelections.mockReset();
@@ -111,13 +113,11 @@ describe("Identify review surfaces", () => {
       },
     });
 
-    const artworkGroups = container.querySelector<HTMLElement>(".identify-artwork-groups");
     const posterGroup = container.querySelector<HTMLElement>("[data-artwork-kind='poster']");
     const backdropGroup = container.querySelector<HTMLElement>("[data-artwork-kind='backdrop']");
 
-    expect(artworkGroups).not.toBeNull();
-    expect(posterGroup?.classList.contains("identify-artwork-group")).toBe(true);
-    expect(backdropGroup?.classList.contains("identify-artwork-group")).toBe(true);
+    expect(posterGroup?.classList.contains("identify-artwork-grid")).toBe(true);
+    expect(backdropGroup?.classList.contains("identify-artwork-grid")).toBe(true);
     expect(posterGroup?.querySelectorAll(".identify-artwork-tile")).toHaveLength(2);
     expect(backdropGroup?.querySelectorAll(".identify-artwork-tile")).toHaveLength(2);
   });
@@ -154,13 +154,48 @@ describe("Identify review surfaces", () => {
 
     expect(header).toHaveAttribute("aria-expanded", "true");
   });
+
+  it("shows New and Merge chips on child and relationship thumbnails", () => {
+    render(IdentifyReviewParent, {
+      props: {
+        entity: entity(),
+        detail: detail({
+          relationships: [
+            {
+              kind: "person",
+              label: "Credits",
+              code: "cast",
+              entities: [entity({ id: "person-1", kind: "person", title: "Tim Robinson" })],
+            },
+          ],
+        }),
+        proposal: proposal("root", {
+          relationships: [
+            proposal("person-existing", { targetKind: "person", title: "Tim Robinson" }),
+            proposal("person-new", { targetKind: "person", title: "New Actor" }),
+          ],
+          children: [
+            proposal("season-existing", {
+              targetKind: "video-season",
+              title: "Season 1",
+              targetEntityId: "season-1",
+            }),
+            proposal("season-new", { targetKind: "video-season", title: "Season 2" }),
+          ],
+        }),
+      },
+    });
+
+    expect(screen.getAllByText("Merge").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("New").length).toBeGreaterThanOrEqual(2);
+  });
 });
 
-function entity(): EntityCard {
+function entity(overrides: Partial<EntityCard> = {}): EntityCard {
   return {
-    id: "entity-1",
-    kind: "video-series",
-    title: "The Chair Company",
+    id: overrides.id ?? "entity-1",
+    kind: overrides.kind ?? "video-series",
+    title: overrides.title ?? "The Chair Company",
     parentEntityId: null,
     sortOrder: null,
     coverUrl: null,
@@ -172,6 +207,21 @@ function entity(): EntityCard {
     isFavorite: false,
     isNsfw: false,
     isOrganized: false,
+    ...overrides,
+  };
+}
+
+function detail(overrides: Partial<EntityDetailCard> = {}): EntityDetailCard {
+  return {
+    id: "entity-1",
+    kind: "video-series",
+    title: "The Chair Company",
+    parentEntityId: null,
+    sortOrder: null,
+    capabilities: [],
+    childrenByKind: [],
+    relationships: [],
+    ...overrides,
   };
 }
 

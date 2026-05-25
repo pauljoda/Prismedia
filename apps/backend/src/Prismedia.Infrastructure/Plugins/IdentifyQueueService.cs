@@ -116,11 +116,25 @@ public sealed class IdentifyQueueService {
         row.UpdatedAt = now;
         row.CompletedAt = null;
 
+        var requireChoice = request.Query?.RequireChoice == true;
         if (!response.Ok) {
             row.State = IdentifyQueueState.Error;
             row.Error = response.Error ?? "Identify failed.";
             row.CandidatesJson = null;
             row.ProposalJson = null;
+        } else if (requireChoice && response.Result is not null) {
+            var candidates = ChoiceCandidates(response.Result, entity);
+            if (candidates.Count > 0) {
+                row.State = IdentifyQueueState.Search;
+                row.Error = null;
+                row.CandidatesJson = JsonSerializer.Serialize(candidates, JsonOptions);
+                row.ProposalJson = null;
+            } else {
+                row.State = IdentifyQueueState.Error;
+                row.Error = response.Error ?? "No provider match was found.";
+                row.CandidatesJson = null;
+                row.ProposalJson = null;
+            }
         } else if (response.Result?.Patch is not null) {
             row.State = IdentifyQueueState.Proposal;
             row.Error = null;
@@ -158,10 +172,11 @@ public sealed class IdentifyQueueService {
             ?? throw new KeyNotFoundException($"Entity '{entityId}' was not found.");
         var proposal = request.Proposal ?? Deserialize<EntityMetadataProposal>(row.ProposalJson)
             ?? throw new InvalidOperationException("Identify queue item has no proposal to apply.");
+        var acceptedProposal = MarkAcceptedProposalTreeOrganized(proposal);
 
         var applied = await _identify.ApplyAsync(
             entityId,
-            proposal,
+            acceptedProposal,
             request.SelectedFields,
             request.SelectedImages,
             cancellationToken);
@@ -171,7 +186,7 @@ public sealed class IdentifyQueueService {
 
         var now = DateTimeOffset.UtcNow;
         row.State = IdentifyQueueState.Done;
-        row.ProposalJson = JsonSerializer.Serialize(proposal, JsonOptions);
+        row.ProposalJson = JsonSerializer.Serialize(acceptedProposal, JsonOptions);
         row.Error = null;
         row.UpdatedAt = now;
         row.CompletedAt = now;
@@ -302,6 +317,66 @@ public sealed class IdentifyQueueService {
 
         return "search";
     }
+
+    private static IReadOnlyList<EntitySearchCandidate> ChoiceCandidates(EntityMetadataProposal proposal, EntityRow entity) {
+        if (proposal.Candidates is { Count: > 0 }) {
+            return proposal.Candidates;
+        }
+
+        if (proposal.Patch is null) {
+            return [];
+        }
+
+        var title = !string.IsNullOrWhiteSpace(proposal.Patch.Title)
+            ? proposal.Patch.Title.Trim()
+            : entity.Title;
+        var poster = proposal.Images.FirstOrDefault(image => image.Kind is "poster" or "still")?.Url;
+        return [
+            new EntitySearchCandidate(
+                proposal.Patch.ExternalIds,
+                title,
+                YearFromDates(proposal.Patch.Dates),
+                proposal.Patch.Description,
+                poster,
+                proposal.Confidence)
+        ];
+    }
+
+    private static int? YearFromDates(IReadOnlyDictionary<string, string> dates) {
+        foreach (var key in new[] { "release", "firstAir", "airDate", "date" }) {
+            if (dates.TryGetValue(key, out var value) &&
+                DateOnly.TryParse(value, out var parsed)) {
+                return parsed.Year;
+            }
+        }
+
+        return null;
+    }
+
+    private static EntityMetadataProposal MarkAcceptedProposalTreeOrganized(EntityMetadataProposal proposal) {
+        var children = proposal.Children.Select(MarkAcceptedProposalTreeOrganized).ToArray();
+        var relationships = (proposal.Relationships ?? []).Select(MarkAcceptedProposalTreeOrganized).ToArray();
+
+        if (proposal.Patch is null) {
+            return proposal with {
+                Children = children,
+                Relationships = relationships
+            };
+        }
+
+        return proposal with {
+            Patch = proposal.Patch with {
+                Flags = MarkOrganized(proposal.Patch.Flags)
+            },
+            Children = children,
+            Relationships = relationships
+        };
+    }
+
+    private static EntityMetadataFlagsPatch MarkOrganized(EntityMetadataFlagsPatch? flags) =>
+        flags is null
+            ? new EntityMetadataFlagsPatch(null, null, true)
+            : flags with { IsOrganized = true };
 
     private static T? Deserialize<T>(string? json) {
         if (string.IsNullOrWhiteSpace(json)) {

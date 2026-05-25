@@ -43,10 +43,12 @@ public sealed record IdentifyStructuralContext(
 /// <param name="Title">Optional title/query override.</param>
 /// <param name="Url">Optional provider URL override.</param>
 /// <param name="ExternalIds">Optional explicit provider IDs, usually from candidate picks.</param>
+/// <param name="RequireChoice">When true, keep the queue in candidate-pick mode even if a provider returns a confident proposal.</param>
 public sealed record IdentifyQuery(
     string? Title,
     string? Url,
-    IReadOnlyDictionary<string, string>? ExternalIds);
+    IReadOnlyDictionary<string, string>? ExternalIds,
+    bool? RequireChoice = null);
 
 /// <summary>
 /// Request envelope sent to short-lived plugin processes.

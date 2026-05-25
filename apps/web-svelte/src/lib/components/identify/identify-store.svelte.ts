@@ -194,8 +194,9 @@ export class IdentifyStore {
         this.navigateToDashboard();
         return null;
       }
-      this.#upsertQueueItem(queueItemFromApi(item, undefined, detail));
-      return item;
+      const mapped = queueItemFromApi(item, undefined, detail);
+      this.#upsertQueueItem(mapped);
+      return await this.#autoIdentifyQueueItem(mapped) ?? mapped;
     } catch (err) {
       this.error = readError(err);
       return null;
@@ -230,29 +231,29 @@ export class IdentifyStore {
     this.navigateTo({ kind: "kind-tab", entityKind });
   }
 
-  async queueEntity(entity: EntityCard) {
+  async queueEntity(entity: EntityCard, providerId?: string | null) {
     const [item, detail] = await Promise.all([
       addIdentifyQueueItem(entity.id),
       fetchEntityDetail(entity.id),
     ]);
     const mapped = queueItemFromApi(item, entity, detail);
     this.#upsertQueueItem(mapped);
-    return mapped;
+    return await this.#autoIdentifyQueueItem(mapped, providerId) ?? mapped;
   }
 
   async identifyEntity(
     entity: EntityCard,
     providerId: string,
-    query?: { title?: string | null; externalIds?: Record<string, string> | null },
+    query?: { title?: string | null; url?: string | null; externalIds?: Record<string, string> | null; requireChoice?: boolean | null },
   ) {
     this.identifyingId = entity.id;
     this.error = null;
     try {
-      const item = await searchIdentifyQueueItem(entity.id, providerId, query);
-      const detail = this.queue.find((queued) => queued.entityId === entity.id)?.detail ?? await fetchEntityDetail(entity.id);
-      const mapped = queueItemFromApi(item, entity, detail);
-      this.#upsertQueueItem(mapped);
-      this.reviewResolvedQueueItem(mapped);
+      const mapped = await this.#searchAndResolve(entity, providerId, query);
+      if (shouldFallbackToTitleSearch(entity, query, mapped)) {
+        return await this.#searchAndResolve(entity, providerId, { title: entity.title });
+      }
+
       return mapped;
     } catch (err) {
       this.error = readError(err);
@@ -265,6 +266,17 @@ export class IdentifyStore {
 
   async identifyWithCandidate(entity: EntityCard, providerId: string, candidate: EntitySearchCandidate) {
     return this.identifyEntity(entity, providerId, { externalIds: candidate.externalIds });
+  }
+
+  async backToSearch(entity: EntityCard, providerId?: string | null) {
+    const queued = this.queue.find((item) => item.entityId === entity.id);
+    const selectedProvider = providerId ?? queued?.provider ?? this.providersForKind(entity.kind)[0]?.id;
+    if (!selectedProvider) {
+      this.error = `No enabled provider supports ${entity.kind}.`;
+      return null;
+    }
+
+    return this.identifyEntity(entity, selectedProvider, { title: entity.title, requireChoice: true });
   }
 
   async applyProposal(
@@ -327,10 +339,7 @@ export class IdentifyStore {
     this.error = null;
     try {
       for (const entity of entities) {
-        const queued = await this.queueEntity(entity);
-        if (queued.state === "search" && queued.candidates.length === 0) {
-          await this.identifyEntity(entity, providerId);
-        }
+        await this.queueEntity(entity, providerId);
       }
     } catch (err) {
       this.error = readError(err);
@@ -576,6 +585,30 @@ export class IdentifyStore {
     }
   }
 
+  async #autoIdentifyQueueItem(item: IdentifyQueueItem, providerId?: string | null) {
+    if (item.state !== "search" || item.candidates.length > 0) {
+      return item;
+    }
+
+    const selectedProvider = providerId ?? item.provider ?? this.providersForKind(item.entityKind)[0]?.id;
+    if (!selectedProvider) return item;
+
+    return this.identifyEntity(item.entity, selectedProvider);
+  }
+
+  async #searchAndResolve(
+    entity: EntityCard,
+    providerId: string,
+    query?: { title?: string | null; url?: string | null; externalIds?: Record<string, string> | null; requireChoice?: boolean | null },
+  ) {
+    const item = await searchIdentifyQueueItem(entity.id, providerId, query);
+    const detail = this.queue.find((queued) => queued.entityId === entity.id)?.detail ?? await fetchEntityDetail(entity.id);
+    const mapped = queueItemFromApi(item, entity, detail);
+    this.#upsertQueueItem(mapped);
+    this.reviewResolvedQueueItem(mapped);
+    return mapped;
+  }
+
   #leaveHiddenReviewIfNeeded() {
     const entityId = this.view.kind === "review-parent" || this.view.kind === "review-child" || this.view.kind === "review-choice"
       ? this.view.entity.id
@@ -660,6 +693,17 @@ function entityCardFromQueueItem(item: ApiIdentifyQueueItem): EntityCard {
 
 function shouldResetScrollForView(view: IdentifyView): boolean {
   return view.kind === "review-parent" || view.kind === "review-child";
+}
+
+function shouldFallbackToTitleSearch(
+  entity: EntityCard,
+  query: { title?: string | null; url?: string | null; externalIds?: Record<string, string> | null; requireChoice?: boolean | null } | undefined,
+  item: IdentifyQueueItem,
+): boolean {
+  if (item.state !== "error") return false;
+  if (!entity.title.trim()) return false;
+  if (query?.title || query?.url || query?.externalIds || query?.requireChoice) return false;
+  return true;
 }
 
 function relationshipEntityIdForProposal(

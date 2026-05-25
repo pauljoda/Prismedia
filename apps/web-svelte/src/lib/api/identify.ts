@@ -19,6 +19,7 @@ export interface PluginProvider {
   version: string;
   installed: boolean;
   enabled: boolean;
+  isNsfw: boolean;
   supports: PluginEntitySupport[];
   auth: PluginAuthField[];
   missingAuthKeys: string[];
@@ -28,6 +29,7 @@ export interface IdentifyQuery {
   title?: string | null;
   url?: string | null;
   externalIds?: Record<string, string> | null;
+  requireChoice?: boolean | null;
 }
 
 export interface ImageCandidate {
@@ -56,6 +58,12 @@ export interface CreditPatch {
   sortOrder?: number | null;
 }
 
+export interface EntityMetadataFlagsPatch {
+  isFavorite?: boolean | null;
+  isNsfw?: boolean | null;
+  isOrganized?: boolean | null;
+}
+
 export interface EntityMetadataPatch {
   title?: string | null;
   description?: string | null;
@@ -68,6 +76,7 @@ export interface EntityMetadataPatch {
   stats: Record<string, number>;
   positions: Record<string, number>;
   classification?: string | null;
+  flags?: EntityMetadataFlagsPatch | null;
 }
 
 export interface EntityMetadataProposal {

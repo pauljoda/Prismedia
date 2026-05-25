@@ -181,11 +181,13 @@
   }
 
   function relationshipStatusLabel(result: EntityMetadataProposal): string {
-    if (result.targetKind === "tag") {
-      return isNewRelationshipTitle(proposalTitle(result), existingTagTitles) ? "New" : "Existing";
-    }
+    if (result.targetEntityId) return "Merge";
+    return isNewRelationshipTitle(proposalTitle(result), relationshipTitlesForDetail(currentDetail, result.targetKind)) ? "New" : "Merge";
+  }
 
-    return relationshipKindLabel(result.targetKind);
+  function proposalStatusCustom(result: EntityMetadataProposal): EntityThumbnailCard["custom"] {
+    const label = relationshipStatusLabel(result);
+    return { bottomLeft: { label, title: `${label} ${relationshipKindLabel(result.targetKind)}` } };
   }
 
   function relationshipCard(result: EntityMetadataProposal): EntityThumbnailCard {
@@ -197,8 +199,17 @@
       cover: image ? { src: reviewImagePreviewUrl(image, result.targetKind), alt: title } : null,
       hover: { kind: "none" },
       subtitle: relationshipKindLabel(result.targetKind),
-      meta: [{ icon: relationshipIcon(result.targetKind), label: relationshipStatusLabel(result) }],
+      custom: proposalStatusCustom(result),
+      meta: [{ icon: relationshipIcon(result.targetKind), label: relationshipKindLabel(result.targetKind) }],
     };
+  }
+
+  function childMeta(child: EntityMetadataProposal): EntityThumbnailCard["meta"] {
+    const meta: EntityThumbnailCard["meta"] = [];
+    const episode = child.patch?.positions?.episode;
+    if (episode) meta.push({ icon: "count", label: `E${String(episode).padStart(2, "0")}` });
+    if (child.confidence) meta.push({ icon: "count", label: `${Math.round(child.confidence * 100)}%` });
+    return meta;
   }
 
   function tagRelationshipForTitle(tag: string): EntityMetadataProposal | null {
@@ -441,6 +452,7 @@
             cover: image ? { src: reviewImagePreviewUrl(image, credit.targetKind), alt: credit.patch?.title ?? "" } : null,
             hover: { kind: "none" } as const,
             subtitle: scopedCredit?.character ? `as ${scopedCredit.character}` : roleLabel(scopedCredit),
+            custom: proposalStatusCustom(credit),
             meta: [{ icon: "person" as const, label: roleLabel(scopedCredit) }],
           }}
           <EntityThumbnail
@@ -520,7 +532,7 @@
                 ? "border-border-default bg-surface-3 text-text-muted"
                 : "border-border-accent bg-accent-950/40 text-text-accent",
             )}>
-              {isExisting ? "Existing" : "New"}
+              {isExisting ? "Merge" : "New"}
             </span>
           </button>
         {/each}
@@ -603,8 +615,8 @@
             cover: childImage ? { src: reviewImagePreviewUrl(childImage, child.targetKind), alt: child.patch?.title ?? "" } : null,
             hover: { kind: "none" } as const,
             subtitle: child.targetKind,
-            custom: child.patch?.positions?.episode ? { bottomLeft: { label: `E${String(child.patch?.positions.episode).padStart(2, "0")}` } } : undefined,
-            meta: child.confidence ? [{ icon: "count" as const, label: `${Math.round(child.confidence * 100)}%` }] : [],
+            custom: proposalStatusCustom(child),
+            meta: childMeta(child),
           }}
           <EntityThumbnail
             card={childCard}

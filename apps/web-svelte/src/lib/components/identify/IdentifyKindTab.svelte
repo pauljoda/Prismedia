@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import {
     Loader2,
@@ -29,6 +28,8 @@
   let selectedIds = $state<string[]>([]);
   let showAll = $state(false);
   let selectedProviderId = $state("");
+  let loadedEntityKind: string | null = null;
+  let loadRequestId = 0;
 
   const activeProviderId = $derived(selectedProviderId || kindProviders[0]?.id || "");
   const activeProvider = $derived(kindProviders.find((p) => p.id === activeProviderId) ?? null);
@@ -43,26 +44,35 @@
   const unorganizedCount = $derived(allEntities.length - organizedCount);
   const cards = $derived(filteredEntities.map((e) => entityCardToThumbnailCard(e)));
 
-  onMount(() => {
-    void loadEntities();
+  $effect(() => {
+    const kind = entityKind;
+    if (loadedEntityKind === kind) return;
+
+    loadedEntityKind = kind;
+    selectedIds = [];
+    selectedProviderId = "";
+    void loadEntities(kind);
   });
 
-  async function loadEntities() {
+  async function loadEntities(kind: string) {
+    const requestId = ++loadRequestId;
     loading = true;
     try {
-      const response = await fetchIdentifyEntities(entityKind);
+      const response = await fetchIdentifyEntities(kind);
+      if (requestId !== loadRequestId) return;
       allEntities = response.items;
     } catch (err) {
+      if (requestId !== loadRequestId) return;
       store.error = err instanceof Error ? err.message : "Failed to load entities";
     } finally {
-      loading = false;
+      if (requestId === loadRequestId) loading = false;
     }
   }
 
   function handleCardActivate(card: EntityThumbnailCard) {
     const entity = filteredEntities.find((e) => e.id === card.entity.id);
     if (!entity) return;
-    void store.queueEntity(entity).then(() => goto(`/identify/${entity.id}`));
+    void store.queueEntity(entity, activeProvider?.id).then(() => goto(`/identify/${entity.id}`));
   }
 
   async function handleBulkQueue() {
