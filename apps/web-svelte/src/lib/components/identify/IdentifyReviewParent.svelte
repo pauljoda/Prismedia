@@ -394,7 +394,7 @@
 
   <!-- Credits -->
   {#if credits.length > 0}
-    <section class="surface-panel overflow-hidden">
+    <section class="surface-panel identify-lazy-section overflow-hidden">
       <header class="flex items-center gap-2.5 border-b border-border-subtle bg-surface-2 px-3.5 py-2.5">
         <Users class="h-3.5 w-3.5 text-text-accent" />
         <span class="text-kicker text-text-accent">Credits</span>
@@ -402,7 +402,7 @@
           {credits.filter((credit) => store.isReviewProposalSelected(credit.proposalId)).length} of {credits.length} selected
         </span>
       </header>
-      <div class="grid grid-cols-1 gap-2 p-3.5 sm:grid-cols-2">
+      <div class="identify-thumbnail-grid grid grid-cols-2 gap-2 p-3.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
         {#each credits as credit (credit.proposalId)}
           {@const scopedCredit = scopedCreditForProposal(proposal, credit)}
           {@const image = preferredProposalImage(credit)}
@@ -416,7 +416,6 @@
           }}
           <EntityThumbnail
             {card}
-            layout="list"
             linkable={false}
             onActivate={() => walkChild(credit)}
             selectable
@@ -431,7 +430,7 @@
 
   <!-- Relationships -->
   {#if nonCreditRelationships.length > 0}
-    <section class="surface-panel overflow-hidden">
+    <section class="surface-panel identify-lazy-section overflow-hidden">
       <header class="flex items-center gap-2.5 border-b border-border-subtle bg-surface-2 px-3.5 py-2.5">
         <Layers class="h-3.5 w-3.5 text-text-accent" />
         <span class="text-kicker text-text-accent">Relationships</span>
@@ -439,11 +438,10 @@
           {nonCreditRelationships.filter((relationship) => store.isReviewProposalSelected(relationship.proposalId)).length} of {nonCreditRelationships.length} selected
         </span>
       </header>
-      <div class="grid grid-cols-1 gap-2 p-3.5 sm:grid-cols-2">
+      <div class="identify-thumbnail-grid grid grid-cols-2 gap-2 p-3.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
         {#each nonCreditRelationships as relationship (relationship.proposalId)}
           <EntityThumbnail
             card={relationshipCard(relationship)}
-            layout="list"
             linkable={false}
             onActivate={() => walkChild(relationship)}
             selectable
@@ -458,7 +456,7 @@
 
   <!-- Artwork -->
   {#if artworkCandidateCount > 0}
-    <section class="surface-panel overflow-hidden">
+    <section class="surface-panel identify-lazy-section overflow-hidden">
       <header class="flex items-center gap-2.5 border-b border-border-subtle bg-surface-2 px-3.5 py-2.5">
         <Images class="h-3.5 w-3.5 text-text-accent" />
         <span class="text-kicker text-text-accent">Artwork</span>
@@ -476,7 +474,7 @@
                 <button
                   type="button"
                   class={cn(
-                    "relative overflow-hidden rounded-xs border transition-all",
+                    "identify-artwork-tile relative overflow-hidden rounded-xs border bg-surface-3 transition-all",
                     selectedImages[group.kind] === image.url
                       ? "border-border-accent-strong shadow-[0_0_16px_rgba(242,194,106,0.2)]"
                       : "border-border-default hover:border-border-accent",
@@ -490,6 +488,7 @@
                     class="h-full w-full object-cover"
                     loading="lazy"
                     decoding="async"
+                    fetchpriority="low"
                   />
                   {#if selectedImages[group.kind] === image.url}
                     <div class="absolute right-1 top-1">
@@ -557,13 +556,13 @@
 
   <!-- Children -->
   {#if children.length > 0}
-    <section class="surface-panel overflow-hidden">
+    <section class="surface-panel identify-lazy-section overflow-hidden">
       <header class="flex items-center gap-2.5 border-b border-border-subtle bg-surface-2 px-3.5 py-2.5">
         <Layers class="h-3.5 w-3.5 text-text-accent" />
         <span class="text-kicker text-text-accent">Children</span>
         <span class="font-mono text-[0.7rem] text-text-muted">{selectedChildCount} of {children.length} selected</span>
       </header>
-      <div class="grid grid-cols-1 gap-2 p-3.5 sm:grid-cols-2">
+      <div class="identify-thumbnail-grid grid grid-cols-2 gap-2 p-3.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
         {#each children as child, i (child.proposalId)}
           {@const childImage = preferredProposalImage(child)}
           {@const childCard = {
@@ -576,7 +575,6 @@
           }}
           <EntityThumbnail
             card={childCard}
-            layout="list"
             linkable={false}
             onActivate={() => walkChild(child)}
             selectable
@@ -647,3 +645,49 @@
     {/if}
   </div>
 </div>
+
+<style>
+  .identify-lazy-section {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 36rem;
+  }
+
+  .identify-thumbnail-grid {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 28rem;
+  }
+
+  .identify-artwork-tile::before {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    content: "";
+    pointer-events: none;
+    background:
+      linear-gradient(110deg, transparent 0%, rgb(242 194 106 / 0.12) 42%, transparent 68%),
+      radial-gradient(circle at 50% 45%, rgb(255 255 255 / 0.07), transparent 36%),
+      linear-gradient(135deg, rgb(13 14 16), rgb(27 24 19));
+    background-size: 220% 100%, auto, auto;
+    animation: identify-artwork-shimmer 1.2s ease-in-out infinite;
+  }
+
+  .identify-artwork-tile img {
+    position: relative;
+    z-index: 1;
+  }
+
+  .identify-artwork-tile > div {
+    z-index: 2;
+  }
+
+  @keyframes identify-artwork-shimmer {
+    from { background-position: 180% 0, 0 0, 0 0; }
+    to { background-position: -80% 0, 0 0, 0 0; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .identify-artwork-tile::before {
+      animation: none;
+    }
+  }
+</style>

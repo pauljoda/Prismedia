@@ -195,6 +195,36 @@ describe("EntityThumbnail", () => {
     expect(container.textContent).toContain("Character Ronnie");
   });
 
+  it("shows a skeleton while async cover images are loading", async () => {
+    const { container } = render(EntityThumbnail, {
+      props: {
+        card: {
+          ...personCard(),
+          cover: {
+            alt: "Tim Robinson",
+            src: "/assets/people/tim.jpg",
+          },
+        },
+      },
+    });
+
+    const media = container.querySelector<HTMLElement>(".media");
+    const image = container.querySelector<HTMLImageElement>(".media > img");
+
+    expect(image?.getAttribute("loading")).toBe("lazy");
+    expect(image?.getAttribute("decoding")).toBe("async");
+    expect(image?.getAttribute("fetchpriority")).toBe("low");
+    expect(media?.classList.contains("is-image-loading")).toBe(true);
+    expect(container.querySelector(".image-loading-skeleton")).not.toBeNull();
+
+    await fireEvent.load(image!);
+
+    await waitFor(() => {
+      expect(media?.classList.contains("is-image-loading")).toBe(false);
+      expect(container.querySelector(".image-loading-skeleton")).toBeNull();
+    });
+  });
+
   it("renders image-sequence thumbnails as the first still until hovered", async () => {
     vi.useFakeTimers();
     const { container } = render(EntityThumbnail, {

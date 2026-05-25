@@ -72,6 +72,7 @@
 
   let pointerRatio = $state<number | null>(null);
   let imageFailed = $state(false);
+  let imageLoaded = $state(false);
   let hoverBroken = $state(false);
   let lastSrc = $state<string | undefined>(undefined);
   let hoverIntentTimer: number | null = null;
@@ -110,6 +111,12 @@
   const activeSequenceAsset = $derived(
     activeSequenceIndex >= 0 ? sequenceAssets[activeSequenceIndex] ?? null : null,
   );
+  const currentImageSrc = $derived(
+    activeSequenceAsset?.src ??
+      sequenceRestCover?.src ??
+      (isSpriteHover && card.cover ? card.cover.src : asset?.src),
+  );
+  const showImageLoading = $derived(Boolean(currentImageSrc) && !showPlaceholder && !imageLoaded && !imageFailed);
 
   const activeSpriteFrame = $derived.by(() => {
     if (!isSpriteHover || !spriteFrames || pointerRatio === null) return null;
@@ -165,9 +172,10 @@
   }
 
   $effect(() => {
-    if (asset?.src !== lastSrc) {
-      lastSrc = asset?.src;
+    if (currentImageSrc !== lastSrc) {
+      lastSrc = currentImageSrc;
       imageFailed = false;
+      imageLoaded = false;
     }
   });
   $effect(() => {
@@ -336,6 +344,10 @@
     event.stopPropagation();
   }
 
+  function markImageLoaded() {
+    imageLoaded = true;
+  }
+
   function formatRating(value: number): string {
     if (value <= 0) return "";
     return String(Math.round(value));
@@ -369,6 +381,7 @@
   <div
     class="media"
     class:has-placeholder={showPlaceholder}
+    class:is-image-loading={showImageLoading}
     role="presentation"
     style:aspect-ratio={layout === "list" ? undefined : aspectRatio}
     style:background={showPlaceholder ? gradient : undefined}
@@ -385,7 +398,9 @@
         alt={activeSequenceAsset.alt}
         decoding="async"
         loading="lazy"
+        fetchpriority="low"
         style:object-fit={imageFit}
+        onload={markImageLoaded}
         onerror={() => {
           imageFailed = true;
           hoverBroken = true;
@@ -398,7 +413,9 @@
         alt={sequenceRestCover.alt}
         decoding="async"
         loading="lazy"
+        fetchpriority="low"
         style:object-fit={imageFit}
+        onload={markImageLoaded}
         onerror={() => { imageFailed = true; }}
       />
     {:else if isSpriteHover && card.cover}
@@ -407,8 +424,10 @@
         alt={card.cover.alt}
         decoding="async"
         loading="lazy"
+        fetchpriority="low"
         style:object-fit={imageFit}
         class:sprite-active={activeSpriteFrame !== null}
+        onload={markImageLoaded}
         onerror={() => { imageFailed = true; }}
       />
     {:else if asset && !showPlaceholder}
@@ -417,7 +436,9 @@
         alt={asset.alt}
         decoding="async"
         loading="lazy"
+        fetchpriority="low"
         style:object-fit={imageFit}
+        onload={markImageLoaded}
         onerror={() => {
           imageFailed = true;
           if (pointerRatio !== null) {
@@ -431,6 +452,10 @@
       <div class="placeholder" aria-hidden="true">
         {@render PlaceholderIcon({ icon: placeholderIcon })}
       </div>
+    {/if}
+
+    {#if showImageLoading}
+      <div class="image-loading-skeleton" aria-hidden="true"></div>
     {/if}
 
     {#if activeSpriteFrame && card.hover.kind === "sprite" && spriteDims.width > 0}
@@ -667,6 +692,19 @@
       #111;
   }
 
+  .media.is-image-loading {
+    background:
+      linear-gradient(110deg, rgb(255 255 255 / 0.04) 8%, rgb(242 194 106 / 0.11) 18%, rgb(255 255 255 / 0.04) 33%),
+      radial-gradient(circle at 50% 45%, rgb(255 255 255 / 0.08), transparent 34%),
+      linear-gradient(135deg, rgb(15 16 18 / 0.96), rgb(28 25 20 / 0.92)),
+      #111;
+    background-size:
+      220% 100%,
+      auto,
+      auto,
+      auto;
+  }
+
   .entity-thumbnail.is-image-only .media {
     border-radius: 5px;
   }
@@ -685,11 +723,25 @@
   }
 
   .media img {
+    position: relative;
+    z-index: 1;
     display: block;
     object-fit: cover;
     object-position: center;
     transition:
       filter 160ms ease;
+  }
+
+  .image-loading-skeleton {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+    background:
+      linear-gradient(110deg, transparent 0%, rgb(242 194 106 / 0.12) 42%, transparent 68%),
+      linear-gradient(180deg, rgb(255 255 255 / 0.05), rgb(0 0 0 / 0.08));
+    background-size: 220% 100%, auto;
+    animation: thumbnail-skeleton-shimmer 1.2s ease-in-out infinite;
   }
 
   .entity-thumbnail:is(:hover, :focus-visible) .media img,
@@ -808,8 +860,17 @@
     to { transform: rotate(360deg); }
   }
 
+  @keyframes thumbnail-skeleton-shimmer {
+    from { background-position: 180% 0, 0 0; }
+    to { background-position: -80% 0, 0 0; }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .placeholder :global(.placeholder-disc) {
+      animation: none;
+    }
+
+    .image-loading-skeleton {
       animation: none;
     }
   }
