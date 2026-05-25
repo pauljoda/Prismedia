@@ -139,6 +139,146 @@ public sealed class ScanJobHandlerTests {
     }
 
     [Fact]
+    public async Task GalleryScanTreatsRootFilesAsLooseAndFoldersAsNestedGalleries() {
+        var root = new LibraryRootData(
+            Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            "/media/images",
+            "Images",
+            Enabled: true,
+            Recursive: true,
+            ScanVideos: false,
+            ScanImages: true,
+            ScanAudio: false,
+            ScanBooks: false,
+            IsNsfw: false);
+        var persistence = new FakeScanPersistence([root]) {
+            Settings = DisabledGeneratedWorkSettings
+        };
+        var discovery = new RecordingFileDiscovery(
+            directoryGroups: new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase) {
+                ["/media/images"] = ["/media/images/root.png"],
+                ["/media/images/Gallery"] = ["/media/images/Gallery/a.png"],
+                ["/media/images/Gallery/A secondGallery"] = ["/media/images/Gallery/A secondGallery/b.png"]
+            });
+        var handler = new ScanGalleryJobHandler(
+            NullLogger<ScanGalleryJobHandler>.Instance,
+            discovery,
+            persistence);
+        var job = new JobRunSnapshot(
+            Guid.NewGuid(),
+            JobType.ScanGallery,
+            JobRunStatus.Running,
+            Progress: 0,
+            Message: null,
+            PayloadJson: $$"""{"libraryRootId":"{{root.Id}}"}""",
+            TargetEntityKind: "library-root",
+            TargetEntityId: root.Id.ToString(),
+            TargetLabel: root.Label,
+            CreatedAt: DateTimeOffset.UtcNow,
+            StartedAt: DateTimeOffset.UtcNow,
+            FinishedAt: null);
+
+        await handler.HandleAsync(new JobContext(job, new RecordingJobQueue()), CancellationToken.None);
+
+        Assert.DoesNotContain(persistence.UpsertedGalleries, gallery => gallery.FolderPath == root.Path);
+        var gallery = Assert.Single(persistence.UpsertedGalleries, item => item.FolderPath == "/media/images/Gallery");
+        var nestedGallery = Assert.Single(persistence.UpsertedGalleries, item => item.FolderPath == "/media/images/Gallery/A secondGallery");
+        Assert.Null(gallery.ParentGalleryEntityId);
+        Assert.Equal(0, gallery.SortOrder);
+        Assert.Equal(gallery.Id, nestedGallery.ParentGalleryEntityId);
+        Assert.Equal(0, nestedGallery.SortOrder);
+
+        Assert.Collection(
+            persistence.UpsertedImages.OrderBy(image => image.FilePath, StringComparer.OrdinalIgnoreCase),
+            image => {
+                Assert.Equal("/media/images/Gallery/A secondGallery/b.png", image.FilePath);
+                Assert.Equal(nestedGallery.Id, image.GalleryEntityId);
+            },
+            image => {
+                Assert.Equal("/media/images/Gallery/a.png", image.FilePath);
+                Assert.Equal(gallery.Id, image.GalleryEntityId);
+            },
+            image => {
+                Assert.Equal("/media/images/root.png", image.FilePath);
+                Assert.Null(image.GalleryEntityId);
+            });
+        Assert.Equal(["/media/images/root.png"], persistence.ValidLooseImagePaths);
+        Assert.Equal(["/media/images/Gallery", "/media/images/Gallery/A secondGallery"], persistence.ValidGalleryPaths);
+        Assert.Equal(["/media/images/Gallery/a.png"], persistence.ValidImagePathsByGalleryId[gallery.Id]);
+        Assert.Equal(["/media/images/Gallery/A secondGallery/b.png"], persistence.ValidImagePathsByGalleryId[nestedGallery.Id]);
+    }
+
+    [Fact]
+    public async Task AudioScanTreatsRootTracksAsLooseAndFoldersAsNestedLibraries() {
+        var root = new LibraryRootData(
+            Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            "/media/audio",
+            "Audio",
+            Enabled: true,
+            Recursive: true,
+            ScanVideos: false,
+            ScanImages: false,
+            ScanAudio: true,
+            ScanBooks: false,
+            IsNsfw: false);
+        var persistence = new FakeScanPersistence([root]) {
+            Settings = DisabledGeneratedWorkSettings
+        };
+        var discovery = new RecordingFileDiscovery(
+            directoryGroups: new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase) {
+                ["/media/audio"] = ["/media/audio/root.flac"],
+                ["/media/audio/Album"] = ["/media/audio/Album/one.flac"],
+                ["/media/audio/Album/Disc 2"] = ["/media/audio/Album/Disc 2/two.flac"]
+            });
+        var handler = new ScanAudioJobHandler(
+            NullLogger<ScanAudioJobHandler>.Instance,
+            discovery,
+            persistence);
+        var job = new JobRunSnapshot(
+            Guid.NewGuid(),
+            JobType.ScanAudio,
+            JobRunStatus.Running,
+            Progress: 0,
+            Message: null,
+            PayloadJson: $$"""{"libraryRootId":"{{root.Id}}"}""",
+            TargetEntityKind: "library-root",
+            TargetEntityId: root.Id.ToString(),
+            TargetLabel: root.Label,
+            CreatedAt: DateTimeOffset.UtcNow,
+            StartedAt: DateTimeOffset.UtcNow,
+            FinishedAt: null);
+
+        await handler.HandleAsync(new JobContext(job, new RecordingJobQueue()), CancellationToken.None);
+
+        Assert.DoesNotContain(persistence.UpsertedAudioLibraries, library => library.FolderPath == root.Path);
+        var album = Assert.Single(persistence.UpsertedAudioLibraries, item => item.FolderPath == "/media/audio/Album");
+        var disc = Assert.Single(persistence.UpsertedAudioLibraries, item => item.FolderPath == "/media/audio/Album/Disc 2");
+        Assert.Null(album.ParentAudioLibraryEntityId);
+        Assert.Equal(0, album.SortOrder);
+        Assert.Equal(album.Id, disc.ParentAudioLibraryEntityId);
+        Assert.Equal(0, disc.SortOrder);
+
+        Assert.Collection(
+            persistence.UpsertedAudioTracks.OrderBy(track => track.FilePath, StringComparer.OrdinalIgnoreCase),
+            track => {
+                Assert.Equal("/media/audio/Album/Disc 2/two.flac", track.FilePath);
+                Assert.Equal(disc.Id, track.AudioLibraryEntityId);
+            },
+            track => {
+                Assert.Equal("/media/audio/Album/one.flac", track.FilePath);
+                Assert.Equal(album.Id, track.AudioLibraryEntityId);
+            },
+            track => {
+                Assert.Equal("/media/audio/root.flac", track.FilePath);
+                Assert.Null(track.AudioLibraryEntityId);
+            });
+        Assert.Equal(["/media/audio/root.flac"], persistence.ValidLooseAudioTrackPaths);
+        Assert.Equal(["/media/audio/Album", "/media/audio/Album/Disc 2"], persistence.ValidAudioLibraryPaths);
+        Assert.Equal(["/media/audio/Album/one.flac"], persistence.ValidAudioTrackPathsByLibraryId[album.Id]);
+        Assert.Equal(["/media/audio/Album/Disc 2/two.flac"], persistence.ValidAudioTrackPathsByLibraryId[disc.Id]);
+    }
+
+    [Fact]
     public async Task BookScanMaterializesFolderVolumesChaptersAndPages() {
         var tempRoot = Directory.CreateTempSubdirectory("prismedia-book-scan-");
         try {
@@ -287,6 +427,17 @@ public sealed class ScanJobHandlerTests {
         }
     }
 
+    private static LibrarySettingsData DisabledGeneratedWorkSettings => new(
+        AutoGenerateMetadata: false,
+        AutoGenerateFingerprints: false,
+        GeneratePhash: false,
+        AutoGeneratePreview: false,
+        GenerateTrickplay: false,
+        TrickplayIntervalSeconds: 10,
+        PreviewClipDurationSeconds: 8,
+        ThumbnailQuality: 2,
+        TrickplayQuality: 2);
+
     private sealed class RecordingScanHandler(FakeScanPersistence persistence)
         : ScanJobHandler(NullLogger<RecordingScanHandler>.Instance, new NoopFileDiscovery(), persistence) {
         public List<Guid> ScannedRootIds { get; } = [];
@@ -321,10 +472,20 @@ public sealed class ScanJobHandlerTests {
         public IReadOnlyDictionary<Guid, DownstreamNeeds> DownstreamNeedsById { get; init; } =
             new Dictionary<Guid, DownstreamNeeds>();
         public List<VideoUpsertItem> UpsertedVideoItems { get; } = [];
+        public List<ImageRecord> UpsertedImages { get; } = [];
+        public List<GalleryRecord> UpsertedGalleries { get; } = [];
+        public List<AudioTrackRecord> UpsertedAudioTracks { get; } = [];
+        public List<AudioLibraryRecord> UpsertedAudioLibraries { get; } = [];
         public List<BookRecord> UpsertedBooks { get; } = [];
         public List<BookVolumeRecord> UpsertedBookVolumes { get; } = [];
         public List<BookChapterRecord> UpsertedBookChapters { get; } = [];
         public List<BookPageRecord> UpsertedBookPages { get; } = [];
+        public IReadOnlyList<string> ValidLooseImagePaths { get; private set; } = [];
+        public Dictionary<Guid, IReadOnlyList<string>> ValidImagePathsByGalleryId { get; } = [];
+        public IReadOnlyList<string> ValidGalleryPaths { get; private set; } = [];
+        public IReadOnlyList<string> ValidLooseAudioTrackPaths { get; private set; } = [];
+        public Dictionary<Guid, IReadOnlyList<string>> ValidAudioTrackPathsByLibraryId { get; } = [];
+        public IReadOnlyList<string> ValidAudioLibraryPaths { get; private set; } = [];
         public IReadOnlyList<string> ValidBookPaths { get; private set; } = [];
         public IReadOnlyList<string> ValidBookVolumePaths { get; private set; } = [];
         public IReadOnlyList<string> ValidBookChapterPaths { get; private set; } = [];
@@ -349,17 +510,38 @@ public sealed class ScanJobHandlerTests {
         public Task<Guid> UpsertVideoAsync(string filePath, string title, Guid libraryRootId, bool isNsfw, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
-        public Task<Guid> UpsertImageAsync(string filePath, string title, Guid? galleryEntityId, long? sizeBytes, int sortOrder, bool isNsfw, CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
+        public Task<Guid> UpsertImageAsync(string filePath, string title, Guid? galleryEntityId, long? sizeBytes, int sortOrder, bool isNsfw, CancellationToken cancellationToken) {
+            var id = IdFor($"image:{filePath}");
+            UpsertedImages.Add(new ImageRecord(id, filePath, title, galleryEntityId, sortOrder));
+            return Task.FromResult(id);
+        }
 
         public Task<Guid> UpsertGalleryAsync(string folderPath, string title, Guid libraryRootId, bool isNsfw, CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
+            UpsertGalleryAsync(folderPath, title, libraryRootId, parentGalleryEntityId: null, sortOrder: 0, isNsfw, cancellationToken);
+
+        public Task<Guid> UpsertGalleryAsync(string folderPath, string title, Guid libraryRootId, Guid? parentGalleryEntityId, int sortOrder, bool isNsfw, CancellationToken cancellationToken) {
+            var id = IdFor($"gallery:{folderPath}");
+            UpsertedGalleries.Add(new GalleryRecord(id, folderPath, title, libraryRootId, parentGalleryEntityId, sortOrder));
+            return Task.FromResult(id);
+        }
 
         public Task<Guid> UpsertAudioTrackAsync(string filePath, string title, Guid audioLibraryId, int sortOrder, bool isNsfw, CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
+            UpsertAudioTrackAsync(filePath, title, (Guid?)audioLibraryId, sortOrder, isNsfw, cancellationToken);
+
+        public Task<Guid> UpsertAudioTrackAsync(string filePath, string title, Guid? audioLibraryId, int sortOrder, bool isNsfw, CancellationToken cancellationToken) {
+            var id = IdFor($"audio-track:{filePath}");
+            UpsertedAudioTracks.Add(new AudioTrackRecord(id, filePath, title, audioLibraryId, sortOrder));
+            return Task.FromResult(id);
+        }
 
         public Task<Guid> UpsertAudioLibraryAsync(string folderPath, string title, Guid libraryRootId, bool isNsfw, CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
+            UpsertAudioLibraryAsync(folderPath, title, libraryRootId, parentAudioLibraryEntityId: null, sortOrder: 0, isNsfw, cancellationToken);
+
+        public Task<Guid> UpsertAudioLibraryAsync(string folderPath, string title, Guid libraryRootId, Guid? parentAudioLibraryEntityId, int sortOrder, bool isNsfw, CancellationToken cancellationToken) {
+            var id = IdFor($"audio-library:{folderPath}");
+            UpsertedAudioLibraries.Add(new AudioLibraryRecord(id, folderPath, title, libraryRootId, parentAudioLibraryEntityId, sortOrder));
+            return Task.FromResult(id);
+        }
 
         public Task<Guid> UpsertBookAsync(string sourcePath, string title, Guid libraryRootId, bool isNsfw, CancellationToken cancellationToken) {
             var id = IdFor($"book:{sourcePath}");
@@ -388,17 +570,35 @@ public sealed class ScanJobHandlerTests {
         public Task<int> RemoveStaleVideosByRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) =>
             Task.FromResult(0);
 
-        public Task<int> RemoveStaleImagesInGalleryAsync(Guid galleryEntityId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
+        public Task<int> RemoveStaleLooseImagesInRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) {
+            ValidLooseImagePaths = validPaths.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToArray();
+            return Task.FromResult(0);
+        }
 
-        public Task<int> RemoveStaleGalleriesInRootAsync(Guid rootId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
+        public Task<int> RemoveStaleImagesInGalleryAsync(Guid galleryEntityId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) {
+            ValidImagePathsByGalleryId[galleryEntityId] = validPaths.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToArray();
+            return Task.FromResult(0);
+        }
 
-        public Task<int> RemoveStaleAudioTracksInLibraryAsync(Guid libraryEntityId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
+        public Task<int> RemoveStaleGalleriesInRootAsync(Guid rootId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken) {
+            ValidGalleryPaths = validFolderPaths.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToArray();
+            return Task.FromResult(0);
+        }
 
-        public Task<int> RemoveStaleAudioLibrariesInRootAsync(Guid rootId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
+        public Task<int> RemoveStaleLooseAudioTracksInRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) {
+            ValidLooseAudioTrackPaths = validPaths.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToArray();
+            return Task.FromResult(0);
+        }
+
+        public Task<int> RemoveStaleAudioTracksInLibraryAsync(Guid libraryEntityId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) {
+            ValidAudioTrackPathsByLibraryId[libraryEntityId] = validPaths.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToArray();
+            return Task.FromResult(0);
+        }
+
+        public Task<int> RemoveStaleAudioLibrariesInRootAsync(Guid rootId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken) {
+            ValidAudioLibraryPaths = validFolderPaths.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToArray();
+            return Task.FromResult(0);
+        }
 
         public Task<int> RemoveStaleBookVolumesAsync(Guid bookEntityId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken) {
             ValidBookVolumePaths = validFolderPaths.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToArray();
@@ -431,13 +631,13 @@ public sealed class ScanJobHandlerTests {
             Task.FromResult(DownstreamNeedsById);
 
         public Task<bool> HasEntityTechnicalAsync(Guid entityId, CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
+            Task.FromResult(false);
 
         public Task<bool> HasEntityFingerprintAsync(Guid entityId, FingerprintAlgorithm algorithm, CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
+            Task.FromResult(false);
 
         public Task<bool> HasEntityFileAsync(Guid entityId, EntityFileRole role, CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
+            Task.FromResult(false);
 
         public Task<bool> HasSubtitlesExtractedAsync(Guid entityId, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
@@ -489,6 +689,10 @@ public sealed class ScanJobHandlerTests {
         }
     }
 
+    private sealed record ImageRecord(Guid Id, string FilePath, string Title, Guid? GalleryEntityId, int SortOrder);
+    private sealed record GalleryRecord(Guid Id, string FolderPath, string Title, Guid LibraryRootId, Guid? ParentGalleryEntityId, int SortOrder);
+    private sealed record AudioTrackRecord(Guid Id, string FilePath, string Title, Guid? AudioLibraryEntityId, int SortOrder);
+    private sealed record AudioLibraryRecord(Guid Id, string FolderPath, string Title, Guid LibraryRootId, Guid? ParentAudioLibraryEntityId, int SortOrder);
     private sealed record BookRecord(Guid Id, string SourcePath, string Title, Guid LibraryRootId);
     private sealed record BookVolumeRecord(Guid Id, string SourcePath, string Title, Guid BookEntityId, int SortOrder);
     private sealed record BookChapterRecord(Guid Id, string SourcePath, string Title, Guid ParentEntityId, int SortOrder, int PageCount);
@@ -502,14 +706,27 @@ public sealed class ScanJobHandlerTests {
             throw new NotSupportedException();
     }
 
-    private sealed class RecordingFileDiscovery(IReadOnlyList<string> files) : IFileDiscovery {
+    private sealed class RecordingFileDiscovery(
+        IReadOnlyList<string>? files = null,
+        IReadOnlyDictionary<string, IReadOnlyList<string>>? directoryGroups = null) : IFileDiscovery {
         public Task<IReadOnlyList<string>> DiscoverFilesAsync(
             string rootPath, MediaCategory category, bool recursive, CancellationToken cancellationToken) =>
-            Task.FromResult(files);
+            Task.FromResult(files ?? []);
 
         public Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> DiscoverFilesByDirectoryAsync(
-            string rootPath, MediaCategory category, bool recursive, CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
+            string rootPath, MediaCategory category, bool recursive, CancellationToken cancellationToken) {
+            if (directoryGroups is not null) {
+                return Task.FromResult(directoryGroups);
+            }
+
+            var grouped = (files ?? [])
+                .GroupBy(path => Path.GetDirectoryName(path)!, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    group => group.Key,
+                    group => (IReadOnlyList<string>)group.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToArray(),
+                    StringComparer.OrdinalIgnoreCase);
+            return Task.FromResult<IReadOnlyDictionary<string, IReadOnlyList<string>>>(grouped);
+        }
     }
 
     private sealed class NoopJobQueue : IJobQueueService {

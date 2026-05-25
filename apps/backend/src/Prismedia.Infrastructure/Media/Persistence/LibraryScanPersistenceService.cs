@@ -83,14 +83,14 @@ public sealed class LibraryScanPersistenceService(PrismediaDbContext db) : ILibr
     public async Task<Guid> UpsertImageAsync(string filePath, string title, Guid? galleryEntityId, long? sizeBytes, int sortOrder, bool isNsfw, CancellationToken cancellationToken) {
         var existing = await FindEntityBySourcePath(EntityKindRegistry.Image.Code, filePath, cancellationToken);
         if (existing is not null) {
-            existing.UpdatedAt = DateTimeOffset.UtcNow;
-            if (galleryEntityId is not null) {
-                await UpsertStructuralChildLinkAsync(
-                    galleryEntityId.Value,
-                    existing.Id,
-                    sortOrder,
-                    DateTimeOffset.UtcNow,
-                    cancellationToken);
+            var updatedAt = DateTimeOffset.UtcNow;
+            var tracked = await db.Entities.FindAsync([existing.Id], cancellationToken);
+            if (tracked is not null) {
+                tracked.Title = title;
+                tracked.ParentEntityId = galleryEntityId;
+                tracked.SortOrder = galleryEntityId is null ? null : sortOrder;
+                tracked.UpdatedAt = updatedAt;
+                if (isNsfw) tracked.IsNsfw = true;
             }
 
             await db.SaveChangesAsync(cancellationToken);
@@ -124,12 +124,28 @@ public sealed class LibraryScanPersistenceService(PrismediaDbContext db) : ILibr
         return id;
     }
 
-    public async Task<Guid> UpsertGalleryAsync(string folderPath, string title, Guid libraryRootId, bool isNsfw, CancellationToken cancellationToken) {
+    public async Task<Guid> UpsertGalleryAsync(
+        string folderPath,
+        string title,
+        Guid libraryRootId,
+        Guid? parentGalleryEntityId,
+        int sortOrder,
+        bool isNsfw,
+        CancellationToken cancellationToken) {
         var existing = await FindEntityBySourcePath(EntityKindRegistry.Gallery.Code, folderPath, cancellationToken);
         if (existing is not null) {
-            existing.UpdatedAt = DateTimeOffset.UtcNow;
+            var tracked = await db.Entities.FindAsync([existing.Id], cancellationToken);
+            if (tracked is not null) {
+                tracked.Title = title;
+                tracked.ParentEntityId = parentGalleryEntityId;
+                tracked.SortOrder = sortOrder;
+                tracked.UpdatedAt = DateTimeOffset.UtcNow;
+                if (isNsfw) tracked.IsNsfw = true;
+            }
+
             var detail = await db.GalleryDetails.FindAsync([existing.Id], cancellationToken);
             if (detail is not null) detail.LibraryRootId = libraryRootId;
+            else db.GalleryDetails.Add(new GalleryDetailRow { EntityId = existing.Id, GalleryType = GalleryType.Folder, LibraryRootId = libraryRootId });
             await db.SaveChangesAsync(cancellationToken);
             return existing.Id;
         }
@@ -137,7 +153,7 @@ public sealed class LibraryScanPersistenceService(PrismediaDbContext db) : ILibr
         var now = DateTimeOffset.UtcNow;
         var id = Guid.NewGuid();
 
-        db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKindRegistry.Gallery.Code, Title = title, IsNsfw = isNsfw, CreatedAt = now, UpdatedAt = now });
+        db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKindRegistry.Gallery.Code, Title = title, ParentEntityId = parentGalleryEntityId, SortOrder = sortOrder, IsNsfw = isNsfw, CreatedAt = now, UpdatedAt = now });
         db.GalleryDetails.Add(new GalleryDetailRow { EntityId = id, GalleryType = GalleryType.Folder, LibraryRootId = libraryRootId });
         db.EntityFiles.Add(new EntityFileRow {
             Id = Guid.NewGuid(),
@@ -152,16 +168,20 @@ public sealed class LibraryScanPersistenceService(PrismediaDbContext db) : ILibr
         return id;
     }
 
-    public async Task<Guid> UpsertAudioTrackAsync(string filePath, string title, Guid audioLibraryId, int sortOrder, bool isNsfw, CancellationToken cancellationToken) {
+    public async Task<Guid> UpsertAudioTrackAsync(string filePath, string title, Guid? audioLibraryId, int sortOrder, bool isNsfw, CancellationToken cancellationToken) {
         var existing = await FindEntityBySourcePath(EntityKindRegistry.AudioTrack.Code, filePath, cancellationToken);
         if (existing is not null) {
-            existing.UpdatedAt = DateTimeOffset.UtcNow;
-            await UpsertStructuralChildLinkAsync(
-                audioLibraryId,
-                existing.Id,
-                sortOrder,
-                DateTimeOffset.UtcNow,
-                cancellationToken);
+            var updatedAt = DateTimeOffset.UtcNow;
+            var tracked = await db.Entities.FindAsync([existing.Id], cancellationToken);
+            if (tracked is not null) {
+                tracked.Title = title;
+                tracked.ParentEntityId = audioLibraryId;
+                tracked.SortOrder = audioLibraryId is null ? null : sortOrder;
+                tracked.UpdatedAt = updatedAt;
+                if (isNsfw) tracked.IsNsfw = true;
+            }
+
+            await EnsureAudioTrackDetailAsync(existing.Id, cancellationToken);
             await db.SaveChangesAsync(cancellationToken);
             return existing.Id;
         }
@@ -169,7 +189,7 @@ public sealed class LibraryScanPersistenceService(PrismediaDbContext db) : ILibr
         var now = DateTimeOffset.UtcNow;
         var id = Guid.NewGuid();
 
-        db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKindRegistry.AudioTrack.Code, Title = title, ParentEntityId = audioLibraryId, SortOrder = sortOrder, IsNsfw = isNsfw, CreatedAt = now, UpdatedAt = now });
+        db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKindRegistry.AudioTrack.Code, Title = title, ParentEntityId = audioLibraryId, SortOrder = audioLibraryId is null ? null : sortOrder, IsNsfw = isNsfw, CreatedAt = now, UpdatedAt = now });
         db.AudioTrackDetails.Add(new AudioTrackDetailRow { EntityId = id });
         db.EntityFiles.Add(new EntityFileRow {
             Id = Guid.NewGuid(),
@@ -180,21 +200,30 @@ public sealed class LibraryScanPersistenceService(PrismediaDbContext db) : ILibr
             CreatedAt = now,
             UpdatedAt = now
         });
-        await UpsertStructuralChildLinkAsync(
-            audioLibraryId,
-            id,
-            sortOrder,
-            now,
-            cancellationToken);
 
         await db.SaveChangesAsync(cancellationToken);
         return id;
     }
 
-    public async Task<Guid> UpsertAudioLibraryAsync(string folderPath, string title, Guid libraryRootId, bool isNsfw, CancellationToken cancellationToken) {
+    public async Task<Guid> UpsertAudioLibraryAsync(
+        string folderPath,
+        string title,
+        Guid libraryRootId,
+        Guid? parentAudioLibraryEntityId,
+        int sortOrder,
+        bool isNsfw,
+        CancellationToken cancellationToken) {
         var existing = await FindEntityBySourcePath(EntityKindRegistry.AudioLibrary.Code, folderPath, cancellationToken);
         if (existing is not null) {
-            existing.UpdatedAt = DateTimeOffset.UtcNow;
+            var tracked = await db.Entities.FindAsync([existing.Id], cancellationToken);
+            if (tracked is not null) {
+                tracked.Title = title;
+                tracked.ParentEntityId = parentAudioLibraryEntityId;
+                tracked.SortOrder = sortOrder;
+                tracked.UpdatedAt = DateTimeOffset.UtcNow;
+                if (isNsfw) tracked.IsNsfw = true;
+            }
+
             var detail = await db.AudioLibraryDetails.FindAsync([existing.Id], cancellationToken);
             if (detail is not null) detail.LibraryRootId = libraryRootId;
             else db.AudioLibraryDetails.Add(new AudioLibraryDetailRow { EntityId = existing.Id, LibraryRootId = libraryRootId });
@@ -205,7 +234,7 @@ public sealed class LibraryScanPersistenceService(PrismediaDbContext db) : ILibr
         var now = DateTimeOffset.UtcNow;
         var id = Guid.NewGuid();
 
-        db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKindRegistry.AudioLibrary.Code, Title = title, IsNsfw = isNsfw, CreatedAt = now, UpdatedAt = now });
+        db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKindRegistry.AudioLibrary.Code, Title = title, ParentEntityId = parentAudioLibraryEntityId, SortOrder = sortOrder, IsNsfw = isNsfw, CreatedAt = now, UpdatedAt = now });
         db.AudioLibraryDetails.Add(new AudioLibraryDetailRow { EntityId = id, LibraryRootId = libraryRootId });
         db.EntityFiles.Add(new EntityFileRow {
             Id = Guid.NewGuid(),
@@ -397,6 +426,11 @@ public sealed class LibraryScanPersistenceService(PrismediaDbContext db) : ILibr
         return await RemoveStaleEntitiesBySourcePath(videoIds, validPaths, cancellationToken);
     }
 
+    public async Task<int> RemoveStaleLooseImagesInRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) {
+        var imageIds = await GetLooseRootEntityIdsAsync(rootId, EntityKindRegistry.Image.Code, cancellationToken);
+        return await RemoveStaleEntitiesBySourcePath(imageIds, validPaths, cancellationToken);
+    }
+
     public async Task<int> RemoveStaleImagesInGalleryAsync(Guid galleryEntityId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) {
         var childIds = await db.Entities.AsNoTracking()
             .Where(entity => entity.ParentEntityId == galleryEntityId && entity.KindCode == EntityKindRegistry.Image.Code)
@@ -412,7 +446,12 @@ public sealed class LibraryScanPersistenceService(PrismediaDbContext db) : ILibr
             .Select(gd => gd.EntityId)
             .ToListAsync(cancellationToken);
 
-        return await RemoveStaleEntitiesBySourcePath(galleryIds, validFolderPaths, cancellationToken);
+        return await RemoveStaleContainerEntitiesBySourcePath(galleryIds, validFolderPaths, cancellationToken);
+    }
+
+    public async Task<int> RemoveStaleLooseAudioTracksInRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) {
+        var trackIds = await GetLooseRootEntityIdsAsync(rootId, EntityKindRegistry.AudioTrack.Code, cancellationToken);
+        return await RemoveStaleEntitiesBySourcePath(trackIds, validPaths, cancellationToken);
     }
 
     public async Task<int> RemoveStaleAudioTracksInLibraryAsync(Guid libraryEntityId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) {
@@ -430,7 +469,7 @@ public sealed class LibraryScanPersistenceService(PrismediaDbContext db) : ILibr
             .Select(ald => ald.EntityId)
             .ToListAsync(cancellationToken);
 
-        return await RemoveStaleEntitiesBySourcePath(libraryIds, validFolderPaths, cancellationToken);
+        return await RemoveStaleContainerEntitiesBySourcePath(libraryIds, validFolderPaths, cancellationToken);
     }
 
     public async Task<int> RemoveStaleBookVolumesAsync(Guid bookEntityId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken) {
@@ -704,6 +743,16 @@ public sealed class LibraryScanPersistenceService(PrismediaDbContext db) : ILibr
             ?? await db.VideoSeriesDetails.FindAsync([seriesId], cancellationToken);
         if (detail is null) {
             db.VideoSeriesDetails.Add(new VideoSeriesDetailRow { EntityId = seriesId });
+        }
+    }
+
+    private async Task EnsureAudioTrackDetailAsync(
+        Guid trackId,
+        CancellationToken cancellationToken) {
+        var detail = db.AudioTrackDetails.Local.FirstOrDefault(row => row.EntityId == trackId)
+            ?? await db.AudioTrackDetails.FindAsync([trackId], cancellationToken);
+        if (detail is null) {
+            db.AudioTrackDetails.Add(new AudioTrackDetailRow { EntityId = trackId });
         }
     }
 
@@ -1205,26 +1254,122 @@ public sealed class LibraryScanPersistenceService(PrismediaDbContext db) : ILibr
         List<Guid> candidateIds, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) {
         if (candidateIds.Count == 0) return 0;
 
+        var staleIds = await GetStaleEntityIdsBySourcePathAsync(candidateIds, validPaths, cancellationToken);
+        return await RemoveEntitiesByIdAsync(staleIds, cancellationToken);
+    }
+
+    private async Task<int> RemoveStaleContainerEntitiesBySourcePath(
+        List<Guid> candidateIds, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) {
+        if (candidateIds.Count == 0) return 0;
+
+        var staleIds = await GetStaleEntityIdsBySourcePathAsync(candidateIds, validPaths, cancellationToken);
+        if (staleIds.Count == 0) return 0;
+
+        var idsToRemove = await ExpandContainerSubtreeIdsAsync(staleIds, validPaths, cancellationToken);
+        return await RemoveEntitiesByIdAsync(idsToRemove, cancellationToken);
+    }
+
+    private async Task<List<Guid>> GetStaleEntityIdsBySourcePathAsync(
+        List<Guid> candidateIds, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) {
         var sourcePaths = await db.EntityFiles.AsNoTracking()
             .Where(f => candidateIds.Contains(f.EntityId) && f.Role == EntityFileRole.Source)
             .Select(f => new { f.EntityId, f.Path })
             .ToListAsync(cancellationToken);
 
-        var staleIds = sourcePaths
+        return sourcePaths
             .Where(sp => !validPaths.Contains(sp.Path))
             .Select(sp => sp.EntityId)
+            .Distinct()
             .ToList();
+    }
 
-        if (staleIds.Count == 0) return 0;
+    private async Task<List<Guid>> ExpandContainerSubtreeIdsAsync(
+        List<Guid> staleContainerIds, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) {
+        var allEntityParents = await db.Entities.AsNoTracking()
+            .Select(entity => new { entity.Id, entity.ParentEntityId })
+            .ToListAsync(cancellationToken);
+        var childrenByParentId = allEntityParents
+            .Where(entity => entity.ParentEntityId is not null)
+            .GroupBy(entity => entity.ParentEntityId!.Value)
+            .ToDictionary(group => group.Key, group => group.Select(entity => entity.Id).ToArray());
+
+        var validSourceEntityIds = await db.EntityFiles.AsNoTracking()
+            .Where(file => file.Role == EntityFileRole.Source && validPaths.Contains(file.Path))
+            .Select(file => file.EntityId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        var validSourceIds = validSourceEntityIds.ToHashSet();
+
+        var idsToRemove = staleContainerIds.ToHashSet();
+        var pending = new Queue<Guid>(staleContainerIds);
+
+        while (pending.Count > 0) {
+            var parentId = pending.Dequeue();
+            if (!childrenByParentId.TryGetValue(parentId, out var childIds)) {
+                continue;
+            }
+
+            foreach (var childId in childIds) {
+                if (validSourceIds.Contains(childId) || !idsToRemove.Add(childId)) {
+                    continue;
+                }
+
+                pending.Enqueue(childId);
+            }
+        }
+
+        return idsToRemove.ToList();
+    }
+
+    private async Task<int> RemoveEntitiesByIdAsync(
+        List<Guid> idsToRemove, CancellationToken cancellationToken) {
+        if (idsToRemove.Count == 0) return 0;
 
         var entitiesToRemove = await db.Entities
-            .Where(e => staleIds.Contains(e.Id))
+            .Where(e => idsToRemove.Contains(e.Id))
             .ToListAsync(cancellationToken);
 
         db.Entities.RemoveRange(entitiesToRemove);
         await db.SaveChangesAsync(cancellationToken);
 
         return entitiesToRemove.Count;
+    }
+
+    private async Task<List<Guid>> GetLooseRootEntityIdsAsync(Guid rootId, string kindCode, CancellationToken cancellationToken) {
+        var rootPath = await db.LibraryRoots.AsNoTracking()
+            .Where(root => root.Id == rootId)
+            .Select(root => root.Path)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(rootPath)) {
+            return [];
+        }
+
+        var sourceFiles = await db.EntityFiles.AsNoTracking()
+            .Where(file => file.Role == EntityFileRole.Source)
+            .Join(
+                db.Entities.AsNoTracking().Where(entity => entity.KindCode == kindCode && entity.ParentEntityId == null),
+                file => file.EntityId,
+                entity => entity.Id,
+                (file, entity) => new { file.EntityId, file.Path })
+            .ToListAsync(cancellationToken);
+
+        return sourceFiles
+            .Where(file => IsDirectChildPath(file.Path, rootPath))
+            .Select(file => file.EntityId)
+            .Distinct()
+            .ToList();
+    }
+
+    private static bool IsDirectChildPath(string path, string parentPath) {
+        var normalizedPath = NormalizePath(path);
+        var normalizedParent = NormalizePath(parentPath);
+
+        if (string.IsNullOrWhiteSpace(normalizedPath) || string.IsNullOrWhiteSpace(normalizedParent)) {
+            return false;
+        }
+
+        var directory = Path.GetDirectoryName(normalizedPath)?.Replace('\\', '/').TrimEnd('/');
+        return string.Equals(directory, normalizedParent, StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsPathUnderRoot(string path, string rootPath) {

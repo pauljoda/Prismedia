@@ -27,18 +27,49 @@ public sealed class ScanAudioJobHandler(
             dirGroups.Count, root.Label);
 
         var settings = await Persistence.GetSettingsAsync(cancellationToken);
-        var validLibraryPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var validLibraryPaths = ContainerPathsFor(root.Path, dirGroups.Keys);
+        var libraryIdsByPath = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+        var siblingSortOrders = SiblingSortOrders(validLibraryPaths);
+
+        foreach (var dirPath in validLibraryPaths) {
+            var libraryTitle = Path.GetFileName(dirPath);
+            var parentPath = Path.GetDirectoryName(dirPath);
+            Guid? parentLibraryId = parentPath is not null && !SamePath(parentPath, root.Path)
+                ? libraryIdsByPath[parentPath]
+                : null;
+
+            var libraryId = await Persistence.UpsertAudioLibraryAsync(
+                dirPath,
+                libraryTitle,
+                root.Id,
+                parentLibraryId,
+                siblingSortOrders[dirPath],
+                root.IsNsfw,
+                cancellationToken);
+            libraryIdsByPath[dirPath] = libraryId;
+        }
+
+        var validLooseTrackPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var validTrackPathsByLibraryPath = validLibraryPaths.ToDictionary(
+            path => path,
+            _ => new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+            StringComparer.OrdinalIgnoreCase);
+        var orderedDirGroups = dirGroups
+            .OrderBy(group => PathDepth(root.Path, group.Key))
+            .ThenBy(group => group.Key, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
         var processedDirs = 0;
 
-        foreach (var (dirPath, audioFiles) in dirGroups) {
-            var libraryTitle = Path.GetFileName(dirPath);
-            validLibraryPaths.Add(dirPath);
+        foreach (var (dirPath, audioFiles) in orderedDirGroups) {
+            var isRootDirectory = SamePath(dirPath, root.Path);
+            var validTrackPaths = isRootDirectory
+                ? validLooseTrackPaths
+                : validTrackPathsByLibraryPath[dirPath];
+            var libraryId = isRootDirectory ? (Guid?)null : libraryIdsByPath[dirPath];
+            var orderedAudioFiles = audioFiles.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToArray();
 
-            var libraryId = await Persistence.UpsertAudioLibraryAsync(dirPath, libraryTitle, root.Id, root.IsNsfw, cancellationToken);
-            var validTrackPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-            for (var i = 0; i < audioFiles.Count; i++) {
-                var filePath = audioFiles[i];
+            for (var i = 0; i < orderedAudioFiles.Length; i++) {
+                var filePath = orderedAudioFiles[i];
                 var title = Path.GetFileNameWithoutExtension(filePath);
                 validTrackPaths.Add(filePath);
 
@@ -57,7 +88,6 @@ public sealed class ScanAudioJobHandler(
                 }
             }
 
-            await Persistence.RemoveStaleAudioTracksInLibraryAsync(libraryId, validTrackPaths, cancellationToken);
             processedDirs++;
 
             if (processedDirs % 10 == 0) {
@@ -66,6 +96,83 @@ public sealed class ScanAudioJobHandler(
             }
         }
 
-        await Persistence.RemoveStaleAudioLibrariesInRootAsync(root.Id, validLibraryPaths, cancellationToken);
+        await Persistence.RemoveStaleLooseAudioTracksInRootAsync(root.Id, validLooseTrackPaths, cancellationToken);
+
+        foreach (var libraryPath in validLibraryPaths) {
+            await Persistence.RemoveStaleAudioTracksInLibraryAsync(
+                libraryIdsByPath[libraryPath],
+                validTrackPathsByLibraryPath[libraryPath],
+                cancellationToken);
+        }
+
+        await Persistence.RemoveStaleAudioLibrariesInRootAsync(root.Id, validLibraryPaths.ToHashSet(StringComparer.OrdinalIgnoreCase), cancellationToken);
+    }
+
+    private static bool SamePath(string left, string right) =>
+        string.Equals(NormalizePath(left), NormalizePath(right), StringComparison.OrdinalIgnoreCase);
+
+    private static string NormalizePath(string path) =>
+        Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+    private static IReadOnlyList<string> ContainerPathsFor(string rootPath, IEnumerable<string> directoryPaths) {
+        var containers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var directoryPath in directoryPaths) {
+            if (!IsBelowRoot(rootPath, directoryPath)) {
+                continue;
+            }
+
+            var current = NormalizePath(directoryPath);
+            while (!SamePath(current, rootPath)) {
+                containers.Add(current);
+                var parent = Path.GetDirectoryName(current);
+                if (parent is null) {
+                    break;
+                }
+
+                current = parent;
+            }
+        }
+
+        return containers
+            .OrderBy(path => PathDepth(rootPath, path))
+            .ThenBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static bool IsBelowRoot(string rootPath, string path) {
+        if (SamePath(rootPath, path)) {
+            return false;
+        }
+
+        var relative = Path.GetRelativePath(rootPath, path);
+        return !relative.Equals("..", StringComparison.Ordinal)
+            && !relative.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+            && !relative.StartsWith($"..{Path.AltDirectorySeparatorChar}", StringComparison.Ordinal)
+            && !Path.IsPathRooted(relative);
+    }
+
+    private static int PathDepth(string rootPath, string path) {
+        var relative = Path.GetRelativePath(rootPath, path);
+        return relative == "."
+            ? 0
+            : relative.Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries).Length;
+    }
+
+    private static Dictionary<string, int> SiblingSortOrders(IReadOnlyList<string> folderPaths) {
+        var sortOrders = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var siblings in folderPaths.GroupBy(path => Path.GetDirectoryName(path) ?? string.Empty, StringComparer.OrdinalIgnoreCase)) {
+            var ordered = siblings
+                .OrderBy(path => Path.GetFileName(path), StringComparer.OrdinalIgnoreCase)
+                .ThenBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            for (var i = 0; i < ordered.Length; i++) {
+                sortOrders[ordered[i]] = i;
+            }
+        }
+
+        return sortOrders;
     }
 }
