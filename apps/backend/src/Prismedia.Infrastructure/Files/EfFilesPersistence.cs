@@ -99,21 +99,27 @@ public sealed class EfFilesPersistence(PrismediaDbContext db) : IFilesPersistenc
         var candidates = absolutePaths
             .Select(path => Path.TrimEndingDirectorySeparator(Path.GetFullPath(path)))
             .ToArray();
-        var nsfwSourcePaths = await db.EntityFiles.AsNoTracking()
+        var sourceVisibilities = await db.EntityFiles.AsNoTracking()
             .Where(file => file.Role == EntityFileRole.Source)
             .Join(
-                db.EntityFlags.AsNoTracking().Where(flag => flag.IsNsfw),
+                db.Entities.AsNoTracking().Where(entity => entity.DeletedAt == null),
                 file => file.EntityId,
-                flag => flag.EntityId,
-                (file, _) => file.Path)
+                entity => entity.Id,
+                (file, entity) => new {
+                    file.Path,
+                    IsNsfw = db.EntityFlags.Any(flag => flag.EntityId == entity.Id && flag.IsNsfw)
+                })
             .ToArrayAsync(cancellationToken);
-        if (nsfwSourcePaths.Length == 0) {
+        if (sourceVisibilities.Length == 0) {
             return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         }
 
         var hidden = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var candidate in candidates) {
-            if (nsfwSourcePaths.Any(sourcePath => PathsOverlap(candidate, sourcePath))) {
+            var associatedSources = sourceVisibilities
+                .Where(source => PathsOverlap(candidate, source.Path))
+                .ToArray();
+            if (associatedSources.Length > 0 && associatedSources.All(source => source.IsNsfw)) {
                 hidden.Add(candidate);
             }
         }
@@ -169,6 +175,7 @@ public sealed class EfFilesPersistence(PrismediaDbContext db) : IFilesPersistenc
         var candidate = Path.TrimEndingDirectorySeparator(Path.GetFullPath(candidatePath));
         var source = Path.TrimEndingDirectorySeparator(Path.GetFullPath(sourcePath));
         return string.Equals(candidate, source, StringComparison.OrdinalIgnoreCase) ||
-            candidate.StartsWith(source + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+            candidate.StartsWith(source + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
+            source.StartsWith(candidate + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
     }
 }
