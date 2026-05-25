@@ -48,6 +48,30 @@ public sealed class FileDiscoveryServiceTests : IDisposable {
         Assert.Equal([Path.Combine(_root.FullName, "Included", "keep.flac")], groups.Single().Value);
     }
 
+    [Fact]
+    public async Task DiscoverFilesByDirectoryTreatsAnimatedGalleryMediaAsImages() {
+        var galleryPath = Path.Combine(_root.FullName, "Gallery", "A secondGallery");
+        Directory.CreateDirectory(galleryPath);
+        await File.WriteAllTextAsync(Path.Combine(galleryPath, "CMAF_1080.mp4"), "clip");
+        await File.WriteAllTextAsync(Path.Combine(galleryPath, "still.png"), "still");
+        var service = new FileDiscoveryService();
+
+        var groups = await service.DiscoverFilesByDirectoryAsync(
+            _root.FullName,
+            SupportedExtensions.Image,
+            recursive: true,
+            excludedPaths: new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+            CancellationToken.None);
+
+        Assert.Equal([galleryPath], groups.Keys.ToArray());
+        Assert.Equal(
+            [
+                Path.Combine(galleryPath, "CMAF_1080.mp4"),
+                Path.Combine(galleryPath, "still.png")
+            ],
+            groups[galleryPath]);
+    }
+
     public void Dispose() {
         if (_root.Exists) {
             _root.Delete(recursive: true);

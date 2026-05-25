@@ -12,7 +12,9 @@ public static class SupportedExtensions {
     public static readonly IReadOnlySet<string> Image = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif", ".heic", ".avif",
-        ".svg", ".ico", ".tga", ".psd"
+        ".svg", ".ico", ".tga", ".psd",
+        // Gallery items can be animated image-like clips commonly used on the web.
+        ".webm", ".mp4", ".m4v", ".mkv", ".mov", ".avi", ".wmv", ".flv"
     };
 
     public static readonly IReadOnlySet<string> Audio = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
