@@ -228,33 +228,35 @@
         </div>
       {/if}
 
-      <div class="section-label">Properties</div>
-      <div class="properties-row" class:has-entity={Boolean(heroCard)}>
-        {#if heroCard}
-          <div class="entity-hero" aria-label="Associated entity">
-            <EntityThumbnail card={heroCard} linkable selectable={false} titleSize="compact" />
-          </div>
-        {/if}
+      <section class="properties-card" aria-labelledby="file-properties-heading">
+        <div class="section-label" id="file-properties-heading">Properties</div>
+        <div class="properties-row" class:has-entity={Boolean(heroCard)}>
+          {#if heroCard}
+            <div class="entity-hero" aria-label="Associated entity">
+              <EntityThumbnail card={heroCard} linkable selectable={false} titleSize="compact" />
+            </div>
+          {/if}
 
-        <div class="meta-grid">
-          {#if isDirectory}
-            {#if detail.directoryTotalSizeBytes != null}
-              <div><span>Total size</span><strong>{formatBytes(detail.directoryTotalSizeBytes)}</strong></div>
+          <div class="meta-grid">
+            {#if isDirectory}
+              {#if detail.directoryTotalSizeBytes != null}
+                <div><span>Total size</span><strong>{formatBytes(detail.directoryTotalSizeBytes)}</strong></div>
+              {/if}
+              {#if detail.directoryFileCount != null}
+                <div><span>Files</span><strong>{detail.directoryFileCount.toLocaleString()}</strong></div>
+              {/if}
+            {:else}
+              <div><span>Size</span><strong>{formatBytes(entry.sizeBytes)}</strong></div>
             {/if}
-            {#if detail.directoryFileCount != null}
-              <div><span>Files</span><strong>{detail.directoryFileCount.toLocaleString()}</strong></div>
+            <div><span>Kind</span><strong>{entry.kind}</strong></div>
+            <div><span>Modified</span><strong>{formatDate(entry.modifiedAt)}</strong></div>
+            <div><span>Created</span><strong>{formatDate(detail.createdAt)}</strong></div>
+            {#if entry.mimeType}
+              <div><span>MIME</span><strong>{entry.mimeType}</strong></div>
             {/if}
-          {:else}
-            <div><span>Size</span><strong>{formatBytes(entry.sizeBytes)}</strong></div>
-          {/if}
-          <div><span>Kind</span><strong>{entry.kind}</strong></div>
-          <div><span>Modified</span><strong>{formatDate(entry.modifiedAt)}</strong></div>
-          <div><span>Created</span><strong>{formatDate(detail.createdAt)}</strong></div>
-          {#if entry.mimeType}
-            <div><span>MIME</span><strong>{entry.mimeType}</strong></div>
-          {/if}
+          </div>
         </div>
-      </div>
+      </section>
 
       {#if linkedCards.length > 0}
         <div class="section-label">Linked entities</div>
@@ -402,6 +404,20 @@
     padding-top: 0.25rem;
   }
 
+  .properties-card {
+    display: grid;
+    gap: 0.75rem;
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface-1);
+    padding: 0.75rem;
+    box-shadow: var(--shadow-well);
+  }
+
+  .properties-card .section-label {
+    padding-top: 0;
+  }
+
   .properties-row {
     display: grid;
     gap: 0.65rem;
@@ -411,8 +427,7 @@
   .meta-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    border: 1px solid var(--color-border-subtle);
-    background: var(--color-surface-1);
+    background: transparent;
   }
 
   .meta-grid span {
