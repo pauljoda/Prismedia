@@ -18,7 +18,6 @@ public sealed class CapabilityPosition(IEnumerable<CapabilityPosition.Item>? ite
     /// <param name="value">Numeric position value.</param>
     /// <param name="label">Optional display label.</param>
     public void Set(string code, int value, string? label = null) {
-        RemoveItems(item => string.Equals(item.Code, code, StringComparison.Ordinal));
-        AddItem(new Item(code, value, label));
+        Upsert(item => string.Equals(item.Code, code, StringComparison.Ordinal), new Item(code, value, label));
     }
 }

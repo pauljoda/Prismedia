@@ -16,7 +16,6 @@ public sealed class CapabilityStats(IEnumerable<CapabilityStats.Item>? items = n
     /// <param name="code">Stable statistic code.</param>
     /// <param name="value">Non-negative statistic value.</param>
     public void Set(string code, int value) {
-        RemoveItems(item => string.Equals(item.Code, code, StringComparison.Ordinal));
-        AddItem(new Item(code, Math.Max(0, value)));
+        Upsert(item => string.Equals(item.Code, code, StringComparison.Ordinal), new Item(code, Math.Max(0, value)));
     }
 }

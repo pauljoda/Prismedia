@@ -35,6 +35,14 @@ public abstract class CollectionCapability<TItem> : EntityCapability {
         return _items.RemoveAll(match);
     }
 
+    /// <summary>Replaces the item matching the predicate with a new value, or appends if no match exists.</summary>
+    /// <param name="match">Predicate identifying the item to replace.</param>
+    /// <param name="replacement">New item to insert.</param>
+    protected void Upsert(Predicate<TItem> match, TItem replacement) {
+        RemoveItems(match);
+        AddItem(replacement);
+    }
+
     /// <summary>Replaces the entire collection with the supplied items.</summary>
     /// <param name="items">Replacement items.</param>
     protected void ReplaceAll(IEnumerable<TItem> items) {

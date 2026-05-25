@@ -13,7 +13,6 @@ public sealed class CapabilityDates(IEnumerable<EntityDate>? items = null)
     /// <param name="sortableValue">Optional normalized sortable date.</param>
     /// <param name="precision">Optional precision code.</param>
     public void Set(string code, string value, DateOnly? sortableValue = null, string? precision = null) {
-        RemoveItems(item => string.Equals(item.Code, code, StringComparison.Ordinal));
-        AddItem(new EntityDate(code, value, sortableValue, precision));
+        Upsert(item => string.Equals(item.Code, code, StringComparison.Ordinal), new EntityDate(code, value, sortableValue, precision));
     }
 }

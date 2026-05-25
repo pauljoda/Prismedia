@@ -20,7 +20,6 @@ public sealed class CapabilityFingerprints(IEnumerable<CapabilityFingerprints.It
     /// <param name="algorithm">Hash algorithm.</param>
     /// <param name="value">Hash or fingerprint value.</param>
     public void Set(FingerprintAlgorithm algorithm, string value) {
-        RemoveItems(item => item.Algorithm == algorithm);
-        AddItem(new Item(algorithm, value));
+        Upsert(item => item.Algorithm == algorithm, new Item(algorithm, value));
     }
 }
