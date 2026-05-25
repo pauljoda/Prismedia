@@ -446,7 +446,7 @@ public sealed class LibraryScanPersistenceService(PrismediaDbContext db) : ILibr
             .Select(gd => gd.EntityId)
             .ToListAsync(cancellationToken);
 
-        return await RemoveStaleEntitiesBySourcePath(galleryIds, validFolderPaths, cancellationToken);
+        return await RemoveStaleContainerEntitiesBySourcePath(galleryIds, validFolderPaths, cancellationToken);
     }
 
     public async Task<int> RemoveStaleLooseAudioTracksInRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) {
@@ -469,7 +469,7 @@ public sealed class LibraryScanPersistenceService(PrismediaDbContext db) : ILibr
             .Select(ald => ald.EntityId)
             .ToListAsync(cancellationToken);
 
-        return await RemoveStaleEntitiesBySourcePath(libraryIds, validFolderPaths, cancellationToken);
+        return await RemoveStaleContainerEntitiesBySourcePath(libraryIds, validFolderPaths, cancellationToken);
     }
 
     public async Task<int> RemoveStaleBookVolumesAsync(Guid bookEntityId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken) {
@@ -1254,20 +1254,79 @@ public sealed class LibraryScanPersistenceService(PrismediaDbContext db) : ILibr
         List<Guid> candidateIds, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) {
         if (candidateIds.Count == 0) return 0;
 
+        var staleIds = await GetStaleEntityIdsBySourcePathAsync(candidateIds, validPaths, cancellationToken);
+        return await RemoveEntitiesByIdAsync(staleIds, cancellationToken);
+    }
+
+    private async Task<int> RemoveStaleContainerEntitiesBySourcePath(
+        List<Guid> candidateIds, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) {
+        if (candidateIds.Count == 0) return 0;
+
+        var staleIds = await GetStaleEntityIdsBySourcePathAsync(candidateIds, validPaths, cancellationToken);
+        if (staleIds.Count == 0) return 0;
+
+        var idsToRemove = await ExpandContainerSubtreeIdsAsync(staleIds, validPaths, cancellationToken);
+        return await RemoveEntitiesByIdAsync(idsToRemove, cancellationToken);
+    }
+
+    private async Task<List<Guid>> GetStaleEntityIdsBySourcePathAsync(
+        List<Guid> candidateIds, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) {
         var sourcePaths = await db.EntityFiles.AsNoTracking()
             .Where(f => candidateIds.Contains(f.EntityId) && f.Role == EntityFileRole.Source)
             .Select(f => new { f.EntityId, f.Path })
             .ToListAsync(cancellationToken);
 
-        var staleIds = sourcePaths
+        return sourcePaths
             .Where(sp => !validPaths.Contains(sp.Path))
             .Select(sp => sp.EntityId)
+            .Distinct()
             .ToList();
+    }
 
-        if (staleIds.Count == 0) return 0;
+    private async Task<List<Guid>> ExpandContainerSubtreeIdsAsync(
+        List<Guid> staleContainerIds, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) {
+        var allEntityParents = await db.Entities.AsNoTracking()
+            .Select(entity => new { entity.Id, entity.ParentEntityId })
+            .ToListAsync(cancellationToken);
+        var childrenByParentId = allEntityParents
+            .Where(entity => entity.ParentEntityId is not null)
+            .GroupBy(entity => entity.ParentEntityId!.Value)
+            .ToDictionary(group => group.Key, group => group.Select(entity => entity.Id).ToArray());
+
+        var validSourceEntityIds = await db.EntityFiles.AsNoTracking()
+            .Where(file => file.Role == EntityFileRole.Source && validPaths.Contains(file.Path))
+            .Select(file => file.EntityId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        var validSourceIds = validSourceEntityIds.ToHashSet();
+
+        var idsToRemove = staleContainerIds.ToHashSet();
+        var pending = new Queue<Guid>(staleContainerIds);
+
+        while (pending.Count > 0) {
+            var parentId = pending.Dequeue();
+            if (!childrenByParentId.TryGetValue(parentId, out var childIds)) {
+                continue;
+            }
+
+            foreach (var childId in childIds) {
+                if (validSourceIds.Contains(childId) || !idsToRemove.Add(childId)) {
+                    continue;
+                }
+
+                pending.Enqueue(childId);
+            }
+        }
+
+        return idsToRemove.ToList();
+    }
+
+    private async Task<int> RemoveEntitiesByIdAsync(
+        List<Guid> idsToRemove, CancellationToken cancellationToken) {
+        if (idsToRemove.Count == 0) return 0;
 
         var entitiesToRemove = await db.Entities
-            .Where(e => staleIds.Contains(e.Id))
+            .Where(e => idsToRemove.Contains(e.Id))
             .ToListAsync(cancellationToken);
 
         db.Entities.RemoveRange(entitiesToRemove);

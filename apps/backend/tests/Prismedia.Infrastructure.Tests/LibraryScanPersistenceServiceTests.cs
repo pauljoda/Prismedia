@@ -490,6 +490,221 @@ public sealed class LibraryScanPersistenceServiceTests {
     }
 
     [Fact]
+    public async Task RemoveStaleGalleriesInRootRemovesStaleFolderSubtree() {
+        await using var db = CreateContext();
+        ILibraryScanPersistence service = new LibraryScanPersistenceService(db);
+        var rootId = Guid.Parse("77777777-7777-7777-7777-777777777777");
+
+        var staleGalleryId = await service.UpsertGalleryAsync(
+            "/media/images/Set",
+            "Set",
+            rootId,
+            parentGalleryEntityId: null,
+            sortOrder: 0,
+            isNsfw: false,
+            CancellationToken.None);
+        var staleImageId = await service.UpsertImageAsync(
+            "/media/images/Set/stale.jpg",
+            "stale",
+            staleGalleryId,
+            sizeBytes: 12,
+            sortOrder: 0,
+            isNsfw: false,
+            CancellationToken.None);
+        var nestedGalleryId = await service.UpsertGalleryAsync(
+            "/media/images/Set/Chapter 01",
+            "Chapter 01",
+            rootId,
+            staleGalleryId,
+            sortOrder: 1,
+            isNsfw: false,
+            CancellationToken.None);
+        var nestedImageId = await service.UpsertImageAsync(
+            "/media/images/Set/Chapter 01/nested.jpg",
+            "nested",
+            nestedGalleryId,
+            sizeBytes: 34,
+            sortOrder: 0,
+            isNsfw: false,
+            CancellationToken.None);
+        var validGalleryId = await service.UpsertGalleryAsync(
+            "/media/images/Keep",
+            "Keep",
+            rootId,
+            parentGalleryEntityId: null,
+            sortOrder: 1,
+            isNsfw: false,
+            CancellationToken.None);
+        var validImageId = await service.UpsertImageAsync(
+            "/media/images/Keep/valid.jpg",
+            "valid",
+            validGalleryId,
+            sizeBytes: 56,
+            sortOrder: 0,
+            isNsfw: false,
+            CancellationToken.None);
+
+        var removed = await service.RemoveStaleGalleriesInRootAsync(
+            rootId,
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "/media/images/Keep" },
+            CancellationToken.None);
+
+        Assert.Equal(4, removed);
+        Assert.False(await db.Entities.AnyAsync(entity => entity.Id == staleGalleryId));
+        Assert.False(await db.Entities.AnyAsync(entity => entity.Id == staleImageId));
+        Assert.False(await db.Entities.AnyAsync(entity => entity.Id == nestedGalleryId));
+        Assert.False(await db.Entities.AnyAsync(entity => entity.Id == nestedImageId));
+        Assert.True(await db.Entities.AnyAsync(entity => entity.Id == validGalleryId));
+        Assert.True(await db.Entities.AnyAsync(entity => entity.Id == validImageId));
+    }
+
+    [Fact]
+    public async Task RemoveStaleAudioLibrariesInRootRemovesStaleFolderSubtree() {
+        await using var db = CreateContext();
+        ILibraryScanPersistence service = new LibraryScanPersistenceService(db);
+        var rootId = Guid.Parse("88888888-8888-8888-8888-888888888888");
+
+        var staleLibraryId = await service.UpsertAudioLibraryAsync(
+            "/media/audio/Album",
+            "Album",
+            rootId,
+            parentAudioLibraryEntityId: null,
+            sortOrder: 0,
+            isNsfw: false,
+            CancellationToken.None);
+        var staleTrackId = await service.UpsertAudioTrackAsync(
+            "/media/audio/Album/stale.flac",
+            "stale",
+            staleLibraryId,
+            sortOrder: 0,
+            isNsfw: false,
+            CancellationToken.None);
+        var nestedLibraryId = await service.UpsertAudioLibraryAsync(
+            "/media/audio/Album/Disc 02",
+            "Disc 02",
+            rootId,
+            staleLibraryId,
+            sortOrder: 1,
+            isNsfw: false,
+            CancellationToken.None);
+        var nestedTrackId = await service.UpsertAudioTrackAsync(
+            "/media/audio/Album/Disc 02/nested.flac",
+            "nested",
+            nestedLibraryId,
+            sortOrder: 0,
+            isNsfw: false,
+            CancellationToken.None);
+        var validLibraryId = await service.UpsertAudioLibraryAsync(
+            "/media/audio/Keep",
+            "Keep",
+            rootId,
+            parentAudioLibraryEntityId: null,
+            sortOrder: 1,
+            isNsfw: false,
+            CancellationToken.None);
+        var validTrackId = await service.UpsertAudioTrackAsync(
+            "/media/audio/Keep/valid.flac",
+            "valid",
+            validLibraryId,
+            sortOrder: 0,
+            isNsfw: false,
+            CancellationToken.None);
+
+        var removed = await service.RemoveStaleAudioLibrariesInRootAsync(
+            rootId,
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "/media/audio/Keep" },
+            CancellationToken.None);
+
+        Assert.Equal(4, removed);
+        Assert.False(await db.Entities.AnyAsync(entity => entity.Id == staleLibraryId));
+        Assert.False(await db.Entities.AnyAsync(entity => entity.Id == staleTrackId));
+        Assert.False(await db.Entities.AnyAsync(entity => entity.Id == nestedLibraryId));
+        Assert.False(await db.Entities.AnyAsync(entity => entity.Id == nestedTrackId));
+        Assert.True(await db.Entities.AnyAsync(entity => entity.Id == validLibraryId));
+        Assert.True(await db.Entities.AnyAsync(entity => entity.Id == validTrackId));
+    }
+
+    [Fact]
+    public async Task RemoveStaleGalleriesInRootRemovesOldRootGalleryWithMissingChild() {
+        await using var db = CreateContext();
+        ILibraryScanPersistence service = new LibraryScanPersistenceService(db);
+        var rootId = Guid.Parse("99999999-9999-9999-9999-999999999999");
+        var oldRootGalleryId = await service.UpsertGalleryAsync(
+            "/media/images",
+            "images",
+            rootId,
+            parentGalleryEntityId: null,
+            sortOrder: 0,
+            isNsfw: false,
+            CancellationToken.None);
+        var missingImageId = await service.UpsertImageAsync(
+            "/media/images/missing.jpg",
+            "missing",
+            oldRootGalleryId,
+            sizeBytes: 12,
+            sortOrder: 0,
+            isNsfw: false,
+            CancellationToken.None);
+        var validLooseImageId = await service.UpsertImageAsync(
+            "/media/images/valid.jpg",
+            "valid",
+            galleryEntityId: null,
+            sizeBytes: 34,
+            sortOrder: 0,
+            isNsfw: false,
+            CancellationToken.None);
+
+        var removed = await service.RemoveStaleGalleriesInRootAsync(
+            rootId,
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+            CancellationToken.None);
+
+        Assert.Equal(2, removed);
+        Assert.False(await db.Entities.AnyAsync(entity => entity.Id == oldRootGalleryId));
+        Assert.False(await db.Entities.AnyAsync(entity => entity.Id == missingImageId));
+        Assert.True(await db.Entities.AnyAsync(entity => entity.Id == validLooseImageId));
+    }
+
+    [Fact]
+    public async Task RemoveStaleAudioLibrariesInRootRemovesOldRootLibraryWithMissingChild() {
+        await using var db = CreateContext();
+        ILibraryScanPersistence service = new LibraryScanPersistenceService(db);
+        var rootId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        var oldRootLibraryId = await service.UpsertAudioLibraryAsync(
+            "/media/audio",
+            "audio",
+            rootId,
+            parentAudioLibraryEntityId: null,
+            sortOrder: 0,
+            isNsfw: false,
+            CancellationToken.None);
+        var missingTrackId = await service.UpsertAudioTrackAsync(
+            "/media/audio/missing.flac",
+            "missing",
+            oldRootLibraryId,
+            sortOrder: 0,
+            isNsfw: false,
+            CancellationToken.None);
+        var validLooseTrackId = await service.UpsertAudioTrackAsync(
+            "/media/audio/valid.flac",
+            "valid",
+            audioLibraryId: null,
+            sortOrder: 0,
+            isNsfw: false,
+            CancellationToken.None);
+
+        var removed = await service.RemoveStaleAudioLibrariesInRootAsync(
+            rootId,
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+            CancellationToken.None);
+
+        Assert.Equal(2, removed);
+        Assert.False(await db.Entities.AnyAsync(entity => entity.Id == oldRootLibraryId));
+        Assert.False(await db.Entities.AnyAsync(entity => entity.Id == missingTrackId));
+        Assert.True(await db.Entities.AnyAsync(entity => entity.Id == validLooseTrackId));
+    }
+
+    [Fact]
     public async Task UpsertBookChapterReusesChapterWhenArchivePathAlsoBelongsToBook() {
         await using var db = CreateContext();
         var bookId = Guid.Parse("11111111-1111-1111-1111-111111111111");
