@@ -56,4 +56,18 @@ describe("Sidebar", () => {
 
     expect(container.querySelector(".brand-mark-backdrop")).toHaveClass("brand-mark-backdrop-nsfw");
   });
+
+  it("does not expose development routes in navigation", () => {
+    const { container } = render(Sidebar, {
+      props: {
+        collapsed: false,
+        onToggle: vi.fn(),
+      },
+    });
+
+    expect(container).not.toHaveTextContent("Develop");
+    expect(container).not.toHaveTextContent("Dev Tools");
+    expect(container.querySelector('a[href="/dev"]')).toBeNull();
+    expect(container.querySelector('a[href="/design-language"]')).toBeNull();
+  });
 });

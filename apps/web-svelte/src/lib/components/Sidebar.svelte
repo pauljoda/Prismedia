@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { BookOpen, PanelLeftClose, PanelLeftOpen, Wrench } from "@lucide/svelte";
+  import { BookOpen, PanelLeftClose, PanelLeftOpen } from "@lucide/svelte";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
   import { cn } from "@prismedia/ui-svelte";
@@ -9,7 +9,6 @@
   import ChangelogDialog from "./ChangelogDialog.svelte";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import { APP_VERSION, fetchReleaseUpdateStatus, type ReleaseUpdateStatus } from "$lib/version";
-  import { shouldExposeDevRoutes } from "$lib/dev-routes";
 
   interface Props {
     collapsed: boolean;
@@ -25,7 +24,6 @@
   const brandLogoNsfw = $derived(nsfw.mode === "show");
   const updateAvailable = $derived(releaseStatus?.updateAvailable === true);
   const pathname = $derived(page.url.pathname);
-  const showDevTools = shouldExposeDevRoutes();
   const docsHref = "https://pauljoda.github.io/Prismedia/docs/users/quick-start";
 
   function isActive(href: string): boolean {
@@ -94,7 +92,7 @@
     >
       <button
         onclick={onToggle}
-        class="flex h-8 w-8 items-center justify-center text-text-muted hover:text-text-primary hover:bg-surface-2 transition-colors duration-fast"
+        class="flex h-8 w-8 items-center justify-center rounded-sm text-text-muted hover:text-text-primary hover:bg-surface-2 transition-colors duration-fast"
         aria-label={collapsed ? "Pin sidebar open" : "Collapse sidebar"}
       >
         {#if collapsed}
@@ -132,7 +130,7 @@
               <a
                 href={resolve(item.href as "/")}
                 class={cn(
-                  "group relative flex items-center px-2.5 py-2 text-sm transition-colors duration-fast whitespace-nowrap",
+                  "group relative flex items-center rounded-sm px-2.5 py-2 text-sm transition-colors duration-fast whitespace-nowrap",
                   active
                     ? "bg-accent-950 text-glow-accent"
                     : "text-text-muted hover:text-text-primary hover:bg-surface-2",
@@ -140,7 +138,7 @@
                 title={!isExpanded ? item.label : undefined}
               >
                 {#if active}
-                  <span class="absolute left-0 top-1.5 bottom-1.5 w-[3px] bg-accent-500 shadow-[var(--shadow-glow-accent)]"></span>
+                  <span class="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-full bg-accent-500 shadow-[var(--shadow-glow-accent)]"></span>
                 {/if}
                 <div class="w-5 flex items-center justify-center shrink-0">
                   {#if Icon}
@@ -172,28 +170,6 @@
 
   <!-- Footer actions -->
   <div class="shrink-0 space-y-1 border-t border-border-subtle px-3 py-3">
-    {#if showDevTools}
-      <a
-        href={resolve("/dev")}
-        aria-label="Open dev tools"
-        title={!isExpanded ? "Dev Tools" : undefined}
-        class="group flex h-8 items-center overflow-hidden whitespace-nowrap text-text-muted transition-colors duration-fast hover:bg-surface-2 hover:text-text-primary"
-      >
-        <div class="flex w-8 shrink-0 items-center justify-center">
-          <Wrench class="h-4 w-4 transition-colors group-hover:text-text-accent" />
-        </div>
-        <div
-          class={cn(
-            "overflow-hidden transition-[max-width,opacity] duration-moderate",
-            isExpanded ? "max-w-[160px] opacity-100 ml-1" : "max-w-0 opacity-0 ml-0",
-          )}
-        >
-          <span class="text-mono-sm text-text-disabled transition-colors group-hover:text-text-accent">
-            Dev Tools
-          </span>
-        </div>
-      </a>
-    {/if}
     <ChangelogDialog version={APP_VERSION}>
       <div
         class="group flex h-8 items-center overflow-hidden whitespace-nowrap text-text-muted transition-colors duration-fast hover:bg-surface-2 hover:text-text-primary"
