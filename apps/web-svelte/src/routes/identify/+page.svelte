@@ -7,7 +7,6 @@
     Check,
     Home,
     Loader2,
-    RefreshCw,
     ScanSearch,
     X,
   } from "@lucide/svelte";
@@ -65,18 +64,6 @@
         </p>
       </div>
     </div>
-    <button
-      type="button"
-      onclick={() => void store.loadInitial()}
-      class="flex h-9 w-9 items-center justify-center rounded-xs border border-border-default bg-surface-2 text-text-muted transition-colors hover:bg-surface-3 hover:text-text-primary"
-      aria-label="Refresh"
-    >
-      {#if store.loading}
-        <Loader2 class="h-4 w-4 animate-spin" />
-      {:else}
-        <RefreshCw class="h-4 w-4" />
-      {/if}
-    </button>
   </div>
 
   <!-- ── Tab strip (dashboard + per-kind tabs) ── -->
