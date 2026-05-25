@@ -49,7 +49,7 @@ export const reviewFieldLabels: Record<string, string> = {
   credits: "Credits",
   dates: "Dates",
   stats: "Stats",
-  positions: "Positions",
+  positions: "Sort order",
   classification: "Classification",
   images: "Artwork",
 };
@@ -206,7 +206,7 @@ export function proposalFieldValue(result: EntityMetadataProposal, field: string
   ).join(", ");
   if (field === "dates") return entries(patch.dates).join(", ");
   if (field === "stats") return entries(patch.stats).join(", ");
-  if (field === "positions") return entries(patch.positions).join(", ");
+  if (field === "positions") return reviewPositionValue(patch.positions, result.targetKind);
   if (field === "classification") return patch.classification ?? "";
   if (field === "images") return groupReviewImages(result).map((group) => `${group.kind} (${group.images.length})`).join(", ");
   return "";
@@ -243,7 +243,10 @@ export function currentFieldValueForReview(
   }
   if (field === "positions") {
     const positions = getCapability(capabilities, CAPABILITY_KIND.position);
-    return (positions?.items ?? []).map((item) => `${item.code}: ${item.value}`).join(", ");
+    return reviewPositionValue(
+      Object.fromEntries((positions?.items ?? []).map((item) => [item.code, item.value])),
+      detail.kind ?? entity.kind,
+    );
   }
   if (field === "classification") {
     const classification = getCapability(capabilities, CAPABILITY_KIND.classification);
@@ -257,6 +260,15 @@ export function currentFieldValueForReview(
       .join(", ");
   }
   return "";
+}
+
+export function reviewPositionValue(
+  positions: Record<string, number | string>,
+  targetKind?: string | null,
+): string {
+  return Object.entries(positions)
+    .map(([code, value]) => reviewPositionEntry(code, value, targetKind))
+    .join(", ");
 }
 
 export function relationshipTitlesForDetail(detail: Pick<EntityCard, "relationships"> | null | undefined, kind: string): string[] {
@@ -459,6 +471,80 @@ function tmdbPreviewSize(kind: string, targetKind?: string | null): string {
 
 function entries(record: Record<string, string | number>): string[] {
   return Object.entries(record).map(([key, value]) => `${key}: ${value}`);
+}
+
+function reviewPositionEntry(code: string, value: number | string, targetKind?: string | null): string {
+  const normalized = normalizePositionCodeForReview(code);
+  const scope = structuralPositionScope(targetKind);
+  const label = isSortOrderPosition(normalized, scope)
+    ? "Sort order"
+    : positionCodeLabel(normalized);
+  return `${label}: ${positionValueLabel(normalized, value, scope)}`;
+}
+
+function normalizePositionCodeForReview(code: string): string {
+  const normalized = code
+    .trim()
+    .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
+    .toLowerCase();
+
+  if (normalized === "season-number") return "season";
+  if (normalized === "episode-number") return "episode";
+  if (normalized === "absolute-episode-number") return "absolute-episode";
+  if (normalized === "volume-number") return "volume";
+  if (normalized === "chapter-number") return "chapter";
+  if (normalized === "page-number") return "page";
+  if (normalized === "track-number") return "track";
+  if (normalized === "sort-order") return "sort";
+  return normalized;
+}
+
+function structuralPositionScope(targetKind?: string | null): "season" | "episode" | null {
+  const normalized = targetKind?.toLowerCase() ?? "";
+  if (normalized.includes("season")) return "season";
+  if (normalized.includes("episode") || normalized === "video") return "episode";
+  return null;
+}
+
+function isSortOrderPosition(
+  normalizedCode: string,
+  scope: "season" | "episode" | null,
+): boolean {
+  if (normalizedCode === "sort") return true;
+  if (scope === "season" && normalizedCode === "season") return true;
+  if (scope === "episode" && (normalizedCode === "episode" || normalizedCode === "absolute-episode")) return true;
+  return false;
+}
+
+function positionCodeLabel(normalizedCode: string): string {
+  if (normalizedCode === "season") return "Season";
+  if (normalizedCode === "episode" || normalizedCode === "absolute-episode") return "Episode";
+  if (normalizedCode === "sort") return "Sort order";
+  return normalizedCode
+    .split("-")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function positionValueLabel(
+  normalizedCode: string,
+  value: number | string,
+  scope: "season" | "episode" | null,
+): string {
+  if (normalizedCode === "sort") {
+    if (scope === "season") return `Season ${value}`;
+    if (scope === "episode") return `Episode ${value}`;
+    return String(value);
+  }
+
+  if (normalizedCode === "season") return `Season ${value}`;
+  if (normalizedCode === "episode" || normalizedCode === "absolute-episode") return `Episode ${value}`;
+  if (normalizedCode === "volume") return `Volume ${value}`;
+  if (normalizedCode === "chapter") return `Chapter ${value}`;
+  if (normalizedCode === "page") return `Page ${value}`;
+  if (normalizedCode === "track") return `Track ${value}`;
+  return String(value);
 }
 
 function titlesForRelationship(

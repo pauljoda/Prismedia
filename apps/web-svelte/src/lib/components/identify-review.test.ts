@@ -10,9 +10,11 @@ import {
   findRelationshipImage,
   groupProposalRows,
   isNewRelationshipTitle,
+  proposalFieldValue,
   reviewDiffFieldKeys,
   reviewFieldKeys,
   reviewImagePreviewUrl,
+  reviewPositionValue,
   reviewableImages,
   reviewChildProposals,
   relationshipProposals,
@@ -310,6 +312,17 @@ describe("identify review helpers", () => {
     expect(selection.studio).toBe(true);
     expect(selection.credits).toBe(true);
     expect(selection.images).toBe(true);
+  });
+
+  it("describes season and episode positions as sort-order changes", () => {
+    expect(reviewPositionValue({ seasonNumber: 1 }, "video-season")).toBe("Sort order: Season 1");
+    expect(reviewPositionValue({ episodeNumber: 2 }, "video")).toBe("Sort order: Episode 2");
+    expect(reviewPositionValue({ sortOrder: 3 }, "video-season")).toBe("Sort order: Season 3");
+    expect(reviewPositionValue({ seasonNumber: 1, episodeNumber: 2 }, "video")).toBe("Season: Season 1, Sort order: Episode 2");
+
+    const season = proposal("season-1", "video-season");
+    season.patch.positions = { seasonNumber: 1 };
+    expect(proposalFieldValue(season, "positions")).toBe("Sort order: Season 1");
   });
 
   it("allows studio logo artwork to be reviewed and carried through walked relationship selections", () => {
