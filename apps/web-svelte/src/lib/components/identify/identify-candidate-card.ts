@@ -42,6 +42,12 @@ export function identifyCandidateKey(candidate: EntitySearchCandidate, index: nu
   return `candidate:${slugTitle(candidate.title)}:${candidate.year ?? "unknown"}:${index}`;
 }
 
+function candidateAspectRatio(entityKind: string): EntityThumbnailCard["aspectRatio"] {
+  if (entityKind === "studio") return "wide";
+  if (entityKind === "person") return { width: 4, height: 5 };
+  return "poster";
+}
+
 /** Converts an identify search result into the shared list thumbnail view model. */
 export function identifyCandidateToThumbnailCard(
   candidate: EntitySearchCandidate,
@@ -62,7 +68,7 @@ export function identifyCandidateToThumbnailCard(
   }
 
   return {
-    aspectRatio: "poster",
+    aspectRatio: candidateAspectRatio(entityKind),
     cover: candidate.posterUrl ? { src: candidate.posterUrl, alt: candidate.title } : null,
     entity: {
       id: identifyCandidateKey(candidate, index),

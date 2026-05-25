@@ -70,7 +70,6 @@
   const existingTagTitles = $derived(relationshipTitlesForDetail(currentDetail, "tag"));
   const looseTags = $derived(tags.filter((tag) => !tagRelationshipForTitle(tag)));
   const imageGroups = $derived(groupReviewImages(proposal));
-  const artworkCandidateCount = $derived(imageGroups.reduce((count, group) => count + group.images.length, 0));
   const selectedTagCount = $derived(Object.values(selectedTags).filter(Boolean).length);
   const selectedChildCount = $derived(
     children.filter((child) => store.isReviewProposalSelected(child.proposalId)).length,
@@ -529,61 +528,60 @@
     </IdentifyReviewSection>
   {/if}
 
-  <!-- Artwork -->
-  {#if artworkCandidateCount > 0}
+  <!-- Artwork — one card per kind -->
+  {#each imageGroups as group (group.kind)}
     <IdentifyReviewSection
-      panelId={`artwork-${proposal.proposalId}`}
-      title="Artwork"
-      meta={`${artworkCandidateCount} candidates`}
+      panelId={`artwork-${group.kind}-${proposal.proposalId}`}
+      title={group.kind.charAt(0).toUpperCase() + group.kind.slice(1)}
+      meta={`${group.images.length} candidate${group.images.length === 1 ? "" : "s"}${selectedImages[group.kind] ? " · 1 selected" : ""}`}
       lazy
     >
       {#snippet icon()}
         <Images class="h-3.5 w-3.5 text-text-accent" />
       {/snippet}
-      <div class="identify-artwork-groups p-3.5">
-        {#each imageGroups as group (group.kind)}
-          <div class="identify-artwork-group" data-artwork-kind={group.kind}>
-            <div class="mb-2 flex items-center gap-2">
-              <span class="text-kicker">{group.kind}</span>
-              <span class="font-mono text-[0.62rem] text-text-disabled">{group.images.length}</span>
+      <div
+        class="identify-artwork-grid p-3.5"
+        data-artwork-kind={group.kind}
+      >
+        {#each group.images as image (image.url)}
+          <button
+            type="button"
+            class={cn(
+              "identify-artwork-tile relative overflow-hidden rounded-xs border bg-surface-3 transition-all",
+              selectedImages[group.kind] === image.url
+                ? "border-border-accent-strong shadow-[0_0_16px_rgba(242,194,106,0.2)]"
+                : "border-border-default hover:border-border-accent",
+            )}
+            style="aspect-ratio: {group.kind === 'poster' ? '2/3' : group.kind === 'backdrop' ? '16/9' : '2/1'};"
+            onclick={() => setImageSelected(group.kind, selectedImages[group.kind] === image.url ? null : image.url)}
+          >
+            <img
+              src={reviewImagePreviewUrl(image, proposal.targetKind)}
+              alt=""
+              class="h-full w-full object-cover"
+              loading="lazy"
+              decoding="async"
+              fetchpriority="low"
+              onload={(e) => e.currentTarget.closest('.identify-artwork-tile')?.classList.add('is-loaded')}
+            />
+            {#if selectedImages[group.kind] === image.url}
+              <div class="absolute right-1 top-1">
+                <span class="grid h-4 w-4 place-items-center rounded-xs bg-accent-500 text-[#0b0b0c]">
+                  <Check class="h-2.5 w-2.5" />
+                </span>
+              </div>
+            {/if}
+            <div class="absolute bottom-0 left-0 right-0 flex justify-between bg-black/75 px-1.5 py-1">
+              <span class="font-mono text-[0.58rem] text-phosphor-600">{image.source}</span>
+              {#if image.width && image.height}
+                <span class="font-mono text-[0.58rem] text-text-disabled">{image.width}×{image.height}</span>
+              {/if}
             </div>
-            <div class="identify-artwork-grid">
-              {#each group.images as image (image.url)}
-                <button
-                  type="button"
-                  class={cn(
-                    "identify-artwork-tile relative overflow-hidden rounded-xs border bg-surface-3 transition-all",
-                    selectedImages[group.kind] === image.url
-                      ? "border-border-accent-strong shadow-[0_0_16px_rgba(242,194,106,0.2)]"
-                      : "border-border-default hover:border-border-accent",
-                  )}
-                  style="aspect-ratio: {group.kind === 'poster' ? '2/3' : group.kind === 'backdrop' ? '16/9' : '2/1'};"
-                  onclick={() => setImageSelected(group.kind, selectedImages[group.kind] === image.url ? null : image.url)}
-                >
-                  <img
-                    src={reviewImagePreviewUrl(image, proposal.targetKind)}
-                    alt=""
-                    class="h-full w-full object-cover"
-                    loading="lazy"
-                    decoding="async"
-                    fetchpriority="low"
-                    onload={(e) => e.currentTarget.closest('.identify-artwork-tile')?.classList.add('is-loaded')}
-                  />
-                  {#if selectedImages[group.kind] === image.url}
-                    <div class="absolute right-1 top-1">
-                      <span class="grid h-4 w-4 place-items-center rounded-xs bg-accent-500 text-[#0b0b0c]">
-                        <Check class="h-2.5 w-2.5" />
-                      </span>
-                    </div>
-                  {/if}
-                </button>
-              {/each}
-            </div>
-          </div>
+          </button>
         {/each}
       </div>
     </IdentifyReviewSection>
-  {/if}
+  {/each}
 
   <!-- Children (episodes) -->
   {#if children.length > 0}
@@ -666,56 +664,31 @@
     contain-intrinsic-size: auto 28rem;
   }
 
-  .identify-artwork-groups {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 1rem;
-  }
-
-  .identify-artwork-group {
-    min-width: 0;
-  }
-
   .identify-artwork-grid {
     display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+    gap: 0.625rem;
+  }
+
+  .identify-artwork-grid[data-artwork-kind="poster"] {
     grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
-    gap: 0.5rem;
   }
 
-  .identify-artwork-group[data-artwork-kind="poster"] .identify-artwork-grid {
-    grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  .identify-artwork-grid[data-artwork-kind="backdrop"] {
+    grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
   }
 
-  .identify-artwork-group[data-artwork-kind="backdrop"] .identify-artwork-grid {
-    grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+  .identify-artwork-grid[data-artwork-kind="logo"] {
+    grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
   }
 
-  @media (min-width: 1024px) {
-    .identify-artwork-groups {
-      grid-template-columns: minmax(19rem, 0.85fr) minmax(28rem, 1.35fr);
-      align-items: start;
+  @media (min-width: 768px) {
+    .identify-artwork-grid[data-artwork-kind="poster"] {
+      grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
     }
 
-    .identify-artwork-group[data-artwork-kind="poster"] {
-      grid-column: 1;
-    }
-
-    .identify-artwork-group[data-artwork-kind="backdrop"] {
-      grid-column: 2;
-    }
-
-    .identify-artwork-group:not([data-artwork-kind="poster"]):not([data-artwork-kind="backdrop"]) {
-      grid-column: 1 / -1;
-    }
-  }
-
-  @media (min-width: 1280px) {
-    .identify-artwork-group[data-artwork-kind="poster"] .identify-artwork-grid {
-      grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr));
-    }
-
-    .identify-artwork-group[data-artwork-kind="backdrop"] .identify-artwork-grid {
-      grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
+    .identify-artwork-grid[data-artwork-kind="backdrop"] {
+      grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
     }
   }
 

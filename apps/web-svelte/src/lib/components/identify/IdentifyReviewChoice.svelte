@@ -3,6 +3,7 @@
     ChevronRight,
     Layers,
     Loader2,
+    RefreshCw,
     Search,
     Star,
     X,
@@ -35,8 +36,25 @@
   let searchTitle = $state("");
   let searchYear = $state("");
   let searching = $state(false);
+  let rescanning = $state(false);
   let searchedCandidates = $state<EntitySearchCandidate[] | null>(null);
   const localCandidates = $derived(searchedCandidates ?? candidates);
+
+  async function handleRescan() {
+    if (!defaultProvider || rescanning) return;
+    rescanning = true;
+    store.error = null;
+    try {
+      const result = await store.identifyEntity(entity, defaultProvider.id);
+      if (result?.state === "search") {
+        searchedCandidates = result.candidates;
+      }
+    } catch (err) {
+      store.error = err instanceof Error ? err.message : "Rescan failed";
+    } finally {
+      rescanning = false;
+    }
+  }
 
   async function handleSearch() {
     if (!defaultProvider || !searchTitle.trim()) return;
@@ -109,6 +127,16 @@
       <Search class="h-3.5 w-3.5 text-text-accent" />
       <span class="text-kicker text-text-accent">Query</span>
       <span class="font-mono text-[0.7rem] text-text-muted">refine and re-search</span>
+      <div class="flex-1"></div>
+      <button
+        type="button"
+        class="inline-flex h-7 items-center gap-1.5 rounded-xs border border-border-default bg-surface-2 px-2.5 text-[0.72rem] text-text-muted transition-colors hover:bg-surface-3 hover:text-text-primary disabled:opacity-40"
+        disabled={rescanning}
+        onclick={handleRescan}
+      >
+        <RefreshCw class={cn("h-3 w-3", rescanning && "animate-spin")} />
+        Rescan
+      </button>
     </header>
     <div class="flex flex-wrap items-center gap-2 p-3.5">
       <span class="font-mono text-[0.72rem] text-text-muted">title:</span>
@@ -166,9 +194,13 @@
     <div class="flex flex-col gap-2.5 p-3.5">
       {#each localCandidates as candidate, i (identifyCandidateKey(candidate, i))}
         {@const card = identifyCandidateToThumbnailCard(candidate, entity.kind, i)}
+        {@const hasCover = Boolean(candidate.posterUrl)}
         <div
           class={cn(
-            "identify-candidate-card relative grid cursor-pointer grid-cols-[6.5rem_minmax(0,1fr)_auto] gap-3 rounded-sm border border-border-subtle bg-surface-1 p-2.5 text-left shadow-well transition-all hover:border-border-accent hover:bg-surface-2 hover:shadow-[0_0_20px_rgba(242,194,106,0.08)] focus-visible:border-border-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent-500/60 sm:grid-cols-[8rem_minmax(0,1fr)_auto]",
+            "identify-candidate-card relative grid cursor-pointer gap-3 rounded-sm border border-border-subtle bg-surface-1 p-2.5 text-left shadow-well transition-all hover:border-border-accent hover:bg-surface-2 hover:shadow-[0_0_20px_rgba(242,194,106,0.08)] focus-visible:border-border-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent-500/60",
+            hasCover
+              ? "grid-cols-[6.5rem_minmax(0,1fr)_auto] sm:grid-cols-[8rem_minmax(0,1fr)_auto]"
+              : "grid-cols-[minmax(0,1fr)_auto]",
             store.identifyingId !== null && "cursor-wait opacity-60",
           )}
           role="button"
@@ -187,16 +219,24 @@
             </div>
           {/if}
 
-          <div class="min-w-0">
-            <EntityThumbnail
-              {card}
-              linkable={false}
-              hoverPreviewsEnabled={false}
-              interactive={false}
-            />
-          </div>
+          {#if hasCover}
+            <div class="min-w-0">
+              <EntityThumbnail
+                {card}
+                linkable={false}
+                hoverPreviewsEnabled={false}
+                interactive={false}
+              />
+            </div>
+          {/if}
 
-          <div class="flex min-w-0 flex-col justify-center gap-2 py-1">
+          <div class="flex min-w-0 flex-col justify-center gap-1.5 py-1">
+            <div class="flex items-baseline gap-2">
+              <span class="font-heading text-[0.88rem] font-semibold text-text-primary">{candidate.title}</span>
+              {#if candidate.year}
+                <span class="font-mono text-[0.7rem] text-text-muted">{candidate.year}</span>
+              {/if}
+            </div>
             {#if candidate.overview}
               <p class="text-[0.8rem] leading-relaxed text-text-secondary">
                 {candidate.overview}
