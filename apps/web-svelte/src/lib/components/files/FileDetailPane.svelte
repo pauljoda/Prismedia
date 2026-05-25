@@ -62,7 +62,7 @@
     if (!linked?.length) return null;
     if (linked.length === 1) return linked[0];
     const matchKinds = isDirectory ? containerKinds : leafKinds;
-    return linked.find((e) => matchKinds.has(e.kind)) ?? null;
+    return linked.find((e) => matchKinds.has(e.kind)) ?? linked[0];
   });
   const heroCard = $derived(
     primaryLinked
@@ -209,12 +209,6 @@
     />
 
     <div class="detail-body">
-      {#if heroCard}
-        <div class="entity-hero">
-          <EntityThumbnail card={heroCard} linkable selectable={false} />
-        </div>
-      {/if}
-
       {#if previewKind !== "none"}
         <div class="preview" data-kind={previewKind}>
           {#if previewKind === "image"}
@@ -235,23 +229,31 @@
       {/if}
 
       <div class="section-label">Properties</div>
-      <div class="meta-grid">
-        {#if isDirectory}
-          {#if detail.directoryTotalSizeBytes != null}
-            <div><span>Total size</span><strong>{formatBytes(detail.directoryTotalSizeBytes)}</strong></div>
-          {/if}
-          {#if detail.directoryFileCount != null}
-            <div><span>Files</span><strong>{detail.directoryFileCount.toLocaleString()}</strong></div>
-          {/if}
-        {:else}
-          <div><span>Size</span><strong>{formatBytes(entry.sizeBytes)}</strong></div>
+      <div class="properties-row" class:has-entity={Boolean(heroCard)}>
+        {#if heroCard}
+          <div class="entity-hero" aria-label="Associated entity">
+            <EntityThumbnail card={heroCard} linkable selectable={false} titleSize="compact" />
+          </div>
         {/if}
-        <div><span>Kind</span><strong>{entry.kind}</strong></div>
-        <div><span>Modified</span><strong>{formatDate(entry.modifiedAt)}</strong></div>
-        <div><span>Created</span><strong>{formatDate(detail.createdAt)}</strong></div>
-        {#if entry.mimeType}
-          <div><span>MIME</span><strong>{entry.mimeType}</strong></div>
-        {/if}
+
+        <div class="meta-grid">
+          {#if isDirectory}
+            {#if detail.directoryTotalSizeBytes != null}
+              <div><span>Total size</span><strong>{formatBytes(detail.directoryTotalSizeBytes)}</strong></div>
+            {/if}
+            {#if detail.directoryFileCount != null}
+              <div><span>Files</span><strong>{detail.directoryFileCount.toLocaleString()}</strong></div>
+            {/if}
+          {:else}
+            <div><span>Size</span><strong>{formatBytes(entry.sizeBytes)}</strong></div>
+          {/if}
+          <div><span>Kind</span><strong>{entry.kind}</strong></div>
+          <div><span>Modified</span><strong>{formatDate(entry.modifiedAt)}</strong></div>
+          <div><span>Created</span><strong>{formatDate(detail.createdAt)}</strong></div>
+          {#if entry.mimeType}
+            <div><span>MIME</span><strong>{entry.mimeType}</strong></div>
+          {/if}
+        </div>
       </div>
 
       {#if linkedCards.length > 0}
@@ -400,6 +402,12 @@
     padding-top: 0.25rem;
   }
 
+  .properties-row {
+    display: grid;
+    gap: 0.65rem;
+    align-items: start;
+  }
+
   .meta-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -432,10 +440,11 @@
   }
 
   .entity-hero {
-    display: flex;
-    justify-content: center;
-    max-width: 16rem;
-    margin: 0 auto;
+    width: min(100%, 13rem);
+  }
+
+  .entity-hero :global(.entity-thumbnail) {
+    width: 100%;
   }
 
   .linked-grid {
@@ -496,6 +505,10 @@
   }
 
   @media (min-width: 768px) {
+    .properties-row.has-entity {
+      grid-template-columns: minmax(10rem, 13rem) minmax(0, 1fr);
+    }
+
     .meta-grid {
       grid-template-columns: repeat(3, minmax(0, 1fr));
     }

@@ -30,6 +30,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated web app manifest and mobile browser metadata for home-screen installation and browser UI theme colors.
 
 ### Fixed
+- Restored associated entity thumbnails in file details and placed the primary entity beside the properties card.
 - Made the Identify review queue respect NSFW mode, including filtered queue totals and NSFW markers on visible review rows.
 - Clarified Identify review position updates so season and episode proposals show the sort order they will set instead of raw position keys.
 - Renamed Identify review field diffs to Base fields and made review panels collapsible from their headers.
