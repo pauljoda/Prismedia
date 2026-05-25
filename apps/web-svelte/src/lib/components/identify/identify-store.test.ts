@@ -44,6 +44,33 @@ describe("IdentifyStore", () => {
     expect(fetchIdentifyQueue).toHaveBeenCalledOnce();
   });
 
+  it("passes current NSFW visibility when loading and refreshing the queue", async () => {
+    const store = new IdentifyStore(() => true);
+
+    await store.loadInitial();
+
+    expect(fetchIdentifyQueue).toHaveBeenCalledWith(false, true);
+
+    fetchIdentifyQueue.mockClear();
+    fetchIdentifyQueue.mockResolvedValue([queueItem("nsfw-1", { isNsfw: true })]);
+
+    await store.syncNsfwVisibility(false);
+
+    expect(fetchIdentifyQueue).toHaveBeenCalledWith(false, false);
+    expect(store.queue[0]?.entity.isNsfw).toBe(true);
+  });
+
+  it("does not refetch the queue when NSFW visibility is unchanged", async () => {
+    const store = new IdentifyStore(() => false);
+
+    await store.loadInitial();
+    fetchIdentifyQueue.mockClear();
+
+    await store.syncNsfwVisibility(false);
+
+    expect(fetchIdentifyQueue).not.toHaveBeenCalled();
+  });
+
   it("hydrates relationship proposal current detail from the scoped entity relationships", async () => {
     const store = new IdentifyStore();
     const creditProposal = proposal("tmdb:person:1500059", {
@@ -60,6 +87,7 @@ describe("IdentifyStore", () => {
         entityId: "series-1",
         entityKind: "video-series",
         title: "Series",
+        isNsfw: false,
         state: "proposal",
         action: "search",
         candidates: [],
@@ -102,6 +130,26 @@ describe("IdentifyStore", () => {
     expect(dispatchEvent.mock.calls.some(([event]) => event.type === MAIN_SCROLL_TOP_EVENT)).toBe(true);
   });
 });
+
+function queueItem(id: string, options: { isNsfw?: boolean } = {}) {
+  return {
+    id: `queue-${id}`,
+    entityId: id,
+    entityKind: "video",
+    title: "Queued Movie",
+    isNsfw: options.isNsfw ?? false,
+    state: "search",
+    provider: null,
+    action: "search",
+    query: null,
+    candidates: [],
+    proposal: null,
+    error: null,
+    createdAt: "2026-05-25T00:00:00Z",
+    updatedAt: "2026-05-25T00:00:00Z",
+    completedAt: null,
+  };
+}
 
 function entity(id: string, options: Partial<EntityCard> = {}): EntityCard {
   return {

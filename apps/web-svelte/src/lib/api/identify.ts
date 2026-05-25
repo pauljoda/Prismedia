@@ -109,6 +109,7 @@ export interface IdentifyQueueItem {
   entityId: string;
   entityKind: string;
   title: string;
+  isNsfw: boolean;
   state: IdentifyQueueState;
   provider?: string | null;
   action: string;
@@ -202,8 +203,8 @@ export function applyIdentifyProposal(
   });
 }
 
-export function fetchIdentifyQueue(includeCompleted = false): Promise<IdentifyQueueItem[]> {
-  return apiJson(`/identify/queue${query({ includeCompleted })}`);
+export function fetchIdentifyQueue(includeCompleted = false, hideNsfw?: boolean): Promise<IdentifyQueueItem[]> {
+  return apiJson(`/identify/queue${query({ includeCompleted, hideNsfw })}`);
 }
 
 export function addIdentifyQueueItem(entityId: string): Promise<IdentifyQueueItem> {

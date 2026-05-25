@@ -1,6 +1,7 @@
 <script lang="ts">
   import {
     ChevronRight,
+    Flame,
     ScanSearch,
     Sparkles,
     X,
@@ -162,7 +163,18 @@
           </div>
 
           <div class="min-w-0">
-            <div class="truncate font-heading text-[0.86rem] text-text-primary">{item.title}</div>
+            <div class="flex min-w-0 items-center gap-2">
+              <div class="truncate font-heading text-[0.86rem] text-text-primary">{item.title}</div>
+              {#if item.isNsfw}
+                <span
+                  class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-xs border border-error/40 bg-error/10 text-error-text"
+                  title="NSFW"
+                  aria-label="NSFW"
+                >
+                  <Flame class="h-3 w-3" />
+                </span>
+              {/if}
+            </div>
             {#if item.state === "error" && item.errorMessage}
               <div class="truncate font-mono text-[0.66rem] text-error-text">{item.errorMessage}</div>
             {/if}

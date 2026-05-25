@@ -29,10 +29,14 @@ public sealed class IdentifyQueueService {
     /// </summary>
     public async Task<IReadOnlyList<IdentifyQueueItem>> ListAsync(
         bool includeCompleted,
+        bool hideNsfw,
         CancellationToken cancellationToken) {
         var query = _db.IdentifyQueueItems.AsNoTracking();
         if (!includeCompleted) {
             query = query.Where(row => row.State != IdentifyQueueState.Done && row.State != IdentifyQueueState.Deleted);
+        }
+        if (hideNsfw) {
+            query = query.Where(row => !_db.EntityFlags.Any(flag => flag.EntityId == row.EntityId && flag.IsNsfw));
         }
 
         var rows = await query
@@ -82,7 +86,7 @@ public sealed class IdentifyQueueService {
         }
 
         await _db.SaveChangesAsync(cancellationToken);
-        return MapRow(row, entity);
+        return MapRow(row, entity, await LoadFlagsAsync(entityId, cancellationToken));
     }
 
     /// <summary>
@@ -135,7 +139,7 @@ public sealed class IdentifyQueueService {
         }
 
         await _db.SaveChangesAsync(cancellationToken);
-        return MapRow(row, entity);
+        return MapRow(row, entity, await LoadFlagsAsync(entityId, cancellationToken));
     }
 
     /// <summary>
@@ -187,7 +191,7 @@ public sealed class IdentifyQueueService {
         await _db.SaveChangesAsync(cancellationToken);
 
         var refreshedEntity = await LoadEntityAsync(entityId, cancellationToken) ?? entity;
-        return MapRow(row, refreshedEntity);
+        return MapRow(row, refreshedEntity, await LoadFlagsAsync(entityId, cancellationToken));
     }
 
     /// <summary>
@@ -208,7 +212,7 @@ public sealed class IdentifyQueueService {
         row.UpdatedAt = now;
         row.CompletedAt = now;
         await _db.SaveChangesAsync(cancellationToken);
-        return MapRow(row, entity);
+        return MapRow(row, entity, await LoadFlagsAsync(entityId, cancellationToken));
     }
 
     private async Task<IdentifyQueueItemRow> EnsureMutableRowAsync(Guid entityId, CancellationToken cancellationToken) {
@@ -231,24 +235,31 @@ public sealed class IdentifyQueueService {
             .AsNoTracking()
             .Where(entity => entityIds.Contains(entity.Id))
             .ToDictionaryAsync(entity => entity.Id, cancellationToken);
+        var flags = await _db.EntityFlags
+            .AsNoTracking()
+            .Where(flag => entityIds.Contains(flag.EntityId))
+            .ToDictionaryAsync(flag => flag.EntityId, cancellationToken);
         return rows
             .Where(row => entities.ContainsKey(row.EntityId))
-            .Select(row => MapRow(row, entities[row.EntityId]))
+            .Select(row => MapRow(row, entities[row.EntityId], flags.GetValueOrDefault(row.EntityId)))
             .ToArray();
     }
 
     private async Task<IdentifyQueueItem> MapRowAsync(IdentifyQueueItemRow row, CancellationToken cancellationToken) {
         var entity = await LoadEntityAsync(row.EntityId, cancellationToken)
             ?? throw new KeyNotFoundException($"Entity '{row.EntityId}' was not found.");
-        return MapRow(row, entity);
+        var flags = await _db.EntityFlags.AsNoTracking()
+            .FirstOrDefaultAsync(flag => flag.EntityId == entity.Id, cancellationToken);
+        return MapRow(row, entity, flags);
     }
 
-    private static IdentifyQueueItem MapRow(IdentifyQueueItemRow row, EntityRow entity) =>
+    private static IdentifyQueueItem MapRow(IdentifyQueueItemRow row, EntityRow entity, EntityFlagRow? flags = null) =>
         new(
             row.Id,
             row.EntityId,
             entity.KindCode,
             entity.Title,
+            flags?.IsNsfw ?? false,
             row.State.ToCode(),
             row.ProviderCode,
             row.Action,
@@ -263,6 +274,10 @@ public sealed class IdentifyQueueService {
     private async Task<EntityRow?> LoadEntityAsync(Guid entityId, CancellationToken cancellationToken) =>
         await _db.Entities
             .FirstOrDefaultAsync(entity => entity.Id == entityId && entity.DeletedAt == null, cancellationToken);
+
+    private async Task<EntityFlagRow?> LoadFlagsAsync(Guid entityId, CancellationToken cancellationToken) =>
+        await _db.EntityFlags.AsNoTracking()
+            .FirstOrDefaultAsync(flag => flag.EntityId == entityId, cancellationToken);
 
     private static void ResetForSearch(IdentifyQueueItemRow row, DateTimeOffset now) {
         row.State = IdentifyQueueState.Search;

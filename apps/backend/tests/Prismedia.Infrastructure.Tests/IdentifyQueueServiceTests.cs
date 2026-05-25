@@ -127,7 +127,28 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         Assert.Equal("done", applied.State);
         Assert.NotNull(applied.CompletedAt);
         Assert.Equal("Reviewed Title", (await db.Entities.SingleAsync(row => row.Id == entityId)).Title);
-        Assert.Empty(await service.ListAsync(includeCompleted: false, CancellationToken.None));
+        Assert.Empty(await service.ListAsync(includeCompleted: false, hideNsfw: false, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ListAsyncHidesNsfwItemsWhenRequestedAndMarksVisibleNsfwRows() {
+        await using var db = CreateContext();
+        var safeId = Guid.Parse("aaaaaaaa-1111-1111-1111-111111111111");
+        var nsfwId = Guid.Parse("bbbbbbbb-1111-1111-1111-111111111111");
+        SeedEntity(db, safeId, "video", "Safe Movie");
+        SeedEntity(db, nsfwId, "video", "NSFW Movie", isNsfw: true);
+        await db.SaveChangesAsync();
+        var service = CreateQueueService(db, new CandidateProcessExecutor(), _tempRoot);
+        await service.AddAsync(safeId, CancellationToken.None);
+        await service.AddAsync(nsfwId, CancellationToken.None);
+
+        var sfwRows = await service.ListAsync(includeCompleted: false, hideNsfw: true, CancellationToken.None);
+        var allRows = await service.ListAsync(includeCompleted: false, hideNsfw: false, CancellationToken.None);
+
+        Assert.Equal([safeId], sfwRows.Select(row => row.EntityId).ToArray());
+        Assert.False(Assert.Single(sfwRows).IsNsfw);
+        Assert.Equal([safeId, nsfwId], allRows.Select(row => row.EntityId).ToArray());
+        Assert.True(allRows.Single(row => row.EntityId == nsfwId).IsNsfw);
     }
 
     public void Dispose() {
@@ -212,7 +233,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         });
     }
 
-    private static void SeedEntity(PrismediaDbContext db, Guid id, string kind, string title) {
+    private static void SeedEntity(PrismediaDbContext db, Guid id, string kind, string title, bool isNsfw = false) {
         db.Entities.Add(new EntityRow {
             Id = id,
             KindCode = kind,
@@ -220,6 +241,13 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
         });
+        if (isNsfw) {
+            db.EntityFlags.Add(new EntityFlagRow {
+                EntityId = id,
+                IsNsfw = true,
+                UpdatedAt = DateTimeOffset.UtcNow
+            });
+        }
     }
 
     private static EntityMetadataProposal Proposal(Guid entityId, string title) =>

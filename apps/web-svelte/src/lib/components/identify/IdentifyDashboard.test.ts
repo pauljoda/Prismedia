@@ -14,7 +14,7 @@ const store = vi.hoisted(() => ({
     auth: unknown[];
     missingAuthKeys: string[];
   }>,
-  queue: [],
+  queue: [] as unknown[],
   supportedKinds: [] as Array<{
     kind: string;
     label: string;
@@ -62,6 +62,44 @@ describe("IdentifyDashboard", () => {
     expect(screen.queryByText("Providers")).not.toBeInTheDocument();
     expect(screen.queryByText("Plugins")).not.toBeInTheDocument();
     expect(screen.queryByText("The Movie Database")).not.toBeInTheDocument();
+  });
+
+  it("marks NSFW queue rows with a fire chip", () => {
+    store.queue = [
+      {
+        id: "queue-1",
+        entityId: "video-1",
+        entityKind: "video",
+        title: "Queued NSFW Movie",
+        isNsfw: true,
+        state: "proposal",
+        provider: "tmdb",
+        action: "search",
+        candidates: [],
+        proposal: { confidence: 0.91 },
+        entity: {
+          id: "video-1",
+          kind: "video",
+          title: "Queued NSFW Movie",
+          parentEntityId: null,
+          sortOrder: null,
+          coverUrl: null,
+          hoverKind: "none",
+          hoverUrl: null,
+          hoverImages: [],
+          meta: [],
+          rating: null,
+          isFavorite: false,
+          isNsfw: true,
+          isOrganized: false,
+        },
+      },
+    ];
+
+    render(IdentifyDashboard);
+
+    expect(screen.getByLabelText("NSFW")).toBeInTheDocument();
+    expect(screen.getByText("Queued NSFW Movie")).toBeInTheDocument();
   });
 });
 

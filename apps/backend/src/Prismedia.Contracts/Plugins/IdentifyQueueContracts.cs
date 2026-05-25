@@ -7,6 +7,7 @@ namespace Prismedia.Contracts.Plugins;
 /// <param name="EntityId">Prismedia entity being identified.</param>
 /// <param name="EntityKind">Entity kind code for provider filtering and UI grouping.</param>
 /// <param name="Title">Current entity title.</param>
+/// <param name="IsNsfw">Whether the queued entity is flagged as NSFW.</param>
 /// <param name="State">Queue state code: search, proposal, done, deleted, or error.</param>
 /// <param name="Provider">Provider code used by the latest search, when selected.</param>
 /// <param name="Action">Provider action used by the latest search.</param>
@@ -22,6 +23,7 @@ public sealed record IdentifyQueueItem(
     Guid EntityId,
     string EntityKind,
     string Title,
+    bool IsNsfw,
     string State,
     string? Provider,
     string Action,

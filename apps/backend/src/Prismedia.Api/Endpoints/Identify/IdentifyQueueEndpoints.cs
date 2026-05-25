@@ -8,9 +8,14 @@ internal static class IdentifyQueueEndpoints {
     internal static RouteGroupBuilder MapIdentifyQueueEndpoints(this RouteGroupBuilder group) {
         group.MapGet("/queue", async (
             bool? includeCompleted,
+            bool? hideNsfw,
+            HttpContext httpContext,
             IdentifyQueueService queue,
             CancellationToken cancellationToken) =>
-            Results.Ok(await queue.ListAsync(includeCompleted ?? false, cancellationToken)))
+            Results.Ok(await queue.ListAsync(
+                includeCompleted ?? false,
+                NsfwVisibility.ShouldHide(hideNsfw, httpContext),
+                cancellationToken)))
             .WithName("ListIdentifyQueue")
             .WithSummary("Lists durable identify queue items.")
             .Produces<IReadOnlyList<IdentifyQueueItem>>();

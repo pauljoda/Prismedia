@@ -4,11 +4,17 @@
     IdentifyStore,
     setIdentifyStore,
   } from "$lib/components/identify/identify-store.svelte";
+  import { useNsfw } from "$lib/nsfw/store.svelte";
 
   let { children } = $props();
 
-  const store = new IdentifyStore();
+  const nsfw = useNsfw();
+  const store = new IdentifyStore(() => nsfw.mode === "off");
   setIdentifyStore(store);
+
+  $effect(() => {
+    void store.syncNsfwVisibility(nsfw.mode === "off");
+  });
 
   onDestroy(() => {
     store.destroy();

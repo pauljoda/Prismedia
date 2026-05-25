@@ -39,6 +39,7 @@ export interface IdentifyQueueItem {
   entityId: string;
   entityKind: string;
   title: string;
+  isNsfw: boolean;
   state: IdentifyQueueState;
   provider?: string | null;
   action: string;
@@ -70,6 +71,9 @@ export function useIdentifyStore(): IdentifyStore {
 }
 
 export class IdentifyStore {
+  #getHideNsfw: () => boolean;
+  #queueHideNsfw: boolean | null = null;
+
   view = $state<IdentifyView>({ kind: "dashboard" });
   providers = $state<PluginProvider[]>([]);
   queue = $state<IdentifyQueueItem[]>([]);
@@ -88,6 +92,10 @@ export class IdentifyStore {
   reviewTagSelections = $state<Record<string, Record<string, boolean>>>({});
   reviewDetailsByEntityId = $state<Record<string, EntityDetailCard | null>>({});
   reviewDetailLoadingByEntityId = $state<Record<string, boolean>>({});
+
+  constructor(getHideNsfw: () => boolean = () => false) {
+    this.#getHideNsfw = getHideNsfw;
+  }
 
   supportedKinds = $derived.by((): IdentifyKindInfo[] => {
     const kindMap = new Map<string, IdentifyKindInfo>();
@@ -134,15 +142,32 @@ export class IdentifyStore {
     try {
       const [providers, queue] = await Promise.all([
         fetchPluginProviders(),
-        fetchIdentifyQueue(),
+        fetchIdentifyQueue(false, this.#getHideNsfw()),
       ]);
       this.providers = providers;
       this.queue = queue.map((item) => queueItemFromApi(item));
+      this.#queueHideNsfw = this.#getHideNsfw();
     } catch (err) {
       this.error = readError(err);
     } finally {
       this.loading = false;
     }
+  }
+
+  async syncNsfwVisibility(hideNsfw: boolean) {
+    if (this.#queueHideNsfw === null) return;
+    if (this.#queueHideNsfw === hideNsfw) return;
+    await this.refreshQueueForVisibility(hideNsfw);
+  }
+
+  async refreshQueueForVisibility(hideNsfw = this.#getHideNsfw()) {
+    const queue = await fetchIdentifyQueue(false, hideNsfw);
+    this.queue = queue.map((item) => {
+      const existing = this.queue.find((queued) => queued.entityId === item.entityId);
+      return queueItemFromApi(item, existing?.entity, existing?.detail);
+    });
+    this.#queueHideNsfw = hideNsfw;
+    this.#leaveHiddenReviewIfNeeded();
   }
 
   async enterDashboardRoute() {
@@ -160,9 +185,15 @@ export class IdentifyStore {
         addIdentifyQueueItem(entityId),
         fetchEntityDetail(entityId),
       ]);
-      const queue = await fetchIdentifyQueue();
+      const hideNsfw = this.#getHideNsfw();
+      const queue = await fetchIdentifyQueue(false, hideNsfw);
       this.providers = providers;
       this.queue = queue.map((queued) => queueItemFromApi(queued));
+      this.#queueHideNsfw = hideNsfw;
+      if (hideNsfw && item.isNsfw) {
+        this.navigateToDashboard();
+        return null;
+      }
       this.#upsertQueueItem(queueItemFromApi(item, undefined, detail));
       return item;
     } catch (err) {
@@ -326,6 +357,7 @@ export class IdentifyStore {
       entityId: entity.id,
       entityKind: entity.kind,
       title: entity.title,
+      isNsfw: entity.isNsfw,
       state,
       provider,
       action: "search",
@@ -543,6 +575,15 @@ export class IdentifyStore {
       item.errorMessage = message;
     }
   }
+
+  #leaveHiddenReviewIfNeeded() {
+    const entityId = this.view.kind === "review-parent" || this.view.kind === "review-child" || this.view.kind === "review-choice"
+      ? this.view.entity.id
+      : null;
+    if (!entityId) return;
+    if (this.queue.some((item) => item.entityId === entityId)) return;
+    this.navigateToDashboard();
+  }
 }
 
 async function fetchEntityDetail(entityId: string): Promise<EntityDetailCard | null> {
@@ -558,12 +599,14 @@ function queueItemFromApi(
   entity?: EntityCard,
   detail?: EntityDetailCard | null,
 ): IdentifyQueueItem {
-  const card = detail ? entityThumbnailFromDetail(detail, entity) : entity ?? entityCardFromQueueItem(item);
+  const fallback = entity ?? entityCardFromQueueItem(item);
+  const card = detail ? entityThumbnailFromDetail(detail, fallback) : fallback;
   return {
     id: item.id,
     entityId: item.entityId,
     entityKind: item.entityKind,
     title: item.title,
+    isNsfw: item.isNsfw,
     state: item.state,
     provider: item.provider,
     action: item.action,
@@ -610,7 +653,7 @@ function entityCardFromQueueItem(item: ApiIdentifyQueueItem): EntityCard {
     meta: [],
     rating: null,
     isFavorite: false,
-    isNsfw: false,
+    isNsfw: item.isNsfw,
     isOrganized: false,
   };
 }
