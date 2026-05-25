@@ -27,6 +27,7 @@
     structuralChildProposals,
     relationshipProposals,
     scopedCreditForProposal,
+    reviewImagePreviewUrl,
   } from "$lib/components/identify-review";
   import type {
     CreditPatch,
@@ -136,9 +137,9 @@
     const images = reviewableImages(proposal.images ?? [], proposal.targetKind);
     for (const kind of kinds) {
       const image = images.find((candidate) => candidate.kind === kind);
-      if (image) return image.url;
+      if (image) return reviewImagePreviewUrl(image, proposal.targetKind);
     }
-    return images[0]?.url ?? null;
+    return images[0] ? reviewImagePreviewUrl(images[0], proposal.targetKind) : null;
   }
 
   function preferredProposalImage(result: EntityMetadataProposal): ImageCandidate | null {
@@ -192,7 +193,7 @@
     return {
       entity: { id: result.proposalId, kind: result.targetKind, title, parentEntityId: null, sortOrder: null, capabilities: [], childrenByKind: [], relationships: [] },
       aspectRatio: result.targetKind === "studio" ? "wide" : result.targetKind === "person" ? { width: 4, height: 5 } : "square",
-      cover: image ? { src: image.url, alt: title } : null,
+      cover: image ? { src: reviewImagePreviewUrl(image, result.targetKind), alt: title } : null,
       hover: { kind: "none" },
       subtitle: relationshipKindLabel(result.targetKind),
       meta: [{ icon: relationshipIcon(result.targetKind), label: relationshipStatusLabel(result) }],
@@ -332,7 +333,7 @@
   <!-- Context bar -->
   <div class="grid grid-cols-[auto_1fr_auto_auto] items-center gap-4 rounded-sm border border-border-subtle bg-surface-1 p-3.5 shadow-well">
     {#if contextPosterUrl}
-      <img src={contextPosterUrl} alt="" class="h-16 w-11 rounded-xs object-cover" />
+      <img src={contextPosterUrl} alt="" class="h-16 w-11 rounded-xs object-cover" decoding="async" />
     {:else}
       <div class="grid h-16 w-11 place-items-center rounded-xs bg-surface-3">
         <Layers class="h-5 w-5 text-text-disabled" />
@@ -435,7 +436,7 @@
           {@const card = {
             entity: { id: credit.proposalId, kind: "person", title: credit.patch?.title ?? "", parentEntityId: null, sortOrder: null, capabilities: [], childrenByKind: [], relationships: [] },
             aspectRatio: { width: 4, height: 5 },
-            cover: image ? { src: image.url, alt: credit.patch?.title ?? "" } : null,
+            cover: image ? { src: reviewImagePreviewUrl(image, credit.targetKind), alt: credit.patch?.title ?? "" } : null,
             hover: { kind: "none" } as const,
             subtitle: scopedCredit?.character ? `as ${scopedCredit.character}` : roleLabel(scopedCredit),
             meta: [{ icon: "person" as const, label: roleLabel(scopedCredit) }],
@@ -551,7 +552,13 @@
                   style="aspect-ratio: {group.kind === 'poster' ? '2/3' : group.kind === 'backdrop' ? '16/9' : '2/1'};"
                   onclick={() => setImageSelected(group.kind, selectedImages[group.kind] === image.url ? null : image.url)}
                 >
-                  <img src={image.url} alt="" class="h-full w-full object-cover" />
+                  <img
+                    src={reviewImagePreviewUrl(image, proposal.targetKind)}
+                    alt=""
+                    class="h-full w-full object-cover"
+                    loading="lazy"
+                    decoding="async"
+                  />
                   {#if selectedImages[group.kind] === image.url}
                     <div class="absolute right-1 top-1">
                       <span class="grid h-4 w-4 place-items-center rounded-xs bg-accent-500 text-[#0b0b0c]">
@@ -582,7 +589,7 @@
           {@const childCard = {
             entity: { id: child.proposalId, kind: child.targetKind, title: child.patch?.title ?? `Episode ${i + 1}`, parentEntityId: null, sortOrder: i, capabilities: [], childrenByKind: [], relationships: [] },
             aspectRatio: "video" as const,
-            cover: childImage ? { src: childImage.url, alt: child.patch?.title ?? "" } : null,
+            cover: childImage ? { src: reviewImagePreviewUrl(childImage, child.targetKind), alt: child.patch?.title ?? "" } : null,
             hover: { kind: "none" } as const,
             subtitle: child.targetKind,
             custom: child.patch?.positions?.episode ? { bottomLeft: { label: `E${String(child.patch?.positions.episode).padStart(2, "0")}` } } : undefined,

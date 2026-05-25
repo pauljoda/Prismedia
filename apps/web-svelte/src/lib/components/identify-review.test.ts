@@ -12,6 +12,7 @@ import {
   isNewRelationshipTitle,
   reviewDiffFieldKeys,
   reviewFieldKeys,
+  reviewImagePreviewUrl,
   reviewableImages,
   reviewChildProposals,
   relationshipProposals,
@@ -219,6 +220,34 @@ describe("identify review helpers", () => {
     expect(payload.proposal.patch.studio).toBeNull();
     expect(payload.proposal.relationships).toEqual([]);
     expect(payload.proposal.images.map((image) => image.kind)).toEqual(["poster"]);
+  });
+
+  it("uses smaller TMDB image variants for review previews without changing selected image URLs", () => {
+    expect(reviewImagePreviewUrl({
+      kind: "poster",
+      url: "https://image.tmdb.org/t/p/original/poster.jpg",
+      source: "tmdb",
+    })).toBe("https://image.tmdb.org/t/p/w342/poster.jpg");
+    expect(reviewImagePreviewUrl({
+      kind: "poster",
+      url: "https://image.tmdb.org/t/p/original/person.jpg",
+      source: "tmdb",
+    }, "person")).toBe("https://image.tmdb.org/t/p/w185/person.jpg");
+    expect(reviewImagePreviewUrl({
+      kind: "backdrop",
+      url: "https://image.tmdb.org/t/p/original/backdrop.jpg",
+      source: "tmdb",
+    })).toBe("https://image.tmdb.org/t/p/w780/backdrop.jpg");
+    expect(reviewImagePreviewUrl({
+      kind: "logo",
+      url: "https://image.tmdb.org/t/p/original/logo.png",
+      source: "tmdb",
+    })).toBe("https://image.tmdb.org/t/p/w300/logo.png");
+    expect(reviewImagePreviewUrl({
+      kind: "poster",
+      url: "https://example.test/poster.jpg",
+      source: "other",
+    })).toBe("https://example.test/poster.jpg");
   });
 
   it("carries walked child field and artwork choices into the root apply payload", () => {

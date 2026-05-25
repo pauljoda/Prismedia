@@ -165,6 +165,10 @@ export function reviewableImages(images: ImageCandidate[], targetKind?: string |
   return images.filter((image) => allowsLogo || image.kind.toLowerCase() !== "logo");
 }
 
+export function reviewImagePreviewUrl(image: ImageCandidate, targetKind?: string | null): string {
+  return tmdbPreviewUrl(image.url, image.kind, targetKind) ?? image.url;
+}
+
 export function defaultImageSelectionForReview(result: EntityMetadataProposal): Record<string, string | null> {
   const selected: Record<string, string | null> = {};
   for (const image of reviewableImages(result.images ?? [], result.targetKind)) {
@@ -424,6 +428,33 @@ function selectedReviewImages(selectedImages: Record<string, string | null>): Re
     selected[kind] = url;
   }
   return selected;
+}
+
+function tmdbPreviewUrl(url: string, kind: string, targetKind?: string | null): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+
+  if (parsed.hostname !== "image.tmdb.org") return null;
+  const parts = parsed.pathname.split("/");
+  const sizeIndex = parts.findIndex((part, index) => part === "p" && parts[index - 1] === "t") + 1;
+  if (sizeIndex <= 0 || !parts[sizeIndex]) return null;
+
+  parts[sizeIndex] = tmdbPreviewSize(kind, targetKind);
+  parsed.pathname = parts.join("/");
+  return parsed.toString();
+}
+
+function tmdbPreviewSize(kind: string, targetKind?: string | null): string {
+  const normalized = kind.toLowerCase();
+  if (targetKind?.toLowerCase() === "person" && normalized !== "backdrop" && normalized !== "logo") return "w185";
+  if (normalized === "backdrop") return "w780";
+  if (normalized === "logo") return "w300";
+  if (normalized === "profile") return "w185";
+  return "w342";
 }
 
 function entries(record: Record<string, string | number>): string[] {

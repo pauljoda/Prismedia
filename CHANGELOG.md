@@ -26,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated web app manifest and mobile browser metadata for home-screen installation and browser UI theme colors.
 
 ### Fixed
+- Improved Identify proposal review performance by rendering provider image previews lazily with smaller browser-cacheable artwork sizes.
 - Fixed Identify dashboard navigation so returning to `/identify` from a review detail exits the stale detail view.
 - Fixed Identify review navigation so walking between child proposals returns the page to the top of the new review.
 - Fixed Identify relationship review so walked cast, studio, and tag proposals hydrate current metadata from existing related entities.
