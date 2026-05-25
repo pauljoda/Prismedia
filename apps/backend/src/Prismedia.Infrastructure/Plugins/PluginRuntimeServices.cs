@@ -772,7 +772,7 @@ public sealed class IdentifyPluginService {
             response.Result,
             descriptor,
             auth,
-            [await SnapshotAsync(entity, descriptor.Manifest.Id, cancellationToken), .. ancestors],
+            [await SnapshotFromProposalAsync(entity, descriptor.Manifest.Id, response.Result, cancellationToken), .. ancestors],
             visited,
             cancellationToken);
         visited.Remove(entity.Id);
@@ -788,43 +788,8 @@ public sealed class IdentifyPluginService {
         HashSet<Guid> visited,
         CancellationToken cancellationToken) {
         var existingChildren = await LoadStructuralChildrenAsync(entity.Id, cancellationToken);
-        if (existingChildren.Count == 0) {
-            return providerProposal with {
-                TargetKind = entity.KindCode,
-                TargetEntityId = entity.Id,
-                Children = StructuralChildProposals(providerProposal),
-                Relationships = RelationshipProposals(providerProposal)
-            };
-        }
-
         var structuralChildren = new List<EntityMetadataProposal>();
-        var usedProviderChildren = new HashSet<string>(StringComparer.Ordinal);
-        var providerStructuralChildren = StructuralChildProposals(providerProposal);
         foreach (var child in existingChildren) {
-            var positions = await ResolveStructuralPositionsAsync(child.Entity.Id, child.SortOrder, cancellationToken);
-            var providerChild = providerStructuralChildren
-                .Where(candidate => IsKindCompatible(child.Entity.KindCode, candidate.TargetKind))
-                .Select(candidate => new {
-                    Proposal = candidate,
-                    Score = ScoreProposalMatch(child.Entity, child.SortOrder, positions, candidate)
-                })
-                .Where(candidate => candidate.Score > 0)
-                .OrderByDescending(candidate => candidate.Score)
-                .FirstOrDefault(candidate => !usedProviderChildren.Contains(candidate.Proposal.ProposalId));
-
-            if (providerChild is not null) {
-                usedProviderChildren.Add(providerChild.Proposal.ProposalId);
-                structuralChildren.Add(await BuildStructuralProposalAsync(
-                    child.Entity,
-                    providerChild.Proposal,
-                    descriptor,
-                    auth,
-                    ancestorPath,
-                    visited,
-                    cancellationToken));
-                continue;
-            }
-
             if (!SupportsKind(descriptor.Manifest, child.Entity.KindCode)) {
                 continue;
             }
@@ -838,7 +803,7 @@ public sealed class IdentifyPluginService {
                 parentSortOrder: child.SortOrder,
                 visited,
                 cancellationToken);
-            if (childResponse.Ok && childResponse.Result is not null) {
+            if (childResponse.Ok && childResponse.Result?.Patch is not null) {
                 structuralChildren.Add(childResponse.Result);
             }
         }
@@ -884,6 +849,39 @@ public sealed class IdentifyPluginService {
             entity.Title,
             hints.ExternalIds,
             hints.Urls);
+    }
+
+    private async Task<IdentifyEntitySnapshot> SnapshotFromProposalAsync(
+        EntityRow entity,
+        string providerId,
+        EntityMetadataProposal proposal,
+        CancellationToken cancellationToken) {
+        var current = await SnapshotAsync(entity, providerId, cancellationToken);
+        var externalIds = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (key, value) in current.ExternalIds ?? new Dictionary<string, string>()) {
+            externalIds[key] = value;
+        }
+
+        foreach (var (key, value) in proposal.Patch.ExternalIds) {
+            externalIds[key] = value;
+        }
+
+        var urls = new List<string>();
+        urls.AddRange(current.Urls ?? []);
+        urls.AddRange(proposal.Patch.Urls);
+
+        var title = !string.IsNullOrWhiteSpace(proposal.Patch.Title)
+            ? proposal.Patch.Title.Trim()
+            : current.Title;
+
+        return current with {
+            Title = title,
+            ExternalIds = externalIds,
+            Urls = urls
+                .Where(url => !string.IsNullOrWhiteSpace(url))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray()
+        };
     }
 
     private async Task<IReadOnlyList<StructuralChild>> LoadStructuralChildrenAsync(Guid parentEntityId, CancellationToken cancellationToken) {
@@ -932,11 +930,6 @@ public sealed class IdentifyPluginService {
     private static bool SupportsKind(PluginManifest manifest, string kind) =>
         manifest.Supports.Any(support => support.EntityKind.Equals(kind, StringComparison.OrdinalIgnoreCase));
 
-    private static IReadOnlyList<EntityMetadataProposal> StructuralChildProposals(EntityMetadataProposal proposal) =>
-        (proposal.Children ?? [])
-            .Where(child => !IsRelationshipMetadataKind(child.TargetKind))
-            .ToArray();
-
     private static IReadOnlyList<EntityMetadataProposal> RelationshipProposals(EntityMetadataProposal proposal) {
         var relationships = new List<EntityMetadataProposal>();
         if (proposal.Relationships is { Count: > 0 }) {
@@ -953,37 +946,6 @@ public sealed class IdentifyPluginService {
 
     private static bool IsRelationshipMetadataKind(string kind) =>
         kind is "person" or "studio" or "tag";
-
-    private static bool IsKindCompatible(string entityKind, string proposalKind) =>
-        entityKind.Equals(proposalKind, StringComparison.OrdinalIgnoreCase) ||
-        (entityKind.Equals(EntityKindRegistry.Video.Code, StringComparison.OrdinalIgnoreCase) &&
-            proposalKind.Equals("video-episode", StringComparison.OrdinalIgnoreCase));
-
-    private static int ScoreProposalMatch(
-        EntityRow entity,
-        int? sortOrder,
-        IReadOnlyDictionary<string, int> positions,
-        EntityMetadataProposal proposal) {
-        var score = 0;
-        if (!string.IsNullOrWhiteSpace(proposal.Patch.Title) &&
-            proposal.Patch.Title.Equals(entity.Title, StringComparison.OrdinalIgnoreCase)) {
-            score += 10;
-        }
-
-        foreach (var (key, value) in proposal.Patch.Positions) {
-            if (positions.TryGetValue(key, out var existing) && existing == value) {
-                score += 20;
-            }
-        }
-
-        if (sortOrder is { } structuralSortOrder) {
-            if (proposal.Patch.Positions.Values.Contains(structuralSortOrder)) {
-                score += 5;
-            }
-        }
-
-        return score;
-    }
 
     private sealed record StructuralChild(int? SortOrder, EntityRow Entity);
 }

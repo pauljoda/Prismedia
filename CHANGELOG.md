@@ -53,6 +53,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Fixed Identify accept so accepted child, credit, studio, and tag entities are marked organized with the root entity.
 - Fixed Identify child proposal thumbnails so structural children show as matched existing children instead of New or Merge targets.
 - Fixed Identify review thumbnails so relationship selectors show New or Merge status consistently.
+- Simplified Identify child hydration so the app recursively calls the selected provider for existing children with parent context instead of accepting provider-created structural children.
 - Fixed Identify relationship review so selectable thumbnail cards can disable cast, studio, and related entities before apply.
 - Fixed Identify proposal review so nested children can be walked more than one level deep without losing parent context.
 - Saved entity grid media-wall mode per grid, defaulted image/page grids to that view, and let book page cards show metadata again when media-wall mode is turned off.

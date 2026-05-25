@@ -274,6 +274,155 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
     }
 
     [Fact]
+    public async Task IdentifyIgnoresProviderStructuralChildrenThatDoNotMapToLocalChildren() {
+        var pluginDir = Path.Combine(_tempRoot, "tmdb");
+        Directory.CreateDirectory(pluginDir);
+        await File.WriteAllTextAsync(
+            Path.Combine(pluginDir, "manifest.json"),
+            """
+            {
+              "manifestVersion": 1,
+              "apiTags": ["prismedia"],
+              "id": "tmdb",
+              "name": "TMDB",
+              "version": "1.2.0",
+              "runtime": "dotnet-process",
+              "entry": "Prismedia.Plugin.Tmdb.dll",
+              "compat": {
+                "pluginApiMin": "1.0.0",
+                "pluginApiMax": null,
+                "prismediaMin": "1.0.0",
+                "prismediaMax": null
+              },
+              "auth": [
+                { "key": "apiKey", "label": "API key", "required": true, "url": "https://www.themoviedb.org/settings/api" }
+              ],
+              "supports": [
+                { "entityKind": "video-series", "actions": ["search"] },
+                { "entityKind": "video-season", "actions": ["search"] }
+              ]
+            }
+            """);
+
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var providerConfig = new ProviderConfigRow {
+            Id = Guid.NewGuid(),
+            ProviderCode = "tmdb",
+            DisplayName = "TMDB",
+            ProviderType = ProviderType.ExternalProcess,
+            Enabled = true,
+            SettingsJson = "{}",
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+        var seriesId = Guid.Parse("11111111-aaaa-4444-8888-111111111111");
+        db.ProviderConfigs.Add(providerConfig);
+        db.ProviderCredentials.Add(new ProviderCredentialRow {
+            Id = Guid.NewGuid(),
+            ProviderConfigId = providerConfig.Id,
+            CredentialKey = "apiKey",
+            EncryptedValue = "secret",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.Entities.Add(new EntityRow {
+            Id = seriesId,
+            KindCode = "video-series",
+            Title = "Series Without Local Children",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+
+        var service = CreateIdentifyService(db, new ProviderChildTreeProcessExecutor(seriesId, null), pluginDir);
+
+        var response = await service.IdentifyAsync(seriesId, "tmdb", null, hideNsfw: false, CancellationToken.None);
+
+        Assert.True(response.Ok);
+        Assert.Empty(response.Result!.Children);
+        Assert.Equal("Generated Studio", Assert.Single(response.Result.Relationships).Patch.Title);
+    }
+
+    [Fact]
+    public async Task IdentifyHydratesExistingChildrenWithFreshPluginCallsAndProposedParentContext() {
+        var pluginDir = Path.Combine(_tempRoot, "tmdb");
+        Directory.CreateDirectory(pluginDir);
+        await File.WriteAllTextAsync(
+            Path.Combine(pluginDir, "manifest.json"),
+            """
+            {
+              "manifestVersion": 1,
+              "apiTags": ["prismedia"],
+              "id": "tmdb",
+              "name": "TMDB",
+              "version": "1.2.0",
+              "runtime": "dotnet-process",
+              "entry": "Prismedia.Plugin.Tmdb.dll",
+              "compat": {
+                "pluginApiMin": "1.0.0",
+                "pluginApiMax": null,
+                "prismediaMin": "1.0.0",
+                "prismediaMax": null
+              },
+              "auth": [
+                { "key": "apiKey", "label": "API key", "required": true, "url": "https://www.themoviedb.org/settings/api" }
+              ],
+              "supports": [
+                { "entityKind": "video-series", "actions": ["search"] },
+                { "entityKind": "video-season", "actions": ["search"] }
+              ]
+            }
+            """);
+
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var providerConfig = new ProviderConfigRow {
+            Id = Guid.NewGuid(),
+            ProviderCode = "tmdb",
+            DisplayName = "TMDB",
+            ProviderType = ProviderType.ExternalProcess,
+            Enabled = true,
+            SettingsJson = "{}",
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+        var seriesId = Guid.Parse("22222222-aaaa-4444-8888-222222222222");
+        var seasonId = Guid.Parse("33333333-aaaa-4444-8888-333333333333");
+        db.ProviderConfigs.Add(providerConfig);
+        db.ProviderCredentials.Add(new ProviderCredentialRow {
+            Id = Guid.NewGuid(),
+            ProviderConfigId = providerConfig.Id,
+            CredentialKey = "apiKey",
+            EncryptedValue = "secret",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.Entities.AddRange(
+            new EntityRow { Id = seriesId, KindCode = "video-series", Title = "Unidentified Series", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = seasonId, KindCode = "video-season", Title = "Season 1", ParentEntityId = seriesId, SortOrder = 1, CreatedAt = now, UpdatedAt = now });
+        await db.SaveChangesAsync();
+
+        var executor = new ProviderChildTreeProcessExecutor(seriesId, seasonId);
+        var service = CreateIdentifyService(db, executor, pluginDir);
+
+        var response = await service.IdentifyAsync(seriesId, "tmdb", null, hideNsfw: false, CancellationToken.None);
+
+        Assert.True(response.Ok);
+        Assert.Equal([seriesId, seasonId], executor.Requests.Select(request => request.Entity.Id).ToArray());
+        var child = Assert.Single(response.Result!.Children);
+        Assert.Equal(seasonId, child.TargetEntityId);
+        Assert.Equal("Season From Child Request", child.Patch.Title);
+        var childRequest = executor.Requests[1];
+        var parentContext = Assert.Single(childRequest.StructuralContext!.Ancestors);
+        Assert.Equal(seriesId, parentContext.Id);
+        Assert.Equal("Identified Series", parentContext.Title);
+        Assert.Equal("series-42", parentContext.ExternalIds!["tmdb"]);
+        Assert.Equal("https://www.themoviedb.org/tv/42", Assert.Single(parentContext.Urls!));
+        Assert.Equal(1, childRequest.StructuralContext.Positions["sortOrder"]);
+    }
+
+    [Fact]
     public async Task IdentifyChoosesActionsFromCurrentEntityKindOnly() {
         var pluginDir = Path.Combine(_tempRoot, "tmdb");
         Directory.CreateDirectory(pluginDir);
@@ -518,7 +667,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
     }
 
     [Fact]
-    public async Task IdentifyMatchesProviderChildrenWhilePreservingRelationshipProposals() {
+    public async Task IdentifyChainsExistingChildrenWhilePreservingRelationshipProposals() {
         var pluginDir = Path.Combine(_tempRoot, "tmdb");
         Directory.CreateDirectory(pluginDir);
         await File.WriteAllTextAsync(
@@ -542,7 +691,9 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
                 { "key": "apiKey", "label": "API key", "required": true, "url": "https://www.themoviedb.org/settings/api" }
               ],
               "supports": [
-                { "entityKind": "video-series", "actions": ["lookup-id", "search"] }
+                { "entityKind": "video-series", "actions": ["lookup-id", "search"] },
+                { "entityKind": "video-season", "actions": ["lookup-id", "search"] },
+                { "entityKind": "video", "actions": ["lookup-id", "search"] }
               ]
             }
             """);
@@ -589,7 +740,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
         var response = await service.IdentifyAsync(seriesId, "tmdb", null, hideNsfw: false, CancellationToken.None);
 
         Assert.True(response.Ok);
-        Assert.Single(executor.Requests);
+        Assert.Equal([seriesId, seasonId, episodeId], executor.Requests.Select(request => request.Entity.Id).ToArray());
         Assert.Equal(seriesId, response.Result?.TargetEntityId);
         var season = Assert.Single(response.Result!.Children);
         Assert.Equal(seasonId, season.TargetEntityId);
@@ -627,7 +778,9 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
                 { "key": "apiKey", "label": "API key", "required": true, "url": "https://www.themoviedb.org/settings/api" }
               ],
               "supports": [
-                { "entityKind": "video-series", "actions": ["lookup-id", "search"] }
+                { "entityKind": "video-series", "actions": ["lookup-id", "search"] },
+                { "entityKind": "video-season", "actions": ["lookup-id", "search"] },
+                { "entityKind": "video", "actions": ["lookup-id", "search"] }
               ]
             }
             """);
@@ -792,6 +945,82 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
         }
     }
 
+    private sealed class ProviderChildTreeProcessExecutor(Guid seriesId, Guid? seasonId) : ProcessExecutor {
+        public List<IdentifyPluginRequest> Requests { get; } = [];
+
+        public override async Task<ProcessExecutionResult> RunAsync(
+            string fileName,
+            IReadOnlyList<string> arguments,
+            IReadOnlyDictionary<string, string>? environment,
+            CancellationToken cancellationToken) {
+            var requestJson = await File.ReadAllTextAsync(arguments[1], cancellationToken);
+            var request = JsonSerializer.Deserialize<IdentifyPluginRequest>(
+                requestJson,
+                new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+            Requests.Add(request);
+
+            var proposal = request.Entity.Id == seriesId
+                ? SeriesProposal()
+                : ChildProposal(request);
+
+            return new ProcessExecutionResult(0, SerializeAsWire(proposal), string.Empty);
+        }
+
+        private EntityMetadataProposal SeriesProposal() {
+            var studioRelationship = new EntityMetadataProposal(
+                "tmdb:studio:generated",
+                "tmdb",
+                "studio",
+                1,
+                "studio",
+                EmptyPatch() with { Title = "Generated Studio" },
+                [],
+                [],
+                []);
+            var providerStructuralChild = new EntityMetadataProposal(
+                "tmdb:season:provider",
+                "tmdb",
+                "video-season",
+                1,
+                "provider-tree",
+                EmptyPatch() with {
+                    Title = "Season 1",
+                    Positions = new Dictionary<string, int> { ["seasonNumber"] = 1 }
+                },
+                [],
+                [],
+                []);
+
+            return new EntityMetadataProposal(
+                "tmdb:series:42",
+                "tmdb",
+                "video-series",
+                1,
+                "search",
+                EmptyPatch() with {
+                    Title = "Identified Series",
+                    ExternalIds = new Dictionary<string, string> { ["tmdb"] = "series-42" },
+                    Urls = ["https://www.themoviedb.org/tv/42"]
+                },
+                [],
+                [providerStructuralChild],
+                [],
+                Relationships: [studioRelationship]);
+        }
+
+        private EntityMetadataProposal ChildProposal(IdentifyPluginRequest request) =>
+            new(
+                $"tmdb:season:{seasonId}",
+                "tmdb",
+                request.Entity.Kind,
+                1,
+                "child-context",
+                EmptyPatch() with { Title = "Season From Child Request" },
+                [],
+                [],
+                []);
+    }
+
     private sealed class FullTreeProcessExecutor : ProcessExecutor {
         public List<IdentifyPluginRequest> Requests { get; } = [];
 
@@ -806,6 +1035,16 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
                 new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
             Requests.Add(request);
 
+            var proposal = request.Entity.Kind switch {
+                "video-series" => SeriesProposal(),
+                "video-season" => SeasonProposal(),
+                _ => EpisodeProposal()
+            };
+
+            return new ProcessExecutionResult(0, SerializeAsWire(proposal), string.Empty);
+        }
+
+        private static EntityMetadataProposal EpisodeProposal() {
             var guestRelationship = new EntityMetadataProposal(
                 "tmdb:person:guest",
                 "tmdb",
@@ -816,10 +1055,11 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
                 [new ImageCandidate("poster", "https://example.test/guest.jpg", "tmdb", null, null, null, null)],
                 [],
                 []);
-            var episode = new EntityMetadataProposal(
+
+            return new EntityMetadataProposal(
                 "tmdb:tv:chair:s1:e2",
                 "tmdb",
-                "video-episode",
+                "video",
                 1,
                 "cascade",
                 EmptyPatch() with {
@@ -831,7 +1071,10 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
                 [],
                 [],
                 Relationships: [guestRelationship]);
-            var season = new EntityMetadataProposal(
+        }
+
+        private static EntityMetadataProposal SeasonProposal() =>
+            new(
                 "tmdb:tv:chair:season:1",
                 "tmdb",
                 "video-season",
@@ -842,8 +1085,10 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
                     Positions = new Dictionary<string, int> { ["seasonNumber"] = 1 }
                 },
                 [new ImageCandidate("poster", "https://example.test/season.jpg", "tmdb", null, null, null, null)],
-                [episode],
+                [],
                 []);
+
+        private static EntityMetadataProposal SeriesProposal() {
             var studioRelationship = new EntityMetadataProposal(
                 "tmdb:studio:chair",
                 "tmdb",
@@ -854,7 +1099,8 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
                 [new ImageCandidate("logo", "https://example.test/studio.png", "tmdb", null, null, null, null)],
                 [],
                 []);
-            var proposal = new EntityMetadataProposal(
+
+            return new EntityMetadataProposal(
                 "tmdb:tv:chair",
                 "tmdb",
                 "video-series",
@@ -866,11 +1112,9 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
                     Credits = [new CreditPatch("Series Actor", "cast", "Ron", 0)]
                 },
                 [new ImageCandidate("poster", "https://example.test/series.jpg", "tmdb", null, null, null, null)],
-                [season],
+                [],
                 [],
                 Relationships: [studioRelationship]);
-
-            return new ProcessExecutionResult(0, SerializeAsWire(proposal), string.Empty);
         }
     }
 
