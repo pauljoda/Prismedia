@@ -1,12 +1,14 @@
 <script lang="ts">
   import {
     ChevronLeft,
+    ChevronRight,
     Film,
     Loader2,
     Search,
     Star,
     X,
   } from "@lucide/svelte";
+  import { cn } from "@prismedia/ui-svelte";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
   import type { EntitySearchCandidate } from "$lib/api/identify";
   import type { EntityCard } from "$lib/api/prismedia";
@@ -58,6 +60,16 @@
   function pickCandidate(candidate: EntitySearchCandidate) {
     if (!defaultProvider || store.identifyingId !== null) return;
     void store.identifyWithCandidate(entity, defaultProvider.id, candidate);
+  }
+
+  function candidateActionLabel(candidate: EntitySearchCandidate): string {
+    return `Use ${candidate.title}${candidate.year ? ` (${candidate.year})` : ""}`;
+  }
+
+  function handleCandidateKeydown(event: KeyboardEvent, candidate: EntitySearchCandidate) {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    pickCandidate(candidate);
   }
 </script>
 
@@ -163,9 +175,21 @@
     </header>
     <div class="flex flex-col gap-2.5 p-3.5">
       {#each localCandidates as candidate, i (identifyCandidateKey(candidate, i))}
-        <div class="relative flex flex-col gap-1.5">
+        {@const card = identifyCandidateToThumbnailCard(candidate, entity.kind, i)}
+        <div
+          class={cn(
+            "identify-candidate-card relative grid cursor-pointer grid-cols-[6.5rem_minmax(0,1fr)_auto] gap-3 rounded-sm border border-border-subtle bg-surface-1 p-2.5 text-left shadow-well transition-all hover:border-border-accent hover:bg-surface-2 hover:shadow-[0_0_20px_rgba(242,194,106,0.08)] focus-visible:border-border-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent-500/60 sm:grid-cols-[8rem_minmax(0,1fr)_auto]",
+            store.identifyingId !== null && "cursor-wait opacity-60",
+          )}
+          role="button"
+          tabindex={store.identifyingId !== null ? -1 : 0}
+          aria-label={candidateActionLabel(candidate)}
+          aria-disabled={store.identifyingId !== null}
+          onclick={() => pickCandidate(candidate)}
+          onkeydown={(event) => handleCandidateKeydown(event, candidate)}
+        >
           {#if i === 0}
-            <div class="absolute left-2.5 top-2 z-10">
+            <div class="absolute left-4 top-4 z-10">
               <span class="inline-flex items-center gap-1 rounded-xs border border-border-accent bg-accent-950/60 px-1.5 py-0.5 font-mono text-[0.6rem] text-text-accent">
                 <Star class="h-2.5 w-2.5" />
                 Best
@@ -173,30 +197,34 @@
             </div>
           {/if}
 
-          <EntityThumbnail
-            card={identifyCandidateToThumbnailCard(candidate, entity.kind, i)}
-            layout="list"
-            linkable={false}
-            hoverPreviewsEnabled={false}
-            onActivate={() => pickCandidate(candidate)}
-          />
+          <div class="min-w-0">
+            <EntityThumbnail
+              {card}
+              linkable={false}
+              hoverPreviewsEnabled={false}
+              interactive={false}
+            />
+          </div>
 
-          <button
-            type="button"
-            class="rounded-xs border border-border-subtle bg-surface-1 px-3 py-2 text-left transition-colors hover:border-border-accent hover:bg-surface-2 focus-visible:border-border-accent focus-visible:outline-none disabled:cursor-wait disabled:opacity-60"
-            disabled={store.identifyingId !== null}
-            onclick={() => pickCandidate(candidate)}
-          >
+          <div class="flex min-w-0 flex-col justify-center gap-2 py-1">
             {#if candidate.overview}
-              <span class="line-clamp-2 text-[0.74rem] leading-snug text-text-muted">
+              <p class="text-[0.8rem] leading-relaxed text-text-secondary">
                 {candidate.overview}
-              </span>
+              </p>
             {:else}
-              <span class="text-[0.72rem] text-text-disabled">
+              <p class="text-[0.78rem] leading-relaxed text-text-disabled">
                 No provider description available.
-              </span>
+              </p>
             {/if}
-          </button>
+          </div>
+
+          <div class="flex items-center self-stretch pl-1 text-text-accent">
+            {#if store.identifyingId !== null}
+              <Loader2 class="h-4 w-4 animate-spin" />
+            {:else}
+              <ChevronRight class="h-4 w-4" />
+            {/if}
+          </div>
         </div>
       {/each}
     </div>

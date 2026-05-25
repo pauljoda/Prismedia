@@ -42,6 +42,7 @@
     linkable?: boolean;
     mediaOnly?: boolean;
     hoverPreviewsEnabled?: boolean;
+    interactive?: boolean;
     onActivate?: (card: EntityThumbnailCard) => void;
     onSelectedChange?: (selected: boolean) => void;
     selectable?: boolean;
@@ -58,6 +59,7 @@
     linkable = true,
     mediaOnly = false,
     hoverPreviewsEnabled = true,
+    interactive = true,
     onActivate,
     onSelectedChange,
     selectable = false,
@@ -177,15 +179,17 @@
   const nsfw = $derived(isNsfw(card.entity.capabilities));
   const rating = $derived(getRatingValue(card.entity.capabilities));
   const bottomLeft = $derived(card.custom?.bottomLeft);
-  const href = $derived(linkable ? resolveEntityThumbnailHref(card) : undefined);
+  const href = $derived(interactive && linkable ? resolveEntityThumbnailHref(card) : undefined);
   const inSelectMode = $derived(selectMode && selectable);
   const effectiveHref = $derived(inSelectMode ? undefined : href);
   const selectionRole = $derived(
-    onActivate && !effectiveHref
-      ? "button"
-      : inSelectMode || (!href && selectable) ? "checkbox" : href ? undefined : "group",
+    !interactive
+      ? undefined
+      : (onActivate && !effectiveHref)
+        ? "button"
+        : inSelectMode || (!href && selectable) ? "checkbox" : href ? undefined : "group",
   );
-  const selectionTabIndex = $derived(effectiveHref ? undefined : 0);
+  const selectionTabIndex = $derived(interactive && !effectiveHref ? 0 : undefined);
 
   function updatePointerRatio(event: PointerEvent) {
     if (!hoverable) return;
@@ -297,6 +301,8 @@
   }
 
   function handleSurfaceClick(event: MouseEvent) {
+    if (!interactive) return;
+
     if (suppressNextActivation) {
       suppressNextActivation = false;
       event.preventDefault();
@@ -313,6 +319,7 @@
   }
 
   function handleSurfaceKeydown(event: KeyboardEvent) {
+    if (!interactive) return;
     if (event.key !== "Enter" && event.key !== " ") return;
     if (onActivate && !effectiveHref) {
       event.preventDefault();
@@ -350,9 +357,10 @@
   class:is-list={layout === "list"}
   class:is-selected={selected}
   class:is-select-mode={inSelectMode}
+  class:is-static={!interactive}
   style:aspect-ratio={layout === "list" || !imageOnly ? undefined : aspectRatio}
   aria-label={card.entity.title}
-  aria-checked={!onActivate && (inSelectMode || (!href && selectable)) ? selected : undefined}
+  aria-checked={interactive && !onActivate && (inSelectMode || (!href && selectable)) ? selected : undefined}
   onblur={clearHover}
   onclick={handleSurfaceClick}
   onfocus={handleFocus}
@@ -604,6 +612,16 @@
   .entity-thumbnail.is-selected {
     border-color: var(--color-border-accent-strong, rgb(242 194 106 / 0.6));
     box-shadow: var(--shadow-focus-accent), var(--shadow-glow-accent-strong);
+  }
+
+  .entity-thumbnail.is-static {
+    pointer-events: none;
+  }
+
+  .entity-thumbnail.is-static:is(:hover, :focus-visible) {
+    transform: none;
+    border-color: var(--color-border-subtle, rgb(255 255 255 / 0.08));
+    box-shadow: var(--shadow-card);
   }
 
   @media (prefers-reduced-motion: reduce) {

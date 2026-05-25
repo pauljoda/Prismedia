@@ -166,6 +166,22 @@ describe("EntityThumbnail", () => {
     expect(onSelectedChange).toHaveBeenCalledWith(false);
   });
 
+  it("can render as a static visual inside a parent control", () => {
+    const { container } = render(EntityThumbnail, {
+      props: {
+        card: personCard(),
+        interactive: false,
+        linkable: false,
+      },
+    });
+
+    const surface = container.querySelector<HTMLElement>(".entity-thumbnail");
+    expect(container.querySelector("a.entity-thumbnail")).toBeNull();
+    expect(surface?.getAttribute("role")).toBeNull();
+    expect(surface?.getAttribute("tabindex")).toBeNull();
+    expect(surface?.classList.contains("is-static")).toBe(true);
+  });
+
   it("renders credit subtitles when present", () => {
     const { container } = render(EntityThumbnail, {
       props: {
