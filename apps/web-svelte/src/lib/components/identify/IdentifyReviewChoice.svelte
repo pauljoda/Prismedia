@@ -1,6 +1,5 @@
 <script lang="ts">
   import {
-    ChevronLeft,
     ChevronRight,
     Film,
     Loader2,
@@ -74,25 +73,6 @@
 </script>
 
 <div class="flex flex-col gap-4">
-  <!-- Back nav + context -->
-  <div class="flex items-center gap-3">
-    <button
-      type="button"
-      class="inline-flex h-8 items-center gap-1.5 rounded-xs border border-border-default bg-surface-2 px-2.5 text-[0.78rem] text-text-muted transition-colors hover:bg-surface-3 hover:text-text-primary"
-      onclick={() => store.navigateToDashboard()}
-    >
-      <ChevronLeft class="h-3.5 w-3.5" />
-      Back
-    </button>
-    <button
-      type="button"
-      class="inline-flex h-8 items-center gap-1 rounded-xs border border-border-default bg-surface-2 px-2 text-[0.72rem] text-text-muted transition-colors hover:bg-surface-3"
-      onclick={() => store.navigateToDashboard()}
-    >
-      Skip
-    </button>
-  </div>
-
   <!-- Entity context bar -->
   <div class="grid grid-cols-[auto_1fr_auto] items-center gap-4 rounded-sm border border-border-subtle border-l-2 border-l-warning bg-surface-1 p-3.5">
     <div class="grid h-11 w-11 place-items-center rounded-xs border border-dashed border-border-default bg-surface-3 text-text-disabled">

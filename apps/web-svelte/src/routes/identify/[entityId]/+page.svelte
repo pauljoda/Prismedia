@@ -1,15 +1,18 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import {
     AlertCircle,
-    ChevronLeft,
+    ChevronDown,
+    ChevronRight,
+    ChevronUp,
     Loader2,
     Search,
     ScanSearch,
-    Trash2,
+    X,
   } from "@lucide/svelte";
-  import { cn, StatusLed } from "@prismedia/ui-svelte";
+  import { cn } from "@prismedia/ui-svelte";
   import IdentifyReviewChoice from "$lib/components/identify/IdentifyReviewChoice.svelte";
   import IdentifyReviewParent from "$lib/components/identify/IdentifyReviewParent.svelte";
   import IdentifyReviewChild from "$lib/components/identify/IdentifyReviewChild.svelte";
@@ -19,6 +22,10 @@
   const entityId = $derived(page.params.entityId ?? "");
   const current = $derived(store.queue.find((item) => item.entityId === entityId) ?? null);
   const providers = $derived(current ? store.providersForKind(current.entityKind) : []);
+
+  const queueIndex = $derived(store.queue.findIndex((item) => item.entityId === entityId));
+  const prevQueueItem = $derived(queueIndex > 0 ? store.queue[queueIndex - 1] : null);
+  const nextQueueItem = $derived(queueIndex >= 0 && queueIndex < store.queue.length - 1 ? store.queue[queueIndex + 1] : null);
 
   let selectedProviderId = $state("");
   let manualTitle = $state("");
@@ -50,8 +57,12 @@
     searching = false;
   }
 
-  function deleteItem() {
+  function cancelItem() {
     if (current) void store.deleteQueueItem(current.entityId);
+  }
+
+  function goToQueueItem(item: typeof prevQueueItem) {
+    if (item) void goto(`/identify/${item.entityId}`);
   }
 </script>
 
@@ -61,31 +72,57 @@
 
 <div class="flex flex-col gap-4 pb-16">
   <div class="flex items-center gap-3">
-    <button
-      type="button"
-      class="inline-flex h-8 items-center gap-1.5 rounded-xs border border-border-default bg-surface-2 px-2.5 text-[0.78rem] text-text-muted transition-colors hover:bg-surface-3 hover:text-text-primary"
-      onclick={() => store.navigateToDashboard()}
-    >
-      <ChevronLeft class="h-3.5 w-3.5" />
-      Queue
-    </button>
-    <ScanSearch class="h-4 w-4 text-text-accent" />
-    <div class="min-w-0 flex-1">
-      <h1 class="truncate">Identify</h1>
+    <!-- Breadcrumb -->
+    <div class="flex items-center gap-1.5 text-[0.78rem]">
+      <a
+        href="/identify"
+        class="text-text-muted transition-colors hover:text-text-accent"
+      >
+        Identify
+      </a>
       {#if current}
-        <p class="mt-0.5 truncate font-mono text-[0.72rem] text-text-muted">
-          {current.title} · {current.entityKind}
-        </p>
+        <ChevronRight class="h-3 w-3 text-text-disabled" />
+        <span class="font-heading font-semibold text-text-primary">{current.title}</span>
       {/if}
     </div>
+
+    <div class="flex-1"></div>
+
+    <!-- Queue position nav -->
+    {#if store.queue.length > 1 && queueIndex >= 0}
+      <div class="flex items-center gap-1.5">
+        <button
+          type="button"
+          class="inline-flex h-7 w-7 items-center justify-center rounded-xs border border-border-default bg-surface-2 text-text-muted transition-colors hover:bg-surface-3 disabled:opacity-30"
+          disabled={!prevQueueItem}
+          onclick={() => goToQueueItem(prevQueueItem)}
+          aria-label="Previous queue item"
+        >
+          <ChevronUp class="h-3.5 w-3.5" />
+        </button>
+        <span class="font-mono text-[0.72rem] text-text-muted">
+          {queueIndex + 1}/{store.queue.length}
+        </span>
+        <button
+          type="button"
+          class="inline-flex h-7 w-7 items-center justify-center rounded-xs border border-border-default bg-surface-2 text-text-muted transition-colors hover:bg-surface-3 disabled:opacity-30"
+          disabled={!nextQueueItem}
+          onclick={() => goToQueueItem(nextQueueItem)}
+          aria-label="Next queue item"
+        >
+          <ChevronDown class="h-3.5 w-3.5" />
+        </button>
+      </div>
+    {/if}
+
     {#if current}
       <button
         type="button"
         class="inline-flex h-8 items-center gap-1.5 rounded-xs border border-border-default bg-surface-2 px-2.5 text-[0.76rem] text-text-muted transition-colors hover:border-error/50 hover:text-error-text"
-        onclick={deleteItem}
+        onclick={cancelItem}
       >
-        <Trash2 class="h-3.5 w-3.5" />
-        Delete
+        <X class="h-3.5 w-3.5" />
+        Cancel
       </button>
     {/if}
   </div>
@@ -125,19 +162,18 @@
       </header>
       <div class="flex flex-col gap-4 p-4">
         {#if providers.length > 0}
-          <div class="flex flex-wrap gap-2">
+          <div class="flex items-center gap-1 rounded-xs border border-border-subtle bg-surface-2 p-0.5">
             {#each providers as provider (provider.id)}
               <button
                 type="button"
                 class={cn(
-                  "inline-flex h-8 items-center gap-2 rounded-xs border px-2.5 font-mono text-[0.72rem] transition-colors",
+                  "rounded-xs px-2.5 py-1 font-mono text-[0.72rem] transition-colors",
                   activeProviderId === provider.id
-                    ? "border-border-accent-strong bg-accent-950/40 text-text-accent"
-                    : "border-border-default bg-surface-2 text-text-muted hover:bg-surface-3 hover:text-text-primary",
+                    ? "bg-accent-950/40 text-text-accent"
+                    : "text-text-muted hover:text-text-primary",
                 )}
                 onclick={() => (selectedProviderId = provider.id)}
               >
-                <StatusLed status={activeProviderId === provider.id ? "accent" : "idle"} size="sm" />
                 {provider.name}
               </button>
             {/each}

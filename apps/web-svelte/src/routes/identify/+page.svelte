@@ -10,7 +10,7 @@
     ScanSearch,
     X,
   } from "@lucide/svelte";
-  import { cn, StatusLed } from "@prismedia/ui-svelte";
+  import { cn } from "@prismedia/ui-svelte";
   import {
     useIdentifyStore,
   } from "$lib/components/identify/identify-store.svelte";
@@ -100,7 +100,7 @@
             <KindIcon class="h-3.5 w-3.5" />
             <span>{kindInfo.label}</span>
             {#if kindInfo.pending > 0}
-              <StatusLed status="accent" pulse size="sm" />
+              <span class="font-mono text-[0.6rem] text-text-accent">{kindInfo.pending}</span>
             {/if}
           </button>
         {/each}

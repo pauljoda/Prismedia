@@ -2,7 +2,8 @@
   import {
     Check,
     ChevronLeft,
-    ChevronRight,
+    ChevronDown,
+    ChevronUp,
     Images,
     Info,
     Layers,
@@ -10,7 +11,7 @@
     Users,
     X,
   } from "@lucide/svelte";
-  import { cn, StatusLed } from "@prismedia/ui-svelte";
+  import { cn } from "@prismedia/ui-svelte";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
   import IdentifyReviewSection from "./IdentifyReviewSection.svelte";
   import {
@@ -302,7 +303,7 @@
       onclick={goBackToParent}
     >
       <ChevronLeft class="h-3.5 w-3.5" />
-      Back to {parentProposal.patch?.title ?? entity.title}
+      {parentProposal.patch?.title ?? entity.title}
     </button>
     <div class="flex-1"></div>
     <!-- Sibling nav -->
@@ -313,19 +314,21 @@
           class="inline-flex h-7 w-7 items-center justify-center rounded-xs border border-border-default bg-surface-2 text-text-muted transition-colors hover:bg-surface-3 disabled:opacity-30"
           disabled={!prevChild}
           onclick={() => prevChild && goToSibling(prevChild)}
+          aria-label="Previous sibling"
         >
-          <ChevronLeft class="h-3.5 w-3.5" />
+          <ChevronUp class="h-3.5 w-3.5" />
         </button>
         <span class="font-mono text-[0.72rem] text-text-muted">
-          {currentIndex + 1} of {parentChildren.length}
+          {currentIndex + 1}/{parentChildren.length}
         </span>
         <button
           type="button"
           class="inline-flex h-7 w-7 items-center justify-center rounded-xs border border-border-default bg-surface-2 text-text-muted transition-colors hover:bg-surface-3 disabled:opacity-30"
           disabled={!nextChild}
           onclick={() => nextChild && goToSibling(nextChild)}
+          aria-label="Next sibling"
         >
-          <ChevronRight class="h-3.5 w-3.5" />
+          <ChevronDown class="h-3.5 w-3.5" />
         </button>
       </div>
     {/if}
@@ -356,10 +359,7 @@
     </div>
     <div class="hidden flex-col items-end gap-0.5 md:flex">
       <span class="text-kicker">Provider</span>
-      <div class="flex items-center gap-1.5">
-        <StatusLed status="accent" pulse />
-        <span class="text-[0.82rem] text-text-primary">{proposal.provider}</span>
-      </div>
+      <span class="text-[0.82rem] text-text-primary">{proposal.provider}</span>
     </div>
   </div>
 
@@ -567,6 +567,7 @@
                     loading="lazy"
                     decoding="async"
                     fetchpriority="low"
+                    onload={(e) => e.currentTarget.closest('.identify-artwork-tile')?.classList.add('is-loaded')}
                   />
                   {#if selectedImages[group.kind] === image.url}
                     <div class="absolute right-1 top-1">
@@ -629,32 +630,31 @@
       onclick={goBackToParent}
     >
       <ChevronLeft class="h-3.5 w-3.5" />
-      Back to {parentProposal.patch?.title ?? entity.title}
+      {parentProposal.patch?.title ?? entity.title}
     </button>
     {#if parentChildren.length > 1}
-      <div class="flex items-center gap-1">
-        {#if prevChild}
-          <button
-            type="button"
-            class="inline-flex h-8 items-center gap-1 rounded-xs border border-border-default bg-surface-2 px-2 text-[0.72rem] text-text-muted transition-colors hover:bg-surface-3"
-            onclick={() => prevChild && goToSibling(prevChild)}
-          >
-            <ChevronLeft class="h-3 w-3" />
-          </button>
-        {/if}
-        <span class="px-1 font-mono text-[0.7rem] text-text-muted">
-          {currentIndex + 1} of {parentChildren.length}
+      <div class="flex items-center gap-1.5">
+        <button
+          type="button"
+          class="inline-flex h-7 w-7 items-center justify-center rounded-xs border border-border-default bg-surface-2 text-text-muted transition-colors hover:bg-surface-3 disabled:opacity-30"
+          disabled={!prevChild}
+          onclick={() => prevChild && goToSibling(prevChild)}
+          aria-label="Previous sibling"
+        >
+          <ChevronUp class="h-3.5 w-3.5" />
+        </button>
+        <span class="font-mono text-[0.72rem] text-text-muted">
+          {currentIndex + 1}/{parentChildren.length}
         </span>
-        {#if nextChild}
-          <button
-            type="button"
-            class="inline-flex h-8 items-center gap-1 rounded-xs border border-border-default bg-surface-2 px-2 text-[0.72rem] text-text-muted transition-colors hover:bg-surface-3"
-            onclick={() => nextChild && goToSibling(nextChild)}
-          >
-            Next
-            <ChevronRight class="h-3 w-3" />
-          </button>
-        {/if}
+        <button
+          type="button"
+          class="inline-flex h-7 w-7 items-center justify-center rounded-xs border border-border-default bg-surface-2 text-text-muted transition-colors hover:bg-surface-3 disabled:opacity-30"
+          disabled={!nextChild}
+          onclick={() => nextChild && goToSibling(nextChild)}
+          aria-label="Next sibling"
+        >
+          <ChevronDown class="h-3.5 w-3.5" />
+        </button>
       </div>
     {/if}
   </div>
@@ -731,6 +731,11 @@
       linear-gradient(135deg, rgb(13 14 16), rgb(27 24 19));
     background-size: 220% 100%, auto, auto;
     animation: identify-artwork-shimmer 1.2s ease-in-out infinite;
+  }
+
+  .identify-artwork-tile.is-loaded::before {
+    opacity: 0;
+    animation: none;
   }
 
   .identify-artwork-tile img {

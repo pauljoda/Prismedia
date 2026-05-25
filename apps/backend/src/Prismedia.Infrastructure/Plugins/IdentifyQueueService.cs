@@ -171,6 +171,19 @@ public sealed class IdentifyQueueService {
         row.Error = null;
         row.UpdatedAt = now;
         row.CompletedAt = now;
+
+        var flags = await _db.EntityFlags.FindAsync([entityId], cancellationToken);
+        if (flags != null) {
+            flags.IsOrganized = true;
+            flags.UpdatedAt = now;
+        } else {
+            _db.EntityFlags.Add(new EntityFlagRow {
+                EntityId = entityId,
+                IsOrganized = true,
+                UpdatedAt = now,
+            });
+        }
+
         await _db.SaveChangesAsync(cancellationToken);
 
         var refreshedEntity = await LoadEntityAsync(entityId, cancellationToken) ?? entity;

@@ -2,13 +2,10 @@
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import {
-    ChevronLeft,
-    ChevronDown,
     Loader2,
     Sparkles,
-    Zap,
   } from "@lucide/svelte";
-  import { cn, StatusLed } from "@prismedia/ui-svelte";
+  import { cn } from "@prismedia/ui-svelte";
   import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
   import { entityCardToThumbnailCard } from "$lib/entities/entity-grid";
   import { fetchIdentifyEntities } from "$lib/api/identify";
@@ -27,13 +24,24 @@
   const kindProviders = $derived(store.providersForKind(entityKind));
   const defaultProvider = $derived(kindProviders[0] ?? null);
 
-  let entities = $state<EntityCard[]>([]);
-  let cards = $state<EntityThumbnailCard[]>([]);
+  let allEntities = $state<EntityCard[]>([]);
   let loading = $state(true);
   let selectedIds = $state<string[]>([]);
+  let showAll = $state(false);
+  let selectedProviderId = $state("");
+
+  const activeProviderId = $derived(selectedProviderId || kindProviders[0]?.id || "");
+  const activeProvider = $derived(kindProviders.find((p) => p.id === activeProviderId) ?? null);
 
   const KindIcon = $derived(entityKindIcon(entityKind));
   const kindLabel = $derived(store.supportedKinds.find((k) => k.kind === entityKind)?.label ?? entityKind);
+
+  const filteredEntities = $derived(
+    showAll ? allEntities : allEntities.filter((e) => !e.isOrganized),
+  );
+  const organizedCount = $derived(allEntities.filter((e) => e.isOrganized).length);
+  const unorganizedCount = $derived(allEntities.length - organizedCount);
+  const cards = $derived(filteredEntities.map((e) => entityCardToThumbnailCard(e)));
 
   onMount(() => {
     void loadEntities();
@@ -43,8 +51,7 @@
     loading = true;
     try {
       const response = await fetchIdentifyEntities(entityKind);
-      entities = response.items;
-      cards = entities.map((e) => entityCardToThumbnailCard(e));
+      allEntities = response.items;
     } catch (err) {
       store.error = err instanceof Error ? err.message : "Failed to load entities";
     } finally {
@@ -53,96 +60,98 @@
   }
 
   function handleCardActivate(card: EntityThumbnailCard) {
-    const entity = entities.find((e) => e.id === card.entity.id);
+    const entity = filteredEntities.find((e) => e.id === card.entity.id);
     if (!entity) return;
     void store.queueEntity(entity).then(() => goto(`/identify/${entity.id}`));
   }
 
   async function handleBulkQueue() {
-    if (!defaultProvider) return;
-    const toQueue = selectedIds.length > 0
-      ? entities.filter((e) => selectedIds.includes(e.id))
-      : entities;
+    if (!activeProvider || selectedIds.length === 0) return;
+    const toQueue = filteredEntities.filter((e) => selectedIds.includes(e.id));
     if (toQueue.length === 0) return;
-    await store.startBulk(defaultProvider.id, toQueue);
+    await store.startBulk(activeProvider.id, toQueue);
   }
 </script>
 
 <div class="flex flex-col gap-4">
-  <!-- Back + Kind hero -->
-  <div class="flex items-center gap-3">
-    <button
-      type="button"
-      class="inline-flex h-8 items-center gap-1.5 rounded-xs border border-border-default bg-surface-2 px-2.5 text-[0.78rem] text-text-muted transition-colors hover:bg-surface-3 hover:text-text-primary"
-      onclick={() => store.navigateToDashboard()}
-    >
-      <ChevronLeft class="h-3.5 w-3.5" />
-      Dashboard
-    </button>
-  </div>
+  <!-- Toolbar: filter toggle + provider selector + queue action -->
+  <div class="flex flex-wrap items-center gap-2.5">
+    <div class="flex items-center gap-1.5">
+      <KindIcon class="h-4 w-4 text-text-accent" />
+      <span class="font-heading text-[0.86rem] font-semibold text-text-primary">{kindLabel}</span>
+      <span class="font-mono text-[0.7rem] text-text-muted">
+        {showAll ? allEntities.length : unorganizedCount}
+      </span>
+    </div>
 
-  <!-- Kind hero panel -->
-  <div
-    class="grid grid-cols-[auto_1fr_auto] items-center gap-4 rounded-md border border-border-accent bg-gradient-to-br from-accent-950/40 to-transparent p-4"
-    style="box-shadow: var(--shadow-glow-accent);"
-  >
-    <div class="grid h-12 w-12 place-items-center rounded-xs border border-border-accent bg-accent-950/50 text-text-accent-bright">
-      <KindIcon class="h-6 w-6" />
+    <div class="flex items-center gap-1 rounded-xs border border-border-subtle bg-surface-2 p-0.5">
+      <button
+        type="button"
+        class={cn(
+          "rounded-xs px-2 py-1 text-[0.72rem] font-medium transition-colors",
+          !showAll
+            ? "bg-accent-950/40 text-text-accent"
+            : "text-text-muted hover:text-text-primary",
+        )}
+        onclick={() => (showAll = false)}
+      >
+        Unorganized
+      </button>
+      <button
+        type="button"
+        class={cn(
+          "rounded-xs px-2 py-1 text-[0.72rem] font-medium transition-colors",
+          showAll
+            ? "bg-accent-950/40 text-text-accent"
+            : "text-text-muted hover:text-text-primary",
+        )}
+        onclick={() => (showAll = true)}
+      >
+        Show all
+      </button>
     </div>
-    <div>
-      <span class="text-kicker text-text-accent">Identify scope</span>
-      <h2 class="mt-1">{kindLabel}</h2>
-      <div class="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[0.78rem] text-text-muted">
-        <span><span class="font-mono text-text-secondary">{entities.length}</span> in library</span>
-        <span><span class="font-mono text-text-accent">{entities.length}</span> unidentified</span>
+
+    {#if kindProviders.length > 1}
+      <div class="flex items-center gap-1 rounded-xs border border-border-subtle bg-surface-2 p-0.5">
+        {#each kindProviders as provider (provider.id)}
+          <button
+            type="button"
+            class={cn(
+              "rounded-xs px-2 py-1 font-mono text-[0.68rem] transition-colors",
+              activeProviderId === provider.id
+                ? "bg-accent-950/40 text-text-accent"
+                : "text-text-muted hover:text-text-primary",
+            )}
+            onclick={() => (selectedProviderId = provider.id)}
+          >
+            {provider.name}
+          </button>
+        {/each}
       </div>
-    </div>
-    {#if defaultProvider}
-      <div class="flex flex-col items-end gap-1.5">
-        <span class="text-kicker">Default provider</span>
-        <div class="flex items-center gap-2">
-          <StatusLed status="accent" pulse />
-          <span class="font-heading text-[0.82rem] font-semibold text-text-accent-bright">
-            {defaultProvider.name}
-          </span>
-          <ChevronDown class="h-3.5 w-3.5 text-text-muted" />
-        </div>
-      </div>
+    {:else if activeProvider}
+      <span class="rounded-xs border border-border-accent bg-accent-950/30 px-2 py-0.5 font-mono text-[0.66rem] text-text-accent">
+        {activeProvider.name}
+      </span>
+    {/if}
+
+    <div class="flex-1"></div>
+
+    {#if selectedIds.length > 0 && activeProvider}
+      <button
+        type="button"
+        class="inline-flex h-7 items-center gap-1.5 rounded-xs border border-border-accent-strong bg-accent-950/40 px-2.5 text-[0.72rem] font-medium text-text-accent transition-colors hover:bg-accent-950/60 disabled:cursor-not-allowed disabled:opacity-40"
+        disabled={store.bulkStarting}
+        onclick={handleBulkQueue}
+      >
+        {#if store.bulkStarting}
+          <Loader2 class="h-3 w-3 animate-spin" />
+        {:else}
+          <Sparkles class="h-3 w-3" />
+        {/if}
+        Queue {selectedIds.length}
+      </button>
     {/if}
   </div>
-
-  <!-- Bulk queue panel -->
-  {#if defaultProvider && entities.length > 0}
-    <div class="surface-panel overflow-hidden">
-      <header class="flex items-center gap-2.5 border-b border-border-subtle bg-surface-2 px-3.5 py-2.5">
-        <Zap class="h-3.5 w-3.5 text-text-accent" />
-        <span class="text-kicker text-text-accent">Queue all</span>
-        <span class="font-mono text-[0.7rem] text-text-muted">
-          {selectedIds.length > 0 ? `${selectedIds.length} selected` : `${entities.length} unidentified`} will be queued
-        </span>
-        <div class="flex-1"></div>
-        <button
-          type="button"
-          class="inline-flex h-7 items-center gap-1.5 rounded-xs border border-border-accent-strong bg-accent-950/40 px-2.5 text-[0.72rem] font-medium text-text-accent transition-colors hover:bg-accent-950/60 disabled:cursor-not-allowed disabled:opacity-40"
-          disabled={store.bulkStarting || (!selectedIds.length && !entities.length)}
-          onclick={handleBulkQueue}
-        >
-          {#if store.bulkStarting}
-            <Loader2 class="h-3 w-3 animate-spin" />
-          {:else}
-            <Sparkles class="h-3 w-3" />
-          {/if}
-          Queue {selectedIds.length || entities.length} with {defaultProvider.name}
-        </button>
-      </header>
-      <div class="flex items-center gap-3 px-3.5 py-2.5 text-[0.78rem]">
-        <span class="font-mono text-[0.7rem] text-text-muted">with provider</span>
-        <span class="rounded-xs border border-border-accent bg-accent-950/30 px-2 py-0.5 font-mono text-[0.66rem] text-text-accent">
-          {defaultProvider.name}
-        </span>
-      </div>
-    </div>
-  {/if}
 
   <!-- Entity grid -->
   {#if loading}
@@ -154,16 +163,18 @@
       {cards}
       selectable
       prefsKey="identify-{entityKind}"
-      emptyTitle="No unidentified {kindLabel.toLowerCase()}"
-      emptyMessage="All {kindLabel.toLowerCase()} in your library have been identified."
+      emptyTitle={showAll ? `No ${kindLabel.toLowerCase()} in library` : `All ${kindLabel.toLowerCase()} organized`}
+      emptyMessage={showAll
+        ? `No ${kindLabel.toLowerCase()} found in your library.`
+        : `All ${kindLabel.toLowerCase()} have been organized. Toggle "Show all" to see everything.`}
       onCardActivate={handleCardActivate}
       onSelectionChange={(ids) => (selectedIds = ids)}
-      bulkActions={defaultProvider
+      bulkActions={activeProvider
         ? [
             {
               id: "identify-bulk",
-              label: `Identify with ${defaultProvider.name}`,
-              onRun: (ids) => store.startBulk(defaultProvider.id, entities.filter((e) => ids.includes(e.id))),
+              label: `Identify with ${activeProvider.name}`,
+              onRun: (ids) => store.startBulk(activeProvider.id, filteredEntities.filter((e) => ids.includes(e.id))),
             },
           ]
         : []}

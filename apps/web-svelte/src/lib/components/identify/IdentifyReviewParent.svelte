@@ -1,18 +1,18 @@
 <script lang="ts">
   import {
     Check,
-    ChevronLeft,
+    ChevronDown,
     ChevronRight,
+    ChevronUp,
     Images,
     Info,
     Layers,
     Loader2,
-    SkipForward,
     Tag,
     Users,
     X,
   } from "@lucide/svelte";
-  import { cn, StatusLed } from "@prismedia/ui-svelte";
+  import { cn } from "@prismedia/ui-svelte";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
   import IdentifyReviewSection from "./IdentifyReviewSection.svelte";
   import {
@@ -81,6 +81,9 @@
     children.filter((child) => store.isReviewProposalSelected(child.proposalId)).length,
   );
   const nextQueueItem = $derived(store.nextQueueItem(entity.id));
+  const queueIndex = $derived(store.queue.findIndex((item) => item.entityId === entity.id));
+  const prevQueueNavItem = $derived(queueIndex > 0 ? store.queue[queueIndex - 1] : null);
+  const nextQueueNavItem = $derived(queueIndex >= 0 && queueIndex < store.queue.length - 1 ? store.queue[queueIndex + 1] : null);
   const contextPosterUrl = $derived(entity.coverUrl ?? proposalImageUrl(["poster", "thumbnail", "cover"]));
 
   $effect(() => {
@@ -267,35 +270,6 @@
 </script>
 
 <div class="flex flex-col gap-4">
-  <!-- Breadcrumb nav -->
-  <div class="flex items-center gap-3">
-    <button
-      type="button"
-      class="inline-flex h-8 items-center gap-1.5 rounded-xs border border-border-default bg-surface-2 px-2.5 text-[0.78rem] text-text-muted transition-colors hover:bg-surface-3 hover:text-text-primary"
-      onclick={() => store.navigateToDashboard()}
-    >
-      <ChevronLeft class="h-3.5 w-3.5" />
-      Back
-    </button>
-    <div class="flex items-center gap-1.5 text-[0.78rem]">
-      <span class="text-text-muted">Identify</span>
-      <ChevronRight class="h-3 w-3 text-text-disabled" />
-      <span class="font-heading font-semibold text-text-primary">{proposal.patch?.title ?? entity.title}</span>
-      <span class="rounded-xs border border-border-accent bg-accent-950/30 px-1.5 py-0.5 font-mono text-[0.6rem] text-text-accent">
-        {entity.kind}
-      </span>
-    </div>
-    <div class="flex-1"></div>
-    <button
-      type="button"
-      class="inline-flex h-8 items-center gap-1 rounded-xs border border-border-default bg-surface-2 px-2.5 text-[0.72rem] text-text-muted transition-colors hover:bg-surface-3"
-      onclick={() => store.navigateToDashboard()}
-    >
-      <SkipForward class="h-3.5 w-3.5" />
-      Skip
-    </button>
-  </div>
-
   <!-- Context bar -->
   <div class="grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-4 rounded-sm border border-border-subtle bg-surface-1 p-3.5 shadow-well">
     {#if contextPosterUrl}
@@ -322,10 +296,7 @@
     </div>
     <div class="hidden flex-col items-end gap-0.5 md:flex">
       <span class="text-kicker">Provider</span>
-      <div class="flex items-center gap-1.5">
-        <StatusLed status="accent" pulse />
-        <span class="text-[0.82rem] text-text-primary">{proposal.provider}</span>
-      </div>
+      <span class="text-[0.82rem] text-text-primary">{proposal.provider}</span>
     </div>
     <div class="hidden flex-col items-end gap-0.5 md:flex">
       <span class="text-kicker">Reason</span>
@@ -496,6 +467,7 @@
                     loading="lazy"
                     decoding="async"
                     fetchpriority="low"
+                    onload={(e) => e.currentTarget.closest('.identify-artwork-tile')?.classList.add('is-loaded')}
                   />
                   {#if selectedImages[group.kind] === image.url}
                     <div class="absolute right-1 top-1">
@@ -603,11 +575,11 @@
   <div class="flex items-center gap-3 py-2">
     <button
       type="button"
-      class="inline-flex h-9 items-center gap-1.5 rounded-xs border border-border-default bg-transparent px-3 text-[0.78rem] text-text-muted transition-colors hover:bg-surface-2 hover:text-text-primary"
+      class="inline-flex h-9 items-center gap-1.5 rounded-xs border border-border-default bg-transparent px-3 text-[0.78rem] text-text-muted transition-colors hover:border-error/50 hover:text-error-text"
       onclick={() => void store.deleteQueueItem(entity.id)}
     >
       <X class="h-3.5 w-3.5" />
-      Delete
+      Cancel
     </button>
     <span class="font-mono text-[0.7rem] text-text-muted">
       {Object.values(selectedFields).filter(Boolean).length} fields
@@ -617,14 +589,31 @@
       · {selectedChildCount} children
     </span>
     <div class="flex-1"></div>
-    <button
-      type="button"
-      class="inline-flex h-9 items-center gap-1.5 rounded-xs border border-border-default bg-surface-2 px-3 text-[0.78rem] text-text-muted transition-colors hover:bg-surface-3 hover:text-text-primary"
-      onclick={() => store.navigateToDashboard()}
-    >
-      <SkipForward class="h-3.5 w-3.5" />
-      Skip
-    </button>
+    {#if store.queue.length > 1 && queueIndex >= 0}
+      <div class="flex items-center gap-1.5">
+        <button
+          type="button"
+          class="inline-flex h-7 w-7 items-center justify-center rounded-xs border border-border-default bg-surface-2 text-text-muted transition-colors hover:bg-surface-3 disabled:opacity-30"
+          disabled={!prevQueueNavItem}
+          onclick={() => prevQueueNavItem && store.reviewQueueItem(prevQueueNavItem)}
+          aria-label="Previous queue item"
+        >
+          <ChevronUp class="h-3.5 w-3.5" />
+        </button>
+        <span class="font-mono text-[0.72rem] text-text-muted">
+          {queueIndex + 1}/{store.queue.length}
+        </span>
+        <button
+          type="button"
+          class="inline-flex h-7 w-7 items-center justify-center rounded-xs border border-border-default bg-surface-2 text-text-muted transition-colors hover:bg-surface-3 disabled:opacity-30"
+          disabled={!nextQueueNavItem}
+          onclick={() => nextQueueNavItem && store.reviewQueueItem(nextQueueNavItem)}
+          aria-label="Next queue item"
+        >
+          <ChevronDown class="h-3.5 w-3.5" />
+        </button>
+      </div>
+    {/if}
     <button
       type="button"
       class="inline-flex h-9 items-center gap-1.5 rounded-xs border border-border-accent-strong px-3 text-[0.78rem] text-text-primary transition-all disabled:cursor-not-allowed disabled:opacity-40"
@@ -729,6 +718,11 @@
       linear-gradient(135deg, rgb(13 14 16), rgb(27 24 19));
     background-size: 220% 100%, auto, auto;
     animation: identify-artwork-shimmer 1.2s ease-in-out infinite;
+  }
+
+  .identify-artwork-tile.is-loaded::before {
+    opacity: 0;
+    animation: none;
   }
 
   .identify-artwork-tile img {
