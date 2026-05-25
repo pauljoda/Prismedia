@@ -23,6 +23,7 @@ public abstract class ScanJobHandler(
 
             for (var i = 0; i < eligible.Count; i++) {
                 await ScanRootAsync(context, eligible[i], cancellationToken);
+                await persistence.UpdateRootLastScannedAsync(eligible[i].Id, cancellationToken);
                 await context.ReportProgressAsync((i + 1) * 100 / eligible.Count,
                     $"Scanned {eligible[i].Label}", cancellationToken);
             }
@@ -34,6 +35,7 @@ public abstract class ScanJobHandler(
             }
 
             await ScanRootAsync(context, root, cancellationToken);
+            await persistence.UpdateRootLastScannedAsync(root.Id, cancellationToken);
             await context.ReportProgressAsync(100, $"Scanned {root.Label}", cancellationToken);
         }
     }

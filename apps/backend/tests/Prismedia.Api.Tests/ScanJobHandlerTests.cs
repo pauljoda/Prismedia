@@ -260,6 +260,7 @@ public sealed class ScanJobHandlerTests {
         Assert.Equal(["/media/images/Gallery", "/media/images/Gallery/A secondGallery"], persistence.ValidGalleryPaths);
         Assert.Equal(["/media/images/Gallery/a.png"], persistence.ValidImagePathsByGalleryId[gallery.Id]);
         Assert.Equal(["/media/images/Gallery/A secondGallery/b.png"], persistence.ValidImagePathsByGalleryId[nestedGallery.Id]);
+        Assert.Equal([root.Id], persistence.LastScannedRootIds);
     }
 
     [Fact]
@@ -330,6 +331,7 @@ public sealed class ScanJobHandlerTests {
         Assert.Equal(["/media/audio/Album", "/media/audio/Album/Disc 2"], persistence.ValidAudioLibraryPaths);
         Assert.Equal(["/media/audio/Album/one.flac"], persistence.ValidAudioTrackPathsByLibraryId[album.Id]);
         Assert.Equal(["/media/audio/Album/Disc 2/two.flac"], persistence.ValidAudioTrackPathsByLibraryId[disc.Id]);
+        Assert.Equal([root.Id], persistence.LastScannedRootIds);
     }
 
     [Fact]
@@ -425,6 +427,7 @@ public sealed class ScanJobHandlerTests {
             Assert.Equal([Path.Combine(rootPath, "Promised Neverland")], persistence.ValidBookPaths);
             Assert.Equal([volumePath], persistence.ValidBookVolumePaths);
             Assert.Equal([chapterOnePath, chapterTwoPath], persistence.ValidBookChapterPaths);
+            Assert.Equal([root.Id], persistence.LastScannedRootIds);
         } finally {
             tempRoot.Delete(recursive: true);
         }
@@ -469,6 +472,7 @@ public sealed class ScanJobHandlerTests {
         Assert.Equal([targetRoot.Id], handler.ScannedRootIds);
         Assert.Equal(targetRoot.Id, persistence.LoadedRootIds.Single());
         Assert.False(persistence.LoadedEnabledRoots);
+        Assert.Equal([targetRoot.Id], persistence.LastScannedRootIds);
     }
 
     private static void CreateZip(string path, IReadOnlyList<string> members) {
@@ -511,6 +515,7 @@ public sealed class ScanJobHandlerTests {
 
     private sealed class FakeScanPersistence(IReadOnlyList<LibraryRootData> roots) : ILibraryScanPersistence {
         public List<Guid> LoadedRootIds { get; } = [];
+        public List<Guid> LastScannedRootIds { get; } = [];
         public bool LoadedEnabledRoots { get; private set; }
         public LibrarySettingsData Settings { get; init; } = new(
             AutoGenerateMetadata: true,
@@ -560,8 +565,10 @@ public sealed class ScanJobHandlerTests {
         public Task<LibrarySettingsData> GetSettingsAsync(CancellationToken cancellationToken) =>
             Task.FromResult(Settings);
 
-        public Task UpdateRootLastScannedAsync(Guid rootId, CancellationToken cancellationToken) =>
-            Task.CompletedTask;
+        public Task UpdateRootLastScannedAsync(Guid rootId, CancellationToken cancellationToken) {
+            LastScannedRootIds.Add(rootId);
+            return Task.CompletedTask;
+        }
 
         public Task<IReadOnlySet<string>> GetExcludedPathsForRootAsync(Guid rootId, CancellationToken cancellationToken) =>
             Task.FromResult(ExcludedPathsByRoot.GetValueOrDefault(rootId) ??

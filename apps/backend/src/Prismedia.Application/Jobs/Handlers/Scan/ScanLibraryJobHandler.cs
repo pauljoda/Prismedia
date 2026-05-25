@@ -123,8 +123,6 @@ public sealed class ScanLibraryJobHandler(
                 logger.LogInformation("ScanLibrary: removed {Count} orphan series/season entities", orphans);
         }
 
-        await Persistence.UpdateRootLastScannedAsync(root.Id, cancellationToken);
-
         var report = timer.Finish();
         logger.LogInformation(
             "[METRICS] scan-library {Label} — {FileCount} files, {Removed} stale, {Orphans} orphans — {Timing}",
