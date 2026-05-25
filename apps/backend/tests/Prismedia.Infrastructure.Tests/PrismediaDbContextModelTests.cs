@@ -14,8 +14,6 @@ public sealed class PrismediaDbContextModelTests {
     [Theory]
     [InlineData(typeof(EntityKindRow), "entity_kinds")]
     [InlineData(typeof(EntityRow), "entities")]
-    [InlineData(typeof(EntityRatingRow), "entity_ratings")]
-    [InlineData(typeof(EntityFlagRow), "entity_flags")]
     [InlineData(typeof(EntityDescriptionRow), "entity_descriptions")]
     [InlineData(typeof(EntityRelationshipLinkRow), "entity_relationship_links")]
     [InlineData(typeof(EntityPlaybackRow), "entity_playback")]
@@ -58,15 +56,6 @@ public sealed class PrismediaDbContextModelTests {
         Assert.NotNull(modelEntity);
         Assert.Null(modelEntity.GetSchema());
         Assert.Equal(tableName, modelEntity.GetTableName());
-    }
-
-    [Fact]
-    public void RatingCapabilityUsesEntityIdAsItsPrimaryKey() {
-        using var db = CreateContext();
-        var modelEntity = db.Model.FindEntityType(typeof(EntityRatingRow));
-
-        var key = Assert.Single(modelEntity!.FindPrimaryKey()!.Properties);
-        Assert.Equal(nameof(EntityRatingRow.EntityId), key.Name);
     }
 
     [Fact]
@@ -192,7 +181,7 @@ public sealed class PrismediaDbContextModelTests {
 
     [Theory]
     [InlineData(typeof(EntityRow), nameof(EntityRow.KindCode), "kind_code")]
-    [InlineData(typeof(EntityRatingRow), nameof(EntityRatingRow.EntityId), "entity_id")]
+    [InlineData(typeof(EntityRow), nameof(EntityRow.RatingValue), "rating_value")]
     [InlineData(typeof(EntityDescriptionRow), nameof(EntityDescriptionRow.Value), "value")]
     [InlineData(typeof(EntityStatRow), nameof(EntityStatRow.Code), "code")]
     [InlineData(typeof(EntityTechnicalRow), nameof(EntityTechnicalRow.DurationSeconds), "duration_seconds")]
@@ -205,7 +194,7 @@ public sealed class PrismediaDbContextModelTests {
     [InlineData(typeof(EntityProgressRow), nameof(EntityProgressRow.CurrentEntityId), "current_entity_id")]
     [InlineData(typeof(EntityPositionRow), nameof(EntityPositionRow.Label), "label")]
     [InlineData(typeof(EntityClassificationRow), nameof(EntityClassificationRow.Value), "value")]
-    [InlineData(typeof(EntityFlagRow), nameof(EntityFlagRow.IsFavorite), "is_favorite")]
+    [InlineData(typeof(EntityRow), nameof(EntityRow.IsFavorite), "is_favorite")]
     [InlineData(typeof(VideoDetailRow), nameof(VideoDetailRow.SubtitlesExtractedAt), "subtitles_extracted_at")]
     [InlineData(typeof(LibraryRootRow), nameof(LibraryRootRow.ScanVideos), "scan_videos")]
     [InlineData(typeof(AppSettingRow), nameof(AppSettingRow.ValueJson), "value_json")]

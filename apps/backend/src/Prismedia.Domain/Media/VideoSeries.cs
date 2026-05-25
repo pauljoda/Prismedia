@@ -43,10 +43,6 @@ public sealed class VideoSeries : Entity {
 
     protected override IEnumerable<EntityCapability> CreateDefaultCapabilities() =>
     [
-        new CapabilityRating(),
-        new CapabilityLinks(),
-        new CapabilityFlags(),
-        new CapabilityFiles(),
         new CapabilityCredits()
     ];
 }

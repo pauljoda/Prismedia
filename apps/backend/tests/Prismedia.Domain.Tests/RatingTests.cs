@@ -1,4 +1,4 @@
-using Prismedia.Domain.Capabilities;
+using Prismedia.Domain.Media;
 
 namespace Prismedia.Domain.Tests;
 
@@ -7,33 +7,32 @@ public sealed class RatingTests {
     [InlineData(0)]
     [InlineData(3)]
     [InlineData(5)]
-    public void ConstructorAcceptsIntegerRatingsOnTheSharedZeroToFiveScale(int value) {
-        var rating = new CapabilityRating(value);
+    public void RateAcceptsIntegerRatingsOnTheSharedZeroToFiveScale(int value) {
+        var video = new Video(Guid.NewGuid(), "Test", subtitlesExtractedAt: null);
 
-        Assert.Equal(value, rating.Value);
+        video.Rate(value);
+
+        Assert.Equal(value, video.RatingValue);
     }
 
     [Theory]
     [InlineData(-1, 0)]
     [InlineData(6, 5)]
-    public void ConstructorClampsRatingsOutsideTheSharedZeroToFiveScale(int value, int normalizedValue) {
-        var rating = new CapabilityRating(value);
+    public void RateClampsRatingsOutsideTheSharedZeroToFiveScale(int value, int normalizedValue) {
+        var video = new Video(Guid.NewGuid(), "Test", subtitlesExtractedAt: null);
 
-        Assert.Equal(normalizedValue, rating.Value);
+        video.Rate(value);
+
+        Assert.Equal(normalizedValue, video.RatingValue);
     }
 
     [Fact]
-    public void RateClampsReplacementRatings() {
-        var rating = new CapabilityRating(3);
+    public void ClearRatingResetsToNull() {
+        var video = new Video(Guid.NewGuid(), "Test", subtitlesExtractedAt: null);
+        video.Rate(3);
 
-        rating.Rate(9);
+        video.ClearRating();
 
-        Assert.Equal(5, rating.Value);
-    }
-
-    [Fact]
-    public void ScaleNormalizeClampsOntoTheSharedScale() {
-        Assert.Equal(CapabilityRating.Scale.MinValue, CapabilityRating.Scale.Normalize(-4));
-        Assert.Equal(CapabilityRating.Scale.MaxValue, CapabilityRating.Scale.Normalize(42));
+        Assert.Null(video.RatingValue);
     }
 }

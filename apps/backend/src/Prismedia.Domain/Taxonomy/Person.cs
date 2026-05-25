@@ -56,10 +56,6 @@ public sealed class Person : Entity {
 
     protected override IEnumerable<EntityCapability> CreateDefaultCapabilities() =>
     [
-        new CapabilityRating(),
-        new CapabilityLinks(),
-        new CapabilityFlags(),
-        new CapabilityFiles(),
         new CapabilityDates(),
         new CapabilityLifetime()
     ];

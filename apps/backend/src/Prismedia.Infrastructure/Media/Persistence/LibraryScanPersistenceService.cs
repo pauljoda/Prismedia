@@ -64,7 +64,7 @@ public sealed class LibraryScanPersistenceService(PrismediaDbContext db) : ILibr
         var now = DateTimeOffset.UtcNow;
         var id = Guid.NewGuid();
 
-        db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKindRegistry.Video.Code, Title = title, CreatedAt = now, UpdatedAt = now });
+        db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKindRegistry.Video.Code, Title = title, IsNsfw = isNsfw, CreatedAt = now, UpdatedAt = now });
         db.VideoDetails.Add(new VideoDetailRow { EntityId = id, LibraryRootId = libraryRootId });
         db.EntityFiles.Add(new EntityFileRow {
             Id = Guid.NewGuid(),
@@ -75,9 +75,6 @@ public sealed class LibraryScanPersistenceService(PrismediaDbContext db) : ILibr
             CreatedAt = now,
             UpdatedAt = now
         });
-        if (isNsfw) {
-            db.EntityFlags.Add(new EntityFlagRow { EntityId = id, IsNsfw = true, UpdatedAt = now });
-        }
 
         await db.SaveChangesAsync(cancellationToken);
         return id;
@@ -103,7 +100,7 @@ public sealed class LibraryScanPersistenceService(PrismediaDbContext db) : ILibr
         var now = DateTimeOffset.UtcNow;
         var id = Guid.NewGuid();
 
-        db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKindRegistry.Image.Code, Title = title, ParentEntityId = galleryEntityId, SortOrder = galleryEntityId is null ? null : sortOrder, CreatedAt = now, UpdatedAt = now });
+        db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKindRegistry.Image.Code, Title = title, ParentEntityId = galleryEntityId, SortOrder = galleryEntityId is null ? null : sortOrder, IsNsfw = isNsfw, CreatedAt = now, UpdatedAt = now });
         db.EntityFiles.Add(new EntityFileRow {
             Id = Guid.NewGuid(),
             EntityId = id,
@@ -123,10 +120,6 @@ public sealed class LibraryScanPersistenceService(PrismediaDbContext db) : ILibr
                 cancellationToken);
         }
 
-        if (isNsfw) {
-            db.EntityFlags.Add(new EntityFlagRow { EntityId = id, IsNsfw = true, UpdatedAt = now });
-        }
-
         await db.SaveChangesAsync(cancellationToken);
         return id;
     }
@@ -144,7 +137,7 @@ public sealed class LibraryScanPersistenceService(PrismediaDbContext db) : ILibr
         var now = DateTimeOffset.UtcNow;
         var id = Guid.NewGuid();
 
-        db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKindRegistry.Gallery.Code, Title = title, CreatedAt = now, UpdatedAt = now });
+        db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKindRegistry.Gallery.Code, Title = title, IsNsfw = isNsfw, CreatedAt = now, UpdatedAt = now });
         db.GalleryDetails.Add(new GalleryDetailRow { EntityId = id, GalleryType = GalleryType.Folder, LibraryRootId = libraryRootId });
         db.EntityFiles.Add(new EntityFileRow {
             Id = Guid.NewGuid(),
@@ -154,9 +147,6 @@ public sealed class LibraryScanPersistenceService(PrismediaDbContext db) : ILibr
             CreatedAt = now,
             UpdatedAt = now
         });
-        if (isNsfw) {
-            db.EntityFlags.Add(new EntityFlagRow { EntityId = id, IsNsfw = true, UpdatedAt = now });
-        }
 
         await db.SaveChangesAsync(cancellationToken);
         return id;
@@ -179,7 +169,7 @@ public sealed class LibraryScanPersistenceService(PrismediaDbContext db) : ILibr
         var now = DateTimeOffset.UtcNow;
         var id = Guid.NewGuid();
 
-        db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKindRegistry.AudioTrack.Code, Title = title, ParentEntityId = audioLibraryId, SortOrder = sortOrder, CreatedAt = now, UpdatedAt = now });
+        db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKindRegistry.AudioTrack.Code, Title = title, ParentEntityId = audioLibraryId, SortOrder = sortOrder, IsNsfw = isNsfw, CreatedAt = now, UpdatedAt = now });
         db.AudioTrackDetails.Add(new AudioTrackDetailRow { EntityId = id });
         db.EntityFiles.Add(new EntityFileRow {
             Id = Guid.NewGuid(),
@@ -196,9 +186,6 @@ public sealed class LibraryScanPersistenceService(PrismediaDbContext db) : ILibr
             sortOrder,
             now,
             cancellationToken);
-        if (isNsfw) {
-            db.EntityFlags.Add(new EntityFlagRow { EntityId = id, IsNsfw = true, UpdatedAt = now });
-        }
 
         await db.SaveChangesAsync(cancellationToken);
         return id;
@@ -218,7 +205,7 @@ public sealed class LibraryScanPersistenceService(PrismediaDbContext db) : ILibr
         var now = DateTimeOffset.UtcNow;
         var id = Guid.NewGuid();
 
-        db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKindRegistry.AudioLibrary.Code, Title = title, CreatedAt = now, UpdatedAt = now });
+        db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKindRegistry.AudioLibrary.Code, Title = title, IsNsfw = isNsfw, CreatedAt = now, UpdatedAt = now });
         db.AudioLibraryDetails.Add(new AudioLibraryDetailRow { EntityId = id, LibraryRootId = libraryRootId });
         db.EntityFiles.Add(new EntityFileRow {
             Id = Guid.NewGuid(),
@@ -228,9 +215,6 @@ public sealed class LibraryScanPersistenceService(PrismediaDbContext db) : ILibr
             CreatedAt = now,
             UpdatedAt = now
         });
-        if (isNsfw) {
-            db.EntityFlags.Add(new EntityFlagRow { EntityId = id, IsNsfw = true, UpdatedAt = now });
-        }
 
         await db.SaveChangesAsync(cancellationToken);
         return id;
@@ -250,7 +234,7 @@ public sealed class LibraryScanPersistenceService(PrismediaDbContext db) : ILibr
         var now = DateTimeOffset.UtcNow;
         var id = Guid.NewGuid();
 
-        db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKindRegistry.Book.Code, Title = title, CreatedAt = now, UpdatedAt = now });
+        db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKindRegistry.Book.Code, Title = title, IsNsfw = isNsfw, CreatedAt = now, UpdatedAt = now });
         db.BookDetails.Add(new BookDetailRow { EntityId = id, BookType = BookType.Book, LibraryRootId = libraryRootId });
         db.EntityFiles.Add(new EntityFileRow {
             Id = Guid.NewGuid(),
@@ -261,9 +245,6 @@ public sealed class LibraryScanPersistenceService(PrismediaDbContext db) : ILibr
             CreatedAt = now,
             UpdatedAt = now
         });
-        if (isNsfw) {
-            db.EntityFlags.Add(new EntityFlagRow { EntityId = id, IsNsfw = true, UpdatedAt = now });
-        }
 
         await db.SaveChangesAsync(cancellationToken);
         return id;
@@ -287,7 +268,7 @@ public sealed class LibraryScanPersistenceService(PrismediaDbContext db) : ILibr
         var now = DateTimeOffset.UtcNow;
         var id = Guid.NewGuid();
 
-        db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKindRegistry.BookVolume.Code, Title = title, ParentEntityId = bookEntityId, SortOrder = sortOrder, CreatedAt = now, UpdatedAt = now });
+        db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKindRegistry.BookVolume.Code, Title = title, ParentEntityId = bookEntityId, SortOrder = sortOrder, IsNsfw = isNsfw, CreatedAt = now, UpdatedAt = now });
         db.EntityFiles.Add(new EntityFileRow {
             Id = Guid.NewGuid(),
             EntityId = id,
@@ -302,9 +283,6 @@ public sealed class LibraryScanPersistenceService(PrismediaDbContext db) : ILibr
             sortOrder,
             now,
             cancellationToken);
-        if (isNsfw) {
-            db.EntityFlags.Add(new EntityFlagRow { EntityId = id, IsNsfw = true, UpdatedAt = now });
-        }
 
         await db.SaveChangesAsync(cancellationToken);
         return id;
@@ -328,7 +306,7 @@ public sealed class LibraryScanPersistenceService(PrismediaDbContext db) : ILibr
         var now = DateTimeOffset.UtcNow;
         var id = Guid.NewGuid();
 
-        db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKindRegistry.BookChapter.Code, Title = title, ParentEntityId = parentEntityId, SortOrder = sortOrder, CreatedAt = now, UpdatedAt = now });
+        db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKindRegistry.BookChapter.Code, Title = title, ParentEntityId = parentEntityId, SortOrder = sortOrder, IsNsfw = isNsfw, CreatedAt = now, UpdatedAt = now });
         db.BookChapterDetails.Add(new BookChapterDetailRow { EntityId = id });
         db.EntityFiles.Add(new EntityFileRow {
             Id = Guid.NewGuid(),
@@ -344,9 +322,6 @@ public sealed class LibraryScanPersistenceService(PrismediaDbContext db) : ILibr
             sortOrder,
             now,
             cancellationToken);
-        if (isNsfw) {
-            db.EntityFlags.Add(new EntityFlagRow { EntityId = id, IsNsfw = true, UpdatedAt = now });
-        }
 
         await db.SaveChangesAsync(cancellationToken);
         return id;
@@ -369,7 +344,7 @@ public sealed class LibraryScanPersistenceService(PrismediaDbContext db) : ILibr
         var now = DateTimeOffset.UtcNow;
         var id = Guid.NewGuid();
 
-        db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKindRegistry.BookPage.Code, Title = title, ParentEntityId = chapterEntityId, SortOrder = sortOrder, CreatedAt = now, UpdatedAt = now });
+        db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKindRegistry.BookPage.Code, Title = title, ParentEntityId = chapterEntityId, SortOrder = sortOrder, IsNsfw = isNsfw, CreatedAt = now, UpdatedAt = now });
         db.EntityFiles.Add(new EntityFileRow {
             Id = Guid.NewGuid(),
             EntityId = id,
@@ -384,9 +359,6 @@ public sealed class LibraryScanPersistenceService(PrismediaDbContext db) : ILibr
             sortOrder,
             now,
             cancellationToken);
-        if (isNsfw) {
-            db.EntityFlags.Add(new EntityFlagRow { EntityId = id, IsNsfw = true, UpdatedAt = now });
-        }
 
         await db.SaveChangesAsync(cancellationToken);
         return id;
@@ -548,7 +520,7 @@ public sealed class LibraryScanPersistenceService(PrismediaDbContext db) : ILibr
             }
 
             var id = Guid.NewGuid();
-            db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKindRegistry.Video.Code, Title = item.Title, CreatedAt = now, UpdatedAt = now });
+            db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKindRegistry.Video.Code, Title = item.Title, IsNsfw = item.IsNsfw, CreatedAt = now, UpdatedAt = now });
             db.VideoDetails.Add(new VideoDetailRow { EntityId = id, LibraryRootId = item.LibraryRootId });
             db.EntityFiles.Add(new EntityFileRow {
                 Id = Guid.NewGuid(),
@@ -559,9 +531,6 @@ public sealed class LibraryScanPersistenceService(PrismediaDbContext db) : ILibr
                 CreatedAt = now,
                 UpdatedAt = now
             });
-            if (item.IsNsfw) {
-                db.EntityFlags.Add(new EntityFlagRow { EntityId = id, IsNsfw = true, UpdatedAt = now });
-            }
             await MaterializeVideoHierarchyAsync(
                 id,
                 item,
@@ -649,20 +618,21 @@ public sealed class LibraryScanPersistenceService(PrismediaDbContext db) : ILibr
                 Id = seriesId,
                 KindCode = EntityKindRegistry.VideoSeries.Code,
                 Title = series.Title,
+                IsNsfw = isNsfw,
                 CreatedAt = now,
                 UpdatedAt = now
             });
         } else {
             var tracked = await db.Entities.FindAsync([seriesId], cancellationToken);
-            if (tracked is not null) tracked.UpdatedAt = now;
+            if (tracked is not null) {
+                tracked.UpdatedAt = now;
+                if (isNsfw) tracked.IsNsfw = true;
+            }
         }
 
         await EnsureEntityFileAsync(seriesId, EntityFileRole.Source, series.FolderPath, sizeBytes: null, now, cancellationToken);
         await EnsureEntitySourceAsync(seriesId, "folder", series.FolderPath, now, cancellationToken);
         await EnsureVideoSeriesDetailAsync(seriesId, cancellationToken);
-        if (isNsfw) {
-            await EnsureEntityFlagAsync(seriesId, now, cancellationToken);
-        }
 
         seriesCache[series.FolderPath] = seriesId;
         return seriesId;
@@ -701,6 +671,7 @@ public sealed class LibraryScanPersistenceService(PrismediaDbContext db) : ILibr
                 Title = season.Title,
                 ParentEntityId = seriesId,
                 SortOrder = season.SeasonNumber,
+                IsNsfw = isNsfw,
                 CreatedAt = now,
                 UpdatedAt = now
             });
@@ -709,6 +680,7 @@ public sealed class LibraryScanPersistenceService(PrismediaDbContext db) : ILibr
             existingSeasonRow.ParentEntityId = seriesId;
             existingSeasonRow.SortOrder = season.SeasonNumber;
             existingSeasonRow.UpdatedAt = now;
+            if (isNsfw) existingSeasonRow.IsNsfw = true;
         }
 
         await EnsureEntityFileAsync(seasonId, EntityFileRole.Source, season.FolderPath, sizeBytes: null, now, cancellationToken);
@@ -720,9 +692,6 @@ public sealed class LibraryScanPersistenceService(PrismediaDbContext db) : ILibr
             season.SeasonNumber,
             now,
             cancellationToken);
-        if (isNsfw) {
-            await EnsureEntityFlagAsync(seasonId, now, cancellationToken);
-        }
 
         seasonCache[cacheKey] = seasonId;
         return seasonId;
@@ -831,17 +800,7 @@ public sealed class LibraryScanPersistenceService(PrismediaDbContext db) : ILibr
         source.UpdatedAt = now;
     }
 
-    private async Task EnsureEntityFlagAsync(Guid entityId, DateTimeOffset now, CancellationToken cancellationToken) {
-        var flag = db.EntityFlags.Local.FirstOrDefault(row => row.EntityId == entityId)
-            ?? await db.EntityFlags.FindAsync([entityId], cancellationToken);
-        if (flag is null) {
-            db.EntityFlags.Add(new EntityFlagRow { EntityId = entityId, IsNsfw = true, UpdatedAt = now });
-            return;
-        }
 
-        flag.IsNsfw = true;
-        flag.UpdatedAt = now;
-    }
 
     public async Task<IReadOnlyDictionary<Guid, DownstreamNeeds>> CheckDownstreamNeedsBatchAsync(
         IReadOnlyList<Guid> entityIds, CancellationToken cancellationToken) {

@@ -47,11 +47,11 @@ public sealed class EntityMetadataApplyServiceTests {
         Assert.Equal("New Title", (await db.Entities.FindAsync([entityId]))?.Title);
         Assert.Null(await db.EntityDescriptions.FindAsync([entityId]));
         Assert.Equal("https://new.example.test", await db.EntityUrls.Where(row => row.EntityId == entityId).Select(row => row.Url).SingleAsync());
-        Assert.Equal(4, (await db.EntityRatings.FindAsync([entityId]))?.Value);
-        var flags = await db.EntityFlags.FindAsync([entityId]);
-        Assert.True(flags?.IsFavorite);
-        Assert.False(flags?.IsNsfw);
-        Assert.True(flags?.IsOrganized);
+        var entityRow = await db.Entities.FindAsync([entityId]);
+        Assert.Equal(4, entityRow?.RatingValue);
+        Assert.True(entityRow?.IsFavorite);
+        Assert.False(entityRow?.IsNsfw);
+        Assert.True(entityRow?.IsOrganized);
     }
 
     [Fact]

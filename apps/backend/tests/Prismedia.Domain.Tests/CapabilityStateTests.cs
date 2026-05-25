@@ -1,17 +1,19 @@
 using Prismedia.Domain.Capabilities;
+using Prismedia.Domain.Media;
 
 namespace Prismedia.Domain.Tests;
 
 public sealed class CapabilityStateTests {
     [Fact]
     public void FlagsPatchOnlyUpdatesProvidedValues() {
-        var flags = new CapabilityFlags(isFavorite: false, isNsfw: true, isOrganized: false);
+        var video = new Video(Guid.NewGuid(), "Test", subtitlesExtractedAt: null);
+        video.PatchFlags(isFavorite: false, isNsfw: true, isOrganized: false);
 
-        flags.Patch(isFavorite: true, isNsfw: null, isOrganized: null);
+        video.PatchFlags(isFavorite: true, isNsfw: null, isOrganized: null);
 
-        Assert.True(flags.IsFavorite);
-        Assert.True(flags.IsNsfw);
-        Assert.False(flags.IsOrganized);
+        Assert.True(video.IsFavorite);
+        Assert.True(video.IsNsfw);
+        Assert.False(video.IsOrganized);
     }
 
     [Fact]

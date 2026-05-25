@@ -1,7 +1,6 @@
 using Prismedia.Contracts.Entities;
 using Prismedia.Domain.Capabilities;
 using Prismedia.Domain.Entities;
-using Prismedia.Domain.Media;
 using ContractCapability = Prismedia.Contracts.Entities.EntityCapability;
 
 namespace Prismedia.Application.Entities;
@@ -39,13 +38,8 @@ public static class EntityCardProjector {
     private static IReadOnlyList<ContractCapability> MapCapabilities(Entity entity) {
         var capabilities = new List<ContractCapability>();
 
-        if (entity.Rating is { } rating) {
-            capabilities.Add(new RatingCapability(rating.Value));
-        }
-
-        if (entity.Flags is { } flags) {
-            capabilities.Add(new FlagsCapability(flags.IsFavorite, flags.IsNsfw, flags.IsOrganized));
-        }
+        capabilities.Add(new RatingCapability(entity.RatingValue));
+        capabilities.Add(new FlagsCapability(entity.IsFavorite, entity.IsNsfw, entity.IsOrganized));
 
         if (entity.Description is { } description) {
             capabilities.Add(new DescriptionCapability(description.Value));
@@ -83,12 +77,12 @@ public static class EntityCardProjector {
             capabilities.Add(images);
         }
 
-        if (entity.Files is { } files) {
-            capabilities.Add(new FilesCapability(files.Items));
+        if (entity.EntityFiles.Count > 0) {
+            capabilities.Add(new FilesCapability(entity.EntityFiles));
         }
 
-        if (entity.GetCapability<CapabilityLinks>() is { } links) {
-            capabilities.Add(new LinksCapability(links.Urls, links.ExternalIds));
+        if (entity.Urls.Count > 0 || entity.ExternalIds.Count > 0) {
+            capabilities.Add(new LinksCapability(entity.Urls, entity.ExternalIds));
         }
 
         if (entity.SubtitleCapability is { } subtitles) {
@@ -138,8 +132,7 @@ public static class EntityCardProjector {
     }
 
     private static ImagesCapability? ProjectImages(Entity entity) {
-        var files = entity.Files?.Items ?? [];
-        var assets = files
+        var assets = entity.EntityFiles
             .Where(file => file.Role is EntityFileRole.Thumbnail or EntityFileRole.Poster
                 or EntityFileRole.Cover or EntityFileRole.Backdrop)
             .OrderBy(file => file.Role switch {
@@ -171,7 +164,7 @@ public static class EntityCardProjector {
             .ToArray();
 
     private static EntityThumbnail ToThumbnail(Entity entity) {
-        var cover = (entity.Files?.Items ?? [])
+        var cover = entity.EntityFiles
             .Where(file => file.Role is EntityFileRole.Thumbnail or EntityFileRole.Poster
                 or EntityFileRole.Cover or EntityFileRole.Backdrop)
             .OrderBy(file => file.Role switch {
@@ -182,7 +175,6 @@ public static class EntityCardProjector {
             })
             .Select(file => file.Path)
             .FirstOrDefault();
-        var flags = entity.Flags;
 
         return new EntityThumbnail(
             entity.Id,
@@ -195,10 +187,10 @@ public static class EntityCardProjector {
             null,
             [],
             [],
-            entity.Rating?.Value,
-            flags?.IsFavorite ?? false,
-            flags?.IsNsfw ?? false,
-            flags?.IsOrganized ?? false);
+            entity.RatingValue,
+            entity.IsFavorite ?? false,
+            entity.IsNsfw ?? false,
+            entity.IsOrganized ?? false);
     }
 
 }

@@ -8,6 +8,9 @@ namespace Prismedia.Domain.Entities;
 public abstract class Entity {
     private readonly List<EntityCapability> _capabilities = [];
     private readonly List<EntityLink> _links = [];
+    private readonly List<EntityUrl> _urls = [];
+    private readonly List<EntityExternalId> _externalIds = [];
+    private readonly List<EntityFile> _entityFiles = [];
 
     /// <summary>
     /// Creates an entity with optional capabilities, child relationships, and non-structural relationships.
@@ -79,17 +82,92 @@ public abstract class Entity {
     public IReadOnlyList<Entity> Relationships =>
         _links.Where(link => !link.Structural).Select(link => link.Entity).ToArray();
 
-    /// <summary>User rating capability when attached.</summary>
-    public CapabilityRating? Rating => GetCapability<CapabilityRating>();
+    // ── Rating ──────────────────────────────────────────────────────────
 
-    /// <summary>User-facing boolean flag capability when attached.</summary>
-    public CapabilityFlags? Flags => GetCapability<CapabilityFlags>();
+    /// <summary>Current normalized rating value (0-5), or null when unrated.</summary>
+    public int? RatingValue { get; private set; }
+
+    /// <summary>Sets the rating value, clamped to the 0-5 scale.</summary>
+    public void Rate(int value) => RatingValue = Math.Clamp(value, 0, 5);
+
+    /// <summary>Clears the current rating.</summary>
+    public void ClearRating() => RatingValue = null;
+
+    // ── Flags ──────────────────────────────────────────────────────────
+
+    /// <summary>Favorite flag when set.</summary>
+    public bool? IsFavorite { get; private set; }
+
+    /// <summary>NSFW flag when set.</summary>
+    public bool? IsNsfw { get; private set; }
+
+    /// <summary>Organized/reviewed flag when set.</summary>
+    public bool? IsOrganized { get; private set; }
+
+    /// <summary>Applies a sparse flag update. Null arguments leave the corresponding flag unchanged.</summary>
+    public void PatchFlags(bool? isFavorite, bool? isNsfw, bool? isOrganized) {
+        if (isFavorite.HasValue) IsFavorite = isFavorite;
+        if (isNsfw.HasValue) IsNsfw = isNsfw;
+        if (isOrganized.HasValue) IsOrganized = isOrganized;
+    }
+
+    // ── Links ──────────────────────────────────────────────────────────
+
+    /// <summary>User-visible URLs in insertion order.</summary>
+    public IReadOnlyList<EntityUrl> Urls => _urls;
+
+    /// <summary>Provider identities in insertion order.</summary>
+    public IReadOnlyList<EntityExternalId> ExternalIds => _externalIds;
+
+    /// <summary>Adds a user-visible URL.</summary>
+    public void AddUrl(string value, string? label = null) => _urls.Add(new EntityUrl(value, label));
+
+    /// <summary>Sets a provider identity, replacing any existing identity for the same provider.</summary>
+    public void SetExternalId(string provider, string value, string? url = null) {
+        _externalIds.RemoveAll(id => string.Equals(id.Provider, provider, StringComparison.Ordinal));
+        _externalIds.Add(new EntityExternalId(provider, value, url));
+    }
+
+    // ── Files ──────────────────────────────────────────────────────────
+
+    /// <summary>Files attached to this entity in insertion order.</summary>
+    public IReadOnlyList<EntityFile> EntityFiles => _entityFiles;
+
+    /// <summary>Attaches a file in the given role.</summary>
+    public void AttachFile(EntityFileRole role, string path, string? mimeType = null) =>
+        _entityFiles.Add(new EntityFile(role, path, mimeType));
+
+    /// <summary>Removes every file attached in the given role.</summary>
+    public bool DetachFileRole(EntityFileRole role) =>
+        _entityFiles.RemoveAll(f => f.Role == role) > 0;
+
+    // ── Hydration (infrastructure only) ────────────────────────────────
+
+    /// <summary>Bulk-loads rating/flags/links/files from persistence. Infrastructure use only.</summary>
+    public void HydrateUniversalProperties(
+        int? ratingValue,
+        bool? isFavorite,
+        bool? isNsfw,
+        bool? isOrganized,
+        IEnumerable<EntityUrl>? urls,
+        IEnumerable<EntityExternalId>? externalIds,
+        IEnumerable<EntityFile>? files) {
+        RatingValue = ratingValue;
+        IsFavorite = isFavorite;
+        IsNsfw = isNsfw;
+        IsOrganized = isOrganized;
+        _urls.Clear();
+        if (urls is not null) _urls.AddRange(urls);
+        _externalIds.Clear();
+        if (externalIds is not null) _externalIds.AddRange(externalIds);
+        _entityFiles.Clear();
+        if (files is not null) _entityFiles.AddRange(files);
+    }
+
+    // ── Capabilities (optional behavior modules) ───────────────────────
 
     /// <summary>Description capability when attached.</summary>
     public CapabilityDescription? Description => GetCapability<CapabilityDescription>();
-
-    /// <summary>File capability when attached.</summary>
-    public CapabilityFiles? Files => GetCapability<CapabilityFiles>();
 
     /// <summary>Stats capability when attached.</summary>
     public CapabilityStats? Stats => GetCapability<CapabilityStats>();

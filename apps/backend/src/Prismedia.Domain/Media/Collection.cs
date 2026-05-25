@@ -37,11 +37,5 @@ public sealed class Collection : Entity {
     public bool SlideshowAutoAdvance { get; private set; }
     public DateTimeOffset? LastRefreshedAt { get; private set; }
 
-    protected override IEnumerable<EntityCapability> CreateDefaultCapabilities() =>
-    [
-        new CapabilityRating(),
-        new CapabilityLinks(),
-        new CapabilityFlags(),
-        new CapabilityFiles()
-    ];
+    protected override IEnumerable<EntityCapability> CreateDefaultCapabilities() => [];
 }

@@ -22,11 +22,5 @@ public sealed class Gallery : Entity {
     public GalleryType GalleryType { get; private set; }
     public Guid? CoverImageId { get; private set; }
 
-    protected override IEnumerable<EntityCapability> CreateDefaultCapabilities() =>
-    [
-        new CapabilityRating(),
-        new CapabilityLinks(),
-        new CapabilityFlags(),
-        new CapabilityFiles()
-    ];
+    protected override IEnumerable<EntityCapability> CreateDefaultCapabilities() => [];
 }

@@ -61,6 +61,7 @@ public sealed class EfFilesPersistenceTests {
             Id = entityId,
             KindCode = kindCode,
             Title = title,
+            IsNsfw = isNsfw,
             CreatedAt = now,
             UpdatedAt = now
         });
@@ -72,14 +73,6 @@ public sealed class EfFilesPersistenceTests {
             CreatedAt = now,
             UpdatedAt = now
         });
-        if (isNsfw) {
-            db.EntityFlags.Add(new EntityFlagRow {
-                EntityId = entityId,
-                IsNsfw = true,
-                UpdatedAt = now
-            });
-        }
-
         await db.SaveChangesAsync();
     }
 

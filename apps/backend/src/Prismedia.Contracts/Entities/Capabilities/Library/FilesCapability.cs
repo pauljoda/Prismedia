@@ -1,4 +1,4 @@
-using EntityFile = Prismedia.Domain.Capabilities.CapabilityFiles.Item;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Contracts.Entities;
 

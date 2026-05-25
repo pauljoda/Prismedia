@@ -139,12 +139,12 @@ public sealed class EfEntityReadService : IEntityReadService {
 
     private IQueryable<EntityRow> ApplyNsfwVisibility(IQueryable<EntityRow> query, bool hideNsfw) =>
         hideNsfw
-            ? query.Where(entity => !_db.EntityFlags.Any(flag => flag.EntityId == entity.Id && flag.IsNsfw))
+            ? query.Where(entity => !entity.IsNsfw)
             : query;
 
     private async Task<bool> IsEntityHiddenAsync(Guid id, CancellationToken cancellationToken) =>
-        await _db.EntityFlags.AsNoTracking()
-            .AnyAsync(flag => flag.EntityId == id && flag.IsNsfw, cancellationToken);
+        await _db.Entities.AsNoTracking()
+            .AnyAsync(entity => entity.Id == id && entity.IsNsfw, cancellationToken);
 
     private async Task<EntityCard> EnrichBookProgressAsync(
         EntityCard card,
@@ -229,12 +229,6 @@ public sealed class EfEntityReadService : IEntityReadService {
         }
 
         var ids = rows.Select(entity => entity.Id).ToArray();
-        var ratings = await _db.EntityRatings.AsNoTracking()
-            .Where(rating => ids.Contains(rating.EntityId))
-            .ToDictionaryAsync(rating => rating.EntityId, rating => rating.Value, cancellationToken);
-        var flags = await _db.EntityFlags.AsNoTracking()
-            .Where(flag => ids.Contains(flag.EntityId))
-            .ToDictionaryAsync(flag => flag.EntityId, cancellationToken);
         var coverByEntity = await LoadCoverPathsAsync(ids, cancellationToken);
         var hoverFiles = await _db.EntityFiles.AsNoTracking()
             .Where(file => ids.Contains(file.EntityId) && file.Role == EntityFileRole.Trickplay)
@@ -251,7 +245,6 @@ public sealed class EfEntityReadService : IEntityReadService {
             .ToDictionaryAsync(technical => technical.EntityId, cancellationToken);
 
         return rows.Select(row => {
-            flags.TryGetValue(row.Id, out var flag);
             var hoverUrl = hoverByEntity.GetValueOrDefault(row.Id);
             var hoverImages = hoverImagesByEntity.GetValueOrDefault(row.Id) ?? [];
             var coverUrl = coverByEntity.GetValueOrDefault(row.Id);
@@ -270,10 +263,10 @@ public sealed class EfEntityReadService : IEntityReadService {
                 hoverUrl,
                 hoverImages,
                 ProjectThumbnailMeta(row, technicalByEntity.GetValueOrDefault(row.Id)),
-                ratings.GetValueOrDefault(row.Id),
-                flag?.IsFavorite ?? false,
-                flag?.IsNsfw ?? false,
-                flag?.IsOrganized ?? false);
+                row.RatingValue,
+                row.IsFavorite,
+                row.IsNsfw,
+                row.IsOrganized);
         }).ToArray();
     }
 
@@ -524,7 +517,7 @@ public sealed class EfEntityReadService : IEntityReadService {
                            link.TargetKindCode == EntityKindRegistry.Person.Code);
         if (hideNsfw) {
             linksQuery = linksQuery.Where(link =>
-                !_db.EntityFlags.Any(flag => flag.EntityId == link.TargetEntityId && flag.IsNsfw));
+                !_db.Entities.Any(entity => entity.Id == link.TargetEntityId && entity.IsNsfw));
         }
 
         var links = await linksQuery

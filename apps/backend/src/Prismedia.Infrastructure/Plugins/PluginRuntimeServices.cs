@@ -551,8 +551,8 @@ public sealed class IdentifyPluginService {
         IdentifyQuery? query,
         bool hideNsfw,
         CancellationToken cancellationToken) {
-        if (hideNsfw && await _db.EntityFlags.AsNoTracking()
-                .AnyAsync(flag => flag.EntityId == entityId && flag.IsNsfw, cancellationToken)) {
+        if (hideNsfw && await _db.Entities.AsNoTracking()
+                .AnyAsync(entity => entity.Id == entityId && entity.IsNsfw, cancellationToken)) {
             return new IdentifyPluginResponse(false, null, $"Entity '{entityId}' was not found.");
         }
 

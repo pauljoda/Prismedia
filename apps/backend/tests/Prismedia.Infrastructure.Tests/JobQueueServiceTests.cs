@@ -72,14 +72,10 @@ public sealed class JobQueueServiceTests {
                 Id = nsfwEntityId,
                 KindCode = EntityKindRegistry.Video.Code,
                 Title = "Hidden",
+                IsNsfw = true,
                 CreatedAt = now,
                 UpdatedAt = now
             });
-        db.EntityFlags.Add(new EntityFlagRow {
-            EntityId = nsfwEntityId,
-            IsNsfw = true,
-            UpdatedAt = now
-        });
         db.LibraryRoots.AddRange(
             new LibraryRootRow {
                 Id = safeRootId,

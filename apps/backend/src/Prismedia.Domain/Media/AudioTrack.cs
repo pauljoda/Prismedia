@@ -32,10 +32,6 @@ public sealed class AudioTrack : Entity {
 
     protected override IEnumerable<EntityCapability> CreateDefaultCapabilities() =>
     [
-        new CapabilityRating(),
-        new CapabilityLinks(),
-        new CapabilityFlags(),
-        new CapabilityFiles(),
         new CapabilityPlayback()
     ];
 }

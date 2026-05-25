@@ -1,5 +1,4 @@
-using EntityUrl = Prismedia.Domain.Capabilities.CapabilityLinks.Url;
-using EntityExternalId = Prismedia.Domain.Capabilities.CapabilityLinks.ExternalId;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Contracts.Entities;
 

@@ -103,14 +103,13 @@ public sealed class EfEntityRepositoryTests {
 
         Set(video, new CapabilityDescription("A noir mystery"));
         Set(video, MakeTechnical(width: 1920, height: 1080, codec: "h264"));
-        Set(video, new CapabilityFiles([new CapabilityFiles.Item(EntityFileRole.Source, "/media/v.mp4", "video/mp4")]));
+        video.AttachFile(EntityFileRole.Source, "/media/v.mp4", "video/mp4");
         Set(video, new CapabilityStats([new CapabilityStats.Item("scenes", 12)]));
         Set(video, new CapabilityDates([new EntityDate("released", "2020-01-01", new DateOnly(2020, 1, 1), "day")]));
         Set(video, new CapabilitySource([new CapabilitySource.Item("stash", "abc")]));
         Set(video, new CapabilityPosition([new CapabilityPosition.Item("episode", 5, "E5")]));
-        Set(video, new CapabilityLinks(
-            [new CapabilityLinks.Url("https://example.test", "Example")],
-            [new CapabilityLinks.ExternalId("tmdb", "42", "https://tmdb.test/42")]));
+        video.AddUrl("https://example.test", "Example");
+        video.SetExternalId("tmdb", "42", "https://tmdb.test/42");
         var subtitlePath = Path.GetTempFileName();
         Set(video, new CapabilitySubtitles([new CapabilitySubtitles.Item(
             Guid.NewGuid(), "en", "English", "srt", EntitySubtitleSource.Embedded, subtitlePath, "srt", null, true)]));
@@ -126,14 +125,13 @@ public sealed class EfEntityRepositoryTests {
         Assert.Equal("A noir mystery", loaded.Description!.Value);
         Assert.Equal(1920, loaded.Technical!.Width);
         Assert.Equal("h264", loaded.Technical!.Codec);
-        Assert.Equal(EntityFileRole.Source, Assert.Single(loaded.Files!.Items).Role);
+        Assert.Equal(EntityFileRole.Source, Assert.Single(loaded.EntityFiles).Role);
         Assert.Equal(12, Assert.Single(loaded.Stats!.Items).Value);
         Assert.Equal("released", Assert.Single(loaded.Dates!.Items).Code);
         Assert.Equal("abc", Assert.Single(loaded.Source!.Items).Value);
         Assert.Equal("E5", Assert.Single(loaded.Position!.Items).Label);
-        var links = loaded.GetCapability<CapabilityLinks>()!;
-        Assert.Equal("https://example.test", Assert.Single(links.Urls).Value);
-        Assert.Equal("tmdb", Assert.Single(links.ExternalIds).Provider);
+        Assert.Equal("https://example.test", Assert.Single(loaded.Urls).Value);
+        Assert.Equal("tmdb", Assert.Single(loaded.ExternalIds).Provider);
         Assert.Equal("en", Assert.Single(loaded.SubtitleCapability!.Items).Language);
         Assert.Equal(FingerprintAlgorithm.Md5, Assert.Single(loaded.GetCapability<CapabilityFingerprints>()!.Items).Algorithm);
         Assert.Equal("R", loaded.Classification!.Value);

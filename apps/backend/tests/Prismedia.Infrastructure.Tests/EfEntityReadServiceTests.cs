@@ -444,14 +444,10 @@ public sealed class EfEntityReadServiceTests {
                 Title = "Hidden Chapter",
                 ParentEntityId = bookId,
                 SortOrder = 1,
+                IsNsfw = true,
                 CreatedAt = now,
                 UpdatedAt = now
             });
-        db.EntityFlags.Add(new EntityFlagRow {
-            EntityId = nsfwChapterId,
-            IsNsfw = true,
-            UpdatedAt = now
-        });
         await db.SaveChangesAsync();
 
         var repository = new EfEntityRepository(db, EntityMappers.Kinds(db), EntityMappers.Capabilities(db));
@@ -485,6 +481,7 @@ public sealed class EfEntityReadServiceTests {
                 Title = "Hidden Chapter",
                 ParentEntityId = bookId,
                 SortOrder = 0,
+                IsNsfw = true,
                 CreatedAt = now,
                 UpdatedAt = now
             });
@@ -494,11 +491,6 @@ public sealed class EfEntityReadServiceTests {
             Unit = "page",
             Index = 5,
             Total = 30,
-            UpdatedAt = now
-        });
-        db.EntityFlags.Add(new EntityFlagRow {
-            EntityId = chapterId,
-            IsNsfw = true,
             UpdatedAt = now
         });
         await db.SaveChangesAsync();
@@ -539,6 +531,7 @@ public sealed class EfEntityReadServiceTests {
                 Id = nsfwPersonId,
                 KindCode = EntityKindRegistry.Person.Code,
                 Title = "Hidden Person",
+                IsNsfw = true,
                 CreatedAt = now,
                 UpdatedAt = now
             });
@@ -561,11 +554,6 @@ public sealed class EfEntityReadServiceTests {
                 SortOrder = 1,
                 CreatedAt = now
             });
-        db.EntityFlags.Add(new EntityFlagRow {
-            EntityId = nsfwPersonId,
-            IsNsfw = true,
-            UpdatedAt = now
-        });
         await db.SaveChangesAsync();
 
         var repository = new EfEntityRepository(db, EntityMappers.Kinds(db), EntityMappers.Capabilities(db));

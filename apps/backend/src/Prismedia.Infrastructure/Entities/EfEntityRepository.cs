@@ -70,6 +70,7 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
         }
 
         var entity = await ConstructEntityAsync(row, cancellationToken);
+        await HydrateUniversalPropertiesAsync(entity, row, cancellationToken);
         foreach (var mapper in _capabilityMappers) {
             await mapper.HydrateAsync(entity, cancellationToken);
         }
@@ -160,6 +161,7 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
 
         var entity = await ConstructEntityAsync(row, cancellationToken);
         context.Add(entity);
+        await HydrateUniversalPropertiesAsync(entity, row, cancellationToken);
         await HydrateChildrenAsync(entity, context, cancellationToken);
         await HydrateRelationshipsAsync(entity, context, cancellationToken);
         foreach (var mapper in _capabilityMappers) {
@@ -308,6 +310,7 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
             _db.EntityRelationshipLinks.Where(link =>
                 link.EntityId == entity.Id &&
                 link.RelationshipCode == RelatedRelationshipCode));
+        ClearUniversalCollections(entity);
         foreach (var mapper in _capabilityMappers) {
             await mapper.ClearAsync(entity, cancellationToken);
         }
@@ -332,6 +335,7 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
             relationshipIndex++;
         }
 
+        await PersistUniversalCollectionsAsync(entity);
         foreach (var mapper in _capabilityMappers) {
             await mapper.PersistAsync(entity, cancellationToken);
         }
@@ -351,6 +355,10 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
                 Title = entity.Title,
                 ParentEntityId = entity.ParentEntityId,
                 SortOrder = entity.SortOrder,
+                RatingValue = entity.RatingValue,
+                IsFavorite = entity.IsFavorite ?? false,
+                IsNsfw = entity.IsNsfw ?? false,
+                IsOrganized = entity.IsOrganized ?? false,
                 CreatedAt = now,
                 UpdatedAt = now,
             });
@@ -361,7 +369,90 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
         row.Title = entity.Title;
         row.ParentEntityId = entity.ParentEntityId;
         row.SortOrder = entity.SortOrder;
+        row.RatingValue = entity.RatingValue;
+        row.IsFavorite = entity.IsFavorite ?? false;
+        row.IsNsfw = entity.IsNsfw ?? false;
+        row.IsOrganized = entity.IsOrganized ?? false;
         row.UpdatedAt = now;
+    }
+
+    private async Task HydrateUniversalPropertiesAsync(
+        Entity entity,
+        EntityRow row,
+        CancellationToken cancellationToken) {
+        var urls = await _db.EntityUrls.AsNoTracking()
+            .Where(r => r.EntityId == entity.Id)
+            .OrderBy(r => r.SortOrder)
+            .Select(r => new EntityUrl(r.Url, r.Label))
+            .ToArrayAsync(cancellationToken);
+        var externalIds = await _db.EntityExternalIds.AsNoTracking()
+            .Where(r => r.EntityId == entity.Id)
+            .Select(r => new EntityExternalId(r.Provider, r.Value, r.Url))
+            .ToArrayAsync(cancellationToken);
+        var files = await _db.EntityFiles.AsNoTracking()
+            .Where(r => r.EntityId == entity.Id)
+            .OrderBy(r => r.CreatedAt)
+            .Select(r => new EntityFile(r.Role, r.Path, r.MimeType))
+            .ToArrayAsync(cancellationToken);
+
+        entity.HydrateUniversalProperties(
+            row.RatingValue,
+            row.IsFavorite,
+            row.IsNsfw,
+            row.IsOrganized,
+            urls,
+            externalIds,
+            files);
+    }
+
+    private Task PersistUniversalCollectionsAsync(Entity entity) {
+        var now = DateTimeOffset.UtcNow;
+        var order = 0;
+        foreach (var url in entity.Urls) {
+            _db.EntityUrls.Add(new EntityUrlRow {
+                Id = Guid.NewGuid(),
+                EntityId = entity.Id,
+                Url = url.Value,
+                Label = url.Label,
+                SortOrder = order++,
+                CreatedAt = now,
+            });
+        }
+
+        foreach (var externalId in entity.ExternalIds) {
+            _db.EntityExternalIds.Add(new EntityExternalIdRow {
+                Id = Guid.NewGuid(),
+                EntityId = entity.Id,
+                Provider = externalId.Provider,
+                Value = externalId.Value,
+                Url = externalId.Url,
+                CreatedAt = now,
+                UpdatedAt = now,
+            });
+        }
+
+        foreach (var file in entity.EntityFiles) {
+            _db.EntityFiles.Add(new EntityFileRow {
+                Id = Guid.NewGuid(),
+                EntityId = entity.Id,
+                Role = file.Role,
+                Path = file.Path,
+                MimeType = file.MimeType,
+                CreatedAt = now,
+                UpdatedAt = now,
+            });
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private void ClearUniversalCollections(Entity entity) {
+        _db.EntityUrls.RemoveRange(
+            _db.EntityUrls.Where(r => r.EntityId == entity.Id));
+        _db.EntityExternalIds.RemoveRange(
+            _db.EntityExternalIds.Where(r => r.EntityId == entity.Id));
+        _db.EntityFiles.RemoveRange(
+            _db.EntityFiles.Where(r => r.EntityId == entity.Id));
     }
 
     private sealed class EntityHydrationContext {

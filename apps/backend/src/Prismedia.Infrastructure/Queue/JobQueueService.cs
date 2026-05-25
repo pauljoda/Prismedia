@@ -370,9 +370,9 @@ public sealed class JobQueueService : IJobQueueService {
             return rows;
         }
 
-        var hiddenEntityIds = await _db.EntityFlags.AsNoTracking()
-            .Where(flag => flag.IsNsfw && targetIds.Contains(flag.EntityId))
-            .Select(flag => flag.EntityId)
+        var hiddenEntityIds = await _db.Entities.AsNoTracking()
+            .Where(entity => entity.IsNsfw && targetIds.Contains(entity.Id))
+            .Select(entity => entity.Id)
             .ToArrayAsync(cancellationToken);
         var hiddenRootIds = await _db.LibraryRoots.AsNoTracking()
             .Where(root => root.IsNsfw && targetIds.Contains(root.Id))

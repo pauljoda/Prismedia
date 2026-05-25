@@ -15,11 +15,5 @@ public sealed class Tag : Entity {
     public override EntityKind Kind => EntityKind.Tag;
     public bool IgnoreAutoTag { get; private set; }
 
-    protected override IEnumerable<EntityCapability> CreateDefaultCapabilities() =>
-    [
-        new CapabilityRating(),
-        new CapabilityLinks(),
-        new CapabilityFlags(),
-        new CapabilityFiles()
-    ];
+    protected override IEnumerable<EntityCapability> CreateDefaultCapabilities() => [];
 }

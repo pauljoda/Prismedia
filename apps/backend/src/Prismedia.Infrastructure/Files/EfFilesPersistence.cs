@@ -59,8 +59,7 @@ public sealed class EfFilesPersistence(PrismediaDbContext db) : IFilesPersistenc
                 (_, entity) => entity)
             .Distinct();
         if (hideNsfw) {
-            entityQuery = entityQuery.Where(entity =>
-                !db.EntityFlags.Any(flag => flag.EntityId == entity.Id && flag.IsNsfw));
+            entityQuery = entityQuery.Where(entity => !entity.IsNsfw);
         }
 
         var entities = await entityQuery
@@ -107,7 +106,7 @@ public sealed class EfFilesPersistence(PrismediaDbContext db) : IFilesPersistenc
                 entity => entity.Id,
                 (file, entity) => new {
                     file.Path,
-                    IsNsfw = db.EntityFlags.Any(flag => flag.EntityId == entity.Id && flag.IsNsfw)
+                    entity.IsNsfw
                 })
             .ToArrayAsync(cancellationToken);
         if (sourceVisibilities.Length == 0) {

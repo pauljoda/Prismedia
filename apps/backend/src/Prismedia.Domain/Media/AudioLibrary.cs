@@ -13,11 +13,5 @@ public sealed class AudioLibrary : Entity {
 
     public override EntityKind Kind => EntityKind.AudioLibrary;
 
-    protected override IEnumerable<EntityCapability> CreateDefaultCapabilities() =>
-    [
-        new CapabilityRating(),
-        new CapabilityLinks(),
-        new CapabilityFlags(),
-        new CapabilityFiles()
-    ];
+    protected override IEnumerable<EntityCapability> CreateDefaultCapabilities() => [];
 }

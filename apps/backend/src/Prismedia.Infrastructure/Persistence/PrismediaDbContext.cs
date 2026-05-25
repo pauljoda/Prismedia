@@ -20,10 +20,6 @@ public sealed class PrismediaDbContext : DbContext {
 
     public DbSet<EntityRow> Entities => Set<EntityRow>();
 
-    public DbSet<EntityRatingRow> EntityRatings => Set<EntityRatingRow>();
-
-    public DbSet<EntityFlagRow> EntityFlags => Set<EntityFlagRow>();
-
     public DbSet<EntityDescriptionRow> EntityDescriptions => Set<EntityDescriptionRow>();
 
     public DbSet<EntityRelationshipLinkRow> EntityRelationshipLinks => Set<EntityRelationshipLinkRow>();

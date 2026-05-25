@@ -8,16 +8,16 @@ namespace Prismedia.Domain.Tests;
 public sealed class EntityCapabilityTests {
     [Fact]
     public void GetCapabilityReturnsAttachedReference() {
-        var rating = new CapabilityRating();
+        var playback = new CapabilityPlayback();
         var video = new Video(
             Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
             "Projected Video",
             subtitlesExtractedAt: null,
-            capabilities: [rating]);
+            capabilities: [playback]);
 
-        var attached = video.GetCapability<CapabilityRating>();
+        var attached = video.GetCapability<CapabilityPlayback>();
 
-        Assert.Same(rating, attached);
+        Assert.Same(playback, attached);
     }
 
     [Fact]
@@ -26,12 +26,12 @@ public sealed class EntityCapabilityTests {
             Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
             "Projected Video",
             subtitlesExtractedAt: null,
-            capabilities: [new CapabilityRating()]);
+            capabilities: [new CapabilityPlayback()]);
 
-        video.GetCapability<CapabilityRating>()!.Rate(4);
+        video.GetCapability<CapabilityPlayback>()!.Update(
+            TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(30), completed: false, DateTimeOffset.UtcNow);
 
-        Assert.Equal(4, video.GetCapability<CapabilityRating>()!.Value);
-        Assert.Equal(4, video.Rating!.Value);
+        Assert.Equal(TimeSpan.FromSeconds(10), video.Playback!.ResumeTime);
     }
 
     [Fact]
@@ -40,9 +40,9 @@ public sealed class EntityCapabilityTests {
             Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"),
             "Projected Video",
             subtitlesExtractedAt: null,
-            capabilities: [new CapabilityRating(1), new CapabilityRating(2)]));
+            capabilities: [new CapabilityPlayback(), new CapabilityPlayback()]));
 
-        Assert.Contains(nameof(CapabilityRating), ex.Message);
+        Assert.Contains(nameof(CapabilityPlayback), ex.Message);
     }
 
     [Fact]
@@ -52,23 +52,24 @@ public sealed class EntityCapabilityTests {
             "Projected Image",
             capabilities: []);
 
-        Assert.False(image.HasCapability<CapabilityRating>());
-        Assert.Null(image.GetCapability<CapabilityRating>());
-        Assert.Throws<InvalidOperationException>(() => image.RequireCapability<CapabilityRating>());
+        Assert.False(image.HasCapability<CapabilityPlayback>());
+        Assert.Null(image.GetCapability<CapabilityPlayback>());
+        Assert.Throws<InvalidOperationException>(() => image.RequireCapability<CapabilityPlayback>());
     }
 
     [Fact]
     public void RemoveCapabilityDetachesTheCapabilityFromTheEntity() {
-        var rating = new CapabilityRating(5);
-        var image = new Image(
+        var playback = new CapabilityPlayback();
+        var video = new Video(
             Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"),
-            "Projected Image",
-            capabilities: [rating]);
+            "Projected Video",
+            subtitlesExtractedAt: null,
+            capabilities: [playback]);
 
-        var removed = image.RemoveCapability<CapabilityRating>();
+        var removed = video.RemoveCapability<CapabilityPlayback>();
 
         Assert.True(removed);
-        Assert.Null(image.GetCapability<CapabilityRating>());
+        Assert.Null(video.GetCapability<CapabilityPlayback>());
     }
 
     [Fact]
@@ -187,6 +188,6 @@ public sealed class EntityCapabilityTests {
         Assert.NotNull(factory);
         Assert.True(factory!.IsAbstract);
         Assert.NotNull(video.Credits);
-        Assert.NotNull(image.Rating);
+        Assert.Null(image.RatingValue);
     }
 }

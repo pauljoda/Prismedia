@@ -30,18 +30,17 @@ public sealed class EntityCapabilityService {
     /// </summary>
     public Task<EntityCard?> RateAsync(Guid id, int? value, CancellationToken cancellationToken) =>
         MutateAsync(id, entity => {
-            var rating = entity.GetOrAddCapability(() => new CapabilityRating());
             if (value is { } v) {
-                rating.Rate(v);
+                entity.Rate(v);
             } else {
-                rating.Clear();
+                entity.ClearRating();
             }
 
             return true;
         }, cancellationToken);
 
     /// <summary>
-    /// Patches the entity's flag capability. Any null argument leaves the corresponding flag unchanged.
+    /// Patches the entity's flags. Any null argument leaves the corresponding flag unchanged.
     /// </summary>
     public Task<EntityCard?> UpdateFlagsAsync(
         Guid id,
@@ -50,8 +49,7 @@ public sealed class EntityCapabilityService {
         bool? isOrganized,
         CancellationToken cancellationToken) =>
         MutateAsync(id, entity => {
-            entity.GetOrAddCapability(() => new CapabilityFlags())
-                .Patch(isFavorite, isNsfw, isOrganized);
+            entity.PatchFlags(isFavorite, isNsfw, isOrganized);
             return true;
         }, cancellationToken);
 

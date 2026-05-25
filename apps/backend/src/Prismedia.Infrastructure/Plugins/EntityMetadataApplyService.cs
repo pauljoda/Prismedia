@@ -695,43 +695,20 @@ public sealed class EntityMetadataApplyService : IEntityMetadataPatchService {
     }
 
     private async Task UpsertRatingAsync(Guid entityId, int? value, DateTimeOffset now, CancellationToken cancellationToken) {
-        var existing = await _db.EntityRatings.FindAsync([entityId], cancellationToken);
-        if (value is null) {
-            if (existing is not null) {
-                _db.EntityRatings.Remove(existing);
-            }
-            return;
-        }
-
-        if (existing is null) {
-            _db.EntityRatings.Add(new EntityRatingRow { EntityId = entityId, Value = value.Value, UpdatedAt = now });
-        } else {
-            existing.Value = value.Value;
-            existing.UpdatedAt = now;
-        }
+        var row = await _db.Entities.FindAsync([entityId], cancellationToken);
+        if (row is null) return;
+        row.RatingValue = value;
+        row.UpdatedAt = now;
     }
 
     private async Task UpsertFlagsAsync(Guid entityId, EntityMetadataFlagsPatch? patch, DateTimeOffset now, CancellationToken cancellationToken) {
-        if (patch is null) {
-            return;
-        }
-
-        var existing = await _db.EntityFlags.FindAsync([entityId], cancellationToken);
-        if (existing is null) {
-            _db.EntityFlags.Add(new EntityFlagRow {
-                EntityId = entityId,
-                IsFavorite = patch.IsFavorite ?? false,
-                IsNsfw = patch.IsNsfw ?? false,
-                IsOrganized = patch.IsOrganized ?? false,
-                UpdatedAt = now
-            });
-            return;
-        }
-
-        existing.IsFavorite = patch.IsFavorite ?? existing.IsFavorite;
-        existing.IsNsfw = patch.IsNsfw ?? existing.IsNsfw;
-        existing.IsOrganized = patch.IsOrganized ?? existing.IsOrganized;
-        existing.UpdatedAt = now;
+        if (patch is null) return;
+        var row = await _db.Entities.FindAsync([entityId], cancellationToken);
+        if (row is null) return;
+        if (patch.IsFavorite.HasValue) row.IsFavorite = patch.IsFavorite.Value;
+        if (patch.IsNsfw.HasValue) row.IsNsfw = patch.IsNsfw.Value;
+        if (patch.IsOrganized.HasValue) row.IsOrganized = patch.IsOrganized.Value;
+        row.UpdatedAt = now;
     }
 
     private async Task DownloadSelectedImagesAsync(

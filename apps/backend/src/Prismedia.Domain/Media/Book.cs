@@ -51,10 +51,6 @@ public sealed class Book : Entity {
 
     protected override IEnumerable<EntityCapability> CreateDefaultCapabilities() =>
     [
-        new CapabilityRating(),
-        new CapabilityLinks(),
-        new CapabilityFlags(),
-        new CapabilityFiles(),
         new CapabilityProgress()
     ];
 }

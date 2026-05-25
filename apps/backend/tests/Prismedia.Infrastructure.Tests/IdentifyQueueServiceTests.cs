@@ -188,11 +188,11 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
                 null),
             CancellationToken.None);
 
-        var flags = await db.EntityFlags.ToDictionaryAsync(row => row.EntityId);
-        Assert.True(flags[seriesId].IsNsfw);
-        Assert.True(flags[seriesId].IsOrganized);
-        Assert.True(flags[seasonId].IsNsfw);
-        Assert.True(flags[seasonId].IsOrganized);
+        var entities = await db.Entities.ToDictionaryAsync(row => row.Id);
+        Assert.True(entities[seriesId].IsNsfw);
+        Assert.True(entities[seriesId].IsOrganized);
+        Assert.True(entities[seasonId].IsNsfw);
+        Assert.True(entities[seasonId].IsOrganized);
         var personId = await db.Entities
             .Where(row => row.KindCode == "person" && row.Title == "NSFW Actor")
             .Select(row => row.Id)
@@ -201,10 +201,10 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             .Where(row => row.KindCode == "tag" && row.Title == "NSFW Tag")
             .Select(row => row.Id)
             .SingleAsync();
-        Assert.True(flags[personId].IsNsfw);
-        Assert.True(flags[personId].IsOrganized);
-        Assert.True(flags[tagId].IsNsfw);
-        Assert.True(flags[tagId].IsOrganized);
+        Assert.True(entities[personId].IsNsfw);
+        Assert.True(entities[personId].IsOrganized);
+        Assert.True(entities[tagId].IsNsfw);
+        Assert.True(entities[tagId].IsOrganized);
     }
 
     [Fact]
@@ -318,14 +318,8 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
         };
+        entity.IsNsfw = isNsfw;
         db.Entities.Add(entity);
-        if (isNsfw) {
-            db.EntityFlags.Add(new EntityFlagRow {
-                EntityId = id,
-                IsNsfw = true,
-                UpdatedAt = DateTimeOffset.UtcNow
-            });
-        }
 
         return entity;
     }

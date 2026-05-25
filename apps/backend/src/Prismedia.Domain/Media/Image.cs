@@ -13,11 +13,5 @@ public sealed class Image : Entity {
 
     public override EntityKind Kind => EntityKind.Image;
 
-    protected override IEnumerable<EntityCapability> CreateDefaultCapabilities() =>
-    [
-        new CapabilityRating(),
-        new CapabilityLinks(),
-        new CapabilityFlags(),
-        new CapabilityFiles()
-    ];
+    protected override IEnumerable<EntityCapability> CreateDefaultCapabilities() => [];
 }

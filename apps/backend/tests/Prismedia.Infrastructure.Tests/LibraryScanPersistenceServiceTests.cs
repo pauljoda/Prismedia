@@ -225,11 +225,8 @@ public sealed class LibraryScanPersistenceServiceTests {
             Value = "/media/The Chair Company",
             UpdatedAt = now
         });
-        db.EntityRatings.Add(new EntityRatingRow {
-            EntityId = seriesId,
-            Value = 4,
-            UpdatedAt = now
-        });
+        var seriesEntity = await db.Entities.FindAsync(seriesId);
+        seriesEntity!.RatingValue = 4;
         await db.SaveChangesAsync();
 
         var service = new LibraryScanPersistenceService(db);
@@ -247,7 +244,7 @@ public sealed class LibraryScanPersistenceServiceTests {
 
         var videoId = Assert.Single(ids);
         Assert.Equal(seriesId, Assert.Single(db.Entities.Where(entity => entity.KindCode == EntityKindRegistry.VideoSeries.Code)).Id);
-        Assert.Equal(4, Assert.Single(db.EntityRatings.Where(rating => rating.EntityId == seriesId)).Value);
+        Assert.Equal(4, db.Entities.Single(entity => entity.Id == seriesId).RatingValue);
 
         var season = Assert.Single(db.Entities.Where(entity => entity.KindCode == EntityKindRegistry.VideoSeason.Code));
         Assert.Equal(1, season.SortOrder);

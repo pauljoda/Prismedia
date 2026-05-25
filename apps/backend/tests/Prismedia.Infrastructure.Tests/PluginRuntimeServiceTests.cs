@@ -172,12 +172,8 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             Id = entityId,
             KindCode = "video",
             Title = "Hidden Video",
-            CreatedAt = now,
-            UpdatedAt = now
-        });
-        db.EntityFlags.Add(new EntityFlagRow {
-            EntityId = entityId,
             IsNsfw = true,
+            CreatedAt = now,
             UpdatedAt = now
         });
         await db.SaveChangesAsync();
