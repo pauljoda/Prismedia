@@ -82,6 +82,7 @@
   let scrubStartClientX = 0;
   let scrubStartClientY = 0;
   let scrubPointerType = "mouse";
+  let suppressNextFocusPreview = false;
   let suppressNextActivation = false;
 
   let spriteFrames = $state<TrickplayFrame[] | null>(null);
@@ -259,6 +260,10 @@
     if (event.pointerType === "touch") {
       return;
     }
+    if (effectiveHref) {
+      suppressNextFocusPreview = true;
+      return;
+    }
     pointerScrubbing = true;
     updatePointerRatio(event);
     pointerRatio = latestPointerRatio;
@@ -267,6 +272,7 @@
   }
 
   function handlePointerUp(event: PointerEvent) {
+    suppressNextFocusPreview = false;
     if (!pointerScrubbing && scrubPointerType !== "touch") return;
     pointerScrubbing = false;
     scrubPointerType = "mouse";
@@ -284,6 +290,10 @@
   }
 
   function handleFocus() {
+    if (suppressNextFocusPreview) {
+      suppressNextFocusPreview = false;
+      return;
+    }
     if (!hoverPreviewsEnabled) return;
     pointerRatio = hoverable ? 0.5 : null;
     void ensureSpriteLoaded();

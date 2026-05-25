@@ -107,6 +107,26 @@ describe("EntityThumbnail", () => {
     expect(onActivate).toHaveBeenCalledWith(spriteCard());
   });
 
+  it("does not start mouse scrubbing from linkable hover-preview thumbnails", async () => {
+    const { container } = render(EntityThumbnail, {
+      props: {
+        card: imageSequenceCard(),
+      },
+    });
+    const media = container.querySelector(".media") as HTMLElement;
+    media.setPointerCapture = vi.fn();
+    Object.defineProperty(media, "getBoundingClientRect", {
+      configurable: true,
+      value: () => ({ left: 0, width: 100 }),
+    });
+
+    await fireEvent(media, pointerEvent("pointerdown", 90));
+    await fireEvent.focus(container.querySelector<HTMLElement>(".entity-thumbnail")!);
+
+    expect(media.setPointerCapture).not.toHaveBeenCalled();
+    expect(container.querySelector<HTMLImageElement>(".media > img")?.getAttribute("src")).toBe("/assets/pages/1.jpg");
+  });
+
   it("resolves default entity links inside the shared thumbnail", () => {
     const { container } = render(EntityThumbnail, {
       props: {

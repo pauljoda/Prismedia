@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from "svelte";
   import { page } from "$app/state";
   import { ArrowLeft, Layers } from "@lucide/svelte";
   import {
@@ -63,7 +62,8 @@
   let lightboxIndex = $state(0);
   let hydratedLightboxEntities = $state.raw<Record<string, UniversalLightboxEntity>>({});
   let lightboxHydrationInFlight = $state.raw<string[]>([]);
-  let lastNsfwMode = $state(nsfw.mode);
+  let activeLoadToken = 0;
+  const currentGalleryId = $derived(page.params.id ?? "");
 
   const card = $derived.by((): EntityDetailCardFull | null => {
     if (!gallery) return null;
@@ -87,14 +87,10 @@
     lightboxCards.map((c) => hydratedLightboxEntities[c.entity.id] ?? lightboxEntityFromCard(c)),
   );
 
-  onMount(() => {
-    void loadGallery();
-  });
-
   $effect(() => {
-    if (nsfw.mode === lastNsfwMode) return;
-    lastNsfwMode = nsfw.mode;
-    void loadGallery();
+    const currentNsfwMode = nsfw.mode;
+    if (!currentGalleryId) return;
+    void loadGallery(currentGalleryId, currentNsfwMode);
   });
 
   $effect(() => {
@@ -105,16 +101,21 @@
     void hydrateLightboxEntity(currentCard.entity.id);
   });
 
-  async function loadGallery() {
+  async function loadGallery(galleryId = currentGalleryId, nsfwMode = nsfw.mode) {
+    const loadToken = activeLoadToken + 1;
+    activeLoadToken = loadToken;
     loadState = "loading";
     errorMessage = null;
     try {
-      const nextGallery = await fetchGallery(page.params.id ?? "");
+      const nextGallery = await fetchGallery(galleryId);
+      if (loadToken !== activeLoadToken) return;
       gallery = nextGallery;
       await hydrateGalleryThumbnails(nextGallery);
+      if (loadToken !== activeLoadToken) return;
       loadState = "ready";
     } catch (err) {
-      if (redirectHiddenEntityNotFound(err, nsfw.mode)) return;
+      if (loadToken !== activeLoadToken) return;
+      if (redirectHiddenEntityNotFound(err, nsfwMode)) return;
       errorMessage = err instanceof Error ? err.message : String(err);
       loadState = "error";
     }
