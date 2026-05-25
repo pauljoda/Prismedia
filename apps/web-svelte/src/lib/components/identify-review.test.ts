@@ -1,12 +1,17 @@
 import { describe, expect, it } from "vitest";
 import type { EntityMetadataProposal } from "$lib/api/identify";
+import type { EntityDetailCard } from "$lib/api/prismedia";
 import {
   buildRootReviewApplyPayload,
   buildProposalForApply,
+  currentFieldValueForReview,
   defaultImageSelectionForReview,
+  defaultFieldSelectionForReview,
   findRelationshipImage,
   groupProposalRows,
   isNewRelationshipTitle,
+  reviewDiffFieldKeys,
+  reviewFieldKeys,
   reviewableImages,
   reviewChildProposals,
   relationshipProposals,
@@ -254,6 +259,86 @@ describe("identify review helpers", () => {
     expect(payloadEpisode.patch.title).toBe("Episode 1");
     expect(payloadEpisode.patch.description).toBeNull();
     expect(payloadEpisode.images.map((image) => image.url)).toEqual(["https://example.test/episode-poster.jpg"]);
+  });
+
+  it("keeps rich selector fields out of the field diff but selected for apply defaults", () => {
+    const root = proposal("series", "video-series", {
+      title: "Series",
+      studio: "HBO",
+      tags: ["Comedy"],
+      credits: [{ name: "Tim Robinson", role: "cast", character: "Ron", sortOrder: 0 }],
+      imageKind: "poster",
+      imageUrl: "https://example.test/poster.jpg",
+    });
+
+    expect(reviewDiffFieldKeys).not.toEqual(expect.arrayContaining(["tags", "studio", "credits", "images"]));
+    expect(reviewDiffFieldKeys).toEqual(["title", "description", "externalIds", "urls", "dates", "stats", "positions", "classification"]);
+
+    const selection = defaultFieldSelectionForReview(root);
+    expect(Object.keys(selection)).toEqual([...reviewFieldKeys]);
+    expect(selection.title).toBe(true);
+    expect(selection.tags).toBe(true);
+    expect(selection.studio).toBe(true);
+    expect(selection.credits).toBe(true);
+    expect(selection.images).toBe(true);
+  });
+
+  it("allows studio logo artwork to be reviewed and carried through walked relationship selections", () => {
+    const studio = proposal("studio-1", "studio", {
+      title: "HBO",
+      imageKind: "logo",
+      imageUrl: "https://example.test/logo.png",
+    });
+    const root = proposal("series", "video-series", {
+      studio: "HBO",
+      relationships: [studio],
+    });
+
+    expect(reviewableImages(studio.images, studio.targetKind).map((image) => image.kind)).toEqual(["logo"]);
+    expect(defaultImageSelectionForReview(studio)).toEqual({ logo: "https://example.test/logo.png" });
+
+    const payload = buildProposalForApply(root, {
+      selectedFieldsByProposal: {
+        series: defaultFieldSelectionForReview(root),
+        "studio-1": defaultFieldSelectionForReview(studio),
+      },
+      selectedImagesByProposal: {
+        "studio-1": {
+          logo: "https://example.test/logo.png",
+        },
+      },
+      selectedCreditsByProposal: {},
+      selectedTagsByProposal: {},
+      selectedCascade: {},
+    });
+
+    expect(expectSingle(payload.relationships).images.map((image) => image.kind)).toEqual(["logo"]);
+  });
+
+  it("reads current values from a walked child entity detail", () => {
+    const detail: EntityDetailCard = {
+      id: "episode-1",
+      kind: "video",
+      title: "Existing episode",
+      parentEntityId: "season-1",
+      sortOrder: 1,
+      capabilities: [
+        { kind: "description", value: "Current description" },
+        { kind: "images", supportedKinds: ["poster", "backdrop"], items: [
+          { kind: "poster", path: "/assets/poster.jpg", mimeType: "image/jpeg" },
+          { kind: "backdrop", path: "/assets/backdrop.jpg", mimeType: "image/jpeg" },
+        ], thumbnailUrl: null, coverUrl: null },
+      ],
+      childrenByKind: [],
+      relationships: [
+        { kind: "studio", label: "Studios", entities: [thumbnail("studio-1", "studio", "Existing Studio")] },
+      ],
+    };
+
+    expect(currentFieldValueForReview(thumbnail("episode-1", "video", "Fallback title"), detail, "title")).toBe("Existing episode");
+    expect(currentFieldValueForReview(thumbnail("episode-1", "video", "Fallback title"), detail, "description")).toBe("Current description");
+    expect(currentFieldValueForReview(thumbnail("episode-1", "video", "Fallback title"), detail, "studio")).toBe("Existing Studio");
+    expect(currentFieldValueForReview(thumbnail("episode-1", "video", "Fallback title"), detail, "images")).toBe("poster, backdrop");
   });
 });
 

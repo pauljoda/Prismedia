@@ -2,12 +2,14 @@ import type {
   EntityCard,
   EntityThumbnail,
 } from "$lib/api/generated/model";
+import { getCapability, getDescription, getImagesCapability } from "$lib/api/capabilities";
 import type {
   CreditPatch,
   EntityMetadataPatch,
   EntityMetadataProposal,
   ImageCandidate,
 } from "$lib/api/identify";
+import { CAPABILITY_KIND } from "$lib/entities/entity-codes";
 
 export const reviewFieldKeys = [
   "title",
@@ -25,6 +27,32 @@ export const reviewFieldKeys = [
 ] as const;
 
 const fieldKeys = reviewFieldKeys;
+
+export const reviewDetailedFieldKeys = [
+  "tags",
+  "studio",
+  "credits",
+  "images",
+] as const;
+
+export const reviewDiffFieldKeys = reviewFieldKeys.filter(
+  (field) => !(reviewDetailedFieldKeys as readonly string[]).includes(field),
+);
+
+export const reviewFieldLabels: Record<string, string> = {
+  title: "Title",
+  description: "Description",
+  externalIds: "Provider IDs",
+  urls: "Links",
+  tags: "Tags",
+  studio: "Studio",
+  credits: "Credits",
+  dates: "Dates",
+  stats: "Stats",
+  positions: "Positions",
+  classification: "Classification",
+  images: "Artwork",
+};
 
 export interface IdentifyReviewSelectionState {
   selectedFieldsByProposal: Record<string, Record<string, boolean>>;
@@ -132,16 +160,107 @@ export function isNewRelationshipTitle(title: string, existingTitles: string[]):
   return !existingTitles.some((existing) => existing.localeCompare(title, undefined, { sensitivity: "accent" }) === 0);
 }
 
-export function reviewableImages(images: ImageCandidate[]): ImageCandidate[] {
-  return images.filter((image) => image.kind.toLowerCase() !== "logo");
+export function reviewableImages(images: ImageCandidate[], targetKind?: string | null): ImageCandidate[] {
+  const allowsLogo = targetKind?.toLowerCase() === "studio";
+  return images.filter((image) => allowsLogo || image.kind.toLowerCase() !== "logo");
 }
 
 export function defaultImageSelectionForReview(result: EntityMetadataProposal): Record<string, string | null> {
   const selected: Record<string, string | null> = {};
-  for (const image of reviewableImages(result.images ?? [])) {
+  for (const image of reviewableImages(result.images ?? [], result.targetKind)) {
     selected[image.kind] ??= image.url;
   }
   return selected;
+}
+
+export function groupReviewImages(result: EntityMetadataProposal): Array<{ kind: string; images: ImageCandidate[] }> {
+  const groups: Record<string, ImageCandidate[]> = {};
+  for (const image of reviewableImages(result.images ?? [], result.targetKind)) {
+    groups[image.kind] = [...(groups[image.kind] ?? []), image];
+  }
+  return Object.entries(groups).map(([kind, images]) => ({ kind, images }));
+}
+
+export function defaultFieldSelectionForReview(result: EntityMetadataProposal): Record<string, boolean> {
+  return Object.fromEntries(fieldKeys.map((field) => [field, proposalHasField(result, field)]));
+}
+
+export function proposalHasField(result: EntityMetadataProposal, field: string): boolean {
+  return proposalFieldValue(result, field).trim().length > 0;
+}
+
+export function proposalFieldValue(result: EntityMetadataProposal, field: string): string {
+  const patch = result.patch;
+  if (field === "title") return patch.title ?? "";
+  if (field === "description") return patch.description ?? "";
+  if (field === "externalIds") return entries(patch.externalIds).join(", ");
+  if (field === "urls") return patch.urls.join(", ");
+  if (field === "tags") return patch.tags.join(", ");
+  if (field === "studio") return patch.studio ?? "";
+  if (field === "credits") return patch.credits.map((credit) =>
+    credit.character ? `${credit.name} as ${credit.character}` : credit.name,
+  ).join(", ");
+  if (field === "dates") return entries(patch.dates).join(", ");
+  if (field === "stats") return entries(patch.stats).join(", ");
+  if (field === "positions") return entries(patch.positions).join(", ");
+  if (field === "classification") return patch.classification ?? "";
+  if (field === "images") return groupReviewImages(result).map((group) => `${group.kind} (${group.images.length})`).join(", ");
+  return "";
+}
+
+export function currentFieldValueForReview(
+  entity: EntityThumbnail,
+  detail: EntityCard | null | undefined,
+  field: string,
+): string {
+  if (field === "title") return detail?.title ?? entity.title ?? "";
+  if (!detail) return "";
+
+  const capabilities = detail.capabilities ?? [];
+  if (field === "description") return getDescription(capabilities) ?? "";
+  if (field === "externalIds") {
+    const links = getCapability(capabilities, CAPABILITY_KIND.links);
+    return (links?.externalIds ?? []).map((externalId) => `${externalId.provider}: ${externalId.value}`).join(", ");
+  }
+  if (field === "urls") {
+    const links = getCapability(capabilities, CAPABILITY_KIND.links);
+    return (links?.urls ?? []).map((url) => url.value).join(", ");
+  }
+  if (field === "tags") return relationshipTitlesForDetail(detail, "tag").join(", ");
+  if (field === "studio") return relationshipTitlesForDetail(detail, "studio")[0] ?? "";
+  if (field === "credits") return relationshipTitlesForDetail(detail, "person").join(", ");
+  if (field === "dates") {
+    const dates = getCapability(capabilities, CAPABILITY_KIND.dates);
+    return (dates?.items ?? []).map((item) => `${item.code}: ${item.value}`).join(", ");
+  }
+  if (field === "stats") {
+    const stats = getCapability(capabilities, CAPABILITY_KIND.stats);
+    return (stats?.items ?? []).map((item) => `${item.code}: ${item.value}`).join(", ");
+  }
+  if (field === "positions") {
+    const positions = getCapability(capabilities, CAPABILITY_KIND.position);
+    return (positions?.items ?? []).map((item) => `${item.code}: ${item.value}`).join(", ");
+  }
+  if (field === "classification") {
+    const classification = getCapability(capabilities, CAPABILITY_KIND.classification);
+    return classification?.value ?? "";
+  }
+  if (field === "images") {
+    const images = getImagesCapability(capabilities);
+    return (images?.items ?? [])
+      .filter((image) => image.kind !== "source")
+      .map((image) => String(image.kind))
+      .join(", ");
+  }
+  return "";
+}
+
+export function relationshipTitlesForDetail(detail: Pick<EntityCard, "relationships"> | null | undefined, kind: string): string[] {
+  return (detail?.relationships ?? [])
+    .filter((group) => group.kind === kind)
+    .flatMap((group) => group.entities)
+    .map((item) => item.title)
+    .filter((title): title is string => Boolean(title));
 }
 
 export function scopedCreditForProposal(
@@ -201,7 +320,7 @@ export function buildProposalForApply(
   selections: IdentifyReviewSelectionState,
 ): EntityMetadataProposal {
   const fields = selections.selectedFieldsByProposal[result.proposalId] ??
-    Object.fromEntries(fieldKeys.map((field) => [field, hasField(result, field)]));
+    defaultFieldSelectionForReview(result);
   const selectedResultCredits = selections.selectedCreditsByProposal[result.proposalId] ?? {};
   const selectedResultTags = selections.selectedTagsByProposal[result.proposalId] ?? {};
   const credits = result.patch.credits
@@ -305,27 +424,6 @@ function selectedReviewImages(selectedImages: Record<string, string | null>): Re
     selected[kind] = url;
   }
   return selected;
-}
-
-function hasField(result: EntityMetadataProposal, field: string): boolean {
-  return fieldValue(result, field).trim().length > 0;
-}
-
-function fieldValue(result: EntityMetadataProposal, field: string): string {
-  const patch = result.patch;
-  if (field === "title") return patch.title ?? "";
-  if (field === "description") return patch.description ?? "";
-  if (field === "externalIds") return entries(patch.externalIds).join(", ");
-  if (field === "urls") return patch.urls.join(", ");
-  if (field === "tags") return patch.tags.join(", ");
-  if (field === "studio") return patch.studio ?? "";
-  if (field === "credits") return patch.credits.length > 0 ? `${patch.credits.length}` : "";
-  if (field === "dates") return entries(patch.dates).join(", ");
-  if (field === "stats") return entries(patch.stats).join(", ");
-  if (field === "positions") return entries(patch.positions).join(", ");
-  if (field === "classification") return patch.classification ?? "";
-  if (field === "images") return result.images.length > 0 ? `${result.images.length}` : "";
-  return "";
 }
 
 function entries(record: Record<string, string | number>): string[] {

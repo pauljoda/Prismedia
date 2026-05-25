@@ -85,6 +85,8 @@ export class IdentifyStore {
   reviewFieldSelections = $state<Record<string, Record<string, boolean>>>({});
   reviewImageSelections = $state<Record<string, Record<string, string | null>>>({});
   reviewTagSelections = $state<Record<string, Record<string, boolean>>>({});
+  reviewDetailsByEntityId = $state<Record<string, EntityDetailCard | null>>({});
+  reviewDetailLoadingByEntityId = $state<Record<string, boolean>>({});
 
   supportedKinds = $derived.by((): IdentifyKindInfo[] => {
     const kindMap = new Map<string, IdentifyKindInfo>();
@@ -380,6 +382,50 @@ export class IdentifyStore {
       item.entityId !== currentEntityId &&
       (item.state === "proposal" || item.state === "search" || item.state === "error"),
     ) ?? null;
+  }
+
+  getReviewDetail(entityId: string): EntityDetailCard | null {
+    if (Object.hasOwn(this.reviewDetailsByEntityId, entityId)) {
+      return this.reviewDetailsByEntityId[entityId] ?? null;
+    }
+
+    return this.queue.find((item) => item.entityId === entityId)?.detail ?? null;
+  }
+
+  async ensureReviewDetail(entityId: string): Promise<EntityDetailCard | null> {
+    if (Object.hasOwn(this.reviewDetailsByEntityId, entityId)) {
+      return this.reviewDetailsByEntityId[entityId] ?? null;
+    }
+
+    const queuedDetail = this.queue.find((item) => item.entityId === entityId)?.detail;
+    if (queuedDetail) {
+      this.reviewDetailsByEntityId = {
+        ...this.reviewDetailsByEntityId,
+        [entityId]: queuedDetail,
+      };
+      return queuedDetail;
+    }
+
+    if (this.reviewDetailLoadingByEntityId[entityId]) {
+      return null;
+    }
+
+    this.reviewDetailLoadingByEntityId = {
+      ...this.reviewDetailLoadingByEntityId,
+      [entityId]: true,
+    };
+    try {
+      const detail = await fetchEntityDetail(entityId);
+      this.reviewDetailsByEntityId = {
+        ...this.reviewDetailsByEntityId,
+        [entityId]: detail,
+      };
+      return detail;
+    } finally {
+      const next = { ...this.reviewDetailLoadingByEntityId };
+      delete next[entityId];
+      this.reviewDetailLoadingByEntityId = next;
+    }
   }
 
   getReviewFieldSelections(proposalId: string): Record<string, boolean> | null {

@@ -13,17 +13,22 @@
     X,
   } from "@lucide/svelte";
   import { cn, StatusLed } from "@prismedia/ui-svelte";
-  import { getCapability, getDescription, getImagesCapability } from "$lib/api/capabilities";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
-  import { CAPABILITY_KIND } from "$lib/entities/entity-codes";
   import {
     buildRootReviewApplyPayload,
+    currentFieldValueForReview,
     defaultImageSelectionForReview,
+    defaultFieldSelectionForReview,
+    groupReviewImages,
     isNewRelationshipTitle,
+    proposalFieldValue,
+    proposalHasField,
     structuralChildProposals,
     relationshipProposals,
+    relationshipTitlesForDetail,
+    reviewDiffFieldKeys,
     reviewableImages,
-    reviewFieldKeys,
+    reviewFieldLabels,
     scopedCreditForProposal,
   } from "$lib/components/identify-review";
   import type {
@@ -45,22 +50,8 @@
 
   const store = useIdentifyStore();
 
-  const FIELD_KEYS = reviewFieldKeys;
-
-  const FIELD_LABELS: Record<string, string> = {
-    title: "Title",
-    description: "Description",
-    externalIds: "Provider IDs",
-    urls: "Links",
-    tags: "Tags",
-    studio: "Studio",
-    credits: "Credits",
-    dates: "Dates",
-    stats: "Stats",
-    positions: "Positions",
-    classification: "Classification",
-    images: "Artwork",
-  };
+  const DIFF_FIELD_KEYS = reviewDiffFieldKeys;
+  const FIELD_LABELS = reviewFieldLabels;
 
   let selectedFields = $state<Record<string, boolean>>({});
   let selectedImages = $state<Record<string, string | null>>({});
@@ -78,7 +69,7 @@
   const tags = $derived(proposal.patch?.tags ?? []);
   const existingTagTitles = $derived(relationshipTitles("tag"));
   const looseTags = $derived(tags.filter((tag) => !tagRelationshipForTitle(tag)));
-  const imageGroups = $derived(groupImages(reviewableImages(proposal.images ?? [])));
+  const imageGroups = $derived(groupReviewImages(proposal));
   const artworkCandidateCount = $derived(imageGroups.reduce((count, group) => count + group.images.length, 0));
   const selectedTagCount = $derived(Object.values(selectedTags).filter(Boolean).length);
   const selectedRelationshipCount = $derived(
@@ -95,7 +86,7 @@
     reviewStateProposalId = proposal.proposalId;
     store.beginProposalReview(proposal);
     selectedFields = store.getReviewFieldSelections(proposal.proposalId) ??
-      Object.fromEntries(FIELD_KEYS.map((k) => [k, hasField(k)]));
+      defaultFieldSelectionForReview(proposal);
     selectedImages = store.getReviewImageSelections(proposal.proposalId) ??
       defaultImageSelectionForReview(proposal);
     selectedTags = store.getReviewTagSelections(proposal.proposalId) ??
@@ -106,33 +97,11 @@
   });
 
   function hasField(field: string): boolean {
-    return fieldValue(field).trim().length > 0;
+    return proposalHasField(proposal, field);
   }
 
   function fieldValue(field: string): string {
-    const patch = proposal.patch;
-    if (!patch) return "";
-    if (field === "title") return patch.title ?? "";
-    if (field === "description") return patch.description ?? "";
-    if (field === "externalIds") return Object.entries(patch.externalIds ?? {}).map(([k, v]) => `${k}: ${v}`).join(", ");
-    if (field === "urls") return (patch.urls ?? []).join(", ");
-    if (field === "tags") return (patch.tags ?? []).join(", ");
-    if (field === "studio") return patch.studio ?? "";
-    if (field === "credits") return (patch.credits ?? []).map((c) => c.character ? `${c.name} as ${c.character}` : c.name).join(", ");
-    if (field === "dates") return Object.entries(patch.dates ?? {}).map(([k, v]) => `${k}: ${v}`).join(", ");
-    if (field === "stats") return Object.entries(patch.stats ?? {}).map(([k, v]) => `${k}: ${v}`).join(", ");
-    if (field === "positions") return Object.entries(patch.positions ?? {}).map(([k, v]) => `${k}: ${v}`).join(", ");
-    if (field === "classification") return patch.classification ?? "";
-    if (field === "images") return imageGroups.map((group) => `${group.kind} (${group.images.length})`).join(", ");
-    return "";
-  }
-
-  function groupImages(images: ImageCandidate[]): Array<{ kind: string; images: ImageCandidate[] }> {
-    const groups: Record<string, ImageCandidate[]> = {};
-    for (const image of images) {
-      groups[image.kind] = [...(groups[image.kind] ?? []), image];
-    }
-    return Object.entries(groups).map(([kind, imgs]) => ({ kind, images: imgs }));
+    return proposalFieldValue(proposal, field);
   }
 
   function defaultTagSelection(): Record<string, boolean> {
@@ -140,58 +109,15 @@
   }
 
   function currentFieldValue(field: string): string {
-    if (field === "title") return detail?.title ?? entity.title ?? "";
-    if (!detail) return "";
-
-    const capabilities = detail.capabilities ?? [];
-    if (field === "description") return getDescription(capabilities) ?? "";
-    if (field === "externalIds") {
-      const links = getCapability(capabilities, CAPABILITY_KIND.links);
-      return (links?.externalIds ?? []).map((externalId) => `${externalId.provider}: ${externalId.value}`).join(", ");
-    }
-    if (field === "urls") {
-      const links = getCapability(capabilities, CAPABILITY_KIND.links);
-      return (links?.urls ?? []).map((url) => url.value).join(", ");
-    }
-    if (field === "tags") return relationshipTitles("tag").join(", ");
-    if (field === "studio") return relationshipTitles("studio")[0] ?? "";
-    if (field === "credits") return relationshipTitles("person").join(", ");
-    if (field === "dates") {
-      const dates = getCapability(capabilities, CAPABILITY_KIND.dates);
-      return (dates?.items ?? []).map((item) => `${item.code}: ${item.value}`).join(", ");
-    }
-    if (field === "stats") {
-      const stats = getCapability(capabilities, CAPABILITY_KIND.stats);
-      return (stats?.items ?? []).map((item) => `${item.code}: ${item.value}`).join(", ");
-    }
-    if (field === "positions") {
-      const positions = getCapability(capabilities, CAPABILITY_KIND.position);
-      return (positions?.items ?? []).map((item) => `${item.code}: ${item.value}`).join(", ");
-    }
-    if (field === "classification") {
-      const classification = getCapability(capabilities, CAPABILITY_KIND.classification);
-      return classification?.value ?? "";
-    }
-    if (field === "images") {
-      const images = getImagesCapability(capabilities);
-      return (images?.items ?? [])
-        .filter((image) => image.kind !== "source")
-        .map((image) => String(image.kind))
-        .join(", ");
-    }
-    return "";
+    return currentFieldValueForReview(entity, detail, field);
   }
 
   function relationshipTitles(kind: string): string[] {
-    return (detail?.relationships ?? [])
-      .filter((group) => group.kind === kind)
-      .flatMap((group) => group.entities)
-      .map((item) => item.title)
-      .filter((title): title is string => Boolean(title));
+    return relationshipTitlesForDetail(detail, kind);
   }
 
   function proposalImageUrl(kinds: string[]): string | null {
-    const images = reviewableImages(proposal.images ?? []);
+    const images = reviewableImages(proposal.images ?? [], proposal.targetKind);
     for (const kind of kinds) {
       const image = images.find((candidate) => candidate.kind === kind);
       if (image) return image.url;
@@ -200,7 +126,7 @@
   }
 
   function preferredProposalImage(result: EntityMetadataProposal): ImageCandidate | null {
-    const images = reviewableImages(result.images ?? []);
+    const images = reviewableImages(result.images ?? [], result.targetKind);
     return images.find((image) => image.kind === "poster") ??
       images.find((image) => image.kind === "thumbnail") ??
       images[0] ??
@@ -292,7 +218,10 @@
   }
 
   function setAllFields(selected: boolean) {
-    selectedFields = Object.fromEntries(FIELD_KEYS.map((k) => [k, selected ? hasField(k) : false]));
+    selectedFields = {
+      ...selectedFields,
+      ...Object.fromEntries(DIFF_FIELD_KEYS.map((k) => [k, selected ? hasField(k) : false])),
+    };
     store.setReviewFieldSelections(proposal.proposalId, selectedFields);
   }
 
@@ -408,7 +337,7 @@
       <Info class="h-3.5 w-3.5 text-text-accent" />
       <span class="text-kicker text-text-accent">Field diff</span>
       <span class="font-mono text-[0.7rem] text-text-muted">
-        {Object.values(selectedFields).filter(Boolean).length} of {FIELD_KEYS.filter((k) => hasField(k)).length} accepted
+        {DIFF_FIELD_KEYS.filter((k) => selectedFields[k]).length} of {DIFF_FIELD_KEYS.filter((k) => hasField(k)).length} accepted
       </span>
       <div class="flex-1"></div>
       <button
@@ -435,7 +364,7 @@
       <span class="text-kicker text-text-accent">Proposed</span>
     </div>
 
-    {#each FIELD_KEYS as field (field)}
+    {#each DIFF_FIELD_KEYS as field (field)}
       {#if hasField(field)}
         {@const current = currentFieldValue(field)}
         <div class="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 border-b border-border-subtle px-3.5 py-3 last:border-b-0 md:grid-cols-[auto_110px_1fr_1fr]">
@@ -552,7 +481,7 @@
                       : "border-border-default hover:border-border-accent",
                   )}
                   style="aspect-ratio: {group.kind === 'poster' ? '2/3' : group.kind === 'backdrop' ? '16/9' : '2/1'};"
-                  onclick={() => setImageSelected(group.kind, image.url)}
+                  onclick={() => setImageSelected(group.kind, selectedImages[group.kind] === image.url ? null : image.url)}
                 >
                   <img src={image.url} alt="" class="h-full w-full object-cover" />
                   {#if selectedImages[group.kind] === image.url}
