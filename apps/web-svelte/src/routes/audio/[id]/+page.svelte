@@ -4,11 +4,14 @@
   import { Music } from "@lucide/svelte";
   import {
     fetchAudioLibrary,
+    fetchAudioTrack,
     updateEntityRating,
     updateEntityFlags,
     updateEntityMetadata,
     type AudioLibraryDetail,
   } from "$lib/api/prismedia";
+  import { apiAssetUrl } from "$lib/api/orval-fetch";
+  import type { AudioTrackListItemDto } from "@prismedia/contracts";
   import { getCapability } from "$lib/api/capabilities";
   import {
     toggleOptimisticEntityFlag,
@@ -22,12 +25,15 @@
     hydrateStandardRelationshipCards,
     thumbnailsToCards,
   } from "$lib/entities/entity-relationship-thumbnails";
+  import { audioTrackDetailToListItem } from "$lib/entities/audio-track-items";
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
   import EntityCastAndCrewSection from "$lib/components/entities/EntityCastAndCrewSection.svelte";
   import EntityDetail, {
     type EntityMetadataUpdateRequest,
   } from "$lib/components/entities/EntityDetail.svelte";
   import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
+  import AudioVidStackPlayer from "$lib/components/AudioVidStackPlayer.svelte";
+  import AudioTrackList from "$lib/components/AudioTrackList.svelte";
   import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import { useAppChrome } from "$lib/stores/app-chrome.svelte";
@@ -46,6 +52,10 @@
   let studioCards = $state<EntityThumbnailCard[]>([]);
   let creditCards = $state<EntityThumbnailCard[]>([]);
   let relationshipTags = $state<EntityDetailTag[]>([]);
+  let trackItems = $state<AudioTrackListItemDto[]>([]);
+
+  let activeTrackId = $state<string | null>(null);
+  let isPlaying = $state(false);
 
   const card = $derived.by((): EntityDetailCardFull | null => {
     if (!library) return null;
@@ -63,8 +73,12 @@
     return cap?.items ?? [];
   });
 
-  const trackCards = $derived(childCards.filter((c) => c.entity.kind === "audio-track"));
   const subLibraryCards = $derived(childCards.filter((c) => c.entity.kind === "audio-library"));
+  const coverUrl = $derived.by(() => {
+    if (!library) return undefined;
+    const images = getCapability(library.capabilities, "images");
+    return apiAssetUrl(images?.coverUrl ?? images?.thumbnailUrl);
+  });
 
   onMount(() => {
     void loadLibrary();
@@ -89,19 +103,32 @@
     errorMessage = null;
     try {
       const nextLibrary = await fetchAudioLibrary(page.params.id ?? "");
-      const [children, relationships] = await Promise.all([
-        fetchOrderedEntityThumbnails(getAllChildIds(nextLibrary)),
+      const allChildIds = getAllChildIds(nextLibrary);
+      const trackChildIds = allChildIds.filter((id) => {
+        for (const group of nextLibrary.childrenByKind) {
+          if (group.kind === "audio-track" && group.entities.some((e) => e.id === id)) return true;
+        }
+        return false;
+      });
+      const nonTrackChildIds = allChildIds.filter((id) => !trackChildIds.includes(id));
+
+      const [children, relationships, ...trackDetails] = await Promise.all([
+        fetchOrderedEntityThumbnails(nonTrackChildIds),
         hydrateStandardRelationshipCards(nextLibrary),
+        ...trackChildIds.map((id) => fetchAudioTrack(id).catch(() => null)),
       ]);
+
       library = nextLibrary;
       childCards = thumbnailsToCards(children, {
-        hrefFor: (thumbnail) => thumbnail.kind === "audio-library"
-          ? resolveEntityHref("audio-library", thumbnail.id)
-          : resolveEntityHref(thumbnail.kind, thumbnail.id, { kind: "audio-library", id: nextLibrary.id }),
+        hrefFor: (thumbnail) => resolveEntityHref("audio-library", thumbnail.id),
       });
       studioCards = relationships.studioCards;
       creditCards = relationships.creditCards;
       relationshipTags = relationships.relationshipTags;
+      trackItems = trackDetails
+        .filter((d): d is NonNullable<typeof d> => d !== null)
+        .map(audioTrackDetailToListItem)
+        .sort((a, b) => a.sortOrder - b.sortOrder);
       loadState = "ready";
     } catch (err) {
       if (redirectHiddenEntityNotFound(err, nsfw.mode)) return;
@@ -168,9 +195,9 @@
           {#if studio || i > 0}<span class="meta-sep"></span>{/if}
           <span class="meta-item">{date.value}</span>
         {/each}
-        {#if childCards.length > 0}
+        {#if trackItems.length > 0}
           {#if studio || dates.length > 0}<span class="meta-sep"></span>{/if}
-          <span class="meta-item">{childCards.length} {childCards.length === 1 ? "item" : "items"}</span>
+          <span class="meta-item">{trackItems.length} {trackItems.length === 1 ? "track" : "tracks"}</span>
         {/if}
       {/snippet}
 
@@ -182,6 +209,23 @@
         {/if}
       {/snippet}
     </EntityDetail>
+
+    {#if trackItems.length > 0}
+      <AudioVidStackPlayer
+        tracks={trackItems}
+        {activeTrackId}
+        onTrackChange={(id) => (activeTrackId = id)}
+        libraryCoverUrl={coverUrl}
+        onPlayingChange={(p) => (isPlaying = p)}
+      />
+
+      <AudioTrackList
+        tracks={trackItems}
+        {activeTrackId}
+        {isPlaying}
+        onPlay={(id) => (activeTrackId = id)}
+      />
+    {/if}
 
     {#if subLibraryCards.length > 0}
       <section class="content-section">
@@ -200,23 +244,7 @@
       </section>
     {/if}
 
-    {#if trackCards.length > 0}
-      <section class="content-section">
-        <h2 class="content-heading">
-          Tracks
-          <span class="content-count">{trackCards.length}</span>
-        </h2>
-        <EntityGrid
-          cards={trackCards}
-          prefsKey={`audio-${library?.id}-tracks`}
-          selectable={false}
-          emptyTitle="No tracks"
-          emptyMessage="No tracks in this library."
-        />
-      </section>
-    {/if}
-
-    {#if childCards.length === 0}
+    {#if trackItems.length === 0 && subLibraryCards.length === 0}
       <div class="empty-children">
         <p>No tracks or sub-libraries in this audio library yet.</p>
       </div>

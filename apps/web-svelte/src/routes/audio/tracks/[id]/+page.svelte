@@ -18,9 +18,11 @@
     type EntityMetadataUpdateRequest,
   } from "$lib/components/entities/EntityDetail.svelte";
   import EntityCastAndCrewSection from "$lib/components/entities/EntityCastAndCrewSection.svelte";
+  import AudioVidStackPlayer from "$lib/components/AudioVidStackPlayer.svelte";
   import { entityCardToDetailCard, type EntityDetailCardFull, type EntityDetailTag } from "$lib/entities/entity-detail";
   import { resolveEntityHref } from "$lib/entities/entity-routes";
   import { hydrateStandardRelationshipCards } from "$lib/entities/entity-relationship-thumbnails";
+  import { audioTrackDetailToListItem } from "$lib/entities/audio-track-items";
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
   import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
   import { useNsfw } from "$lib/nsfw/store.svelte";
@@ -54,6 +56,8 @@
     if (!track) return [];
     return getCapability(track.capabilities, "dates")?.items ?? [];
   });
+
+  const trackItem = $derived(track ? audioTrackDetailToListItem(track) : null);
 
   onMount(() => {
     void loadTrack();
@@ -130,7 +134,7 @@
       <p>{errorMessage ?? "Failed to load audio track."}</p>
       <button type="button" onclick={() => void loadTrack()}>Retry</button>
     </div>
-  {:else if card && track}
+  {:else if card && track && trackItem}
     <EntityDetail
       {card}
       onRatingChange={handleRatingChange}
@@ -164,6 +168,12 @@
         {/if}
       {/snippet}
     </EntityDetail>
+
+    <AudioVidStackPlayer
+      tracks={[trackItem]}
+      activeTrackId={track.id}
+      onTrackChange={() => {}}
+    />
   {/if}
 </div>
 

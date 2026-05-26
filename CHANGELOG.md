@@ -11,6 +11,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Mobile install metadata now presents Prismedia with the correct app name, theme colors, and safer icon spacing for browser and home-screen surfaces.
 
 ### Added
+- Added audio playback with streaming, waveform visualization, and full transport controls.
+- Added a traditional music player track list on audio library detail pages.
+- Added play count tracking for audio tracks.
 - Added reversible file explorer exclusions so files and folders can be skipped by library scans without deleting them.
 - Added a centralized app settings registry and descriptor-driven settings UI for app-wide visibility, playback, subtitle, scan, generation, worker, and HLS defaults.
 - Added a durable Identify queue so search results and metadata proposals survive navigation and backend restarts.

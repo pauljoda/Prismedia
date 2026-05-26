@@ -1,4 +1,7 @@
 <script lang="ts">
+  import "vidstack/player";
+  import "vidstack/player/ui";
+
   import { onMount } from "svelte";
   import {
     Music,
@@ -15,7 +18,12 @@
   } from "@lucide/svelte";
   import { cn } from "@prismedia/ui-svelte";
   import { formatDuration, type AudioTrackListItemDto } from "@prismedia/contracts";
-  import { apiAssetUrl as toApiUrl } from "$lib/api/orval-fetch";
+  import type {
+    MediaProviderChangeEvent,
+    MediaTimeUpdateEvent,
+  } from "vidstack";
+  import type { MediaPlayerElement } from "vidstack/elements";
+  import { apiAssetUrl } from "$lib/api/orval-fetch";
   import AudioWaveformFilmstrip from "./AudioWaveformFilmstrip.svelte";
 
   type RepeatMode = "off" | "all" | "one";
@@ -42,6 +50,7 @@
     onPlayingChange,
   }: Props = $props();
 
+  let player: MediaPlayerElement | null = $state(null);
   let audioEl: HTMLAudioElement | null = $state(null);
   let playing = $state(false);
   let currentTime = $state(0);
@@ -52,17 +61,23 @@
   let repeat = $state<RepeatMode>("off");
   let shuffle = $state(false);
   let timelineDragging = $state(false);
+  let mediaMounted = $state(false);
 
   let timelineDraggingRef = false;
   let lastShufflePlayKey = 0;
 
-  const activeTrack = $derived(tracks.find((track) => track.id === activeTrackId) ?? null);
+  const activeTrack = $derived(tracks.find((t) => t.id === activeTrackId) ?? null);
   const activeIndex = $derived(
-    activeTrack ? tracks.findIndex((track) => track.id === activeTrackId) : -1,
+    activeTrack ? tracks.findIndex((t) => t.id === activeTrackId) : -1,
   );
   const hasNext = $derived(activeIndex >= 0 && activeIndex < tracks.length - 1);
   const hasPrev = $derived(activeIndex > 0);
   const progress = $derived(duration > 0 ? (currentTime / duration) * 100 : 0);
+
+  const playerSrc = $derived.by(() => {
+    if (!activeTrack) return undefined;
+    return apiAssetUrl(`/audio-stream/${activeTrack.id}`);
+  });
 
   function isKeyboardShortcutSuppressed(target: EventTarget | null): boolean {
     if (!(target instanceof HTMLElement)) return false;
@@ -70,26 +85,21 @@
     return Boolean(target.closest("input, textarea, select"));
   }
 
-  function requestPlay() {
-    if (!audioEl) return;
-    const playPromise = audioEl.play();
-    if (playPromise && typeof playPromise.catch === "function") {
-      void playPromise.catch((error: unknown) => {
-        console.error("Audio play failed:", error);
-      });
-    }
+  function syncAudioElement() {
+    const audio = player?.querySelector("audio") ?? null;
+    audioEl = audio;
   }
 
   function handleSeek(time: number) {
-    if (!audioEl) return;
-    audioEl.currentTime = time;
+    if (!player) return;
+    player.currentTime = time;
     currentTime = time;
   }
 
   function toggleMute() {
-    if (!audioEl) return;
-    audioEl.muted = !audioEl.muted;
-    muted = audioEl.muted;
+    if (!player) return;
+    player.muted = !player.muted;
+    muted = player.muted;
   }
 
   function cycleRepeat() {
@@ -107,19 +117,22 @@
   }
 
   function togglePlay() {
-    if (!audioEl) return;
+    if (!player) return;
     if (!activeTrack) {
       playAll();
       return;
     }
-    if (audioEl.paused) requestPlay();
-    else audioEl.pause();
+    if (player.paused) {
+      void player.play();
+    } else {
+      player.pause();
+    }
   }
 
   function handleNext() {
     if (tracks.length === 0) return;
     if (shuffle) {
-      const otherTracks = tracks.filter((track) => track.id !== activeTrackId);
+      const otherTracks = tracks.filter((t) => t.id !== activeTrackId);
       if (otherTracks.length > 0) {
         const randomTrack = otherTracks[Math.floor(Math.random() * otherTracks.length)];
         onTrackChange(randomTrack!.id);
@@ -136,8 +149,8 @@
   }
 
   function handlePrev() {
-    if (audioEl && audioEl.currentTime > 3) {
-      audioEl.currentTime = 0;
+    if (player && player.currentTime > 3) {
+      player.currentTime = 0;
       return;
     }
     if (hasPrev) {
@@ -147,15 +160,15 @@
 
   function handleTrackEnd() {
     if (repeat === "one") {
-      if (audioEl) {
-        audioEl.currentTime = 0;
-        requestPlay();
+      if (player) {
+        player.currentTime = 0;
+        void player.play();
       }
       return;
     }
 
     if (shuffle) {
-      const otherTracks = tracks.filter((track) => track.id !== activeTrackId);
+      const otherTracks = tracks.filter((t) => t.id !== activeTrackId);
       if (otherTracks.length > 0) {
         const randomTrack = otherTracks[Math.floor(Math.random() * otherTracks.length)];
         onTrackChange(randomTrack!.id);
@@ -180,47 +193,67 @@
   }
 
   function handleVolumeInput(event: Event) {
-    if (!audioEl) return;
+    if (!player) return;
     const nextVolume = Number((event.currentTarget as HTMLInputElement).value);
-    audioEl.volume = nextVolume;
+    player.volume = nextVolume;
     volume = nextVolume;
-    if (nextVolume > 0 && audioEl.muted) {
-      audioEl.muted = false;
+    if (nextVolume > 0 && player.muted) {
+      player.muted = false;
       muted = false;
     }
   }
 
   function recordTrackPlay(trackId: string) {
-    const url = toApiUrl(`/audio-tracks/${trackId}/play`);
+    const url = apiAssetUrl(`/audio-tracks/${trackId}/play`);
     if (!url) return;
     void fetch(url, { method: "POST" }).catch(() => {});
   }
 
-  $effect(() => {
-    if (!audioEl) return;
-    if (!activeTrack) {
-      audioEl.removeAttribute("src");
-      audioEl.load();
-      playing = false;
-      currentTime = 0;
-      return;
+  function handleProviderChange(_event: Event) {
+    syncAudioElement();
+  }
+
+  function handleTimeUpdate(event: Event) {
+    const detail = (event as MediaTimeUpdateEvent).detail;
+    currentTime = detail.currentTime;
+  }
+
+  function handlePlay() {
+    playing = true;
+    onPlayingChange?.(true);
+  }
+
+  function handlePause() {
+    playing = false;
+    onPlayingChange?.(false);
+  }
+
+  function handleCanPlay() {
+    syncAudioElement();
+    if (player && Number.isFinite(player.duration)) {
+      duration = player.duration;
     }
+  }
 
-    const nextSrc = toApiUrl(`/audio-stream/${activeTrack.id}`);
-    if (!nextSrc || audioEl.src === nextSrc) return;
-    audioEl.src = nextSrc;
-    currentTime = 0;
-    duration = activeTrack.duration ?? 0;
-    requestPlay();
-  });
+  function handleEnded() {
+    if (activeTrackId) recordTrackPlay(activeTrackId);
+    handleTrackEnd();
+  }
 
+  function handleDurationChange() {
+    if (player && Number.isFinite(player.duration)) {
+      duration = player.duration;
+    }
+  }
+
+  // Load waveform data for the active track
   $effect(() => {
     if (!activeTrack?.waveformPath) {
       waveformData = null;
       return;
     }
 
-    const waveformUrl = toApiUrl(
+    const waveformUrl = apiAssetUrl(
       `/assets/${activeTrack.waveformPath.replace(/^\/+/, "")}`,
     );
     if (!waveformUrl) {
@@ -238,9 +271,8 @@
         if (cancelled) return;
         waveformData = Array.isArray(payload.data) ? payload.data : null;
       })
-      .catch((error) => {
+      .catch(() => {
         if (cancelled) return;
-        console.error("Failed to load waveform:", error);
         waveformData = null;
       });
 
@@ -249,6 +281,18 @@
     };
   });
 
+  // Update duration when active track changes
+  $effect(() => {
+    if (!activeTrack) {
+      currentTime = 0;
+      duration = 0;
+      return;
+    }
+    currentTime = 0;
+    duration = activeTrack.duration ?? 0;
+  });
+
+  // Handle shuffle play key
   $effect(() => {
     if (shufflePlayKey === 0 || shufflePlayKey === lastShufflePlayKey || tracks.length === 0) {
       return;
@@ -257,58 +301,36 @@
     shuffle = true;
     const randomTrack = tracks[Math.floor(Math.random() * tracks.length)];
     if (randomTrack?.id === activeTrackId) {
-      requestPlay();
+      if (player) void player.play();
     } else if (randomTrack) {
       onTrackChange(randomTrack.id);
     }
   });
 
   onMount(() => {
-    if (!audioEl) return;
-
-    const handleTimeUpdate = () => {
-      currentTime = audioEl?.currentTime ?? 0;
-    };
-    const handleLoadedMetadata = () => {
-      if (audioEl && Number.isFinite(audioEl.duration)) duration = audioEl.duration;
-    };
-    const handleDurationChange = () => {
-      if (audioEl && Number.isFinite(audioEl.duration)) duration = audioEl.duration;
-    };
-    const handlePlay = () => {
-      playing = true;
-      onPlayingChange?.(true);
-    };
-    const handlePause = () => {
-      playing = false;
-      onPlayingChange?.(false);
-    };
-    const handleEnded = () => {
-      if (activeTrackId) recordTrackPlay(activeTrackId);
-      handleTrackEnd();
-    };
-    const handleError = () => {
-      console.error("Audio element error:", audioEl?.error);
-      playing = false;
-      onPlayingChange?.(false);
-    };
-
-    audioEl.addEventListener("timeupdate", handleTimeUpdate);
-    audioEl.addEventListener("loadedmetadata", handleLoadedMetadata);
-    audioEl.addEventListener("durationchange", handleDurationChange);
-    audioEl.addEventListener("play", handlePlay);
-    audioEl.addEventListener("pause", handlePause);
-    audioEl.addEventListener("ended", handleEnded);
-    audioEl.addEventListener("error", handleError);
-
+    mediaMounted = true;
     return () => {
-      audioEl?.removeEventListener("timeupdate", handleTimeUpdate);
-      audioEl?.removeEventListener("loadedmetadata", handleLoadedMetadata);
-      audioEl?.removeEventListener("durationchange", handleDurationChange);
-      audioEl?.removeEventListener("play", handlePlay);
-      audioEl?.removeEventListener("pause", handlePause);
-      audioEl?.removeEventListener("ended", handleEnded);
-      audioEl?.removeEventListener("error", handleError);
+      mediaMounted = false;
+    };
+  });
+
+  $effect(() => {
+    const el = player;
+    if (!el) return;
+
+    const listeners: Array<[string, EventListener]> = [
+      ["provider-change", handleProviderChange],
+      ["can-play", handleCanPlay],
+      ["time-update", handleTimeUpdate],
+      ["play", handlePlay],
+      ["pause", handlePause],
+      ["ended", handleEnded],
+      ["duration-change", handleDurationChange],
+    ];
+
+    for (const [type, listener] of listeners) el.addEventListener(type, listener);
+    return () => {
+      for (const [type, listener] of listeners) el.removeEventListener(type, listener);
     };
   });
 
@@ -316,14 +338,14 @@
     if (isKeyboardShortcutSuppressed(event.target)) return;
 
     const seekBy = (delta: number) => {
-      if (!audioEl || !activeTrack) return;
+      if (!player || !activeTrack) return;
       const max =
         duration > 0 && Number.isFinite(duration)
           ? duration
-          : Number.isFinite(audioEl.duration) && audioEl.duration > 0
-            ? audioEl.duration
+          : Number.isFinite(player.duration) && player.duration > 0
+            ? player.duration
             : Number.POSITIVE_INFINITY;
-      handleSeek(Math.max(0, Math.min(max, audioEl.currentTime + delta)));
+      handleSeek(Math.max(0, Math.min(max, (player.currentTime ?? 0) + delta)));
     };
 
     switch (event.key.toLowerCase()) {
@@ -362,7 +384,21 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <div class={cn("surface-panel border border-border-subtle", className)}>
-  <audio bind:this={audioEl} preload="auto"></audio>
+  {#if playerSrc && mediaMounted}
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <media-player
+      class="audio-vidstack-engine"
+      title={activeTrack?.title ?? "Audio"}
+      src={playerSrc}
+      viewType="audio"
+      streamType="on-demand"
+      crossOrigin
+      playsInline
+      bind:this={player}
+    >
+      <media-provider></media-provider>
+    </media-player>
+  {/if}
 
   <div class="px-4 pt-4 pb-2">
     <div class="mb-3 flex items-center gap-3">
@@ -537,3 +573,14 @@
     </div>
   </div>
 </div>
+
+<style>
+  .audio-vidstack-engine {
+    position: absolute;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+    pointer-events: none;
+    opacity: 0;
+  }
+</style>
