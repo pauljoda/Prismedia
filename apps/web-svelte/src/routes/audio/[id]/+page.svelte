@@ -4,7 +4,6 @@
   import { Music } from "@lucide/svelte";
   import {
     fetchAudioLibrary,
-    fetchAudioTrack,
     updateEntityRating,
     updateEntityFlags,
     updateEntityMetadata,
@@ -17,7 +16,6 @@
     toggleOptimisticEntityFlag,
     updateOptimisticEntityRating,
   } from "$lib/entities/entity-detail-state";
-  import { getAllChildIds } from "$lib/entities/entity-children";
   import { entityCardToDetailCard, type EntityDetailCardFull, type EntityDetailTag } from "$lib/entities/entity-detail";
   import { resolveEntityHref } from "$lib/entities/entity-routes";
   import {
@@ -25,7 +23,7 @@
     hydrateStandardRelationshipCards,
     thumbnailsToCards,
   } from "$lib/entities/entity-relationship-thumbnails";
-  import { audioTrackDetailToListItem } from "$lib/entities/audio-track-items";
+  import { entityThumbnailToTrackItem } from "$lib/entities/audio-track-items";
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
   import EntityCastAndCrewSection from "$lib/components/entities/EntityCastAndCrewSection.svelte";
   import EntityDetail, {
@@ -103,19 +101,15 @@
     errorMessage = null;
     try {
       const nextLibrary = await fetchAudioLibrary(page.params.id ?? "");
-      const allChildIds = getAllChildIds(nextLibrary);
-      const trackChildIds = allChildIds.filter((id) => {
-        for (const group of nextLibrary.childrenByKind) {
-          if (group.kind === "audio-track" && group.entities.some((e) => e.id === id)) return true;
-        }
-        return false;
-      });
-      const nonTrackChildIds = allChildIds.filter((id) => !trackChildIds.includes(id));
 
-      const [children, relationships, ...trackDetails] = await Promise.all([
-        fetchOrderedEntityThumbnails(nonTrackChildIds),
+      // Separate track children from non-track children using the entity groups
+      const trackGroup = nextLibrary.childrenByKind.find((g) => g.kind === "audio-track");
+      const nonTrackGroups = nextLibrary.childrenByKind.filter((g) => g.kind !== "audio-track");
+      const nonTrackIds = nonTrackGroups.flatMap((g) => g.entities.map((e) => e.id));
+
+      const [children, relationships] = await Promise.all([
+        fetchOrderedEntityThumbnails(nonTrackIds),
         hydrateStandardRelationshipCards(nextLibrary),
-        ...trackChildIds.map((id) => fetchAudioTrack(id).catch(() => null)),
       ]);
 
       library = nextLibrary;
@@ -125,10 +119,12 @@
       studioCards = relationships.studioCards;
       creditCards = relationships.creditCards;
       relationshipTags = relationships.relationshipTags;
-      trackItems = trackDetails
-        .filter((d): d is NonNullable<typeof d> => d !== null)
-        .map(audioTrackDetailToListItem)
+
+      // Build track items from entity thumbnails already in the response — no N+1 fetches
+      trackItems = (trackGroup?.entities ?? [])
+        .map((thumb) => entityThumbnailToTrackItem(thumb, nextLibrary.id))
         .sort((a, b) => a.sortOrder - b.sortOrder);
+
       loadState = "ready";
     } catch (err) {
       if (redirectHiddenEntityNotFound(err, nsfw.mode)) return;

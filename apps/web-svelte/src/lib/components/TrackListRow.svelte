@@ -43,56 +43,39 @@
 
 <div
   class={cn(
-    "group/row relative grid grid-cols-[2rem_minmax(0,1fr)_auto_3rem_1.75rem] items-center gap-3 px-3 sm:px-4 py-1.5 transition-colors duration-fast",
+    "group/row relative grid h-11 grid-cols-[2rem_minmax(0,1fr)_auto_3rem_1.75rem] items-center gap-3 px-3 sm:px-4 transition-colors duration-fast",
     "before:pointer-events-none before:absolute before:inset-y-0 before:left-0 before:w-[2px] before:transition-all before:duration-normal",
     isActive
       ? "bg-gradient-to-r from-accent-900/40 via-accent-950/30 to-transparent before:bg-[var(--color-accent-500)] before:shadow-[0_0_12px_rgba(199,155,92,0.55)]"
       : "hover:bg-surface-2 before:bg-transparent",
   )}
 >
-  <div class="flex items-center justify-center">
-    {#if isActive}
-      {#if isPlaying}
-        <span
-          class="flex h-4 items-end gap-[2px]"
-          aria-label="Now playing"
-        >
-          <span
-            class="w-[2px] bg-accent-400 animate-[bar-bounce_0.9s_ease-in-out_infinite]"
-            style="height:55%; animation-delay:0ms"
-          ></span>
-          <span
-            class="w-[2px] bg-accent-400 animate-[bar-bounce_0.9s_ease-in-out_infinite]"
-            style="height:100%; animation-delay:150ms"
-          ></span>
-          <span
-            class="w-[2px] bg-accent-400 animate-[bar-bounce_0.9s_ease-in-out_infinite]"
-            style="height:40%; animation-delay:300ms"
-          ></span>
-          <span
-            class="w-[2px] bg-accent-400 animate-[bar-bounce_0.9s_ease-in-out_infinite]"
-            style="height:75%; animation-delay:450ms"
-          ></span>
-        </span>
-      {:else}
-        <button
-          type="button"
-          onclick={() => onPlay(track.id)}
-          aria-label="Resume"
-          class="inline-flex h-7 w-7 items-center justify-center text-accent-400 transition-colors hover:text-accent-300"
-        >
-          <Play class="h-3.5 w-3.5" fill="currentColor" />
-        </button>
-      {/if}
+  <div class="flex h-7 w-7 items-center justify-center">
+    {#if isActive && isPlaying}
+      <span
+        class="flex h-4 items-end gap-[2px]"
+        aria-label="Now playing"
+      >
+        <span class="w-[2px] bg-accent-400 animate-[bar-bounce_0.9s_ease-in-out_infinite]" style="height:55%; animation-delay:0ms"></span>
+        <span class="w-[2px] bg-accent-400 animate-[bar-bounce_0.9s_ease-in-out_infinite]" style="height:100%; animation-delay:150ms"></span>
+        <span class="w-[2px] bg-accent-400 animate-[bar-bounce_0.9s_ease-in-out_infinite]" style="height:40%; animation-delay:300ms"></span>
+        <span class="w-[2px] bg-accent-400 animate-[bar-bounce_0.9s_ease-in-out_infinite]" style="height:75%; animation-delay:450ms"></span>
+      </span>
     {:else}
-      <span class="font-mono text-[0.72rem] text-text-disabled tabular-nums group-hover/row:hidden">
+      <span class={cn(
+        "absolute font-mono text-[0.72rem] tabular-nums transition-opacity duration-fast",
+        isActive ? "text-accent-400 opacity-0" : "text-text-disabled group-hover/row:opacity-0",
+      )}>
         {track.trackNumber ?? index + 1}
       </span>
       <button
         type="button"
         onclick={() => onPlay(track.id)}
-        aria-label={`Play ${track.title}`}
-        class="hidden h-7 w-7 items-center justify-center text-text-primary transition-colors hover:text-accent-300 group-hover/row:inline-flex"
+        aria-label={isActive ? "Resume" : `Play ${track.title}`}
+        class={cn(
+          "inline-flex h-7 w-7 items-center justify-center transition-opacity duration-fast",
+          isActive ? "text-accent-400 opacity-100 hover:text-accent-300" : "text-text-primary opacity-0 group-hover/row:opacity-100 hover:text-accent-300",
+        )}
       >
         <Play class="h-3.5 w-3.5" fill="currentColor" />
       </button>
@@ -131,16 +114,16 @@
     {/if}
   </div>
 
-  <div class="justify-self-end opacity-60 transition-opacity duration-fast group-hover/row:opacity-100">
-    {#if onRatingChange}
-      <StarRatingPicker
-        value={track.rating}
-        onChange={(v) => onRatingChange!(track.id, v)}
-        ariaLabelPrefix={ratingAriaPrefix ?? `Rate ${track.title} with`}
-      />
-    {:else if track.rating != null}
-      <StarRatingPicker value={track.rating} readOnly />
-    {/if}
+  <div class={cn(
+    "justify-self-end transition-opacity duration-fast",
+    track.rating != null ? "opacity-70 group-hover/row:opacity-100" : "opacity-0 group-hover/row:opacity-100",
+  )}>
+    <StarRatingPicker
+      value={track.rating}
+      onChange={onRatingChange ? (v) => onRatingChange!(track.id, v) : undefined}
+      readOnly={!onRatingChange}
+      ariaLabelPrefix={ratingAriaPrefix ?? `Rate ${track.title} with`}
+    />
   </div>
 
   <span class="justify-self-end font-mono text-[0.72rem] tabular-nums text-text-muted">

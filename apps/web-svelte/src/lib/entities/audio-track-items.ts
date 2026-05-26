@@ -1,5 +1,5 @@
 import type { AudioTrackListItemDto } from "@prismedia/contracts";
-import type { AudioTrackDetail } from "$lib/api/generated/model";
+import type { AudioTrackDetail, EntityThumbnail } from "$lib/api/generated/model";
 import { getCapability } from "$lib/api/capabilities";
 
 function parseDurationString(value: string | null | undefined): number | null {
@@ -14,10 +14,58 @@ function parseDurationString(value: string | null | undefined): number | null {
   return days * 86400 + hours * 3600 + minutes * 60 + seconds + frac;
 }
 
+/** Parse a display duration like "12:40" or "1:02:33" into seconds. */
+function parseDisplayDuration(label: string): number | null {
+  const parts = label.split(":").map(Number);
+  if (parts.some((p) => !Number.isFinite(p))) return null;
+  if (parts.length === 2) return parts[0]! * 60 + parts[1]!;
+  if (parts.length === 3) return parts[0]! * 3600 + parts[1]! * 60 + parts[2]!;
+  return null;
+}
+
 function toNumber(value: number | string | null | undefined): number | null {
   if (value == null) return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Build a lightweight track list item from an entity thumbnail summary.
+ * Avoids the N+1 fetch pattern of calling fetchAudioTrack() per track.
+ */
+export function entityThumbnailToTrackItem(
+  thumb: EntityThumbnail,
+  libraryId: string | null,
+): AudioTrackListItemDto {
+  const durationMeta = thumb.meta.find((m) => m.icon === "duration");
+  const codecMeta = thumb.meta.find((m) => m.icon === "audio");
+
+  return {
+    id: thumb.id,
+    title: thumb.title,
+    date: null,
+    rating: toNumber(thumb.rating) ?? null,
+    organized: thumb.isOrganized,
+    isNsfw: thumb.isNsfw,
+    duration: durationMeta ? parseDisplayDuration(durationMeta.label) : null,
+    bitRate: null,
+    sampleRate: null,
+    channels: null,
+    codec: codecMeta?.label ?? null,
+    fileSize: null,
+    embeddedArtist: null,
+    embeddedAlbum: null,
+    trackNumber: toNumber(thumb.sortOrder) ?? null,
+    waveformPath: null,
+    libraryId,
+    sortOrder: toNumber(thumb.sortOrder) ?? 0,
+    studioId: null,
+    performers: [],
+    tags: [],
+    playCount: 0,
+    lastPlayedAt: null,
+    createdAt: "",
+  };
 }
 
 export function audioTrackDetailToListItem(detail: AudioTrackDetail): AudioTrackListItemDto {

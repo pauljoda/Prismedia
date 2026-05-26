@@ -358,81 +358,83 @@
   }}
 ></audio>
 
-<div class={cn("fixed bottom-14 left-0 right-0 z-[55] border-t border-border-subtle bg-surface-1/95 backdrop-blur-md md:bottom-0", className)}>
-  <div class="px-4 pt-3 pb-1.5">
-    <div class="mb-2.5 flex items-center gap-3">
-      <div class="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden bg-surface-3 surface-card-sharp">
-        <Music class={cn("h-4 w-4", activeTrack ? "text-accent-500" : "text-text-disabled")} />
-        {#if libraryCoverUrl}
-          <img
-            src={libraryCoverUrl}
-            alt=""
-            class="absolute inset-0 h-full w-full object-cover"
-            decoding="async"
-            onerror={(event) => ((event.currentTarget as HTMLImageElement).style.display = "none")}
-          />
-        {/if}
-      </div>
-
-      <div class="min-w-0 flex-1">
-        {#if activeTrack}
-          <p class="truncate text-sm font-medium text-text-primary">{activeTrack.title}</p>
-          <p class="truncate text-xs text-text-muted">
-            {activeTrack.embeddedArtist ?? "Unknown artist"}
-          </p>
-        {:else}
-          <p class="text-sm text-text-muted">No track playing</p>
-          <p class="text-xs text-text-disabled">Select a track or press play</p>
-        {/if}
-      </div>
-
-      <span class="shrink-0 font-mono tabular-nums text-xs text-text-muted">
-        {#if activeTrack}
-          {formatDuration(currentTime) ?? "0:00"}
-          <span class="text-text-disabled"> / {formatDuration(duration) ?? "0:00"}</span>
-        {:else}
-          --:--
-        {/if}
-      </span>
+<div class={cn(
+  "fixed bottom-16 right-3 z-[55] w-[min(24rem,calc(100vw-1.5rem))] overflow-hidden rounded-xl border border-border-subtle bg-surface-1/90 shadow-xl shadow-black/40 backdrop-blur-xl md:bottom-4 md:right-4",
+  className,
+)}>
+  <!-- Now-playing + progress -->
+  <div class="flex items-center gap-2.5 px-3 pt-2.5 pb-1">
+    <div class="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-md bg-surface-3">
+      <Music class={cn("h-3.5 w-3.5", activeTrack ? "text-accent-500" : "text-text-disabled")} />
+      {#if libraryCoverUrl}
+        <img
+          src={libraryCoverUrl}
+          alt=""
+          class="absolute inset-0 h-full w-full object-cover"
+          decoding="async"
+          onerror={(event) => ((event.currentTarget as HTMLImageElement).style.display = "none")}
+        />
+      {/if}
     </div>
 
-    {#if activeTrack && duration > 0}
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div
-        class="video-progress-track group/track mb-1.5"
-        data-dragging={timelineDragging}
-        onpointerdown={(event) => {
-          if (duration <= 0) return;
-          timelineDraggingRef = true;
-          timelineDragging = true;
-          (event.currentTarget as HTMLDivElement).setPointerCapture(event.pointerId);
-          const rect = (event.currentTarget as HTMLDivElement).getBoundingClientRect();
-          const nextPercent = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
-          handleSeek(nextPercent * duration);
-        }}
-        onpointermove={(event) => {
-          if (!timelineDraggingRef || duration <= 0) return;
-          const rect = (event.currentTarget as HTMLDivElement).getBoundingClientRect();
-          const nextPercent = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
-          handleSeek(nextPercent * duration);
-        }}
-        onpointerup={(event) => {
-          (event.currentTarget as HTMLDivElement).releasePointerCapture(event.pointerId);
-          timelineDraggingRef = false;
-          timelineDragging = false;
-        }}
-        onpointercancel={() => {
-          timelineDraggingRef = false;
-          timelineDragging = false;
-        }}
-      >
-        <div class="video-progress-fill" style={`width: ${progress}%`}></div>
-      </div>
-    {/if}
+    <div class="min-w-0 flex-1">
+      {#if activeTrack}
+        <p class="truncate text-[0.8rem] font-medium leading-tight text-text-primary">{activeTrack.title}</p>
+        <p class="truncate text-[0.68rem] leading-tight text-text-muted">
+          {activeTrack.embeddedArtist ?? "Unknown artist"}
+        </p>
+      {:else}
+        <p class="text-[0.8rem] text-text-muted">No track playing</p>
+      {/if}
+    </div>
+
+    <span class="shrink-0 font-mono tabular-nums text-[0.65rem] text-text-disabled">
+      {#if activeTrack}
+        {formatDuration(currentTime) ?? "0:00"} / {formatDuration(duration) ?? "0:00"}
+      {:else}
+        --:--
+      {/if}
+    </span>
   </div>
 
+  <!-- Progress scrubber -->
+  {#if activeTrack && duration > 0}
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div
+      class="video-progress-track group/track mx-3 mb-1"
+      data-dragging={timelineDragging}
+      onpointerdown={(event) => {
+        if (duration <= 0) return;
+        timelineDraggingRef = true;
+        timelineDragging = true;
+        (event.currentTarget as HTMLDivElement).setPointerCapture(event.pointerId);
+        const rect = (event.currentTarget as HTMLDivElement).getBoundingClientRect();
+        const nextPercent = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+        handleSeek(nextPercent * duration);
+      }}
+      onpointermove={(event) => {
+        if (!timelineDraggingRef || duration <= 0) return;
+        const rect = (event.currentTarget as HTMLDivElement).getBoundingClientRect();
+        const nextPercent = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+        handleSeek(nextPercent * duration);
+      }}
+      onpointerup={(event) => {
+        (event.currentTarget as HTMLDivElement).releasePointerCapture(event.pointerId);
+        timelineDraggingRef = false;
+        timelineDragging = false;
+      }}
+      onpointercancel={() => {
+        timelineDraggingRef = false;
+        timelineDragging = false;
+      }}
+    >
+      <div class="video-progress-fill" style={`width: ${progress}%`}></div>
+    </div>
+  {/if}
+
+  <!-- Waveform (only when data available) -->
   {#if activeTrack && waveformData && duration > 0}
-    <div class="overflow-hidden border-t border-border-subtle bg-black">
+    <div class="overflow-hidden border-t border-border-subtle/50 bg-black/30">
       <AudioWaveformFilmstrip
         peaks={waveformData}
         {duration}
@@ -442,83 +444,17 @@
     </div>
   {/if}
 
-  <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-x-2 px-4 py-2">
-    <div class="min-w-0" aria-hidden="true"></div>
-
-    <div class="flex items-center justify-center gap-1">
-      <button
-        type="button"
-        onclick={() => (shuffle = !shuffle)}
-        title={shuffle ? "Shuffle: on" : "Shuffle: off"}
-        class={cn(
-          "p-2 transition-colors",
-          shuffle ? "text-accent-500" : "text-text-disabled hover:text-text-muted",
-        )}
-      >
-        <Shuffle class="h-3.5 w-3.5" />
-      </button>
-
-      <button
-        type="button"
-        onclick={handlePrev}
-        disabled={!activeTrack && tracks.length === 0}
-        class="p-2 text-text-muted transition-colors hover:text-text-primary disabled:text-text-disabled"
-      >
-        <SkipBack class="h-4 w-4" />
-      </button>
-
-      <button
-        type="button"
-        onclick={togglePlay}
-        class={cn(
-          "mx-1 p-3 transition-all",
-          playing
-            ? "bg-accent-500 text-bg shadow-[0_0_12px_rgba(196,154,90,0.3)]"
-            : "bg-surface-3 text-text-primary hover:bg-surface-4 hover:text-accent-400",
-        )}
-      >
-        {#if playing}
-          <Pause class="h-5 w-5" />
-        {:else}
-          <Play class="ml-0.5 h-5 w-5" />
-        {/if}
-      </button>
-
-      <button
-        type="button"
-        onclick={handleNext}
-        disabled={!activeTrack && tracks.length === 0}
-        class="p-2 text-text-muted transition-colors hover:text-text-primary disabled:text-text-disabled"
-      >
-        <SkipForward class="h-4 w-4" />
-      </button>
-
-      <button
-        type="button"
-        onclick={cycleRepeat}
-        title={repeat === "off" ? "Repeat: off" : repeat === "all" ? "Repeat: all" : "Repeat: one"}
-        class={cn(
-          "p-2 transition-colors",
-          repeat !== "off" ? "text-accent-500" : "text-text-disabled hover:text-text-muted",
-        )}
-      >
-        {#if repeat === "one"}
-          <Repeat1 class="h-3.5 w-3.5" />
-        {:else}
-          <Repeat class="h-3.5 w-3.5" />
-        {/if}
-      </button>
-    </div>
-
-    <div class="group/vol flex min-w-0 items-center justify-end gap-1.5">
+  <!-- Transport controls -->
+  <div class="flex items-center justify-between px-2 py-1.5">
+    <div class="group/vol flex items-center gap-1">
       <button
         type="button"
         onclick={toggleMute}
-        class="p-1.5 text-text-disabled transition-colors hover:text-text-muted"
+        class="p-1 text-text-disabled transition-colors hover:text-text-muted"
       >
-        <VolumeIcon class="h-3.5 w-3.5" />
+        <VolumeIcon class="h-3 w-3" />
       </button>
-      <div class="w-0 overflow-hidden transition-all duration-200 group-hover/vol:w-20">
+      <div class="w-0 overflow-hidden transition-all duration-200 group-hover/vol:w-16">
         <input
           type="range"
           min="0"
@@ -530,5 +466,72 @@
         />
       </div>
     </div>
+
+    <div class="flex items-center gap-0.5">
+      <button
+        type="button"
+        onclick={() => (shuffle = !shuffle)}
+        title={shuffle ? "Shuffle: on" : "Shuffle: off"}
+        class={cn(
+          "p-1.5 transition-colors",
+          shuffle ? "text-accent-500" : "text-text-disabled hover:text-text-muted",
+        )}
+      >
+        <Shuffle class="h-3 w-3" />
+      </button>
+
+      <button
+        type="button"
+        onclick={handlePrev}
+        disabled={!activeTrack && tracks.length === 0}
+        class="p-1.5 text-text-muted transition-colors hover:text-text-primary disabled:text-text-disabled"
+      >
+        <SkipBack class="h-3.5 w-3.5" />
+      </button>
+
+      <button
+        type="button"
+        onclick={togglePlay}
+        class={cn(
+          "mx-0.5 rounded-full p-2 transition-all",
+          playing
+            ? "bg-accent-500 text-bg shadow-[0_0_10px_rgba(196,154,90,0.3)]"
+            : "bg-surface-3 text-text-primary hover:bg-surface-4 hover:text-accent-400",
+        )}
+      >
+        {#if playing}
+          <Pause class="h-4 w-4" />
+        {:else}
+          <Play class="ml-0.5 h-4 w-4" />
+        {/if}
+      </button>
+
+      <button
+        type="button"
+        onclick={handleNext}
+        disabled={!activeTrack && tracks.length === 0}
+        class="p-1.5 text-text-muted transition-colors hover:text-text-primary disabled:text-text-disabled"
+      >
+        <SkipForward class="h-3.5 w-3.5" />
+      </button>
+
+      <button
+        type="button"
+        onclick={cycleRepeat}
+        title={repeat === "off" ? "Repeat: off" : repeat === "all" ? "Repeat: all" : "Repeat: one"}
+        class={cn(
+          "p-1.5 transition-colors",
+          repeat !== "off" ? "text-accent-500" : "text-text-disabled hover:text-text-muted",
+        )}
+      >
+        {#if repeat === "one"}
+          <Repeat1 class="h-3 w-3" />
+        {:else}
+          <Repeat class="h-3 w-3" />
+        {/if}
+      </button>
+    </div>
+
+    <div class="w-10" aria-hidden="true"></div>
   </div>
 </div>
