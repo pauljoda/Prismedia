@@ -110,6 +110,7 @@
     onRatingChange?: (value: number | null) => void;
     onFavoriteToggle?: () => void;
     onOrganizedToggle?: () => void;
+    peopleLabel?: string;
     posterSize?: EntityDetailPosterSize;
     ratingBusy?: boolean;
     showHero?: boolean;
@@ -136,6 +137,7 @@
     onRatingChange,
     onFavoriteToggle,
     onOrganizedToggle,
+    peopleLabel = "Cast & Crew",
     posterSize = "medium",
     ratingBusy = false,
     showHero = true,
@@ -780,7 +782,7 @@
         editDraft.creditPicks = v;
       }}
       onSearch={searchPeople}
-      label="Cast & Crew"
+      label={peopleLabel}
       placeholder="Search people…"
       canAddNew={true}
       addNewLabel="person"
@@ -1390,8 +1392,8 @@
       </div>
     {:else if heroMode === "poster-blur"}
       <div class="hero-backdrop poster-mode">
-        <div class="hero-backdrop-img">
-          <img src={card.poster!.src} alt="" aria-hidden="true" />
+        <div class="hero-backdrop-thumbnail">
+          <EntityThumbnail card={posterCard!} linkable={false} mediaOnly={true} interactive={false} />
         </div>
         <div class="hero-backdrop-blur"></div>
       </div>
@@ -1590,19 +1592,32 @@
     overflow: hidden;
   }
 
-  .hero-backdrop-img {
+  .hero-backdrop-thumbnail {
     position: absolute;
     inset: -40px;
-  }
-
-  .hero-backdrop-img img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    object-position: center center;
     transform: scale(1.3);
     filter: blur(15px) saturate(1.3) brightness(0.5);
     will-change: transform;
+  }
+
+  .hero-backdrop-thumbnail :global(.entity-thumbnail) {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    transform: none;
+  }
+
+  .hero-backdrop-thumbnail :global(.entity-thumbnail::after) {
+    display: none;
+  }
+
+  .hero-backdrop-thumbnail :global(.media) {
+    width: 100%;
+    height: 100%;
+    border-bottom: 0;
   }
 
   .hero-backdrop-blur {
@@ -1759,22 +1774,31 @@
     align-items: center;
     gap: 0.4rem;
     padding: 0.35rem 0.65rem;
-    border: 1px solid var(--detail-border);
+    border: 1px solid color-mix(in srgb, var(--detail-accent) 32%, var(--detail-border));
     border-radius: var(--radius-xs, 4px);
-    background: rgba(255, 255, 255, 0.04);
-    color: var(--detail-text-muted);
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--detail-accent) 12%, rgba(10, 12, 17, 0.82)),
+      rgba(10, 12, 17, 0.78)
+    );
+    color: var(--detail-text-secondary);
     font-family: var(--font-mono, "JetBrains Mono", monospace);
     font-size: 0.72rem;
     font-weight: 600;
     letter-spacing: 0.03em;
     cursor: pointer;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      0 0 14px rgba(0, 0, 0, 0.3);
     transition: color 0.2s, border-color 0.2s, box-shadow 0.2s, background 0.2s;
   }
 
   .action-btn:hover {
     color: var(--detail-accent);
-    border-color: var(--detail-accent-muted);
-    box-shadow: 0 0 12px var(--detail-accent-glow);
+    border-color: color-mix(in srgb, var(--detail-accent) 58%, var(--detail-border));
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.12),
+      0 0 16px var(--detail-accent-glow);
     background: color-mix(in srgb, var(--detail-accent) 6%, transparent);
   }
 

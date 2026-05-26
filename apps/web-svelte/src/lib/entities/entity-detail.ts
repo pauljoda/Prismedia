@@ -16,14 +16,11 @@ import type {
   EntityCard,
   EntityDate,
   EntityExternalId,
-  EntityThumbnail,
   EntityUrl,
 } from "$lib/api/generated/model";
 import { CAPABILITY_KIND, ENTITY_FILE_ROLE } from "./entity-codes";
-import { getEntityKindLabel } from "./entity-grid";
+import { entityCardToThumbnailCard, getEntityKindLabel } from "./entity-grid";
 import {
-  aspectRatioForKind,
-  type EntityThumbnailAsset,
   type EntityThumbnailCard,
 } from "./entity-thumbnail";
 
@@ -249,7 +246,10 @@ function resolvePoster(capabilities: EntityCapability[]): EntityDetailPoster | n
   const images = getImagesCapability(capabilities);
   if (!images) return null;
   const posterItem = images.items.find(
-    (item) => item.kind === ENTITY_FILE_ROLE.poster || item.kind === ENTITY_FILE_ROLE.thumbnail,
+    (item) =>
+      item.kind === ENTITY_FILE_ROLE.poster ||
+      item.kind === ENTITY_FILE_ROLE.thumbnail ||
+      item.kind === ENTITY_FILE_ROLE.logo,
   );
   if (posterItem) return { src: posterItem.path, alt: String(posterItem.kind) };
   if (images.coverUrl) return { src: images.coverUrl, alt: "Cover" };
@@ -257,63 +257,8 @@ function resolvePoster(capabilities: EntityCapability[]): EntityDetailPoster | n
   return null;
 }
 
-function assetFromPath(path: string, title: string, role?: string): EntityThumbnailAsset {
-  return {
-    alt: role ? `${title} ${role}` : title,
-    role,
-    src: path,
-  };
-}
-
-function sampleSpread<T>(items: T[], max: number): T[] {
-  if (items.length <= max) return items;
-  const result: T[] = [];
-  const last = items.length - 1;
-  for (let i = 0; i < max; i++) {
-    result.push(items[Math.round((i * last) / (max - 1))]);
-  }
-  return result;
-}
-
-function thumbnailPreviewAsset(entity: EntityThumbnail): EntityThumbnailAsset | null {
-  const path = entity.coverUrl ?? entity.hoverImages?.[0]?.path ?? null;
-  return path ? assetFromPath(path, entity.title, "preview") : null;
-}
-
-function childPreviewAssets(entity: EntityCard): EntityThumbnailAsset[] {
-  for (const group of entity.childrenByKind) {
-    const assets = sampleSpread(group.entities, 5)
-      .map(thumbnailPreviewAsset)
-      .filter((asset): asset is EntityThumbnailAsset => Boolean(asset));
-    if (assets.length > 0) return assets;
-  }
-
-  return [];
-}
-
-function resolvePosterCard(entity: EntityCard, poster: EntityDetailPoster | null): EntityThumbnailCard | null {
-  const hoverAssets = childPreviewAssets(entity);
-  const cover = poster ? assetFromPath(poster.src, entity.title, "cover") : null;
-  if (!cover && hoverAssets.length === 0) return null;
-
-  return {
-    aspectRatio: aspectRatioForKind(entity.kind),
-    cover,
-    entity: {
-      id: entity.id,
-      kind: entity.kind,
-      title: entity.title,
-      parentEntityId: entity.parentEntityId,
-      sortOrder: entity.sortOrder,
-      capabilities: entity.capabilities,
-      childrenByKind: entity.childrenByKind,
-      relationships: entity.relationships,
-    },
-    fit: "cover",
-    hover: hoverAssets.length > 0
-      ? { kind: "image-sequence", assets: hoverAssets }
-      : { kind: "none" },
-  };
+function resolvePosterCard(entity: EntityCard): EntityThumbnailCard {
+  return entityCardToThumbnailCard(entity);
 }
 
 function resolveFlags(capabilities: EntityCapability[]): EntityDetailFlag[] {
@@ -446,7 +391,7 @@ export function entityCardToDetailCard(entity: EntityCard): EntityDetailCardFull
     kindLabel: getEntityKindLabel(entity.kind),
     hero: resolveHero(capabilities),
     poster,
-    posterCard: resolvePosterCard(entity, poster),
+    posterCard: resolvePosterCard(entity),
     description: getDescription(capabilities),
     rating: getCapability(capabilities, CAPABILITY_KIND.rating)
       ? { value: ratingValue, max: 5 }

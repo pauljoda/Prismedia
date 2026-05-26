@@ -134,12 +134,13 @@ public static class EntityCardProjector {
     private static ImagesCapability? ProjectImages(Entity entity) {
         var assets = entity.EntityFiles
             .Where(file => file.Role is EntityFileRole.Thumbnail or EntityFileRole.Poster
-                or EntityFileRole.Cover or EntityFileRole.Backdrop)
+                or EntityFileRole.Cover or EntityFileRole.Backdrop or EntityFileRole.Logo)
             .OrderBy(file => file.Role switch {
                 EntityFileRole.Thumbnail => 0,
                 EntityFileRole.Poster => 1,
                 EntityFileRole.Cover => 2,
-                _ => 3
+                EntityFileRole.Logo => 3,
+                _ => 4
             })
             .Select(file => new EntityImageAsset(file.Role, file.Path, file.MimeType))
             .ToArray();
@@ -166,12 +167,13 @@ public static class EntityCardProjector {
     private static EntityThumbnail ToThumbnail(Entity entity) {
         var cover = entity.EntityFiles
             .Where(file => file.Role is EntityFileRole.Thumbnail or EntityFileRole.Poster
-                or EntityFileRole.Cover or EntityFileRole.Backdrop)
+                or EntityFileRole.Cover or EntityFileRole.Backdrop or EntityFileRole.Logo)
             .OrderBy(file => file.Role switch {
                 EntityFileRole.Thumbnail => 0,
                 EntityFileRole.Poster => 1,
                 EntityFileRole.Cover => 2,
-                _ => 3
+                EntityFileRole.Logo => 3,
+                _ => 4
             })
             .Select(file => file.Path)
             .FirstOrDefault();

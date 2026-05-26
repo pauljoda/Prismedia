@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { ArrowLeft, BookOpen, Check, Info, Play, RotateCcw, SlidersHorizontal, Users } from "@lucide/svelte";
+  import { BookOpen, Check, Info, Play, RotateCcw, SlidersHorizontal, Users } from "@lucide/svelte";
   import { getCapability } from "$lib/api/capabilities";
   import {
     fetchBook,
@@ -44,10 +44,12 @@
     redirectHiddenEntityNotFound,
   } from "$lib/nsfw/hidden-entity";
   import { useNsfw } from "$lib/nsfw/store.svelte";
+  import { useAppChrome } from "$lib/stores/app-chrome.svelte";
 
   type LoadState = "loading" | "ready" | "error";
 
   const nsfw = useNsfw();
+  const appChrome = useAppChrome();
 
   interface ChapterDetail {
     detail: EntityCardFull;
@@ -71,6 +73,7 @@
 
   const bookId = $derived(page.params.id ?? "");
   const bookType = $derived(book?.bookType ?? null);
+  const peopleLabel = $derived(bookType === "comic" || bookType === "manga" ? "Artists" : "People");
   const bookTitle = $derived(book?.title ?? "Book");
   const chapterSummaries = $derived(combineChapterSummaries(chapterDetails, progressChapterSummary));
   const progressDisplay = $derived(bookEntityProgressDisplay(book, chapterSummaries));
@@ -97,7 +100,7 @@
   const detailSections = $derived.by((): EntityDetailSection[] => [
     {
       id: "cast-and-crew",
-      label: "Cast and Crew",
+      label: peopleLabel,
       icon: Users,
       hidden: !hasCastAndCrew,
     },
@@ -135,6 +138,14 @@
     if (nsfw.mode === lastNsfwMode) return;
     lastNsfwMode = nsfw.mode;
     void loadBook();
+  });
+
+  $effect(() => {
+    if (!book) return;
+    return appChrome.setBreadcrumbs([
+      { label: "Books", href: "/books" },
+      { label: book.title },
+    ]);
   });
 
   async function loadBook() {
@@ -304,11 +315,6 @@
 </svelte:head>
 
 <div class="book-page">
-  <a href="/books" class="back-link">
-    <ArrowLeft class="h-4 w-4" />
-    Books
-  </a>
-
   {#if loadState === "loading"}
     <div class="loading-shell" aria-busy="true"></div>
   {:else if loadState === "error"}
@@ -324,6 +330,7 @@
       onOrganizedToggle={handleOrganizedToggle}
       onMetadataSave={handleMetadataSave}
       {ratingBusy}
+      {peopleLabel}
       posterSize="large"
       tabs={detailTabs}
       sections={detailSections}
@@ -364,7 +371,7 @@
 
       {#snippet sectionContent(section)}
         {#if section.id === "cast-and-crew"}
-          <EntityCastAndCrewSection {studioCards} {creditCards} />
+          <EntityCastAndCrewSection {studioCards} {creditCards} castLabel={peopleLabel} />
         {/if}
       {/snippet}
     </EntityDetail>
@@ -455,23 +462,6 @@
     padding: 0;
     max-width: none;
     margin: 0;
-  }
-
-  .back-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    color: var(--color-text-muted, #8a93a6);
-    font-size: 0.78rem;
-    text-decoration: none;
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    transition: color 0.15s;
-  }
-
-  .back-link:hover {
-    color: var(--color-text-primary, #f2eed8);
   }
 
   .loading-shell {

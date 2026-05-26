@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { page } from "$app/state";
-  import { ArrowLeft, Users, Music } from "@lucide/svelte";
+  import { Music } from "@lucide/svelte";
   import {
     fetchAudioLibrary,
     updateEntityRating,
@@ -15,23 +15,27 @@
     updateOptimisticEntityRating,
   } from "$lib/entities/entity-detail-state";
   import { getAllChildIds } from "$lib/entities/entity-children";
-  import { entityCardToDetailCard, type EntityDetailCardFull } from "$lib/entities/entity-detail";
+  import { entityCardToDetailCard, type EntityDetailCardFull, type EntityDetailTag } from "$lib/entities/entity-detail";
   import { resolveEntityHref } from "$lib/entities/entity-routes";
   import {
     fetchOrderedEntityThumbnails,
+    hydrateStandardRelationshipCards,
     thumbnailsToCards,
   } from "$lib/entities/entity-relationship-thumbnails";
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
+  import EntityCastAndCrewSection from "$lib/components/entities/EntityCastAndCrewSection.svelte";
   import EntityDetail, {
     type EntityMetadataUpdateRequest,
   } from "$lib/components/entities/EntityDetail.svelte";
   import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
   import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
   import { useNsfw } from "$lib/nsfw/store.svelte";
+  import { useAppChrome } from "$lib/stores/app-chrome.svelte";
 
   type LoadState = "loading" | "ready" | "error";
 
   const nsfw = useNsfw();
+  const appChrome = useAppChrome();
 
   let loadState: LoadState = $state("loading");
   let library = $state<AudioLibraryDetail | null>(null);
@@ -39,15 +43,19 @@
   let lastNsfwMode = $state(nsfw.mode);
   let ratingBusy = $state(false);
   let childCards = $state<EntityThumbnailCard[]>([]);
+  let studioCards = $state<EntityThumbnailCard[]>([]);
+  let creditCards = $state<EntityThumbnailCard[]>([]);
+  let relationshipTags = $state<EntityDetailTag[]>([]);
 
   const card = $derived.by((): EntityDetailCardFull | null => {
     if (!library) return null;
-    return entityCardToDetailCard(library);
+    return {
+      ...entityCardToDetailCard(library),
+      tags: relationshipTags,
+    };
   });
 
-  const studio = $derived.by((): { id: string; title: string } | null => null);
-
-  const credits = $derived.by((): Array<{ id: string; title: string }> => []);
+  const studio = $derived(studioCards[0]?.entity ?? null);
 
   const dates = $derived.by(() => {
     if (!library) return [];
@@ -68,17 +76,32 @@
     void loadLibrary();
   });
 
+  $effect(() => {
+    if (!library) return;
+    return appChrome.setBreadcrumbs([
+      { label: "Audio", href: "/audio" },
+      { label: library.title },
+    ]);
+  });
+
   async function loadLibrary() {
     loadState = "loading";
     errorMessage = null;
     try {
       const nextLibrary = await fetchAudioLibrary(page.params.id ?? "");
+      const [children, relationships] = await Promise.all([
+        fetchOrderedEntityThumbnails(getAllChildIds(nextLibrary)),
+        hydrateStandardRelationshipCards(nextLibrary),
+      ]);
       library = nextLibrary;
-      childCards = thumbnailsToCards(await fetchOrderedEntityThumbnails(getAllChildIds(nextLibrary)), {
+      childCards = thumbnailsToCards(children, {
         hrefFor: (thumbnail) => thumbnail.kind === "audio-library"
           ? resolveEntityHref("audio-library", thumbnail.id)
           : resolveEntityHref(thumbnail.kind, thumbnail.id, { kind: "audio-library", id: nextLibrary.id }),
       });
+      studioCards = relationships.studioCards;
+      creditCards = relationships.creditCards;
+      relationshipTags = relationships.relationshipTags;
       loadState = "ready";
     } catch (err) {
       if (redirectHiddenEntityNotFound(err, nsfw.mode)) return;
@@ -119,11 +142,6 @@
 </svelte:head>
 
 <div class="detail-page">
-  <a href="/audio" class="back-link">
-    <ArrowLeft class="h-4 w-4" />
-    Audio
-  </a>
-
   {#if loadState === "loading"}
     <div class="loading-shell" aria-busy="true"></div>
   {:else if loadState === "error"}
@@ -139,6 +157,7 @@
       onOrganizedToggle={handleOrganizedToggle}
       onMetadataSave={handleMetadataSave}
       {ratingBusy}
+      peopleLabel="Performers"
       posterSize="large"
     >
       {#snippet heroMeta()}
@@ -156,19 +175,9 @@
       {/snippet}
 
       {#snippet afterBody()}
-        {#if credits.length > 0}
+        {#if studioCards.length > 0 || creditCards.length > 0}
           <div class="credits-section">
-            <h2 class="section-label">
-              <Users class="h-4 w-4" />
-              Artists
-            </h2>
-            <div class="credits-grid">
-              {#each credits as person (person.id)}
-                <a href={resolveEntityHref("person", person.id)} class="credit-chip">
-                  {person.title}
-                </a>
-              {/each}
-            </div>
+            <EntityCastAndCrewSection {studioCards} {creditCards} castLabel="Performers" />
           </div>
         {/if}
       {/snippet}
@@ -217,8 +226,6 @@
 
 <style>
   .detail-page { display: grid; gap: 1.25rem; padding: clamp(1rem, 3vw, 2rem); max-width: 72rem; margin: 0 auto; }
-  .back-link { display: inline-flex; align-items: center; gap: 0.4rem; color: var(--color-text-muted, #8a93a6); font-size: 0.78rem; text-decoration: none; font-family: var(--font-mono, "JetBrains Mono", monospace); text-transform: uppercase; letter-spacing: 0.04em; transition: color 0.15s; }
-  .back-link:hover { color: var(--color-text-primary, #f2eed8); }
   .loading-shell { min-height: 28rem; border: 1px solid var(--color-border, #1c2235); background: var(--color-surface-2, #101420); animation: pulse 1.2s ease-in-out infinite; }
   .error-notice { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem; border: 1px solid color-mix(in srgb, #ef4444 50%, var(--color-border, #1c2235)); background: var(--color-surface-2, #101420); color: var(--color-text-muted, #8a93a6); font-size: 0.85rem; }
   .error-notice button { border: 1px solid var(--color-border, #1c2235); background: var(--color-surface-3, #151a28); color: var(--color-text-muted, #8a93a6); padding: 0.4rem 0.8rem; font-size: 0.78rem; cursor: pointer; }
@@ -229,10 +236,6 @@
   :global(.meta-sep) { display: inline-block; width: 3px; height: 3px; margin: 0 0.5rem; background: var(--color-text-muted, #8a93a6); opacity: 0.5; }
 
   .credits-section { padding: 1rem 1.5rem; border-top: 1px solid var(--color-border, #1c2235); }
-  .section-label { display: flex; align-items: center; gap: 0.45rem; margin: 0 0 0.75rem; font-family: var(--font-mono, "JetBrains Mono", monospace); font-size: 0.68rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-text-muted, #8a93a6); }
-  .credits-grid { display: flex; flex-wrap: wrap; gap: 0.35rem; }
-  .credit-chip { padding: 0.22rem 0.55rem; font-size: 0.75rem; color: var(--color-text-secondary, #c4c9d4); border: 1px solid var(--color-border, #1c2235); background: var(--color-surface-3, #151a28); text-decoration: none; transition: border-color 0.15s, color 0.15s; }
-  .credit-chip:hover { color: var(--color-text-accent, #c49a5a); border-color: rgba(196, 154, 90, 0.35); }
 
   .content-section { display: grid; gap: 0.75rem; }
   .content-heading { display: flex; align-items: center; gap: 0.5rem; margin: 0; font-family: var(--font-heading, Geist, sans-serif); font-size: 1.1rem; font-weight: 600; color: var(--color-text-primary, #f2eed8); }

@@ -290,10 +290,12 @@ public sealed class EfEntityReadService : IEntityReadService {
             .Where(file => file.Role == EntityFileRole.Thumbnail ||
                 file.Role == EntityFileRole.Poster ||
                 file.Role == EntityFileRole.Cover ||
+                file.Role == EntityFileRole.Logo ||
                 file.Role == EntityFileRole.Backdrop)
             .OrderBy(file => file.Role == EntityFileRole.Thumbnail ? 0 :
                 file.Role == EntityFileRole.Poster ? 1 :
-                file.Role == EntityFileRole.Cover ? 2 : 3)
+                file.Role == EntityFileRole.Cover ? 2 :
+                file.Role == EntityFileRole.Logo ? 3 : 4)
             .ThenBy(file => file.CreatedAt)
             .ToArrayAsync(cancellationToken);
 

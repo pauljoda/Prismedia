@@ -188,6 +188,29 @@ function assetFromPath(path: string, title: string, role?: string): EntityThumbn
   };
 }
 
+function sampleSpread<T>(items: T[], max: number): T[] {
+  if (items.length <= max) return items;
+  const result: T[] = [];
+  const last = items.length - 1;
+  for (let i = 0; i < max; i++) {
+    result.push(items[Math.round((i * last) / (max - 1))]);
+  }
+  return result;
+}
+
+function thumbnailPreviewAsset(entity: EntityThumbnail): EntityThumbnailAsset | null {
+  const path = entity.coverUrl ?? entity.hoverImages?.[0]?.path ?? null;
+  return path ? assetFromPath(path, entity.title, "preview") : null;
+}
+
+function childPreviewAssets(entity: EntityGridSourceEntity): EntityThumbnailAsset[] {
+  if (!isFullEntityCard(entity)) return [];
+  const childThumbnails = entity.childrenByKind.flatMap((group) => group.entities);
+  return sampleSpread(childThumbnails, 5)
+    .map(thumbnailPreviewAsset)
+    .filter((asset): asset is EntityThumbnailAsset => Boolean(asset));
+}
+
 function previewAssets(entity: EntityGridSourceEntity, roles: string[]): EntityThumbnailAsset[] {
   if (!isFullEntityCard(entity) && entity.hoverImages?.length > 0) {
     return entity.hoverImages.map((image) => assetFromPath(image.path, image.title, "preview"));
@@ -337,15 +360,24 @@ export function entityCardToThumbnailCard(
     (!isFullEntityCard(entity) ? entity.coverUrl : null) ??
     getThumbnailUrl(capabilities) ??
     images?.coverUrl ??
-    images?.items.find((item) => item.kind === ENTITY_FILE_ROLE.cover || item.kind === ENTITY_FILE_ROLE.poster || item.kind === ENTITY_FILE_ROLE.thumbnail)?.path ??
+    images?.items.find(
+      (item) =>
+        item.kind === ENTITY_FILE_ROLE.cover ||
+        item.kind === ENTITY_FILE_ROLE.poster ||
+        item.kind === ENTITY_FILE_ROLE.thumbnail ||
+        item.kind === ENTITY_FILE_ROLE.logo,
+    )?.path ??
     null;
 
   const spriteHover = findSpriteHover(entity);
   const imageSequence = previewAssets(entity, [ENTITY_FILE_ROLE.trickplay, ENTITY_FILE_ROLE.sprite]);
+  const childSequence = imageSequence.length > 0 ? [] : childPreviewAssets(entity);
   const hover: EntityThumbnailCard["hover"] = spriteHover
     ? { kind: "sprite", spriteUrl: spriteHover.spriteUrl, vttUrl: spriteHover.vttUrl }
     : imageSequence.length > 0
       ? { kind: "image-sequence", assets: imageSequence }
+      : childSequence.length > 0
+        ? { kind: "image-sequence", assets: childSequence }
       : { kind: "none" };
 
   return {

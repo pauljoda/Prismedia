@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { page } from "$app/state";
-  import { ArrowLeft, Layers } from "@lucide/svelte";
+  import { Layers } from "@lucide/svelte";
   import {
     fetchCollection,
     updateEntityRating,
@@ -28,10 +28,12 @@
   import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
   import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
   import { useNsfw } from "$lib/nsfw/store.svelte";
+  import { useAppChrome } from "$lib/stores/app-chrome.svelte";
 
   type LoadState = "loading" | "ready" | "error";
 
   const nsfw = useNsfw();
+  const appChrome = useAppChrome();
 
   let loadState: LoadState = $state("loading");
   let collection = $state<CollectionDetail | null>(null);
@@ -53,6 +55,14 @@
     if (nsfw.mode === lastNsfwMode) return;
     lastNsfwMode = nsfw.mode;
     void loadCollection();
+  });
+
+  $effect(() => {
+    if (!collection) return;
+    return appChrome.setBreadcrumbs([
+      { label: "Collections", href: "/collections" },
+      { label: collection.title },
+    ]);
   });
 
   async function loadCollection() {
@@ -104,11 +114,6 @@
 </svelte:head>
 
 <div class="detail-page">
-  <a href="/collections" class="back-link">
-    <ArrowLeft class="h-4 w-4" />
-    Collections
-  </a>
-
   {#if loadState === "loading"}
     <div class="loading-shell" aria-busy="true"></div>
   {:else if loadState === "error"}
@@ -168,8 +173,6 @@
 
 <style>
   .detail-page { display: grid; gap: 1.25rem; padding: clamp(1rem, 3vw, 2rem); max-width: 72rem; margin: 0 auto; }
-  .back-link { display: inline-flex; align-items: center; gap: 0.4rem; color: var(--color-text-muted, #8a93a6); font-size: 0.78rem; text-decoration: none; font-family: var(--font-mono, "JetBrains Mono", monospace); text-transform: uppercase; letter-spacing: 0.04em; transition: color 0.15s; }
-  .back-link:hover { color: var(--color-text-primary, #f2eed8); }
   .loading-shell { min-height: 28rem; border: 1px solid var(--color-border, #1c2235); background: var(--color-surface-2, #101420); animation: pulse 1.2s ease-in-out infinite; }
   .error-notice { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem; border: 1px solid color-mix(in srgb, #ef4444 50%, var(--color-border, #1c2235)); background: var(--color-surface-2, #101420); color: var(--color-text-muted, #8a93a6); font-size: 0.85rem; }
   .error-notice button { border: 1px solid var(--color-border, #1c2235); background: var(--color-surface-3, #151a28); color: var(--color-text-muted, #8a93a6); padding: 0.4rem 0.8rem; font-size: 0.78rem; cursor: pointer; }

@@ -19,6 +19,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 - Image and audio scans now keep root-level loose files standalone while turning folders into nested galleries and audio libraries.
+- Mobile entity grids now default unsaved thumbnail sizing to the largest card size while preserving saved user choices.
+- Relationship people sections now use contextual labels such as People, Artists, and Performers outside video cast and crew pages.
+- Detail pages now use the header breadcrumb trail for back navigation instead of page-local back links.
+- Improved detail hero action buttons with stronger glass contrast and clearer active affordances.
 - Bulk identify now runs as a durable background job instead of an ephemeral in-memory session, so progress survives app restarts and results feed directly into the identify review queue.
 - Standardized all API error responses to use the `ApiProblem` format with consistent `code` and `message` fields.
 - Removed development-only links from app navigation.
@@ -34,6 +38,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated web app manifest and mobile browser metadata for home-screen installation and browser UI theme colors.
 
 ### Fixed
+- Fixed gallery detail hero thumbnails so container previews sample all child groups and reuse the shared thumbnail fallback in the hero backdrop.
+- Fixed studio logo artwork so identified studio thumbnails appear on relationship cards and detail artwork surfaces.
+- Fixed detail page poster previews so they use the same shared thumbnail hover behavior as entity grids.
 - Fixed automatic scan scheduling so image, audio, and book scans update library scan timestamps and respect the configured interval.
 - Brought the Jobs worker heartbeat badge into the Prism Noir design language with controlled corners, glass material, and status glow.
 - Fixed animated image lightbox playback so video-backed items loop, keep progress visible at the bottom edge, and keep navigation controls out of the media frame.

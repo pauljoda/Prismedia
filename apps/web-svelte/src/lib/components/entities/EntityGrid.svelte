@@ -45,6 +45,8 @@
 
   const DEFAULT_PAGE_SIZE = 250;
   const DEFAULT_PAGE_SIZE_OPTIONS = [100, 250, 500, 1000];
+  const DEFAULT_SCALE = 5;
+  const MOBILE_THUMBNAIL_QUERY = "(max-width: 639.98px)";
 
   interface Props {
     bulkActions?: EntityGridBulkAction[];
@@ -134,8 +136,18 @@
     return prefsKey ? `prismedia:entity-grid-media-wall:${prefsKey}` : null;
   }
 
+  function isMobileThumbnailViewport(): boolean {
+    return browser &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia(MOBILE_THUMBNAIL_QUERY).matches;
+  }
+
+  function defaultScale(): number {
+    return isMobileThumbnailViewport() ? minScale : DEFAULT_SCALE;
+  }
+
   function loadScale(): number {
-    const fallbackScale = 5;
+    const fallbackScale = defaultScale();
     if (!browser) return fallbackScale;
     const key = storageKey();
     if (!key) return fallbackScale;
@@ -183,7 +195,7 @@
   let pageSize = $state(DEFAULT_PAGE_SIZE);
   let pageSizeOpen = $state(false);
   let pendingAdvanceAfterLoad = $state(false);
-  let scale = $state(5);
+  let scale = $state(DEFAULT_SCALE);
   // svelte-ignore state_referenced_locally
   let mediaWall = $state(initialMediaWall);
   let selectedIds = $state<string[]>([]);

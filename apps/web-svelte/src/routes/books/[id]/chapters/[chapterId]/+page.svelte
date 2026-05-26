@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { ArrowLeft, BookOpen, Check, Images, Info, Play, RotateCcw, SlidersHorizontal } from "@lucide/svelte";
+  import { BookOpen, Check, Images, Info, Play, RotateCcw, SlidersHorizontal } from "@lucide/svelte";
   import {
     fetchBook,
     fetchEntity,
@@ -28,10 +28,12 @@
   import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
   import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
   import { useNsfw } from "$lib/nsfw/store.svelte";
+  import { useAppChrome } from "$lib/stores/app-chrome.svelte";
 
   type LoadState = "loading" | "ready" | "error";
 
   const nsfw = useNsfw();
+  const appChrome = useAppChrome();
 
   let loadState: LoadState = $state("loading");
   let book = $state<BookDetail | null>(null);
@@ -84,6 +86,15 @@
     if (nsfw.mode === lastNsfwMode) return;
     lastNsfwMode = nsfw.mode;
     void loadChapter();
+  });
+
+  $effect(() => {
+    if (!book || !chapter) return;
+    return appChrome.setBreadcrumbs([
+      { label: "Books", href: "/books" },
+      { label: book.title, href: `/books/${book.id}` },
+      { label: chapter.title },
+    ]);
   });
 
   async function loadChapter() {
@@ -208,11 +219,6 @@
 </svelte:head>
 
 <div class="chapter-page">
-  <a href={`/books/${bookId}`} class="back-link">
-    <ArrowLeft class="h-4 w-4" />
-    {book?.title ?? "Book"}
-  </a>
-
   {#if loadState === "loading"}
     <div class="loading-shell" aria-busy="true"></div>
   {:else if loadState === "error"}
@@ -286,23 +292,6 @@
     padding: 0;
     max-width: none;
     margin: 0;
-  }
-
-  .back-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    color: var(--color-text-muted, #8a93a6);
-    font-size: 0.78rem;
-    text-decoration: none;
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    transition: color 0.15s;
-  }
-
-  .back-link:hover {
-    color: var(--color-text-primary, #f2eed8);
   }
 
   .loading-shell {

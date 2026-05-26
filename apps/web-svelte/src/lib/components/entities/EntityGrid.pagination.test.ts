@@ -29,6 +29,37 @@ describe("EntityGrid pagination", () => {
     vi.restoreAllMocks();
   });
 
+  it("defaults mobile thumbnail grids to the largest card size when no saved size exists", async () => {
+    vi.stubGlobal("matchMedia", createMatchMedia(true));
+    const cards = Array.from({ length: 6 }, (_, index) => card(index));
+    const { container } = render(EntityGrid, {
+      props: {
+        cards,
+        prefsKey: "mobile-largest-default-test",
+      },
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector<HTMLElement>(".entity-grid")?.style.getPropertyValue("--col-count")).toBe("2");
+    });
+  });
+
+  it("keeps saved thumbnail size preferences ahead of the mobile default", async () => {
+    vi.stubGlobal("matchMedia", createMatchMedia(true));
+    window.localStorage.setItem("prismedia:entity-grid:mobile-saved-size-test", "7");
+    const cards = Array.from({ length: 6 }, (_, index) => card(index));
+    const { container } = render(EntityGrid, {
+      props: {
+        cards,
+        prefsKey: "mobile-saved-size-test",
+      },
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector<HTMLElement>(".entity-grid")?.style.getPropertyValue("--col-count")).toBe("7");
+    });
+  });
+
   it("renders the default page instead of every card in a large grid", async () => {
     const cards = Array.from({ length: 4_500 }, (_, index) => card(index));
     let renderedCount = 0;
@@ -263,4 +294,17 @@ function createLocalStorageStub(): Storage {
       store.set(key, String(value));
     },
   };
+}
+
+function createMatchMedia(matches: boolean): typeof window.matchMedia {
+  return vi.fn().mockImplementation((query: string): MediaQueryList => ({
+    matches,
+    media: query,
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }));
 }

@@ -95,6 +95,7 @@
   const aspectRatio = $derived(toAspectRatioValue(card.aspectRatio));
   const imageOnly = $derived(mediaOnly);
   const imageFit = $derived(card.fit ?? "cover");
+  const isLogoLikeArtwork = $derived(card.cover?.role === "logo" || card.entity.kind === "studio");
   const placeholderIcon = $derived(iconForKind(card.entity.kind));
   const sequenceRestCover = $derived(
     isImageSequenceHover && !card.cover && sequenceAssets.length > 0 ? sequenceAssets[0] : null,
@@ -391,6 +392,7 @@
   <div
     class="media"
     class:has-placeholder={showPlaceholder}
+    class:has-logo-art={isLogoLikeArtwork && !showPlaceholder}
     class:is-image-loading={showImageLoading}
     role="presentation"
     style:aspect-ratio={layout === "list" ? undefined : aspectRatio}
@@ -715,6 +717,13 @@
       auto;
   }
 
+  .media.has-logo-art {
+    background:
+      radial-gradient(circle at 34% 24%, rgb(255 255 255 / 0.32), transparent 34%),
+      linear-gradient(135deg, rgb(232 221 190 / 0.92) 0%, rgb(150 134 96 / 0.72) 45%, rgb(22 25 29 / 0.94) 100%),
+      #b7aa86;
+  }
+
   .entity-thumbnail.is-image-only .media {
     border-radius: 5px;
   }
@@ -740,6 +749,12 @@
     object-position: center;
     transition:
       filter 160ms ease;
+  }
+
+  .media.has-logo-art img {
+    padding: clamp(0.85rem, 12%, 1.5rem);
+    object-fit: contain !important;
+    filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.42));
   }
 
   .image-loading-skeleton {

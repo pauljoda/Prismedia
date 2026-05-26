@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
-  import { ArrowLeft, Users, Building2, Calendar, Info, SlidersHorizontal } from "@lucide/svelte";
+  import { Users, Building2, Calendar, Info, SlidersHorizontal } from "@lucide/svelte";
   import {
     fetchSeason,
     fetchSeries,
@@ -38,10 +38,12 @@
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
   import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
   import { useNsfw } from "$lib/nsfw/store.svelte";
+  import { useAppChrome } from "$lib/stores/app-chrome.svelte";
 
   type LoadState = "loading" | "ready" | "error";
 
   const nsfw = useNsfw();
+  const appChrome = useAppChrome();
 
   let loadState: LoadState = $state("loading");
   let series = $state<VideoSeriesDetail | null>(null);
@@ -123,6 +125,14 @@
     if (nsfw.mode === lastNsfwMode) return;
     lastNsfwMode = nsfw.mode;
     void loadSeries();
+  });
+
+  $effect(() => {
+    if (!series) return;
+    return appChrome.setBreadcrumbs([
+      { label: "Series", href: resolve("/series") },
+      { label: series.title },
+    ]);
   });
 
   async function loadSeries() {
@@ -220,11 +230,6 @@
 </svelte:head>
 
 <div class="series-page">
-  <a href={resolve("/series")} class="back-link">
-    <ArrowLeft class="h-4 w-4" />
-    Series
-  </a>
-
   {#if loadState === "loading"}
     <div class="loading-shell" aria-busy="true"></div>
   {:else if loadState === "error"}
@@ -339,23 +344,6 @@
     padding: 0;
     max-width: none;
     margin: 0;
-  }
-
-  .back-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    color: var(--color-text-muted, #8a93a6);
-    font-size: 0.78rem;
-    text-decoration: none;
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    transition: color 0.15s;
-  }
-
-  .back-link:hover {
-    color: var(--color-text-primary, #f2eed8);
   }
 
   .loading-shell {

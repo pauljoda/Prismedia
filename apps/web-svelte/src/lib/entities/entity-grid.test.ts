@@ -87,6 +87,20 @@ describe("entity grid helpers", () => {
     ]);
   });
 
+  it("uses logo artwork as a card fallback when no poster or cover exists", () => {
+    const thumbnail = entityCardToThumbnailCard(card("studio-1", "studio", "HBO", [
+      {
+        kind: "images",
+        supportedKinds: ["logo"],
+        thumbnailUrl: null,
+        coverUrl: null,
+        items: [{ kind: "logo", path: "/assets/studios/hbo-logo.png", mimeType: "image/png" }],
+      },
+    ]));
+
+    expect(thumbnail.cover?.src).toBe("/assets/studios/hbo-logo.png");
+  });
+
   it("builds tabs from SFW-visible cards only", () => {
     expect(buildEntityKindTabs(cards, { includeNsfw: false })).toEqual([
       { kind: "book", label: "Books", count: 1 },
