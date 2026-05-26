@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { ChevronLeft, ChevronRight } from "@lucide/svelte";
+  import { elementSize } from "$lib/hooks/element-size.svelte";
 
   interface Props {
     peaks: number[];
@@ -19,7 +20,8 @@
   let containerEl: HTMLDivElement | null = $state(null);
   let trackEl: HTMLDivElement | null = $state(null);
   let canvasEl: HTMLCanvasElement | null = $state(null);
-  let containerWidth = $state(0);
+  const containerSize = elementSize();
+  let containerWidth = $derived(containerSize.width);
   let stripDragging = $state(false);
 
   let dragging = false;
@@ -107,23 +109,6 @@
   }
 
   onMount(() => {
-    if (containerEl) {
-      const width = containerEl.getBoundingClientRect().width;
-      if (width > 0) containerWidth = width;
-    }
-
-    const resizeObserver =
-      containerEl && typeof ResizeObserver !== "undefined"
-        ? new ResizeObserver((entries) => {
-            const entry = entries[0];
-            if (entry) containerWidth = entry.contentRect.width;
-          })
-        : null;
-
-    if (containerEl && resizeObserver) {
-      resizeObserver.observe(containerEl);
-    }
-
     const tick = () => {
       if (!dragging && audioEl) {
         applyPosition(audioEl.currentTime);
@@ -165,7 +150,6 @@
 
     return () => {
       if (animationFrame) window.cancelAnimationFrame(animationFrame);
-      resizeObserver?.disconnect();
       mq.removeEventListener("change", syncWheelListener);
       containerEl?.removeEventListener("wheel", handleWheel);
       clearWheelIdleTimer();
@@ -193,6 +177,7 @@
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
       bind:this={containerEl}
+      use:containerSize.attach
       class="relative flex-1 overflow-hidden select-none touch-none"
       style={`height: ${STRIP_HEIGHT}px`}
       onpointerdown={(event) => {

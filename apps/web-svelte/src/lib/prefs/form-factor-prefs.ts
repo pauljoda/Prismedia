@@ -1,3 +1,5 @@
+import { writeCookie } from "$lib/utils/cookie";
+
 export type UiPrefsFormFactor = "mobile" | "desktop";
 
 export const UI_PREFS_FORM_FACTOR_COOKIE = "prismedia-ui-form-factor";
@@ -10,8 +12,7 @@ export function parseUiPrefsFormFactor(raw: string | null | undefined): UiPrefsF
 }
 
 function rememberUiPrefsFormFactor(formFactor: UiPrefsFormFactor): void {
-  if (typeof document === "undefined") return;
-  document.cookie = `${UI_PREFS_FORM_FACTOR_COOKIE}=${formFactor};path=/;max-age=31536000;samesite=lax`;
+  writeCookie(UI_PREFS_FORM_FACTOR_COOKIE, formFactor);
 }
 
 export function detectUiPrefsFormFactor(): UiPrefsFormFactor {

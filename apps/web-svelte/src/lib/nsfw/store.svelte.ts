@@ -1,16 +1,15 @@
 import { browser } from "$app/environment";
 import { invalidateAll } from "$app/navigation";
 import { createContext } from "$lib/utils/context";
+import { writeCookie as setCookie } from "$lib/utils/cookie";
 import { isModShiftZ } from "./hotkey";
 import { type NsfwMode } from "./cookie";
 
 const COOKIE_NAME = "prismedia-nsfw-mode";
-const COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 const ctx = createContext<NsfwStore>("Nsfw");
 
-function writeCookie(mode: NsfwMode) {
-  if (!browser) return;
-  document.cookie = `${COOKIE_NAME}=${encodeURIComponent(mode)};path=/;max-age=${COOKIE_MAX_AGE};samesite=lax`;
+function writeNsfwCookie(mode: NsfwMode) {
+  setCookie(COOKIE_NAME, mode);
 }
 
 /**
@@ -85,7 +84,7 @@ export class NsfwStore {
   setMode(next: NsfwMode) {
     if (this.mode === next) return;
     this.mode = next;
-    writeCookie(next);
+    writeNsfwCookie(next);
     refetchServerData();
   }
 

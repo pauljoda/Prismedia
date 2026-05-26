@@ -1,3 +1,5 @@
+import { writeCookie as setCookieRaw, deleteCookie } from "$lib/utils/cookie";
+
 /**
  * Generic factory for cookie-backed list preference objects.
  *
@@ -69,13 +71,11 @@ export function createListPrefs<T>(config: ListPrefsConfig<T>): ListPrefsApi<T> 
   }
 
   function writeCookie(prefs: T): void {
-    if (typeof document === "undefined") return;
-    document.cookie = `${cookieName}=${serialize(prefs)};path=/;max-age=${maxAge};samesite=lax`;
+    setCookieRaw(cookieName, serialize(prefs), maxAge);
   }
 
   function clearCookie(): void {
-    if (typeof document === "undefined") return;
-    document.cookie = `${cookieName}=;path=/;max-age=0;samesite=lax`;
+    deleteCookie(cookieName);
   }
 
   return {

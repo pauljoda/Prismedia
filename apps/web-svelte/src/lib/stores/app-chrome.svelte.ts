@@ -1,9 +1,9 @@
 import { browser } from "$app/environment";
 import { createContext } from "$lib/utils/context";
+import { readCookie, writeCookie } from "$lib/utils/cookie";
 
 const ctx = createContext<AppChromeStore>("AppChrome");
 const COOKIE_NAME = "prismedia-sidebar";
-const COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
 export interface AppBreadcrumb {
   label: string;
@@ -16,13 +16,11 @@ export function parseSidebarCookie(raw: string | undefined): boolean {
 
 export function readSidebarCookie(): boolean {
   if (!browser) return false;
-  const match = document.cookie.match(/(?:^|;\s*)prismedia-sidebar=([^;]*)/);
-  return parseSidebarCookie(match ? decodeURIComponent(match[1]) : undefined);
+  return parseSidebarCookie(readCookie(COOKIE_NAME));
 }
 
 function writeSidebarCookie(collapsed: boolean) {
-  if (!browser) return;
-  document.cookie = `${COOKIE_NAME}=${collapsed ? "collapsed" : "expanded"};path=/;max-age=${COOKIE_MAX_AGE}`;
+  writeCookie(COOKIE_NAME, collapsed ? "collapsed" : "expanded");
 }
 
 export class AppChromeStore {
