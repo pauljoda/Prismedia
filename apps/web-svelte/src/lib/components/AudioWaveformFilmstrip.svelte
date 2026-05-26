@@ -18,25 +18,17 @@
   let { peaks, duration, audioEl, onSeek }: Props = $props();
 
   let containerEl: HTMLDivElement | null = $state(null);
-  let trackEl: HTMLDivElement | null = $state(null);
   let canvasEl: HTMLCanvasElement | null = $state(null);
   let containerWidth = $state(0);
   let stripDragging = $state(false);
+  let currentTime = $state(0);
 
   let dragging = false;
-  let dragStartX = 0;
-  let dragStartTime = 0;
   let animationFrame = 0;
-  let wheelIdleTimer: number | null = null;
 
   const safeDuration = $derived(duration > 0 ? duration : 0.001);
   const pairCount = $derived(Math.floor(peaks.length / 2));
-  const naturalWidth = $derived(Math.max(1, pairCount * 2));
-  const trackWidth = $derived(
-    containerWidth > 0
-      ? Math.max(naturalWidth, containerWidth * 6, safeDuration * 10)
-      : 0,
-  );
+  const progress = $derived(Math.max(0, Math.min(1, currentTime / safeDuration)));
 
   function drawWaveformStrip(
     canvas: HTMLCanvasElement,
@@ -58,36 +50,31 @@
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, width, height);
 
-    const barWidth = Math.max(1, width / count);
+    const columns = Math.max(1, Math.floor(width));
+    const barWidth = Math.max(1, width / columns);
     const centerY = height / 2;
     const displayScale = waveformDisplayScale(waveform);
 
-    for (let i = 0; i < count; i += 1) {
-      const min = normalizeWaveformSample(waveform[i * 2]!, displayScale);
-      const max = normalizeWaveformSample(waveform[i * 2 + 1]!, displayScale);
-      const x = (i / count) * width;
+    for (let column = 0; column < columns; column += 1) {
+      const startPair = Math.floor((column / columns) * count);
+      const endPair = Math.max(startPair + 1, Math.ceil(((column + 1) / columns) * count));
+      let rawMin = 0;
+      let rawMax = 0;
+
+      for (let pair = startPair; pair < endPair && pair < count; pair += 1) {
+        rawMin = Math.min(rawMin, waveform[pair * 2] ?? 0);
+        rawMax = Math.max(rawMax, waveform[pair * 2 + 1] ?? 0);
+      }
+
+      const min = normalizeWaveformSample(rawMin, displayScale);
+      const max = normalizeWaveformSample(rawMax, displayScale);
+      const x = (column / columns) * width;
       const barTop = centerY - max * (height / 2) * 0.88;
       const barBottom = centerY - min * (height / 2) * 0.88;
       const barHeight = Math.max(1, barBottom - barTop);
       const intensity = (Math.abs(min) + Math.abs(max)) / 2;
       ctx.fillStyle = intensity > 0.35 ? BAR_ACCENT : BAR_COLOR;
       ctx.fillRect(x, barTop, Math.max(1, barWidth - 0.5), barHeight);
-    }
-  }
-
-  function applyPosition(time: number) {
-    if (!containerEl || !trackEl || trackWidth <= 0) return;
-    const containerWidth = containerEl.clientWidth;
-    const clampedTime = Math.max(0, Math.min(safeDuration, time));
-    const trackPosition = (clampedTime / safeDuration) * trackWidth;
-    const translateX = containerWidth / 2 - trackPosition;
-    trackEl.style.transform = `translateX(${translateX}px)`;
-  }
-
-  function clearWheelIdle() {
-    if (wheelIdleTimer != null) {
-      window.clearTimeout(wheelIdleTimer);
-      wheelIdleTimer = null;
     }
   }
 
@@ -98,10 +85,9 @@
 
   function jump(direction: -1 | 1) {
     const step = Math.max(0.5, safeDuration / 48);
-    const currentTime = audioEl?.currentTime ?? 0;
-    const nextTime = Math.max(0, Math.min(safeDuration, currentTime + direction * step));
+    const audioTime = audioEl?.currentTime ?? 0;
+    const nextTime = Math.max(0, Math.min(safeDuration, audioTime + direction * step));
     onSeek(nextTime);
-    applyPosition(nextTime);
   }
 
   onMount(() => {
@@ -123,8 +109,8 @@
     }
 
     const tick = () => {
-      if (!dragging && audioEl && trackWidth > 0) {
-        applyPosition(audioEl.currentTime);
+      if (!dragging && audioEl) {
+        currentTime = audioEl.currentTime;
       }
       animationFrame = window.requestAnimationFrame(tick);
     };
@@ -135,19 +121,17 @@
       if (!mq.matches) return;
       const rawDelta =
         Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
-      if (rawDelta === 0 || trackWidth <= 0) return;
+      if (rawDelta === 0) return;
       event.preventDefault();
       event.stopPropagation();
-      const pixelsPerSecond = trackWidth / safeDuration;
-      const timeDelta = rawDelta / pixelsPerSecond;
-      const currentTime = audioEl?.currentTime ?? 0;
-      const nextTime = Math.max(0, Math.min(safeDuration, currentTime + timeDelta));
-      applyPosition(nextTime);
+      const timeDelta =
+        (rawDelta / Math.max(1, containerEl?.clientWidth ?? 1)) * safeDuration;
+      const nextTime = Math.max(
+        0,
+        Math.min(safeDuration, (audioEl?.currentTime ?? 0) + timeDelta),
+      );
+      currentTime = nextTime;
       onSeek(nextTime);
-      clearWheelIdle();
-      wheelIdleTimer = window.setTimeout(() => {
-        wheelIdleTimer = null;
-      }, 320);
     };
 
     const syncWheelListener = () => {
@@ -165,13 +149,12 @@
       resizeObserver?.disconnect();
       mq.removeEventListener("change", syncWheelListener);
       containerEl?.removeEventListener("wheel", handleWheel);
-      clearWheelIdle();
     };
   });
 
   $effect(() => {
-    if (!canvasEl || trackWidth <= 0 || pairCount <= 0) return;
-    drawWaveformStrip(canvasEl, peaks, trackWidth, STRIP_HEIGHT);
+    if (!canvasEl || containerWidth <= 0 || pairCount <= 0) return;
+    drawWaveformStrip(canvasEl, peaks, containerWidth, STRIP_HEIGHT);
   });
 </script>
 
@@ -192,23 +175,22 @@
       class="relative flex-1 overflow-hidden select-none touch-none"
       style={`height: ${STRIP_HEIGHT}px`}
       onpointerdown={(event) => {
-        if (trackWidth <= 0) return;
+        if (safeDuration <= 0) return;
         dragging = true;
         stripDragging = true;
-        dragStartX = event.clientX;
-        dragStartTime = audioEl?.currentTime ?? 0;
         (event.currentTarget as HTMLDivElement).setPointerCapture(event.pointerId);
+        const rect = (event.currentTarget as HTMLDivElement).getBoundingClientRect();
+        const nextTime =
+          Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)) * safeDuration;
+        currentTime = nextTime;
+        onSeek(nextTime);
       }}
       onpointermove={(event) => {
-        if (!dragging || trackWidth <= 0) return;
-        const deltaX = event.clientX - dragStartX;
-        const pixelsPerSecond = trackWidth / safeDuration;
-        const timeDelta = -deltaX / pixelsPerSecond;
-        const nextTime = Math.max(
-          0,
-          Math.min(safeDuration, dragStartTime + timeDelta),
-        );
-        applyPosition(nextTime);
+        if (!dragging || safeDuration <= 0) return;
+        const rect = (event.currentTarget as HTMLDivElement).getBoundingClientRect();
+        const nextTime =
+          Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)) * safeDuration;
+        currentTime = nextTime;
         onSeek(nextTime);
       }}
       onpointerup={(event) => {
@@ -220,21 +202,28 @@
       <div class="pointer-events-none absolute inset-y-0 left-0 z-10 w-12 bg-gradient-to-r from-black/70 to-transparent"></div>
       <div class="pointer-events-none absolute inset-y-0 right-0 z-10 w-12 bg-gradient-to-l from-black/70 to-transparent"></div>
 
-      <div class="pointer-events-none absolute inset-y-0 left-1/2 z-20 -translate-x-1/2">
-        <div class="absolute -top-px left-1/2 -translate-x-1/2 border-x-[5px] border-t-[5px] border-x-transparent border-t-accent-500"></div>
-        <div class="h-full w-[2px] bg-accent-500 shadow-[0_0_8px_rgba(196,154,90,0.55)]"></div>
-        <div class="absolute -bottom-px left-1/2 -translate-x-1/2 border-x-[5px] border-b-[5px] border-x-transparent border-b-accent-500"></div>
-      </div>
-
-      {#if trackWidth > 0}
+      {#if containerWidth > 0}
         <div
-          bind:this={trackEl}
-          class="absolute inset-y-0 left-0 will-change-transform"
-          style={`width: ${trackWidth}px; cursor: ${stripDragging ? "grabbing" : "grab"};`}
+          class="absolute inset-y-0 left-0"
+          style={`width: ${containerWidth}px; cursor: ${stripDragging ? "grabbing" : "grab"};`}
         >
           <canvas bind:this={canvasEl} class="block h-full"></canvas>
         </div>
       {/if}
+
+      <div
+        class="pointer-events-none absolute inset-y-0 left-0 z-10 bg-accent-500/12"
+        style={`width: ${progress * 100}%`}
+      ></div>
+
+      <div
+        class="pointer-events-none absolute inset-y-0 z-20 -translate-x-1/2"
+        style={`left: ${progress * 100}%`}
+      >
+        <div class="absolute -top-px left-1/2 -translate-x-1/2 border-x-[5px] border-t-[5px] border-x-transparent border-t-accent-500"></div>
+        <div class="h-full w-[2px] bg-accent-500 shadow-[0_0_8px_rgba(196,154,90,0.55)]"></div>
+        <div class="absolute -bottom-px left-1/2 -translate-x-1/2 border-x-[5px] border-b-[5px] border-x-transparent border-b-accent-500"></div>
+      </div>
     </div>
 
     <button

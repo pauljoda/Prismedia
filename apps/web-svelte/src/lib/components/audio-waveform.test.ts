@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { waveformDisplayScale } from "./audio-waveform";
+import { isRenderableWaveform, waveformDisplayScale } from "./audio-waveform";
 
 describe("audio waveform display helpers", () => {
   it("uses a percentile scale so isolated bad peaks do not flatten the waveform", () => {
@@ -19,5 +19,10 @@ describe("audio waveform display helpers", () => {
   it("falls back to one for silent or empty waveforms", () => {
     expect(waveformDisplayScale([])).toBe(1);
     expect(waveformDisplayScale([0, 0, 0, 0])).toBe(1);
+  });
+
+  it("rejects stale positive-only waveform caches", () => {
+    expect(isRenderableWaveform([0, 16191, 0, 16255, 0, 32575, 0, 32575])).toBe(false);
+    expect(isRenderableWaveform([-10, 12, -20, 30, -15, 18, -8, 9])).toBe(true);
   });
 });

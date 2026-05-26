@@ -43,6 +43,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated web app manifest and mobile browser metadata for home-screen installation and browser UI theme colors.
 
 ### Fixed
+- Fixed audio player artwork and waveform presentation so compact covers render without extra thumbnail chrome, stale malformed waveforms are ignored, and the main play button uses the accent treatment.
 - Fixed audio playback in Chrome for source codecs browsers cannot play directly, reset seeking when tracks advance, and made player artwork reuse the shared entity thumbnail renderer.
 - Fixed audio player playback polish so track ratings save on the 0-5 scale, audio library track rows can be rated directly, waveform generation preserves binary sample data, and the player progress bar stays inside its shell.
 - Fixed entity artwork edit mode so poster controls overlay existing artwork, empty headers use only the upload affordance, and artwork frames preserve each entity's thumbnail shape.

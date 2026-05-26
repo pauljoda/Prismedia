@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import {
+    Music,
     Pause,
     Play,
     Repeat,
@@ -15,10 +16,8 @@
   import { cn } from "@prismedia/ui-svelte";
   import { formatDuration, type AudioTrackListItemDto } from "@prismedia/contracts";
   import { apiAssetUrl, assetUrl } from "$lib/api/orval-fetch";
-  import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
-  import { ENTITY_KIND } from "$lib/entities/entity-codes";
-  import { entityReferenceToThumbnailCard } from "$lib/entities/entity-thumbnail";
   import AudioWaveformFilmstrip from "./AudioWaveformFilmstrip.svelte";
+  import { isRenderableWaveform } from "./audio-waveform";
 
   type RepeatMode = "off" | "all" | "one";
 
@@ -68,31 +67,6 @@
   const progress = $derived(
     duration > 0 ? Math.max(0, Math.min(100, (currentTime / duration) * 100)) : 0,
   );
-  const playerThumbnailCard = $derived.by(() => {
-    const source = activeTrack?.libraryId
-      ? {
-          id: activeTrack.libraryId,
-          kind: ENTITY_KIND.audioLibrary,
-          title: activeTrack.embeddedAlbum ?? activeTrack.title,
-          thumbnailUrl: libraryCoverUrl ?? null,
-        }
-      : activeTrack
-        ? {
-            id: activeTrack.id,
-            kind: ENTITY_KIND.audioTrack,
-            title: activeTrack.title,
-            thumbnailUrl: libraryCoverUrl ?? null,
-          }
-        : null;
-
-    return source
-      ? entityReferenceToThumbnailCard(source, {
-          aspectRatio: "square",
-          fit: "cover",
-          hover: { kind: "none" },
-        })
-      : null;
-  });
 
   function isKeyboardShortcutSuppressed(target: EventTarget | null): boolean {
     if (!(target instanceof HTMLElement)) return false;
@@ -311,7 +285,10 @@
       })
       .then((payload) => {
         if (cancelled) return;
-        waveformData = Array.isArray(payload.data) ? payload.data : null;
+        waveformData =
+          Array.isArray(payload.data) && isRenderableWaveform(payload.data)
+            ? payload.data
+            : null;
       })
       .catch(() => {
         if (cancelled) return;
@@ -445,9 +422,18 @@
 )}>
   <!-- Now-playing + progress -->
   <div class="flex items-center gap-2.5 px-3 pt-2.5 pb-1">
-    <div class="player-thumbnail relative h-9 w-9 shrink-0 overflow-hidden rounded-md bg-surface-3">
-      {#if playerThumbnailCard}
-        <EntityThumbnail card={playerThumbnailCard} linkable={false} mediaOnly={true} interactive={false} />
+    <div class="player-artwork relative h-9 w-9 shrink-0 overflow-hidden rounded-md">
+      {#if libraryCoverUrl}
+        <img
+          src={libraryCoverUrl}
+          alt=""
+          class="h-full w-full object-cover"
+          decoding="async"
+        />
+      {:else}
+        <div class="flex h-full w-full items-center justify-center bg-black/20 text-accent-500/80">
+          <Music class="h-4 w-4" />
+        </div>
       {/if}
     </div>
 
@@ -572,7 +558,7 @@
           "mx-0.5 rounded-full p-2 transition-all",
           playing
             ? "bg-accent-500 text-bg shadow-[0_0_10px_rgba(196,154,90,0.3)]"
-            : "bg-surface-3 text-text-primary hover:bg-surface-4 hover:text-accent-400",
+            : "bg-accent-500/15 text-accent-300 ring-1 ring-accent-500/45 shadow-[0_0_12px_rgba(196,154,90,0.18)] hover:bg-accent-500 hover:text-bg",
         )}
       >
         {#if playing}
@@ -611,20 +597,3 @@
     <div class="w-10" aria-hidden="true"></div>
   </div>
 </div>
-
-<style>
-  .player-thumbnail :global(.entity-thumbnail) {
-    width: 100%;
-    height: 100%;
-    min-width: 0;
-    border-radius: 6px;
-    box-shadow: none;
-  }
-
-  .player-thumbnail :global(.media) {
-    width: 100%;
-    height: 100%;
-    min-height: 0;
-    border-radius: 6px;
-  }
-</style>
