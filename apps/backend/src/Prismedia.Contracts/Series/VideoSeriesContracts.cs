@@ -12,6 +12,8 @@ public sealed record VideoSeriesDetail : EntityDetail {
 
 /// <summary>
 /// API-facing video-season detail shape with ordered episode videos.
-/// Carries no kind-specific extras; the shared envelope is sufficient.
 /// </summary>
-public sealed record VideoSeasonDetail : EntityDetail;
+public sealed record VideoSeasonDetail : EntityDetail {
+    /// <summary>Relationship edge metadata for credited people shown on detail pages.</summary>
+    public required IReadOnlyList<EntityCreditMetadata> CreditMetadata { get; init; }
+}

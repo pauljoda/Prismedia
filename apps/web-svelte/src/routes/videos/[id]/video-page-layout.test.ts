@@ -64,6 +64,7 @@ describe("/videos/[id] detail layout", () => {
     expect(sectionSource).toContain('titleAlign="center"');
     expect(sectionSource).toContain('titleSize="compact"');
     expect(sectionSource).toContain("{#snippet subtitleContent(card)}");
+    expect(readLocalSource("../../../lib/components/thumbnails/EntityThumbnail.svelte")).toContain("custom-subtitle");
     expect(sectionSource).toContain("credit-scroller");
     expect(sectionSource).toContain("overflow-wrap: anywhere");
     expect(sectionSource).toContain("white-space: normal");

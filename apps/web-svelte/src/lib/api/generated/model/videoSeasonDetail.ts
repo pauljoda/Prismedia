@@ -5,9 +5,11 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { EntityCapability } from './entityCapability';
+import type { EntityCreditMetadata } from './entityCreditMetadata';
 import type { EntityGroup } from './entityGroup';
 
 export interface VideoSeasonDetail {
+  creditMetadata: EntityCreditMetadata[];
   id: string;
   kind: string;
   title: string;

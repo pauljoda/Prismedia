@@ -531,15 +531,15 @@
 
   {#if !imageOnly}
     <div class="glass-info" class:has-subtitle={Boolean(card.subtitle || subtitleContent)}>
-      {#if subtitleContent}
-        <div class={`custom-above title-align-${titleAlign}`}>
-          {@render subtitleContent(card)}
-        </div>
-      {/if}
       <div class="copy">
         <h3 class={`title-align-${titleAlign} title-size-${titleSize}`} title={card.entity.title} aria-label={card.entity.title}>
           {card.entity.title}
         </h3>
+        {#if subtitleContent}
+          <div class={`custom-subtitle title-align-${titleAlign}`}>
+            {@render subtitleContent(card)}
+          </div>
+        {/if}
         {#if card.subtitle && !subtitleContent}
           <div class={`subtitle title-align-${titleAlign}`} title={card.subtitle}>
             <OverflowTicker text={card.subtitle} align={titleAlign} />
@@ -1100,20 +1100,21 @@
     text-shadow: 0 1px 3px rgb(0 0 0 / 0.6);
   }
 
-  .custom-above {
+  .custom-subtitle {
     display: flex;
     min-width: 0;
+    margin-top: 0.22rem;
   }
 
-  .custom-above.title-align-left {
+  .custom-subtitle.title-align-left {
     justify-content: flex-start;
   }
 
-  .custom-above.title-align-center {
+  .custom-subtitle.title-align-center {
     justify-content: center;
   }
 
-  .custom-above.title-align-right {
+  .custom-subtitle.title-align-right {
     justify-content: flex-end;
   }
 
@@ -1274,7 +1275,6 @@
     }
 
     .subtitle,
-    .custom-above,
     .chips {
       display: none;
     }

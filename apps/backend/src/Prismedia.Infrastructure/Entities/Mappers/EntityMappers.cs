@@ -114,6 +114,7 @@ public static class EntityMappers {
                     Capabilities = card.Capabilities,
                     ChildrenByKind = card.ChildrenByKind,
                     Relationships = card.Relationships,
+                    CreditMetadata = creditMetadata,
                 },
                 _ => card
             };
