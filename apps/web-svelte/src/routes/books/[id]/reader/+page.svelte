@@ -58,14 +58,14 @@
   );
 
   onMount(() => {
-    void loadReader();
+    void loadReader(page.url);
   });
 
-  async function loadReader() {
+  async function loadReader(url: URL) {
     loadState = "loading";
     errorMessage = null;
 
-    const nextContext = bookReaderContextFromUrl(page.url);
+    const nextContext = bookReaderContextFromUrl(url);
     if (!nextContext) {
       context = null;
       errorMessage = "Reader link is missing a valid context.";
@@ -332,14 +332,16 @@
   async function handleNextChapter() {
     if (!book || !context || !nextChapter) return;
     await saveProgress(readerIndex, true);
-    await goto(bookReaderHref({
+    const nextHref = bookReaderHref({
       bookId: book.id,
       kind: "chapter",
       id: nextChapter.id,
       returnId: context.returnId ?? context.id,
       command: "resume",
       mode: readerMode,
-    }));
+    });
+    await goto(nextHref);
+    await loadReader(new URL(nextHref, page.url.origin));
   }
 
   async function closeReader() {
