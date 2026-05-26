@@ -143,6 +143,20 @@
     }
   }
 
+  async function handleTrackRatingChange(trackId: string, value: number | null) {
+    const previousTrackItems = trackItems;
+    trackItems = trackItems.map((track) =>
+      track.id === trackId ? { ...track, rating: value } : track,
+    );
+
+    try {
+      await updateEntityRating(trackId, value);
+    } catch (err) {
+      trackItems = previousTrackItems;
+      console.warn("Unable to update audio track rating", err);
+    }
+  }
+
   async function handleFavoriteToggle() {
     if (!library) return;
     await toggleOptimisticEntityFlag(library, "isFavorite", (next) => (library = next), updateEntityFlags);
@@ -220,6 +234,7 @@
         {activeTrackId}
         {isPlaying}
         onPlay={(id) => (activeTrackId = id)}
+        onRatingChange={handleTrackRatingChange}
       />
     {/if}
 

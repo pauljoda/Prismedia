@@ -43,6 +43,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated web app manifest and mobile browser metadata for home-screen installation and browser UI theme colors.
 
 ### Fixed
+- Fixed audio player playback polish so track ratings save on the 0-5 scale, audio library track rows can be rated directly, waveform generation preserves binary sample data, and the player progress bar stays inside its shell.
 - Fixed entity artwork edit mode so poster controls overlay existing artwork, empty headers use only the upload affordance, and artwork frames preserve each entity's thumbnail shape.
 - Fixed custom entity artwork precedence so user-managed and plugin-managed thumbnails are preferred over generated scan thumbnails.
 - Fixed the book progress card so the resume panel uses the Prism Noir Luxe glass surface, controlled radius, and brass progress treatment.

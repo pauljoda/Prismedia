@@ -133,6 +133,25 @@ public sealed class ThumbnailServiceTests : IDisposable {
     }
 
     [Fact]
+    public async Task AudioWaveformReadsBinaryPcmFromProcessOutputFile() {
+        var inputPath = Path.Combine(_root, "audio.m4a");
+        await File.WriteAllTextAsync(inputPath, "source");
+        var process = new BinaryWaveformProcessExecutor([-1000, 1000, -250, 250]);
+        var service = new ThumbnailService(process);
+
+        var data = await service.GenerateWaveformDataAsync(
+            inputPath,
+            durationSeconds: 1,
+            pixelsPerSecond: 2,
+            CancellationToken.None);
+
+        Assert.NotNull(data);
+        Assert.Equal([-1000, 1000, -250, 250], data);
+        Assert.Single(process.OutputPaths);
+        Assert.False(File.Exists(process.OutputPaths[0]));
+    }
+
+    [Fact]
     public void AssetPathsNormalizeRelativeDataDirectoriesToAbsoluteCacheRoots() {
         var relativeDataDir = Path.GetRelativePath(
             Directory.GetCurrentDirectory(),
@@ -165,6 +184,34 @@ public sealed class ThumbnailServiceTests : IDisposable {
             var outputPath = arguments[^1];
             Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
             await File.WriteAllTextAsync(outputPath, "tile", cancellationToken);
+            return new ProcessExecutionResult(0, string.Empty, string.Empty);
+        }
+    }
+
+    private sealed class BinaryWaveformProcessExecutor(short[] samples) : ProcessExecutor {
+        public List<string> OutputPaths { get; } = [];
+
+        public override Task<ProcessExecutionResult> RunAsync(
+            string fileName,
+            IReadOnlyList<string> arguments,
+            IReadOnlyDictionary<string, string>? environment,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new ProcessExecutionResult(1, string.Empty, "stdout text path used"));
+
+        public override async Task<ProcessExecutionResult> RunToFileAsync(
+            string fileName,
+            IReadOnlyList<string> arguments,
+            IReadOnlyDictionary<string, string>? environment,
+            string outputPath,
+            CancellationToken cancellationToken) {
+            OutputPaths.Add(outputPath);
+            var bytes = new byte[samples.Length * 2];
+            for (var i = 0; i < samples.Length; i++) {
+                var valueBytes = BitConverter.GetBytes(samples[i]);
+                bytes[i * 2] = valueBytes[0];
+                bytes[i * 2 + 1] = valueBytes[1];
+            }
+            await File.WriteAllBytesAsync(outputPath, bytes, cancellationToken);
             return new ProcessExecutionResult(0, string.Empty, string.Empty);
         }
     }

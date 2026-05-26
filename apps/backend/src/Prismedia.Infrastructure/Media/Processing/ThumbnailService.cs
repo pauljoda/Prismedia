@@ -424,47 +424,54 @@ public sealed class ThumbnailService {
         MediaToolOptions? toolOptions = null) {
         const int sampleRate = 8000;
         var tools = toolOptions ?? _toolOptions;
-        var result = await _processExecutor.RunAsync(tools.FfmpegPath,
+        var pcmPath = Path.Combine(Path.GetTempPath(), $"prismedia-waveform-{Guid.NewGuid():N}.pcm");
+        var result = await _processExecutor.RunToFileAsync(tools.FfmpegPath,
             ["-hide_banner", "-loglevel", "error",
              "-i", inputPath,
              "-f", "s16le", "-ac", "1", "-ar", sampleRate.ToString(),
              "pipe:1"],
-            null, cancellationToken);
+            null, pcmPath, cancellationToken);
 
-        if (result.ExitCode != 0)
-            return null;
+        try {
+            if (result.ExitCode != 0)
+                return null;
 
-        var pcmBytes = System.Text.Encoding.Latin1.GetBytes(result.StandardOutput);
-        if (pcmBytes.Length < 2)
-            return null;
+            var pcmBytes = await File.ReadAllBytesAsync(pcmPath, cancellationToken);
+            if (pcmBytes.Length < 2)
+                return null;
 
-        var totalSamples = pcmBytes.Length / 2;
-        var totalPixels = (int)(durationSeconds * pixelsPerSecond);
-        if (totalPixels < 1)
-            totalPixels = 1;
+            var totalSamples = pcmBytes.Length / 2;
+            var totalPixels = (int)(durationSeconds * pixelsPerSecond);
+            if (totalPixels < 1)
+                totalPixels = 1;
 
-        var samplesPerPixel = totalSamples / totalPixels;
-        if (samplesPerPixel < 1)
-            samplesPerPixel = 1;
+            var samplesPerPixel = totalSamples / totalPixels;
+            if (samplesPerPixel < 1)
+                samplesPerPixel = 1;
 
-        var data = new int[totalPixels * 2];
-        for (var pixel = 0; pixel < totalPixels; pixel++) {
-            var startSample = pixel * samplesPerPixel;
-            var endSample = Math.Min(startSample + samplesPerPixel, totalSamples);
-            short min = 0, max = 0;
+            var data = new int[totalPixels * 2];
+            for (var pixel = 0; pixel < totalPixels; pixel++) {
+                var startSample = pixel * samplesPerPixel;
+                var endSample = Math.Min(startSample + samplesPerPixel, totalSamples);
+                short min = 0, max = 0;
 
-            for (var s = startSample; s < endSample; s++) {
-                var offset = s * 2;
-                if (offset + 1 >= pcmBytes.Length) break;
-                var sample = (short)(pcmBytes[offset] | (pcmBytes[offset + 1] << 8));
-                if (sample < min) min = sample;
-                if (sample > max) max = sample;
+                for (var s = startSample; s < endSample; s++) {
+                    var offset = s * 2;
+                    if (offset + 1 >= pcmBytes.Length) break;
+                    var sample = (short)(pcmBytes[offset] | (pcmBytes[offset + 1] << 8));
+                    if (sample < min) min = sample;
+                    if (sample > max) max = sample;
+                }
+
+                data[pixel * 2] = min;
+                data[pixel * 2 + 1] = max;
             }
 
-            data[pixel * 2] = min;
-            data[pixel * 2 + 1] = max;
+            return data;
+        } finally {
+            if (File.Exists(pcmPath)) {
+                File.Delete(pcmPath);
+            }
         }
-
-        return data;
     }
 }

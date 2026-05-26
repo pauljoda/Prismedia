@@ -16,7 +16,7 @@
     ariaLabelPrefix = "Set",
   }: Props = $props();
 
-  const stars = $derived(value ? Math.round(value / 20) : 0);
+  const stars = $derived(value ? Math.max(0, Math.min(5, Math.round(value))) : 0);
   let hovered = $state(0);
 </script>
 
@@ -41,7 +41,7 @@
         type="button"
         onmouseenter={() => (hovered = starIdx)}
         onclick={() => {
-          const newVal = starIdx === stars ? null : starIdx * 20;
+          const newVal = starIdx === stars ? null : starIdx;
           onChange?.(newVal);
         }}
         aria-label={`${ariaLabelPrefix} ${starIdx} star rating`}

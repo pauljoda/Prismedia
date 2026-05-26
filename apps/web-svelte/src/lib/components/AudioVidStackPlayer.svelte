@@ -62,7 +62,9 @@
   );
   const hasNext = $derived(activeIndex >= 0 && activeIndex < tracks.length - 1);
   const hasPrev = $derived(activeIndex > 0);
-  const progress = $derived(duration > 0 ? (currentTime / duration) * 100 : 0);
+  const progress = $derived(
+    duration > 0 ? Math.max(0, Math.min(100, (currentTime / duration) * 100)) : 0,
+  );
 
   function isKeyboardShortcutSuppressed(target: EventTarget | null): boolean {
     if (!(target instanceof HTMLElement)) return false;
@@ -333,7 +335,6 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <!-- Hidden audio element -->
-<!-- svelte-ignore a11y_media_has_caption -->
 <audio
   bind:this={audioEl}
   preload="auto"
@@ -398,36 +399,38 @@
 
   <!-- Progress scrubber -->
   {#if activeTrack && duration > 0}
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div
-      class="video-progress-track group/track mx-3 mb-1 overflow-hidden"
-      data-dragging={timelineDragging}
-      onpointerdown={(event) => {
-        if (duration <= 0) return;
-        timelineDraggingRef = true;
-        timelineDragging = true;
-        (event.currentTarget as HTMLDivElement).setPointerCapture(event.pointerId);
-        const rect = (event.currentTarget as HTMLDivElement).getBoundingClientRect();
-        const nextPercent = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
-        handleSeek(nextPercent * duration);
-      }}
-      onpointermove={(event) => {
-        if (!timelineDraggingRef || duration <= 0) return;
-        const rect = (event.currentTarget as HTMLDivElement).getBoundingClientRect();
-        const nextPercent = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
-        handleSeek(nextPercent * duration);
-      }}
-      onpointerup={(event) => {
-        (event.currentTarget as HTMLDivElement).releasePointerCapture(event.pointerId);
-        timelineDraggingRef = false;
-        timelineDragging = false;
-      }}
-      onpointercancel={() => {
-        timelineDraggingRef = false;
-        timelineDragging = false;
-      }}
-    >
-      <div class="video-progress-fill" style={`width: ${progress}%`}></div>
+    <div class="mb-1 px-3">
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div
+        class="video-progress-track group/track overflow-hidden"
+        data-dragging={timelineDragging}
+        onpointerdown={(event) => {
+          if (duration <= 0) return;
+          timelineDraggingRef = true;
+          timelineDragging = true;
+          (event.currentTarget as HTMLDivElement).setPointerCapture(event.pointerId);
+          const rect = (event.currentTarget as HTMLDivElement).getBoundingClientRect();
+          const nextPercent = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+          handleSeek(nextPercent * duration);
+        }}
+        onpointermove={(event) => {
+          if (!timelineDraggingRef || duration <= 0) return;
+          const rect = (event.currentTarget as HTMLDivElement).getBoundingClientRect();
+          const nextPercent = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+          handleSeek(nextPercent * duration);
+        }}
+        onpointerup={(event) => {
+          (event.currentTarget as HTMLDivElement).releasePointerCapture(event.pointerId);
+          timelineDraggingRef = false;
+          timelineDragging = false;
+        }}
+        onpointercancel={() => {
+          timelineDraggingRef = false;
+          timelineDragging = false;
+        }}
+      >
+        <div class="video-progress-fill" style={`width: ${progress}%`}></div>
+      </div>
     </div>
   {/if}
 
