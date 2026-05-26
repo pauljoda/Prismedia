@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Relationship people sections now use contextual labels such as People, Artists, and Performers outside video cast and crew pages.
 - Detail pages now use the header breadcrumb trail for back navigation instead of page-local back links.
 - Improved detail hero action buttons with stronger glass contrast and clearer active affordances.
+- Updated detail edit forms so flags match the shared field label language and metadata examples stay entity-neutral.
 - Bulk identify now runs as a durable background job instead of an ephemeral in-memory session, so progress survives app restarts and results feed directly into the identify review queue.
 - Standardized all API error responses to use the `ApiProblem` format with consistent `code` and `message` fields.
 - Removed development-only links from app navigation.

@@ -36,6 +36,7 @@
   import ListEditor from "$lib/components/forms/ListEditor.svelte";
   import KeyValueEditor from "$lib/components/forms/KeyValueEditor.svelte";
   import type { KeyValuePair } from "$lib/components/forms";
+  import FormField from "$lib/components/forms/FormField.svelte";
   import ToggleChip from "$lib/components/forms/ToggleChip.svelte";
   import TextField from "$lib/components/forms/TextField.svelte";
   import { isNsfw as hasNsfwCapability } from "$lib/api/capabilities";
@@ -722,14 +723,13 @@
         min="0"
         max={card.rating?.max ?? 5}
       />
-      <div class="edit-field">
-        <span class="edit-field-label">Flags</span>
+      <FormField label="Flags">
         <div class="edit-flag-chips">
           <ToggleChip value={editDraft.isFavorite} onChange={(v) => (editDraft.isFavorite = v)} onLabel="Favorite" icon={Heart} />
           <ToggleChip value={editDraft.isNsfw} onChange={(v) => (editDraft.isNsfw = v)} onLabel="NSFW" variant="warning" icon={Flame} />
           <ToggleChip value={editDraft.isOrganized} onChange={(v) => (editDraft.isOrganized = v)} onLabel="Organized" icon={CheckCircle} />
         </div>
-      </div>
+      </FormField>
     </div>
     <MarkdownEditor
       value={editDraft.description}
@@ -821,8 +821,8 @@
       onChange={(v) => (editDraft.dates = v)}
       label="Dates"
       icon={Calendar}
-      keyPlaceholder="date_aired"
-      valuePlaceholder="2025-01-15"
+      keyPlaceholder="date"
+      valuePlaceholder="YYYY-MM-DD"
       keyLabel="Code"
       valueLabel="Date"
     />
@@ -836,8 +836,8 @@
       onChange={(v) => (editDraft.stats = v)}
       label="Stats"
       icon={BarChart3}
-      keyPlaceholder="runtime"
-      valuePlaceholder="120"
+      keyPlaceholder="count"
+      valuePlaceholder="12"
       keyLabel="Stat"
       valueLabel="Value"
       valueInputMode="decimal"
@@ -853,7 +853,7 @@
       onChange={(v) => (editDraft.positions = v)}
       label="Positions"
       icon={ListOrdered}
-      keyPlaceholder="season"
+      keyPlaceholder="sort"
       valuePlaceholder="1"
       keyLabel="Position"
       valueLabel="Value"
@@ -870,7 +870,7 @@
       onChange={(v) => (editDraft.classification = v)}
       label="Classification"
       icon={Badge}
-      placeholder="e.g. TV-MA, PG-13"
+      placeholder="e.g. complete, draft, archived"
       helper="Empty clears the value"
     />
   </section>
@@ -893,14 +893,13 @@
 
 {#snippet flagsEditSection()}
   <section class="detail-section edit-section">
-    <div class="edit-field">
-      <span class="edit-field-label">Flags</span>
+    <FormField label="Flags">
       <div class="edit-flag-chips">
         <ToggleChip value={editDraft.isFavorite} onChange={(v) => (editDraft.isFavorite = v)} onLabel="Favorite" icon={Heart} />
         <ToggleChip value={editDraft.isNsfw} onChange={(v) => (editDraft.isNsfw = v)} onLabel="NSFW" variant="warning" icon={Flame} />
         <ToggleChip value={editDraft.isOrganized} onChange={(v) => (editDraft.isOrganized = v)} onLabel="Organized" icon={CheckCircle} />
       </div>
-    </div>
+    </FormField>
   </section>
 {/snippet}
 
@@ -2226,21 +2225,6 @@
     gap: 0.75rem;
   }
 
-  .edit-field {
-    display: grid;
-    gap: 0.3rem;
-    min-width: 0;
-  }
-
-  .edit-field-label {
-    color: var(--detail-text-muted);
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.68rem;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-  }
-
   .edit-inline-grid {
     display: grid;
     gap: 0.75rem;
@@ -2259,6 +2243,10 @@
     gap: 0.35rem;
     min-height: 2.55rem;
     align-items: center;
+  }
+
+  .edit-flag-chips :global(button) {
+    min-height: 2.55rem;
   }
 
   .edit-confirm-backdrop {
