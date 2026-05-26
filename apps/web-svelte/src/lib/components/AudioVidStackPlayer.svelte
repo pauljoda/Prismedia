@@ -1,8 +1,4 @@
 <script lang="ts">
-  import "vidstack/player";
-  import "vidstack/player/ui";
-
-  import { onMount } from "svelte";
   import {
     Music,
     Pause,
@@ -18,11 +14,6 @@
   } from "@lucide/svelte";
   import { cn } from "@prismedia/ui-svelte";
   import { formatDuration, type AudioTrackListItemDto } from "@prismedia/contracts";
-  import type {
-    MediaProviderChangeEvent,
-    MediaTimeUpdateEvent,
-  } from "vidstack";
-  import type { MediaPlayerElement } from "vidstack/elements";
   import { apiAssetUrl } from "$lib/api/orval-fetch";
   import AudioWaveformFilmstrip from "./AudioWaveformFilmstrip.svelte";
 
@@ -50,7 +41,6 @@
     onPlayingChange,
   }: Props = $props();
 
-  let player: MediaPlayerElement | null = $state(null);
   let audioEl: HTMLAudioElement | null = $state(null);
   let playing = $state(false);
   let currentTime = $state(0);
@@ -61,10 +51,10 @@
   let repeat = $state<RepeatMode>("off");
   let shuffle = $state(false);
   let timelineDragging = $state(false);
-  let mediaMounted = $state(false);
 
   let timelineDraggingRef = false;
   let lastShufflePlayKey = 0;
+  let currentSrcTrackId: string | null = null;
 
   const activeTrack = $derived(tracks.find((t) => t.id === activeTrackId) ?? null);
   const activeIndex = $derived(
@@ -74,32 +64,32 @@
   const hasPrev = $derived(activeIndex > 0);
   const progress = $derived(duration > 0 ? (currentTime / duration) * 100 : 0);
 
-  const playerSrc = $derived.by(() => {
-    if (!activeTrack) return undefined;
-    return apiAssetUrl(`/audio-stream/${activeTrack.id}`);
-  });
-
   function isKeyboardShortcutSuppressed(target: EventTarget | null): boolean {
     if (!(target instanceof HTMLElement)) return false;
     if (target.isContentEditable) return true;
     return Boolean(target.closest("input, textarea, select"));
   }
 
-  function syncAudioElement() {
-    const audio = player?.querySelector("audio") ?? null;
-    audioEl = audio;
+  function requestPlay() {
+    if (!audioEl) return;
+    const playPromise = audioEl.play();
+    if (playPromise && typeof playPromise.catch === "function") {
+      void playPromise.catch((error: unknown) => {
+        console.error("Audio play failed:", error);
+      });
+    }
   }
 
   function handleSeek(time: number) {
-    if (!player) return;
-    player.currentTime = time;
+    if (!audioEl) return;
+    audioEl.currentTime = time;
     currentTime = time;
   }
 
   function toggleMute() {
-    if (!player) return;
-    player.muted = !player.muted;
-    muted = player.muted;
+    if (!audioEl) return;
+    audioEl.muted = !audioEl.muted;
+    muted = audioEl.muted;
   }
 
   function cycleRepeat() {
@@ -117,15 +107,15 @@
   }
 
   function togglePlay() {
-    if (!player) return;
+    if (!audioEl) return;
     if (!activeTrack) {
       playAll();
       return;
     }
-    if (player.paused) {
-      void player.play();
+    if (audioEl.paused) {
+      requestPlay();
     } else {
-      player.pause();
+      audioEl.pause();
     }
   }
 
@@ -149,8 +139,8 @@
   }
 
   function handlePrev() {
-    if (player && player.currentTime > 3) {
-      player.currentTime = 0;
+    if (audioEl && audioEl.currentTime > 3) {
+      audioEl.currentTime = 0;
       return;
     }
     if (hasPrev) {
@@ -160,9 +150,9 @@
 
   function handleTrackEnd() {
     if (repeat === "one") {
-      if (player) {
-        player.currentTime = 0;
-        void player.play();
+      if (audioEl) {
+        audioEl.currentTime = 0;
+        requestPlay();
       }
       return;
     }
@@ -193,12 +183,12 @@
   }
 
   function handleVolumeInput(event: Event) {
-    if (!player) return;
+    if (!audioEl) return;
     const nextVolume = Number((event.currentTarget as HTMLInputElement).value);
-    player.volume = nextVolume;
+    audioEl.volume = nextVolume;
     volume = nextVolume;
-    if (nextVolume > 0 && player.muted) {
-      player.muted = false;
+    if (nextVolume > 0 && audioEl.muted) {
+      audioEl.muted = false;
       muted = false;
     }
   }
@@ -209,42 +199,42 @@
     void fetch(url, { method: "POST" }).catch(() => {});
   }
 
-  function handleProviderChange(_event: Event) {
-    syncAudioElement();
-  }
-
-  function handleTimeUpdate(event: Event) {
-    const detail = (event as MediaTimeUpdateEvent).detail;
-    currentTime = detail.currentTime;
-  }
-
-  function handlePlay() {
-    playing = true;
-    onPlayingChange?.(true);
-  }
-
-  function handlePause() {
-    playing = false;
-    onPlayingChange?.(false);
-  }
-
-  function handleCanPlay() {
-    syncAudioElement();
-    if (player && Number.isFinite(player.duration)) {
-      duration = player.duration;
+  // Switch audio source when active track changes
+  $effect(() => {
+    if (!audioEl) return;
+    if (!activeTrack) {
+      currentSrcTrackId = null;
+      audioEl.removeAttribute("src");
+      audioEl.load();
+      playing = false;
+      currentTime = 0;
+      duration = 0;
+      return;
     }
-  }
 
-  function handleEnded() {
-    if (activeTrackId) recordTrackPlay(activeTrackId);
-    handleTrackEnd();
-  }
+    if (activeTrack.id === currentSrcTrackId) return;
+    currentSrcTrackId = activeTrack.id;
 
-  function handleDurationChange() {
-    if (player && Number.isFinite(player.duration)) {
-      duration = player.duration;
-    }
-  }
+    const nextSrc = apiAssetUrl(`/audio-stream/${activeTrack.id}`);
+    if (!nextSrc) return;
+
+    // Listen for canplay before starting playback
+    const el = audioEl;
+    const onCanPlay = () => {
+      el.removeEventListener("canplay", onCanPlay);
+      requestPlay();
+    };
+    el.addEventListener("canplay", onCanPlay);
+
+    el.src = nextSrc;
+    el.load();
+    currentTime = 0;
+    duration = activeTrack.duration ?? 0;
+
+    return () => {
+      el.removeEventListener("canplay", onCanPlay);
+    };
+  });
 
   // Load waveform data for the active track
   $effect(() => {
@@ -253,9 +243,7 @@
       return;
     }
 
-    const waveformUrl = apiAssetUrl(
-      `/assets/${activeTrack.waveformPath.replace(/^\/+/, "")}`,
-    );
+    const waveformUrl = apiAssetUrl(activeTrack.waveformPath);
     if (!waveformUrl) {
       waveformData = null;
       return;
@@ -281,17 +269,6 @@
     };
   });
 
-  // Update duration when active track changes
-  $effect(() => {
-    if (!activeTrack) {
-      currentTime = 0;
-      duration = 0;
-      return;
-    }
-    currentTime = 0;
-    duration = activeTrack.duration ?? 0;
-  });
-
   // Handle shuffle play key
   $effect(() => {
     if (shufflePlayKey === 0 || shufflePlayKey === lastShufflePlayKey || tracks.length === 0) {
@@ -301,51 +278,24 @@
     shuffle = true;
     const randomTrack = tracks[Math.floor(Math.random() * tracks.length)];
     if (randomTrack?.id === activeTrackId) {
-      if (player) void player.play();
+      requestPlay();
     } else if (randomTrack) {
       onTrackChange(randomTrack.id);
     }
-  });
-
-  onMount(() => {
-    mediaMounted = true;
-    return () => {
-      mediaMounted = false;
-    };
-  });
-
-  $effect(() => {
-    const el = player;
-    if (!el) return;
-
-    const listeners: Array<[string, EventListener]> = [
-      ["provider-change", handleProviderChange],
-      ["can-play", handleCanPlay],
-      ["time-update", handleTimeUpdate],
-      ["play", handlePlay],
-      ["pause", handlePause],
-      ["ended", handleEnded],
-      ["duration-change", handleDurationChange],
-    ];
-
-    for (const [type, listener] of listeners) el.addEventListener(type, listener);
-    return () => {
-      for (const [type, listener] of listeners) el.removeEventListener(type, listener);
-    };
   });
 
   function handleKeydown(event: KeyboardEvent) {
     if (isKeyboardShortcutSuppressed(event.target)) return;
 
     const seekBy = (delta: number) => {
-      if (!player || !activeTrack) return;
+      if (!audioEl || !activeTrack) return;
       const max =
         duration > 0 && Number.isFinite(duration)
           ? duration
-          : Number.isFinite(player.duration) && player.duration > 0
-            ? player.duration
+          : Number.isFinite(audioEl.duration) && audioEl.duration > 0
+            ? audioEl.duration
             : Number.POSITIVE_INFINITY;
-      handleSeek(Math.max(0, Math.min(max, (player.currentTime ?? 0) + delta)));
+      handleSeek(Math.max(0, Math.min(max, audioEl.currentTime + delta)));
     };
 
     switch (event.key.toLowerCase()) {
@@ -383,25 +333,34 @@
 
 <svelte:window onkeydown={handleKeydown} />
 
-<div class={cn("surface-panel border border-border-subtle", className)}>
-  {#if playerSrc && mediaMounted}
-    <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <media-player
-      class="audio-vidstack-engine"
-      title={activeTrack?.title ?? "Audio"}
-      src={playerSrc}
-      viewType="audio"
-      streamType="on-demand"
-      crossOrigin
-      playsInline
-      bind:this={player}
-    >
-      <media-provider></media-provider>
-    </media-player>
-  {/if}
+<!-- Hidden audio element -->
+<!-- svelte-ignore a11y_media_has_caption -->
+<audio
+  bind:this={audioEl}
+  preload="auto"
+  ontimeupdate={() => {
+    if (audioEl && !timelineDraggingRef) currentTime = audioEl.currentTime;
+  }}
+  ondurationchange={() => {
+    if (audioEl && Number.isFinite(audioEl.duration)) duration = audioEl.duration;
+  }}
+  onplay={() => {
+    playing = true;
+    onPlayingChange?.(true);
+  }}
+  onpause={() => {
+    playing = false;
+    onPlayingChange?.(false);
+  }}
+  onended={() => {
+    if (activeTrackId) recordTrackPlay(activeTrackId);
+    handleTrackEnd();
+  }}
+></audio>
 
-  <div class="px-4 pt-4 pb-2">
-    <div class="mb-3 flex items-center gap-3">
+<div class={cn("fixed bottom-14 left-0 right-0 z-[55] border-t border-border-subtle bg-surface-1/95 backdrop-blur-md md:bottom-0", className)}>
+  <div class="px-4 pt-3 pb-1.5">
+    <div class="mb-2.5 flex items-center gap-3">
       <div class="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden bg-surface-3 surface-card-sharp">
         <Music class={cn("h-4 w-4", activeTrack ? "text-accent-500" : "text-text-disabled")} />
         {#if libraryCoverUrl}
@@ -440,7 +399,7 @@
     {#if activeTrack && duration > 0}
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
-        class="video-progress-track group/track mb-2"
+        class="video-progress-track group/track mb-1.5"
         data-dragging={timelineDragging}
         onpointerdown={(event) => {
           if (duration <= 0) return;
@@ -483,7 +442,7 @@
     </div>
   {/if}
 
-  <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-x-2 px-4 py-2.5">
+  <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-x-2 px-4 py-2">
     <div class="min-w-0" aria-hidden="true"></div>
 
     <div class="flex items-center justify-center gap-1">
@@ -573,14 +532,3 @@
     </div>
   </div>
 </div>
-
-<style>
-  .audio-vidstack-engine {
-    position: absolute;
-    width: 0;
-    height: 0;
-    overflow: hidden;
-    pointer-events: none;
-    opacity: 0;
-  }
-</style>
