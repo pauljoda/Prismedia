@@ -13,6 +13,15 @@ namespace Prismedia.Application.Entities;
 /// through here.
 /// </summary>
 public static class EntityCardProjector {
+    private static readonly EntityFileRole[] SupportedManualImageRoles =
+    [
+        EntityFileRole.Thumbnail,
+        EntityFileRole.Poster,
+        EntityFileRole.Backdrop,
+        EntityFileRole.Cover,
+        EntityFileRole.Logo
+    ];
+
     /// <summary>Projects a hydrated domain entity to the shared entity card contract.</summary>
     public static EntityCard ToCard(Entity entity) =>
         new() {
@@ -136,6 +145,7 @@ public static class EntityCardProjector {
             .Where(file => file.Role is EntityFileRole.Thumbnail or EntityFileRole.Poster
                 or EntityFileRole.Cover or EntityFileRole.Backdrop or EntityFileRole.Logo)
             .OrderBy(file => file.Role switch {
+                _ when IsCustomPath(file.Path) => -1,
                 EntityFileRole.Thumbnail => 0,
                 EntityFileRole.Poster => 1,
                 EntityFileRole.Cover => 2,
@@ -145,11 +155,12 @@ public static class EntityCardProjector {
             .Select(file => new EntityImageAsset(file.Role, file.Path, file.MimeType))
             .ToArray();
 
-        if (assets.Length == 0) {
+        var supportedKinds = SupportedManualImageRoles.Select(role => role.ToCode()).ToArray();
+        if (assets.Length == 0 && supportedKinds.Length == 0) {
             return null;
         }
 
-        return new ImagesCapability([], assets, assets[0].Path, assets[0].Path);
+        return new ImagesCapability(supportedKinds, assets, assets.FirstOrDefault()?.Path, assets.FirstOrDefault()?.Path);
     }
 
     private static IReadOnlyList<EntityGroup> ToGroups(
@@ -169,6 +180,7 @@ public static class EntityCardProjector {
             .Where(file => file.Role is EntityFileRole.Thumbnail or EntityFileRole.Poster
                 or EntityFileRole.Cover or EntityFileRole.Backdrop or EntityFileRole.Logo)
             .OrderBy(file => file.Role switch {
+                _ when IsCustomPath(file.Path) => -1,
                 EntityFileRole.Thumbnail => 0,
                 EntityFileRole.Poster => 1,
                 EntityFileRole.Cover => 2,
@@ -195,4 +207,7 @@ public static class EntityCardProjector {
             entity.IsOrganized ?? false);
     }
 
+    private static bool IsCustomPath(string path) =>
+        path.Contains("/custom/artwork/", StringComparison.OrdinalIgnoreCase) ||
+        path.Contains("/plugins/artwork/", StringComparison.OrdinalIgnoreCase);
 }

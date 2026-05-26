@@ -746,12 +746,14 @@ public sealed class EntityMetadataApplyService : IEntityMetadataPatchService {
                     Role = role,
                     Path = publicPath,
                     MimeType = MimeTypeFromExtension(ext),
+                    Source = "custom",
                     CreatedAt = now,
                     UpdatedAt = now
                 });
             } else {
                 existing.Path = publicPath;
                 existing.MimeType = MimeTypeFromExtension(ext);
+                existing.Source = "custom";
                 existing.UpdatedAt = now;
             }
         }
@@ -820,12 +822,14 @@ public sealed class EntityMetadataApplyService : IEntityMetadataPatchService {
                     Role = role,
                     Path = publicPath,
                     MimeType = MimeTypeFromExtension(ext),
+                    Source = "custom",
                     CreatedAt = now,
                     UpdatedAt = now
                 });
             } else {
                 existing.Path = publicPath;
                 existing.MimeType = MimeTypeFromExtension(ext);
+                existing.Source = "custom";
                 existing.UpdatedAt = now;
             }
 

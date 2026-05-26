@@ -292,7 +292,10 @@ public sealed class EfEntityReadService : IEntityReadService {
                 file.Role == EntityFileRole.Cover ||
                 file.Role == EntityFileRole.Logo ||
                 file.Role == EntityFileRole.Backdrop)
-            .OrderBy(file => file.Role == EntityFileRole.Thumbnail ? 0 :
+            .OrderBy(file => file.Source == "custom" ||
+                file.Path.Contains("/custom/artwork/") ||
+                file.Path.Contains("/plugins/artwork/") ? -1 :
+                file.Role == EntityFileRole.Thumbnail ? 0 :
                 file.Role == EntityFileRole.Poster ? 1 :
                 file.Role == EntityFileRole.Cover ? 2 :
                 file.Role == EntityFileRole.Logo ? 3 : 4)

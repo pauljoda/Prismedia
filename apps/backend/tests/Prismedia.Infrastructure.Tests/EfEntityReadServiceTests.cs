@@ -138,6 +138,48 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
+    public async Task ListAsyncPrefersCustomArtworkOverGeneratedThumbnails() {
+        await using var db = CreateContext();
+        var videoId = Guid.Parse("15151515-1515-1515-1515-151515151515");
+        var now = DateTimeOffset.UtcNow;
+        db.Entities.Add(new EntityRow {
+            Id = videoId,
+            KindCode = EntityKindRegistry.Video.Code,
+            Title = "Custom Poster Video",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.EntityFiles.AddRange(
+            new EntityFileRow {
+                Id = Guid.NewGuid(),
+                EntityId = videoId,
+                Role = EntityFileRole.Thumbnail,
+                Path = "/assets/videos/15151515/thumb.jpg",
+                Source = "scan",
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new EntityFileRow {
+                Id = Guid.NewGuid(),
+                EntityId = videoId,
+                Role = EntityFileRole.Poster,
+                Path = "/assets/custom/artwork/15151515/poster.webp",
+                Source = "custom",
+                CreatedAt = now.AddSeconds(1),
+                UpdatedAt = now.AddSeconds(1)
+            });
+        await db.SaveChangesAsync();
+
+        var repository = new EfEntityRepository(db, EntityMappers.Kinds(db), EntityMappers.Capabilities(db));
+        var service = new EfEntityReadService(db, repository, EntityMappers.Kinds(db));
+
+        var result = await service.ListAsync(EntityKindRegistry.Video.Code, null, null, null, null, CancellationToken.None);
+        var item = Assert.Single(result.Items);
+
+        Assert.Equal("/assets/custom/artwork/15151515/poster.webp", item.CoverUrl);
+    }
+
+    [Fact]
     public async Task ListAsyncProjectsVideoTechnicalMetadataAsThumbnailMeta() {
         await using var db = CreateContext();
         var videoId = Guid.Parse("55555555-5555-5555-5555-555555555555");

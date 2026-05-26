@@ -60,6 +60,7 @@ export async function uploadFile<T>(
   path: string,
   file: File,
   extraFields?: Record<string, string>,
+  init?: RequestInit,
 ): Promise<T> {
   const form = new FormData();
   if (extraFields) {
@@ -70,6 +71,7 @@ export async function uploadFile<T>(
   form.append("file", file);
 
   return fetchApi<T>(path, {
+    ...init,
     method: "POST",
     body: form,
   });

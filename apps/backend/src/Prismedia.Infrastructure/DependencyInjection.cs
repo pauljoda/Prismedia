@@ -113,6 +113,10 @@ public static class DependencyInjection {
         services.AddScoped<IEntityWriteRepository>(provider => provider.GetRequiredService<EfEntityRepository>());
         services.AddScoped<IEntityReadService, EfEntityReadService>();
         services.AddScoped<IEntityFileContentService, EfEntityFileContentService>();
+        services.AddScoped<IEntityImageAssetMutationService>(provider =>
+            new EntityImageAssetMutationService(
+                provider.GetRequiredService<PrismediaDbContext>(),
+                new EntityImageAssetStorageOptions(cacheDir)));
         services.AddScoped<IOrganizePersistence, EfOrganizePersistence>();
         services.AddScoped<IFilesPersistence, EfFilesPersistence>();
         services.AddSingleton<IManagedFileStorage, LocalManagedFileStorage>();

@@ -110,7 +110,7 @@ import type {
   VideoSeriesDetail as GeneratedVideoSeriesDetail,
   VideoSeasonDetail as GeneratedVideoSeasonDetail,
 } from "./generated/model";
-import { fetchApi, jellyfinApiPath, apiPath } from "./orval-fetch";
+import { fetchApi, jellyfinApiPath, apiPath, uploadFile } from "./orval-fetch";
 import type { EntityFileRoleCode } from "$lib/entities/entity-codes";
 
 export type EntityCapability = GeneratedEntityCapability;
@@ -734,6 +734,28 @@ export function updateEntityMetadata(
   return fetchApi<EntityDetailCard>(`/entities${kindPath}/${id}`, {
     method: "PATCH",
     body: JSON.stringify(request),
+    signal: options?.signal,
+  });
+}
+
+export function uploadEntityImageAsset(
+  id: string,
+  role: EntityFileRoleCode,
+  file: File,
+  options?: RequestOptions,
+): Promise<EntityDetailCard> {
+  return uploadFile<EntityDetailCard>(`/entities/${id}/images/${encodeURIComponent(role)}`, file, undefined, {
+    signal: options?.signal,
+  });
+}
+
+export function clearEntityImageAsset(
+  id: string,
+  role: EntityFileRoleCode,
+  options?: RequestOptions,
+): Promise<EntityDetailCard> {
+  return fetchApi<EntityDetailCard>(`/entities/${id}/images/${encodeURIComponent(role)}`, {
+    method: "DELETE",
     signal: options?.signal,
   });
 }

@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 - Added audio playback with streaming, waveform visualization, and full transport controls.
+- Added edit-mode poster and header artwork upload, drag-and-drop, and clear controls for entity detail pages.
 - Added a traditional music player track list on audio library detail pages.
 - Added play count tracking for audio tracks.
 - Added reversible file explorer exclusions so files and folders can be skipped by library scans without deleting them.
@@ -43,6 +44,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 - Fixed the book progress card so the resume panel uses the Prism Noir Luxe glass surface, controlled radius, and brass progress treatment.
+- Fixed custom entity artwork precedence so user-managed and plugin-managed thumbnails are preferred over generated scan thumbnails.
 - Fixed gallery detail pages so their EntityDetail wrapper uses the same full-width layout behavior as other detail pages.
 - Fixed cast thumbnails so saved character and role names appear as centered chips under people names on series, season, and video detail pages.
 - Fixed empty entity detail tabs so pages without displayable detail content no longer show a tab strip or "No details available" placeholder.

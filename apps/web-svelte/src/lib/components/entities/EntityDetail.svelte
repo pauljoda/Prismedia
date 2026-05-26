@@ -13,6 +13,7 @@
     Flame,
     CheckCircle,
     ExternalLink,
+    Image as ImageIcon,
     Link,
     ListOrdered,
     MonitorCog,
@@ -20,6 +21,8 @@
     PencilOff,
     Play,
     Save,
+    Trash2,
+    Upload,
     Users,
     X,
   } from "@lucide/svelte";
@@ -27,7 +30,7 @@
   import type { EntityDetailCard, EntityDetailCardFull, EntityDetailCredit } from "$lib/entities/entity-detail";
   import { renderEntityDescriptionMarkdown } from "$lib/entities/entity-detail-markdown";
   import { hasHero, hasPoster } from "$lib/entities/entity-detail";
-  import { entityReferenceToThumbnailCard, placeholderGradient } from "$lib/entities/entity-thumbnail";
+  import { entityReferenceToThumbnailCard, placeholderGradient, type EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
   import EntityTagChips from "./EntityTagChips.svelte";
   import MarkdownEditor from "$lib/components/forms/MarkdownEditor.svelte";
@@ -39,9 +42,11 @@
   import FormField from "$lib/components/forms/FormField.svelte";
   import ToggleChip from "$lib/components/forms/ToggleChip.svelte";
   import TextField from "$lib/components/forms/TextField.svelte";
-  import { isNsfw as hasNsfwCapability } from "$lib/api/capabilities";
+  import { getImagesCapability, isNsfw as hasNsfwCapability } from "$lib/api/capabilities";
   import { listTags, listPeople, listStudios } from "$lib/api/generated/prismedia";
+  import { clearEntityImageAsset, uploadEntityImageAsset } from "$lib/api/prismedia";
   import { useNsfw } from "$lib/nsfw/store.svelte";
+  import { ENTITY_FILE_ROLE, type EntityFileRoleCode } from "$lib/entities/entity-codes";
 
   export type EntityDetailPosterSize = "none" | "small" | "medium" | "large";
 
@@ -117,6 +122,8 @@
     showHero?: boolean;
     tabs?: EntityDetailTab[];
     onMetadataSave?: (request: EntityMetadataUpdateRequest) => void | Promise<void>;
+    onImageAssetUpload?: (role: EntityFileRoleCode, file: File) => void | Promise<void>;
+    onImageAssetClear?: (role: EntityFileRoleCode) => void | Promise<void>;
     /** Route-provided sections that can be assigned to any tab. */
     sections?: EntityDetailSection[];
     /** Inline metadata rendered below the title (e.g. studio link · date · count). */
@@ -144,6 +151,8 @@
     showHero = true,
     tabs = [],
     onMetadataSave,
+    onImageAssetUpload,
+    onImageAssetClear,
     sections = [],
     heroMeta,
     heroBadges,
@@ -162,6 +171,12 @@
   let pendingTabId = $state<string | null>(null);
   let savingEdit = $state(false);
   let editError = $state<string | null>(null);
+  let assetError = $state<string | null>(null);
+  let assetBusyRole = $state<EntityFileRoleCode | null>(null);
+  let posterInput: HTMLInputElement | null = $state(null);
+  let headerInput: HTMLInputElement | null = $state(null);
+  let localPosterAsset = $state<{ src: string | null; empty: boolean } | null>(null);
+  let localHeaderAsset = $state<{ src: string | null; empty: boolean } | null>(null);
   let initialDraft = $state<EntityDetailEditDraft | null>(null);
   let editDraft = $state<EntityDetailEditDraft>({
     title: "",
@@ -213,15 +228,29 @@
 
   type HeroMode = "image" | "poster-blur" | "gradient";
 
+  const effectiveShowHero = $derived(showHero || isEditingActiveTab);
+  const displayHero = $derived.by(() => {
+    if (localHeaderAsset) return localHeaderAsset.empty || !localHeaderAsset.src ? null : { src: localHeaderAsset.src, alt: "Header" };
+    return card.hero;
+  });
+  const displayPoster = $derived.by(() => {
+    if (localPosterAsset) return localPosterAsset.empty || !localPosterAsset.src ? null : { src: localPosterAsset.src, alt: "Poster" };
+    return card.poster;
+  });
   const heroMode = $derived.by((): HeroMode => {
-    if (!showHero) return "gradient";
-    if (hasHero(card)) return "image";
-    if (hasPoster(card)) return "poster-blur";
+    if (!effectiveShowHero) return "gradient";
+    if (displayHero) return "image";
+    if (displayPoster) return "poster-blur";
     return "gradient";
   });
 
-  const posterCard = $derived(card.posterCard ?? null);
-  const posterVisible = $derived(posterSize !== "none" && posterCard !== null);
+  const effectivePosterSize = $derived(isEditingActiveTab && posterSize === "none" ? "medium" : posterSize);
+  const posterCard = $derived.by(() => posterCardForDisplay());
+  const posterVisible = $derived(effectivePosterSize !== "none" && (posterCard !== null || isEditingActiveTab));
+  const posterHasAsset = $derived(Boolean(displayPoster));
+  const headerHasAsset = $derived(Boolean(displayHero));
+  const imagesCapability = $derived(getImagesCapability(card.entity.capabilities));
+  const canManageImages = $derived(Boolean(onMetadataSave || onImageAssetUpload || onImageAssetClear));
 
   const renderedDescription = $derived(renderEntityDescriptionMarkdown(card.description));
   const hasStandaloneBodyContent = $derived(Boolean(renderedDescription) || card.tags.length > 0);
@@ -437,6 +466,7 @@
     editDraft = { ...nextDraft };
     editingTabId = tab?.id ?? "__standalone__";
     editError = null;
+    assetError = null;
   }
 
   function cancelEdit() {
@@ -630,6 +660,98 @@
     }
   }
 
+  function posterCardForDisplay(): EntityThumbnailCard | null {
+    const poster = displayPoster;
+    if (poster) {
+      return {
+        ...(card.posterCard ?? entityReferenceToThumbnailCard(card.entity)),
+        cover: { src: poster.src, alt: poster.alt, role: ENTITY_FILE_ROLE.poster },
+        hover: { kind: "none" },
+      };
+    }
+
+    if (!isEditingActiveTab) return card.posterCard ?? null;
+    return {
+      ...entityReferenceToThumbnailCard(card.entity, { cover: null }),
+      hover: { kind: "none" },
+    };
+  }
+
+  function roleSupported(role: EntityFileRoleCode): boolean {
+    const supportedKinds = imagesCapability?.supportedKinds ?? [];
+    return supportedKinds.length === 0 || supportedKinds.includes(role);
+  }
+
+  function inputForRole(role: EntityFileRoleCode): HTMLInputElement | null {
+    return role === ENTITY_FILE_ROLE.backdrop ? headerInput : posterInput;
+  }
+
+  function openAssetPicker(role: EntityFileRoleCode) {
+    inputForRole(role)?.click();
+  }
+
+  async function handleAssetInput(role: EntityFileRoleCode, event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = "";
+    if (file) await uploadAsset(role, file);
+  }
+
+  async function handleAssetDrop(role: EntityFileRoleCode, event: DragEvent) {
+    event.preventDefault();
+    const file = event.dataTransfer?.files?.[0];
+    if (file) await uploadAsset(role, file);
+  }
+
+  function preventAssetDrag(event: DragEvent) {
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+  }
+
+  async function uploadAsset(role: EntityFileRoleCode, file: File) {
+    if (assetBusyRole) return;
+    assetBusyRole = role;
+    assetError = null;
+    try {
+      await (onImageAssetUpload
+        ? onImageAssetUpload(role, file)
+        : uploadEntityImageAsset(card.entity.id, role, file));
+      applyImageAssetResult(role, URL.createObjectURL(file));
+    } catch (err) {
+      assetError = err instanceof Error ? err.message : String(err);
+    } finally {
+      assetBusyRole = null;
+    }
+  }
+
+  async function clearAsset(role: EntityFileRoleCode) {
+    if (assetBusyRole) return;
+    assetBusyRole = role;
+    assetError = null;
+    try {
+      await (onImageAssetClear
+        ? onImageAssetClear(role)
+        : clearEntityImageAsset(card.entity.id, role));
+      applyImageAssetResult(role, null);
+    } catch (err) {
+      assetError = err instanceof Error ? err.message : String(err);
+    } finally {
+      assetBusyRole = null;
+    }
+  }
+
+  function applyImageAssetResult(role: EntityFileRoleCode, nextAsset: string | null) {
+    if (role === ENTITY_FILE_ROLE.backdrop) {
+      localHeaderAsset = nextAsset ? { src: nextAsset, empty: false } : { src: null, empty: true };
+    } else {
+      localPosterAsset = nextAsset ? { src: nextAsset, empty: false } : { src: null, empty: true };
+    }
+  }
+
+  function assetBusy(role: EntityFileRoleCode): boolean {
+    return assetBusyRole === role;
+  }
+
   function creditToThumbnailCard(credit: EntityDetailCredit) {
     return entityReferenceToThumbnailCard({
       id: credit.id,
@@ -669,6 +791,35 @@
     }));
   }
 </script>
+
+{#snippet imageAssetActions(role: EntityFileRoleCode, label: "poster" | "header", hasAsset: boolean)}
+  {#if isEditingActiveTab && canManageImages && roleSupported(role)}
+    <div class="image-asset-actions">
+      <button
+        type="button"
+        class="image-asset-btn"
+        onclick={() => openAssetPicker(role)}
+        disabled={assetBusy(role)}
+        aria-label={`Upload ${label}`}
+      >
+        <Upload class="h-3.5 w-3.5" />
+        <span>{assetBusy(role) ? "Uploading" : "Upload"}</span>
+      </button>
+      {#if hasAsset}
+        <button
+          type="button"
+          class="image-asset-btn"
+          onclick={() => void clearAsset(role)}
+          disabled={assetBusy(role)}
+          aria-label={`Clear ${label}`}
+        >
+          <Trash2 class="h-3.5 w-3.5" />
+          <span>Clear</span>
+        </button>
+      {/if}
+    </div>
+  {/if}
+{/snippet}
 
 {#snippet descriptionContent()}
   {#if renderedDescription}
@@ -1229,13 +1380,16 @@
         </button>
       </div>
     </div>
-    {#if editValidationErrors.length > 0 || editError}
+    {#if editValidationErrors.length > 0 || editError || assetError}
       <div class="edit-errors" aria-live="polite">
         {#each editValidationErrors as error (error)}
           <p>{error}</p>
         {/each}
         {#if editError}
           <p>{editError}</p>
+        {/if}
+        {#if assetError}
+          <p>{assetError}</p>
         {/if}
       </div>
     {/if}
@@ -1272,15 +1426,55 @@
   {/if}
 {/snippet}
 
-<article class="entity-detail" data-poster-size={posterSize} data-hero-mode={heroMode}>
+<input
+  bind:this={posterInput}
+  class="asset-file-input"
+  type="file"
+  accept="image/*"
+  onchange={(event) => void handleAssetInput(ENTITY_FILE_ROLE.poster, event)}
+/>
+<input
+  bind:this={headerInput}
+  class="asset-file-input"
+  type="file"
+  accept="image/*"
+  onchange={(event) => void handleAssetInput(ENTITY_FILE_ROLE.backdrop, event)}
+/>
+
+<article class="entity-detail" data-poster-size={effectivePosterSize} data-hero-mode={heroMode}>
   <!-- Hero -->
-  <div class="hero" data-hero-mode={heroMode}>
+  <div
+    class="hero"
+    role="group"
+    aria-label="Header artwork"
+    data-hero-mode={heroMode}
+    data-asset-dropzone={isEditingActiveTab && roleSupported(ENTITY_FILE_ROLE.backdrop) ? ENTITY_FILE_ROLE.backdrop : undefined}
+    ondrop={(event) => void handleAssetDrop(ENTITY_FILE_ROLE.backdrop, event)}
+    ondragover={preventAssetDrag}
+  >
 
     {#snippet heroContent()}
       <div class="hero-content">
         {#if posterVisible}
-          <div class="poster-frame">
-            <EntityThumbnail card={posterCard!} linkable={false} mediaOnly={true} />
+          <div
+            class="poster-frame"
+            class:is-empty={!posterHasAsset}
+            role="group"
+            aria-label="Poster artwork"
+            data-asset-dropzone={isEditingActiveTab && roleSupported(ENTITY_FILE_ROLE.poster) ? ENTITY_FILE_ROLE.poster : undefined}
+            ondrop={(event) => void handleAssetDrop(ENTITY_FILE_ROLE.poster, event)}
+            ondragover={preventAssetDrag}
+          >
+            {#if posterCard}
+              <EntityThumbnail card={posterCard} linkable={false} mediaOnly={true} />
+            {/if}
+            {#if isEditingActiveTab && !posterHasAsset}
+              <div class="asset-empty-label">
+                <ImageIcon class="h-4 w-4" />
+                <span>Poster empty</span>
+              </div>
+            {/if}
+            {@render imageAssetActions(ENTITY_FILE_ROLE.poster, "poster", posterHasAsset)}
           </div>
         {/if}
 
@@ -1391,15 +1585,27 @@
       </div>
     {/snippet}
 
+    {#if isEditingActiveTab}
+      <div class="header-asset-panel" class:is-empty={!headerHasAsset}>
+        {#if !headerHasAsset}
+          <div class="asset-empty-label">
+            <ImageIcon class="h-4 w-4" />
+            <span>Header empty</span>
+          </div>
+        {/if}
+        {@render imageAssetActions(ENTITY_FILE_ROLE.backdrop, "header", headerHasAsset)}
+      </div>
+    {/if}
+
     {#if heroMode === "image"}
       <!-- Sharp banner, mask fades bottom 10% -->
       <div class="hero-banner">
-        <img src={card.hero!.src} alt="Banner" />
+        <img src={displayHero!.src} alt="Banner" />
       </div>
       <!-- Lower zone: reflection bg + content on top -->
       <div class="hero-lower">
         <div class="hero-reflection">
-          <img src={card.hero!.src} alt="" aria-hidden="true" />
+          <img src={displayHero!.src} alt="" aria-hidden="true" />
         </div>
         <div class="hero-blur-overlay"></div>
         {@render heroContent()}
@@ -1407,7 +1613,9 @@
     {:else if heroMode === "poster-blur"}
       <div class="hero-backdrop poster-mode">
         <div class="hero-backdrop-thumbnail">
-          <EntityThumbnail card={posterCard!} linkable={false} mediaOnly={true} interactive={false} />
+          {#if posterCard}
+            <EntityThumbnail card={posterCard} linkable={false} mediaOnly={true} interactive={false} />
+          {/if}
         </div>
         <div class="hero-backdrop-blur"></div>
       </div>
@@ -1464,13 +1672,16 @@
                 </button>
               </div>
             </div>
-            {#if isEditingActiveTab && (editValidationErrors.length > 0 || editError)}
+            {#if isEditingActiveTab && (editValidationErrors.length > 0 || editError || assetError)}
               <div class="edit-errors" aria-live="polite">
                 {#each editValidationErrors as error (error)}
                   <p>{error}</p>
                 {/each}
                 {#if editError}
                   <p>{editError}</p>
+                {/if}
+                {#if assetError}
+                  <p>{assetError}</p>
                 {/if}
               </div>
             {/if}
@@ -1533,6 +1744,14 @@
   }
 
   /* ── Hero ────────────────────────────────────────────────── */
+
+  .asset-file-input {
+    position: fixed;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  }
 
   .hero {
     position: relative;
@@ -1662,14 +1881,22 @@
   /* ── Poster / cover ────────────────────────────────────── */
 
   .poster-frame {
+    position: relative;
     flex-shrink: 0;
     width: var(--poster-width, 7rem);
+    min-height: calc(var(--poster-width, 7rem) * 1.45);
     border-radius: var(--radius-sm, 6px);
     background: #050505;
     box-shadow:
       0 8px 32px rgba(0, 0, 0, 0.6),
       0 0 0 1px rgba(196, 154, 90, 0.2);
     overflow: hidden;
+  }
+
+  .poster-frame.is-empty {
+    display: grid;
+    place-items: center;
+    background-image: linear-gradient(135deg, rgba(196, 154, 90, 0.12), rgba(255, 255, 255, 0.04));
   }
 
   [data-poster-size="small"] .poster-frame { --poster-width: 5rem; }
@@ -1690,6 +1917,101 @@
 
   .poster-frame :global(.media) {
     border-bottom: 0;
+  }
+
+  .header-asset-panel {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    pointer-events: none;
+  }
+
+  .header-asset-panel.is-empty {
+    align-items: center;
+    justify-content: center;
+  }
+
+  .asset-empty-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.4rem 0.55rem;
+    border: 1px solid color-mix(in srgb, var(--detail-accent) 28%, var(--detail-border));
+    border-radius: var(--radius-xs, 4px);
+    background: rgba(8, 10, 15, 0.72);
+    color: var(--detail-text-muted);
+    font-family: var(--font-mono, "JetBrains Mono", monospace);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    box-shadow: 0 0 16px rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+
+  .poster-frame .asset-empty-label {
+    position: absolute;
+    inset: auto 0.45rem 3.2rem;
+    justify-content: center;
+  }
+
+  .image-asset-actions {
+    display: flex;
+    gap: 0.35rem;
+    pointer-events: auto;
+  }
+
+  .poster-frame .image-asset-actions {
+    position: absolute;
+    right: 0.4rem;
+    bottom: 0.4rem;
+    left: 0.4rem;
+    justify-content: center;
+  }
+
+  .image-asset-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3rem;
+    min-height: 1.8rem;
+    padding: 0.3rem 0.5rem;
+    border: 1px solid color-mix(in srgb, var(--detail-accent) 38%, var(--detail-border));
+    border-radius: var(--radius-xs, 4px);
+    background: rgba(8, 10, 15, 0.78);
+    color: var(--detail-text-secondary);
+    font-family: var(--font-mono, "JetBrains Mono", monospace);
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    cursor: pointer;
+    box-shadow: 0 0 14px rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+
+  .image-asset-btn:hover:not(:disabled) {
+    color: var(--detail-accent);
+    border-color: color-mix(in srgb, var(--detail-accent) 62%, var(--detail-border));
+    box-shadow: 0 0 16px var(--detail-accent-glow);
+  }
+
+  .image-asset-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  [data-asset-dropzone="poster"],
+  [data-asset-dropzone="backdrop"] {
+    outline: 1px dashed color-mix(in srgb, var(--detail-accent) 42%, transparent);
+    outline-offset: -0.35rem;
   }
 
   .hero-text {

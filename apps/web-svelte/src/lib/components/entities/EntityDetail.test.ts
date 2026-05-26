@@ -76,6 +76,27 @@ describe("EntityDetail", () => {
     expect(source).toContain("overflow-wrap: anywhere;");
   });
 
+  it("owns shared hero badge styling for detail route chips", () => {
+    const detailSource = readFileSync("src/lib/components/entities/EntityDetail.svelte", "utf8");
+    const routeSources = [
+      "src/routes/galleries/[id]/+page.svelte",
+      "src/routes/collections/[id]/+page.svelte",
+      "src/routes/series/[id]/seasons/[seasonId]/+page.svelte",
+      "src/routes/books/[id]/+page.svelte",
+    ].map((path) => readFileSync(path, "utf8"));
+
+    expect(detailSource).toContain(":global(.hero-badge)");
+    expect(detailSource).toContain("var(--color-overlay-glass-accent)");
+    expect(detailSource).toContain("var(--shadow-glow-accent)");
+
+    for (const source of routeSources) {
+      expect(source).toContain('class="hero-badge"');
+      expect(source).not.toContain('class="type-badge"');
+      expect(source).not.toContain('class="position-badge"');
+      expect(source).not.toContain('class="progress-badge"');
+    }
+  });
+
   it("renders detail poster artwork through the shared thumbnail component", () => {
     const card = buildCard();
     card.poster = { src: "/covers/book.jpg", alt: "Cover" };
@@ -106,6 +127,29 @@ describe("EntityDetail", () => {
 
     expect(container.querySelector(".poster-frame .entity-thumbnail")).toBeInTheDocument();
     expect(container.querySelector(".poster-frame img")).toHaveAttribute("src", "/covers/book.jpg");
+  });
+
+  it("shows editable poster and header drop zones when artwork is missing", async () => {
+    const onMetadataSave = vi.fn().mockResolvedValue(undefined);
+    const onImageAssetUpload = vi.fn().mockResolvedValue(undefined);
+    const { container, unmount } = render(EntityDetail, {
+      props: {
+        card: buildCard(),
+        onMetadataSave,
+        onImageAssetUpload,
+      },
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Edit details" }));
+
+    expect(screen.getByText("Poster empty")).toBeInTheDocument();
+    expect(screen.getByText("Header empty")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Upload poster" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Upload header" })).toBeInTheDocument();
+    expect(container.querySelector('[data-asset-dropzone="poster"]')).toBeInTheDocument();
+    expect(container.querySelector('[data-asset-dropzone="backdrop"]')).toBeInTheDocument();
+
+    unmount();
   });
 
   it("renders caller-provided detail tabs with section mappings and custom content", async () => {
