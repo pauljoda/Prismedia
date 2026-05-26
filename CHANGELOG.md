@@ -93,6 +93,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Restored richer running and queued job rows with job-kind grouping, target details, and live status messages.
 - Fixed generated thumbnail and preview asset serving on fresh startup by creating and mounting the media cache directory before assets are requested.
 - Fixed Prismedia logo PNG transparency so the app brand mark no longer carries a black square background.
+- Fixed the iOS home-screen install icon so Safari previews it on Prismedia's dark app background instead of a white square.
 - Reduced thumbnail grid scroll jank by deferring hover previews during scroll and avoiding unnecessary player/lightbox loading on non-lightbox library pages.
 - Fixed embedded episode grids so small season pages no longer use sticky grid chrome or viewport-edge thumbnail unloading.
 - Kept lightweight grids lean by hiding pagination chrome below the paging threshold and making grid pagination non-sticky.
