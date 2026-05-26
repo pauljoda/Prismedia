@@ -359,7 +359,7 @@
 ></audio>
 
 <div class={cn(
-  "fixed bottom-16 right-3 z-[55] w-[min(24rem,calc(100vw-1.5rem))] overflow-hidden rounded-xl border border-border-subtle bg-surface-1/90 shadow-xl shadow-black/40 backdrop-blur-xl md:bottom-4 md:right-4",
+  "fixed bottom-16 left-3 right-3 z-[55] mx-auto max-w-3xl overflow-hidden rounded-xl border border-border-subtle bg-surface-1/90 shadow-xl shadow-black/40 backdrop-blur-xl md:bottom-4 md:left-64 md:right-4",
   className,
 )}>
   <!-- Now-playing + progress -->
