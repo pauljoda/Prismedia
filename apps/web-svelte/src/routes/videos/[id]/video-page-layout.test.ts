@@ -15,9 +15,9 @@ describe("/videos/[id] detail layout", () => {
   it("keeps outer padding owned by the shared layout", () => {
     const layoutSource = readLocalSource("../../+layout.svelte");
 
-    expect(layoutSource).toContain('class={cn("flex-1", usesFlushContentChrome ? "p-0" : "p-5")}');
+    expect(layoutSource).toContain('class="flex-1 p-5"');
     expect(layoutSource).not.toContain("isVideoDetailPage");
-    expect(layoutSource).toContain('page.route.id === "/galleries/[id]"');
+    expect(layoutSource).not.toContain("usesFlushContentChrome");
   });
 
   it("does not add component padding or width constraints around the player", () => {

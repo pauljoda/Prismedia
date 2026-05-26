@@ -2,7 +2,6 @@
   import "../app.css";
 
   import { afterNavigate } from "$app/navigation";
-  import { page } from "$app/state";
   import { onMount, tick } from "svelte";
   import type { Snapshot } from "@sveltejs/kit";
   import { cn } from "@prismedia/ui-svelte";
@@ -53,8 +52,6 @@
   provideSearch();
   const playlist = providePlaylist();
   let mainScroller = $state<HTMLElement | null>(null);
-  const usesFlushContentChrome = $derived(page.route.id === "/galleries/[id]");
-
   $effect(() => {
     void playlist.hydrate();
   });
@@ -137,7 +134,7 @@
     style:transition-timing-function="var(--ease-mechanical)"
   >
     <CanvasHeader />
-    <div class={cn("flex-1", usesFlushContentChrome ? "p-0" : "p-5")}>
+    <div class="flex-1 p-5">
       {@render pageContent()}
     </div>
   </main>

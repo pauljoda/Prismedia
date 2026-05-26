@@ -373,9 +373,9 @@
   .detail-page {
     display: grid;
     gap: 1.25rem;
-    padding: clamp(1rem, 3vw, 2rem);
-    max-width: 72rem;
-    margin: 0 auto;
+    padding: 0;
+    max-width: none;
+    margin: 0;
   }
 
   .loading-shell {
