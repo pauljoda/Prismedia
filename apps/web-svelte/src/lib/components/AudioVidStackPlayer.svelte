@@ -1,6 +1,6 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import {
-    Music,
     Pause,
     Play,
     Repeat,
@@ -15,6 +15,9 @@
   import { cn } from "@prismedia/ui-svelte";
   import { formatDuration, type AudioTrackListItemDto } from "@prismedia/contracts";
   import { apiAssetUrl, assetUrl } from "$lib/api/orval-fetch";
+  import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
+  import { ENTITY_KIND } from "$lib/entities/entity-codes";
+  import { entityReferenceToThumbnailCard } from "$lib/entities/entity-thumbnail";
   import AudioWaveformFilmstrip from "./AudioWaveformFilmstrip.svelte";
 
   type RepeatMode = "off" | "all" | "one";
@@ -65,6 +68,31 @@
   const progress = $derived(
     duration > 0 ? Math.max(0, Math.min(100, (currentTime / duration) * 100)) : 0,
   );
+  const playerThumbnailCard = $derived.by(() => {
+    const source = activeTrack?.libraryId
+      ? {
+          id: activeTrack.libraryId,
+          kind: ENTITY_KIND.audioLibrary,
+          title: activeTrack.embeddedAlbum ?? activeTrack.title,
+          thumbnailUrl: libraryCoverUrl ?? null,
+        }
+      : activeTrack
+        ? {
+            id: activeTrack.id,
+            kind: ENTITY_KIND.audioTrack,
+            title: activeTrack.title,
+            thumbnailUrl: libraryCoverUrl ?? null,
+          }
+        : null;
+
+    return source
+      ? entityReferenceToThumbnailCard(source, {
+          aspectRatio: "square",
+          fit: "cover",
+          hover: { kind: "none" },
+        })
+      : null;
+  });
 
   function isKeyboardShortcutSuppressed(target: EventTarget | null): boolean {
     if (!(target instanceof HTMLElement)) return false;
@@ -80,6 +108,18 @@
         console.error("Audio play failed:", error);
       });
     }
+  }
+
+  function resetPlaybackPosition(nextDuration = 0) {
+    if (audioEl) {
+      try {
+        audioEl.currentTime = 0;
+      } catch (error) {
+        console.warn("Failed to reset audio position:", error);
+      }
+    }
+    currentTime = 0;
+    duration = nextDuration;
   }
 
   function handleSeek(time: number) {
@@ -102,9 +142,11 @@
     if (tracks.length === 0) return;
     if (shuffle) {
       const randomTrack = tracks[Math.floor(Math.random() * tracks.length)];
+      resetPlaybackPosition(randomTrack?.duration ?? 0);
       onTrackChange(randomTrack!.id);
       return;
     }
+    resetPlaybackPosition(tracks[0]?.duration ?? 0);
     onTrackChange(tracks[0]!.id);
   }
 
@@ -127,33 +169,39 @@
       const otherTracks = tracks.filter((t) => t.id !== activeTrackId);
       if (otherTracks.length > 0) {
         const randomTrack = otherTracks[Math.floor(Math.random() * otherTracks.length)];
+        resetPlaybackPosition(randomTrack?.duration ?? 0);
         onTrackChange(randomTrack!.id);
       }
       return;
     }
     if (hasNext) {
-      onTrackChange(tracks[activeIndex + 1]!.id);
+      const nextTrack = tracks[activeIndex + 1]!;
+      resetPlaybackPosition(nextTrack.duration ?? 0);
+      onTrackChange(nextTrack.id);
       return;
     }
     if (repeat === "all") {
+      resetPlaybackPosition(tracks[0]?.duration ?? 0);
       onTrackChange(tracks[0]!.id);
     }
   }
 
   function handlePrev() {
     if (audioEl && audioEl.currentTime > 3) {
-      audioEl.currentTime = 0;
+      resetPlaybackPosition(duration);
       return;
     }
     if (hasPrev) {
-      onTrackChange(tracks[activeIndex - 1]!.id);
+      const prevTrack = tracks[activeIndex - 1]!;
+      resetPlaybackPosition(prevTrack.duration ?? 0);
+      onTrackChange(prevTrack.id);
     }
   }
 
   function handleTrackEnd() {
     if (repeat === "one") {
       if (audioEl) {
-        audioEl.currentTime = 0;
+        resetPlaybackPosition(duration);
         requestPlay();
       }
       return;
@@ -163,19 +211,24 @@
       const otherTracks = tracks.filter((t) => t.id !== activeTrackId);
       if (otherTracks.length > 0) {
         const randomTrack = otherTracks[Math.floor(Math.random() * otherTracks.length)];
+        resetPlaybackPosition(randomTrack?.duration ?? 0);
         onTrackChange(randomTrack!.id);
       } else if (repeat === "all" && tracks.length > 0) {
+        resetPlaybackPosition(tracks[0]?.duration ?? 0);
         onTrackChange(tracks[0]!.id);
       }
       return;
     }
 
     if (activeIndex >= 0 && activeIndex < tracks.length - 1) {
-      onTrackChange(tracks[activeIndex + 1]!.id);
+      const nextTrack = tracks[activeIndex + 1]!;
+      resetPlaybackPosition(nextTrack.duration ?? 0);
+      onTrackChange(nextTrack.id);
       return;
     }
 
     if (repeat === "all" && tracks.length > 0) {
+      resetPlaybackPosition(tracks[0]?.duration ?? 0);
       onTrackChange(tracks[0]!.id);
       return;
     }
@@ -221,8 +274,8 @@
     if (!nextSrc) return;
 
     audioEl.src = nextSrc;
-    currentTime = 0;
-    duration = activeTrack.duration ?? 0;
+    resetPlaybackPosition(activeTrack.duration ?? 0);
+    audioEl.load();
 
     // Call play() directly — the browser queues it until data arrives.
     // This also satisfies the user-gesture autoplay requirement since
@@ -279,10 +332,59 @@
     shuffle = true;
     const randomTrack = tracks[Math.floor(Math.random() * tracks.length)];
     if (randomTrack?.id === activeTrackId) {
+      resetPlaybackPosition(randomTrack.duration ?? 0);
       requestPlay();
     } else if (randomTrack) {
+      resetPlaybackPosition(randomTrack.duration ?? 0);
       onTrackChange(randomTrack.id);
     }
+  });
+
+  onMount(() => {
+    const audio = audioEl;
+    if (!audio) return;
+
+    const handleTimeUpdate = () => {
+      if (!timelineDraggingRef) currentTime = audio.currentTime;
+    };
+    const handleDurationChange = () => {
+      if (Number.isFinite(audio.duration)) duration = audio.duration;
+    };
+    const handlePlay = () => {
+      playing = true;
+      onPlayingChange?.(true);
+    };
+    const handlePause = () => {
+      playing = false;
+      onPlayingChange?.(false);
+    };
+    const handleEnded = () => {
+      if (activeTrackId) recordTrackPlay(activeTrackId);
+      handleTrackEnd();
+    };
+    const handleError = () => {
+      playing = false;
+      onPlayingChange?.(false);
+      console.error("Audio element error:", audio.error);
+    };
+
+    audio.addEventListener("timeupdate", handleTimeUpdate);
+    audio.addEventListener("loadedmetadata", handleDurationChange);
+    audio.addEventListener("durationchange", handleDurationChange);
+    audio.addEventListener("play", handlePlay);
+    audio.addEventListener("pause", handlePause);
+    audio.addEventListener("ended", handleEnded);
+    audio.addEventListener("error", handleError);
+
+    return () => {
+      audio.removeEventListener("timeupdate", handleTimeUpdate);
+      audio.removeEventListener("loadedmetadata", handleDurationChange);
+      audio.removeEventListener("durationchange", handleDurationChange);
+      audio.removeEventListener("play", handlePlay);
+      audio.removeEventListener("pause", handlePause);
+      audio.removeEventListener("ended", handleEnded);
+      audio.removeEventListener("error", handleError);
+    };
   });
 
   function handleKeydown(event: KeyboardEvent) {
@@ -335,28 +437,7 @@
 <svelte:window onkeydown={handleKeydown} />
 
 <!-- Hidden audio element -->
-<audio
-  bind:this={audioEl}
-  preload="auto"
-  ontimeupdate={() => {
-    if (audioEl && !timelineDraggingRef) currentTime = audioEl.currentTime;
-  }}
-  ondurationchange={() => {
-    if (audioEl && Number.isFinite(audioEl.duration)) duration = audioEl.duration;
-  }}
-  onplay={() => {
-    playing = true;
-    onPlayingChange?.(true);
-  }}
-  onpause={() => {
-    playing = false;
-    onPlayingChange?.(false);
-  }}
-  onended={() => {
-    if (activeTrackId) recordTrackPlay(activeTrackId);
-    handleTrackEnd();
-  }}
-></audio>
+<audio bind:this={audioEl} preload="auto"></audio>
 
 <div class={cn(
   "fixed bottom-16 left-3 right-3 z-[55] mx-auto max-w-3xl overflow-hidden rounded-xl border border-border-subtle bg-surface-1/90 shadow-xl shadow-black/40 backdrop-blur-xl md:bottom-4 md:left-64 md:right-4",
@@ -364,16 +445,9 @@
 )}>
   <!-- Now-playing + progress -->
   <div class="flex items-center gap-2.5 px-3 pt-2.5 pb-1">
-    <div class="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-md bg-surface-3">
-      <Music class={cn("h-3.5 w-3.5", activeTrack ? "text-accent-500" : "text-text-disabled")} />
-      {#if libraryCoverUrl}
-        <img
-          src={libraryCoverUrl}
-          alt=""
-          class="absolute inset-0 h-full w-full object-cover"
-          decoding="async"
-          onerror={(event) => ((event.currentTarget as HTMLImageElement).style.display = "none")}
-        />
+    <div class="player-thumbnail relative h-9 w-9 shrink-0 overflow-hidden rounded-md bg-surface-3">
+      {#if playerThumbnailCard}
+        <EntityThumbnail card={playerThumbnailCard} linkable={false} mediaOnly={true} interactive={false} />
       {/if}
     </div>
 
@@ -537,3 +611,20 @@
     <div class="w-10" aria-hidden="true"></div>
   </div>
 </div>
+
+<style>
+  .player-thumbnail :global(.entity-thumbnail) {
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    border-radius: 6px;
+    box-shadow: none;
+  }
+
+  .player-thumbnail :global(.media) {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    border-radius: 6px;
+  }
+</style>

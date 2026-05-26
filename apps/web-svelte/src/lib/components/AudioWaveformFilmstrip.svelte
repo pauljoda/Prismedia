@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { ChevronLeft, ChevronRight } from "@lucide/svelte";
+  import { normalizeWaveformSample, waveformDisplayScale } from "./audio-waveform";
 
   interface Props {
     peaks: number[];
@@ -59,11 +60,11 @@
 
     const barWidth = Math.max(1, width / count);
     const centerY = height / 2;
-    const maxAmplitude = waveform.reduce((max, value) => Math.max(max, Math.abs(value)), 1);
+    const displayScale = waveformDisplayScale(waveform);
 
     for (let i = 0; i < count; i += 1) {
-      const min = waveform[i * 2]! / maxAmplitude;
-      const max = waveform[i * 2 + 1]! / maxAmplitude;
+      const min = normalizeWaveformSample(waveform[i * 2]!, displayScale);
+      const max = normalizeWaveformSample(waveform[i * 2 + 1]!, displayScale);
       const x = (i / count) * width;
       const barTop = centerY - max * (height / 2) * 0.88;
       const barBottom = centerY - min * (height / 2) * 0.88;

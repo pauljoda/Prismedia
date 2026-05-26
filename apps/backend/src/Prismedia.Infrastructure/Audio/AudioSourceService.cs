@@ -9,6 +9,16 @@ namespace Prismedia.Infrastructure.Audio;
 /// EF-backed implementation that resolves source audio files from the shared file capability table.
 /// </summary>
 public sealed class AudioSourceService : IAudioSourceService {
+    private static readonly HashSet<string> BrowserNativeCodecs = new(StringComparer.OrdinalIgnoreCase) {
+        "aac",
+        "flac",
+        "mp3",
+        "opus",
+        "pcm_s16le",
+        "pcm_s24le",
+        "vorbis"
+    };
+
     private readonly PrismediaDbContext _db;
 
     /// <summary>
@@ -46,8 +56,13 @@ public sealed class AudioSourceService : IAudioSourceService {
             id,
             source.File.Path,
             source.File.MimeType ?? MimeForExtension(extension),
-            source.Technical?.DurationSeconds);
+            source.Technical?.DurationSeconds,
+            source.Technical?.Codec,
+            IsDirectPlayable(source.Technical?.Codec));
     }
+
+    private static bool IsDirectPlayable(string? codec) =>
+        string.IsNullOrWhiteSpace(codec) || BrowserNativeCodecs.Contains(codec.Trim());
 
     private static string MimeForExtension(string extension) {
         return extension.ToLowerInvariant() switch {
