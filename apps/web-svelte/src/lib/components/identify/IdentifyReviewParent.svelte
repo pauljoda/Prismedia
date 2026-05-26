@@ -2,7 +2,6 @@
   import {
     Check,
     ChevronDown,
-    ChevronRight,
     ChevronUp,
     Images,
     Info,
@@ -29,17 +28,21 @@
     relationshipProposals,
     relationshipTitlesForDetail,
     reviewDiffFieldKeys,
-    reviewableImages,
     reviewFieldLabels,
-    scopedCreditForProposal,
   } from "$lib/components/identify-review";
-  import type {
-    CreditPatch,
-    EntityMetadataProposal,
-    ImageCandidate,
-  } from "$lib/api/identify";
+  import {
+    proposalImageUrl,
+    selectedProposalImageUrl,
+    proposalTitle,
+    relationshipCard,
+    creditCard,
+    childCard,
+    childStatusCustom,
+    childMeta,
+    tagRelationshipForTitle,
+  } from "./identify-review-helpers";
+  import type { EntityMetadataProposal } from "$lib/api/identify";
   import type { EntityCard, EntityDetailCard } from "$lib/api/prismedia";
-  import type { EntityThumbnailCard, EntityThumbnailMetaIcon } from "$lib/entities/entity-thumbnail";
   import { useIdentifyStore } from "./identify-store.svelte";
 
   interface Props {
@@ -62,15 +65,11 @@
 
   const children = $derived(structuralChildProposals(proposal));
   const relationships = $derived(relationshipProposals(proposal));
-  const credits = $derived(
-    relationships.filter((r) => r.targetKind === "person"),
-  );
-  const nonCreditRelationships = $derived(
-    relationships.filter((r) => r.targetKind !== "person"),
-  );
+  const credits = $derived(relationships.filter((r) => r.targetKind === "person"));
+  const nonCreditRelationships = $derived(relationships.filter((r) => r.targetKind !== "person"));
   const tags = $derived(proposal.patch?.tags ?? []);
-  const existingTagTitles = $derived(relationshipTitles("tag"));
-  const looseTags = $derived(tags.filter((tag) => !tagRelationshipForTitle(tag)));
+  const existingTagTitles = $derived(relationshipTitlesForDetail(detail, "tag"));
+  const looseTags = $derived(tags.filter((tag) => !tagRelationshipForTitle(tag, relationships)));
   const imageGroups = $derived(groupReviewImages(proposal));
   const selectedTagCount = $derived(Object.values(selectedTags).filter(Boolean).length);
   const selectedRelationshipCount = $derived(
@@ -83,7 +82,11 @@
   const queueIndex = $derived(store.queue.findIndex((item) => item.entityId === entity.id));
   const prevQueueNavItem = $derived(queueIndex > 0 ? store.queue[queueIndex - 1] : null);
   const nextQueueNavItem = $derived(queueIndex >= 0 && queueIndex < store.queue.length - 1 ? store.queue[queueIndex + 1] : null);
-  const contextPosterUrl = $derived(selectedProposalImageUrl(proposal, ["poster", "thumbnail", "cover"]) ?? entity.coverUrl ?? proposalImageUrl(["poster", "thumbnail", "cover"]));
+  const contextPosterUrl = $derived(
+    selectedProposalImageUrl(proposal, ["poster", "thumbnail", "cover"], selectedImages, proposal.proposalId, store)
+    ?? entity.coverUrl
+    ?? proposalImageUrl(proposal, ["poster", "thumbnail", "cover"]),
+  );
 
   $effect(() => {
     if (reviewStateProposalId === proposal.proposalId) return;
@@ -94,147 +97,11 @@
     selectedImages = store.getReviewImageSelections(proposal.proposalId) ??
       defaultImageSelectionForReview(proposal);
     selectedTags = store.getReviewTagSelections(proposal.proposalId) ??
-      defaultTagSelection();
+      Object.fromEntries((proposal.patch?.tags ?? []).map((tag) => [tag, true]));
     store.setReviewFieldSelections(proposal.proposalId, selectedFields);
     store.setReviewImageSelections(proposal.proposalId, selectedImages);
     store.setReviewTagSelections(proposal.proposalId, selectedTags);
   });
-
-  function hasField(field: string): boolean {
-    return proposalHasField(proposal, field);
-  }
-
-  function fieldValue(field: string): string {
-    return proposalFieldValue(proposal, field);
-  }
-
-  function defaultTagSelection(): Record<string, boolean> {
-    return Object.fromEntries((proposal.patch?.tags ?? []).map((tag) => [tag, true]));
-  }
-
-  function currentFieldValue(field: string): string {
-    return currentFieldValueForReview(entity, detail, field);
-  }
-
-  function relationshipTitles(kind: string): string[] {
-    return relationshipTitlesForDetail(detail, kind);
-  }
-
-  function proposalImageUrl(kinds: string[]): string | null {
-    const images = reviewableImages(proposal.images ?? [], proposal.targetKind);
-    for (const kind of kinds) {
-      const image = images.find((candidate) => candidate.kind === kind);
-      if (image) return reviewImagePreviewUrl(image, proposal.targetKind);
-    }
-    return images[0] ? reviewImagePreviewUrl(images[0], proposal.targetKind) : null;
-  }
-
-  function preferredProposalImage(result: EntityMetadataProposal): ImageCandidate | null {
-    const selected = selectedProposalImage(result, ["poster", "thumbnail", "cover", "logo"]);
-    if (selected) return selected;
-    const images = reviewableImages(result.images ?? [], result.targetKind);
-    return images.find((image) => image.kind === "poster") ??
-      images.find((image) => image.kind === "thumbnail") ??
-      images[0] ??
-      null;
-  }
-
-  function preferredRelationshipImage(result: EntityMetadataProposal): ImageCandidate | null {
-    const selected = selectedProposalImage(result, ["poster", "thumbnail", "logo", "cover"]);
-    if (selected) return selected;
-    return result.images.find((image) => image.kind === "poster") ??
-      result.images.find((image) => image.kind === "thumbnail") ??
-      result.images.find((image) => image.kind === "logo") ??
-      result.images[0] ??
-      null;
-  }
-
-  function selectedProposalImage(result: EntityMetadataProposal, kinds: string[]): ImageCandidate | null {
-    const images = reviewableImages(result.images ?? [], result.targetKind);
-    const selections = result.proposalId === proposal.proposalId
-      ? selectedImages
-      : store.getReviewImageSelections(result.proposalId);
-    if (!selections) return null;
-
-    for (const kind of kinds) {
-      const url = selections[kind];
-      if (!url) continue;
-      const image = images.find((candidate) => candidate.kind === kind && candidate.url === url);
-      if (image) return image;
-    }
-
-    return null;
-  }
-
-  function selectedProposalImageUrl(result: EntityMetadataProposal, kinds: string[]): string | null {
-    const selected = selectedProposalImage(result, kinds);
-    return selected ? reviewImagePreviewUrl(selected, result.targetKind) : null;
-  }
-
-  function roleLabel(credit: CreditPatch | null | undefined): string {
-    const role = credit?.role?.trim();
-    if (!role) return "Cast";
-    return role.replaceAll("-", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
-  }
-
-  function proposalTitle(result: EntityMetadataProposal): string {
-    return result.patch?.title?.trim() || result.targetKind;
-  }
-
-  function relationshipKindLabel(kind: string): string {
-    return kind.replaceAll("-", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
-  }
-
-  function relationshipIcon(kind: string): EntityThumbnailMetaIcon {
-    if (kind === "studio") return "studio";
-    if (kind === "tag") return "tag";
-    if (kind === "person") return "person";
-    return "collection";
-  }
-
-  function relationshipStatusLabel(result: EntityMetadataProposal): string {
-    if (result.targetEntityId) return "Merge";
-    return isNewRelationshipTitle(proposalTitle(result), relationshipTitles(result.targetKind)) ? "New" : "Merge";
-  }
-
-  function proposalStatusCustom(result: EntityMetadataProposal): EntityThumbnailCard["custom"] {
-    const label = relationshipStatusLabel(result);
-    return { bottomLeft: { label, title: `${label} ${relationshipKindLabel(result.targetKind)}` } };
-  }
-
-  function childStatusCustom(child: EntityMetadataProposal): EntityThumbnailCard["custom"] {
-    const label = "Matched";
-    return { bottomLeft: { label, title: `${label} ${relationshipKindLabel(child.targetKind)}` } };
-  }
-
-  function relationshipCard(result: EntityMetadataProposal): EntityThumbnailCard {
-    const image = preferredRelationshipImage(result);
-    const title = proposalTitle(result);
-    return {
-      entity: { id: result.proposalId, kind: result.targetKind, title, parentEntityId: null, sortOrder: null, capabilities: [], childrenByKind: [], relationships: [] },
-      aspectRatio: result.targetKind === "studio" ? "wide" : result.targetKind === "person" ? { width: 4, height: 5 } : "square",
-      cover: image ? { src: reviewImagePreviewUrl(image, result.targetKind), alt: title } : null,
-      hover: { kind: "none" },
-      subtitle: relationshipKindLabel(result.targetKind),
-      custom: proposalStatusCustom(result),
-      meta: [{ icon: relationshipIcon(result.targetKind), label: relationshipKindLabel(result.targetKind) }],
-    };
-  }
-
-  function childMeta(child: EntityMetadataProposal): EntityThumbnailCard["meta"] {
-    const meta: EntityThumbnailCard["meta"] = [];
-    const episode = child.patch?.positions?.episode;
-    if (episode) meta.push({ icon: "count", label: `E${String(episode).padStart(2, "0")}` });
-    if (child.confidence) meta.push({ icon: "count", label: `${Math.round(child.confidence * 100)}%` });
-    return meta;
-  }
-
-  function tagRelationshipForTitle(tag: string): EntityMetadataProposal | null {
-    return relationships.find((relationship) =>
-      relationship.targetKind === "tag" &&
-      proposalTitle(relationship).localeCompare(tag, undefined, { sensitivity: "accent" }) === 0,
-    ) ?? null;
-  }
 
   function setRelationshipSelected(result: EntityMetadataProposal, selected: boolean) {
     store.setReviewProposalSelected(result.proposalId, selected);
@@ -244,43 +111,28 @@
   }
 
   function setTagSelected(tag: string, selected: boolean) {
-    selectedTags = {
-      ...selectedTags,
-      [tag]: selected,
-    };
+    selectedTags = { ...selectedTags, [tag]: selected };
     store.setReviewTagSelected(proposal.proposalId, tag, selected);
-    const relationship = tagRelationshipForTitle(tag);
-    if (relationship) {
-      store.setReviewProposalSelected(relationship.proposalId, selected);
-    }
+    const relationship = tagRelationshipForTitle(tag, relationships);
+    if (relationship) store.setReviewProposalSelected(relationship.proposalId, selected);
   }
 
   function setFieldSelected(field: string, selected: boolean) {
-    selectedFields = {
-      ...selectedFields,
-      [field]: selected,
-    };
+    selectedFields = { ...selectedFields, [field]: selected };
     store.setReviewFieldSelected(proposal.proposalId, field, selected);
   }
 
   function setAllFields(selected: boolean) {
     selectedFields = {
       ...selectedFields,
-      ...Object.fromEntries(DIFF_FIELD_KEYS.map((k) => [k, selected ? hasField(k) : false])),
+      ...Object.fromEntries(DIFF_FIELD_KEYS.map((k) => [k, selected ? proposalHasField(proposal, k) : false])),
     };
     store.setReviewFieldSelections(proposal.proposalId, selectedFields);
   }
 
   function setImageSelected(kind: string, url: string | null) {
-    selectedImages = {
-      ...selectedImages,
-      [kind]: url,
-    };
+    selectedImages = { ...selectedImages, [kind]: url };
     store.setReviewImageSelected(proposal.proposalId, kind, url);
-  }
-
-  function setChildSelected(child: EntityMetadataProposal, selected: boolean) {
-    store.setReviewProposalSelected(child.proposalId, selected);
   }
 
   function handleApply(navigateNext = false) {
@@ -349,7 +201,7 @@
   <IdentifyReviewSection
     panelId={`base-fields-${proposal.proposalId}`}
     title="Base fields"
-    meta={`${DIFF_FIELD_KEYS.filter((k) => selectedFields[k]).length} of ${DIFF_FIELD_KEYS.filter((k) => hasField(k)).length} accepted`}
+    meta={`${DIFF_FIELD_KEYS.filter((k) => selectedFields[k]).length} of ${DIFF_FIELD_KEYS.filter((k) => proposalHasField(proposal, k)).length} accepted`}
   >
     {#snippet icon()}
       <Info class="h-3.5 w-3.5 text-text-accent" />
@@ -380,8 +232,8 @@
     </div>
 
     {#each DIFF_FIELD_KEYS as field (field)}
-      {#if hasField(field)}
-        {@const current = currentFieldValue(field)}
+      {#if proposalHasField(proposal, field)}
+        {@const current = currentFieldValueForReview(entity, detail, field)}
         <div class="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 border-b border-border-subtle px-3.5 py-3 last:border-b-0 md:grid-cols-[auto_110px_1fr_1fr]">
           <label class="flex items-center">
             <input
@@ -398,7 +250,7 @@
             </div>
             <div class="hidden text-[0.76rem] leading-snug text-text-muted md:block">{current || "—"}</div>
             <div class="mt-1 text-[0.82rem] leading-snug text-text-primary md:mt-0">
-              {fieldValue(field)}
+              {proposalFieldValue(proposal, field)}
             </div>
           </div>
         </div>
@@ -419,19 +271,8 @@
       {/snippet}
       <div class="identify-thumbnail-grid grid grid-cols-2 gap-2 p-3.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
         {#each credits as credit (credit.proposalId)}
-          {@const scopedCredit = scopedCreditForProposal(proposal, credit)}
-          {@const image = preferredProposalImage(credit)}
-          {@const card = {
-            entity: { id: credit.proposalId, kind: "person", title: credit.patch?.title ?? "", parentEntityId: null, sortOrder: null, capabilities: [], childrenByKind: [], relationships: [] },
-            aspectRatio: { width: 4, height: 5 },
-            cover: image ? { src: reviewImagePreviewUrl(image, credit.targetKind), alt: credit.patch?.title ?? "" } : null,
-            hover: { kind: "none" } as const,
-            subtitle: scopedCredit?.character ? `as ${scopedCredit.character}` : roleLabel(scopedCredit),
-            custom: proposalStatusCustom(credit),
-            meta: [{ icon: "person" as const, label: roleLabel(scopedCredit) }],
-          }}
           <EntityThumbnail
-            {card}
+            card={creditCard(credit, proposal, relationshipTitlesForDetail(detail, credit.targetKind), selectedImages, proposal.proposalId, store)}
             linkable={false}
             onActivate={() => walkChild(credit)}
             selectable
@@ -458,7 +299,7 @@
       <div class="identify-thumbnail-grid grid grid-cols-2 gap-2 p-3.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
         {#each nonCreditRelationships as relationship (relationship.proposalId)}
           <EntityThumbnail
-            card={relationshipCard(relationship)}
+            card={relationshipCard(relationship, relationshipTitlesForDetail(detail, relationship.targetKind), selectedImages, proposal.proposalId, store)}
             linkable={false}
             onActivate={() => walkChild(relationship)}
             selectable
@@ -583,24 +424,14 @@
       {/snippet}
       <div class="identify-thumbnail-grid grid grid-cols-2 gap-2 p-3.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
         {#each children as child, i (child.proposalId)}
-          {@const childImage = preferredProposalImage(child)}
-          {@const childCard = {
-            entity: { id: child.proposalId, kind: child.targetKind, title: child.patch?.title ?? `Child ${i + 1}`, parentEntityId: null, sortOrder: i, capabilities: [], childrenByKind: [], relationships: [] },
-            aspectRatio: "poster" as const,
-            cover: childImage ? { src: reviewImagePreviewUrl(childImage, child.targetKind), alt: child.patch?.title ?? "" } : null,
-            hover: { kind: "none" } as const,
-            subtitle: child.targetKind,
-            custom: childStatusCustom(child),
-            meta: childMeta(child),
-          }}
           <EntityThumbnail
-            card={childCard}
+            card={childCard(child, i, "Child", "poster", selectedImages, proposal.proposalId, store)}
             linkable={false}
             onActivate={() => walkChild(child)}
             selectable
             selectMode
             selected={store.isReviewProposalSelected(child.proposalId)}
-            onSelectedChange={(selected) => setChildSelected(child, selected)}
+            onSelectedChange={(selected) => store.setReviewProposalSelected(child.proposalId, selected)}
           />
         {/each}
       </div>
