@@ -51,6 +51,7 @@
   let readerTitle = $state("Reader");
   let returnHref = $state("/books");
   let errorMessage: string | null = $state(null);
+  let progressSaveQueue: Promise<void> = Promise.resolve();
 
   const bookId = $derived(page.params.id ?? "");
   const readerPages = $derived(
@@ -145,60 +146,55 @@
   }
 
   async function resolveBookReader(nextBook: BookDetail, nextContext: BookReaderRouteContext) {
-    const bookChapterDetails = await loadBookChapterDetails(nextBook);
-    let chapters = bookChapterDetails.map((chapter, index) =>
-      readerChapter(chapter, orderedBookChildren(chapter, ENTITY_KIND.bookPage), index),
-    );
-    let summaries = chapters.map((chapter) => chapter.summary);
-    let progress = bookEntityProgressDisplay(nextBook, summaries);
-
     const progressChapterId = getCapability(nextBook.capabilities, "progress")?.currentEntityId ?? null;
-    if (nextContext.command === "resume" && progressChapterId && !progress) {
+    if (nextContext.command === "resume" && progressChapterId) {
       const progressChapter = await fetchEntity(progressChapterId);
       if (progressChapter.kind === ENTITY_KIND.bookChapter) {
-        chapters = [
-          readerChapter(progressChapter, orderedBookChildren(progressChapter, ENTITY_KIND.bookPage), 0),
-        ];
-        summaries = chapters.map((chapter) => chapter.summary);
-        progress = bookEntityProgressDisplay(nextBook, summaries);
+        return resolveBookChapterReader(nextBook, nextContext, progressChapter);
       }
     }
 
-    const selectedChapterId = nextContext.command === "resume" && progress
-      ? progress.chapterId
-      : chapters[0]?.detail.id ?? null;
-    const selectedIndex = Math.max(
-      0,
-      chapters.findIndex((chapter) => chapter.detail.id === selectedChapterId),
-    );
-    const selectedChapter = chapters[selectedIndex];
-    const initialIndex = selectedChapter && progress?.chapterId === selectedChapter.detail.id && !progress.isComplete
+    const firstChapter = await loadFirstBookChapterDetail(nextBook);
+    return resolveBookChapterReader(nextBook, nextContext, firstChapter);
+  }
+
+  async function resolveBookChapterReader(
+    nextBook: BookDetail,
+    nextContext: BookReaderRouteContext,
+    selectedChapter: EntityCardFull | null,
+  ) {
+    const summaries = selectedChapter ? await loadChapterSummaries(nextBook, selectedChapter) : [];
+    const progress = bookEntityProgressDisplay(nextBook, summaries);
+    const selectedIndex = selectedChapter
+      ? Math.max(0, summaries.findIndex((chapter) => chapter.id === selectedChapter.id))
+      : -1;
+    const pages = selectedChapter ? orderedBookChildren(selectedChapter, ENTITY_KIND.bookPage) : [];
+    const initialIndex = selectedChapter && progress?.chapterId === selectedChapter.id && !progress.isComplete
       ? progress.currentPage - 1
       : 0;
 
     return {
-      title: `${nextBook.title}${selectedChapter ? ` · ${selectedChapter.detail.title}` : ""}`,
-      chapters: selectedChapter ? [selectedChapter] : [],
+      title: `${nextBook.title}${selectedChapter ? ` · ${selectedChapter.title}` : ""}`,
+      chapters: selectedChapter ? [readerChapter(selectedChapter, pages, selectedIndex >= 0 ? selectedIndex : 0)] : [],
       nextChapter: selectedIndex >= 0 ? summaries[selectedIndex + 1] ?? null : null,
       initialIndex,
       readerMode: progress?.readerMode ?? "paged",
-      pageCount: selectedChapter?.pages.length ?? 0,
+      pageCount: pages.length,
     };
   }
 
-  async function loadBookChapterDetails(nextBook: BookDetail): Promise<EntityCardFull[]> {
+  async function loadFirstBookChapterDetail(nextBook: BookDetail): Promise<EntityCardFull | null> {
     const directChapters = orderedBookChildren(nextBook, ENTITY_KIND.bookChapter);
     if (directChapters.length > 0) {
-      return Promise.all(directChapters.map((chapter) => fetchEntity(chapter.id)));
+      return fetchEntity(directChapters[0].id);
     }
 
-    const volumeDetails = await Promise.all(
-      orderedBookChildren(nextBook, ENTITY_KIND.bookVolume).map((volume) => fetchEntity(volume.id)),
-    );
-    const volumeChapterIds = volumeDetails.flatMap((volume) =>
-      orderedBookChildren(volume, ENTITY_KIND.bookChapter).map((chapter) => chapter.id),
-    );
-    return Promise.all(volumeChapterIds.map((chapterId) => fetchEntity(chapterId)));
+    const firstVolume = orderedBookChildren(nextBook, ENTITY_KIND.bookVolume)[0];
+    if (!firstVolume) return null;
+
+    const volume = await fetchEntity(firstVolume.id);
+    const firstVolumeChapter = orderedBookChildren(volume, ENTITY_KIND.bookChapter)[0];
+    return firstVolumeChapter ? fetchEntity(firstVolumeChapter.id) : null;
   }
 
   async function loadChapterSummaries(
@@ -318,20 +314,28 @@
     });
   }
 
+  function queueProgressSave(index = readerIndex, completed = false) {
+    const nextSave = progressSaveQueue
+      .catch(() => undefined)
+      .then(() => saveProgress(index, completed));
+    progressSaveQueue = nextSave;
+    return nextSave;
+  }
+
   function handleIndexChange(index: number) {
     readerIndex = index;
     const reachedEnd = readerPages.length > 0 && index >= readerPages.length - 1;
-    void saveProgress(index, reachedEnd);
+    void queueProgressSave(index, reachedEnd).catch(() => undefined);
   }
 
   function handleModeChange(mode: ReaderMode) {
     readerMode = mode;
-    void saveProgress(readerIndex, false);
+    void queueProgressSave(readerIndex, false).catch(() => undefined);
   }
 
   async function handleNextChapter() {
     if (!book || !context || !nextChapter) return;
-    await saveProgress(readerIndex, true);
+    await queueProgressSave(readerIndex, true).catch(() => undefined);
     const nextHref = bookReaderHref({
       bookId: book.id,
       kind: "chapter",
@@ -346,7 +350,7 @@
 
   async function closeReader() {
     const reachedEnd = readerPages.length > 0 && readerIndex >= readerPages.length - 1;
-    await saveProgress(readerIndex, reachedEnd);
+    await queueProgressSave(readerIndex, reachedEnd).catch(() => undefined);
     await goto(returnHref);
   }
 

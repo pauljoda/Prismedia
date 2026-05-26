@@ -75,6 +75,36 @@ function bookDetail(): BookDetail {
   };
 }
 
+function volumeBookDetail(): BookDetail {
+  return {
+    ...bookDetail(),
+    capabilities: [
+      {
+        kind: "progress",
+        currentEntityId: "chapter-2",
+        unit: "page",
+        index: 1,
+        total: 2,
+        mode: "paged",
+        completedAt: null,
+        updatedAt: "2026-05-26T00:00:00.000Z",
+        workIndex: 1,
+        workTotal: 6,
+      },
+    ],
+    childrenByKind: [
+      {
+        kind: "book-volume",
+        label: "Volumes",
+        entities: [
+          thumbnail("volume-1", "book-volume", "Volume One", 0),
+          thumbnail("volume-2", "book-volume", "Volume Two", 1),
+        ],
+      },
+    ],
+  };
+}
+
 function chapterDetail(id: string, title: string): EntityCardFull {
   return {
     id,
@@ -91,6 +121,27 @@ function chapterDetail(id: string, title: string): EntityCardFull {
           thumbnail(`${id}-page-1`, "book-page", `${title} Page 1`, 0),
           thumbnail(`${id}-page-2`, "book-page", `${title} Page 2`, 1),
         ],
+      },
+    ],
+    relationships: [],
+  };
+}
+
+function volumeDetail(id: string, chapterIds: string[]): EntityCardFull {
+  return {
+    id,
+    kind: "book-volume",
+    title: id === "volume-1" ? "Volume One" : "Volume Two",
+    parentEntityId: "book-1",
+    sortOrder: id === "volume-1" ? 0 : 1,
+    capabilities: [],
+    childrenByKind: [
+      {
+        kind: "book-chapter",
+        label: "Chapters",
+        entities: chapterIds.map((chapterId, index) =>
+          thumbnail(chapterId, "book-chapter", `Chapter ${index + 1}`, index),
+        ),
       },
     ],
     relationships: [],
@@ -117,9 +168,16 @@ describe("book reader next chapter navigation", () => {
       "http://localhost/books/book-1/reader?kind=chapter&id=chapter-1&returnId=book-1",
     ) as unknown as typeof page.url;
 
+    let activeProgressSaves = 0;
+    let maxActiveProgressSaves = 0;
     mocks.fetchBook.mockResolvedValue(book);
     mocks.fetchEntity.mockImplementation((id: string) => Promise.resolve(chapters.get(id) ?? book));
-    mocks.updateEntityProgress.mockResolvedValue(undefined);
+    mocks.updateEntityProgress.mockImplementation(async () => {
+      activeProgressSaves++;
+      maxActiveProgressSaves = Math.max(maxActiveProgressSaves, activeProgressSaves);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      activeProgressSaves--;
+    });
 
     const { findByText, getByLabelText, getByText } = render(Page);
 
@@ -135,6 +193,36 @@ describe("book reader next chapter navigation", () => {
     expect(mocks.goto).toHaveBeenCalledWith(
       "/books/book-1/reader?kind=chapter&id=chapter-2&returnId=book-1&command=resume&mode=paged",
     );
+    expect(maxActiveProgressSaves).toBe(1);
     await findByText("Prismedia Book · Chapter Two");
+  });
+
+  it("opens book resume from the saved chapter without loading the whole book", async () => {
+    const book = volumeBookDetail();
+    const progressChapter = chapterDetail("chapter-2", "Chapter Two");
+    progressChapter.parentEntityId = "volume-1";
+    const volume = volumeDetail("volume-1", ["chapter-1", "chapter-2", "chapter-3"]);
+
+    page.params = { id: book.id };
+    page.url = new URL(
+      "http://localhost/books/book-1/reader?kind=book&id=book-1&returnId=book-1&command=resume",
+    ) as unknown as typeof page.url;
+
+    mocks.fetchBook.mockResolvedValue(book);
+    mocks.fetchEntity.mockImplementation((id: string) => {
+      if (id === "chapter-2") return Promise.resolve(progressChapter);
+      if (id === "volume-1") return Promise.resolve(volume);
+      throw new Error(`Unexpected eager entity load: ${id}`);
+    });
+    mocks.updateEntityProgress.mockResolvedValue(undefined);
+
+    const { findByText } = render(Page);
+
+    await findByText("Prismedia Book · Chapter Two");
+    expect(mocks.fetchEntity).toHaveBeenCalledWith("chapter-2");
+    expect(mocks.fetchEntity).toHaveBeenCalledWith("volume-1");
+    expect(mocks.fetchEntity).not.toHaveBeenCalledWith("chapter-1");
+    expect(mocks.fetchEntity).not.toHaveBeenCalledWith("chapter-3");
+    expect(mocks.fetchEntity).not.toHaveBeenCalledWith("volume-2");
   });
 });
