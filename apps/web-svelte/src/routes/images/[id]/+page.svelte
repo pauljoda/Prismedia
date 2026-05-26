@@ -199,7 +199,7 @@
   .error-notice { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem; border: 1px solid color-mix(in srgb, #ef4444 50%, var(--color-border, #1c2235)); background: var(--color-surface-2, #101420); color: var(--color-text-muted, #8a93a6); font-size: 0.85rem; }
   .error-notice button { border: 1px solid var(--color-border, #1c2235); background: var(--color-surface-3, #151a28); color: var(--color-text-muted, #8a93a6); padding: 0.4rem 0.8rem; font-size: 0.78rem; cursor: pointer; }
 
-  .image-detail-back-page { max-width: 72rem; margin: 0 auto; padding: clamp(0.75rem, 2vw, 1.25rem); }
+  .image-detail-back-page { display: contents; }
 
   :global(.meta-item) { white-space: nowrap; font-size: 0.82rem; }
   :global(.meta-item.is-studio) { color: var(--color-text-accent, #c49a5a); text-decoration: none; transition: opacity 0.15s; }

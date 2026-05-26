@@ -96,6 +96,32 @@ public sealed class EfEntityRepositoryTests {
     }
 
     [Fact]
+    public async Task FindShallowAsyncPreservesStructuralPlacementForCoreMutations() {
+        await using var db = CreateContext();
+        var libraryId = Guid.Parse("10101010-1010-1010-1010-101010101010");
+        var trackId = Guid.Parse("20202020-2020-2020-2020-202020202020");
+        SeedEntity(db, libraryId, EntityKind.AudioLibrary, "Library");
+        SeedEntity(db, trackId, EntityKind.AudioTrack, "Track 1", libraryId, sortOrder: 7);
+        db.AudioTrackDetails.Add(new AudioTrackDetailRow { EntityId = trackId });
+        await db.SaveChangesAsync();
+
+        var repository = new EfEntityRepository(db, EntityMappers.Kinds(db), EntityMappers.Capabilities(db));
+        var track = await repository.FindShallowAsync(trackId, CancellationToken.None);
+
+        Assert.NotNull(track);
+        Assert.Equal(libraryId, track.ParentEntityId);
+        Assert.Equal(7, track.SortOrder);
+
+        track.Rate(4);
+        await repository.SaveAsync(track, CancellationToken.None);
+
+        var row = await db.Entities.SingleAsync(entity => entity.Id == trackId);
+        Assert.Equal(libraryId, row.ParentEntityId);
+        Assert.Equal(7, row.SortOrder);
+        Assert.Equal(4, row.RatingValue);
+    }
+
+    [Fact]
     public async Task SaveThenFindRoundTripsEveryPersistedCapabilityWithoutLoss() {
         await using var db = CreateContext();
         var id = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");

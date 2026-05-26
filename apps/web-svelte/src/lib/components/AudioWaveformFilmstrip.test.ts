@@ -14,5 +14,8 @@ describe("AudioWaveformFilmstrip", () => {
     expect(source).toContain("containerEl.clientWidth / 2 - trackPosition");
     expect(source).toContain("width: ${trackWidth}px");
     expect(source).toContain("left-1/2 z-20 -translate-x-1/2");
+    expect(source).toContain("const barWidth = Math.max(1, width / count)");
+    expect(source).toContain("const maxAmplitude = waveform.reduce");
+    expect(source).not.toContain("normalizeWaveformSample");
   });
 });

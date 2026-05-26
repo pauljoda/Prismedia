@@ -76,6 +76,14 @@ export function withRatingCapability(
   capabilities: EntityCapability[],
   value: number | null,
 ): EntityCapability[] {
+  const hasRating = capabilities.some((capability) => capability.kind === "rating");
+  if (!hasRating) {
+    return [
+      ...capabilities,
+      { kind: "rating", value } as EntityCapabilityRatingCapability,
+    ];
+  }
+
   return capabilities.map((capability) =>
     capability.kind === "rating"
       ? {

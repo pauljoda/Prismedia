@@ -741,7 +741,13 @@ public sealed class IdentifyPluginService {
             return new IdentifyPluginResponse(false, null, $"Cycle detected while identifying entity '{entity.Id}'.");
         }
 
-        var hints = await _hints.ResolveAsync(entity.Id, descriptor.Manifest.Id, cancellationToken);
+        var resolvedHints = await _hints.ResolveAsync(entity.Id, descriptor.Manifest.Id, cancellationToken);
+        var hints = ShouldIgnoreExistingIdentityHints(query)
+            ? resolvedHints with {
+                ExternalIds = new Dictionary<string, string>(),
+                Urls = []
+            }
+            : resolvedHints;
         var positions = await ResolveStructuralPositionsAsync(entity.Id, parentSortOrder, cancellationToken);
         var structuralContext = ancestors.Count > 0 || positions.Count > 0
             ? new IdentifyStructuralContext(ancestors, positions)
@@ -814,6 +820,11 @@ public sealed class IdentifyPluginService {
             Relationships = RelationshipProposals(providerProposal)
         };
     }
+
+    private static bool ShouldIgnoreExistingIdentityHints(IdentifyQuery? query) =>
+        !string.IsNullOrWhiteSpace(query?.Title) &&
+        string.IsNullOrWhiteSpace(query.Url) &&
+        query.ExternalIds is not { Count: > 0 };
 
     private async Task<IReadOnlyList<IdentifyEntitySnapshot>> LoadAncestorSnapshotsAsync(
         EntityRow entity,
@@ -948,4 +959,3 @@ public sealed class IdentifyPluginService {
 
     private sealed record StructuralChild(int? SortOrder, EntityRow Entity);
 }
-

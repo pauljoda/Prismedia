@@ -176,7 +176,9 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
             throw new InvalidOperationException($"Entity kind '{row.KindCode}' cannot be hydrated.");
         }
 
-        return await mapper.ConstructAsync(row, cancellationToken);
+        var entity = await mapper.ConstructAsync(row, cancellationToken);
+        entity.HydrateStructuralPlacement(row.ParentEntityId, row.SortOrder);
+        return entity;
     }
 
     private async Task<Guid?> ResolveProgressChapterIdAsync(Guid currentEntityId, CancellationToken cancellationToken) {

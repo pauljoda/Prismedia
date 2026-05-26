@@ -83,6 +83,20 @@ public sealed class EntityPatchEndpointTests {
     }
 
     [Fact]
+    public async Task EntityRatingPatchStoresSharedRatingCapability() {
+        using var factory = CreateProgressFactory();
+        using var client = factory.CreateClient();
+
+        using var response = await client.PatchAsJsonAsync(
+            $"/api/entities/{EntityId}/rating",
+            new RatingUpdateRequest(4));
+        var repository = factory.Services.GetRequiredService<FakeEntityWriteRepository>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(4, repository.SavedEntity?.RatingValue);
+    }
+
+    [Fact]
     public async Task EntityProgressPatchMarksProgressComplete() {
         using var factory = CreateProgressFactory();
         using var client = factory.CreateClient();
@@ -207,7 +221,9 @@ public sealed class EntityPatchEndpointTests {
             string? cursor,
             bool? hideNsfw,
             int? limit,
-            CancellationToken cancellationToken) =>
+            CancellationToken cancellationToken,
+            Guid? referencedBy = null,
+            string? relationshipCode = null) =>
             throw new NotSupportedException();
 
         public Task<EntityCard?> GetAsync(Guid id, bool hideNsfw, CancellationToken cancellationToken) =>

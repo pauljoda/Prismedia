@@ -918,8 +918,18 @@ public sealed class LibraryScanPersistenceService(PrismediaDbContext db) : ILibr
             .Select(f => f.EntityId)
             .ToListAsync(cancellationToken)).ToHashSet();
 
+        var entityKinds = await db.Entities.AsNoTracking()
+            .Where(entity => ids.Contains(entity.Id))
+            .Select(entity => new { entity.Id, entity.KindCode })
+            .ToDictionaryAsync(entity => entity.Id, entity => entity.KindCode, cancellationToken);
+
         var hasThumbnail = (await db.EntityFiles.AsNoTracking()
             .Where(f => ids.Contains(f.EntityId) && f.Role == EntityFileRole.Thumbnail)
+            .Select(f => f.EntityId)
+            .ToListAsync(cancellationToken)).ToHashSet();
+
+        var hasWaveform = (await db.EntityFiles.AsNoTracking()
+            .Where(f => ids.Contains(f.EntityId) && f.Role == EntityFileRole.Waveform)
             .Select(f => f.EntityId)
             .ToListAsync(cancellationToken)).ToHashSet();
 
@@ -946,10 +956,15 @@ public sealed class LibraryScanPersistenceService(PrismediaDbContext db) : ILibr
 
         var result = new Dictionary<Guid, DownstreamNeeds>(ids.Count);
         foreach (var id in ids) {
+            var needsPreview = entityKinds.TryGetValue(id, out var kindCode) &&
+                string.Equals(kindCode, EntityKindRegistry.AudioTrack.Code, StringComparison.OrdinalIgnoreCase)
+                    ? !hasWaveform.Contains(id)
+                    : !hasThumbnail.Contains(id);
+
             result[id] = new DownstreamNeeds(
                 NeedsProbe: !hasTechnical.Contains(id) || !hasMediaSource.Contains(id),
                 NeedsFingerprint: !hasFingerprint.Contains(id),
-                NeedsPreview: !hasThumbnail.Contains(id),
+                NeedsPreview: needsPreview,
                 NeedsTrickplay: !hasTrickplay.Contains(id),
                 NeedsSubtitleExtraction: !hasUsableSubtitleState.Contains(id));
         }

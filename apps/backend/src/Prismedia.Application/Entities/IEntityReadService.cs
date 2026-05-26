@@ -18,7 +18,9 @@ public interface IEntityReadService {
         string? cursor,
         bool? hideNsfw,
         int? limit,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        Guid? referencedBy = null,
+        string? relationshipCode = null);
 
     /// <summary>
     /// Gets one active entity as the shared entity card read model.

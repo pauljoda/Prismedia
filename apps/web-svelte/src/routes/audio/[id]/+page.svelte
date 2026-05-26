@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { page } from "$app/state";
-  import { Music } from "@lucide/svelte";
+  import { Music, Play, Shuffle } from "@lucide/svelte";
   import {
     fetchAudioLibrary,
     updateEntityRating,
@@ -54,6 +54,7 @@
 
   let activeTrackId = $state<string | null>(null);
   let isPlaying = $state(false);
+  let shufflePlayKey = $state(0);
 
   const card = $derived.by((): EntityDetailCardFull | null => {
     if (!library) return null;
@@ -157,6 +158,35 @@
     }
   }
 
+  async function handleTrackRename(track: AudioTrackListItemDto, title: string) {
+    const previousTrackItems = trackItems;
+    trackItems = trackItems.map((item) =>
+      item.id === track.id ? { ...item, title } : item,
+    );
+
+    try {
+      await updateEntityMetadata(track.id, {
+        fields: ["title"],
+        patch: {
+          title,
+          description: null,
+          externalIds: {},
+          urls: [],
+          tags: [],
+          studio: null,
+          credits: [],
+          dates: {},
+          stats: {},
+          positions: {},
+          classification: null,
+        },
+      }, { kind: "audio-track" });
+    } catch (err) {
+      trackItems = previousTrackItems;
+      throw err;
+    }
+  }
+
   async function handleFavoriteToggle() {
     if (!library) return;
     await toggleOptimisticEntityFlag(library, "isFavorite", (next) => (library = next), updateEntityFlags);
@@ -171,6 +201,19 @@
     if (!library) return;
     await updateEntityMetadata(library.id, request, { kind: library.kind });
     await loadLibrary();
+  }
+
+  function playAll() {
+    const firstTrack = trackItems[0];
+    if (!firstTrack) return;
+    activeTrackId = firstTrack.id;
+    isPlaying = true;
+  }
+
+  function shuffleAll() {
+    if (trackItems.length === 0) return;
+    shufflePlayKey += 1;
+    isPlaying = true;
   }
 </script>
 
@@ -211,6 +254,19 @@
         {/if}
       {/snippet}
 
+      {#snippet extraActions()}
+        {#if trackItems.length > 0}
+          <button type="button" class="hero-audio-action hero-audio-action-primary" onclick={playAll}>
+            <Play class="h-4 w-4" fill="currentColor" />
+            Play All
+          </button>
+          <button type="button" class="hero-audio-action" onclick={shuffleAll}>
+            <Shuffle class="h-4 w-4" />
+            Shuffle
+          </button>
+        {/if}
+      {/snippet}
+
       {#snippet afterBody()}
         {#if studioCards.length > 0 || creditCards.length > 0}
           <div class="credits-section">
@@ -219,24 +275,6 @@
         {/if}
       {/snippet}
     </EntityDetail>
-
-    {#if trackItems.length > 0}
-      <AudioVidStackPlayer
-        tracks={trackItems}
-        {activeTrackId}
-        onTrackChange={(id) => (activeTrackId = id)}
-        libraryCoverUrl={coverUrl}
-        onPlayingChange={(p) => (isPlaying = p)}
-      />
-
-      <AudioTrackList
-        tracks={trackItems}
-        {activeTrackId}
-        {isPlaying}
-        onPlay={(id) => (activeTrackId = id)}
-        onRatingChange={handleTrackRatingChange}
-      />
-    {/if}
 
     {#if subLibraryCards.length > 0}
       <section class="content-section">
@@ -255,6 +293,26 @@
       </section>
     {/if}
 
+    {#if trackItems.length > 0}
+      <AudioVidStackPlayer
+        tracks={trackItems}
+        {activeTrackId}
+        onTrackChange={(id) => (activeTrackId = id)}
+        libraryCoverUrl={coverUrl}
+        {shufflePlayKey}
+        onPlayingChange={(p) => (isPlaying = p)}
+      />
+
+      <AudioTrackList
+        tracks={trackItems}
+        {activeTrackId}
+        {isPlaying}
+        onPlay={(id) => (activeTrackId = id)}
+        onRatingChange={handleTrackRatingChange}
+        onRename={handleTrackRename}
+      />
+    {/if}
+
     {#if trackItems.length === 0 && subLibraryCards.length === 0}
       <div class="empty-children">
         <p>No tracks or sub-libraries in this audio library yet.</p>
@@ -264,7 +322,7 @@
 </div>
 
 <style>
-  .detail-page { display: grid; gap: 1.25rem; padding: clamp(1rem, 3vw, 2rem); padding-bottom: 10rem; max-width: 72rem; margin: 0 auto; }
+  .detail-page { display: grid; gap: 1.25rem; padding: 0; max-width: none; margin: 0; }
   .loading-shell { min-height: 28rem; border: 1px solid var(--color-border, #1c2235); background: var(--color-surface-2, #101420); animation: pulse 1.2s ease-in-out infinite; }
   .error-notice { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem; border: 1px solid color-mix(in srgb, #ef4444 50%, var(--color-border, #1c2235)); background: var(--color-surface-2, #101420); color: var(--color-text-muted, #8a93a6); font-size: 0.85rem; }
   .error-notice button { border: 1px solid var(--color-border, #1c2235); background: var(--color-surface-3, #151a28); color: var(--color-text-muted, #8a93a6); padding: 0.4rem 0.8rem; font-size: 0.78rem; cursor: pointer; }
@@ -273,6 +331,53 @@
   :global(.meta-item.is-studio) { color: var(--color-text-accent, #c49a5a); text-decoration: none; transition: opacity 0.15s; }
   :global(.meta-item.is-studio:hover) { opacity: 0.8; }
   :global(.meta-sep) { display: inline-block; width: 3px; height: 3px; margin: 0 0.5rem; background: var(--color-text-muted, #8a93a6); opacity: 0.5; }
+
+  :global(.hero-audio-action) {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.65rem;
+    border: 1px solid color-mix(in srgb, var(--detail-accent, #c49a5a) 32%, var(--detail-border, #1c2235));
+    border-radius: var(--radius-xs, 4px);
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--detail-accent, #c49a5a) 12%, rgba(10, 12, 17, 0.82)),
+      rgba(10, 12, 17, 0.78)
+    );
+    color: var(--detail-text-secondary, #a8afbf);
+    font-family: var(--font-mono, "JetBrains Mono", monospace);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      0 0 14px rgba(0, 0, 0, 0.3);
+    transition: color 0.2s, border-color 0.2s, box-shadow 0.2s, background 0.2s;
+  }
+
+  :global(.hero-audio-action:hover) {
+    border-color: color-mix(in srgb, var(--detail-accent, #c49a5a) 58%, var(--detail-border, #1c2235));
+    background: color-mix(in srgb, var(--detail-accent, #c49a5a) 6%, transparent);
+    color: var(--detail-accent, #c49a5a);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.12),
+      0 0 16px var(--detail-accent-glow, rgba(196, 154, 90, 0.22));
+  }
+
+  :global(.hero-audio-action-primary) {
+    border-color: var(--detail-accent-muted, rgba(196, 154, 90, 0.48));
+    background: color-mix(in srgb, var(--detail-accent, #c49a5a) 10%, transparent);
+    color: var(--detail-accent, #c49a5a);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.1),
+      0 0 14px var(--detail-accent-glow, rgba(196, 154, 90, 0.22));
+  }
+
+  :global(.hero-audio-action-primary:hover) {
+    border-color: var(--detail-accent, #c49a5a);
+    background: color-mix(in srgb, var(--detail-accent, #c49a5a) 14%, transparent);
+    color: var(--color-accent-300, #f2c26a);
+  }
 
   .credits-section { padding: 1rem 1.5rem; border-top: 1px solid var(--color-border, #1c2235); }
 

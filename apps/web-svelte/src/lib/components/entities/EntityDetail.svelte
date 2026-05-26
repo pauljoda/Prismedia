@@ -37,6 +37,8 @@
     type EntityThumbnailCard,
   } from "$lib/entities/entity-thumbnail";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
+  import MetadataCard from "$lib/components/MetadataCard.svelte";
+  import MetadataCardGrid from "$lib/components/MetadataCardGrid.svelte";
   import EntityTagChips from "./EntityTagChips.svelte";
   import MarkdownEditor from "$lib/components/forms/MarkdownEditor.svelte";
   import EntityPicker from "$lib/components/forms/EntityPicker.svelte";
@@ -233,31 +235,6 @@
 
   type HeroMode = "image" | "poster-blur" | "gradient";
 
-  const effectiveShowHero = $derived(showHero || isEditingActiveTab);
-  const displayHero = $derived.by(() => {
-    if (localHeaderAsset) return localHeaderAsset.empty || !localHeaderAsset.src ? null : { src: localHeaderAsset.src, alt: "Header" };
-    return card.hero;
-  });
-  const displayPoster = $derived.by(() => {
-    if (localPosterAsset) return localPosterAsset.empty || !localPosterAsset.src ? null : { src: localPosterAsset.src, alt: "Poster" };
-    return card.poster;
-  });
-  const heroMode = $derived.by((): HeroMode => {
-    if (!effectiveShowHero) return "gradient";
-    if (displayHero) return "image";
-    if (displayPoster) return "poster-blur";
-    return "gradient";
-  });
-
-  const effectivePosterSize = $derived(isEditingActiveTab && posterSize === "none" ? "medium" : posterSize);
-  const posterCard = $derived.by(() => posterCardForDisplay());
-  const posterFrameAspectRatio = $derived(posterCard ? toAspectRatioValue(posterCard.aspectRatio) : undefined);
-  const posterVisible = $derived(effectivePosterSize !== "none" && (posterCard !== null || isEditingActiveTab));
-  const posterHasAsset = $derived(Boolean(displayPoster));
-  const headerHasAsset = $derived(Boolean(displayHero));
-  const imagesCapability = $derived(getImagesCapability(card.entity.capabilities));
-  const canManageImages = $derived(Boolean(onMetadataSave || onImageAssetUpload || onImageAssetClear));
-
   const renderedDescription = $derived(renderEntityDescriptionMarkdown(card.description));
   const hasStandaloneBodyContent = $derived(Boolean(renderedDescription) || card.tags.length > 0);
   const coreSections = $derived.by((): EntityDetailSection[] => [
@@ -280,6 +257,8 @@
   ]);
   const availableSections = $derived([...coreSections, ...sections]);
   const cardFull = $derived(card as EntityDetailCard & Partial<EntityDetailCardFull>);
+  const urlLinks = $derived(card.links.filter((link) => !hasProvider(link)));
+  const providerIdLinks = $derived(card.links.filter(hasProvider));
   const visibleTabs = $derived.by(() => tabs.filter(tabHasDisplayContent));
   const hasTabs = $derived(visibleTabs.length > 0);
   const activeTab = $derived(visibleTabs.find((tab) => tab.id === activeTabId) ?? visibleTabs[0] ?? null);
@@ -306,6 +285,29 @@
   const isEditingActiveTab = $derived(
     hasTabs ? Boolean(activeTab && editingTabId === activeTab.id) : editingTabId === "__standalone__",
   );
+  const effectiveShowHero = $derived(showHero || isEditingActiveTab);
+  const displayHero = $derived.by(() => {
+    if (localHeaderAsset) return localHeaderAsset.empty || !localHeaderAsset.src ? null : { src: localHeaderAsset.src, alt: "Header" };
+    return card.hero;
+  });
+  const displayPoster = $derived.by(() => {
+    if (localPosterAsset) return localPosterAsset.empty || !localPosterAsset.src ? null : { src: localPosterAsset.src, alt: "Poster" };
+    return card.poster;
+  });
+  const heroMode = $derived.by((): HeroMode => {
+    if (!effectiveShowHero) return "gradient";
+    if (displayHero) return "image";
+    if (displayPoster) return "poster-blur";
+    return "gradient";
+  });
+  const effectivePosterSize = $derived(isEditingActiveTab && posterSize === "none" ? "medium" : posterSize);
+  const posterCard = $derived.by(() => posterCardForDisplay());
+  const posterFrameAspectRatio = $derived(posterCard ? toAspectRatioValue(posterCard.aspectRatio) : undefined);
+  const posterVisible = $derived(effectivePosterSize !== "none" && (posterCard !== null || isEditingActiveTab));
+  const posterHasAsset = $derived(Boolean(displayPoster));
+  const headerHasAsset = $derived(Boolean(displayHero));
+  const imagesCapability = $derived(getImagesCapability(card.entity.capabilities));
+  const canManageImages = $derived(Boolean(onMetadataSave || onImageAssetUpload || onImageAssetClear));
   const canEdit = $derived(Boolean(onMetadataSave));
   const editActionLabel = $derived(activeTab ? `Edit ${activeTab.label}` : "Edit details");
   const cancelEditActionLabel = $derived(activeTab ? `Cancel ${activeTab.label}` : "Cancel editing");
@@ -853,27 +855,51 @@
 
 {#snippet linksSection()}
   {#if card.links.length > 0}
-    <section class="detail-section">
-      <h2 class="section-label">
-        <Link class="h-4 w-4" />
-        Links
-      </h2>
-      <div class="link-list">
-        {#each card.links as link (link.label)}
-          {#if link.url}
-            <a href={link.url} target="_blank" rel="noopener noreferrer" class="link-item">
-              <ExternalLink class="h-3.5 w-3.5" />
-              {link.label}
-            </a>
-          {:else}
-            <span class="link-item no-url">
-              <Link class="h-3.5 w-3.5" />
-              {link.label}
-            </span>
-          {/if}
-        {/each}
-      </div>
-    </section>
+    <MetadataCard title="Links & Provider IDs" icon={Link}>
+      {#if urlLinks.length > 0}
+        <div class="link-group">
+          <div class="link-group-label">URLs</div>
+          <div class="link-list">
+            {#each urlLinks as link (link.label)}
+              {#if link.url}
+                <a href={link.url} target="_blank" rel="noopener noreferrer" class="link-item">
+                  <ExternalLink class="h-3.5 w-3.5" />
+                  {link.label}
+                </a>
+              {:else}
+                <span class="link-item no-url">
+                  <Link class="h-3.5 w-3.5" />
+                  {link.label}
+                </span>
+              {/if}
+            {/each}
+          </div>
+        </div>
+      {/if}
+      {#if providerIdLinks.length > 0}
+        <div class="link-group">
+          <div class="link-group-label">Provider IDs</div>
+          <div class="link-list">
+            {#each providerIdLinks as link (`${link.provider}:${externalIdValue(link.label, link.provider)}`)}
+              {@const externalValue = externalIdValue(link.label, link.provider)}
+              {#if link.url}
+                <a href={link.url} target="_blank" rel="noopener noreferrer" class="link-item provider-id-item">
+                  <ExternalLink class="h-3.5 w-3.5" />
+                  <span class="provider-id-provider">{link.provider}</span>
+                  <span class="provider-id-value">{externalValue}</span>
+                </a>
+              {:else}
+                <span class="link-item provider-id-item no-url">
+                  <Fingerprint class="h-3.5 w-3.5" />
+                  <span class="provider-id-provider">{link.provider}</span>
+                  <span class="provider-id-value">{externalValue}</span>
+                </span>
+              {/if}
+            {/each}
+          </div>
+        </div>
+      {/if}
+    </MetadataCard>
   {/if}
 {/snippet}
 
@@ -1118,184 +1144,93 @@
 
 {#snippet statsSection()}
   {#if (cardFull.stats?.length ?? 0) > 0}
-    <section class="detail-section">
-      <h2 class="section-label">
-        <BarChart3 class="h-4 w-4" />
-        Stats
-      </h2>
-      <div class="tab-data-list">
-        {#each cardFull.stats ?? [] as row (row.code)}
-          <div class="tab-data-row">
-            <span>{row.label}</span>
-            <strong>{row.value}</strong>
-          </div>
-        {/each}
-      </div>
-    </section>
+    <MetadataCard
+      title="Stats"
+      icon={BarChart3}
+      rows={(cardFull.stats ?? []).map((r) => ({ label: r.label, value: r.value }))}
+    />
   {/if}
 {/snippet}
 
 {#snippet datesSection()}
   {#if (cardFull.dates?.length ?? 0) > 0}
-    <section class="detail-section">
-      <h2 class="section-label">
-        <Calendar class="h-4 w-4" />
-        Dates
-      </h2>
-      <div class="tab-data-list">
-        {#each cardFull.dates ?? [] as row (row.code)}
-          <div class="tab-data-row">
-            <span>{row.label}</span>
-            <strong>{row.value}</strong>
-          </div>
-        {/each}
-      </div>
-    </section>
+    <MetadataCard
+      title="Dates"
+      icon={Calendar}
+      rows={(cardFull.dates ?? []).map((r) => ({ label: r.label, value: r.value }))}
+    />
   {/if}
 {/snippet}
 
 {#snippet technicalSection()}
   {#if (cardFull.technical?.length ?? 0) > 0}
-    <section class="detail-section">
-      <h2 class="section-label">
-        <MonitorCog class="h-4 w-4" />
-        Technical
-      </h2>
-      <div class="tab-data-list">
-        {#each cardFull.technical ?? [] as row (row.label)}
-          <div class="tab-data-row">
-            <span>{row.label}</span>
-            <strong>{row.value}</strong>
-          </div>
-        {/each}
-      </div>
-    </section>
+    <MetadataCard
+      title="Technical"
+      icon={MonitorCog}
+      rows={(cardFull.technical ?? []).map((r) => ({ label: r.label, value: r.value }))}
+    />
   {/if}
 {/snippet}
 
 {#snippet progressSection()}
   {#if cardFull.progress}
-    <section class="detail-section">
-      <h2 class="section-label">
-        <Play class="h-4 w-4" />
-        Progress
-      </h2>
-      <div class="tab-data-list">
-        <div class="tab-data-row">
-          <span>Progress</span>
-          <strong>{cardFull.progress.index} / {cardFull.progress.total} {cardFull.progress.unit}</strong>
-        </div>
-        <div class="tab-data-row">
-          <span>Percent</span>
-          <strong>{cardFull.progress.percent}%</strong>
-        </div>
-        {#if cardFull.progress.mode}
-          <div class="tab-data-row">
-            <span>Mode</span>
-            <strong>{cardFull.progress.mode}</strong>
-          </div>
-        {/if}
-      </div>
-    </section>
+    {@const rows = [
+      { label: "Progress", value: `${cardFull.progress.index} / ${cardFull.progress.total} ${cardFull.progress.unit}` },
+      { label: "Percent", value: `${cardFull.progress.percent}%` },
+      ...(cardFull.progress.mode ? [{ label: "Mode", value: cardFull.progress.mode }] : []),
+    ]}
+    <MetadataCard title="Progress" icon={Play} {rows} />
   {/if}
 {/snippet}
 
 {#snippet positionsSection()}
   {#if (cardFull.positions?.length ?? 0) > 0}
-    <section class="detail-section">
-      <h2 class="section-label">
-        <ListOrdered class="h-4 w-4" />
-        Positions
-      </h2>
-      <div class="tab-data-list">
-        {#each cardFull.positions ?? [] as row (row.code)}
-          <div class="tab-data-row">
-            <span>{row.code}</span>
-            <strong>{row.label}</strong>
-          </div>
-        {/each}
-      </div>
-    </section>
+    <MetadataCard
+      title="Positions"
+      icon={ListOrdered}
+      rows={(cardFull.positions ?? []).map((r) => ({ label: r.code, value: r.label }))}
+    />
   {/if}
 {/snippet}
 
 {#snippet classificationSection()}
   {#if cardFull.classification}
-    <section class="detail-section">
-      <h2 class="section-label">
-        <Badge class="h-4 w-4" />
-        Classification
-      </h2>
-      <div class="tab-data-list">
-        <div class="tab-data-row">
-          <span>{cardFull.classification.label}</span>
-          <strong>{cardFull.classification.value}</strong>
-        </div>
-      </div>
-    </section>
+    <MetadataCard
+      title="Classification"
+      icon={Badge}
+      rows={[{ label: cardFull.classification.label, value: cardFull.classification.value }]}
+    />
   {/if}
 {/snippet}
 
 {#snippet sourceSection()}
   {#if (cardFull.sources?.length ?? 0) > 0 || (cardFull.fingerprints?.length ?? 0) > 0}
-    <section class="detail-section">
-      <h2 class="section-label">
-        <Database class="h-4 w-4" />
-        Source
-      </h2>
-      <div class="tab-data-list">
-        {#each cardFull.sources ?? [] as source (source.code)}
-          <div class="tab-data-row">
-            <span>{source.code}</span>
-            <strong>{source.value}</strong>
-          </div>
-        {/each}
-        {#each cardFull.fingerprints ?? [] as fingerprint (`${fingerprint.algorithm}:${fingerprint.value}`)}
-          <div class="tab-data-row">
-            <span>{fingerprint.algorithm}</span>
-            <strong>{fingerprint.value}</strong>
-          </div>
-        {/each}
-      </div>
-    </section>
+    <MetadataCard title="Source" icon={Database}
+      rows={[
+        ...(cardFull.sources ?? []).map((s) => ({ label: s.code, value: s.value })),
+        ...(cardFull.fingerprints ?? []).map((f) => ({ label: String(f.algorithm), value: f.value })),
+      ]}
+    />
   {/if}
 {/snippet}
 
 {#snippet sourcesSection()}
   {#if (cardFull.sources?.length ?? 0) > 0}
-    <section class="detail-section">
-      <h2 class="section-label">
-        <Database class="h-4 w-4" />
-        Sources
-      </h2>
-      <div class="tab-data-list">
-        {#each cardFull.sources ?? [] as source (source.code)}
-          <div class="tab-data-row">
-            <span>{source.code}</span>
-            <strong>{source.value}</strong>
-          </div>
-        {/each}
-      </div>
-    </section>
+    <MetadataCard
+      title="Sources"
+      icon={Database}
+      rows={(cardFull.sources ?? []).map((s) => ({ label: s.code, value: s.value }))}
+    />
   {/if}
 {/snippet}
 
 {#snippet fingerprintsSection()}
   {#if (cardFull.fingerprints?.length ?? 0) > 0}
-    <section class="detail-section">
-      <h2 class="section-label">
-        <Fingerprint class="h-4 w-4" />
-        Fingerprints
-      </h2>
-      <div class="tab-data-list">
-        {#each cardFull.fingerprints ?? [] as row (`${row.algorithm}:${row.value}`)}
-          <div class="tab-data-row">
-            <span>{row.algorithm}</span>
-            <strong>{row.value}</strong>
-          </div>
-        {/each}
-      </div>
-    </section>
+    <MetadataCard
+      title="Fingerprints"
+      icon={Fingerprint}
+      rows={(cardFull.fingerprints ?? []).map((r) => ({ label: String(r.algorithm), value: r.value }))}
+    />
   {/if}
 {/snippet}
 
@@ -1425,9 +1360,11 @@
         {@render extraSections()}
       {/if}
 
-      {#each standaloneMetadataSections as section (section.id)}
-        {@render renderDetailSection(section)}
-      {/each}
+      <MetadataCardGrid>
+        {#each standaloneMetadataSections as section (section.id)}
+          {@render renderDetailSection(section)}
+        {/each}
+      </MetadataCardGrid>
     </div>
   {/if}
 {/snippet}
@@ -1698,10 +1635,12 @@
             {/if}
           {/if}
           {#key activeTab.id}
-            <div class="detail-tab-sections" data-layout={activeTab.layout ?? "stack"}>
-              {#each activeTabSections as section (section.id)}
-                {@render renderDetailSection(section)}
-              {/each}
+            <div class="detail-tab-sections">
+              <MetadataCardGrid>
+                {#each activeTabSections as section (section.id)}
+                  {@render renderDetailSection(section)}
+                {/each}
+              </MetadataCardGrid>
             </div>
           {/key}
         </div>
@@ -1971,8 +1910,9 @@
   }
 
   .header-asset-panel.is-empty {
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
+    padding-top: 1rem;
   }
 
   .asset-empty-label {
@@ -2467,14 +2407,8 @@
   }
 
   .detail-tab-sections {
-    display: grid;
-    gap: 1rem;
     min-width: 0;
     padding: 1rem 1.5rem 1.5rem;
-  }
-
-  .detail-tab-sections[data-layout="grid"] {
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
   }
 
   .detail-tab-sections .detail-body {
@@ -2482,7 +2416,8 @@
   }
 
   .detail-tab-sections .detail-section {
-    padding: 0 0 1rem;
+    padding: 0;
+    border-bottom: none;
   }
 
   .custom-detail-section {
@@ -2597,8 +2532,14 @@
   /* ── Metadata sections ──────────────────────────────────── */
 
   .metadata-sections {
-    padding: 0 1.5rem 1.5rem;
-    border-top: 1px solid var(--detail-border);
+    display: grid;
+    gap: 0.75rem;
+    padding: 1rem 1.5rem 1.5rem;
+  }
+
+  .metadata-sections .detail-section {
+    padding: 0;
+    border-bottom: none;
   }
 
   .detail-section {
@@ -2690,45 +2631,6 @@
     color: var(--detail-text-muted);
   }
 
-  .tab-data-list {
-    display: grid;
-    gap: 0;
-    min-width: 0;
-  }
-
-  .tab-data-row {
-    display: grid;
-    grid-template-columns: minmax(5.5rem, max-content) minmax(0, 1fr);
-    gap: 0.8rem;
-    align-items: baseline;
-    min-width: 0;
-    padding: 0.55rem 0;
-    border-bottom: 1px solid color-mix(in srgb, var(--detail-border) 56%, transparent);
-    font-size: 0.82rem;
-  }
-
-  .tab-data-row:last-child {
-    border-bottom: none;
-  }
-
-  .tab-data-row span {
-    color: var(--detail-text-muted);
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.7rem;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-  }
-
-  .tab-data-row strong {
-    min-width: 0;
-    color: var(--detail-text-secondary);
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.76rem;
-    font-weight: 500;
-    overflow-wrap: anywhere;
-  }
-
   .reference-list {
     display: flex;
     flex-wrap: nowrap;
@@ -2756,31 +2658,69 @@
 
   .link-list {
     display: grid;
+    gap: 0.3rem;
+  }
+
+  .link-group {
+    display: grid;
     gap: 0.35rem;
   }
 
+  .link-group + .link-group {
+    margin-top: 0.8rem;
+  }
+
+  .link-group-label {
+    color: var(--color-text-muted, #7d8596);
+    font-family: var(--font-mono, "JetBrains Mono", monospace);
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
   .link-item {
-    display: inline-flex;
+    display: flex;
     align-items: center;
     gap: 0.4rem;
-    padding: 0.35rem 0.6rem;
-    border: 1px solid var(--detail-border);
+    min-width: 0;
+    padding: 0.3rem 0.55rem;
+    border: 1px solid var(--color-border-subtle, rgba(164, 172, 185, 0.07));
     border-radius: var(--radius-xs, 4px);
-    background: var(--detail-surface-raised);
-    color: var(--detail-text-secondary);
-    font-size: 0.82rem;
+    background: var(--color-surface-3, #151a28);
+    color: var(--color-text-secondary, #c4c9d4);
+    font-family: var(--font-mono, "JetBrains Mono", monospace);
+    font-size: 0.74rem;
     text-decoration: none;
-    transition: border-color 0.15s, color 0.15s, box-shadow 0.15s;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transition: border-color 0.15s, color 0.15s;
   }
 
   a.link-item:hover {
     color: var(--detail-accent);
     border-color: var(--detail-accent-muted);
-    box-shadow: 0 0 10px var(--detail-accent-glow);
+  }
+
+  .provider-id-item {
+    gap: 0.5rem;
+  }
+
+  .provider-id-provider {
+    color: var(--detail-accent);
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  .provider-id-value {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .link-item.no-url {
-    color: var(--detail-text-muted);
+    color: var(--color-text-muted, #8a93a6);
   }
 
   /* ── Shared ─────────────────────────────────────────────── */
@@ -2807,7 +2747,7 @@
     }
 
     .metadata-sections {
-      padding: 0 2rem 2rem;
+      padding: 1rem 2rem 2rem;
     }
 
     .detail-tab-list {

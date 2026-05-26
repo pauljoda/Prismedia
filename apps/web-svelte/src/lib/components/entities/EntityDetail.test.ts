@@ -245,7 +245,7 @@ describe("EntityDetail", () => {
       subtitles: [],
       progress: { index: 12, total: 18, percent: 67, unit: "episodes", mode: "watching", completed: false },
       positions: [{ code: "episode", value: 2, label: "Episode 2" }],
-      classification: { value: "animation", system: "content-type" },
+      classification: { value: "animation", label: "Animation", system: "content-type" },
       sources: [{ code: "stash-compat", value: "scene-42" }],
     } satisfies EntityDetailCardFull;
 
@@ -382,7 +382,7 @@ describe("EntityDetail", () => {
       subtitles: [],
       progress: null,
       positions: [{ code: "episodeNumber", value: 2, label: "Episode 2" }],
-      classification: { value: "movie", system: "kind" },
+      classification: { value: "movie", label: "Movie", system: "kind" },
       sources: [],
       studio: null,
       credits: [],
@@ -406,8 +406,8 @@ describe("EntityDetail", () => {
     });
     await fireEvent.click(screen.getByRole("button", { name: "Favorite" }));
     await fireEvent.input(screen.getByRole("textbox", { name: "Stats" }), { target: { value: "94" } });
-    await fireEvent.input(screen.getByPlaceholderText("runtime"), { target: { value: "voteCount" } });
-    await fireEvent.input(screen.getByPlaceholderText("120"), { target: { value: "12" } });
+    await fireEvent.input(screen.getByPlaceholderText("count"), { target: { value: "voteCount" } });
+    await fireEvent.input(screen.getByPlaceholderText("12"), { target: { value: "12" } });
     await fireEvent.click(screen.getAllByRole("button", { name: "Add entry" })[0]);
     await fireEvent.input(screen.getByRole("textbox", { name: "Positions" }), { target: { value: "3" } });
     await fireEvent.input(screen.getByRole("textbox", { name: "Classification" }), {
@@ -431,6 +431,7 @@ describe("EntityDetail", () => {
 
   it("blocks dirty tab navigation until the user discards edits", async () => {
     const card = buildCard();
+    card.description = "A visible details tab";
     card.links = [{ label: "https://example.test", url: "https://example.test" }];
 
     render(EntityDetail, {
@@ -515,5 +516,26 @@ describe("EntityDetail", () => {
         externalIds: { tmdb: "6515882" },
       }),
     });
+  });
+
+  it("shows provider IDs separately from URL links in the read view", () => {
+    const card = buildCard();
+    card.links = [
+      { label: "The Movie Database", url: "https://www.themoviedb.org/tv/271267" },
+      { label: "tmdb: 418214", url: "https://www.themoviedb.org/tv/418214", provider: "tmdb" },
+    ];
+
+    render(EntityDetail, {
+      props: {
+        card,
+        tabs: [{ id: "links", label: "Links", sections: ["links"] }],
+      },
+    });
+
+    expect(screen.getByText("Links & Provider IDs")).toBeInTheDocument();
+    expect(screen.getByText("URLs")).toBeInTheDocument();
+    expect(screen.getByText("Provider IDs")).toBeInTheDocument();
+    expect(screen.getByText("tmdb")).toBeInTheDocument();
+    expect(screen.getByText("418214")).toBeInTheDocument();
   });
 });

@@ -1,5 +1,6 @@
 <script lang="ts">
   import EntityCastAndCrewSection from "$lib/components/entities/EntityCastAndCrewSection.svelte";
+  import MetadataCard from "$lib/components/MetadataCard.svelte";
   import type {
     EntityDetailCardFull,
   } from "$lib/entities/entity-detail";
@@ -9,6 +10,7 @@
   import VideoMarkerEditor from "$lib/components/VideoMarkerEditor.svelte";
   import VideoTranscriptPanel from "$lib/components/VideoTranscriptPanel.svelte";
   import { formatVideoTimestamp } from "./video-page-state";
+  import { MonitorCog, Calendar, Activity, Database } from "@lucide/svelte";
 
   interface Props {
     section: EntityDetailSection;
@@ -55,57 +57,38 @@
   <EntityCastAndCrewSection {studioCards} {creditCards} />
 {:else if section.id === "technical"}
   {#if card.technical.length > 0}
-    <div class="tab-data-list">
-      {#each card.technical as row (row.label)}
-        <div class="tab-data-row">
-          <span>{row.label}</span>
-          <strong>{row.value}</strong>
-        </div>
-      {/each}
-    </div>
+    <MetadataCard
+      title="Technical"
+      icon={MonitorCog}
+      rows={card.technical.map((r) => ({ label: r.label, value: r.value }))}
+    />
   {/if}
 {:else if section.id === "dates"}
   {#if card.dates.length > 0}
-    <div class="tab-data-list">
-      {#each card.dates as row (row.code)}
-        <div class="tab-data-row">
-          <span>{row.label}</span>
-          <strong>{row.value}</strong>
-        </div>
-      {/each}
-    </div>
+    <MetadataCard
+      title="Dates"
+      icon={Calendar}
+      rows={card.dates.map((r) => ({ label: r.label, value: r.value }))}
+    />
   {/if}
 {:else if section.id === "playback"}
   {#if playbackState}
-    <div class="tab-data-list">
-      <div class="tab-data-row">
-        <span>Play Count</span>
-        <strong>{playbackState.playCount}</strong>
-      </div>
-      {#if playbackState.resumeSeconds > 0}
-        <div class="tab-data-row">
-          <span>Resume</span>
-          <strong>{formatVideoTimestamp(playbackState.resumeSeconds)}</strong>
-        </div>
-      {/if}
-    </div>
+    {@const rows = [
+      { label: "Play Count", value: String(playbackState.playCount) },
+      ...(playbackState.resumeSeconds > 0
+        ? [{ label: "Resume", value: formatVideoTimestamp(playbackState.resumeSeconds) }]
+        : []),
+    ]}
+    <MetadataCard title="Playback" icon={Activity} {rows} />
   {/if}
 {:else if section.id === "source"}
   {#if card.sources.length > 0 || card.fingerprints.length > 0}
-    <div class="tab-data-list">
-      {#each card.sources as source (source.code)}
-        <div class="tab-data-row">
-          <span>{source.code}</span>
-          <strong>{source.value}</strong>
-        </div>
-      {/each}
-      {#each card.fingerprints as fingerprint (`${fingerprint.algorithm}:${fingerprint.value}`)}
-        <div class="tab-data-row">
-          <span>{fingerprint.algorithm}</span>
-          <strong>{fingerprint.value}</strong>
-        </div>
-      {/each}
-    </div>
+    <MetadataCard title="Source" icon={Database}
+      rows={[
+        ...card.sources.map((s) => ({ label: s.code, value: s.value })),
+        ...card.fingerprints.map((f) => ({ label: String(f.algorithm), value: f.value })),
+      ]}
+    />
   {/if}
 {:else if section.id === "markers"}
   <VideoMarkerEditor
@@ -156,37 +139,10 @@
 {/if}
 
 <style>
-  .tab-data-list,
   .transcript-tab-stack {
     display: grid;
     gap: 0;
     min-width: 0;
-  }
-
-  .tab-data-row {
-    display: grid;
-    grid-template-columns: minmax(5.5rem, max-content) minmax(0, 1fr);
-    gap: 0.8rem;
-    align-items: baseline;
-    min-width: 0;
-    padding: 0.55rem 0;
-    border-bottom: 1px solid color-mix(in srgb, var(--color-border, #1c2235) 56%, transparent);
-    font-size: 0.82rem;
-  }
-
-  .tab-data-row span {
-    color: var(--color-text-muted, #8a93a6);
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.7rem;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-  }
-
-  .tab-data-row strong {
-    min-width: 0;
-    overflow-wrap: anywhere;
-    color: var(--color-text-secondary, #c4c9d4);
-    font-weight: 500;
   }
 
   .tab-inline-notice {

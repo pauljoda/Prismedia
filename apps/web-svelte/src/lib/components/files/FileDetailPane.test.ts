@@ -20,24 +20,18 @@ describe("FileDetailPane", () => {
     const { container } = render(FileDetailPane, { props: { detail } });
 
     const propertiesCard = container.querySelector(".properties-card");
-    const propertiesRow = container.querySelector(".properties-row");
-    const metaGrid = container.querySelector(".meta-grid");
     expect(propertiesCard).toBeInTheDocument();
-    expect(propertiesRow).toBeInTheDocument();
-    expect(propertiesCard).toContainElement(propertiesRow as HTMLElement);
-    expect(propertiesCard).toContainElement(metaGrid as HTMLElement);
     expect(within(propertiesCard as HTMLElement).getByRole("link", { name: "A Feature Film" })).toHaveClass("entity-thumbnail");
     expect(within(propertiesCard as HTMLElement).getByText("Kind")).toBeInTheDocument();
     expect(screen.queryByText("Linked entities")).not.toBeInTheDocument();
   });
 
-  it("uses the properties card as the metadata background instead of nesting a metadata card", () => {
+  it("uses MetadataCard inside the properties section", () => {
     const source = readFileSync("src/lib/components/files/FileDetailPane.svelte", "utf8");
 
     expect(source).toContain(".properties-card");
-    expect(source).toContain(".meta-grid {");
-    expect(source).toContain("background: transparent;");
-    expect(source).not.toContain(".meta-grid {\n    display: grid;\n    grid-template-columns: repeat(2, minmax(0, 1fr));\n    border: 1px solid var(--color-border-subtle);");
+    expect(source).toContain("MetadataCard");
+    expect(source).toContain('title="Properties"');
   });
 
   it("renders excluded paths as filesystem-only details", () => {

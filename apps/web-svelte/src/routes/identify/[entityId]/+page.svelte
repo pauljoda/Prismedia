@@ -17,8 +17,10 @@
   import IdentifyReviewParent from "$lib/components/identify/IdentifyReviewParent.svelte";
   import IdentifyReviewChild from "$lib/components/identify/IdentifyReviewChild.svelte";
   import { useIdentifyStore } from "$lib/components/identify/identify-store.svelte";
+  import { useAppChrome } from "$lib/stores/app-chrome.svelte";
 
   const store = useIdentifyStore();
+  const appChrome = useAppChrome();
   const entityId = $derived(page.params.entityId ?? "");
   const current = $derived(store.queue.find((item) => item.entityId === entityId) ?? null);
   const providers = $derived(current ? store.providersForKind(current.entityKind) : []);
@@ -46,6 +48,13 @@
     if (queued) {
       store.reviewResolvedQueueItem(queued);
     }
+  });
+
+  $effect(() => {
+    return appChrome.setBreadcrumbs([
+      { label: "Identify", href: "/identify" },
+      { label: current?.title ?? "Review" },
+    ]);
   });
 
   async function runSearch() {

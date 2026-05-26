@@ -33,6 +33,18 @@ describe("entity detail state helpers", () => {
     expect(current.capabilities).toContainEqual({ kind: "rating", value: 4 });
   });
 
+  it("adds a rating capability when optimistic rating starts from an unrated entity", async () => {
+    let current = {
+      ...entity(),
+      capabilities: [{ kind: "flags" as const, isFavorite: false, isNsfw: false, isOrganized: true }],
+    };
+    const persist = vi.fn().mockResolvedValue(undefined);
+
+    await updateOptimisticEntityRating(current, 3, (next) => (current = next), persist);
+
+    expect(current.capabilities).toContainEqual({ kind: "rating", value: 3 });
+  });
+
   it("rolls rating changes back when persistence fails", async () => {
     let current = entity();
     const previous = current;

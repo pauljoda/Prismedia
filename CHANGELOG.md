@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Mobile install metadata now presents Prismedia with the correct app name, theme colors, and safer icon spacing for browser and home-screen surfaces.
 
 ### Added
+- Added explicit reference-backed entity grids on people, studio, and tag detail pages so related content is listed from actual incoming relationships instead of search matches.
 - Added audio playback with streaming, waveform visualization, and full transport controls.
 - Added edit-mode poster and header artwork upload, drag-and-drop, and clear controls for entity detail pages.
 - Added a traditional music player track list on audio library detail pages.
@@ -43,6 +44,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated web app manifest and mobile browser metadata for home-screen installation and browser UI theme colors.
 
 ### Fixed
+- Fixed Identify queue accepts so scoped child proposals cannot overwrite the root entity under review.
+- Fixed manual Identify title searches so stale provider IDs already saved on an entity cannot override the user's search text.
+- Fixed regenerated audio waveform files being hidden behind the browser's cached waveform JSON.
+- Fixed audio scan preview checks so audio tracks look for waveform assets instead of thumbnail assets.
+- Fixed audio track row numbering so zero-based structural order is displayed as human-friendly track numbers.
+- Restored audio library hero playback actions, moved sub-libraries above track lists, improved mobile track rows, and matched the waveform renderer to the legacy player visuals.
+- Fixed studio, person, tag, collection, image, and audio detail routes so page wrappers no longer add their own padding or width constraints around EntityDetail.
+- Fixed core entity rating and flag saves so shallow child entities keep their parent and sort order instead of disappearing from custom child lists after refresh.
+- Fixed Identify review navigation so queue review breadcrumbs live in the app shell and selected artwork previews update parent and relationship cards after walking into nested reviews.
+- Fixed audio library editing so track row renames save from the custom track list, track actions have a right-edge menu, header artwork upload no longer overlaps empty hero titles, and ratings persist through the shared entity rating endpoint.
 - Fixed audio waveform scrubbing so long tracks render as a scrolling strip under the fixed playhead instead of compressing the full waveform into the visible player.
 - Fixed audio waveform fallback rendering so old positive-only waveform cache files stay visible while newer regenerated waveforms use signed peaks.
 - Fixed audio player artwork and waveform presentation so compact covers render without extra thumbnail chrome, stale malformed waveforms are ignored, and the main play button uses the accent treatment.

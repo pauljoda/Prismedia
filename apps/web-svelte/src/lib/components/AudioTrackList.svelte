@@ -10,6 +10,7 @@
     isPlaying: boolean;
     onPlay: (trackId: string) => void;
     onRatingChange?: (trackId: string, value: number | null) => void;
+    onRename?: (track: AudioTrackListItemDto, title: string) => void | Promise<void>;
     onDelete?: (track: AudioTrackListItemDto) => void;
     class?: string;
   }
@@ -20,6 +21,7 @@
     isPlaying,
     onPlay,
     onRatingChange,
+    onRename,
     onDelete,
     class: className = "",
   }: Props = $props();
@@ -38,7 +40,7 @@
 
 <div class={cn("surface-panel border border-border-subtle overflow-hidden", className)}>
   <div
-    class="grid grid-cols-[2rem_minmax(0,1fr)_auto_3rem_1.75rem] items-center gap-3 border-b border-border-subtle px-3 py-2 sm:px-4"
+    class="hidden grid-cols-[2rem_minmax(0,1fr)_auto_3rem_2rem] items-center gap-3 border-b border-border-subtle px-4 py-2 sm:grid"
   >
     <span class="text-center font-mono text-[0.65rem] font-semibold uppercase tracking-widest text-text-disabled">#</span>
     <span class="text-[0.65rem] font-semibold uppercase tracking-widest text-text-disabled">Title</span>
@@ -55,6 +57,7 @@
       isPlaying={track.id === activeTrackId && isPlaying}
       {onPlay}
       {onRatingChange}
+      {onRename}
       {onDelete}
       trackHref={resolveEntityHref("audio-track", track.id)}
     />

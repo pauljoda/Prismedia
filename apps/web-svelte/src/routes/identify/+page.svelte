@@ -20,8 +20,10 @@
   import IdentifyReviewParent from "$lib/components/identify/IdentifyReviewParent.svelte";
   import IdentifyReviewChild from "$lib/components/identify/IdentifyReviewChild.svelte";
   import { entityKindIcon } from "$lib/components/identify/identify-icons";
+  import { useAppChrome } from "$lib/stores/app-chrome.svelte";
 
   const store = useIdentifyStore();
+  const appChrome = useAppChrome();
 
   onMount(() => {
     const entityId = page.url.searchParams.get("entity");
@@ -32,6 +34,10 @@
     } else {
       void store.enterDashboardRoute();
     }
+  });
+
+  $effect(() => {
+    return appChrome.setBreadcrumbs([{ label: "Identify" }]);
   });
 </script>
 

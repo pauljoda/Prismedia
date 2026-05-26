@@ -278,7 +278,7 @@
     }
 
     let cancelled = false;
-    fetch(waveformUrl)
+    fetch(waveformUrl, { cache: "no-store" })
       .then((response) => {
         if (!response.ok) throw new Error(`Waveform fetch failed: ${response.status}`);
         return response.json() as Promise<{ data?: number[] }>;
@@ -504,8 +504,8 @@
   {/if}
 
   <!-- Transport controls -->
-  <div class="flex items-center justify-between px-2 py-1.5">
-    <div class="group/vol flex items-center gap-1">
+  <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-x-2 px-2 py-1.5">
+    <div class="group/vol flex min-w-0 items-center gap-1">
       <button
         type="button"
         onclick={toggleMute}
@@ -591,6 +591,6 @@
       </button>
     </div>
 
-    <div class="w-10" aria-hidden="true"></div>
+    <div class="min-w-0" aria-hidden="true"></div>
   </div>
 </div>

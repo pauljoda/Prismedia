@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { ChevronLeft, ChevronRight } from "@lucide/svelte";
-  import { normalizeWaveformSample, waveformDisplayScale } from "./audio-waveform";
 
   interface Props {
     peaks: number[];
@@ -58,25 +57,14 @@
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, width, height);
 
-    const columns = Math.max(1, Math.floor(width));
-    const barWidth = Math.max(1, width / columns);
+    const barWidth = Math.max(1, width / count);
     const centerY = height / 2;
-    const displayScale = waveformDisplayScale(waveform);
+    const maxAmplitude = waveform.reduce((max, value) => Math.max(max, Math.abs(value)), 1);
 
-    for (let column = 0; column < columns; column += 1) {
-      const startPair = Math.floor((column / columns) * count);
-      const endPair = Math.max(startPair + 1, Math.ceil(((column + 1) / columns) * count));
-      let rawMin = 0;
-      let rawMax = 0;
-
-      for (let pair = startPair; pair < endPair && pair < count; pair += 1) {
-        rawMin = Math.min(rawMin, waveform[pair * 2] ?? 0);
-        rawMax = Math.max(rawMax, waveform[pair * 2 + 1] ?? 0);
-      }
-
-      const min = normalizeWaveformSample(rawMin, displayScale);
-      const max = normalizeWaveformSample(rawMax, displayScale);
-      const x = (column / columns) * width;
+    for (let i = 0; i < count; i += 1) {
+      const min = waveform[i * 2]! / maxAmplitude;
+      const max = waveform[i * 2 + 1]! / maxAmplitude;
+      const x = (i / count) * width;
       const barTop = centerY - max * (height / 2) * 0.88;
       const barBottom = centerY - min * (height / 2) * 0.88;
       const barHeight = Math.max(1, barBottom - barTop);

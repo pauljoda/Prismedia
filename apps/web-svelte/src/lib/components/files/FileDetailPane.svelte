@@ -11,11 +11,13 @@
     Upload,
     Undo2,
   } from "@lucide/svelte";
+  import { Info } from "@lucide/svelte";
   import type { FileDetail } from "$lib/api/prismedia";
   import { fileContentUrl } from "$lib/api/prismedia";
   import type { FileActionId } from "$lib/files/file-actions";
   import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
+  import MetadataCard from "$lib/components/MetadataCard.svelte";
   import { entityReferenceToThumbnailCard } from "$lib/entities/entity-thumbnail";
 
   interface Props {
@@ -117,6 +119,23 @@
       timeStyle: "short",
     }).format(new Date(value));
   }
+
+  const fileMetaRows = $derived.by(() => {
+    if (!entry || !detail) return [];
+    const rows: { label: string; value: string }[] = [];
+    if (isDirectory) {
+      if (detail.directoryTotalSizeBytes != null) rows.push({ label: "Total size", value: formatBytes(detail.directoryTotalSizeBytes) });
+      if (detail.directoryFileCount != null) rows.push({ label: "Files", value: detail.directoryFileCount.toLocaleString() });
+    } else {
+      rows.push({ label: "Size", value: formatBytes(entry.sizeBytes) });
+    }
+    rows.push({ label: "Kind", value: entry.kind });
+    if (isExcluded) rows.push({ label: "Excluded", value: "Library scans skip this path" });
+    rows.push({ label: "Modified", value: formatDate(entry.modifiedAt) });
+    rows.push({ label: "Created", value: formatDate(detail.createdAt) });
+    if (entry.mimeType) rows.push({ label: "MIME", value: entry.mimeType });
+    return rows;
+  });
 
   function handleDragOver(event: DragEvent): void {
     if (!event.dataTransfer?.types.includes("Files")) return;
@@ -238,36 +257,12 @@
       {/if}
 
       <section class="properties-card" aria-labelledby="file-properties-heading">
-        <div class="section-label" id="file-properties-heading">Properties</div>
-        <div class="properties-row" class:has-entity={Boolean(heroCard)}>
-          {#if heroCard}
-            <div class="entity-hero" aria-label="Associated entity">
-              <EntityThumbnail card={heroCard} linkable selectable={false} titleSize="compact" />
-            </div>
-          {/if}
-
-          <div class="meta-grid">
-            {#if isDirectory}
-              {#if detail.directoryTotalSizeBytes != null}
-                <div><span>Total size</span><strong>{formatBytes(detail.directoryTotalSizeBytes)}</strong></div>
-              {/if}
-              {#if detail.directoryFileCount != null}
-                <div><span>Files</span><strong>{detail.directoryFileCount.toLocaleString()}</strong></div>
-              {/if}
-            {:else}
-              <div><span>Size</span><strong>{formatBytes(entry.sizeBytes)}</strong></div>
-            {/if}
-            <div><span>Kind</span><strong>{entry.kind}</strong></div>
-            {#if isExcluded}
-              <div><span>Excluded</span><strong>Library scans skip this path</strong></div>
-            {/if}
-            <div><span>Modified</span><strong>{formatDate(entry.modifiedAt)}</strong></div>
-            <div><span>Created</span><strong>{formatDate(detail.createdAt)}</strong></div>
-            {#if entry.mimeType}
-              <div><span>MIME</span><strong>{entry.mimeType}</strong></div>
-            {/if}
+        {#if heroCard}
+          <div class="entity-hero" aria-label="Associated entity">
+            <EntityThumbnail card={heroCard} linkable selectable={false} titleSize="compact" />
           </div>
-        </div>
+        {/if}
+        <MetadataCard title="Properties" icon={Info} rows={fileMetaRows} />
       </section>
 
       {#if linkedCards.length > 0}
@@ -426,46 +421,6 @@
     box-shadow: var(--shadow-well);
   }
 
-  .properties-card .section-label {
-    padding-top: 0;
-  }
-
-  .properties-row {
-    display: grid;
-    gap: 0.65rem;
-    align-items: start;
-  }
-
-  .meta-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    background: transparent;
-  }
-
-  .meta-grid span {
-    color: var(--color-text-disabled);
-    font-family: var(--font-mono);
-    font-size: 0.62rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-  }
-
-  .meta-grid div {
-    min-width: 0;
-    border-bottom: 1px solid var(--color-border-subtle);
-    padding: 0.4rem 0.6rem;
-  }
-
-  .meta-grid strong {
-    display: block;
-    overflow-wrap: anywhere;
-    margin-top: 0.1rem;
-    color: var(--color-text-secondary);
-    font-family: var(--font-mono);
-    font-size: 0.75rem;
-    font-weight: 500;
-  }
-
   .entity-hero {
     width: min(100%, 13rem);
   }
@@ -534,12 +489,11 @@
   }
 
   @media (min-width: 768px) {
-    .properties-row.has-entity {
+    .properties-card {
+      display: grid;
       grid-template-columns: minmax(10rem, 13rem) minmax(0, 1fr);
-    }
-
-    .meta-grid {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0.65rem;
+      align-items: start;
     }
   }
 </style>

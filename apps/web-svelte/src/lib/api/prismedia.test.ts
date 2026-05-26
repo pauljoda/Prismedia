@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  fetchEntities,
+  updateEntityRating,
   updateEntityMetadata,
   uploadFiles,
   excludeFile,
@@ -44,6 +46,40 @@ describe("api helpers", () => {
       method: "PATCH",
       body: JSON.stringify(request),
     }));
+  });
+
+  it("patches entity ratings through the same JSON API helper", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ id: "track-1", kind: "audio-track", title: "Track" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await updateEntityRating("track-1", 4);
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/entities/track-1/rating", expect.objectContaining({
+      method: "PATCH",
+      body: JSON.stringify({ value: 4 }),
+    }));
+  });
+
+  it("passes referenced entity and relationship code filters when listing entities", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ items: [], nextCursor: null, totalCount: 0 }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await fetchEntities({ referencedBy: "studio-1", relationshipCode: "studio", limit: 1000 });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/entities?referencedBy=studio-1&relationshipCode=studio&limit=1000",
+      expect.objectContaining({ method: "GET" }),
+    );
   });
 
   it("posts watched-root uploads as multipart data without a json content type", async () => {

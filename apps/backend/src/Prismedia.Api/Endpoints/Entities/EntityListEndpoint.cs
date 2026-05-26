@@ -12,6 +12,8 @@ internal static class EntityListEndpoint {
             string? cursor,
             bool? hideNsfw,
             int? limit,
+            Guid? referencedBy,
+            string? relationshipCode,
             HttpContext httpContext,
             IEntityReadService entities,
             CancellationToken cancellationToken) => {
@@ -25,7 +27,9 @@ internal static class EntityListEndpoint {
                     cursor,
                     NsfwVisibility.ShouldHide(hideNsfw, httpContext),
                     limit,
-                    cancellationToken));
+                    cancellationToken,
+                    referencedBy,
+                    relationshipCode));
             })
             .WithName("ListEntities")
             .Produces<EntityListResponse>()

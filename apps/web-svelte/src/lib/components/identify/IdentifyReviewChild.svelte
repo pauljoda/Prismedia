@@ -74,7 +74,7 @@
   const selectedChildCount = $derived(
     children.filter((child) => store.isReviewProposalSelected(child.proposalId)).length,
   );
-  const contextPosterUrl = $derived(proposalImageUrl(["poster", "thumbnail", "cover", "logo"]));
+  const contextPosterUrl = $derived(selectedProposalImageUrl(proposal, ["poster", "thumbnail", "cover", "logo"]) ?? proposalImageUrl(["poster", "thumbnail", "cover", "logo"]));
 
   const parentChildren = $derived(structuralChildProposals(parentProposal));
   const currentIndex = $derived(parentChildren.findIndex((c) => c.proposalId === proposal.proposalId));
@@ -144,6 +144,8 @@
   }
 
   function preferredProposalImage(result: EntityMetadataProposal): ImageCandidate | null {
+    const selected = selectedProposalImage(result, ["poster", "thumbnail", "cover", "logo"]);
+    if (selected) return selected;
     const images = reviewableImages(result.images ?? [], result.targetKind);
     return images.find((image) => image.kind === "poster") ??
       images.find((image) => image.kind === "thumbnail") ??
@@ -152,11 +154,35 @@
   }
 
   function preferredRelationshipImage(result: EntityMetadataProposal): ImageCandidate | null {
+    const selected = selectedProposalImage(result, ["poster", "thumbnail", "logo", "cover"]);
+    if (selected) return selected;
     return result.images.find((image) => image.kind === "poster") ??
       result.images.find((image) => image.kind === "thumbnail") ??
       result.images.find((image) => image.kind === "logo") ??
       result.images[0] ??
       null;
+  }
+
+  function selectedProposalImage(result: EntityMetadataProposal, kinds: string[]): ImageCandidate | null {
+    const images = reviewableImages(result.images ?? [], result.targetKind);
+    const selections = result.proposalId === proposal.proposalId
+      ? selectedImages
+      : store.getReviewImageSelections(result.proposalId);
+    if (!selections) return null;
+
+    for (const kind of kinds) {
+      const url = selections[kind];
+      if (!url) continue;
+      const image = images.find((candidate) => candidate.kind === kind && candidate.url === url);
+      if (image) return image;
+    }
+
+    return null;
+  }
+
+  function selectedProposalImageUrl(result: EntityMetadataProposal, kinds: string[]): string | null {
+    const selected = selectedProposalImage(result, kinds);
+    return selected ? reviewImagePreviewUrl(selected, result.targetKind) : null;
   }
 
   function roleLabel(credit: CreditPatch | null | undefined): string {

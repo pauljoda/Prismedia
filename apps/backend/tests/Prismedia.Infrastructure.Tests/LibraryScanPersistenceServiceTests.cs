@@ -53,6 +53,40 @@ public sealed class LibraryScanPersistenceServiceTests {
     }
 
     [Fact]
+    public async Task DownstreamNeedsAudioPreviewUsesWaveformRole() {
+        await using var db = CreateContext();
+        var trackWithWaveformId = Guid.Parse("aaaaaaaa-1111-1111-1111-111111111111");
+        var trackWithThumbnailId = Guid.Parse("aaaaaaaa-2222-2222-2222-222222222222");
+        SeedSourceEntity(db, trackWithWaveformId, EntityKindRegistry.AudioTrack.Code, "/media/audio/with-waveform.m4a");
+        SeedSourceEntity(db, trackWithThumbnailId, EntityKindRegistry.AudioTrack.Code, "/media/audio/with-thumbnail.m4a");
+        db.EntityFiles.Add(new EntityFileRow {
+            Id = Guid.NewGuid(),
+            EntityId = trackWithWaveformId,
+            Role = EntityFileRole.Waveform,
+            Path = $"/assets/audio-tracks/{trackWithWaveformId}/waveform.json",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        db.EntityFiles.Add(new EntityFileRow {
+            Id = Guid.NewGuid(),
+            EntityId = trackWithThumbnailId,
+            Role = EntityFileRole.Thumbnail,
+            Path = $"/assets/audio-tracks/{trackWithThumbnailId}/thumbnail.jpg",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var service = new LibraryScanPersistenceService(db);
+        var needs = await service.CheckDownstreamNeedsBatchAsync(
+            [trackWithWaveformId, trackWithThumbnailId],
+            CancellationToken.None);
+
+        Assert.False(needs[trackWithWaveformId].NeedsPreview);
+        Assert.True(needs[trackWithThumbnailId].NeedsPreview);
+    }
+
+    [Fact]
     public async Task DownstreamNeedsSubtitleExtractionWhenStoredSubtitleFileIsMissing() {
         await using var db = CreateContext();
         var videoId = Guid.Parse("33333333-3333-3333-3333-333333333333");

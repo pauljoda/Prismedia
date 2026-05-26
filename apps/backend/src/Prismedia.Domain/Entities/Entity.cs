@@ -164,6 +164,17 @@ public abstract class Entity {
         if (files is not null) _entityFiles.AddRange(files);
     }
 
+    /// <summary>
+    /// Restores persisted structural placement when infrastructure hydrates an entity
+    /// directly instead of through its parent aggregate.
+    /// </summary>
+    /// <param name="parentEntityId">Persisted parent entity identifier, if any.</param>
+    /// <param name="sortOrder">Persisted order within the parent, if any.</param>
+    public void HydrateStructuralPlacement(Guid? parentEntityId, int? sortOrder) {
+        ParentEntityId = parentEntityId;
+        SortOrder = sortOrder;
+    }
+
     // ── Capabilities (optional behavior modules) ───────────────────────
 
     /// <summary>Description capability when attached.</summary>

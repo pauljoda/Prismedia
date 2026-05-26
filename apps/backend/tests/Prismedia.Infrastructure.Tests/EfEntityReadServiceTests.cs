@@ -96,6 +96,82 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
+    public async Task ListAsyncCanFilterToEntitiesThatReferenceATargetByRelationshipCode() {
+        await using var db = CreateContext();
+        var actorId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        var matchedVideoId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var otherVideoId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+        var relatedVideoId = Guid.Parse("44444444-4444-4444-4444-444444444444");
+        var now = DateTimeOffset.UtcNow;
+        db.Entities.AddRange(
+            new EntityRow {
+                Id = matchedVideoId,
+                KindCode = EntityKindRegistry.Video.Code,
+                Title = "Linked Video",
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new EntityRow {
+                Id = otherVideoId,
+                KindCode = EntityKindRegistry.Video.Code,
+                Title = "Unlinked Video",
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new EntityRow {
+                Id = relatedVideoId,
+                KindCode = EntityKindRegistry.Video.Code,
+                Title = "Related Video",
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new EntityRow {
+                Id = actorId,
+                KindCode = EntityKindRegistry.Person.Code,
+                Title = "Guest Actor",
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+        db.EntityRelationshipLinks.AddRange(
+            new EntityRelationshipLinkRow {
+                EntityId = matchedVideoId,
+                RelationshipCode = "cast",
+                Label = "Cast",
+                TargetEntityId = actorId,
+                TargetKindCode = EntityKindRegistry.Person.Code,
+                SortOrder = 0,
+                CreatedAt = now
+            },
+            new EntityRelationshipLinkRow {
+                EntityId = relatedVideoId,
+                RelationshipCode = "related",
+                Label = "Related",
+                TargetEntityId = actorId,
+                TargetKindCode = EntityKindRegistry.Person.Code,
+                SortOrder = 0,
+                CreatedAt = now
+            });
+        await db.SaveChangesAsync();
+
+        var repository = new EfEntityRepository(db, EntityMappers.Kinds(db), EntityMappers.Capabilities(db));
+        var service = new EfEntityReadService(db, repository, EntityMappers.Kinds(db));
+
+        var result = await service.ListAsync(
+            EntityKindRegistry.Video.Code,
+            query: null,
+            cursor: null,
+            hideNsfw: null,
+            limit: null,
+            CancellationToken.None,
+            referencedBy: actorId,
+            relationshipCode: "cast");
+
+        var item = Assert.Single(result.Items);
+        Assert.Equal(matchedVideoId, item.Id);
+        Assert.Equal(1, result.TotalCount);
+    }
+
+    [Fact]
     public async Task ListAsyncProjectsVideoTrickplayPlaylistAsSpriteHover() {
         await using var db = CreateContext();
         var videoId = Guid.Parse("44444444-4444-4444-4444-444444444444");

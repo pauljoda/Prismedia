@@ -19,7 +19,6 @@
   import { entityCardToThumbnailCard } from "$lib/entities/entity-grid";
   import { resolveEntityHref } from "$lib/entities/entity-routes";
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
-  import type { EntityCard } from "$lib/api/generated/model";
   import EntityDetail, { type EntityMetadataUpdateRequest } from "$lib/components/entities/EntityDetail.svelte";
   import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
   import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
@@ -67,7 +66,7 @@
     try {
       const id = page.params.id ?? "";
       tag = await fetchTag(id);
-      await loadRelated(id, tag.title);
+      await loadRelated(id);
       loadState = "ready";
     } catch (err) {
       if (redirectHiddenEntityNotFound(err, nsfw.mode)) return;
@@ -76,9 +75,9 @@
     }
   }
 
-  async function loadRelated(tagId: string, tagTitle: string) {
+  async function loadRelated(tagId: string) {
     try {
-      const response = await fetchEntities({ query: tagTitle });
+      const response = await fetchEntities({ referencedBy: tagId, relationshipCode: "tags", limit: 1000 });
       relatedCards = response.items.map((item) => entityCardToThumbnailCard(item, resolveEntityHref(item.kind, item.id)));
     } catch {
       relatedCards = [];
@@ -165,7 +164,7 @@
 </div>
 
 <style>
-  .detail-page { display: grid; gap: 1.25rem; padding: clamp(1rem, 3vw, 2rem); max-width: 72rem; margin: 0 auto; }
+  .detail-page { display: grid; gap: 1.25rem; padding: 0; max-width: none; margin: 0; }
   .loading-shell { min-height: 28rem; border: 1px solid var(--color-border, #1c2235); background: var(--color-surface-2, #101420); animation: pulse 1.2s ease-in-out infinite; }
   .error-notice { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem; border: 1px solid color-mix(in srgb, #ef4444 50%, var(--color-border, #1c2235)); background: var(--color-surface-2, #101420); color: var(--color-text-muted, #8a93a6); font-size: 0.85rem; }
   .error-notice button { border: 1px solid var(--color-border, #1c2235); background: var(--color-surface-3, #151a28); color: var(--color-text-muted, #8a93a6); padding: 0.4rem 0.8rem; font-size: 0.78rem; cursor: pointer; }

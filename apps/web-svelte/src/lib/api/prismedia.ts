@@ -34,7 +34,6 @@ import {
   updateEntityFlags as updateEntityFlagsRequest,
   updateEntityMarker as updateEntityMarkerRequest,
   updateEntityPlayback as updateEntityPlaybackRequest,
-  updateEntityRating as updateEntityRatingRequest,
   getSetting as getSettingRequest,
   getSettings,
   resetSetting as resetSettingRequest,
@@ -472,7 +471,15 @@ function normalizeSettingsValues(response: GeneratedSettingsValuesResponse): Set
 }
 
 export function fetchEntities(
-  params?: { kind?: string; query?: string; cursor?: string; hideNsfw?: boolean; limit?: number },
+  params?: {
+    kind?: string;
+    query?: string;
+    cursor?: string;
+    hideNsfw?: boolean;
+    limit?: number;
+    referencedBy?: string;
+    relationshipCode?: string;
+  },
   options?: RequestOptions,
 ): Promise<EntityListResponse> {
   // Cast: hideNsfw is accepted by the backend but not yet in the generated OpenAPI type.
@@ -711,7 +718,10 @@ export function updateEntityRating(
   id: string,
   value: number | null,
 ): Promise<unknown> {
-  return updateEntityRatingRequest(id, { value });
+  return fetchApi(`/entities/${id}/rating`, {
+    method: "PATCH",
+    body: JSON.stringify({ value }),
+  });
 }
 
 export function updateEntityFlags(

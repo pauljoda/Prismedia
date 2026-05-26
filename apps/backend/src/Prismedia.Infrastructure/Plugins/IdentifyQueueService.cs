@@ -170,8 +170,15 @@ public sealed class IdentifyQueueService {
             ?? throw new KeyNotFoundException($"Identify queue item for entity '{entityId}' was not found.");
         var entity = await LoadEntityAsync(entityId, cancellationToken)
             ?? throw new KeyNotFoundException($"Entity '{entityId}' was not found.");
-        var proposal = request.Proposal ?? Deserialize<EntityMetadataProposal>(row.ProposalJson)
+        var storedProposal = Deserialize<EntityMetadataProposal>(row.ProposalJson)
             ?? throw new InvalidOperationException("Identify queue item has no proposal to apply.");
+        var proposal = request.Proposal ?? storedProposal;
+        if (!string.Equals(proposal.ProposalId, storedProposal.ProposalId, StringComparison.Ordinal)) {
+            throw new InvalidOperationException("Only the root identify proposal can be applied to a queue item.");
+        }
+        if (!string.Equals(proposal.TargetKind, entity.KindCode, StringComparison.OrdinalIgnoreCase)) {
+            throw new InvalidOperationException("Identify proposal kind does not match the queued entity.");
+        }
         var acceptedProposal = MarkAcceptedProposalTreeOrganized(proposal);
 
         var applied = await _identify.ApplyAsync(

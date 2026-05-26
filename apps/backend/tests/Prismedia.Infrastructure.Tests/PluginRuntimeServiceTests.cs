@@ -565,7 +565,9 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             CancellationToken.None);
 
         Assert.True(response.Ok);
-        Assert.Equal("search", Assert.Single(executor.Requests).Action);
+        var request = Assert.Single(executor.Requests);
+        Assert.Equal("search", request.Action);
+        Assert.Empty(request.Hints.ExternalIds);
     }
 
     [Fact]

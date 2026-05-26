@@ -539,15 +539,14 @@
     position: relative;
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
-    gap: 0.9rem 1rem;
+    gap: 0.75rem 1rem;
     overflow: hidden;
-    padding: 1.1rem 1.25rem;
+    padding: 1rem 1.25rem;
     text-align: left;
     border: 1px solid var(--color-border-default, rgba(164, 172, 185, 0.12));
     border-radius: var(--radius-md, 10px);
     background:
-      linear-gradient(145deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0) 32%),
-      linear-gradient(180deg, rgba(242, 194, 106, 0.08), rgba(242, 194, 106, 0) 38%),
+      linear-gradient(145deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0) 32%),
       var(--color-overlay-glass);
     color: var(--color-text-muted, #8a93a6);
     box-shadow: var(--shadow-elevated);
@@ -561,26 +560,7 @@
     pointer-events: none;
     content: "";
     border-radius: inherit;
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.08),
-      inset 1px 0 0 rgba(255, 255, 255, 0.03);
-  }
-
-  .progress-section::after {
-    position: absolute;
-    top: 0;
-    right: 1.25rem;
-    left: 1.25rem;
-    height: 1px;
-    pointer-events: none;
-    content: "";
-    background: linear-gradient(
-      90deg,
-      transparent,
-      rgba(242, 194, 106, 0.48),
-      rgba(226, 232, 240, 0.18),
-      transparent
-    );
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
   }
 
   .progress-summary {
@@ -596,7 +576,6 @@
 
   .progress-summary:hover strong {
     color: var(--color-text-accent-bright, #f5d48a);
-    text-shadow: 0 0 16px rgba(242, 194, 106, 0.18);
   }
 
   .progress-summary:focus-visible {
@@ -641,21 +620,17 @@
     font-size: 0.95rem;
     font-weight: 700;
     color: var(--color-text-accent-bright, #f5d48a);
-    text-shadow: 0 0 16px rgba(242, 194, 106, 0.2);
   }
 
   .progress-track {
     position: relative;
     grid-column: 1 / -1;
     display: block;
-    height: 5px;
+    height: 3px;
     overflow: hidden;
-    border: 1px solid var(--color-border-subtle, rgba(164, 172, 185, 0.07));
     border-radius: var(--radius-xs, 4px);
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent),
-      rgba(0, 0, 0, 0.42);
-    box-shadow: var(--shadow-well, inset 0 2px 5px rgba(0, 0, 0, 0.4));
+    background: rgba(0, 0, 0, 0.35);
+    box-shadow: var(--shadow-well, inset 0 1px 3px rgba(0, 0, 0, 0.35));
   }
 
   .progress-track span {
@@ -663,7 +638,6 @@
     height: 100%;
     border-radius: inherit;
     background: linear-gradient(135deg, #7a5e20 0%, #d59a2a 58%, #f2c26a 100%);
-    box-shadow: 0 0 18px rgba(242, 194, 106, 0.52);
   }
 
   .progress-actions {

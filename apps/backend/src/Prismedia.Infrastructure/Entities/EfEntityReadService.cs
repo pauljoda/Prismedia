@@ -43,8 +43,13 @@ public sealed class EfEntityReadService : IEntityReadService {
         string? cursor,
         bool? hideNsfw,
         int? limit,
-        CancellationToken cancellationToken) {
+        CancellationToken cancellationToken,
+        Guid? referencedBy = null,
+        string? relationshipCode = null) {
         var pageSize = Math.Clamp(limit ?? DefaultPageSize, 1, MaxPageSize);
+        var normalizedRelationshipCode = string.IsNullOrWhiteSpace(relationshipCode)
+            ? null
+            : relationshipCode.Trim();
         var entityQuery = _db.Entities.AsNoTracking()
             .Where(entity => entity.DeletedAt == null);
 
@@ -59,6 +64,14 @@ public sealed class EfEntityReadService : IEntityReadService {
         if (!string.IsNullOrWhiteSpace(query)) {
             var normalized = query.Trim().ToLower();
             entityQuery = entityQuery.Where(entity => entity.Title.ToLower().Contains(normalized));
+        }
+
+        if (referencedBy is { } targetEntityId) {
+            entityQuery = entityQuery.Where(entity =>
+                _db.EntityRelationshipLinks.Any(link =>
+                    link.TargetEntityId == targetEntityId &&
+                    link.EntityId == entity.Id &&
+                    (normalizedRelationshipCode == null || link.RelationshipCode == normalizedRelationshipCode)));
         }
 
         entityQuery = ApplyNsfwVisibility(entityQuery, hideNsfw == true);

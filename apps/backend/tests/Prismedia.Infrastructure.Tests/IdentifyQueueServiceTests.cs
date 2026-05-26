@@ -158,6 +158,43 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
     }
 
     [Fact]
+    public async Task ApplyAsyncRejectsScopedChildProposalForRootQueueItem() {
+        await using var db = CreateContext();
+        var seriesId = Guid.Parse("55555555-5555-5555-5555-555555555555");
+        var seasonId = Guid.Parse("66666666-6666-6666-6666-666666666666");
+        SeedEntity(db, seriesId, "video-series", "Series");
+        var season = SeedEntity(db, seasonId, "video-season", "Season 1");
+        season.ParentEntityId = seriesId;
+        season.SortOrder = 1;
+        var proposal = NsfwTreeProposal(seriesId, seasonId);
+        var scopedSeasonProposal = proposal.Children.Single();
+        db.IdentifyQueueItems.Add(new IdentifyQueueItemRow {
+            Id = Guid.NewGuid(),
+            EntityId = seriesId,
+            State = IdentifyQueueState.Proposal,
+            ProviderCode = "tmdb",
+            Action = "lookup-id",
+            ProposalJson = JsonSerializer.Serialize(proposal, JsonOptions),
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var service = CreateQueueService(db, new ProposalProcessExecutor(), _tempRoot);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.ApplyAsync(
+                seriesId,
+                new ApplyIdentifyQueueItemRequest(
+                    scopedSeasonProposal,
+                    ["title"],
+                    null),
+                CancellationToken.None));
+
+        Assert.Contains("root identify proposal", error.Message);
+        Assert.Equal("Series", (await db.Entities.SingleAsync(row => row.Id == seriesId)).Title);
+    }
+
+    [Fact]
     public async Task ApplyAsyncMarksFlagsAcrossAcceptedProposalTree() {
         await using var db = CreateContext();
         var seriesId = Guid.Parse("55555555-5555-5555-5555-555555555555");
