@@ -224,8 +224,7 @@
   const posterVisible = $derived(posterSize !== "none" && posterCard !== null);
 
   const renderedDescription = $derived(renderEntityDescriptionMarkdown(card.description));
-  const hasTabs = $derived(tabs.length > 0);
-  const activeTab = $derived(tabs.find((tab) => tab.id === activeTabId) ?? tabs[0] ?? null);
+  const hasStandaloneBodyContent = $derived(Boolean(renderedDescription) || card.tags.length > 0);
   const coreSections = $derived.by((): EntityDetailSection[] => [
     { id: "description", label: "Description" },
     { id: "tags", label: "Tags" },
@@ -245,8 +244,11 @@
     { id: "fingerprints", label: "Fingerprints", icon: Fingerprint },
   ]);
   const availableSections = $derived([...coreSections, ...sections]);
-  const activeTabSections = $derived(activeTab ? sectionsForTab(activeTab) : []);
   const cardFull = $derived(card as EntityDetailCard & Partial<EntityDetailCardFull>);
+  const visibleTabs = $derived.by(() => tabs.filter(tabHasDisplayContent));
+  const hasTabs = $derived(visibleTabs.length > 0);
+  const activeTab = $derived(visibleTabs.find((tab) => tab.id === activeTabId) ?? visibleTabs[0] ?? null);
+  const activeTabSections = $derived(activeTab ? sectionsForTab(activeTab) : []);
   const standaloneMetadataSectionIds = [
     "studio",
     "credits",
@@ -323,6 +325,12 @@
     if (section.hidden) return false;
     if (isEditingActiveTab && sectionEditable(section)) return true;
 
+    return sectionHasDisplayContent(section);
+  }
+
+  function sectionHasDisplayContent(section: EntityDetailSection): boolean {
+    if (section.hidden) return false;
+
     switch (section.id) {
       case "description":
         return Boolean(renderedDescription);
@@ -358,6 +366,13 @@
       default:
         return Boolean(sectionContent);
     }
+  }
+
+  function tabHasDisplayContent(tab: EntityDetailTab): boolean {
+    return tab.sections
+      .map(findSection)
+      .filter((section): section is EntityDetailSection => Boolean(section))
+      .some(sectionHasDisplayContent);
   }
 
   function sectionsForTab(tab: EntityDetailTab): EntityDetailSection[] {
@@ -1231,7 +1246,7 @@
       {@render descriptionEditSection()}
       {@render tagsEditSection()}
     </div>
-  {:else}
+  {:else if hasStandaloneBodyContent}
     <div class="detail-body">
       {@render descriptionContent()}
       {@render tagsContent()}
@@ -1406,7 +1421,7 @@
   {#if hasTabs}
     <div class="detail-tabs">
       <div class="detail-tab-list" role="tablist" aria-label="Detail sections">
-        {#each tabs as tab (tab.id)}
+        {#each visibleTabs as tab (tab.id)}
           {@const active = activeTab?.id === tab.id}
           {@const TabIcon = tab.icon}
           <button
@@ -1464,8 +1479,6 @@
             <div class="detail-tab-sections" data-layout={activeTab.layout ?? "stack"}>
               {#each activeTabSections as section (section.id)}
                 {@render renderDetailSection(section)}
-              {:else}
-                <div class="tab-empty-state">No details available.</div>
               {/each}
             </div>
           {/key}
@@ -2087,15 +2100,6 @@
 
   .custom-detail-section {
     min-width: 0;
-  }
-
-  .tab-empty-state {
-    padding: 1rem;
-    border: 1px solid var(--detail-border);
-    border-radius: var(--radius-xs, 4px);
-    background: var(--detail-surface);
-    color: var(--detail-text-muted);
-    font-size: 0.82rem;
   }
 
   .detail-body {

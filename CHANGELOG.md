@@ -39,6 +39,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated web app manifest and mobile browser metadata for home-screen installation and browser UI theme colors.
 
 ### Fixed
+- Fixed empty entity detail tabs so pages without displayable detail content no longer show a tab strip or "No details available" placeholder.
 - Fixed gallery detail hero thumbnails so container previews sample all child groups and reuse the shared thumbnail fallback in the hero backdrop.
 - Fixed studio logo artwork so identified studio thumbnails appear on relationship cards and detail artwork surfaces.
 - Fixed detail page poster previews so they use the same shared thumbnail hover behavior as entity grids.
