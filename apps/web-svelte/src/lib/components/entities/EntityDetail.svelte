@@ -665,7 +665,6 @@
     if (poster) {
       return {
         ...(card.posterCard ?? entityReferenceToThumbnailCard(card.entity)),
-        aspectRatio: "poster",
         cover: { src: poster.src, alt: poster.alt, role: ENTITY_FILE_ROLE.poster },
         hover: { kind: "none" },
       };
@@ -673,7 +672,7 @@
 
     if (!isEditingActiveTab) return card.posterCard ?? null;
     return {
-      ...entityReferenceToThumbnailCard(card.entity, { aspectRatio: "poster", cover: null }),
+      ...entityReferenceToThumbnailCard(card.entity, { cover: null }),
       hover: { kind: "none" },
     };
   }
@@ -1598,18 +1597,6 @@
 
     {#if isEditingActiveTab}
       <div class="header-asset-panel" class:is-empty={!headerHasAsset}>
-        {#if !headerHasAsset}
-          <button
-            type="button"
-            class="asset-empty-label asset-empty-button"
-            onclick={() => openAssetPicker(ENTITY_FILE_ROLE.backdrop)}
-            disabled={assetBusy(ENTITY_FILE_ROLE.backdrop)}
-            aria-label="Header empty"
-          >
-            <ImageIcon class="h-4 w-4" />
-            <span>Header empty</span>
-          </button>
-        {/if}
         {@render imageAssetActions(ENTITY_FILE_ROLE.backdrop, "header", headerHasAsset)}
       </div>
     {/if}
@@ -1999,22 +1986,6 @@
     box-shadow: 0 0 16px rgba(0, 0, 0, 0.35);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
-  }
-
-  .asset-empty-button {
-    cursor: pointer;
-    pointer-events: auto;
-  }
-
-  .asset-empty-button:hover:not(:disabled) {
-    color: var(--detail-accent);
-    border-color: color-mix(in srgb, var(--detail-accent) 62%, var(--detail-border));
-    box-shadow: 0 0 16px var(--detail-accent-glow);
-  }
-
-  .asset-empty-button:disabled {
-    cursor: not-allowed;
-    opacity: 0.55;
   }
 
   .poster-frame .asset-empty-label {
