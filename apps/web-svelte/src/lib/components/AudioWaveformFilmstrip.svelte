@@ -18,17 +18,25 @@
   let { peaks, duration, audioEl, onSeek }: Props = $props();
 
   let containerEl: HTMLDivElement | null = $state(null);
+  let trackEl: HTMLDivElement | null = $state(null);
   let canvasEl: HTMLCanvasElement | null = $state(null);
   let containerWidth = $state(0);
   let stripDragging = $state(false);
-  let currentTime = $state(0);
 
   let dragging = false;
+  let dragStartX = 0;
+  let dragStartTime = 0;
   let animationFrame = 0;
+  let wheelIdleTimer: number | null = null;
 
   const safeDuration = $derived(duration > 0 ? duration : 0.001);
   const pairCount = $derived(Math.floor(peaks.length / 2));
-  const progress = $derived(Math.max(0, Math.min(1, currentTime / safeDuration)));
+  const naturalWidth = $derived(Math.max(1, pairCount * 2));
+  const trackWidth = $derived(
+    containerWidth > 0
+      ? Math.max(naturalWidth, containerWidth * 6, safeDuration * 10)
+      : 0,
+  );
 
   function drawWaveformStrip(
     canvas: HTMLCanvasElement,
@@ -83,10 +91,30 @@
     stripDragging = false;
   }
 
+  function clearWheelIdleTimer() {
+    if (wheelIdleTimer != null) {
+      window.clearTimeout(wheelIdleTimer);
+      wheelIdleTimer = null;
+    }
+  }
+
+  function clampTime(time: number) {
+    return Math.max(0, Math.min(safeDuration, time));
+  }
+
+  function applyPosition(time: number) {
+    if (!containerEl || !trackEl || trackWidth <= 0) return;
+    const clampedTime = clampTime(time);
+    const trackPosition = (clampedTime / safeDuration) * trackWidth;
+    const translateX = containerEl.clientWidth / 2 - trackPosition;
+    trackEl.style.transform = `translateX(${translateX}px)`;
+  }
+
   function jump(direction: -1 | 1) {
     const step = Math.max(0.5, safeDuration / 48);
     const audioTime = audioEl?.currentTime ?? 0;
-    const nextTime = Math.max(0, Math.min(safeDuration, audioTime + direction * step));
+    const nextTime = clampTime(audioTime + direction * step);
+    applyPosition(nextTime);
     onSeek(nextTime);
   }
 
@@ -110,7 +138,7 @@
 
     const tick = () => {
       if (!dragging && audioEl) {
-        currentTime = audioEl.currentTime;
+        applyPosition(audioEl.currentTime);
       }
       animationFrame = window.requestAnimationFrame(tick);
     };
@@ -121,17 +149,20 @@
       if (!mq.matches) return;
       const rawDelta =
         Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
-      if (rawDelta === 0) return;
+      if (rawDelta === 0 || trackWidth <= 0) return;
       event.preventDefault();
       event.stopPropagation();
-      const timeDelta =
-        (rawDelta / Math.max(1, containerEl?.clientWidth ?? 1)) * safeDuration;
-      const nextTime = Math.max(
-        0,
-        Math.min(safeDuration, (audioEl?.currentTime ?? 0) + timeDelta),
-      );
-      currentTime = nextTime;
+      const pixelsPerSecond = trackWidth / safeDuration;
+      const timeDelta = rawDelta / pixelsPerSecond;
+      const nextTime = clampTime((audioEl?.currentTime ?? 0) + timeDelta);
+      applyPosition(nextTime);
       onSeek(nextTime);
+      clearWheelIdleTimer();
+      stripDragging = true;
+      wheelIdleTimer = window.setTimeout(() => {
+        wheelIdleTimer = null;
+        stripDragging = false;
+      }, 180);
     };
 
     const syncWheelListener = () => {
@@ -149,12 +180,14 @@
       resizeObserver?.disconnect();
       mq.removeEventListener("change", syncWheelListener);
       containerEl?.removeEventListener("wheel", handleWheel);
+      clearWheelIdleTimer();
     };
   });
 
   $effect(() => {
-    if (!canvasEl || containerWidth <= 0 || pairCount <= 0) return;
-    drawWaveformStrip(canvasEl, peaks, containerWidth, STRIP_HEIGHT);
+    if (!canvasEl || trackWidth <= 0 || pairCount <= 0) return;
+    drawWaveformStrip(canvasEl, peaks, trackWidth, STRIP_HEIGHT);
+    applyPosition(audioEl?.currentTime ?? 0);
   });
 </script>
 
@@ -175,22 +208,21 @@
       class="relative flex-1 overflow-hidden select-none touch-none"
       style={`height: ${STRIP_HEIGHT}px`}
       onpointerdown={(event) => {
-        if (safeDuration <= 0) return;
+        if (safeDuration <= 0 || trackWidth <= 0) return;
+        clearWheelIdleTimer();
         dragging = true;
         stripDragging = true;
+        dragStartX = event.clientX;
+        dragStartTime = audioEl?.currentTime ?? 0;
         (event.currentTarget as HTMLDivElement).setPointerCapture(event.pointerId);
-        const rect = (event.currentTarget as HTMLDivElement).getBoundingClientRect();
-        const nextTime =
-          Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)) * safeDuration;
-        currentTime = nextTime;
-        onSeek(nextTime);
+        applyPosition(dragStartTime);
       }}
       onpointermove={(event) => {
-        if (!dragging || safeDuration <= 0) return;
-        const rect = (event.currentTarget as HTMLDivElement).getBoundingClientRect();
-        const nextTime =
-          Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)) * safeDuration;
-        currentTime = nextTime;
+        if (!dragging || safeDuration <= 0 || trackWidth <= 0) return;
+        const deltaX = event.clientX - dragStartX;
+        const pixelsPerSecond = trackWidth / safeDuration;
+        const nextTime = clampTime(dragStartTime - deltaX / pixelsPerSecond);
+        applyPosition(nextTime);
         onSeek(nextTime);
       }}
       onpointerup={(event) => {
@@ -202,28 +234,21 @@
       <div class="pointer-events-none absolute inset-y-0 left-0 z-10 w-12 bg-gradient-to-r from-black/70 to-transparent"></div>
       <div class="pointer-events-none absolute inset-y-0 right-0 z-10 w-12 bg-gradient-to-l from-black/70 to-transparent"></div>
 
-      {#if containerWidth > 0}
-        <div
-          class="absolute inset-y-0 left-0"
-          style={`width: ${containerWidth}px; cursor: ${stripDragging ? "grabbing" : "grab"};`}
-        >
-          <canvas bind:this={canvasEl} class="block h-full"></canvas>
-        </div>
-      {/if}
-
-      <div
-        class="pointer-events-none absolute inset-y-0 left-0 z-10 bg-accent-500/12"
-        style={`width: ${progress * 100}%`}
-      ></div>
-
-      <div
-        class="pointer-events-none absolute inset-y-0 z-20 -translate-x-1/2"
-        style={`left: ${progress * 100}%`}
-      >
+      <div class="pointer-events-none absolute inset-y-0 left-1/2 z-20 -translate-x-1/2">
         <div class="absolute -top-px left-1/2 -translate-x-1/2 border-x-[5px] border-t-[5px] border-x-transparent border-t-accent-500"></div>
         <div class="h-full w-[2px] bg-accent-500 shadow-[0_0_8px_rgba(196,154,90,0.55)]"></div>
         <div class="absolute -bottom-px left-1/2 -translate-x-1/2 border-x-[5px] border-b-[5px] border-x-transparent border-b-accent-500"></div>
       </div>
+
+      {#if trackWidth > 0}
+        <div
+          bind:this={trackEl}
+          class="absolute inset-y-0 left-0 will-change-transform"
+          style={`width: ${trackWidth}px; cursor: ${stripDragging ? "grabbing" : "grab"};`}
+        >
+          <canvas bind:this={canvasEl} class="block h-full"></canvas>
+        </div>
+      {/if}
     </div>
 
     <button

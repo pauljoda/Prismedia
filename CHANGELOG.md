@@ -43,6 +43,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated web app manifest and mobile browser metadata for home-screen installation and browser UI theme colors.
 
 ### Fixed
+- Fixed audio waveform scrubbing so long tracks render as a scrolling strip under the fixed playhead instead of compressing the full waveform into the visible player.
 - Fixed audio waveform fallback rendering so old positive-only waveform cache files stay visible while newer regenerated waveforms use signed peaks.
 - Fixed audio player artwork and waveform presentation so compact covers render without extra thumbnail chrome, stale malformed waveforms are ignored, and the main play button uses the accent treatment.
 - Fixed audio playback in Chrome for source codecs browsers cannot play directly, reset seeking when tracks advance, and made player artwork reuse the shared entity thumbnail renderer.
