@@ -853,7 +853,7 @@ public sealed class EntityMetadataApplyServiceTests {
             .Where(row => row.EntityId == actorId)
             .Select(row => row.Url)
             .SingleAsync());
-        Assert.Equal(12, (await db.EntityStats.FindAsync([actorId, "popularity"]))?.Value);
+        Assert.Null(await db.EntityStats.FindAsync([actorId, "popularity"]));
         Assert.Equal(EntityFileRole.Poster, (await db.EntityFiles.SingleAsync(row => row.EntityId == actorId)).Role);
     }
 

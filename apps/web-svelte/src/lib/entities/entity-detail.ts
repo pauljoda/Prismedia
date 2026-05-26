@@ -146,6 +146,7 @@ export interface EntityDetailPosition {
 /** Classification badge. */
 export interface EntityDetailClassification {
   value: string;
+  label: string;
   system: string | null;
 }
 
@@ -219,6 +220,22 @@ function formatDateCode(code: string): string {
 
 function formatStatCode(code: string): string {
   return code.replaceAll("-", " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+const HIDDEN_STAT_CODES = new Set(["popularity"]);
+
+function shouldDisplayStat(code: string): boolean {
+  return !HIDDEN_STAT_CODES.has(code.trim().toLowerCase());
+}
+
+function formatClassificationLabel(kind: string, system: string | null | undefined): string {
+  if (!system || system === "manual") return "Classification";
+  if (system === "plugin") {
+    if (kind === "person") return "Known For";
+    return "Category";
+  }
+
+  return formatStatCode(system);
 }
 
 function markerTimestamp(seconds: number): string {
@@ -400,11 +417,13 @@ export function entityCardToDetailCard(entity: EntityCard): EntityDetailCardFull
     tags: [],
     studio: null,
     credits: [],
-    stats: (statsCap?.items ?? []).map((item) => ({
-      code: item.code,
-      label: formatStatCode(item.code),
-      value: String(item.value),
-    })),
+    stats: (statsCap?.items ?? [])
+      .filter((item) => shouldDisplayStat(item.code))
+      .map((item) => ({
+        code: item.code,
+        label: formatStatCode(item.code),
+        value: String(item.value),
+      })),
     dates: (datesCap?.items ?? []).map((item) => ({
       code: item.code,
       label: formatDateCode(item.code),
@@ -424,7 +443,11 @@ export function entityCardToDetailCard(entity: EntityCard): EntityDetailCardFull
     progress: resolveProgress(capabilities),
     positions: resolvePositions(capabilities),
     classification: classificationCap?.value
-      ? { value: classificationCap.value, system: classificationCap.system }
+      ? {
+          value: classificationCap.value,
+          label: formatClassificationLabel(entity.kind, classificationCap.system),
+          system: classificationCap.system,
+        }
       : null,
     sources: sourcesCap?.items ?? [],
     presentCapabilities,

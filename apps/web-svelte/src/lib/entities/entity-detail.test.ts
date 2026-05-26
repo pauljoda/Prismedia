@@ -228,6 +228,54 @@ describe("entity detail view model", () => {
     ]);
     expect(detail.technical.map((row) => row.value)).not.toContain("10.2 Mbps");
   });
+
+  it("does not expose provider popularity as a generic detail stat", () => {
+    const detail = entityCardToDetailCard({
+      id: "person-1",
+      kind: "person",
+      title: "Lead Actor",
+      parentEntityId: null,
+      sortOrder: null,
+      capabilities: [
+        {
+          kind: "stats",
+          items: [
+            { code: "popularity", value: 12 },
+            { code: "credits", value: 3 },
+          ],
+        },
+      ],
+      childrenByKind: [],
+      relationships: [],
+    } satisfies EntityCard);
+
+    expect(detail.stats.map((row) => row.code)).toEqual(["credits"]);
+  });
+
+  it("labels plugin person classification by meaning instead of source", () => {
+    const detail = entityCardToDetailCard({
+      id: "person-1",
+      kind: "person",
+      title: "Lead Actor",
+      parentEntityId: null,
+      sortOrder: null,
+      capabilities: [
+        {
+          kind: "classification",
+          value: "Acting",
+          system: "plugin",
+        },
+      ],
+      childrenByKind: [],
+      relationships: [],
+    } satisfies EntityCard);
+
+    expect(detail.classification).toMatchObject({
+      label: "Known For",
+      value: "Acting",
+      system: "plugin",
+    });
+  });
 });
 
 function thumbnail(id: string, kind: string, title: string, coverUrl: string, parentEntityId = "gallery-1") {

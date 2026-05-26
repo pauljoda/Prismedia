@@ -20,6 +20,10 @@ public sealed record PluginArtworkServiceOptions(string CacheRoot);
 /// Applies selected plugin metadata proposals into entity capability rows.
 /// </summary>
 public sealed class EntityMetadataApplyService : IEntityMetadataPatchService {
+    private static readonly HashSet<string> IgnoredStatCodes = new(StringComparer.OrdinalIgnoreCase) {
+        "popularity"
+    };
+
     private readonly PrismediaDbContext _db;
     private readonly PluginArtworkServiceOptions _options;
     private readonly HttpClient _http;
@@ -567,7 +571,7 @@ public sealed class EntityMetadataApplyService : IEntityMetadataPatchService {
     }
 
     private async Task UpsertStatsAsync(Guid entityId, IReadOnlyDictionary<string, int> stats, DateTimeOffset now, CancellationToken cancellationToken) {
-        foreach (var (code, value) in stats) {
+        foreach (var (code, value) in FilterStats(stats)) {
             var existing = await _db.EntityStats.FindAsync([entityId, code], cancellationToken);
             if (existing is null) {
                 _db.EntityStats.Add(new EntityStatRow { EntityId = entityId, Code = code, Value = value, UpdatedAt = now });
@@ -585,6 +589,11 @@ public sealed class EntityMetadataApplyService : IEntityMetadataPatchService {
         _db.EntityStats.RemoveRange(existing);
         await UpsertStatsAsync(entityId, stats, now, cancellationToken);
     }
+
+    private static IReadOnlyDictionary<string, int> FilterStats(IReadOnlyDictionary<string, int> stats) =>
+        stats
+            .Where(item => !IgnoredStatCodes.Contains(item.Key.Trim()))
+            .ToDictionary(item => item.Key, item => item.Value, StringComparer.OrdinalIgnoreCase);
 
     private async Task UpsertPositionsAsync(EntityRow entity, IReadOnlyDictionary<string, int> positions, DateTimeOffset now, CancellationToken cancellationToken) {
         foreach (var (code, value) in positions) {

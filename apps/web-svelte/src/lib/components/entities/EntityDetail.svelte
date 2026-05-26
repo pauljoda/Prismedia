@@ -1071,7 +1071,7 @@
       </h2>
       <div class="tab-data-list">
         <div class="tab-data-row">
-          <span>{cardFull.classification.system ?? "classification"}</span>
+          <span>{cardFull.classification.label}</span>
           <strong>{cardFull.classification.value}</strong>
         </div>
       </div>
