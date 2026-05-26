@@ -98,6 +98,13 @@
     buildTimelineChapterCues,
     findTimelineChapterTitle,
   } from "$lib/player/timeline-chapters";
+  import {
+    formatTime,
+    formatBandwidth,
+    formatDimensions,
+    languageLabel,
+    rangeProgress,
+  } from "./video-player-format";
   import AssSubtitleOverlay from "./AssSubtitleOverlay.svelte";
   import FilmStrip from "./FilmStrip.svelte";
 
@@ -394,44 +401,6 @@
     return directAvailable ? "direct" : "hls";
   }
 
-  function formatTime(seconds: number) {
-    const safe = Number.isFinite(seconds) ? Math.max(0, seconds) : 0;
-    const h = Math.floor(safe / 3600);
-    const m = Math.floor((safe % 3600) / 60);
-    const s = Math.floor(safe % 60);
-    if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-    return `${m}:${String(s).padStart(2, "0")}`;
-  }
-
-  function formatBandwidth(bps: number | null) {
-    if (!bps || !Number.isFinite(bps)) return "—";
-    if (bps >= 1_000_000) {
-      const mbps = bps / 1_000_000;
-      return `${Number.isInteger(mbps) ? mbps.toFixed(0) : mbps.toFixed(1)} Mbps`;
-    }
-    return `${Math.round(bps / 1_000)} Kbps`;
-  }
-
-  function formatDimensions(width: number | null | undefined, height: number | null | undefined) {
-    const safeWidth = typeof width === "number" && Number.isFinite(width) && width > 0
-      ? Math.round(width)
-      : null;
-    const safeHeight = typeof height === "number" && Number.isFinite(height) && height > 0
-      ? Math.round(height)
-      : null;
-    if (safeWidth && safeHeight) return `${safeWidth}x${safeHeight}`;
-    return null;
-  }
-
-  function languageLabel(language: string): string {
-    if (!language || language === "und") return "Unknown";
-    try {
-      const displayNames = new Intl.DisplayNames(undefined, { type: "language" });
-      return displayNames.of(language) ?? language.toUpperCase();
-    } catch {
-      return language.toUpperCase();
-    }
-  }
 
   function isAssTrackActive(
     id: string | null | undefined,
@@ -633,11 +602,6 @@
     closeMenus();
   }
 
-  function rangeProgress(value: number, min: number, max: number): string {
-    if (max <= min) return "0%";
-    const pct = ((value - min) / (max - min)) * 100;
-    return `${Math.max(0, Math.min(100, pct))}%`;
-  }
 
   function handleAppearanceChange(next: SubtitleAppearance) {
     localAppearance = next;
