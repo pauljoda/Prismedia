@@ -41,14 +41,21 @@
   }
 </script>
 
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   class={cn(
-    "group/row relative grid h-11 grid-cols-[2rem_minmax(0,1fr)_auto_3rem_1.75rem] items-center gap-3 px-3 sm:px-4 transition-colors duration-fast",
+    "group/row relative grid h-11 cursor-pointer grid-cols-[2rem_minmax(0,1fr)_auto_3rem_1.75rem] items-center gap-3 px-3 sm:px-4 transition-colors duration-fast",
     "before:pointer-events-none before:absolute before:inset-y-0 before:left-0 before:w-[2px] before:transition-all before:duration-normal",
     isActive
       ? "bg-gradient-to-r from-accent-900/40 via-accent-950/30 to-transparent before:bg-[var(--color-accent-500)] before:shadow-[0_0_12px_rgba(199,155,92,0.55)]"
       : "hover:bg-surface-2 before:bg-transparent",
   )}
+  onclick={(e) => {
+    // Don't intercept clicks on interactive children (links, buttons, rating stars)
+    const target = e.target as HTMLElement;
+    if (target.closest("a, button, [role='slider']")) return;
+    onPlay(track.id);
+  }}
 >
   <div class="flex h-7 w-7 items-center justify-center">
     {#if isActive && isPlaying}
