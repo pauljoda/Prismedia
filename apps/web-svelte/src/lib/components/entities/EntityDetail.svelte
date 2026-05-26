@@ -30,7 +30,12 @@
   import type { EntityDetailCard, EntityDetailCardFull, EntityDetailCredit } from "$lib/entities/entity-detail";
   import { renderEntityDescriptionMarkdown } from "$lib/entities/entity-detail-markdown";
   import { hasHero, hasPoster } from "$lib/entities/entity-detail";
-  import { entityReferenceToThumbnailCard, placeholderGradient, type EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
+  import {
+    entityReferenceToThumbnailCard,
+    placeholderGradient,
+    toAspectRatioValue,
+    type EntityThumbnailCard,
+  } from "$lib/entities/entity-thumbnail";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
   import EntityTagChips from "./EntityTagChips.svelte";
   import MarkdownEditor from "$lib/components/forms/MarkdownEditor.svelte";
@@ -246,6 +251,7 @@
 
   const effectivePosterSize = $derived(isEditingActiveTab && posterSize === "none" ? "medium" : posterSize);
   const posterCard = $derived.by(() => posterCardForDisplay());
+  const posterFrameAspectRatio = $derived(posterCard ? toAspectRatioValue(posterCard.aspectRatio) : undefined);
   const posterVisible = $derived(effectivePosterSize !== "none" && (posterCard !== null || isEditingActiveTab));
   const posterHasAsset = $derived(Boolean(displayPoster));
   const headerHasAsset = $derived(Boolean(displayHero));
@@ -1461,6 +1467,7 @@
             class:is-empty={!posterHasAsset}
             role="group"
             aria-label="Poster artwork"
+            style:aspect-ratio={posterFrameAspectRatio}
             data-asset-dropzone={isEditingActiveTab && roleSupported(ENTITY_FILE_ROLE.poster) ? ENTITY_FILE_ROLE.poster : undefined}
             ondrop={(event) => void handleAssetDrop(ENTITY_FILE_ROLE.poster, event)}
             ondragover={preventAssetDrag}
@@ -1888,7 +1895,6 @@
     position: relative;
     flex-shrink: 0;
     width: var(--poster-width, 7rem);
-    min-height: calc(var(--poster-width, 7rem) * 1.45);
     border-radius: var(--radius-sm, 6px);
     background: #050505;
     box-shadow:

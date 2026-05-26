@@ -171,7 +171,9 @@ describe("EntityDetail", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Edit details" }));
 
     const posterThumbnail = container.querySelector<HTMLElement>(".poster-frame .entity-thumbnail");
-    expect(container.querySelector(".poster-frame")).toBeInTheDocument();
+    const posterFrame = container.querySelector<HTMLElement>(".poster-frame");
+    expect(posterFrame).toBeInTheDocument();
+    expect(posterFrame?.style.aspectRatio).toBe("1 / 1");
     expect(posterThumbnail?.style.aspectRatio).toBe("1 / 1");
 
     unmount();

@@ -43,7 +43,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated web app manifest and mobile browser metadata for home-screen installation and browser UI theme colors.
 
 ### Fixed
-- Fixed entity artwork edit mode so poster controls overlay existing artwork, empty headers use only the upload affordance, and upload placeholders preserve each entity's thumbnail shape.
+- Fixed entity artwork edit mode so poster controls overlay existing artwork, empty headers use only the upload affordance, and artwork frames preserve each entity's thumbnail shape.
 - Fixed custom entity artwork precedence so user-managed and plugin-managed thumbnails are preferred over generated scan thumbnails.
 - Fixed the book progress card so the resume panel uses the Prism Noir Luxe glass surface, controlled radius, and brass progress treatment.
 - Fixed detail hero chips so gallery, collection, season, and book badges share the Prism Noir Luxe glass treatment.
