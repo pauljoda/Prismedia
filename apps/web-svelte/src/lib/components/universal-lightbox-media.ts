@@ -1,5 +1,5 @@
 import type { EntityCapability } from "$lib/api/generated/model";
-import { entityFileUrl } from "$lib/api/prismedia";
+import { entityFileUrl } from "$lib/api/files";
 import { getCapability, isNsfw } from "$lib/api/capabilities";
 import { CAPABILITY_KIND, ENTITY_FILE_ROLE, ENTITY_KIND, type EntityFileRoleCode } from "$lib/entities/entity-codes";
 import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";

@@ -1,7 +1,7 @@
 import { render, screen, within } from "@testing-library/svelte";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import type { FileDetail } from "$lib/api/prismedia";
+import type { FileDetail } from "$lib/api/files";
 import FileDetailPane from "./FileDetailPane.svelte";
 
 describe("FileDetailPane", () => {

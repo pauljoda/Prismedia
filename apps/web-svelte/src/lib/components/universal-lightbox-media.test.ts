@@ -7,7 +7,7 @@ import {
   lightboxEntityFromCard,
   type UniversalLightboxEntity,
 } from "./universal-lightbox-media";
-import { entityFileUrl } from "$lib/api/prismedia";
+import { entityFileUrl } from "$lib/api/files";
 
 const imageCapability = {
   kind: "images",

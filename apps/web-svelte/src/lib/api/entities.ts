@@ -2,11 +2,13 @@ import {
   getEntity,
   getEntityThumbnails,
   listEntities,
+  refreshEntity as refreshEntityRequest,
 } from "$lib/api/generated/prismedia";
 import type {
   EntityCard as GeneratedEntityCard,
   EntityGroup as GeneratedEntityGroup,
   EntityListResponse as GeneratedEntityListResponse,
+  EntityRefreshResponse,
   EntityThumbnail as GeneratedEntityThumbnail,
   EntityThumbnailBatchResponse as GeneratedEntityThumbnailBatchResponse,
   ListEntitiesParams,
@@ -44,5 +46,14 @@ export async function fetchEntityThumbnails(
 export function fetchEntity(id: string, options?: RequestOptions): Promise<EntityCardFull> {
   return getEntity(id, undefined, requestInit(options)).then((r) =>
     unwrapGenerated(r, `Failed to fetch entity ${id}`),
+  );
+}
+
+export function refreshEntity(
+  entityId: string,
+  options?: RequestOptions,
+): Promise<EntityRefreshResponse> {
+  return refreshEntityRequest(entityId, requestInit(options)).then((r) =>
+    unwrapGenerated(r, "Failed to refresh entity"),
   );
 }

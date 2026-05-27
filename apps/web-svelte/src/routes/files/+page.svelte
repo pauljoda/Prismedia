@@ -12,7 +12,6 @@
     fetchFileDetail,
     fetchFileRoots,
     moveFile as apiMoveFile,
-    refreshEntity,
     renameFile as apiRenameFile,
     removeFileExclusion as apiRemoveFileExclusion,
     rescanFileRoot as apiRescanFileRoot,
@@ -20,7 +19,8 @@
     type FileDetail,
     type FileRoot,
     type FileUploadItem,
-  } from "$lib/api/prismedia";
+  } from "$lib/api/files";
+  import { refreshEntity } from "$lib/api/entities";
   import type { FileActionId } from "$lib/files/file-actions";
   import {
     createFileTreeRegistry,

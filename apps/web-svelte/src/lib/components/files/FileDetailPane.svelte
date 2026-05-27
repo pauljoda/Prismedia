@@ -12,8 +12,8 @@
     Undo2,
   } from "@lucide/svelte";
   import { Info } from "@lucide/svelte";
-  import type { FileDetail } from "$lib/api/prismedia";
-  import { fileContentUrl } from "$lib/api/prismedia";
+  import type { FileDetail } from "$lib/api/files";
+  import { fileContentUrl } from "$lib/api/files";
   import type { FileActionId } from "$lib/files/file-actions";
   import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
