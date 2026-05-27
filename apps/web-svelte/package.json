@@ -10,8 +10,9 @@
     "build": "vite build",
     "preview": "vite preview --port 5173",
     "start": "node build/index.js",
-    "lint": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-    "typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "sync": "svelte-kit sync",
+    "lint": "svelte-check --tsconfig ./tsconfig.json",
+    "typecheck": "svelte-check --tsconfig ./tsconfig.json",
     "api:generate": "orval --config orval.config.ts",
     "test": "pnpm test:unit",
     "test:unit": "vitest run --config vitest.config.ts"

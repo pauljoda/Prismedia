@@ -10,7 +10,7 @@
     "dev:worker": "dotnet watch --project apps/backend/src/Prismedia.Worker/Prismedia.Worker.csproj run",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
-    "check": "turbo run lint typecheck",
+    "check": "pnpm --filter @prismedia/web-svelte sync && turbo run lint typecheck",
     "test": "pnpm test:unit",
     "test:backend": "dotnet test apps/backend/Prismedia.slnx",
     "test:unit": "vitest run --config vitest.config.ts",
