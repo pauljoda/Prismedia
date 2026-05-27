@@ -4,7 +4,7 @@ import type {
   SettingsCatalogResponse,
   SettingsGroup,
   SettingValue,
-} from "$lib/api/prismedia";
+} from "$lib/api/settings";
 
 export const settingKeys = {
   visibilityDefaultMode: "visibility.defaultMode",

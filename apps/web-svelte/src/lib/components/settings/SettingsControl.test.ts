@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/svelte";
 import { describe, expect, it, vi } from "vitest";
-import type { SettingDescriptor } from "$lib/api/prismedia";
+import type { SettingDescriptor } from "$lib/api/settings";
 import SettingsControl from "./SettingsControl.svelte";
 
 function descriptor(overrides: Partial<SettingDescriptor>): SettingDescriptor {

@@ -18,7 +18,7 @@
     type SettingDescriptor,
     type SettingsCatalogResponse,
     type SettingValue,
-  } from "$lib/api/prismedia";
+  } from "$lib/api/settings";
   import {
     catalogToLibrarySettings,
     defaultLibrarySettings,

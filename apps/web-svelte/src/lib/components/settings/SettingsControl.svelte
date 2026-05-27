@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Select, Toggle, cn, type SelectOption } from "@prismedia/ui-svelte";
-  import type { SettingDescriptor, SettingValue } from "$lib/api/prismedia";
+  import type { SettingDescriptor, SettingValue } from "$lib/api/settings";
   import {
     parseStringList,
     valueAsBoolean,

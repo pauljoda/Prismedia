@@ -18,13 +18,13 @@
   import { Button, Panel, StatusLed, cn } from "@prismedia/ui-svelte";
   import {
     browseLibraryPath,
-    createJob,
     createLibraryRoot,
     deleteLibraryRoot,
     updateLibraryRoot,
-    type LibraryBrowse as LibraryBrowse,
-    type LibraryRoot as LibraryRoot,
-  } from "$lib/api/prismedia";
+    type LibraryBrowse,
+    type LibraryRoot,
+  } from "$lib/api/settings";
+  import { createJob } from "$lib/api/prismedia";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import { entityTerms } from "$lib/terminology";
   import ToggleCard from "./ToggleCard.svelte";

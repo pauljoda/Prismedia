@@ -1,5 +1,5 @@
 import type { LayoutLoad } from "./$types";
-import { fetchSettingsValues } from "$lib/api/prismedia";
+import { fetchSettingsValues } from "$lib/api/settings";
 import { settingKeys, valuesToLibrarySettings } from "$lib/settings/app-settings";
 import { readSidebarCookie } from "$lib/stores/app-chrome.svelte";
 

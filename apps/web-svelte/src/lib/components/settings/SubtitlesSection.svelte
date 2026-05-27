@@ -7,7 +7,7 @@
     type SubtitleAppearance,
     type SubtitleDisplayStyle,
   } from "$lib/settings/library-settings";
-  import type { LibrarySettings as LibrarySettings } from "$lib/api/prismedia";
+  import type { LibrarySettings } from "$lib/api/settings";
   import SubtitleCaptionOverlay from "$lib/components/SubtitleCaptionOverlay.svelte";
   import ToggleCard from "./ToggleCard.svelte";
 
