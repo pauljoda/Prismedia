@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Entities;
@@ -25,8 +24,7 @@ public sealed class EntityMetadataApplyService : IEntityMetadataPatchService {
     };
 
     private readonly PrismediaDbContext _db;
-    private readonly PluginArtworkServiceOptions _options;
-    private readonly HttpClient _http;
+    private readonly PluginArtworkDownloader _artwork;
 
     /// <summary>
     /// Creates an apply service over EF Core rows and optional artwork downloading.
@@ -39,8 +37,7 @@ public sealed class EntityMetadataApplyService : IEntityMetadataPatchService {
         PluginArtworkServiceOptions options,
         HttpClient? http = null) {
         _db = db;
-        _options = options;
-        _http = http ?? new HttpClient();
+        _artwork = new PluginArtworkDownloader(db, options, http);
     }
 
     /// <summary>
@@ -85,7 +82,7 @@ public sealed class EntityMetadataApplyService : IEntityMetadataPatchService {
         await ApplyScopedPatchToEntityAsync(entity, fields, request.Patch, now, cancellationToken);
 
         if (fields.Contains("images") && request.SelectedImages is not null) {
-            await DownloadSelectedImagesAsync(entityId, request.SelectedImages, now, cancellationToken);
+            await _artwork.DownloadSelectedImagesAsync(entityId, request.SelectedImages, now, cancellationToken);
         }
 
         if (request.Children is { Count: > 0 }) {
@@ -238,7 +235,7 @@ public sealed class EntityMetadataApplyService : IEntityMetadataPatchService {
         }
 
         if (selected.Contains("images") && selectedImages is not null) {
-            await DownloadSelectedImagesAsync(entityId, selectedImages, now, cancellationToken);
+            await _artwork.DownloadSelectedImagesAsync(entityId, selectedImages, now, cancellationToken);
         }
 
         if (patch.Flags?.IsNsfw == true) {
@@ -679,45 +676,6 @@ public sealed class EntityMetadataApplyService : IEntityMetadataPatchService {
         row.UpdatedAt = now;
     }
 
-    private async Task DownloadSelectedImagesAsync(
-        Guid entityId,
-        IReadOnlyDictionary<string, string?> selectedImages,
-        DateTimeOffset now,
-        CancellationToken cancellationToken) {
-        foreach (var (roleCode, url) in selectedImages) {
-            if (string.IsNullOrWhiteSpace(url) || !roleCode.TryDecodeAs<EntityFileRole>(out var role)) {
-                continue;
-            }
-
-            var bytes = await _http.GetByteArrayAsync(url, cancellationToken);
-            var ext = ExtensionFromUrl(url);
-            var relativePath = Path.Combine("plugins", "artwork", entityId.ToString(), $"{roleCode}-{ShortHash(url)}{ext}");
-            var physicalPath = Path.Combine(_options.CacheRoot, relativePath);
-            Directory.CreateDirectory(Path.GetDirectoryName(physicalPath)!);
-            await File.WriteAllBytesAsync(physicalPath, bytes, cancellationToken);
-
-            var publicPath = $"/assets/{relativePath.Replace(Path.DirectorySeparatorChar, '/')}";
-            var existing = await FindEntityFileAsync(entityId, role, cancellationToken);
-            if (existing is null) {
-                _db.EntityFiles.Add(new EntityFileRow {
-                    Id = Guid.NewGuid(),
-                    EntityId = entityId,
-                    Role = role,
-                    Path = publicPath,
-                    MimeType = MimeTypeFromExtension(ext),
-                    Source = "custom",
-                    CreatedAt = now,
-                    UpdatedAt = now
-                });
-            } else {
-                existing.Path = publicPath;
-                existing.MimeType = MimeTypeFromExtension(ext);
-                existing.Source = "custom";
-                existing.UpdatedAt = now;
-            }
-        }
-    }
-
     /// <summary>
     /// Applies metadata and artwork from relationship proposals into linked Person and Studio entities
     /// that were created or resolved during credits/studio apply.
@@ -754,46 +712,7 @@ public sealed class EntityMetadataApplyService : IEntityMetadataPatchService {
             var image = child.Images.FirstOrDefault(img => img.Kind is "poster") ?? child.Images.FirstOrDefault(img => img.Kind is "logo") ?? child.Images[0];
             var role = child.TargetKind == "studio" ? EntityFileRole.Logo : EntityFileRole.Poster;
 
-            await DownloadPluginImageAsync(linkedEntity, image, role, now, cancellationToken);
-        }
-    }
-
-    private async Task DownloadPluginImageAsync(
-        EntityRow entity,
-        ImageCandidate image,
-        EntityFileRole role,
-        DateTimeOffset now,
-        CancellationToken cancellationToken) {
-        try {
-            var bytes = await _http.GetByteArrayAsync(image.Url, cancellationToken);
-            var ext = ExtensionFromUrl(image.Url);
-            var relativePath = Path.Combine("plugins", "artwork", entity.Id.ToString(), $"{role.ToString().ToLowerInvariant()}-{ShortHash(image.Url)}{ext}");
-            var physicalPath = Path.Combine(_options.CacheRoot, relativePath);
-            Directory.CreateDirectory(Path.GetDirectoryName(physicalPath)!);
-            await File.WriteAllBytesAsync(physicalPath, bytes, cancellationToken);
-
-            var publicPath = $"/assets/{relativePath.Replace(Path.DirectorySeparatorChar, '/')}";
-            var existing = await FindEntityFileAsync(entity.Id, role, cancellationToken);
-            if (existing is null) {
-                _db.EntityFiles.Add(new EntityFileRow {
-                    Id = Guid.NewGuid(),
-                    EntityId = entity.Id,
-                    Role = role,
-                    Path = publicPath,
-                    MimeType = MimeTypeFromExtension(ext),
-                    Source = "custom",
-                    CreatedAt = now,
-                    UpdatedAt = now
-                });
-            } else {
-                existing.Path = publicPath;
-                existing.MimeType = MimeTypeFromExtension(ext);
-                existing.Source = "custom";
-                existing.UpdatedAt = now;
-            }
-
-            entity.UpdatedAt = now;
-        } catch (HttpRequestException) {
+            await _artwork.DownloadPluginImageAsync(linkedEntity, image, role, now, cancellationToken);
         }
     }
 
@@ -895,15 +814,11 @@ public sealed class EntityMetadataApplyService : IEntityMetadataPatchService {
                 "poster" => EntityFileRole.Poster,
                 _ => EntityFileRole.Thumbnail
             };
-            await DownloadPluginImageAsync(entity, image, role, now, cancellationToken);
+            await _artwork.DownloadPluginImageAsync(entity, image, role, now, cancellationToken);
         }
 
         entity.UpdatedAt = now;
     }
-
-    private async Task<EntityFileRow?> FindEntityFileAsync(Guid entityId, EntityFileRole role, CancellationToken cancellationToken) =>
-        _db.EntityFiles.Local.FirstOrDefault(row => row.EntityId == entityId && row.Role == role)
-        ?? await _db.EntityFiles.FirstOrDefaultAsync(row => row.EntityId == entityId && row.Role == role, cancellationToken);
 
     private static IReadOnlyList<EntityMetadataProposal> StructuralChildProposals(EntityMetadataProposal proposal) =>
         proposal.Children
@@ -954,20 +869,4 @@ public sealed class EntityMetadataApplyService : IEntityMetadataPatchService {
     private static DateOnly? ParseDateOnly(string value) =>
         DateOnly.TryParse(value, out var parsed) ? parsed : null;
 
-    private static string ShortHash(string value) =>
-        Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(value)))[..12].ToLowerInvariant();
-
-    private static string ExtensionFromUrl(string url) {
-        var path = Uri.TryCreate(url, UriKind.Absolute, out var uri) ? uri.AbsolutePath : url;
-        var ext = Path.GetExtension(path);
-        return string.IsNullOrWhiteSpace(ext) ? ".jpg" : ext.ToLowerInvariant();
-    }
-
-    private static string? MimeTypeFromExtension(string ext) =>
-        ext.ToLowerInvariant() switch {
-            ".jpg" or ".jpeg" => "image/jpeg",
-            ".png" => "image/png",
-            ".webp" => "image/webp",
-            _ => null
-        };
 }
