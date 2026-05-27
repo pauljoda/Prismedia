@@ -13,6 +13,7 @@
   import type { ImageListItemDto } from "@prismedia/contracts";
   import { fade } from "svelte/transition";
   import { dur, ease } from "@prismedia/ui-svelte";
+  import { createNavigationKeyHandler } from "$lib/keyboard/navigation-keyboard";
   import { portal } from "$lib/actions/portal";
   import { apiAssetUrl as toApiUrl } from "$lib/api/orval-fetch";
   import NsfwBlur from "./nsfw/NsfwBlur.svelte";
@@ -295,34 +296,12 @@
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
 
-    function onKey(event: KeyboardEvent) {
-      const target = event.target as HTMLElement;
-      const typing =
-        target.tagName === "INPUT" ||
-        target.tagName === "TEXTAREA" ||
-        target.isContentEditable;
-      if (typing && event.key !== "Escape") return;
-
-      switch (event.key) {
-        case "Escape":
-          event.preventDefault();
-          onClose();
-          break;
-        case "ArrowLeft":
-        case "h":
-        case "H":
-          event.preventDefault();
-          goPrev();
-          break;
-        case "ArrowRight":
-        case "l":
-        case "L":
-        case " ":
-          event.preventDefault();
-          goNext();
-          break;
-      }
-    }
+    const onKey = createNavigationKeyHandler({
+      close: onClose,
+      prev: goPrev,
+      next: goNext,
+      extraKeys: { " ": () => goNext() },
+    });
 
     window.addEventListener("keydown", onKey);
     showControlsTemporarily();

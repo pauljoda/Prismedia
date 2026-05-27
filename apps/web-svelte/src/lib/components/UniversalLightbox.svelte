@@ -17,6 +17,7 @@
   import { fade } from "svelte/transition";
   import { getCapability } from "$lib/api/capabilities";
   import { positiveNumberValue } from "$lib/utils/format";
+  import { createNavigationKeyHandler } from "$lib/keyboard/navigation-keyboard";
   import { portal } from "$lib/actions/portal";
   import { CAPABILITY_KIND } from "$lib/entities/entity-codes";
   import NsfwBlur from "./nsfw/NsfwBlur.svelte";
@@ -276,57 +277,25 @@
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
 
-    function onKey(event: KeyboardEvent) {
-      const target = event.target as HTMLElement;
-      const typing =
-        target.tagName === "INPUT" ||
-        target.tagName === "TEXTAREA" ||
-        target.isContentEditable;
-      if (typing && event.key !== "Escape") return;
-
-      switch (event.key) {
-        case "Escape":
-          event.preventDefault();
-          onClose();
-          break;
-        case "ArrowLeft":
-        case "h":
-        case "H":
-          event.preventDefault();
-          goPrev();
-          break;
-        case "ArrowRight":
-        case "l":
-        case "L":
-          event.preventDefault();
-          goNext();
-          break;
-        case "+":
-        case "=":
-          event.preventDefault();
-          zoomBy(0.25);
-          break;
-        case "-":
-        case "_":
-          event.preventDefault();
-          zoomBy(-0.2);
-          break;
-        case "0":
-          event.preventDefault();
-          resetTransform();
-          break;
-        case "i":
-        case "I":
-          event.preventDefault();
-          if (canOpenDetails) infoOpen = !infoOpen;
-          break;
-        default:
-          if (event.key >= "1" && event.key <= "5") {
-            event.preventDefault();
-            handleRate(Number(event.key));
-          }
-      }
-    }
+    const onKey = createNavigationKeyHandler({
+      close: onClose,
+      prev: goPrev,
+      next: goNext,
+      extraKeys: {
+        "+": () => zoomBy(0.25),
+        "=": () => zoomBy(0.25),
+        "-": () => zoomBy(-0.2),
+        "_": () => zoomBy(-0.2),
+        "0": () => resetTransform(),
+        "i": () => { if (canOpenDetails) infoOpen = !infoOpen; },
+        "I": () => { if (canOpenDetails) infoOpen = !infoOpen; },
+        "1": () => handleRate(1),
+        "2": () => handleRate(2),
+        "3": () => handleRate(3),
+        "4": () => handleRate(4),
+        "5": () => handleRate(5),
+      },
+    });
 
     window.addEventListener("keydown", onKey);
     const observer = new ResizeObserver(() => {
