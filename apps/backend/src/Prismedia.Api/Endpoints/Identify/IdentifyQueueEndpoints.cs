@@ -1,6 +1,6 @@
+using Prismedia.Application.Plugins;
 using Prismedia.Contracts.Plugins;
 using Prismedia.Contracts.System;
-using Prismedia.Infrastructure.Plugins;
 
 namespace Prismedia.Api.Endpoints;
 
@@ -10,7 +10,7 @@ internal static class IdentifyQueueEndpoints {
             bool? includeCompleted,
             bool? hideNsfw,
             HttpContext httpContext,
-            IdentifyQueueService queue,
+            IIdentifyQueueService queue,
             CancellationToken cancellationToken) =>
             Results.Ok(await queue.ListAsync(
                 includeCompleted ?? false,
@@ -22,7 +22,7 @@ internal static class IdentifyQueueEndpoints {
 
         group.MapPost("/queue/entities/{entityId:guid}", async (
             Guid entityId,
-            IdentifyQueueService queue,
+            IIdentifyQueueService queue,
             CancellationToken cancellationToken) => {
                 try {
                     return Results.Ok(await queue.AddAsync(entityId, cancellationToken));
@@ -37,7 +37,7 @@ internal static class IdentifyQueueEndpoints {
 
         group.MapGet("/queue/entities/{entityId:guid}", async (
             Guid entityId,
-            IdentifyQueueService queue,
+            IIdentifyQueueService queue,
             CancellationToken cancellationToken) => {
                 var item = await queue.GetAsync(entityId, cancellationToken);
                 return item is null
@@ -54,7 +54,7 @@ internal static class IdentifyQueueEndpoints {
             IdentifyQueueSearchRequest request,
             bool? hideNsfw,
             HttpContext httpContext,
-            IdentifyQueueService queue,
+            IIdentifyQueueService queue,
             CancellationToken cancellationToken) => {
                 try {
                     return Results.Ok(await queue.SearchAsync(
@@ -74,7 +74,7 @@ internal static class IdentifyQueueEndpoints {
         group.MapPost("/queue/entities/{entityId:guid}/apply", async (
             Guid entityId,
             ApplyIdentifyQueueItemRequest request,
-            IdentifyQueueService queue,
+            IIdentifyQueueService queue,
             CancellationToken cancellationToken) => {
                 try {
                     return Results.Ok(await queue.ApplyAsync(entityId, request, cancellationToken));
@@ -94,7 +94,7 @@ internal static class IdentifyQueueEndpoints {
 
         group.MapDelete("/queue/entities/{entityId:guid}", async (
             Guid entityId,
-            IdentifyQueueService queue,
+            IIdentifyQueueService queue,
             CancellationToken cancellationToken) => {
                 try {
                     var item = await queue.DeleteAsync(entityId, cancellationToken);

@@ -1,6 +1,6 @@
+using Prismedia.Application.Plugins;
 using Prismedia.Contracts.Plugins;
 using Prismedia.Contracts.System;
-using Prismedia.Infrastructure.Plugins;
 
 namespace Prismedia.Api.Endpoints;
 
@@ -10,7 +10,7 @@ public static class PluginEndpoints {
             .WithTags("Plugins");
 
         group.MapGet("/", async (
-            PluginCatalogService plugins,
+            IPluginCatalogService plugins,
             CancellationToken cancellationToken) =>
             Results.Ok(await plugins.ListProvidersAsync(cancellationToken)))
             .WithName("ListPlugins")
@@ -19,7 +19,7 @@ public static class PluginEndpoints {
 
         group.MapPost("/{provider}", async (
             string provider,
-            PluginCatalogService plugins,
+            IPluginCatalogService plugins,
             CancellationToken cancellationToken) => {
                 var result = await plugins.InstallAsync(provider, cancellationToken);
                 return result is null
@@ -33,7 +33,7 @@ public static class PluginEndpoints {
 
         group.MapDelete("/{provider}", async (
             string provider,
-            PluginCatalogService plugins,
+            IPluginCatalogService plugins,
             CancellationToken cancellationToken) =>
             await plugins.RemoveAsync(provider, cancellationToken)
                 ? Results.NoContent()
@@ -46,7 +46,7 @@ public static class PluginEndpoints {
         group.MapPut("/{provider}/auth", async (
             string provider,
             PluginAuthUpdateRequest request,
-            PluginCatalogService plugins,
+            IPluginCatalogService plugins,
             CancellationToken cancellationToken) =>
             await plugins.SaveAuthAsync(provider, request.Values, cancellationToken)
                 ? Results.NoContent()

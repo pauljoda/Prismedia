@@ -12,6 +12,7 @@ using Prismedia.Application.Settings;
 using Prismedia.Application.Health;
 using Prismedia.Application.UserState;
 using Prismedia.Application.Audio;
+using Prismedia.Application.Plugins;
 using Prismedia.Application.Videos;
 using Prismedia.Infrastructure.Audio;
 using Prismedia.Infrastructure.Collections;
@@ -52,16 +53,33 @@ public static class DependencyInjection {
         var cacheDir = NormalizePath(configuration["PRISMEDIA_CACHE_DIR"] ??
             configuration["Prismedia:CacheDir"] ??
             Path.Combine(dataDir, "cache"), pathBase);
-
-        services.AddSingleton(_ => NpgsqlDataSource.Create(connectionString));
-        services.AddDbContext<PrismediaDbContext>((provider, options) =>
-            options.UseNpgsql(provider.GetRequiredService<NpgsqlDataSource>()));
-        services.AddSingleton<ProcessExecutor>();
-        services.AddSingleton<IWorkerHeartbeatStore>(new FileWorkerHeartbeatStore(dataDir));
         var mediaToolOptions = MediaToolOptions.FromConfiguration(
             configuration["PRISMEDIA_FFMPEG_PATH"] ?? configuration["Prismedia:Hls:FfmpegPath"],
             configuration["PRISMEDIA_FFPROBE_PATH"] ?? configuration["Prismedia:Hls:FfprobePath"]);
 
+        RegisterPersistence(services, connectionString);
+        RegisterMediaProcessing(services, mediaToolOptions, dataDir);
+        RegisterPluginsAndIdentify(services, configuration, pathBase, cacheDir);
+        RegisterLibraryScanning(services, dataDir);
+        RegisterEntities(services, cacheDir);
+        RegisterFilesAndOrganization(services);
+        RegisterPlayback(services, configuration, cacheDir, mediaToolOptions);
+        RegisterJobsSettingsAndState(services, dataDir);
+
+        return services;
+    }
+
+    private static void RegisterPersistence(IServiceCollection services, string connectionString) {
+        services.AddSingleton(_ => NpgsqlDataSource.Create(connectionString));
+        services.AddDbContext<PrismediaDbContext>((provider, options) =>
+            options.UseNpgsql(provider.GetRequiredService<NpgsqlDataSource>()));
+    }
+
+    private static void RegisterMediaProcessing(
+        IServiceCollection services,
+        MediaToolOptions mediaToolOptions,
+        string dataDir) {
+        services.AddSingleton<ProcessExecutor>();
         services.AddSingleton(mediaToolOptions);
         services.AddSingleton<MediaToolService>();
         services.AddSingleton<FileDiscoveryService>();
@@ -74,12 +92,27 @@ public static class DependencyInjection {
             provider.GetRequiredService<MediaProbeService>(),
             provider.GetRequiredService<MediaToolOptions>()));
         services.AddSingleton<HashingService>();
+        services.AddSingleton<IFileDiscovery>(provider =>
+            new FileDiscoveryAdapter(provider.GetRequiredService<FileDiscoveryService>()));
+        services.AddSingleton<IMediaProbe>(provider =>
+            new MediaProbeAdapter(provider.GetRequiredService<MediaProbeService>()));
+        services.AddSingleton<IMediaHashing>(provider =>
+            new MediaHashingAdapter(provider.GetRequiredService<HashingService>()));
+    }
+
+    private static void RegisterPluginsAndIdentify(
+        IServiceCollection services,
+        IConfiguration configuration,
+        string pathBase,
+        string cacheDir) {
         services.AddSingleton(new PluginCatalogOptions(
             ResolvePluginDevPaths(configuration, pathBase),
             cacheDir,
             ResolveCurrentVersion(configuration, pathBase)));
         services.AddSingleton<DotnetPluginProcessRunner>();
         services.AddScoped<PluginCatalogService>();
+        services.AddScoped<IPluginCatalogService>(provider =>
+            provider.GetRequiredService<PluginCatalogService>());
         services.AddScoped<IdentifyMatchHintResolver>();
         services.AddScoped(provider => new EntityMetadataApplyService(
             provider.GetRequiredService<PrismediaDbContext>(),
@@ -88,15 +121,15 @@ public static class DependencyInjection {
         services.AddScoped<IEntityMetadataPatchService>(provider =>
             provider.GetRequiredService<EntityMetadataApplyService>());
         services.AddScoped<IdentifyPluginService>();
+        services.AddScoped<IIdentifyProviderService>(provider =>
+            provider.GetRequiredService<IdentifyPluginService>());
         services.AddScoped<IdentifyQueueService>();
+        services.AddScoped<IIdentifyQueueService>(provider =>
+            provider.GetRequiredService<IdentifyQueueService>());
         services.AddScoped<IBulkIdentifyProvider, BulkIdentifyProviderAdapter>();
+    }
 
-        services.AddSingleton<IFileDiscovery>(provider =>
-            new FileDiscoveryAdapter(provider.GetRequiredService<FileDiscoveryService>()));
-        services.AddSingleton<IMediaProbe>(provider =>
-            new MediaProbeAdapter(provider.GetRequiredService<MediaProbeService>()));
-        services.AddSingleton<IMediaHashing>(provider =>
-            new MediaHashingAdapter(provider.GetRequiredService<HashingService>()));
+    private static void RegisterLibraryScanning(IServiceCollection services, string dataDir) {
         services.AddScoped<IMediaAssetGenerator>(provider =>
             new MediaAssetGeneratorAdapter(
                 provider.GetRequiredService<ThumbnailService>(),
@@ -108,6 +141,9 @@ public static class DependencyInjection {
             new MaintenancePersistenceService(provider.GetRequiredService<PrismediaDbContext>(), dataDir));
         services.AddScoped<ICollectionRuleEngine, CollectionRuleEngine>();
         services.AddScoped<ICollectionRefreshPersistence, CollectionRefreshPersistenceService>();
+    }
+
+    private static void RegisterEntities(IServiceCollection services, string cacheDir) {
         RegisterEntityMappers(services);
         services.AddScoped<EfEntityRepository>();
         services.AddScoped<IEntityWriteRepository>(provider => provider.GetRequiredService<EfEntityRepository>());
@@ -117,11 +153,22 @@ public static class DependencyInjection {
             new EntityImageAssetMutationService(
                 provider.GetRequiredService<PrismediaDbContext>(),
                 new EntityImageAssetStorageOptions(cacheDir)));
+    }
+
+    private static void RegisterFilesAndOrganization(IServiceCollection services) {
         services.AddScoped<IOrganizePersistence, EfOrganizePersistence>();
         services.AddScoped<IFilesPersistence, EfFilesPersistence>();
         services.AddSingleton<IManagedFileStorage, LocalManagedFileStorage>();
+    }
+
+    private static void RegisterPlayback(
+        IServiceCollection services,
+        IConfiguration configuration,
+        string cacheDir,
+        MediaToolOptions mediaToolOptions) {
         services.AddScoped<IVideoSourceService, VideoSourceService>();
         services.AddScoped<IAudioSourceService, AudioSourceService>();
+        services.AddSingleton<IAudioTranscodeOptions, MediaToolAudioTranscodeOptions>();
         services.AddSingleton(new HlsAssetServiceOptions(
             cacheDir,
             HlsTranscoderProfiles.ParseOrDefault(configuration["PRISMEDIA_HLS_TRANSCODER"] ?? configuration["Prismedia:Hls:Transcoder"]),
@@ -133,11 +180,13 @@ public static class DependencyInjection {
         services.AddScoped<IPlaybackSessionService, PlaybackSessionService>();
         services.AddScoped<ITrickplayService, TrickplayService>();
         services.AddScoped<IVideoSubtitleAssetService, VideoSubtitleAssetService>();
+    }
+
+    private static void RegisterJobsSettingsAndState(IServiceCollection services, string dataDir) {
+        services.AddSingleton<IWorkerHeartbeatStore>(new FileWorkerHeartbeatStore(dataDir));
         services.AddScoped<IJobQueueService, JobQueueService>();
         services.AddScoped<ISettingsPersistence, EfSettingsPersistence>();
         services.AddScoped<IUserStatePersistence, EfUserStatePersistence>();
-
-        return services;
     }
 
     private static void RegisterEntityMappers(IServiceCollection services) {

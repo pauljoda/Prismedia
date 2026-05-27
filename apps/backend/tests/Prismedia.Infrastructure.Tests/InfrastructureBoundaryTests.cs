@@ -70,45 +70,28 @@ public sealed class InfrastructureBoundaryTests {
 
     [Fact]
     public void ApiEndpointInfrastructureImportsDoNotGrow() {
-        var allowed = new HashSet<string>(StringComparer.Ordinal)
-        {
-            "apps/backend/src/Prismedia.Api/Endpoints/AudioTracks/AudioTrackEndpoints.cs",
-            "apps/backend/src/Prismedia.Api/Endpoints/Identify/IdentifyEntityEndpoints.cs",
-            "apps/backend/src/Prismedia.Api/Endpoints/Identify/IdentifyProviderEndpoints.cs",
-            "apps/backend/src/Prismedia.Api/Endpoints/Identify/IdentifyQueueEndpoints.cs",
-            "apps/backend/src/Prismedia.Api/Endpoints/Plugins/PluginEndpoints.cs"
-        };
-
         var actual = FilesContaining(
                 "apps/backend/src/Prismedia.Api/Endpoints",
                 "using Prismedia.Infrastructure")
             .ToArray();
 
-        var unexpected = actual
-            .Where(path => !allowed.Contains(path))
-            .ToArray();
-
-        Assert.Empty(unexpected);
+        Assert.Empty(actual);
     }
 
     [Fact]
-    public void ContractDomainImportsDoNotGrow() {
-        var allowed = new HashSet<string>(StringComparer.Ordinal)
-        {
-            "apps/backend/src/Prismedia.Contracts/Entities/Capabilities/Identity/LinksCapability.cs",
-            "apps/backend/src/Prismedia.Contracts/Entities/Capabilities/Library/FilesCapability.cs"
-        };
+    public void ContractProjectDoesNotReferenceDomain() {
+        var projectFile = ReadRepoFile("apps/backend/src/Prismedia.Contracts/Prismedia.Contracts.csproj");
+        Assert.DoesNotContain("Prismedia.Domain", projectFile, StringComparison.Ordinal);
+    }
 
+    [Fact]
+    public void ContractSourceDoesNotUseDomainNamespaces() {
         var actual = FilesContaining(
                 "apps/backend/src/Prismedia.Contracts",
-                "using Prismedia.Domain")
+                "Prismedia.Domain")
             .ToArray();
 
-        var unexpected = actual
-            .Where(path => !allowed.Contains(path))
-            .ToArray();
-
-        Assert.Empty(unexpected);
+        Assert.Empty(actual);
     }
 
     private static IEnumerable<string> FilesContaining(string relativeDirectory, string text) {

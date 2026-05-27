@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Prismedia.Application.Entities;
+using Prismedia.Application.Audio;
 using Prismedia.Application.Files;
 using Prismedia.Application.Jobs;
 using Prismedia.Application.Organization;
@@ -34,6 +35,7 @@ public static class DependencyInjection {
         services.AddScoped<UserStateService>();
         services.AddScoped<OrganizeService>();
         services.AddScoped<FilesService>();
+        services.AddScoped<IAudioStreamService, AudioStreamService>();
 
         return services;
     }

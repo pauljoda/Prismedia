@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Application.Plugins;
 using Prismedia.Contracts.Plugins;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
@@ -35,7 +36,7 @@ public sealed record PluginDescriptor(
 /// <summary>
 /// Discovers plugin manifests, applies compatibility gates, and stores installed provider state.
 /// </summary>
-public sealed class PluginCatalogService {
+public sealed class PluginCatalogService : IPluginCatalogService {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) {
         PropertyNameCaseInsensitive = true,
         WriteIndented = false
@@ -511,7 +512,7 @@ public sealed class DotnetPluginProcessRunner {
 /// <summary>
 /// Coordinates provider selection, ID-first match hints, plugin execution, and metadata application.
 /// </summary>
-public sealed class IdentifyPluginService {
+public sealed class IdentifyPluginService : IIdentifyProviderService {
     private readonly PrismediaDbContext _db;
     private readonly PluginCatalogService _catalog;
     private readonly IdentifyMatchHintResolver _hints;

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Application.Plugins;
 using Prismedia.Contracts.Plugins;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
@@ -10,7 +11,7 @@ namespace Prismedia.Infrastructure.Plugins;
 /// <summary>
 /// Owns the durable identify queue state machine for entity metadata review.
 /// </summary>
-public sealed class IdentifyQueueService {
+public sealed class IdentifyQueueService : IIdentifyQueueService {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) {
         PropertyNameCaseInsensitive = true,
         WriteIndented = false

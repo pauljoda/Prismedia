@@ -2,6 +2,18 @@ using Prismedia.Contracts.Entities;
 using Prismedia.Domain.Capabilities;
 using Prismedia.Domain.Entities;
 using ContractCapability = Prismedia.Contracts.Entities.EntityCapability;
+using DomainEntityDate = Prismedia.Domain.Capabilities.EntityDate;
+using ContractEntityDate = Prismedia.Contracts.Entities.EntityDate;
+using ContractEntityExternalId = Prismedia.Contracts.Entities.EntityExternalId;
+using ContractEntityFile = Prismedia.Contracts.Entities.EntityFile;
+using ContractEntityFingerprint = Prismedia.Contracts.Entities.EntityFingerprint;
+using ContractEntityImageAsset = Prismedia.Contracts.Entities.EntityImageAsset;
+using ContractEntityMarker = Prismedia.Contracts.Entities.EntityMarker;
+using ContractEntityPosition = Prismedia.Contracts.Entities.EntityPosition;
+using ContractEntitySource = Prismedia.Contracts.Entities.EntitySource;
+using ContractEntityStat = Prismedia.Contracts.Entities.EntityStat;
+using ContractEntitySubtitle = Prismedia.Contracts.Entities.EntitySubtitle;
+using ContractEntityUrl = Prismedia.Contracts.Entities.EntityUrl;
 
 namespace Prismedia.Application.Entities;
 
@@ -64,7 +76,13 @@ public static class EntityCardProjector {
         }
 
         if (entity.MarkerCapability is { } markers) {
-            capabilities.Add(new MarkersCapability(markers.Items));
+            capabilities.Add(new MarkersCapability(markers.Items
+                .Select(marker => new ContractEntityMarker(
+                    marker.Id,
+                    marker.Title,
+                    marker.Seconds,
+                    marker.EndSeconds))
+                .ToArray()));
         }
 
         if (entity.Technical is { } technical) {
@@ -87,35 +105,70 @@ public static class EntityCardProjector {
         }
 
         if (entity.EntityFiles.Count > 0) {
-            capabilities.Add(new FilesCapability(entity.EntityFiles));
+            capabilities.Add(new FilesCapability(entity.EntityFiles
+                .Select(file => new ContractEntityFile(file.Role.ToCode(), file.Path, file.MimeType))
+                .ToArray()));
         }
 
         if (entity.Urls.Count > 0 || entity.ExternalIds.Count > 0) {
-            capabilities.Add(new LinksCapability(entity.Urls, entity.ExternalIds));
+            capabilities.Add(new LinksCapability(
+                entity.Urls
+                    .Select(url => new ContractEntityUrl(url.Value, url.Label))
+                    .ToArray(),
+                entity.ExternalIds
+                    .Select(externalId => new ContractEntityExternalId(
+                        externalId.Provider,
+                        externalId.Value,
+                        externalId.Url))
+                    .ToArray()));
         }
 
         if (entity.SubtitleCapability is { } subtitles) {
-            capabilities.Add(new SubtitlesCapability(subtitles.Items));
+            capabilities.Add(new SubtitlesCapability(subtitles.Items
+                .Select(subtitle => new ContractEntitySubtitle(
+                    subtitle.Id,
+                    subtitle.Language,
+                    subtitle.Label,
+                    subtitle.Format,
+                    subtitle.Source.ToCode(),
+                    subtitle.StoragePath,
+                    subtitle.SourceFormat,
+                    subtitle.SourcePath,
+                    subtitle.IsDefault))
+                .ToArray()));
         }
 
         if (entity.GetCapability<CapabilityFingerprints>() is { } fingerprints) {
-            capabilities.Add(new FingerprintsCapability(fingerprints.Items));
+            capabilities.Add(new FingerprintsCapability(fingerprints.Items
+                .Select(fingerprint => new ContractEntityFingerprint(
+                    fingerprint.Algorithm.ToCode(),
+                    fingerprint.Value))
+                .ToArray()));
         }
 
         if (entity.Stats is { } stats) {
-            capabilities.Add(new StatsCapability(stats.Items));
+            capabilities.Add(new StatsCapability(stats.Items
+                .Select(stat => new ContractEntityStat(stat.Code, stat.Value))
+                .ToArray()));
         }
 
         if (entity.Dates is { } dates) {
-            capabilities.Add(new DatesCapability(dates.Items));
+            capabilities.Add(new DatesCapability(dates.Items
+                .Select(ToContractDate)
+                .ToArray()));
         }
 
         if (entity.Lifetime is { } lifetime) {
-            capabilities.Add(new LifetimeCapability(lifetime.Start, lifetime.End, lifetime.Label));
+            capabilities.Add(new LifetimeCapability(
+                lifetime.Start is null ? null : ToContractDate(lifetime.Start),
+                lifetime.End is null ? null : ToContractDate(lifetime.End),
+                lifetime.Label));
         }
 
         if (entity.Source is { } source) {
-            capabilities.Add(new SourceCapability(source.Items));
+            capabilities.Add(new SourceCapability(source.Items
+                .Select(item => new ContractEntitySource(item.Code, item.Value))
+                .ToArray()));
         }
 
         if (entity.Progress is { } progress) {
@@ -130,7 +183,9 @@ public static class EntityCardProjector {
         }
 
         if (entity.Position is { } position) {
-            capabilities.Add(new PositionCapability(position.Items));
+            capabilities.Add(new PositionCapability(position.Items
+                .Select(item => new ContractEntityPosition(item.Code, item.Value, item.Label))
+                .ToArray()));
         }
 
         if (entity.Classification is { } classification) {
@@ -152,7 +207,7 @@ public static class EntityCardProjector {
                 EntityFileRole.Logo => 3,
                 _ => 4
             })
-            .Select(file => new EntityImageAsset(file.Role, file.Path, file.MimeType))
+            .Select(file => new ContractEntityImageAsset(file.Role.ToCode(), file.Path, file.MimeType))
             .ToArray();
 
         var supportedKinds = SupportedManualImageRoles.Select(role => role.ToCode()).ToArray();
@@ -210,4 +265,7 @@ public static class EntityCardProjector {
     private static bool IsCustomPath(string path) =>
         path.Contains("/custom/artwork/", StringComparison.OrdinalIgnoreCase) ||
         path.Contains("/plugins/artwork/", StringComparison.OrdinalIgnoreCase);
+
+    private static ContractEntityDate ToContractDate(DomainEntityDate date) =>
+        new(date.Code, date.Value, date.SortableValue, date.Precision);
 }

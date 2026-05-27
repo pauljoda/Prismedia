@@ -1,5 +1,3 @@
-using EntityDate = Prismedia.Domain.Capabilities.EntityDate;
-
 namespace Prismedia.Contracts.Entities;
 
 /// <summary>API-facing semantic lifetime capability.</summary>

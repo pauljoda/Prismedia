@@ -2,7 +2,7 @@ using Prismedia.Contracts.Plugins;
 using Prismedia.Contracts.System;
 using Prismedia.Contracts.Entities;
 using Prismedia.Application.Entities;
-using Prismedia.Infrastructure.Plugins;
+using Prismedia.Application.Plugins;
 
 namespace Prismedia.Api.Endpoints;
 
@@ -13,7 +13,7 @@ internal static class IdentifyEntityEndpoints {
             IdentifyEntityRequest request,
             bool? hideNsfw,
             HttpContext httpContext,
-            IdentifyPluginService identify,
+            IIdentifyProviderService identify,
             CancellationToken cancellationToken) => {
                 var response = await identify.IdentifyAsync(
                     entityId,
