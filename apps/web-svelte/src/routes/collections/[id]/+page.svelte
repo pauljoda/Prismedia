@@ -6,7 +6,7 @@
     updateEntityRating,
     updateEntityFlags,
     updateEntityMetadata,
-  } from "$lib/api/prismedia";
+  } from "$lib/api/entity-mutations";
   import { getCollection } from "$lib/api/generated/prismedia";
   import type { CollectionDetail } from "$lib/api/generated/model";
   import { unwrapGenerated } from "$lib/api/generated-response";

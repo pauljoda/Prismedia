@@ -48,7 +48,7 @@
   import ToggleChip from "$lib/components/forms/ToggleChip.svelte";
   import TextField from "$lib/components/forms/TextField.svelte";
   import { getImagesCapability, isNsfw as hasNsfwCapability } from "$lib/api/capabilities";
-  import { clearEntityImageAsset, uploadEntityImageAsset } from "$lib/api/prismedia";
+  import { clearEntityImageAsset, uploadEntityImageAsset } from "$lib/api/entity-mutations";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import { ENTITY_FILE_ROLE, type EntityFileRoleCode } from "$lib/entities/entity-codes";
   import {

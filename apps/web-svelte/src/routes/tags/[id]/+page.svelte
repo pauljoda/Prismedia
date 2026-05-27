@@ -2,12 +2,12 @@
   import { onMount } from "svelte";
   import { page } from "$app/state";
   import { Film } from "@lucide/svelte";
+  import { fetchEntities } from "$lib/api/entities";
   import {
-    fetchEntities,
     updateEntityRating,
     updateEntityFlags,
     updateEntityMetadata,
-  } from "$lib/api/prismedia";
+  } from "$lib/api/entity-mutations";
   import { getTag } from "$lib/api/generated/prismedia";
   import type { TagDetail } from "$lib/api/generated/model";
   import { unwrapGenerated } from "$lib/api/generated-response";

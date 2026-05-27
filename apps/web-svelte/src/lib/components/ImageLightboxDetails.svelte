@@ -1,12 +1,12 @@
 <script lang="ts">
   import { Users } from "@lucide/svelte";
+  import { fetchImage } from "$lib/api/prismedia";
   import {
-    fetchImage,
     updateEntityFlags,
     updateEntityMetadata,
     updateEntityRating,
-    type ImageDetail,
-  } from "$lib/api/prismedia";
+  } from "$lib/api/entity-mutations";
+  import type { ImageDetail } from "$lib/api/generated/model";
   import { getCapability } from "$lib/api/capabilities";
   import {
     toggleOptimisticEntityFlag,

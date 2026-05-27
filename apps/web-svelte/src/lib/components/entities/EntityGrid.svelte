@@ -18,7 +18,7 @@
   import { onMount } from "svelte";
   import { isNsfw, withFlagCapability } from "$lib/api/capabilities";
   import type { EntityCapability } from "$lib/api/generated/model";
-  import { updateEntityFlags } from "$lib/api/prismedia";
+  import { updateEntityFlags } from "$lib/api/entity-mutations";
   import { createFilterPresets, type FilterPreset } from "$lib/filter-presets";
   import { usePageSnapshots } from "$lib/stores/page-snapshots.svelte";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";

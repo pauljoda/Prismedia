@@ -16,9 +16,9 @@
   import { EntityIndexPageState } from "./entity-index-page.svelte.ts";
   import type { EntityGridRequest } from "$lib/entities/entity-grid";
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
+  import { updateEntityRating } from "$lib/api/entity-mutations";
   import {
     fetchImage,
-    updateEntityRating,
     type EntityCard,
     type ImageDetail,
   } from "$lib/api/prismedia";
