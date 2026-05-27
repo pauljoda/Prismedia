@@ -161,6 +161,7 @@ public static class DependencyInjection {
         services.AddScoped<ICollectionRuleEngine, CollectionRuleEngine>();
         services.AddScoped<ICollectionRefreshPersistence, CollectionRefreshPersistenceService>();
         services.AddScoped<ICollectionItemReadService, CollectionItemReadService>();
+        services.AddScoped<ICollectionCommandService, CollectionCommandService>();
     }
 
     private static void RegisterEntities(IServiceCollection services, string cacheDir) {

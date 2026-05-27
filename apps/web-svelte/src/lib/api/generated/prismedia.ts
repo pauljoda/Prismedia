@@ -15,7 +15,17 @@ import type {
   BulkJobResponse,
   CancelJobsParams,
   ClearJobFailuresParams,
+  CollectionAddItemsRequest,
+  CollectionDeleteResponse,
   CollectionDetail,
+  CollectionItemMutationResponse,
+  CollectionItemsResponse,
+  CollectionRefreshResponse,
+  CollectionRemoveItemsRequest,
+  CollectionReorderItemsRequest,
+  CollectionRulePreviewRequest,
+  CollectionRulePreviewResponse,
+  CollectionWriteRequest,
   CreateFileFolderParams,
   DeleteFileParams,
   EntityCard,
@@ -80,6 +90,7 @@ import type {
   ListAudioLibrariesParams,
   ListAudioTracksParams,
   ListBooksParams,
+  ListCollectionItemsParams,
   ListCollectionsParams,
   ListEntitiesParams,
   ListFileChildrenParams,
@@ -105,6 +116,7 @@ import type {
   PlaybackUpdateRequest,
   PluginAuthUpdateRequest,
   PluginProvider,
+  PreviewCollectionRulesParams,
   ProblemDetails,
   RatingUpdateRequest,
   RemoveFileExclusionParams,
@@ -3189,6 +3201,47 @@ export const listCollections = async (params?: ListCollectionsParams, options?: 
 
 
 
+export type createCollectionResponse201 = {
+  data: CollectionDetail
+  status: 201
+}
+
+export type createCollectionResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type createCollectionResponseSuccess = (createCollectionResponse201) & {
+  headers: Headers;
+};
+export type createCollectionResponseError = (createCollectionResponse400) & {
+  headers: Headers;
+};
+
+export type createCollectionResponse = (createCollectionResponseSuccess | createCollectionResponseError)
+
+export const getCreateCollectionUrl = () => {
+
+
+
+
+  return `/api/collections`
+}
+
+export const createCollection = async (collectionWriteRequest: CollectionWriteRequest, options?: RequestInit): Promise<createCollectionResponse> => {
+
+  return orvalFetch<createCollectionResponse>(getCreateCollectionUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      collectionWriteRequest,)
+  }
+);}
+
+
+
 export type getCollectionResponse200 = {
   data: CollectionDetail
   status: 200
@@ -3280,6 +3333,365 @@ export const getCollectionPatch = async (id: string,
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       entityMetadataUpdateRequest,)
+  }
+);}
+
+
+
+export type updateCollectionResponse200 = {
+  data: CollectionDetail
+  status: 200
+}
+
+export type updateCollectionResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type updateCollectionResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type updateCollectionResponseSuccess = (updateCollectionResponse200) & {
+  headers: Headers;
+};
+export type updateCollectionResponseError = (updateCollectionResponse400 | updateCollectionResponse404) & {
+  headers: Headers;
+};
+
+export type updateCollectionResponse = (updateCollectionResponseSuccess | updateCollectionResponseError)
+
+export const getUpdateCollectionUrl = (id: string,) => {
+
+
+
+
+  return `/api/collections/${id}`
+}
+
+export const updateCollection = async (id: string,
+    collectionWriteRequest: CollectionWriteRequest, options?: RequestInit): Promise<updateCollectionResponse> => {
+
+  return orvalFetch<updateCollectionResponse>(getUpdateCollectionUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      collectionWriteRequest,)
+  }
+);}
+
+
+
+export type deleteCollectionResponse200 = {
+  data: CollectionDeleteResponse
+  status: 200
+}
+
+export type deleteCollectionResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type deleteCollectionResponseSuccess = (deleteCollectionResponse200) & {
+  headers: Headers;
+};
+export type deleteCollectionResponseError = (deleteCollectionResponse404) & {
+  headers: Headers;
+};
+
+export type deleteCollectionResponse = (deleteCollectionResponseSuccess | deleteCollectionResponseError)
+
+export const getDeleteCollectionUrl = (id: string,) => {
+
+
+
+
+  return `/api/collections/${id}`
+}
+
+export const deleteCollection = async (id: string, options?: RequestInit): Promise<deleteCollectionResponse> => {
+
+  return orvalFetch<deleteCollectionResponse>(getDeleteCollectionUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type previewCollectionRulesResponse200 = {
+  data: CollectionRulePreviewResponse
+  status: 200
+}
+
+export type previewCollectionRulesResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type previewCollectionRulesResponseSuccess = (previewCollectionRulesResponse200) & {
+  headers: Headers;
+};
+export type previewCollectionRulesResponseError = (previewCollectionRulesResponse400) & {
+  headers: Headers;
+};
+
+export type previewCollectionRulesResponse = (previewCollectionRulesResponseSuccess | previewCollectionRulesResponseError)
+
+export const getPreviewCollectionRulesUrl = (params?: PreviewCollectionRulesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/collections/preview-rules?${stringifiedParams}` : `/api/collections/preview-rules`
+}
+
+export const previewCollectionRules = async (collectionRulePreviewRequest: CollectionRulePreviewRequest,
+    params?: PreviewCollectionRulesParams, options?: RequestInit): Promise<previewCollectionRulesResponse> => {
+
+  return orvalFetch<previewCollectionRulesResponse>(getPreviewCollectionRulesUrl(params),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      collectionRulePreviewRequest,)
+  }
+);}
+
+
+
+export type listCollectionItemsResponse200 = {
+  data: CollectionItemsResponse
+  status: 200
+}
+
+export type listCollectionItemsResponseSuccess = (listCollectionItemsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listCollectionItemsResponse = (listCollectionItemsResponseSuccess)
+
+export const getListCollectionItemsUrl = (id: string,
+    params?: ListCollectionItemsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/collections/${id}/items?${stringifiedParams}` : `/api/collections/${id}/items`
+}
+
+export const listCollectionItems = async (id: string,
+    params?: ListCollectionItemsParams, options?: RequestInit): Promise<listCollectionItemsResponse> => {
+
+  return orvalFetch<listCollectionItemsResponse>(getListCollectionItemsUrl(id,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type addCollectionItemsResponse200 = {
+  data: CollectionItemMutationResponse
+  status: 200
+}
+
+export type addCollectionItemsResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type addCollectionItemsResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type addCollectionItemsResponseSuccess = (addCollectionItemsResponse200) & {
+  headers: Headers;
+};
+export type addCollectionItemsResponseError = (addCollectionItemsResponse400 | addCollectionItemsResponse404) & {
+  headers: Headers;
+};
+
+export type addCollectionItemsResponse = (addCollectionItemsResponseSuccess | addCollectionItemsResponseError)
+
+export const getAddCollectionItemsUrl = (id: string,) => {
+
+
+
+
+  return `/api/collections/${id}/items`
+}
+
+export const addCollectionItems = async (id: string,
+    collectionAddItemsRequest: CollectionAddItemsRequest, options?: RequestInit): Promise<addCollectionItemsResponse> => {
+
+  return orvalFetch<addCollectionItemsResponse>(getAddCollectionItemsUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      collectionAddItemsRequest,)
+  }
+);}
+
+
+
+export type removeCollectionItemsResponse200 = {
+  data: CollectionItemMutationResponse
+  status: 200
+}
+
+export type removeCollectionItemsResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type removeCollectionItemsResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type removeCollectionItemsResponseSuccess = (removeCollectionItemsResponse200) & {
+  headers: Headers;
+};
+export type removeCollectionItemsResponseError = (removeCollectionItemsResponse400 | removeCollectionItemsResponse404) & {
+  headers: Headers;
+};
+
+export type removeCollectionItemsResponse = (removeCollectionItemsResponseSuccess | removeCollectionItemsResponseError)
+
+export const getRemoveCollectionItemsUrl = (id: string,) => {
+
+
+
+
+  return `/api/collections/${id}/items/remove`
+}
+
+export const removeCollectionItems = async (id: string,
+    collectionRemoveItemsRequest: CollectionRemoveItemsRequest, options?: RequestInit): Promise<removeCollectionItemsResponse> => {
+
+  return orvalFetch<removeCollectionItemsResponse>(getRemoveCollectionItemsUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      collectionRemoveItemsRequest,)
+  }
+);}
+
+
+
+export type reorderCollectionItemsResponse200 = {
+  data: CollectionItemMutationResponse
+  status: 200
+}
+
+export type reorderCollectionItemsResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type reorderCollectionItemsResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type reorderCollectionItemsResponseSuccess = (reorderCollectionItemsResponse200) & {
+  headers: Headers;
+};
+export type reorderCollectionItemsResponseError = (reorderCollectionItemsResponse400 | reorderCollectionItemsResponse404) & {
+  headers: Headers;
+};
+
+export type reorderCollectionItemsResponse = (reorderCollectionItemsResponseSuccess | reorderCollectionItemsResponseError)
+
+export const getReorderCollectionItemsUrl = (id: string,) => {
+
+
+
+
+  return `/api/collections/${id}/items/reorder`
+}
+
+export const reorderCollectionItems = async (id: string,
+    collectionReorderItemsRequest: CollectionReorderItemsRequest, options?: RequestInit): Promise<reorderCollectionItemsResponse> => {
+
+  return orvalFetch<reorderCollectionItemsResponse>(getReorderCollectionItemsUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      collectionReorderItemsRequest,)
+  }
+);}
+
+
+
+export type refreshCollectionResponse200 = {
+  data: CollectionRefreshResponse
+  status: 200
+}
+
+export type refreshCollectionResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type refreshCollectionResponseSuccess = (refreshCollectionResponse200) & {
+  headers: Headers;
+};
+export type refreshCollectionResponseError = (refreshCollectionResponse404) & {
+  headers: Headers;
+};
+
+export type refreshCollectionResponse = (refreshCollectionResponseSuccess | refreshCollectionResponseError)
+
+export const getRefreshCollectionUrl = (id: string,) => {
+
+
+
+
+  return `/api/collections/${id}/refresh`
+}
+
+export const refreshCollection = async (id: string, options?: RequestInit): Promise<refreshCollectionResponse> => {
+
+  return orvalFetch<refreshCollectionResponse>(getRefreshCollectionUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
   }
 );}
 

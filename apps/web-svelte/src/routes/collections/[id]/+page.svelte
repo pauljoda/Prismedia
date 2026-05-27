@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { Layers, Play, Shuffle } from "@lucide/svelte";
+  import { ArrowDown, ArrowUp, Layers, Pencil, Play, Plus, RefreshCw, Shuffle, Trash2, X } from "@lucide/svelte";
   import {
     updateEntityRating,
     updateEntityFlags,
@@ -9,9 +10,16 @@
   } from "$lib/api/entity-mutations";
   import { getCollection } from "$lib/api/generated/prismedia";
   import type { CollectionDetail } from "$lib/api/generated/model";
-  import { fetchCollectionItems } from "$lib/api/collections";
+  import {
+    addCollectionItems,
+    deleteCollection,
+    fetchCollectionItems,
+    refreshCollection,
+    removeCollectionItems,
+    reorderCollectionItems,
+  } from "$lib/api/collections";
+  import { fetchEntities } from "$lib/api/entities";
   import { unwrapGenerated } from "$lib/api/generated-response";
-  import { getCapability } from "$lib/api/capabilities";
   import {
     toggleOptimisticEntityFlag,
     updateOptimisticEntityRating,
@@ -25,6 +33,7 @@
     type EntityMetadataUpdateRequest,
   } from "$lib/components/entities/EntityDetail.svelte";
   import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
+  import EntityPicker, { type EntityPickerItem } from "$lib/components/forms/EntityPicker.svelte";
   import { durationToSeconds } from "$lib/utils/format";
   import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
   import { useNsfw } from "$lib/nsfw/store.svelte";
@@ -44,11 +53,19 @@
   let ratingBusy = $state(false);
   let collectionItems = $state.raw<CollectionItem[]>([]);
   let itemCards = $state<EntityThumbnailCard[]>([]);
+  let addItemKind = $state<CollectionItem["entityType"]>("video");
+  let addSelection = $state<EntityPickerItem[]>([]);
+  let addingItem = $state(false);
+  let refreshBusy = $state(false);
+  let deleteBusy = $state(false);
+  let itemMutationError = $state<string | null>(null);
 
   const card = $derived.by((): EntityDetailCardFull | null => {
     if (!collection) return null;
     return entityCardToDetailCard(collection);
   });
+  const canManuallyCurate = $derived(collection?.mode !== "dynamic");
+  const canRefreshRules = $derived(collection?.mode === "dynamic" || collection?.mode === "hybrid");
 
   onMount(() => {
     void loadCollection();
@@ -126,6 +143,92 @@
       slideshowDurationSeconds: slideshowDurationSeconds(),
     });
   }
+
+  async function searchAddableEntities(query: string): Promise<EntityPickerItem[]> {
+    const response = await fetchEntities({
+      kind: addItemKind,
+      query: query || undefined,
+      limit: 20,
+    });
+    return response.items.map((item) => ({
+      id: item.id,
+      title: item.title,
+      thumbnailUrl: item.coverUrl,
+      subtitle: item.meta.map((meta) => meta.label).filter(Boolean).join(" · "),
+    }));
+  }
+
+  async function handleAddSelection(values: EntityPickerItem[]) {
+    addSelection = [];
+    const item = values.at(-1);
+    if (!collection || !item || addingItem) return;
+    addingItem = true;
+    itemMutationError = null;
+    try {
+      await addCollectionItems(collection.id, {
+        items: [{ entityType: addItemKind, entityId: item.id }],
+      });
+      await loadCollection();
+    } catch (err) {
+      itemMutationError = err instanceof Error ? err.message : "Failed to add item.";
+    } finally {
+      addingItem = false;
+    }
+  }
+
+  async function removeItem(item: CollectionItem) {
+    if (!collection) return;
+    itemMutationError = null;
+    try {
+      await removeCollectionItems(collection.id, [item.id]);
+      await loadCollection();
+    } catch (err) {
+      itemMutationError = err instanceof Error ? err.message : "Failed to remove item.";
+    }
+  }
+
+  async function moveItem(index: number, direction: -1 | 1) {
+    if (!collection) return;
+    const nextIndex = index + direction;
+    if (nextIndex < 0 || nextIndex >= collectionItems.length) return;
+    const next = [...collectionItems];
+    [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
+    itemMutationError = null;
+    try {
+      await reorderCollectionItems(collection.id, next.map((item) => item.id));
+      await loadCollection();
+    } catch (err) {
+      itemMutationError = err instanceof Error ? err.message : "Failed to reorder items.";
+    }
+  }
+
+  async function refreshDynamicItems() {
+    if (!collection || refreshBusy) return;
+    refreshBusy = true;
+    itemMutationError = null;
+    try {
+      await refreshCollection(collection.id);
+      await loadCollection();
+    } catch (err) {
+      itemMutationError = err instanceof Error ? err.message : "Failed to refresh collection.";
+    } finally {
+      refreshBusy = false;
+    }
+  }
+
+  async function handleDeleteCollection() {
+    if (!collection || deleteBusy) return;
+    if (!confirm(`Delete ${collection.title}?`)) return;
+    deleteBusy = true;
+    try {
+      await deleteCollection(collection.id);
+      await goto("/collections");
+    } catch (err) {
+      itemMutationError = err instanceof Error ? err.message : "Failed to delete collection.";
+    } finally {
+      deleteBusy = false;
+    }
+  }
 </script>
 
 <svelte:head>
@@ -170,6 +273,26 @@
       {/snippet}
 
       {#snippet extraActions()}
+        <a
+          class="hero-icon-action"
+          aria-label="Edit collection"
+          title="Edit collection"
+          href={`/collections/${card.entity.id}/edit`}
+        >
+          <Pencil class="h-4 w-4" />
+        </a>
+        {#if canRefreshRules}
+          <button
+            type="button"
+            class="hero-icon-action"
+            aria-label="Refresh dynamic items"
+            title="Refresh dynamic items"
+            disabled={refreshBusy}
+            onclick={refreshDynamicItems}
+          >
+            <RefreshCw class={refreshBusy ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+          </button>
+        {/if}
         <button
           type="button"
           class="hero-icon-action"
@@ -190,8 +313,97 @@
         >
           <Shuffle class="h-4 w-4" />
         </button>
+        <button
+          type="button"
+          class="hero-icon-action danger"
+          aria-label="Delete collection"
+          title="Delete collection"
+          disabled={deleteBusy}
+          onclick={handleDeleteCollection}
+        >
+          <Trash2 class="h-4 w-4" />
+        </button>
       {/snippet}
     </EntityDetail>
+
+    {#if itemMutationError}
+      <div class="error-notice">
+        <p>{itemMutationError}</p>
+        <button type="button" onclick={() => (itemMutationError = null)}>Dismiss</button>
+      </div>
+    {/if}
+
+    {#if canManuallyCurate}
+      <section class="content-section collection-curation">
+        <h2 class="content-heading">
+          <Plus class="h-4 w-4" />
+          Curate
+        </h2>
+        <div class="add-row">
+          <label class="kind-select">
+            <span>Kind</span>
+            <select bind:value={addItemKind} disabled={addingItem}>
+              <option value="video">Video</option>
+              <option value="gallery">Gallery</option>
+              <option value="image">Image</option>
+              <option value="book">Book</option>
+              <option value="audio-track">Audio</option>
+            </select>
+          </label>
+          <EntityPicker
+            values={addSelection}
+            onChange={handleAddSelection}
+            onSearch={searchAddableEntities}
+            mode="single"
+            placeholder="Search media..."
+            disabled={addingItem}
+          />
+        </div>
+
+        {#if collectionItems.length > 0}
+          <ol class="item-order-list">
+            {#each collectionItems as item, index (item.id)}
+              <li class="item-order-row">
+                <div class="item-order-main">
+                  <a href={getEntityHref(item, `/collections/${collection.id}`)}>
+                    {item.entity?.title ?? "Unknown item"}
+                  </a>
+                  <span>{item.entityType} · {item.source}</span>
+                </div>
+                <div class="item-order-actions">
+                  <button
+                    type="button"
+                    aria-label="Move item up"
+                    title="Move item up"
+                    disabled={index === 0}
+                    onclick={() => moveItem(index, -1)}
+                  >
+                    <ArrowUp class="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Move item down"
+                    title="Move item down"
+                    disabled={index === collectionItems.length - 1}
+                    onclick={() => moveItem(index, 1)}
+                  >
+                    <ArrowDown class="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Remove item"
+                    title="Remove item"
+                    onclick={() => removeItem(item)}
+                  >
+                    <X class="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </li>
+            {/each}
+          </ol>
+        {/if}
+      </section>
+    {/if}
 
     {#if itemCards.length > 0}
       <section class="content-section">
@@ -230,9 +442,32 @@
   .content-count { font-family: var(--font-mono, "JetBrains Mono", monospace); font-size: 0.68rem; font-weight: 600; color: var(--color-text-muted, #8a93a6); padding: 0.1rem 0.4rem; border: 1px solid var(--color-border, #1c2235); background: var(--color-surface-3, #151a28); }
   :global(.hero-icon-action) { display: inline-flex; width: 2.35rem; height: 2.35rem; align-items: center; justify-content: center; border: 1px solid var(--color-border-subtle, #1c2235); background: rgb(17 22 29 / 0.72); color: var(--color-text-muted, #8a93a6); backdrop-filter: blur(12px); transition: border-color 0.16s, color 0.16s, box-shadow 0.16s; }
   :global(.hero-icon-action:hover:not(:disabled)) { border-color: rgba(242, 194, 106, 0.42); color: var(--color-text-accent, #f2c26a); box-shadow: 0 0 18px rgb(242 194 106 / 0.12); }
+  :global(.hero-icon-action.danger:hover:not(:disabled)) { border-color: rgba(255, 128, 111, 0.48); color: var(--color-error-text, #ff9f92); box-shadow: 0 0 18px rgb(255 128 111 / 0.12); }
   :global(.hero-icon-action:disabled) { cursor: not-allowed; opacity: 0.4; }
 
   .empty-children { padding: 2rem; border: 1px solid var(--color-border-subtle, #1c2235); background: var(--color-surface-1, #0c0f15); color: var(--color-text-muted, #8a93a6); text-align: center; font-size: 0.85rem; }
+
+  .collection-curation { border: 1px solid var(--color-border-subtle, #1c2235); background: rgba(12, 15, 21, 0.68); padding: 1rem; }
+  .add-row { display: grid; grid-template-columns: minmax(8rem, 12rem) minmax(0, 1fr); gap: 0.75rem; align-items: end; }
+  .kind-select { display: grid; gap: 0.35rem; }
+  .kind-select span { font-family: var(--font-mono, "JetBrains Mono", monospace); font-size: 0.66rem; text-transform: uppercase; color: var(--color-text-disabled, #596071); }
+  .kind-select select { width: 100%; border: 1px solid var(--color-border-subtle, #1c2235); border-radius: var(--radius-xs, 4px); background: var(--color-surface-2, #101420); color: var(--color-text-primary, #f2eed8); padding: 0.57rem 0.65rem; }
+  .item-order-list { display: grid; gap: 1px; margin: 0; padding: 0; list-style: none; border: 1px solid var(--color-border-subtle, #1c2235); background: var(--color-border-subtle, #1c2235); }
+  .item-order-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.75rem; align-items: center; background: var(--color-surface-1, #0c0f15); padding: 0.7rem 0.75rem; }
+  .item-order-main { display: grid; min-width: 0; gap: 0.1rem; }
+  .item-order-main a { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-text-primary, #f2eed8); text-decoration: none; font-size: 0.86rem; }
+  .item-order-main a:hover { color: var(--color-text-accent, #f2c26a); }
+  .item-order-main span { color: var(--color-text-disabled, #596071); font-family: var(--font-mono, "JetBrains Mono", monospace); font-size: 0.66rem; }
+  .item-order-actions { display: flex; align-items: center; gap: 0.25rem; }
+  .item-order-actions button { display: inline-flex; width: 2rem; height: 2rem; align-items: center; justify-content: center; border: 1px solid var(--color-border-subtle, #1c2235); border-radius: var(--radius-xs, 4px); background: var(--color-surface-2, #101420); color: var(--color-text-muted, #8a93a6); }
+  .item-order-actions button:hover:not(:disabled) { border-color: rgba(242, 194, 106, 0.42); color: var(--color-text-accent, #f2c26a); }
+  .item-order-actions button:disabled { cursor: not-allowed; opacity: 0.35; }
+
+  @media (max-width: 720px) {
+    .add-row,
+    .item-order-row { grid-template-columns: 1fr; }
+    .item-order-actions { justify-content: flex-end; }
+  }
 
   @keyframes pulse { 0%, 100% { opacity: 0.45; } 50% { opacity: 0.85; } }
 </style>
