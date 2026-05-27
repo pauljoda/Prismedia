@@ -145,7 +145,7 @@ public sealed class EntityMetadataApplyService : IEntityMetadataPatchService {
         }
 
         if (fields.Contains("positions")) {
-            await ReplacePositionsAsync(entity, NormalizePositions(patch.Positions), now, cancellationToken);
+            await ReplacePositionsAsync(entity, EntityMetadataPositionRules.Normalize(patch.Positions), now, cancellationToken);
         }
 
         if (fields.Contains("classification")) {
@@ -226,7 +226,7 @@ public sealed class EntityMetadataApplyService : IEntityMetadataPatchService {
         }
 
         if (selected.Contains("positions")) {
-            var normalizedPositions = NormalizePositions(patch.Positions);
+            var normalizedPositions = EntityMetadataPositionRules.Normalize(patch.Positions);
             await UpsertPositionsAsync(entity, normalizedPositions, now, cancellationToken);
         }
 
@@ -578,7 +578,7 @@ public sealed class EntityMetadataApplyService : IEntityMetadataPatchService {
         IReadOnlyDictionary<string, int> positions,
         DateTimeOffset now,
         CancellationToken cancellationToken) {
-        var sortOrder = StructuralSortOrder(entity.KindCode, positions);
+        var sortOrder = EntityMetadataPositionRules.SortOrderFor(entity.KindCode, positions);
         if (sortOrder is null) {
             return;
         }
@@ -586,49 +586,6 @@ public sealed class EntityMetadataApplyService : IEntityMetadataPatchService {
         entity.SortOrder = sortOrder.Value;
         entity.UpdatedAt = now;
     }
-
-    private static int? StructuralSortOrder(string kindCode, IReadOnlyDictionary<string, int> positions) {
-        if (kindCode.Equals(EntityKindRegistry.VideoSeason.Code, StringComparison.OrdinalIgnoreCase)) {
-            return PositionValue(positions, "season", "sort");
-        }
-
-        if (kindCode.Equals(EntityKindRegistry.Video.Code, StringComparison.OrdinalIgnoreCase)) {
-            return PositionValue(positions, "episode", "absolute-episode", "sort");
-        }
-
-        return PositionValue(positions, "track", "page", "chapter", "volume", "sort");
-    }
-
-    private static int? PositionValue(IReadOnlyDictionary<string, int> positions, params string[] codes) {
-        foreach (var code in codes) {
-            if (positions.TryGetValue(code, out var value)) {
-                return value;
-            }
-        }
-
-        return null;
-    }
-
-    private static IReadOnlyDictionary<string, int> NormalizePositions(IReadOnlyDictionary<string, int> positions) {
-        var normalized = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        foreach (var (code, value) in positions) {
-            normalized[NormalizePositionCode(code)] = value;
-        }
-
-        return normalized;
-    }
-
-    private static string NormalizePositionCode(string code) => code.Trim() switch {
-        var value when value.Equals("seasonNumber", StringComparison.OrdinalIgnoreCase) => "season",
-        var value when value.Equals("episodeNumber", StringComparison.OrdinalIgnoreCase) => "episode",
-        var value when value.Equals("absoluteEpisodeNumber", StringComparison.OrdinalIgnoreCase) => "absolute-episode",
-        var value when value.Equals("volumeNumber", StringComparison.OrdinalIgnoreCase) => "volume",
-        var value when value.Equals("chapterNumber", StringComparison.OrdinalIgnoreCase) => "chapter",
-        var value when value.Equals("pageNumber", StringComparison.OrdinalIgnoreCase) => "page",
-        var value when value.Equals("trackNumber", StringComparison.OrdinalIgnoreCase) => "track",
-        var value when value.Equals("sortOrder", StringComparison.OrdinalIgnoreCase) => "sort",
-        var value => value
-    };
 
     private async Task UpsertClassificationAsync(Guid entityId, string? value, DateTimeOffset now, CancellationToken cancellationToken) {
         var existing = await _db.EntityClassifications.FindAsync([entityId], cancellationToken);
@@ -795,7 +752,7 @@ public sealed class EntityMetadataApplyService : IEntityMetadataPatchService {
         }
 
         if (patch.Positions.Count > 0) {
-            var normalizedPositions = NormalizePositions(patch.Positions);
+            var normalizedPositions = EntityMetadataPositionRules.Normalize(patch.Positions);
             await UpsertPositionsAsync(entity, normalizedPositions, now, cancellationToken);
         }
 
