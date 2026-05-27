@@ -3,12 +3,13 @@
   import { page } from "$app/state";
   import { Layers } from "@lucide/svelte";
   import {
-    fetchCollection,
     updateEntityRating,
     updateEntityFlags,
     updateEntityMetadata,
-    type CollectionDetail,
   } from "$lib/api/prismedia";
+  import { getCollection } from "$lib/api/generated/prismedia";
+  import type { CollectionDetail } from "$lib/api/generated/model";
+  import { unwrapGenerated } from "$lib/api/generated-response";
   import { getCapability } from "$lib/api/capabilities";
   import {
     toggleOptimisticEntityFlag,
@@ -69,7 +70,8 @@
     loadState = "loading";
     errorMessage = null;
     try {
-      const nextCollection = await fetchCollection(page.params.id ?? "");
+      const id = page.params.id ?? "";
+      const nextCollection = unwrapGenerated<CollectionDetail>(await getCollection(id), `Failed to fetch collection ${id}`);
       collection = nextCollection;
       itemCards = thumbnailsToCards(await fetchOrderedEntityThumbnails(getAllChildIds(nextCollection)), {
         hrefFor: (thumbnail) => resolveEntityHref(thumbnail.kind, thumbnail.id),

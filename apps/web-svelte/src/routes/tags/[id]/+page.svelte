@@ -3,13 +3,14 @@
   import { page } from "$app/state";
   import { Film } from "@lucide/svelte";
   import {
-    fetchTag,
     fetchEntities,
     updateEntityRating,
     updateEntityFlags,
     updateEntityMetadata,
-    type TagDetail,
   } from "$lib/api/prismedia";
+  import { getTag } from "$lib/api/generated/prismedia";
+  import type { TagDetail } from "$lib/api/generated/model";
+  import { unwrapGenerated } from "$lib/api/generated-response";
   import { getCapability } from "$lib/api/capabilities";
   import {
     toggleOptimisticEntityFlag,
@@ -65,7 +66,7 @@
     errorMessage = null;
     try {
       const id = page.params.id ?? "";
-      tag = await fetchTag(id);
+      tag = unwrapGenerated<TagDetail>(await getTag(id), `Failed to fetch tag ${id}`);
       await loadRelated(id);
       loadState = "ready";
     } catch (err) {

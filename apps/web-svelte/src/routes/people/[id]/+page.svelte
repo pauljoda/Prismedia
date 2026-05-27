@@ -3,13 +3,14 @@
   import { page } from "$app/state";
   import { Film, Layers, BookOpen, Music, User } from "@lucide/svelte";
   import {
-    fetchPerson,
     fetchEntities,
     updateEntityRating,
     updateEntityFlags,
     updateEntityMetadata,
-    type PersonDetail,
   } from "$lib/api/prismedia";
+  import { getPerson } from "$lib/api/generated/prismedia";
+  import type { PersonDetail } from "$lib/api/generated/model";
+  import { unwrapGenerated } from "$lib/api/generated-response";
   import { getCapability } from "$lib/api/capabilities";
   import {
     toggleOptimisticEntityFlag,
@@ -93,7 +94,7 @@
     errorMessage = null;
     try {
       const id = page.params.id ?? "";
-      person = await fetchPerson(id);
+      person = unwrapGenerated<PersonDetail>(await getPerson(id), `Failed to fetch person ${id}`);
       await loadRelated(id);
       loadState = "ready";
     } catch (err) {

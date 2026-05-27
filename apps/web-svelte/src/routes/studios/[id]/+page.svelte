@@ -3,13 +3,14 @@
   import { page } from "$app/state";
   import { Film } from "@lucide/svelte";
   import {
-    fetchStudio,
     fetchEntities,
     updateEntityRating,
     updateEntityFlags,
     updateEntityMetadata,
-    type StudioDetail,
   } from "$lib/api/prismedia";
+  import { getStudio } from "$lib/api/generated/prismedia";
+  import type { StudioDetail } from "$lib/api/generated/model";
+  import { unwrapGenerated } from "$lib/api/generated-response";
   import { getCapability } from "$lib/api/capabilities";
   import {
     toggleOptimisticEntityFlag,
@@ -72,7 +73,7 @@
     errorMessage = null;
     try {
       const id = page.params.id ?? "";
-      studio = await fetchStudio(id);
+      studio = unwrapGenerated<StudioDetail>(await getStudio(id), `Failed to fetch studio ${id}`);
       await loadRelated(id);
       loadState = "ready";
     } catch (err) {
