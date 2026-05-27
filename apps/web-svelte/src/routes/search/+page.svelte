@@ -11,7 +11,7 @@
   } from "@lucide/svelte";
   import { cn } from "@prismedia/ui-svelte";
   import SearchResultCard from "$lib/components/SearchResultCard.svelte";
-  import { fetchEntities, type EntityCard } from "$lib/api/prismedia";
+  import { fetchEntities, type EntityCard } from "$lib/api/entities";
   import { resolveEntityHref } from "$lib/entities/entity-routes";
   import { labelForEntityKind } from "$lib/entities/entity-codes";
   import { useNsfw } from "$lib/nsfw/store.svelte";

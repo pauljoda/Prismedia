@@ -4,10 +4,10 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
-import type { CapabilityPositionItem } from './capabilityPositionItem';
 import type { EntityCapabilityPositionCapabilityKind } from './entityCapabilityPositionCapabilityKind';
+import type { EntityPosition } from './entityPosition';
 
 export interface EntityCapabilityPositionCapability {
   kind: EntityCapabilityPositionCapabilityKind;
-  items: CapabilityPositionItem[];
+  items: EntityPosition[];
 }

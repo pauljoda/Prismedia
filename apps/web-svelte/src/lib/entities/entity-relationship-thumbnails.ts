@@ -3,7 +3,7 @@ import type {
   EntityCreditMetadata,
   EntityThumbnail,
 } from "$lib/api/generated/model";
-import { fetchEntityThumbnails } from "$lib/api/prismedia";
+import { fetchEntityThumbnails } from "$lib/api/entities";
 import { getRelationshipIds } from "./entity-children";
 import { creditSubtitle, type EntityCredit } from "./entity-credits";
 import type { EntityDetailTag } from "./entity-detail";

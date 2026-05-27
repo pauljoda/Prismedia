@@ -5,4 +5,7 @@
  * OpenAPI spec version: 1.0.0
  */
 
-export interface EntitySubtitleSource {}
+export interface EntitySource {
+  code: string;
+  value: string;
+}

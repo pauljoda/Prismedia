@@ -9,14 +9,14 @@ import {
 } from "$lib/api/capabilities";
 import { numberValue, formatDurationString, durationToSeconds, formatResolutionLabel } from "$lib/utils/format";
 import type {
-  CapabilityFingerprintsItem as EntityFingerprint,
-  CapabilityMarkersItem as EntityMarker,
-  CapabilitySourceItem as EntitySource,
-  CapabilitySubtitlesItem as EntitySubtitle,
   EntityCapability,
   EntityCard,
   EntityDate,
   EntityExternalId,
+  EntityFingerprint,
+  EntityMarker,
+  EntitySource,
+  EntitySubtitle,
   EntityUrl,
 } from "$lib/api/generated/model";
 import { CAPABILITY_KIND, ENTITY_FILE_ROLE } from "./entity-codes";

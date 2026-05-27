@@ -4,10 +4,10 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
-import type { CapabilityFingerprintsItem } from './capabilityFingerprintsItem';
 import type { EntityCapabilityFingerprintsCapabilityKind } from './entityCapabilityFingerprintsCapabilityKind';
+import type { EntityFingerprint } from './entityFingerprint';
 
 export interface EntityCapabilityFingerprintsCapability {
   kind: EntityCapabilityFingerprintsCapabilityKind;
-  items: CapabilityFingerprintsItem[];
+  items: EntityFingerprint[];
 }

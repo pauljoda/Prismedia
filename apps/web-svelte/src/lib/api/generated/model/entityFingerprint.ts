@@ -5,4 +5,7 @@
  * OpenAPI spec version: 1.0.0
  */
 
-export interface EntityFileRole {}
+export interface EntityFingerprint {
+  algorithm: string;
+  value: string;
+}

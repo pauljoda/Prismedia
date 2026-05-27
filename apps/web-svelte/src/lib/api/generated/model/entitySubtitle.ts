@@ -4,15 +4,14 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
-import type { EntitySubtitleSource } from './entitySubtitleSource';
 
-export interface CapabilitySubtitlesItem {
+export interface EntitySubtitle {
   id: string;
   language: string;
   /** @nullable */
   label: string | null;
   format: string;
-  source: EntitySubtitleSource;
+  source: string;
   storagePath: string;
   sourceFormat: string;
   /** @nullable */

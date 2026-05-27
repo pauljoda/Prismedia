@@ -8,6 +8,7 @@ namespace Prismedia.Api.Endpoints;
 internal static class EntityListEndpoint {
     internal static RouteGroupBuilder MapEntityListEndpoint(this RouteGroupBuilder group) {
         group.MapGet("/", async (
+            string? kind,
             string? query,
             string? cursor,
             bool? hideNsfw,
@@ -17,12 +18,12 @@ internal static class EntityListEndpoint {
             HttpContext httpContext,
             IEntityReadService entities,
             CancellationToken cancellationToken) => {
-                if (!TryGetKind(httpContext.Request.Query["kind"].ToString(), out var kind, out var error)) {
+                if (!TryGetKind(kind, out var resolvedKind, out var error)) {
                     return error;
                 }
 
                 return Results.Ok(await entities.ListAsync(
-                    kind,
+                    resolvedKind,
                     query,
                     cursor,
                     NsfwVisibility.ShouldHide(hideNsfw, httpContext),

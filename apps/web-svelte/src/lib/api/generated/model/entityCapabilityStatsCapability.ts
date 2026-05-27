@@ -4,10 +4,10 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
-import type { CapabilityStatsItem } from './capabilityStatsItem';
 import type { EntityCapabilityStatsCapabilityKind } from './entityCapabilityStatsCapabilityKind';
+import type { EntityStat } from './entityStat';
 
 export interface EntityCapabilityStatsCapability {
   kind: EntityCapabilityStatsCapabilityKind;
-  items: CapabilityStatsItem[];
+  items: EntityStat[];
 }

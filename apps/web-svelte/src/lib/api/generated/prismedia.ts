@@ -245,6 +245,51 @@ export const getVideoSeason = async (id: string,
 
 
 
+export type getAudioStreamResponse200 = {
+  data: void
+  status: 200
+}
+
+export type getAudioStreamResponse206 = {
+  data: void
+  status: 206
+}
+
+export type getAudioStreamResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type getAudioStreamResponseSuccess = (getAudioStreamResponse200 | getAudioStreamResponse206) & {
+  headers: Headers;
+};
+export type getAudioStreamResponseError = (getAudioStreamResponse404) & {
+  headers: Headers;
+};
+
+export type getAudioStreamResponse = (getAudioStreamResponseSuccess | getAudioStreamResponseError)
+
+export const getGetAudioStreamUrl = (id: string,) => {
+
+
+
+
+  return `/api/audio-stream/${id}`
+}
+
+export const getAudioStream = async (id: string, options?: RequestInit): Promise<getAudioStreamResponse> => {
+
+  return orvalFetch<getAudioStreamResponse>(getGetAudioStreamUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
 export type getJellyfinPlaybackInfoResponse200 = {
   data: PlaybackInfoResponse
   status: 200
@@ -1087,6 +1132,106 @@ export const getEntityThumbnails = async (entityThumbnailBatchRequest: EntityThu
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       entityThumbnailBatchRequest,)
+  }
+);}
+
+
+
+export type uploadEntityImageAssetResponse200 = {
+  data: EntityCard
+  status: 200
+}
+
+export type uploadEntityImageAssetResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type uploadEntityImageAssetResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type uploadEntityImageAssetResponseSuccess = (uploadEntityImageAssetResponse200) & {
+  headers: Headers;
+};
+export type uploadEntityImageAssetResponseError = (uploadEntityImageAssetResponse400 | uploadEntityImageAssetResponse404) & {
+  headers: Headers;
+};
+
+export type uploadEntityImageAssetResponse = (uploadEntityImageAssetResponseSuccess | uploadEntityImageAssetResponseError)
+
+export const getUploadEntityImageAssetUrl = (id: string,
+    role: string,) => {
+
+
+
+
+  return `/api/entities/${id}/images/${role}`
+}
+
+/**
+ * @summary Uploads user-managed artwork for an entity image role.
+ */
+export const uploadEntityImageAsset = async (id: string,
+    role: string, options?: RequestInit): Promise<uploadEntityImageAssetResponse> => {
+
+  return orvalFetch<uploadEntityImageAssetResponse>(getUploadEntityImageAssetUrl(id,role),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type clearEntityImageAssetResponse200 = {
+  data: EntityCard
+  status: 200
+}
+
+export type clearEntityImageAssetResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type clearEntityImageAssetResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type clearEntityImageAssetResponseSuccess = (clearEntityImageAssetResponse200) & {
+  headers: Headers;
+};
+export type clearEntityImageAssetResponseError = (clearEntityImageAssetResponse400 | clearEntityImageAssetResponse404) & {
+  headers: Headers;
+};
+
+export type clearEntityImageAssetResponse = (clearEntityImageAssetResponseSuccess | clearEntityImageAssetResponseError)
+
+export const getClearEntityImageAssetUrl = (id: string,
+    role: string,) => {
+
+
+
+
+  return `/api/entities/${id}/images/${role}`
+}
+
+/**
+ * @summary Clears user-managed artwork for an entity image role.
+ */
+export const clearEntityImageAsset = async (id: string,
+    role: string, options?: RequestInit): Promise<clearEntityImageAssetResponse> => {
+
+  return orvalFetch<clearEntityImageAssetResponse>(getClearEntityImageAssetUrl(id,role),
+  {
+    ...options,
+    method: 'DELETE'
+
+
   }
 );}
 
@@ -2546,6 +2691,46 @@ export const getAudioTrackPatch = async (id: string,
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       entityMetadataUpdateRequest,)
+  }
+);}
+
+
+
+export type recordAudioTrackPlayResponse200 = {
+  data: EntityCard
+  status: 200
+}
+
+export type recordAudioTrackPlayResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type recordAudioTrackPlayResponseSuccess = (recordAudioTrackPlayResponse200) & {
+  headers: Headers;
+};
+export type recordAudioTrackPlayResponseError = (recordAudioTrackPlayResponse404) & {
+  headers: Headers;
+};
+
+export type recordAudioTrackPlayResponse = (recordAudioTrackPlayResponseSuccess | recordAudioTrackPlayResponseError)
+
+export const getRecordAudioTrackPlayUrl = (id: string,) => {
+
+
+
+
+  return `/api/audio-tracks/${id}/play`
+}
+
+export const recordAudioTrackPlay = async (id: string, options?: RequestInit): Promise<recordAudioTrackPlayResponse> => {
+
+  return orvalFetch<recordAudioTrackPlayResponse>(getRecordAudioTrackPlayUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
   }
 );}
 

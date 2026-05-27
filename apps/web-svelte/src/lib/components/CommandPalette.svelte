@@ -5,7 +5,7 @@
   import { Search, X, Clock, ArrowRight, Trash2 } from "@lucide/svelte";
   import { cn, dur, ease, flyDown } from "@prismedia/ui-svelte";
   import { fade } from "svelte/transition";
-  import { fetchEntities, type EntityCard } from "$lib/api/prismedia";
+  import { fetchEntities, type EntityCard } from "$lib/api/entities";
   import SearchResultCard from "$lib/components/SearchResultCard.svelte";
   import { useSearch } from "$lib/stores/search.svelte";
   import { useNsfw } from "$lib/nsfw/store.svelte";

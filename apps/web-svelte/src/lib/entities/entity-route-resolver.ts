@@ -1,4 +1,4 @@
-import { fetchEntity } from "$lib/api/prismedia";
+import { fetchEntity } from "$lib/api/entities";
 import { ENTITY_KIND, isEntityKindCode, resolveEntityHref } from "./entity-codes";
 
 export interface EntityRouteRecord {

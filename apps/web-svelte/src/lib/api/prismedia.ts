@@ -95,6 +95,7 @@ import type {
   LibraryBrowseResponse as GeneratedLibraryBrowseResponse,
   LibraryConfigResponse as GeneratedLibraryConfigResponse,
   LibraryRoot as GeneratedLibraryRoot,
+  ListEntitiesParams,
   PersonDetail as GeneratedPersonDetail,
   PlaybackSessionRequest as GeneratedPlaybackSessionRequest,
   PlaybackUpdateRequest as GeneratedPlaybackUpdateRequest,
@@ -467,19 +468,10 @@ function normalizeSettingsValues(response: GeneratedSettingsValuesResponse): Set
 }
 
 export function fetchEntities(
-  params?: {
-    kind?: string;
-    query?: string;
-    cursor?: string;
-    hideNsfw?: boolean;
-    limit?: number;
-    referencedBy?: string;
-    relationshipCode?: string;
-  },
+  params?: ListEntitiesParams,
   options?: RequestOptions,
 ): Promise<EntityListResponse> {
-  // Cast: hideNsfw is accepted by the backend but not yet in the generated OpenAPI type.
-  return listEntities(params as Record<string, string | boolean | undefined>, requestInit(options)).then((r) =>
+  return listEntities(params, requestInit(options)).then((r) =>
     unwrapGenerated(r, "Failed to list entities"),
   );
 }

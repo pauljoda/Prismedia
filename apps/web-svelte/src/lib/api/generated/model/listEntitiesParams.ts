@@ -6,6 +6,7 @@
  */
 
 export type ListEntitiesParams = {
+kind?: string;
 query?: string;
 cursor?: string;
 hideNsfw?: boolean;
@@ -13,4 +14,6 @@ hideNsfw?: boolean;
  * @pattern ^-?(?:0|[1-9]\d*)$
  */
 limit?: number | string;
+referencedBy?: string;
+relationshipCode?: string;
 };

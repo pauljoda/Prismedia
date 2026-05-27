@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { EntityCard } from "$lib/api/prismedia";
+import type { EntityCard } from "$lib/api/entities";
 import { EntityIndexPageState } from "./entity-index-page.svelte.ts";
 
 const fetchEntities = vi.fn();
 
-vi.mock("$lib/api/prismedia", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("$lib/api/prismedia")>();
+vi.mock("$lib/api/entities", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("$lib/api/entities")>();
   return {
     ...actual,
     fetchEntities: (...args: unknown[]) => fetchEntities(...args),

@@ -1,4 +1,4 @@
-import { fetchEntities, type EntityCard } from "$lib/api/prismedia";
+import { fetchEntities, type EntityCard } from "$lib/api/entities";
 import { entityCardToThumbnailCard } from "$lib/entities/entity-grid";
 import { resolveEntityHref } from "$lib/entities/entity-routes";
 import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";

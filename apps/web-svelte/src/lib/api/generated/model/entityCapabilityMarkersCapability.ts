@@ -4,10 +4,10 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
-import type { CapabilityMarkersItem } from './capabilityMarkersItem';
 import type { EntityCapabilityMarkersCapabilityKind } from './entityCapabilityMarkersCapabilityKind';
+import type { EntityMarker } from './entityMarker';
 
 export interface EntityCapabilityMarkersCapability {
   kind: EntityCapabilityMarkersCapabilityKind;
-  items: CapabilityMarkersItem[];
+  items: EntityMarker[];
 }
