@@ -6,6 +6,25 @@ namespace Prismedia.Infrastructure.Persistence;
 
 internal static partial class PrismediaModelConfiguration {
     private static void ConfigureSystemTables(ModelBuilder modelBuilder) {
+        modelBuilder.Entity<LibraryRootRow>(entity => {
+            entity.ToTable("library_roots");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(row => row.Path).HasColumnName("path").IsRequired();
+            entity.Property(row => row.Label).HasColumnName("label").IsRequired();
+            entity.Property(row => row.Enabled).HasColumnName("enabled");
+            entity.Property(row => row.Recursive).HasColumnName("recursive");
+            entity.Property(row => row.ScanVideos).HasColumnName("scan_videos");
+            entity.Property(row => row.ScanImages).HasColumnName("scan_images");
+            entity.Property(row => row.ScanAudio).HasColumnName("scan_audio");
+            entity.Property(row => row.ScanBooks).HasColumnName("scan_books");
+            entity.Property(row => row.IsNsfw).HasColumnName("is_nsfw");
+            entity.Property(row => row.LastScannedAt).HasColumnName("last_scanned_at");
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            entity.HasIndex(row => row.Path).IsUnique();
+        });
+
         modelBuilder.Entity<MediaFileIgnoreRow>(entity => {
             entity.ToTable("media_file_ignores");
             entity.HasKey(row => new { row.LibraryRootId, row.Path });
@@ -134,6 +153,59 @@ internal static partial class PrismediaModelConfiguration {
             entity.HasIndex(row => new { row.EntityId, row.Algorithm, row.Hash }).IsUnique();
             entity.HasOne<EntityRow>().WithMany().HasForeignKey(row => row.EntityId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne<ProviderConfigRow>().WithMany().HasForeignKey(row => row.ProviderConfigId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<DatabaseBackupRow>(entity => {
+            entity.ToTable("database_backups");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(row => row.BackupPath).HasColumnName("backup_path").IsRequired();
+            entity.Property(row => row.Status)
+                .HasColumnName("status")
+                .HasMaxLength(32)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<DatabaseBackupStatus>())
+                .IsRequired();
+            entity.Property(row => row.Error).HasColumnName("error");
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.Property(row => row.CompletedAt).HasColumnName("completed_at");
+        });
+
+        modelBuilder.Entity<JobRunRow>(entity => {
+            entity.ToTable("job_runs");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(row => row.Type)
+                .HasColumnName("type")
+                .HasMaxLength(128)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<JobType>())
+                .IsRequired();
+            entity.Property(row => row.Status)
+                .HasColumnName("status")
+                .HasMaxLength(32)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<JobRunStatus>())
+                .IsRequired();
+            entity.Property(row => row.PayloadJson).HasColumnName("payload_json").HasColumnType("jsonb").IsRequired();
+            entity.Property(row => row.Priority).HasColumnName("priority");
+            entity.Property(row => row.Attempts).HasColumnName("attempts");
+            entity.Property(row => row.MaxAttempts).HasColumnName("max_attempts");
+            entity.Property(row => row.Progress).HasColumnName("progress");
+            entity.Property(row => row.Message).HasColumnName("message");
+            entity.Property(row => row.TargetEntityKind).HasColumnName("target_entity_kind").HasMaxLength(64);
+            entity.Property(row => row.TargetEntityId).HasColumnName("target_entity_id").HasMaxLength(64);
+            entity.Property(row => row.TargetLabel).HasColumnName("target_label").HasMaxLength(512);
+            entity.Property(row => row.AvailableAt).HasColumnName("available_at");
+            entity.Property(row => row.LockedAt).HasColumnName("locked_at");
+            entity.Property(row => row.LockedBy).HasColumnName("locked_by").HasMaxLength(128);
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.Property(row => row.StartedAt).HasColumnName("started_at");
+            entity.Property(row => row.FinishedAt).HasColumnName("finished_at");
+            entity.HasIndex(row => new { row.Status, row.AvailableAt, row.Priority });
+            entity.HasIndex(row => new { row.Type, row.TargetEntityId, row.Status })
+                .HasDatabaseName("ix_job_runs_dedup");
+            entity.ToTable(table => {
+                table.HasCheckConstraint("ck_job_runs_progress", "progress >= 0 AND progress <= 100");
+                table.HasCheckConstraint("ck_job_runs_attempts", "attempts >= 0 AND max_attempts > 0");
+            });
         });
     }
 }
