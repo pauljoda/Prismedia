@@ -2,7 +2,21 @@
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { ArrowDown, ArrowUp, Layers, Pencil, Play, Plus, RefreshCw, Shuffle, Trash2, X } from "@lucide/svelte";
+  import {
+    ArrowDown,
+    ArrowUp,
+    ChevronDown,
+    Layers,
+    Loader2,
+    Pencil,
+    Play,
+    Plus,
+    RefreshCw,
+    Shuffle,
+    Trash2,
+    X,
+  } from "@lucide/svelte";
+  import { cn } from "@prismedia/ui-svelte";
   import {
     updateEntityRating,
     updateEntityFlags,
@@ -59,6 +73,14 @@
   let refreshBusy = $state(false);
   let deleteBusy = $state(false);
   let itemMutationError = $state<string | null>(null);
+
+  const entityKinds: { value: CollectionItem["entityType"]; label: string }[] = [
+    { value: "video", label: "Video" },
+    { value: "gallery", label: "Gallery" },
+    { value: "image", label: "Image" },
+    { value: "book", label: "Book" },
+    { value: "audio-track", label: "Audio" },
+  ];
 
   const card = $derived.by((): EntityDetailCardFull | null => {
     if (!collection) return null;
@@ -235,13 +257,19 @@
   <title>{collection?.title ?? "Collection"} · Prismedia</title>
 </svelte:head>
 
-<div class="detail-page">
+<div class="grid gap-5">
   {#if loadState === "loading"}
-    <div class="loading-shell" aria-busy="true"></div>
+    <div class="min-h-[28rem] border border-border-subtle bg-surface-2 animate-pulse"></div>
   {:else if loadState === "error"}
-    <div class="error-notice">
-      <p>{errorMessage ?? "Failed to load collection."}</p>
-      <button type="button" onclick={() => void loadCollection()}>Retry</button>
+    <div class="flex items-center justify-between gap-4 border border-error/50 bg-surface-2 p-4 text-[0.85rem] text-text-muted">
+      <p class="m-0">{errorMessage ?? "Failed to load collection."}</p>
+      <button
+        type="button"
+        onclick={() => void loadCollection()}
+        class="border border-border-subtle bg-surface-3 px-3 py-1.5 text-[0.78rem] text-text-muted transition-colors hover:border-border-default hover:text-text-primary"
+      >
+        Retry
+      </button>
     </div>
   {:else if card && collection}
     <EntityDetail
@@ -265,16 +293,18 @@
 
       {#snippet heroBadges()}
         {#if collection?.mode}
-          <span class="hero-badge">{collection.mode}</span>
+          <span class="pill-accent">{collection.mode}</span>
         {/if}
         {#if collection?.slideshowAutoAdvance && slideshowDurationSeconds() > 0}
-          <span class="hero-badge">auto {slideshowDurationSeconds()}s</span>
+          <span class="pill-accent">auto {slideshowDurationSeconds()}s</span>
         {/if}
       {/snippet}
 
       {#snippet extraActions()}
+        {@const actionClass = "inline-flex w-[2.35rem] h-[2.35rem] items-center justify-center border border-border-subtle bg-[rgb(17_22_29/0.72)] text-text-muted backdrop-blur-[12px] transition-all hover:border-border-accent hover:text-text-accent hover:shadow-[0_0_18px_rgb(242_194_106/0.12)] disabled:cursor-not-allowed disabled:opacity-40 no-underline"}
+        {@const dangerClass = "inline-flex w-[2.35rem] h-[2.35rem] items-center justify-center border border-border-subtle bg-[rgb(17_22_29/0.72)] text-text-muted backdrop-blur-[12px] transition-all hover:border-error/50 hover:text-error-text hover:shadow-[0_0_18px_rgb(255_128_111/0.12)] disabled:cursor-not-allowed disabled:opacity-40"}
         <a
-          class="hero-icon-action"
+          class={actionClass}
           aria-label="Edit collection"
           title="Edit collection"
           href={`/collections/${card.entity.id}/edit`}
@@ -284,7 +314,7 @@
         {#if canRefreshRules}
           <button
             type="button"
-            class="hero-icon-action"
+            class={actionClass}
             aria-label="Refresh dynamic items"
             title="Refresh dynamic items"
             disabled={refreshBusy}
@@ -295,7 +325,7 @@
         {/if}
         <button
           type="button"
-          class="hero-icon-action"
+          class={actionClass}
           aria-label="Play collection"
           title="Play collection"
           disabled={collectionItems.length === 0}
@@ -305,7 +335,7 @@
         </button>
         <button
           type="button"
-          class="hero-icon-action"
+          class={actionClass}
           aria-label="Shuffle collection"
           title="Shuffle collection"
           disabled={collectionItems.length === 0}
@@ -315,7 +345,7 @@
         </button>
         <button
           type="button"
-          class="hero-icon-action danger"
+          class={dangerClass}
           aria-label="Delete collection"
           title="Delete collection"
           disabled={deleteBusy}
@@ -327,90 +357,146 @@
     </EntityDetail>
 
     {#if itemMutationError}
-      <div class="error-notice">
-        <p>{itemMutationError}</p>
-        <button type="button" onclick={() => (itemMutationError = null)}>Dismiss</button>
+      <div class="flex items-center justify-between gap-3 border border-error/50 bg-surface-2 px-4 py-3 text-[0.8rem] text-error-text">
+        <span>{itemMutationError}</span>
+        <button
+          type="button"
+          onclick={() => (itemMutationError = null)}
+          class="inline-flex h-7 w-7 items-center justify-center border border-border-subtle bg-surface-3 text-text-muted transition-colors hover:text-text-primary"
+        >
+          <X class="h-3 w-3" />
+        </button>
       </div>
     {/if}
 
     {#if canManuallyCurate}
-      <section class="content-section collection-curation">
-        <h2 class="content-heading">
-          <Plus class="h-4 w-4" />
-          Curate
-        </h2>
-        <div class="add-row">
-          <label class="kind-select">
-            <span>Kind</span>
-            <select bind:value={addItemKind} disabled={addingItem}>
-              <option value="video">Video</option>
-              <option value="gallery">Gallery</option>
-              <option value="image">Image</option>
-              <option value="book">Book</option>
-              <option value="audio-track">Audio</option>
-            </select>
-          </label>
+      <section class="surface-panel p-5 space-y-4">
+        <div class="flex items-center justify-between gap-3">
+          <h2 class="m-0 font-heading text-[1.05rem] font-semibold text-text-primary flex items-center gap-2">
+            <Plus class="h-4 w-4 text-text-muted" />
+            Curate
+          </h2>
+          {#if addingItem}
+            <Loader2 class="h-4 w-4 animate-spin text-text-accent" />
+          {/if}
+        </div>
+
+        <!-- Add row -->
+        <div class="grid grid-cols-1 sm:grid-cols-[minmax(8rem,12rem)_minmax(0,1fr)] gap-3 items-end">
+          <div class="space-y-1.5">
+            <span class="text-kicker">Kind</span>
+            <div class="relative">
+              <select
+                bind:value={addItemKind}
+                disabled={addingItem}
+                class={cn(
+                  "w-full appearance-none border border-border-subtle bg-surface-2 px-3 py-2 pr-8 text-sm text-text-primary",
+                  "shadow-[inset_0_2px_8px_rgba(0,0,0,0.30)] transition-colors outline-none",
+                  "focus:border-border-accent focus:shadow-[inset_0_2px_8px_rgba(0,0,0,0.30),0_0_0_1px_rgba(242,194,106,0.35),0_0_8px_rgba(242,194,106,0.15)]",
+                  "disabled:cursor-not-allowed disabled:opacity-50",
+                )}
+              >
+                {#each entityKinds as kind (kind.value)}
+                  <option value={kind.value}>{kind.label}</option>
+                {/each}
+              </select>
+              <ChevronDown class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-text-muted" />
+            </div>
+          </div>
           <EntityPicker
             values={addSelection}
             onChange={handleAddSelection}
             onSearch={searchAddableEntities}
             mode="single"
-            placeholder="Search media..."
+            placeholder="Search media to add…"
             disabled={addingItem}
           />
         </div>
 
+        <!-- Ordered item list -->
         {#if collectionItems.length > 0}
-          <ol class="item-order-list">
-            {#each collectionItems as item, index (item.id)}
-              <li class="item-order-row">
-                <div class="item-order-main">
-                  <a href={getEntityHref(item, `/collections/${collection.id}`)}>
-                    {item.entity?.title ?? "Unknown item"}
-                  </a>
-                  <span>{item.entityType} · {item.source}</span>
-                </div>
-                <div class="item-order-actions">
-                  <button
-                    type="button"
-                    aria-label="Move item up"
-                    title="Move item up"
-                    disabled={index === 0}
-                    onclick={() => moveItem(index, -1)}
-                  >
-                    <ArrowUp class="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label="Move item down"
-                    title="Move item down"
-                    disabled={index === collectionItems.length - 1}
-                    onclick={() => moveItem(index, 1)}
-                  >
-                    <ArrowDown class="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label="Remove item"
-                    title="Remove item"
-                    onclick={() => removeItem(item)}
-                  >
-                    <X class="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </li>
-            {/each}
-          </ol>
+          <div class="border border-border-subtle overflow-hidden">
+            <ol class="m-0 p-0 list-none">
+              {#each collectionItems as item, index (item.id)}
+                <li
+                  class={cn(
+                    "grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2.5 transition-colors",
+                    "hover:bg-surface-2",
+                    index > 0 && "border-t border-border-subtle",
+                  )}
+                >
+                  <span class="text-[0.68rem] font-mono text-text-disabled tabular-nums w-5 text-center">
+                    {index + 1}
+                  </span>
+                  <div class="min-w-0">
+                    <a
+                      href={getEntityHref(item, `/collections/${collection.id}`)}
+                      class="block truncate text-[0.85rem] text-text-primary no-underline transition-colors hover:text-text-accent"
+                    >
+                      {item.entity?.title ?? "Unknown item"}
+                    </a>
+                    <span class="text-kicker">
+                      {item.entityType}{#if item.source !== "manual"} · {item.source}{/if}
+                    </span>
+                  </div>
+                  <div class="flex items-center gap-1">
+                    <button
+                      type="button"
+                      aria-label="Move up"
+                      title="Move up"
+                      disabled={index === 0}
+                      onclick={() => moveItem(index, -1)}
+                      class={cn(
+                        "inline-flex h-7 w-7 items-center justify-center border border-border-subtle bg-surface-2 text-text-muted transition-colors",
+                        "hover:border-border-accent hover:text-text-accent",
+                        "disabled:cursor-not-allowed disabled:opacity-30",
+                      )}
+                    >
+                      <ArrowUp class="h-3 w-3" />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Move down"
+                      title="Move down"
+                      disabled={index === collectionItems.length - 1}
+                      onclick={() => moveItem(index, 1)}
+                      class={cn(
+                        "inline-flex h-7 w-7 items-center justify-center border border-border-subtle bg-surface-2 text-text-muted transition-colors",
+                        "hover:border-border-accent hover:text-text-accent",
+                        "disabled:cursor-not-allowed disabled:opacity-30",
+                      )}
+                    >
+                      <ArrowDown class="h-3 w-3" />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Remove item"
+                      title="Remove item"
+                      onclick={() => removeItem(item)}
+                      class={cn(
+                        "inline-flex h-7 w-7 items-center justify-center border border-border-subtle bg-surface-2 text-text-muted transition-colors",
+                        "hover:border-error/50 hover:text-error-text",
+                      )}
+                    >
+                      <X class="h-3 w-3" />
+                    </button>
+                  </div>
+                </li>
+              {/each}
+            </ol>
+          </div>
         {/if}
       </section>
     {/if}
 
     {#if itemCards.length > 0}
-      <section class="content-section">
-        <h2 class="content-heading">
-          <Layers class="h-4 w-4" />
+      <section class="grid gap-3">
+        <h2 class="m-0 font-heading text-[1.1rem] font-semibold text-text-primary flex items-center gap-2">
+          <Layers class="h-4 w-4 text-text-muted" />
           Items
-          <span class="content-count">{itemCards.length}</span>
+          <span class="font-mono text-[0.68rem] font-semibold text-text-muted px-1.5 py-0.5 border border-border-subtle bg-surface-3 tabular-nums">
+            {itemCards.length}
+          </span>
         </h2>
         <EntityGrid
           cards={itemCards}
@@ -421,53 +507,9 @@
         />
       </section>
     {:else}
-      <div class="empty-children">
-        <p>This collection is empty.</p>
+      <div class="surface-well p-8 text-center text-[0.85rem] text-text-muted">
+        <p class="m-0">This collection is empty.</p>
       </div>
     {/if}
   {/if}
 </div>
-
-<style>
-  .detail-page { display: grid; gap: 1.25rem; padding: 0; max-width: none; margin: 0; }
-  .loading-shell { min-height: 28rem; border: 1px solid var(--color-border, #1c2235); background: var(--color-surface-2, #101420); animation: pulse 1.2s ease-in-out infinite; }
-  .error-notice { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem; border: 1px solid color-mix(in srgb, #ef4444 50%, var(--color-border, #1c2235)); background: var(--color-surface-2, #101420); color: var(--color-text-muted, #8a93a6); font-size: 0.85rem; }
-  .error-notice button { border: 1px solid var(--color-border, #1c2235); background: var(--color-surface-3, #151a28); color: var(--color-text-muted, #8a93a6); padding: 0.4rem 0.8rem; font-size: 0.78rem; cursor: pointer; }
-
-  :global(.meta-item) { white-space: nowrap; font-size: 0.82rem; }
-  :global(.meta-sep) { display: inline-block; width: 3px; height: 3px; margin: 0 0.5rem; background: var(--color-text-muted, #8a93a6); opacity: 0.5; }
-
-  .content-section { display: grid; gap: 0.75rem; }
-  .content-heading { display: flex; align-items: center; gap: 0.5rem; margin: 0; font-family: var(--font-heading, Geist, sans-serif); font-size: 1.1rem; font-weight: 600; color: var(--color-text-primary, #f2eed8); }
-  .content-count { font-family: var(--font-mono, "JetBrains Mono", monospace); font-size: 0.68rem; font-weight: 600; color: var(--color-text-muted, #8a93a6); padding: 0.1rem 0.4rem; border: 1px solid var(--color-border, #1c2235); background: var(--color-surface-3, #151a28); }
-  :global(.hero-icon-action) { display: inline-flex; width: 2.35rem; height: 2.35rem; align-items: center; justify-content: center; border: 1px solid var(--color-border-subtle, #1c2235); background: rgb(17 22 29 / 0.72); color: var(--color-text-muted, #8a93a6); backdrop-filter: blur(12px); transition: border-color 0.16s, color 0.16s, box-shadow 0.16s; }
-  :global(.hero-icon-action:hover:not(:disabled)) { border-color: rgba(242, 194, 106, 0.42); color: var(--color-text-accent, #f2c26a); box-shadow: 0 0 18px rgb(242 194 106 / 0.12); }
-  :global(.hero-icon-action.danger:hover:not(:disabled)) { border-color: rgba(255, 128, 111, 0.48); color: var(--color-error-text, #ff9f92); box-shadow: 0 0 18px rgb(255 128 111 / 0.12); }
-  :global(.hero-icon-action:disabled) { cursor: not-allowed; opacity: 0.4; }
-
-  .empty-children { padding: 2rem; border: 1px solid var(--color-border-subtle, #1c2235); background: var(--color-surface-1, #0c0f15); color: var(--color-text-muted, #8a93a6); text-align: center; font-size: 0.85rem; }
-
-  .collection-curation { border: 1px solid var(--color-border-subtle, #1c2235); background: rgba(12, 15, 21, 0.68); padding: 1rem; }
-  .add-row { display: grid; grid-template-columns: minmax(8rem, 12rem) minmax(0, 1fr); gap: 0.75rem; align-items: end; }
-  .kind-select { display: grid; gap: 0.35rem; }
-  .kind-select span { font-family: var(--font-mono, "JetBrains Mono", monospace); font-size: 0.66rem; text-transform: uppercase; color: var(--color-text-disabled, #596071); }
-  .kind-select select { width: 100%; border: 1px solid var(--color-border-subtle, #1c2235); border-radius: var(--radius-xs, 4px); background: var(--color-surface-2, #101420); color: var(--color-text-primary, #f2eed8); padding: 0.57rem 0.65rem; }
-  .item-order-list { display: grid; gap: 1px; margin: 0; padding: 0; list-style: none; border: 1px solid var(--color-border-subtle, #1c2235); background: var(--color-border-subtle, #1c2235); }
-  .item-order-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.75rem; align-items: center; background: var(--color-surface-1, #0c0f15); padding: 0.7rem 0.75rem; }
-  .item-order-main { display: grid; min-width: 0; gap: 0.1rem; }
-  .item-order-main a { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-text-primary, #f2eed8); text-decoration: none; font-size: 0.86rem; }
-  .item-order-main a:hover { color: var(--color-text-accent, #f2c26a); }
-  .item-order-main span { color: var(--color-text-disabled, #596071); font-family: var(--font-mono, "JetBrains Mono", monospace); font-size: 0.66rem; }
-  .item-order-actions { display: flex; align-items: center; gap: 0.25rem; }
-  .item-order-actions button { display: inline-flex; width: 2rem; height: 2rem; align-items: center; justify-content: center; border: 1px solid var(--color-border-subtle, #1c2235); border-radius: var(--radius-xs, 4px); background: var(--color-surface-2, #101420); color: var(--color-text-muted, #8a93a6); }
-  .item-order-actions button:hover:not(:disabled) { border-color: rgba(242, 194, 106, 0.42); color: var(--color-text-accent, #f2c26a); }
-  .item-order-actions button:disabled { cursor: not-allowed; opacity: 0.35; }
-
-  @media (max-width: 720px) {
-    .add-row,
-    .item-order-row { grid-template-columns: 1fr; }
-    .item-order-actions { justify-content: flex-end; }
-  }
-
-  @keyframes pulse { 0%, 100% { opacity: 0.45; } 50% { opacity: 0.85; } }
-</style>

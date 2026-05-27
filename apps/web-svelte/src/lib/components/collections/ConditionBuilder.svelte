@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Plus, SlidersHorizontal, Trash2 } from "@lucide/svelte";
+  import { ChevronDown, Plus, SlidersHorizontal, Trash2 } from "@lucide/svelte";
   import { cn } from "@prismedia/ui-svelte";
   import {
     COLLECTION_RULE_FIELDS,
@@ -133,281 +133,160 @@
         : [...current, kind],
     });
   }
+
+  const selectClasses = cn(
+    "min-w-0 w-full appearance-none border border-border-subtle bg-surface-2 px-2.5 py-2 pr-7 text-[0.78rem] text-text-primary",
+    "shadow-[inset_0_2px_8px_rgba(0,0,0,0.30)] transition-colors outline-none",
+    "focus:border-border-accent focus:shadow-[inset_0_2px_8px_rgba(0,0,0,0.30),0_0_0_1px_rgba(242,194,106,0.35),0_0_8px_rgba(242,194,106,0.15)]",
+    "disabled:cursor-not-allowed disabled:opacity-50",
+  );
+
+  const inputClasses = cn(
+    "min-w-0 w-full border border-border-subtle bg-surface-2 px-2.5 py-2 text-[0.78rem] text-text-primary",
+    "shadow-[inset_0_2px_8px_rgba(0,0,0,0.30)] transition-colors outline-none placeholder:text-text-disabled",
+    "focus:border-border-accent focus:shadow-[inset_0_2px_8px_rgba(0,0,0,0.30),0_0_0_1px_rgba(242,194,106,0.35),0_0_8px_rgba(242,194,106,0.15)]",
+    "disabled:cursor-not-allowed disabled:opacity-50",
+  );
 </script>
 
-<div class="rule-builder">
-  <div class="rule-builder-head">
+<div class="surface-well p-4 space-y-3">
+  <!-- Header -->
+  <div class="flex items-center justify-between gap-4 flex-wrap">
     <div>
-      <p class="rule-kicker">Dynamic Match</p>
-      <h3><SlidersHorizontal class="h-4 w-4" /> Filter Rules</h3>
+      <p class="text-kicker mb-1">Dynamic Match</p>
+      <h3 class="m-0 font-heading text-[0.95rem] text-text-primary flex items-center gap-2">
+        <SlidersHorizontal class="h-4 w-4 text-text-muted" />
+        Filter Rules
+      </h3>
     </div>
-    <label class="operator-select">
-      <span>Match</span>
-      <select
-        value={rule.operator}
-        {disabled}
-        onchange={(e) => updateGroup({ operator: (e.currentTarget as HTMLSelectElement).value as CollectionRuleGroup["operator"] })}
-      >
-        <option value="and">all rules</option>
-        <option value="or">any rule</option>
-        <option value="not">not these rules</option>
-      </select>
-    </label>
+    <div class="relative inline-flex items-center gap-2">
+      <span class="text-kicker">Match</span>
+      <div class="relative">
+        <select
+          value={rule.operator}
+          {disabled}
+          onchange={(e) => updateGroup({ operator: (e.currentTarget as HTMLSelectElement).value as CollectionRuleGroup["operator"] })}
+          class={selectClasses}
+        >
+          <option value="and">all rules</option>
+          <option value="or">any rule</option>
+          <option value="not">not these rules</option>
+        </select>
+        <ChevronDown class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 text-text-muted" />
+      </div>
+    </div>
   </div>
 
-  <div class="rule-list">
-    {#each conditions as condition, i (i)}
-      {@const field = fieldFor(condition)}
-      <article class="rule-row">
-        <div class="rule-controls">
-          <select
-            aria-label="Rule field"
-            value={condition.field}
-            {disabled}
-            onchange={(e) => setField(i, (e.currentTarget as HTMLSelectElement).value)}
-          >
-            {#each COLLECTION_RULE_FIELDS as option (option.field)}
-              <option value={option.field}>{option.label}</option>
-            {/each}
-          </select>
+  <!-- Rule list -->
+  {#if conditions.length > 0}
+    <div class="grid gap-2">
+      {#each conditions as condition, i (i)}
+        {@const field = fieldFor(condition)}
+        {@const isNullary = ["is_null", "is_not_null", "is_true", "is_false"].includes(condition.operator)}
+        <article class="border border-border-subtle bg-surface-1 p-3 space-y-2.5 transition-colors hover:border-border-default">
+          <!-- Controls row -->
+          <div class="grid gap-2 grid-cols-1 sm:grid-cols-[minmax(9rem,1fr)_minmax(8rem,0.85fr)_minmax(10rem,1fr)_auto]">
+            <div class="relative">
+              <select
+                aria-label="Rule field"
+                value={condition.field}
+                {disabled}
+                onchange={(e) => setField(i, (e.currentTarget as HTMLSelectElement).value)}
+                class={selectClasses}
+              >
+                {#each COLLECTION_RULE_FIELDS as option (option.field)}
+                  <option value={option.field}>{option.label}</option>
+                {/each}
+              </select>
+              <ChevronDown class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 text-text-muted" />
+            </div>
 
-          <select
-            aria-label="Rule operator"
-            value={condition.operator}
-            {disabled}
-            onchange={(e) => setOperator(i, (e.currentTarget as HTMLSelectElement).value)}
-          >
-            {#each field.operators as operator (operator)}
-              <option value={operator}>{operator.replaceAll("_", " ")}</option>
-            {/each}
-          </select>
+            <div class="relative">
+              <select
+                aria-label="Rule operator"
+                value={condition.operator}
+                {disabled}
+                onchange={(e) => setOperator(i, (e.currentTarget as HTMLSelectElement).value)}
+                class={selectClasses}
+              >
+                {#each field.operators as operator (operator)}
+                  <option value={operator}>{operator.replaceAll("_", " ")}</option>
+                {/each}
+              </select>
+              <ChevronDown class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 text-text-muted" />
+            </div>
 
-          {#if !["is_null", "is_not_null", "is_true", "is_false"].includes(condition.operator)}
-            {#if field.enumValues}
+            {#if !isNullary}
               <input
                 aria-label="Rule value"
                 value={valueText(condition.value)}
-                placeholder={field.enumValues.join(", ")}
+                placeholder={field.enumValues ? field.enumValues.join(", ") : (condition.operator === "between" ? "min, max" : "Value")}
                 {disabled}
                 oninput={(e) =>
                   updateCondition(i, {
                     value: parseValue(field, condition.operator, (e.currentTarget as HTMLInputElement).value),
                   })}
+                class={inputClasses}
               />
             {:else}
-              <input
-                aria-label="Rule value"
-                value={valueText(condition.value)}
-                placeholder={condition.operator === "between" ? "min, max" : "Value"}
-                {disabled}
-                oninput={(e) =>
-                  updateCondition(i, {
-                    value: parseValue(field, condition.operator, (e.currentTarget as HTMLInputElement).value),
-                  })}
-              />
+              <div class="hidden sm:block"></div>
             {/if}
-          {/if}
 
-          <button
-            type="button"
-            class="icon-btn danger"
-            aria-label="Remove rule"
-            title="Remove rule"
-            {disabled}
-            onclick={() => removeCondition(i)}
-          >
-            <Trash2 class="h-3.5 w-3.5" />
-          </button>
-        </div>
-
-        <div class="kind-chips" aria-label="Entity types">
-          <span>Types</span>
-          {#each entityKinds as kind (kind.value)}
             <button
               type="button"
-              class={cn(
-                "kind-chip",
-                condition.entityTypes.length === 0 || condition.entityTypes.includes(kind.value) ? "active" : "",
-              )}
+              aria-label="Remove rule"
+              title="Remove rule"
               {disabled}
-              aria-pressed={condition.entityTypes.length === 0 || condition.entityTypes.includes(kind.value)}
-              onclick={() => toggleEntityType(i, kind.value)}
+              onclick={() => removeCondition(i)}
+              class={cn(
+                "inline-flex w-full sm:w-9 h-9 items-center justify-center border border-border-subtle bg-surface-2 text-text-muted transition-colors",
+                "hover:border-error/50 hover:text-error-text hover:bg-error-muted/20",
+                "disabled:cursor-not-allowed disabled:opacity-50",
+              )}
             >
-              {kind.label}
+              <Trash2 class="h-3.5 w-3.5" />
             </button>
-          {/each}
-        </div>
-      </article>
-    {/each}
-  </div>
+          </div>
 
-  <button type="button" class="add-rule" {disabled} onclick={addCondition}>
-    <Plus class="h-4 w-4" />
+          <!-- Entity type chips -->
+          <div class="flex flex-wrap items-center gap-1.5">
+            <span class="text-kicker mr-1">Types</span>
+            {#each entityKinds as kind (kind.value)}
+              {@const active = condition.entityTypes.length === 0 || condition.entityTypes.includes(kind.value)}
+              <button
+                type="button"
+                {disabled}
+                aria-pressed={active}
+                onclick={() => toggleEntityType(i, kind.value)}
+                class={cn(
+                  "px-2 py-1 text-[0.68rem] font-medium border transition-all duration-fast",
+                  "disabled:cursor-not-allowed disabled:opacity-50",
+                  active
+                    ? "border-border-accent bg-accent-950/40 text-text-accent shadow-[0_0_10px_rgba(242,194,106,0.10)]"
+                    : "border-border-subtle bg-surface-2 text-text-disabled hover:text-text-muted hover:border-border-default",
+                )}
+              >
+                {kind.label}
+              </button>
+            {/each}
+          </div>
+        </article>
+      {/each}
+    </div>
+  {/if}
+
+  <!-- Add rule -->
+  <button
+    type="button"
+    {disabled}
+    onclick={addCondition}
+    class={cn(
+      "inline-flex items-center gap-1.5 border border-dashed border-border-subtle bg-transparent px-3 py-2 text-[0.78rem] text-text-muted transition-all",
+      "hover:border-border-accent hover:text-text-accent hover:bg-accent-950/10",
+      "disabled:cursor-not-allowed disabled:opacity-50",
+    )}
+  >
+    <Plus class="h-3.5 w-3.5" />
     Add Rule
   </button>
 </div>
-
-<style>
-  .rule-builder {
-    display: grid;
-    gap: 0.85rem;
-    border: 1px solid var(--color-border-subtle);
-    background: linear-gradient(180deg, rgba(21, 26, 40, 0.86), rgba(12, 15, 21, 0.92));
-    padding: 1rem;
-  }
-
-  .rule-builder-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-  }
-
-  .rule-kicker {
-    margin: 0 0 0.25rem;
-    font-family: var(--font-mono);
-    font-size: 0.62rem;
-    letter-spacing: 0;
-    text-transform: uppercase;
-    color: var(--color-text-disabled);
-  }
-
-  h3 {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    margin: 0;
-    font-family: var(--font-heading);
-    font-size: 0.98rem;
-    color: var(--color-text-primary);
-  }
-
-  .operator-select {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-family: var(--font-mono);
-    font-size: 0.68rem;
-    color: var(--color-text-muted);
-  }
-
-  select,
-  input {
-    min-width: 0;
-    border: 1px solid var(--color-border-subtle);
-    border-radius: var(--radius-xs);
-    background: var(--color-surface-2);
-    color: var(--color-text-primary);
-    font-size: 0.8rem;
-    padding: 0.48rem 0.6rem;
-    outline: none;
-  }
-
-  select:focus,
-  input:focus {
-    border-color: var(--color-border-accent);
-    box-shadow: var(--shadow-focus-accent);
-  }
-
-  .rule-list {
-    display: grid;
-    gap: 0.65rem;
-  }
-
-  .rule-row {
-    display: grid;
-    gap: 0.6rem;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    background: rgba(7, 10, 15, 0.46);
-    padding: 0.75rem;
-  }
-
-  .rule-controls {
-    display: grid;
-    grid-template-columns: minmax(9rem, 1fr) minmax(8rem, 0.85fr) minmax(10rem, 1fr) auto;
-    gap: 0.5rem;
-  }
-
-  .icon-btn {
-    display: inline-flex;
-    width: 2.2rem;
-    height: 2.2rem;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid var(--color-border-subtle);
-    border-radius: var(--radius-xs);
-    background: var(--color-surface-2);
-    color: var(--color-text-muted);
-  }
-
-  .icon-btn:hover:not(:disabled) {
-    border-color: var(--color-error);
-    color: var(--color-error-text);
-  }
-
-  .kind-chips {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.35rem;
-    color: var(--color-text-disabled);
-    font-family: var(--font-mono);
-    font-size: 0.66rem;
-  }
-
-  .kind-chip,
-  .add-rule {
-    border: 1px solid var(--color-border-subtle);
-    border-radius: var(--radius-xs);
-    background: var(--color-surface-2);
-    color: var(--color-text-muted);
-    transition: border-color 0.16s, color 0.16s, box-shadow 0.16s;
-  }
-
-  .kind-chip {
-    padding: 0.3rem 0.5rem;
-    font-size: 0.68rem;
-  }
-
-  .kind-chip.active {
-    border-color: rgba(242, 194, 106, 0.48);
-    color: var(--color-text-accent);
-    box-shadow: 0 0 12px rgb(242 194 106 / 0.12);
-  }
-
-  .add-rule {
-    display: inline-flex;
-    width: fit-content;
-    align-items: center;
-    gap: 0.45rem;
-    padding: 0.55rem 0.8rem;
-    font-size: 0.78rem;
-  }
-
-  .add-rule:hover:not(:disabled) {
-    border-color: rgba(242, 194, 106, 0.5);
-    color: var(--color-text-accent);
-  }
-
-  button:disabled,
-  select:disabled,
-  input:disabled {
-    cursor: not-allowed;
-    opacity: 0.55;
-  }
-
-  @media (max-width: 820px) {
-    .rule-builder-head {
-      align-items: stretch;
-      flex-direction: column;
-    }
-
-    .rule-controls {
-      grid-template-columns: 1fr;
-    }
-
-    .icon-btn {
-      width: 100%;
-    }
-  }
-</style>

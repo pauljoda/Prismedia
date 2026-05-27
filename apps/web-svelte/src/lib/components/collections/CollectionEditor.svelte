@@ -1,6 +1,17 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
-  import { ArrowLeft, Eye, FolderPlus, Save, ShieldAlert, Timer, Type } from "@lucide/svelte";
+  import {
+    ArrowLeft,
+    Eye,
+    FolderPlus,
+    Layers,
+    Loader2,
+    Save,
+    ShieldAlert,
+    Timer,
+    Type,
+    XCircle,
+  } from "@lucide/svelte";
   import { cn } from "@prismedia/ui-svelte";
   import type { CollectionDetail } from "$lib/api/generated/model";
   import { createCollection, previewCollectionRules, updateCollection } from "$lib/api/collections";
@@ -27,10 +38,15 @@
   let { collection = null, isNew = false }: Props = $props();
 
   const appChrome = useAppChrome();
-  const modes: { value: CollectionMode; label: string; meta: string }[] = [
-    { value: "manual", label: "Manual", meta: "Pinned" },
-    { value: "dynamic", label: "Dynamic", meta: "Rules" },
-    { value: "hybrid", label: "Hybrid", meta: "Both" },
+  const modes: { value: CollectionMode; label: string; desc: string; icon: typeof Layers }[] = [
+    { value: "manual", label: "Manual", desc: "Hand-pick and order items", icon: Layers },
+    { value: "dynamic", label: "Dynamic", desc: "Auto-populate from rules", icon: Layers },
+    { value: "hybrid", label: "Hybrid", desc: "Rules plus manual pins", icon: Layers },
+  ];
+
+  const coverModes: { value: CollectionCoverMode; label: string }[] = [
+    { value: "mosaic", label: "Mosaic" },
+    { value: "item", label: "Single Item" },
   ];
 
   let hydratedId = $state<string | null>(null);
@@ -167,34 +183,74 @@
   <title>{isNew ? "New Collection" : `Edit ${collection?.title ?? "Collection"}`} · Prismedia</title>
 </svelte:head>
 
-<section class="collection-editor">
-  <header class="editor-head">
-    <a href={collection ? `/collections/${collection.id}` : "/collections"} class="back-link">
-      <ArrowLeft class="h-4 w-4" />
-      Collections
-    </a>
-    <div>
-      <p class="editor-kicker">Library · Collection</p>
-      <h1>{isNew ? "New Collection" : "Edit Collection"}</h1>
+<section class="grid gap-5 max-w-[84rem]">
+  <!-- Header -->
+  <header class="flex items-end justify-between gap-4 border-b border-border-subtle pb-4">
+    <div class="flex items-end gap-4">
+      <a
+        href={collection ? `/collections/${collection.id}` : "/collections"}
+        class="inline-flex items-center gap-1.5 text-text-muted text-[0.78rem] no-underline transition-colors hover:text-text-primary"
+      >
+        <ArrowLeft class="h-4 w-4" />
+        <span class="hidden sm:inline">Collections</span>
+      </a>
+      <div>
+        <p class="text-kicker mb-1">Library · Collection</p>
+        <h1 class="m-0 font-heading text-text-primary text-[clamp(1.35rem,2vw,2rem)]">
+          {isNew ? "New Collection" : "Edit Collection"}
+        </h1>
+      </div>
     </div>
-    <button type="button" class="save-button" disabled={!canSave} onclick={save}>
-      <Save class="h-4 w-4" />
-      {saving ? "Saving" : "Save"}
-    </button>
+    <div class="flex items-center gap-2">
+      <a
+        href={collection ? `/collections/${collection.id}` : "/collections"}
+        class={cn(
+          "inline-flex items-center gap-1.5 border border-border-subtle bg-surface-2 px-3 py-2 text-[0.78rem] text-text-muted no-underline transition-colors",
+          "hover:border-border-default hover:text-text-primary",
+        )}
+      >
+        <XCircle class="h-3.5 w-3.5" />
+        Cancel
+      </a>
+      <button
+        type="button"
+        disabled={!canSave}
+        onclick={save}
+        class={cn(
+          "inline-flex items-center gap-1.5 border border-border-accent bg-gradient-to-r from-accent-900 via-accent-800 to-accent-900 px-4 py-2 text-[0.78rem] font-medium text-accent-100 shadow-[var(--shadow-glow-accent)] transition-all",
+          "hover:shadow-[var(--shadow-glow-accent-strong)]",
+          "disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none",
+        )}
+      >
+        {#if saving}
+          <Loader2 class="h-3.5 w-3.5 animate-spin" />
+        {:else}
+          <Save class="h-3.5 w-3.5" />
+        {/if}
+        {saving ? "Saving…" : "Save"}
+      </button>
+    </div>
   </header>
 
   {#if saveError}
-    <div class="notice error">{saveError}</div>
+    <div class="flex items-center gap-3 border border-error/50 bg-surface-2 px-4 py-3 text-[0.8rem] text-error-text">
+      <ShieldAlert class="h-4 w-4 flex-shrink-0" />
+      {saveError}
+    </div>
   {/if}
 
-  <div class="editor-grid">
-    <section class="editor-main">
-      <div class="form-band">
+  <!-- Main grid -->
+  <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(17rem,22rem)] gap-5 items-start">
+    <!-- Left: core fields -->
+    <div class="grid gap-5">
+      <!-- Title / Description -->
+      <div class="surface-panel p-5 space-y-4">
         <TextField
           value={title}
           onChange={(value) => (title = value)}
           label="Title"
           icon={Type}
+          placeholder="Collection name"
           required
           disabled={saving}
         />
@@ -202,57 +258,98 @@
           value={description}
           onChange={(value) => (description = value)}
           label="Description"
-          rows={5}
+          placeholder="What this collection is about…"
+          rows={4}
+          minHeightRem={4}
           disabled={saving}
         />
       </div>
 
-      <div class="form-band">
-        <div class="mode-grid" aria-label="Collection mode">
+      <!-- Mode selector -->
+      <div class="surface-panel p-5 space-y-4">
+        <p class="text-kicker">Collection Mode</p>
+        <div class="grid grid-cols-3 gap-2 max-sm:grid-cols-1" role="radiogroup" aria-label="Collection mode">
           {#each modes as option (option.value)}
+            {@const active = mode === option.value}
             <button
               type="button"
-              class={cn("mode-option", mode === option.value && "active")}
-              aria-pressed={mode === option.value}
+              role="radio"
+              aria-checked={active}
               disabled={saving}
               onclick={() => (mode = option.value)}
+              class={cn(
+                "group grid gap-1 p-3 text-left border transition-all duration-normal",
+                "disabled:cursor-not-allowed disabled:opacity-50",
+                active
+                  ? "border-border-accent-strong bg-accent-950/30 shadow-[var(--shadow-glow-accent)]"
+                  : "border-border-subtle bg-surface-2 hover:border-border-default",
+              )}
             >
-              <span>{option.label}</span>
-              <small>{option.meta}</small>
+              <span class={cn(
+                "font-heading text-[0.9rem] font-semibold transition-colors",
+                active ? "text-text-accent" : "text-text-primary",
+              )}>
+                {option.label}
+              </span>
+              <span class="text-[0.7rem] text-text-disabled leading-snug">
+                {option.desc}
+              </span>
             </button>
           {/each}
         </div>
 
         {#if showRules}
           <ConditionBuilder rule={ruleTree} onChange={(next) => (ruleTree = next)} disabled={saving} />
-          <div class="preview-row">
-            <button type="button" class="preview-button" disabled={previewing || saving} onclick={previewRules}>
-              <Eye class="h-4 w-4" />
-              {previewing ? "Previewing" : "Preview"}
+
+          <div class="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              disabled={previewing || saving}
+              onclick={previewRules}
+              class={cn(
+                "inline-flex items-center gap-1.5 border border-border-subtle bg-surface-2 px-3 py-2 text-[0.78rem] text-text-muted transition-colors",
+                "hover:border-border-accent hover:text-text-accent",
+                "disabled:cursor-not-allowed disabled:opacity-50",
+              )}
+            >
+              {#if previewing}
+                <Loader2 class="h-3.5 w-3.5 animate-spin" />
+              {:else}
+                <Eye class="h-3.5 w-3.5" />
+              {/if}
+              {previewing ? "Previewing…" : "Preview Rules"}
             </button>
             {#if previewTotal !== null}
-              <div class="preview-result">
-                <span>{previewTotal} matches</span>
+              <div class="flex flex-wrap items-center gap-1.5">
+                <span class="inline-flex items-center gap-1 border border-border-accent bg-accent-950/40 px-2 py-1 text-[0.72rem] font-mono font-semibold text-text-accent tabular-nums">
+                  {previewTotal} matches
+                </span>
                 {#each Object.entries(previewByType) as [kind, count] (kind)}
-                  <small>{kind}: {count}</small>
+                  <span class="border border-border-subtle bg-surface-3 px-2 py-1 text-[0.68rem] font-mono text-text-muted tabular-nums">
+                    {kind}: {count}
+                  </span>
                 {/each}
               </div>
             {/if}
           </div>
           {#if previewError}
-            <div class="notice error">{previewError}</div>
+            <p class="text-[0.72rem] text-error-text">{previewError}</p>
           {/if}
         {/if}
       </div>
-    </section>
+    </div>
 
-    <aside class="editor-side">
-      <div class="side-panel">
-        <h2><Timer class="h-4 w-4" /> Playback</h2>
+    <!-- Right: sidebar panels -->
+    <div class="grid gap-5">
+      <!-- Playback -->
+      <div class="surface-panel p-5 space-y-4">
+        <h2 class="text-kicker flex items-center gap-1.5">
+          <Timer class="h-3 w-3" /> Playback
+        </h2>
         <TextField
           value={String(slideshowDurationSeconds)}
           onChange={(value) => (slideshowDurationSeconds = Number(value))}
-          label="Image timer"
+          label="Image timer (seconds)"
           type="number"
           min={1}
           max={3600}
@@ -267,19 +364,39 @@
         />
       </div>
 
-      <div class="side-panel">
-        <h2><FolderPlus class="h-4 w-4" /> Cover</h2>
-        <label class="select-field">
-          <span>Mode</span>
-          <select bind:value={coverMode} disabled={saving}>
-            <option value="mosaic">Mosaic</option>
-            <option value="item">Item</option>
-          </select>
-        </label>
+      <!-- Cover -->
+      <div class="surface-panel p-5 space-y-4">
+        <h2 class="text-kicker flex items-center gap-1.5">
+          <FolderPlus class="h-3 w-3" /> Cover
+        </h2>
+        <div class="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Cover mode">
+          {#each coverModes as cm (cm.value)}
+            {@const active = coverMode === cm.value}
+            <button
+              type="button"
+              role="radio"
+              aria-checked={active}
+              disabled={saving}
+              onclick={() => (coverMode = cm.value)}
+              class={cn(
+                "px-3 py-2 text-[0.78rem] border text-center transition-all duration-normal",
+                "disabled:cursor-not-allowed disabled:opacity-50",
+                active
+                  ? "border-border-accent-strong bg-accent-950/30 text-text-accent shadow-[0_0_12px_rgba(242,194,106,0.12)]"
+                  : "border-border-subtle bg-surface-2 text-text-muted hover:border-border-default hover:text-text-primary",
+              )}
+            >
+              {cm.label}
+            </button>
+          {/each}
+        </div>
       </div>
 
-      <div class="side-panel">
-        <h2><ShieldAlert class="h-4 w-4" /> Visibility</h2>
+      <!-- Visibility -->
+      <div class="surface-panel p-5 space-y-4">
+        <h2 class="text-kicker flex items-center gap-1.5">
+          <ShieldAlert class="h-3 w-3" /> Visibility
+        </h2>
         <ToggleChip
           value={isNsfw}
           onChange={(value) => (isNsfw = value)}
@@ -289,222 +406,6 @@
           disabled={saving}
         />
       </div>
-    </aside>
+    </div>
   </div>
 </section>
-
-<style>
-  .collection-editor {
-    display: grid;
-    gap: 1rem;
-    max-width: 84rem;
-  }
-
-  .editor-head {
-    display: grid;
-    grid-template-columns: auto 1fr auto;
-    align-items: end;
-    gap: 1rem;
-    border-bottom: 1px solid var(--color-border-subtle);
-    padding-bottom: 1rem;
-  }
-
-  .back-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.45rem;
-    color: var(--color-text-muted);
-    font-size: 0.78rem;
-    text-decoration: none;
-  }
-
-  .back-link:hover {
-    color: var(--color-text-primary);
-  }
-
-  .editor-kicker {
-    margin: 0 0 0.25rem;
-    font-family: var(--font-mono);
-    font-size: 0.65rem;
-    text-transform: uppercase;
-    color: var(--color-text-disabled);
-  }
-
-  h1,
-  h2 {
-    margin: 0;
-    font-family: var(--font-heading);
-    color: var(--color-text-primary);
-  }
-
-  h1 {
-    font-size: clamp(1.35rem, 2vw, 2rem);
-  }
-
-  h2 {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: 0.92rem;
-  }
-
-  .save-button,
-  .preview-button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    border: 1px solid rgba(242, 194, 106, 0.42);
-    border-radius: var(--radius-xs);
-    background: rgba(213, 154, 42, 0.16);
-    color: var(--color-text-accent);
-    padding: 0.62rem 0.85rem;
-    font-size: 0.8rem;
-    box-shadow: 0 0 18px rgb(242 194 106 / 0.1);
-  }
-
-  .save-button:disabled,
-  .preview-button:disabled {
-    cursor: not-allowed;
-    opacity: 0.55;
-  }
-
-  .editor-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(17rem, 22rem);
-    gap: 1rem;
-    align-items: start;
-  }
-
-  .editor-main,
-  .editor-side {
-    display: grid;
-    gap: 1rem;
-  }
-
-  .form-band,
-  .side-panel {
-    display: grid;
-    gap: 0.9rem;
-    border: 1px solid var(--color-border-subtle);
-    background: rgba(12, 15, 21, 0.72);
-    padding: 1rem;
-  }
-
-  .mode-grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0.55rem;
-  }
-
-  .mode-option {
-    display: grid;
-    gap: 0.2rem;
-    min-height: 4.2rem;
-    border: 1px solid var(--color-border-subtle);
-    border-radius: var(--radius-xs);
-    background: var(--color-surface-2);
-    color: var(--color-text-muted);
-    padding: 0.8rem;
-    text-align: left;
-    transition: border-color 0.16s, color 0.16s, box-shadow 0.16s;
-  }
-
-  .mode-option span {
-    font-family: var(--font-heading);
-    font-size: 0.95rem;
-    color: var(--color-text-primary);
-  }
-
-  .mode-option small {
-    font-family: var(--font-mono);
-    font-size: 0.65rem;
-    color: var(--color-text-disabled);
-  }
-
-  .mode-option.active {
-    border-color: rgba(242, 194, 106, 0.56);
-    box-shadow: 0 0 18px rgb(242 194 106 / 0.13);
-  }
-
-  .preview-row {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.75rem;
-  }
-
-  .preview-result {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    align-items: center;
-    color: var(--color-text-muted);
-    font-family: var(--font-mono);
-    font-size: 0.7rem;
-  }
-
-  .preview-result span,
-  .preview-result small {
-    border: 1px solid var(--color-border-subtle);
-    border-radius: var(--radius-xs);
-    background: var(--color-surface-2);
-    padding: 0.28rem 0.48rem;
-  }
-
-  .select-field {
-    display: grid;
-    gap: 0.4rem;
-    color: var(--color-text-muted);
-    font-size: 0.78rem;
-  }
-
-  .select-field span {
-    font-family: var(--font-mono);
-    font-size: 0.68rem;
-    color: var(--color-text-disabled);
-    text-transform: uppercase;
-  }
-
-  .select-field select {
-    border: 1px solid var(--color-border-subtle);
-    border-radius: var(--radius-xs);
-    background: var(--color-surface-2);
-    color: var(--color-text-primary);
-    padding: 0.58rem 0.65rem;
-  }
-
-  .notice {
-    border: 1px solid var(--color-border-subtle);
-    background: var(--color-surface-2);
-    padding: 0.75rem 0.9rem;
-    color: var(--color-text-muted);
-    font-size: 0.8rem;
-  }
-
-  .notice.error {
-    border-color: color-mix(in srgb, var(--color-error) 55%, var(--color-border-subtle));
-    color: var(--color-error-text);
-  }
-
-  @media (max-width: 900px) {
-    .editor-head {
-      grid-template-columns: 1fr;
-      align-items: stretch;
-    }
-
-    .save-button {
-      width: 100%;
-    }
-
-    .editor-grid {
-      grid-template-columns: 1fr;
-    }
-  }
-
-  @media (max-width: 640px) {
-    .mode-grid {
-      grid-template-columns: 1fr;
-    }
-  }
-</style>
