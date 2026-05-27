@@ -168,6 +168,19 @@ public sealed class InfrastructureBoundaryTests {
         }
     }
 
+    [Fact]
+    public void JobServiceUsesNarrowDownstreamNeedsPersistencePort() {
+        var constructorTypes = typeof(Prismedia.Application.Jobs.JobService)
+            .GetConstructors()
+            .Single()
+            .GetParameters()
+            .Select(parameter => parameter.ParameterType)
+            .ToArray();
+
+        Assert.DoesNotContain(typeof(Prismedia.Application.Jobs.Ports.ILibraryScanPersistence), constructorTypes);
+        Assert.Contains(typeof(Prismedia.Application.Jobs.Ports.IDownstreamNeedsPersistence), constructorTypes);
+    }
+
     private static IEnumerable<string> FilesContaining(string relativeDirectory, string text) {
         var root = Path.GetDirectoryName(RepoPath("package.json")) ??
             throw new DirectoryNotFoundException("Could not resolve repository root.");

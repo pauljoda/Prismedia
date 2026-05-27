@@ -10,21 +10,21 @@ namespace Prismedia.Application.Jobs;
 public sealed class JobService {
     private readonly IJobQueueService _queue;
     private readonly IMaintenancePersistence _maintenance;
-    private readonly ILibraryScanPersistence _scanPersistence;
+    private readonly IDownstreamNeedsPersistence _downstreamNeeds;
 
     /// <summary>
     /// Creates a job service over the durable queue and maintenance persistence ports.
     /// </summary>
     /// <param name="queue">Queue port implemented by infrastructure persistence.</param>
     /// <param name="maintenance">Maintenance persistence port used to enumerate active entities for bulk operations.</param>
-    /// <param name="scanPersistence">Library scan persistence port used to check existing fingerprints during bulk backfill.</param>
+    /// <param name="downstreamNeeds">Persistence port used to check existing fingerprints during bulk backfill.</param>
     public JobService(
         IJobQueueService queue,
         IMaintenancePersistence maintenance,
-        ILibraryScanPersistence scanPersistence) {
+        IDownstreamNeedsPersistence downstreamNeeds) {
         _queue = queue;
         _maintenance = maintenance;
-        _scanPersistence = scanPersistence;
+        _downstreamNeeds = downstreamNeeds;
     }
 
     /// <summary>
@@ -128,7 +128,7 @@ public sealed class JobService {
         foreach (var (kind, jobType) in fingerprintKinds) {
             var entityIds = await _maintenance.GetActiveEntityIdsByKindAsync(kind, cancellationToken);
             foreach (var entityId in entityIds) {
-                if (await _scanPersistence.HasEntityFingerprintAsync(
+                if (await _downstreamNeeds.HasEntityFingerprintAsync(
                         entityId,
                         FingerprintAlgorithm.Md5,
                         cancellationToken)) {
