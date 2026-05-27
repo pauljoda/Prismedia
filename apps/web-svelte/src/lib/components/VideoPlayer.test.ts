@@ -491,7 +491,7 @@ describe("VideoPlayer", () => {
   });
 
   it("keeps mobile settings top-level and desktop settings inside the video drawer", async () => {
-    const source = await readFile("src/lib/components/VideoPlayer.svelte", "utf8");
+    const source = await readFile("src/lib/components/VideoSettingsMenu.svelte", "utf8");
 
     expect(source).toContain("z-index: 1005");
     expect(source).toContain("height: min(34dvh, 18rem)");
@@ -510,14 +510,14 @@ describe("VideoPlayer", () => {
     expect(source).toContain(".sidecar-control-button {\n      padding: 0;\n      width: 2.25rem;");
   });
 
-  it("uses menu-row subtitle style controls with square range inputs", async () => {
-    const source = await readFile("src/lib/components/VideoPlayer.svelte", "utf8");
+  it("uses menu-row subtitle style controls with compact range inputs", async () => {
+    const source = await readFile("src/lib/components/VideoSettingsMenu.svelte", "utf8");
 
     expect(source).toContain("player-settings-control");
     expect(source).toContain("player-settings-separator");
     expect(source).toContain("style={`--range-progress: ${rangeProgress");
     expect(source).toContain('.player-settings-control input[type="range"]');
-    expect(source).toContain("border-radius: 0;");
+    expect(source).toContain("border-radius: var(--radius-xs);");
   });
 
   it("shows a trickplay frame in the seekbar hover preview", async () => {
