@@ -242,12 +242,12 @@ public sealed class EntityMetadataApplyService : IEntityMetadataPatchService {
             await UpsertFlagsAsync(entityId, new EntityMetadataFlagsPatch(null, true, null), now, cancellationToken);
         }
 
-        var relationshipProposals = RelationshipProposals(proposal);
+        var relationshipProposals = EntityMetadataProposalTraversal.Relationships(proposal);
         if (relationshipProposals.Count > 0 && (selected.Contains("credits") || selected.Contains("studio") || selected.Contains("tags"))) {
             await ApplyRelationshipProposalsAsync(entityId, relationshipProposals, now, cancellationToken);
         }
 
-        await ApplyStructuralChildrenAsync(StructuralChildProposals(proposal), now, [entity.Id], cancellationToken);
+        await ApplyStructuralChildrenAsync(EntityMetadataProposalTraversal.StructuralChildren(proposal), now, [entity.Id], cancellationToken);
 
         entity.UpdatedAt = now;
         await _db.SaveChangesAsync(cancellationToken);
@@ -698,13 +698,13 @@ public sealed class EntityMetadataApplyService : IEntityMetadataPatchService {
             }
 
             await ApplyPatchToEntityAsync(childEntity, child.Patch, child.Images, now, cancellationToken);
-            var relationshipProposals = RelationshipProposals(child);
+            var relationshipProposals = EntityMetadataProposalTraversal.Relationships(child);
             if (relationshipProposals.Count > 0 &&
                 (child.Patch.Credits.Count > 0 || !string.IsNullOrWhiteSpace(child.Patch.Studio) || child.Patch.Tags.Count > 0)) {
                 await ApplyRelationshipProposalsAsync(childEntity.Id, relationshipProposals, now, cancellationToken);
             }
 
-            await ApplyStructuralChildrenAsync(StructuralChildProposals(child), now, visited, cancellationToken);
+            await ApplyStructuralChildrenAsync(EntityMetadataProposalTraversal.StructuralChildren(child), now, visited, cancellationToken);
             visited.Remove(child.TargetEntityId.Value);
         }
     }
@@ -776,28 +776,6 @@ public sealed class EntityMetadataApplyService : IEntityMetadataPatchService {
 
         entity.UpdatedAt = now;
     }
-
-    private static IReadOnlyList<EntityMetadataProposal> StructuralChildProposals(EntityMetadataProposal proposal) =>
-        proposal.Children
-            .Where(child => !IsRelationshipMetadataKind(child.TargetKind))
-            .ToArray();
-
-    private static IReadOnlyList<EntityMetadataProposal> RelationshipProposals(EntityMetadataProposal proposal) {
-        var relationships = new List<EntityMetadataProposal>();
-        if (proposal.Relationships is { Count: > 0 }) {
-            relationships.AddRange(proposal.Relationships);
-        }
-
-        relationships.AddRange(proposal.Children.Where(child => IsRelationshipMetadataKind(child.TargetKind)));
-
-        return relationships
-            .GroupBy(child => child.ProposalId, StringComparer.Ordinal)
-            .Select(group => group.First())
-            .ToArray();
-    }
-
-    private static bool IsRelationshipMetadataKind(string kind) =>
-        kind is "person" or "studio" or "tag";
 
     private static bool IsKindCompatible(string entityKind, string expectedKind) =>
         entityKind.Equals(expectedKind, StringComparison.OrdinalIgnoreCase) ||

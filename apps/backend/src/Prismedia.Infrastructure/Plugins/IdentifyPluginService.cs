@@ -316,7 +316,7 @@ public sealed class IdentifyPluginService : IIdentifyProviderService {
             TargetKind = entity.KindCode,
             TargetEntityId = entity.Id,
             Children = structuralChildren,
-            Relationships = RelationshipProposals(providerProposal)
+            Relationships = EntityMetadataProposalTraversal.Relationships(providerProposal)
         };
     }
 
@@ -438,23 +438,6 @@ public sealed class IdentifyPluginService : IIdentifyProviderService {
 
     private static bool SupportsKind(PluginManifest manifest, string kind) =>
         manifest.Supports.Any(support => support.EntityKind.Equals(kind, StringComparison.OrdinalIgnoreCase));
-
-    private static IReadOnlyList<EntityMetadataProposal> RelationshipProposals(EntityMetadataProposal proposal) {
-        var relationships = new List<EntityMetadataProposal>();
-        if (proposal.Relationships is { Count: > 0 }) {
-            relationships.AddRange(proposal.Relationships);
-        }
-
-        relationships.AddRange((proposal.Children ?? []).Where(child => IsRelationshipMetadataKind(child.TargetKind)));
-
-        return relationships
-            .GroupBy(child => child.ProposalId, StringComparer.Ordinal)
-            .Select(group => group.First())
-            .ToArray();
-    }
-
-    private static bool IsRelationshipMetadataKind(string kind) =>
-        kind is "person" or "studio" or "tag";
 
     private sealed record StructuralChild(int? SortOrder, EntityRow Entity);
 }
