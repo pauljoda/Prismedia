@@ -32,6 +32,7 @@
     checked?: boolean;
     disabled?: boolean;
     size?: ToggleSize;
+    ariaLabel?: string;
     class?: string;
     onchange?: (checked: boolean) => void;
   }
@@ -40,6 +41,7 @@
     checked = false,
     disabled = false,
     size = "md",
+    ariaLabel = "Toggle setting",
     class: className,
     onchange,
   }: Props = $props();
@@ -57,6 +59,7 @@
   type="button"
   role="switch"
   aria-checked={checked}
+  aria-label={ariaLabel}
   {disabled}
   onclick={() => { if (!disabled) onchange?.(!checked); }}
   class={cn(

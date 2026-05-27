@@ -182,7 +182,7 @@
           { icon: "🖥️", label: "SELF-HOSTED", desc: "Full control. No compromises." },
           { icon: "🔌", label: "EXTENSIBLE", desc: "Plugins, scripts, automations." },
           { icon: "◈", label: "PRECISION", desc: "Every surface, every detail." },
-        ] as pillar}
+        ] as pillar (pillar.label)}
           <div class="ds-pillar">
             <span class="ds-pillar-icon">{pillar.icon}</span>
             <span class="ds-pillar-label">{pillar.label}</span>
@@ -211,7 +211,7 @@
         <div class="space-y-3">
           <h3 class="text-kicker">CORE</h3>
           <div class="grid grid-cols-5 gap-2">
-            {#each corePalette as swatch}
+            {#each corePalette as swatch (swatch.label)}
               <div class="flex flex-col items-center gap-2">
                 <div
                   class="ds-swatch"
@@ -228,7 +228,7 @@
         <div class="space-y-3">
           <h3 class="text-kicker">ACCENT</h3>
           <div class="grid grid-cols-5 gap-2">
-            {#each accentPalette as swatch}
+            {#each accentPalette as swatch (swatch.label)}
               <div class="flex flex-col items-center gap-2">
                 <div
                   class="ds-swatch"
@@ -245,7 +245,7 @@
         <div class="space-y-3">
           <h3 class="text-kicker">SIGNAL</h3>
           <div class="grid grid-cols-4 gap-2">
-            {#each signalColors as signal}
+            {#each signalColors as signal (signal.label)}
               <div class="flex flex-col items-center gap-2">
                 <div
                   class="ds-swatch ds-swatch-signal"
@@ -265,7 +265,7 @@
       <div class="mt-8 space-y-3">
         <h3 class="text-kicker">BRASS ACCENT RAMP</h3>
         <div class="flex">
-          {#each accentScale as swatch}
+          {#each accentScale as swatch (swatch.label)}
             <div
               class="flex-1 h-12 flex flex-col items-center justify-end pb-1"
               style="background: {swatch.hex}"
@@ -340,7 +340,7 @@
       <div class="mt-8">
         <h3 class="text-kicker mb-3">TEXT COLORS</h3>
         <div class="flex flex-wrap gap-6">
-          {#each textColors as tc}
+          {#each textColors as tc (tc.label)}
             <div class="flex items-center gap-3">
               <div class="w-5 h-5 border border-border-subtle rounded-xs" style="background: {tc.hex}"></div>
               <div>
@@ -361,7 +361,7 @@
       </div>
 
       <div class="grid md:grid-cols-2 xl:grid-cols-4 gap-4">
-        {#each surfaceLayers as layer, i}
+        {#each surfaceLayers as layer, i (layer.layer)}
           <div
             class="ds-surface-card"
             class:ds-surface-signal={i === 3}
@@ -394,7 +394,7 @@
         <div class="relative h-48 overflow-hidden border border-border-subtle rounded-md">
           <div class="absolute inset-0 bg-gradient-to-br from-accent-800 via-accent-950 to-surface-1"></div>
           <div class="absolute inset-0 flex items-center justify-center gap-4 p-4">
-            {#each glassLevels as glass}
+            {#each glassLevels as glass (glass.label)}
               <div
                 class="flex-1 h-full flex flex-col items-center justify-center border border-border-subtle rounded-sm"
                 style="background: var(--color-overlay-glass); backdrop-filter: blur({glass.blur})"
@@ -420,7 +420,7 @@
           <h3 class="text-kicker">SPACING SCALE (8pt)</h3>
           <Panel>
             <div class="p-5 flex flex-wrap items-end gap-3">
-              {#each [4, 8, 12, 16, 20, 24, 32, 40, 48, 64] as size}
+              {#each [4, 8, 12, 16, 20, 24, 32, 40, 48, 64] as size (size)}
                 <div class="flex flex-col items-center gap-1">
                   <div
                     class="bg-accent-500/30 border border-accent-500/40"
@@ -447,7 +447,7 @@
                 { label: "XL", value: "18px" },
                 { label: "2XL", value: "24px" },
                 { label: "Pill", value: "9999px" },
-              ] as r}
+              ] as r (r.label)}
                 <div class="flex flex-col items-center gap-1">
                   <div
                     class="w-12 h-12 bg-surface-3 border border-border-default"
@@ -523,7 +523,7 @@
           <h3 class="text-kicker">CHIPS</h3>
           <Panel>
             <div class="p-5 flex flex-wrap gap-2">
-              {#each ["Movies", "TV Shows", "Books", "Audio", "Images"] as chip}
+              {#each ["Movies", "TV Shows", "Books", "Audio", "Images"] as chip (chip)}
                 <span class="tag-chip tag-chip-default px-3 py-1.5">{chip}</span>
               {/each}
             </div>
@@ -535,7 +535,7 @@
           <h3 class="text-kicker">STATUS BADGES</h3>
           <Panel>
             <div class="p-5 flex flex-wrap gap-2">
-              {#each statusBadges as badge}
+              {#each statusBadges as badge (badge.label)}
                 <Badge variant={badge.color}>{badge.label}</Badge>
               {/each}
             </div>
@@ -547,7 +547,7 @@
           <h3 class="text-kicker">META BADGES</h3>
           <Panel>
             <div class="p-5 flex flex-wrap gap-2">
-              {#each metaBadges as meta}
+              {#each metaBadges as meta (meta)}
                 <span class="pill-accent px-2 py-0.5 text-mono-sm font-semibold">{meta}</span>
               {/each}
             </div>
@@ -584,29 +584,29 @@
           <Panel>
             <div class="p-5 space-y-4">
               <div>
-                <label class="control-label">Default</label>
+                <div class="control-label">Default</div>
                 <TextInput placeholder="Search Prismedia or type a command..." />
               </div>
               <div class="grid grid-cols-3 gap-3">
                 <div>
-                  <label class="control-label">Small</label>
+                  <div class="control-label">Small</div>
                   <TextInput size="sm" placeholder="Small" />
                 </div>
                 <div>
-                  <label class="control-label">Medium</label>
+                  <div class="control-label">Medium</div>
                   <TextInput placeholder="Medium" />
                 </div>
                 <div>
-                  <label class="control-label">Large</label>
+                  <div class="control-label">Large</div>
                   <TextInput size="lg" placeholder="Large" />
                 </div>
               </div>
               <div>
-                <label class="control-label">Error</label>
+                <div class="control-label">Error</div>
                 <TextInput variant="error" value="Invalid value" />
               </div>
               <div>
-                <label class="control-label">Disabled</label>
+                <div class="control-label">Disabled</div>
                 <TextInput disabled value="Cannot edit" />
               </div>
             </div>
@@ -619,7 +619,7 @@
           <Panel>
             <div class="p-5 space-y-4">
               <div>
-                <label class="control-label">Default</label>
+                <div class="control-label">Default</div>
                 <Select
                   options={demoSelectOptions}
                   bind:value={demoSelectValue}
@@ -628,20 +628,20 @@
               </div>
               <div class="grid grid-cols-3 gap-3">
                 <div>
-                  <label class="control-label">Small</label>
+                  <div class="control-label">Small</div>
                   <Select options={demoSelectOptions} size="sm" placeholder="Small" />
                 </div>
                 <div>
-                  <label class="control-label">Medium</label>
+                  <div class="control-label">Medium</div>
                   <Select options={demoSelectOptions} placeholder="Medium" />
                 </div>
                 <div>
-                  <label class="control-label">Large</label>
+                  <div class="control-label">Large</div>
                   <Select options={demoSelectOptions} size="lg" placeholder="Large" />
                 </div>
               </div>
               <div>
-                <label class="control-label">Disabled</label>
+                <div class="control-label">Disabled</div>
                 <Select options={demoSelectOptions} disabled value="option-a" />
               </div>
             </div>
@@ -696,7 +696,7 @@
                 <Toggle disabled />
               </div>
               <div class="pt-3 border-t border-border-subtle">
-                <label class="control-label">Meter</label>
+                <div class="control-label">Meter</div>
                 <Meter value={64} showValue />
               </div>
             </div>
@@ -801,7 +801,7 @@
 
       <Panel>
         <div class="p-5 flex flex-wrap items-center gap-6">
-          {#each ledStatuses as status}
+          {#each ledStatuses as status (status)}
             <div class="flex items-center gap-2 text-label">
               <StatusLed {status} />
               {status}
@@ -951,7 +951,7 @@
           </div>
           <div class="flex flex-col items-center gap-3">
             <div class="w-20 h-20 flex items-center justify-end gap-[3px] pb-4 pl-3">
-              {#each [0, 0.15, 0.3, 0.45] as delay}
+              {#each [0, 0.15, 0.3, 0.45] as delay (delay)}
                 <div
                   class="w-[3px] h-5 bg-accent-500/70"
                   style="animation: bar-bounce 0.85s {delay}s ease-in-out infinite"
@@ -996,7 +996,7 @@
           { icon: "→", name: "Purposeful", desc: "Motion clarifies focus, progress, & state." },
           { icon: "⚙", name: "Mechanical Ease", desc: "Smooth, precise, no bouncy curves." },
           { icon: "♿", name: "Accessible", desc: "Respects reduced motion settings." },
-        ] as principle}
+        ] as principle (principle.name)}
           <Panel>
             <div class="p-5 text-center space-y-2">
               <div class="text-3xl text-text-accent">{principle.icon}</div>
@@ -1020,7 +1020,7 @@
           <h3 class="text-kicker">DURATIONS</h3>
           <Panel>
             <div class="p-5 space-y-4">
-              {#each durations as dur}
+              {#each durations as dur (dur.name)}
                 <div class="flex items-center gap-4">
                   <span class="text-label w-20">{dur.name}</span>
                   <div class="flex-1 h-2 bg-surface-1 relative overflow-hidden">
@@ -1041,7 +1041,7 @@
           <h3 class="text-kicker">EASING CURVES</h3>
           <Panel>
             <div class="p-5 space-y-4">
-              {#each easingCurves as curve}
+              {#each easingCurves as curve (curve.name)}
                 <div class="flex items-center gap-4">
                   <span class="text-label w-24">{curve.name}</span>
                   <div class="flex-1">
@@ -1063,7 +1063,7 @@
 
       <Panel>
         <div class="p-6 flex items-end gap-8">
-          {#each [24, 48, 72, 96] as size}
+          {#each [24, 48, 72, 96] as size (size)}
             <div class="flex flex-col items-center gap-2">
               <LogoMark {size} />
               <span class="text-mono-sm text-text-muted">{size}px</span>

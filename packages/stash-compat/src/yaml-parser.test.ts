@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { resolveActionDef } from "./yaml-parser";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { parseScraperYaml, resolveActionDef } from "./yaml-parser";
 import type { ScraperActionDef, ScraperYamlDef } from "./types";
 
 describe("resolveActionDef", () => {
@@ -70,5 +73,28 @@ describe("resolveActionDef", () => {
       sceneByURL: [{} as ScraperActionDef, {} as ScraperActionDef],
     };
     expect(resolveActionDef(def, "sceneByURL", "https://site-a.com/x")).toBeNull();
+  });
+});
+
+describe("parseScraperYaml", () => {
+  it("does not treat inherited capability names as supported scraper actions", async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), "prismedia-stash-compat-"));
+    const yamlPath = path.join(tempDir, "scraper.yml");
+
+    Object.defineProperty(Object.prototype, "sceneByURL", {
+      configurable: true,
+      value: { action: "script", script: ["python", "scraper.py"] },
+    });
+
+    try {
+      await writeFile(yamlPath, "name: Prototype polluted scraper\n", "utf8");
+
+      const result = await parseScraperYaml(yamlPath);
+
+      expect(result.capabilities.sceneByURL).toBe(false);
+    } finally {
+      delete (Object.prototype as Record<string, unknown>).sceneByURL;
+      await rm(tempDir, { force: true, recursive: true });
+    }
   });
 });

@@ -125,7 +125,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Fixed long entity detail titles so filename-like text wraps instead of clipping on narrow screens.
 - Fixed video thumbnail grids so scan/probe metadata like duration, resolution, codec, bitrate, and container is shown on video cards.
 - Fixed touch drag scrubbing for trickplay sprites and segmented thumbnail previews.
+- Fixed Stash-compatible scraper input handling so inherited object properties cannot be mistaken for supported YAML capabilities or URL fields.
+- Fixed shared toggle accessibility metadata and cleared remaining Svelte diagnostics from the design-system demo page.
 
 ### Removed
 
 ### Docs
+- Clarified the Docker quick start so it describes the .NET API serving the built Svelte UI and uses 1.0.0-based image tag examples.

@@ -13,6 +13,7 @@ import type {
 } from "./types";
 import { resolveActionDef } from "./yaml-parser";
 import { ScraperExecutionError } from "./executor";
+import { getOwnString } from "./object";
 
 const require = createRequire(import.meta.url);
 const { JSDOM } = require("jsdom") as typeof import("jsdom");
@@ -33,8 +34,7 @@ export async function runXPathScraper(
 ): Promise<StashScrapedScene | null> {
   const { timeoutMs = 15_000 } = options ?? {};
 
-  const inputUrl =
-    "url" in input && typeof input.url === "string" ? input.url : undefined;
+  const inputUrl = getOwnString(input, "url");
 
   const actionDef = resolveActionDef(definition, action, inputUrl);
   if (!actionDef || actionDef.action !== "scrapeXPath") {
@@ -62,7 +62,7 @@ export async function runXPathScraper(
 
   if (action === "sceneByURL" || action === "performerByURL") {
     fetchUrl = inputUrl ?? null;
-  } else if (xpathDef.queryURL && "file_path" in input) {
+  } else if (xpathDef.queryURL && getOwnString(input, "file_path") !== undefined) {
     // Build URL from queryURL template + queryURLReplace
     fetchUrl = buildQueryURL(
       xpathDef.queryURL,

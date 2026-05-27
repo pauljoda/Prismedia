@@ -7,6 +7,7 @@ import {
   type ScraperXPathDef,
   capabilityKeys,
 } from "./types";
+import { getOwnString, hasOwnField } from "./object";
 
 export class ScraperParseError extends Error {
   constructor(
@@ -33,7 +34,7 @@ export async function parseScraperYaml(yamlPath: string): Promise<{
   }
 
   const def = raw as Record<string, unknown>;
-  if (typeof def.name !== "string" || !def.name) {
+  if (!getOwnString(def, "name")) {
     throw new ScraperParseError("Missing required field: name", yamlPath);
   }
 
@@ -51,7 +52,7 @@ export async function parseScraperYaml(yamlPath: string): Promise<{
   };
 
   for (const key of capabilityKeys) {
-    capabilities[key] = key in def && def[key] != null;
+    capabilities[key] = hasOwnField(def, key) && def[key] != null;
   }
 
   return {

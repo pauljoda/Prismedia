@@ -6,7 +6,7 @@ description: Run Prismedia with Docker in five minutes.
 
 # Quick Start
 
-Prismedia runs as one Docker image. PostgreSQL 16, ffmpeg, audiowaveform, the SvelteKit web server, and the background worker are all bundled. You provide two volumes — `/data` for application state and `/media` for your library — and one port (`8008`).
+Prismedia runs as one Docker image. PostgreSQL 16, ffmpeg, audiowaveform, the .NET API, the built Svelte web UI, and the background worker are all bundled. You provide two volumes — `/data` for application state and `/media` for your library — and one port (`8008`).
 
 ## Requirements
 
@@ -84,7 +84,7 @@ Read [Library Organization](./library-organization.md) **before** pointing Prism
 
 ## Ports & networking
 
-Only port `8008` is exposed. Prismedia serves the web UI and same-origin `/api/*` routes from a single SvelteKit process; there is no separate API server, no nginx, no Redis.
+Only port `8008` is exposed. Prismedia serves the web UI, same-origin `/api/*` routes, and streaming endpoints from the .NET API process; there is no separate web server, nginx, or Redis.
 
 If you want the app on a different host port:
 
@@ -100,9 +100,9 @@ Behind a reverse proxy (Caddy, Traefik, nginx) just point at `http://prismedia:8
 | Tag | What it pins | Use it when |
 | --- | --- | --- |
 | `latest` | The most recent stable release. | Normal installs. |
-| `X.Y.Z` (e.g. `0.20.1`) | One exact release. | You want to pin a known-good version. |
-| `X.Y` (e.g. `0.20`) | The latest patch on a minor line. | You want bug fixes but not minor-version churn. |
-| `X` (e.g. `0`) | The latest minor on a major line. | Long-running deployment with the broadest tracking band. |
+| `X.Y.Z` (e.g. `1.0.0`) | One exact release. | You want to pin a known-good version. |
+| `X.Y` (e.g. `1.0`) | The latest patch on a minor line. | You want bug fixes but not minor-version churn. |
+| `X` (e.g. `1`) | The latest minor on a major line. | Long-running deployment with the broadest tracking band. |
 | `dev` | The newest commit on `main`. | You're testing an unreleased change and accept breakage. |
 | `sha-abc1234` | One exact dev build. | Rollback or pinned dev testing. |
 

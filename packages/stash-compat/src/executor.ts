@@ -8,6 +8,7 @@ import type {
   StashScrapedScene,
   StashScrapedPerformer,
 } from "./types";
+import { getOwnString } from "./object";
 import { resolveActionDef } from "./yaml-parser";
 
 export class ScraperExecutionError extends Error {
@@ -49,8 +50,7 @@ export async function runScraperScript<T = StashScrapedScene>(
   options: ExecutorOptions = {}
 ): Promise<T | null> {
   const { timeoutMs = 30_000, scrapersRootDir } = options;
-  const inputUrl =
-    "url" in input && typeof input.url === "string" ? input.url : undefined;
+  const inputUrl = getOwnString(input, "url");
 
   const actionDef = resolveActionDef(definition, action, inputUrl);
   if (!actionDef || actionDef.action !== "script") {
@@ -174,8 +174,7 @@ export async function scrapeScene(
   input: ScraperSceneFragment | ScraperSearchInput,
   options?: ExecutorOptions
 ): Promise<StashScrapedScene | StashScrapedScene[] | null> {
-  const inputUrl =
-    "url" in input && typeof input.url === "string" ? input.url : undefined;
+  const inputUrl = getOwnString(input, "url");
   const actionDef = resolveActionDef(definition, action, inputUrl);
 
   if (!actionDef) {
