@@ -85,6 +85,18 @@ describe("frontend architecture boundaries", () => {
   });
 });
 
+describe("media-core architecture boundaries", () => {
+  it("keeps the public entrypoint as a barrel export", () => {
+    const entrypoint = path.join(repoRoot, "packages/media-core/src/index.ts");
+    const lines = readFileSync(entrypoint, "utf8")
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    expect(lines.every((line) => /^export \* from "\.\/[\w-]+";$/.test(line))).toBe(true);
+  });
+});
+
 function sourceFiles(directory: string): string[] {
   return readdirSync(directory).flatMap((entry) => {
     const fullPath = path.join(directory, entry);
