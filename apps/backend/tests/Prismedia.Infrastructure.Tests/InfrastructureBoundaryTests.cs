@@ -94,6 +94,31 @@ public sealed class InfrastructureBoundaryTests {
         Assert.Empty(actual);
     }
 
+    [Fact]
+    public void LibraryScanAggregatePortDoesNotRegainDeclaredMembers() {
+        var declaredMethods = typeof(Prismedia.Application.Jobs.Ports.ILibraryScanPersistence)
+            .GetMethods(System.Reflection.BindingFlags.Public |
+                        System.Reflection.BindingFlags.Instance |
+                        System.Reflection.BindingFlags.DeclaredOnly);
+
+        Assert.Empty(declaredMethods);
+    }
+
+    [Fact]
+    public void RefreshEntityHandlerUsesNarrowScanPersistencePorts() {
+        var constructorTypes = typeof(Prismedia.Application.Jobs.Handlers.Maintenance.RefreshEntityJobHandler)
+            .GetConstructors()
+            .Single()
+            .GetParameters()
+            .Select(parameter => parameter.ParameterType)
+            .ToArray();
+
+        Assert.DoesNotContain(typeof(Prismedia.Application.Jobs.Ports.ILibraryScanPersistence), constructorTypes);
+        Assert.Contains(typeof(Prismedia.Application.Jobs.Ports.IEntityRefreshTreePersistence), constructorTypes);
+        Assert.Contains(typeof(Prismedia.Application.Jobs.Ports.ILibraryScanRootPersistence), constructorTypes);
+        Assert.Contains(typeof(Prismedia.Application.Jobs.Ports.IDownstreamNeedsPersistence), constructorTypes);
+    }
+
     private static IEnumerable<string> FilesContaining(string relativeDirectory, string text) {
         var root = Path.GetDirectoryName(RepoPath("package.json")) ??
             throw new DirectoryNotFoundException("Could not resolve repository root.");

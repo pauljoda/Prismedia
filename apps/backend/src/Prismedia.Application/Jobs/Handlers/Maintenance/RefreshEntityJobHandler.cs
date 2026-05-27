@@ -10,7 +10,9 @@ namespace Prismedia.Application.Jobs.Handlers.Maintenance;
 /// </summary>
 public sealed class RefreshEntityJobHandler(
     ILogger<RefreshEntityJobHandler> logger,
-    ILibraryScanPersistence persistence,
+    IEntityRefreshTreePersistence refreshTree,
+    ILibraryScanRootPersistence scanRoots,
+    IDownstreamNeedsPersistence downstreamNeeds,
     IMaintenancePersistence maintenance) : IJobHandler {
 
     public JobType Type => JobType.RefreshEntity;
@@ -21,7 +23,7 @@ public sealed class RefreshEntityJobHandler(
             return;
         }
 
-        var tree = await persistence.GetEntityTreeAsync(entityId, cancellationToken);
+        var tree = await refreshTree.GetEntityTreeAsync(entityId, cancellationToken);
         if (tree.Count == 0) {
             logger.LogWarning("RefreshEntity: entity {EntityId} not found", entityId);
             return;
@@ -29,7 +31,7 @@ public sealed class RefreshEntityJobHandler(
 
         await context.ReportProgressAsync(10, $"Found {tree.Count} entities to refresh", cancellationToken);
 
-        var settings = await persistence.GetSettingsAsync(cancellationToken);
+        var settings = await scanRoots.GetSettingsAsync(cancellationToken);
         var ids = tree.Select(e => e.Id).ToList();
         foreach (var entity in tree) {
             if (EntityKindRegistry.TryGet(entity.KindCode, out var kind)) {
@@ -37,7 +39,7 @@ public sealed class RefreshEntityJobHandler(
             }
         }
 
-        var needs = await persistence.CheckDownstreamNeedsBatchAsync(ids, cancellationToken);
+        var needs = await downstreamNeeds.CheckDownstreamNeedsBatchAsync(ids, cancellationToken);
 
         var jobRequests = new List<EnqueueJobRequest>();
         foreach (var entity in tree) {

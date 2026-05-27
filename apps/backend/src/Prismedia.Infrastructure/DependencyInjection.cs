@@ -137,6 +137,22 @@ public static class DependencyInjection {
                 provider.GetRequiredService<SettingsService>(),
                 provider.GetRequiredService<MediaToolOptions>()));
         services.AddScoped<ILibraryScanPersistence, LibraryScanPersistenceService>();
+        services.AddScoped<ILibraryScanRootPersistence>(provider =>
+            provider.GetRequiredService<ILibraryScanPersistence>());
+        services.AddScoped<IVideoScanPersistence>(provider =>
+            provider.GetRequiredService<ILibraryScanPersistence>());
+        services.AddScoped<IImageGalleryScanPersistence>(provider =>
+            provider.GetRequiredService<ILibraryScanPersistence>());
+        services.AddScoped<IAudioScanPersistence>(provider =>
+            provider.GetRequiredService<ILibraryScanPersistence>());
+        services.AddScoped<IBookScanPersistence>(provider =>
+            provider.GetRequiredService<ILibraryScanPersistence>());
+        services.AddScoped<IDownstreamNeedsPersistence>(provider =>
+            provider.GetRequiredService<ILibraryScanPersistence>());
+        services.AddScoped<IMediaProcessingStatePersistence>(provider =>
+            provider.GetRequiredService<ILibraryScanPersistence>());
+        services.AddScoped<IEntityRefreshTreePersistence>(provider =>
+            provider.GetRequiredService<ILibraryScanPersistence>());
         services.AddScoped<IMaintenancePersistence>(provider =>
             new MaintenancePersistenceService(provider.GetRequiredService<PrismediaDbContext>(), dataDir));
         services.AddScoped<ICollectionRuleEngine, CollectionRuleEngine>();

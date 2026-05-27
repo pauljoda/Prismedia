@@ -2,52 +2,21 @@ using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Jobs.Ports;
 
-/// <summary>
-/// Port for entity persistence operations during library scanning. Handles the create/update/delete
-/// lifecycle for entities discovered by file system scans.
-/// </summary>
-public interface ILibraryScanPersistence {
-    // ── Library roots & settings ──
-
+/// <summary>Reads library roots, scan settings, and root-scoped exclusions used by scan handlers.</summary>
+public interface ILibraryScanRootPersistence {
     Task<LibraryRootData?> GetLibraryRootAsync(Guid rootId, CancellationToken cancellationToken);
     Task<IReadOnlyList<LibraryRootData>> GetEnabledRootsAsync(CancellationToken cancellationToken);
     Task<LibrarySettingsData> GetSettingsAsync(CancellationToken cancellationToken);
     Task UpdateRootLastScannedAsync(Guid rootId, CancellationToken cancellationToken);
     Task<IReadOnlySet<string>> GetExcludedPathsForRootAsync(Guid rootId, CancellationToken cancellationToken);
     Task<int> RemoveEntitiesInExcludedPathsAsync(Guid rootId, CancellationToken cancellationToken);
+}
 
-    // ── Entity upsert (returns entity ID) ──
-
+/// <summary>Video scan persistence operations for discovered files and stale cleanup.</summary>
+public interface IVideoScanPersistence {
     Task<Guid> UpsertVideoAsync(string filePath, string title, Guid libraryRootId, bool isNsfw, CancellationToken cancellationToken);
-    Task<Guid> UpsertImageAsync(string filePath, string title, Guid? galleryEntityId, long? sizeBytes, int sortOrder, bool isNsfw, CancellationToken cancellationToken);
-    Task<Guid> UpsertGalleryAsync(string folderPath, string title, Guid libraryRootId, Guid? parentGalleryEntityId, int sortOrder, bool isNsfw, CancellationToken cancellationToken);
-    Task<Guid> UpsertAudioTrackAsync(string filePath, string title, Guid? audioLibraryId, int sortOrder, bool isNsfw, CancellationToken cancellationToken);
-    Task<Guid> UpsertAudioLibraryAsync(string folderPath, string title, Guid libraryRootId, Guid? parentAudioLibraryEntityId, int sortOrder, bool isNsfw, CancellationToken cancellationToken);
-    Task<Guid> UpsertBookAsync(string sourcePath, string title, Guid libraryRootId, bool isNsfw, CancellationToken cancellationToken);
-    Task<Guid> UpsertBookVolumeAsync(string folderPath, string title, Guid bookEntityId, int sortOrder, bool isNsfw, CancellationToken cancellationToken);
-    Task<Guid> UpsertBookChapterAsync(string archivePath, string title, Guid parentEntityId, int sortOrder, int pageCount, bool isNsfw, CancellationToken cancellationToken);
-    Task<Guid> UpsertBookPageAsync(string filePath, string title, Guid bookEntityId, Guid chapterEntityId, int sortOrder, bool isNsfw, CancellationToken cancellationToken);
-
-    // ── Stale entity cleanup ──
-
     Task<int> RemoveStaleVideosByRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken);
-    Task<int> RemoveStaleLooseImagesInRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken);
-    Task<int> RemoveStaleImagesInGalleryAsync(Guid galleryEntityId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken);
-    Task<int> RemoveStaleGalleriesInRootAsync(Guid rootId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken);
-    Task<int> RemoveStaleLooseAudioTracksInRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken);
-    Task<int> RemoveStaleAudioTracksInLibraryAsync(Guid libraryEntityId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken);
-    Task<int> RemoveStaleAudioLibrariesInRootAsync(Guid rootId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken);
-    Task<int> RemoveStaleBookVolumesAsync(Guid bookEntityId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken);
-    Task<int> RemoveStaleBookChaptersAsync(Guid bookEntityId, IReadOnlySet<string> validArchivePaths, CancellationToken cancellationToken);
-    Task<int> RemoveStaleBooksInRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken);
-
-    /// <summary>
-    /// Removes video series and season entities that have no remaining child entities.
-    /// Should be called after stale video removal to clean up empty container shells.
-    /// </summary>
     Task<int> RemoveOrphanSeriesAndSeasonsAsync(CancellationToken cancellationToken);
-
-    // ── Batch upsert ──
 
     /// <summary>
     /// Upserts a batch of video entities in a single database round-trip,
@@ -55,7 +24,39 @@ public interface ILibraryScanPersistence {
     /// </summary>
     Task<IReadOnlyList<Guid>> UpsertVideosBatchAsync(
         IReadOnlyList<VideoUpsertItem> items, CancellationToken cancellationToken);
+}
 
+/// <summary>Image and gallery scan persistence operations for discovered files and stale cleanup.</summary>
+public interface IImageGalleryScanPersistence {
+    Task<Guid> UpsertImageAsync(string filePath, string title, Guid? galleryEntityId, long? sizeBytes, int sortOrder, bool isNsfw, CancellationToken cancellationToken);
+    Task<Guid> UpsertGalleryAsync(string folderPath, string title, Guid libraryRootId, Guid? parentGalleryEntityId, int sortOrder, bool isNsfw, CancellationToken cancellationToken);
+    Task<int> RemoveStaleLooseImagesInRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken);
+    Task<int> RemoveStaleImagesInGalleryAsync(Guid galleryEntityId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken);
+    Task<int> RemoveStaleGalleriesInRootAsync(Guid rootId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken);
+}
+
+/// <summary>Audio scan persistence operations for discovered tracks/libraries and stale cleanup.</summary>
+public interface IAudioScanPersistence {
+    Task<Guid> UpsertAudioTrackAsync(string filePath, string title, Guid? audioLibraryId, int sortOrder, bool isNsfw, CancellationToken cancellationToken);
+    Task<Guid> UpsertAudioLibraryAsync(string folderPath, string title, Guid libraryRootId, Guid? parentAudioLibraryEntityId, int sortOrder, bool isNsfw, CancellationToken cancellationToken);
+    Task<int> RemoveStaleLooseAudioTracksInRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken);
+    Task<int> RemoveStaleAudioTracksInLibraryAsync(Guid libraryEntityId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken);
+    Task<int> RemoveStaleAudioLibrariesInRootAsync(Guid rootId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken);
+}
+
+/// <summary>Book/comic scan persistence operations for discovered archives/pages and stale cleanup.</summary>
+public interface IBookScanPersistence {
+    Task<Guid> UpsertBookAsync(string sourcePath, string title, Guid libraryRootId, bool isNsfw, CancellationToken cancellationToken);
+    Task<Guid> UpsertBookVolumeAsync(string folderPath, string title, Guid bookEntityId, int sortOrder, bool isNsfw, CancellationToken cancellationToken);
+    Task<Guid> UpsertBookChapterAsync(string archivePath, string title, Guid parentEntityId, int sortOrder, int pageCount, bool isNsfw, CancellationToken cancellationToken);
+    Task<Guid> UpsertBookPageAsync(string filePath, string title, Guid bookEntityId, Guid chapterEntityId, int sortOrder, bool isNsfw, CancellationToken cancellationToken);
+    Task<int> RemoveStaleBookVolumesAsync(Guid bookEntityId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken);
+    Task<int> RemoveStaleBookChaptersAsync(Guid bookEntityId, IReadOnlySet<string> validArchivePaths, CancellationToken cancellationToken);
+    Task<int> RemoveStaleBooksInRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken);
+}
+
+/// <summary>Reads downstream processing state used to decide which jobs are still needed.</summary>
+public interface IDownstreamNeedsPersistence {
     /// <summary>
     /// Checks what downstream jobs are needed for a batch of entities in a single query.
     /// Returns one <see cref="DownstreamNeeds"/> per entity ID.
@@ -63,15 +64,14 @@ public interface ILibraryScanPersistence {
     Task<IReadOnlyDictionary<Guid, DownstreamNeeds>> CheckDownstreamNeedsBatchAsync(
         IReadOnlyList<Guid> entityIds, CancellationToken cancellationToken);
 
-    // ── Reads for downstream chaining decisions ──
-
     Task<bool> HasEntityTechnicalAsync(Guid entityId, CancellationToken cancellationToken);
     Task<bool> HasEntityFingerprintAsync(Guid entityId, FingerprintAlgorithm algorithm, CancellationToken cancellationToken);
     Task<bool> HasEntityFileAsync(Guid entityId, EntityFileRole role, CancellationToken cancellationToken);
     Task<bool> HasSubtitlesExtractedAsync(Guid entityId, CancellationToken cancellationToken);
+}
 
-    // ── Entity technical / file / fingerprint writes ──
-
+/// <summary>Writes media processing outputs and source-file metadata for entities.</summary>
+public interface IMediaProcessingStatePersistence {
     Task UpsertEntityTechnicalAsync(Guid entityId, double? duration, int? width, int? height,
         double? frameRate, int? bitRate, int? sampleRate, int? channels,
         string? codec, string? container, string? format, CancellationToken cancellationToken);
@@ -104,13 +104,30 @@ public interface ILibraryScanPersistence {
     Task UpsertAudioTrackTagsAsync(Guid entityId, string? artist, string? album, CancellationToken cancellationToken);
 
     Task<EntityTechnicalData?> GetEntityTechnicalAsync(Guid entityId, CancellationToken cancellationToken);
+}
 
+/// <summary>Reads entity trees for refresh jobs that re-queue processing work.</summary>
+public interface IEntityRefreshTreePersistence {
     /// <summary>
     /// Returns summary info for an entity and all its descendants (recursive children).
     /// Used by the refresh-entity job to re-queue processing for an entity tree.
     /// </summary>
     Task<IReadOnlyList<EntityRefreshTarget>> GetEntityTreeAsync(Guid entityId, CancellationToken cancellationToken);
 }
+
+/// <summary>
+/// Compatibility aggregate for the existing EF implementation while scan callers migrate
+/// to the narrower ports above.
+/// </summary>
+public interface ILibraryScanPersistence :
+    ILibraryScanRootPersistence,
+    IVideoScanPersistence,
+    IImageGalleryScanPersistence,
+    IAudioScanPersistence,
+    IBookScanPersistence,
+    IDownstreamNeedsPersistence,
+    IMediaProcessingStatePersistence,
+    IEntityRefreshTreePersistence;
 
 public sealed record LibraryRootData(
     Guid Id,
