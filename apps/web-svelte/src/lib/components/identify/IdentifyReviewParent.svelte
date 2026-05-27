@@ -490,8 +490,7 @@
     <div class="flex flex-col gap-2 md:flex-row md:gap-3">
       <button
         type="button"
-        class="inline-flex h-10 items-center justify-center gap-1.5 rounded-xs border border-border-accent-strong px-3 text-[0.78rem] text-text-primary transition-all disabled:cursor-not-allowed disabled:opacity-40 md:h-9"
-        style="background: linear-gradient(135deg, rgba(242,194,106,0.24), rgba(242,194,106,0.1)); box-shadow: 0 0 18px rgba(242,194,106,0.16);"
+        class="btn-accent-glow inline-flex h-10 items-center justify-center gap-1.5 rounded-xs border border-border-accent-strong px-3 text-[0.78rem] text-text-primary transition-all disabled:cursor-not-allowed disabled:opacity-40 md:h-9"
         disabled={store.applying}
         onclick={() => handleApply(false)}
       >
@@ -587,6 +586,11 @@
   @keyframes identify-artwork-shimmer {
     from { background-position: 180% 0, 0 0, 0 0; }
     to { background-position: -80% 0, 0 0, 0 0; }
+  }
+
+  .btn-accent-glow {
+    background: linear-gradient(135deg, var(--color-accent-overlay-light), var(--color-accent-overlay-faint));
+    box-shadow: 0 0 18px var(--color-accent-overlay-subtle);
   }
 
   @media (prefers-reduced-motion: reduce) {
