@@ -31,7 +31,6 @@ import {
   rebuildPreviews as rebuildPreviewsRequest,
   removeFileExclusion as removeFileExclusionRequest,
   rescanFileRoot as rescanFileRootRequest,
-  updateEntityFlags as updateEntityFlagsRequest,
   updateEntityMarker as updateEntityMarkerRequest,
   updateEntityPlayback as updateEntityPlaybackRequest,
   getSetting as getSettingRequest,
@@ -111,8 +110,15 @@ import type {
   VideoSeasonDetail as GeneratedVideoSeasonDetail,
 } from "./generated/model";
 import { requestInit, unwrapGenerated, type RequestOptions as GeneratedRequestOptions } from "$lib/api/generated-response";
-import { fetchApi, jellyfinApiPath, apiPath, uploadFile } from "./orval-fetch";
+import { fetchApi, jellyfinApiPath, apiPath } from "./orval-fetch";
 import type { EntityFileRoleCode } from "$lib/entities/entity-codes";
+export {
+  clearEntityImageAsset,
+  updateEntityFlags,
+  updateEntityMetadata,
+  updateEntityRating,
+  uploadEntityImageAsset,
+} from "$lib/api/entity-mutations";
 
 export type EntityCapability = GeneratedEntityCapability;
 export type EntityCard = GeneratedEntityThumbnail;
@@ -344,10 +350,6 @@ export interface JellyfinPlaybackSessionRequest {
 }
 
 export type RequestOptions = GeneratedRequestOptions;
-
-export interface EntityMetadataUpdateOptions extends RequestOptions {
-  kind?: string | null;
-}
 
 export interface EntityMetadataFlagsPatch {
   isFavorite?: boolean | null;
@@ -640,62 +642,6 @@ export function fetchCollection(id: string, options?: RequestOptions): Promise<C
 
 export function fetchCollections(options?: RequestOptions): Promise<CollectionListResponse> {
   return listCollections(undefined, requestInit(options)).then((response) => response.data);
-}
-
-export function updateEntityRating(
-  id: string,
-  value: number | null,
-): Promise<unknown> {
-  return fetchApi(`/entities/${id}/rating`, {
-    method: "PATCH",
-    body: JSON.stringify({ value }),
-  });
-}
-
-export function updateEntityFlags(
-  id: string,
-  flags: { isFavorite?: boolean | null; isNsfw?: boolean | null; isOrganized?: boolean | null },
-): Promise<unknown> {
-  return updateEntityFlagsRequest(id, {
-    isFavorite: flags.isFavorite ?? null,
-    isNsfw: flags.isNsfw ?? null,
-    isOrganized: flags.isOrganized ?? null,
-  });
-}
-
-export function updateEntityMetadata(
-  id: string,
-  request: EntityMetadataUpdateRequest,
-  options?: EntityMetadataUpdateOptions,
-): Promise<EntityDetailCard> {
-  const kindPath = options?.kind ? `/${encodeURIComponent(options.kind)}` : "";
-  return fetchApi<EntityDetailCard>(`/entities${kindPath}/${id}`, {
-    method: "PATCH",
-    body: JSON.stringify(request),
-    signal: options?.signal,
-  });
-}
-
-export function uploadEntityImageAsset(
-  id: string,
-  role: EntityFileRoleCode,
-  file: File,
-  options?: RequestOptions,
-): Promise<EntityDetailCard> {
-  return uploadFile<EntityDetailCard>(`/entities/${id}/images/${encodeURIComponent(role)}`, file, undefined, {
-    signal: options?.signal,
-  });
-}
-
-export function clearEntityImageAsset(
-  id: string,
-  role: EntityFileRoleCode,
-  options?: RequestOptions,
-): Promise<EntityDetailCard> {
-  return fetchApi<EntityDetailCard>(`/entities/${id}/images/${encodeURIComponent(role)}`, {
-    method: "DELETE",
-    signal: options?.signal,
-  });
 }
 
 export async function updateEntityPlayback(
