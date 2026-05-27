@@ -1,5 +1,4 @@
-import type { JobRun as ApiJobRun } from "$lib/api/prismedia";
-import type { JobQueueCountDto } from "$lib/api/generated/model";
+import type { JobQueueCountDto, JobRun as ApiJobRun } from "$lib/api/generated/model";
 import {
   queueDefinitions,
   type JobRun as DashboardJobRun,

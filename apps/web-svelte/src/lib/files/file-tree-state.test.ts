@@ -7,7 +7,7 @@ import {
   unloadedExpandedDirectories,
   upsertFileTreeEntries,
 } from "./file-tree-state";
-import type { FileEntry, FileRoot } from "$lib/api/prismedia";
+import type { FileEntry, FileRoot } from "$lib/api/generated/model";
 
 describe("file tree state", () => {
   const root: FileRoot = {

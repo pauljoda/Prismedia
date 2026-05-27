@@ -1,4 +1,4 @@
-import type { EntityCard } from "$lib/api/prismedia";
+import type { EntityThumbnail } from "$lib/api/generated/model";
 import {
   getFlagsCapability,
   getRatingValue,
@@ -88,7 +88,7 @@ function formatResolution(width: number | string | null, height: number | string
   return formatResolutionLabel(h) ?? undefined;
 }
 
-export function entityCardToVideoCardData(item: EntityCard): VideoCardData {
+export function entityCardToVideoCardData(item: EntityThumbnail): VideoCardData {
   return {
     id: item.id,
     href: `/videos/${item.id}`,

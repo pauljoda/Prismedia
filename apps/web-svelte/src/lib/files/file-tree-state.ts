@@ -1,4 +1,4 @@
-import type { FileEntry, FileRoot } from "$lib/api/prismedia";
+import type { FileEntry, FileRoot } from "$lib/api/generated/model";
 
 export interface FileTreeNodeMeta {
   rootId: string;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildJobsDashboard, groupJobRunsByKind, mapJobRun } from "./jobs-dashboard";
-import type { JobRun } from "$lib/api/prismedia";
+import type { JobRun } from "$lib/api/generated/model";
 
 const baseJob: JobRun = {
   id: "job-1",
