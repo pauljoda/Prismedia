@@ -12,7 +12,9 @@ namespace Prismedia.Application.Jobs.Handlers.Probe;
 public sealed class ProbeAudioJobHandler(
     ILogger<ProbeAudioJobHandler> logger,
     IMediaProbe mediaProbe,
-    ILibraryScanPersistence persistence) : EntityFileJobHandler(logger, persistence) {
+    IMediaProcessingStatePersistence persistence,
+    ILibraryScanRootPersistence roots,
+    IDownstreamNeedsPersistence downstreamNeeds) : EntityFileJobHandler(logger, persistence) {
     public override JobType Type => JobType.ProbeAudio;
 
     protected override async Task ExecuteAsync(
@@ -34,8 +36,8 @@ public sealed class ProbeAudioJobHandler(
             await Persistence.UpsertAudioTrackTagsAsync(entityId, probe.Artist, probe.Album, cancellationToken);
         }
 
-        var settings = await Persistence.GetSettingsAsync(cancellationToken);
-        if (settings.AutoGeneratePreview && !await Persistence.HasEntityFileAsync(entityId, EntityFileRole.Waveform, cancellationToken)) {
+        var settings = await roots.GetSettingsAsync(cancellationToken);
+        if (settings.AutoGeneratePreview && !await downstreamNeeds.HasEntityFileAsync(entityId, EntityFileRole.Waveform, cancellationToken)) {
             await context.EnqueueIfNeededAsync(new EnqueueJobRequest(
                 JobType.GenerateAudioWaveform, TargetEntityKind: "audio-track",
                 TargetEntityId: entityId.ToString(), TargetLabel: context.Job.TargetLabel), cancellationToken);

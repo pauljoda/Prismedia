@@ -11,7 +11,7 @@ namespace Prismedia.Application.Jobs.Handlers.Generate;
 public sealed class GenerateImageThumbnailJobHandler(
     ILogger<GenerateImageThumbnailJobHandler> logger,
     IMediaAssetGenerator assets,
-    ILibraryScanPersistence persistence) : EntityFileJobHandler(logger, persistence) {
+    IMediaProcessingStatePersistence persistence) : EntityFileJobHandler(logger, persistence) {
     public override JobType Type => JobType.GenerateImageThumbnail;
 
     protected override async Task ExecuteAsync(

@@ -13,7 +13,7 @@ namespace Prismedia.Application.Jobs.Handlers.Generate;
 public sealed class GenerateAudioWaveformJobHandler(
     ILogger<GenerateAudioWaveformJobHandler> logger,
     IMediaAssetGenerator assets,
-    ILibraryScanPersistence persistence) : EntityFileJobHandler(logger, persistence) {
+    IMediaProcessingStatePersistence persistence) : EntityFileJobHandler(logger, persistence) {
     public override JobType Type => JobType.GenerateAudioWaveform;
 
     protected override async Task ExecuteAsync(

@@ -119,6 +119,32 @@ public sealed class InfrastructureBoundaryTests {
         Assert.Contains(typeof(Prismedia.Application.Jobs.Ports.IDownstreamNeedsPersistence), constructorTypes);
     }
 
+    [Fact]
+    public void EntityFileJobHandlersUseNarrowMediaProcessingPersistencePort() {
+        var handlerTypes = new[]
+        {
+            typeof(Prismedia.Application.Jobs.Handlers.Probe.ProbeVideoJobHandler),
+            typeof(Prismedia.Application.Jobs.Handlers.Probe.ProbeAudioJobHandler),
+            typeof(Prismedia.Application.Jobs.Handlers.Identity.FingerprintJobHandler),
+            typeof(Prismedia.Application.Jobs.Handlers.Identity.ExtractSubtitlesJobHandler),
+            typeof(Prismedia.Application.Jobs.Handlers.Generate.GeneratePreviewJobHandler),
+            typeof(Prismedia.Application.Jobs.Handlers.Generate.GenerateImageThumbnailJobHandler),
+            typeof(Prismedia.Application.Jobs.Handlers.Generate.GenerateBookPageThumbnailJobHandler),
+            typeof(Prismedia.Application.Jobs.Handlers.Generate.GenerateAudioWaveformJobHandler)
+        };
+
+        foreach (var handlerType in handlerTypes) {
+            var constructorTypes = handlerType.GetConstructors()
+                .Single()
+                .GetParameters()
+                .Select(parameter => parameter.ParameterType)
+                .ToArray();
+
+            Assert.DoesNotContain(typeof(Prismedia.Application.Jobs.Ports.ILibraryScanPersistence), constructorTypes);
+            Assert.Contains(typeof(Prismedia.Application.Jobs.Ports.IMediaProcessingStatePersistence), constructorTypes);
+        }
+    }
+
     private static IEnumerable<string> FilesContaining(string relativeDirectory, string text) {
         var root = Path.GetDirectoryName(RepoPath("package.json")) ??
             throw new DirectoryNotFoundException("Could not resolve repository root.");

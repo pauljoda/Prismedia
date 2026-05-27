@@ -13,7 +13,7 @@ namespace Prismedia.Application.Jobs.Handlers.Generate;
 public sealed class GenerateBookPageThumbnailJobHandler(
     ILogger<GenerateBookPageThumbnailJobHandler> logger,
     IMediaAssetGenerator assets,
-    ILibraryScanPersistence persistence) : EntityFileJobHandler(logger, persistence) {
+    IMediaProcessingStatePersistence persistence) : EntityFileJobHandler(logger, persistence) {
     public override JobType Type => JobType.GenerateBookPageThumbnail;
 
     protected override bool ValidateFilePath(string filePath) {

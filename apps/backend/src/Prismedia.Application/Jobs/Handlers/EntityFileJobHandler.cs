@@ -11,7 +11,7 @@ namespace Prismedia.Application.Jobs.Handlers;
 /// </summary>
 public abstract class EntityFileJobHandler(
     ILogger logger,
-    ILibraryScanPersistence persistence) : IJobHandler {
+    IMediaProcessingStatePersistence persistence) : IJobHandler {
     public abstract JobType Type { get; }
 
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
@@ -40,7 +40,7 @@ public abstract class EntityFileJobHandler(
         Task.CompletedTask;
 
     /// <summary>Scan persistence port for subclass use.</summary>
-    protected ILibraryScanPersistence Persistence => persistence;
+    protected IMediaProcessingStatePersistence Persistence => persistence;
 
     private static Guid? ParseEntityId(string? value) =>
         Guid.TryParse(value, out var id) ? id : null;

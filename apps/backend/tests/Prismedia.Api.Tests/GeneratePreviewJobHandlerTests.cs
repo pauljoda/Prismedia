@@ -44,6 +44,7 @@ public sealed class GeneratePreviewJobHandlerTests : IDisposable {
         var handler = new GeneratePreviewJobHandler(
             NullLogger<GeneratePreviewJobHandler>.Instance,
             assets,
+            persistence,
             persistence);
         var job = new JobRunSnapshot(
             Guid.NewGuid(),

@@ -12,7 +12,7 @@ namespace Prismedia.Application.Jobs.Handlers.Probe;
 public sealed class ProbeVideoJobHandler(
     ILogger<ProbeVideoJobHandler> logger,
     IMediaProbe mediaProbe,
-    ILibraryScanPersistence persistence) : EntityFileJobHandler(logger, persistence) {
+    IMediaProcessingStatePersistence persistence) : EntityFileJobHandler(logger, persistence) {
     public override JobType Type => JobType.ProbeVideo;
 
     protected override async Task ExecuteAsync(

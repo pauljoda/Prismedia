@@ -13,7 +13,7 @@ public sealed class FingerprintJobHandler(
     JobType jobType,
     ILogger<FingerprintJobHandler> logger,
     IMediaHashing hashing,
-    ILibraryScanPersistence persistence) : EntityFileJobHandler(logger, persistence) {
+    IMediaProcessingStatePersistence persistence) : EntityFileJobHandler(logger, persistence) {
     public override JobType Type => jobType;
 
     protected override async Task ExecuteAsync(

@@ -62,17 +62,17 @@ public static class DependencyInjection {
             JobType.FingerprintVideo,
             sp.GetRequiredService<ILogger<FingerprintJobHandler>>(),
             sp.GetRequiredService<IMediaHashing>(),
-            sp.GetRequiredService<ILibraryScanPersistence>()));
+            sp.GetRequiredService<IMediaProcessingStatePersistence>()));
         services.AddTransient<IJobHandler>(sp => new FingerprintJobHandler(
             JobType.FingerprintImage,
             sp.GetRequiredService<ILogger<FingerprintJobHandler>>(),
             sp.GetRequiredService<IMediaHashing>(),
-            sp.GetRequiredService<ILibraryScanPersistence>()));
+            sp.GetRequiredService<IMediaProcessingStatePersistence>()));
         services.AddTransient<IJobHandler>(sp => new FingerprintJobHandler(
             JobType.FingerprintAudio,
             sp.GetRequiredService<ILogger<FingerprintJobHandler>>(),
             sp.GetRequiredService<IMediaHashing>(),
-            sp.GetRequiredService<ILibraryScanPersistence>()));
+            sp.GetRequiredService<IMediaProcessingStatePersistence>()));
 
         // Preview / asset generation
         services.AddTransient<IJobHandler, GeneratePreviewJobHandler>();

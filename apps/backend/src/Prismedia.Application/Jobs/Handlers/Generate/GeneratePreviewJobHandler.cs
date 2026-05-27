@@ -13,13 +13,14 @@ namespace Prismedia.Application.Jobs.Handlers.Generate;
 public sealed class GeneratePreviewJobHandler(
     ILogger<GeneratePreviewJobHandler> logger,
     IMediaAssetGenerator assets,
-    ILibraryScanPersistence persistence) : EntityFileJobHandler(logger, persistence) {
+    IMediaProcessingStatePersistence persistence,
+    ILibraryScanRootPersistence roots) : EntityFileJobHandler(logger, persistence) {
     public override JobType Type => JobType.GeneratePreview;
 
     protected override async Task ExecuteAsync(
         JobContext context, Guid entityId, string filePath, CancellationToken cancellationToken) {
         var timer = new JobPhaseTimer();
-        var settings = await Persistence.GetSettingsAsync(cancellationToken);
+        var settings = await roots.GetSettingsAsync(cancellationToken);
 
         var (duration, width, height) = await GetDimensionsAsync(entityId, cancellationToken);
 

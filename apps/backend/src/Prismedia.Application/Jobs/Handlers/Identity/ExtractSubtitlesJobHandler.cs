@@ -13,7 +13,7 @@ public sealed class ExtractSubtitlesJobHandler(
     ILogger<ExtractSubtitlesJobHandler> logger,
     IMediaProbe mediaProbe,
     IMediaAssetGenerator assets,
-    ILibraryScanPersistence persistence) : EntityFileJobHandler(logger, persistence) {
+    IMediaProcessingStatePersistence persistence) : EntityFileJobHandler(logger, persistence) {
     public override JobType Type => JobType.ExtractSubtitles;
 
     protected override Task OnSourceFileNotFoundAsync(Guid entityId, CancellationToken cancellationToken) =>
