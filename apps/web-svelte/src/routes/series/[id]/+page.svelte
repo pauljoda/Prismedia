@@ -3,15 +3,12 @@
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
   import { Users, Building2, Calendar, Info, SlidersHorizontal } from "@lucide/svelte";
+  import { fetchSeason, fetchSeries, type VideoSeasonDetail, type VideoSeriesDetail } from "$lib/api/media";
   import {
-    fetchSeason,
-    fetchSeries,
     updateEntityRating,
     updateEntityFlags,
     updateEntityMetadata,
-    type VideoSeasonDetail,
-    type VideoSeriesDetail,
-  } from "$lib/api/prismedia";
+  } from "$lib/api/entity-mutations";
   import { getCapability } from "$lib/api/capabilities";
   import {
     toggleOptimisticEntityFlag,

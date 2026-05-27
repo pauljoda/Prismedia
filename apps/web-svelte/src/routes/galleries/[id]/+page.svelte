@@ -1,15 +1,12 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { Layers } from "@lucide/svelte";
+  import { fetchImage, fetchGallery, type GalleryDetail, type ImageDetail } from "$lib/api/media";
   import {
-    fetchImage,
-    fetchGallery,
     updateEntityRating,
     updateEntityFlags,
     updateEntityMetadata,
-    type GalleryDetail,
-    type ImageDetail,
-  } from "$lib/api/prismedia";
+  } from "$lib/api/entity-mutations";
   import {
     getCapability,
     getImagesCapability,

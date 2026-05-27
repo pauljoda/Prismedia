@@ -17,7 +17,7 @@ import {
   type IdentifyQueueState,
   type PluginProvider,
 } from "$lib/api/identify";
-import type { EntityCard, EntityDetailCard } from "$lib/api/prismedia";
+import type { EntityCard, EntityDetailCard } from "$lib/api/entities";
 import { entityCardToThumbnailCard } from "$lib/entities/entity-grid";
 import { resolveEntityHrefById } from "$lib/entities/entity-route-resolver";
 import { requestMainScrollTop } from "$lib/stores/main-scroll";

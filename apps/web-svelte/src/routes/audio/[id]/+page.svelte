@@ -2,13 +2,12 @@
   import { onMount } from "svelte";
   import { page } from "$app/state";
   import { Music, Play, Shuffle } from "@lucide/svelte";
+  import { fetchAudioLibrary, type AudioLibraryDetail } from "$lib/api/media";
   import {
-    fetchAudioLibrary,
     updateEntityRating,
     updateEntityFlags,
     updateEntityMetadata,
-    type AudioLibraryDetail,
-  } from "$lib/api/prismedia";
+  } from "$lib/api/entity-mutations";
   import { assetUrl } from "$lib/api/orval-fetch";
   import type { AudioTrackListItemDto } from "@prismedia/contracts";
   import { getCapability } from "$lib/api/capabilities";

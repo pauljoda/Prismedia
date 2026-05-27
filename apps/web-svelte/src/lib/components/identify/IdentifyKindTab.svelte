@@ -8,7 +8,7 @@
   import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
   import { entityCardToThumbnailCard } from "$lib/entities/entity-grid";
   import { fetchIdentifyEntities } from "$lib/api/identify";
-  import type { EntityCard } from "$lib/api/prismedia";
+  import type { EntityCard } from "$lib/api/entities";
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
   import { useIdentifyStore } from "./identify-store.svelte";
   import { entityKindIcon } from "./identify-icons";

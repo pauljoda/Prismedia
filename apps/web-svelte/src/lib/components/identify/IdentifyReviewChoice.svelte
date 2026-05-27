@@ -11,7 +11,7 @@
   import { cn } from "@prismedia/ui-svelte";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
   import type { EntitySearchCandidate } from "$lib/api/identify";
-  import type { EntityCard } from "$lib/api/prismedia";
+  import type { EntityCard } from "$lib/api/entities";
   import {
     identifyCandidateKey,
     identifyCandidateToThumbnailCard,

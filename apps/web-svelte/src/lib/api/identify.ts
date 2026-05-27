@@ -1,5 +1,6 @@
 import { fetchApi, apiPath } from "$lib/api/orval-fetch";
-import type { EntityCard, EntityDetailCard, EntityListResponse, EntityMetadataFlagsPatch } from "$lib/api/prismedia";
+import type { EntityCard, EntityDetailCard, EntityListResponse } from "$lib/api/entities";
+import type { EntityMetadataFlagsPatch } from "$lib/api/entity-mutations";
 
 export interface PluginEntitySupport {
   entityKind: string;

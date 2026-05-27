@@ -1,5 +1,5 @@
 import type { EntityCapability } from "$lib/api/generated/model";
-import type { JellyfinPlaybackInfoResponse } from "$lib/api/prismedia";
+import type { JellyfinPlaybackInfoResponse } from "$lib/api/playback";
 import type {
   VideoPlayerAudioTrack,
   VideoPlayerMarker,

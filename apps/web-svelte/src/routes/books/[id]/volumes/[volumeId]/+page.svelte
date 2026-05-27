@@ -3,14 +3,10 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import { BookOpen, Check, Info, Play, RotateCcw, SlidersHorizontal } from "@lucide/svelte";
-  import {
-    fetchBook,
-    fetchEntity,
-    updateEntityMetadata,
-    updateEntityProgress,
-    type BookDetail,
-    type EntityCardFull,
-  } from "$lib/api/prismedia";
+  import { fetchBook, type BookDetail } from "$lib/api/media";
+  import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
+  import { updateEntityMetadata } from "$lib/api/entity-mutations";
+  import { updateEntityProgress } from "$lib/api/playback";
   import { entityCardToDetailCard, type EntityDetailCardFull } from "$lib/entities/entity-detail";
   import {
     bookEntityProgressDisplay,

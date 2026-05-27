@@ -3,13 +3,12 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import { Users } from "@lucide/svelte";
+  import { fetchImage, type ImageDetail } from "$lib/api/media";
   import {
-    fetchImage,
     updateEntityRating,
     updateEntityFlags,
     updateEntityMetadata,
-    type ImageDetail,
-  } from "$lib/api/prismedia";
+  } from "$lib/api/entity-mutations";
   import {
     getCapability,
     getImagesCapability,

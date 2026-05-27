@@ -5,7 +5,7 @@
     createEntityMarker,
     updateEntityMarker,
     deleteEntityMarker,
-  } from "$lib/api/prismedia";
+  } from "$lib/api/entity-mutations";
   import type { EntityDetailMarker } from "$lib/entities/entity-detail";
   import TimeMarkerForm, { formatSecondsInput } from "./TimeMarkerForm.svelte";
 

@@ -4,13 +4,9 @@
   import { page } from "$app/state";
   import { AlertTriangle } from "@lucide/svelte";
   import { getCapability } from "$lib/api/capabilities";
-  import {
-    fetchBook,
-    fetchEntity,
-    updateEntityProgress,
-    type BookDetail,
-    type EntityCardFull,
-  } from "$lib/api/prismedia";
+  import { fetchBook, type BookDetail } from "$lib/api/media";
+  import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
+  import { updateEntityProgress } from "$lib/api/playback";
   import {
     bookEntityProgressDisplay,
     entityPageToReaderImage,

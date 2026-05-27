@@ -4,15 +4,13 @@
   import { page } from "$app/state";
   import { BookOpen, Check, Info, Play, RotateCcw, SlidersHorizontal, Users } from "@lucide/svelte";
   import { getCapability } from "$lib/api/capabilities";
+  import { fetchBook, type BookDetail } from "$lib/api/media";
+  import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
   import {
-    fetchBook,
-    fetchEntity,
     updateEntityFlags,
     updateEntityMetadata,
     updateEntityRating,
-    type BookDetail,
-    type EntityCardFull,
-  } from "$lib/api/prismedia";
+  } from "$lib/api/entity-mutations";
   import {
     toggleOptimisticEntityFlag,
     updateOptimisticEntityRating,

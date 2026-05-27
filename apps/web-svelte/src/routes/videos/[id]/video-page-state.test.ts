@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { LibrarySettings } from "$lib/api/prismedia";
+import type { LibrarySettings } from "$lib/api/settings";
 import {
   buildSubtitleDefaults,
   clampTranscriptDockPercent,

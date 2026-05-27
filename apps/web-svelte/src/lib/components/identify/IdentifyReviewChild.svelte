@@ -39,7 +39,7 @@
     tagRelationshipForTitle,
   } from "./identify-review-helpers";
   import type { EntityMetadataProposal } from "$lib/api/identify";
-  import type { EntityCard } from "$lib/api/prismedia";
+  import type { EntityCard } from "$lib/api/entities";
   import { useIdentifyStore } from "./identify-store.svelte";
 
   interface Props {

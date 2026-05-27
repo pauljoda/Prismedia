@@ -17,11 +17,8 @@
   import type { EntityGridRequest } from "$lib/entities/entity-grid";
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
   import { updateEntityRating } from "$lib/api/entity-mutations";
-  import {
-    fetchImage,
-    type EntityCard,
-    type ImageDetail,
-  } from "$lib/api/prismedia";
+  import { fetchImage, type ImageDetail } from "$lib/api/media";
+  import type { EntityCard } from "$lib/api/entities";
 
   interface Props {
     actionHref?: string;

@@ -7,7 +7,7 @@ const guardrailFile = "lib/api/api-facade-boundary.test.ts";
 const scannedExtensions = new Set([".svelte", ".ts", ".js"]);
 
 const trackedFacades = [
-  { modulePath: "$lib/api/prismedia", currentImporters: 25 },
+  { modulePath: "$lib/api/prismedia", currentImporters: 0 },
   { modulePath: "$lib/api/identify", currentImporters: 14 },
 ] as const;
 

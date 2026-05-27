@@ -11,19 +11,19 @@
     Users,
   } from "@lucide/svelte";
   import { cn } from "@prismedia/ui-svelte";
+  import { fetchVideo, type VideoDetail } from "$lib/api/media";
+  import { fetchSettingsValues, type LibrarySettings } from "$lib/api/settings";
   import {
-    fetchVideo,
-    fetchSettingsValues,
     fetchJellyfinPlaybackInfo,
     markJellyfinUserPlayedItem,
     postJellyfinSessionProgress,
+    type JellyfinPlaybackInfoResponse,
+  } from "$lib/api/playback";
+  import {
     updateEntityRating,
     updateEntityFlags,
     updateEntityMetadata,
-    type JellyfinPlaybackInfoResponse,
-    type VideoDetail,
-    type LibrarySettings,
-  } from "$lib/api/prismedia";
+  } from "$lib/api/entity-mutations";
   import { settingKeys, valuesToLibrarySettings } from "$lib/settings/app-settings";
   import { getCapability } from "$lib/api/capabilities";
   import {

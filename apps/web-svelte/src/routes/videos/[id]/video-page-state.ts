@@ -1,4 +1,4 @@
-import type { LibrarySettings } from "$lib/api/prismedia";
+import type { LibrarySettings } from "$lib/api/settings";
 import type {
   SubtitleAppearance,
   SubtitleDisplayStyle,

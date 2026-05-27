@@ -2,14 +2,13 @@
   import { onMount } from "svelte";
   import { page } from "$app/state";
   import { Music } from "@lucide/svelte";
+  import { fetchAudioTrack, type AudioTrackDetail } from "$lib/api/media";
+  import { fetchEntityThumbnails } from "$lib/api/entities";
   import {
-    fetchAudioTrack,
-    fetchEntityThumbnails,
     updateEntityFlags,
     updateEntityMetadata,
     updateEntityRating,
-    type AudioTrackDetail,
-  } from "$lib/api/prismedia";
+  } from "$lib/api/entity-mutations";
   import { assetUrl } from "$lib/api/orval-fetch";
   import { getCapability } from "$lib/api/capabilities";
   import {

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { IdentifyStore } from "./identify-store.svelte";
 import type { EntityMetadataProposal } from "$lib/api/identify";
-import type { EntityCard, EntityDetailCard } from "$lib/api/prismedia";
+import type { EntityCard, EntityDetailCard } from "$lib/api/entities";
 import { MAIN_SCROLL_TOP_EVENT } from "$lib/stores/main-scroll";
 
 const fetchPluginProviders = vi.fn();

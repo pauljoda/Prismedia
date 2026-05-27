@@ -2,7 +2,8 @@ import { fireEvent, render, waitFor } from "@testing-library/svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page } from "$app/state";
 import Page from "./[id]/reader/+page.svelte";
-import type { BookDetail, EntityCardFull } from "$lib/api/prismedia";
+import type { BookDetail } from "$lib/api/media";
+import type { EntityCardFull } from "$lib/api/entities";
 import type { EntityThumbnail } from "$lib/api/generated/model";
 
 const mocks = vi.hoisted(() => ({
@@ -12,14 +13,19 @@ const mocks = vi.hoisted(() => ({
   updateEntityProgress: vi.fn(),
 }));
 
-vi.mock("$lib/api/prismedia", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("$lib/api/prismedia")>();
-  return {
-    ...actual,
-    fetchBook: mocks.fetchBook,
-    fetchEntity: mocks.fetchEntity,
-    updateEntityProgress: mocks.updateEntityProgress,
-  };
+vi.mock("$lib/api/media", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("$lib/api/media")>();
+  return { ...actual, fetchBook: mocks.fetchBook };
+});
+
+vi.mock("$lib/api/entities", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("$lib/api/entities")>();
+  return { ...actual, fetchEntity: mocks.fetchEntity };
+});
+
+vi.mock("$lib/api/playback", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("$lib/api/playback")>();
+  return { ...actual, updateEntityProgress: mocks.updateEntityProgress };
 });
 
 vi.mock("$app/navigation", () => ({

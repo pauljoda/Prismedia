@@ -1,12 +1,16 @@
 import {
+  createEntityMarker as createEntityMarkerRequest,
+  deleteEntityMarker as deleteEntityMarkerRequest,
   updateEntity as updateEntityRequest,
   updateEntityByKind,
   updateEntityFlags as updateEntityFlagsRequest,
+  updateEntityMarker as updateEntityMarkerRequest,
   updateEntityRating as updateEntityRatingRequest,
 } from "$lib/api/generated/prismedia";
 import type {
   EntityCard,
   EntityFlagsUpdateRequest,
+  EntityMarkerWriteRequest,
   EntityMetadataUpdateRequest as GeneratedEntityMetadataUpdateRequest,
 } from "$lib/api/generated/model";
 import { requestInit, unwrapGenerated, type RequestOptions } from "$lib/api/generated-response";
@@ -15,6 +19,12 @@ import type { EntityFileRoleCode } from "$lib/entities/entity-codes";
 
 export interface EntityMetadataUpdateOptions extends RequestOptions {
   kind?: string | null;
+}
+
+export interface EntityMetadataFlagsPatch {
+  isFavorite?: boolean | null;
+  isNsfw?: boolean | null;
+  isOrganized?: boolean | null;
 }
 
 export interface EntityMetadataPatch {
@@ -103,4 +113,35 @@ export function clearEntityImageAsset(
     method: "DELETE",
     signal: options?.signal,
   });
+}
+
+export function createEntityMarker(
+  id: string,
+  payload: EntityMarkerWriteRequest,
+  options?: RequestOptions,
+): Promise<EntityCard> {
+  return createEntityMarkerRequest(id, payload, requestInit(options)).then((response) =>
+    unwrapGenerated<EntityCard>(response, `Failed to create marker for ${id}`),
+  );
+}
+
+export function updateEntityMarker(
+  id: string,
+  markerId: string,
+  payload: EntityMarkerWriteRequest,
+  options?: RequestOptions,
+): Promise<EntityCard> {
+  return updateEntityMarkerRequest(id, markerId, payload, requestInit(options)).then((response) =>
+    unwrapGenerated<EntityCard>(response, `Failed to update marker ${markerId}`),
+  );
+}
+
+export function deleteEntityMarker(
+  id: string,
+  markerId: string,
+  options?: RequestOptions,
+): Promise<EntityCard> {
+  return deleteEntityMarkerRequest(id, markerId, requestInit(options)).then((response) =>
+    unwrapGenerated<EntityCard>(response, `Failed to delete marker ${markerId}`),
+  );
 }
