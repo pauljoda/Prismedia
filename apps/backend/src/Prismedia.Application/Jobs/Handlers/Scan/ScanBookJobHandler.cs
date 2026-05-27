@@ -13,7 +13,9 @@ namespace Prismedia.Application.Jobs.Handlers.Scan;
 public sealed class ScanBookJobHandler(
     ILogger<ScanBookJobHandler> logger,
     IFileDiscovery fileDiscovery,
-    ILibraryScanPersistence persistence) : ScanJobHandler(logger, fileDiscovery, persistence) {
+    ILibraryScanRootPersistence roots,
+    IBookScanPersistence books,
+    IDownstreamNeedsPersistence downstreamNeeds) : ScanJobHandler(logger, fileDiscovery, roots) {
     private static readonly HashSet<string> ImageExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif"
@@ -25,14 +27,14 @@ public sealed class ScanBookJobHandler(
 
     protected override async Task ScanRootAsync(JobContext context, LibraryRootData root, CancellationToken cancellationToken) {
         logger.LogInformation("ScanBook: discovering archives in {Path}", root.Path);
-        var excludedPaths = await Persistence.GetExcludedPathsForRootAsync(root.Id, cancellationToken);
+        var excludedPaths = await Roots.GetExcludedPathsForRootAsync(root.Id, cancellationToken);
 
         var archiveFiles = await FileDiscovery.DiscoverFilesAsync(
             root.Path, MediaCategory.ComicArchive, root.Recursive, excludedPaths, cancellationToken);
 
         logger.LogInformation("ScanBook: found {Count} archive files in {Label}", archiveFiles.Count, root.Label);
 
-        var settings = await Persistence.GetSettingsAsync(cancellationToken);
+        var settings = await Roots.GetSettingsAsync(cancellationToken);
         var archiveItems = new List<BookArchiveItem>();
 
         foreach (var archivePath in archiveFiles.OrderBy(path => path, NaturalPathComparer.Instance)) {
@@ -52,7 +54,7 @@ public sealed class ScanBookJobHandler(
             .GroupBy(item => item.BookPath, StringComparer.OrdinalIgnoreCase)
             .OrderBy(group => group.Key, NaturalPathComparer.Instance)) {
             var first = bookGroup.First();
-            var bookId = await Persistence.UpsertBookAsync(first.BookPath, first.BookTitle, root.Id, root.IsNsfw, cancellationToken);
+            var bookId = await books.UpsertBookAsync(first.BookPath, first.BookTitle, root.Id, root.IsNsfw, cancellationToken);
             validBookPaths.Add(first.BookPath);
 
             var directChapterPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -87,7 +89,7 @@ public sealed class ScanBookJobHandler(
                 var volumeGroup = volumeGroups[volumeIndex];
                 var volumeFirst = volumeGroup.First();
                 var volumePath = volumeFirst.VolumePath!;
-                var volumeId = await Persistence.UpsertBookVolumeAsync(
+                var volumeId = await books.UpsertBookVolumeAsync(
                     volumePath,
                     volumeFirst.VolumeTitle!,
                     bookId,
@@ -115,15 +117,15 @@ public sealed class ScanBookJobHandler(
                     await ReportArchiveProgressAsync(context, processedArchiveCount, archiveItems.Count, cancellationToken);
                 }
 
-                await Persistence.RemoveStaleBookChaptersAsync(volumeId, validChapterPaths, cancellationToken);
+                await books.RemoveStaleBookChaptersAsync(volumeId, validChapterPaths, cancellationToken);
             }
 
-            await Persistence.RemoveStaleBookChaptersAsync(bookId, directChapterPaths, cancellationToken);
-            await Persistence.RemoveStaleBookVolumesAsync(bookId, validVolumePaths, cancellationToken);
+            await books.RemoveStaleBookChaptersAsync(bookId, directChapterPaths, cancellationToken);
+            await books.RemoveStaleBookVolumesAsync(bookId, validVolumePaths, cancellationToken);
         }
 
-        await Persistence.RemoveStaleBooksInRootAsync(root.Id, validBookPaths, cancellationToken);
-        await Persistence.RemoveEntitiesInExcludedPathsAsync(root.Id, cancellationToken);
+        await books.RemoveStaleBooksInRootAsync(root.Id, validBookPaths, cancellationToken);
+        await Roots.RemoveEntitiesInExcludedPathsAsync(root.Id, cancellationToken);
     }
 
     private async Task UpsertChapterPagesAsync(
@@ -137,7 +139,7 @@ public sealed class ScanBookJobHandler(
         ISet<string> validChapterPaths,
         CancellationToken cancellationToken) {
         validChapterPaths.Add(item.ArchivePath);
-        var chapterId = await Persistence.UpsertBookChapterAsync(
+        var chapterId = await books.UpsertBookChapterAsync(
             item.ArchivePath,
             item.ChapterTitle,
             parentEntityId,
@@ -151,9 +153,9 @@ public sealed class ScanBookJobHandler(
             var pagePath = $"{item.ArchivePath}::{memberPath}";
             var pageTitle = Path.GetFileNameWithoutExtension(memberPath);
 
-            var pageId = await Persistence.UpsertBookPageAsync(pagePath, pageTitle, bookId, chapterId, i, root.IsNsfw, cancellationToken);
+            var pageId = await books.UpsertBookPageAsync(pagePath, pageTitle, bookId, chapterId, i, root.IsNsfw, cancellationToken);
 
-            if (settings.AutoGeneratePreview && !await Persistence.HasEntityFileAsync(pageId, EntityFileRole.Thumbnail, cancellationToken)) {
+            if (settings.AutoGeneratePreview && !await downstreamNeeds.HasEntityFileAsync(pageId, EntityFileRole.Thumbnail, cancellationToken)) {
                 await context.EnqueueIfNeededAsync(new EnqueueJobRequest(
                     JobType.GenerateBookPageThumbnail, TargetEntityKind: "book-page",
                     TargetEntityId: pageId.ToString(), TargetLabel: pageTitle), cancellationToken);

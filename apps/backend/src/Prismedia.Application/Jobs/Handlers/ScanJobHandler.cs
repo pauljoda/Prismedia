@@ -12,30 +12,30 @@ namespace Prismedia.Application.Jobs.Handlers;
 public abstract class ScanJobHandler(
     ILogger logger,
     IFileDiscovery fileDiscovery,
-    ILibraryScanPersistence persistence) : IJobHandler {
+    ILibraryScanRootPersistence roots) : IJobHandler {
     public abstract JobType Type { get; }
 
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         if (!ScanRootPayload.TryParse(context.Job.PayloadJson, out var payload)) {
-            var roots = await persistence.GetEnabledRootsAsync(cancellationToken);
-            var eligible = roots.Where(IsEligibleRoot).ToList();
+            var enabledRoots = await roots.GetEnabledRootsAsync(cancellationToken);
+            var eligible = enabledRoots.Where(IsEligibleRoot).ToList();
             logger.LogInformation("{JobType}: scanning {Count} eligible roots", Type.ToCode(), eligible.Count);
 
             for (var i = 0; i < eligible.Count; i++) {
                 await ScanRootAsync(context, eligible[i], cancellationToken);
-                await persistence.UpdateRootLastScannedAsync(eligible[i].Id, cancellationToken);
+                await roots.UpdateRootLastScannedAsync(eligible[i].Id, cancellationToken);
                 await context.ReportProgressAsync((i + 1) * 100 / eligible.Count,
                     $"Scanned {eligible[i].Label}", cancellationToken);
             }
         } else {
-            var root = await persistence.GetLibraryRootAsync(payload.RootId, cancellationToken);
+            var root = await roots.GetLibraryRootAsync(payload.RootId, cancellationToken);
             if (root is null) {
                 logger.LogWarning("{JobType}: root {RootId} not found", Type.ToCode(), payload.RootId);
                 return;
             }
 
             await ScanRootAsync(context, root, cancellationToken);
-            await persistence.UpdateRootLastScannedAsync(root.Id, cancellationToken);
+            await roots.UpdateRootLastScannedAsync(root.Id, cancellationToken);
             await context.ReportProgressAsync(100, $"Scanned {root.Label}", cancellationToken);
         }
     }
@@ -49,6 +49,6 @@ public abstract class ScanJobHandler(
     /// <summary>File discovery port for subclass use.</summary>
     protected IFileDiscovery FileDiscovery => fileDiscovery;
 
-    /// <summary>Scan persistence port for subclass use.</summary>
-    protected ILibraryScanPersistence Persistence => persistence;
+    /// <summary>Root and scan-setting persistence port for subclass use.</summary>
+    protected ILibraryScanRootPersistence Roots => roots;
 }

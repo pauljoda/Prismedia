@@ -12,14 +12,16 @@ namespace Prismedia.Application.Jobs.Handlers.Scan;
 public sealed class ScanGalleryJobHandler(
     ILogger<ScanGalleryJobHandler> logger,
     IFileDiscovery fileDiscovery,
-    ILibraryScanPersistence persistence) : ScanJobHandler(logger, fileDiscovery, persistence) {
+    ILibraryScanRootPersistence roots,
+    IImageGalleryScanPersistence images,
+    IDownstreamNeedsPersistence downstreamNeeds) : ScanJobHandler(logger, fileDiscovery, roots) {
     public override JobType Type => JobType.ScanGallery;
 
     protected override bool IsEligibleRoot(LibraryRootData root) => root.ScanImages;
 
     protected override async Task ScanRootAsync(JobContext context, LibraryRootData root, CancellationToken cancellationToken) {
         logger.LogInformation("ScanGallery: discovering images in {Path}", root.Path);
-        var excludedPaths = await Persistence.GetExcludedPathsForRootAsync(root.Id, cancellationToken);
+        var excludedPaths = await Roots.GetExcludedPathsForRootAsync(root.Id, cancellationToken);
 
         var dirGroups = await FileDiscovery.DiscoverFilesByDirectoryAsync(
             root.Path, MediaCategory.Image, root.Recursive, excludedPaths, cancellationToken);
@@ -27,7 +29,7 @@ public sealed class ScanGalleryJobHandler(
         logger.LogInformation("ScanGallery: found {DirCount} directories with images in {Label}",
             dirGroups.Count, root.Label);
 
-        var settings = await Persistence.GetSettingsAsync(cancellationToken);
+        var settings = await Roots.GetSettingsAsync(cancellationToken);
         var validGalleryPaths = ContainerPathsFor(root.Path, dirGroups.Keys);
         var galleryIdsByPath = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
         var siblingSortOrders = SiblingSortOrders(validGalleryPaths);
@@ -39,7 +41,7 @@ public sealed class ScanGalleryJobHandler(
                 ? galleryIdsByPath[parentPath]
                 : null;
 
-            var galleryId = await Persistence.UpsertGalleryAsync(
+            var galleryId = await images.UpsertGalleryAsync(
                 dirPath,
                 galleryTitle,
                 root.Id,
@@ -77,15 +79,15 @@ public sealed class ScanGalleryJobHandler(
                 long? size = null;
                 try { size = new FileInfo(filePath).Length; } catch { }
 
-                var imageId = await Persistence.UpsertImageAsync(filePath, title, galleryId, size, i, root.IsNsfw, cancellationToken);
+                var imageId = await images.UpsertImageAsync(filePath, title, galleryId, size, i, root.IsNsfw, cancellationToken);
 
-                if (settings.AutoGeneratePreview && !await Persistence.HasEntityFileAsync(imageId, EntityFileRole.Thumbnail, cancellationToken)) {
+                if (settings.AutoGeneratePreview && !await downstreamNeeds.HasEntityFileAsync(imageId, EntityFileRole.Thumbnail, cancellationToken)) {
                     await context.EnqueueIfNeededAsync(new EnqueueJobRequest(
                         JobType.GenerateImageThumbnail, TargetEntityKind: "image",
                         TargetEntityId: imageId.ToString(), TargetLabel: title), cancellationToken);
                 }
 
-                if (settings.AutoGenerateFingerprints && !await Persistence.HasEntityFingerprintAsync(imageId, FingerprintAlgorithm.Md5, cancellationToken)) {
+                if (settings.AutoGenerateFingerprints && !await downstreamNeeds.HasEntityFingerprintAsync(imageId, FingerprintAlgorithm.Md5, cancellationToken)) {
                     await context.EnqueueIfNeededAsync(new EnqueueJobRequest(
                         JobType.FingerprintImage, TargetEntityKind: "image",
                         TargetEntityId: imageId.ToString(), TargetLabel: title), cancellationToken);
@@ -100,17 +102,17 @@ public sealed class ScanGalleryJobHandler(
             }
         }
 
-        await Persistence.RemoveStaleLooseImagesInRootAsync(root.Id, validLooseImagePaths, cancellationToken);
-        await Persistence.RemoveEntitiesInExcludedPathsAsync(root.Id, cancellationToken);
+        await images.RemoveStaleLooseImagesInRootAsync(root.Id, validLooseImagePaths, cancellationToken);
+        await Roots.RemoveEntitiesInExcludedPathsAsync(root.Id, cancellationToken);
 
         foreach (var galleryPath in validGalleryPaths) {
-            await Persistence.RemoveStaleImagesInGalleryAsync(
+            await images.RemoveStaleImagesInGalleryAsync(
                 galleryIdsByPath[galleryPath],
                 validImagePathsByGalleryPath[galleryPath],
                 cancellationToken);
         }
 
-        await Persistence.RemoveStaleGalleriesInRootAsync(root.Id, validGalleryPaths.ToHashSet(StringComparer.OrdinalIgnoreCase), cancellationToken);
+        await images.RemoveStaleGalleriesInRootAsync(root.Id, validGalleryPaths.ToHashSet(StringComparer.OrdinalIgnoreCase), cancellationToken);
     }
 
     private static bool SamePath(string left, string right) =>

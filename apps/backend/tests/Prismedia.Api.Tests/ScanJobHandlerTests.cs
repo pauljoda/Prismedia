@@ -49,6 +49,8 @@ public sealed class ScanJobHandlerTests {
         var handler = new ScanLibraryJobHandler(
             NullLogger<ScanLibraryJobHandler>.Instance,
             discovery,
+            persistence,
+            persistence,
             persistence);
         var job = new JobRunSnapshot(
             Guid.NewGuid(),
@@ -112,6 +114,8 @@ public sealed class ScanJobHandlerTests {
         var handler = new ScanLibraryJobHandler(
             NullLogger<ScanLibraryJobHandler>.Instance,
             discovery,
+            persistence,
+            persistence,
             persistence);
         var job = new JobRunSnapshot(
             Guid.NewGuid(),
@@ -171,6 +175,8 @@ public sealed class ScanJobHandlerTests {
         var handler = new ScanLibraryJobHandler(
             NullLogger<ScanLibraryJobHandler>.Instance,
             discovery,
+            persistence,
+            persistence,
             persistence);
         var job = new JobRunSnapshot(
             Guid.NewGuid(),
@@ -217,6 +223,8 @@ public sealed class ScanJobHandlerTests {
         var handler = new ScanGalleryJobHandler(
             NullLogger<ScanGalleryJobHandler>.Instance,
             discovery,
+            persistence,
+            persistence,
             persistence);
         var job = new JobRunSnapshot(
             Guid.NewGuid(),
@@ -288,6 +296,8 @@ public sealed class ScanJobHandlerTests {
         var handler = new ScanAudioJobHandler(
             NullLogger<ScanAudioJobHandler>.Instance,
             discovery,
+            persistence,
+            persistence,
             persistence);
         var job = new JobRunSnapshot(
             Guid.NewGuid(),
@@ -372,6 +382,8 @@ public sealed class ScanJobHandlerTests {
             var handler = new ScanBookJobHandler(
                 NullLogger<ScanBookJobHandler>.Instance,
                 new RecordingFileDiscovery([chapterTwoPath, chapterOnePath]),
+                persistence,
+                persistence,
                 persistence);
             var job = new JobRunSnapshot(
                 Guid.NewGuid(),

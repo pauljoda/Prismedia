@@ -12,14 +12,16 @@ namespace Prismedia.Application.Jobs.Handlers.Scan;
 public sealed class ScanAudioJobHandler(
     ILogger<ScanAudioJobHandler> logger,
     IFileDiscovery fileDiscovery,
-    ILibraryScanPersistence persistence) : ScanJobHandler(logger, fileDiscovery, persistence) {
+    ILibraryScanRootPersistence roots,
+    IAudioScanPersistence audio,
+    IDownstreamNeedsPersistence downstreamNeeds) : ScanJobHandler(logger, fileDiscovery, roots) {
     public override JobType Type => JobType.ScanAudio;
 
     protected override bool IsEligibleRoot(LibraryRootData root) => root.ScanAudio;
 
     protected override async Task ScanRootAsync(JobContext context, LibraryRootData root, CancellationToken cancellationToken) {
         logger.LogInformation("ScanAudio: discovering audio files in {Path}", root.Path);
-        var excludedPaths = await Persistence.GetExcludedPathsForRootAsync(root.Id, cancellationToken);
+        var excludedPaths = await Roots.GetExcludedPathsForRootAsync(root.Id, cancellationToken);
 
         var dirGroups = await FileDiscovery.DiscoverFilesByDirectoryAsync(
             root.Path, MediaCategory.Audio, root.Recursive, excludedPaths, cancellationToken);
@@ -27,7 +29,7 @@ public sealed class ScanAudioJobHandler(
         logger.LogInformation("ScanAudio: found {DirCount} directories with audio in {Label}",
             dirGroups.Count, root.Label);
 
-        var settings = await Persistence.GetSettingsAsync(cancellationToken);
+        var settings = await Roots.GetSettingsAsync(cancellationToken);
         var validLibraryPaths = ContainerPathsFor(root.Path, dirGroups.Keys);
         var libraryIdsByPath = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
         var siblingSortOrders = SiblingSortOrders(validLibraryPaths);
@@ -39,7 +41,7 @@ public sealed class ScanAudioJobHandler(
                 ? libraryIdsByPath[parentPath]
                 : null;
 
-            var libraryId = await Persistence.UpsertAudioLibraryAsync(
+            var libraryId = await audio.UpsertAudioLibraryAsync(
                 dirPath,
                 libraryTitle,
                 root.Id,
@@ -74,15 +76,15 @@ public sealed class ScanAudioJobHandler(
                 var title = Path.GetFileNameWithoutExtension(filePath);
                 validTrackPaths.Add(filePath);
 
-                var trackId = await Persistence.UpsertAudioTrackAsync(filePath, title, libraryId, i, root.IsNsfw, cancellationToken);
+                var trackId = await audio.UpsertAudioTrackAsync(filePath, title, libraryId, i, root.IsNsfw, cancellationToken);
 
-                if (settings.AutoGenerateMetadata && !await Persistence.HasEntityTechnicalAsync(trackId, cancellationToken)) {
+                if (settings.AutoGenerateMetadata && !await downstreamNeeds.HasEntityTechnicalAsync(trackId, cancellationToken)) {
                     await context.EnqueueIfNeededAsync(new EnqueueJobRequest(
                         JobType.ProbeAudio, TargetEntityKind: "audio-track",
                         TargetEntityId: trackId.ToString(), TargetLabel: title), cancellationToken);
                 }
 
-                if (settings.AutoGenerateFingerprints && !await Persistence.HasEntityFingerprintAsync(trackId, FingerprintAlgorithm.Md5, cancellationToken)) {
+                if (settings.AutoGenerateFingerprints && !await downstreamNeeds.HasEntityFingerprintAsync(trackId, FingerprintAlgorithm.Md5, cancellationToken)) {
                     await context.EnqueueIfNeededAsync(new EnqueueJobRequest(
                         JobType.FingerprintAudio, TargetEntityKind: "audio-track",
                         TargetEntityId: trackId.ToString(), TargetLabel: title), cancellationToken);
@@ -97,17 +99,17 @@ public sealed class ScanAudioJobHandler(
             }
         }
 
-        await Persistence.RemoveStaleLooseAudioTracksInRootAsync(root.Id, validLooseTrackPaths, cancellationToken);
-        await Persistence.RemoveEntitiesInExcludedPathsAsync(root.Id, cancellationToken);
+        await audio.RemoveStaleLooseAudioTracksInRootAsync(root.Id, validLooseTrackPaths, cancellationToken);
+        await Roots.RemoveEntitiesInExcludedPathsAsync(root.Id, cancellationToken);
 
         foreach (var libraryPath in validLibraryPaths) {
-            await Persistence.RemoveStaleAudioTracksInLibraryAsync(
+            await audio.RemoveStaleAudioTracksInLibraryAsync(
                 libraryIdsByPath[libraryPath],
                 validTrackPathsByLibraryPath[libraryPath],
                 cancellationToken);
         }
 
-        await Persistence.RemoveStaleAudioLibrariesInRootAsync(root.Id, validLibraryPaths.ToHashSet(StringComparer.OrdinalIgnoreCase), cancellationToken);
+        await audio.RemoveStaleAudioLibrariesInRootAsync(root.Id, validLibraryPaths.ToHashSet(StringComparer.OrdinalIgnoreCase), cancellationToken);
     }
 
     private static bool SamePath(string left, string right) =>

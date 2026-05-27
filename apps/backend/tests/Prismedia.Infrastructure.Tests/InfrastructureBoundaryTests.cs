@@ -145,6 +145,29 @@ public sealed class InfrastructureBoundaryTests {
         }
     }
 
+    [Fact]
+    public void ScanJobHandlersUseNarrowScanPersistencePorts() {
+        var handlerTypes = new[]
+        {
+            typeof(Prismedia.Application.Jobs.Handlers.Scan.ScanLibraryJobHandler),
+            typeof(Prismedia.Application.Jobs.Handlers.Scan.ScanGalleryJobHandler),
+            typeof(Prismedia.Application.Jobs.Handlers.Scan.ScanBookJobHandler),
+            typeof(Prismedia.Application.Jobs.Handlers.Scan.ScanAudioJobHandler)
+        };
+
+        foreach (var handlerType in handlerTypes) {
+            var constructorTypes = handlerType.GetConstructors()
+                .Single()
+                .GetParameters()
+                .Select(parameter => parameter.ParameterType)
+                .ToArray();
+
+            Assert.DoesNotContain(typeof(Prismedia.Application.Jobs.Ports.ILibraryScanPersistence), constructorTypes);
+            Assert.Contains(typeof(Prismedia.Application.Jobs.Ports.ILibraryScanRootPersistence), constructorTypes);
+            Assert.Contains(typeof(Prismedia.Application.Jobs.Ports.IDownstreamNeedsPersistence), constructorTypes);
+        }
+    }
+
     private static IEnumerable<string> FilesContaining(string relativeDirectory, string text) {
         var root = Path.GetDirectoryName(RepoPath("package.json")) ??
             throw new DirectoryNotFoundException("Could not resolve repository root.");

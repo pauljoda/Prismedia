@@ -14,7 +14,9 @@ namespace Prismedia.Application.Jobs.Handlers.Scan;
 public sealed class ScanLibraryJobHandler(
     ILogger<ScanLibraryJobHandler> logger,
     IFileDiscovery fileDiscovery,
-    ILibraryScanPersistence persistence) : ScanJobHandler(logger, fileDiscovery, persistence) {
+    ILibraryScanRootPersistence roots,
+    IVideoScanPersistence videos,
+    IDownstreamNeedsPersistence downstreamNeeds) : ScanJobHandler(logger, fileDiscovery, roots) {
     private const int BatchSize = 50;
     private static readonly Regex SeasonFolderPattern = new(
         @"^(?:Season\s*(?<season>\d{1,3})|S(?<season>\d{1,3}))$",
@@ -32,7 +34,7 @@ public sealed class ScanLibraryJobHandler(
         var timer = new JobPhaseTimer();
 
         IReadOnlyList<string> files;
-        var excludedPaths = await Persistence.GetExcludedPathsForRootAsync(root.Id, cancellationToken);
+        var excludedPaths = await Roots.GetExcludedPathsForRootAsync(root.Id, cancellationToken);
         using (timer.Phase("discover")) {
             logger.LogInformation("ScanLibrary: discovering videos in {Path}", root.Path);
             files = await FileDiscovery.DiscoverFilesAsync(
@@ -40,7 +42,7 @@ public sealed class ScanLibraryJobHandler(
             logger.LogInformation("ScanLibrary: found {Count} video files in {Label}", files.Count, root.Label);
         }
 
-        var settings = await Persistence.GetSettingsAsync(cancellationToken);
+        var settings = await Roots.GetSettingsAsync(cancellationToken);
         var allEntityIds = new List<Guid>(files.Count);
         var validPaths = new HashSet<string>(files.Count, StringComparer.OrdinalIgnoreCase);
 
@@ -55,7 +57,7 @@ public sealed class ScanLibraryJobHandler(
                     batchItems.Add(BuildVideoUpsertItem(filePath, root));
                 }
 
-                var entityIds = await Persistence.UpsertVideosBatchAsync(batchItems, cancellationToken);
+                var entityIds = await videos.UpsertVideosBatchAsync(batchItems, cancellationToken);
                 allEntityIds.AddRange(entityIds);
 
                 await context.ReportProgressAsync(
@@ -69,7 +71,7 @@ public sealed class ScanLibraryJobHandler(
                 var batchEnd = Math.Min(batchStart + BatchSize, allEntityIds.Count);
                 var batchIds = allEntityIds.GetRange(batchStart, batchEnd - batchStart);
 
-                var needs = await Persistence.CheckDownstreamNeedsBatchAsync(batchIds, cancellationToken);
+                var needs = await downstreamNeeds.CheckDownstreamNeedsBatchAsync(batchIds, cancellationToken);
                 var jobRequests = new List<EnqueueJobRequest>();
 
                 for (var i = 0; i < batchIds.Count; i++) {
@@ -110,15 +112,15 @@ public sealed class ScanLibraryJobHandler(
         int removed;
         int orphans;
         using (timer.Phase("cleanup")) {
-            removed = await Persistence.RemoveStaleVideosByRootAsync(root.Id, validPaths, cancellationToken);
+            removed = await videos.RemoveStaleVideosByRootAsync(root.Id, validPaths, cancellationToken);
             if (removed > 0)
                 logger.LogInformation("ScanLibrary: removed {Count} stale video entities from {Label}", removed, root.Label);
 
-            var excluded = await Persistence.RemoveEntitiesInExcludedPathsAsync(root.Id, cancellationToken);
+            var excluded = await Roots.RemoveEntitiesInExcludedPathsAsync(root.Id, cancellationToken);
             if (excluded > 0)
                 logger.LogInformation("ScanLibrary: removed {Count} excluded entities from {Label}", excluded, root.Label);
 
-            orphans = await Persistence.RemoveOrphanSeriesAndSeasonsAsync(cancellationToken);
+            orphans = await videos.RemoveOrphanSeriesAndSeasonsAsync(cancellationToken);
             if (orphans > 0)
                 logger.LogInformation("ScanLibrary: removed {Count} orphan series/season entities", orphans);
         }
