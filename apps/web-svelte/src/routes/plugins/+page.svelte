@@ -25,8 +25,10 @@
   } from "@lucide/svelte";
   import { Badge, Button } from "@prismedia/ui-svelte";
   import PluginPageShell from "./PluginPageShell.svelte";
+  import PrismediaCommunityTab from "./PrismediaCommunityTab.svelte";
   import StashCommunityIndexTab from "./StashCommunityIndexTab.svelte";
   import StashBoxEndpointsTab from "./StashBoxEndpointsTab.svelte";
+  import { authLinkLabel, authPlaceholder } from "./plugin-auth-format";
   import type { PluginTabDefinition, PluginsTab } from "./plugin-page-types";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import { entityTerms } from "$lib/terminology";
@@ -127,7 +129,6 @@
   let prismediaEntries = $state<PrismediaPluginIndexEntry[]>([]);
   let prismediaLoading = $state(false);
   let prismediaLoaded = $state(false);
-  let prismediaSearch = $state("");
   let prismediaInstallingId = $state<string | null>(null);
 
   let stashBoxEndpoints = $state<StashBoxEndpoint[]>([]);
@@ -340,38 +341,6 @@
     }
   }
 
-  function authFieldName(field: { key: string; label: string }) {
-    const key = field.key.toLowerCase();
-    if (key.includes("client_id")) return "client ID";
-    if (key.includes("client_secret")) return "client secret";
-    if (key.includes("username")) return "username";
-    if (key.includes("password")) return "password";
-    if (key.includes("api_key") || key.includes("apikey")) return "API key";
-    if (key.includes("token")) return "token";
-    return field.label.toLowerCase();
-  }
-
-  function authPlaceholder(
-    plugin: InstalledPlugin,
-    field: { key: string; label: string },
-  ) {
-    const name = authFieldName(field);
-    if (plugin.authStatus === "ok") {
-      return `Configured - enter new ${name} to replace`;
-    }
-    if (name === "username" || name === "password") {
-      return `Enter your ${field.label}`;
-    }
-    return `Paste your ${field.label}`;
-  }
-
-  function authLinkLabel(field: { key: string }) {
-    const key = field.key.toLowerCase();
-    if (key.includes("username") || key.includes("password")) return "Open login";
-    if (key.includes("client_id") || key.includes("client_secret")) return "Open settings";
-    return "Get key";
-  }
-
   async function handleInstalledPluginSaveAuth(plugin: InstalledPlugin) {
     if (!plugin.authFields) return;
     authSavingFor = plugin.id;
@@ -439,14 +408,19 @@
     }
   }
 
-  async function handleProviderSaveAuth(plugin: PluginProvider) {
+  async function handleProviderSaveAuth(
+    plugin: PluginProvider,
+    valuesOverride?: Record<string, string | null>,
+  ) {
     authSavingFor = `prismedia:${plugin.id}`;
     error = null;
     try {
-      const values: Record<string, string | null> = {};
-      for (const field of plugin.auth) {
-        const value = authValues[`prismedia:${plugin.id}:${field.key}`]?.trim();
-        if (value) values[field.key] = value;
+      const values: Record<string, string | null> = valuesOverride ?? {};
+      if (!valuesOverride) {
+        for (const field of plugin.auth) {
+          const value = authValues[`prismedia:${plugin.id}:${field.key}`]?.trim();
+          if (value) values[field.key] = value;
+        }
       }
       await savePluginAuth(plugin.id, values);
       pluginProviders = await fetchPluginProviders();
@@ -591,14 +565,6 @@
       }
 
       return matchesProviderCapabilityFilter(plugin);
-    });
-  });
-
-  const filteredPlugins = $derived.by(() => {
-    const q = prismediaSearch.trim().toLowerCase();
-    return visibleProviderPlugins.filter((plugin) => {
-      if (!q) return true;
-      return plugin.name.toLowerCase().includes(q) || plugin.id.toLowerCase().includes(q);
     });
   });
 
@@ -1131,196 +1097,16 @@
 
     <!-- PRISMEDIA COMMUNITY INDEX TAB -->
     {#if tab === "prismedia-index"}
-      <section class="space-y-3">
-        <div class="flex items-center justify-between gap-3 flex-wrap">
-          <p class="text-text-muted text-[0.72rem]">
-            {visibleProviderPlugins.length} plugins available
-          </p>
-          <div class="flex items-center gap-2">
-            <div class="relative">
-              <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-text-disabled" />
-              <input
-                class="control-input pl-8 w-64 py-1.5 text-sm"
-                placeholder="Filter by name or ID..."
-                bind:value={prismediaSearch}
-              />
-              {#if prismediaSearch}
-                <button
-                  onclick={() => (prismediaSearch = "")}
-                  aria-label="Clear search"
-                  class="absolute right-2 top-1/2 -translate-y-1/2 text-text-disabled hover:text-text-muted"
-                >
-                  <X class="h-3 w-3" />
-                </button>
-              {/if}
-            </div>
-            <Button variant="secondary" size="sm" onclick={() => void loadPrismediaIndex()} disabled={prismediaLoading}>
-              {#snippet children()}
-                {#if prismediaLoading}
-                  <Loader2 class="h-3.5 w-3.5 animate-spin" />
-                {:else}
-                  <RefreshCw class="h-3.5 w-3.5" />
-                {/if}
-                Refresh
-              {/snippet}
-            </Button>
-          </div>
-        </div>
-
-        {#if prismediaLoading && !prismediaLoaded}
-          <div class="surface-card no-lift p-12 flex items-center justify-center">
-            <Loader2 class="h-6 w-6 animate-spin text-text-muted" />
-          </div>
-        {:else if filteredPlugins.length === 0}
-          <div class="surface-card no-lift p-8 text-center">
-            <Sparkles class="h-8 w-8 text-text-disabled mx-auto mb-3" />
-            <p class="text-text-muted text-sm">
-              {prismediaSearch
-                ? "No plugins match your search."
-                : prismediaLoaded
-                  ? "No plugins available."
-                  : "Loading plugin index..."}
-            </p>
-          </div>
-        {:else}
-          <div class="space-y-1">
-            {#each filteredPlugins as plugin (plugin.id)}
-              {@const authExpanded = authExpandedFor === `prismedia:${plugin.id}`}
-              {@const hasAuth = plugin.auth.length > 0}
-              <div class="surface-card no-lift px-4 py-3 flex items-center gap-3">
-                <div class="min-w-0 flex-1">
-                  <div class="flex items-center gap-2 flex-wrap">
-                    <p class="text-sm font-medium">{plugin.name}</p>
-                    <span class="text-mono-sm text-text-disabled">v{plugin.version}</span>
-                    {#if plugin.installed}
-                      <Badge variant={plugin.enabled ? "accent" : "default"}>
-                        {#snippet children()}{plugin.enabled ? "Installed" : "Disabled"}{/snippet}
-                      </Badge>
-                    {/if}
-                    {#if plugin.missingAuthKeys.length === 0 && hasAuth}
-                      <Badge variant="success">
-                        {#snippet children()}<Check class="h-2.5 w-2.5" />Auth OK{/snippet}
-                      </Badge>
-                    {:else if plugin.missingAuthKeys.length > 0}
-                      <Badge variant="warning">
-                        {#snippet children()}<AlertCircle class="h-2.5 w-2.5" />Auth Required{/snippet}
-                      </Badge>
-                    {/if}
-                  </div>
-                  <p class="text-text-disabled text-[0.65rem] mt-0.5 font-mono">
-                    {plugin.id} · dotnet-process
-                  </p>
-                  <div class="flex flex-wrap items-center gap-1.5 mt-1.5">
-                    {#each providerSupportLabels(plugin) as label (label)}
-                      <span class="tag-chip-default text-[0.55rem] px-1.5 py-0.5">
-                        {label}
-                      </span>
-                    {/each}
-                  </div>
-                </div>
-                <div class="flex items-center gap-2 shrink-0">
-                  {#if hasAuth && plugin.installed}
-                    <button
-                      onclick={() => toggleProviderAuthExpanded(plugin.id)}
-                      class={"flex items-center gap-1.5 px-2.5 py-1.5 text-xs transition-colors duration-fast " +
-                        (plugin.missingAuthKeys.length > 0 ? "text-status-warning-text" : "text-text-muted hover:text-text-primary")}
-                    >
-                      <KeyRound class="h-3.5 w-3.5" />
-                      {authExpanded ? "Close" : "Configure"}
-                    </button>
-                  {/if}
-                  {#if !plugin.installed || !plugin.enabled}
-                    <button
-                      onclick={() => void handleProviderInstall(plugin)}
-                      disabled={providerInstallingId === plugin.id}
-                      class="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-text-muted hover:text-text-accent transition-colors duration-fast shrink-0 disabled:opacity-40"
-                    >
-                      {#if providerInstallingId === plugin.id}
-                        <Loader2 class="h-3.5 w-3.5 animate-spin" />
-                      {:else}
-                        <Download class="h-3.5 w-3.5" />
-                      {/if}
-                      Install
-                    </button>
-                  {/if}
-                </div>
-              </div>
-
-              {#if authExpanded}
-                <div class="surface-card no-lift border-t border-border-subtle px-4 py-3 space-y-3 bg-surface-1/50">
-                  <h4 class="text-[0.72rem] font-medium text-text-secondary">Authentication</h4>
-                  {#each plugin.auth as field (field.key)}
-                    <div>
-                      <div class="flex items-center justify-between mb-1">
-                        <label class="text-[0.65rem] text-text-disabled" for="community-plugin-auth-{plugin.id}-{field.key}">
-                          {field.label}
-                          {#if field.required}
-                            <span class="text-status-error-text ml-0.5">*</span>
-                          {/if}
-                        </label>
-                        {#if field.url}
-                          <button
-                            type="button"
-                            onclick={() => window.open(field.url ?? "", "_blank", "noopener,noreferrer")}
-                            class="text-[0.6rem] text-text-accent hover:underline"
-                          >
-                            {authLinkLabel(field)}
-                          </button>
-                        {/if}
-                      </div>
-                      <input
-                        id="community-plugin-auth-{plugin.id}-{field.key}"
-                        type="password"
-                        value={authValues[`prismedia:${plugin.id}:${field.key}`] ?? ""}
-                        oninput={(e) => {
-                          authValues = {
-                            ...authValues,
-                            [`prismedia:${plugin.id}:${field.key}`]: (e.currentTarget as HTMLInputElement).value,
-                          };
-                        }}
-                        placeholder={plugin.missingAuthKeys.includes(field.key) ? "Required" : "Saved - enter a new value to replace"}
-                        class="control-input py-1.5 font-mono"
-                      />
-                    </div>
-                  {/each}
-                  <div class="flex items-center justify-end gap-2 pt-1">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onclick={() => {
-                        authExpandedFor = null;
-                        authValues = {};
-                      }}
-                      class="h-auto px-3 py-1.5 text-[0.72rem]"
-                    >
-                      {#snippet children()}Cancel{/snippet}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="primary"
-                      size="sm"
-                      disabled={authSavingFor === `prismedia:${plugin.id}` ||
-                        !plugin.auth.some((field) => authValues[`prismedia:${plugin.id}:${field.key}`]?.trim())}
-                      onclick={() => void handleProviderSaveAuth(plugin)}
-                      class="h-auto gap-1.5 px-3 py-1.5 text-[0.72rem]"
-                    >
-                      {#snippet children()}
-                        {#if authSavingFor === `prismedia:${plugin.id}`}
-                          <Loader2 class="h-3 w-3 animate-spin" />
-                        {:else}
-                          <Save class="h-3 w-3" />
-                        {/if}
-                        Save Credentials
-                      {/snippet}
-                    </Button>
-                  </div>
-                </div>
-              {/if}
-            {/each}
-          </div>
-        {/if}
-      </section>
+      <PrismediaCommunityTab
+        {authSavingFor}
+        installingId={providerInstallingId}
+        loaded={prismediaLoaded}
+        loading={prismediaLoading}
+        onInstall={(plugin) => void handleProviderInstall(plugin)}
+        onRefresh={() => void loadPrismediaIndex()}
+        onSaveAuth={(plugin, values) => void handleProviderSaveAuth(plugin, values)}
+        plugins={visibleProviderPlugins}
+      />
     {/if}
     <!-- STASH COMMUNITY INDEX TAB -->
     {#if tab === "stash-index" && !isSfw}
