@@ -41,7 +41,7 @@
     childMeta,
     tagRelationshipForTitle,
   } from "./identify-review-helpers";
-  import type { EntityMetadataProposal } from "$lib/api/identify";
+  import type { EntityMetadataProposal } from "$lib/api/identify-types";
   import type { EntityCard, EntityDetailCard } from "$lib/api/entities";
   import { useIdentifyStore } from "./identify-store.svelte";
 

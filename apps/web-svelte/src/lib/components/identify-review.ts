@@ -8,7 +8,7 @@ import type {
   EntityMetadataPatch,
   EntityMetadataProposal,
   ImageCandidate,
-} from "$lib/api/identify";
+} from "$lib/api/identify-types";
 import { CAPABILITY_KIND } from "$lib/entities/entity-codes";
 
 export const reviewFieldKeys = [

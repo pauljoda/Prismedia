@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { EntityMetadataProposal } from "$lib/api/identify";
+import type { EntityMetadataProposal } from "$lib/api/identify-types";
 import type { EntityCard as EntityDetailCard } from "$lib/api/generated/model";
 import {
   buildRootReviewApplyPayload,

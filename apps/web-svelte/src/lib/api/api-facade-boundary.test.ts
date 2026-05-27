@@ -8,7 +8,7 @@ const scannedExtensions = new Set([".svelte", ".ts", ".js"]);
 
 const trackedFacades = [
   { modulePath: "$lib/api/prismedia", currentImporters: 0 },
-  { modulePath: "$lib/api/identify", currentImporters: 14 },
+  { modulePath: "$lib/api/identify", currentImporters: 7 },
 ] as const;
 
 describe("frontend API facade boundary", () => {
@@ -22,7 +22,7 @@ describe("frontend API facade boundary", () => {
         }))
         .filter(({ relativePath }) => relativePath !== guardrailFile)
         .filter(({ relativePath }) => !relativePath.startsWith("lib/api/generated/"))
-        .filter(({ absolutePath }) => readFileSync(absolutePath, "utf8").includes(modulePath))
+        .filter(({ absolutePath }) => importsModule(readFileSync(absolutePath, "utf8"), modulePath))
         .map(({ relativePath }) => relativePath)
         .sort((left, right) => left.localeCompare(right));
 
@@ -33,6 +33,10 @@ describe("frontend API facade boundary", () => {
     },
   );
 });
+
+function importsModule(source: string, modulePath: string): boolean {
+  return source.includes(`"${modulePath}"`) || source.includes(`'${modulePath}'`);
+}
 
 function sourceFiles(directory: string): string[] {
   return readdirSync(directory)

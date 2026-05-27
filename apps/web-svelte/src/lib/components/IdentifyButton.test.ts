@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import IdentifyButtonHarness from "./IdentifyButton.test-harness.svelte";
-import type { IdentifyQueueItem, PluginProvider } from "$lib/api/identify";
+import type { IdentifyQueueItem, PluginProvider } from "$lib/api/identify-types";
 
 const goto = vi.fn();
 const fetchIdentifyProviders = vi.fn();

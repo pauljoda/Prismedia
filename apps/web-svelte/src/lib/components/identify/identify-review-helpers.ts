@@ -2,7 +2,7 @@ import type {
   CreditPatch,
   EntityMetadataProposal,
   ImageCandidate,
-} from "$lib/api/identify";
+} from "$lib/api/identify-types";
 import type { EntityThumbnailCard, EntityThumbnailMetaIcon } from "$lib/entities/entity-thumbnail";
 import {
   reviewableImages,
