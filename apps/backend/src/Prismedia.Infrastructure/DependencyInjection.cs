@@ -136,23 +136,25 @@ public static class DependencyInjection {
                 provider.GetRequiredService<AssetPathService>(),
                 provider.GetRequiredService<SettingsService>(),
                 provider.GetRequiredService<MediaToolOptions>()));
-        services.AddScoped<ILibraryScanPersistence, LibraryScanPersistenceService>();
+        services.AddScoped<LibraryScanPersistenceService>();
+        services.AddScoped<ILibraryScanPersistence>(provider =>
+            provider.GetRequiredService<LibraryScanPersistenceService>());
         services.AddScoped<ILibraryScanRootPersistence>(provider =>
-            provider.GetRequiredService<ILibraryScanPersistence>());
+            provider.GetRequiredService<LibraryScanPersistenceService>());
         services.AddScoped<IVideoScanPersistence>(provider =>
-            provider.GetRequiredService<ILibraryScanPersistence>());
+            provider.GetRequiredService<LibraryScanPersistenceService>());
         services.AddScoped<IImageGalleryScanPersistence>(provider =>
-            provider.GetRequiredService<ILibraryScanPersistence>());
+            provider.GetRequiredService<LibraryScanPersistenceService>());
         services.AddScoped<IAudioScanPersistence>(provider =>
-            provider.GetRequiredService<ILibraryScanPersistence>());
+            provider.GetRequiredService<LibraryScanPersistenceService>());
         services.AddScoped<IBookScanPersistence>(provider =>
-            provider.GetRequiredService<ILibraryScanPersistence>());
+            provider.GetRequiredService<LibraryScanPersistenceService>());
         services.AddScoped<IDownstreamNeedsPersistence>(provider =>
-            provider.GetRequiredService<ILibraryScanPersistence>());
+            provider.GetRequiredService<LibraryScanPersistenceService>());
         services.AddScoped<IMediaProcessingStatePersistence>(provider =>
-            provider.GetRequiredService<ILibraryScanPersistence>());
+            provider.GetRequiredService<LibraryScanPersistenceService>());
         services.AddScoped<IEntityRefreshTreePersistence>(provider =>
-            provider.GetRequiredService<ILibraryScanPersistence>());
+            provider.GetRequiredService<LibraryScanPersistenceService>());
         services.AddScoped<IMaintenancePersistence>(provider =>
             new MaintenancePersistenceService(provider.GetRequiredService<PrismediaDbContext>(), dataDir));
         services.AddScoped<ICollectionRuleEngine, CollectionRuleEngine>();
