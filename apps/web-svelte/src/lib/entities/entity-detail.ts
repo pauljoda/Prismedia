@@ -7,7 +7,7 @@ import {
   isNsfw,
   type EntityCapabilityKind,
 } from "$lib/api/capabilities";
-import { numberValue, formatDurationString, durationToSeconds } from "$lib/utils/format";
+import { numberValue, formatDurationString, durationToSeconds, formatResolutionLabel } from "$lib/utils/format";
 import type {
   CapabilityFingerprintsItem as EntityFingerprint,
   CapabilityMarkersItem as EntityMarker,
@@ -185,11 +185,8 @@ export interface EntityDetailCardFull extends EntityDetailCard {
 
 
 function formatResolution(width: number, height: number): string {
-  if (height >= 2160) return `${width}×${height} (4K)`;
-  if (height >= 1440) return `${width}×${height} (1440p)`;
-  if (height >= 1080) return `${width}×${height} (1080p)`;
-  if (height >= 720) return `${width}×${height} (720p)`;
-  return `${width}×${height}`;
+  const label = formatResolutionLabel(height);
+  return label ? `${width}×${height} (${label})` : `${width}×${height}`;
 }
 
 function formatDateCode(code: string): string {

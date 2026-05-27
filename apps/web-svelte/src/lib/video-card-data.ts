@@ -7,6 +7,7 @@ import {
   getThumbnailUrl,
 } from "$lib/api/capabilities";
 import { apiAssetUrl as toApiUrl } from "$lib/api/orval-fetch";
+import { formatResolutionLabel } from "$lib/utils/format";
 
 export interface VideoCardPerformer {
   name: string;
@@ -84,12 +85,7 @@ function formatTimeSpan(ts: string): string {
 function formatResolution(width: number | string | null, height: number | string | null): string | undefined {
   const h = typeof height === "number" ? height : parseInt(String(height), 10);
   if (!h || isNaN(h)) return undefined;
-  if (h >= 2160) return "4K";
-  if (h >= 1440) return "1440p";
-  if (h >= 1080) return "1080p";
-  if (h >= 720) return "720p";
-  if (h >= 480) return "480p";
-  return `${h}p`;
+  return formatResolutionLabel(h) ?? undefined;
 }
 
 export function entityCardToVideoCardData(item: EntityCard): VideoCardData {

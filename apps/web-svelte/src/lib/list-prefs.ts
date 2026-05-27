@@ -16,6 +16,12 @@ export function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
+export type SortDir = "asc" | "desc";
+
+export interface DisplayFilterLookups {
+  studios?: { id: string; name: string }[];
+}
+
 const ONE_YEAR = 60 * 60 * 24 * 365;
 
 export interface ListPrefsConfig<T> {

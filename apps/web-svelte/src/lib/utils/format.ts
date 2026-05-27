@@ -49,3 +49,27 @@ export function durationToSeconds(value: string | null | undefined): number | nu
 export function normalized(value: string | null | undefined): string {
   return (value ?? "").toLowerCase().replaceAll(".", "").replaceAll("-", "").replaceAll("_", "");
 }
+
+/** Format an ISO timestamp as a relative time string ("just now", "3m ago", "2h ago", "5d ago"). */
+export function formatRelativeTime(value: string | null, short = false): string {
+  if (!value) return "Never";
+  const diffMs = Date.now() - new Date(value).getTime();
+  const diffMinutes = Math.max(0, Math.floor(diffMs / 60_000));
+  if (diffMinutes < 1) return short ? "now" : "just now";
+  if (diffMinutes < 60) return short ? `${diffMinutes}m` : `${diffMinutes}m ago`;
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return short ? `${diffHours}h` : `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  return short ? `${diffDays}d` : `${diffDays}d ago`;
+}
+
+/** Map a video height to a short resolution label ("4K", "1080p", etc.). */
+export function formatResolutionLabel(height: number): string | null {
+  if (!Number.isFinite(height) || height <= 0) return null;
+  if (height >= 2160) return "4K";
+  if (height >= 1440) return "1440p";
+  if (height >= 1080) return "1080p";
+  if (height >= 720) return "720p";
+  if (height >= 480) return "480p";
+  return `${height}p`;
+}

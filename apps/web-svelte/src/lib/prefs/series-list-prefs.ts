@@ -6,7 +6,7 @@
  * across devices.
  */
 
-import { isRecord } from "$lib/list-prefs";
+import { isRecord, type SortDir, type DisplayFilterLookups } from "$lib/list-prefs";
 
 export const SERIES_LIST_PREFS_KEY = "series:listPrefs";
 export const SERIES_PRESETS_KEY = "series:filterPresets";
@@ -18,7 +18,6 @@ export type SeriesSortOption =
   | "rating"
   | "videos"
   | "randomized";
-export type SortDir = "asc" | "desc";
 
 export interface SeriesListPrefsActiveFilter {
   label: string;
@@ -160,10 +159,6 @@ export function seriesListPrefsToFetchParams(
     organized: organized === "true" || organized === "false" ? organized : undefined,
     nsfw,
   };
-}
-
-export interface DisplayFilterLookups {
-  studios?: { id: string; name: string }[];
 }
 
 export function formatSeriesFilterValue(

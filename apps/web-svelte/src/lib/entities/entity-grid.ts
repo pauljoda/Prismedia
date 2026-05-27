@@ -7,7 +7,7 @@ import {
   isNsfw,
   type EntityCapabilityKind,
 } from "$lib/api/capabilities";
-import { numberValue, formatDurationString, durationToSeconds, normalized } from "$lib/utils/format";
+import { numberValue, formatDurationString, durationToSeconds, normalized, formatResolutionLabel } from "$lib/utils/format";
 import type { EntityCard, EntityCapability } from "$lib/api/generated/model";
 import type { EntityThumbnail } from "$lib/api/generated/model";
 import {
@@ -107,13 +107,8 @@ function isBitrateLabel(label: string): boolean {
 }
 
 
-function formatResolutionLabel(width: number, height: number): string {
-  if (height >= 2160) return "4K";
-  if (height >= 1440) return "1440p";
-  if (height >= 1080) return "1080p";
-  if (height >= 720) return "720p";
-  if (height >= 480) return "480p";
-  return `${width}×${height}`;
+function formatResolutionLabelFull(width: number, height: number): string {
+  return formatResolutionLabel(height) ?? `${width}×${height}`;
 }
 
 type EntityGridSourceEntity = EntityCard | EntityThumbnail;
@@ -245,7 +240,7 @@ function metaForEntity(entity: EntityGridSourceEntity): EntityThumbnailCard["met
   const customOverlay = customOverlayForEntity(entity);
 
   if (duration) meta.push({ icon: "duration", label: duration });
-  if (width && height) meta.push({ icon: entity.kind === ENTITY_KIND.video ? "video" : "image", label: formatResolutionLabel(width, height) });
+  if (width && height) meta.push({ icon: entity.kind === ENTITY_KIND.video ? "video" : "image", label: formatResolutionLabelFull(width, height) });
   if (entity.kind === ENTITY_KIND.video && technical?.codec) {
     meta.push({ icon: "video", label: technical.codec.toUpperCase() });
   }

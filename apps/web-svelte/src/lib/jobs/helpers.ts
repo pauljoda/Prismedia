@@ -1,5 +1,6 @@
 import type { LedStatus, BadgeVariant } from "@prismedia/ui-svelte";
 import type { JobRun, QueueSummary } from "./models";
+import { formatRelativeTime } from "$lib/utils/format";
 import {
   Cpu,
   BookOpen,
@@ -35,21 +36,7 @@ export function formatStamp(value: string | null) {
   return new Date(value).toLocaleString();
 }
 
-export function formatRelativeTime(value: string | null) {
-  if (!value) return "Never";
-
-  const diffMs = Date.now() - new Date(value).getTime();
-  const diffMinutes = Math.max(0, Math.floor(diffMs / 60_000));
-
-  if (diffMinutes < 1) return "just now";
-  if (diffMinutes < 60) return `${diffMinutes}m ago`;
-
-  const diffHours = Math.floor(diffMinutes / 60);
-  if (diffHours < 24) return `${diffHours}h ago`;
-
-  const diffDays = Math.floor(diffHours / 24);
-  return `${diffDays}d ago`;
-}
+export { formatRelativeTime } from "$lib/utils/format";
 
 export function formatElapsed(job: JobRun): string {
   const anchor = job.startedAt ?? job.createdAt;
@@ -165,14 +152,7 @@ export function formatDuration(job: JobRun): string {
 }
 
 export function formatRelativeTimeShort(value: string | null): string {
-  if (!value) return "Never";
-  const diffMs = Date.now() - new Date(value).getTime();
-  const diffMinutes = Math.max(0, Math.floor(diffMs / 60_000));
-  if (diffMinutes < 1) return "now";
-  if (diffMinutes < 60) return `${diffMinutes}m`;
-  const diffHours = Math.floor(diffMinutes / 60);
-  if (diffHours < 24) return `${diffHours}h`;
-  return `${Math.floor(diffHours / 24)}d`;
+  return formatRelativeTime(value, true);
 }
 
 export function errorFingerprint(job: Pick<JobRun, "queueName" | "error">): string {

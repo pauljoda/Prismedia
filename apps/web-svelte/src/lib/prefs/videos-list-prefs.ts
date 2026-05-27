@@ -11,7 +11,7 @@
  * `createServerPresets`, so they follow you across devices and browsers.
  */
 
-import { isRecord } from "$lib/list-prefs";
+import { isRecord, type SortDir, type DisplayFilterLookups } from "$lib/list-prefs";
 
 export const VIDEOS_LIST_PREFS_KEY = "videos:listPrefs";
 export const VIDEOS_PRESETS_KEY = "videos:filterPresets";
@@ -27,7 +27,6 @@ export type SortOption =
   | "plays"
   | "episode"
   | "randomized";
-export type SortDir = "asc" | "desc";
 
 export interface VideosListPrefsActiveFilter {
   label: string;
@@ -226,15 +225,6 @@ export function videosListPrefsToFetchParams(
     codec: codecFilters.length > 0 ? codecFilters : undefined,
     nsfw,
   };
-}
-
-/**
- * Types of filter whose value is an opaque id (studio, performer-by-id)
- * and must be translated to a display name before rendering as a chip
- * on the toolbar.
- */
-export interface DisplayFilterLookups {
-  studios?: { id: string; name: string }[];
 }
 
 const DURATION_LABELS: Record<string, string> = {
