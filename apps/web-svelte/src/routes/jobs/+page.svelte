@@ -19,9 +19,9 @@
     clearJobFailures,
     createJob,
     fetchJobs,
-    fetchSettingsValues,
     fetchWorkerHealth,
-  } from "$lib/api/prismedia";
+  } from "$lib/api/jobs";
+  import { fetchSettingsValues } from "$lib/api/settings";
   import { settingKeys, valuesToLibrarySettings } from "$lib/settings/app-settings";
   import type { JobRun, JobsDashboard } from "$lib/jobs/models";
   import { useNsfw } from "$lib/nsfw/store.svelte";

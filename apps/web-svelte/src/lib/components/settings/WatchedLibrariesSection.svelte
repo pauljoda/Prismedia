@@ -24,7 +24,7 @@
     type LibraryBrowse,
     type LibraryRoot,
   } from "$lib/api/settings";
-  import { createJob } from "$lib/api/prismedia";
+  import { createJob } from "$lib/api/jobs";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import { entityTerms } from "$lib/terminology";
   import ToggleCard from "./ToggleCard.svelte";

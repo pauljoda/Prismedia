@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Loader2, RefreshCw, Wrench } from "@lucide/svelte";
   import { Panel } from "@prismedia/ui-svelte";
-  import { rebuildPreviews, backfillFingerprints } from "$lib/api/prismedia";
+  import { rebuildPreviews, backfillFingerprints } from "$lib/api/jobs";
 
   let rebuilding = $state(false);
   let result = $state<string | null>(null);

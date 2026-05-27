@@ -10,7 +10,8 @@ public static class HealthEndpoints {
         routes.MapGet("/api/health", () =>
             Results.Ok(new HealthResponse("ok", "dotnet")))
             .WithName("GetHealth")
-            .WithSummary("Reports that the Prismedia .NET backend is ready to accept requests.");
+            .WithSummary("Reports that the Prismedia .NET backend is ready to accept requests.")
+            .Produces<HealthResponse>();
 
         routes.MapGet("/api/health/worker", async (
             IWorkerHeartbeatStore heartbeatStore,
@@ -26,7 +27,8 @@ public static class HealthEndpoints {
                 (int)WorkerHeartbeatStaleAfter.TotalSeconds));
         })
             .WithName("GetWorkerHealth")
-            .WithSummary("Reports whether the Prismedia worker has published a fresh heartbeat.");
+            .WithSummary("Reports whether the Prismedia worker has published a fresh heartbeat.")
+            .Produces<WorkerHealthResponse>();
 
         return routes;
     }

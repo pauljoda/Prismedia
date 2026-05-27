@@ -1,5 +1,5 @@
 import type { LedStatus } from "@prismedia/ui-svelte";
-import type { WorkerHealthResponse } from "$lib/api/prismedia";
+import type { WorkerHealthResponse } from "$lib/api/jobs";
 
 export type WorkerHealthBadgeStatus = "checking" | "online" | "offline";
 

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Prismedia.Application.Jobs;
+using Prismedia.Contracts.Jobs;
 using Prismedia.Contracts.System;
 
 namespace Prismedia.Api.Endpoints;
@@ -17,7 +18,9 @@ internal static class JobFailureEndpoints {
                 return Results.Ok(await jobs.ClearFailuresAsync(jobType, cancellationToken));
             })
             .WithName("ClearJobFailures")
-            .WithSummary("Clears failed job runs from the operations dashboard.");
+            .WithSummary("Clears failed job runs from the operations dashboard.")
+            .Produces<JobFailureClearResponse>()
+            .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
 
         return group;
     }

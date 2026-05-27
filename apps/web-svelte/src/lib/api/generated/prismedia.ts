@@ -12,6 +12,7 @@ import type {
   AudioTrackDetail,
   BookDetail,
   BrowseLibraryPathParams,
+  BulkJobResponse,
   CancelJobsParams,
   ClearJobFailuresParams,
   CollectionDetail,
@@ -60,13 +61,16 @@ import type {
   GetVideoSeasonParams,
   GetVideoSeriesParams,
   HeadFileContentParams,
+  HealthResponse,
   IdentifyBulkStartRequest,
   IdentifyEntityParams,
   IdentifyEntityRequest,
   IdentifyQueueItem,
   IdentifyQueueSearchRequest,
   ImageDetail,
+  JobCancelResponse,
   JobCreateResponse,
+  JobFailureClearResponse,
   JobListResponse,
   LibraryBrowseResponse,
   LibraryConfigResponse,
@@ -117,13 +121,14 @@ import type {
   TagDetail,
   VideoDetail,
   VideoSeasonDetail,
-  VideoSeriesDetail
+  VideoSeriesDetail,
+  WorkerHealthResponse
 } from './model';
 
 import { orvalFetch } from '../orval-fetch';
 
 export type getHealthResponse200 = {
-  data: void
+  data: HealthResponse
   status: 200
 }
 
@@ -159,7 +164,7 @@ export const getHealth = async ( options?: RequestInit): Promise<getHealthRespon
 
 
 export type getWorkerHealthResponse200 = {
-  data: void
+  data: WorkerHealthResponse
   status: 200
 }
 
@@ -3324,16 +3329,23 @@ export const listJobs = async (params?: ListJobsParams, options?: RequestInit): 
 
 
 export type cancelJobsResponse200 = {
-  data: void
+  data: JobCancelResponse
   status: 200
+}
+
+export type cancelJobsResponse400 = {
+  data: ApiProblem
+  status: 400
 }
 
 export type cancelJobsResponseSuccess = (cancelJobsResponse200) & {
   headers: Headers;
 };
-;
+export type cancelJobsResponseError = (cancelJobsResponse400) & {
+  headers: Headers;
+};
 
-export type cancelJobsResponse = (cancelJobsResponseSuccess)
+export type cancelJobsResponse = (cancelJobsResponseSuccess | cancelJobsResponseError)
 
 export const getCancelJobsUrl = (params?: CancelJobsParams,) => {
   const normalizedParams = new URLSearchParams();
@@ -3366,12 +3378,12 @@ export const cancelJobs = async (params?: CancelJobsParams, options?: RequestIni
 
 
 
-export type createJobResponse200 = {
-  data: void
-  status: 200
+export type createJobResponse202 = {
+  data: JobCreateResponse
+  status: 202
 }
 
-export type createJobResponseSuccess = (createJobResponse200) & {
+export type createJobResponseSuccess = (createJobResponse202) & {
   headers: Headers;
 };
 ;
@@ -3403,7 +3415,7 @@ export const createJob = async (type: string, options?: RequestInit): Promise<cr
 
 
 export type cancelJobRunResponse200 = {
-  data: void
+  data: JobCancelResponse
   status: 200
 }
 
@@ -3439,16 +3451,23 @@ export const cancelJobRun = async (id: string, options?: RequestInit): Promise<c
 
 
 export type clearJobFailuresResponse200 = {
-  data: void
+  data: JobFailureClearResponse
   status: 200
+}
+
+export type clearJobFailuresResponse400 = {
+  data: ApiProblem
+  status: 400
 }
 
 export type clearJobFailuresResponseSuccess = (clearJobFailuresResponse200) & {
   headers: Headers;
 };
-;
+export type clearJobFailuresResponseError = (clearJobFailuresResponse400) & {
+  headers: Headers;
+};
 
-export type clearJobFailuresResponse = (clearJobFailuresResponseSuccess)
+export type clearJobFailuresResponse = (clearJobFailuresResponseSuccess | clearJobFailuresResponseError)
 
 export const getClearJobFailuresUrl = (params?: ClearJobFailuresParams,) => {
   const normalizedParams = new URLSearchParams();
@@ -3482,7 +3501,7 @@ export const clearJobFailures = async (params?: ClearJobFailuresParams, options?
 
 
 export type rebuildPreviewsResponse200 = {
-  data: void
+  data: BulkJobResponse
   status: 200
 }
 
@@ -3518,7 +3537,7 @@ export const rebuildPreviews = async ( options?: RequestInit): Promise<rebuildPr
 
 
 export type backfillFingerprintsResponse200 = {
-  data: void
+  data: BulkJobResponse
   status: 200
 }
 
