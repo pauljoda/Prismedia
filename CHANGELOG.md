@@ -26,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Changed
+- Refined the collection editor layout with a cleaner header, combined identity and playback panel, and rule previews shown through the shared entity grid.
 - Image and audio scans now keep root-level loose files standalone while turning folders into nested galleries and audio libraries.
 - Mobile entity grids now default unsaved thumbnail sizing to the largest card size while preserving saved user choices.
 - Relationship people sections now use contextual labels such as People, Artists, and Performers outside video cast and crew pages.
