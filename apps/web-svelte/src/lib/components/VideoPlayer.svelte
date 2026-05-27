@@ -20,11 +20,9 @@
     Gauge,
     Loader,
     Maximize,
-    Pause,
     Play,
-    RotateCcw,
-    RotateCw,
     PanelRightOpen,
+    RotateCw,
     Settings2,
     Sliders,
     Volume2,
@@ -104,6 +102,7 @@
   } from "./video-player-types";
   import AssSubtitleOverlay from "./AssSubtitleOverlay.svelte";
   import FilmStrip from "./FilmStrip.svelte";
+  import VideoTransportControls from "./VideoTransportControls.svelte";
 
   interface Props {
     src?: string;
@@ -1659,51 +1658,13 @@
           showControls ? "opacity-100" : "opacity-0",
         )}
       >
-      <div class="pointer-events-auto flex items-center gap-4">
-        <button
-          type="button"
-          onclick={(event) => {
-            event.stopPropagation();
-            seek(-10);
-          }}
-          class="player-skip-button relative flex h-8 w-8 items-center justify-center rounded-full text-white/72 transition-all hover:text-white"
-          title="Skip back 10s"
-          aria-label="Skip back 10s"
-        >
-          <RotateCcw class="h-4 w-4" />
-          <span class="absolute mt-[1px] text-[0.42rem] font-bold">10</span>
-        </button>
-        <button
-          type="button"
-          onclick={(event) => {
-            event.stopPropagation();
-            togglePlay();
-          }}
-          class="player-play-button flex h-11 w-11 items-center justify-center rounded-full text-accent-950 transition-all"
-          aria-label={playing ? "Pause" : "Play"}
-        >
-          {#if buffering}
-            <Loader class="h-4 w-4 animate-spin" />
-          {:else if playing}
-            <Pause class="h-4 w-4" fill="currentColor" />
-          {:else}
-            <span class="play-glyph" aria-hidden="true"></span>
-          {/if}
-        </button>
-        <button
-          type="button"
-          onclick={(event) => {
-            event.stopPropagation();
-            seek(10);
-          }}
-          class="player-skip-button relative flex h-8 w-8 items-center justify-center rounded-full text-white/72 transition-all hover:text-white"
-          title="Skip forward 10s"
-          aria-label="Skip forward 10s"
-        >
-          <RotateCw class="h-4 w-4" />
-          <span class="absolute mt-[1px] text-[0.42rem] font-bold">10</span>
-        </button>
-      </div>
+      <VideoTransportControls
+        variant="mobile"
+        {buffering}
+        {playing}
+        onSeek={seek}
+        onTogglePlay={togglePlay}
+      />
       </div>
 
       <div
@@ -1737,42 +1698,12 @@
 
         <div class="pointer-events-auto order-1 flex flex-col gap-2 sm:order-2 sm:flex-row sm:items-center sm:justify-between">
           <div class="flex w-full items-center justify-end gap-2 sm:w-auto sm:justify-start sm:gap-2.5">
-            <div class="hidden items-center gap-2.5 sm:flex">
-              <button
-                type="button"
-                onclick={() => seek(-10)}
-                class="player-skip-button relative flex h-8 w-8 items-center justify-center rounded-full text-white/70 transition-all hover:text-white"
-                title="Skip back 10s"
-                aria-label="Skip back 10s"
-              >
-                <RotateCcw class="h-4 w-4" />
-                <span class="absolute mt-[1px] text-[0.45rem] font-bold">10</span>
-              </button>
-              <button
-                type="button"
-                onclick={togglePlay}
-                class="player-play-button flex h-10 w-10 items-center justify-center rounded-full text-accent-950 transition-all"
-                aria-label={playing ? "Pause" : "Play"}
-              >
-                {#if buffering}
-                  <Loader class="h-4 w-4 animate-spin" />
-                {:else if playing}
-                  <Pause class="h-4 w-4" fill="currentColor" />
-                {:else}
-                  <span class="play-glyph" aria-hidden="true"></span>
-                {/if}
-              </button>
-              <button
-                type="button"
-                onclick={() => seek(10)}
-                class="player-skip-button relative flex h-8 w-8 items-center justify-center rounded-full text-white/70 transition-all hover:text-white"
-                title="Skip forward 10s"
-                aria-label="Skip forward 10s"
-              >
-                <RotateCw class="h-4 w-4" />
-                <span class="absolute mt-[1px] text-[0.45rem] font-bold">10</span>
-              </button>
-            </div>
+            <VideoTransportControls
+              {buffering}
+              {playing}
+              onSeek={seek}
+              onTogglePlay={togglePlay}
+            />
 
             <div class="hidden sm:flex items-center gap-2 text-white/80">
               <button type="button" onclick={toggleMute} class="transition-colors hover:text-white" aria-label={muted ? "Unmute" : "Mute"}>
@@ -2121,42 +2052,6 @@
       );
   }
 
-  .player-play-button {
-    background: linear-gradient(135deg, var(--color-accent-300) 0%, var(--color-accent-500) 100%);
-    border: 1px solid rgba(255, 255, 255, 0.20);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.25),
-      0 0 0 2px rgba(196, 154, 90, 0.25),
-      0 0 24px rgba(196, 154, 90, 0.40),
-      0 0 48px rgba(196, 154, 90, 0.15);
-  }
-
-  .player-play-button:hover {
-    background: linear-gradient(135deg, var(--color-accent-200) 0%, var(--color-accent-400) 100%);
-    border-color: rgba(255, 255, 255, 0.30);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.30),
-      0 0 0 2px rgba(196, 154, 90, 0.40),
-      0 0 32px rgba(196, 154, 90, 0.55),
-      0 0 64px rgba(196, 154, 90, 0.20);
-  }
-
-  .player-skip-button {
-    backdrop-filter: blur(var(--glass-blur-sm));
-    -webkit-backdrop-filter: blur(var(--glass-blur-sm));
-    background: var(--color-white-overlay);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
-  }
-
-  .player-skip-button:hover {
-    background: rgba(255, 255, 255, 0.14);
-    border-color: rgba(255, 255, 255, 0.22);
-    box-shadow:
-      0 0 12px rgba(255, 255, 255, 0.08),
-      0 2px 8px rgba(0, 0, 0, 0.30);
-  }
-
   .player-mode-chip {
     backdrop-filter: blur(var(--glass-blur-sm));
     -webkit-backdrop-filter: blur(var(--glass-blur-sm));
@@ -2329,35 +2224,6 @@
       inset 0 0 14px rgba(196, 154, 90, 0.18),
       0 0 20px rgba(196, 154, 90, 0.34);
     transform: translateY(1px) scale(0.94);
-  }
-
-  .play-glyph {
-    display: block;
-    height: 0.875rem;
-    position: relative;
-    width: 0.875rem;
-  }
-
-  .play-glyph::before {
-    border-bottom: 0.36rem solid transparent;
-    border-left: 0.56rem solid currentColor;
-    border-top: 0.36rem solid transparent;
-    content: "";
-    left: 50%;
-    position: absolute;
-    top: 50%;
-    transform: translate(-42%, -50%);
-  }
-
-  .play-glyph-lg {
-    height: 1rem;
-    width: 1rem;
-  }
-
-  .play-glyph-lg::before {
-    border-bottom-width: 0.42rem;
-    border-left-width: 0.64rem;
-    border-top-width: 0.42rem;
   }
 
   .sidecar-control-button {
