@@ -26,63 +26,20 @@ export function getEntityHref(item: CollectionItem, from?: string): string {
 }
 
 export function getEntityTitle(item: CollectionItem): string {
-  const entity = item.entity as Record<string, unknown> | undefined;
+  const entity = item.entity;
   if (!entity) return "Unknown";
-  return (entity.title as string) ?? "Untitled";
+  return entity.title ?? "Untitled";
 }
 
 export function getEntityThumbnail(item: CollectionItem): string | null {
-  const entity = item.entity as Record<string, unknown> | undefined;
+  const entity = item.entity;
   if (!entity) return null;
-  switch (item.entityType) {
-    case "video":
-      return ((entity.cardThumbnailPath as string | null) ??
-        (entity.thumbnailPath as string | null)) as string | null;
-    case "gallery":
-      return (entity.coverImagePath as string | null) ?? null;
-    case "book":
-      return (entity.coverImagePath as string | null) ?? null;
-    case "image":
-      return (entity.thumbnailPath as string | null) ?? null;
-    case "audio-track":
-      return null;
-    default:
-      return null;
-  }
+  return entity.coverUrl;
 }
 
 export function getEntityMeta(item: CollectionItem): string | null {
-  const entity = item.entity as Record<string, unknown> | undefined;
+  const entity = item.entity;
   if (!entity) return null;
-  switch (item.entityType) {
-    case "video": {
-      const duration = entity.durationFormatted as string | null;
-      const resolution = entity.resolution as string | null;
-      return [duration, resolution].filter(Boolean).join(" · ");
-    }
-    case "gallery": {
-      const count = entity.imageCount as number | null;
-      return count ? `${count} images` : null;
-    }
-    case "book": {
-      const chapters = entity.chapterCount as number | null;
-      const pages = entity.pageCount as number | null;
-      if (chapters) return `${chapters} chapter${chapters === 1 ? "" : "s"}`;
-      return pages ? `${pages} pages` : null;
-    }
-    case "image": {
-      const w = entity.width as number | null;
-      const h = entity.height as number | null;
-      return w && h ? `${w}×${h}` : null;
-    }
-    case "audio-track": {
-      const d = entity.duration as number | null;
-      if (!d) return null;
-      const m = Math.floor(d / 60);
-      const s = Math.floor(d % 60);
-      return `${m}:${String(s).padStart(2, "0")}`;
-    }
-    default:
-      return null;
-  }
+  const labels = entity.meta.map((meta) => meta.label).filter(Boolean);
+  return labels.length > 0 ? labels.join(" · ") : null;
 }

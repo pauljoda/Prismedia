@@ -2,6 +2,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using Prismedia.Application.Collections;
 using Prismedia.Domain.Entities;
 using Prismedia.Application.Entities;
 using Prismedia.Application.Files;
@@ -159,6 +160,7 @@ public static class DependencyInjection {
             new MaintenancePersistenceService(provider.GetRequiredService<PrismediaDbContext>(), dataDir));
         services.AddScoped<ICollectionRuleEngine, CollectionRuleEngine>();
         services.AddScoped<ICollectionRefreshPersistence, CollectionRefreshPersistenceService>();
+        services.AddScoped<ICollectionItemReadService, CollectionItemReadService>();
     }
 
     private static void RegisterEntities(IServiceCollection services, string cacheDir) {

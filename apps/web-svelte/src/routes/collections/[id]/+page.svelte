@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { page } from "$app/state";
-  import { Layers } from "@lucide/svelte";
+  import { Layers, Play, Shuffle } from "@lucide/svelte";
   import {
     updateEntityRating,
     updateEntityFlags,
@@ -9,38 +9,40 @@
   } from "$lib/api/entity-mutations";
   import { getCollection } from "$lib/api/generated/prismedia";
   import type { CollectionDetail } from "$lib/api/generated/model";
+  import { fetchCollectionItems } from "$lib/api/collections";
   import { unwrapGenerated } from "$lib/api/generated-response";
   import { getCapability } from "$lib/api/capabilities";
   import {
     toggleOptimisticEntityFlag,
     updateOptimisticEntityRating,
   } from "$lib/entities/entity-detail-state";
-  import { getAllChildIds } from "$lib/entities/entity-children";
   import { entityCardToDetailCard, type EntityDetailCardFull } from "$lib/entities/entity-detail";
-  import { resolveEntityHref } from "$lib/entities/entity-routes";
-  import {
-    fetchOrderedEntityThumbnails,
-    thumbnailsToCards,
-  } from "$lib/entities/entity-relationship-thumbnails";
+  import { entityCardToThumbnailCard } from "$lib/entities/entity-grid";
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
+  import type { CollectionItem } from "$lib/collections/models";
+  import { getEntityHref } from "$lib/components/collections/collection-item-helpers";
   import EntityDetail, {
     type EntityMetadataUpdateRequest,
   } from "$lib/components/entities/EntityDetail.svelte";
   import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
+  import { durationToSeconds } from "$lib/utils/format";
   import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import { useAppChrome } from "$lib/stores/app-chrome.svelte";
+  import { usePlaylist } from "$lib/stores/playlist.svelte";
 
   type LoadState = "loading" | "ready" | "error";
 
   const nsfw = useNsfw();
   const appChrome = useAppChrome();
+  const playlist = usePlaylist();
 
   let loadState: LoadState = $state("loading");
   let collection = $state<CollectionDetail | null>(null);
   let errorMessage: string | null = $state(null);
   let lastNsfwMode = $state(nsfw.mode);
   let ratingBusy = $state(false);
+  let collectionItems = $state.raw<CollectionItem[]>([]);
   let itemCards = $state<EntityThumbnailCard[]>([]);
 
   const card = $derived.by((): EntityDetailCardFull | null => {
@@ -72,10 +74,12 @@
     try {
       const id = page.params.id ?? "";
       const nextCollection = unwrapGenerated<CollectionDetail>(await getCollection(id), `Failed to fetch collection ${id}`);
+      const nextItems = await fetchCollectionItems(id);
       collection = nextCollection;
-      itemCards = thumbnailsToCards(await fetchOrderedEntityThumbnails(getAllChildIds(nextCollection)), {
-        hrefFor: (thumbnail) => resolveEntityHref(thumbnail.kind, thumbnail.id),
-      });
+      collectionItems = nextItems;
+      itemCards = nextItems
+        .map((item) => item.entity ? entityCardToThumbnailCard(item.entity, getEntityHref(item, `/collections/${id}`)) : null)
+        .filter((card): card is EntityThumbnailCard => Boolean(card));
       loadState = "ready";
     } catch (err) {
       if (redirectHiddenEntityNotFound(err, nsfw.mode)) return;
@@ -108,6 +112,19 @@
     if (!collection) return;
     await updateEntityMetadata(collection.id, request, { kind: collection.kind });
     await loadCollection();
+  }
+
+  function slideshowDurationSeconds() {
+    if (!collection?.slideshowAutoAdvance) return 0;
+    return durationToSeconds(collection.slideshowDuration) ?? 0;
+  }
+
+  function startPlaylist(shuffle = false) {
+    if (!collection || collectionItems.length === 0) return;
+    playlist.startPlaylist(collectionItems, collection.title, 0, {
+      shuffle,
+      slideshowDurationSeconds: slideshowDurationSeconds(),
+    });
   }
 </script>
 
@@ -147,6 +164,32 @@
         {#if collection?.mode}
           <span class="hero-badge">{collection.mode}</span>
         {/if}
+        {#if collection?.slideshowAutoAdvance && slideshowDurationSeconds() > 0}
+          <span class="hero-badge">auto {slideshowDurationSeconds()}s</span>
+        {/if}
+      {/snippet}
+
+      {#snippet extraActions()}
+        <button
+          type="button"
+          class="hero-icon-action"
+          aria-label="Play collection"
+          title="Play collection"
+          disabled={collectionItems.length === 0}
+          onclick={() => startPlaylist(false)}
+        >
+          <Play class="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          class="hero-icon-action"
+          aria-label="Shuffle collection"
+          title="Shuffle collection"
+          disabled={collectionItems.length === 0}
+          onclick={() => startPlaylist(true)}
+        >
+          <Shuffle class="h-4 w-4" />
+        </button>
       {/snippet}
     </EntityDetail>
 
@@ -185,6 +228,9 @@
   .content-section { display: grid; gap: 0.75rem; }
   .content-heading { display: flex; align-items: center; gap: 0.5rem; margin: 0; font-family: var(--font-heading, Geist, sans-serif); font-size: 1.1rem; font-weight: 600; color: var(--color-text-primary, #f2eed8); }
   .content-count { font-family: var(--font-mono, "JetBrains Mono", monospace); font-size: 0.68rem; font-weight: 600; color: var(--color-text-muted, #8a93a6); padding: 0.1rem 0.4rem; border: 1px solid var(--color-border, #1c2235); background: var(--color-surface-3, #151a28); }
+  :global(.hero-icon-action) { display: inline-flex; width: 2.35rem; height: 2.35rem; align-items: center; justify-content: center; border: 1px solid var(--color-border-subtle, #1c2235); background: rgb(17 22 29 / 0.72); color: var(--color-text-muted, #8a93a6); backdrop-filter: blur(12px); transition: border-color 0.16s, color 0.16s, box-shadow 0.16s; }
+  :global(.hero-icon-action:hover:not(:disabled)) { border-color: rgba(242, 194, 106, 0.42); color: var(--color-text-accent, #f2c26a); box-shadow: 0 0 18px rgb(242 194 106 / 0.12); }
+  :global(.hero-icon-action:disabled) { cursor: not-allowed; opacity: 0.4; }
 
   .empty-children { padding: 2rem; border: 1px solid var(--color-border-subtle, #1c2235); background: var(--color-surface-1, #0c0f15); color: var(--color-text-muted, #8a93a6); text-align: center; font-size: 0.85rem; }
 

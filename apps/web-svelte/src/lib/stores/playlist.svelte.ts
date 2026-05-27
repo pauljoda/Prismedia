@@ -29,6 +29,8 @@ function getEntityHref(item: CollectionItem): string {
       return `/videos/${item.entityId}`;
     case "gallery":
       return `/galleries/${item.entityId}`;
+    case "book":
+      return `/books/${item.entityId}`;
     case "image":
       return `/images/${item.entityId}`;
     case "audio-track":

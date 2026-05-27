@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Mobile install metadata now presents Prismedia with the correct app name, theme colors, and safer icon spacing for browser and home-screen surfaces.
 
 ### Added
+- Added shell-level collection playback from collection detail pages, including ordered Play and Shuffle controls that persist in the bottom playlist controller.
 - Added explicit reference-backed entity grids on people, studio, and tag detail pages so related content is listed from actual incoming relationships instead of search matches.
 - Added audio playback with streaming, waveform visualization, and full transport controls.
 - Added edit-mode poster and header artwork upload, drag-and-drop, and clear controls for entity detail pages.
@@ -44,6 +45,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated web app manifest and mobile browser metadata for home-screen installation and browser UI theme colors.
 
 ### Fixed
+- Fixed collection playlist advancement so videos, audio tracks, static images, and video-backed images all notify the shell when they complete.
 - Fixed detail-page Identify actions so already-queued entities show a pending review state, open the existing queue item, and expose ready providers for people and studios.
 - Fixed Identify queue accepts so scoped child proposals cannot overwrite the root entity under review.
 - Fixed manual Identify title searches so stale provider IDs already saved on an entity cannot override the user's search text.

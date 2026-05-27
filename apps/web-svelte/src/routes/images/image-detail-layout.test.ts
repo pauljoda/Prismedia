@@ -17,4 +17,12 @@ describe("image detail route layout", () => {
     expect(source).toContain("<EntityDetail");
     expect(source).not.toContain("showHero={false}");
   });
+
+  it("connects playlist auto-advance to the universal lightbox", async () => {
+    const source = await readFile("src/routes/images/[id]/+page.svelte", "utf8");
+
+    expect(source).toContain("playlist.isPlaylistItem(\"image\", image.id)");
+    expect(source).toContain("autoAdvanceSeconds={isCurrentPlaylistItem ? playlist.slideshowDurationSeconds : 0}");
+    expect(source).toContain("playlist.reportContentEnded(\"image\", image.id)");
+  });
 });

@@ -35,6 +35,10 @@
     onClose: () => void;
     onIndexChange?: (index: number) => void;
     onRatingChange?: (entityId: string, rating: number | null) => void;
+    autoAdvanceSeconds?: number;
+    onAutoAdvance?: (entity: UniversalLightboxEntity) => void;
+    onPreviousRequest?: () => void;
+    onNextRequest?: () => void;
     detailsContent?: Snippet<[UniversalLightboxEntity]>;
     sharedKey?: string;
   }
@@ -45,6 +49,10 @@
     onClose,
     onIndexChange,
     onRatingChange,
+    autoAdvanceSeconds = 0,
+    onAutoAdvance,
+    onPreviousRequest,
+    onNextRequest,
     detailsContent,
   }: Props = $props();
 
@@ -117,13 +125,29 @@
   });
 
   function goPrev() {
+    if (onPreviousRequest && current) {
+      onPreviousRequest();
+      return;
+    }
     if (entities.length === 0) return;
     index = (index - 1 + entities.length) % entities.length;
   }
 
   function goNext() {
+    if (onNextRequest && current) {
+      onNextRequest();
+      return;
+    }
     if (entities.length === 0) return;
     index = (index + 1) % entities.length;
+  }
+
+  function advance() {
+    if (onAutoAdvance && current) {
+      onAutoAdvance(current);
+      return;
+    }
+    goNext();
   }
 
   function resetTransform() {
@@ -162,6 +186,12 @@
     naturalH = el.naturalHeight || naturalH || 1;
     applyFit();
   }
+
+  $effect(() => {
+    if (!current || autoAdvanceSeconds <= 0 || isCurrentVideo || infoOpen) return;
+    const timeout = window.setTimeout(advance, autoAdvanceSeconds * 1000);
+    return () => window.clearTimeout(timeout);
+  });
 
   function zoomBy(delta: number, centerX?: number, centerY?: number) {
     const old = scale;
@@ -411,8 +441,11 @@
                   chrome="minimal"
                   enableKeyboardShortcuts={false}
                   initialMuted={videoMuted}
+                  onEnded={() => {
+                    if (autoAdvanceSeconds > 0) advance();
+                  }}
                   autoPlay
-                  autoRepeat
+                  autoRepeat={autoAdvanceSeconds <= 0}
                 />
               {:else if currentImageSource}
                 <img

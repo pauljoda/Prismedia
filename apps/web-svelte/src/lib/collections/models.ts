@@ -1,3 +1,5 @@
+import type { EntityThumbnail } from "$lib/api/generated/model";
+
 export type CollectionEntityType = "video" | "gallery" | "image" | "book" | "audio-track";
 export type CollectionItemSource = "manual" | "dynamic";
 
@@ -9,7 +11,7 @@ export interface CollectionItem {
   source: CollectionItemSource;
   sortOrder: number;
   addedAt: string;
-  entity: Record<string, unknown> | null;
+  entity: EntityThumbnail | null;
 }
 
 export interface PlaylistSession {

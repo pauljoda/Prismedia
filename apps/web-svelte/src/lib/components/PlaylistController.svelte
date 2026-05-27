@@ -2,7 +2,7 @@
   import { BookOpen, ChevronDown, ChevronUp, Film, Images, Layers, Music, Repeat, Shuffle, SkipBack, SkipForward, X } from "@lucide/svelte";
   import type { CollectionEntityType } from "$lib/collections/models";
   import { usePlaylist } from "$lib/stores/playlist.svelte";
-  import { getEntityHref } from "./collections/collection-item-helpers";
+  import { getEntityHref, getEntityTitle } from "./collections/collection-item-helpers";
   import PlaylistQueueSheet from "./PlaylistQueueSheet.svelte";
 
   const playlist = usePlaylist();
@@ -18,9 +18,7 @@
   let showQueue = $state(false);
   const queueSheetId = "playlist-queue-sheet";
 
-  const currentTitle = $derived(
-    ((playlist.currentItem?.entity as Record<string, unknown> | undefined)?.title as string | undefined) ?? "Untitled",
-  );
+  const currentTitle = $derived(playlist.currentItem ? getEntityTitle(playlist.currentItem) : "Untitled");
   const CurrentTypeIcon = $derived(
     playlist.currentItem ? typeIcons[playlist.currentItem.entityType] : Film,
   );
