@@ -1,6 +1,10 @@
 import type { InstalledPlugin } from "$lib/api/plugins";
 
 export type PluginAuthFieldSummary = { key: string; label: string };
+export type PluginCredentialField = PluginAuthFieldSummary & {
+  required?: boolean;
+  url?: string | null;
+};
 
 export function authFieldName(field: PluginAuthFieldSummary): string {
   const key = field.key.toLowerCase();

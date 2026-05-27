@@ -14,7 +14,6 @@
     Loader2,
     Package,
     RefreshCw,
-    Save,
     Search,
     Sparkles,
     ToggleLeft,
@@ -25,10 +24,11 @@
   } from "@lucide/svelte";
   import { Badge, Button } from "@prismedia/ui-svelte";
   import PluginPageShell from "./PluginPageShell.svelte";
+  import PluginCredentialForm from "./PluginCredentialForm.svelte";
   import PrismediaCommunityTab from "./PrismediaCommunityTab.svelte";
   import StashCommunityIndexTab from "./StashCommunityIndexTab.svelte";
   import StashBoxEndpointsTab from "./StashBoxEndpointsTab.svelte";
-  import { authLinkLabel, authPlaceholder } from "./plugin-auth-format";
+  import { authPlaceholder } from "./plugin-auth-format";
   import type { PluginTabDefinition, PluginsTab } from "./plugin-page-types";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import { entityTerms } from "$lib/terminology";
@@ -339,6 +339,11 @@
       authExpandedFor = pluginId;
       authValues = {};
     }
+  }
+
+  function closeAuthForm() {
+    authExpandedFor = null;
+    authValues = {};
   }
 
   async function handleInstalledPluginSaveAuth(plugin: InstalledPlugin) {
@@ -800,75 +805,19 @@
                 </div>
 
                 {#if authExpanded}
-                  <div class="border-t border-border-subtle px-4 py-3 space-y-3 bg-surface-1/50">
-                    <h4 class="text-[0.72rem] font-medium text-text-secondary">Authentication</h4>
-                    {#each plugin.auth as field (field.key)}
-                      <div>
-                        <div class="flex items-center justify-between mb-1">
-                          <label class="text-[0.65rem] text-text-disabled" for="plugin-auth-{plugin.id}-{field.key}">
-                            {field.label}
-                            {#if field.required}
-                              <span class="text-status-error-text ml-0.5">*</span>
-                            {/if}
-                          </label>
-                          {#if field.url}
-                            <button
-                              type="button"
-                              onclick={() => window.open(field.url ?? "", "_blank", "noopener,noreferrer")}
-                              class="text-[0.6rem] text-text-accent hover:underline"
-                            >
-                              {authLinkLabel(field)}
-                            </button>
-                          {/if}
-                        </div>
-                        <input
-                          id="plugin-auth-{plugin.id}-{field.key}"
-                          type="password"
-                          value={authValues[`prismedia:${plugin.id}:${field.key}`] ?? ""}
-                          oninput={(e) => {
-                            authValues = {
-                              ...authValues,
-                              [`prismedia:${plugin.id}:${field.key}`]: (e.currentTarget as HTMLInputElement).value,
-                            };
-                          }}
-                          placeholder={plugin.missingAuthKeys.includes(field.key) ? "Required" : "Saved - enter a new value to replace"}
-                          class="control-input py-1.5 font-mono"
-                        />
-                      </div>
-                    {/each}
-                    <div class="flex items-center justify-end gap-2 pt-1">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onclick={() => {
-                          authExpandedFor = null;
-                          authValues = {};
-                        }}
-                        class="h-auto px-3 py-1.5 text-[0.72rem]"
-                      >
-                        {#snippet children()}Cancel{/snippet}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="primary"
-                        size="sm"
-                        disabled={authSavingFor === `prismedia:${plugin.id}` ||
-                          !plugin.auth.some((field) => authValues[`prismedia:${plugin.id}:${field.key}`]?.trim())}
-                        onclick={() => void handleProviderSaveAuth(plugin)}
-                        class="h-auto gap-1.5 px-3 py-1.5 text-[0.72rem]"
-                      >
-                        {#snippet children()}
-                          {#if authSavingFor === `prismedia:${plugin.id}`}
-                            <Loader2 class="h-3 w-3 animate-spin" />
-                          {:else}
-                            <Save class="h-3 w-3" />
-                          {/if}
-                          Save Credentials
-                        {/snippet}
-                      </Button>
-                    </div>
-                  </div>
+                  <PluginCredentialForm
+                    bind:values={authValues}
+                    fields={plugin.auth}
+                    getPlaceholder={(field) =>
+                      plugin.missingAuthKeys.includes(field.key)
+                        ? "Required"
+                        : "Saved - enter a new value to replace"}
+                    getValueKey={(field) => `prismedia:${plugin.id}:${field.key}`}
+                    inputIdPrefix={`plugin-auth-${plugin.id}`}
+                    onCancel={closeAuthForm}
+                    onSave={() => void handleProviderSaveAuth(plugin)}
+                    saving={authSavingFor === `prismedia:${plugin.id}`}
+                  />
                 {/if}
               </div>
             {/each}
@@ -969,75 +918,16 @@
                 </div>
 
                 {#if authExpanded && plugin.authFields}
-                  <div class="border-t border-border-subtle px-4 py-3 space-y-3 bg-surface-1/50">
-                    <h4 class="text-[0.72rem] font-medium text-text-secondary">Authentication</h4>
-                    {#each plugin.authFields as field (field.key)}
-                      <div>
-                        <div class="flex items-center justify-between mb-1">
-                          <label class="text-[0.65rem] text-text-disabled" for="auth-{plugin.id}-{field.key}">
-                            {field.label}
-                            {#if field.required}
-                              <span class="text-status-error-text ml-0.5">*</span>
-                            {/if}
-                          </label>
-                          {#if field.url}
-                            <button
-                              type="button"
-                              onclick={() => window.open(field.url ?? "", "_blank", "noopener,noreferrer")}
-                              class="text-[0.6rem] text-text-accent hover:underline"
-                            >
-                              {authLinkLabel(field)}
-                            </button>
-                          {/if}
-                        </div>
-                        <input
-                          id="auth-{plugin.id}-{field.key}"
-                          type="password"
-                          value={authValues[field.key] ?? ""}
-                          oninput={(e) => {
-                            authValues = {
-                              ...authValues,
-                              [field.key]: (e.currentTarget as HTMLInputElement).value,
-                            };
-                          }}
-                          placeholder={authPlaceholder(plugin, field)}
-                          class="control-input py-1.5 font-mono"
-                        />
-                      </div>
-                    {/each}
-                    <div class="flex items-center justify-end gap-2 pt-1">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onclick={() => {
-                          authExpandedFor = null;
-                          authValues = {};
-                        }}
-                        class="h-auto px-3 py-1.5 text-[0.72rem]"
-                      >
-                        {#snippet children()}Cancel{/snippet}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="primary"
-                        size="sm"
-                        disabled={authSavingFor === plugin.id ||
-                          !plugin.authFields.some((f) => authValues[f.key]?.trim())}
-                        onclick={() => void handleInstalledPluginSaveAuth(plugin)}
-                        class="h-auto gap-1.5 px-3 py-1.5 text-[0.72rem]"
-                      >
-                        {#snippet children()}
-                          {#if authSavingFor === plugin.id}
-                            <Loader2 class="h-3 w-3 animate-spin" />
-                          {:else}
-                            <Save class="h-3 w-3" />
-                          {/if}
-                          Save Credentials
-                        {/snippet}
-                      </Button>
-                    </div>
-                  </div>
+                  <PluginCredentialForm
+                    bind:values={authValues}
+                    fields={plugin.authFields}
+                    getPlaceholder={(field) => authPlaceholder(plugin, field)}
+                    getValueKey={(field) => field.key}
+                    inputIdPrefix={`auth-${plugin.id}`}
+                    onCancel={closeAuthForm}
+                    onSave={() => void handleInstalledPluginSaveAuth(plugin)}
+                    saving={authSavingFor === plugin.id}
+                  />
                 {/if}
               </div>
             {/each}
