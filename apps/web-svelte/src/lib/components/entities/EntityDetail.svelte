@@ -40,6 +40,7 @@
   import MetadataCard from "$lib/components/MetadataCard.svelte";
   import MetadataCardGrid from "$lib/components/MetadataCardGrid.svelte";
   import EntityTagChips from "./EntityTagChips.svelte";
+  import EntityDetailReferenceRail from "./EntityDetailReferenceRail.svelte";
   import MarkdownEditor from "$lib/components/forms/MarkdownEditor.svelte";
   import EntityPicker from "$lib/components/forms/EntityPicker.svelte";
   import ListEditor from "$lib/components/forms/ListEditor.svelte";
@@ -531,16 +532,6 @@
   function assetBusy(role: EntityFileRoleCode): boolean {
     return assetBusyRole === role;
   }
-
-  function creditToThumbnailCard(credit: EntityDetailCredit) {
-    return entityReferenceToThumbnailCard({
-      id: credit.id,
-      kind: credit.kind,
-      title: credit.title,
-      thumbnailUrl: credit.thumbnail,
-    });
-  }
-
 </script>
 
 {#snippet imageAssetActions(role: EntityFileRoleCode, label: "poster" | "header", hasAsset: boolean)}
@@ -844,44 +835,15 @@
   </section>
 {/snippet}
 
-{#snippet referenceItem(credit: EntityDetailCredit)}
-  <div class="reference-thumbnail">
-    <EntityThumbnail
-      card={creditToThumbnailCard(credit)}
-      selectable={false}
-      titleAlign="center"
-      titleSize="compact"
-    />
-  </div>
-{/snippet}
-
 {#snippet studioSection()}
   {#if cardFull.studio}
-    <section class="detail-section">
-      <h2 class="section-label">
-        <Building2 class="h-4 w-4" />
-        Studio
-      </h2>
-      <div class="reference-list is-horizontal-rail">
-        {@render referenceItem(cardFull.studio)}
-      </div>
-    </section>
+    <EntityDetailReferenceRail icon={Building2} title="Studio" references={[cardFull.studio]} />
   {/if}
 {/snippet}
 
 {#snippet creditsSection()}
   {#if (cardFull.credits?.length ?? 0) > 0}
-    <section class="detail-section">
-      <h2 class="section-label">
-        <Users class="h-4 w-4" />
-        Credits
-      </h2>
-      <div class="reference-list is-horizontal-rail">
-        {#each cardFull.credits ?? [] as credit, index (`${credit.id}:${index}`)}
-          {@render referenceItem(credit)}
-        {/each}
-      </div>
-    </section>
+    <EntityDetailReferenceRail icon={Users} title="Credits" references={cardFull.credits ?? []} />
   {/if}
 {/snippet}
 
@@ -2372,29 +2334,6 @@
     letter-spacing: 0.06em;
     text-transform: uppercase;
     color: var(--detail-text-muted);
-  }
-
-  .reference-list {
-    display: flex;
-    flex-wrap: nowrap;
-    gap: 0.75rem;
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
-    overflow-x: auto;
-    overflow-y: hidden;
-    padding-bottom: 0.35rem;
-    scroll-padding-inline: 0.25rem;
-    scrollbar-width: thin;
-  }
-
-  .reference-list.is-horizontal-rail {
-    align-items: stretch;
-  }
-
-  .reference-thumbnail {
-    flex: 0 0 clamp(7rem, 33vw, 8.75rem);
-    min-width: 0;
   }
 
   /* ── Links ──────────────────────────────────────────────── */
