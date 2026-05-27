@@ -67,8 +67,8 @@ public sealed class EntityMetadataApplyService : IEntityMetadataPatchService {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(request.Patch);
 
-        var fields = FieldSet(request.Fields);
-        ValidatePatch(fields, request.Patch);
+        var fields = EntityMetadataPatchValidator.NormalizeFieldSet(request.Fields);
+        EntityMetadataPatchValidator.Validate(fields, request.Patch);
 
         var entity = await _db.Entities
             .FirstOrDefaultAsync(row => row.Id == entityId && row.DeletedAt == null, cancellationToken);
@@ -100,47 +100,6 @@ public sealed class EntityMetadataApplyService : IEntityMetadataPatchService {
         entity.UpdatedAt = now;
         await _db.SaveChangesAsync(cancellationToken);
         return EntityMetadataPatchResult.Applied;
-    }
-
-    private static HashSet<string> FieldSet(IEnumerable<string> fields) =>
-        fields
-            .Where(field => !string.IsNullOrWhiteSpace(field))
-            .Select(field => field.Trim())
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-    private static void ValidatePatch(ISet<string> fields, EntityMetadataPatch patch) {
-        var errors = new List<string>();
-
-        if (fields.Contains("title") && string.IsNullOrWhiteSpace(patch.Title)) {
-            errors.Add("title is required");
-        }
-
-        if (fields.Contains("rating") && patch.Rating is not null and (< 0 or > 5)) {
-            errors.Add("rating must be from 0 through 5");
-        }
-
-        if (fields.Contains("urls")) {
-            foreach (var url in patch.Urls.Where(value => !string.IsNullOrWhiteSpace(value))) {
-                if (!Uri.TryCreate(url, UriKind.Absolute, out var parsed) ||
-                    parsed.Scheme is not ("http" or "https")) {
-                    errors.Add($"url '{url}' must be an absolute http or https URL");
-                }
-            }
-        }
-
-        if (fields.Contains("dates")) {
-            foreach (var (code, value) in patch.Dates) {
-                if (string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(value)) {
-                    errors.Add("date codes and values cannot be empty");
-                } else if (!DateOnly.TryParse(value, out _)) {
-                    errors.Add($"date '{code}' must be parseable as a date");
-                }
-            }
-        }
-
-        if (errors.Count > 0) {
-            throw new ArgumentException($"Invalid entity metadata patch: {string.Join("; ", errors)}.");
-        }
     }
 
     private async Task ApplyScopedPatchToEntityAsync(

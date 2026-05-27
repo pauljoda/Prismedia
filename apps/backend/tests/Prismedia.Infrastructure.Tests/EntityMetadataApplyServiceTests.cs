@@ -135,6 +135,20 @@ public sealed class EntityMetadataApplyServiceTests {
     }
 
     [Fact]
+    public void PatchValidatorNormalizesFieldsAndRejectsInvalidDates() {
+        var fields = EntityMetadataPatchValidator.NormalizeFieldSet([" dates ", "", "DATES"]);
+
+        var exception = Assert.Throws<ArgumentException>(() =>
+            EntityMetadataPatchValidator.Validate(
+                fields,
+                EmptyPatch() with {
+                    Dates = new Dictionary<string, string> { ["released"] = "not-a-date" }
+                }));
+
+        Assert.Contains("released", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task ApplyPatchReturnsFalseForMissingEntity() {
         await using var db = CreateContext();
         var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
