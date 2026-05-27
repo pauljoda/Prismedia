@@ -25,6 +25,7 @@
   } from "@lucide/svelte";
   import { Badge, Button } from "@prismedia/ui-svelte";
   import PluginPageShell from "./PluginPageShell.svelte";
+  import StashCommunityIndexTab from "./StashCommunityIndexTab.svelte";
   import StashBoxEndpointsTab from "./StashBoxEndpointsTab.svelte";
   import type { PluginTabDefinition, PluginsTab } from "./plugin-page-types";
   import { useNsfw } from "$lib/nsfw/store.svelte";
@@ -121,7 +122,6 @@
   let indexEntries = $state<CommunityIndexEntry[]>([]);
   let indexLoading = $state(false);
   let indexLoaded = $state(false);
-  let indexSearch = $state("");
   let installingId = $state<string | null>(null);
 
   let prismediaEntries = $state<PrismediaPluginIndexEntry[]>([]);
@@ -614,15 +614,6 @@
       return !!caps && (caps.performerByURL || caps.performerByName || caps.performerByFragment);
     }).length,
   );
-
-  const filteredIndex = $derived.by(() => {
-    const q = indexSearch.trim().toLowerCase();
-    return q
-      ? indexEntries.filter(
-          (e) => e.name.toLowerCase().includes(q) || e.id.toLowerCase().includes(q),
-        )
-      : indexEntries;
-  });
 
   const installedCount = $derived(
     visibleScrapers.length + visibleInstalledPlugins.length + visibleInstalledProviders.length,
@@ -1333,90 +1324,14 @@
     {/if}
     <!-- STASH COMMUNITY INDEX TAB -->
     {#if tab === "stash-index" && !isSfw}
-      <section class="space-y-3">
-        <div class="flex items-center justify-between gap-3 flex-wrap">
-          <p class="text-text-muted text-[0.72rem]">
-            {indexEntries.length} scrapers available · All Stash community scrapers are classified as NSFW
-          </p>
-          <div class="flex items-center gap-2">
-            <div class="relative">
-              <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-text-disabled" />
-              <input
-                class="control-input pl-8 w-64 py-1.5 text-sm"
-                placeholder="Filter by name or ID..."
-                bind:value={indexSearch}
-              />
-              {#if indexSearch}
-                <button
-                  onclick={() => (indexSearch = "")}
-                  aria-label="Clear search"
-                  class="absolute right-2 top-1/2 -translate-y-1/2 text-text-disabled hover:text-text-muted"
-                >
-                  <X class="h-3 w-3" />
-                </button>
-              {/if}
-            </div>
-            <Button variant="secondary" size="sm" onclick={() => void loadStashIndex(true)} disabled={indexLoading}>
-              {#snippet children()}
-                {#if indexLoading}
-                  <Loader2 class="h-3.5 w-3.5 animate-spin" />
-                {:else}
-                  <RefreshCw class="h-3.5 w-3.5" />
-                {/if}
-                Refresh
-              {/snippet}
-            </Button>
-          </div>
-        </div>
-
-        {#if indexLoading && !indexLoaded}
-          <div class="surface-card no-lift p-12 flex items-center justify-center">
-            <Loader2 class="h-6 w-6 animate-spin text-text-muted" />
-          </div>
-        {:else}
-          <div class="space-y-1 max-h-[600px] overflow-y-auto scrollbar-hidden">
-            {#each filteredIndex as entry (entry.id)}
-              <div class="surface-card no-lift px-4 py-3 flex items-center gap-3">
-                <div class="min-w-0 flex-1">
-                  <p class="text-sm font-medium">{entry.name}</p>
-                  <p class="text-text-disabled text-[0.65rem] mt-0.5 font-mono">
-                    {entry.id}
-                    <span class="text-text-disabled/60 ml-2">{entry.date}</span>
-                    {#if entry.requires?.length}
-                      <span class="text-text-disabled/60 ml-2">requires: {entry.requires.join(", ")}</span>
-                    {/if}
-                  </p>
-                </div>
-                {#if entry.installed}
-                  <Badge variant="accent">
-                    {#snippet children()}<Check class="h-2.5 w-2.5 mr-1" />Installed{/snippet}
-                  </Badge>
-                {:else}
-                  <button
-                    onclick={() => void handleScraperInstall(entry.id)}
-                    disabled={installingId === entry.id}
-                    class="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-text-muted hover:text-text-accent transition-colors duration-fast shrink-0 disabled:opacity-40"
-                  >
-                    {#if installingId === entry.id}
-                      <Loader2 class="h-3.5 w-3.5 animate-spin" />
-                    {:else}
-                      <Download class="h-3.5 w-3.5" />
-                    {/if}
-                    Install
-                  </button>
-                {/if}
-              </div>
-            {/each}
-            {#if filteredIndex.length === 0}
-              <div class="surface-card no-lift p-8 text-center">
-                <p class="text-text-muted text-sm">
-                  {indexSearch ? "No scrapers match your search." : "Index is empty."}
-                </p>
-              </div>
-            {/if}
-          </div>
-        {/if}
-      </section>
+      <StashCommunityIndexTab
+        entries={indexEntries}
+        {installingId}
+        loaded={indexLoaded}
+        loading={indexLoading}
+        onInstall={(id) => void handleScraperInstall(id)}
+        onRefresh={() => void loadStashIndex(true)}
+      />
     {/if}
 
     <!-- STASHBOX ENDPOINTS TAB -->
