@@ -14,7 +14,16 @@ import type {
   StashBoxTagResultDto,
   StashIdEntryDto,
 } from "@prismedia/contracts";
+import {
+  installPlugin as installPluginProviderRequest,
+  listPlugins,
+  removePlugin as removePluginProviderRequest,
+  updatePluginAuth,
+} from "$lib/api/generated/prismedia";
+import type { PluginAuthUpdateRequest } from "$lib/api/generated/model";
+import { unwrapGenerated } from "$lib/api/generated-response";
 import { fetchApi } from "$lib/api/orval-fetch";
+import type { PluginProvider } from "$lib/api/identify-types";
 
 export type ScraperPackage = ScraperPackageDto;
 export type CommunityIndexEntry = CommunityIndexEntryDto;
@@ -33,6 +42,7 @@ export type PrismediaPluginIndexEntry = PluginIndexEntryDto & {
   updateAvailable?: boolean;
 };
 export type InstalledPlugin = PluginPackageDto;
+export type { PluginProvider };
 
 export interface PluginUpdateStatus {
   pluginId: string;
@@ -49,6 +59,33 @@ export interface PluginExecuteResult {
   normalized?: NormalizedScrapeResult;
   pluginId: string;
   action: string;
+}
+
+export function fetchPluginProviders(): Promise<PluginProvider[]> {
+  return listPlugins().then((response) =>
+    unwrapGenerated(response, "Failed to list plugin providers") as PluginProvider[],
+  );
+}
+
+export function installPlugin(provider: string): Promise<PluginProvider> {
+  return installPluginProviderRequest(provider).then((response) =>
+    unwrapGenerated(response, "Failed to install plugin provider") as PluginProvider,
+  );
+}
+
+export function removePlugin(provider: string): Promise<void> {
+  return removePluginProviderRequest(provider).then((response) =>
+    unwrapGenerated(response, "Failed to remove plugin provider", [204]),
+  );
+}
+
+export function savePluginAuth(
+  provider: string,
+  values: Record<string, string | null>,
+): Promise<void> {
+  return updatePluginAuth(provider, { values } as PluginAuthUpdateRequest).then((response) =>
+    unwrapGenerated(response, "Failed to save plugin auth", [204]),
+  );
 }
 
 

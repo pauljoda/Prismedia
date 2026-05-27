@@ -16,10 +16,14 @@
     fetchCommunityIndex,
     fetchInstalledScrapers,
     fetchPluginUpdates,
+    fetchPluginProviders,
     fetchStashBoxEndpoints,
     installPrismediaPlugin,
+    installPlugin,
     installScraper,
+    removePlugin,
     savePluginAuthKey,
+    savePluginAuth,
     uninstallScraper,
     uninstallPlugin,
     toggleScraper,
@@ -31,16 +35,10 @@
     type InstalledPlugin,
     type PluginUpdateStatus,
     type CommunityIndexEntry,
+    type PluginProvider,
     type ScraperPackage,
     type StashBoxEndpoint,
   } from "$lib/api/plugins";
-  import {
-    fetchPluginProviders,
-    installPlugin,
-    removePlugin,
-    savePluginAuth,
-    type PluginProvider as PluginProvider,
-  } from "$lib/api/identify";
 
   const nsfw = useNsfw();
   const isSfw = $derived(nsfw.mode === "off");

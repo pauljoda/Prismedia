@@ -6,8 +6,8 @@
     fetchIdentifyProviders,
     fetchOptionalIdentifyQueueItem,
     providerCanIdentifyKind,
-    type IdentifyQueueItem,
-  } from "$lib/api/identify";
+  } from "$lib/api/identify-client";
+  import type { IdentifyQueueItem } from "$lib/api/identify-types";
 
   interface Props {
     entityId: string;

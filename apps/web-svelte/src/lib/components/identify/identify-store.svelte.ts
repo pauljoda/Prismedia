@@ -8,15 +8,17 @@ import {
   fetchIdentifyEntity,
   fetchIdentifyQueue,
   fetchIdentifyQueueItem,
-  fetchPluginProviders,
   searchIdentifyQueueItem,
-  type EntityMetadataProposal,
-  type EntitySearchCandidate,
-  type IdentifyBulkSession,
-  type IdentifyQueueItem as ApiIdentifyQueueItem,
-  type IdentifyQueueState,
-  type PluginProvider,
-} from "$lib/api/identify";
+} from "$lib/api/identify-client";
+import { fetchPluginProviders } from "$lib/api/plugins";
+import type {
+  EntityMetadataProposal,
+  EntitySearchCandidate,
+  IdentifyBulkSession,
+  IdentifyQueueItem as ApiIdentifyQueueItem,
+  IdentifyQueueState,
+  PluginProvider,
+} from "$lib/api/identify-types";
 import type { EntityCard, EntityDetailCard } from "$lib/api/entities";
 import { entityCardToThumbnailCard } from "$lib/entities/entity-grid";
 import { resolveEntityHrefById } from "$lib/entities/entity-route-resolver";

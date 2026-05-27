@@ -20,8 +20,8 @@ const store = vi.hoisted(() => ({
 
 vi.mock("$app/navigation", () => ({ goto: (...args: unknown[]) => goto(...args) }));
 
-vi.mock("$lib/api/identify", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("$lib/api/identify")>();
+vi.mock("$lib/api/identify-client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("$lib/api/identify-client")>();
   return {
     ...actual,
     fetchIdentifyEntities: (...args: unknown[]) => fetchIdentifyEntities(...args),

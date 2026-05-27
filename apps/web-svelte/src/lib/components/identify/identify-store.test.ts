@@ -11,11 +11,18 @@ const fetchIdentifyQueueItem = vi.fn();
 const addIdentifyQueueItem = vi.fn();
 const searchIdentifyQueueItem = vi.fn();
 
-vi.mock("$lib/api/identify", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("$lib/api/identify")>();
+vi.mock("$lib/api/plugins", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("$lib/api/plugins")>();
   return {
     ...actual,
     fetchPluginProviders: (...args: unknown[]) => fetchPluginProviders(...args),
+  };
+});
+
+vi.mock("$lib/api/identify-client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("$lib/api/identify-client")>();
+  return {
+    ...actual,
     fetchIdentifyQueue: (...args: unknown[]) => fetchIdentifyQueue(...args),
     fetchIdentifyEntity: (...args: unknown[]) => fetchIdentifyEntity(...args),
     fetchIdentifyQueueItem: (...args: unknown[]) => fetchIdentifyQueueItem(...args),
