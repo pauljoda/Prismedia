@@ -88,8 +88,6 @@ export interface CollectionWriteRequest {
   ruleTreeJson?: string | null;
   coverMode?: CollectionCoverMode | null;
   coverItemId?: string | null;
-  slideshowDurationSeconds?: number | null;
-  slideshowAutoAdvance?: boolean | null;
   isNsfw?: boolean | null;
 }
 
@@ -118,27 +116,4 @@ export interface CollectionRulePreviewResponse {
   total: number;
   byType: Partial<Record<CollectionEntityType, number>>;
   sample: CollectionRulePreviewItem[];
-}
-
-export interface PlaylistSession {
-  collectionId: string | null;
-  collectionName: string;
-  items: CollectionItem[];
-  playOrder: number[];
-  orderPosition: number;
-  shuffle: boolean;
-  loop: boolean;
-  slideshowDurationSeconds: number;
-  updatedAt: string;
-}
-
-export interface PlaylistSessionWrite {
-  collectionId: string | null;
-  collectionName: string;
-  items: CollectionItem[];
-  playOrder: number[];
-  orderPosition: number;
-  shuffle: boolean;
-  loop: boolean;
-  slideshowDurationSeconds: number;
 }

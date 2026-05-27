@@ -145,7 +145,7 @@ describe("UniversalLightbox", () => {
     expect(screen.queryByRole("button", { name: "Player settings" })).not.toBeInTheDocument();
   });
 
-  it("autoplays video-capable items muted and repeats only outside timed playback", async () => {
+  it("autoplays video-capable items muted and repeats in the lightbox", async () => {
     render(UniversalLightboxHarness, {
       props: { entities: [animated], initialIndex: 0, onClose: vi.fn() },
     });
@@ -156,9 +156,7 @@ describe("UniversalLightbox", () => {
     expect(screen.getByRole("button", { name: "Unmute" })).toBeInTheDocument();
 
     const source = await readFile("src/lib/components/UniversalLightbox.svelte", "utf8");
-    expect(source).toContain("autoRepeat={autoAdvanceSeconds <= 0}");
-    expect(source).toContain("if (autoAdvanceSeconds > 0) advance();");
-    expect(source).toContain("window.setTimeout(advance, autoAdvanceSeconds * 1000)");
+    expect(source).toContain("autoRepeat");
   });
 
   it("sizes embedded minimal videos with a real responsive lightbox frame", async () => {

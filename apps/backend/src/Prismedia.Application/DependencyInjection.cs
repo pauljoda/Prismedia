@@ -8,7 +8,6 @@ using Prismedia.Application.Jobs;
 using Prismedia.Application.Organization;
 using Prismedia.Application.Settings;
 using Prismedia.Application.Health;
-using Prismedia.Application.UserState;
 using Prismedia.Application.Jobs.Handlers;
 using Prismedia.Application.Jobs.Handlers.Generate;
 using Prismedia.Application.Jobs.Handlers.Identity;
@@ -32,7 +31,6 @@ public static class DependencyInjection {
         services.AddScoped<JobService>();
         services.AddScoped<EntityCapabilityService>();
         services.AddScoped<SettingsService>();
-        services.AddScoped<UserStateService>();
         services.AddScoped<OrganizeService>();
         services.AddScoped<FilesService>();
         services.AddScoped<IAudioStreamService, AudioStreamService>();

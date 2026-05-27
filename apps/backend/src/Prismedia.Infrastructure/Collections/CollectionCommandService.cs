@@ -20,8 +20,6 @@ public sealed class CollectionCommandService(
     IEntityReadService entities,
     ICollectionRuleEngine ruleEngine,
     ICollectionRefreshPersistence refreshPersistence) : ICollectionCommandService {
-    private const int DefaultSlideshowSeconds = 5;
-    private const int MaxSlideshowSeconds = 3600;
     private const int PreviewSampleSize = 24;
     private const string EmptyRuleJson = """{"type":"group","operator":"and","children":[]}""";
 
@@ -55,9 +53,7 @@ public sealed class CollectionCommandService(
             Mode = write.Mode,
             RuleTreeJson = write.RuleTreeJson,
             CoverMode = write.CoverMode,
-            CoverItemEntityId = write.CoverItemId,
-            SlideshowDurationSeconds = write.SlideshowDurationSeconds,
-            SlideshowAutoAdvance = write.SlideshowAutoAdvance
+            CoverItemEntityId = write.CoverItemId
         });
         await UpsertDescriptionAsync(collectionId, write.Description, now, cancellationToken);
 
@@ -93,8 +89,6 @@ public sealed class CollectionCommandService(
         detail.RuleTreeJson = write.RuleTreeJson;
         detail.CoverMode = write.CoverMode;
         detail.CoverItemEntityId = write.CoverItemId;
-        detail.SlideshowDurationSeconds = write.SlideshowDurationSeconds;
-        detail.SlideshowAutoAdvance = write.SlideshowAutoAdvance;
         await UpsertDescriptionAsync(collectionId, write.Description, now, cancellationToken);
 
         await db.SaveChangesAsync(cancellationToken);
@@ -341,12 +335,6 @@ public sealed class CollectionCommandService(
             return false;
         }
 
-        var duration = request.SlideshowDurationSeconds ?? DefaultSlideshowSeconds;
-        if (duration is < 1 or > MaxSlideshowSeconds) {
-            message = $"Slideshow duration must be between 1 and {MaxSlideshowSeconds} seconds.";
-            return false;
-        }
-
         var ruleTreeJson = NormalizeRuleTree(mode, request.RuleTreeJson);
         if (!ValidateRuleTree(ruleTreeJson, out message)) {
             return false;
@@ -359,8 +347,6 @@ public sealed class CollectionCommandService(
             ruleTreeJson,
             coverMode,
             request.CoverItemId,
-            duration,
-            request.SlideshowAutoAdvance ?? true,
             request.IsNsfw ?? false);
         return true;
     }
@@ -517,8 +503,6 @@ public sealed class CollectionCommandService(
         string? RuleTreeJson,
         CollectionCoverMode CoverMode,
         Guid? CoverItemId,
-        int SlideshowDurationSeconds,
-        bool SlideshowAutoAdvance,
         bool IsNsfw);
 
     private sealed record VisibleRuleMatch(string EntityType, Guid EntityId);

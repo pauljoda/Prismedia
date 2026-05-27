@@ -16,13 +16,6 @@ export interface CollectionDetail {
   coverMode: string | null;
   /** @nullable */
   coverItemId: string | null;
-  /**
-     * @nullable
-     * @pattern ^-?(\d+\.)?\d{2}:\d{2}:\d{2}(\.\d{1,7})?$
-     */
-  slideshowDuration: string | null;
-  /** @nullable */
-  slideshowAutoAdvance: boolean | null;
   /** @nullable */
   lastRefreshedAt: string | null;
   id: string;

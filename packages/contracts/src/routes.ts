@@ -81,7 +81,6 @@ export const apiRoutes = {
   collectionPreviewRules: "/collections/preview-rules",
   collectionCover: "/collections/:id/cover",
   collectionCoverAsset: "/assets/collections/:id/cover",
-  playlistSession: "/playlist-session",
   // Plugins
   pluginPackages: "/plugins/packages",
   pluginPackageDetail: "/plugins/packages/:id",

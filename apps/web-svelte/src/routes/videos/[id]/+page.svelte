@@ -41,7 +41,6 @@
   import { extractVideoPlayerProps, getPlaybackState } from "$lib/entities/video-capabilities";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import { useAppChrome } from "$lib/stores/app-chrome.svelte";
-  import { usePlaylist } from "$lib/stores/playlist.svelte";
   import NsfwBlur from "$lib/components/nsfw/NsfwBlur.svelte";
   import EntityDetail, {
     type EntityMetadataUpdateRequest,
@@ -66,7 +65,6 @@
 
   const nsfw = useNsfw();
   const appChrome = useAppChrome();
-  const playlist = usePlaylist();
 
   let loadState: LoadState = $state("loading");
   let video = $state<VideoDetail | null>(null);
@@ -452,7 +450,6 @@
     } catch {
       // best-effort
     }
-    playlist.reportContentEnded("video", video.id);
   }
 
   function handleActiveSubtitleChange(id: string | null) {
@@ -585,7 +582,6 @@
             onTranscriptSidecarToggle={toggleTranscriptDock}
             {defaultPlaybackMode}
             {showCastControls}
-            autoPlay={playlist.isActive && playlist.isPlaylistItem("video", video.id)}
             onEnded={handleVideoEnded}
           />
           {#if isTranscriptInlineDocked}

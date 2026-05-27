@@ -9,8 +9,6 @@ namespace Prismedia.Contracts.Collections;
 /// <param name="RuleTreeJson">Optional dynamic rule tree JSON.</param>
 /// <param name="CoverMode">Cover selection mode code: mosaic, custom, or item.</param>
 /// <param name="CoverItemId">Optional entity used as the collection cover.</param>
-/// <param name="SlideshowDurationSeconds">Image/slideshow dwell time in seconds.</param>
-/// <param name="SlideshowAutoAdvance">Whether shell playback advances timed media automatically.</param>
 /// <param name="IsNsfw">Whether the collection itself should be hidden in SFW mode.</param>
 public sealed record CollectionWriteRequest(
     string Title,
@@ -19,8 +17,6 @@ public sealed record CollectionWriteRequest(
     string? RuleTreeJson,
     string? CoverMode,
     Guid? CoverItemId,
-    int? SlideshowDurationSeconds,
-    bool? SlideshowAutoAdvance,
     bool? IsNsfw);
 
 /// <summary>Reference to an entity being added to a collection.</summary>
@@ -110,12 +106,6 @@ public sealed record CollectionDetail : EntityDetail {
 
     /// <summary>Entity selected as the collection cover item.</summary>
     public required Guid? CoverItemId { get; init; }
-
-    /// <summary>Duration for collection slideshow advancement.</summary>
-    public required TimeSpan? SlideshowDuration { get; init; }
-
-    /// <summary>Whether collection slideshows advance automatically.</summary>
-    public required bool? SlideshowAutoAdvance { get; init; }
 
     /// <summary>Last dynamic refresh timestamp, when known.</summary>
     public required DateTimeOffset? LastRefreshedAt { get; init; }

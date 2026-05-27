@@ -28,12 +28,10 @@
   import type { UniversalLightboxEntity } from "$lib/components/universal-lightbox-media";
   import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
   import { useNsfw } from "$lib/nsfw/store.svelte";
-  import { usePlaylist } from "$lib/stores/playlist.svelte";
 
   type LoadState = "loading" | "ready" | "error";
 
   const nsfw = useNsfw();
-  const playlist = usePlaylist();
 
   let loadState: LoadState = $state("loading");
   let image = $state<ImageDetail | null>(null);
@@ -61,10 +59,6 @@
   });
 
   const lightboxEntities = $derived(lightboxEntity ? [lightboxEntity] : []);
-  const isCurrentPlaylistItem = $derived(
-    image ? playlist.isPlaylistItem("image", image.id) : false,
-  );
-
   const studio = $derived.by((): { id: string; title: string } | null => null);
 
   const credits = $derived.by((): Array<{ id: string; title: string }> => []);
@@ -150,12 +144,6 @@
     initialIndex={0}
     onClose={closeLightbox}
     onRatingChange={(_, value) => void handleRatingChange(value)}
-    autoAdvanceSeconds={isCurrentPlaylistItem ? playlist.slideshowDurationSeconds : 0}
-    onAutoAdvance={() => {
-      if (image) playlist.reportContentEnded("image", image.id);
-    }}
-    onPreviousRequest={isCurrentPlaylistItem ? () => playlist.previous() : undefined}
-    onNextRequest={isCurrentPlaylistItem ? () => playlist.next() : undefined}
     sharedKey={`image-${image?.id ?? "detail"}`}
   >
     {#snippet detailsContent()}

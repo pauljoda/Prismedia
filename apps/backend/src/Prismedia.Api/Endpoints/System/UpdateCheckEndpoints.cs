@@ -17,7 +17,7 @@ internal static class UpdateCheckEndpoints {
                 error = "Update checks are not available in the .NET API host yet."
             }))
             .WithName("GetUpdateCheck")
-            .WithTags("User State")
+            .WithTags("System")
             .WithSummary("Returns a non-blocking update-check status for the Svelte shell.");
 
         return routes;

@@ -17,13 +17,6 @@ export interface CollectionWriteRequest {
   coverMode: string | null;
   /** @nullable */
   coverItemId: string | null;
-  /**
-     * @nullable
-     * @pattern ^-?(?:0|[1-9]\d*)$
-     */
-  slideshowDurationSeconds: number | string | null;
-  /** @nullable */
-  slideshowAutoAdvance: boolean | null;
   /** @nullable */
   isNsfw: boolean | null;
 }

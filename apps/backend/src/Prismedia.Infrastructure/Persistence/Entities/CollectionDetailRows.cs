@@ -8,8 +8,6 @@ public sealed class CollectionDetailRow {
     public string? RuleTreeJson { get; set; }
     public CollectionCoverMode CoverMode { get; set; } = CollectionCoverMode.Mosaic;
     public Guid? CoverItemEntityId { get; set; }
-    public int SlideshowDurationSeconds { get; set; } = 5;
-    public bool SlideshowAutoAdvance { get; set; } = true;
     public DateTimeOffset? LastRefreshedAt { get; set; }
 }
 

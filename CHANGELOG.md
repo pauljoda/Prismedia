@@ -11,9 +11,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Mobile install metadata now presents Prismedia with the correct app name, theme colors, and safer icon spacing for browser and home-screen surfaces.
 
 ### Added
-- Added collection creation and editing, including manual, dynamic, and hybrid modes, rule previews, visibility, cover mode, and slideshow timing.
+- Added collection creation and editing, including manual, dynamic, and hybrid modes, rule previews, visibility, and cover mode.
 - Added collection item curation controls for adding, removing, and reordering manual media entries from collection detail pages.
-- Added shell-level collection playback from collection detail pages, including ordered Play and Shuffle controls that persist in the bottom playlist controller.
 - Added explicit reference-backed entity grids on people, studio, and tag detail pages so related content is listed from actual incoming relationships instead of search matches.
 - Added audio playback with streaming, waveform visualization, and full transport controls.
 - Added edit-mode poster and header artwork upload, drag-and-drop, and clear controls for entity detail pages.
@@ -36,6 +35,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Bulk identify now runs as a durable background job instead of an ephemeral in-memory session, so progress survives app restarts and results feed directly into the identify review queue.
 - Standardized all API error responses to use the `ApiProblem` format with consistent `code` and `message` fields.
 - Removed development-only links from app navigation.
+- Removed collection playback controls and global collection queue behavior so collections stay purely organizational.
 - Removed the summary stats cards from the Identify dashboard so the page starts with actionable queue content.
 - Removed the redundant plugin inventory panel from the Identify dashboard.
 - Simplified the Identify dashboard header by removing the redundant manual refresh action.
@@ -51,7 +51,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Fixed dynamic collection rule previews so NSFW, organized, favorite, and rating rules use the current entity schema.
 - Fixed dynamic collection rule previews so series entities can match universal filters such as title rules.
 - Fixed the New Collection route so it opens the collection editor instead of the route-not-found payload.
-- Fixed collection playlist advancement so videos, audio tracks, static images, and video-backed images all notify the shell when they complete.
 - Fixed detail-page Identify actions so already-queued entities show a pending review state, open the existing queue item, and expose ready providers for people and studios.
 - Fixed Identify queue accepts so scoped child proposals cannot overwrite the root entity under review.
 - Fixed manual Identify title searches so stale provider IDs already saved on an entity cannot override the user's search text.

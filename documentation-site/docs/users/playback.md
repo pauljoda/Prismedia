@@ -152,10 +152,6 @@ Controls:
 - **Volume**
 - **Playback speed** (0.75×–2×)
 
-The currently-playing playlist persists across refreshes via the `playlist_sessions` table, including shuffle state, loop state, cursor, and any slideshow timing if you're playing a collection.
-
-On mobile, a queue sheet slides up from the bottom for managing the current playlist.
-
 ![Mobile audio](/img/screenshots/mobile-audio.png)
 
 ## Markers

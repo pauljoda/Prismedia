@@ -78,7 +78,7 @@ The standalone Images page covers loose images that aren't part of a folder gall
 
 Audio libraries are the album-equivalent: a folder of tracks. Each library card shows cover art, title, and track count.
 
-Inside a library, the playlist component takes over. The brass-accent active row marks the current track; a live equalizer animation runs while it plays. The bottom-of-screen player handles playback globally so navigating away doesn't interrupt the audio.
+Inside a library, the track list takes over. The brass-accent active row marks the current track; a live equalizer animation runs while it plays.
 
 ![Audio track detail](/img/screenshots/audio.png)
 
@@ -119,7 +119,7 @@ Collections are user-created groupings that span media types. Three modes:
 | **Dynamic** | A rule tree (e.g. "all videos with tag 'favorite' rated 4+") evaluated on demand. |
 | **Hybrid** | Dynamic base + manual additions / removals. |
 
-A collection detail page lets you toggle between **Mixed** (everything in one view) and **By type** (tabs per media type). You can play a collection as a slideshow with auto-advance — useful for galleries or audio playlists.
+A collection detail page keeps collection membership as an organizational view for browsing, filtering, and curation.
 
 ## Search and the command palette
 

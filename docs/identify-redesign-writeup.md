@@ -27,7 +27,7 @@ Neither shares proposals, selection state, or providers with the other. Navigati
 
 ### Root-Level Queue Store
 
-A new `IdentifyQueueStore` class provided via Svelte context in the root `+layout.svelte` (same pattern as `PlaylistStore`). Survives navigation across the entire app.
+A new `IdentifyQueueStore` class provided via Svelte context in the root `+layout.svelte`. Survives navigation across the entire app.
 
 **Item state machine:**
 ```

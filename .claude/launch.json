@@ -7,6 +7,12 @@
       "runtimeArgs": ["--filter", "@prismedia/web-svelte", "dev"],
       "port": 5173,
       "autoPort": true
+    },
+    {
+      "name": "app",
+      "runtimeExecutable": "tail",
+      "runtimeArgs": ["-f", "/dev/null"],
+      "port": 8008
     }
   ]
 }

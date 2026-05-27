@@ -1,15 +1,12 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
-describe("collection playlist wiring", () => {
-  it("uses ordered collection item membership for grids and shell playlist playback", async () => {
+describe("collection detail route", () => {
+  it("uses ordered collection item membership for grids", async () => {
     const source = await readFile("src/routes/collections/[id]/+page.svelte", "utf8");
 
     expect(source).toContain("fetchCollectionItems");
-    expect(source).toContain("playlist.startPlaylist(collectionItems, collection.title, 0");
-    expect(source).toContain("slideshowDurationSeconds: slideshowDurationSeconds()");
-    expect(source).toContain("aria-label=\"Play collection\"");
-    expect(source).toContain("aria-label=\"Shuffle collection\"");
+    expect(source).toContain("<EntityGrid");
   });
 
   it("owns create and edit routes instead of linking to a missing shell fallback", async () => {
@@ -28,9 +25,11 @@ describe("collection playlist wiring", () => {
     const detailSource = await readFile("src/routes/collections/[id]/+page.svelte", "utf8");
     const apiSource = await readFile("src/lib/api/collections.ts", "utf8");
     const editorSource = await readFile("src/lib/components/collections/CollectionEditor.svelte", "utf8");
+    const modelsSource = await readFile("src/lib/collections/models.ts", "utf8");
+    const conditionBuilderSource = await readFile("src/lib/components/collections/ConditionBuilder.svelte", "utf8");
 
     expect(apiSource).toContain("createCollection");
-    expect(apiSource).toContain('[201]');
+    expect(apiSource).toContain("[201]");
     expect(apiSource).toContain("updateCollection");
     expect(apiSource).toContain("addCollectionItems");
     expect(apiSource).toContain("reorderCollectionItems");
@@ -39,5 +38,7 @@ describe("collection playlist wiring", () => {
     expect(detailSource).toContain("removeCollectionItems");
     expect(detailSource).toContain("refreshCollection");
     expect(editorSource).toContain("ConditionBuilder");
+    expect(modelsSource).toContain("\"video-series\"");
+    expect(conditionBuilderSource).toContain("value: \"video-series\"");
   });
 });

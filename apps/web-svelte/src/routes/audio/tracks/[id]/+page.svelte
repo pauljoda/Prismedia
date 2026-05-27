@@ -28,13 +28,11 @@
   import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import { useAppChrome } from "$lib/stores/app-chrome.svelte";
-  import { usePlaylist } from "$lib/stores/playlist.svelte";
 
   type LoadState = "loading" | "ready" | "error";
 
   const nsfw = useNsfw();
   const appChrome = useAppChrome();
-  const playlist = usePlaylist();
 
   let loadState: LoadState = $state("loading");
   let track = $state<AudioTrackDetail | null>(null);
@@ -62,9 +60,6 @@
   });
 
   const trackItem = $derived(track ? audioTrackDetailToListItem(track) : null);
-  const isCurrentPlaylistItem = $derived(
-    track ? playlist.isPlaylistItem("audio-track", track.id) : false,
-  );
 
   onMount(() => {
     void loadTrack();
@@ -192,9 +187,6 @@
       activeTrackId={track.id}
       onTrackChange={() => {}}
       libraryCoverUrl={parentCoverUrl}
-      onPlaybackComplete={() => {
-        if (track && isCurrentPlaylistItem) playlist.reportContentEnded("audio-track", track.id);
-      }}
     />
   {/if}
 </div>

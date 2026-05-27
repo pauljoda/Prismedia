@@ -16,7 +16,6 @@ public sealed class InfrastructureBoundaryTests {
             "Prismedia.Application.Plugins.IBulkIdentifySessions",
             "Prismedia.Application.Plugins.IIdentifyUseCases",
             "Prismedia.Application.Plugins.IPluginCatalogUseCases",
-            "Prismedia.Application.UserState.IUserStateService",
             "Prismedia.Infrastructure.Plugins.ApplicationIdentifySessionStore",
             "Prismedia.Infrastructure.Plugins.IdentifyUseCases",
             "Prismedia.Infrastructure.Plugins.PluginCatalogUseCases"

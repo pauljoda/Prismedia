@@ -11,7 +11,6 @@ using Prismedia.Application.Jobs.Ports;
 using Prismedia.Application.Organization;
 using Prismedia.Application.Settings;
 using Prismedia.Application.Health;
-using Prismedia.Application.UserState;
 using Prismedia.Application.Audio;
 using Prismedia.Application.Plugins;
 using Prismedia.Application.Videos;
@@ -31,7 +30,6 @@ using Prismedia.Infrastructure.Processes;
 using Prismedia.Infrastructure.Queue;
 using Prismedia.Infrastructure.Settings;
 using Prismedia.Infrastructure.Health;
-using Prismedia.Infrastructure.UserState;
 using Prismedia.Infrastructure.Videos;
 
 namespace Prismedia.Infrastructure;
@@ -207,7 +205,6 @@ public static class DependencyInjection {
         services.AddSingleton<IWorkerHeartbeatStore>(new FileWorkerHeartbeatStore(dataDir));
         services.AddScoped<IJobQueueService, JobQueueService>();
         services.AddScoped<ISettingsPersistence, EfSettingsPersistence>();
-        services.AddScoped<IUserStatePersistence, EfUserStatePersistence>();
     }
 
     private static void RegisterEntityMappers(IServiceCollection services) {

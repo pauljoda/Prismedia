@@ -20,7 +20,7 @@ public static class EndpointRouteBuilderExtensions {
         routes.MapSettingsEndpoints();
         routes.MapLibraryEndpoints();
         routes.MapFilesEndpoints();
-        routes.MapUserStateEndpoints();
+        routes.MapUpdateCheckEndpoints();
         routes.MapPluginEndpoints();
         routes.MapIdentifyEndpoints();
         routes.MapOrganizeEndpoints();

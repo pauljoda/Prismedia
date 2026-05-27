@@ -9,10 +9,8 @@
     Layers,
     Loader2,
     Pencil,
-    Play,
     Plus,
     RefreshCw,
-    Shuffle,
     Trash2,
     X,
   } from "@lucide/svelte";
@@ -48,17 +46,14 @@
   } from "$lib/components/entities/EntityDetail.svelte";
   import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
   import EntityPicker, { type EntityPickerItem } from "$lib/components/forms/EntityPicker.svelte";
-  import { durationToSeconds } from "$lib/utils/format";
   import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import { useAppChrome } from "$lib/stores/app-chrome.svelte";
-  import { usePlaylist } from "$lib/stores/playlist.svelte";
 
   type LoadState = "loading" | "ready" | "error";
 
   const nsfw = useNsfw();
   const appChrome = useAppChrome();
-  const playlist = usePlaylist();
 
   let loadState: LoadState = $state("loading");
   let collection = $state<CollectionDetail | null>(null);
@@ -151,19 +146,6 @@
     if (!collection) return;
     await updateEntityMetadata(collection.id, request, { kind: collection.kind });
     await loadCollection();
-  }
-
-  function slideshowDurationSeconds() {
-    if (!collection?.slideshowAutoAdvance) return 0;
-    return durationToSeconds(collection.slideshowDuration) ?? 0;
-  }
-
-  function startPlaylist(shuffle = false) {
-    if (!collection || collectionItems.length === 0) return;
-    playlist.startPlaylist(collectionItems, collection.title, 0, {
-      shuffle,
-      slideshowDurationSeconds: slideshowDurationSeconds(),
-    });
   }
 
   async function searchAddableEntities(query: string): Promise<EntityPickerItem[]> {
@@ -259,14 +241,14 @@
 
 <div class="grid gap-5">
   {#if loadState === "loading"}
-    <div class="min-h-[28rem] border border-border-subtle bg-surface-2 animate-pulse"></div>
+    <div class="min-h-[28rem] rounded-md border border-border-subtle bg-surface-2 animate-pulse"></div>
   {:else if loadState === "error"}
-    <div class="flex items-center justify-between gap-4 border border-error/50 bg-surface-2 p-4 text-[0.85rem] text-text-muted">
+    <div class="flex items-center justify-between gap-4 rounded-sm border border-error/50 bg-surface-2 p-4 text-[0.85rem] text-text-muted">
       <p class="m-0">{errorMessage ?? "Failed to load collection."}</p>
       <button
         type="button"
         onclick={() => void loadCollection()}
-        class="border border-border-subtle bg-surface-3 px-3 py-1.5 text-[0.78rem] text-text-muted transition-colors hover:border-border-default hover:text-text-primary"
+        class="rounded-xs border border-border-subtle bg-surface-3 px-3 py-1.5 text-[0.78rem] text-text-muted transition-colors hover:border-border-default hover:text-text-primary"
       >
         Retry
       </button>
@@ -293,16 +275,13 @@
 
       {#snippet heroBadges()}
         {#if collection?.mode}
-          <span class="pill-accent">{collection.mode}</span>
-        {/if}
-        {#if collection?.slideshowAutoAdvance && slideshowDurationSeconds() > 0}
-          <span class="pill-accent">auto {slideshowDurationSeconds()}s</span>
+          <span class="hero-badge">{collection.mode}</span>
         {/if}
       {/snippet}
 
       {#snippet extraActions()}
-        {@const actionClass = "inline-flex w-[2.35rem] h-[2.35rem] items-center justify-center border border-border-subtle bg-[rgb(17_22_29/0.72)] text-text-muted backdrop-blur-[12px] transition-all hover:border-border-accent hover:text-text-accent hover:shadow-[0_0_18px_rgb(242_194_106/0.12)] disabled:cursor-not-allowed disabled:opacity-40 no-underline"}
-        {@const dangerClass = "inline-flex w-[2.35rem] h-[2.35rem] items-center justify-center border border-border-subtle bg-[rgb(17_22_29/0.72)] text-text-muted backdrop-blur-[12px] transition-all hover:border-error/50 hover:text-error-text hover:shadow-[0_0_18px_rgb(255_128_111/0.12)] disabled:cursor-not-allowed disabled:opacity-40"}
+        {@const actionClass = "inline-flex w-[2.35rem] h-[2.35rem] items-center justify-center rounded-xs border border-border-subtle bg-[rgb(17_22_29/0.72)] text-text-muted backdrop-blur-[12px] transition-all hover:border-border-accent hover:text-text-accent hover:shadow-[0_0_18px_rgb(242_194_106/0.12)] disabled:cursor-not-allowed disabled:opacity-40 no-underline"}
+        {@const dangerClass = "inline-flex w-[2.35rem] h-[2.35rem] items-center justify-center rounded-xs border border-border-subtle bg-[rgb(17_22_29/0.72)] text-text-muted backdrop-blur-[12px] transition-all hover:border-error/50 hover:text-error-text hover:shadow-[0_0_18px_rgb(255_128_111/0.12)] disabled:cursor-not-allowed disabled:opacity-40"}
         <a
           class={actionClass}
           aria-label="Edit collection"
@@ -325,26 +304,6 @@
         {/if}
         <button
           type="button"
-          class={actionClass}
-          aria-label="Play collection"
-          title="Play collection"
-          disabled={collectionItems.length === 0}
-          onclick={() => startPlaylist(false)}
-        >
-          <Play class="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          class={actionClass}
-          aria-label="Shuffle collection"
-          title="Shuffle collection"
-          disabled={collectionItems.length === 0}
-          onclick={() => startPlaylist(true)}
-        >
-          <Shuffle class="h-4 w-4" />
-        </button>
-        <button
-          type="button"
           class={dangerClass}
           aria-label="Delete collection"
           title="Delete collection"
@@ -357,12 +316,12 @@
     </EntityDetail>
 
     {#if itemMutationError}
-      <div class="flex items-center justify-between gap-3 border border-error/50 bg-surface-2 px-4 py-3 text-[0.8rem] text-error-text">
+      <div class="flex items-center justify-between gap-3 rounded-sm border border-error/50 bg-surface-2 px-4 py-3 text-[0.8rem] text-error-text">
         <span>{itemMutationError}</span>
         <button
           type="button"
           onclick={() => (itemMutationError = null)}
-          class="inline-flex h-7 w-7 items-center justify-center border border-border-subtle bg-surface-3 text-text-muted transition-colors hover:text-text-primary"
+          class="inline-flex h-7 w-7 items-center justify-center rounded-xs border border-border-subtle bg-surface-3 text-text-muted transition-colors hover:text-text-primary"
         >
           <X class="h-3 w-3" />
         </button>
@@ -390,7 +349,7 @@
                 bind:value={addItemKind}
                 disabled={addingItem}
                 class={cn(
-                  "w-full appearance-none border border-border-subtle bg-surface-2 px-3 py-2 pr-8 text-sm text-text-primary",
+                  "w-full appearance-none rounded-xs border border-border-subtle bg-surface-2 px-3 py-2 pr-8 text-sm text-text-primary",
                   "shadow-[inset_0_2px_8px_rgba(0,0,0,0.30)] transition-colors outline-none",
                   "focus:border-border-accent focus:shadow-[inset_0_2px_8px_rgba(0,0,0,0.30),0_0_0_1px_rgba(242,194,106,0.35),0_0_8px_rgba(242,194,106,0.15)]",
                   "disabled:cursor-not-allowed disabled:opacity-50",
@@ -415,7 +374,7 @@
 
         <!-- Ordered item list -->
         {#if collectionItems.length > 0}
-          <div class="border border-border-subtle overflow-hidden">
+          <div class="rounded-sm border border-border-subtle overflow-hidden">
             <ol class="m-0 p-0 list-none">
               {#each collectionItems as item, index (item.id)}
                 <li
@@ -447,7 +406,7 @@
                       disabled={index === 0}
                       onclick={() => moveItem(index, -1)}
                       class={cn(
-                        "inline-flex h-7 w-7 items-center justify-center border border-border-subtle bg-surface-2 text-text-muted transition-colors",
+                        "inline-flex h-7 w-7 items-center justify-center rounded-xs border border-border-subtle bg-surface-2 text-text-muted transition-colors",
                         "hover:border-border-accent hover:text-text-accent",
                         "disabled:cursor-not-allowed disabled:opacity-30",
                       )}
@@ -461,7 +420,7 @@
                       disabled={index === collectionItems.length - 1}
                       onclick={() => moveItem(index, 1)}
                       class={cn(
-                        "inline-flex h-7 w-7 items-center justify-center border border-border-subtle bg-surface-2 text-text-muted transition-colors",
+                        "inline-flex h-7 w-7 items-center justify-center rounded-xs border border-border-subtle bg-surface-2 text-text-muted transition-colors",
                         "hover:border-border-accent hover:text-text-accent",
                         "disabled:cursor-not-allowed disabled:opacity-30",
                       )}
@@ -474,7 +433,7 @@
                       title="Remove item"
                       onclick={() => removeItem(item)}
                       class={cn(
-                        "inline-flex h-7 w-7 items-center justify-center border border-border-subtle bg-surface-2 text-text-muted transition-colors",
+                        "inline-flex h-7 w-7 items-center justify-center rounded-xs border border-border-subtle bg-surface-2 text-text-muted transition-colors",
                         "hover:border-error/50 hover:text-error-text",
                       )}
                     >
@@ -494,7 +453,7 @@
         <h2 class="m-0 font-heading text-[1.1rem] font-semibold text-text-primary flex items-center gap-2">
           <Layers class="h-4 w-4 text-text-muted" />
           Items
-          <span class="font-mono text-[0.68rem] font-semibold text-text-muted px-1.5 py-0.5 border border-border-subtle bg-surface-3 tabular-nums">
+          <span class="font-mono text-[0.68rem] font-semibold text-text-muted px-1.5 py-0.5 rounded-xs border border-border-subtle bg-surface-3 tabular-nums">
             {itemCards.length}
           </span>
         </h2>

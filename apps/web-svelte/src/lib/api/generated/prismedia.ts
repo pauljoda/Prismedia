@@ -5034,116 +5034,6 @@ export const headFileContent = async (params: HeadFileContentParams, options?: R
   }
 );}
 
-
-
-export type getPlaylistSessionResponse200 = {
-  data: void
-  status: 200
-}
-
-export type getPlaylistSessionResponseSuccess = (getPlaylistSessionResponse200) & {
-  headers: Headers;
-};
-;
-
-export type getPlaylistSessionResponse = (getPlaylistSessionResponseSuccess)
-
-export const getGetPlaylistSessionUrl = () => {
-
-
-
-
-  return `/api/playlist-session`
-}
-
-/**
- * @summary Gets the current browser playlist session.
- */
-export const getPlaylistSession = async ( options?: RequestInit): Promise<getPlaylistSessionResponse> => {
-
-  return orvalFetch<getPlaylistSessionResponse>(getGetPlaylistSessionUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-export type putPlaylistSessionResponse200 = {
-  data: void
-  status: 200
-}
-
-export type putPlaylistSessionResponseSuccess = (putPlaylistSessionResponse200) & {
-  headers: Headers;
-};
-;
-
-export type putPlaylistSessionResponse = (putPlaylistSessionResponseSuccess)
-
-export const getPutPlaylistSessionUrl = () => {
-
-
-
-
-  return `/api/playlist-session`
-}
-
-/**
- * @summary Stores the current browser playlist session.
- */
-export const putPlaylistSession = async ( options?: RequestInit): Promise<putPlaylistSessionResponse> => {
-
-  return orvalFetch<putPlaylistSessionResponse>(getPutPlaylistSessionUrl(),
-  {
-    ...options,
-    method: 'PUT'
-
-
-  }
-);}
-
-
-
-export type deletePlaylistSessionResponse200 = {
-  data: void
-  status: 200
-}
-
-export type deletePlaylistSessionResponseSuccess = (deletePlaylistSessionResponse200) & {
-  headers: Headers;
-};
-;
-
-export type deletePlaylistSessionResponse = (deletePlaylistSessionResponseSuccess)
-
-export const getDeletePlaylistSessionUrl = () => {
-
-
-
-
-  return `/api/playlist-session`
-}
-
-/**
- * @summary Clears the current browser playlist session.
- */
-export const deletePlaylistSession = async ( options?: RequestInit): Promise<deletePlaylistSessionResponse> => {
-
-  return orvalFetch<deletePlaylistSessionResponse>(getDeletePlaylistSessionUrl(),
-  {
-    ...options,
-    method: 'DELETE'
-
-
-  }
-);}
-
-
-
 export type listPluginsResponse200 = {
   data: PluginProvider[]
   status: 200
@@ -5863,6 +5753,5 @@ export const applyOrganizePlan = async (organizePlanRequest: OrganizePlanRequest
       organizePlanRequest,)
   }
 );}
-
 
 

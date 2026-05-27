@@ -25,8 +25,6 @@ public sealed class CollectionCommandServiceTests {
                 EmptyRuleJson,
                 "mosaic",
                 null,
-                9,
-                true,
                 true),
             CancellationToken.None);
 
@@ -34,7 +32,6 @@ public sealed class CollectionCommandServiceTests {
         Assert.NotNull(result.Collection);
         Assert.Equal("Favorites", result.Collection.Title);
         Assert.Equal("hybrid", result.Collection.Mode);
-        Assert.Equal(TimeSpan.FromSeconds(9), result.Collection.SlideshowDuration);
 
         var entity = Assert.Single(db.Entities);
         Assert.Equal(EntityKindRegistry.Collection.Code, entity.KindCode);
@@ -59,8 +56,6 @@ public sealed class CollectionCommandServiceTests {
                 EmptyRuleJson,
                 "item",
                 null,
-                12,
-                false,
                 false),
             CancellationToken.None);
 
@@ -71,8 +66,6 @@ public sealed class CollectionCommandServiceTests {
         Assert.False(entity.IsNsfw);
         Assert.Equal(CollectionMode.Dynamic, detail.Mode);
         Assert.Equal(CollectionCoverMode.Item, detail.CoverMode);
-        Assert.Equal(12, detail.SlideshowDurationSeconds);
-        Assert.False(detail.SlideshowAutoAdvance);
     }
 
     [Fact]
@@ -204,8 +197,6 @@ public sealed class CollectionCommandServiceTests {
             EntityId = id,
             Mode = mode,
             RuleTreeJson = mode == CollectionMode.Manual ? null : EmptyRuleJson,
-            SlideshowDurationSeconds = 5,
-            SlideshowAutoAdvance = true,
         });
         return id;
     }
@@ -296,8 +287,6 @@ public sealed class CollectionCommandServiceTests {
                 RuleTreeJson = detail.RuleTreeJson,
                 CoverMode = detail.CoverMode.ToCode(),
                 CoverItemId = detail.CoverItemEntityId,
-                SlideshowDuration = TimeSpan.FromSeconds(detail.SlideshowDurationSeconds),
-                SlideshowAutoAdvance = detail.SlideshowAutoAdvance,
                 LastRefreshedAt = detail.LastRefreshedAt,
             };
         }

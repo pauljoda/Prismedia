@@ -23,8 +23,6 @@ internal sealed class CollectionKindMapper(PrismediaDbContext db) : IEntityKindM
                 detail.RuleTreeJson,
                 detail.CoverMode,
                 detail.CoverItemEntityId,
-                TimeSpan.FromSeconds(detail.SlideshowDurationSeconds),
-                detail.SlideshowAutoAdvance,
                 detail.LastRefreshedAt);
     }
 
@@ -39,8 +37,6 @@ internal sealed class CollectionKindMapper(PrismediaDbContext db) : IEntityKindM
         row.RuleTreeJson = collection.RuleTreeJson;
         row.CoverMode = collection.CoverMode;
         row.CoverItemEntityId = collection.CoverItemId;
-        row.SlideshowDurationSeconds = (int)collection.SlideshowDuration.TotalSeconds;
-        row.SlideshowAutoAdvance = collection.SlideshowAutoAdvance;
         row.LastRefreshedAt = collection.LastRefreshedAt;
     }
 
@@ -62,8 +58,6 @@ internal sealed class CollectionKindMapper(PrismediaDbContext db) : IEntityKindM
                 RuleTreeJson = collection.RuleTreeJson,
                 CoverMode = collection.CoverMode.ToCode(),
                 CoverItemId = collection.CoverItemId,
-                SlideshowDuration = collection.SlideshowDuration,
-                SlideshowAutoAdvance = collection.SlideshowAutoAdvance,
                 LastRefreshedAt = collection.LastRefreshedAt,
             }
             : card;

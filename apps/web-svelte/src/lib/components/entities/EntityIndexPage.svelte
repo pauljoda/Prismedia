@@ -374,6 +374,7 @@
     gap: 0.5rem;
     height: 2.4rem;
     padding: 0 1rem;
+    border-radius: var(--radius-sm);
     border: 1px solid rgb(244 220 170 / 0.5);
     background: linear-gradient(180deg, #ddb477, #a07a3e);
     color: #1a1408;

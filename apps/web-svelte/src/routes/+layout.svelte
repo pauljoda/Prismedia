@@ -9,7 +9,6 @@
   import CanvasHeader from "$lib/components/CanvasHeader.svelte";
   import MobileNav from "$lib/components/MobileNav.svelte";
   import CommandPalette from "$lib/components/CommandPalette.svelte";
-  import PlaylistController from "$lib/components/PlaylistController.svelte";
 
   import { type NsfwMode, parseNsfwModeCookie } from "$lib/nsfw/cookie";
   import { provideNsfw } from "$lib/nsfw/store.svelte";
@@ -18,7 +17,6 @@
   import { MAIN_SCROLL_TOP_EVENT } from "$lib/stores/main-scroll";
   import { providePageSnapshots, type AppPageSnapshot } from "$lib/stores/page-snapshots.svelte";
   import { provideSearch } from "$lib/stores/search.svelte";
-  import { providePlaylist } from "$lib/stores/playlist.svelte";
 
   function readNsfwCookie(): NsfwMode | null {
     if (!browser) return null;
@@ -50,11 +48,7 @@
   }));
   const chrome = provideAppChrome(() => layoutData.initialCollapsed);
   provideSearch();
-  const playlist = providePlaylist();
   let mainScroller = $state<HTMLElement | null>(null);
-  $effect(() => {
-    void playlist.hydrate();
-  });
 
   function scrollMainToTop() {
     void tick().then(() => {
@@ -109,15 +103,13 @@
   const bottomDockPadding = $derived(
     chrome.bottomDockInsetPx > 0 ? `${chrome.bottomDockInsetPx + 16}px` : "0px",
   );
-  const playlistOffset = $derived(playlist.isActive ? "3.5rem" : "0px");
 </script>
 
 <div
   class="flex min-h-dvh"
   style:--prismedia-bottom-dock-padding={bottomDockPadding}
-  style:--prismedia-playlist-offset={playlistOffset}
-  style:--prismedia-mobile-bottom-clearance="calc(3.5rem + var(--prismedia-playlist-offset) + var(--prismedia-bottom-dock-padding))"
-  style:--prismedia-desktop-bottom-clearance="calc(var(--prismedia-playlist-offset) + var(--prismedia-bottom-dock-padding))"
+  style:--prismedia-mobile-bottom-clearance="calc(3.5rem + var(--prismedia-bottom-dock-padding))"
+  style:--prismedia-desktop-bottom-clearance="var(--prismedia-bottom-dock-padding)"
 >
   <!-- Desktop sidebar -->
   <div class="hidden md:block">
@@ -141,5 +133,4 @@
 
   <MobileNav />
   <CommandPalette />
-  <PlaylistController />
 </div>

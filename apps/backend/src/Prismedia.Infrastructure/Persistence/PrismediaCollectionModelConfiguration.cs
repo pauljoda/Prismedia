@@ -20,8 +20,6 @@ internal static partial class PrismediaModelConfiguration {
                 .HasMaxLength(64)
                 .HasConversion(value => value.ToCode(), value => value.DecodeAs<CollectionCoverMode>());
             entity.Property(row => row.CoverItemEntityId).HasColumnName("cover_item_entity_id");
-            entity.Property(row => row.SlideshowDurationSeconds).HasColumnName("slideshow_duration_seconds");
-            entity.Property(row => row.SlideshowAutoAdvance).HasColumnName("slideshow_auto_advance");
             entity.Property(row => row.LastRefreshedAt).HasColumnName("last_refreshed_at");
             entity.HasOne<EntityRow>().WithOne().HasForeignKey<CollectionDetailRow>(row => row.EntityId).OnDelete(DeleteBehavior.Cascade);
         });

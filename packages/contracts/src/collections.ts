@@ -112,8 +112,6 @@ export interface CollectionListItemDto {
   itemCount: number;
   coverMode: CollectionCoverMode;
   coverImagePath: string | null;
-  slideshowDurationSeconds: number;
-  slideshowAutoAdvance: boolean;
   isNsfw: boolean;
   /** Breakdown of items by entity type. */
   typeCounts: Record<CollectionEntityType, number>;
@@ -149,8 +147,6 @@ export interface CollectionCreateDto {
   description?: string;
   mode?: CollectionMode;
   ruleTree?: CollectionRuleGroup;
-  slideshowDurationSeconds?: number;
-  slideshowAutoAdvance?: boolean;
   isNsfw?: boolean;
 }
 
@@ -162,8 +158,6 @@ export interface CollectionPatchDto {
   coverMode?: CollectionCoverMode;
   coverItemId?: string | null;
   coverItemType?: CollectionEntityType | null;
-  slideshowDurationSeconds?: number;
-  slideshowAutoAdvance?: boolean;
   isNsfw?: boolean;
 }
 
@@ -184,27 +178,4 @@ export interface CollectionRulePreviewDto {
   total: number;
   byType: Record<CollectionEntityType, number>;
   sample: CollectionItemDto[];
-}
-
-export interface PlaylistSessionDto {
-  collectionId: string | null;
-  collectionName: string;
-  items: CollectionItemDto[];
-  playOrder: number[];
-  orderPosition: number;
-  shuffle: boolean;
-  loop: boolean;
-  slideshowDurationSeconds: number;
-  updatedAt: string;
-}
-
-export interface PlaylistSessionWriteDto {
-  collectionId: string | null;
-  collectionName: string;
-  items: CollectionItemDto[];
-  playOrder: number[];
-  orderPosition: number;
-  shuffle: boolean;
-  loop: boolean;
-  slideshowDurationSeconds: number;
 }
