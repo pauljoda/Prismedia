@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { page } from "$app/state";
   import { Film } from "@lucide/svelte";
+  import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import { fetchEntities } from "$lib/api/entities";
   import {
     updateEntityRating,
@@ -131,7 +132,7 @@
 
 <div class="detail-page">
   {#if loadState === "loading"}
-    <div class="loading-shell" aria-busy="true"></div>
+    <EntityDetailSkeleton />
   {:else if loadState === "error"}
     <div class="error-notice">
       <p>{errorMessage ?? "Failed to load studio."}</p>
@@ -182,7 +183,6 @@
 
 <style>
   .detail-page { display: grid; gap: 1.25rem; padding: 0; max-width: none; margin: 0; }
-  .loading-shell { min-height: 28rem; border: 1px solid var(--color-border, #1c2235); background: var(--color-surface-2, #101420); animation: pulse 1.2s ease-in-out infinite; }
   .error-notice { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem; border: 1px solid color-mix(in srgb, #ef4444 50%, var(--color-border, #1c2235)); background: var(--color-surface-2, #101420); color: var(--color-text-muted, #8a93a6); font-size: 0.85rem; }
   .error-notice button { border: 1px solid var(--color-border, #1c2235); background: var(--color-surface-3, #151a28); color: var(--color-text-muted, #8a93a6); padding: 0.4rem 0.8rem; font-size: 0.78rem; cursor: pointer; }
 
@@ -193,5 +193,4 @@
   .content-heading { display: flex; align-items: center; gap: 0.5rem; margin: 0; font-family: var(--font-heading, Geist, sans-serif); font-size: 1.1rem; font-weight: 600; color: var(--color-text-primary, #f2eed8); }
   .content-count { font-family: var(--font-mono, "JetBrains Mono", monospace); font-size: 0.68rem; font-weight: 600; color: var(--color-text-muted, #8a93a6); padding: 0.1rem 0.4rem; border: 1px solid var(--color-border, #1c2235); background: var(--color-surface-3, #151a28); }
 
-  @keyframes pulse { 0%, 100% { opacity: 0.45; } 50% { opacity: 0.85; } }
 </style>

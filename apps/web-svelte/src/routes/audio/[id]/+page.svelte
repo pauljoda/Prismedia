@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { page } from "$app/state";
   import { Music, Play, Shuffle } from "@lucide/svelte";
+  import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import { fetchAudioLibrary, type AudioLibraryDetail } from "$lib/api/media";
   import {
     updateEntityRating,
@@ -242,7 +243,7 @@
 
 <div class={trackItems.length > 0 ? "detail-page has-audio-player" : "detail-page"}>
   {#if loadState === "loading"}
-    <div class="loading-shell" aria-busy="true"></div>
+    <EntityDetailSkeleton />
   {:else if loadState === "error"}
     <div class="error-notice">
       <p>{errorMessage ?? "Failed to load audio library."}</p>
@@ -332,7 +333,6 @@
 <style>
   .detail-page { display: grid; gap: 1.25rem; padding: 0; max-width: none; margin: 0; }
   .detail-page.has-audio-player { padding-bottom: calc(12rem + env(safe-area-inset-bottom, 0px)); }
-  .loading-shell { min-height: 28rem; border: 1px solid var(--color-border, #1c2235); background: var(--color-surface-2, #101420); animation: pulse 1.2s ease-in-out infinite; }
   .error-notice { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem; border: 1px solid color-mix(in srgb, #ef4444 50%, var(--color-border, #1c2235)); background: var(--color-surface-2, #101420); color: var(--color-text-muted, #8a93a6); font-size: 0.85rem; }
   .error-notice button { border: 1px solid var(--color-border, #1c2235); background: var(--color-surface-3, #151a28); color: var(--color-text-muted, #8a93a6); padding: 0.4rem 0.8rem; font-size: 0.78rem; cursor: pointer; }
 
@@ -352,5 +352,4 @@
 
   @media (min-width: 640px) { .credits-section { padding: 1rem 2rem; } }
   @media (min-width: 768px) { .detail-page.has-audio-player { padding-bottom: 11rem; } }
-  @keyframes pulse { 0%, 100% { opacity: 0.45; } 50% { opacity: 0.85; } }
 </style>

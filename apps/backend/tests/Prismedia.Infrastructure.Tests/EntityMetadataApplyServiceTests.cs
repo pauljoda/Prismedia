@@ -610,6 +610,77 @@ public sealed class EntityMetadataApplyServiceTests {
     }
 
     [Fact]
+    public async Task ApplyBookCascadePromotesStructuralChildStudioRelationshipToBook() {
+        await using var db = CreateContext();
+        var bookId = Guid.Parse("22222222-3333-4444-5555-666666666666");
+        SeedEntity(db, bookId, "book", "Manga");
+        await db.SaveChangesAsync();
+
+        var proposal = new EntityMetadataProposal(
+            ProposalId: "mangaplus:manga-1",
+            Provider: "mangaplus",
+            TargetKind: "book",
+            Confidence: 1,
+            MatchReason: "external-id",
+            Patch: EmptyPatch(),
+            Images: [],
+            Children:
+            [
+                new EntityMetadataProposal(
+                    ProposalId: "mangaplus:manga-1:volume:1",
+                    Provider: "mangaplus",
+                    TargetKind: "book-volume",
+                    Confidence: 0.8m,
+                    MatchReason: "volume-map",
+                    Patch: EmptyPatch() with {
+                        Title = "Volume 1",
+                        Positions = new Dictionary<string, int> { ["volumeNumber"] = 1 }
+                    },
+                    Images: [],
+                    Children:
+                    [
+                        new EntityMetadataProposal(
+                            ProposalId: "mangaplus:manga-1:chapter:chapter-1",
+                            Provider: "mangaplus",
+                            TargetKind: "book-chapter",
+                            Confidence: 0.7m,
+                            MatchReason: "chapter-feed",
+                            Patch: EmptyPatch() with {
+                                Title = "Chapter 1",
+                                Studio = "MangaPlus",
+                                Positions = new Dictionary<string, int> { ["chapterNumber"] = 1 }
+                            },
+                            Images: [],
+                            Children: [],
+                            Candidates: [])
+                    ],
+                    Candidates: [])
+            ],
+            Candidates: []);
+
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+        await service.ApplyAsync(bookId, proposal, selectedFields: ["externalIds"], selectedImages: null, CancellationToken.None);
+
+        var volumeId = await db.Entities
+            .Where(row => row.KindCode == "book-volume")
+            .Select(row => row.Id)
+            .SingleAsync();
+        var chapterId = await db.Entities
+            .Where(row => row.KindCode == "book-chapter")
+            .Select(row => row.Id)
+            .SingleAsync();
+        var studioId = await db.Entities
+            .Where(row => row.KindCode == "studio" && row.Title == "MangaPlus")
+            .Select(row => row.Id)
+            .SingleAsync();
+
+        var link = await db.EntityRelationshipLinks.SingleAsync(row => row.RelationshipCode == "studio");
+        Assert.Equal(bookId, link.EntityId);
+        Assert.Equal(studioId, link.TargetEntityId);
+        Assert.DoesNotContain(db.EntityRelationshipLinks, row => row.EntityId == volumeId || row.EntityId == chapterId);
+    }
+
+    [Fact]
     public async Task ApplyCascadePositionsUpdatesCanonicalPositionsAndStructuralSortOrder() {
         await using var db = CreateContext();
         var seriesId = Guid.Parse("88888888-8888-8888-8888-888888888888");

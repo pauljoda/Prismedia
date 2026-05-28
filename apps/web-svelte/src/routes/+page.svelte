@@ -127,10 +127,10 @@
     </a>
   </div>
 {:else}
-  <div class="space-y-10 pb-16 -mx-1">
+  <div class="space-y-10 pb-16 -mx-3">
     {#each populatedSections as section (section.kind)}
       <section>
-        <div class="flex items-center justify-between mb-4 px-1">
+        <div class="flex items-center justify-between mb-4 px-3">
           <h2 class="text-lg font-semibold flex items-center gap-2">
             <section.icon class="w-4.5 h-4.5 text-accent-500" />
             {section.label}
@@ -144,15 +144,10 @@
           </a>
         </div>
 
-        <div class="flex gap-3 overflow-x-auto pb-4 snap-x snap-mandatory scrollbar-hidden px-1">
+        <div class="flex gap-3 overflow-x-auto pt-1 pb-5 snap-x snap-mandatory scrollbar-hidden px-3">
           {#each section.cards as card (card.entity.id)}
             <div class="flex-none snap-start" style:width="clamp(140px, 18vw, 220px)">
-              <a
-                href={card.href}
-                class="block overflow-hidden border border-border-subtle bg-surface-1 hover:border-border-accent transition-colors duration-fast"
-              >
-                <EntityThumbnail {card} />
-              </a>
+              <EntityThumbnail {card} />
             </div>
           {/each}
         </div>

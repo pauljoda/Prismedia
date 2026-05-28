@@ -15,6 +15,7 @@
     X,
   } from "@lucide/svelte";
   import { cn } from "@prismedia/ui-svelte";
+  import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import {
     updateEntityRating,
     updateEntityFlags,
@@ -316,7 +317,7 @@
 
 <div class="grid gap-5">
   {#if loadState === "loading"}
-    <div class="min-h-[28rem] rounded-md border border-border-subtle bg-surface-2 animate-pulse"></div>
+    <EntityDetailSkeleton />
   {:else if loadState === "error"}
     <div class="flex items-center justify-between gap-4 rounded-sm border border-error/50 bg-surface-2 p-4 text-[0.85rem] text-text-muted">
       <p class="m-0">{errorMessage ?? "Failed to load collection."}</p>

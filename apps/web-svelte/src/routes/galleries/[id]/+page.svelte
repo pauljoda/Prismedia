@@ -1,6 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { Layers } from "@lucide/svelte";
+  import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import { fetchImage, fetchGallery, type GalleryDetail, type ImageDetail } from "$lib/api/media";
   import {
     updateEntityRating,
@@ -258,7 +259,7 @@
 
 <div class="detail-page">
   {#if loadState === "loading"}
-    <div class="loading-shell" aria-busy="true"></div>
+    <EntityDetailSkeleton />
   {:else if loadState === "error"}
     <div class="error-notice">
       <p>{errorMessage ?? "Failed to load gallery."}</p>
@@ -375,12 +376,6 @@
     margin: 0;
   }
 
-  .loading-shell {
-    min-height: 28rem;
-    border: 1px solid var(--color-border, #1c2235);
-    background: var(--color-surface-2, #101420);
-    animation: pulse 1.2s ease-in-out infinite;
-  }
 
   .error-notice {
     display: flex;
@@ -417,5 +412,4 @@
   .empty-children { padding: 2rem; border: 1px solid var(--color-border-subtle, #1c2235); background: var(--color-surface-1, #0c0f15); color: var(--color-text-muted, #8a93a6); text-align: center; font-size: 0.85rem; }
 
   @media (min-width: 640px) { .credits-section { padding: 1rem 2rem; } }
-  @keyframes pulse { 0%, 100% { opacity: 0.45; } 50% { opacity: 0.85; } }
 </style>

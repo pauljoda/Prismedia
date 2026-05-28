@@ -631,6 +631,7 @@
     color: var(--color-text, #f4efe6);
     text-decoration: none;
     min-width: 0;
+    overflow: hidden;
     border: 1px solid var(--color-border-subtle, rgb(255 255 255 / 0.08));
     border-radius: 6px;
     box-shadow: var(--shadow-card);
@@ -643,7 +644,10 @@
   .entity-thumbnail:is(:hover, :focus-visible) {
     transform: translateY(-1px);
     border-color: var(--color-border-accent, rgb(242 194 106 / 0.32));
-    box-shadow: var(--shadow-card-hover), var(--shadow-glow-accent);
+    box-shadow:
+      var(--shadow-card-hover),
+      0 0 12px rgb(242 194 106 / 0.07),
+      0 0 4px rgb(242 194 106 / 0.10);
   }
 
   .entity-thumbnail.is-selected {
@@ -1186,7 +1190,7 @@
     flex-wrap: wrap;
     gap: 0.25rem;
     margin-top: 0.1rem;
-    max-block-size: 1.25rem;
+    max-block-size: 1.4rem;
     overflow: hidden;
   }
 
@@ -1248,7 +1252,7 @@
 
     .chips {
       gap: 0.15rem;
-      max-block-size: 1rem;
+      max-block-size: 1.15rem;
     }
 
     .chip {

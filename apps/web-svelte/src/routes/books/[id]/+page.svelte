@@ -3,6 +3,7 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import { BookOpen, Check, Info, Play, RotateCcw, SlidersHorizontal, Users } from "@lucide/svelte";
+  import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import { getCapability } from "$lib/api/capabilities";
   import { fetchBook, type BookDetail } from "$lib/api/media";
   import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
@@ -332,7 +333,7 @@
 
 <div class="book-page">
   {#if loadState === "loading"}
-    <div class="loading-shell" aria-busy="true"></div>
+    <EntityDetailSkeleton />
   {:else if loadState === "error"}
     <div class="error-notice">
       <p>{errorMessage ?? "Failed to load book."}</p>
@@ -466,12 +467,6 @@
     margin: 0;
   }
 
-  .loading-shell {
-    min-height: 28rem;
-    border: 1px solid var(--color-border, #1c2235);
-    background: var(--color-surface-2, #101420);
-    animation: pulse 1.2s ease-in-out infinite;
-  }
 
   .error-notice {
     display: flex;
@@ -708,8 +703,5 @@
     min-width: 0;
   }
 
-  @keyframes pulse {
-    0%, 100% { opacity: 0.45; }
-    50% { opacity: 0.85; }
-  }
+
 </style>

@@ -11,6 +11,7 @@
     Users,
   } from "@lucide/svelte";
   import { cn } from "@prismedia/ui-svelte";
+  import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import { fetchVideo, type VideoDetail } from "$lib/api/media";
   import { fetchSettingsValues, type LibrarySettings } from "$lib/api/settings";
   import {
@@ -546,7 +547,8 @@
 
 <div class="detail-page">
   {#if loadState === "loading"}
-    <div class="loading-shell" aria-busy="true"></div>
+    <div class="player-skeleton" aria-hidden="true"></div>
+    <EntityDetailSkeleton showHero={false} tabCount={4} />
   {:else if loadState === "error"}
     <div class="error-notice">
       <p>{errorMessage ?? "Failed to load video."}</p>
@@ -701,10 +703,9 @@
     margin: 0;
   }
 
-  .loading-shell {
-    min-height: 28rem;
-    border: 1px solid var(--color-border, #1c2235);
-    background: var(--color-surface-2, #101420);
+  .player-skeleton {
+    aspect-ratio: 16 / 9;
+    background: #050508;
     animation: pulse 1.2s ease-in-out infinite;
   }
 

@@ -119,20 +119,7 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
             await ReplaceUrlsAsync(entity.Id, patch.Urls, now, cancellationToken);
         }
 
-        if (fields.Contains("tags")) {
-            await ReplaceTagsAsync(entity.Id, patch.Tags, now, cancellationToken);
-        }
-
-        if (fields.Contains("studio")) {
-            await RemoveRelationshipAsync(entity.Id, "studio", cancellationToken);
-            if (!string.IsNullOrWhiteSpace(patch.Studio)) {
-                await SetStudioAsync(entity.Id, patch.Studio, now, cancellationToken);
-            }
-        }
-
-        if (fields.Contains("credits")) {
-            await ReplaceCreditsAsync(entity.Id, patch.Credits, now, cancellationToken);
-        }
+        await ApplyScopedRelationshipFieldsAsync(entity, fields, patch, now, cancellationToken);
 
         if (fields.Contains("dates")) {
             await ReplaceDatesAsync(entity.Id, patch.Dates, now, cancellationToken);
@@ -203,17 +190,7 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
             await UpsertUrlsAsync(entityId, patch.Urls, now, cancellationToken);
         }
 
-        if (selected.Contains("tags")) {
-            await ReplaceTagsAsync(entityId, patch.Tags, now, cancellationToken);
-        }
-
-        if (selected.Contains("studio") && !string.IsNullOrWhiteSpace(patch.Studio)) {
-            await SetStudioAsync(entityId, patch.Studio, now, cancellationToken);
-        }
-
-        if (selected.Contains("credits")) {
-            await ReplaceCreditsAsync(entityId, patch.Credits, now, cancellationToken);
-        }
+        await ApplySelectedRelationshipFieldsAsync(entity, selected, patch, now, cancellationToken);
 
         if (selected.Contains("dates")) {
             await UpsertDatesAsync(entityId, patch.Dates, now, cancellationToken);

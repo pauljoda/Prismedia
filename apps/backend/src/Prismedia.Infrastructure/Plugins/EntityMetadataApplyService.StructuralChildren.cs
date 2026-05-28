@@ -145,17 +145,7 @@ public sealed partial class EntityMetadataApplyService {
             await UpsertUrlsAsync(entity.Id, patch.Urls, now, cancellationToken);
         }
 
-        if (patch.Tags.Count > 0) {
-            await ReplaceTagsAsync(entity.Id, patch.Tags, now, cancellationToken);
-        }
-
-        if (!string.IsNullOrWhiteSpace(patch.Studio)) {
-            await SetStudioAsync(entity.Id, patch.Studio, now, cancellationToken);
-        }
-
-        if (patch.Credits.Count > 0) {
-            await ReplaceCreditsAsync(entity.Id, patch.Credits, now, cancellationToken);
-        }
+        await ApplyCascadeRelationshipFieldsAsync(entity, patch, now, cancellationToken);
 
         if (patch.Dates.Count > 0) {
             await UpsertDatesAsync(entity.Id, patch.Dates, now, cancellationToken);

@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { page } from "$app/state";
   import { Music } from "@lucide/svelte";
+  import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import { fetchAudioTrack, type AudioTrackDetail } from "$lib/api/media";
   import { fetchEntityThumbnails } from "$lib/api/entities";
   import {
@@ -141,7 +142,7 @@
 
 <div class="detail-page">
   {#if loadState === "loading"}
-    <div class="loading-shell" aria-busy="true"></div>
+    <EntityDetailSkeleton />
   {:else if loadState === "error"}
     <div class="error-notice">
       <p>{errorMessage ?? "Failed to load audio track."}</p>
@@ -193,7 +194,6 @@
 
 <style>
   .detail-page { display: grid; gap: 1.25rem; padding: 0; max-width: none; margin: 0; }
-  .loading-shell { min-height: 28rem; border: 1px solid var(--color-border, #1c2235); background: var(--color-surface-2, #101420); animation: pulse 1.2s ease-in-out infinite; }
   .error-notice { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem; border: 1px solid color-mix(in srgb, #ef4444 50%, var(--color-border, #1c2235)); background: var(--color-surface-2, #101420); color: var(--color-text-muted, #8a93a6); font-size: 0.85rem; }
   .error-notice button { border: 1px solid var(--color-border, #1c2235); background: var(--color-surface-3, #151a28); color: var(--color-text-muted, #8a93a6); padding: 0.4rem 0.8rem; font-size: 0.78rem; cursor: pointer; }
   .credits-section { display: grid; gap: 0.7rem; margin-top: 1rem; }
@@ -202,5 +202,4 @@
   :global(.meta-item.is-studio) { color: var(--color-text-accent, #c49a5a); text-decoration: none; transition: opacity 0.15s; }
   :global(.meta-item.is-studio:hover) { opacity: 0.8; }
   :global(.meta-sep) { display: inline-block; width: 3px; height: 3px; margin: 0 0.5rem; background: var(--color-text-muted, #8a93a6); opacity: 0.5; }
-  @keyframes pulse { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
 </style>

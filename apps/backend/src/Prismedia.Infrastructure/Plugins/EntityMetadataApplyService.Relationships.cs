@@ -8,6 +8,135 @@ using Prismedia.Infrastructure.Persistence.Entities;
 namespace Prismedia.Infrastructure.Plugins;
 
 public sealed partial class EntityMetadataApplyService {
+    private static readonly HashSet<string> RelationshipOwnerKindCodes = new(StringComparer.OrdinalIgnoreCase) {
+        EntityKindRegistry.Audio.Code,
+        EntityKindRegistry.AudioLibrary.Code,
+        EntityKindRegistry.AudioTrack.Code,
+        EntityKindRegistry.Book.Code,
+        EntityKindRegistry.Gallery.Code,
+        EntityKindRegistry.Image.Code,
+        EntityKindRegistry.Video.Code,
+        EntityKindRegistry.VideoSeries.Code
+    };
+
+    private async Task ApplyScopedRelationshipFieldsAsync(
+        EntityRow entity,
+        ISet<string> fields,
+        EntityMetadataPatch patch,
+        DateTimeOffset now,
+        CancellationToken cancellationToken) {
+        if (!fields.Contains("tags") && !fields.Contains("studio") && !fields.Contains("credits")) {
+            return;
+        }
+
+        var owner = await ResolveRelationshipOwnerAsync(entity, cancellationToken);
+        if (owner is null) {
+            return;
+        }
+
+        if (fields.Contains("tags")) {
+            await ReplaceTagsAsync(owner.Id, patch.Tags, now, cancellationToken);
+        }
+
+        if (fields.Contains("studio")) {
+            await RemoveRelationshipAsync(owner.Id, "studio", cancellationToken);
+            if (!string.IsNullOrWhiteSpace(patch.Studio)) {
+                await SetStudioAsync(owner.Id, patch.Studio, now, cancellationToken);
+            }
+        }
+
+        if (fields.Contains("credits")) {
+            await ReplaceCreditsAsync(owner.Id, patch.Credits, now, cancellationToken);
+        }
+
+        owner.UpdatedAt = now;
+    }
+
+    private async Task ApplySelectedRelationshipFieldsAsync(
+        EntityRow entity,
+        ISet<string> selected,
+        EntityMetadataPatch patch,
+        DateTimeOffset now,
+        CancellationToken cancellationToken) {
+        if (!selected.Contains("tags") &&
+            !(selected.Contains("studio") && !string.IsNullOrWhiteSpace(patch.Studio)) &&
+            !selected.Contains("credits")) {
+            return;
+        }
+
+        var owner = await ResolveRelationshipOwnerAsync(entity, cancellationToken);
+        if (owner is null) {
+            return;
+        }
+
+        if (selected.Contains("tags")) {
+            await ReplaceTagsAsync(owner.Id, patch.Tags, now, cancellationToken);
+        }
+
+        if (selected.Contains("studio") && !string.IsNullOrWhiteSpace(patch.Studio)) {
+            await SetStudioAsync(owner.Id, patch.Studio, now, cancellationToken);
+        }
+
+        if (selected.Contains("credits")) {
+            await ReplaceCreditsAsync(owner.Id, patch.Credits, now, cancellationToken);
+        }
+
+        owner.UpdatedAt = now;
+    }
+
+    private async Task ApplyCascadeRelationshipFieldsAsync(
+        EntityRow entity,
+        EntityMetadataPatch patch,
+        DateTimeOffset now,
+        CancellationToken cancellationToken) {
+        if (patch.Tags.Count == 0 && string.IsNullOrWhiteSpace(patch.Studio) && patch.Credits.Count == 0) {
+            return;
+        }
+
+        var owner = await ResolveRelationshipOwnerAsync(entity, cancellationToken);
+        if (owner is null) {
+            return;
+        }
+
+        if (patch.Tags.Count > 0) {
+            await ReplaceTagsAsync(owner.Id, patch.Tags, now, cancellationToken);
+        }
+
+        if (!string.IsNullOrWhiteSpace(patch.Studio)) {
+            await SetStudioAsync(owner.Id, patch.Studio, now, cancellationToken);
+        }
+
+        if (patch.Credits.Count > 0) {
+            await ReplaceCreditsAsync(owner.Id, patch.Credits, now, cancellationToken);
+        }
+
+        owner.UpdatedAt = now;
+    }
+
+    private async Task<EntityRow?> ResolveRelationshipOwnerAsync(EntityRow entity, CancellationToken cancellationToken) {
+        var current = entity;
+        var visited = new HashSet<Guid>();
+        while (visited.Add(current.Id)) {
+            if (RelationshipOwnerKindCodes.Contains(current.KindCode)) {
+                return current;
+            }
+
+            if (current.ParentEntityId is not { } parentId) {
+                return null;
+            }
+
+            var parent = _db.Entities.Local.FirstOrDefault(row => row.Id == parentId && row.DeletedAt == null)
+                ?? await _db.Entities.FirstOrDefaultAsync(row => row.Id == parentId && row.DeletedAt == null, cancellationToken);
+            if (parent is null) {
+                return null;
+            }
+
+            current = parent;
+        }
+
+        return null;
+    }
+
     private async Task ReplaceTagsAsync(Guid entityId, IReadOnlyList<string> tags, DateTimeOffset now, CancellationToken cancellationToken) {
         await RemoveRelationshipAsync(entityId, "tags", cancellationToken);
 
