@@ -26,7 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Changed
-- Restyled detail content and entity thumbnail metadata so inset glass sections sit under slightly wider rounded artwork.
+- Restyled detail content so tabbed and non-tabbed sections render as a slightly inset subtle glass card emerging from the hero without covering the tab row corners.
 - Softened detail-page hero badge glow so collection, gallery, season, and book status chips feel calmer against artwork.
 - Moved collection mode controls into the collection editor settings rail and removed the duplicate visibility toggle from that panel.
 - Refined the collection editor layout with a cleaner header, focused settings panel, and rule previews shown through the shared entity grid.
