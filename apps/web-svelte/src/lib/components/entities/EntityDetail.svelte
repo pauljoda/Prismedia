@@ -88,6 +88,19 @@
   export type EntityMetadataPatch = _Patch;
   export type EntityMetadataUpdateRequest = _Request;
 
+  const DEFAULT_STANDALONE_METADATA_SECTION_IDS = [
+    "studio",
+    "credits",
+    "stats",
+    "dates",
+    "technical",
+    "progress",
+    "positions",
+    "classification",
+    "sources",
+    "fingerprints",
+    "links",
+  ];
 
   interface Props {
     card: EntityDetailCard;
@@ -99,6 +112,8 @@
     ratingBusy?: boolean;
     showHero?: boolean;
     tabs?: EntityDetailTab[];
+    /** Built-in lower metadata sections used when this route does not provide tabs. */
+    standaloneMetadataSectionIds?: string[];
     onMetadataSave?: (request: EntityMetadataUpdateRequest) => void | Promise<void>;
     onImageAssetUpload?: (role: EntityFileRoleCode, file: File) => void | Promise<void>;
     onImageAssetClear?: (role: EntityFileRoleCode) => void | Promise<void>;
@@ -128,6 +143,7 @@
     ratingBusy = false,
     showHero = true,
     tabs = [],
+    standaloneMetadataSectionIds = DEFAULT_STANDALONE_METADATA_SECTION_IDS,
     onMetadataSave,
     onImageAssetUpload,
     onImageAssetClear,
@@ -234,19 +250,6 @@
   const hasTabs = $derived(visibleTabs.length > 0);
   const activeTab = $derived(visibleTabs.find((tab) => tab.id === activeTabId) ?? visibleTabs[0] ?? null);
   const activeTabSections = $derived(activeTab ? sectionsForTab(activeTab) : []);
-  const standaloneMetadataSectionIds = [
-    "studio",
-    "credits",
-    "stats",
-    "dates",
-    "technical",
-    "progress",
-    "positions",
-    "classification",
-    "sources",
-    "fingerprints",
-    "links",
-  ];
   const standaloneMetadataSections = $derived.by(() =>
     standaloneMetadataSectionIds
       .map(findSection)

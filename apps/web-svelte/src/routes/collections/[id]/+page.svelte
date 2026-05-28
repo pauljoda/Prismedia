@@ -71,6 +71,7 @@
 
   const entityKinds: { value: CollectionItem["entityType"]; label: string }[] = [
     { value: "video", label: "Video" },
+    { value: "video-series", label: "Series" },
     { value: "gallery", label: "Gallery" },
     { value: "image", label: "Image" },
     { value: "book", label: "Book" },
@@ -262,6 +263,7 @@
       onMetadataSave={handleMetadataSave}
       {ratingBusy}
       posterSize="large"
+      standaloneMetadataSectionIds={[]}
     >
       {#snippet heroMeta()}
         {#if collection?.mode}

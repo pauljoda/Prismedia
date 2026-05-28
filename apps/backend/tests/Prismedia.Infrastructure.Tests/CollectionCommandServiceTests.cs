@@ -145,6 +145,32 @@ public sealed class CollectionCommandServiceTests {
     }
 
     [Fact]
+    public async Task AddItemsAsyncAllowsSeriesButRejectsNestedCollections() {
+        await using var db = CreateContext();
+        var collectionId = SeedCollection(db, "Manual");
+        var seriesId = SeedEntity(db, EntityKindRegistry.VideoSeries.Code, "The Chair Company");
+        var nestedCollectionId = SeedCollection(db, "Nested");
+        await db.SaveChangesAsync();
+        var service = CreateService(db);
+
+        var added = await service.AddItemsAsync(
+            collectionId,
+            new CollectionAddItemsRequest([new CollectionItemReference("video-series", seriesId)]),
+            CancellationToken.None);
+
+        Assert.Equal(CollectionCommandStatus.Succeeded, added.Status);
+        Assert.Equal(seriesId, Assert.Single(db.CollectionItemDetails).ItemEntityId);
+
+        var rejected = await service.AddItemsAsync(
+            collectionId,
+            new CollectionAddItemsRequest([new CollectionItemReference("collection", nestedCollectionId)]),
+            CancellationToken.None);
+
+        Assert.Equal(CollectionCommandStatus.Invalid, rejected.Status);
+        Assert.Contains("cannot be added to a collection", rejected.Message);
+    }
+
+    [Fact]
     public async Task AddItemsAsyncRejectsPureDynamicCollections() {
         await using var db = CreateContext();
         var collectionId = SeedCollection(db, "Rules", CollectionMode.Dynamic);

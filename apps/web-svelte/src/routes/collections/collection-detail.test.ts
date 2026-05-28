@@ -41,4 +41,18 @@ describe("collection detail route", () => {
     expect(modelsSource).toContain("\"video-series\"");
     expect(conditionBuilderSource).toContain("value: \"video-series\"");
   });
+
+  it("keeps collection detail metadata focused and prevents collections from nesting in rules", async () => {
+    const detailSource = await readFile("src/routes/collections/[id]/+page.svelte", "utf8");
+    const conditionBuilderSource = await readFile("src/lib/components/collections/ConditionBuilder.svelte", "utf8");
+    const modelsSource = await readFile("src/lib/collections/models.ts", "utf8");
+    const contractsSource = await readFile("../../packages/contracts/src/collections.ts", "utf8");
+
+    expect(detailSource).toContain("standaloneMetadataSectionIds={[]}");
+    expect(detailSource).toContain("value: \"video-series\", label: \"Series\"");
+    expect(detailSource).not.toContain("value: \"collection\"");
+    expect(conditionBuilderSource).not.toContain("value: \"collection\"");
+    expect(modelsSource).not.toContain("\"collection\"");
+    expect(contractsSource).not.toContain("\"collection\"");
+  });
 });

@@ -25,6 +25,7 @@ public sealed class CollectionCommandService(
 
     private static readonly HashSet<string> SupportedItemKinds = new(StringComparer.OrdinalIgnoreCase) {
         EntityKindRegistry.Video.Code,
+        EntityKindRegistry.VideoSeries.Code,
         EntityKindRegistry.Gallery.Code,
         EntityKindRegistry.Image.Code,
         EntityKindRegistry.Book.Code,
