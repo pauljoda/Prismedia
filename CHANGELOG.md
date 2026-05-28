@@ -51,6 +51,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated web app manifest and mobile browser metadata for home-screen installation and browser UI theme colors.
 
 ### Fixed
+- Fixed detail-page link cards so long URLs show a readable site title with a truncated full URL instead of overflowing.
 - Fixed the mobile Files detail pane so long names, paths, toolbar actions, and text previews stay within the phone viewport.
 - Reworked mobile detail heroes so artwork sits larger at the top while title, metadata, rating, badges, and actions collapse in desktop order.
 - Fixed collection detail heroes so member artwork appears for Mosaic and Standard covers, metadata separators stay readable, and mobile hero actions remain compact.

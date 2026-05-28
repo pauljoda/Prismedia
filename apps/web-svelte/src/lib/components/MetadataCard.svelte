@@ -13,12 +13,13 @@
     icon?: Component<Record<string, unknown>>;
     rows?: MetadataRow[];
     children?: Snippet;
+    wide?: boolean;
   }
 
-  let { title, icon: Icon, rows, children }: Props = $props();
+  let { title, icon: Icon, rows, children, wide = false }: Props = $props();
 </script>
 
-<div class="metadata-card">
+<div class="metadata-card" class:metadata-card-wide={wide}>
   <h3 class="metadata-card-title">
     {#if Icon}
       <Icon class="h-3.5 w-3.5" />

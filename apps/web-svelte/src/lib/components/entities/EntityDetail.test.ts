@@ -555,6 +555,8 @@ describe("EntityDetail", () => {
 
     expect(screen.getByText("Links & Provider IDs")).toBeInTheDocument();
     expect(screen.getByText("URLs")).toBeInTheDocument();
+    expect(screen.getByText("themoviedb.org")).toBeInTheDocument();
+    expect(screen.getByText("https://www.themoviedb.org/tv/271267")).toBeInTheDocument();
     expect(screen.getByText("Provider IDs")).toBeInTheDocument();
     expect(screen.getByText("tmdb")).toBeInTheDocument();
     expect(screen.getByText("418214")).toBeInTheDocument();
