@@ -1733,28 +1733,71 @@
   }
 
   @media (max-width: 480px) {
-    [data-poster-size="small"] .poster-frame { --poster-width: 5rem; }
-    [data-poster-size="medium"] .poster-frame { --poster-width: 6rem; }
-    [data-poster-size="large"] .poster-frame { --poster-width: 7rem; }
-
-    .action-row {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr);
-      align-items: start;
-      justify-items: end;
-      gap: 0.35rem;
+    .hero-content {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 0.85rem;
+      padding: 1.25rem;
+      padding-top: 1.75rem;
     }
 
-    .action-badges {
+    [data-poster-size="small"] .poster-frame { --poster-width: min(10rem, 68vw); }
+    [data-poster-size="medium"] .poster-frame { --poster-width: min(11rem, 72vw); }
+    [data-poster-size="large"] .poster-frame { --poster-width: min(12rem, 76vw); }
+
+    .poster-frame {
+      align-self: center;
+    }
+
+    .hero-text {
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-areas:
+        "title title"
+        "meta meta"
+        "rating badges"
+        "actions actions";
+      align-items: center;
+      column-gap: 0.75rem;
+      row-gap: 0.35rem;
+      width: 100%;
+    }
+
+    .hero-title {
+      grid-area: title;
+    }
+
+    .meta-row {
+      grid-area: meta;
+    }
+
+    .rating-row {
+      grid-area: rating;
+    }
+
+    .position-badges {
+      grid-area: badges;
       justify-self: end;
     }
 
+    .action-row {
+      grid-area: actions;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.35rem;
+      width: 100%;
+    }
+
+    .action-badges {
+      justify-self: start;
+    }
+
     .action-group {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(1.9rem, 1.9rem));
+      display: flex;
+      flex-wrap: wrap;
       justify-content: flex-end;
       gap: 0.25rem;
-      width: min(100%, 8.35rem);
+      width: auto;
       margin-left: auto;
     }
 
