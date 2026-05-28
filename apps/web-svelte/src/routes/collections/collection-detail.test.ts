@@ -50,7 +50,7 @@ describe("collection detail route", () => {
 
     expect(detailSource).toContain("standaloneMetadataSectionIds={[]}");
     expect(detailSource).toContain("Edit collection rules");
-    expect(detailSource).toContain("<SlidersHorizontal");
+    expect(detailSource).toContain("icon: SlidersHorizontal");
     expect(detailSource).toContain("value: \"video-series\", label: \"Series\"");
     expect(detailSource).not.toContain("value: \"collection\"");
     expect(conditionBuilderSource).not.toContain("value: \"collection\"");

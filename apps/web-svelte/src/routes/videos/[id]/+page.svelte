@@ -30,7 +30,7 @@
     toggleOptimisticEntityFlag,
     updateOptimisticEntityRating,
   } from "$lib/entities/entity-detail-state";
-  import IdentifyButton from "$lib/components/IdentifyButton.svelte";
+  import { useIdentifyDetailAction } from "$lib/components/identify/use-identify-detail-action.svelte";
   import type { EntityDetailTag } from "$lib/entities/entity-detail";
   import { entityCardToDetailCard, type EntityDetailCardFull } from "$lib/entities/entity-detail";
   import {
@@ -43,6 +43,7 @@
   import { useAppChrome } from "$lib/stores/app-chrome.svelte";
   import NsfwBlur from "$lib/components/nsfw/NsfwBlur.svelte";
   import EntityDetail, {
+    type EntityDetailActionButton,
     type EntityMetadataUpdateRequest,
     type EntityDetailSection,
     type EntityDetailTab,
@@ -104,6 +105,8 @@
       tags: relationshipTags,
     };
   });
+  const identifyAction = useIdentifyDetailAction(() => card?.entity.id, () => card?.entity.kind);
+  const heroActions = $derived.by((): EntityDetailActionButton[] => identifyAction.action ? [identifyAction.action] : []);
   const videoId = $derived(video?.id ?? "");
 
   const playerProps = $derived.by(() => {
@@ -649,6 +652,7 @@
       posterSize="none"
       tabs={detailTabs}
       sections={detailSections}
+      actionButtons={heroActions}
     >
       {#snippet heroMeta()}
         {#if primaryStudio}
@@ -662,9 +666,6 @@
         {/each}
       {/snippet}
 
-      {#snippet extraActions()}
-        <IdentifyButton entityId={card.entity.id} entityKind={card.entity.kind} />
-      {/snippet}
 
       {#snippet sectionContent(section)}
         <VideoDetailSectionContent

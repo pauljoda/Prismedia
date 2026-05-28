@@ -75,6 +75,24 @@
     layout?: "stack" | "grid";
   }
 
+  export type EntityDetailActionVariant = "default" | "primary" | "danger";
+
+  export interface EntityDetailActionButton {
+    id: string;
+    label: string;
+    icon: LucideIcon;
+    onClick?: () => void | Promise<void>;
+    href?: string;
+    title?: string;
+    ariaLabel?: string;
+    disabled?: boolean;
+    active?: boolean;
+    hidden?: boolean;
+    variant?: EntityDetailActionVariant;
+    iconClass?: string;
+    iconFill?: string;
+  }
+
   export interface EntityDetailSection {
     id: string;
     label?: string;
@@ -123,8 +141,8 @@
     heroMeta?: Snippet;
     /** Badge row rendered below the rating stars (e.g. Season 1, Episode 2). */
     heroBadges?: Snippet;
-    /** Action buttons rendered in the right-aligned actions group (e.g. identify). */
-    extraActions?: Snippet;
+    /** Action buttons rendered in the right-aligned actions group. */
+    actionButtons?: EntityDetailActionButton[];
     /** Content rendered between the detail body and the metadata sections (e.g. studio, credits). */
     afterBody?: Snippet;
     /** Extra metadata sections appended inside the lower metadata area. */
@@ -150,7 +168,7 @@
     sections = [],
     heroMeta,
     heroBadges,
-    extraActions,
+    actionButtons = [],
     afterBody,
     extraSections,
     sectionContent,
@@ -246,6 +264,7 @@
   const cardFull = $derived(card as EntityDetailCard & Partial<EntityDetailCardFull>);
   const urlLinks = $derived(card.links.filter((link) => !hasProvider(link)));
   const providerIdLinks = $derived(card.links.filter(hasProvider));
+  const visibleActionButtons = $derived.by(() => actionButtons.filter((action) => !action.hidden));
   const visibleTabs = $derived.by(() => tabs.filter(tabHasDisplayContent));
   const hasTabs = $derived(visibleTabs.length > 0);
   const activeTab = $derived(visibleTabs.find((tab) => tab.id === activeTabId) ?? visibleTabs[0] ?? null);
@@ -1234,7 +1253,7 @@
               </button>
             </div>
 
-            {#if canEdit || extraActions}
+            {#if canEdit || visibleActionButtons.length > 0}
               <div class="action-group">
                 {#if canEdit}
                   {#if isEditingActiveTab}
@@ -1260,9 +1279,43 @@
                     </button>
                   {/if}
                 {/if}
-                {#if extraActions}
-                  {@render extraActions()}
-                {/if}
+                {#each visibleActionButtons as action (action.id)}
+                  {@const ActionIcon = action.icon}
+                  {#if action.href && !action.disabled}
+                    <a
+                      class={[
+                        "entity-action-button",
+                        action.active && "entity-action-button-active",
+                        action.variant === "primary" && "entity-action-button-primary",
+                        action.variant === "danger" && "entity-action-button-danger",
+                      ]}
+                      href={action.href}
+                      aria-label={action.ariaLabel ?? action.label}
+                      title={action.title ?? action.ariaLabel ?? action.label}
+                    >
+                      <ActionIcon class={action.iconClass ?? "h-3.5 w-3.5"} fill={action.iconFill} />
+                      <span class="entity-action-button-label">{action.label}</span>
+                    </a>
+                  {:else}
+                    <button
+                      type="button"
+                      class={[
+                        "entity-action-button",
+                        action.active && "entity-action-button-active",
+                        action.variant === "primary" && "entity-action-button-primary",
+                        action.variant === "danger" && "entity-action-button-danger",
+                      ]}
+                      disabled={action.disabled}
+                      aria-label={action.ariaLabel ?? action.label}
+                      title={action.title ?? action.ariaLabel ?? action.label}
+                      onclick={() => void action.onClick?.()}
+                    >
+                      <ActionIcon class={action.iconClass ?? "h-3.5 w-3.5"} fill={action.iconFill} />
+                      <span class="entity-action-button-label">{action.label}</span>
+                    </button>
+                  {/if}
+                {/each}
+
               </div>
             {/if}
           </div>

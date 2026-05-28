@@ -21,10 +21,11 @@
   import { resolveEntityHref } from "$lib/entities/entity-routes";
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
   import EntityDetail, {
+    type EntityDetailActionButton,
     type EntityMetadataUpdateRequest,
   } from "$lib/components/entities/EntityDetail.svelte";
   import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
-  import IdentifyButton from "$lib/components/IdentifyButton.svelte";
+  import { useIdentifyDetailAction } from "$lib/components/identify/use-identify-detail-action.svelte";
   import MetadataCard from "$lib/components/MetadataCard.svelte";
   import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
   import { useNsfw } from "$lib/nsfw/store.svelte";
@@ -46,6 +47,9 @@
     if (!person) return null;
     return entityCardToDetailCard(person);
   });
+
+  const identifyAction = useIdentifyDetailAction(() => card?.entity.id, () => card?.entity.kind);
+  const heroActions = $derived.by((): EntityDetailActionButton[] => identifyAction.action ? [identifyAction.action] : []);
 
   const dates = $derived.by(() => {
     if (!person) return [];
@@ -161,6 +165,7 @@
       onMetadataSave={handleMetadataSave}
       {ratingBusy}
       posterSize="large"
+      actionButtons={heroActions}
     >
       {#snippet heroMeta()}
         {#if person?.gender}
@@ -176,9 +181,6 @@
         {/each}
       {/snippet}
 
-      {#snippet extraActions()}
-        <IdentifyButton entityId={card.entity.id} entityKind={card.entity.kind} />
-      {/snippet}
 
       {#snippet afterBody()}
         {#if bioRows.length > 0}

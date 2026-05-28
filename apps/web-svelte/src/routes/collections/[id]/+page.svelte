@@ -42,6 +42,7 @@
   import type { CollectionItem } from "$lib/collections/models";
   import { getEntityHref } from "$lib/components/collections/collection-item-helpers";
   import EntityDetail, {
+    type EntityDetailActionButton,
     type EntityMetadataUpdateRequest,
   } from "$lib/components/entities/EntityDetail.svelte";
   import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
@@ -88,6 +89,40 @@
   });
   const canManuallyCurate = $derived(collection?.mode !== "dynamic");
   const canRefreshRules = $derived(collection?.mode === "dynamic" || collection?.mode === "hybrid");
+  const heroActions = $derived.by((): EntityDetailActionButton[] => {
+    if (!card) return [];
+    return [
+      {
+        id: "edit-rules",
+        label: "Edit Rules",
+        icon: SlidersHorizontal,
+        href: `/collections/${card.entity.id}/edit`,
+        ariaLabel: "Edit collection rules",
+        title: "Edit collection rules",
+      },
+      {
+        id: "refresh-dynamic-items",
+        label: "Refresh",
+        icon: RefreshCw,
+        iconClass: refreshBusy ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5",
+        disabled: refreshBusy,
+        hidden: !canRefreshRules,
+        ariaLabel: "Refresh dynamic items",
+        title: "Refresh dynamic items",
+        onClick: refreshDynamicItems,
+      },
+      {
+        id: "delete-collection",
+        label: "Delete",
+        icon: Trash2,
+        disabled: deleteBusy,
+        variant: "danger",
+        ariaLabel: "Delete collection",
+        title: "Delete collection",
+        onClick: handleDeleteCollection,
+      },
+    ];
+  });
 
   onMount(() => {
     void loadCollection();
@@ -303,6 +338,7 @@
       {ratingBusy}
       posterSize="large"
       standaloneMetadataSectionIds={[]}
+      actionButtons={heroActions}
     >
       {#snippet heroMeta()}
         {#if collection?.mode}
@@ -320,40 +356,6 @@
         {/if}
       {/snippet}
 
-      {#snippet extraActions()}
-        {@const actionClass = "inline-flex w-[2.35rem] h-[2.35rem] items-center justify-center rounded-xs border border-border-subtle bg-[rgb(17_22_29/0.72)] text-text-muted backdrop-blur-[12px] transition-all hover:border-border-accent hover:text-text-accent hover:shadow-[0_0_18px_rgb(242_194_106/0.12)] disabled:cursor-not-allowed disabled:opacity-40 no-underline"}
-        {@const dangerClass = "inline-flex w-[2.35rem] h-[2.35rem] items-center justify-center rounded-xs border border-border-subtle bg-[rgb(17_22_29/0.72)] text-text-muted backdrop-blur-[12px] transition-all hover:border-error/50 hover:text-error-text hover:shadow-[0_0_18px_rgb(255_128_111/0.12)] disabled:cursor-not-allowed disabled:opacity-40"}
-        <a
-          class={actionClass}
-          aria-label="Edit collection rules"
-          title="Edit collection rules"
-          href={`/collections/${card.entity.id}/edit`}
-        >
-          <SlidersHorizontal class="h-4 w-4" />
-        </a>
-        {#if canRefreshRules}
-          <button
-            type="button"
-            class={actionClass}
-            aria-label="Refresh dynamic items"
-            title="Refresh dynamic items"
-            disabled={refreshBusy}
-            onclick={refreshDynamicItems}
-          >
-            <RefreshCw class={refreshBusy ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
-          </button>
-        {/if}
-        <button
-          type="button"
-          class={dangerClass}
-          aria-label="Delete collection"
-          title="Delete collection"
-          disabled={deleteBusy}
-          onclick={handleDeleteCollection}
-        >
-          <Trash2 class="h-4 w-4" />
-        </button>
-      {/snippet}
     </EntityDetail>
 
     {#if itemMutationError}

@@ -31,12 +31,13 @@
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
   import EntityCastAndCrewSection from "$lib/components/entities/EntityCastAndCrewSection.svelte";
   import EntityDetail, {
+    type EntityDetailActionButton,
     type EntityDetailSection,
     type EntityDetailTab,
     type EntityMetadataUpdateRequest,
   } from "$lib/components/entities/EntityDetail.svelte";
   import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
-  import IdentifyButton from "$lib/components/IdentifyButton.svelte";
+  import { useIdentifyDetailAction } from "$lib/components/identify/use-identify-detail-action.svelte";
   import {
     isHiddenEntityNotFoundError,
     redirectHiddenEntityNotFound,
@@ -93,6 +94,23 @@
       ...entityCardToDetailCard(book),
       tags: relationshipTags,
     };
+  });
+
+  const identifyAction = useIdentifyDetailAction(() => card?.entity.id, () => card?.entity.kind);
+  const heroActions = $derived.by((): EntityDetailActionButton[] => {
+    const actions: EntityDetailActionButton[] = [];
+    if (identifyAction.action) actions.push(identifyAction.action);
+    if (readerPageCount > 0) {
+      actions.push({
+        id: "read-book",
+        label: primaryReadLabel,
+        icon: Play,
+        iconFill: "currentColor",
+        variant: "primary",
+        onClick: openSelectedReader,
+      });
+    }
+    return actions;
   });
 
   const detailSections = $derived.by((): EntityDetailSection[] => [
@@ -332,6 +350,7 @@
       posterSize="large"
       tabs={detailTabs}
       sections={detailSections}
+      actionButtons={heroActions}
     >
       {#snippet heroMeta()}
         {#if bookType}
@@ -355,17 +374,6 @@
         {/if}
       {/snippet}
 
-      {#snippet extraActions()}
-        {#if book}
-        <IdentifyButton entityId={card.entity.id} entityKind={card.entity.kind} />
-        {#if readerPageCount > 0}
-          <button type="button" class="reader-action" onclick={openSelectedReader}>
-            <Play class="h-3.5 w-3.5" />
-            {primaryReadLabel}
-          </button>
-        {/if}
-        {/if}
-      {/snippet}
 
       {#snippet sectionContent(section)}
         {#if section.id === "cast-and-crew"}

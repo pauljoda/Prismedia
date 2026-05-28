@@ -26,6 +26,7 @@
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
   import EntityCastAndCrewSection from "$lib/components/entities/EntityCastAndCrewSection.svelte";
   import EntityDetail, {
+    type EntityDetailActionButton,
     type EntityMetadataUpdateRequest,
   } from "$lib/components/entities/EntityDetail.svelte";
   import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
@@ -76,6 +77,25 @@
     if (!library) return undefined;
     const images = getCapability(library.capabilities, "images");
     return assetUrl(images?.coverUrl ?? images?.thumbnailUrl) || undefined;
+  });
+  const heroActions = $derived.by((): EntityDetailActionButton[] => {
+    if (trackItems.length === 0) return [];
+    return [
+      {
+        id: "play-all",
+        label: "Play All",
+        icon: Play,
+        iconFill: "currentColor",
+        variant: "primary",
+        onClick: playAll,
+      },
+      {
+        id: "shuffle",
+        label: "Shuffle",
+        icon: Shuffle,
+        onClick: shuffleAll,
+      },
+    ];
   });
 
   onMount(() => {
@@ -238,6 +258,7 @@
       {ratingBusy}
       peopleLabel="Performers"
       posterSize="large"
+      actionButtons={heroActions}
     >
       {#snippet heroMeta()}
         {#if studio}
@@ -253,18 +274,6 @@
         {/if}
       {/snippet}
 
-      {#snippet extraActions()}
-        {#if trackItems.length > 0}
-          <button type="button" class="hero-audio-action hero-audio-action-primary" onclick={playAll}>
-            <Play class="h-4 w-4" fill="currentColor" />
-            Play All
-          </button>
-          <button type="button" class="hero-audio-action" onclick={shuffleAll}>
-            <Shuffle class="h-4 w-4" />
-            Shuffle
-          </button>
-        {/if}
-      {/snippet}
 
       {#snippet afterBody()}
         {#if studioCards.length > 0 || creditCards.length > 0}
@@ -331,52 +340,6 @@
   :global(.meta-item.is-studio:hover) { opacity: 0.8; }
   :global(.meta-sep) { display: inline-block; width: 3px; height: 3px; margin: 0 0.5rem; background: var(--color-text-muted, #8a93a6); opacity: 0.5; }
 
-  :global(.hero-audio-action) {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    padding: 0.35rem 0.65rem;
-    border: 1px solid color-mix(in srgb, var(--detail-accent, #c49a5a) 32%, var(--detail-border, #1c2235));
-    border-radius: var(--radius-xs, 4px);
-    background: linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--detail-accent, #c49a5a) 12%, rgba(10, 12, 17, 0.82)),
-      rgba(10, 12, 17, 0.78)
-    );
-    color: var(--detail-text-secondary, #a8afbf);
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.72rem;
-    font-weight: 600;
-    letter-spacing: 0.03em;
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.08),
-      0 0 14px rgba(0, 0, 0, 0.3);
-    transition: color 0.2s, border-color 0.2s, box-shadow 0.2s, background 0.2s;
-  }
-
-  :global(.hero-audio-action:hover) {
-    border-color: color-mix(in srgb, var(--detail-accent, #c49a5a) 58%, var(--detail-border, #1c2235));
-    background: color-mix(in srgb, var(--detail-accent, #c49a5a) 6%, transparent);
-    color: var(--detail-accent, #c49a5a);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.12),
-      0 0 16px var(--detail-accent-glow, rgba(196, 154, 90, 0.22));
-  }
-
-  :global(.hero-audio-action-primary) {
-    border-color: var(--detail-accent-muted, rgba(196, 154, 90, 0.48));
-    background: color-mix(in srgb, var(--detail-accent, #c49a5a) 10%, transparent);
-    color: var(--detail-accent, #c49a5a);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.1),
-      0 0 14px var(--detail-accent-glow, rgba(196, 154, 90, 0.22));
-  }
-
-  :global(.hero-audio-action-primary:hover) {
-    border-color: var(--detail-accent, #c49a5a);
-    background: color-mix(in srgb, var(--detail-accent, #c49a5a) 14%, transparent);
-    color: var(--color-accent-300, #f2c26a);
-  }
 
   .credits-section { padding: 1rem 1.5rem; border-top: 1px solid var(--color-border, #1c2235); }
 

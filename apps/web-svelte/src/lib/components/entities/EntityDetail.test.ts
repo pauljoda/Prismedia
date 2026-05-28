@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/svelte";
-import { FileText } from "@lucide/svelte";
+import { FileText, Play } from "@lucide/svelte";
 import { readFileSync } from "node:fs";
 import { createRawSnippet } from "svelte";
 import { describe, expect, it, vi } from "vitest";
@@ -62,6 +62,33 @@ describe("EntityDetail", () => {
 
     expect(heroChildren.indexOf(title)).toBeLessThan(heroChildren.indexOf(ratingRow!));
     expect(heroChildren.indexOf(ratingRow!)).toBeLessThan(heroChildren.indexOf(actionRow!));
+  });
+
+  it("renders configured hero action buttons with shared styling", async () => {
+    const onClick = vi.fn();
+    render(EntityDetail, {
+      props: {
+        card: buildCard(),
+        actionButtons: [
+          {
+            id: "play-all",
+            label: "Play All",
+            icon: Play,
+            iconFill: "currentColor",
+            variant: "primary",
+            onClick,
+          },
+        ],
+      },
+    });
+
+    const action = screen.getByRole("button", { name: "Play All" });
+    expect(action.className).toContain("entity-action-button");
+    expect(action.className).toContain("entity-action-button-primary");
+
+    await fireEvent.click(action);
+
+    expect(onClick).toHaveBeenCalledOnce();
   });
 
   it("allows long hero titles to wrap instead of clipping", () => {

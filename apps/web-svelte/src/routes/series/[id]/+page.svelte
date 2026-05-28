@@ -15,7 +15,7 @@
     updateOptimisticEntityRating,
   } from "$lib/entities/entity-detail-state";
   import EntityCastAndCrewSection from "$lib/components/entities/EntityCastAndCrewSection.svelte";
-  import IdentifyButton from "$lib/components/IdentifyButton.svelte";
+  import { useIdentifyDetailAction } from "$lib/components/identify/use-identify-detail-action.svelte";
   import type { EntityDetailTag } from "$lib/entities/entity-detail";
   import { entityCardToDetailCard, type EntityDetailCardFull } from "$lib/entities/entity-detail";
   import { getChildIds } from "$lib/entities/entity-children";
@@ -27,6 +27,7 @@
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
   import { ENTITY_KIND } from "$lib/entities/entity-codes";
   import EntityDetail, {
+    type EntityDetailActionButton,
     type EntityMetadataUpdateRequest,
     type EntityDetailSection,
     type EntityDetailTab,
@@ -62,6 +63,9 @@
       tags: relationshipTags,
     };
   });
+
+  const identifyAction = useIdentifyDetailAction(() => card?.entity.id, () => card?.entity.kind);
+  const heroActions = $derived.by((): EntityDetailActionButton[] => identifyAction.action ? [identifyAction.action] : []);
 
   const dates = $derived.by(() => {
     if (!series) return [];
@@ -245,6 +249,7 @@
       posterSize="large"
       tabs={detailTabs}
       sections={detailSections}
+      actionButtons={heroActions}
     >
       {#snippet heroMeta()}
         {#if dateAired}
@@ -264,9 +269,6 @@
         {/if}
       {/snippet}
 
-      {#snippet extraActions()}
-        <IdentifyButton entityId={card.entity.id} entityKind={card.entity.kind} />
-      {/snippet}
 
       {#snippet sectionContent(section)}
         {#if section.id === "cast-and-crew"}

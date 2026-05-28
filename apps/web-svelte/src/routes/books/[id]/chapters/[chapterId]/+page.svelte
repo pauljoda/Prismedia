@@ -18,6 +18,7 @@
   import { ENTITY_KIND } from "$lib/entities/entity-codes";
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
   import EntityDetail, {
+    type EntityDetailActionButton,
     type EntityDetailTab,
     type EntityMetadataUpdateRequest,
   } from "$lib/components/entities/EntityDetail.svelte";
@@ -50,6 +51,33 @@
   const primaryReadLabel = $derived(
     chapterProgress ? (chapterProgress.isComplete ? "Re-read chapter" : "Resume chapter") : "Read chapter",
   );
+  const heroActions = $derived.by((): EntityDetailActionButton[] => {
+    if (readerPageCount === 0) return [];
+    return [
+      {
+        id: "read-chapter",
+        label: primaryReadLabel,
+        icon: Play,
+        iconFill: "currentColor",
+        variant: "primary",
+        onClick: openPrimaryReader,
+      },
+      {
+        id: "mark-chapter-read",
+        label: "Mark read",
+        icon: Check,
+        hidden: Boolean(chapterProgress?.isComplete),
+        onClick: markChapterRead,
+      },
+      {
+        id: "restart-chapter",
+        label: "Start over",
+        icon: RotateCcw,
+        hidden: !chapterProgress || chapterProgress.isComplete,
+        onClick: () => openReaderAt(0),
+      },
+    ];
+  });
   const detailTabs = $derived.by((): EntityDetailTab[] => {
     if (!card) return [];
     const tabs: EntityDetailTab[] = [
@@ -228,6 +256,7 @@
       onMetadataSave={handleMetadataSave}
       posterSize="large"
       tabs={detailTabs}
+      actionButtons={heroActions}
     >
       {#snippet heroMeta()}
         <span class="meta-item">{bookTitle}</span>
@@ -237,26 +266,6 @@
         </span>
       {/snippet}
 
-      {#snippet extraActions()}
-        {#if readerPageCount > 0}
-          <button type="button" class="reader-action" onclick={openPrimaryReader}>
-            <Play class="h-3.5 w-3.5" />
-            {primaryReadLabel}
-          </button>
-          {#if !chapterProgress?.isComplete}
-            <button type="button" class="reader-action" onclick={() => void markChapterRead()}>
-              <Check class="h-3.5 w-3.5" />
-              Mark read
-            </button>
-          {/if}
-          {#if chapterProgress && !chapterProgress.isComplete}
-            <button type="button" class="reader-action" onclick={() => openReaderAt(0)}>
-              <RotateCcw class="h-3.5 w-3.5" />
-              Start over
-            </button>
-          {/if}
-        {/if}
-      {/snippet}
     </EntityDetail>
 
     <section class="content-section">
@@ -309,8 +318,7 @@
     font-size: 0.85rem;
   }
 
-  .error-notice button,
-  .reader-action {
+  .error-notice button {
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
@@ -322,7 +330,6 @@
     cursor: pointer;
   }
 
-  .reader-action:hover,
   .error-notice button:hover {
     color: var(--color-text-accent, #c49a5a);
     border-color: rgba(196, 154, 90, 0.45);

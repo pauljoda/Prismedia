@@ -403,11 +403,17 @@
     background: color-mix(in srgb, var(--entity-action-accent) 6%, transparent);
   }
 
-  .entity-action-button-active {
+  .entity-action-button-active,
+  .entity-action-button-primary {
     color: var(--entity-action-accent);
     border-color: color-mix(in srgb, var(--entity-action-accent) 58%, var(--entity-action-border));
     box-shadow: 0 0 14px var(--entity-action-accent-glow);
     background: color-mix(in srgb, var(--entity-action-accent) 10%, transparent);
+  }
+
+  .entity-action-button-danger {
+    --entity-action-accent: var(--color-error-text);
+    --entity-action-accent-glow: rgba(255, 128, 111, 0.16);
   }
 
   .entity-action-button:disabled {
