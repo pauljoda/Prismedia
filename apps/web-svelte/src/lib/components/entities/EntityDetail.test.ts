@@ -87,7 +87,8 @@ describe("EntityDetail", () => {
 
     expect(detailSource).toContain(":global(.hero-badge)");
     expect(detailSource).toContain("var(--color-overlay-glass-accent)");
-    expect(detailSource).toContain("var(--shadow-glow-accent)");
+    expect(detailSource).toContain("0 0 8px rgba(242, 194, 106, 0.08)");
+    expect(detailSource).toContain("text-shadow: 0 0 6px rgba(242, 194, 106, 0.16)");
 
     for (const source of routeSources) {
       expect(source).toContain('class="hero-badge"');

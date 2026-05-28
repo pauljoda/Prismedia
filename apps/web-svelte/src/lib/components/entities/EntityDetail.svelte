@@ -1959,14 +1959,14 @@
     align-items: center;
     min-height: 1.45rem;
     padding: 0.2rem 0.62rem;
-    border: 1px solid var(--color-border-accent);
+    border: 1px solid rgba(242, 194, 106, 0.38);
     border-radius: var(--radius-xs);
     background:
-      linear-gradient(135deg, rgba(242, 194, 106, 0.16), rgba(255, 255, 255, 0.035)),
+      linear-gradient(135deg, rgba(242, 194, 106, 0.11), rgba(255, 255, 255, 0.03)),
       var(--color-overlay-glass-accent);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.08),
-      var(--shadow-glow-accent);
+      inset 0 1px 0 rgba(255, 255, 255, 0.06),
+      0 0 8px rgba(242, 194, 106, 0.08);
     color: var(--color-accent-100);
     font-family: var(--font-mono, "JetBrains Mono", monospace);
     font-size: 0.68rem;
@@ -1974,7 +1974,7 @@
     letter-spacing: 0.08em;
     line-height: 1;
     text-transform: uppercase;
-    text-shadow: 0 0 12px rgba(242, 194, 106, 0.28);
+    text-shadow: 0 0 6px rgba(242, 194, 106, 0.16);
   }
 
   /* ── Detail Body ────────────────────────────────────────── */
