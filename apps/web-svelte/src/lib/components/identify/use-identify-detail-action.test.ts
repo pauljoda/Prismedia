@@ -73,6 +73,44 @@ describe("useIdentifyDetailAction", () => {
 
     expect(goto).toHaveBeenCalledWith("/identify/person-1?returnId=person-1");
   });
+
+  it("loads provider state after the detail entity is populated asynchronously", async () => {
+    fetchIdentifyProviders.mockResolvedValue([provider("video")]);
+    const { rerender } = render(UseIdentifyDetailActionHarness, {
+      props: {
+        entityId: "",
+        entityKind: "",
+      },
+    });
+
+    await rerender({
+      entityId: "video-1",
+      entityKind: "video",
+    });
+
+    await waitFor(() => expect(fetchIdentifyProviders).toHaveBeenCalledWith("video"));
+    expect(await screen.findByRole("button", { name: "Identify" })).toBeInTheDocument();
+  });
+
+  it("refreshes provider state when an open detail page regains focus", async () => {
+    fetchIdentifyProviders
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([provider("video")]);
+
+    render(UseIdentifyDetailActionHarness, {
+      props: {
+        entityId: "video-1",
+        entityKind: "video",
+      },
+    });
+
+    await waitFor(() => expect(fetchIdentifyProviders).toHaveBeenCalledWith("video"));
+    expect(screen.queryByRole("button")).toBeNull();
+
+    window.dispatchEvent(new Event("focus"));
+
+    expect(await screen.findByRole("button", { name: "Identify" })).toBeInTheDocument();
+  });
 });
 
 function provider(entityKind: string, options: Partial<PluginProvider> = {}): PluginProvider {

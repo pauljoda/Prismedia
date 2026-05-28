@@ -20,6 +20,7 @@ export function useIdentifyDetailAction(
   let hasReadyProvider = $state(false);
   let loading = $state(false);
   let lastLoadKey = "";
+  let loadVersion = 0;
 
   const isQueued = $derived.by(() => queuedItem !== null && isActiveQueueState(queuedItem.state));
   const label = $derived(isQueued ? "Pending Review" : "Identify");
@@ -37,21 +38,36 @@ export function useIdentifyDetailAction(
       hasReadyProvider = false;
       loading = false;
       lastLoadKey = "";
+      loadVersion += 1;
       return;
     }
 
     const loadKey = `${id}:${kind ?? ""}`;
     if (loadKey === lastLoadKey) return;
     lastLoadKey = loadKey;
-    loading = true;
-    let cancelled = false;
+    void loadStatus(id, kind, true);
 
-    void loadStatus(id, kind).finally(() => {
-      if (!cancelled) loading = false;
-    });
+    return () => undefined;
+  });
 
+  $effect(() => {
+    const id = entityId();
+    if (!id || typeof window === "undefined") return;
+
+    const refresh = () => {
+      const currentId = entityId();
+      if (!currentId) return;
+      void loadStatus(currentId, entityKind(), false);
+    };
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
     return () => {
-      cancelled = true;
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
   });
 
@@ -71,15 +87,24 @@ export function useIdentifyDetailAction(
     };
   });
 
-  async function loadStatus(id: string, kind: string | null | undefined) {
+  async function loadStatus(id: string, kind: string | null | undefined, showLoading: boolean) {
+    const currentVersion = ++loadVersion;
+    if (showLoading) loading = true;
+
     const [queueItem, providers] = await Promise.all([
       fetchOptionalIdentifyQueueItem(id).catch(() => null),
       kind ? fetchIdentifyProviders(kind).catch(() => []) : Promise.resolve(null),
     ]);
+    if (currentVersion !== loadVersion) {
+      if (showLoading) loading = false;
+      return;
+    }
+
     queuedItem = queueItem;
     hasReadyProvider = kind
       ? (providers ?? []).some((provider) => providerCanIdentifyKind(provider, kind))
       : false;
+    if (showLoading) loading = false;
   }
 
   function navigate(id: string) {
