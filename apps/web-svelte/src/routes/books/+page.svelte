@@ -6,7 +6,6 @@
 <EntityIndexPage
   kind="book"
   title="Books"
-  description="Browse comics and books in your library"
   icon={BookOpen}
   prefsKey="books"
   emptyTitle="No books"

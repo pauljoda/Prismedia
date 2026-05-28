@@ -24,7 +24,6 @@
     actionHref?: string;
     actionIcon?: Component;
     actionLabel?: string;
-    description: string;
     emptyMessage: string;
     emptyTitle: string;
     enableLightbox?: boolean;
@@ -45,7 +44,6 @@
     actionHref,
     actionIcon: ActionIcon,
     actionLabel,
-    description,
     emptyMessage,
     emptyTitle,
     enableLightbox = false,
@@ -199,17 +197,10 @@
 <section class="space-y-5">
   <header class="page-head">
     <div class="page-head-meta">
-      <span class="page-head-eyebrow" aria-hidden="true">
-        <span class="eyebrow-tick"></span>
-        LIBRARY · {kind.toUpperCase()}
-      </span>
       <h1 class="page-head-title">
         <Icon class="h-5 w-5 text-text-accent page-head-icon" />
         {title}
       </h1>
-      <p class="page-head-description">
-        {description}
-      </p>
     </div>
 
     {#if actionHref && actionLabel}
@@ -302,46 +293,7 @@
   .page-head-meta {
     min-width: 0;
     display: flex;
-    flex-direction: column;
-    gap: 0.28rem;
-  }
-
-  .page-head-eyebrow {
-    display: inline-flex;
     align-items: center;
-    gap: 0.55rem;
-    color: var(--color-text-disabled);
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.56rem;
-    font-weight: 600;
-    letter-spacing: 0.22em;
-  }
-
-  .eyebrow-tick {
-    display: inline-block;
-    width: 0.4rem;
-    height: 0.4rem;
-    background: rgb(196 154 90);
-    box-shadow: 0 0 8px rgb(196 154 90 / 0.6);
-    border-radius: 0;
-    animation: tick-pulse 3.2s ease-in-out infinite;
-  }
-
-  @keyframes tick-pulse {
-    0%, 100% {
-      box-shadow: 0 0 8px rgb(196 154 90 / 0.6);
-      opacity: 1;
-    }
-    50% {
-      box-shadow: 0 0 14px rgb(196 154 90 / 0.85);
-      opacity: 0.75;
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .eyebrow-tick {
-      animation: none;
-    }
   }
 
   .page-head-title {
@@ -358,14 +310,6 @@
 
   .page-head-title :global(.page-head-icon) {
     filter: drop-shadow(0 0 10px rgb(196 154 90 / 0.4));
-  }
-
-  .page-head-description {
-    margin: 0;
-    color: var(--color-text-muted);
-    font-size: 0.82rem;
-    line-height: 1.45;
-    max-width: 60ch;
   }
 
   .page-head-action {

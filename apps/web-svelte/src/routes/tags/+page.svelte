@@ -6,7 +6,6 @@
 <EntityIndexPage
   kind="tag"
   title="Tags"
-  description="Browse tags in your library"
   icon={TagIcon}
   prefsKey="tags"
   emptyTitle="No tags"

@@ -6,7 +6,6 @@
 <EntityIndexPage
   kind="collection"
   title="Collections"
-  description="Curated groupings across your media"
   icon={FolderOpen}
   prefsKey="collections"
   emptyTitle="No collections"

@@ -6,7 +6,6 @@
 <EntityIndexPage
   kind="image"
   title="Images"
-  description="Browse images in your library"
   icon={ImageIcon}
   prefsKey="images"
   emptyTitle="No images"

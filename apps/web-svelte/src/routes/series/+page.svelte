@@ -6,7 +6,6 @@
 <EntityIndexPage
   kind="video-series"
   title="Series"
-  description="Browse your series hierarchy and drill into seasons or episodes"
   icon={FolderOpen}
   prefsKey="series"
   emptyTitle="No series"

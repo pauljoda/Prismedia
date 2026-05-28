@@ -6,7 +6,6 @@
 <EntityIndexPage
   kind="video"
   title="Videos"
-  description="Browse and manage your media library"
   icon={Film}
   prefsKey="videos"
   emptyTitle="No videos"

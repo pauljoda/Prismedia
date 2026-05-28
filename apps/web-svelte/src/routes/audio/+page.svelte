@@ -6,7 +6,6 @@
 <EntityIndexPage
   kind="audio-library"
   title="Audio"
-  description="Browse audio libraries in your collection"
   icon={Music}
   prefsKey="audio"
   emptyTitle="No audio"

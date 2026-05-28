@@ -6,7 +6,6 @@
 <EntityIndexPage
   kind="gallery"
   title="Galleries"
-  description="Browse galleries in your library"
   icon={Layers}
   prefsKey="galleries"
   emptyTitle="No galleries"

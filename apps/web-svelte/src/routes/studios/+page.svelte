@@ -6,7 +6,6 @@
 <EntityIndexPage
   kind="studio"
   title="Studios"
-  description="Browse studios in your library"
   icon={Building2}
   prefsKey="studios"
   emptyTitle="No studios"
