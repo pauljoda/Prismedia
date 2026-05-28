@@ -59,6 +59,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Fixed audio library track lists so the floating player no longer covers the bottom rows.
 - Fixed book detail pages so empty chapter sections are omitted and chapter cards use the shared radius scale.
 - Fixed the changelog dialog title so it matches the sidebar brand typography.
+- Fixed the library loading animation so its pulsing field and rings render as circles.
 - Fixed provider-applied Studio artwork so identified channel/studio relationship metadata can save both logo thumbnails and header backdrops.
 - Fixed plugin cascade reviews so provider-created structural children such as MangaDex volumes and chapters can be created and updated while respecting NSFW visibility.
 - Fixed MangaDex identify reviews so cover artwork keeps a book-cover aspect ratio and existing volume or chapter folders can receive scoped metadata.

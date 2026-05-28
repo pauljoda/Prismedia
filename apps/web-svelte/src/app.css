@@ -696,8 +696,8 @@
     animation: glow-pulse 2.4s ease-in-out infinite;
   }
 
-  /* App route loader: brass energy radiates from center (sharp squares). */
-  @keyframes route-loader-ripple-square {
+  /* App route loader: brass energy radiates from center in circular ripples. */
+  @keyframes route-loader-ripple-circle {
     0% {
       transform: scale(0.28);
       opacity: 0;
@@ -753,8 +753,8 @@
     width: 2.75rem;
     height: 2.75rem;
     border: 1px solid rgba(242, 194, 106, 0.42);
-    border-radius: 0;
-    animation: route-loader-ripple-square 2.4s var(--ease-mechanical) infinite;
+    border-radius: 9999px;
+    animation: route-loader-ripple-circle 2.4s var(--ease-mechanical) infinite;
     will-change: transform, opacity, box-shadow;
   }
 
@@ -772,7 +772,7 @@
     width: 3.25rem;
     height: 3.25rem;
     border: 1px solid rgba(242, 194, 106, 0.28);
-    border-radius: 0;
+    border-radius: 9999px;
     background: linear-gradient(
       180deg,
       rgba(242, 194, 106, 0.12) 0%,
