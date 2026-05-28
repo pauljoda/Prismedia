@@ -327,11 +327,11 @@ public static class AppSettingsRegistry {
                 70,
                 "HLS transcoder",
                 "Encoder used for new adaptive HLS segments.",
-                "Software",
+                "Auto",
                 10,
                 [
-                    new SettingOption("Software", "Software", "libx264 CPU baseline."),
                     new SettingOption("Auto", "Auto", "Native encoder when safe."),
+                    new SettingOption("Software", "Software", "libx264 CPU baseline."),
                     new SettingOption("VideoToolbox", "Apple VT", "macOS hardware path."),
                     new SettingOption("Vaapi", "VA-API", "Intel / AMD Linux."),
                     new SettingOption("Nvenc", "NVENC", "NVIDIA hardware."),

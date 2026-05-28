@@ -1,4 +1,7 @@
 using System.Text.Json;
+using System.Formats.Tar;
+using System.IO.Compression;
+using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Plugins;
 using Prismedia.Contracts.Plugins;
@@ -14,10 +17,12 @@ namespace Prismedia.Infrastructure.Plugins;
 /// <param name="DevPaths">Local plugin repository or plugin directories to scan during development.</param>
 /// <param name="CacheRoot">Cache directory used for transient plugin request envelopes.</param>
 /// <param name="CurrentPrismediaVersion">Current Prismedia version used for compatibility gating.</param>
+/// <param name="CommunityIndexUrl">Optional URL for the Prismedia community plugin index.</param>
 public sealed record PluginCatalogOptions(
     IReadOnlyList<string> DevPaths,
     string CacheRoot,
-    string CurrentPrismediaVersion);
+    string CurrentPrismediaVersion,
+    string? CommunityIndexUrl = null);
 
 /// <summary>
 /// Resolved local plugin artifact ready to execute.
@@ -43,17 +48,21 @@ public sealed class PluginCatalogService : IPluginCatalogService {
 
     private readonly PrismediaDbContext _db;
     private readonly PluginCatalogOptions _options;
+    private readonly HttpClient _http;
 
-    public PluginCatalogService(PrismediaDbContext db, PluginCatalogOptions options) {
+    public PluginCatalogService(PrismediaDbContext db, PluginCatalogOptions options, HttpClient? http = null) {
         _db = db;
         _options = options;
+        _http = http ?? new HttpClient();
     }
 
     /// <summary>
     /// Lists locally discoverable providers and overlays installed/auth state from the database.
     /// </summary>
     public async Task<IReadOnlyList<PluginProvider>> ListProvidersAsync(CancellationToken cancellationToken) {
+        var current = ParseVersion(_options.CurrentPrismediaVersion);
         var descriptors = await DiscoverAsync(cancellationToken);
+        var indexed = await ListRemoteIndexEntriesAsync(current, cancellationToken);
         var configs = await _db.ProviderConfigs
             .AsNoTracking()
             .ToDictionaryAsync(row => row.ProviderCode, StringComparer.OrdinalIgnoreCase, cancellationToken);
@@ -73,29 +82,27 @@ public sealed class PluginCatalogService : IPluginCatalogService {
                 group => group.Select(row => row.CredentialKey).ToHashSet(StringComparer.Ordinal),
                 StringComparer.OrdinalIgnoreCase);
 
-        return descriptors
-            .Select(descriptor => {
-                configs.TryGetValue(descriptor.Manifest.Id, out var config);
-                credentialKeys.TryGetValue(descriptor.Manifest.Id, out var keys);
-                keys ??= [];
-                var missing = descriptor.Manifest.Auth
-                    .Where(field => field.Required &&
-                        !PluginCredentialResolver.HasCredentialForField(keys, field.Key) &&
-                        !PluginCredentialResolver.HasEnvironmentCredential(descriptor.Manifest.Id, field.Key))
-                    .Select(field => field.Key)
-                    .ToArray();
-
+        var providers = descriptors
+            .Select(descriptor => ToProvider(descriptor, configs, credentialKeys))
+            .ToList();
+        var localIds = providers.Select(provider => provider.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        providers.AddRange(indexed
+            .Where(entry => !localIds.Contains(entry.Id))
+            .Select(entry => {
+                configs.TryGetValue(entry.Id, out var config);
                 return new PluginProvider(
-                    descriptor.Manifest.Id,
-                    descriptor.Manifest.Name,
-                    descriptor.Manifest.Version,
+                    entry.Id,
+                    entry.Name,
+                    entry.Version,
                     Installed: config is not null,
                     Enabled: config?.Enabled ?? false,
-                    IsNsfw: descriptor.Manifest.IsNsfw || config?.IsNsfw == true,
-                    descriptor.Manifest.Supports,
-                    descriptor.Manifest.Auth,
-                    missing);
-            })
+                    IsNsfw: entry.IsNsfw || config?.IsNsfw == true,
+                    entry.Supports,
+                    Auth: [],
+                    MissingAuthKeys: []);
+            }));
+
+        return providers
             .OrderBy(provider => provider.Name)
             .ToArray();
     }
@@ -121,6 +128,7 @@ public sealed class PluginCatalogService : IPluginCatalogService {
     /// </summary>
     public async Task<PluginProvider?> InstallAsync(string providerId, CancellationToken cancellationToken) {
         var descriptor = await FindProviderAsync(providerId, null, cancellationToken);
+        descriptor ??= await PullProviderAsync(providerId, cancellationToken);
         if (descriptor is null) {
             return null;
         }
@@ -244,7 +252,7 @@ public sealed class PluginCatalogService : IPluginCatalogService {
         var current = ParseVersion(_options.CurrentPrismediaVersion);
         var descriptors = new List<PluginDescriptor>();
 
-        foreach (var root in _options.DevPaths.Where(Directory.Exists).Distinct(StringComparer.OrdinalIgnoreCase)) {
+        foreach (var root in EnumerateDiscoveryRoots().Where(Directory.Exists).Distinct(StringComparer.OrdinalIgnoreCase)) {
             foreach (var manifestPath in EnumerateManifestPaths(root)) {
                 cancellationToken.ThrowIfCancellationRequested();
                 var manifest = await ReadManifestAsync(manifestPath, cancellationToken);
@@ -264,6 +272,348 @@ public sealed class PluginCatalogService : IPluginCatalogService {
             .GroupBy(descriptor => descriptor.Manifest.Id, StringComparer.OrdinalIgnoreCase)
             .Select(group => group.OrderByDescending(descriptor => ParseVersion(descriptor.Manifest.Version)).First())
             .ToArray();
+    }
+
+    private PluginProvider ToProvider(
+        PluginDescriptor descriptor,
+        IReadOnlyDictionary<string, ProviderConfigRow> configs,
+        IReadOnlyDictionary<string, HashSet<string>> credentialKeys) {
+        configs.TryGetValue(descriptor.Manifest.Id, out var config);
+        credentialKeys.TryGetValue(descriptor.Manifest.Id, out var keys);
+        keys ??= [];
+        var missing = descriptor.Manifest.Auth
+            .Where(field => field.Required &&
+                !PluginCredentialResolver.HasCredentialForField(keys, field.Key) &&
+                !PluginCredentialResolver.HasEnvironmentCredential(descriptor.Manifest.Id, field.Key))
+            .Select(field => field.Key)
+            .ToArray();
+
+        return new PluginProvider(
+            descriptor.Manifest.Id,
+            descriptor.Manifest.Name,
+            descriptor.Manifest.Version,
+            Installed: config is not null,
+            Enabled: config?.Enabled ?? false,
+            IsNsfw: descriptor.Manifest.IsNsfw || config?.IsNsfw == true,
+            descriptor.Manifest.Supports,
+            descriptor.Manifest.Auth,
+            missing);
+    }
+
+    private IEnumerable<string> EnumerateDiscoveryRoots() {
+        foreach (var path in _options.DevPaths) {
+            yield return path;
+        }
+
+        yield return CommunityPluginRoot();
+    }
+
+    private async Task<IReadOnlyList<PluginIndexEntry>> ListRemoteIndexEntriesAsync(
+        Version current,
+        CancellationToken cancellationToken) {
+        var entries = await FetchRemoteIndexAsync(cancellationToken);
+        return entries
+            .Where(entry => PluginCompatibilityResolver.IsCompatible(entry, current))
+            .GroupBy(entry => entry.Id, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.OrderByDescending(entry => ParseVersion(entry.Version)).First())
+            .ToArray();
+    }
+
+    private async Task<PluginDescriptor?> PullProviderAsync(string providerId, CancellationToken cancellationToken) {
+        if (string.IsNullOrWhiteSpace(_options.CommunityIndexUrl)) {
+            return null;
+        }
+
+        var current = ParseVersion(_options.CurrentPrismediaVersion);
+        var entry = PluginCompatibilityResolver.LatestCompatible(
+            await FetchRemoteIndexAsync(cancellationToken),
+            providerId,
+            current);
+        if (entry is null) {
+            return null;
+        }
+
+        var destination = Path.Combine(CommunityPluginRoot(), SafePathSegment(entry.Id), SafePathSegment(entry.Version));
+        if (!Directory.Exists(destination) || !EnumerateManifestPaths(destination).Any()) {
+            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+            var artifact = await DownloadArtifactAsync(entry, cancellationToken);
+            var tempDirectory = Path.Combine(CommunityPluginRoot(), $".tmp-{Guid.NewGuid():N}");
+            try {
+                Directory.CreateDirectory(tempDirectory);
+                ExtractArtifact(artifact, tempDirectory);
+                if (Directory.Exists(destination)) {
+                    Directory.Delete(destination, recursive: true);
+                }
+
+                Directory.Move(tempDirectory, destination);
+            } finally {
+                if (File.Exists(artifact)) {
+                    File.Delete(artifact);
+                }
+
+                if (Directory.Exists(tempDirectory)) {
+                    Directory.Delete(tempDirectory, recursive: true);
+                }
+            }
+        }
+
+        var descriptors = await DiscoverAsync(cancellationToken);
+        return descriptors
+            .Where(descriptor => descriptor.Manifest.Id.Equals(providerId, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(descriptor => ParseVersion(descriptor.Manifest.Version))
+            .FirstOrDefault();
+    }
+
+    private async Task<string> DownloadArtifactAsync(PluginIndexEntry entry, CancellationToken cancellationToken) {
+        var url = ResolveEntryUrl(entry.Path);
+        var artifacts = Path.Combine(CommunityPluginRoot(), "artifacts");
+        Directory.CreateDirectory(artifacts);
+        var extension = ArtifactExtension(new Uri(url).AbsolutePath);
+        var path = Path.Combine(artifacts, $"{SafePathSegment(entry.Id)}-{SafePathSegment(entry.Version)}{extension}");
+
+        await using (var remote = await _http.GetStreamAsync(url, cancellationToken))
+        await using (var local = File.Create(path)) {
+            await remote.CopyToAsync(local, cancellationToken);
+        }
+
+        if (!string.IsNullOrWhiteSpace(entry.Sha256)) {
+            await using var stream = File.OpenRead(path);
+            var hash = Convert.ToHexString(await SHA256.HashDataAsync(stream, cancellationToken)).ToLowerInvariant();
+            if (!hash.Equals(entry.Sha256, StringComparison.OrdinalIgnoreCase)) {
+                File.Delete(path);
+                throw new InvalidOperationException($"Plugin artifact checksum mismatch for '{entry.Id}'.");
+            }
+        }
+
+        return path;
+    }
+
+    private async Task<IReadOnlyList<PluginIndexEntry>> FetchRemoteIndexAsync(CancellationToken cancellationToken) {
+        if (string.IsNullOrWhiteSpace(_options.CommunityIndexUrl)) {
+            return [];
+        }
+
+        try {
+            var json = await _http.GetStringAsync(ResolveIndexUrl(_options.CommunityIndexUrl), cancellationToken);
+            return ParseIndex(json);
+        } catch (HttpRequestException) {
+            return [];
+        } catch (JsonException) {
+            return [];
+        } catch (IOException) {
+            return [];
+        }
+    }
+
+    private static IReadOnlyList<PluginIndexEntry> ParseIndex(string json) {
+        using var document = JsonDocument.Parse(json);
+        var root = document.RootElement;
+        var entries = root.ValueKind == JsonValueKind.Array
+            ? root.EnumerateArray()
+            : root.TryGetProperty("plugins", out var plugins) && plugins.ValueKind == JsonValueKind.Array
+                ? plugins.EnumerateArray()
+                : [];
+
+        return entries
+            .Where(entry => entry.ValueKind == JsonValueKind.Object)
+            .Select(ParseIndexEntry)
+            .Where(entry => !string.IsNullOrWhiteSpace(entry.Id) &&
+                !string.IsNullOrWhiteSpace(entry.Name) &&
+                !string.IsNullOrWhiteSpace(entry.Version) &&
+                !string.IsNullOrWhiteSpace(entry.Path))
+            .ToArray();
+    }
+
+    private static PluginIndexEntry ParseIndexEntry(JsonElement entry) =>
+        new(
+            Id: GetString(entry, "id"),
+            Name: GetString(entry, "name"),
+            Version: GetString(entry, "version"),
+            Date: GetString(entry, "date"),
+            Path: GetString(entry, "path", "downloadUrl"),
+            Sha256: GetString(entry, "sha256"),
+            Runtime: GetString(entry, "runtime", fallback: "dotnet-process"),
+            IsNsfw: GetBool(entry, "isNsfw"),
+            ManifestVersion: GetInt(entry, "manifestVersion", 1),
+            ApiTags: GetStringArray(entry, "apiTags", ["prismedia"]),
+            Compat: ParseCompatibility(entry),
+            Supports: ParseSupports(entry));
+
+    private static PluginCompatibility ParseCompatibility(JsonElement entry) {
+        if (!entry.TryGetProperty("compat", out var compat) || compat.ValueKind != JsonValueKind.Object) {
+            return new PluginCompatibility("1.0.0", null, "1.0.0", null);
+        }
+
+        return new PluginCompatibility(
+            GetString(compat, "pluginApiMin", fallback: "1.0.0"),
+            GetNullableString(compat, "pluginApiMax"),
+            GetString(compat, "prismediaMin", fallback: "1.0.0"),
+            GetNullableString(compat, "prismediaMax"));
+    }
+
+    private static IReadOnlyList<PluginEntitySupport> ParseSupports(JsonElement entry) {
+        if (!entry.TryGetProperty("supports", out var supports) || supports.ValueKind != JsonValueKind.Array) {
+            return [];
+        }
+
+        return supports
+            .EnumerateArray()
+            .Where(support => support.ValueKind == JsonValueKind.Object)
+            .Select(support => new PluginEntitySupport(
+                GetString(support, "entityKind"),
+                GetStringArray(support, "actions")))
+            .Where(support => !string.IsNullOrWhiteSpace(support.EntityKind) && support.Actions.Count > 0)
+            .ToArray();
+    }
+
+    private static string GetString(JsonElement element, string name, string? alternate = null, string fallback = "") {
+        if (element.TryGetProperty(name, out var property) && property.ValueKind == JsonValueKind.String) {
+            return property.GetString() ?? fallback;
+        }
+
+        if (alternate is not null &&
+            element.TryGetProperty(alternate, out var alternateProperty) &&
+            alternateProperty.ValueKind == JsonValueKind.String) {
+            return alternateProperty.GetString() ?? fallback;
+        }
+
+        return fallback;
+    }
+
+    private static string? GetNullableString(JsonElement element, string name) =>
+        element.TryGetProperty(name, out var property) && property.ValueKind == JsonValueKind.String
+            ? property.GetString()
+            : null;
+
+    private static bool GetBool(JsonElement element, string name) =>
+        element.TryGetProperty(name, out var property) && property.ValueKind == JsonValueKind.True;
+
+    private static int GetInt(JsonElement element, string name, int fallback) =>
+        element.TryGetProperty(name, out var property) && property.TryGetInt32(out var value)
+            ? value
+            : fallback;
+
+    private static IReadOnlyList<string> GetStringArray(
+        JsonElement element,
+        string name,
+        IReadOnlyList<string>? fallback = null) =>
+        element.TryGetProperty(name, out var property) && property.ValueKind == JsonValueKind.Array
+            ? property.EnumerateArray()
+                .Where(item => item.ValueKind == JsonValueKind.String)
+                .Select(item => item.GetString())
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Cast<string>()
+                .ToArray()
+            : fallback ?? [];
+
+    private static string ResolveIndexUrl(string configured) {
+        if (configured.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) {
+            return configured;
+        }
+
+        return configured.TrimEnd('/') + "/index.json";
+    }
+
+    private string ResolveEntryUrl(string path) {
+        if (Uri.TryCreate(path, UriKind.Absolute, out var absolute)) {
+            return absolute.ToString();
+        }
+
+        var indexUrl = ResolveIndexUrl(_options.CommunityIndexUrl ?? string.Empty);
+        return new Uri(new Uri(indexUrl), path).ToString();
+    }
+
+    private static void ExtractArtifact(string artifact, string destination) {
+        if (artifact.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) {
+            ExtractZip(artifact, destination);
+            return;
+        }
+
+        if (artifact.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase) ||
+            artifact.EndsWith(".tgz", StringComparison.OrdinalIgnoreCase)) {
+            using var file = File.OpenRead(artifact);
+            using var gzip = new GZipStream(file, CompressionMode.Decompress);
+            ExtractTar(gzip, destination);
+            return;
+        }
+
+        if (artifact.EndsWith(".tar", StringComparison.OrdinalIgnoreCase)) {
+            using var file = File.OpenRead(artifact);
+            ExtractTar(file, destination);
+            return;
+        }
+
+        throw new InvalidOperationException("Only .zip, .tar, .tar.gz, and .tgz plugin artifacts are supported.");
+    }
+
+    private static void ExtractZip(string artifact, string destination) {
+        using var archive = ZipFile.OpenRead(artifact);
+        foreach (var entry in archive.Entries) {
+            var target = Path.GetFullPath(Path.Combine(destination, entry.FullName));
+            if (!IsSafeExtractionPath(destination, target)) {
+                throw new InvalidOperationException("Plugin artifact contains an unsafe path.");
+            }
+
+            if (string.IsNullOrEmpty(entry.Name)) {
+                Directory.CreateDirectory(target);
+                continue;
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            entry.ExtractToFile(target, overwrite: true);
+        }
+    }
+
+    private static void ExtractTar(Stream stream, string destination) {
+        using var archive = new TarReader(stream);
+        while (archive.GetNextEntry() is { } entry) {
+            var target = Path.GetFullPath(Path.Combine(destination, entry.Name));
+            if (!IsSafeExtractionPath(destination, target)) {
+                throw new InvalidOperationException("Plugin artifact contains an unsafe path.");
+            }
+
+            if (entry.EntryType == TarEntryType.Directory) {
+                Directory.CreateDirectory(target);
+                continue;
+            }
+
+            if (entry.DataStream is null) {
+                continue;
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            using var output = File.Create(target);
+            entry.DataStream.CopyTo(output);
+        }
+    }
+
+    private string CommunityPluginRoot() =>
+        Path.Combine(_options.CacheRoot, "plugins", "community");
+
+    private static string SafePathSegment(string value) {
+        var chars = value.Select(character =>
+            char.IsLetterOrDigit(character) || character is '-' or '_' or '.'
+                ? character
+                : '-').ToArray();
+        return new string(chars).Trim('-', '.');
+    }
+
+    private static bool IsSafeExtractionPath(string destination, string target) {
+        var root = Path.GetFullPath(destination).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return target.Equals(root, StringComparison.OrdinalIgnoreCase) ||
+            target.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string ArtifactExtension(string urlPath) {
+        if (urlPath.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase)) {
+            return ".tar.gz";
+        }
+
+        if (urlPath.EndsWith(".tgz", StringComparison.OrdinalIgnoreCase)) {
+            return ".tgz";
+        }
+
+        return Path.GetExtension(urlPath);
     }
 
     private static IEnumerable<string> EnumerateManifestPaths(string root) {

@@ -23,11 +23,18 @@ public static class PluginCompatibilityResolver {
 
         return entries
             .Where(entry => string.Equals(entry.Id, pluginId, StringComparison.OrdinalIgnoreCase))
-            .Where(IsDotnetProcess)
-            .Where(entry => SupportsAppVersion(entry.Compat, currentAppVersion))
+            .Where(entry => IsCompatible(entry, currentAppVersion))
             .OrderByDescending(entry => ParseVersion(entry.Version))
             .FirstOrDefault();
     }
+
+    /// <summary>
+    /// Returns whether a registry entry can run in the current app version.
+    /// </summary>
+    /// <param name="entry">Community index entry to inspect.</param>
+    /// <param name="currentAppVersion">Current Prismedia version with any dev suffix already removed.</param>
+    public static bool IsCompatible(PluginIndexEntry entry, Version currentAppVersion) =>
+        IsDotnetProcess(entry) && SupportsAppVersion(entry.Compat, currentAppVersion);
 
     private static bool IsDotnetProcess(PluginIndexEntry entry) =>
         entry.ManifestVersion == 1 &&

@@ -16,9 +16,14 @@ public sealed class SettingsServiceTests {
         var castControls = catalog.Groups
             .SelectMany(group => group.Settings)
             .Single(setting => setting.Key == AppSettingKeys.PlaybackShowCastControls);
+        var hlsTranscoder = catalog.Groups
+            .SelectMany(group => group.Settings)
+            .Single(setting => setting.Key == AppSettingKeys.HlsTranscoderProfile);
 
         Assert.True(castControls.Value.GetBoolean());
         Assert.True(castControls.IsDefault);
+        Assert.Equal("Auto", hlsTranscoder.Value.GetString());
+        Assert.True(hlsTranscoder.IsDefault);
         Assert.Empty(await db.AppSettings.ToArrayAsync());
     }
 

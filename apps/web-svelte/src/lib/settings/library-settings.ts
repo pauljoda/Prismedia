@@ -18,8 +18,8 @@ export function normalizePlaybackMode(value: unknown): PlaybackMode {
 }
 
 export const hlsTranscoderProfiles = [
-  "Software",
   "Auto",
+  "Software",
   "VideoToolbox",
   "Vaapi",
   "Nvenc",
@@ -31,5 +31,5 @@ export type HlsTranscoderProfile = (typeof hlsTranscoderProfiles)[number];
 export function normalizeHlsTranscoderProfile(value: unknown): HlsTranscoderProfile {
   return typeof value === "string" && (hlsTranscoderProfiles as readonly string[]).includes(value)
     ? (value as HlsTranscoderProfile)
-    : "Software";
+    : "Auto";
 }

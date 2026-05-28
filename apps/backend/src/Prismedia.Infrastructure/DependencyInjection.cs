@@ -107,9 +107,14 @@ public static class DependencyInjection {
         services.AddSingleton(new PluginCatalogOptions(
             ResolvePluginDevPaths(configuration, pathBase),
             cacheDir,
-            ResolveCurrentVersion(configuration, pathBase)));
+            ResolveCurrentVersion(configuration, pathBase),
+            ResolvePluginIndexUrl(configuration)));
+        services.AddSingleton(new HttpClient());
         services.AddSingleton<DotnetPluginProcessRunner>();
-        services.AddScoped<PluginCatalogService>();
+        services.AddScoped(provider => new PluginCatalogService(
+            provider.GetRequiredService<PrismediaDbContext>(),
+            provider.GetRequiredService<PluginCatalogOptions>(),
+            provider.GetRequiredService<HttpClient>()));
         services.AddScoped<IPluginCatalogService>(provider =>
             provider.GetRequiredService<PluginCatalogService>());
         services.AddScoped<IdentifyMatchHintResolver>();
@@ -291,6 +296,24 @@ public static class DependencyInjection {
         } catch (IOException) {
             return "1.0.0";
         }
+    }
+
+    private static string? ResolvePluginIndexUrl(IConfiguration configuration) {
+        var configured = configuration["PRISMEDIA_PLUGIN_INDEX_URL"] ??
+            configuration["Prismedia:Plugins:IndexUrl"];
+        if (!string.IsNullOrWhiteSpace(configured)) {
+            return configured;
+        }
+
+        if (string.Equals(
+                configuration["PRISMEDIA_PLUGIN_INDEX_DISABLED"] ??
+                configuration["Prismedia:Plugins:IndexDisabled"],
+                "true",
+                StringComparison.OrdinalIgnoreCase)) {
+            return null;
+        }
+
+        return "https://raw.githubusercontent.com/pauljoda/prismedia-community-plugins/main/index.json";
     }
 
     private static string? FindRepoRoot(string start) {

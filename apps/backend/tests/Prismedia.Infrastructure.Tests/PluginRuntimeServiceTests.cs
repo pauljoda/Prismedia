@@ -1,3 +1,6 @@
+using System.IO.Compression;
+using System.Net;
+using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Contracts.Plugins;
@@ -116,6 +119,84 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
         Assert.True(provider.Installed);
         Assert.Empty(provider.MissingAuthKeys);
         Assert.Equal("stored-secret", auth["apiKey"]);
+    }
+
+    [Fact]
+    public async Task CatalogListsAndPullsCompatibleRemotePlugins() {
+        var archive = CreatePluginArchive(
+            """
+            {
+              "manifestVersion": 1,
+              "apiTags": ["prismedia"],
+              "id": "tmdb",
+              "name": "TMDB",
+              "version": "1.2.0",
+              "runtime": "dotnet-process",
+              "entry": "Prismedia.Plugin.Tmdb.dll",
+              "compat": {
+                "pluginApiMin": "1.0.0",
+                "pluginApiMax": null,
+                "prismediaMin": "1.0.0",
+                "prismediaMax": null
+              },
+              "auth": [
+                { "key": "apiKey", "label": "API key", "required": true, "url": "https://www.themoviedb.org/settings/api" }
+              ],
+              "supports": [
+                { "entityKind": "video", "actions": ["lookup-id", "search"] }
+              ]
+            }
+            """);
+        var sha256 = Convert.ToHexString(SHA256.HashData(archive)).ToLowerInvariant();
+        var index = $$"""
+        {
+          "plugins": [
+            {
+              "id": "tmdb",
+              "name": "TMDB",
+              "version": "1.2.0",
+              "date": "2026-05-28",
+              "path": "plugins/tmdb.zip",
+              "sha256": "{{sha256}}",
+              "runtime": "dotnet-process",
+              "isNsfw": false,
+              "manifestVersion": 1,
+              "apiTags": ["prismedia"],
+              "compat": {
+                "pluginApiMin": "1.0.0",
+                "pluginApiMax": null,
+                "prismediaMin": "1.0.0",
+                "prismediaMax": null
+              },
+              "supports": [
+                { "entityKind": "video", "actions": ["lookup-id", "search"] }
+              ]
+            }
+          ]
+        }
+        """;
+        var handler = new StaticHttpMessageHandler(new Dictionary<string, byte[]> {
+            ["https://plugins.example.test/index.json"] = System.Text.Encoding.UTF8.GetBytes(index),
+            ["https://plugins.example.test/plugins/tmdb.zip"] = archive
+        });
+        await using var db = CreateContext();
+        var catalog = new PluginCatalogService(
+            db,
+            new PluginCatalogOptions([], _tempRoot, "1.0.0", "https://plugins.example.test/index.json"),
+            new HttpClient(handler));
+
+        var listed = Assert.Single(await catalog.ListProvidersAsync(CancellationToken.None));
+        var installed = await catalog.InstallAsync("tmdb", CancellationToken.None);
+
+        Assert.Equal("tmdb", listed.Id);
+        Assert.False(listed.Installed);
+        Assert.Equal("video", Assert.Single(listed.Supports).EntityKind);
+        Assert.NotNull(installed);
+        Assert.True(installed.Installed);
+        Assert.True(installed.Enabled);
+        Assert.Contains("apiKey", installed.MissingAuthKeys);
+        Assert.Contains(handler.Requests, uri => uri.ToString() == "https://plugins.example.test/plugins/tmdb.zip");
+        Assert.True(File.Exists(Path.Combine(_tempRoot, "plugins", "community", "tmdb", "1.2.0", "manifest.json")));
     }
 
     [Fact]
@@ -1220,4 +1301,43 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
         Stats: new Dictionary<string, int>(),
         Positions: new Dictionary<string, int>(),
         Classification: null);
+
+    private static byte[] CreatePluginArchive(string manifestJson) {
+        using var stream = new MemoryStream();
+        using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, leaveOpen: true)) {
+            var manifest = archive.CreateEntry("manifest.json");
+            using (var writer = new StreamWriter(manifest.Open())) {
+                writer.Write(manifestJson);
+            }
+
+            var entry = archive.CreateEntry("Prismedia.Plugin.Tmdb.dll");
+            using var entryStream = entry.Open();
+            entryStream.WriteByte(0);
+        }
+
+        return stream.ToArray();
+    }
+
+    private sealed class StaticHttpMessageHandler : HttpMessageHandler {
+        private readonly IReadOnlyDictionary<string, byte[]> _responses;
+
+        public StaticHttpMessageHandler(IReadOnlyDictionary<string, byte[]> responses) {
+            _responses = responses;
+        }
+
+        public List<Uri> Requests { get; } = [];
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken) {
+            Requests.Add(request.RequestUri!);
+            if (!_responses.TryGetValue(request.RequestUri!.ToString(), out var body)) {
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+            }
+
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) {
+                Content = new ByteArrayContent(body)
+            });
+        }
+    }
 }

@@ -27,6 +27,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Changed
+- Defaulted adaptive HLS transcoding to Auto so fresh installs choose a safe native encoder when available before falling back to software.
 - Replaced Identify provider chip groups with a searchable provider dropdown so large plugin libraries stay navigable.
 - Restyled detail content so tabbed and non-tabbed sections render as a slightly inset subtle glass card emerging from the hero without covering the tab row corners.
 - Softened detail-page hero badge glow so collection, gallery, season, and book status chips feel calmer against artwork.
@@ -54,6 +55,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated web app manifest and mobile browser metadata for home-screen installation and browser UI theme colors.
 
 ### Fixed
+- Fixed deployed Prismedia Community plugin discovery so compatible remote index entries can be listed and pulled into the local plugin cache for installation.
 - Fixed Studio grid thumbnails so plugin-provided channel logos are preferred for cards while channel headers remain available for detail heroes.
 - Fixed already-open detail pages so Identify actions refresh when provider availability changes while the page is open.
 - Fixed audio library track lists so the floating player no longer covers the bottom rows.

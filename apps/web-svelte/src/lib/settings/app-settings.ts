@@ -63,7 +63,7 @@ export const defaultLibrarySettings: LibrarySettings = {
   subtitleFontScale: 1,
   subtitlePositionPercent: 88,
   subtitleOpacity: 1,
-  hlsTranscoderProfile: "Software",
+  hlsTranscoderProfile: "Auto",
   hlsFfmpegPath: "ffmpeg",
   hlsVaapiDevice: "/dev/dri/renderD128",
 };

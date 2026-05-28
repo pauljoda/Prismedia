@@ -35,7 +35,7 @@ public static class HlsTranscoderProfiles {
     /// <returns>A supported HLS transcoder profile.</returns>
     public static HlsTranscoderProfile ParseOrDefault(
         string? value,
-        HlsTranscoderProfile fallback = HlsTranscoderProfile.Software) =>
+        HlsTranscoderProfile fallback = HlsTranscoderProfile.Auto) =>
         Enum.TryParse<HlsTranscoderProfile>(value, ignoreCase: true, out var profile)
             ? profile
             : fallback;
@@ -50,6 +50,6 @@ public static class HlsTranscoderProfiles {
 /// <param name="VaapiDevice">Linux render device used by the VA-API encoder profile.</param>
 public sealed record HlsAssetServiceOptions(
     string CacheRoot,
-    HlsTranscoderProfile TranscoderProfile = HlsTranscoderProfile.Software,
+    HlsTranscoderProfile TranscoderProfile = HlsTranscoderProfile.Auto,
     string FfmpegPath = "ffmpeg",
     string VaapiDevice = "/dev/dri/renderD128");
