@@ -1,4 +1,5 @@
 import { fireEvent, render, waitFor } from "@testing-library/svelte";
+import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import EntityThumbnail from "./EntityThumbnail.svelte";
 import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
@@ -410,6 +411,15 @@ describe("EntityThumbnail", () => {
     expect(container.querySelector(".chips")?.textContent).toContain("1080p");
     expect(container.querySelector(".chips")?.textContent).not.toContain("S1 E2");
     expect(container.querySelector(".chips")?.textContent).not.toContain("4");
+  });
+
+  it("insets thumbnail metadata while keeping media artwork fully rounded", () => {
+    const source = readFileSync("src/lib/components/thumbnails/EntityThumbnail.svelte", "utf8");
+
+    expect(source).toContain("--thumbnail-slideout-inset: 5px;");
+    expect(source).toContain("margin: -1px var(--thumbnail-slideout-inset) 0;");
+    expect(source).toContain("border-radius: 5px;");
+    expect(source).toContain("border-radius: 0 0 5px 5px;");
   });
 
   it("shows book page metadata when media-only mode is not requested", () => {

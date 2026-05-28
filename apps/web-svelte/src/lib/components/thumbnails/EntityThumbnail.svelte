@@ -624,6 +624,8 @@
 
 <style>
   .entity-thumbnail {
+    --thumbnail-slideout-inset: 5px;
+
     position: relative;
     display: flex;
     flex-direction: column;
@@ -697,7 +699,7 @@
     min-height: 0;
     overflow: hidden;
     touch-action: pan-y;
-    border-radius: 5px 5px 0 0;
+    border-radius: 5px;
     background:
       radial-gradient(circle at 50% 45%, rgb(255 255 255 / 0.08), transparent 34%),
       linear-gradient(135deg, rgb(15 16 18 / 0.96), rgb(28 25 20 / 0.92)),
@@ -726,6 +728,10 @@
 
   .entity-thumbnail.is-image-only .media {
     border-radius: 5px;
+  }
+
+  .entity-thumbnail.is-list .media {
+    border-radius: 5px 0 0 5px;
   }
 
   .entity-thumbnail.is-list .media img {
@@ -908,8 +914,11 @@
     justify-content: center;
     gap: 0.25rem;
     min-width: 0;
+    margin: -1px var(--thumbnail-slideout-inset) 0;
     padding: 0.5rem 0.6rem;
-    border-top: 1px solid rgb(255 255 255 / 0.05);
+    border: 1px solid rgb(255 255 255 / 0.05);
+    border-top: 0;
+    border-radius: 0 0 5px 5px;
     background:
       linear-gradient(
         180deg,
@@ -1125,7 +1134,7 @@
     min-height: auto;
     justify-content: center;
     min-block-size: 5.25rem;
-    margin-top: 0;
+    margin: 0;
     padding: 0.72rem 0.9rem;
     border-radius: 0;
     background:
