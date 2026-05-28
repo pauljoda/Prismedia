@@ -15,6 +15,7 @@
     variant?: SearchResultCardVariant;
     currentPath?: string;
     onSelect?: (href: string) => void;
+    highlighted?: boolean;
   }
 
   let {
@@ -23,6 +24,7 @@
     variant = "grid",
     currentPath,
     onSelect,
+    highlighted = false,
   }: Props = $props();
 
   const href = $derived(buildHrefWithFrom(item.href, currentPath ?? ""));
@@ -55,7 +57,10 @@
 {#if variant === "compact"}
   <button
     type="button"
-    class="flex w-full items-center gap-3 px-4 py-2 text-left transition-colors duration-fast hover:bg-surface-2"
+    class={cn(
+      "flex w-full items-center gap-3 px-4 py-2 text-left transition-colors duration-fast hover:bg-surface-2",
+      highlighted && "bg-accent-950/45 ring-1 ring-inset ring-accent-500/45",
+    )}
     onclick={() => onSelect?.(item.href)}
   >
     {@render Thumbnail(cn("shrink-0", compactFrameClass))}
@@ -65,14 +70,17 @@
         <div class="truncate text-[0.68rem] text-text-muted">{item.subtitle}</div>
       {/if}
     </div>
-    <span class="tag-chip tag-chip-default shrink-0 text-[0.6rem]">
-      {label}
+    <span class={cn("tag-chip shrink-0 text-[0.6rem]", highlighted ? "tag-chip-accent" : "tag-chip-default")}>
+      {item.matchType === "related" ? "Related" : label}
     </span>
   </button>
 {:else if isRowGrid}
   <a
     {href}
-    class="surface-card-sharp flex items-center gap-3 p-2 transition-colors duration-fast hover:border-border-accent group/card"
+    class={cn(
+      "surface-card-sharp flex items-center gap-3 p-2 transition-colors duration-fast hover:border-border-accent group/card",
+      highlighted && "border-border-accent bg-accent-950/30 shadow-[0_0_24px_rgba(242,194,106,0.12)]",
+    )}
   >
     <div class="h-16 w-16 shrink-0">
       {@render Thumbnail("h-full w-full")}
@@ -90,6 +98,7 @@
     class={cn(
       "surface-card-sharp overflow-hidden transition-colors duration-fast hover:border-border-accent block",
       isTallGrid && "flex flex-col",
+      highlighted && "border-border-accent bg-accent-950/30 shadow-[0_0_24px_rgba(242,194,106,0.12)]",
     )}
   >
     {@render Thumbnail(cn("w-full", item.kind === "video" ? "aspect-video" : isTallGrid ? "aspect-[2/3]" : "aspect-square"))}

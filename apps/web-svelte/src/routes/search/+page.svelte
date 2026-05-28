@@ -11,11 +11,10 @@
   } from "@lucide/svelte";
   import { cn } from "@prismedia/ui-svelte";
   import SearchResultCard from "$lib/components/SearchResultCard.svelte";
-  import { fetchEntities, type EntityCard } from "$lib/api/entities";
-  import { resolveEntityHref } from "$lib/entities/entity-routes";
-  import { labelForEntityKind } from "$lib/entities/entity-codes";
+  import { buildHrefWithFrom } from "$lib/back-navigation";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import type { SearchEntityKind, SearchResponse, SearchResultItem } from "$lib/search/models";
+  import { firstSearchResult, searchEntities } from "$lib/search/entity-search";
   import { entityTerms } from "$lib/terminology";
   import {
     ALL_SEARCH_KINDS,
@@ -59,6 +58,7 @@
   const hasFiltersApplied = $derived(
     minRating != null || dateFrom !== "" || dateTo !== "",
   );
+  const topResult = $derived(firstSearchResult(results));
 
   $effect(() => {
     inputRef?.focus();
@@ -106,17 +106,19 @@
     const requestId = ++activeRequest;
     const timer = window.setTimeout(async () => {
       try {
-        void kindsList;
         void rating;
         void from;
         void to;
-        const startedAt = performance.now();
-        const data = await fetchEntities({
+        const data = await searchEntities({
           query: q,
           hideNsfw: nsfwMode === "off",
+          kinds: kindsList,
+          directLimit: 160,
+          relatedSourceLimit: 6,
+          relatedLimitPerSource: 60,
         });
         if (requestId === activeRequest) {
-          results = toSearchResponse(q, startedAt, data.items);
+          results = filterSearchResponse(data);
         }
       } catch {
         if (requestId === activeRequest) {
@@ -155,50 +157,27 @@
     // report their returned total, so this path is only here for template parity.
   }
 
-  function toSearchKind(kind: string): SearchEntityKind | null {
-    if (kind === "person") return "performer";
-    if ((ALL_SEARCH_KINDS as string[]).includes(kind)) return kind as SearchEntityKind;
-    return null;
-  }
-
-  function entityToSearchItem(entity: EntityCard): SearchResultItem | null {
-    const kind = toSearchKind(entity.kind);
-    const href = resolveEntityHref(entity.kind, entity.id);
-    if (!kind || !href) return null;
-
+  function filterSearchResponse(response: SearchResponse): SearchResponse {
     return {
-      href,
-      id: entity.id,
-      imagePath: entity.coverUrl ?? null,
-      kind,
-      meta: {},
-      rating: typeof entity.rating === "number" ? entity.rating : null,
-      score: 1,
-      subtitle: labelForEntityKind(entity.kind),
-      title: entity.title,
+      ...response,
+      groups: response.groups
+        .map((group) => {
+          const groupItems = group.items
+            .filter((item) => activeKinds.has(item.kind))
+            .filter((item) => minRating == null || (item.rating ?? 0) >= minRating);
+          return {
+            ...group,
+            items: groupItems.slice(0, PAGE_SIZE),
+            total: groupItems.length,
+          };
+        })
+        .filter((group) => group.items.length > 0),
     };
   }
 
-  function toSearchResponse(term: string, startedAt: number, entities: EntityCard[]): SearchResponse {
-    const groups = new Map<SearchEntityKind, SearchResultItem[]>();
-    for (const entity of entities) {
-      const item = entityToSearchItem(entity);
-      if (!item || !activeKinds.has(item.kind)) continue;
-      if (minRating != null && (item.rating ?? 0) < minRating) continue;
-      groups.set(item.kind, [...(groups.get(item.kind) ?? []), item]);
-    }
-
-    return {
-      durationMs: Math.max(0, Math.round(performance.now() - startedAt)),
-      groups: [...groups.entries()].map(([kind, groupItems]) => ({
-        hasMore: false,
-        items: groupItems.slice(0, PAGE_SIZE),
-        kind,
-        label: labelForEntityKind(kind === "performer" ? "person" : kind),
-        total: groupItems.length,
-      })),
-      query: term,
-    };
+  function navigateToTopResult() {
+    if (!topResult) return;
+    void goto(buildHrefWithFrom(topResult.href, currentPath));
   }
 
   function gridClassFor(kind: SearchEntityKind): string {
@@ -244,6 +223,12 @@
         type="text"
         placeholder="Search everything..."
         class="flex-1 bg-transparent text-sm text-text-primary placeholder:text-text-disabled focus:outline-none"
+        onkeydown={(e) => {
+          if (e.key === "Enter" && topResult) {
+            e.preventDefault();
+            navigateToTopResult();
+          }
+        }}
       />
       {#if query}
         <button
@@ -403,7 +388,7 @@
 
           <div class={gridClassFor(group.kind)}>
             {#each items as item, index (item.id)}
-              <SearchResultCard {item} {index} {currentPath} />
+              <SearchResultCard {item} {index} {currentPath} highlighted={item.id === topResult?.id} />
             {/each}
           </div>
 
@@ -430,9 +415,6 @@
         </section>
       {/each}
 
-      <div class="py-2 text-center font-mono text-[0.6rem] text-text-disabled">
-        {results.durationMs}ms
-      </div>
     </div>
   {/if}
 </div>

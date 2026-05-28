@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Mobile install metadata now presents Prismedia with the correct app name, theme colors, and safer icon spacing for browser and home-screen surfaces.
 
 ### Added
+- Added global entity search results that show direct matches first, then related media for matched people, studios, and tags, with quick-open highlighted results in search and the command palette.
 - Added collection creation and editing, including manual, dynamic, and hybrid modes, rule previews, visibility, and cover mode.
 - Added collection item curation controls for adding, removing, and reordering manual media entries from collection detail pages.
 - Added explicit reference-backed entity grids on people, studio, and tag detail pages so related content is listed from actual incoming relationships instead of search matches.

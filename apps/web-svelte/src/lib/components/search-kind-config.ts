@@ -6,6 +6,7 @@ import {
   FolderOpen,
   Image,
   Images,
+  Layers3,
   Music,
   Tag,
   Users,
@@ -21,6 +22,7 @@ export const ALL_SEARCH_KINDS: SearchEntityKind[] = [
   "gallery",
   "book",
   "image",
+  "collection",
   "audio-library",
   "audio-track",
 ];
@@ -40,6 +42,7 @@ export const SEARCH_KIND_CONFIG: Record<SearchEntityKind, SearchKindConfig> = {
   gallery: { label: "Galleries", icon: Images, href: "/galleries" },
   book: { label: "Books", icon: BookOpen, href: "/books" },
   image: { label: "Images", icon: Image, href: "/images" },
+  collection: { label: "Collections", icon: Layers3, href: "/collections" },
   "audio-library": { label: "Audio Libraries", icon: Music, href: "/audio" },
   "audio-track": { label: "Audio Tracks", icon: Music, href: "/audio" },
 };

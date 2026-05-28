@@ -5,16 +5,14 @@
   import { Search, X, Clock, ArrowRight, Trash2 } from "@lucide/svelte";
   import { cn, dur, ease, flyDown } from "@prismedia/ui-svelte";
   import { fade } from "svelte/transition";
-  import { fetchEntities, type EntityCard } from "$lib/api/entities";
   import SearchResultCard from "$lib/components/SearchResultCard.svelte";
   import { useSearch } from "$lib/stores/search.svelte";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import { entityTerms } from "$lib/terminology";
   import { recentSearches } from "$lib/stores/recent-searches.svelte";
   import { buildHrefWithFrom } from "$lib/back-navigation";
-  import { resolveEntityHref } from "$lib/entities/entity-routes";
-  import { labelForEntityKind } from "$lib/entities/entity-codes";
-  import type { SearchEntityKind, SearchResponse, SearchResultItem } from "$lib/search/models";
+  import type { SearchResponse } from "$lib/search/models";
+  import { firstSearchResult, flattenSearchResults, searchEntities } from "$lib/search/entity-search";
 
   const search = useSearch();
   const nsfw = useNsfw();
@@ -24,6 +22,7 @@
   let results = $state<SearchResponse | null>(null);
   let loading = $state(false);
   let inputRef = $state<HTMLInputElement | null>(null);
+  let activeResultId = $state<string | null>(null);
 
   let activeRequest = 0;
   const currentPath = $derived(`${page.url.pathname}${page.url.search}`);
@@ -32,63 +31,10 @@
   const hasResults = $derived(
     results != null && results.groups.some((group) => group.items.length > 0),
   );
-
-  function toSearchKind(kind: string): SearchEntityKind | null {
-    if (kind === "person") return "performer";
-    if (
-      kind === "video" ||
-      kind === "video-series" ||
-      kind === "studio" ||
-      kind === "tag" ||
-      kind === "gallery" ||
-      kind === "image" ||
-      kind === "book" ||
-      kind === "audio-library" ||
-      kind === "audio-track"
-    ) {
-      return kind;
-    }
-    return null;
-  }
-
-  function entityToSearchItem(entity: EntityCard): SearchResultItem | null {
-    const kind = toSearchKind(entity.kind);
-    const href = resolveEntityHref(entity.kind, entity.id);
-    if (!kind || !href) return null;
-
-    return {
-      href,
-      id: entity.id,
-      imagePath: entity.coverUrl ?? null,
-      kind,
-      meta: {},
-      rating: typeof entity.rating === "number" ? entity.rating : null,
-      score: 1,
-      subtitle: labelForEntityKind(entity.kind),
-      title: entity.title,
-    };
-  }
-
-  function toSearchResponse(term: string, startedAt: number, items: EntityCard[]): SearchResponse {
-    const groups = new Map<SearchEntityKind, SearchResultItem[]>();
-    for (const entity of items) {
-      const item = entityToSearchItem(entity);
-      if (!item) continue;
-      groups.set(item.kind, [...(groups.get(item.kind) ?? []), item]);
-    }
-
-    return {
-      durationMs: Math.max(0, Math.round(performance.now() - startedAt)),
-      groups: [...groups.entries()].map(([kind, groupItems]) => ({
-        hasMore: false,
-        items: groupItems,
-        kind,
-        label: labelForEntityKind(kind === "performer" ? "person" : kind),
-        total: groupItems.length,
-      })),
-      query: term,
-    };
-  }
+  const flatResults = $derived(flattenSearchResults(results));
+  const activeResult = $derived(
+    flatResults.find((item) => item.id === activeResultId) ?? firstSearchResult(results),
+  );
 
   function closePalette() {
     search.closePalette();
@@ -98,6 +44,7 @@
     query = "";
     results = null;
     loading = false;
+    activeResultId = null;
   }
 
   async function runSearch(term: string) {
@@ -107,22 +54,27 @@
     if (trimmed.length < 2) {
       results = null;
       loading = false;
+      activeResultId = null;
       return;
     }
 
     loading = true;
     try {
-      const startedAt = performance.now();
-      const data = await fetchEntities({
+      const data = await searchEntities({
         query: trimmed,
         hideNsfw: nsfw.mode === "off",
+        directLimit: 30,
+        relatedSourceLimit: 3,
+        relatedLimitPerSource: 8,
       });
       if (requestId === activeRequest) {
-        results = toSearchResponse(trimmed, startedAt, data.items);
+        results = data;
+        activeResultId = firstSearchResult(data)?.id ?? null;
       }
     } catch {
       if (requestId === activeRequest) {
         results = null;
+        activeResultId = null;
       }
     } finally {
       if (requestId === activeRequest) {
@@ -146,11 +98,36 @@
     void goto(`/search?q=${encodeURIComponent(trimmed)}`);
   }
 
+  function moveActiveResult(delta: number) {
+    if (flatResults.length === 0) return;
+    const currentIndex = Math.max(0, flatResults.findIndex((item) => item.id === activeResultId));
+    const nextIndex = (currentIndex + delta + flatResults.length) % flatResults.length;
+    activeResultId = flatResults[nextIndex].id;
+  }
+
+  function handleSearchKeydown(e: KeyboardEvent) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (activeResult) {
+        navigateTo(activeResult.href);
+      } else {
+        submitSearch();
+      }
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      moveActiveResult(1);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      moveActiveResult(-1);
+    }
+  }
+
   $effect(() => {
     if (!open) {
       query = "";
       results = null;
       loading = false;
+      activeResultId = null;
       activeRequest += 1;
       return;
     }
@@ -175,6 +152,7 @@
     if (trimmed.length < 2) {
       results = null;
       loading = false;
+      activeResultId = null;
       activeRequest += 1;
       return;
     }
@@ -218,12 +196,7 @@
           type="text"
           placeholder={`Search ${entityTerms.videos.toLowerCase()}, ${entityTerms.performers.toLowerCase()}, ${entityTerms.studios.toLowerCase()}, ${entityTerms.tags.toLowerCase()}...`}
           class="flex-1 bg-transparent text-sm text-text-primary placeholder:text-text-disabled focus:outline-none"
-          onkeydown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              submitSearch();
-            }
-          }}
+          onkeydown={handleSearchKeydown}
         />
         {#if query}
           <button
@@ -304,6 +277,7 @@
                     index={itemIndex}
                     variant="compact"
                     {currentPath}
+                    highlighted={item.id === activeResult?.id}
                     onSelect={navigateTo}
                   />
                 {/each}
@@ -323,9 +297,6 @@
             <span>See all results</span>
             <ArrowRight class="h-3 w-3" />
           </button>
-          <span class="font-mono text-[0.6rem] text-text-disabled">
-            {loading ? "..." : `${results?.durationMs ?? 0}ms`}
-          </span>
         </div>
       {/if}
     </div>

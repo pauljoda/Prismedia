@@ -8,7 +8,14 @@ export type SearchEntityKind =
   | "image"
   | "book"
   | "audio-library"
-  | "audio-track";
+  | "audio-track"
+  | "collection";
+
+export interface SearchRelatedEntity {
+  id: string;
+  kind: SearchEntityKind;
+  title: string;
+}
 
 export interface SearchResultItem {
   id: string;
@@ -20,6 +27,8 @@ export interface SearchResultItem {
   rating: number | null;
   score: number;
   meta: Record<string, string | number | boolean | string[] | null>;
+  matchType?: "direct" | "related";
+  relatedTo?: SearchRelatedEntity;
 }
 
 export interface SearchResultGroup {
