@@ -69,6 +69,38 @@ public sealed class CollectionCommandServiceTests {
     }
 
     [Fact]
+    public async Task UpdateAsyncRefreshesDynamicRuleItemsOnSave() {
+        await using var db = CreateContext();
+        var collectionId = SeedCollection(db, "Watch Later", CollectionMode.Dynamic);
+        var matchedId = SeedEntity(db, EntityKindRegistry.VideoSeries.Code, "The Chair Company");
+        await db.SaveChangesAsync();
+        var refreshPersistence = new FakeCollectionRefreshPersistence();
+        var service = CreateService(
+            db,
+            new FakeCollectionRuleEngine([new CollectionRuleMatch(EntityKind.VideoSeries, matchedId)]),
+            refreshPersistence);
+
+        var result = await service.UpdateAsync(
+            collectionId,
+            new CollectionWriteRequest(
+                "Rule Picks",
+                null,
+                "dynamic",
+                """{"type":"group","operator":"and","children":[{"type":"condition","entityTypes":[],"field":"title","operator":"contains","value":"Chair"}]}""",
+                "mosaic",
+                null,
+                false),
+            CancellationToken.None);
+
+        Assert.Equal(CollectionCommandStatus.Succeeded, result.Status);
+        var refresh = Assert.Single(refreshPersistence.Refreshes);
+        Assert.Equal(collectionId, refresh.CollectionEntityId);
+        var refreshedItem = Assert.Single(refresh.ResolvedItems);
+        Assert.Equal(EntityKind.VideoSeries, refreshedItem.EntityKind);
+        Assert.Equal(matchedId, refreshedItem.EntityId);
+    }
+
+    [Fact]
     public async Task AddRemoveAndReorderItemsPreservesManualMembershipRules() {
         await using var db = CreateContext();
         var collectionId = SeedCollection(db, "Manual");
@@ -181,12 +213,13 @@ public sealed class CollectionCommandServiceTests {
 
     private static CollectionCommandService CreateService(
         PrismediaDbContext db,
-        ICollectionRuleEngine? ruleEngine = null) =>
+        ICollectionRuleEngine? ruleEngine = null,
+        ICollectionRefreshPersistence? refreshPersistence = null) =>
         new(
             db,
             new FakeEntityReadService(db),
             ruleEngine ?? new FakeCollectionRuleEngine([]),
-            new FakeCollectionRefreshPersistence());
+            refreshPersistence ?? new FakeCollectionRefreshPersistence());
 
     private static Guid SeedCollection(
         PrismediaDbContext db,
@@ -300,6 +333,8 @@ public sealed class CollectionCommandServiceTests {
     }
 
     private sealed class FakeCollectionRefreshPersistence : ICollectionRefreshPersistence {
+        public List<RefreshCall> Refreshes { get; } = [];
+
         public Task<CollectionRefreshData?> GetDynamicCollectionAsync(
             Guid collectionEntityId,
             CancellationToken cancellationToken) =>
@@ -308,7 +343,13 @@ public sealed class CollectionCommandServiceTests {
         public Task RefreshCollectionItemsAsync(
             Guid collectionEntityId,
             IReadOnlyList<CollectionRuleMatch> resolvedItems,
-            CancellationToken cancellationToken) =>
-            Task.CompletedTask;
+            CancellationToken cancellationToken) {
+            Refreshes.Add(new RefreshCall(collectionEntityId, resolvedItems));
+            return Task.CompletedTask;
+        }
+
+        public sealed record RefreshCall(
+            Guid CollectionEntityId,
+            IReadOnlyList<CollectionRuleMatch> ResolvedItems);
     }
 }

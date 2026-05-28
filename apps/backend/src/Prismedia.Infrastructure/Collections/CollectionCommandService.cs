@@ -58,6 +58,7 @@ public sealed class CollectionCommandService(
         await UpsertDescriptionAsync(collectionId, write.Description, now, cancellationToken);
 
         await db.SaveChangesAsync(cancellationToken);
+        await RefreshRulesAfterWriteAsync(collectionId, write, cancellationToken);
         return await DetailResultAsync(collectionId, cancellationToken);
     }
 
@@ -92,6 +93,7 @@ public sealed class CollectionCommandService(
         await UpsertDescriptionAsync(collectionId, write.Description, now, cancellationToken);
 
         await db.SaveChangesAsync(cancellationToken);
+        await RefreshRulesAfterWriteAsync(collectionId, write, cancellationToken);
         return await DetailResultAsync(collectionId, cancellationToken);
     }
 
@@ -308,6 +310,19 @@ public sealed class CollectionCommandService(
 
     private static CollectionWriteResult InvalidWrite(string message) =>
         new(CollectionCommandStatus.Invalid, Message: message);
+
+    private async Task RefreshRulesAfterWriteAsync(
+        Guid collectionId,
+        NormalizedCollectionWrite write,
+        CancellationToken cancellationToken) {
+        if (write.Mode is not (CollectionMode.Dynamic or CollectionMode.Hybrid) ||
+            string.IsNullOrWhiteSpace(write.RuleTreeJson)) {
+            return;
+        }
+
+        var matches = await ruleEngine.EvaluateAsync(write.RuleTreeJson, cancellationToken);
+        await refreshPersistence.RefreshCollectionItemsAsync(collectionId, matches, cancellationToken);
+    }
 
     private bool TryNormalizeWrite(
         CollectionWriteRequest request,
