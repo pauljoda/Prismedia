@@ -264,20 +264,6 @@ public sealed class EfEntityReadService : IEntityReadService {
         var technicalByEntity = await _db.EntityTechnical.AsNoTracking()
             .Where(technical => ids.Contains(technical.EntityId))
             .ToDictionaryAsync(technical => technical.EntityId, cancellationToken);
-        var statRows = await _db.EntityStats.AsNoTracking()
-            .Where(stat => ids.Contains(stat.EntityId))
-            .ToArrayAsync(cancellationToken);
-        var statsByEntity = statRows
-            .OrderBy(stat => StatPriority(stat.Code))
-            .ThenBy(stat => stat.Code)
-            .ToLookup(stat => stat.EntityId);
-        var positionRows = await _db.EntityPositions.AsNoTracking()
-            .Where(position => ids.Contains(position.EntityId))
-            .ToArrayAsync(cancellationToken);
-        var positionsByEntity = positionRows
-            .OrderBy(position => PositionPriority(position.Code))
-            .ThenBy(position => position.Code)
-            .ToLookup(position => position.EntityId);
 
         return rows.Select(row => {
             var hoverUrl = hoverByEntity.GetValueOrDefault(row.Id);
@@ -297,11 +283,7 @@ public sealed class EfEntityReadService : IEntityReadService {
                 hoverUrl is null ? "none" : "sprite",
                 hoverUrl,
                 hoverImages,
-                ProjectThumbnailMeta(
-                    row,
-                    technicalByEntity.GetValueOrDefault(row.Id),
-                    statsByEntity[row.Id],
-                    positionsByEntity[row.Id]),
+                ProjectThumbnailMeta(row, technicalByEntity.GetValueOrDefault(row.Id)),
                 row.RatingValue,
                 row.IsFavorite,
                 row.IsNsfw,
@@ -360,103 +342,31 @@ public sealed class EfEntityReadService : IEntityReadService {
 
     private static IReadOnlyList<EntityThumbnailMeta> ProjectThumbnailMeta(
         EntityRow row,
-        EntityTechnicalRow? technical,
-        IEnumerable<EntityStatRow> stats,
-        IEnumerable<EntityPositionRow> positions) {
+        EntityTechnicalRow? technical) {
+        if (technical is null) {
+            return [];
+        }
+
         var meta = new List<EntityThumbnailMeta>(MaxThumbnailMeta);
-
-        if (technical is not null) {
-            AddTechnicalMeta(meta, row, technical);
+        Add(meta, "duration", FormatDuration(technical.DurationSeconds));
+        if (technical.Width is { } width && technical.Height is { } height) {
+            Add(meta, row.KindCode == EntityKindRegistry.Video.Code ? "video" : "image", FormatResolution(width, height));
         }
 
-        foreach (var position in positions) {
-            Add(meta, IconForPosition(row.KindCode, position.Code), FormatPosition(position));
-        }
-
-        foreach (var stat in stats.Where(stat => !IsRuntimeStat(stat.Code))) {
-            Add(meta, IconForStat(stat.Code), FormatStat(stat));
+        if (row.KindCode == EntityKindRegistry.Video.Code) {
+            Add(meta, "video", technical.Codec?.ToUpperInvariant());
+            Add(meta, "video", technical.Container?.ToUpperInvariant());
+        } else if (row.KindCode == EntityKindRegistry.AudioTrack.Code) {
+            Add(meta, "audio", technical.Codec?.ToUpperInvariant());
         }
 
         return meta.Take(MaxThumbnailMeta).ToArray();
-    }
-
-    private static void AddTechnicalMeta(
-        List<EntityThumbnailMeta> meta,
-        EntityRow row,
-        EntityTechnicalRow technical) {
-        Add(meta, "duration", FormatDuration(technical.DurationSeconds));
-        if (technical.Width is { } width && technical.Height is { } height) {
-            Add(meta, row.KindCode == EntityKindRegistry.Video.Code ? "video" : "image", FormatDimensions(row.KindCode, width, height));
-        }
-
-        if (IsAudioKind(row.KindCode)) {
-            Add(meta, "audio", FormatSampleRate(technical.SampleRate));
-            Add(meta, "audio", FormatChannels(technical.Channels));
-            Add(meta, "audio", technical.Codec?.ToUpperInvariant());
-            Add(meta, "audio", technical.Container?.ToUpperInvariant() ?? technical.Format?.ToUpperInvariant());
-        } else if (row.KindCode == EntityKindRegistry.Video.Code) {
-            Add(meta, "video", technical.Codec?.ToUpperInvariant());
-            Add(meta, "video", technical.Container?.ToUpperInvariant());
-        } else if (IsImageLikeKind(row.KindCode)) {
-            Add(meta, "image", technical.Format?.ToUpperInvariant() ?? technical.Codec?.ToUpperInvariant());
-        }
     }
 
     private static void Add(List<EntityThumbnailMeta> meta, string icon, string? label) {
         if (!string.IsNullOrWhiteSpace(label)) {
             meta.Add(new EntityThumbnailMeta(icon, label));
         }
-    }
-
-    private static bool IsAudioKind(string kindCode) =>
-        kindCode == EntityKindRegistry.Audio.Code ||
-        kindCode == EntityKindRegistry.AudioTrack.Code;
-
-    private static bool IsImageLikeKind(string kindCode) =>
-        kindCode == EntityKindRegistry.Image.Code ||
-        kindCode == EntityKindRegistry.BookPage.Code;
-
-    private static bool IsRuntimeStat(string code) =>
-        code.Contains("bit-rate", StringComparison.OrdinalIgnoreCase) ||
-        code.Contains("bitrate", StringComparison.OrdinalIgnoreCase);
-
-    private static string IconForPosition(string kindCode, string code) => code switch {
-        "chapter" => "chapter",
-        "page" or "volume" => "book",
-        "season" or "episode" or "absolute-episode" when kindCode == EntityKindRegistry.Video.Code => "video",
-        "track" or "disc" => "audio",
-        _ => kindCode == EntityKindRegistry.BookChapter.Code ? "chapter" : "count"
-    };
-
-    private static string IconForStat(string code) {
-        if (code.Contains("track", StringComparison.OrdinalIgnoreCase)) return "audio";
-        if (code.Contains("page", StringComparison.OrdinalIgnoreCase)) return "book";
-        if (code.Contains("chapter", StringComparison.OrdinalIgnoreCase)) return "chapter";
-        if (code.Contains("image", StringComparison.OrdinalIgnoreCase)) return "gallery";
-        if (code.Contains("video", StringComparison.OrdinalIgnoreCase)) return "video";
-        if (code.Contains("credit", StringComparison.OrdinalIgnoreCase) || code.Contains("people", StringComparison.OrdinalIgnoreCase)) return "person";
-        return "count";
-    }
-
-    private static int PositionPriority(string code) => code switch {
-        "disc" => 0,
-        "volume" => 0,
-        "season" => 0,
-        "chapter" => 1,
-        "track" => 1,
-        "episode" => 1,
-        "absolute-episode" => 1,
-        "page" => 2,
-        _ => 10
-    };
-
-    private static int StatPriority(string code) {
-        if (code.Contains("track", StringComparison.OrdinalIgnoreCase)) return 0;
-        if (code.Contains("video", StringComparison.OrdinalIgnoreCase)) return 0;
-        if (code.Contains("chapter", StringComparison.OrdinalIgnoreCase)) return 1;
-        if (code.Contains("page", StringComparison.OrdinalIgnoreCase)) return 2;
-        if (code.Contains("image", StringComparison.OrdinalIgnoreCase)) return 2;
-        return 10;
     }
 
     private static string? FormatDuration(double? seconds) {
@@ -480,48 +390,6 @@ public sealed class EfEntityReadService : IEntityReadService {
         if (height >= 480) return "480p";
         return $"{width}x{height}";
     }
-
-    private static string FormatDimensions(string kindCode, int width, int height) =>
-        kindCode == EntityKindRegistry.Video.Code ? FormatResolution(width, height) : $"{width}×{height}";
-
-    private static string? FormatSampleRate(int? sampleRate) {
-        if (sampleRate is not { } value || value <= 0) {
-            return null;
-        }
-
-        return value >= 1000 && value % 100 == 0
-            ? $"{value / 1000.0:0.#} kHz"
-            : $"{value} Hz";
-    }
-
-    private static string? FormatChannels(int? channels) => channels switch {
-        null or <= 0 => null,
-        1 => "Mono",
-        2 => "Stereo",
-        _ => $"{channels} ch"
-    };
-
-    private static string? FormatPosition(EntityPositionRow position) {
-        if (!string.IsNullOrWhiteSpace(position.Label)) {
-            return position.Label;
-        }
-
-        return position.Code switch {
-            "season" => $"S{position.Value}",
-            "episode" or "absolute-episode" => $"E{position.Value}",
-            "volume" => $"Vol {position.Value}",
-            "chapter" => $"Ch {position.Value}",
-            "page" => $"Page {position.Value}",
-            "track" => $"Track {position.Value}",
-            "disc" => $"Disc {position.Value}",
-            "sort" => null,
-            _ => $"{FormatCodeLabel(position.Code)} {position.Value}"
-        };
-    }
-
-    private static string FormatStat(EntityStatRow stat) => $"{stat.Value} {FormatCodeLabel(stat.Code)}";
-
-    private static string FormatCodeLabel(string code) => code.Replace('-', ' ');
 
     private async Task<IReadOnlyDictionary<Guid, IReadOnlyList<EntityThumbnailHoverImage>>> ProjectHoverImagesAsync(
         IReadOnlyList<EntityRow> rows,

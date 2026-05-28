@@ -185,38 +185,6 @@ describe("entity grid helpers", () => {
     expect(request.filters.map((filter) => filter.id)).toEqual(["rating:4", "technical:duration"]);
   });
 
-  it("maps non-video technical metadata into thumbnail chips", () => {
-    const audio = entityCardToThumbnailCard(card("audio-1", "audio-track", "Track", [{
-      kind: "technical",
-      duration: "00:03:34",
-      width: null,
-      height: null,
-      frameRate: null,
-      bitRate: null,
-      sampleRate: 44100,
-      channels: 2,
-      codec: "aac",
-      container: "mp4",
-      format: null,
-    }]));
-    const imageCard = entityCardToThumbnailCard(card("image-1", "image", "Still", [{
-      kind: "technical",
-      duration: null,
-      width: 4000,
-      height: 3000,
-      frameRate: null,
-      bitRate: null,
-      sampleRate: null,
-      channels: null,
-      codec: null,
-      container: null,
-      format: "jpeg",
-    }]));
-
-    expect(audio.meta?.map((item) => item.label)).toEqual(["03:34", "44.1 kHz", "Stereo", "AAC", "MP4"]);
-    expect(imageCard.meta?.map((item) => item.label)).toEqual(["4000×3000", "JPEG"]);
-  });
-
   it("maps video season and episode numbers into the bottom-left custom slot", () => {
     const thumbnail = entityCardToThumbnailCard(card("4", "video", "Episode", [
       flags(false),

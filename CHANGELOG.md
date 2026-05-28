@@ -27,7 +27,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Changed
-- Expanded entity thumbnail metadata chips so audio, images, books, galleries, and structural children surface useful format, position, and count details instead of video-only cues.
 - Replaced Identify provider chip groups with a searchable provider dropdown so large plugin libraries stay navigable.
 - Restyled detail content so tabbed and non-tabbed sections render as a slightly inset subtle glass card emerging from the hero without covering the tab row corners.
 - Softened detail-page hero badge glow so collection, gallery, season, and book status chips feel calmer against artwork.

@@ -111,34 +111,6 @@ function formatResolutionLabelFull(width: number, height: number): string {
   return formatResolutionLabel(height) ?? `${width}×${height}`;
 }
 
-function formatDimensionsForKind(kind: string, width: number, height: number): string {
-  return kind === ENTITY_KIND.video ? formatResolutionLabelFull(width, height) : `${width}×${height}`;
-}
-
-function formatSampleRate(value: number | string | null | undefined): string | null {
-  const sampleRate = numberValue(value);
-  if (!sampleRate || sampleRate <= 0) return null;
-  return sampleRate >= 1000 && sampleRate % 100 === 0
-    ? `${sampleRate / 1000} kHz`
-    : `${sampleRate} Hz`;
-}
-
-function formatChannels(value: number | string | null | undefined): string | null {
-  const channels = numberValue(value);
-  if (!channels || channels <= 0) return null;
-  if (channels === 1) return "Mono";
-  if (channels === 2) return "Stereo";
-  return `${channels} ch`;
-}
-
-function isAudioKind(kind: string): boolean {
-  return kind === ENTITY_KIND.audio || kind === ENTITY_KIND.audioTrack;
-}
-
-function isImageLikeKind(kind: string): boolean {
-  return kind === ENTITY_KIND.image || kind === ENTITY_KIND.bookPage;
-}
-
 type EntityGridSourceEntity = EntityCard | EntityThumbnail;
 
 function isFullEntityCard(entity: EntityGridSourceEntity): entity is EntityCard {
@@ -268,19 +240,12 @@ function metaForEntity(entity: EntityGridSourceEntity): EntityThumbnailCard["met
   const customOverlay = customOverlayForEntity(entity);
 
   if (duration) meta.push({ icon: "duration", label: duration });
-  if (width && height) meta.push({ icon: entity.kind === ENTITY_KIND.video ? "video" : "image", label: formatDimensionsForKind(entity.kind, width, height) });
-  if (isAudioKind(entity.kind)) {
-    const sampleRate = formatSampleRate(technical?.sampleRate);
-    const channels = formatChannels(technical?.channels);
-    if (sampleRate) meta.push({ icon: "audio", label: sampleRate });
-    if (channels) meta.push({ icon: "audio", label: channels });
-    if (technical?.codec) meta.push({ icon: "audio", label: technical.codec.toUpperCase() });
-    if (technical?.container || technical?.format) meta.push({ icon: "audio", label: (technical.container ?? technical.format ?? "").toUpperCase() });
-  } else if (entity.kind === ENTITY_KIND.video) {
-    if (technical?.codec) meta.push({ icon: "video", label: technical.codec.toUpperCase() });
-    if (technical?.container) meta.push({ icon: "video", label: technical.container.toUpperCase() });
-  } else if (isImageLikeKind(entity.kind) && (technical?.format || technical?.codec)) {
-    meta.push({ icon: "image", label: (technical.format ?? technical.codec ?? "").toUpperCase() });
+  if (width && height) meta.push({ icon: entity.kind === ENTITY_KIND.video ? "video" : "image", label: formatResolutionLabelFull(width, height) });
+  if (entity.kind === ENTITY_KIND.video && technical?.codec) {
+    meta.push({ icon: "video", label: technical.codec.toUpperCase() });
+  }
+  if (entity.kind === ENTITY_KIND.video && technical?.container) {
+    meta.push({ icon: "video", label: technical.container.toUpperCase() });
   }
   for (const stat of stats.filter((s) => !s.code.includes("bit-rate") && !s.code.includes("bitrate")).slice(0, 2)) {
     meta.push({ icon: statIcon(stat.code), label: statLabel(stat.code, stat.value) });
