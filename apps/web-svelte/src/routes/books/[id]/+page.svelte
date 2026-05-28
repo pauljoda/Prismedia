@@ -453,10 +453,6 @@
           {/each}
         </div>
       </section>
-    {:else}
-      <div class="empty-children">
-        <p>No chapters linked to this book yet.</p>
-      </div>
     {/if}
   {/if}
 </div>
@@ -694,6 +690,7 @@
     min-height: 6.5rem;
     padding: 0.9rem;
     border: 1px solid var(--color-border-subtle, #1c2235);
+    border-radius: var(--radius-sm, 6px);
     background: var(--color-surface-1, #0c0f15);
     color: var(--color-text-muted, #8a93a6);
     text-decoration: none;
@@ -709,15 +706,6 @@
     display: grid;
     gap: 0.35rem;
     min-width: 0;
-  }
-
-  .empty-children {
-    padding: 2rem;
-    border: 1px solid var(--color-border-subtle, #1c2235);
-    background: var(--color-surface-1, #0c0f15);
-    color: var(--color-text-muted, #8a93a6);
-    text-align: center;
-    font-size: 0.85rem;
   }
 
   @keyframes pulse {

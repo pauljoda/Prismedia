@@ -14,4 +14,13 @@ describe("book progress card styling", () => {
     expect(source).toContain("border-radius: var(--radius-xs");
     expect(source).not.toContain("background: var(--color-glass-1");
   });
+
+  it("omits empty chapter placeholders and softens chapter cards", async () => {
+    const source = await readFile("src/routes/books/[id]/+page.svelte", "utf8");
+
+    expect(source).not.toContain("No chapters linked to this book yet.");
+    expect(source).not.toContain(".empty-children");
+    expect(source).toContain(".chapter-card");
+    expect(source).toContain("border-radius: var(--radius-sm");
+  });
 });
