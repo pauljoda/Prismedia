@@ -10,7 +10,7 @@ After the container starts, Prismedia needs one watched library root. A root is 
 
 ## 1. Open the app
 
-Open [http://localhost:8008](http://localhost:8008). In local development, Vite is usually [http://localhost:5173](http://localhost:5173) and proxies to the API.
+Open [http://localhost:8008](http://localhost:8008). The release container serves the built web app and API from the same port.
 
 ## 2. Add a watched root
 

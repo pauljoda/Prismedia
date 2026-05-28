@@ -154,6 +154,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ### Removed
 
 ### Docs
+- Removed development-server language from user setup docs and clarified that release images serve the built web app from the .NET API.
 - Tightened the documentation site theme so docs pages follow Prism Noir Luxe radii, surfaces, lists, screenshots, and content language consistently.
 - Refreshed the README and documentation site for the current Prismedia v1 app surface, including Files, Identify, collections, playback, settings, operations, and Prism Noir Luxe guidance.
 - Restored the GitHub Pages documentation-site workflow so the Docusaurus docs build and deploy from `main`.

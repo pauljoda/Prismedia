@@ -93,6 +93,8 @@ Most installs can start with no environment variables. Add these when you need d
 | ffmpeg | Media probing, thumbnailing, HLS, subtitle extraction. |
 | `prismedia-phash` | Stash-compatible video perceptual hashes. |
 
+The frontend is prebuilt into static assets for release images and served by the .NET API. Normal installs do not run a separate web development server.
+
 ## Next steps
 
 1. Open [First Boot](./first-boot.md).
