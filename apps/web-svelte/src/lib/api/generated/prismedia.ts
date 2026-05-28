@@ -67,6 +67,7 @@ import type {
   GetSettingValuesParams,
   GetStudioParams,
   GetTagParams,
+  GetUpdateCheckParams,
   GetVideoParams,
   GetVideoSeasonParams,
   GetVideoSeriesParams,
@@ -131,6 +132,7 @@ import type {
   StartBulkIdentifyParams,
   StudioDetail,
   TagDetail,
+  UpdateCheckResponse,
   VideoDetail,
   VideoSeasonDetail,
   VideoSeriesDetail,
@@ -247,6 +249,9 @@ export const getGetVideoSeasonUrl = (id: string,
   return stringifiedParams.length > 0 ? `/api/series/${id}/seasons/${seasonId}?${stringifiedParams}` : `/api/series/${id}/seasons/${seasonId}`
 }
 
+/**
+ * @summary Get Video Season.
+ */
 export const getVideoSeason = async (id: string,
     seasonId: string,
     params?: GetVideoSeasonParams, options?: RequestInit): Promise<getVideoSeasonResponse> => {
@@ -294,6 +299,9 @@ export const getGetAudioStreamUrl = (id: string,) => {
   return `/api/audio-stream/${id}`
 }
 
+/**
+ * @summary Get Audio Stream.
+ */
 export const getAudioStream = async (id: string, options?: RequestInit): Promise<getAudioStreamResponse> => {
 
   return orvalFetch<getAudioStreamResponse>(getGetAudioStreamUrl(id),
@@ -334,6 +342,9 @@ export const getGetJellyfinPlaybackInfoUrl = (itemId: string,) => {
   return `/Items/${itemId}/PlaybackInfo`
 }
 
+/**
+ * @summary Get Jellyfin Playback Info.
+ */
 export const getJellyfinPlaybackInfo = async (itemId: string, options?: RequestInit): Promise<getJellyfinPlaybackInfoResponse> => {
 
   return orvalFetch<getJellyfinPlaybackInfoResponse>(getGetJellyfinPlaybackInfoUrl(itemId),
@@ -374,6 +385,9 @@ export const getPostJellyfinPlaybackInfoUrl = (itemId: string,) => {
   return `/Items/${itemId}/PlaybackInfo`
 }
 
+/**
+ * @summary Post Jellyfin Playback Info.
+ */
 export const postJellyfinPlaybackInfo = async (itemId: string,
     playbackInfoRequest: PlaybackInfoRequest, options?: RequestInit): Promise<postJellyfinPlaybackInfoResponse> => {
 
@@ -426,6 +440,9 @@ export const getGetJellyfinVideoStreamUrl = (itemId: string,) => {
   return `/Videos/${itemId}/stream`
 }
 
+/**
+ * @summary Get Jellyfin Video Stream.
+ */
 export const getJellyfinVideoStream = async (itemId: string, options?: RequestInit): Promise<getJellyfinVideoStreamResponse> => {
 
   return orvalFetch<getJellyfinVideoStreamResponse>(getGetJellyfinVideoStreamUrl(itemId),
@@ -467,6 +484,9 @@ export const getGetJellyfinVideoMasterPlaylistUrl = (itemId: string,
   return stringifiedParams.length > 0 ? `/Videos/${itemId}/master.m3u8?${stringifiedParams}` : `/Videos/${itemId}/master.m3u8`
 }
 
+/**
+ * @summary Get Jellyfin Video Master Playlist.
+ */
 export const getJellyfinVideoMasterPlaylist = async (itemId: string,
     params?: GetJellyfinVideoMasterPlaylistParams, options?: RequestInit): Promise<getJellyfinVideoMasterPlaylistResponse> => {
 
@@ -512,6 +532,9 @@ export const getGetJellyfinVideoHlsSegmentUrl = (itemId: string,
   return stringifiedParams.length > 0 ? `/Videos/${itemId}/hls/${playlistId}/${segmentId}.${container}?${stringifiedParams}` : `/Videos/${itemId}/hls/${playlistId}/${segmentId}.${container}`
 }
 
+/**
+ * @summary Get Jellyfin Video Hls Segment.
+ */
 export const getJellyfinVideoHlsSegment = async (itemId: string,
     playlistId: string,
     segmentId: string,
@@ -560,6 +583,9 @@ export const getGetJellyfinVideoHlsRelativeAssetUrl = (itemId: string,
   return stringifiedParams.length > 0 ? `/Videos/${itemId}/v/${playlistId}/${segmentId}.${container}?${stringifiedParams}` : `/Videos/${itemId}/v/${playlistId}/${segmentId}.${container}`
 }
 
+/**
+ * @summary Get Jellyfin Video Hls Relative Asset.
+ */
 export const getJellyfinVideoHlsRelativeAsset = async (itemId: string,
     playlistId: string,
     segmentId: string,
@@ -597,6 +623,9 @@ export const getDeleteJellyfinActiveEncodingsUrl = () => {
   return `/Videos/ActiveEncodings`
 }
 
+/**
+ * @summary Delete Jellyfin Active Encodings.
+ */
 export const deleteJellyfinActiveEncodings = async ( options?: RequestInit): Promise<deleteJellyfinActiveEncodingsResponse> => {
 
   return orvalFetch<deleteJellyfinActiveEncodingsResponse>(getDeleteJellyfinActiveEncodingsUrl(),
@@ -631,6 +660,9 @@ export const getGetJellyfinTrickplayPlaylistUrl = (itemId: string,
   return `/Videos/${itemId}/Trickplay/${width}/tiles.m3u8`
 }
 
+/**
+ * @summary Get Jellyfin Trickplay Playlist.
+ */
 export const getJellyfinTrickplayPlaylist = async (itemId: string,
     width: number, options?: RequestInit): Promise<getJellyfinTrickplayPlaylistResponse> => {
 
@@ -667,6 +699,9 @@ export const getGetJellyfinTrickplayTileUrl = (itemId: string,
   return `/Videos/${itemId}/Trickplay/${width}/${index}.jpg`
 }
 
+/**
+ * @summary Get Jellyfin Trickplay Tile.
+ */
 export const getJellyfinTrickplayTile = async (itemId: string,
     width: number,
     index: number, options?: RequestInit): Promise<getJellyfinTrickplayTileResponse> => {
@@ -702,6 +737,9 @@ export const getPostJellyfinSessionPlayingUrl = () => {
   return `/Sessions/Playing`
 }
 
+/**
+ * @summary Post Jellyfin Session Playing.
+ */
 export const postJellyfinSessionPlaying = async (playbackSessionRequest: PlaybackSessionRequest, options?: RequestInit): Promise<postJellyfinSessionPlayingResponse> => {
 
   return orvalFetch<postJellyfinSessionPlayingResponse>(getPostJellyfinSessionPlayingUrl(),
@@ -736,6 +774,9 @@ export const getPostJellyfinSessionProgressUrl = () => {
   return `/Sessions/Playing/Progress`
 }
 
+/**
+ * @summary Post Jellyfin Session Progress.
+ */
 export const postJellyfinSessionProgress = async (playbackSessionRequest: PlaybackSessionRequest, options?: RequestInit): Promise<postJellyfinSessionProgressResponse> => {
 
   return orvalFetch<postJellyfinSessionProgressResponse>(getPostJellyfinSessionProgressUrl(),
@@ -770,6 +811,9 @@ export const getPostJellyfinSessionPingUrl = () => {
   return `/Sessions/Playing/Ping`
 }
 
+/**
+ * @summary Post Jellyfin Session Ping.
+ */
 export const postJellyfinSessionPing = async (playbackSessionRequest: PlaybackSessionRequest, options?: RequestInit): Promise<postJellyfinSessionPingResponse> => {
 
   return orvalFetch<postJellyfinSessionPingResponse>(getPostJellyfinSessionPingUrl(),
@@ -804,6 +848,9 @@ export const getPostJellyfinSessionStoppedUrl = () => {
   return `/Sessions/Playing/Stopped`
 }
 
+/**
+ * @summary Post Jellyfin Session Stopped.
+ */
 export const postJellyfinSessionStopped = async (playbackSessionRequest: PlaybackSessionRequest, options?: RequestInit): Promise<postJellyfinSessionStoppedResponse> => {
 
   return orvalFetch<postJellyfinSessionStoppedResponse>(getPostJellyfinSessionStoppedUrl(),
@@ -838,6 +885,9 @@ export const getPostJellyfinUserPlayedItemUrl = (itemId: string,) => {
   return `/UserPlayedItems/${itemId}`
 }
 
+/**
+ * @summary Post Jellyfin User Played Item.
+ */
 export const postJellyfinUserPlayedItem = async (itemId: string, options?: RequestInit): Promise<postJellyfinUserPlayedItemResponse> => {
 
   return orvalFetch<postJellyfinUserPlayedItemResponse>(getPostJellyfinUserPlayedItemUrl(itemId),
@@ -871,6 +921,9 @@ export const getDeleteJellyfinUserPlayedItemUrl = (itemId: string,) => {
   return `/UserPlayedItems/${itemId}`
 }
 
+/**
+ * @summary Delete Jellyfin User Played Item.
+ */
 export const deleteJellyfinUserPlayedItem = async (itemId: string, options?: RequestInit): Promise<deleteJellyfinUserPlayedItemResponse> => {
 
   return orvalFetch<deleteJellyfinUserPlayedItemResponse>(getDeleteJellyfinUserPlayedItemUrl(itemId),
@@ -885,7 +938,7 @@ export const deleteJellyfinUserPlayedItem = async (itemId: string, options?: Req
 
 
 export type getUpdateCheckResponse200 = {
-  data: void
+  data: UpdateCheckResponse
   status: 200
 }
 
@@ -896,20 +949,63 @@ export type getUpdateCheckResponseSuccess = (getUpdateCheckResponse200) & {
 
 export type getUpdateCheckResponse = (getUpdateCheckResponseSuccess)
 
-export const getGetUpdateCheckUrl = () => {
+export const getGetUpdateCheckUrl = (params?: GetUpdateCheckParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/update-check`
+  return stringifiedParams.length > 0 ? `/api/update-check?${stringifiedParams}` : `/api/update-check`
 }
 
 /**
  * @summary Returns a non-blocking update-check status for the Svelte shell.
  */
-export const getUpdateCheck = async ( options?: RequestInit): Promise<getUpdateCheckResponse> => {
+export const getUpdateCheck = async (params?: GetUpdateCheckParams, options?: RequestInit): Promise<getUpdateCheckResponse> => {
 
-  return orvalFetch<getUpdateCheckResponse>(getGetUpdateCheckUrl(),
+  return orvalFetch<getUpdateCheckResponse>(getGetUpdateCheckUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getChangelogResponse200 = {
+  data: void
+  status: 200
+}
+
+export type getChangelogResponseSuccess = (getChangelogResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getChangelogResponse = (getChangelogResponseSuccess)
+
+export const getGetChangelogUrl = () => {
+
+
+
+
+  return `/api/changelog`
+}
+
+/**
+ * @summary Returns the bundled Prismedia changelog markdown.
+ */
+export const getChangelog = async ( options?: RequestInit): Promise<getChangelogResponse> => {
+
+  return orvalFetch<getChangelogResponse>(getGetChangelogUrl(),
   {
     ...options,
     method: 'GET'
@@ -954,6 +1050,9 @@ export const getListEntitiesUrl = (params?: ListEntitiesParams,) => {
   return stringifiedParams.length > 0 ? `/api/entities?${stringifiedParams}` : `/api/entities`
 }
 
+/**
+ * @summary List Entities.
+ */
 export const listEntities = async (params?: ListEntitiesParams, options?: RequestInit): Promise<listEntitiesResponse> => {
 
   return orvalFetch<listEntitiesResponse>(getListEntitiesUrl(params),
@@ -1000,6 +1099,9 @@ export const getUpdateEntityByKindUrl = (kind: string,
   return `/api/entities/${kind}/${id}`
 }
 
+/**
+ * @summary Update Entity By Kind.
+ */
 export const updateEntityByKind = async (kind: string,
     id: string,
     entityMetadataUpdateRequest: EntityMetadataUpdateRequest, options?: RequestInit): Promise<updateEntityByKindResponse> => {
@@ -1051,6 +1153,9 @@ export const getGetEntityUrl = (id: string,
   return stringifiedParams.length > 0 ? `/api/entities/${id}?${stringifiedParams}` : `/api/entities/${id}`
 }
 
+/**
+ * @summary Get Entity.
+ */
 export const getEntity = async (id: string,
     params?: GetEntityParams, options?: RequestInit): Promise<getEntityResponse> => {
 
@@ -1097,6 +1202,9 @@ export const getUpdateEntityUrl = (id: string,) => {
   return `/api/entities/${id}`
 }
 
+/**
+ * @summary Update Entity.
+ */
 export const updateEntity = async (id: string,
     entityMetadataUpdateRequest: EntityMetadataUpdateRequest, options?: RequestInit): Promise<updateEntityResponse> => {
 
@@ -1139,6 +1247,9 @@ export const getGetEntityThumbnailsUrl = (params?: GetEntityThumbnailsParams,) =
   return stringifiedParams.length > 0 ? `/api/entities/thumbnails?${stringifiedParams}` : `/api/entities/thumbnails`
 }
 
+/**
+ * @summary Get Entity Thumbnails.
+ */
 export const getEntityThumbnails = async (entityThumbnailBatchRequest: EntityThumbnailBatchRequest,
     params?: GetEntityThumbnailsParams, options?: RequestInit): Promise<getEntityThumbnailsResponse> => {
 
@@ -1281,6 +1392,9 @@ export const getUpdateEntityRatingUrl = (id: string,) => {
   return `/api/entities/${id}/rating`
 }
 
+/**
+ * @summary Update Entity Rating.
+ */
 export const updateEntityRating = async (id: string,
     ratingUpdateRequest: RatingUpdateRequest, options?: RequestInit): Promise<updateEntityRatingResponse> => {
 
@@ -1323,6 +1437,9 @@ export const getUpdateEntityFlagsUrl = (id: string,) => {
   return `/api/entities/${id}/flags`
 }
 
+/**
+ * @summary Update Entity Flags.
+ */
 export const updateEntityFlags = async (id: string,
     entityFlagsUpdateRequest: EntityFlagsUpdateRequest, options?: RequestInit): Promise<updateEntityFlagsResponse> => {
 
@@ -1453,6 +1570,9 @@ export const getUpdateEntityPlaybackUrl = (id: string,) => {
   return `/api/entities/${id}/playback`
 }
 
+/**
+ * @summary Update Entity Playback.
+ */
 export const updateEntityPlayback = async (id: string,
     playbackUpdateRequest: PlaybackUpdateRequest, options?: RequestInit): Promise<updateEntityPlaybackResponse> => {
 
@@ -1495,6 +1615,9 @@ export const getUpdateEntityProgressUrl = (id: string,) => {
   return `/api/entities/${id}/progress`
 }
 
+/**
+ * @summary Update Entity Progress.
+ */
 export const updateEntityProgress = async (id: string,
     entityProgressUpdateRequest: EntityProgressUpdateRequest, options?: RequestInit): Promise<updateEntityProgressResponse> => {
 
@@ -1537,6 +1660,9 @@ export const getCreateEntityMarkerUrl = (id: string,) => {
   return `/api/entities/${id}/markers`
 }
 
+/**
+ * @summary Create Entity Marker.
+ */
 export const createEntityMarker = async (id: string,
     entityMarkerWriteRequest: EntityMarkerWriteRequest, options?: RequestInit): Promise<createEntityMarkerResponse> => {
 
@@ -1580,6 +1706,9 @@ export const getUpdateEntityMarkerUrl = (id: string,
   return `/api/entities/${id}/markers/${markerId}`
 }
 
+/**
+ * @summary Update Entity Marker.
+ */
 export const updateEntityMarker = async (id: string,
     markerId: string,
     entityMarkerWriteRequest: EntityMarkerWriteRequest, options?: RequestInit): Promise<updateEntityMarkerResponse> => {
@@ -1624,6 +1753,9 @@ export const getDeleteEntityMarkerUrl = (id: string,
   return `/api/entities/${id}/markers/${markerId}`
 }
 
+/**
+ * @summary Delete Entity Marker.
+ */
 export const deleteEntityMarker = async (id: string,
     markerId: string, options?: RequestInit): Promise<deleteEntityMarkerResponse> => {
 
@@ -1658,6 +1790,9 @@ export const getRefreshEntityUrl = (id: string,) => {
   return `/api/entities/${id}/refresh`
 }
 
+/**
+ * @summary Refresh Entity.
+ */
 export const refreshEntity = async (id: string, options?: RequestInit): Promise<refreshEntityResponse> => {
 
   return orvalFetch<refreshEntityResponse>(getRefreshEntityUrl(id),
@@ -1698,6 +1833,9 @@ export const getListVideosUrl = (params?: ListVideosParams,) => {
   return stringifiedParams.length > 0 ? `/api/videos?${stringifiedParams}` : `/api/videos`
 }
 
+/**
+ * @summary List Videos.
+ */
 export const listVideos = async (params?: ListVideosParams, options?: RequestInit): Promise<listVideosResponse> => {
 
   return orvalFetch<listVideosResponse>(getListVideosUrl(params),
@@ -1746,6 +1884,9 @@ export const getGetVideoUrl = (id: string,
   return stringifiedParams.length > 0 ? `/api/videos/${id}?${stringifiedParams}` : `/api/videos/${id}`
 }
 
+/**
+ * @summary Get Videos detail.
+ */
 export const getVideo = async (id: string,
     params?: GetVideoParams, options?: RequestInit): Promise<getVideoResponse> => {
 
@@ -1792,6 +1933,9 @@ export const getGetVideoPatchUrl = (id: string,) => {
   return `/api/videos/${id}`
 }
 
+/**
+ * @summary Update Videos detail.
+ */
 export const getVideoPatch = async (id: string,
     entityMetadataUpdateRequest: EntityMetadataUpdateRequest, options?: RequestInit): Promise<getVideoPatchResponse> => {
 
@@ -1924,6 +2068,9 @@ export const getListVideoSeriesUrl = (params?: ListVideoSeriesParams,) => {
   return stringifiedParams.length > 0 ? `/api/series?${stringifiedParams}` : `/api/series`
 }
 
+/**
+ * @summary List Series.
+ */
 export const listVideoSeries = async (params?: ListVideoSeriesParams, options?: RequestInit): Promise<listVideoSeriesResponse> => {
 
   return orvalFetch<listVideoSeriesResponse>(getListVideoSeriesUrl(params),
@@ -1972,6 +2119,9 @@ export const getGetVideoSeriesUrl = (id: string,
   return stringifiedParams.length > 0 ? `/api/series/${id}?${stringifiedParams}` : `/api/series/${id}`
 }
 
+/**
+ * @summary Get Series detail.
+ */
 export const getVideoSeries = async (id: string,
     params?: GetVideoSeriesParams, options?: RequestInit): Promise<getVideoSeriesResponse> => {
 
@@ -2018,6 +2168,9 @@ export const getGetVideoSeriesPatchUrl = (id: string,) => {
   return `/api/series/${id}`
 }
 
+/**
+ * @summary Update Series detail.
+ */
 export const getVideoSeriesPatch = async (id: string,
     entityMetadataUpdateRequest: EntityMetadataUpdateRequest, options?: RequestInit): Promise<getVideoSeriesPatchResponse> => {
 
@@ -2060,6 +2213,9 @@ export const getListImagesUrl = (params?: ListImagesParams,) => {
   return stringifiedParams.length > 0 ? `/api/images?${stringifiedParams}` : `/api/images`
 }
 
+/**
+ * @summary List Images.
+ */
 export const listImages = async (params?: ListImagesParams, options?: RequestInit): Promise<listImagesResponse> => {
 
   return orvalFetch<listImagesResponse>(getListImagesUrl(params),
@@ -2108,6 +2264,9 @@ export const getGetImageUrl = (id: string,
   return stringifiedParams.length > 0 ? `/api/images/${id}?${stringifiedParams}` : `/api/images/${id}`
 }
 
+/**
+ * @summary Get Images detail.
+ */
 export const getImage = async (id: string,
     params?: GetImageParams, options?: RequestInit): Promise<getImageResponse> => {
 
@@ -2154,6 +2313,9 @@ export const getGetImagePatchUrl = (id: string,) => {
   return `/api/images/${id}`
 }
 
+/**
+ * @summary Update Images detail.
+ */
 export const getImagePatch = async (id: string,
     entityMetadataUpdateRequest: EntityMetadataUpdateRequest, options?: RequestInit): Promise<getImagePatchResponse> => {
 
@@ -2196,6 +2358,9 @@ export const getListGalleriesUrl = (params?: ListGalleriesParams,) => {
   return stringifiedParams.length > 0 ? `/api/galleries?${stringifiedParams}` : `/api/galleries`
 }
 
+/**
+ * @summary List Galleries.
+ */
 export const listGalleries = async (params?: ListGalleriesParams, options?: RequestInit): Promise<listGalleriesResponse> => {
 
   return orvalFetch<listGalleriesResponse>(getListGalleriesUrl(params),
@@ -2244,6 +2409,9 @@ export const getGetGalleryUrl = (id: string,
   return stringifiedParams.length > 0 ? `/api/galleries/${id}?${stringifiedParams}` : `/api/galleries/${id}`
 }
 
+/**
+ * @summary Get Galleries detail.
+ */
 export const getGallery = async (id: string,
     params?: GetGalleryParams, options?: RequestInit): Promise<getGalleryResponse> => {
 
@@ -2290,6 +2458,9 @@ export const getGetGalleryPatchUrl = (id: string,) => {
   return `/api/galleries/${id}`
 }
 
+/**
+ * @summary Update Galleries detail.
+ */
 export const getGalleryPatch = async (id: string,
     entityMetadataUpdateRequest: EntityMetadataUpdateRequest, options?: RequestInit): Promise<getGalleryPatchResponse> => {
 
@@ -2332,6 +2503,9 @@ export const getListBooksUrl = (params?: ListBooksParams,) => {
   return stringifiedParams.length > 0 ? `/api/books?${stringifiedParams}` : `/api/books`
 }
 
+/**
+ * @summary List Books.
+ */
 export const listBooks = async (params?: ListBooksParams, options?: RequestInit): Promise<listBooksResponse> => {
 
   return orvalFetch<listBooksResponse>(getListBooksUrl(params),
@@ -2380,6 +2554,9 @@ export const getGetBookUrl = (id: string,
   return stringifiedParams.length > 0 ? `/api/books/${id}?${stringifiedParams}` : `/api/books/${id}`
 }
 
+/**
+ * @summary Get Books detail.
+ */
 export const getBook = async (id: string,
     params?: GetBookParams, options?: RequestInit): Promise<getBookResponse> => {
 
@@ -2426,6 +2603,9 @@ export const getGetBookPatchUrl = (id: string,) => {
   return `/api/books/${id}`
 }
 
+/**
+ * @summary Update Books detail.
+ */
 export const getBookPatch = async (id: string,
     entityMetadataUpdateRequest: EntityMetadataUpdateRequest, options?: RequestInit): Promise<getBookPatchResponse> => {
 
@@ -2468,6 +2648,9 @@ export const getListAudioLibrariesUrl = (params?: ListAudioLibrariesParams,) => 
   return stringifiedParams.length > 0 ? `/api/audio-libraries?${stringifiedParams}` : `/api/audio-libraries`
 }
 
+/**
+ * @summary List Audio.
+ */
 export const listAudioLibraries = async (params?: ListAudioLibrariesParams, options?: RequestInit): Promise<listAudioLibrariesResponse> => {
 
   return orvalFetch<listAudioLibrariesResponse>(getListAudioLibrariesUrl(params),
@@ -2516,6 +2699,9 @@ export const getGetAudioLibraryUrl = (id: string,
   return stringifiedParams.length > 0 ? `/api/audio-libraries/${id}?${stringifiedParams}` : `/api/audio-libraries/${id}`
 }
 
+/**
+ * @summary Get Audio detail.
+ */
 export const getAudioLibrary = async (id: string,
     params?: GetAudioLibraryParams, options?: RequestInit): Promise<getAudioLibraryResponse> => {
 
@@ -2562,6 +2748,9 @@ export const getGetAudioLibraryPatchUrl = (id: string,) => {
   return `/api/audio-libraries/${id}`
 }
 
+/**
+ * @summary Update Audio detail.
+ */
 export const getAudioLibraryPatch = async (id: string,
     entityMetadataUpdateRequest: EntityMetadataUpdateRequest, options?: RequestInit): Promise<getAudioLibraryPatchResponse> => {
 
@@ -2604,6 +2793,9 @@ export const getListAudioTracksUrl = (params?: ListAudioTracksParams,) => {
   return stringifiedParams.length > 0 ? `/api/audio-tracks?${stringifiedParams}` : `/api/audio-tracks`
 }
 
+/**
+ * @summary List Audio.
+ */
 export const listAudioTracks = async (params?: ListAudioTracksParams, options?: RequestInit): Promise<listAudioTracksResponse> => {
 
   return orvalFetch<listAudioTracksResponse>(getListAudioTracksUrl(params),
@@ -2652,6 +2844,9 @@ export const getGetAudioTrackUrl = (id: string,
   return stringifiedParams.length > 0 ? `/api/audio-tracks/${id}?${stringifiedParams}` : `/api/audio-tracks/${id}`
 }
 
+/**
+ * @summary Get Audio detail.
+ */
 export const getAudioTrack = async (id: string,
     params?: GetAudioTrackParams, options?: RequestInit): Promise<getAudioTrackResponse> => {
 
@@ -2698,6 +2893,9 @@ export const getGetAudioTrackPatchUrl = (id: string,) => {
   return `/api/audio-tracks/${id}`
 }
 
+/**
+ * @summary Update Audio detail.
+ */
 export const getAudioTrackPatch = async (id: string,
     entityMetadataUpdateRequest: EntityMetadataUpdateRequest, options?: RequestInit): Promise<getAudioTrackPatchResponse> => {
 
@@ -2740,6 +2938,9 @@ export const getRecordAudioTrackPlayUrl = (id: string,) => {
   return `/api/audio-tracks/${id}/play`
 }
 
+/**
+ * @summary Record Audio Track Play.
+ */
 export const recordAudioTrackPlay = async (id: string, options?: RequestInit): Promise<recordAudioTrackPlayResponse> => {
 
   return orvalFetch<recordAudioTrackPlayResponse>(getRecordAudioTrackPlayUrl(id),
@@ -2780,6 +2981,9 @@ export const getListPeopleUrl = (params?: ListPeopleParams,) => {
   return stringifiedParams.length > 0 ? `/api/people?${stringifiedParams}` : `/api/people`
 }
 
+/**
+ * @summary List Taxonomy.
+ */
 export const listPeople = async (params?: ListPeopleParams, options?: RequestInit): Promise<listPeopleResponse> => {
 
   return orvalFetch<listPeopleResponse>(getListPeopleUrl(params),
@@ -2828,6 +3032,9 @@ export const getGetPersonUrl = (id: string,
   return stringifiedParams.length > 0 ? `/api/people/${id}?${stringifiedParams}` : `/api/people/${id}`
 }
 
+/**
+ * @summary Get Taxonomy detail.
+ */
 export const getPerson = async (id: string,
     params?: GetPersonParams, options?: RequestInit): Promise<getPersonResponse> => {
 
@@ -2874,6 +3081,9 @@ export const getGetPersonPatchUrl = (id: string,) => {
   return `/api/people/${id}`
 }
 
+/**
+ * @summary Update Taxonomy detail.
+ */
 export const getPersonPatch = async (id: string,
     entityMetadataUpdateRequest: EntityMetadataUpdateRequest, options?: RequestInit): Promise<getPersonPatchResponse> => {
 
@@ -2916,6 +3126,9 @@ export const getListStudiosUrl = (params?: ListStudiosParams,) => {
   return stringifiedParams.length > 0 ? `/api/studios?${stringifiedParams}` : `/api/studios`
 }
 
+/**
+ * @summary List Taxonomy.
+ */
 export const listStudios = async (params?: ListStudiosParams, options?: RequestInit): Promise<listStudiosResponse> => {
 
   return orvalFetch<listStudiosResponse>(getListStudiosUrl(params),
@@ -2964,6 +3177,9 @@ export const getGetStudioUrl = (id: string,
   return stringifiedParams.length > 0 ? `/api/studios/${id}?${stringifiedParams}` : `/api/studios/${id}`
 }
 
+/**
+ * @summary Get Taxonomy detail.
+ */
 export const getStudio = async (id: string,
     params?: GetStudioParams, options?: RequestInit): Promise<getStudioResponse> => {
 
@@ -3010,6 +3226,9 @@ export const getGetStudioPatchUrl = (id: string,) => {
   return `/api/studios/${id}`
 }
 
+/**
+ * @summary Update Taxonomy detail.
+ */
 export const getStudioPatch = async (id: string,
     entityMetadataUpdateRequest: EntityMetadataUpdateRequest, options?: RequestInit): Promise<getStudioPatchResponse> => {
 
@@ -3052,6 +3271,9 @@ export const getListTagsUrl = (params?: ListTagsParams,) => {
   return stringifiedParams.length > 0 ? `/api/tags?${stringifiedParams}` : `/api/tags`
 }
 
+/**
+ * @summary List Taxonomy.
+ */
 export const listTags = async (params?: ListTagsParams, options?: RequestInit): Promise<listTagsResponse> => {
 
   return orvalFetch<listTagsResponse>(getListTagsUrl(params),
@@ -3100,6 +3322,9 @@ export const getGetTagUrl = (id: string,
   return stringifiedParams.length > 0 ? `/api/tags/${id}?${stringifiedParams}` : `/api/tags/${id}`
 }
 
+/**
+ * @summary Get Taxonomy detail.
+ */
 export const getTag = async (id: string,
     params?: GetTagParams, options?: RequestInit): Promise<getTagResponse> => {
 
@@ -3146,6 +3371,9 @@ export const getGetTagPatchUrl = (id: string,) => {
   return `/api/tags/${id}`
 }
 
+/**
+ * @summary Update Taxonomy detail.
+ */
 export const getTagPatch = async (id: string,
     entityMetadataUpdateRequest: EntityMetadataUpdateRequest, options?: RequestInit): Promise<getTagPatchResponse> => {
 
@@ -3188,6 +3416,9 @@ export const getListCollectionsUrl = (params?: ListCollectionsParams,) => {
   return stringifiedParams.length > 0 ? `/api/collections?${stringifiedParams}` : `/api/collections`
 }
 
+/**
+ * @summary List Collections.
+ */
 export const listCollections = async (params?: ListCollectionsParams, options?: RequestInit): Promise<listCollectionsResponse> => {
 
   return orvalFetch<listCollectionsResponse>(getListCollectionsUrl(params),
@@ -3228,6 +3459,9 @@ export const getCreateCollectionUrl = () => {
   return `/api/collections`
 }
 
+/**
+ * @summary Create Collection.
+ */
 export const createCollection = async (collectionWriteRequest: CollectionWriteRequest, options?: RequestInit): Promise<createCollectionResponse> => {
 
   return orvalFetch<createCollectionResponse>(getCreateCollectionUrl(),
@@ -3277,6 +3511,9 @@ export const getGetCollectionUrl = (id: string,
   return stringifiedParams.length > 0 ? `/api/collections/${id}?${stringifiedParams}` : `/api/collections/${id}`
 }
 
+/**
+ * @summary Get Collections detail.
+ */
 export const getCollection = async (id: string,
     params?: GetCollectionParams, options?: RequestInit): Promise<getCollectionResponse> => {
 
@@ -3323,6 +3560,9 @@ export const getGetCollectionPatchUrl = (id: string,) => {
   return `/api/collections/${id}`
 }
 
+/**
+ * @summary Update Collections detail.
+ */
 export const getCollectionPatch = async (id: string,
     entityMetadataUpdateRequest: EntityMetadataUpdateRequest, options?: RequestInit): Promise<getCollectionPatchResponse> => {
 
@@ -3370,6 +3610,9 @@ export const getUpdateCollectionUrl = (id: string,) => {
   return `/api/collections/${id}`
 }
 
+/**
+ * @summary Update Collection.
+ */
 export const updateCollection = async (id: string,
     collectionWriteRequest: CollectionWriteRequest, options?: RequestInit): Promise<updateCollectionResponse> => {
 
@@ -3412,6 +3655,9 @@ export const getDeleteCollectionUrl = (id: string,) => {
   return `/api/collections/${id}`
 }
 
+/**
+ * @summary Delete Collection.
+ */
 export const deleteCollection = async (id: string, options?: RequestInit): Promise<deleteCollectionResponse> => {
 
   return orvalFetch<deleteCollectionResponse>(getDeleteCollectionUrl(id),
@@ -3459,6 +3705,9 @@ export const getPreviewCollectionRulesUrl = (params?: PreviewCollectionRulesPara
   return stringifiedParams.length > 0 ? `/api/collections/preview-rules?${stringifiedParams}` : `/api/collections/preview-rules`
 }
 
+/**
+ * @summary Preview Collection Rules.
+ */
 export const previewCollectionRules = async (collectionRulePreviewRequest: CollectionRulePreviewRequest,
     params?: PreviewCollectionRulesParams, options?: RequestInit): Promise<previewCollectionRulesResponse> => {
 
@@ -3502,6 +3751,9 @@ export const getListCollectionItemsUrl = (id: string,
   return stringifiedParams.length > 0 ? `/api/collections/${id}/items?${stringifiedParams}` : `/api/collections/${id}/items`
 }
 
+/**
+ * @summary List Collection Items.
+ */
 export const listCollectionItems = async (id: string,
     params?: ListCollectionItemsParams, options?: RequestInit): Promise<listCollectionItemsResponse> => {
 
@@ -3548,6 +3800,9 @@ export const getAddCollectionItemsUrl = (id: string,) => {
   return `/api/collections/${id}/items`
 }
 
+/**
+ * @summary Add Collection Items.
+ */
 export const addCollectionItems = async (id: string,
     collectionAddItemsRequest: CollectionAddItemsRequest, options?: RequestInit): Promise<addCollectionItemsResponse> => {
 
@@ -3595,6 +3850,9 @@ export const getRemoveCollectionItemsUrl = (id: string,) => {
   return `/api/collections/${id}/items/remove`
 }
 
+/**
+ * @summary Remove Collection Items.
+ */
 export const removeCollectionItems = async (id: string,
     collectionRemoveItemsRequest: CollectionRemoveItemsRequest, options?: RequestInit): Promise<removeCollectionItemsResponse> => {
 
@@ -3642,6 +3900,9 @@ export const getReorderCollectionItemsUrl = (id: string,) => {
   return `/api/collections/${id}/items/reorder`
 }
 
+/**
+ * @summary Reorder Collection Items.
+ */
 export const reorderCollectionItems = async (id: string,
     collectionReorderItemsRequest: CollectionReorderItemsRequest, options?: RequestInit): Promise<reorderCollectionItemsResponse> => {
 
@@ -3684,6 +3945,9 @@ export const getRefreshCollectionUrl = (id: string,) => {
   return `/api/collections/${id}/refresh`
 }
 
+/**
+ * @summary Refresh Collection.
+ */
 export const refreshCollection = async (id: string, options?: RequestInit): Promise<refreshCollectionResponse> => {
 
   return orvalFetch<refreshCollectionResponse>(getRefreshCollectionUrl(id),
@@ -5034,6 +5298,8 @@ export const headFileContent = async (params: HeadFileContentParams, options?: R
   }
 );}
 
+
+
 export type listPluginsResponse200 = {
   data: PluginProvider[]
   status: 200
@@ -5753,5 +6019,6 @@ export const applyOrganizePlan = async (organizePlanRequest: OrganizePlanRequest
       organizePlanRequest,)
   }
 );}
+
 
 

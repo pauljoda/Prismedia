@@ -37,6 +37,12 @@
         continue;
       }
 
+      // Skip the document title because the dialog already owns that chrome.
+      if (/^#\s+/.test(line)) {
+        flushAll();
+        continue;
+      }
+
       // H2 with optional date tag like `## [Unreleased]` or `## [0.19.0] - 2026-04-01`
       const h2 = line.match(/^##\s+(.+?)(?:\s+-\s+(.+))?$/);
       if (h2) {
@@ -114,6 +120,13 @@
   const updateAvailable = $derived(
     releaseStatus?.updateAvailable === true && !!releaseStatus.latestVersion && !!releaseStatus.latestUrl,
   );
+  const releaseStatusLabel = $derived.by(() => {
+    if (checkingRelease) return "Checking GitHub";
+    if (updateAvailable) return `v${releaseStatus?.latestVersion} available`;
+    if (releaseStatus?.status === "current") return "Up to date";
+    if (releaseStatus?.status === "unknown") return "Release status unavailable";
+    return "Release status pending";
+  });
 
   async function loadChangelog() {
     if (content || loading) return;
@@ -154,6 +167,12 @@
     if (event.target === dialogRef) open = false;
   }
 
+  function handleTriggerKeydown(event: KeyboardEvent) {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    handleOpen();
+  }
+
   function renderInline(text: string): Array<
     | { kind: "text"; value: string }
     | { kind: "strong"; value: string }
@@ -173,96 +192,119 @@
   }
 </script>
 
-<!-- svelte-ignore a11y_click_events_have_key_events -->
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<span onclick={handleOpen} class="cursor-pointer">
+<div
+  role="button"
+  tabindex="0"
+  onclick={handleOpen}
+  onkeydown={handleTriggerKeydown}
+  class="cursor-pointer rounded-xs outline-none focus-visible:ring-2 focus-visible:ring-accent-500/35"
+>
   {@render children()}
-</span>
+</div>
 
 <dialog
   bind:this={dialogRef}
   onclick={handleBackdropClick}
   onclose={() => (open = false)}
-  class="fixed inset-0 m-auto h-[85vh] w-[90vw] max-w-3xl flex-col border border-border-subtle bg-surface-1 p-0 text-text-primary backdrop:bg-black/70 open:flex sm:h-[80vh]"
+  aria-label="Prismedia changelog"
+  class="changelog-dialog fixed inset-0 m-auto h-[min(86dvh,44rem)] w-[min(94vw,56rem)] flex-col overflow-hidden border border-border-default p-0 text-text-primary open:flex"
 >
-  <div class="flex flex-wrap items-center justify-between gap-3 border-b border-border-subtle px-5 py-3.5">
-    <div class="min-w-0">
-      <h2 class="font-heading text-sm font-bold uppercase tracking-wider text-text-accent">
-        Changelog &middot; v{version}
-      </h2>
-      <div class="mt-2 flex flex-wrap gap-2">
-        {#each communityLinks as link (link.href)}
-          <a
-            href={link.href}
-            target="_blank"
-            rel="noopener noreferrer"
-            class="inline-flex h-8 items-center gap-2 border border-border-subtle bg-surface-2/80 px-2.5 font-heading text-[10px] font-bold uppercase tracking-wider text-text-muted transition hover:border-border-accent hover:text-text-accent hover:shadow-[0_0_18px_rgba(196,154,90,0.18)] focus-visible:border-border-accent focus-visible:text-text-accent focus-visible:outline-none focus-visible:shadow-[0_0_18px_rgba(196,154,90,0.22)]"
-            aria-label={`Open Prismedia on ${link.label}`}
-          >
-            <img src={link.icon} alt="" class="h-3.5 w-3.5" />
-            {link.label}
-          </a>
-        {/each}
-        <button
-          type="button"
-          onclick={() => void loadReleaseStatus(true)}
-          disabled={checkingRelease}
-          class="inline-flex h-8 w-8 items-center justify-center border border-border-subtle bg-surface-2/80 text-text-muted transition hover:border-border-accent hover:text-text-accent hover:shadow-[0_0_18px_rgba(196,154,90,0.18)] focus-visible:border-border-accent focus-visible:text-text-accent focus-visible:outline-none focus-visible:shadow-[0_0_18px_rgba(196,154,90,0.22)] disabled:cursor-wait disabled:opacity-60"
-          aria-label="Check for updates"
-          title="Check for updates"
-        >
-          <RefreshCw class={checkingRelease ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"} />
-        </button>
+  <header class="changelog-header relative border-b border-border-subtle px-4 py-3.5 sm:px-5">
+    <div class="flex items-start justify-between gap-4">
+      <div class="min-w-0 space-y-3">
+        <div>
+          <p class="text-kicker mb-1 text-text-accent">Release console</p>
+          <h2 class="font-display text-[1.55rem] font-bold leading-none tracking-[-0.04em] text-text-primary sm:text-[1.85rem]">
+            Changelog
+          </h2>
+        </div>
+        <div class="flex flex-wrap items-center gap-1.5">
+          <span class="status-chip status-chip-strong">Installed v{version}</span>
+          <span class="status-chip">{releaseStatusLabel}</span>
+        </div>
       </div>
+
+      <button
+        type="button"
+        onclick={() => (open = false)}
+        class="control-button h-9 w-9 shrink-0"
+        aria-label="Close changelog"
+      >
+        <X class="h-4 w-4" />
+      </button>
     </div>
-    <button
-      type="button"
-      onclick={() => (open = false)}
-      class="flex h-7 w-7 shrink-0 items-center justify-center text-text-muted transition-colors hover:bg-surface-3 hover:text-text-primary"
-      aria-label="Close"
-    >
-      <X class="h-4 w-4" />
-    </button>
-  </div>
-  <div class="scrollbar-hidden flex-1 overflow-y-auto px-5 py-4">
+
+    <div class="mt-3 flex flex-wrap items-center gap-1.5">
+      {#each communityLinks as link (link.href)}
+        <a
+          href={link.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="link-button"
+          aria-label={`Open Prismedia on ${link.label}`}
+        >
+          <img src={link.icon} alt="" class="h-3.5 w-3.5 opacity-80" />
+          {link.label}
+        </a>
+      {/each}
+      <button
+        type="button"
+        onclick={() => void loadReleaseStatus(true)}
+        disabled={checkingRelease}
+        class="link-button disabled:cursor-wait disabled:opacity-60"
+        aria-label="Check for updates"
+        title="Check for updates"
+      >
+        <RefreshCw class={checkingRelease ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"} />
+        Refresh
+      </button>
+    </div>
+  </header>
+
+  <div class="changelog-scroll min-h-0 flex-1 overflow-y-auto px-4 py-3.5 sm:px-5">
     {#if updateAvailable}
       <a
         href={releaseStatus?.latestUrl ?? undefined}
         target="_blank"
         rel="noopener noreferrer"
-        class="mb-4 flex items-center justify-between gap-3 border border-border-accent bg-glass-2 px-3 py-2 text-xs text-text-primary shadow-[0_0_22px_rgba(196,154,90,0.14)] transition hover:text-text-accent"
+        class="update-banner mb-4 grid gap-1 px-3.5 py-3 text-sm transition hover:border-border-accent-strong hover:shadow-[var(--shadow-glow-accent-strong)] sm:grid-cols-[1fr_auto] sm:items-center"
       >
-        <span class="font-heading font-bold uppercase tracking-wider">
+        <span class="font-heading font-semibold text-text-primary">
           Update available: v{releaseStatus?.latestVersion}
         </span>
-        <span class="font-mono text-[10px] text-text-disabled">GitHub release</span>
+        <span class="font-mono text-[0.68rem] uppercase tracking-[0.16em] text-text-accent">Open release</span>
       </a>
     {/if}
+
     {#if loading}
-      <p class="animate-pulse text-xs text-text-disabled">Loading changelog...</p>
+      <div class="surface-well animate-pulse px-4 py-8 text-center text-xs uppercase tracking-[0.16em] text-text-disabled">
+        Loading changelog...
+      </div>
     {:else if content}
-      <div class="pb-4">
+      <div class="release-stream pb-5">
         {#each blocks as block, index (index)}
           {#if block.type === "h2"}
-            <div class="mt-6 border-b border-border-subtle pb-2 first:mt-0">
-              <h2 class="font-heading text-sm font-bold uppercase tracking-wider text-text-primary">
-                {block.title}
+            <section class="release-marker mt-4 first:mt-0">
+              <div class="flex flex-wrap items-baseline justify-between gap-2 border-b border-border-subtle pb-2">
+                <h2 class="font-heading text-base font-semibold tracking-[-0.02em] text-text-primary">
+                  {block.title}
+                </h2>
                 {#if block.date}
-                  <span class="ml-2 font-mono text-[10px] text-text-disabled">{block.date}</span>
+                  <span class="font-mono text-[0.68rem] uppercase tracking-[0.12em] text-text-disabled">{block.date}</span>
                 {/if}
-              </h2>
-            </div>
+              </div>
+            </section>
           {:else if block.type === "h3"}
-            <h3 class="mt-4 font-heading text-xs font-bold uppercase tracking-wider text-text-accent">
+            <h3 class="mt-3 inline-flex border border-border-accent/35 bg-accent-950/20 px-2 py-1 font-heading text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-text-accent">
               {block.title}
             </h3>
           {:else if block.type === "p"}
-            <p class="mt-3 text-xs leading-relaxed text-text-muted first:mt-0">
+            <p class="mt-3 max-w-3xl text-sm leading-relaxed text-text-muted first:mt-0">
               {#each renderInline(block.text) as part, i (i)}
                 {#if part.kind === "strong"}
-                  <strong class="text-text-primary">{part.value}</strong>
+                  <strong class="font-semibold text-text-primary">{part.value}</strong>
                 {:else if part.kind === "code"}
-                  <code class="bg-surface-3/60 px-1 py-0.5 font-mono text-[10px] break-all">
+                  <code class="inline-code">
                     {part.value}
                   </code>
                 {:else if part.kind === "link"}
@@ -270,7 +312,7 @@
                     href={part.href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    class="text-text-accent hover:underline"
+                    class="text-text-accent transition hover:text-text-accent-bright hover:underline"
                   >
                     {part.label}
                   </a>
@@ -280,18 +322,18 @@
               {/each}
             </p>
           {:else}
-            <ul class="mt-2 space-y-1">
+            <ul class="changelog-list mt-2 space-y-1.5 pl-5">
               {#each block.items as item, itemIndex (itemIndex)}
                 <li
                   class={item.level === 0
-                    ? "ml-4 list-disc text-xs leading-relaxed text-text-muted"
-                    : "ml-8 list-disc text-[11px] leading-relaxed text-text-muted/75"}
+                    ? "text-sm leading-relaxed text-text-secondary"
+                    : "ml-4 text-[0.8rem] leading-relaxed text-text-muted"}
                 >
                   {#each renderInline(item.text) as part, i (i)}
                     {#if part.kind === "strong"}
-                      <strong class="text-text-primary">{part.value}</strong>
+                      <strong class="font-semibold text-text-primary">{part.value}</strong>
                     {:else if part.kind === "code"}
-                      <code class="bg-surface-3/60 px-1 py-0.5 font-mono text-[10px] break-all">
+                      <code class="inline-code">
                         {part.value}
                       </code>
                     {:else if part.kind === "link"}
@@ -299,7 +341,7 @@
                         href={part.href}
                         target="_blank"
                         rel="noopener noreferrer"
-                        class="text-text-accent hover:underline"
+                        class="text-text-accent transition hover:text-text-accent-bright hover:underline"
                       >
                         {part.label}
                       </a>
@@ -316,3 +358,126 @@
     {/if}
   </div>
 </dialog>
+
+<style>
+  .changelog-dialog {
+    border-radius: var(--radius-md);
+    background:
+      radial-gradient(circle at 92% 8%, rgb(255 255 255 / 0.045), transparent 24%),
+      linear-gradient(145deg, rgb(17 22 29 / 0.97), rgb(7 8 11 / 0.99));
+    box-shadow:
+      0 20px 60px rgb(0 0 0 / 0.58),
+      inset 0 1px 0 rgb(255 255 255 / 0.055);
+    backdrop-filter: blur(22px);
+    -webkit-backdrop-filter: blur(22px);
+  }
+
+  .changelog-dialog::backdrop {
+    background: rgb(7 8 11 / 0.82);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+
+  .changelog-header {
+    background: linear-gradient(180deg, rgb(42 48 56 / 0.36), rgb(11 14 18 / 0.22));
+  }
+
+  .status-chip,
+  .link-button,
+  .control-button,
+  .update-banner,
+  .inline-code {
+    border-radius: var(--radius-xs);
+  }
+
+  .status-chip {
+    display: inline-flex;
+    min-height: 1.55rem;
+    align-items: center;
+    border: 1px solid var(--color-border-subtle);
+    background: rgb(11 14 18 / 0.5);
+    padding: 0.2rem 0.5rem;
+    font-family: var(--font-mono);
+    font-size: 0.62rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+  }
+
+  .status-chip-strong {
+    border-color: var(--color-border-accent);
+    color: var(--color-text-accent);
+  }
+
+  .link-button,
+  .control-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    border: 1px solid var(--color-border-subtle);
+    background: rgb(11 14 18 / 0.52);
+    color: var(--color-text-muted);
+    font-family: var(--font-heading);
+    font-size: 0.64rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    min-height: 1.85rem;
+    padding: 0 0.58rem;
+    text-transform: uppercase;
+    transition: border-color 180ms var(--ease-mechanical), color 180ms var(--ease-mechanical), box-shadow 180ms var(--ease-mechanical), background 180ms var(--ease-mechanical);
+  }
+
+  .link-button:hover,
+  .link-button:focus-visible,
+  .control-button:hover,
+  .control-button:focus-visible {
+    border-color: var(--color-border-accent);
+    background: var(--color-overlay-glass-accent);
+    color: var(--color-text-accent);
+    box-shadow: 0 0 16px rgb(242 194 106 / 0.08);
+    outline: none;
+  }
+
+  .changelog-scroll {
+    scrollbar-width: none;
+  }
+
+  .changelog-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
+  .update-banner {
+    border: 1px solid var(--color-border-accent);
+    background:
+      linear-gradient(135deg, rgb(122 94 32 / 0.24), rgb(17 22 29 / 0.84)),
+      var(--color-overlay-glass);
+    box-shadow: var(--shadow-glow-accent);
+  }
+
+  .release-stream {
+    position: relative;
+  }
+
+  .release-marker {
+    position: relative;
+  }
+
+  .changelog-list {
+    list-style: disc;
+  }
+
+  .changelog-list li::marker {
+    color: var(--color-accent-500);
+  }
+
+  .inline-code {
+    border: 1px solid var(--color-border-subtle);
+    background: var(--color-surface-1);
+    color: var(--color-text-secondary);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    padding: 0.05rem 0.3rem;
+    word-break: break-word;
+  }
+</style>

@@ -133,6 +133,7 @@ COPY --from=dotnet-builder /out/api ./api
 COPY --from=dotnet-builder /out/worker ./worker
 COPY --from=builder /app/apps/web-svelte/build ./wwwroot
 COPY CHANGELOG.md ./CHANGELOG.md
+COPY package.json ./package.json
 COPY infra/docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 

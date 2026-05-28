@@ -53,6 +53,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated web app manifest and mobile browser metadata for home-screen installation and browser UI theme colors.
 
 ### Fixed
+- Fixed the changelog popup so local installs can load bundled release notes and check GitHub releases for new Prismedia versions.
 - Capped the Links & Provider IDs detail card with an internal scroll area so long link lists do not stretch the page.
 - Fixed image-backed detail heroes so the title and action section bottom-aligns with the poster artwork.
 - Fixed image-backed detail heroes so short poster artwork keeps matching top and bottom breathing room instead of creeping into the header.
