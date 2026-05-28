@@ -60,6 +60,21 @@ describe("IdentifyButton", () => {
     expect(button).toBeDisabled();
   });
 
+  it("keeps the identify label accessible while rendering icon-only on mobile", async () => {
+    render(IdentifyButtonHarness, {
+      props: {
+        entityId: "person-1",
+        entityKind: "person",
+      },
+    });
+
+    const button = await screen.findByRole("button", { name: "Identify" });
+    const label = await screen.findByText("Identify");
+
+    expect(button.className).toContain("entity-action-button");
+    expect(label.className).toContain("entity-action-button-label");
+  });
+
   it("allows person identify when a registered provider supports people", async () => {
     render(IdentifyButtonHarness, {
       props: {

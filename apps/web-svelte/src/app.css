@@ -358,6 +358,91 @@
     contain: layout paint;
   }
 
+  /* Entity hero action buttons: shared by local edit controls and nested action components. */
+  .entity-action-button {
+    --entity-action-accent: var(--detail-accent, var(--color-accent-500));
+    --entity-action-accent-glow: var(--detail-accent-glow, rgba(242, 194, 106, 0.16));
+    --entity-action-border: var(--detail-border, var(--color-border-default));
+    --entity-action-text: var(--detail-text-secondary, var(--color-text-secondary));
+
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    box-sizing: border-box;
+    min-width: 0;
+    height: 2.35rem;
+    min-height: 2.35rem;
+    padding: 0.35rem 0.65rem;
+    border: 1px solid color-mix(in srgb, var(--entity-action-accent) 32%, var(--entity-action-border));
+    border-radius: var(--radius-xs, 4px);
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--entity-action-accent) 12%, rgba(10, 12, 17, 0.82)),
+      rgba(10, 12, 17, 0.78)
+    );
+    color: var(--entity-action-text);
+    font-family: var(--font-mono, "JetBrains Mono", monospace);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-decoration: none;
+    cursor: pointer;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      0 0 14px rgba(0, 0, 0, 0.3);
+    transition: color 0.2s, border-color 0.2s, box-shadow 0.2s, background 0.2s;
+  }
+
+  .entity-action-button:hover:not(:disabled) {
+    color: var(--entity-action-accent);
+    border-color: color-mix(in srgb, var(--entity-action-accent) 58%, var(--entity-action-border));
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.12),
+      0 0 16px var(--entity-action-accent-glow);
+    background: color-mix(in srgb, var(--entity-action-accent) 6%, transparent);
+  }
+
+  .entity-action-button-active {
+    color: var(--entity-action-accent);
+    border-color: color-mix(in srgb, var(--entity-action-accent) 58%, var(--entity-action-border));
+    box-shadow: 0 0 14px var(--entity-action-accent-glow);
+    background: color-mix(in srgb, var(--entity-action-accent) 10%, transparent);
+  }
+
+  .entity-action-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  .entity-action-button > svg {
+    flex: 0 0 auto;
+  }
+
+  @media (max-width: 480px) {
+    .entity-action-button {
+      width: 1.9rem;
+      min-width: 1.9rem;
+      height: 1.9rem;
+      min-height: 1.9rem;
+      gap: 0;
+      padding-inline: 0;
+    }
+
+    .entity-action-button-label {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      clip-path: inset(50%);
+      white-space: nowrap;
+      border: 0;
+    }
+  }
+
   /* Elevated: floating panels with glass blur */
   .surface-elevated {
     background: rgba(16, 20, 32, 0.82);

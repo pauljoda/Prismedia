@@ -26,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Changed
+- Restyled detail tabs so tab content reads as a bordered card emerging from the hero with matching width and rounded bottom corners.
 - Softened detail-page hero badge glow so collection, gallery, season, and book status chips feel calmer against artwork.
 - Moved collection mode controls into the collection editor settings rail and removed the duplicate visibility toggle from that panel.
 - Refined the collection editor layout with a cleaner header, focused settings panel, and rule previews shown through the shared entity grid.
@@ -51,6 +52,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated web app manifest and mobile browser metadata for home-screen installation and browser UI theme colors.
 
 ### Fixed
+- Fixed mobile detail-page identify and edit actions so they share one aligned action-button style and collapse labels consistently.
 - Fixed detail-page link cards so long URLs show a readable site title with a truncated full URL instead of overflowing.
 - Fixed the mobile Files detail pane so long names, paths, toolbar actions, and text previews stay within the phone viewport.
 - Reworked mobile detail heroes so artwork sits larger at the top while title, metadata, rating, badges, and actions collapse in desktop order.

@@ -73,9 +73,8 @@
 <button
   type="button"
   class={[
-    "inline-flex min-h-[2.1rem] items-center justify-center gap-[0.45rem] rounded-xs border border-accent-500/55 bg-surface-2 px-[0.65rem] text-[0.76rem] text-text-primary shadow-[0_0_14px_rgba(196,154,90,0.12)] transition-all hover:border-accent-500/80 hover:shadow-[0_0_20px_rgba(196,154,90,0.22)]",
-    isQueued && "border-accent-500/75 bg-accent-950/35 text-text-accent-bright",
-    disabled && "cursor-not-allowed opacity-60 hover:border-accent-500/55 hover:shadow-[0_0_14px_rgba(196,154,90,0.12)]",
+    "entity-action-button",
+    isQueued && "entity-action-button-active",
     className,
   ]}
   disabled={disabled}
@@ -89,5 +88,5 @@
   {:else}
     <ScanSearch class="h-4 w-4" />
   {/if}
-  <span>{buttonLabel}</span>
+  <span class="entity-action-button-label">{buttonLabel}</span>
 </button>

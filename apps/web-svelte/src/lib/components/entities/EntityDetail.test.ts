@@ -56,7 +56,7 @@ describe("EntityDetail", () => {
     expect(heroText).not.toBeNull();
     expect(actionRow).not.toBeNull();
     expect(ratingRow).not.toBeNull();
-    expect(readFileSync("src/lib/components/entities/EntityDetail.svelte", "utf8")).toContain("height: 2.35rem;");
+    expect(readFileSync("src/app.css", "utf8")).toContain("height: 2.35rem;");
 
     const heroChildren = Array.from(heroText!.children);
 
@@ -101,6 +101,7 @@ describe("EntityDetail", () => {
 
   it("owns shared hero metadata separators and mobile action compaction", () => {
     const source = readFileSync("src/lib/components/entities/EntityDetail.svelte", "utf8");
+    const appStyles = readFileSync("src/app.css", "utf8");
 
     expect(source).toContain(":global(.meta-sep)");
     expect(source).toContain("margin: 0 0.5rem;");
@@ -113,8 +114,12 @@ describe("EntityDetail", () => {
     expect(source).toContain('"actions actions"');
     expect(source).toContain("justify-content: space-between;");
     expect(source).toContain("justify-content: flex-end;");
-    expect(source).toContain(".action-btn span");
-    expect(source).toContain("display: none;");
+    expect(source).toContain("border-radius: 0 0 var(--radius-md, 10px) var(--radius-md, 10px);");
+    expect(source).toContain("background: linear-gradient(180deg, rgba(12, 15, 21, 0.78), rgba(12, 15, 21, 0.92));");
+    expect(source).toContain("entity-action-button-label");
+    expect(appStyles).toContain(".entity-action-button {");
+    expect(appStyles).toContain(".entity-action-button-label {");
+    expect(appStyles).toContain("width: 1.9rem;");
     expect(source).not.toContain("flex-direction: column;\n      align-items: flex-start;");
   });
 

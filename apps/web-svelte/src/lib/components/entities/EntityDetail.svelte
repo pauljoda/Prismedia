@@ -1236,23 +1236,23 @@
                   {#if isEditingActiveTab}
                     <button
                       type="button"
-                      class="action-btn editing"
+                      class="entity-action-button entity-action-button-active"
                       onclick={cancelEdit}
                       disabled={savingEdit}
                       aria-label={cancelEditActionLabel}
                     >
                       <PencilOff class="h-3.5 w-3.5" />
-                      <span>Editing</span>
+                      <span class="entity-action-button-label">Editing</span>
                     </button>
                   {:else}
                     <button
                       type="button"
-                      class="action-btn"
+                      class="entity-action-button"
                       onclick={() => startEdit(activeTab ?? undefined)}
                       aria-label={editActionLabel}
                     >
                       <Pencil class="h-3.5 w-3.5" />
-                      <span>Edit</span>
+                      <span class="entity-action-button-label">Edit</span>
                     </button>
                   {/if}
                 {/if}
@@ -1830,23 +1830,6 @@
       margin-left: auto;
     }
 
-    .action-btn {
-      width: 1.9rem;
-      height: 1.9rem;
-      justify-content: center;
-      padding-inline: 0;
-    }
-
-    .action-group :global(a),
-    .action-group :global(button) {
-      width: 1.9rem;
-      min-width: 1.9rem;
-      height: 1.9rem;
-    }
-
-    .action-btn span {
-      display: none;
-    }
   }
 
   .action-badge {
@@ -1895,54 +1878,7 @@
     pointer-events: none;
   }
 
-  /* ── Action buttons (edit, identify) ────────────────── */
-
-  .action-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    box-sizing: border-box;
-    height: 2.35rem;
-    padding: 0.35rem 0.65rem;
-    border: 1px solid color-mix(in srgb, var(--detail-accent) 32%, var(--detail-border));
-    border-radius: var(--radius-xs, 4px);
-    background: linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--detail-accent) 12%, rgba(10, 12, 17, 0.82)),
-      rgba(10, 12, 17, 0.78)
-    );
-    color: var(--detail-text-secondary);
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.72rem;
-    font-weight: 600;
-    letter-spacing: 0.03em;
-    cursor: pointer;
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.08),
-      0 0 14px rgba(0, 0, 0, 0.3);
-    transition: color 0.2s, border-color 0.2s, box-shadow 0.2s, background 0.2s;
-  }
-
-  .action-btn:hover {
-    color: var(--detail-accent);
-    border-color: color-mix(in srgb, var(--detail-accent) 58%, var(--detail-border));
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.12),
-      0 0 16px var(--detail-accent-glow);
-    background: color-mix(in srgb, var(--detail-accent) 6%, transparent);
-  }
-
-  .action-btn.editing {
-    color: var(--detail-accent);
-    border-color: var(--detail-accent-muted);
-    box-shadow: 0 0 14px var(--detail-accent-glow);
-    background: color-mix(in srgb, var(--detail-accent) 10%, transparent);
-  }
-
-  .action-btn:disabled {
-    cursor: not-allowed;
-    opacity: 0.5;
-  }
+  /* ── Action buttons (edit, identify) use global .entity-action-button ── */
 
   /* Organized — green when active */
   .action-badge.organized.active {
@@ -2113,6 +2049,15 @@
 
   .detail-tabs {
     min-width: 0;
+    margin-top: -1px;
+    border: 1px solid var(--detail-border);
+    border-top: 0;
+    border-radius: 0 0 var(--radius-md, 10px) var(--radius-md, 10px);
+    background: linear-gradient(180deg, rgba(12, 15, 21, 0.78), rgba(12, 15, 21, 0.92));
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.03),
+      0 10px 30px rgba(0, 0, 0, 0.24);
+    overflow: hidden;
   }
 
   .detail-tab-list {
@@ -2122,7 +2067,6 @@
     overflow-x: auto;
     padding: 0.65rem 1.5rem;
     border-bottom: 1px solid var(--detail-border);
-    border-radius: 0 0 var(--radius-md, 10px) var(--radius-md, 10px);
     background: var(--detail-glass);
     backdrop-filter: blur(var(--detail-glass-blur));
     -webkit-backdrop-filter: blur(var(--detail-glass-blur));
@@ -2170,6 +2114,7 @@
 
   .detail-tab-panel {
     min-width: 0;
+    background: color-mix(in srgb, var(--detail-surface) 78%, transparent);
   }
 
   .detail-edit-toolbar {
@@ -2179,7 +2124,6 @@
     gap: 0.5rem;
     padding: 0.5rem 1.5rem;
     border-bottom: 1px solid var(--detail-border);
-    border-radius: 0 0 var(--radius-md, 10px) var(--radius-md, 10px);
     background: var(--detail-glass);
     backdrop-filter: blur(var(--detail-glass-blur));
     -webkit-backdrop-filter: blur(var(--detail-glass-blur));
