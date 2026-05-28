@@ -336,7 +336,7 @@
                 ? "border-border-accent-strong shadow-[0_0_16px_rgba(242,194,106,0.2)]"
                 : "border-border-default hover:border-border-accent",
             )}
-            style="aspect-ratio: {group.kind === 'poster' ? '2/3' : group.kind === 'backdrop' ? '16/9' : '2/1'};"
+            style="aspect-ratio: {group.kind === 'poster' || group.kind === 'cover' ? '2/3' : group.kind === 'backdrop' ? '16/9' : '2/1'};"
             onclick={() => setImageSelected(group.kind, selectedImages[group.kind] === image.url ? null : image.url)}
           >
             <img
