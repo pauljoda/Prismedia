@@ -106,8 +106,8 @@ describe("EntityDetail", () => {
     expect(source).toContain("margin: 0 0.5rem;");
     expect(source).toContain("align-items: center;");
     expect(source).toContain("@media (max-width: 480px)");
-    expect(source).toContain("grid-template-columns: auto minmax(0, 1fr);");
-    expect(source).toContain("grid-template-columns: repeat(auto-fit, minmax(2rem, 2rem));");
+    expect(source).toContain("grid-template-columns: minmax(0, 1fr);");
+    expect(source).toContain("grid-template-columns: repeat(auto-fit, minmax(1.9rem, 1.9rem));");
     expect(source).toContain("justify-content: flex-end;");
     expect(source).toContain(".action-btn span");
     expect(source).toContain("display: none;");

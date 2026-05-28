@@ -1739,36 +1739,37 @@
 
     .action-row {
       display: grid;
-      grid-template-columns: auto minmax(0, 1fr);
+      grid-template-columns: minmax(0, 1fr);
       align-items: start;
+      justify-items: end;
       gap: 0.35rem;
     }
 
     .action-badges {
-      justify-self: start;
+      justify-self: end;
     }
 
     .action-group {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(2rem, 2rem));
+      grid-template-columns: repeat(auto-fit, minmax(1.9rem, 1.9rem));
       justify-content: flex-end;
       gap: 0.25rem;
-      width: min(100%, 8.75rem);
+      width: min(100%, 8.35rem);
       margin-left: auto;
     }
 
     .action-btn {
-      width: 2rem;
-      height: 2rem;
+      width: 1.9rem;
+      height: 1.9rem;
       justify-content: center;
       padding-inline: 0;
     }
 
     .action-group :global(a),
     .action-group :global(button) {
-      width: 2rem;
-      min-width: 2rem;
-      height: 2rem;
+      width: 1.9rem;
+      min-width: 1.9rem;
+      height: 1.9rem;
     }
 
     .action-btn span {
