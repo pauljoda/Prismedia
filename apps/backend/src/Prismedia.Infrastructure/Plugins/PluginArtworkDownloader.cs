@@ -12,6 +12,7 @@ namespace Prismedia.Infrastructure.Plugins;
 /// Downloads plugin artwork into the Prismedia cache and updates entity file rows.
 /// </summary>
 public sealed class PluginArtworkDownloader {
+    private const string UserAgent = "Prismedia/1.0 (+https://github.com/pauljoda/prismedia)";
     private readonly PrismediaDbContext _db;
     private readonly PluginArtworkServiceOptions _options;
     private readonly HttpClient _http;
@@ -23,6 +24,9 @@ public sealed class PluginArtworkDownloader {
         _db = db;
         _options = options;
         _http = http ?? new HttpClient();
+        if (!_http.DefaultRequestHeaders.UserAgent.Any()) {
+            _http.DefaultRequestHeaders.UserAgent.ParseAdd(UserAgent);
+        }
     }
 
     /// <summary>

@@ -389,6 +389,42 @@ public sealed class EntityMetadataApplyServiceTests {
     }
 
     [Fact]
+    public async Task ApplySelectedImagesSendsUserAgentForProviderArtworkDownloads() {
+        await using var db = CreateContext();
+        var entityId = Guid.Parse("43434343-4343-4343-4343-434343434343");
+        SeedEntity(db, entityId, "book-volume", "Volume 1");
+        await db.SaveChangesAsync();
+
+        var imageUrl = "https://uploads.mangadex.org/covers/manga-id/cover.jpg.512.jpg";
+        var proposal = new EntityMetadataProposal(
+            ProposalId: "mangadex:manga-id:volume:1",
+            Provider: "mangadex",
+            TargetKind: "book-volume",
+            TargetEntityId: entityId,
+            Confidence: 1,
+            MatchReason: "volume-map",
+            Patch: EmptyPatch(),
+            Images: [new ImageCandidate("cover", imageUrl, "MangaDex volume 1", null, null, null, null)],
+            Children: [],
+            Candidates: []);
+
+        var service = new EntityMetadataApplyService(
+            db,
+            new PluginArtworkServiceOptions(Path.GetTempPath()),
+            new HttpClient(new RequiresUserAgentImageHandler()));
+        await service.ApplyAsync(
+            entityId,
+            proposal,
+            selectedFields: ["images"],
+            selectedImages: new Dictionary<string, string?> { ["cover"] = imageUrl },
+            CancellationToken.None);
+
+        var file = await db.EntityFiles.SingleAsync(row => row.EntityId == entityId && row.Role == EntityFileRole.Cover);
+        Assert.StartsWith($"/assets/plugins/artwork/{entityId}/cover-", file.Path);
+        Assert.EndsWith(".jpg", file.Path);
+    }
+
+    [Fact]
     public async Task ApplySeriesCascadeReplacesExistingSeasonPosterArtwork() {
         await using var db = CreateContext();
         var seriesId = Guid.Parse("39393939-3939-3939-3939-393939393939");
@@ -1123,5 +1159,19 @@ public sealed class EntityMetadataApplyServiceTests {
             Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK) {
                 Content = new ByteArrayContent([1, 2, 3])
             });
+    }
+
+    private sealed class RequiresUserAgentImageHandler : HttpMessageHandler {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) {
+            if (!request.Headers.UserAgent.Any()) {
+                return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.BadRequest) {
+                    Content = new StringContent("You must set an appropriate User-Agent header")
+                });
+            }
+
+            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK) {
+                Content = new ByteArrayContent([1, 2, 3])
+            });
+        }
     }
 }

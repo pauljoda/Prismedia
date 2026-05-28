@@ -55,6 +55,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ### Fixed
 - Fixed plugin cascade reviews so provider-created structural children such as MangaDex volumes and chapters can be created and updated while respecting NSFW visibility.
 - Fixed MangaDex identify reviews so cover artwork keeps a book-cover aspect ratio and existing volume or chapter folders can receive scoped metadata.
+- Fixed provider artwork downloads so MangaDex cover selections can be applied without CDN User-Agent errors.
 - Fixed identify candidate loading feedback so only the selected candidate shows progress while large provider trees are checked.
 - Fixed plugin no-match errors so the selected provider name is shown instead of a TMDB-specific message.
 - Fixed first-scan trickplay generation so preview jobs wait for probe metadata instead of completing before trickplay tiles can be created.
