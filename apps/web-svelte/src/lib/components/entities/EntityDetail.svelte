@@ -1796,6 +1796,8 @@
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
+    box-sizing: border-box;
+    height: 2.35rem;
     padding: 0.35rem 0.65rem;
     border: 1px solid color-mix(in srgb, var(--detail-accent) 32%, var(--detail-border));
     border-radius: var(--radius-xs, 4px);

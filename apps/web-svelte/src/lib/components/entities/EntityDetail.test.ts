@@ -56,6 +56,7 @@ describe("EntityDetail", () => {
     expect(heroText).not.toBeNull();
     expect(actionRow).not.toBeNull();
     expect(ratingRow).not.toBeNull();
+    expect(readFileSync("src/lib/components/entities/EntityDetail.svelte", "utf8")).toContain("height: 2.35rem;");
 
     const heroChildren = Array.from(heroText!.children);
 
