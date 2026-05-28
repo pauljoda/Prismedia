@@ -214,7 +214,7 @@
       <div class="min-w-0 space-y-3">
         <div>
           <p class="text-kicker mb-1 text-text-accent">Release console</p>
-          <h2 class="font-display text-[1.55rem] font-bold leading-none tracking-[-0.04em] text-text-primary sm:text-[1.85rem]">
+          <h2 class="font-heading text-[1.35rem] font-bold uppercase leading-none tracking-[0.18em] text-text-primary sm:text-[1.55rem]">
             Changelog
           </h2>
         </div>
