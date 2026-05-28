@@ -1045,63 +1045,67 @@
 {/snippet}
 
 {#snippet defaultDetailContent()}
-  {#if isEditingActiveTab}
-    <div class="detail-edit-toolbar">
-      <div class="detail-edit-actions">
-        <button type="button" class="edit-action secondary" onclick={cancelEdit} disabled={savingEdit} aria-label="Cancel editing">
-          <X class="h-3.5 w-3.5" />
-          Cancel
-        </button>
-        <button type="button" class="edit-action primary" onclick={() => void saveEdit()} disabled={saveDisabled} aria-label="Save changes">
-          <Save class="h-3.5 w-3.5" />
-          {savingEdit ? "Saving…" : "Save"}
-        </button>
-      </div>
-    </div>
-    {#if editValidationErrors.length > 0 || editError || assetError}
-      <div class="edit-errors" aria-live="polite">
-        {#each editValidationErrors as error (error)}
-          <p>{error}</p>
-        {/each}
-        {#if editError}
-          <p>{editError}</p>
+  {#if isEditingActiveTab || hasStandaloneBodyContent || afterBody || standaloneMetadataSections.length > 0 || extraSections}
+    <div class="detail-content-card detail-content-card--standalone">
+      {#if isEditingActiveTab}
+        <div class="detail-edit-toolbar">
+          <div class="detail-edit-actions">
+            <button type="button" class="edit-action secondary" onclick={cancelEdit} disabled={savingEdit} aria-label="Cancel editing">
+              <X class="h-3.5 w-3.5" />
+              Cancel
+            </button>
+            <button type="button" class="edit-action primary" onclick={() => void saveEdit()} disabled={saveDisabled} aria-label="Save changes">
+              <Save class="h-3.5 w-3.5" />
+              {savingEdit ? "Saving…" : "Save"}
+            </button>
+          </div>
+        </div>
+        {#if editValidationErrors.length > 0 || editError || assetError}
+          <div class="edit-errors" aria-live="polite">
+            {#each editValidationErrors as error (error)}
+              <p>{error}</p>
+            {/each}
+            {#if editError}
+              <p>{editError}</p>
+            {/if}
+            {#if assetError}
+              <p>{assetError}</p>
+            {/if}
+          </div>
         {/if}
-        {#if assetError}
-          <p>{assetError}</p>
-        {/if}
-      </div>
-    {/if}
-  {/if}
-
-  {#if isEditingActiveTab}
-    <div class="detail-body">
-      {@render descriptionEditSection()}
-      {@render tagsEditSection()}
-    </div>
-  {:else if hasStandaloneBodyContent}
-    <div class="detail-body">
-      {@render descriptionContent()}
-      {@render tagsContent()}
-    </div>
-  {/if}
-
-  <!-- Kind-specific content between body and metadata (studio, credits, etc.) -->
-  {#if afterBody}
-    {@render afterBody()}
-  {/if}
-
-  <!-- Lower metadata sections -->
-  {#if standaloneMetadataSections.length > 0 || extraSections}
-    <div class="metadata-sections">
-      {#if extraSections}
-        {@render extraSections()}
       {/if}
 
-      <MetadataCardGrid>
-        {#each standaloneMetadataSections as section (section.id)}
-          {@render renderDetailSection(section)}
-        {/each}
-      </MetadataCardGrid>
+      {#if isEditingActiveTab}
+        <div class="detail-body">
+          {@render descriptionEditSection()}
+          {@render tagsEditSection()}
+        </div>
+      {:else if hasStandaloneBodyContent}
+        <div class="detail-body">
+          {@render descriptionContent()}
+          {@render tagsContent()}
+        </div>
+      {/if}
+
+      <!-- Kind-specific content between body and metadata (studio, credits, etc.) -->
+      {#if afterBody}
+        {@render afterBody()}
+      {/if}
+
+      <!-- Lower metadata sections -->
+      {#if standaloneMetadataSections.length > 0 || extraSections}
+        <div class="metadata-sections">
+          {#if extraSections}
+            {@render extraSections()}
+          {/if}
+
+          <MetadataCardGrid>
+            {#each standaloneMetadataSections as section (section.id)}
+              {@render renderDetailSection(section)}
+            {/each}
+          </MetadataCardGrid>
+        </div>
+      {/if}
     </div>
   {/if}
 {/snippet}
@@ -1339,7 +1343,7 @@
 
       {#if activeTab}
         <div
-          class="detail-tab-panel"
+          class="detail-tab-panel detail-content-card detail-content-card--tabbed"
           role="tabpanel"
           id={`entity-detail-panel-${activeTab.id}`}
           aria-labelledby={`entity-detail-tab-${activeTab.id}`}
@@ -1419,6 +1423,7 @@
     --detail-glass-blur: var(--glass-blur-sm);
     --hero-banner-max-height: clamp(13rem, 36vw, 20rem);
     --hero-lower-overlap: clamp(-3.75rem, -6vw, -2rem);
+    --detail-slideout-inset: 5px;
 
     display: grid;
     gap: 0;
@@ -2049,24 +2054,21 @@
 
   .detail-tabs {
     min-width: 0;
-    margin-top: -1px;
-    border: 1px solid var(--detail-border);
-    border-top: 0;
-    border-radius: 0 0 var(--radius-md, 10px) var(--radius-md, 10px);
-    background: linear-gradient(180deg, rgba(12, 15, 21, 0.78), rgba(12, 15, 21, 0.92));
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.03),
-      0 10px 30px rgba(0, 0, 0, 0.24);
-    overflow: hidden;
+    margin-inline: var(--detail-slideout-inset);
   }
 
   .detail-tab-list {
+    position: relative;
+    z-index: 2;
     display: flex;
     gap: 0.35rem;
     min-width: 0;
+    margin-top: -1px;
     overflow-x: auto;
     padding: 0.65rem 1.5rem;
-    border-bottom: 1px solid var(--detail-border);
+    border: 1px solid var(--detail-border);
+    border-top: 0;
+    border-radius: 0 0 var(--radius-md, 10px) var(--radius-md, 10px);
     background: var(--detail-glass);
     backdrop-filter: blur(var(--detail-glass-blur));
     -webkit-backdrop-filter: blur(var(--detail-glass-blur));
@@ -2114,7 +2116,38 @@
 
   .detail-tab-panel {
     min-width: 0;
-    background: color-mix(in srgb, var(--detail-surface) 78%, transparent);
+  }
+
+  .detail-content-card {
+    min-width: 0;
+    border: 1px solid var(--detail-border);
+    border-top: 0;
+    border-radius: 0 0 var(--radius-md, 10px) var(--radius-md, 10px);
+    background:
+      linear-gradient(180deg, rgba(19, 23, 31, 0.66), rgba(12, 15, 21, 0.86)),
+      rgba(12, 15, 21, 0.72);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.035),
+      0 10px 30px rgba(0, 0, 0, 0.24);
+    overflow: hidden;
+  }
+
+  @supports ((backdrop-filter: blur(4px)) or (-webkit-backdrop-filter: blur(4px))) {
+    .detail-content-card {
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+    }
+  }
+
+  .detail-content-card--tabbed {
+    position: relative;
+    z-index: 1;
+    margin-top: -0.5rem;
+    padding-top: 0.5rem;
+  }
+
+  .detail-content-card--standalone {
+    margin: -1px var(--detail-slideout-inset) 0;
   }
 
   .detail-edit-toolbar {

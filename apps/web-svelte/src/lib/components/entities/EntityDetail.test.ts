@@ -115,7 +115,12 @@ describe("EntityDetail", () => {
     expect(source).toContain("justify-content: space-between;");
     expect(source).toContain("justify-content: flex-end;");
     expect(source).toContain("border-radius: 0 0 var(--radius-md, 10px) var(--radius-md, 10px);");
-    expect(source).toContain("background: linear-gradient(180deg, rgba(12, 15, 21, 0.78), rgba(12, 15, 21, 0.92));");
+    expect(source).toContain("class=\"detail-content-card detail-content-card--standalone\"");
+    expect(source).toContain("class=\"detail-tab-panel detail-content-card detail-content-card--tabbed\"");
+    expect(source).toContain("backdrop-filter: blur(4px);");
+    expect(source).toContain("z-index: 2;");
+    expect(source).toContain("--detail-slideout-inset: 5px;");
+    expect(source).toContain("margin-inline: var(--detail-slideout-inset);");
     expect(source).toContain("entity-action-button-label");
     expect(appStyles).toContain(".entity-action-button {");
     expect(appStyles).toContain(".entity-action-button-label {");
