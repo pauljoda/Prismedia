@@ -113,7 +113,7 @@ public sealed class ExtractSubtitlesJobHandlerTests : IDisposable {
         public string AudioWaveformUrl(Guid entityId) => throw new NotSupportedException();
     }
 
-    private sealed class RecordingScanPersistence(string sourcePath) : ILibraryScanPersistence {
+    private sealed class RecordingScanPersistence(string sourcePath) : IMediaProcessingStatePersistence {
         public List<RecordedSubtitle> Subtitles { get; } = [];
         public bool MarkedExtracted { get; private set; }
 

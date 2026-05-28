@@ -21,6 +21,7 @@ internal static class EntityProgressEndpoint {
                 request.Completed,
                 cancellationToken)))
             .WithName("UpdateEntityProgress")
+            .WithSummary("Update Entity Progress.")
             .Produces<EntityCard>()
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 

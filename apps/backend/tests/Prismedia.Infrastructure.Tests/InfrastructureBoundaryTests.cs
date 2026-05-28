@@ -94,13 +94,25 @@ public sealed class InfrastructureBoundaryTests {
     }
 
     [Fact]
-    public void LibraryScanAggregatePortDoesNotRegainDeclaredMembers() {
-        var declaredMethods = typeof(Prismedia.Application.Jobs.Ports.ILibraryScanPersistence)
-            .GetMethods(System.Reflection.BindingFlags.Public |
-                        System.Reflection.BindingFlags.Instance |
-                        System.Reflection.BindingFlags.DeclaredOnly);
+    public void ProductionCompositionDoesNotRegisterLibraryScanAggregatePort() {
+        var dependencyInjection = ReadRepoFile("apps/backend/src/Prismedia.Infrastructure/DependencyInjection.cs");
+        Assert.DoesNotContain("ILibraryScanPersistence", dependencyInjection, StringComparison.Ordinal);
+    }
 
-        Assert.Empty(declaredMethods);
+    [Fact]
+    public void LibraryScanPersistenceServiceImplementsOnlyNarrowScanPorts() {
+        var implementedInterfaces = typeof(Prismedia.Infrastructure.Media.Persistence.LibraryScanPersistenceService)
+            .GetInterfaces()
+            .Select(type => type.FullName)
+            .ToArray();
+
+        Assert.DoesNotContain("Prismedia.Application.Jobs.Ports.ILibraryScanPersistence", implementedInterfaces);
+    }
+
+    [Fact]
+    public void InfrastructureDoesNotOwnCollectionCommandOrchestration() {
+        var infrastructureAssembly = typeof(Prismedia.Infrastructure.DependencyInjection).Assembly;
+        Assert.Null(infrastructureAssembly.GetType("Prismedia.Infrastructure.Collections.CollectionCommandService"));
     }
 
     [Fact]
@@ -112,7 +124,7 @@ public sealed class InfrastructureBoundaryTests {
             .Select(parameter => parameter.ParameterType)
             .ToArray();
 
-        Assert.DoesNotContain(typeof(Prismedia.Application.Jobs.Ports.ILibraryScanPersistence), constructorTypes);
+        Assert.DoesNotContain("Prismedia.Application.Jobs.Ports.ILibraryScanPersistence", constructorTypes.Select(type => type.FullName));
         Assert.Contains(typeof(Prismedia.Application.Jobs.Ports.IEntityRefreshTreePersistence), constructorTypes);
         Assert.Contains(typeof(Prismedia.Application.Jobs.Ports.ILibraryScanRootPersistence), constructorTypes);
         Assert.Contains(typeof(Prismedia.Application.Jobs.Ports.IDownstreamNeedsPersistence), constructorTypes);
@@ -139,7 +151,7 @@ public sealed class InfrastructureBoundaryTests {
                 .Select(parameter => parameter.ParameterType)
                 .ToArray();
 
-            Assert.DoesNotContain(typeof(Prismedia.Application.Jobs.Ports.ILibraryScanPersistence), constructorTypes);
+            Assert.DoesNotContain("Prismedia.Application.Jobs.Ports.ILibraryScanPersistence", constructorTypes.Select(type => type.FullName));
             Assert.Contains(typeof(Prismedia.Application.Jobs.Ports.IMediaProcessingStatePersistence), constructorTypes);
         }
     }
@@ -161,7 +173,7 @@ public sealed class InfrastructureBoundaryTests {
                 .Select(parameter => parameter.ParameterType)
                 .ToArray();
 
-            Assert.DoesNotContain(typeof(Prismedia.Application.Jobs.Ports.ILibraryScanPersistence), constructorTypes);
+            Assert.DoesNotContain("Prismedia.Application.Jobs.Ports.ILibraryScanPersistence", constructorTypes.Select(type => type.FullName));
             Assert.Contains(typeof(Prismedia.Application.Jobs.Ports.ILibraryScanRootPersistence), constructorTypes);
             Assert.Contains(typeof(Prismedia.Application.Jobs.Ports.IDownstreamNeedsPersistence), constructorTypes);
         }
@@ -176,7 +188,7 @@ public sealed class InfrastructureBoundaryTests {
             .Select(parameter => parameter.ParameterType)
             .ToArray();
 
-        Assert.DoesNotContain(typeof(Prismedia.Application.Jobs.Ports.ILibraryScanPersistence), constructorTypes);
+        Assert.DoesNotContain("Prismedia.Application.Jobs.Ports.ILibraryScanPersistence", constructorTypes.Select(type => type.FullName));
         Assert.Contains(typeof(Prismedia.Application.Jobs.Ports.IDownstreamNeedsPersistence), constructorTypes);
     }
 

@@ -115,20 +115,6 @@ public interface IEntityRefreshTreePersistence {
     Task<IReadOnlyList<EntityRefreshTarget>> GetEntityTreeAsync(Guid entityId, CancellationToken cancellationToken);
 }
 
-/// <summary>
-/// Compatibility aggregate for the existing EF implementation while scan callers migrate
-/// to the narrower ports above.
-/// </summary>
-public interface ILibraryScanPersistence :
-    ILibraryScanRootPersistence,
-    IVideoScanPersistence,
-    IImageGalleryScanPersistence,
-    IAudioScanPersistence,
-    IBookScanPersistence,
-    IDownstreamNeedsPersistence,
-    IMediaProcessingStatePersistence,
-    IEntityRefreshTreePersistence;
-
 public sealed record LibraryRootData(
     Guid Id,
     string Path,

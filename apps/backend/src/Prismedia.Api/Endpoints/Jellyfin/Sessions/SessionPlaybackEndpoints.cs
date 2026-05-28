@@ -14,6 +14,7 @@ internal static class SessionPlaybackEndpoints {
                 return Results.NoContent();
             })
             .WithName("PostJellyfinSessionPlaying")
+            .WithSummary("Post Jellyfin Session Playing.")
             .WithTags("Jellyfin Sessions");
 
         routes.MapPost("/Sessions/Playing/Progress", async (
@@ -24,6 +25,7 @@ internal static class SessionPlaybackEndpoints {
                 return Results.NoContent();
             })
             .WithName("PostJellyfinSessionProgress")
+            .WithSummary("Post Jellyfin Session Progress.")
             .WithTags("Jellyfin Sessions");
 
         routes.MapPost("/Sessions/Playing/Ping", async (
@@ -34,6 +36,7 @@ internal static class SessionPlaybackEndpoints {
                 return Results.NoContent();
             })
             .WithName("PostJellyfinSessionPing")
+            .WithSummary("Post Jellyfin Session Ping.")
             .WithTags("Jellyfin Sessions");
 
         routes.MapPost("/Sessions/Playing/Stopped", async (
@@ -44,6 +47,7 @@ internal static class SessionPlaybackEndpoints {
                 return Results.NoContent();
             })
             .WithName("PostJellyfinSessionStopped")
+            .WithSummary("Post Jellyfin Session Stopped.")
             .WithTags("Jellyfin Sessions");
 
         return routes;

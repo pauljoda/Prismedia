@@ -15,6 +15,7 @@ internal static class EntityDetailEndpoint {
             CancellationToken cancellationToken) =>
             await PatchEntityAsync(id, kind, request, metadata, entities, cancellationToken))
             .WithName("UpdateEntityByKind")
+            .WithSummary("Update Entity By Kind.")
             .Produces<EntityCard>()
             .Produces<ApiProblem>(StatusCodes.Status400BadRequest)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
@@ -31,6 +32,7 @@ internal static class EntityDetailEndpoint {
                 entities,
                 cancellationToken))
             .WithName("GetEntity")
+            .WithSummary("Get Entity.")
             .Produces<EntityCard>()
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
@@ -42,6 +44,7 @@ internal static class EntityDetailEndpoint {
             CancellationToken cancellationToken) =>
             await PatchEntityAsync(id, expectedKind: null, request, metadata, entities, cancellationToken))
             .WithName("UpdateEntity")
+            .WithSummary("Update Entity.")
             .Produces<EntityCard>()
             .Produces<ApiProblem>(StatusCodes.Status400BadRequest)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);

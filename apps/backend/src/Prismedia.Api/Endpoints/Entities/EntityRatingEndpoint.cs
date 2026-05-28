@@ -13,6 +13,7 @@ internal static class EntityRatingEndpoint {
             CancellationToken cancellationToken) =>
             EntityEndpointResults.ToResult(id, await capabilities.RateAsync(id, request.Value, cancellationToken)))
             .WithName("UpdateEntityRating")
+            .WithSummary("Update Entity Rating.")
             .Produces<EntityCard>()
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 

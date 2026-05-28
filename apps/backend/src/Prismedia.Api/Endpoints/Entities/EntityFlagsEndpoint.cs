@@ -14,6 +14,7 @@ internal static class EntityFlagsEndpoint {
             EntityEndpointResults.ToResult(id, await capabilities.UpdateFlagsAsync(
                 id, request.IsFavorite, request.IsNsfw, request.IsOrganized, cancellationToken)))
             .WithName("UpdateEntityFlags")
+            .WithSummary("Update Entity Flags.")
             .Produces<EntityCard>()
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 

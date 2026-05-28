@@ -16,6 +16,7 @@ internal static class EntityThumbnailEndpoint {
                 NsfwVisibility.ShouldHide(hideNsfw, httpContext),
                 cancellationToken)))
             .WithName("GetEntityThumbnails")
+            .WithSummary("Get Entity Thumbnails.")
             .Produces<EntityThumbnailBatchResponse>();
 
         return group;

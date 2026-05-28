@@ -525,7 +525,7 @@ public sealed class ScanJobHandlerTests {
         }
     }
 
-    private sealed class FakeScanPersistence(IReadOnlyList<LibraryRootData> roots) : ILibraryScanPersistence {
+    private sealed class FakeScanPersistence(IReadOnlyList<LibraryRootData> roots) : ILibraryScanRootPersistence, IVideoScanPersistence, IDownstreamNeedsPersistence, IImageGalleryScanPersistence, IAudioScanPersistence, IBookScanPersistence {
         public List<Guid> LoadedRootIds { get; } = [];
         public List<Guid> LastScannedRootIds { get; } = [];
         public bool LoadedEnabledRoots { get; private set; }

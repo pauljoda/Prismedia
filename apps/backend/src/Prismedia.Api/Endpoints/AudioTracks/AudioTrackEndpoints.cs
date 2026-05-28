@@ -24,12 +24,14 @@ public static class AudioTrackEndpoints {
             EntityEndpointResults.ToResult(id, await capabilities.UpdatePlaybackAsync(
                 id, resumeSeconds: 0, durationSeconds: null, completed: true, cancellationToken)))
             .WithName("RecordAudioTrackPlay")
+            .WithSummary("Record Audio Track Play.")
             .WithTags("Audio")
             .Produces<EntityCard>()
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
         routes.MapGet("/api/audio-stream/{id:guid}", StreamAudioAsync)
             .WithName("GetAudioStream")
+            .WithSummary("Get Audio Stream.")
             .WithTags("Audio")
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status206PartialContent)

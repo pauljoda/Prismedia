@@ -11,6 +11,14 @@ namespace Prismedia.Infrastructure.Media.Persistence;
 /// <summary>
 /// Implements entity persistence operations for library scanning against the entity schema.
 /// </summary>
-public sealed partial class LibraryScanPersistenceService(PrismediaDbContext db) : ILibraryScanPersistence {
+public sealed partial class LibraryScanPersistenceService(PrismediaDbContext db) :
+    ILibraryScanRootPersistence,
+    IVideoScanPersistence,
+    IImageGalleryScanPersistence,
+    IAudioScanPersistence,
+    IBookScanPersistence,
+    IDownstreamNeedsPersistence,
+    IMediaProcessingStatePersistence,
+    IEntityRefreshTreePersistence {
     private readonly PrismediaDbContext _db = db;
 }

@@ -136,8 +136,6 @@ public static class DependencyInjection {
                 provider.GetRequiredService<SettingsService>(),
                 provider.GetRequiredService<MediaToolOptions>()));
         services.AddScoped<LibraryScanPersistenceService>();
-        services.AddScoped<ILibraryScanPersistence>(provider =>
-            provider.GetRequiredService<LibraryScanPersistenceService>());
         services.AddScoped<ILibraryScanRootPersistence>(provider =>
             provider.GetRequiredService<LibraryScanPersistenceService>());
         services.AddScoped<IVideoScanPersistence>(provider =>
@@ -159,7 +157,8 @@ public static class DependencyInjection {
         services.AddScoped<ICollectionRuleEngine, CollectionRuleEngine>();
         services.AddScoped<ICollectionRefreshPersistence, CollectionRefreshPersistenceService>();
         services.AddScoped<ICollectionItemReadService, CollectionItemReadService>();
-        services.AddScoped<ICollectionCommandService, CollectionCommandService>();
+        services.AddScoped<ICollectionCommandPersistence, CollectionCommandPersistence>();
+        services.AddScoped<ICollectionCommandService, Prismedia.Application.Collections.CollectionCommandService>();
     }
 
     private static void RegisterEntities(IServiceCollection services, string cacheDir) {

@@ -14,6 +14,7 @@ internal static class EntityPlaybackEndpoint {
             EntityEndpointResults.ToResult(id, await capabilities.UpdatePlaybackAsync(
                 id, request.ResumeSeconds, request.DurationSeconds, request.Completed, cancellationToken)))
             .WithName("UpdateEntityPlayback")
+            .WithSummary("Update Entity Playback.")
             .Produces<EntityCard>()
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 

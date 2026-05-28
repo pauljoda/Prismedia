@@ -30,6 +30,7 @@ public static class CollectionEndpoints {
                 };
             })
             .WithName("CreateCollection")
+            .WithSummary("Create Collection.")
             .Produces<CollectionDetail>(StatusCodes.Status201Created)
             .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
 
@@ -40,6 +41,7 @@ public static class CollectionEndpoints {
             CancellationToken cancellationToken) =>
                 ToCollectionWriteResult(await collections.UpdateAsync(id, request, cancellationToken)))
             .WithName("UpdateCollection")
+            .WithSummary("Update Collection.")
             .Produces<CollectionDetail>(StatusCodes.Status200OK)
             .Produces<ApiProblem>(StatusCodes.Status400BadRequest)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
@@ -54,6 +56,7 @@ public static class CollectionEndpoints {
                     : Results.NotFound(new ApiProblem("collection_not_found", result.Message ?? "Collection was not found."));
             })
             .WithName("DeleteCollection")
+            .WithSummary("Delete Collection.")
             .Produces<CollectionDeleteResponse>(StatusCodes.Status200OK)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
@@ -72,6 +75,7 @@ public static class CollectionEndpoints {
                     : Results.Ok(response);
             })
             .WithName("PreviewCollectionRules")
+            .WithSummary("Preview Collection Rules.")
             .Produces<CollectionRulePreviewResponse>(StatusCodes.Status200OK)
             .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
 
@@ -88,6 +92,7 @@ public static class CollectionEndpoints {
                 return Results.Ok(response);
             })
             .WithName("ListCollectionItems")
+            .WithSummary("List Collection Items.")
             .Produces<CollectionItemsResponse>(StatusCodes.Status200OK);
 
         group.MapPost("/{id:guid}/items", async (
@@ -97,6 +102,7 @@ public static class CollectionEndpoints {
             CancellationToken cancellationToken) =>
                 ToCountResult(await collections.AddItemsAsync(id, request, cancellationToken)))
             .WithName("AddCollectionItems")
+            .WithSummary("Add Collection Items.")
             .Produces<CollectionItemMutationResponse>(StatusCodes.Status200OK)
             .Produces<ApiProblem>(StatusCodes.Status400BadRequest)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
@@ -108,6 +114,7 @@ public static class CollectionEndpoints {
             CancellationToken cancellationToken) =>
                 ToCountResult(await collections.RemoveItemsAsync(id, request, cancellationToken)))
             .WithName("RemoveCollectionItems")
+            .WithSummary("Remove Collection Items.")
             .Produces<CollectionItemMutationResponse>(StatusCodes.Status200OK)
             .Produces<ApiProblem>(StatusCodes.Status400BadRequest)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
@@ -119,6 +126,7 @@ public static class CollectionEndpoints {
             CancellationToken cancellationToken) =>
                 ToCountResult(await collections.ReorderItemsAsync(id, request, cancellationToken)))
             .WithName("ReorderCollectionItems")
+            .WithSummary("Reorder Collection Items.")
             .Produces<CollectionItemMutationResponse>(StatusCodes.Status200OK)
             .Produces<ApiProblem>(StatusCodes.Status400BadRequest)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
@@ -133,6 +141,7 @@ public static class CollectionEndpoints {
                     : Results.Ok(response);
             })
             .WithName("RefreshCollection")
+            .WithSummary("Refresh Collection.")
             .Produces<CollectionRefreshResponse>(StatusCodes.Status200OK)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 

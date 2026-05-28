@@ -14,6 +14,7 @@ internal static class EntityMarkerEndpoints {
             EntityEndpointResults.ToResult(id, await capabilities.AddMarkerAsync(
                 id, request.Title, request.Seconds, request.EndSeconds, cancellationToken)))
             .WithName("CreateEntityMarker")
+            .WithSummary("Create Entity Marker.")
             .Produces<EntityCard>()
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
@@ -26,6 +27,7 @@ internal static class EntityMarkerEndpoints {
             EntityEndpointResults.ToResult(id, await capabilities.UpdateMarkerAsync(
                 id, markerId, request.Title, request.Seconds, request.EndSeconds, cancellationToken)))
             .WithName("UpdateEntityMarker")
+            .WithSummary("Update Entity Marker.")
             .Produces<EntityCard>()
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
@@ -36,6 +38,7 @@ internal static class EntityMarkerEndpoints {
             CancellationToken cancellationToken) =>
             EntityEndpointResults.ToResult(id, await capabilities.DeleteMarkerAsync(id, markerId, cancellationToken)))
             .WithName("DeleteEntityMarker")
+            .WithSummary("Delete Entity Marker.")
             .Produces<EntityCard>()
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 

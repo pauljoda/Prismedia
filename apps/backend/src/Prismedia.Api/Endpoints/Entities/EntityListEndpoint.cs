@@ -33,6 +33,7 @@ internal static class EntityListEndpoint {
                     relationshipCode));
             })
             .WithName("ListEntities")
+            .WithSummary("List Entities.")
             .Produces<EntityListResponse>()
             .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
 

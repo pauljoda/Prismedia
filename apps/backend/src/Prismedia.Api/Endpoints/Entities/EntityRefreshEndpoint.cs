@@ -29,6 +29,7 @@ internal static class EntityRefreshEndpoint {
             return Results.Ok(new EntityRefreshResponse(job.Id, AlreadyPending: false));
         })
             .WithName("RefreshEntity")
+            .WithSummary("Refresh Entity.")
             .Produces<EntityRefreshResponse>();
 
         return group;

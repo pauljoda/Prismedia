@@ -13,6 +13,28 @@ public sealed class EndpointLayoutTests {
         Assert.False(Directory.Exists(Path.Combine(endpointRoot, "Api")));
     }
 
+    [Fact]
+    public void MappedEndpointsDeclareOpenApiSummaries() {
+        var endpointRoot = RepoPath("apps/backend/src/Prismedia.Api/Endpoints");
+        var offenders = Directory.GetFiles(endpointRoot, "*.cs", SearchOption.AllDirectories)
+            .Where(file => !Path.GetFileName(file).EndsWith("Results.cs", StringComparison.Ordinal))
+            .Where(file => !string.Equals(Path.GetFileName(file), "JobRouteValues.cs", StringComparison.Ordinal))
+            .Select(file => new { File = file, Source = File.ReadAllText(file) })
+            .Where(item => ContainsRouteMapping(item.Source) && !item.Source.Contains(".WithSummary(", StringComparison.Ordinal))
+            .Select(item => Path.GetRelativePath(endpointRoot, item.File).Replace('\\', '/'))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Empty(offenders);
+    }
+
+    private static bool ContainsRouteMapping(string source) =>
+        source.Contains(".MapGet(", StringComparison.Ordinal) ||
+        source.Contains(".MapPost(", StringComparison.Ordinal) ||
+        source.Contains(".MapPut(", StringComparison.Ordinal) ||
+        source.Contains(".MapPatch(", StringComparison.Ordinal) ||
+        source.Contains(".MapDelete(", StringComparison.Ordinal);
+
     private static string RepoPath(string relativePath) {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null) {

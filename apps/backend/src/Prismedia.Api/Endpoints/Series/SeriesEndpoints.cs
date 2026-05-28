@@ -31,6 +31,7 @@ public static class SeriesEndpoints {
                 cancellationToken))
             .WithTags("Series")
             .WithName("GetVideoSeason")
+            .WithSummary("Get Video Season.")
             .Produces<VideoSeasonDetail>()
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 

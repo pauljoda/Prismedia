@@ -12,6 +12,7 @@ internal static class PlaybackInfoEndpoints {
             CancellationToken cancellationToken) =>
             JellyfinPlaybackResults.GetPlaybackInfoAsync(itemId, playback, null, cancellationToken))
             .WithName("GetJellyfinPlaybackInfo")
+            .WithSummary("Get Jellyfin Playback Info.")
             .WithTags("Jellyfin Playback")
             .Produces<PlaybackInfoResponse>()
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
@@ -23,6 +24,7 @@ internal static class PlaybackInfoEndpoints {
             CancellationToken cancellationToken) =>
             JellyfinPlaybackResults.GetPlaybackInfoAsync(itemId, playback, request, cancellationToken))
             .WithName("PostJellyfinPlaybackInfo")
+            .WithSummary("Post Jellyfin Playback Info.")
             .WithTags("Jellyfin Playback")
             .Produces<PlaybackInfoResponse>()
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);

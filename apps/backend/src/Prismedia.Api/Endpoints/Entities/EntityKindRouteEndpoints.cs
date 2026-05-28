@@ -27,6 +27,7 @@ internal static class EntityKindRouteEndpoints {
             CancellationToken cancellationToken) =>
             Results.Ok(await entities.ListAsync(kind, query, cursor, NsfwVisibility.ShouldHide(hideNsfw, httpContext), limit, cancellationToken)))
             .WithName(listName)
+            .WithSummary($"List {tag}.")
             .Produces(StatusCodes.Status200OK, listResponseType);
 
         group.MapGet("/{id:guid}", async (
@@ -37,6 +38,7 @@ internal static class EntityKindRouteEndpoints {
             CancellationToken cancellationToken) =>
             await GetKindDetailAsync(id, kind, NsfwVisibility.ShouldHide(hideNsfw, httpContext), entities, cancellationToken))
             .WithName(detailName)
+            .WithSummary($"Get {tag} detail.")
             .Produces(StatusCodes.Status200OK, detailResponseType)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
@@ -48,6 +50,7 @@ internal static class EntityKindRouteEndpoints {
             CancellationToken cancellationToken) =>
             await EntityDetailEndpoint.PatchEntityAsync(id, kind, request, metadata, entities, cancellationToken))
             .WithName($"{detailName}Patch")
+            .WithSummary($"Update {tag} detail.")
             .Produces(StatusCodes.Status200OK, detailResponseType)
             .Produces<ApiProblem>(StatusCodes.Status400BadRequest)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);

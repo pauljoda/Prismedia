@@ -148,7 +148,7 @@ public sealed class GeneratePreviewJobHandlerTests : IDisposable {
         public string SubtitleUrl(Guid entityId, string fileName) => throw new NotSupportedException();
     }
 
-    private sealed class PreviewPersistence(string sourcePath) : ILibraryScanPersistence {
+    private sealed class PreviewPersistence(string sourcePath) : IMediaProcessingStatePersistence, ILibraryScanRootPersistence {
         public LibrarySettingsData Settings { get; init; } = new(
             AutoGenerateMetadata: false,
             AutoGenerateFingerprints: false,

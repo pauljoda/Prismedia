@@ -10,6 +10,7 @@ internal static class UserPlayedItemEndpoints {
             CancellationToken cancellationToken) =>
             await JellyfinPlaybackResults.MarkPlayedAsync(itemId, sessions, cancellationToken))
             .WithName("PostJellyfinUserPlayedItem")
+            .WithSummary("Post Jellyfin User Played Item.")
             .WithTags("Jellyfin Sessions");
 
         routes.MapDelete("/UserPlayedItems/{itemId:guid}", async (
@@ -18,6 +19,7 @@ internal static class UserPlayedItemEndpoints {
             CancellationToken cancellationToken) =>
             await JellyfinPlaybackResults.MarkUnplayedAsync(itemId, sessions, cancellationToken))
             .WithName("DeleteJellyfinUserPlayedItem")
+            .WithSummary("Delete Jellyfin User Played Item.")
             .WithTags("Jellyfin Sessions");
 
         return routes;

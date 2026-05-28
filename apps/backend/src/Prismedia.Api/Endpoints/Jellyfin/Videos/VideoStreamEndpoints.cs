@@ -6,6 +6,7 @@ internal static class VideoStreamEndpoints {
     internal static IEndpointRouteBuilder MapJellyfinVideoStreamEndpoints(this IEndpointRouteBuilder routes) {
         routes.MapGet("/Videos/{itemId:guid}/stream", JellyfinPlaybackResults.StreamVideoAsync)
             .WithName("GetJellyfinVideoStream")
+            .WithSummary("Get Jellyfin Video Stream.")
             .WithTags("Jellyfin Videos")
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status206PartialContent)

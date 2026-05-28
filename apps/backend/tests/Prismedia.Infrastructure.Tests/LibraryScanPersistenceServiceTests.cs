@@ -377,7 +377,7 @@ public sealed class LibraryScanPersistenceServiceTests {
     [Fact]
     public async Task UpsertGalleryStoresFolderParentAndSortOrder() {
         await using var db = CreateContext();
-        ILibraryScanPersistence service = new LibraryScanPersistenceService(db);
+        var service = new LibraryScanPersistenceService(db);
         var rootId = Guid.Parse("11111111-1111-1111-1111-111111111111");
         var parentId = await service.UpsertGalleryAsync(
             "/media/images/Set",
@@ -408,7 +408,7 @@ public sealed class LibraryScanPersistenceServiceTests {
     [Fact]
     public async Task UpsertAudioLibraryStoresFolderParentAndSortOrder() {
         await using var db = CreateContext();
-        ILibraryScanPersistence service = new LibraryScanPersistenceService(db);
+        var service = new LibraryScanPersistenceService(db);
         var rootId = Guid.Parse("22222222-2222-2222-2222-222222222222");
         var parentId = await service.UpsertAudioLibraryAsync(
             "/media/audio/Albums",
@@ -438,7 +438,7 @@ public sealed class LibraryScanPersistenceServiceTests {
     [Fact]
     public async Task UpsertImageCanRelinkExistingImageBackToLooseRootFile() {
         await using var db = CreateContext();
-        ILibraryScanPersistence service = new LibraryScanPersistenceService(db);
+        var service = new LibraryScanPersistenceService(db);
         var galleryId = await service.UpsertGalleryAsync(
             "/media/images/Gallery",
             "Gallery",
@@ -474,7 +474,7 @@ public sealed class LibraryScanPersistenceServiceTests {
     [Fact]
     public async Task UpsertAudioTrackCanRelinkExistingTrackBackToLooseRootFile() {
         await using var db = CreateContext();
-        ILibraryScanPersistence service = new LibraryScanPersistenceService(db);
+        var service = new LibraryScanPersistenceService(db);
         var libraryId = await service.UpsertAudioLibraryAsync(
             "/media/audio/Album",
             "Album",
@@ -524,7 +524,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         SeedSourceEntity(db, subfolderOrphanId, EntityKindRegistry.Image.Code, "/media/images/Sub/orphan.png");
         await db.SaveChangesAsync();
 
-        ILibraryScanPersistence service = new LibraryScanPersistenceService(db);
+        var service = new LibraryScanPersistenceService(db);
         var removed = await service.RemoveStaleLooseImagesInRootAsync(
             rootId,
             new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "/media/images/valid.jpg" },
@@ -557,7 +557,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         SeedSourceEntity(db, subfolderOrphanId, EntityKindRegistry.AudioTrack.Code, "/media/audio/Sub/orphan.flac");
         await db.SaveChangesAsync();
 
-        ILibraryScanPersistence service = new LibraryScanPersistenceService(db);
+        var service = new LibraryScanPersistenceService(db);
         var removed = await service.RemoveStaleLooseAudioTracksInRootAsync(
             rootId,
             new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "/media/audio/valid.flac" },
@@ -574,7 +574,7 @@ public sealed class LibraryScanPersistenceServiceTests {
     [Fact]
     public async Task RemoveStaleGalleriesInRootRemovesStaleFolderSubtree() {
         await using var db = CreateContext();
-        ILibraryScanPersistence service = new LibraryScanPersistenceService(db);
+        var service = new LibraryScanPersistenceService(db);
         var rootId = Guid.Parse("77777777-7777-7777-7777-777777777777");
 
         var staleGalleryId = await service.UpsertGalleryAsync(
@@ -643,7 +643,7 @@ public sealed class LibraryScanPersistenceServiceTests {
     [Fact]
     public async Task RemoveStaleAudioLibrariesInRootRemovesStaleFolderSubtree() {
         await using var db = CreateContext();
-        ILibraryScanPersistence service = new LibraryScanPersistenceService(db);
+        var service = new LibraryScanPersistenceService(db);
         var rootId = Guid.Parse("88888888-8888-8888-8888-888888888888");
 
         var staleLibraryId = await service.UpsertAudioLibraryAsync(
@@ -709,7 +709,7 @@ public sealed class LibraryScanPersistenceServiceTests {
     [Fact]
     public async Task RemoveStaleGalleriesInRootRemovesOldRootGalleryWithMissingChild() {
         await using var db = CreateContext();
-        ILibraryScanPersistence service = new LibraryScanPersistenceService(db);
+        var service = new LibraryScanPersistenceService(db);
         var rootId = Guid.Parse("99999999-9999-9999-9999-999999999999");
         var oldRootGalleryId = await service.UpsertGalleryAsync(
             "/media/images",
@@ -750,7 +750,7 @@ public sealed class LibraryScanPersistenceServiceTests {
     [Fact]
     public async Task RemoveStaleAudioLibrariesInRootRemovesOldRootLibraryWithMissingChild() {
         await using var db = CreateContext();
-        ILibraryScanPersistence service = new LibraryScanPersistenceService(db);
+        var service = new LibraryScanPersistenceService(db);
         var rootId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
         var oldRootLibraryId = await service.UpsertAudioLibraryAsync(
             "/media/audio",

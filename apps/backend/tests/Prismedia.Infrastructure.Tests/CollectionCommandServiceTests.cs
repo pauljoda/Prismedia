@@ -237,12 +237,12 @@ public sealed class CollectionCommandServiceTests {
 
     private const string EmptyRuleJson = """{"type":"group","operator":"and","children":[]}""";
 
-    private static CollectionCommandService CreateService(
+    private static Prismedia.Application.Collections.CollectionCommandService CreateService(
         PrismediaDbContext db,
         ICollectionRuleEngine? ruleEngine = null,
         ICollectionRefreshPersistence? refreshPersistence = null) =>
         new(
-            db,
+            new CollectionCommandPersistence(db),
             new FakeEntityReadService(db),
             ruleEngine ?? new FakeCollectionRuleEngine([]),
             refreshPersistence ?? new FakeCollectionRefreshPersistence());

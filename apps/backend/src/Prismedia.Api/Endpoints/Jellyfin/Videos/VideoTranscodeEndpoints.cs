@@ -11,6 +11,7 @@ internal static class VideoTranscodeEndpoints {
                 return Results.Ok(new { killed });
             })
             .WithName("DeleteJellyfinActiveEncodings")
+            .WithSummary("Delete Jellyfin Active Encodings.")
             .WithTags("Jellyfin Videos");
 
         return routes;
