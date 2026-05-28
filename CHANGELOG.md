@@ -154,5 +154,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ### Removed
 
 ### Docs
+- Restored the GitHub Pages documentation-site workflow so the Docusaurus docs build and deploy from `main`.
 - Clarified the Docker quick start so it describes the .NET API serving the built Svelte UI and uses 1.0.0-based image tag examples.
 - Removed stale implementation planning artifacts from the docs tree.
