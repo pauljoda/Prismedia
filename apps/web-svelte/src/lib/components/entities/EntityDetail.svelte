@@ -1801,6 +1801,7 @@
     gap: 0.4rem;
     min-width: 0;
     flex: 1;
+    align-self: flex-end;
   }
 
   /* ── Action row (flags left, actions right) ──────────── */
@@ -1847,6 +1848,7 @@
     }
 
     .hero-text {
+      align-self: stretch;
       grid-template-columns: minmax(0, 1fr) auto;
       grid-template-areas:
         "title title"

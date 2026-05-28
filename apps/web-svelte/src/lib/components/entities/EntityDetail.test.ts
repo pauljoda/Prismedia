@@ -135,6 +135,13 @@ describe("EntityDetail", () => {
     expect(source).toContain("padding-top: calc(2rem - var(--hero-lower-overlap));");
   });
 
+  it("bottom-aligns the hero text column against the poster", () => {
+    const source = readFileSync("src/lib/components/entities/EntityDetail.svelte", "utf8");
+
+    expect(source).toContain("align-self: flex-end;");
+    expect(source).toContain("align-self: stretch;");
+  });
+
   it("owns shared hero metadata separators and mobile action compaction", () => {
     const source = readFileSync("src/lib/components/entities/EntityDetail.svelte", "utf8");
     const appStyles = readFileSync("src/app.css", "utf8");

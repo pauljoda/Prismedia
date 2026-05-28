@@ -53,6 +53,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated web app manifest and mobile browser metadata for home-screen installation and browser UI theme colors.
 
 ### Fixed
+- Fixed image-backed detail heroes so the title and action section bottom-aligns with the poster artwork.
 - Fixed image-backed detail heroes so short poster artwork keeps matching top and bottom breathing room instead of creeping into the header.
 - Fixed mobile detail-page identify and edit actions so they share one aligned action-button style and collapse labels consistently.
 - Fixed detail-page link cards so long URLs show a readable site title with a truncated full URL instead of overflowing.
