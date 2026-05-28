@@ -313,7 +313,7 @@ public static class DependencyInjection {
             return null;
         }
 
-        return "https://raw.githubusercontent.com/pauljoda/prismedia-community-plugins/main/index.json";
+        return "https://raw.githubusercontent.com/pauljoda/Prismedia-Plugins/main/index.yml";
     }
 
     private static string? FindRepoRoot(string start) {

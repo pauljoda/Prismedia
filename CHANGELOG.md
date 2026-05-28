@@ -55,7 +55,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated web app manifest and mobile browser metadata for home-screen installation and browser UI theme colors.
 
 ### Fixed
-- Fixed deployed Prismedia Community plugin discovery so compatible remote index entries can be listed and pulled into the local plugin cache for installation.
+- Fixed deployed Prismedia Community plugin discovery so the app resolves the live Prismedia-Plugins YAML index and can pull compatible entries into the local plugin cache for installation.
 - Fixed Studio grid thumbnails so plugin-provided channel logos are preferred for cards while channel headers remain available for detail heroes.
 - Fixed already-open detail pages so Identify actions refresh when provider availability changes while the page is open.
 - Fixed audio library track lists so the floating player no longer covers the bottom rows.

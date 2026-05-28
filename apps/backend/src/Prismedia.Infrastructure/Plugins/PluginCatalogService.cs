@@ -394,124 +394,28 @@ public sealed class PluginCatalogService : IPluginCatalogService {
         }
 
         try {
-            var json = await _http.GetStringAsync(ResolveIndexUrl(_options.CommunityIndexUrl), cancellationToken);
-            return ParseIndex(json);
+            var indexUrl = ResolveIndexUrl(_options.CommunityIndexUrl);
+            var body = await _http.GetStringAsync(indexUrl, cancellationToken);
+            return PluginIndexParser.Parse(body, indexUrl);
         } catch (HttpRequestException) {
             return [];
         } catch (JsonException) {
+            return [];
+        } catch (FormatException) {
             return [];
         } catch (IOException) {
             return [];
         }
     }
 
-    private static IReadOnlyList<PluginIndexEntry> ParseIndex(string json) {
-        using var document = JsonDocument.Parse(json);
-        var root = document.RootElement;
-        var entries = root.ValueKind == JsonValueKind.Array
-            ? root.EnumerateArray()
-            : root.TryGetProperty("plugins", out var plugins) && plugins.ValueKind == JsonValueKind.Array
-                ? plugins.EnumerateArray()
-                : [];
-
-        return entries
-            .Where(entry => entry.ValueKind == JsonValueKind.Object)
-            .Select(ParseIndexEntry)
-            .Where(entry => !string.IsNullOrWhiteSpace(entry.Id) &&
-                !string.IsNullOrWhiteSpace(entry.Name) &&
-                !string.IsNullOrWhiteSpace(entry.Version) &&
-                !string.IsNullOrWhiteSpace(entry.Path))
-            .ToArray();
-    }
-
-    private static PluginIndexEntry ParseIndexEntry(JsonElement entry) =>
-        new(
-            Id: GetString(entry, "id"),
-            Name: GetString(entry, "name"),
-            Version: GetString(entry, "version"),
-            Date: GetString(entry, "date"),
-            Path: GetString(entry, "path", "downloadUrl"),
-            Sha256: GetString(entry, "sha256"),
-            Runtime: GetString(entry, "runtime", fallback: "dotnet-process"),
-            IsNsfw: GetBool(entry, "isNsfw"),
-            ManifestVersion: GetInt(entry, "manifestVersion", 1),
-            ApiTags: GetStringArray(entry, "apiTags", ["prismedia"]),
-            Compat: ParseCompatibility(entry),
-            Supports: ParseSupports(entry));
-
-    private static PluginCompatibility ParseCompatibility(JsonElement entry) {
-        if (!entry.TryGetProperty("compat", out var compat) || compat.ValueKind != JsonValueKind.Object) {
-            return new PluginCompatibility("1.0.0", null, "1.0.0", null);
-        }
-
-        return new PluginCompatibility(
-            GetString(compat, "pluginApiMin", fallback: "1.0.0"),
-            GetNullableString(compat, "pluginApiMax"),
-            GetString(compat, "prismediaMin", fallback: "1.0.0"),
-            GetNullableString(compat, "prismediaMax"));
-    }
-
-    private static IReadOnlyList<PluginEntitySupport> ParseSupports(JsonElement entry) {
-        if (!entry.TryGetProperty("supports", out var supports) || supports.ValueKind != JsonValueKind.Array) {
-            return [];
-        }
-
-        return supports
-            .EnumerateArray()
-            .Where(support => support.ValueKind == JsonValueKind.Object)
-            .Select(support => new PluginEntitySupport(
-                GetString(support, "entityKind"),
-                GetStringArray(support, "actions")))
-            .Where(support => !string.IsNullOrWhiteSpace(support.EntityKind) && support.Actions.Count > 0)
-            .ToArray();
-    }
-
-    private static string GetString(JsonElement element, string name, string? alternate = null, string fallback = "") {
-        if (element.TryGetProperty(name, out var property) && property.ValueKind == JsonValueKind.String) {
-            return property.GetString() ?? fallback;
-        }
-
-        if (alternate is not null &&
-            element.TryGetProperty(alternate, out var alternateProperty) &&
-            alternateProperty.ValueKind == JsonValueKind.String) {
-            return alternateProperty.GetString() ?? fallback;
-        }
-
-        return fallback;
-    }
-
-    private static string? GetNullableString(JsonElement element, string name) =>
-        element.TryGetProperty(name, out var property) && property.ValueKind == JsonValueKind.String
-            ? property.GetString()
-            : null;
-
-    private static bool GetBool(JsonElement element, string name) =>
-        element.TryGetProperty(name, out var property) && property.ValueKind == JsonValueKind.True;
-
-    private static int GetInt(JsonElement element, string name, int fallback) =>
-        element.TryGetProperty(name, out var property) && property.TryGetInt32(out var value)
-            ? value
-            : fallback;
-
-    private static IReadOnlyList<string> GetStringArray(
-        JsonElement element,
-        string name,
-        IReadOnlyList<string>? fallback = null) =>
-        element.TryGetProperty(name, out var property) && property.ValueKind == JsonValueKind.Array
-            ? property.EnumerateArray()
-                .Where(item => item.ValueKind == JsonValueKind.String)
-                .Select(item => item.GetString())
-                .Where(value => !string.IsNullOrWhiteSpace(value))
-                .Cast<string>()
-                .ToArray()
-            : fallback ?? [];
-
     private static string ResolveIndexUrl(string configured) {
-        if (configured.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) {
+        if (configured.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ||
+            configured.EndsWith(".yml", StringComparison.OrdinalIgnoreCase) ||
+            configured.EndsWith(".yaml", StringComparison.OrdinalIgnoreCase)) {
             return configured;
         }
 
-        return configured.TrimEnd('/') + "/index.json";
+        return configured.TrimEnd('/') + "/index.yml";
     }
 
     private string ResolveEntryUrl(string path) {

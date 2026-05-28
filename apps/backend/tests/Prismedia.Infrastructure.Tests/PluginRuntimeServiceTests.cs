@@ -200,6 +200,98 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
     }
 
     [Fact]
+    public async Task CatalogResolvesPrismediaPluginsYamlIndexFromRepositoryBaseUrl() {
+        var index = """
+        # Prismedia Community Plugins Index
+        - id: tvdb
+          name: The TVDB
+          version: 1.0.0
+          date: '2026-04-17'
+          path: plugins/tvdb/tvdb.zip
+          sha256: 168ac2e4daf2aa97fc99a62696f0eaec4f3de05217cd4bf59fb43d8183ad7a14
+          runtime: dotnet-process
+          isNsfw: false
+          manifestVersion: 1
+          apiTags:
+            - prismedia
+          compat:
+            pluginApiMin: 1.0.0
+            pluginApiMax: null
+            prismediaMin: 1.0.0
+            prismediaMax: null
+          supports:
+            - entityKind: video-series
+              actions:
+                - lookup-id
+                - lookup-url
+                - search
+                - cascade
+            - entityKind: video
+              actions:
+                - lookup-id
+                - lookup-url
+                - search
+        - id: tmdb
+          name: The Movie Database
+          version: 1.1.0
+          date: '2026-05-22'
+          path: plugins/tmdb/tmdb.zip
+          sha256: acf49f19ab05537fd784f802e32ee406ae906c8a2ec2befdb502aacedab98671
+          runtime: dotnet-process
+          isNsfw: false
+          manifestVersion: 1
+          apiTags:
+            - prismedia
+          compat:
+            pluginApiMin: 1.0.0
+            pluginApiMax: null
+            prismediaMin: 1.0.0
+            prismediaMax: null
+          supports:
+            - entityKind: video
+              actions:
+                - lookup-id
+                - lookup-url
+                - search
+            - entityKind: video-series
+              actions:
+                - lookup-id
+                - lookup-url
+                - search
+                - cascade
+            - entityKind: person
+              actions:
+                - lookup-id
+                - lookup-url
+                - search
+        """;
+        var handler = new StaticHttpMessageHandler(new Dictionary<string, byte[]> {
+            ["https://raw.githubusercontent.com/pauljoda/Prismedia-Plugins/main/index.yml"] =
+                System.Text.Encoding.UTF8.GetBytes(index)
+        });
+        await using var db = CreateContext();
+        var catalog = new PluginCatalogService(
+            db,
+            new PluginCatalogOptions(
+                [],
+                _tempRoot,
+                "1.0.0",
+                "https://raw.githubusercontent.com/pauljoda/Prismedia-Plugins/main"),
+            new HttpClient(handler));
+
+        var providers = await catalog.ListProvidersAsync(CancellationToken.None);
+
+        Assert.Equal(2, providers.Count);
+        Assert.Contains(handler.Requests,
+            uri => uri.ToString() == "https://raw.githubusercontent.com/pauljoda/Prismedia-Plugins/main/index.yml");
+        var tmdb = providers.Single(provider => provider.Id == "tmdb");
+        Assert.Equal("The Movie Database", tmdb.Name);
+        Assert.Equal("1.1.0", tmdb.Version);
+        Assert.Contains(tmdb.Supports, support =>
+            support.EntityKind == "video-series" && support.Actions.Contains("cascade"));
+    }
+
+    [Fact]
     public void CredentialResolverReadsCanonicalEnvironmentVariable() {
         const string envName = "PRISMEDIA_PLUGIN_TMDB_API_KEY";
         var previous = Environment.GetEnvironmentVariable(envName);
