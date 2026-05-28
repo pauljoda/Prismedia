@@ -54,7 +54,7 @@ public sealed class DotnetPluginProcessRunner {
 
             var wire = JsonSerializer.Deserialize<PluginWireResponse>(result.StandardOutput, JsonOptions);
             return wire is not null
-                ? ConvertWireResponse(wire)
+                ? ConvertWireResponse(wire, descriptor.Manifest.Name)
                 : new IdentifyPluginResponse(false, null, "Plugin returned an empty response.");
         } catch (JsonException ex) {
             return new IdentifyPluginResponse(false, null, $"Plugin returned invalid JSON: {ex.Message}");
@@ -81,7 +81,7 @@ public sealed class DotnetPluginProcessRunner {
         string? PosterUrl,
         decimal? Popularity);
 
-    private static IdentifyPluginResponse ConvertWireResponse(PluginWireResponse wire) {
+    private static IdentifyPluginResponse ConvertWireResponse(PluginWireResponse wire, string providerName) {
         if (!wire.Ok || wire.Result is null) {
             return new IdentifyPluginResponse(wire.Ok, null, wire.Error);
         }
@@ -97,7 +97,7 @@ public sealed class DotnetPluginProcessRunner {
                 .Where(candidate => !string.IsNullOrWhiteSpace(candidate.Title))
                 .ToArray();
             if (candidates.Length == 0) {
-                return new IdentifyPluginResponse(true, null, wire.Error ?? "No TMDB match was found.");
+                return new IdentifyPluginResponse(true, null, wire.Error ?? $"No {providerName} match was found.");
             }
 
             var shell = new EntityMetadataProposal(
@@ -115,7 +115,7 @@ public sealed class DotnetPluginProcessRunner {
             return new IdentifyPluginResponse(true, shell, wire.Error);
         }
 
-        return new IdentifyPluginResponse(true, null, wire.Error ?? "No TMDB match was found.");
+        return new IdentifyPluginResponse(true, null, wire.Error ?? $"No {providerName} match was found.");
     }
 
     private static EntitySearchCandidate NormalizeSearchCandidate(PluginWireSearchCandidate candidate) =>

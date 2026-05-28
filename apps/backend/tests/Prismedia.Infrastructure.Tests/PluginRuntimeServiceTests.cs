@@ -180,6 +180,43 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
     }
 
     [Fact]
+    public async Task ProcessRunnerUsesProviderNameForNoMatchErrors() {
+        var executor = new EmptyCandidateProcessExecutor();
+        var runner = new DotnetPluginProcessRunner(
+            executor,
+            new PluginCatalogOptions([], _tempRoot, "1.0.0"));
+        var descriptor = new PluginDescriptor(
+            Manifest: new PluginManifest(
+                1,
+                ["prismedia"],
+                "mangadex",
+                "MangaDex",
+                "1.0.0",
+                "dotnet-process",
+                "mangadex.dll",
+                new PluginCompatibility("1.0.0", null, "1.0.0", null),
+                [],
+                false,
+                []),
+            ManifestPath: Path.Combine(_tempRoot, "manifest.json"),
+            WorkingDirectory: _tempRoot,
+            EntryPath: Path.Combine(_tempRoot, "mangadex.dll"));
+        var request = new IdentifyPluginRequest(
+            1,
+            "search",
+            new Dictionary<string, string>(),
+            new IdentifyEntitySnapshot(Guid.NewGuid(), "book", "Missing"),
+            new IdentifyQuery("Missing", null, null),
+            new IdentifyMatchHints(new Dictionary<string, string>(), [], "Missing", null));
+
+        var response = await runner.IdentifyAsync(descriptor, request, CancellationToken.None);
+
+        Assert.True(response.Ok);
+        Assert.Null(response.Result);
+        Assert.Equal("No MangaDex match was found.", response.Error);
+    }
+
+    [Fact]
     public async Task IdentifyHidesNsfwEntityBeforeRunningProviderWhenRequested() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;
@@ -917,6 +954,28 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
 
             return new ProcessExecutionResult(0, wireJson, string.Empty);
         }
+    }
+
+    private sealed class EmptyCandidateProcessExecutor : ProcessExecutor {
+        public override Task<ProcessExecutionResult> RunAsync(
+            string fileName,
+            IReadOnlyList<string> arguments,
+            IReadOnlyDictionary<string, string>? environment,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new ProcessExecutionResult(
+                0,
+                """
+                {
+                  "ok": true,
+                  "result": {
+                    "type": "candidates",
+                    "proposal": null,
+                    "candidates": []
+                  },
+                  "error": null
+                }
+                """,
+                string.Empty));
     }
 
     private sealed class StructuralContextCapturingProcessExecutor : ProcessExecutor {

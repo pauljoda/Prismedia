@@ -24,6 +24,18 @@ public sealed class GeneratePreviewJobHandler(
 
         var (duration, width, height) = await GetDimensionsAsync(entityId, cancellationToken);
 
+        if (settings.GenerateTrickplay && duration is null or <= 0) {
+            await context.EnqueueIfNeededAsync(
+                new EnqueueJobRequest(
+                    JobType.ProbeVideo,
+                    TargetEntityKind: "video",
+                    TargetEntityId: entityId.ToString(),
+                    TargetLabel: context.Job.TargetLabel,
+                    Priority: 30),
+                cancellationToken);
+            throw new InvalidOperationException($"Cannot generate trickplay for {entityId} until video probe metadata is available.");
+        }
+
         if (settings.AutoGeneratePreview) {
             using (timer.Phase("thumbnail+preview")) {
                 await context.ReportProgressAsync(10, "Generating thumbnail and preview", cancellationToken);

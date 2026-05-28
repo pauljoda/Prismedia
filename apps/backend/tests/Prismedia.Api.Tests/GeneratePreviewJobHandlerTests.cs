@@ -68,6 +68,57 @@ public sealed class GeneratePreviewJobHandlerTests : IDisposable {
         Assert.DoesNotContain(persistence.EntityFiles, file => file.Role == EntityFileRole.Preview);
     }
 
+    [Fact]
+    public async Task TrickplayWaitsForProbeMetadataInsteadOfCompletingWithoutTiles() {
+        var entityId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        var sourcePath = Path.Combine(_tempDir, "unprobed.mkv");
+        await File.WriteAllTextAsync(sourcePath, "video");
+        var assets = new RecordingMediaAssetGenerator(_tempDir);
+        var persistence = new PreviewPersistence(sourcePath) {
+            Settings = new LibrarySettingsData(
+                AutoGenerateMetadata: false,
+                AutoGenerateFingerprints: false,
+                GeneratePhash: false,
+                AutoGeneratePreview: true,
+                GenerateTrickplay: true,
+                TrickplayIntervalSeconds: 10,
+                PreviewClipDurationSeconds: 8,
+                ThumbnailQuality: 2,
+                TrickplayQuality: 2),
+            Technical = null
+        };
+        var handler = new GeneratePreviewJobHandler(
+            NullLogger<GeneratePreviewJobHandler>.Instance,
+            assets,
+            persistence,
+            persistence);
+        var job = new JobRunSnapshot(
+            Guid.NewGuid(),
+            JobType.GeneratePreview,
+            JobRunStatus.Running,
+            Progress: 0,
+            Message: null,
+            PayloadJson: "{}",
+            TargetEntityKind: "video",
+            TargetEntityId: entityId.ToString(),
+            TargetLabel: "Unprobed",
+            CreatedAt: DateTimeOffset.UtcNow,
+            StartedAt: DateTimeOffset.UtcNow,
+            FinishedAt: null);
+        var queue = new RecordingJobQueue();
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            handler.HandleAsync(new JobContext(job, queue), CancellationToken.None));
+
+        Assert.Contains("probe metadata", ex.Message);
+        Assert.False(assets.GeneratedThumbnailAndPreview);
+        Assert.Empty(persistence.EntityFiles);
+        var probe = Assert.Single(queue.Enqueued);
+        Assert.Equal(JobType.ProbeVideo, probe.Type);
+        Assert.Equal(entityId.ToString(), probe.TargetEntityId);
+        Assert.Equal(30, probe.Priority);
+    }
+
     public void Dispose() {
         if (Directory.Exists(_tempDir)) {
             Directory.Delete(_tempDir, recursive: true);
@@ -213,6 +264,41 @@ public sealed class GeneratePreviewJobHandlerTests : IDisposable {
         public Task UpsertSubtitleAsync(Guid entityId, string language, string? label, string format, EntitySubtitleSource source, string storagePath, string sourceFormat, int streamIndex, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task UpsertAudioTrackTagsAsync(Guid entityId, string? artist, string? album, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<IReadOnlyList<EntityRefreshTarget>> GetEntityTreeAsync(Guid entityId, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private sealed class RecordingJobQueue : IJobQueueService {
+        public List<EnqueueJobRequest> Enqueued { get; } = [];
+
+        public Task<IReadOnlyList<JobRunSnapshot>> ListAsync(bool hideNsfw, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<JobRunSnapshot>>([]);
+        public Task<JobRunSnapshot> EnqueueAsync(JobType type, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<JobRunSnapshot> EnqueueAsync(EnqueueJobRequest request, CancellationToken cancellationToken) {
+            Enqueued.Add(request);
+            return Task.FromResult(new JobRunSnapshot(
+                Guid.NewGuid(),
+                request.Type,
+                JobRunStatus.Queued,
+                0,
+                null,
+                request.PayloadJson ?? "{}",
+                request.TargetEntityKind,
+                request.TargetEntityId,
+                request.TargetLabel,
+                DateTimeOffset.UtcNow,
+                null,
+                null));
+        }
+        public Task<bool> HasPendingAsync(JobType type, string? targetEntityId, CancellationToken cancellationToken) => Task.FromResult(false);
+        public Task<int> EnqueueBatchAsync(IReadOnlyList<EnqueueJobRequest> requests, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<int> CancelAsync(JobType? type, CancellationToken cancellationToken) => Task.FromResult(0);
+        public Task<bool> CancelRunAsync(Guid id, CancellationToken cancellationToken) => Task.FromResult(false);
+        public Task<int> ClearFailuresAsync(JobType? type, CancellationToken cancellationToken) => Task.FromResult(0);
+        public Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken) => Task.FromResult<JobRunSnapshot?>(null);
+        public Task<int> RecoverStaleRunningAsync(string currentWorkerId, TimeSpan staleAfter, CancellationToken cancellationToken) => Task.FromResult(0);
+        public Task UpdateProgressAsync(Guid id, int progress, string? message, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task CompleteAsync(Guid id, string? message, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task FailAsync(Guid id, string message, TimeSpan retryDelay, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task<IReadOnlyList<JobQueueCount>> GetQueueCountsAsync(bool hideNsfw, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<JobQueueCount>>([]);
+        public Task<int> PruneHistoryAsync(TimeSpan retention, CancellationToken cancellationToken) => Task.FromResult(0);
     }
 
     private sealed class NoopJobQueue : IJobQueueService {
