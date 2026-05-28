@@ -389,95 +389,49 @@
           </div>
         </div>
         <div class="grid gap-2">
-          <h3 class="text-kicker m-0 flex items-center gap-1.5">
-            <ShieldAlert class="h-3 w-3" /> Visibility
-          </h3>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={isNsfw}
-            aria-label="Mark collection as NSFW"
-            disabled={saving}
-            onclick={() => (isNsfw = !isNsfw)}
-            class={cn(
-              "flex h-9 items-center justify-between rounded-xs border px-3 text-[0.78rem] transition-all",
-              "disabled:cursor-not-allowed disabled:opacity-50",
-              isNsfw
-                ? "border-error/40 bg-error-muted/60 text-error-text shadow-[0_0_12px_rgba(220,80,80,0.18)]"
-                : "border-border-subtle bg-surface-2 text-text-muted hover:border-border-default hover:text-text-primary",
-            )}
-          >
-            <span>NSFW</span>
-            <span
-              aria-hidden="true"
-              class={cn(
-                "relative h-4 w-8 rounded-full border transition-all",
-                isNsfw
-                  ? "border-error/50 bg-error/20"
-                  : "border-border-subtle bg-surface-1",
-              )}
-            >
-              <span
+          <h3 class="text-kicker m-0">Collection Mode</h3>
+          <div class="grid gap-1.5" role="radiogroup" aria-label="Collection mode">
+            {#each modes as option (option.value)}
+              {@const active = mode === option.value}
+              {@const Icon = option.icon}
+              <button
+                type="button"
+                role="radio"
+                aria-checked={active}
+                disabled={saving}
+                onclick={() => (mode = option.value)}
                 class={cn(
-                  "absolute top-1/2 h-3 w-3 -translate-y-1/2 rounded-full transition-all",
-                  isNsfw
-                    ? "left-[1.05rem] bg-error-text shadow-[0_0_8px_rgba(255,128,111,0.35)]"
-                    : "left-0.5 bg-text-disabled",
+                  "group relative grid gap-1 overflow-hidden rounded-sm border p-3 text-left transition-all duration-normal",
+                  "disabled:cursor-not-allowed disabled:opacity-50",
+                  active
+                    ? "border-border-accent-strong bg-gradient-to-br from-accent-950/40 to-accent-950/10 shadow-[var(--shadow-glow-accent)]"
+                    : "border-border-subtle bg-surface-2 hover:border-border-default",
                 )}
-              ></span>
-            </span>
-          </button>
+              >
+                <span class="relative flex items-center gap-1.5">
+                  <Icon class={cn("h-3.5 w-3.5 transition-colors", active ? "text-text-accent" : "text-text-muted")} />
+                  <span
+                    class={cn(
+                      "font-heading text-[0.85rem] font-semibold transition-colors",
+                      active ? "text-text-accent" : "text-text-primary",
+                    )}
+                  >
+                    {option.label}
+                  </span>
+                  {#if active}
+                    <span class="ml-auto font-mono text-[0.55rem] font-bold uppercase tracking-[0.18em] text-text-accent/80">
+                      Active
+                    </span>
+                  {/if}
+                </span>
+                <span class="relative text-[0.68rem] leading-snug text-text-disabled">
+                  {option.desc}
+                </span>
+              </button>
+            {/each}
+          </div>
         </div>
       </aside>
-    </div>
-  </section>
-
-  <section class="surface-panel grid gap-4 p-4">
-    <div class="flex flex-wrap items-center justify-between gap-3">
-      <div>
-        <p class="text-kicker m-0">Collection Mode</p>
-      </div>
-    </div>
-
-    <div class="grid grid-cols-1 gap-2 md:grid-cols-3" role="radiogroup" aria-label="Collection mode">
-      {#each modes as option (option.value)}
-        {@const active = mode === option.value}
-        {@const Icon = option.icon}
-        <button
-          type="button"
-          role="radio"
-          aria-checked={active}
-          disabled={saving}
-          onclick={() => (mode = option.value)}
-          class={cn(
-            "group relative grid gap-1 overflow-hidden rounded-sm border p-3 text-left transition-all duration-normal",
-            "disabled:cursor-not-allowed disabled:opacity-50",
-            active
-              ? "border-border-accent-strong bg-gradient-to-br from-accent-950/40 to-accent-950/10 shadow-[var(--shadow-glow-accent)]"
-              : "border-border-subtle bg-surface-2 hover:border-border-default",
-          )}
-        >
-          <span class="relative flex items-center gap-1.5">
-            <Icon class={cn("h-3.5 w-3.5 transition-colors", active ? "text-text-accent" : "text-text-muted")} />
-            <span
-              class={cn(
-                "font-heading text-[0.85rem] font-semibold transition-colors",
-                active ? "text-text-accent" : "text-text-primary",
-              )}
-            >
-              {option.label}
-            </span>
-            {#if active}
-              <span class="ml-auto font-mono text-[0.55rem] font-bold uppercase tracking-[0.18em] text-text-accent/80">
-                Active
-              </span>
-            {/if}
-          </span>
-          <span class="relative text-[0.68rem] leading-snug text-text-disabled">
-            {option.desc}
-          </span>
-        </button>
-      {/each}
     </div>
   </section>
 

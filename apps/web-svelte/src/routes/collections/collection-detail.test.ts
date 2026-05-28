@@ -57,4 +57,14 @@ describe("collection detail route", () => {
     expect(modelsSource).not.toContain("\"collection\"");
     expect(contractsSource).not.toContain("\"collection\"");
   });
+
+  it("keeps collection editor settings focused on cover and mode controls", async () => {
+    const editorSource = await readFile("src/lib/components/collections/CollectionEditor.svelte", "utf8");
+
+    expect(editorSource).toContain("Collection Mode");
+    expect(editorSource).toContain("Cover");
+    expect(editorSource).not.toContain("Mark collection as NSFW");
+    expect(editorSource).not.toContain("> Visibility");
+    expect(editorSource.indexOf("Collection Mode")).toBeLessThan(editorSource.indexOf("Rule Editor"));
+  });
 });
