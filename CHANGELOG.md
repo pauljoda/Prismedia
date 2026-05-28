@@ -50,6 +50,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated web app manifest and mobile browser metadata for home-screen installation and browser UI theme colors.
 
 ### Fixed
+- Refined mobile detail heroes so poster artwork vertically centers with the hero content and action controls wrap in a right-aligned grid.
 - Fixed collection detail heroes so member artwork appears for Mosaic and Standard covers, metadata separators stay readable, and mobile hero actions remain compact.
 - Fixed detail-page hero action buttons so icon-only and icon-with-text controls share the same height.
 - Fixed collection detail pages so collection metadata stays focused on description, tags, and item curation instead of showing media-specific metadata editors.

@@ -1529,7 +1529,7 @@
   .hero-content {
     position: relative;
     display: flex;
-    align-items: end;
+    align-items: center;
     gap: 1.25rem;
     padding: 1.5rem;
     padding-top: 3rem;
@@ -1738,16 +1738,22 @@
     [data-poster-size="large"] .poster-frame { --poster-width: 7rem; }
 
     .action-row {
-      align-items: center;
-      flex-wrap: nowrap;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: start;
       gap: 0.35rem;
     }
 
+    .action-badges {
+      justify-self: start;
+    }
+
     .action-group {
-      flex-direction: row;
-      flex-wrap: nowrap;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(2rem, 2rem));
       justify-content: flex-end;
       gap: 0.25rem;
+      width: min(100%, 8.75rem);
       margin-left: auto;
     }
 
