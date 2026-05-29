@@ -464,19 +464,6 @@
   const visibleProviderPlugins = $derived(pluginProviders);
   const visibleInstalledProviders = $derived(visibleProviderPlugins.filter((plugin) => plugin.installed));
 
-  const videoCount = $derived(
-    visibleScrapers.filter((pkg) => {
-      const caps = pkg.capabilities as Record<string, boolean> | null;
-      return !!caps && (caps.sceneByURL || caps.sceneByFragment || caps.sceneByName);
-    }).length,
-  );
-  const performerCount = $derived(
-    visibleScrapers.filter((pkg) => {
-      const caps = pkg.capabilities as Record<string, boolean> | null;
-      return !!caps && (caps.performerByURL || caps.performerByName || caps.performerByFragment);
-    }).length,
-  );
-
   const installedCount = $derived(
     visibleScrapers.length + visibleInstalledPlugins.length + visibleInstalledProviders.length,
   );
@@ -514,17 +501,11 @@
 </svelte:head>
 
 <PluginPageShell
-  {isSfw}
   {loading}
   {error}
   {message}
   {tab}
   {visibleTabs}
-  {installedCount}
-  {videoCount}
-  {performerCount}
-  stashBoxCount={stashBoxEndpoints.length}
-  prismediaCount={visibleProviderPlugins.length}
   onDismissError={() => (error = null)}
   onTabChange={(nextTab) => (tab = nextTab)}
 >

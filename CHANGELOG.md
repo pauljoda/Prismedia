@@ -28,6 +28,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Changed
+- Refreshed the Plugins page to match the app design language, replacing the row of plain stat cards with a grounded header and tab bar where each tab carries its own count.
 - Defaulted adaptive HLS transcoding to Auto so fresh installs choose a safe native encoder when available before falling back to software.
 - Replaced Identify provider chip groups with a searchable provider dropdown so large plugin libraries stay navigable.
 - Restyled detail content so tabbed and non-tabbed sections render as a slightly inset subtle glass card emerging from the hero without covering the tab row corners.
