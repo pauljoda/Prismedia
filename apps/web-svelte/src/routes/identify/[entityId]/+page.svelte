@@ -37,6 +37,9 @@
   const activeProvider = $derived(
     providers.find((provider) => provider.id === activeProviderId) ?? null,
   );
+  const currentIdentifyStatus = $derived(
+    store.identifyingId === current?.entityId ? store.identifyingStatus : null,
+  );
 
   onMount(async () => {
     const returnId = page.url.searchParams.get("returnId") ?? page.url.searchParams.get("quid");
@@ -62,17 +65,23 @@
   async function runSearch() {
     if (!current || !activeProvider) return;
     searching = true;
-    await store.identifyEntity(current.entity, activeProvider.id, {
-      title: manualTitle.trim() || null,
-    });
-    searching = false;
+    try {
+      await store.identifyEntity(current.entity, activeProvider.id, {
+        title: manualTitle.trim() || null,
+      });
+    } finally {
+      searching = false;
+    }
   }
 
   async function backToSearch() {
     if (!current || !activeProvider) return;
     searching = true;
-    await store.backToSearch(current.entity, activeProvider.id);
-    searching = false;
+    try {
+      await store.backToSearch(current.entity, activeProvider.id);
+    } finally {
+      searching = false;
+    }
   }
 
   function cancelItem() {
@@ -180,8 +189,16 @@
   {/if}
 
   {#if store.loading || !current}
-    <div class="flex items-center justify-center py-16">
+    <div class="flex flex-col items-center justify-center gap-3 py-16 text-center">
       <Loader2 class="h-6 w-6 animate-spin text-text-accent" />
+      <div class="space-y-1">
+        <p class="font-heading text-[0.86rem] font-semibold text-text-primary">
+          {store.identifyingStatus ?? "Preparing identify review"}
+        </p>
+        <p class="font-mono text-[0.7rem] text-text-muted">
+          Plugin searches can take a moment when a provider checks related metadata.
+        </p>
+      </div>
     </div>
   {:else if store.view.kind === "review-child" && store.view.entity.id === current.entityId}
     <IdentifyReviewChild
@@ -199,7 +216,7 @@
       providerId={current.provider}
     />
   {:else}
-    <section class="surface-panel overflow-hidden">
+    <section class="surface-panel overflow-visible">
       <header class="flex items-center gap-2.5 border-b border-border-subtle bg-surface-2 px-3.5 py-2.5">
         <Search class="h-3.5 w-3.5 text-text-accent" />
         <span class="text-kicker text-text-accent">Search</span>
@@ -236,6 +253,12 @@
               Search
             </button>
           </div>
+          {#if currentIdentifyStatus}
+            <div class="flex items-center gap-2 rounded-xs border border-border-subtle bg-surface-1 px-3 py-2 font-mono text-[0.72rem] text-text-muted">
+              <Loader2 class="h-3.5 w-3.5 animate-spin text-text-accent" />
+              <span>{currentIdentifyStatus}</span>
+            </div>
+          {/if}
         {:else}
           <div class="rounded-xs border border-warning/30 bg-warning-muted px-3 py-2.5 text-[0.82rem] text-warning-text">
             No enabled provider supports {current.entityKind}.

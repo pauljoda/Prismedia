@@ -78,6 +78,10 @@ export class IdentifyStore {
   error = $state<string | null>(null);
   message = $state<string | null>(null);
   identifyingId = $state<string | null>(null);
+  identifyingProviderId = $state<string | null>(null);
+  identifyingProviderName = $state<string | null>(null);
+  identifyingProviderIndex = $state<number | null>(null);
+  identifyingProviderTotal = $state<number | null>(null);
   applying = $state(false);
   bulkSession = $state<IdentifyBulkSession | null>(null);
   bulkStarting = $state(false);
@@ -121,6 +125,21 @@ export class IdentifyStore {
   activeKindTab = $derived.by((): string | null => {
     if (this.view.kind === "kind-tab") return this.view.entityKind;
     return null;
+  });
+
+  identifyingStatus = $derived.by((): string | null => {
+    if (!this.identifyingId) return null;
+    const providerName = this.identifyingProviderName ?? this.identifyingProviderId;
+    if (!providerName) return "Searching identify providers";
+    const pluginLabel = providerName.toLowerCase().includes("plugin")
+      ? providerName
+      : `${providerName} Plugin`;
+    const progress = this.identifyingProviderIndex !== null &&
+      this.identifyingProviderTotal !== null &&
+      this.identifyingProviderTotal > 1
+        ? ` (${this.identifyingProviderIndex + 1}/${this.identifyingProviderTotal})`
+        : "";
+    return `Searching with ${pluginLabel}${progress}`;
   });
 
   providersForKind(kind: string): PluginProvider[] {
@@ -255,19 +274,15 @@ export class IdentifyStore {
   ) {
     this.identifyingId = entity.id;
     this.error = null;
+    this.#setIdentifyingProvider(providerId, 0, 1);
     try {
-      const mapped = await this.#searchAndResolve(entity, providerId, query);
-      if (shouldFallbackToTitleSearch(entity, query, mapped)) {
-        return await this.#searchAndResolve(entity, providerId, { title: entity.title });
-      }
-
-      return mapped;
+      return await this.#searchWithTitleFallback(entity, providerId, query);
     } catch (err) {
       this.error = readError(err);
       this.#markQueueError(entity.id, readError(err));
       return null;
     } finally {
-      this.identifyingId = null;
+      this.#clearIdentifyingStatus();
     }
   }
 
@@ -597,10 +612,54 @@ export class IdentifyStore {
       return item;
     }
 
-    const selectedProvider = providerId ?? item.provider ?? this.providersForKind(item.entityKind)[0]?.id;
-    if (!selectedProvider) return item;
+    const selectedProvider = providerId ?? item.provider;
+    if (selectedProvider) return this.identifyEntity(item.entity, selectedProvider);
 
-    return this.identifyEntity(item.entity, selectedProvider);
+    return this.#identifyEntityWithAvailableProviders(item);
+  }
+
+  async #identifyEntityWithAvailableProviders(item: IdentifyQueueItem) {
+    const providers = this.providersForKind(item.entityKind);
+    if (providers.length === 0) return item;
+
+    this.identifyingId = item.entity.id;
+    this.error = null;
+    let lastResult: IdentifyQueueItem | null = null;
+    let lastError: string | null = null;
+    try {
+      for (const [index, provider] of providers.entries()) {
+        this.#setIdentifyingProvider(provider.id, index, providers.length);
+        try {
+          const result = await this.#searchWithTitleFallback(item.entity, provider.id);
+          lastResult = result;
+          if (isResolvedIdentifyResult(result)) return result;
+        } catch (err) {
+          lastError = readError(err);
+        }
+      }
+
+      if (lastResult) return lastResult;
+      if (lastError) {
+        this.error = lastError;
+        this.#markQueueError(item.entity.id, lastError);
+      }
+      return item;
+    } finally {
+      this.#clearIdentifyingStatus();
+    }
+  }
+
+  async #searchWithTitleFallback(
+    entity: EntityCard,
+    providerId: string,
+    query?: { title?: string | null; url?: string | null; externalIds?: Record<string, string> | null; requireChoice?: boolean | null },
+  ) {
+    const mapped = await this.#searchAndResolve(entity, providerId, query);
+    if (shouldFallbackToTitleSearch(entity, query, mapped)) {
+      return await this.#searchAndResolve(entity, providerId, { title: entity.title });
+    }
+
+    return mapped;
   }
 
   async #searchAndResolve(
@@ -614,6 +673,22 @@ export class IdentifyStore {
     this.#upsertQueueItem(mapped);
     this.reviewResolvedQueueItem(mapped);
     return mapped;
+  }
+
+  #setIdentifyingProvider(providerId: string, index: number, total: number) {
+    const provider = this.providers.find((candidate) => candidate.id === providerId);
+    this.identifyingProviderId = providerId;
+    this.identifyingProviderName = provider?.name ?? providerId;
+    this.identifyingProviderIndex = index;
+    this.identifyingProviderTotal = total;
+  }
+
+  #clearIdentifyingStatus() {
+    this.identifyingId = null;
+    this.identifyingProviderId = null;
+    this.identifyingProviderName = null;
+    this.identifyingProviderIndex = null;
+    this.identifyingProviderTotal = null;
   }
 
   #leaveHiddenReviewIfNeeded() {
@@ -715,6 +790,11 @@ function shouldFallbackToTitleSearch(
   if (!entity.title.trim()) return false;
   if (query?.title || query?.url || query?.externalIds || query?.requireChoice) return false;
   return true;
+}
+
+function isResolvedIdentifyResult(item: IdentifyQueueItem): boolean {
+  return (item.state === "proposal" && Boolean(item.proposal)) ||
+    (item.state === "search" && item.candidates.length > 0);
 }
 
 function relationshipEntityIdForProposal(

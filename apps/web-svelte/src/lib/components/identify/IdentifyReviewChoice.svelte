@@ -10,6 +10,7 @@
   } from "@lucide/svelte";
   import { cn } from "@prismedia/ui-svelte";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
+  import IdentifyProviderSelect from "./IdentifyProviderSelect.svelte";
   import type { EntitySearchCandidate } from "$lib/api/identify-types";
   import type { EntityCard } from "$lib/api/entities";
   import {
@@ -27,29 +28,37 @@
   let { entity, candidates, providerId = null }: Props = $props();
 
   const store = useIdentifyStore();
-  const defaultProvider = $derived(
-    (providerId ? store.providers.find((provider) => provider.id === providerId) : null) ??
-      store.providersForKind(entity.kind)[0] ??
-      null,
-  );
-
   let searchTitle = $state("");
   let searchYear = $state("");
+  let selectedProviderId = $state<string | null>(null);
+  let searchedProviderId = $state<string | null>(null);
   let searching = $state(false);
   let rescanning = $state(false);
   let checkingCandidateKey = $state<string | null>(null);
   let checkingCandidateTitle = $state<string | null>(null);
   let searchedCandidates = $state<EntitySearchCandidate[] | null>(null);
+
+  const providerOptions = $derived(store.providersForKind(entity.kind));
+  const activeProviderId = $derived(selectedProviderId ?? providerId ?? providerOptions[0]?.id ?? "");
+  const activeProvider = $derived(
+    providerOptions.find((provider) => provider.id === activeProviderId) ?? null,
+  );
+  const candidateProvider = $derived(
+    (searchedProviderId ? store.providers.find((provider) => provider.id === searchedProviderId) : null) ??
+      (providerId ? store.providers.find((provider) => provider.id === providerId) : null) ??
+      activeProvider,
+  );
   const localCandidates = $derived(searchedCandidates ?? candidates);
 
   async function handleRescan() {
-    if (!defaultProvider || rescanning) return;
+    if (!activeProvider || rescanning) return;
     rescanning = true;
     store.error = null;
     try {
-      const result = await store.identifyEntity(entity, defaultProvider.id);
+      const result = await store.identifyEntity(entity, activeProvider.id);
       if (result?.state === "search") {
         searchedCandidates = result.candidates;
+        searchedProviderId = result.provider ?? activeProvider.id;
       }
     } catch (err) {
       store.error = err instanceof Error ? err.message : "Rescan failed";
@@ -59,15 +68,16 @@
   }
 
   async function handleSearch() {
-    if (!defaultProvider || !searchTitle.trim()) return;
+    if (!activeProvider || !searchTitle.trim()) return;
     searching = true;
     store.error = null;
     try {
-      const result = await store.identifyEntity(entity, defaultProvider.id, {
+      const result = await store.identifyEntity(entity, activeProvider.id, {
         title: searchTitle.trim() || undefined,
       });
       if (result?.state === "search") {
         searchedCandidates = result.candidates;
+        searchedProviderId = result.provider ?? activeProvider.id;
       }
     } catch (err) {
       store.error = err instanceof Error ? err.message : "Search failed";
@@ -77,11 +87,11 @@
   }
 
   async function pickCandidate(candidate: EntitySearchCandidate, candidateKey: string) {
-    if (!defaultProvider || store.identifyingId !== null) return;
+    if (!candidateProvider || store.identifyingId !== null) return;
     checkingCandidateKey = candidateKey;
     checkingCandidateTitle = candidate.title;
     try {
-      await store.identifyWithCandidate(entity, defaultProvider.id, candidate);
+      await store.identifyWithCandidate(entity, candidateProvider.id, candidate);
     } finally {
       if (checkingCandidateKey === candidateKey) {
         checkingCandidateKey = null;
@@ -91,13 +101,17 @@
   }
 
   function candidateActionLabel(candidate: EntitySearchCandidate): string {
-    return `Use ${candidate.title}${candidate.year ? ` (${candidate.year})` : ""}`;
+    return `Use ${candidateTitle(candidate)}${candidate.year ? ` (${candidate.year})` : ""}`;
   }
 
   function handleCandidateKeydown(event: KeyboardEvent, candidate: EntitySearchCandidate, candidateKey: string) {
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
     void pickCandidate(candidate, candidateKey);
+  }
+
+  function candidateTitle(candidate: EntitySearchCandidate): string {
+    return candidate.title?.trim() || "Untitled match";
   }
 </script>
 
@@ -124,16 +138,16 @@
       <span class="text-kicker">Candidates</span>
       <span class="font-mono font-semibold text-text-accent">{localCandidates.length}</span>
     </div>
-    {#if defaultProvider}
+    {#if activeProvider}
       <div class="hidden flex-col items-end gap-0.5 md:flex">
         <span class="text-kicker">Provider</span>
-        <span class="text-[0.82rem] text-text-primary">{defaultProvider.name}</span>
+        <span class="text-[0.82rem] text-text-primary">{activeProvider.name}</span>
       </div>
     {/if}
   </div>
 
   <!-- Manual search panel -->
-  <section class="surface-panel overflow-hidden">
+  <section class="surface-panel relative z-20 overflow-visible">
     <header class="flex items-center gap-2.5 border-b border-border-subtle bg-surface-2 px-3.5 py-2.5">
       <Search class="h-3.5 w-3.5 text-text-accent" />
       <span class="text-kicker text-text-accent">Query</span>
@@ -165,11 +179,14 @@
         placeholder="optional"
         bind:value={searchYear}
       />
-      {#if defaultProvider}
+      {#if providerOptions.length > 0}
         <span class="font-mono text-[0.72rem] text-text-muted">provider:</span>
-        <span class="rounded-xs border border-border-accent bg-accent-950/30 px-2 py-0.5 font-mono text-[0.66rem] text-text-accent">
-          {defaultProvider.name}
-        </span>
+        <IdentifyProviderSelect
+          providers={providerOptions}
+          selectedId={activeProviderId}
+          onChange={(providerId) => (selectedProviderId = providerId)}
+          compact
+        />
       {/if}
       <div class="flex-1"></div>
       <button
@@ -197,7 +214,7 @@
   </section>
 
   <!-- Candidates list -->
-  <section class="surface-panel overflow-hidden">
+  <section class="surface-panel relative z-0 overflow-hidden">
     <header class="flex items-center gap-2.5 border-b border-border-subtle bg-surface-2 px-3.5 py-2.5">
       <span class="text-kicker text-text-accent">Candidates</span>
       <span class="font-mono text-[0.7rem] text-text-muted">{localCandidates.length} found</span>
@@ -228,15 +245,6 @@
           onclick={() => void pickCandidate(candidate, candidateKey)}
           onkeydown={(event) => handleCandidateKeydown(event, candidate, candidateKey)}
         >
-          {#if i === 0}
-            <div class="absolute left-4 top-4 z-10">
-              <span class="inline-flex items-center gap-1 rounded-xs border border-border-accent bg-accent-950/60 px-1.5 py-0.5 font-mono text-[0.6rem] text-text-accent">
-                <Star class="h-2.5 w-2.5" />
-                Best
-              </span>
-            </div>
-          {/if}
-
           {#if hasCover}
             <div class="min-w-0">
               <EntityThumbnail
@@ -249,10 +257,18 @@
           {/if}
 
           <div class="flex min-w-0 flex-col justify-center gap-1.5 py-1">
-            <div class="flex items-baseline gap-2">
-              <span class="font-heading text-[0.88rem] font-semibold text-text-primary">{candidate.title}</span>
+            <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+              <span class="min-w-0 break-words font-heading text-[0.88rem] font-semibold text-text-primary">
+                {candidateTitle(candidate)}
+              </span>
               {#if candidate.year}
                 <span class="font-mono text-[0.7rem] text-text-muted">{candidate.year}</span>
+              {/if}
+              {#if i === 0}
+                <span class="inline-flex shrink-0 items-center gap-1 rounded-xs border border-border-accent bg-accent-950/60 px-1.5 py-0.5 font-mono text-[0.6rem] text-text-accent">
+                  <Star class="h-2.5 w-2.5" />
+                  Best
+                </span>
               {/if}
             </div>
             {#if candidate.overview}

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { IdentifyStore } from "./identify-store.svelte";
-import type { EntityMetadataProposal } from "$lib/api/identify-types";
+import type { EntityMetadataProposal, PluginProvider } from "$lib/api/identify-types";
 import type { EntityCard, EntityDetailCard } from "$lib/api/entities";
 import { MAIN_SCROLL_TOP_EVENT } from "$lib/stores/main-scroll";
 
@@ -166,6 +166,63 @@ describe("IdentifyStore", () => {
     expect(searchIdentifyQueueItem).toHaveBeenCalledWith("video-1", "tmdb", undefined);
     expect(queued?.state).toBe("proposal");
     expect(store.view.kind).toBe("review-parent");
+  });
+
+  it("auto-identifies a queued entity by trying each enabled provider for that entity kind", async () => {
+    const store = new IdentifyStore();
+    const movie = entity("video-1", { kind: "video", title: "Friendship" });
+    store.providers = [
+      provider("anilist", "AniList"),
+      provider("tmdb", "The Movie Database"),
+    ];
+    addIdentifyQueueItem.mockResolvedValue(queueItem("video-1", { title: "Friendship" }));
+    fetchIdentifyEntity.mockResolvedValue(detail("video-1", { kind: "video", title: "Friendship" }));
+    searchIdentifyQueueItem
+      .mockResolvedValueOnce(queueItem("video-1", {
+        state: "error",
+        provider: "anilist",
+        error: "No exact match",
+      }))
+      .mockResolvedValueOnce(queueItem("video-1", {
+        state: "error",
+        provider: "anilist",
+        error: "No title match",
+      }))
+      .mockResolvedValueOnce(queueItem("video-1", {
+        state: "proposal",
+        provider: "tmdb",
+        proposal: proposal("tmdb:movie:123", { targetKind: "video", title: "Friendship" }),
+      }));
+
+    const queued = await store.queueEntity(movie);
+
+    expect(searchIdentifyQueueItem).toHaveBeenNthCalledWith(1, "video-1", "anilist", undefined);
+    expect(searchIdentifyQueueItem).toHaveBeenNthCalledWith(2, "video-1", "anilist", { title: "Friendship" });
+    expect(searchIdentifyQueueItem).toHaveBeenNthCalledWith(3, "video-1", "tmdb", undefined);
+    expect(queued?.provider).toBe("tmdb");
+    expect(store.view.kind).toBe("review-parent");
+  });
+
+  it("describes the provider currently being searched", async () => {
+    const store = new IdentifyStore();
+    const movie = entity("video-1", { kind: "video", title: "Friendship" });
+    store.providers = [provider("tmdb", "The Movie Database")];
+    store.queue = [{
+      ...queueItem("video-1"),
+      entity: movie,
+      detail: detail("video-1", { kind: "video", title: "Friendship" }),
+    }];
+    let resolveSearch: (item: ReturnType<typeof queueItem>) => void = () => undefined;
+    searchIdentifyQueueItem.mockReturnValue(new Promise((resolve) => {
+      resolveSearch = resolve;
+    }));
+
+    const search = store.identifyEntity(movie, "tmdb");
+    expect(store.identifyingStatus).toBe("Searching with The Movie Database Plugin");
+
+    resolveSearch(queueItem("video-1", { state: "search", provider: "tmdb" }));
+    await search;
+    expect(store.identifyingStatus).toBeNull();
   });
 
   it("opens an existing queued item without enqueueing or searching again", async () => {
@@ -361,5 +418,19 @@ function proposal(
     relationships: [],
     candidates: [],
     targetEntityId: null,
+  };
+}
+
+function provider(id: string, name: string, entityKind = "video"): PluginProvider {
+  return {
+    id,
+    name,
+    version: "1.0.0",
+    installed: true,
+    enabled: true,
+    isNsfw: false,
+    supports: [{ entityKind, actions: ["search"] }],
+    auth: [],
+    missingAuthKeys: [],
   };
 }

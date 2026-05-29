@@ -55,6 +55,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated web app manifest and mobile browser metadata for home-screen installation and browser UI theme colors.
 
 ### Fixed
+- Fixed Identify review provider selection and progress feedback so provider menus are available on candidate review screens, are not clipped, automatic Identify tries each ready plugin for the entity type, and searches show which plugin is running.
+- Fixed Identify candidate cards so the Best badge stays in the content flow and no longer overlaps titles when artwork is missing.
+- Fixed installed plugin search candidates so deployed plugins using description and thumbnail fields still show candidate summaries and artwork.
 - Improved large entity grid scrolling by keeping the full paged thumbnail set mounted and loading grid covers eagerly, avoiding fast-scroll pop-in while pagination still caps the workload.
 - Fixed large entity grids so scrolling no longer pushes reactive scroll state through every thumbnail, keeping cover images smoother while hover previews stay deferred during scroll.
 - Fixed background worker concurrency changes so the running worker refreshes the saved setting and starts additional jobs without a restart.

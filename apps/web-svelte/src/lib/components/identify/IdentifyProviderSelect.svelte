@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
-  import { Check, ChevronDown, Search } from "@lucide/svelte";
+  import { ChevronDown, Search } from "@lucide/svelte";
   import { cn } from "@prismedia/ui-svelte";
   import type { PluginProvider } from "$lib/api/identify-types";
 
@@ -149,7 +149,6 @@
               commit(provider.id);
             }}
           >
-            <Check class={cn("provider-check", selected && "is-visible")} />
             <span class="provider-option-copy">
               <span class="provider-option-name">{provider.name}</span>
               <span class="provider-option-id">{provider.id}</span>
@@ -312,18 +311,6 @@
 
   .provider-option.is-selected {
     color: var(--color-text-accent, #c79b5c);
-  }
-
-  .provider-check {
-    height: 0.78rem;
-    width: 0.78rem;
-    flex-shrink: 0;
-    opacity: 0;
-    color: var(--color-text-accent, #c79b5c);
-  }
-
-  .provider-check.is-visible {
-    opacity: 1;
   }
 
   .provider-option-copy {

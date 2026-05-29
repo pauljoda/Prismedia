@@ -1,13 +1,13 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { EntitySearchCandidate } from "$lib/api/identify-types";
+import type { EntitySearchCandidate, PluginProvider } from "$lib/api/identify-types";
 import type { EntityThumbnail as EntityCard } from "$lib/api/generated/model";
 import IdentifyReviewChoice from "./IdentifyReviewChoice.svelte";
 
 const store = vi.hoisted(() => ({
   error: null as string | null,
   identifyingId: null as string | null,
-  providers: [],
+  providers: [] as PluginProvider[],
   providersForKind: vi.fn(),
   identifyWithCandidate: vi.fn(),
   navigateToDashboard: vi.fn(),
@@ -78,12 +78,33 @@ describe("IdentifyReviewChoice", () => {
     resolveIdentify();
     await waitFor(() => expect(container.querySelector(".animate-spin")).toBeNull());
   });
+
+  it("lets the review query switch providers before searching again", async () => {
+    store.providers = [
+      provider("tmdb", "The Movie Database"),
+      provider("anilist", "AniList"),
+    ];
+    store.providersForKind.mockReturnValue(store.providers);
+
+    render(IdentifyReviewChoice, {
+      props: {
+        entity: entity(),
+        candidates: [searchCandidate()],
+        providerId: "tmdb",
+      },
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Provider: The Movie Database" }));
+    await fireEvent.mouseDown(screen.getByRole("option", { name: "AniList anilist" }));
+
+    expect(screen.getByRole("button", { name: "Provider: AniList" })).toBeInTheDocument();
+  });
 });
 
-function provider() {
+function provider(id = "tmdb", name = "The Movie Database"): PluginProvider {
   return {
-    id: "tmdb",
-    name: "The Movie Database",
+    id,
+    name,
     version: "1.0.0",
     installed: true,
     enabled: true,

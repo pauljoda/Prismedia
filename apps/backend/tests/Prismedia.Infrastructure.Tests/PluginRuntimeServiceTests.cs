@@ -429,6 +429,44 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
     }
 
     [Fact]
+    public async Task ProcessRunnerMapsInstalledPluginCandidateDescriptionAndThumbnail() {
+        var executor = new CandidateMetadataProcessExecutor();
+        var runner = new DotnetPluginProcessRunner(
+            executor,
+            new PluginCatalogOptions([], _tempRoot, "1.0.0"));
+        var descriptor = new PluginDescriptor(
+            Manifest: new PluginManifest(
+                1,
+                ["prismedia"],
+                "tmdb",
+                "TMDB",
+                "1.0.0",
+                "dotnet-process",
+                "tmdb.dll",
+                new PluginCompatibility("1.0.0", null, "1.0.0", null),
+                [],
+                false,
+                []),
+            ManifestPath: Path.Combine(_tempRoot, "manifest.json"),
+            WorkingDirectory: _tempRoot,
+            EntryPath: Path.Combine(_tempRoot, "tmdb.dll"));
+        var request = new IdentifyPluginRequest(
+            1,
+            "search",
+            new Dictionary<string, string>(),
+            new IdentifyEntitySnapshot(Guid.NewGuid(), "video-series", "Abbott Elementary"),
+            new IdentifyQuery("Abbott Elementary", null, null),
+            new IdentifyMatchHints(new Dictionary<string, string>(), [], "Abbott Elementary", null));
+
+        var response = await runner.IdentifyAsync(descriptor, request, CancellationToken.None);
+
+        var candidate = Assert.Single(response.Result!.Candidates);
+        Assert.Equal("Abbott Elementary", candidate.Title);
+        Assert.Equal("A workplace comedy.", candidate.Overview);
+        Assert.Equal("https://image.tmdb.org/t/p/w342/poster.jpg", candidate.PosterUrl);
+    }
+
+    [Fact]
     public async Task IdentifyHidesNsfwEntityBeforeRunningProviderWhenRequested() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;
@@ -1187,6 +1225,40 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
                     "type": "candidates",
                     "proposal": null,
                     "candidates": []
+                  },
+                  "error": null
+                }
+                """,
+                string.Empty));
+    }
+
+    private sealed class CandidateMetadataProcessExecutor : ProcessExecutor {
+        public override Task<ProcessExecutionResult> RunAsync(
+            string fileName,
+            IReadOnlyList<string> arguments,
+            IReadOnlyDictionary<string, string>? environment,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new ProcessExecutionResult(
+                0,
+                """
+                {
+                  "ok": true,
+                  "result": {
+                    "type": "candidates",
+                    "proposal": null,
+                    "candidates": [
+                      {
+                        "candidateId": "tmdb:tv:125935",
+                        "externalIds": { "tmdb": "125935" },
+                        "title": "Abbott Elementary",
+                        "description": "A workplace comedy.",
+                        "thumbnailUrl": "https://image.tmdb.org/t/p/w342/poster.jpg",
+                        "year": 2021,
+                        "source": "TMDB",
+                        "confidence": 1,
+                        "matchReason": "title-search"
+                      }
+                    ]
                   },
                   "error": null
                 }

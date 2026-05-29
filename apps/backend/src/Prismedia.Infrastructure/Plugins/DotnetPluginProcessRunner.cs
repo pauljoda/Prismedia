@@ -79,7 +79,9 @@ public sealed class DotnetPluginProcessRunner {
         int? Year,
         string? Overview,
         string? PosterUrl,
-        decimal? Popularity);
+        decimal? Popularity,
+        string? Description,
+        string? ThumbnailUrl);
 
     private static IdentifyPluginResponse ConvertWireResponse(PluginWireResponse wire, string providerName) {
         if (!wire.Ok || wire.Result is null) {
@@ -123,8 +125,8 @@ public sealed class DotnetPluginProcessRunner {
             candidate.ExternalIds ?? new Dictionary<string, string>(),
             candidate.Title ?? string.Empty,
             candidate.Year,
-            candidate.Overview,
-            candidate.PosterUrl,
+            candidate.Overview ?? candidate.Description,
+            candidate.PosterUrl ?? candidate.ThumbnailUrl,
             candidate.Popularity);
 
     private static void TryDelete(string path) {
