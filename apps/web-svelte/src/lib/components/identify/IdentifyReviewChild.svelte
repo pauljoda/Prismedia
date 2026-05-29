@@ -72,6 +72,12 @@
   const existingTagTitles = $derived(relationshipTitlesForDetail(currentDetail, "tag"));
   const looseTags = $derived(tags.filter((tag) => !tagRelationshipForTitle(tag, relationships)));
   const imageGroups = $derived(groupReviewImages(proposal));
+  const localChildrenById = $derived.by(() => {
+    const pairs = (currentDetail?.childrenByKind ?? [])
+      .flatMap((group) => group.entities)
+      .map((child) => [child.id, child] as const);
+    return new Map(pairs);
+  });
   const selectedTagCount = $derived(Object.values(selectedTags).filter(Boolean).length);
   const selectedChildCount = $derived(
     children.filter((child) => store.isReviewProposalSelected(child.proposalId)).length,
@@ -469,7 +475,7 @@
       <div class="identify-thumbnail-grid grid grid-cols-2 gap-2 p-3.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
         {#each children as child, i (child.proposalId)}
           <EntityThumbnail
-            card={buildChildCard(child, i, "Episode", "video", selectedImages, proposal.proposalId, store)}
+            card={buildChildCard(child, i, "Episode", "video", selectedImages, proposal.proposalId, store, child.targetEntityId ? localChildrenById.get(child.targetEntityId) : null)}
             linkable={false}
             onActivate={() => goToChild(child)}
             selectable

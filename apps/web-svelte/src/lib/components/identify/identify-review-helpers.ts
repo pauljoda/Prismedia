@@ -3,6 +3,7 @@ import type {
   EntityMetadataProposal,
   ImageCandidate,
 } from "$lib/api/identify-types";
+import type { EntityCard } from "$lib/api/entities";
 import type { EntityThumbnailCard, EntityThumbnailMetaIcon } from "$lib/entities/entity-thumbnail";
 import {
   reviewableImages,
@@ -153,9 +154,14 @@ export function relationshipCard(
 
 export function childMeta(child: EntityMetadataProposal): EntityThumbnailCard["meta"] {
   const meta: EntityThumbnailCard["meta"] = [];
-  const episode = child.patch?.positions?.episode;
-  if (episode) meta.push({ icon: "count", label: `E${String(episode).padStart(2, "0")}` });
-  if (child.confidence) meta.push({ icon: "count", label: `${Math.round(child.confidence * 100)}%` });
+  const positions = child.patch?.positions ?? {};
+  const episode = positions.episode ?? positions.episodeNumber;
+  const season = positions.season ?? positions.seasonNumber;
+  if (episode) {
+    meta.push({ icon: "count", label: `E${String(episode).padStart(2, "0")}` });
+  } else if (season) {
+    meta.push({ icon: "count", label: `S${String(season).padStart(2, "0")}` });
+  }
   return meta;
 }
 
@@ -198,14 +204,17 @@ export function childCard(
   selectedImages: Record<string, string | null>,
   rootProposalId: string,
   store: { getReviewImageSelections: (id: string) => Record<string, string | null> | null | undefined },
+  localChild?: EntityCard | null,
 ): EntityThumbnailCard {
   const childImage = preferredProposalImage(child, selectedImages, rootProposalId, store);
+  const localCover = localChild?.coverUrl;
   return {
     entity: { id: child.proposalId, kind: child.targetKind, title: child.patch?.title ?? `${defaultLabel} ${index + 1}`, parentEntityId: null, sortOrder: index, capabilities: [], childrenByKind: [], relationships: [] },
     aspectRatio,
-    cover: childImage ? { src: reviewImagePreviewUrl(childImage, child.targetKind), alt: child.patch?.title ?? "" } : null,
+    cover: childImage
+      ? { src: reviewImagePreviewUrl(childImage, child.targetKind), alt: child.patch?.title ?? "" }
+      : localCover ? { src: localCover, alt: localChild.title } : null,
     hover: { kind: "none" } as const,
-    subtitle: child.targetKind,
     custom: childStatusCustom(child),
     meta: childMeta(child),
   };

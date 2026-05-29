@@ -58,6 +58,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated web app manifest and mobile browser metadata for home-screen installation and browser UI theme colors.
 
 ### Fixed
+- Fixed Identify review child cards so matched episodes show their episode number and reuse local thumbnails when provider stills are unavailable.
 - Fixed Identify acceptance feedback so quick metadata applies keep the progress row visible before navigating away.
 - Fixed video scans so named nested season folders such as Specials stay under their parent series instead of appearing as duplicate top-level series.
 - Fixed TMDB Identify cascades so matched season shells are hydrated when local episodes exist, allowing episode titles and artwork to appear in the review tree after selecting a series search result.

@@ -204,6 +204,95 @@ describe("Identify review surfaces", () => {
     expect(screen.getAllByText("Matched").length).toBeGreaterThanOrEqual(2);
   });
 
+  it("shows normalized episode chips and local covers for matched children", () => {
+    render(IdentifyReviewParent, {
+      props: {
+        entity: entity(),
+        detail: detail({
+          childrenByKind: [
+            {
+              kind: "video",
+              label: "Episodes",
+              code: "episodes",
+              entities: [
+                entity({
+                  id: "episode-1",
+                  kind: "video",
+                  title: "Local Episode One",
+                  coverUrl: "/assets/thumbnails/episode-1.jpg",
+                }),
+              ],
+            },
+          ],
+        }),
+        proposal: proposal("root", {
+          children: [
+            proposal("episode-1-proposal", {
+              targetKind: "video-episode",
+              title: "Episode One",
+              targetEntityId: "episode-1",
+              images: [],
+              patch: {
+                positions: { seasonNumber: 1, episodeNumber: 1 },
+              },
+            }),
+          ],
+        }),
+      },
+    });
+
+    expect(screen.getByText("E01")).toBeInTheDocument();
+    expect(screen.getByAltText("Local Episode One")).toHaveAttribute("src", "/assets/thumbnails/episode-1.jpg");
+  });
+
+  it("shows local covers for walked child grandchildren when provider stills are missing", () => {
+    store.getReviewDetailForProposal.mockReturnValue(detail({
+      id: "season-1",
+      kind: "video-season",
+      childrenByKind: [
+        {
+          kind: "video",
+          label: "Episodes",
+          code: "episodes",
+          entities: [
+            entity({
+              id: "episode-1",
+              kind: "video",
+              title: "Local Episode One",
+              coverUrl: "/assets/thumbnails/episode-1.jpg",
+            }),
+          ],
+        },
+      ],
+    }));
+
+    render(IdentifyReviewChild, {
+      props: {
+        entity: entity(),
+        parentProposal: proposal("root"),
+        proposal: proposal("season-1-proposal", {
+          targetKind: "video-season",
+          title: "Season 1",
+          targetEntityId: "season-1",
+          children: [
+            proposal("episode-1-proposal", {
+              targetKind: "video-episode",
+              title: "Episode One",
+              targetEntityId: "episode-1",
+              images: [],
+              patch: {
+                positions: { seasonNumber: 1, episodeNumber: 1 },
+              },
+            }),
+          ],
+        }),
+      },
+    });
+
+    expect(screen.getByText("E01")).toBeInTheDocument();
+    expect(screen.getByAltText("Local Episode One")).toHaveAttribute("src", "/assets/thumbnails/episode-1.jpg");
+  });
+
   it("renders a full-width apply progress row with the active proposal path", () => {
     store.applying = true;
     store.applyProgress = {
@@ -271,7 +360,7 @@ function detail(overrides: Partial<EntityDetailCard> = {}): EntityDetailCard {
 
 function proposal(
   proposalId: string,
-  overrides: Partial<EntityMetadataProposal> & { title?: string } = {},
+  overrides: Omit<Partial<EntityMetadataProposal>, "patch"> & { title?: string; patch?: Partial<EntityMetadataPatch> } = {},
 ): EntityMetadataProposal {
   const {
     title = "The Chair Company",

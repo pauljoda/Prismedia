@@ -78,6 +78,12 @@
   const selectedChildCount = $derived(
     children.filter((child) => store.isReviewProposalSelected(child.proposalId)).length,
   );
+  const localChildrenById = $derived.by(() => {
+    const pairs = (detail?.childrenByKind ?? [])
+      .flatMap((group) => group.entities)
+      .map((child) => [child.id, child] as const);
+    return new Map(pairs);
+  });
   const nextQueueItem = $derived(store.nextQueueItem(entity.id));
   const queueIndex = $derived(store.queue.findIndex((item) => item.entityId === entity.id));
   const prevQueueNavItem = $derived(queueIndex > 0 ? store.queue[queueIndex - 1] : null);
@@ -437,7 +443,7 @@
       <div class="identify-thumbnail-grid grid grid-cols-2 gap-2 p-3.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
         {#each children as child, i (child.proposalId)}
           <EntityThumbnail
-            card={childCard(child, i, "Child", "poster", selectedImages, proposal.proposalId, store)}
+            card={childCard(child, i, "Child", "poster", selectedImages, proposal.proposalId, store, child.targetEntityId ? localChildrenById.get(child.targetEntityId) : null)}
             linkable={false}
             onActivate={() => walkChild(child)}
             selectable
