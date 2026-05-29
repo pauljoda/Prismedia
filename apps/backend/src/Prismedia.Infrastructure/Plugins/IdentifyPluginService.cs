@@ -298,9 +298,17 @@ public sealed class IdentifyPluginService : IIdentifyProviderService {
         HashSet<Guid> visited,
         CancellationToken cancellationToken) {
         var existingChildren = await LoadStructuralChildrenAsync(entity.Id, cancellationToken);
+        var boundProviderProposal = await BindLocalStructuralTargetsAsync(providerProposal, entity.Id, cancellationToken);
+        var providerStructuralChildren = EntityMetadataProposalTraversal.StructuralChildren(boundProviderProposal);
         var structuralChildren = new List<EntityMetadataProposal>();
         foreach (var child in existingChildren) {
             if (!SupportsKind(descriptor.Manifest, child.Entity.KindCode)) {
+                continue;
+            }
+
+            var providerChild = providerStructuralChildren.FirstOrDefault(proposal => IsSameStructuralChild(child, proposal));
+            if (providerChild is not null) {
+                structuralChildren.Add(providerChild);
                 continue;
             }
 
@@ -319,12 +327,44 @@ public sealed class IdentifyPluginService : IIdentifyProviderService {
             }
         }
 
-        return providerProposal with {
+        return boundProviderProposal with {
             TargetKind = entity.KindCode,
             TargetEntityId = entity.Id,
-            Children = MergeStructuralChildren(providerProposal.Children, structuralChildren),
-            Relationships = EntityMetadataProposalTraversal.Relationships(providerProposal)
+            Children = MergeStructuralChildren(boundProviderProposal.Children, structuralChildren),
+            Relationships = EntityMetadataProposalTraversal.Relationships(boundProviderProposal)
         };
+    }
+
+    private async Task<EntityMetadataProposal> BindLocalStructuralTargetsAsync(
+        EntityMetadataProposal proposal,
+        Guid parentEntityId,
+        CancellationToken cancellationToken) {
+        var proposalChildren = proposal.Children ?? [];
+        if (proposalChildren.Count == 0) {
+            return proposal;
+        }
+
+        var localChildren = await LoadStructuralChildrenAsync(parentEntityId, cancellationToken);
+        if (localChildren.Count == 0) {
+            return proposal;
+        }
+
+        var children = new List<EntityMetadataProposal>(proposalChildren.Count);
+        foreach (var childProposal in proposalChildren) {
+            var localChild = localChildren.FirstOrDefault(child => IsSameStructuralChild(child, childProposal));
+            if (localChild is null) {
+                children.Add(childProposal);
+                continue;
+            }
+
+            var boundChild = await BindLocalStructuralTargetsAsync(
+                childProposal with { TargetEntityId = localChild.Entity.Id },
+                localChild.Entity.Id,
+                cancellationToken);
+            children.Add(boundChild);
+        }
+
+        return proposal with { Children = children };
     }
 
     private static IReadOnlyList<EntityMetadataProposal> MergeStructuralChildren(
@@ -371,6 +411,30 @@ public sealed class IdentifyPluginService : IIdentifyProviderService {
             !string.IsNullOrWhiteSpace(right.Patch.Title) &&
             left.Patch.Title.Equals(right.Patch.Title, StringComparison.OrdinalIgnoreCase);
     }
+
+    private static bool IsSameStructuralChild(StructuralChild localChild, EntityMetadataProposal proposal) {
+        if (!IsCompatibleStructuralKind(localChild.Entity.KindCode, proposal.TargetKind)) {
+            return false;
+        }
+
+        var proposalSortOrder = EntityMetadataPositionRules.SortOrderFor(
+            localChild.Entity.KindCode,
+            EntityMetadataPositionRules.Normalize(proposal.Patch.Positions));
+        if (localChild.SortOrder is { } localSortOrder &&
+            proposalSortOrder is { } matchedSortOrder &&
+            localSortOrder == matchedSortOrder) {
+            return true;
+        }
+
+        return !string.IsNullOrWhiteSpace(localChild.Entity.Title) &&
+            !string.IsNullOrWhiteSpace(proposal.Patch.Title) &&
+            localChild.Entity.Title.Equals(proposal.Patch.Title, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsCompatibleStructuralKind(string localKind, string proposalKind) =>
+        localKind.Equals(proposalKind, StringComparison.OrdinalIgnoreCase) ||
+        localKind.Equals(EntityKindRegistry.Video.Code, StringComparison.OrdinalIgnoreCase) &&
+        proposalKind.Equals("video-episode", StringComparison.OrdinalIgnoreCase);
 
     private static EntityMetadataProposal EnsureStructuralPositions(EntityMetadataProposal proposal, StructuralChild child) {
         if (child.SortOrder is not { } sortOrder || proposal.Patch.Positions.Count > 0) {

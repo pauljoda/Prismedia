@@ -647,7 +647,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
     }
 
     [Fact]
-    public async Task IdentifyHydratesExistingChildrenWithFreshPluginCallsAndProposedParentContext() {
+    public async Task IdentifyBindsExistingChildrenFromProviderTreeWithoutFreshPluginCalls() {
         var pluginDir = Path.Combine(_tempRoot, "tmdb");
         Directory.CreateDirectory(pluginDir);
         await File.WriteAllTextAsync(
@@ -711,17 +711,11 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
         var response = await service.IdentifyAsync(seriesId, "tmdb", null, hideNsfw: false, CancellationToken.None);
 
         Assert.True(response.Ok);
-        Assert.Equal([seriesId, seasonId], executor.Requests.Select(request => request.Entity.Id).ToArray());
+        Assert.Equal([seriesId], executor.Requests.Select(request => request.Entity.Id).ToArray());
         var child = Assert.Single(response.Result!.Children);
         Assert.Equal(seasonId, child.TargetEntityId);
-        Assert.Equal("Season From Child Request", child.Patch.Title);
-        var childRequest = executor.Requests[1];
-        var parentContext = Assert.Single(childRequest.StructuralContext!.Ancestors);
-        Assert.Equal(seriesId, parentContext.Id);
-        Assert.Equal("Identified Series", parentContext.Title);
-        Assert.Equal("series-42", parentContext.ExternalIds!["tmdb"]);
-        Assert.Equal("https://www.themoviedb.org/tv/42", Assert.Single(parentContext.Urls!));
-        Assert.Equal(1, childRequest.StructuralContext.Positions["sortOrder"]);
+        Assert.Equal("Season 1", child.Patch.Title);
+        Assert.Equal("Generated Studio", Assert.Single(response.Result.Relationships).Patch.Title);
     }
 
     [Fact]

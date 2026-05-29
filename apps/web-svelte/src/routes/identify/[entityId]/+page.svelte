@@ -40,6 +40,9 @@
   const currentIdentifyStatus = $derived(
     store.identifyingId === current?.entityId ? store.identifyingStatus : null,
   );
+  const activeReviewChild = $derived(
+    store.view.kind === "review-child" && store.view.entity.id === entityId ? store.view : null,
+  );
 
   onMount(async () => {
     const returnId = page.url.searchParams.get("returnId") ?? page.url.searchParams.get("quid");
@@ -200,12 +203,12 @@
         </p>
       </div>
     </div>
-  {:else if store.view.kind === "review-child" && store.view.entity.id === current.entityId}
+  {:else if activeReviewChild}
     <IdentifyReviewChild
-      entity={store.view.entity}
-      proposal={store.view.proposal}
-      parentProposal={store.view.parentProposal}
-      ancestors={store.view.ancestors}
+      entity={activeReviewChild.entity}
+      proposal={activeReviewChild.proposal}
+      parentProposal={activeReviewChild.parentProposal}
+      ancestors={activeReviewChild.ancestors}
     />
   {:else if current.state === "proposal" && current.proposal}
     <IdentifyReviewParent entity={current.entity} proposal={current.proposal} detail={current.detail} />

@@ -62,6 +62,22 @@ describe("identify review helpers", () => {
     ]);
   });
 
+  it("deduplicates structural child proposals by provider proposal id", () => {
+    const root = proposal("season-1", "video-season", {
+      children: [
+        proposal("episode-8", "video", { title: "Episode 8" }),
+        proposal("episode-8", "video", { title: "Episode 8 duplicate" }),
+        proposal("episode-9", "video", { title: "Episode 9" }),
+        proposal("person-1", "person", { title: "Guest Actor" }),
+      ],
+    });
+
+    expect(structuralChildProposals(root).map((child) => child.proposalId)).toEqual([
+      "episode-8",
+      "episode-9",
+    ]);
+  });
+
   it("keeps nested cascade selections and relationship proposals in the apply payload", () => {
     const guest = proposal("guest", "person", {
       title: "Guest Actor",

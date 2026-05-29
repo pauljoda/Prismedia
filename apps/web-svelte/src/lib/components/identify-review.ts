@@ -91,7 +91,13 @@ export interface IdentifyRootReviewApplyPayload {
 }
 
 export function structuralChildProposals(result: EntityMetadataProposal): EntityMetadataProposal[] {
-  return (result.children ?? []).filter((child) => !isRelationshipKind(child.targetKind));
+  const seen = new Set<string>();
+  return (result.children ?? []).filter((child) => {
+    if (isRelationshipKind(child.targetKind)) return false;
+    if (seen.has(child.proposalId)) return false;
+    seen.add(child.proposalId);
+    return true;
+  });
 }
 
 export function relationshipProposals(result: EntityMetadataProposal): EntityMetadataProposal[] {
