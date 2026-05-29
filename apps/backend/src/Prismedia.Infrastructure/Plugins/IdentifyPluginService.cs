@@ -519,18 +519,20 @@ public sealed class IdentifyPluginService : IIdentifyProviderService {
             : kind.Trim().ToLowerInvariant();
 
     private static bool IsSameStructuralChild(EntityMetadataProposal left, EntityMetadataProposal right) {
-        if (!left.TargetKind.Equals(right.TargetKind, StringComparison.OrdinalIgnoreCase)) {
+        if (!AreCompatibleProposalKinds(left.TargetKind, right.TargetKind)) {
             return false;
         }
 
-        var leftPositions = EntityMetadataPositionRules.Normalize(left.Patch.Positions);
-        var rightPositions = EntityMetadataPositionRules.Normalize(right.Patch.Positions);
-        foreach (var code in new[] { "season", "volume", "episode", "chapter", "sort" }) {
-            if (leftPositions.TryGetValue(code, out var leftValue) &&
-                rightPositions.TryGetValue(code, out var rightValue) &&
-                leftValue == rightValue) {
-                return true;
-            }
+        if (left.TargetEntityId is { } leftId && right.TargetEntityId is { } rightId) {
+            return leftId == rightId;
+        }
+
+        var leftSortOrder = StructuralSortOrder(left);
+        var rightSortOrder = StructuralSortOrder(right);
+        if (leftSortOrder is not null || rightSortOrder is not null) {
+            return leftSortOrder is not null &&
+                rightSortOrder is not null &&
+                leftSortOrder == rightSortOrder;
         }
 
         return !string.IsNullOrWhiteSpace(left.Patch.Title) &&
@@ -561,6 +563,13 @@ public sealed class IdentifyPluginService : IIdentifyProviderService {
         localKind.Equals(proposalKind, StringComparison.OrdinalIgnoreCase) ||
         localKind.Equals(EntityKindRegistry.Video.Code, StringComparison.OrdinalIgnoreCase) &&
         proposalKind.Equals("video-episode", StringComparison.OrdinalIgnoreCase);
+
+    private static bool AreCompatibleProposalKinds(string leftKind, string rightKind) =>
+        leftKind.Equals(rightKind, StringComparison.OrdinalIgnoreCase) ||
+        leftKind.Equals(EntityKindRegistry.Video.Code, StringComparison.OrdinalIgnoreCase) &&
+        rightKind.Equals("video-episode", StringComparison.OrdinalIgnoreCase) ||
+        leftKind.Equals("video-episode", StringComparison.OrdinalIgnoreCase) &&
+        rightKind.Equals(EntityKindRegistry.Video.Code, StringComparison.OrdinalIgnoreCase);
 
     private static EntityMetadataProposal EnsureStructuralPositions(EntityMetadataProposal proposal, StructuralChild child) {
         if (child.SortOrder is not { } sortOrder || proposal.Patch.Positions.Count > 0) {
