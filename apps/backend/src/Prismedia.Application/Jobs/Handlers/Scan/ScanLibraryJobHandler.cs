@@ -153,6 +153,21 @@ public sealed class ScanLibraryJobHandler(
                 }
             }
 
+            var grandparentFolder = Path.GetDirectoryName(parentFolder);
+            if (episodeToken is not null &&
+                !string.IsNullOrWhiteSpace(grandparentFolder) &&
+                !SamePath(grandparentFolder, root.Path)) {
+                return new VideoUpsertItem(
+                    filePath,
+                    title,
+                    root.Id,
+                    root.IsNsfw,
+                    new VideoSeriesScanInfo(grandparentFolder, Path.GetFileName(grandparentFolder)),
+                    new VideoSeasonScanInfo(parentFolder, parentFolderName, episodeToken.SeasonNumber),
+                    episodeToken.EpisodeNumber,
+                    AbsoluteEpisodeNumber: null);
+            }
+
             if (episodeToken is not null && !SamePath(parentFolder, root.Path)) {
                 return new VideoUpsertItem(
                     filePath,
@@ -185,8 +200,9 @@ public sealed class ScanLibraryJobHandler(
             return null;
         }
 
-        return int.TryParse(match.Groups["episode"].Value, out var episodeNumber)
-            ? new EpisodeToken(episodeNumber)
+        return int.TryParse(match.Groups["season"].Value, out var seasonNumber) &&
+            int.TryParse(match.Groups["episode"].Value, out var episodeNumber)
+            ? new EpisodeToken(seasonNumber, episodeNumber)
             : null;
     }
 
@@ -196,5 +212,5 @@ public sealed class ScanLibraryJobHandler(
             Path.TrimEndingDirectorySeparator(right),
             StringComparison.OrdinalIgnoreCase);
 
-    private sealed record EpisodeToken(int EpisodeNumber);
+    private sealed record EpisodeToken(int SeasonNumber, int EpisodeNumber);
 }

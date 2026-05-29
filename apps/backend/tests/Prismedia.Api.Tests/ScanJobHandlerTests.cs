@@ -143,6 +143,124 @@ public sealed class ScanJobHandlerTests {
     }
 
     [Fact]
+    public async Task VideoScanClassifiesNamedNestedEpisodeFoldersAsSeasons() {
+        var root = new LibraryRootData(
+            Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            "/media/videos",
+            "Videos",
+            Enabled: true,
+            Recursive: true,
+            ScanVideos: true,
+            ScanImages: false,
+            ScanAudio: false,
+            ScanBooks: false,
+            IsNsfw: false);
+        var videoId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        var persistence = new FakeScanPersistence([root]) {
+            Settings = DisabledGeneratedWorkSettings,
+            UpsertedVideoIds = [videoId],
+            DownstreamNeedsById = new Dictionary<Guid, DownstreamNeeds> {
+                [videoId] = new(
+                    NeedsProbe: false,
+                    NeedsFingerprint: false,
+                    NeedsPreview: false,
+                    NeedsTrickplay: false,
+                    NeedsSubtitleExtraction: false)
+            }
+        };
+        var discovery = new RecordingFileDiscovery([
+            "/media/videos/Blue's Clues/Specials/Blue's Clues - S00E100 - Behind the Clues - 10 Years of Blue SDTV.mp4"
+        ]);
+        var handler = new ScanLibraryJobHandler(
+            NullLogger<ScanLibraryJobHandler>.Instance,
+            discovery,
+            persistence,
+            persistence,
+            persistence);
+        var job = new JobRunSnapshot(
+            Guid.NewGuid(),
+            JobType.ScanLibrary,
+            JobRunStatus.Running,
+            Progress: 0,
+            Message: null,
+            PayloadJson: $$"""{"libraryRootId":"{{root.Id}}"}""",
+            TargetEntityKind: "library-root",
+            TargetEntityId: root.Id.ToString(),
+            TargetLabel: root.Label,
+            CreatedAt: DateTimeOffset.UtcNow,
+            StartedAt: DateTimeOffset.UtcNow,
+            FinishedAt: null);
+
+        await handler.HandleAsync(new JobContext(job, new RecordingJobQueue()), CancellationToken.None);
+
+        var item = Assert.Single(persistence.UpsertedVideoItems);
+        Assert.Equal("Blue's Clues", item.Series?.Title);
+        Assert.Equal("/media/videos/Blue's Clues", item.Series?.FolderPath);
+        Assert.Equal("Specials", item.Season?.Title);
+        Assert.Equal("/media/videos/Blue's Clues/Specials", item.Season?.FolderPath);
+        Assert.Equal(0, item.Season?.SeasonNumber);
+        Assert.Equal(100, item.EpisodeNumber);
+    }
+
+    [Fact]
+    public async Task VideoScanKeepsRootLevelEpisodeFilesDirectlyUnderSeries() {
+        var root = new LibraryRootData(
+            Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            "/media/videos",
+            "Videos",
+            Enabled: true,
+            Recursive: true,
+            ScanVideos: true,
+            ScanImages: false,
+            ScanAudio: false,
+            ScanBooks: false,
+            IsNsfw: false);
+        var videoId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        var persistence = new FakeScanPersistence([root]) {
+            Settings = DisabledGeneratedWorkSettings,
+            UpsertedVideoIds = [videoId],
+            DownstreamNeedsById = new Dictionary<Guid, DownstreamNeeds> {
+                [videoId] = new(
+                    NeedsProbe: false,
+                    NeedsFingerprint: false,
+                    NeedsPreview: false,
+                    NeedsTrickplay: false,
+                    NeedsSubtitleExtraction: false)
+            }
+        };
+        var discovery = new RecordingFileDiscovery([
+            "/media/videos/Blue's Clues/Blue's Clues - S01E01 - Snack Time SDTV.mkv"
+        ]);
+        var handler = new ScanLibraryJobHandler(
+            NullLogger<ScanLibraryJobHandler>.Instance,
+            discovery,
+            persistence,
+            persistence,
+            persistence);
+        var job = new JobRunSnapshot(
+            Guid.NewGuid(),
+            JobType.ScanLibrary,
+            JobRunStatus.Running,
+            Progress: 0,
+            Message: null,
+            PayloadJson: $$"""{"libraryRootId":"{{root.Id}}"}""",
+            TargetEntityKind: "library-root",
+            TargetEntityId: root.Id.ToString(),
+            TargetLabel: root.Label,
+            CreatedAt: DateTimeOffset.UtcNow,
+            StartedAt: DateTimeOffset.UtcNow,
+            FinishedAt: null);
+
+        await handler.HandleAsync(new JobContext(job, new RecordingJobQueue()), CancellationToken.None);
+
+        var item = Assert.Single(persistence.UpsertedVideoItems);
+        Assert.Equal("Blue's Clues", item.Series?.Title);
+        Assert.Equal("/media/videos/Blue's Clues", item.Series?.FolderPath);
+        Assert.Null(item.Season);
+        Assert.Equal(1, item.EpisodeNumber);
+    }
+
+    [Fact]
     public async Task VideoScanPassesRootExclusionsToDiscovery() {
         var root = new LibraryRootData(
             Guid.Parse("11111111-1111-1111-1111-111111111111"),
