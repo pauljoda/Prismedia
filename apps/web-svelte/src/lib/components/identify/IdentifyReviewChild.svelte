@@ -76,6 +76,7 @@
   const selectedChildCount = $derived(
     children.filter((child) => store.isReviewProposalSelected(child.proposalId)).length,
   );
+  const contextTitle = $derived(proposal.patch?.title?.trim() || "Child");
   const contextPosterUrl = $derived(
     selectedProposalImageUrl(proposal, ["poster", "thumbnail", "cover", "logo"], selectedImages, proposal.proposalId, store)
     ?? proposalImageUrl(proposal, ["poster", "thumbnail", "cover", "logo"]),
@@ -224,9 +225,9 @@
       </div>
     {/if}
     <div class="min-w-0">
-      <div class="flex items-baseline gap-2">
-        <h2 class="truncate">{proposal.patch?.title ?? `Child ${currentIndex + 1}`}</h2>
-        <span class="rounded-xs border border-phosphor-600/20 bg-surface-3 px-1.5 py-0.5 font-mono text-[0.6rem] text-phosphor-600">
+      <h2 class="truncate">{contextTitle}</h2>
+      <div class="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
+        <span class="rounded-xs border border-phosphor-600/20 bg-surface-3 px-1.5 py-0.5 font-mono text-[0.6rem] leading-none text-phosphor-600">
           {proposal.targetKind}
         </span>
       </div>

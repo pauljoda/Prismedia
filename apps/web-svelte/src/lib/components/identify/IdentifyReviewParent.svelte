@@ -82,6 +82,10 @@
   const queueIndex = $derived(store.queue.findIndex((item) => item.entityId === entity.id));
   const prevQueueNavItem = $derived(queueIndex > 0 ? store.queue[queueIndex - 1] : null);
   const nextQueueNavItem = $derived(queueIndex >= 0 && queueIndex < store.queue.length - 1 ? store.queue[queueIndex + 1] : null);
+  const contextTitle = $derived(proposal.patch?.title?.trim() || entity.title);
+  const showEntitySubtitle = $derived(
+    entity.title.trim().localeCompare(contextTitle, undefined, { sensitivity: "accent" }) !== 0,
+  );
   const contextPosterUrl = $derived(
     selectedProposalImageUrl(proposal, ["poster", "thumbnail", "cover"], selectedImages, proposal.proposalId, store)
     ?? entity.coverUrl
@@ -173,13 +177,15 @@
       </div>
     {/if}
     <div class="min-w-0">
-      <div class="flex items-baseline gap-2">
-        <h2 class="truncate">{proposal.patch?.title ?? entity.title}</h2>
-        <span class="rounded-xs border border-phosphor-600/20 bg-surface-3 px-1.5 py-0.5 font-mono text-[0.6rem] text-phosphor-600">
+      <h2 class="truncate">{contextTitle}</h2>
+      <div class="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
+        <span class="rounded-xs border border-phosphor-600/20 bg-surface-3 px-1.5 py-0.5 font-mono text-[0.6rem] leading-none text-phosphor-600">
           {entity.kind}
         </span>
+        {#if showEntitySubtitle}
+          <span class="min-w-0 truncate font-mono text-[0.7rem] text-text-muted">{entity.title}</span>
+        {/if}
       </div>
-      <div class="mt-0.5 truncate font-mono text-[0.7rem] text-text-muted">{entity.title}</div>
     </div>
     <div class="hidden flex-col items-end gap-0.5 md:flex">
       <span class="text-kicker">Match</span>

@@ -57,6 +57,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ### Fixed
 - Fixed Identify candidate selection for provider-created series trees so Prismedia reuses matching season and episode proposals instead of re-querying the provider for every existing child before the review can open.
 - Fixed Identify child review drill-down when a provider returns a duplicate child proposal id, preventing season and episode review pages from snapping back to the parent view.
+- Improved Identify review context headers on mobile so kind chips no longer crowd or clip the title.
 - Fixed Identify review provider selection and progress feedback so provider menus are available on candidate review screens, are not clipped, automatic Identify tries each ready plugin for the entity type, and searches show which plugin is running.
 - Improved Identify progress text so candidate matches show that Prismedia is identifying related items instead of appearing stuck in provider search.
 - Fixed Identify candidate cards so the Best badge stays in the content flow and no longer overlaps titles when artwork is missing.
