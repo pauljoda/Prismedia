@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Prismedia.Application.Settings;
 using Prismedia.Application.Videos;
+using Prismedia.Infrastructure.Media.Processing;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Processes;
 using Prismedia.Infrastructure.Settings;
@@ -837,22 +838,15 @@ public sealed class HlsAssetService : IHlsAssetService {
         ];
     }
 
-    private static string InputHdrColorParameters(VideoSourceFile source) {
-        var videoStream = PrimaryVideoStream(source);
-        var transfer = videoStream?.ColorTransfer;
-        var colorTransfer = string.Equals(transfer, "arib-std-b67", StringComparison.OrdinalIgnoreCase)
-            ? "arib-std-b67"
-            : "smpte2084";
-        return $"setparams=color_primaries=bt2020:color_trc={colorTransfer}:colorspace=bt2020nc";
-    }
-
     private static string ToneMappingFilter(VideoSourceFile source, VirtualHlsRendition rendition) {
         var scale = $"scale=w=-2:h={rendition.Height}:force_original_aspect_ratio=decrease:force_divisible_by=2";
-        if (RequiresDolbyVisionToneMapping(source)) {
-            return $"{InputHdrColorParameters(source)},{scale},tonemapx=tonemap=bt2390:desat=0:peak=400:t=bt709:m=bt709:p=bt709:format=yuv420p";
-        }
-
-        return $"{InputHdrColorParameters(source)},zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0:peak=100,zscale=t=bt709:m=bt709:p=bt709:out_range=tv,{scale},format=yuv420p";
+        var stream = PrimaryVideoStream(source);
+        return FfmpegToneMapping.BuildFilter(
+            stream?.ColorTransfer,
+            stream?.DvProfile,
+            stream?.DvBlSignalCompatibilityId,
+            scale,
+            trailingFormat: "yuv420p");
     }
 
     private static IReadOnlyList<string> VideoEncoderArguments(
@@ -1021,12 +1015,6 @@ public sealed class HlsAssetService : IHlsAssetService {
     private static bool NeedsToneMapping(VideoSourceFile source) {
         var range = VideoPlaybackRangePolicy.Classify(PrimaryVideoStream(source));
         return !range.VideoRangeType.Equals("SDR", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool RequiresDolbyVisionToneMapping(VideoSourceFile source) {
-        var stream = PrimaryVideoStream(source);
-        return stream?.DvProfile is 5 ||
-            stream?.DvBlSignalCompatibilityId is 0;
     }
 
     private static bool IsMissingVideoFilterError(string standardError) =>

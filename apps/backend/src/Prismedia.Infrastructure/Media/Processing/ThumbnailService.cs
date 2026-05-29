@@ -1,3 +1,4 @@
+using Prismedia.Application.Videos;
 using Prismedia.Infrastructure.Processes;
 
 namespace Prismedia.Infrastructure.Media.Processing;
@@ -387,30 +388,25 @@ public sealed class ThumbnailService {
             return outputTransform;
         }
 
-        if (RequiresDolbyVisionToneMapping(videoStream)) {
-            return $"{InputHdrColorParameters(videoStream)},{outputTransform},tonemapx=tonemap=bt2390:desat=0:peak=400:t=bt709:m=bt709:p=bt709:format=yuv420p";
-        }
-
-        return $"{InputHdrColorParameters(videoStream)},zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0:peak=100,zscale=t=bt709:m=bt709:p=bt709:out_range=tv,{outputTransform}";
+        return FfmpegToneMapping.BuildFilter(
+            videoStream?.ColorTransfer,
+            videoStream?.DvProfile,
+            videoStream?.DvBlSignalCompatibilityId,
+            outputTransform);
     }
 
-    private static bool NeedsToneMapping(MediaStreamProbeResult? stream) =>
-        stream is not null &&
-        (RequiresDolbyVisionToneMapping(stream) ||
-            stream.Hdr10PlusPresentFlag ||
-            string.Equals(stream.ColorTransfer, "arib-std-b67", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(stream.ColorTransfer, "smpte2084", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(stream.ColorPrimaries, "bt2020", StringComparison.OrdinalIgnoreCase));
+    private static bool NeedsToneMapping(MediaStreamProbeResult? stream) {
+        if (stream is null) {
+            return false;
+        }
 
-    private static bool RequiresDolbyVisionToneMapping(MediaStreamProbeResult? stream) =>
-        stream?.DvProfile is 5 ||
-        stream?.DvBlSignalCompatibilityId is 0;
-
-    private static string InputHdrColorParameters(MediaStreamProbeResult? stream) {
-        var colorTransfer = string.Equals(stream?.ColorTransfer, "arib-std-b67", StringComparison.OrdinalIgnoreCase)
-            ? "arib-std-b67"
-            : "smpte2084";
-        return $"setparams=color_primaries=bt2020:color_trc={colorTransfer}:colorspace=bt2020nc";
+        var range = VideoPlaybackRangePolicy.Classify(
+            stream.ColorTransfer,
+            stream.ColorPrimaries,
+            stream.DvProfile,
+            stream.RpuPresentFlag,
+            stream.Hdr10PlusPresentFlag);
+        return !range.VideoRangeType.Equals("SDR", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

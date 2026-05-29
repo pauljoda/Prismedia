@@ -11,25 +11,47 @@ public static class VideoPlaybackRangePolicy {
     /// </summary>
     /// <param name="stream">Primary video stream metadata, or null when unavailable.</param>
     /// <returns>Classified dynamic range values for playback negotiation and HLS planning.</returns>
-    public static VideoPlaybackRange Classify(VideoSourceStream? stream) {
-        if (stream is null) {
-            return VideoPlaybackRange.Sdr;
-        }
+    public static VideoPlaybackRange Classify(VideoSourceStream? stream) =>
+        stream is null
+            ? VideoPlaybackRange.Sdr
+            : Classify(
+                stream.ColorTransfer,
+                stream.ColorPrimaries,
+                stream.DvProfile,
+                stream.RpuPresentFlag,
+                stream.Hdr10PlusPresentFlag);
 
-        if (stream.DvProfile is not null || stream.RpuPresentFlag == true) {
+    /// <summary>
+    /// Derives the Jellyfin-style video range and range type from raw HDR metadata fields.
+    /// This field-based overload is the single source of truth for HDR detection so that
+    /// different probe/source record shapes cannot diverge in how they classify a stream.
+    /// </summary>
+    /// <param name="colorTransfer">Stream color transfer characteristic (e.g. smpte2084, arib-std-b67).</param>
+    /// <param name="colorPrimaries">Stream color primaries (e.g. bt2020).</param>
+    /// <param name="dvProfile">Dolby Vision profile when present.</param>
+    /// <param name="rpuPresentFlag">Whether a Dolby Vision RPU is present.</param>
+    /// <param name="hdr10PlusPresentFlag">Whether HDR10+ dynamic metadata is present.</param>
+    /// <returns>Classified dynamic range values for playback negotiation and HLS planning.</returns>
+    public static VideoPlaybackRange Classify(
+        string? colorTransfer,
+        string? colorPrimaries,
+        int? dvProfile,
+        bool? rpuPresentFlag,
+        bool hdr10PlusPresentFlag) {
+        if (dvProfile is not null || rpuPresentFlag == true) {
             return VideoPlaybackRange.Dovi;
         }
 
-        if (stream.Hdr10PlusPresentFlag) {
+        if (hdr10PlusPresentFlag) {
             return VideoPlaybackRange.Hdr10Plus;
         }
 
-        if (Comparer.Equals(stream.ColorTransfer, "arib-std-b67")) {
+        if (Comparer.Equals(colorTransfer, "arib-std-b67")) {
             return VideoPlaybackRange.Hlg;
         }
 
-        if (Comparer.Equals(stream.ColorTransfer, "smpte2084") ||
-            Comparer.Equals(stream.ColorPrimaries, "bt2020")) {
+        if (Comparer.Equals(colorTransfer, "smpte2084") ||
+            Comparer.Equals(colorPrimaries, "bt2020")) {
             return VideoPlaybackRange.Hdr10;
         }
 

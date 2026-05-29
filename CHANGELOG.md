@@ -55,6 +55,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated web app manifest and mobile browser metadata for home-screen installation and browser UI theme colors.
 
 ### Fixed
+- Fixed HDR thumbnails for Dolby Vision profile 8 videos so still-frame thumbnails are tone-mapped consistently with adaptive streaming instead of rendering washed out or discolored.
 - Fixed deployed Prismedia Community plugin discovery so the app resolves the live Prismedia-Plugins YAML index and can pull compatible entries into the local plugin cache for installation.
 - Fixed plugin catalog refreshes so registry transport failures no longer crash the Plugins page.
 - Fixed Studio grid thumbnails so plugin-provided channel logos are preferred for cards while channel headers remain available for detail heroes.
