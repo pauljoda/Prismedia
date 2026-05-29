@@ -73,11 +73,13 @@ function baseProps(overrides: Partial<InstalledPluginsTabProps> = {}): Installed
     onProviderInstall: vi.fn(),
     onProviderRemove: vi.fn(),
     onProviderSaveAuth: vi.fn(),
+    onProviderUpdate: vi.fn(),
     onScraperRemove: vi.fn(),
     onScraperToggle: vi.fn(),
     pluginUpdates: {},
     providerInstallingId: null,
     providerRemovingId: null,
+    providerUpdatingId: null,
     providers: [provider],
     scrapers: [scraper],
     updatingPluginId: null,
@@ -121,6 +123,31 @@ describe("InstalledPluginsTab", () => {
 
     expect(onCheckUpdates).toHaveBeenCalled();
     expect(onInstalledPluginToggle).toHaveBeenCalledWith(installedPlugin);
+  });
+
+  it("emits provider update actions for installed Prismedia providers", async () => {
+    const onProviderUpdate = vi.fn();
+    const updateable = {
+      ...provider,
+      updateAvailable: true,
+      availableVersion: "1.1.0",
+    };
+    render(InstalledPluginsTab, {
+      props: baseProps({
+        installedPlugins: [],
+        providers: [updateable],
+        scrapers: [],
+        onProviderUpdate,
+      }),
+    });
+
+    const pluginCard = screen.getByText("TMDB").closest(".surface-card");
+    expect(pluginCard).not.toBeNull();
+    expect(within(pluginCard as HTMLElement).getByText("v1.1.0 available")).toBeInTheDocument();
+
+    await fireEvent.click(within(pluginCard as HTMLElement).getByRole("button", { name: /update/i }));
+
+    expect(onProviderUpdate).toHaveBeenCalledWith(updateable);
   });
 
   it("shows an empty state when there are no installed plugins", () => {

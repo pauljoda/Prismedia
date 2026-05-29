@@ -75,11 +75,13 @@
     onProviderInstall: (plugin: PluginProviderSummary) => void;
     onProviderRemove: (plugin: PluginProviderSummary) => void;
     onProviderSaveAuth: (plugin: PluginProviderSummary) => void;
+    onProviderUpdate: (plugin: PluginProviderSummary) => void;
     onScraperRemove: (pkg: ScraperPackage) => void;
     onScraperToggle: (pkg: ScraperPackage) => void;
     pluginUpdates: Record<string, PluginUpdateStatus>;
     providerInstallingId: string | null;
     providerRemovingId: string | null;
+    providerUpdatingId: string | null;
     providers: PluginProviderSummary[];
     scrapers: ScraperPackage[];
     updatingPluginId: string | null;
@@ -103,11 +105,13 @@
     onProviderInstall,
     onProviderRemove,
     onProviderSaveAuth,
+    onProviderUpdate,
     onScraperRemove,
     onScraperToggle,
     pluginUpdates,
     providerInstallingId,
     providerRemovingId,
+    providerUpdatingId,
     providers,
     scrapers,
     updatingPluginId,
@@ -211,7 +215,7 @@
       {/each}
     {/if}
     <div class="flex-1"></div>
-    {#if installedPlugins.length > 0}
+    {#if installedPlugins.length > 0 || providers.some((plugin) => plugin.installed)}
       <Button
         variant="ghost"
         size="sm"
@@ -260,6 +264,11 @@
                   <Badge variant={plugin.installed && plugin.enabled ? "accent" : "default"}>
                     {plugin.installed && plugin.enabled ? "Installed" : "Available"}
                   </Badge>
+                  {#if plugin.updateAvailable}
+                    <Badge variant="success">
+                      <Sparkles class="h-2.5 w-2.5" />v{plugin.availableVersion} available
+                    </Badge>
+                  {/if}
                   {#if plugin.missingAuthKeys.length === 0 && hasAuth}
                     <Badge variant="success">
                       <Check class="h-2.5 w-2.5" />Auth OK
@@ -280,6 +289,20 @@
                 </div>
               </div>
               <div class="flex items-center gap-2 shrink-0">
+                {#if plugin.installed && plugin.updateAvailable}
+                  <button
+                    onclick={() => onProviderUpdate(plugin)}
+                    disabled={providerUpdatingId === plugin.id}
+                    class="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-status-success-text hover:text-text-primary transition-colors duration-fast disabled:opacity-40"
+                  >
+                    {#if providerUpdatingId === plugin.id}
+                      <Loader2 class="h-3.5 w-3.5 animate-spin" />
+                    {:else}
+                      <Download class="h-3.5 w-3.5" />
+                    {/if}
+                    Update
+                  </button>
+                {/if}
                 {#if !plugin.installed || !plugin.enabled}
                   <button
                     onclick={() => onProviderInstall(plugin)}

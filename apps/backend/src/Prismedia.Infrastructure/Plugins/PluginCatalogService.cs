@@ -63,6 +63,7 @@ public sealed class PluginCatalogService : IPluginCatalogService {
         var current = ParseVersion(_options.CurrentPrismediaVersion);
         var descriptors = await DiscoverAsync(cancellationToken);
         var indexed = await ListRemoteIndexEntriesAsync(current, cancellationToken);
+        var indexedById = indexed.ToDictionary(entry => entry.Id, StringComparer.OrdinalIgnoreCase);
         var configs = await _db.ProviderConfigs
             .AsNoTracking()
             .ToDictionaryAsync(row => row.ProviderCode, StringComparer.OrdinalIgnoreCase, cancellationToken);
@@ -83,7 +84,10 @@ public sealed class PluginCatalogService : IPluginCatalogService {
                 StringComparer.OrdinalIgnoreCase);
 
         var providers = descriptors
-            .Select(descriptor => ToProvider(descriptor, configs, credentialKeys))
+            .Select(descriptor => {
+                indexedById.TryGetValue(descriptor.Manifest.Id, out var remote);
+                return ToProvider(descriptor, configs, credentialKeys, remote);
+            })
             .ToList();
         var localIds = providers.Select(provider => provider.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
         providers.AddRange(indexed
@@ -158,6 +162,32 @@ public sealed class PluginCatalogService : IPluginCatalogService {
 
         return (await ListProvidersAsync(cancellationToken))
             .FirstOrDefault(provider => provider.Id.Equals(providerId, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Pulls the newest compatible remote artifact for an installed provider and re-points its config to it.
+    /// </summary>
+    public async Task<PluginProvider?> UpdateAsync(string providerId, CancellationToken cancellationToken) {
+        var current = ParseVersion(_options.CurrentPrismediaVersion);
+        var remote = PluginCompatibilityResolver.LatestCompatible(
+            await FetchRemoteIndexAsync(cancellationToken),
+            providerId,
+            current);
+        if (remote is null) {
+            return null;
+        }
+
+        var currentDescriptor = await FindProviderAsync(providerId, null, cancellationToken);
+        if (currentDescriptor is not null &&
+            ParseVersion(currentDescriptor.Manifest.Version) >= ParseVersion(remote.Version)) {
+            return (await ListProvidersAsync(cancellationToken))
+                .FirstOrDefault(provider => provider.Id.Equals(providerId, StringComparison.OrdinalIgnoreCase));
+        }
+
+        var updated = await PullProviderAsync(providerId, cancellationToken, remote);
+        return updated is null
+            ? null
+            : await InstallAsync(providerId, cancellationToken);
     }
 
     /// <summary>
@@ -277,7 +307,8 @@ public sealed class PluginCatalogService : IPluginCatalogService {
     private PluginProvider ToProvider(
         PluginDescriptor descriptor,
         IReadOnlyDictionary<string, ProviderConfigRow> configs,
-        IReadOnlyDictionary<string, HashSet<string>> credentialKeys) {
+        IReadOnlyDictionary<string, HashSet<string>> credentialKeys,
+        PluginIndexEntry? remote) {
         configs.TryGetValue(descriptor.Manifest.Id, out var config);
         credentialKeys.TryGetValue(descriptor.Manifest.Id, out var keys);
         keys ??= [];
@@ -287,6 +318,9 @@ public sealed class PluginCatalogService : IPluginCatalogService {
                 !PluginCredentialResolver.HasEnvironmentCredential(descriptor.Manifest.Id, field.Key))
             .Select(field => field.Key)
             .ToArray();
+        var updateAvailable = config is not null &&
+            remote is not null &&
+            ParseVersion(remote.Version) > ParseVersion(descriptor.Manifest.Version);
 
         return new PluginProvider(
             descriptor.Manifest.Id,
@@ -297,7 +331,9 @@ public sealed class PluginCatalogService : IPluginCatalogService {
             IsNsfw: descriptor.Manifest.IsNsfw || config?.IsNsfw == true,
             descriptor.Manifest.Supports,
             descriptor.Manifest.Auth,
-            missing);
+            missing,
+            UpdateAvailable: updateAvailable,
+            AvailableVersion: updateAvailable ? remote?.Version : null);
     }
 
     private IEnumerable<string> EnumerateDiscoveryRoots() {
@@ -319,16 +355,19 @@ public sealed class PluginCatalogService : IPluginCatalogService {
             .ToArray();
     }
 
-    private async Task<PluginDescriptor?> PullProviderAsync(string providerId, CancellationToken cancellationToken) {
+    private async Task<PluginDescriptor?> PullProviderAsync(
+        string providerId,
+        CancellationToken cancellationToken,
+        PluginIndexEntry? requestedEntry = null) {
         if (string.IsNullOrWhiteSpace(_options.CommunityIndexUrl)) {
             return null;
         }
 
         var current = ParseVersion(_options.CurrentPrismediaVersion);
-        var entry = PluginCompatibilityResolver.LatestCompatible(
-            await FetchRemoteIndexAsync(cancellationToken),
-            providerId,
-            current);
+        var entry = requestedEntry ?? PluginCompatibilityResolver.LatestCompatible(
+                await FetchRemoteIndexAsync(cancellationToken),
+                providerId,
+                current);
         if (entry is null) {
             return null;
         }

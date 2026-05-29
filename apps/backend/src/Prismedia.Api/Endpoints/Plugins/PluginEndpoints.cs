@@ -31,6 +31,20 @@ public static class PluginEndpoints {
             .Produces<PluginProvider>()
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
+        group.MapPost("/{provider}/update", async (
+            string provider,
+            IPluginCatalogService plugins,
+            CancellationToken cancellationToken) => {
+                var result = await plugins.UpdateAsync(provider, cancellationToken);
+                return result is null
+                    ? Results.NotFound(new ApiProblem("plugin_update_not_found", $"No compatible update was found for plugin provider '{provider}'."))
+                    : Results.Ok(result);
+            })
+            .WithName("UpdatePlugin")
+            .WithSummary("Downloads and enables the newest compatible community plugin artifact.")
+            .Produces<PluginProvider>()
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+
         group.MapDelete("/{provider}", async (
             string provider,
             IPluginCatalogService plugins,

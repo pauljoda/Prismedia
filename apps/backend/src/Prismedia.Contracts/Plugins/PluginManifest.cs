@@ -103,7 +103,9 @@ public sealed record PluginProvider(
     bool IsNsfw,
     IReadOnlyList<PluginEntitySupport> Supports,
     IReadOnlyList<PluginAuthField> Auth,
-    IReadOnlyList<string> MissingAuthKeys);
+    IReadOnlyList<string> MissingAuthKeys,
+    bool UpdateAvailable = false,
+    string? AvailableVersion = null);
 
 /// <summary>
 /// Request body for saving plugin credential values.

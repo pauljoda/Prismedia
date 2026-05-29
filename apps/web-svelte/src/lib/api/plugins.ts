@@ -73,6 +73,12 @@ export function installPlugin(provider: string): Promise<PluginProvider> {
   );
 }
 
+export function updatePlugin(provider: string): Promise<PluginProvider> {
+  return fetchApi(`/api/plugins/${encodeURIComponent(provider)}/update`, {
+    method: "POST",
+  });
+}
+
 export function removePlugin(provider: string): Promise<void> {
   return removePluginProviderRequest(provider).then((response) =>
     unwrapGenerated(response, "Failed to remove plugin provider", [204]),

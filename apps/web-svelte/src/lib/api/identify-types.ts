@@ -22,6 +22,8 @@ export interface PluginProvider {
   supports: PluginEntitySupport[];
   auth: PluginAuthField[];
   missingAuthKeys: string[];
+  updateAvailable?: boolean;
+  availableVersion?: string | null;
 }
 
 export interface IdentifyQuery {

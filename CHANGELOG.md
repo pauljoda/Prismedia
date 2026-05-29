@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 - Added a typed EntityDetail action button API so route-level hero actions share consistent styling, sizing, disabled states, and mobile label behavior.
+- Added Prismedia Community plugin update detection and install actions so deployed providers can move to newer compatible repository versions.
 - Added global entity search results that show direct matches first, then related media for matched people, studios, and tags, with quick-open highlighted results in search and the command palette.
 - Added collection creation and editing, including manual, dynamic, and hybrid modes, rule previews, visibility, and cover mode.
 - Added collection item curation controls for adding, removing, and reordering manual media entries from collection detail pages.

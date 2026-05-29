@@ -23,6 +23,7 @@
     uninstallPlugin,
     toggleScraper,
     togglePlugin,
+    updatePlugin,
     createStashBoxEndpoint,
     updateStashBoxEndpoint,
     deleteStashBoxEndpoint,
@@ -50,6 +51,7 @@
   let pluginProviders = $state<PluginProvider[]>([]);
   let providerInstallingId = $state<string | null>(null);
   let providerRemovingId = $state<string | null>(null);
+  let providerUpdatingId = $state<string | null>(null);
   let pluginUpdates = $state<Record<string, PluginUpdateStatus>>({});
   let updatingPluginId = $state<string | null>(null);
   let checkingUpdates = $state(false);
@@ -87,12 +89,16 @@
   async function loadPluginUpdates(refresh = false) {
     checkingUpdates = true;
     try {
-      const rows = await fetchPluginUpdates({ refresh });
+      const [rows, providers] = await Promise.all([
+        fetchPluginUpdates({ refresh }).catch(() => [] as PluginUpdateStatus[]),
+        fetchPluginProviders(),
+      ]);
       const map: Record<string, PluginUpdateStatus> = {};
       for (const row of rows) map[row.pluginId] = row;
       pluginUpdates = map;
-    } catch {
-      /* registry unreachable — ignore */
+      pluginProviders = providers;
+    } catch (err) {
+      error = err instanceof Error ? err.message : "Failed to check plugin updates";
     } finally {
       checkingUpdates = false;
     }
@@ -293,6 +299,20 @@
       error = err instanceof Error ? err.message : `Failed to install ${plugin.name}`;
     } finally {
       providerInstallingId = null;
+    }
+  }
+
+  async function handleProviderUpdate(plugin: PluginProvider) {
+    providerUpdatingId = plugin.id;
+    error = null;
+    try {
+      const updated = await updatePlugin(plugin.id);
+      pluginProviders = pluginProviders.map((row) => (row.id === updated.id ? updated : row));
+      flashMessage(`Updated ${updated.name} -> v${updated.version}`);
+    } catch (err) {
+      error = err instanceof Error ? err.message : `Failed to update ${plugin.name}`;
+    } finally {
+      providerUpdatingId = null;
     }
   }
 
@@ -528,11 +548,13 @@
         onProviderInstall={(plugin) => void handleProviderInstall(plugin)}
         onProviderRemove={(plugin) => void handleRemove(plugin)}
         onProviderSaveAuth={(plugin) => void handleProviderSaveAuth(plugin)}
+        onProviderUpdate={(plugin) => void handleProviderUpdate(plugin)}
         onScraperRemove={(pkg) => void handleUninstall(pkg)}
         onScraperToggle={(pkg) => void handleToggle(pkg)}
         {pluginUpdates}
         {providerInstallingId}
         {providerRemovingId}
+        {providerUpdatingId}
         providers={visibleInstalledProviders}
         scrapers={visibleScrapers}
         {updatingPluginId}
