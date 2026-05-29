@@ -55,6 +55,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated web app manifest and mobile browser metadata for home-screen installation and browser UI theme colors.
 
 ### Fixed
+- Fixed job state races so a job being cancelled, updated, completed, or retried at the same moment by the worker and the UI no longer silently loses one of the updates.
 - Fixed HDR thumbnails for Dolby Vision profile 8 videos so still-frame thumbnails are tone-mapped consistently with adaptive streaming instead of rendering washed out or discolored.
 - Fixed playback progress consistency so external (Jellyfin-compatible) clients and the native player record resume position, completion, and play counts identically; marking an item played from an external client now correctly records completion and progress pings no longer inflate the play count.
 - Fixed deployed Prismedia Community plugin discovery so the app resolves the live Prismedia-Plugins YAML index and can pull compatible entries into the local plugin cache for installation.

@@ -109,5 +109,17 @@ public sealed class PrismediaDbContext : DbContext {
         modelBuilder.ConfigureEntityRelationshipModel();
         modelBuilder.ConfigureEntityAttachmentModel();
         modelBuilder.ConfigurePrismediaModel();
+
+        // job_runs is mutated concurrently by background worker tasks (claim/progress/complete/fail)
+        // and by API endpoints (cancel), so it uses the PostgreSQL xmin system column as an optimistic
+        // concurrency token to detect and resolve conflicting writes. xmin already exists on every row,
+        // so this maps to it without DDL. Guarded to Npgsql so the in-memory test provider is unaffected.
+        if (Database.IsNpgsql()) {
+            // A uint, store-generated, concurrency-token property is recognized by the Npgsql convention
+            // and mapped to the existing xmin system column without emitting any migration DDL.
+            modelBuilder.Entity<JobRunRow>()
+                .Property<uint>("Version")
+                .IsRowVersion();
+        }
     }
 }

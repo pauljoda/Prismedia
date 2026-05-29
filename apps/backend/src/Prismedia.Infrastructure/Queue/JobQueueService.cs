@@ -161,21 +161,19 @@ public sealed class JobQueueService : IJobQueueService {
         return rows.Count;
     }
 
-    public async Task<bool> CancelRunAsync(Guid id, CancellationToken cancellationToken) {
-        var row = await _db.JobRuns.FindAsync([id], cancellationToken);
-        if (row is null || (row.Status != JobRunStatus.Queued && row.Status != JobRunStatus.Running)) {
-            return false;
-        }
+    public Task<bool> CancelRunAsync(Guid id, CancellationToken cancellationToken) =>
+        MutateRunAsync(id, row => {
+            if (row.Status != JobRunStatus.Queued && row.Status != JobRunStatus.Running) {
+                return false;
+            }
 
-        row.Status = JobRunStatus.Cancelled;
-        row.Message = "Cancelled";
-        row.LockedAt = null;
-        row.LockedBy = null;
-        row.FinishedAt = DateTimeOffset.UtcNow;
-        await _db.SaveChangesAsync(cancellationToken);
-
-        return true;
-    }
+            row.Status = JobRunStatus.Cancelled;
+            row.Message = "Cancelled";
+            row.LockedAt = null;
+            row.LockedBy = null;
+            row.FinishedAt = DateTimeOffset.UtcNow;
+            return true;
+        }, cancellationToken);
 
     public async Task<int> ClearFailuresAsync(JobType? type, CancellationToken cancellationToken) {
         var query = _db.JobRuns.Where(job => job.Status == JobRunStatus.Failed);
@@ -288,53 +286,83 @@ public sealed class JobQueueService : IJobQueueService {
         return rows.Count;
     }
 
-    public async Task UpdateProgressAsync(Guid id, int progress, string? message, CancellationToken cancellationToken) {
-        var row = await _db.JobRuns.FindAsync([id], cancellationToken);
-        if (row is null || row.Status != JobRunStatus.Running) {
-            return;
-        }
+    public Task UpdateProgressAsync(Guid id, int progress, string? message, CancellationToken cancellationToken) =>
+        MutateRunAsync(id, row => {
+            if (row.Status != JobRunStatus.Running) {
+                return false;
+            }
 
-        row.Progress = Math.Clamp(progress, 0, 100);
-        if (message is not null) {
+            row.Progress = Math.Clamp(progress, 0, 100);
+            if (message is not null) {
+                row.Message = message;
+            }
+
+            return true;
+        }, cancellationToken);
+
+    public Task CompleteAsync(Guid id, string? message, CancellationToken cancellationToken) =>
+        MutateRunAsync(id, row => {
+            if (row.Status != JobRunStatus.Running) {
+                return false;
+            }
+
+            row.Status = JobRunStatus.Completed;
+            row.Progress = 100;
             row.Message = message;
-        }
+            row.LockedAt = null;
+            row.LockedBy = null;
+            row.FinishedAt = DateTimeOffset.UtcNow;
+            return true;
+        }, cancellationToken);
 
-        await _db.SaveChangesAsync(cancellationToken);
-    }
-
-    public async Task CompleteAsync(Guid id, string? message, CancellationToken cancellationToken) {
-        var row = await _db.JobRuns.FindAsync([id], cancellationToken);
-        if (row is null || row.Status != JobRunStatus.Running) {
-            return;
-        }
-
-        row.Status = JobRunStatus.Completed;
-        row.Progress = 100;
-        row.Message = message;
-        row.LockedAt = null;
-        row.LockedBy = null;
-        row.FinishedAt = DateTimeOffset.UtcNow;
-        await _db.SaveChangesAsync(cancellationToken);
-    }
-
-    public async Task FailAsync(
+    public Task FailAsync(
         Guid id,
         string message,
         TimeSpan retryDelay,
-        CancellationToken cancellationToken) {
-        var row = await _db.JobRuns.FindAsync([id], cancellationToken);
-        if (row is null || row.Status != JobRunStatus.Running) {
-            return;
-        }
+        CancellationToken cancellationToken) =>
+        MutateRunAsync(id, row => {
+            if (row.Status != JobRunStatus.Running) {
+                return false;
+            }
 
-        var shouldRetry = row.Attempts < row.MaxAttempts;
-        row.Status = shouldRetry ? JobRunStatus.Queued : JobRunStatus.Failed;
-        row.Message = message;
-        row.LockedAt = null;
-        row.LockedBy = null;
-        row.AvailableAt = shouldRetry ? DateTimeOffset.UtcNow.Add(retryDelay) : row.AvailableAt;
-        row.FinishedAt = shouldRetry ? null : DateTimeOffset.UtcNow;
-        await _db.SaveChangesAsync(cancellationToken);
+            var shouldRetry = row.Attempts < row.MaxAttempts;
+            row.Status = shouldRetry ? JobRunStatus.Queued : JobRunStatus.Failed;
+            row.Message = message;
+            row.LockedAt = null;
+            row.LockedBy = null;
+            row.AvailableAt = shouldRetry ? DateTimeOffset.UtcNow.Add(retryDelay) : row.AvailableAt;
+            row.FinishedAt = shouldRetry ? null : DateTimeOffset.UtcNow;
+            return true;
+        }, cancellationToken);
+
+    /// <summary>
+    /// Loads a single job run, applies a mutation, and saves it, retrying on optimistic-concurrency
+    /// conflicts. job_runs is written by both background workers and API endpoints; the xmin token
+    /// turns a lost update into a <see cref="DbUpdateConcurrencyException"/>, which we resolve by
+    /// reloading the current row state and re-evaluating the mutation (which may now be a no-op).
+    /// </summary>
+    /// <param name="id">Job run identifier.</param>
+    /// <param name="mutate">Mutation returning true to persist, or false to abort without saving.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>True when the row was mutated and saved; otherwise false.</returns>
+    private async Task<bool> MutateRunAsync(
+        Guid id,
+        Func<JobRunRow, bool> mutate,
+        CancellationToken cancellationToken) {
+        const int maxConcurrencyRetries = 3;
+        for (var attempt = 0; ; attempt++) {
+            var row = await _db.JobRuns.FindAsync([id], cancellationToken);
+            if (row is null || !mutate(row)) {
+                return false;
+            }
+
+            try {
+                await _db.SaveChangesAsync(cancellationToken);
+                return true;
+            } catch (DbUpdateConcurrencyException) when (attempt < maxConcurrencyRetries) {
+                await _db.Entry(row).ReloadAsync(cancellationToken);
+            }
+        }
     }
 
     public async Task<IReadOnlyList<JobQueueCount>> GetQueueCountsAsync(bool hideNsfw, CancellationToken cancellationToken) {

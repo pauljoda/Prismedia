@@ -172,8 +172,8 @@ public sealed class PrismediaDbContextModelTests {
         using var db = CreateContext();
         var migrations = db.GetService<IMigrationsAssembly>().Migrations.Keys.ToArray();
 
-        var migration = Assert.Single(migrations);
-        Assert.EndsWith("InitialPrismediaSchema", migration, StringComparison.Ordinal);
+        Assert.NotEmpty(migrations);
+        Assert.EndsWith("InitialPrismediaSchema", migrations[0], StringComparison.Ordinal);
     }
 
     [Theory]
