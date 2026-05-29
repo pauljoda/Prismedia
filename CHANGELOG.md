@@ -55,6 +55,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated web app manifest and mobile browser metadata for home-screen installation and browser UI theme colors.
 
 ### Fixed
+- Fixed background worker concurrency changes so the running worker refreshes the saved setting and starts additional jobs without a restart.
+- Fixed custom video thumbnails so VidStack poster images fill and center inside the player surface instead of sitting in the top-left corner.
 - Fixed entity saves so an interrupted save can no longer leave an item with its metadata cleared but not rewritten; capability writes are now committed atomically.
 - Fixed job state races so a job being cancelled, updated, completed, or retried at the same moment by the worker and the UI no longer silently loses one of the updates.
 - Fixed HDR thumbnails for Dolby Vision profile 8 videos so still-frame thumbnails are tone-mapped consistently with adaptive streaming instead of rendering washed out or discolored.

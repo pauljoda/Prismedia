@@ -1759,6 +1759,14 @@
     width: 100%;
   }
 
+  .prismedia-media-engine :global(media-poster img) {
+    display: block;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    width: 100%;
+  }
+
   :global(.prismedia-media-engine[data-started] media-poster),
   :global(.prismedia-media-engine[data-playing] media-poster) {
     opacity: 0;

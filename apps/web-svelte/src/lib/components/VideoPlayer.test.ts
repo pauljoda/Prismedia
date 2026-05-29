@@ -432,6 +432,9 @@ describe("VideoPlayer", () => {
     expect(source).toContain(".prismedia-media-engine :global(media-provider)");
     expect(source).toContain("position: absolute;");
     expect(source).toContain("inset: 0;");
+    expect(source).toContain(".prismedia-media-engine :global(media-poster img)");
+    expect(source).toContain("object-fit: cover;");
+    expect(source).toContain("object-position: center;");
     expect(source).toContain(":global(.prismedia-media-engine[data-started] media-poster)");
     expect(source).toContain("visibility: hidden;");
   });

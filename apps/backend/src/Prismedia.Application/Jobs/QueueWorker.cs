@@ -14,11 +14,15 @@ namespace Prismedia.Application.Jobs;
 public sealed class QueueWorker(
     IServiceScopeFactory scopeFactory,
     WorkerRuntimeIdentity workerIdentity,
-    ILogger<QueueWorker> logger) : BackgroundService {
+    ILogger<QueueWorker> logger,
+    TimeSpan? concurrencyRefreshInterval = null) : BackgroundService {
     private static readonly TimeSpan IdleDelay = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan StaleLeaseTimeout = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan StaleLeaseRecoveryInterval = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan DefaultConcurrencyRefreshInterval = TimeSpan.FromSeconds(15);
+    private readonly TimeSpan _concurrencyRefreshInterval =
+        concurrencyRefreshInterval ?? DefaultConcurrencyRefreshInterval;
     private readonly string _workerId = workerIdentity.WorkerId;
 
     /// <summary>
@@ -27,7 +31,8 @@ public sealed class QueueWorker(
     /// </summary>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
         var concurrency = await LoadConcurrencyAsync(stoppingToken);
-        using var semaphore = new SemaphoreSlim(concurrency, concurrency);
+        var runningJobs = new HashSet<Task>();
+        var nextConcurrencyRefreshAt = DateTimeOffset.UtcNow.Add(_concurrencyRefreshInterval);
 
         logger.LogInformation(
             "Prismedia .NET worker {WorkerId} started with concurrency {Concurrency}.",
@@ -35,13 +40,31 @@ public sealed class QueueWorker(
 
         var nextRecoveryAt = DateTimeOffset.MinValue;
         while (!stoppingToken.IsCancellationRequested) {
-            await semaphore.WaitAsync(stoppingToken);
+            RemoveCompletedJobs(runningJobs);
+
+            var now = DateTimeOffset.UtcNow;
+            if (now >= nextConcurrencyRefreshAt) {
+                var nextConcurrency = await LoadConcurrencyAsync(stoppingToken);
+                if (nextConcurrency != concurrency) {
+                    logger.LogInformation(
+                        "Prismedia .NET worker {WorkerId} concurrency changed from {PreviousConcurrency} to {Concurrency}.",
+                        _workerId, concurrency, nextConcurrency);
+                    concurrency = nextConcurrency;
+                }
+
+                nextConcurrencyRefreshAt = now.Add(_concurrencyRefreshInterval);
+            }
+
+            if (runningJobs.Count >= concurrency) {
+                await WaitForCapacityOrRefreshAsync(runningJobs, nextConcurrencyRefreshAt, stoppingToken);
+                continue;
+            }
 
             JobRunSnapshot? job;
             try {
                 await using var claimScope = scopeFactory.CreateAsyncScope();
                 var queue = claimScope.ServiceProvider.GetRequiredService<IJobQueueService>();
-                var now = DateTimeOffset.UtcNow;
+                now = DateTimeOffset.UtcNow;
                 if (now >= nextRecoveryAt) {
                     var recovered = await queue.RecoverStaleRunningAsync(_workerId, StaleLeaseTimeout, stoppingToken);
                     if (recovered > 0) {
@@ -53,24 +76,53 @@ public sealed class QueueWorker(
 
                 job = await queue.ClaimNextAsync(_workerId, stoppingToken);
             } catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) {
-                semaphore.Release();
                 throw;
             } catch (Exception ex) {
-                semaphore.Release();
                 logger.LogError(ex, "Failed to claim next job.");
-                await Task.Delay(IdleDelay, stoppingToken);
+                await WaitForCapacityOrRefreshAsync(runningJobs, nextConcurrencyRefreshAt, stoppingToken);
                 continue;
             }
 
             if (job is null) {
-                semaphore.Release();
-                await Task.Delay(IdleDelay, stoppingToken);
+                await WaitForCapacityOrRefreshAsync(runningJobs, nextConcurrencyRefreshAt, stoppingToken);
                 continue;
             }
 
-            _ = Task.Run(() => ProcessJobAsync(job, stoppingToken), stoppingToken)
-                .ContinueWith(_ => semaphore.Release(), TaskScheduler.Default);
+            runningJobs.Add(Task.Run(() => ProcessJobAsync(job, stoppingToken), stoppingToken));
         }
+
+        if (runningJobs.Count > 0) {
+            await Task.WhenAll(runningJobs);
+        }
+    }
+
+    private static void RemoveCompletedJobs(HashSet<Task> runningJobs) {
+        runningJobs.RemoveWhere(job => job.IsCompleted);
+    }
+
+    private static async Task WaitForCapacityOrRefreshAsync(
+        HashSet<Task> runningJobs,
+        DateTimeOffset nextConcurrencyRefreshAt,
+        CancellationToken stoppingToken) {
+        var delay = NextCheckDelay(nextConcurrencyRefreshAt);
+        if (runningJobs.Count == 0) {
+            await Task.Delay(delay, stoppingToken);
+            return;
+        }
+
+        var jobCompletion = Task.WhenAny(runningJobs);
+        var refreshDelay = Task.Delay(delay, stoppingToken);
+        var completed = await Task.WhenAny(jobCompletion, refreshDelay);
+        if (completed == jobCompletion) {
+            var finishedJob = await jobCompletion;
+            runningJobs.Remove(finishedJob);
+        }
+    }
+
+    private static TimeSpan NextCheckDelay(DateTimeOffset nextConcurrencyRefreshAt) {
+        var untilRefresh = nextConcurrencyRefreshAt - DateTimeOffset.UtcNow;
+        if (untilRefresh <= TimeSpan.Zero) return TimeSpan.Zero;
+        return untilRefresh < IdleDelay ? untilRefresh : IdleDelay;
     }
 
     private async Task ProcessJobAsync(JobRunSnapshot job, CancellationToken stoppingToken) {
