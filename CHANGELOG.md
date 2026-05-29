@@ -58,6 +58,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated web app manifest and mobile browser metadata for home-screen installation and browser UI theme colors.
 
 ### Fixed
+- Fixed Identify acceptance feedback so quick metadata applies keep the progress row visible before navigating away.
 - Fixed video scans so named nested season folders such as Specials stay under their parent series instead of appearing as duplicate top-level series.
 - Fixed TMDB Identify cascades so matched season shells are hydrated when local episodes exist, allowing episode titles and artwork to appear in the review tree after selecting a series search result.
 - Fixed Identify candidate selection for provider-created series trees so Prismedia reuses matching season and episode proposals instead of re-querying the provider for every existing child before the review can open.

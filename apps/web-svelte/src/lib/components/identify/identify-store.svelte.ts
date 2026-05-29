@@ -68,6 +68,7 @@ export interface IdentifyKindInfo {
 const identifyStoreContext = createContext<IdentifyStore>("IdentifyStore");
 export const setIdentifyStore = identifyStoreContext.provide;
 export const useIdentifyStore = identifyStoreContext.use;
+const MIN_APPLY_PROGRESS_VISIBLE_MS = 650;
 
 export class IdentifyStore {
   #getHideNsfw: () => boolean;
@@ -317,6 +318,8 @@ export class IdentifyStore {
     options: { navigateNext?: boolean } = {},
   ) {
     const progressId = createOperationId();
+    const progressStartedAt = nowMs();
+    let afterApply: (() => void | Promise<void>) | null = null;
     this.applying = true;
     this.applyProgress = initialApplyProgress(progressId, entity, proposal, selectedFields);
     this.error = null;
@@ -328,28 +331,33 @@ export class IdentifyStore {
       if (options.navigateNext) {
         const next = this.nextQueueItem(item.entityId);
         if (next) {
-          this.reviewQueueItem(next);
-          return;
+          afterApply = () => this.reviewQueueItem(next);
         }
       }
 
-      if (this.returnEntityId) {
+      if (!afterApply && this.returnEntityId) {
         const href = await resolveEntityHrefById(this.returnEntityId);
         if (href) {
-          void goto(href);
-          return;
+          afterApply = () => goto(href);
         }
       }
 
-      this.message = `${proposal.patch.title ?? entity.title} identified`;
-      this.navigateToDashboard();
+      if (!afterApply) {
+        this.message = `${proposal.patch.title ?? entity.title} identified`;
+        afterApply = () => this.navigateToDashboard();
+      }
     } catch (err) {
       this.error = readError(err);
     } finally {
+      await waitForMinimumApplyProgress(progressStartedAt);
       this.#stopApplyProgressPolling?.();
       this.#stopApplyProgressPolling = null;
       this.applying = false;
       this.applyProgress = null;
+    }
+
+    if (!this.error && afterApply) {
+      await afterApply();
     }
   }
 
@@ -859,6 +867,17 @@ function isResolvedIdentifyResult(item: IdentifyQueueItem): boolean {
 
 function createOperationId(): string {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function nowMs(): number {
+  return globalThis.performance?.now?.() ?? Date.now();
+}
+
+async function waitForMinimumApplyProgress(startedAt: number): Promise<void> {
+  const remaining = MIN_APPLY_PROGRESS_VISIBLE_MS - (nowMs() - startedAt);
+  if (remaining > 0) {
+    await new Promise<void>((resolve) => setTimeout(resolve, remaining));
+  }
 }
 
 function initialApplyProgress(

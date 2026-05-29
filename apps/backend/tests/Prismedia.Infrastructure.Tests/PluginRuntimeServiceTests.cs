@@ -909,6 +909,92 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
     }
 
     [Fact]
+    public async Task IdentifyHydratesLocalEpisodesMissingFromProviderSeasonTree() {
+        var pluginDir = Path.Combine(_tempRoot, "tmdb");
+        Directory.CreateDirectory(pluginDir);
+        await File.WriteAllTextAsync(
+            Path.Combine(pluginDir, "manifest.json"),
+            """
+            {
+              "manifestVersion": 1,
+              "apiTags": ["prismedia"],
+              "id": "tmdb",
+              "name": "TMDB",
+              "version": "1.2.0",
+              "runtime": "dotnet-process",
+              "entry": "Prismedia.Plugin.Tmdb.dll",
+              "compat": {
+                "pluginApiMin": "1.0.0",
+                "pluginApiMax": null,
+                "prismediaMin": "1.0.0",
+                "prismediaMax": null
+              },
+              "auth": [
+                { "key": "apiKey", "label": "API key", "required": true, "url": "https://www.themoviedb.org/settings/api" }
+              ],
+              "supports": [
+                { "entityKind": "video-series", "actions": ["lookup-id", "search"] },
+                { "entityKind": "video-season", "actions": ["lookup-id", "search"] },
+                { "entityKind": "video", "actions": ["lookup-id", "search"] }
+              ]
+            }
+            """);
+
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var providerConfig = new ProviderConfigRow {
+            Id = Guid.NewGuid(),
+            ProviderCode = "tmdb",
+            DisplayName = "TMDB",
+            ProviderType = ProviderType.ExternalProcess,
+            Enabled = true,
+            SettingsJson = "{}",
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+        var seriesId = Guid.Parse("55555555-2222-4444-8888-555555555555");
+        var seasonId = Guid.Parse("66666666-2222-4444-8888-666666666666");
+        var firstEpisodeId = Guid.Parse("77777777-2222-4444-8888-777777777777");
+        var secondEpisodeId = Guid.Parse("88888888-2222-4444-8888-888888888888");
+        db.ProviderConfigs.Add(providerConfig);
+        db.ProviderCredentials.Add(new ProviderCredentialRow {
+            Id = Guid.NewGuid(),
+            ProviderConfigId = providerConfig.Id,
+            CredentialKey = "apiKey",
+            EncryptedValue = "secret",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.Entities.AddRange(
+            new EntityRow { Id = seriesId, KindCode = "video-series", Title = "Bear in the Big Blue House", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = seasonId, KindCode = "video-season", Title = "Season 2", ParentEntityId = seriesId, SortOrder = 2, CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = firstEpisodeId, KindCode = "video", Title = "Bear in the Big Blue House - S02E01 - Ooh Baby, Baby SDTV", ParentEntityId = seasonId, SortOrder = 1, CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = secondEpisodeId, KindCode = "video", Title = "Bear in the Big Blue House - S02E02 - Raiders of the Lost Cheese SDTV", ParentEntityId = seasonId, SortOrder = 2, CreatedAt = now, UpdatedAt = now });
+        db.EntityPositions.AddRange(
+            new EntityPositionRow { EntityId = seasonId, Code = "season", Value = 2, UpdatedAt = now },
+            new EntityPositionRow { EntityId = firstEpisodeId, Code = "season", Value = 2, UpdatedAt = now },
+            new EntityPositionRow { EntityId = firstEpisodeId, Code = "episode", Value = 1, UpdatedAt = now },
+            new EntityPositionRow { EntityId = secondEpisodeId, Code = "season", Value = 2, UpdatedAt = now },
+            new EntityPositionRow { EntityId = secondEpisodeId, Code = "episode", Value = 2, UpdatedAt = now });
+        await db.SaveChangesAsync();
+
+        var executor = new ProviderSeasonMissingFirstEpisodeProcessExecutor(seriesId);
+        var service = CreateIdentifyService(db, executor, pluginDir);
+
+        var response = await service.IdentifyAsync(seriesId, "tmdb", null, hideNsfw: false, CancellationToken.None);
+
+        Assert.True(response.Ok);
+        Assert.Equal([seriesId, seasonId, firstEpisodeId], executor.Requests.Select(request => request.Entity.Id).ToArray());
+        var season = Assert.Single(response.Result!.Children);
+        Assert.Equal(seasonId, season.TargetEntityId);
+        Assert.Equal(
+            [firstEpisodeId, secondEpisodeId],
+            season.Children.OrderBy(child => child.Patch.Positions["episodeNumber"]).Select(child => child.TargetEntityId).ToArray());
+        Assert.Equal("Ooh Baby, Baby", season.Children.Single(child => child.TargetEntityId == firstEpisodeId).Patch.Title);
+        Assert.Equal("Raiders of the Lost Cheese", season.Children.Single(child => child.TargetEntityId == secondEpisodeId).Patch.Title);
+    }
+
+    [Fact]
     public async Task IdentifyChoosesActionsFromCurrentEntityKindOnly() {
         var pluginDir = Path.Combine(_tempRoot, "tmdb");
         Directory.CreateDirectory(pluginDir);
@@ -1646,6 +1732,105 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
                 [episode],
                 []);
         }
+    }
+
+    private sealed class ProviderSeasonMissingFirstEpisodeProcessExecutor(Guid seriesId) : ProcessExecutor {
+        public List<IdentifyPluginRequest> Requests { get; } = [];
+
+        public override async Task<ProcessExecutionResult> RunAsync(
+            string fileName,
+            IReadOnlyList<string> arguments,
+            IReadOnlyDictionary<string, string>? environment,
+            CancellationToken cancellationToken) {
+            var requestJson = await File.ReadAllTextAsync(arguments[1], cancellationToken);
+            var request = JsonSerializer.Deserialize<IdentifyPluginRequest>(
+                requestJson,
+                new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+            Requests.Add(request);
+
+            var proposal = request.Entity.Kind switch {
+                "video-series" => SeriesWithSeasonShell(),
+                "video-season" => SeasonStartingAtSecondEpisode(),
+                _ => FirstEpisodeProposal()
+            };
+
+            return new ProcessExecutionResult(0, SerializeAsWire(proposal), string.Empty);
+        }
+
+        private EntityMetadataProposal SeriesWithSeasonShell() {
+            var seasonShell = new EntityMetadataProposal(
+                $"tmdb:tv:{seriesId}:season:2",
+                "tmdb",
+                "video-season",
+                0.85m,
+                "cascade",
+                EmptyPatch() with {
+                    Title = "Season 2",
+                    Positions = new Dictionary<string, int> { ["seasonNumber"] = 2 }
+                },
+                [],
+                [],
+                []);
+
+            return new EntityMetadataProposal(
+                $"tmdb:tv:{seriesId}",
+                "tmdb",
+                "video-series",
+                1,
+                "external-id",
+                EmptyPatch() with {
+                    Title = "Bear in the Big Blue House",
+                    ExternalIds = new Dictionary<string, string> { ["tmdb"] = seriesId.ToString() }
+                },
+                [],
+                [seasonShell],
+                []);
+        }
+
+        private EntityMetadataProposal SeasonStartingAtSecondEpisode() {
+            var episode = new EntityMetadataProposal(
+                $"tmdb:tv:{seriesId}:s2:e2",
+                "tmdb",
+                "video-episode",
+                0.9m,
+                "cascade",
+                EmptyPatch() with {
+                    Title = "Raiders of the Lost Cheese",
+                    Positions = new Dictionary<string, int> { ["seasonNumber"] = 2, ["episodeNumber"] = 2 }
+                },
+                [],
+                [],
+                []);
+
+            return new EntityMetadataProposal(
+                $"tmdb:tv:{seriesId}:season:2",
+                "tmdb",
+                "video-season",
+                1,
+                "context",
+                EmptyPatch() with {
+                    Title = "Season 2",
+                    Positions = new Dictionary<string, int> { ["seasonNumber"] = 2 }
+                },
+                [],
+                [episode],
+                []);
+        }
+
+        private EntityMetadataProposal FirstEpisodeProposal() =>
+            new(
+                $"tmdb:tv:{seriesId}:s2:e1",
+                "tmdb",
+                "video",
+                0.9m,
+                "parent-context",
+                EmptyPatch() with {
+                    Title = "Ooh Baby, Baby",
+                    Positions = new Dictionary<string, int> { ["seasonNumber"] = 2, ["episodeNumber"] = 1 }
+                },
+                [],
+                [],
+                []);
     }
 
     private sealed class FullTreeProcessExecutor : ProcessExecutor {

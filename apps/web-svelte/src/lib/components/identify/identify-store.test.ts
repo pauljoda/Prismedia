@@ -10,6 +10,8 @@ const fetchIdentifyEntity = vi.fn();
 const fetchIdentifyQueueItem = vi.fn();
 const addIdentifyQueueItem = vi.fn();
 const searchIdentifyQueueItem = vi.fn();
+const applyIdentifyQueueItem = vi.fn();
+const fetchIdentifyApplyProgress = vi.fn();
 
 vi.mock("$lib/api/plugins", async (importOriginal) => {
   const actual = await importOriginal<typeof import("$lib/api/plugins")>();
@@ -28,6 +30,8 @@ vi.mock("$lib/api/identify-client", async (importOriginal) => {
     fetchIdentifyQueueItem: (...args: unknown[]) => fetchIdentifyQueueItem(...args),
     addIdentifyQueueItem: (...args: unknown[]) => addIdentifyQueueItem(...args),
     searchIdentifyQueueItem: (...args: unknown[]) => searchIdentifyQueueItem(...args),
+    applyIdentifyQueueItem: (...args: unknown[]) => applyIdentifyQueueItem(...args),
+    fetchIdentifyApplyProgress: (...args: unknown[]) => fetchIdentifyApplyProgress(...args),
   };
 });
 
@@ -39,12 +43,27 @@ describe("IdentifyStore", () => {
     fetchIdentifyQueueItem.mockReset();
     addIdentifyQueueItem.mockReset();
     searchIdentifyQueueItem.mockReset();
+    applyIdentifyQueueItem.mockReset();
+    fetchIdentifyApplyProgress.mockReset();
     fetchPluginProviders.mockResolvedValue([]);
     fetchIdentifyQueue.mockResolvedValue([]);
     fetchIdentifyEntity.mockResolvedValue(null);
     fetchIdentifyQueueItem.mockResolvedValue(queueItem("video-1"));
     addIdentifyQueueItem.mockResolvedValue(queueItem("video-1"));
     searchIdentifyQueueItem.mockResolvedValue(queueItem("video-1", { state: "search" }));
+    applyIdentifyQueueItem.mockResolvedValue(queueItem("video-1", { state: "done" }));
+    fetchIdentifyApplyProgress.mockResolvedValue({
+      id: "apply-1",
+      entityId: "video-1",
+      state: "running",
+      currentIndex: 1,
+      total: 1,
+      currentKind: "video",
+      currentTitle: "Queued Movie",
+      currentPath: ["Queued Movie"],
+      error: null,
+      updatedAt: "2026-05-25T00:00:00Z",
+    });
   });
 
   it("resets stale review state when entering the dashboard route", async () => {
@@ -344,6 +363,33 @@ describe("IdentifyStore", () => {
       requireChoice: true,
     });
     expect(store.view.kind).toBe("review-choice");
+  });
+
+  it("keeps apply progress visible briefly before navigating away", async () => {
+    vi.useFakeTimers();
+    try {
+      const store = new IdentifyStore();
+      const movie = entity("video-1", { kind: "video", title: "Friendship" });
+      const accepted = proposal("tmdb:movie:123", { targetKind: "video", title: "Friendship" });
+
+      const apply = store.applyProposal(movie, accepted, ["title"]);
+
+      expect(store.applying).toBe(true);
+      expect(store.applyProgress?.currentPath).toEqual(["Friendship"]);
+      await vi.advanceTimersByTimeAsync(300);
+      expect(store.applying).toBe(true);
+      await vi.advanceTimersByTimeAsync(400);
+      await apply;
+
+      expect(applyIdentifyQueueItem).toHaveBeenCalledWith("video-1", accepted, ["title"], undefined, {
+        progressId: expect.any(String),
+      });
+      expect(store.applying).toBe(false);
+      expect(store.applyProgress).toBeNull();
+      expect(store.view.kind).toBe("dashboard");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
