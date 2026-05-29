@@ -364,8 +364,17 @@ public sealed class IdentifyPluginService : IIdentifyProviderService {
         bool includeNsfw,
         HashSet<Guid> visited,
         CancellationToken cancellationToken) {
-        if (EntityMetadataProposalTraversal.StructuralChildren(providerChild).Count > 0 ||
-            !await HasSupportedStructuralChildrenAsync(child.Entity.Id, descriptor.Manifest, cancellationToken)) {
+        var providerStructuralChildren = EntityMetadataProposalTraversal.StructuralChildren(providerChild);
+        if (!await HasSupportedStructuralChildrenAsync(child.Entity.Id, descriptor.Manifest, cancellationToken)) {
+            return providerChild;
+        }
+
+        if (providerStructuralChildren.Count > 0 &&
+            !await HasMissingSupportedStructuralChildrenAsync(
+                child.Entity.Id,
+                providerStructuralChildren,
+                descriptor.Manifest,
+                cancellationToken)) {
             return providerChild;
         }
 
@@ -394,6 +403,19 @@ public sealed class IdentifyPluginService : IIdentifyProviderService {
             .Select(row => row.KindCode)
             .ToArrayAsync(cancellationToken);
         return childKinds.Any(kind => manifest.Supports.Any(support => IsCompatibleStructuralKind(kind, support.EntityKind)));
+    }
+
+    private async Task<bool> HasMissingSupportedStructuralChildrenAsync(
+        Guid parentEntityId,
+        IReadOnlyList<EntityMetadataProposal> providerChildren,
+        PluginManifest manifest,
+        CancellationToken cancellationToken) {
+        var localChildren = await LoadStructuralChildrenAsync(parentEntityId, cancellationToken);
+        return localChildren
+            .Where(child => manifest.Supports.Any(support => IsCompatibleStructuralKind(child.Entity.KindCode, support.EntityKind)))
+            .Any(child => !providerChildren.Any(providerChild =>
+                providerChild.TargetEntityId == child.Entity.Id ||
+                IsSameStructuralChild(child, providerChild)));
     }
 
     private async Task<EntityMetadataProposal> BindLocalStructuralTargetsAsync(
