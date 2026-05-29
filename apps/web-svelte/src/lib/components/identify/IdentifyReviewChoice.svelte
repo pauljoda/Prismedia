@@ -220,7 +220,7 @@
       <span class="font-mono text-[0.7rem] text-text-muted">{localCandidates.length} found</span>
       {#if checkingCandidateTitle}
         <span class="hidden font-mono text-[0.7rem] text-text-muted md:inline">
-          Checking {checkingCandidateTitle}; large trees can take a while.
+          Match found. Identifying related items; this may take a while.
         </span>
       {/if}
     </header>

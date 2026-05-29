@@ -71,7 +71,7 @@ describe("IdentifyReviewChoice", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Use Other Match (2025)" }));
 
     await waitFor(() => {
-      expect(screen.getByText("Checking Other Match; large trees can take a while.")).toBeInTheDocument();
+      expect(screen.getByText("Match found. Identifying related items; this may take a while.")).toBeInTheDocument();
       expect(container.querySelectorAll(".animate-spin")).toHaveLength(1);
     });
 

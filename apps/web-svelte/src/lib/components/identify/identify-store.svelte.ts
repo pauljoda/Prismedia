@@ -82,6 +82,7 @@ export class IdentifyStore {
   identifyingProviderName = $state<string | null>(null);
   identifyingProviderIndex = $state<number | null>(null);
   identifyingProviderTotal = $state<number | null>(null);
+  identifyingPhase = $state<"searching" | "matched">("searching");
   applying = $state(false);
   bulkSession = $state<IdentifyBulkSession | null>(null);
   bulkStarting = $state(false);
@@ -130,6 +131,9 @@ export class IdentifyStore {
   identifyingStatus = $derived.by((): string | null => {
     if (!this.identifyingId) return null;
     const providerName = this.identifyingProviderName ?? this.identifyingProviderId;
+    if (this.identifyingPhase === "matched") {
+      return "Match found. Identifying related items; this may take a while.";
+    }
     if (!providerName) return "Searching identify providers";
     const pluginLabel = providerName.toLowerCase().includes("plugin")
       ? providerName
@@ -274,7 +278,7 @@ export class IdentifyStore {
   ) {
     this.identifyingId = entity.id;
     this.error = null;
-    this.#setIdentifyingProvider(providerId, 0, 1);
+    this.#setIdentifyingProvider(providerId, 0, 1, identifyQueryHasMatch(query) ? "matched" : "searching");
     try {
       return await this.#searchWithTitleFallback(entity, providerId, query);
     } catch (err) {
@@ -675,12 +679,18 @@ export class IdentifyStore {
     return mapped;
   }
 
-  #setIdentifyingProvider(providerId: string, index: number, total: number) {
+  #setIdentifyingProvider(
+    providerId: string,
+    index: number,
+    total: number,
+    phase: "searching" | "matched" = "searching",
+  ) {
     const provider = this.providers.find((candidate) => candidate.id === providerId);
     this.identifyingProviderId = providerId;
     this.identifyingProviderName = provider?.name ?? providerId;
     this.identifyingProviderIndex = index;
     this.identifyingProviderTotal = total;
+    this.identifyingPhase = phase;
   }
 
   #clearIdentifyingStatus() {
@@ -689,6 +699,7 @@ export class IdentifyStore {
     this.identifyingProviderName = null;
     this.identifyingProviderIndex = null;
     this.identifyingProviderTotal = null;
+    this.identifyingPhase = "searching";
   }
 
   #leaveHiddenReviewIfNeeded() {
@@ -790,6 +801,12 @@ function shouldFallbackToTitleSearch(
   if (!entity.title.trim()) return false;
   if (query?.title || query?.url || query?.externalIds || query?.requireChoice) return false;
   return true;
+}
+
+function identifyQueryHasMatch(
+  query: { title?: string | null; url?: string | null; externalIds?: Record<string, string> | null; requireChoice?: boolean | null } | undefined,
+): boolean {
+  return Boolean(query?.url || query?.externalIds && Object.keys(query.externalIds).length > 0);
 }
 
 function isResolvedIdentifyResult(item: IdentifyQueueItem): boolean {

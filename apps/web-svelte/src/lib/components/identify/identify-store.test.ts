@@ -225,6 +225,35 @@ describe("IdentifyStore", () => {
     expect(store.identifyingStatus).toBeNull();
   });
 
+  it("describes related-item work after a candidate match is selected", async () => {
+    const store = new IdentifyStore();
+    const movie = entity("video-1", { kind: "video", title: "Friendship" });
+    store.providers = [provider("tmdb", "The Movie Database")];
+    store.queue = [{
+      ...queueItem("video-1"),
+      entity: movie,
+      detail: detail("video-1", { kind: "video", title: "Friendship" }),
+    }];
+    let resolveSearch: (item: ReturnType<typeof queueItem>) => void = () => undefined;
+    searchIdentifyQueueItem.mockReturnValue(new Promise((resolve) => {
+      resolveSearch = resolve;
+    }));
+
+    const search = store.identifyWithCandidate(movie, "tmdb", {
+      externalIds: { tmdb: "123" },
+      title: "Friendship",
+      year: 2025,
+      overview: null,
+      posterUrl: null,
+      popularity: null,
+    });
+    expect(store.identifyingStatus).toBe("Match found. Identifying related items; this may take a while.");
+
+    resolveSearch(queueItem("video-1", { state: "proposal", provider: "tmdb", proposal: proposal("tmdb:movie:123") }));
+    await search;
+    expect(store.identifyingStatus).toBeNull();
+  });
+
   it("opens an existing queued item without enqueueing or searching again", async () => {
     const store = new IdentifyStore();
     fetchIdentifyQueueItem.mockResolvedValue(queueItem("video-1", {

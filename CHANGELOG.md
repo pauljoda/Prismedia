@@ -56,6 +56,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 - Fixed Identify review provider selection and progress feedback so provider menus are available on candidate review screens, are not clipped, automatic Identify tries each ready plugin for the entity type, and searches show which plugin is running.
+- Improved Identify progress text so candidate matches show that Prismedia is identifying related items instead of appearing stuck in provider search.
 - Fixed Identify candidate cards so the Best badge stays in the content flow and no longer overlaps titles when artwork is missing.
 - Fixed installed plugin search candidates so deployed plugins using description and thumbnail fields still show candidate summaries and artwork.
 - Improved large entity grid scrolling by keeping the full paged thumbnail set mounted and loading grid covers eagerly, avoiding fast-scroll pop-in while pagination still caps the workload.
