@@ -35,9 +35,13 @@
 
   type EntityThumbnailTitleAlign = "left" | "center" | "right";
   type EntityThumbnailTitleSize = "default" | "compact";
+  type EntityThumbnailImageLoading = "eager" | "lazy";
+  type EntityThumbnailImageFetchPriority = "auto" | "high" | "low";
 
   interface Props {
     card: EntityThumbnailCard;
+    imageFetchPriority?: EntityThumbnailImageFetchPriority;
+    imageLoading?: EntityThumbnailImageLoading;
     layout?: "grid" | "list";
     linkable?: boolean;
     mediaOnly?: boolean;
@@ -56,6 +60,8 @@
 
   let {
     card,
+    imageFetchPriority = "low",
+    imageLoading = "lazy",
     layout = "grid",
     linkable = true,
     mediaOnly = false,
@@ -418,8 +424,8 @@
         src={activeSequenceAsset.src}
         alt={activeSequenceAsset.alt}
         decoding="async"
-        loading="lazy"
-        fetchpriority="low"
+        loading={imageLoading}
+        fetchpriority={imageFetchPriority}
         style:object-fit={imageFit}
         onload={markImageLoaded}
         onerror={() => {
@@ -433,8 +439,8 @@
         src={sequenceRestCover.src}
         alt={sequenceRestCover.alt}
         decoding="async"
-        loading="lazy"
-        fetchpriority="low"
+        loading={imageLoading}
+        fetchpriority={imageFetchPriority}
         style:object-fit={imageFit}
         onload={markImageLoaded}
         onerror={() => { imageFailed = true; }}
@@ -444,8 +450,8 @@
         src={card.cover.src}
         alt={card.cover.alt}
         decoding="async"
-        loading="lazy"
-        fetchpriority="low"
+        loading={imageLoading}
+        fetchpriority={imageFetchPriority}
         style:object-fit={imageFit}
         class:sprite-active={activeSpriteFrame !== null}
         onload={markImageLoaded}
@@ -456,8 +462,8 @@
         src={asset.src}
         alt={asset.alt}
         decoding="async"
-        loading="lazy"
-        fetchpriority="low"
+        loading={imageLoading}
+        fetchpriority={imageFetchPriority}
         style:object-fit={imageFit}
         onload={markImageLoaded}
         onerror={() => {

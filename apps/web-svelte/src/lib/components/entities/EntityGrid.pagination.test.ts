@@ -23,6 +23,10 @@ describe("EntityGrid pagination", () => {
       configurable: true,
       value: vi.fn(),
     });
+    Object.defineProperty(window, "scrollTo", {
+      configurable: true,
+      value: vi.fn(),
+    });
   });
 
   afterEach(() => {
@@ -76,8 +80,10 @@ describe("EntityGrid pagination", () => {
     });
 
     await waitFor(() => {
-      expect(renderedCount).toBe(250);
-      expect(container.querySelectorAll(".entity-thumbnail").length).toBe(250);
+      expect(renderedCount).toBeGreaterThan(0);
+      expect(renderedCount).toBeLessThan(250);
+      expect(container.querySelectorAll(".entity-thumbnail").length).toBe(renderedCount);
+      expect(container.querySelector(".cards")?.classList.contains("is-virtualized")).toBe(true);
       expect(screen.getByText("Page 1 / 18")).toBeInTheDocument();
     });
   });
@@ -95,7 +101,10 @@ describe("EntityGrid pagination", () => {
     await fireEvent.click(screen.getByRole("button", { name: "100" }));
 
     await waitFor(() => {
-      expect(container.querySelectorAll(".entity-thumbnail").length).toBe(100);
+      const renderedCount = container.querySelectorAll(".entity-thumbnail").length;
+      expect(renderedCount).toBeGreaterThan(0);
+      expect(renderedCount).toBeLessThan(100);
+      expect(container.querySelector(".cards")?.classList.contains("is-virtualized")).toBe(true);
       expect(screen.getByText("Page 1 / 6")).toBeInTheDocument();
     });
 
@@ -117,7 +126,9 @@ describe("EntityGrid pagination", () => {
     });
 
     await waitFor(() => {
-      expect(container.querySelectorAll(".entity-thumbnail")).toHaveLength(100);
+      const renderedCount = container.querySelectorAll(".entity-thumbnail").length;
+      expect(renderedCount).toBeGreaterThan(0);
+      expect(renderedCount).toBeLessThan(100);
       expect(container.querySelector(".pagination-shell")).toBeNull();
       expect(screen.queryByText("Page 1 / 1")).not.toBeInTheDocument();
     });
@@ -133,7 +144,9 @@ describe("EntityGrid pagination", () => {
     });
 
     await waitFor(() => {
-      expect(container.querySelectorAll(".entity-thumbnail")).toHaveLength(150);
+      const renderedCount = container.querySelectorAll(".entity-thumbnail").length;
+      expect(renderedCount).toBeGreaterThan(0);
+      expect(renderedCount).toBeLessThan(150);
       expect(container.querySelector(".pagination-shell")).not.toBeNull();
       expect(screen.getByLabelText("Per page")).toHaveTextContent("250");
       expect(screen.getByText("Page 1 / 1")).toBeInTheDocument();

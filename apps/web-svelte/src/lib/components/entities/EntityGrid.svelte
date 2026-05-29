@@ -33,6 +33,16 @@
   import EntityGridTabs from "./EntityGridTabs.svelte";
   import EntityGridToolbar from "./EntityGridToolbar.svelte";
   import { computeContainedScrollHeight } from "./entity-grid-viewport.svelte";
+  import {
+    ENTITY_GRID_ESTIMATED_ROW_HEIGHT,
+    ENTITY_GRID_MEDIA_WALL_ROW_GAP_PX,
+    ENTITY_GRID_ROW_GAP_PX,
+    ENTITY_GRID_VIRTUALIZATION_THRESHOLD,
+    ENTITY_GRID_VIRTUAL_OVERSCAN_PX,
+    chunkEntityGridRows,
+    computeEntityGridVirtualWindow,
+    resolveEntityGridColumnCount,
+  } from "./entity-grid-virtualization";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import type { NsfwMode } from "$lib/nsfw/cookie";
 
@@ -196,6 +206,10 @@
   let measuredScrollMaxHeight = $state<string | null>(null);
   let measuredFillHeight = $state<string | null>(null);
   let hoverPreviewsResumeAt = 0;
+  let scrollViewportHeight = $state(720);
+  let scrollViewportOffset = $state(0);
+  let virtualRowHeights = $state<Record<number, number>>({});
+  let viewportWidth = $state(1024);
   // svelte-ignore state_referenced_locally
   let sortBy = $state<EntityGridSort>(initialSortBy);
   // svelte-ignore state_referenced_locally
@@ -268,6 +282,32 @@
   const pageStart = $derived(effectiveTotal === 0 ? 0 : currentPageIndex * pageSize);
   const pageEnd = $derived(Math.min(effectiveTotal, pageStart + pageSize));
   const pagedCards = $derived(visibleCards.slice(pageStart, Math.min(visibleCards.length, pageStart + pageSize)));
+  const columnCount = $derived(
+    resolveEntityGridColumnCount({
+      mediaWall,
+      scale,
+      viewMode,
+      viewportWidth,
+    }),
+  );
+  const pagedRows = $derived(chunkEntityGridRows(pagedCards, columnCount));
+  const rowGap = $derived(mediaWall && viewMode === "grid" ? ENTITY_GRID_MEDIA_WALL_ROW_GAP_PX : ENTITY_GRID_ROW_GAP_PX);
+  const virtualized = $derived(dockControls && pagedCards.length > ENTITY_GRID_VIRTUALIZATION_THRESHOLD);
+  const virtualWindow = $derived(
+    computeEntityGridVirtualWindow({
+      estimatedRowHeight: ENTITY_GRID_ESTIMATED_ROW_HEIGHT,
+      overscan: ENTITY_GRID_VIRTUAL_OVERSCAN_PX,
+      rowCount: pagedRows.length,
+      rowGap,
+      rowHeights: virtualRowHeights,
+      scrollOffset: scrollViewportOffset,
+      viewportHeight: scrollViewportHeight,
+    }),
+  );
+  const renderedRows = $derived(virtualized ? pagedRows.slice(virtualWindow.startRow, virtualWindow.endRow) : pagedRows);
+  const renderedCardCount = $derived(
+    virtualized ? renderedRows.reduce((total, row) => total + row.items.length, 0) : pagedCards.length,
+  );
   const canPageBack = $derived(currentPageIndex > 0);
   const canPageForward = $derived(currentPageIndex < pageCount - 1 || Boolean(hasMore && onLoadMore));
   const canSeekToEnd = $derived(currentPageIndex < pageCount - 1);
@@ -302,6 +342,72 @@
   }
 
   const pageSnapshots = usePageSnapshots();
+  let virtualMeasureRaf: number | null = null;
+  let virtualLayoutSignature = "";
+
+  function findScrollAncestor(el: Element): Element | null {
+    let current: Element | null = el.parentElement;
+    while (current && current !== document.body && current !== document.documentElement) {
+      const cs = getComputedStyle(current);
+      const overflows = cs.overflowY === "auto" || cs.overflowY === "scroll";
+      if (overflows) return current;
+      current = current.parentElement;
+    }
+    return null;
+  }
+
+  function updateVirtualViewport() {
+    if (!browser || !viewportEl) return;
+
+    viewportWidth = window.innerWidth;
+    const viewportRect = viewportEl.getBoundingClientRect();
+    const scrollAncestor = findScrollAncestor(viewportEl);
+    const containerRect = scrollAncestor?.getBoundingClientRect();
+    const visibleTop = Math.max(viewportRect.top, containerRect?.top ?? 0, 0);
+    const visibleBottom = Math.min(viewportRect.bottom, containerRect?.bottom ?? window.innerHeight, window.innerHeight);
+
+    scrollViewportOffset = Math.max(0, visibleTop - viewportRect.top);
+    scrollViewportHeight = Math.max(0, visibleBottom - visibleTop);
+  }
+
+  function scheduleVirtualViewportMeasure() {
+    if (!browser || virtualMeasureRaf !== null) return;
+    virtualMeasureRaf = window.requestAnimationFrame(() => {
+      virtualMeasureRaf = null;
+      updateVirtualViewport();
+    });
+  }
+
+  function updateVirtualRowHeight(index: number, height: number) {
+    const nextHeight = Math.ceil(height);
+    if (nextHeight <= 0 || virtualRowHeights[index] === nextHeight) return;
+    virtualRowHeights = { ...virtualRowHeights, [index]: nextHeight };
+  }
+
+  function measureVirtualRow(node: HTMLElement, rowIndex: number) {
+    let currentIndex = rowIndex;
+    let observer: ResizeObserver | null = null;
+
+    function measure() {
+      updateVirtualRowHeight(currentIndex, node.getBoundingClientRect().height);
+    }
+
+    queueMicrotask(measure);
+    if (typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(measure);
+      observer.observe(node);
+    }
+
+    return {
+      update(nextIndex: number) {
+        currentIndex = nextIndex;
+        measure();
+      },
+      destroy() {
+        observer?.disconnect();
+      },
+    };
+  }
 
   onMount(() => {
     scale = loadScale();
@@ -358,16 +464,7 @@
       // mobile because the layout reserves a band at the bottom for the fixed
       // MobileNav — anchoring against the scrolling container keeps the
       // pagination strip above that band instead of behind it.
-      let current: Element | null = el.parentElement;
-      while (current && current !== document.body && current !== document.documentElement) {
-        const cs = getComputedStyle(current);
-        const overflows = cs.overflowY === "auto" || cs.overflowY === "scroll";
-        if (overflows) {
-          return current.getBoundingClientRect().bottom;
-        }
-        current = current.parentElement;
-      }
-      return window.innerHeight;
+      return findScrollAncestor(el)?.getBoundingClientRect().bottom ?? window.innerHeight;
     }
 
     function measureViewport() {
@@ -430,12 +527,44 @@
     hoverPreviewsResumeAt = performance.now() + 220;
   }
 
+  function handleViewportWheel() {
+    markScrolling();
+    scheduleVirtualViewportMeasure();
+  }
+
   onMount(() => {
-    window.addEventListener("scroll", markScrolling, { capture: true, passive: true });
+    function handleScroll() {
+      markScrolling();
+      scheduleVirtualViewportMeasure();
+    }
+
+    window.addEventListener("scroll", handleScroll, { capture: true, passive: true });
+    window.addEventListener("resize", scheduleVirtualViewportMeasure, { passive: true });
+    queueMicrotask(updateVirtualViewport);
 
     return () => {
-      window.removeEventListener("scroll", markScrolling, { capture: true });
+      window.removeEventListener("scroll", handleScroll, { capture: true });
+      window.removeEventListener("resize", scheduleVirtualViewportMeasure);
+      if (virtualMeasureRaf !== null) {
+        window.cancelAnimationFrame(virtualMeasureRaf);
+        virtualMeasureRaf = null;
+      }
     };
+  });
+
+  $effect(() => {
+    const nextSignature = [
+      currentPageIndex,
+      pageSize,
+      columnCount,
+      viewMode,
+      mediaWall ? "wall" : "cards",
+      pagedCards.length,
+    ].join(":");
+    if (nextSignature === virtualLayoutSignature) return;
+    virtualLayoutSignature = nextSignature;
+    virtualRowHeights = {};
+    scheduleVirtualViewportMeasure();
   });
 
   $effect(() => {
@@ -443,7 +572,7 @@
   });
 
   $effect(() => {
-    onRenderedCountChange?.(pagedCards.length);
+    onRenderedCountChange?.(renderedCardCount);
   });
 
   $effect(() => {
@@ -610,7 +739,20 @@
   }
 
   function scrollPageToTop() {
-    viewportEl?.scrollTo({ top: 0 });
+    if (!browser || !viewportEl) return;
+    const scrollAncestor = findScrollAncestor(viewportEl);
+    if (scrollAncestor instanceof HTMLElement) {
+      const ancestorRect = scrollAncestor.getBoundingClientRect();
+      const viewportRect = viewportEl.getBoundingClientRect();
+      scrollAncestor.scrollTo({
+        top: scrollAncestor.scrollTop + viewportRect.top - ancestorRect.top,
+      });
+      return;
+    }
+
+    window.scrollTo({
+      top: window.scrollY + viewportEl.getBoundingClientRect().top,
+    });
   }
 
   function setPageIndex(next: number) {
@@ -686,6 +828,23 @@
     }
   }
 </script>
+
+{#snippet ThumbnailCard(card: EntityThumbnailCard)}
+  <EntityThumbnail
+    {card}
+    imageFetchPriority="auto"
+    imageLoading="eager"
+    layout={viewMode}
+    linkable={!onCardActivate}
+    mediaOnly={mediaWall}
+    onActivate={onCardActivate ? (activatedCard) => onCardActivate(activatedCard, pagedCards) : undefined}
+    hoverPreviewSuppressed={areHoverPreviewsSuppressed}
+    {selectable}
+    selectMode={selectedCount > 0}
+    selected={selectedIds.includes(card.entity.id)}
+    onSelectedChange={(selected) => updateSelection(card.entity.id, selected)}
+  />
+{/snippet}
 
 <section
   bind:this={sectionEl}
@@ -837,7 +996,7 @@
     bind:this={viewportEl}
     class={["grid-viewport", containsScroll && "is-contained"]}
     style:--entity-grid-scroll-max-height={effectiveScrollMaxHeight ?? undefined}
-    onwheel={markScrolling}
+    onwheel={handleViewportWheel}
   >
     {#if loading}
       <div class="loading-grid" aria-label="Loading entities" aria-busy="true">
@@ -853,21 +1012,48 @@
         {/each}
       </div>
     {:else if visibleCards.length > 0}
-      <div class="cards" class:is-list={viewMode === "list"} class:is-media-wall={mediaWall} aria-label="Entities">
-        {#each pagedCards as card (card.entity.id)}
-          <EntityThumbnail
-            {card}
-            layout={viewMode}
-            linkable={!onCardActivate}
-            mediaOnly={mediaWall}
-            onActivate={onCardActivate ? (activatedCard) => onCardActivate(activatedCard, pagedCards) : undefined}
-            hoverPreviewSuppressed={areHoverPreviewsSuppressed}
-            {selectable}
-            selectMode={selectedCount > 0}
-            selected={selectedIds.includes(card.entity.id)}
-            onSelectedChange={(selected) => updateSelection(card.entity.id, selected)}
-          />
-        {/each}
+      <div
+        class="cards"
+        class:is-list={viewMode === "list"}
+        class:is-media-wall={mediaWall}
+        class:is-virtualized={virtualized}
+        aria-label="Entities"
+      >
+        {#if virtualized}
+          {#if virtualWindow.beforeHeight > 0}
+            <div
+              class="virtual-spacer"
+              aria-hidden="true"
+              style:height={`${virtualWindow.beforeHeight}px`}
+            ></div>
+          {/if}
+
+          {#each renderedRows as row (row.index)}
+            <div
+              class="card-row"
+              class:is-list={viewMode === "list"}
+              class:is-media-wall={mediaWall}
+              data-row-index={row.index}
+              use:measureVirtualRow={row.index}
+            >
+              {#each row.items as card (card.entity.id)}
+                {@render ThumbnailCard(card)}
+              {/each}
+            </div>
+          {/each}
+
+          {#if virtualWindow.afterHeight > 0}
+            <div
+              class="virtual-spacer"
+              aria-hidden="true"
+              style:height={`${virtualWindow.afterHeight}px`}
+            ></div>
+          {/if}
+        {:else}
+          {#each pagedCards as card (card.entity.id)}
+            {@render ThumbnailCard(card)}
+          {/each}
+        {/if}
       </div>
     {:else}
       <div class="empty" role="status">
@@ -985,6 +1171,47 @@
   .cards.is-media-wall {
     grid-template-columns: repeat(var(--col-count, 5), minmax(0, 1fr));
     gap: clamp(0.25rem, 0.8vw, 0.5rem);
+  }
+
+  .cards.is-virtualized {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+    contain: layout paint;
+    transition: none;
+  }
+
+  .cards.is-virtualized.is-media-wall {
+    gap: clamp(0.25rem, 0.8vw, 0.5rem);
+  }
+
+  .card-row {
+    display: grid;
+    grid-template-columns: repeat(
+      max(1, min(calc(var(--col-count, 5) - 1), 4)),
+      minmax(0, 1fr)
+    );
+    gap: inherit;
+    align-items: start;
+    width: 100%;
+    min-height: 0;
+  }
+
+  .card-row.is-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .card-row.is-media-wall {
+    grid-template-columns: repeat(var(--col-count, 5), minmax(0, 1fr));
+  }
+
+  .virtual-spacer {
+    flex: 0 0 auto;
+    min-height: 0;
+    pointer-events: none;
   }
 
   .entity-grid.is-static :global(.toolbar-shell) {
@@ -1232,14 +1459,16 @@
 
   @media (min-width: 640px) {
     .cards,
-    .loading-grid {
+    .loading-grid,
+    .card-row {
       grid-template-columns: repeat(max(1, min(var(--col-count, 5), 4)), minmax(0, 1fr));
     }
   }
 
   @media (min-width: 1024px) {
     .cards,
-    .loading-grid {
+    .loading-grid,
+    .card-row {
       grid-template-columns: repeat(var(--col-count, 5), minmax(0, 1fr));
     }
   }

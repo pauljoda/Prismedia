@@ -55,6 +55,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated web app manifest and mobile browser metadata for home-screen installation and browser UI theme colors.
 
 ### Fixed
+- Improved large entity grid scrolling by rendering only an overscanned window of thumbnail rows and loading those visible covers eagerly, reducing delayed thumbnail paint while keeping pagination intact.
 - Fixed large entity grids so scrolling no longer pushes reactive scroll state through every thumbnail, keeping cover images smoother while hover previews stay deferred during scroll.
 - Fixed background worker concurrency changes so the running worker refreshes the saved setting and starts additional jobs without a restart.
 - Fixed custom video thumbnails so VidStack poster images fill and center inside the player surface instead of sitting in the top-left corner.

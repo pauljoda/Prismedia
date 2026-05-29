@@ -257,6 +257,27 @@ describe("EntityThumbnail", () => {
     });
   });
 
+  it("allows scrolling grids to opt into eager cover image loading", () => {
+    const { container } = render(EntityThumbnail, {
+      props: {
+        card: {
+          ...personCard(),
+          cover: {
+            alt: "Tim Robinson",
+            src: "/assets/people/tim.jpg",
+          },
+        },
+        imageFetchPriority: "auto",
+        imageLoading: "eager",
+      },
+    });
+
+    const image = container.querySelector<HTMLImageElement>(".media > img");
+
+    expect(image?.getAttribute("loading")).toBe("eager");
+    expect(image?.getAttribute("fetchpriority")).toBe("auto");
+  });
+
   it("renders image-sequence thumbnails as the first still until hovered", async () => {
     vi.useFakeTimers();
     const { container } = render(EntityThumbnail, {
