@@ -122,6 +122,12 @@
           <ScanSearch class="h-3.5 w-3.5 text-text-accent" />
           <span class="text-kicker text-text-accent">Review queue</span>
           <span class="font-mono text-[0.7rem] text-text-muted">{store.queue.length} items</span>
+          {#if store.bulkSearching}
+            <span class="inline-flex items-center gap-1.5 font-mono text-[0.7rem] text-text-accent">
+              <Loader2 class="h-3 w-3 animate-spin" />
+              Searching {store.bulkSearchDone}/{store.bulkSearchTotal}
+            </span>
+          {/if}
           {#if store.bulkAccepting}
             <span class="inline-flex items-center gap-1.5 font-mono text-[0.7rem] text-text-accent">
               <Loader2 class="h-3 w-3 animate-spin" />
