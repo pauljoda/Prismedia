@@ -546,8 +546,9 @@
     pointer-events: auto;
 
     --toolbar-detail-border: var(--color-border, #1c2235);
-    --toolbar-detail-glass: rgba(12, 15, 21, 0.72);
+    --toolbar-detail-glass: rgb(12 15 21);
     --toolbar-detail-slideout-inset: 5px;
+    --toolbar-bar-overlap: 0.5rem;
   }
 
   .toolbar-hero {
@@ -589,7 +590,7 @@
     align-items: center;
     min-width: 0;
     margin-inline: var(--toolbar-detail-slideout-inset);
-    margin-top: -1px;
+    margin-top: calc(-1 * var(--toolbar-bar-overlap));
     border: 1px solid var(--toolbar-detail-border);
     border-top: 0;
     border-radius: 0 0 var(--radius-md, 10px) var(--radius-md, 10px);
@@ -1122,14 +1123,14 @@
     z-index: 1;
     gap: 0.4rem;
     min-height: 2.1rem;
-    padding: 0.4rem 0.7rem;
+    padding: calc(0.4rem + var(--toolbar-bar-overlap)) 0.7rem 0.4rem;
     pointer-events: auto;
   }
 
   .filter-row + .bulk-bar {
     z-index: 0;
-    margin-top: -0.5rem;
-    padding-top: 1.05rem;
+    margin-top: calc(-1 * var(--toolbar-bar-overlap));
+    padding-top: calc(0.6rem + var(--toolbar-bar-overlap));
   }
 
   .filter-scroll {
@@ -1201,7 +1202,7 @@
     z-index: 1;
     gap: 0.75rem;
     min-height: 2.55rem;
-    padding: 0.6rem 0.85rem;
+    padding: calc(0.6rem + var(--toolbar-bar-overlap)) 0.85rem 0.6rem;
     color: var(--color-text-muted);
     font-family: var(--font-mono, "JetBrains Mono", monospace);
     font-size: 0.7rem;
