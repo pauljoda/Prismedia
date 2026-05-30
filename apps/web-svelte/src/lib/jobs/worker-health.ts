@@ -12,7 +12,7 @@ export interface WorkerHealthBadge {
 }
 
 export const workerOfflineTooltip =
-  "Worker offline. Restart the Prismedia instance to bring the worker back up.";
+  "Worker offline. It restarts automatically — this should clear on its own shortly.";
 
 export function describeWorkerHealth(
   health: WorkerHealthResponse | null,
