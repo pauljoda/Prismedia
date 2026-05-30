@@ -76,6 +76,7 @@
   const peopleLabel = $derived(bookType === "comic" || bookType === "manga" ? "Artists" : "People");
   const bookTitle = $derived(book?.title ?? "Book");
   const chapterSummaries = $derived(combineChapterSummaries(chapterDetails, progressChapterSummary));
+  const chapterCards = $derived(chapterDetails.map((chapter) => chapter.card));
   const progressDisplay = $derived(bookEntityProgressDisplay(book, chapterSummaries));
   const selectedChapter = $derived(
     chapterDetails.find((chapter) => chapter.detail.id === selectedChapterId) ?? chapterDetails[0] ?? null,
@@ -440,19 +441,13 @@
           Chapters
           <span class="content-count">{chapterDetails.length}</span>
         </h2>
-        <div class="chapter-grid">
-          {#each chapterDetails as chapter (chapter.detail.id)}
-            <a class="chapter-card" href={`/books/${book.id}/chapters/${chapter.detail.id}`}>
-              <div class="chapter-card-body">
-                <span class="section-kicker">Ch. {chapter.summary.sortOrder + 1}</span>
-                <strong>{chapter.detail.title}</strong>
-                <span>
-                  {chapter.pages.length} page{chapter.pages.length === 1 ? "" : "s"}
-                </span>
-              </div>
-            </a>
-          {/each}
-        </div>
+        <EntityGrid
+          cards={chapterCards}
+          prefsKey={`book-${book.id}-chapters`}
+          initialSortBy="position"
+          emptyTitle="No chapters"
+          emptyMessage="No chapters found for this book."
+        />
       </section>
     {/if}
   {/if}
