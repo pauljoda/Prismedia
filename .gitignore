@@ -17,3 +17,6 @@ documentation-site/build/
 **/obj/
 **/*.lscache
 apps/backend/data/
+
+# Claude Code harness runtime lock
+.claude/scheduled_tasks.lock
