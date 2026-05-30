@@ -93,6 +93,10 @@ public static class DependencyInjection {
             provider.GetRequiredService<MediaToolOptions>()));
         services.AddSingleton<HashingService>();
         services.AddSingleton<SkiaImageDownscaler>();
+        services.AddSingleton<IImageThumbnailGenerator>(provider =>
+            new ImageThumbnailGenerator(
+                provider.GetRequiredService<SkiaImageDownscaler>(),
+                provider.GetRequiredService<ThumbnailService>()));
         services.AddSingleton<IFileDiscovery>(provider =>
             new FileDiscoveryAdapter(provider.GetRequiredService<FileDiscoveryService>()));
         services.AddSingleton<IMediaProbe>(provider =>
@@ -182,7 +186,7 @@ public static class DependencyInjection {
             new GridThumbnailService(
                 provider.GetRequiredService<PrismediaDbContext>(),
                 provider.GetRequiredService<AssetPathService>(),
-                provider.GetRequiredService<SkiaImageDownscaler>()));
+                provider.GetRequiredService<IImageThumbnailGenerator>()));
         services.AddScoped<IEntityImageAssetMutationService>(provider =>
             new EntityImageAssetMutationService(
                 provider.GetRequiredService<PrismediaDbContext>(),

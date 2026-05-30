@@ -6,11 +6,13 @@ using Prismedia.Domain.Entities;
 namespace Prismedia.Application.Jobs.Handlers.Generate;
 
 /// <summary>
-/// Generates a thumbnail for an image entity by scaling it to 640px width via ffmpeg.
+/// Generates a thumbnail for an image entity by scaling it to 640px width through the
+/// shared image resizer (in-process SkiaSharp, with an ffmpeg fallback for exotic formats).
 /// </summary>
 public sealed class GenerateImageThumbnailJobHandler(
     ILogger<GenerateImageThumbnailJobHandler> logger,
     IMediaAssetGenerator assets,
+    IImageThumbnailGenerator imageThumbnails,
     IMediaProcessingStatePersistence persistence) : EntityFileJobHandler(logger, persistence) {
     public override JobType Type => JobType.GenerateImageThumbnail;
 
@@ -19,7 +21,7 @@ public sealed class GenerateImageThumbnailJobHandler(
         await context.ReportProgressAsync(20, "Generating thumbnail", cancellationToken);
 
         var thumbPath = assets.ImageThumbnailPath(entityId);
-        var success = await assets.GenerateImageThumbnailAsync(filePath, thumbPath, 640, 3, cancellationToken);
+        var success = await imageThumbnails.GenerateAsync(filePath, thumbPath, 640, 80, cancellationToken);
 
         if (success) {
             var size = new FileInfo(thumbPath).Length;

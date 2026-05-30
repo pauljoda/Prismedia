@@ -1,8 +1,10 @@
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Application.Jobs.Ports;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Media.Processing;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
+using Prismedia.Infrastructure.Processes;
 using SkiaSharp;
 
 namespace Prismedia.Infrastructure.Tests;
@@ -26,7 +28,7 @@ public sealed class GridThumbnailServiceTests : IDisposable {
         AddEntityFile(db, entityId, EntityFileRole.Thumbnail, coverUrl, "scan");
         await db.SaveChangesAsync();
 
-        var service = new GridThumbnailService(db, _assets, new SkiaImageDownscaler());
+        var service = new GridThumbnailService(db, _assets, Resizer());
         await service.EnsureAsync(entityId, CancellationToken.None);
 
         var gridPath = _assets.GridThumbnailPath(entityId);
@@ -60,7 +62,7 @@ public sealed class GridThumbnailServiceTests : IDisposable {
         AddEntityFile(db, entityId, EntityFileRole.Poster, customUrl, "custom");
         await db.SaveChangesAsync();
 
-        var service = new GridThumbnailService(db, _assets, new SkiaImageDownscaler());
+        var service = new GridThumbnailService(db, _assets, Resizer());
         await service.EnsureAsync(entityId, CancellationToken.None);
 
         using var bmp = SKBitmap.Decode(_assets.GridThumbnailPath(entityId));
@@ -76,7 +78,7 @@ public sealed class GridThumbnailServiceTests : IDisposable {
         SeedEntity(db, entityId);
         await db.SaveChangesAsync();
 
-        var service = new GridThumbnailService(db, _assets, new SkiaImageDownscaler());
+        var service = new GridThumbnailService(db, _assets, Resizer());
         await service.EnsureAsync(entityId, CancellationToken.None);
 
         Assert.False(File.Exists(_assets.GridThumbnailPath(entityId)));
@@ -88,6 +90,9 @@ public sealed class GridThumbnailServiceTests : IDisposable {
             Directory.Delete(_dataDir, recursive: true);
         }
     }
+
+    private static IImageThumbnailGenerator Resizer() =>
+        new ImageThumbnailGenerator(new SkiaImageDownscaler(), new ThumbnailService(new ProcessExecutor()));
 
     private static PrismediaDbContext CreateContext() {
         var options = new DbContextOptionsBuilder<PrismediaDbContext>()

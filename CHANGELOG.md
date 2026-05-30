@@ -36,6 +36,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 - Entity grids now lazy-load cover images and request the small thumbnail variant, dramatically cutting the network and image-decoding work needed to render large libraries.
+- Image and comic-page thumbnails are now generated in-process during scans (with an automatic ffmpeg fallback for unusual formats like HEIC/AVIF), instead of launching a separate ffmpeg process for every file — noticeably faster scans on large image and comic libraries.
+- Uploading poster or header artwork now shows a spinner over the image while it is processed, so it is clear the upload is in progress.
 - Deepened shared material card surfaces so plugin rows, settings cards, and other repeated panels keep a solid machined feel without relying on blur.
 - Restricted blur-backed glass treatments to shell-level overlays, high-level chrome, and static asset effects so repeated cards, chips, badges, and progress surfaces use cheaper material styling.
 - Reworked the library grid toolbar to match the entity detail header: search and controls now sit in a larger raised hero panel, with the active-filters and selection bars tucking beneath it so the toolbar reads as one continuous, layered surface.

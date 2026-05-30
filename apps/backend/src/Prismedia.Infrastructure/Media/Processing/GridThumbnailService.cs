@@ -17,7 +17,7 @@ namespace Prismedia.Infrastructure.Media.Processing;
 public sealed class GridThumbnailService(
     PrismediaDbContext db,
     AssetPathService assets,
-    SkiaImageDownscaler downscaler) : IGridThumbnailService {
+    IImageThumbnailGenerator imageThumbnails) : IGridThumbnailService {
     /// <summary>Target width for grid cards. Comfortably covers small/medium cards at 2x DPR.</summary>
     private const int GridThumbnailMaxWidth = 480;
     private const int GridThumbnailJpegQuality = 80;
@@ -40,7 +40,7 @@ public sealed class GridThumbnailService(
         }
 
         var outputPath = assets.GridThumbnailPath(entityId);
-        if (!downscaler.Downscale(sourcePath, outputPath, GridThumbnailMaxWidth, GridThumbnailJpegQuality)) {
+        if (!await imageThumbnails.GenerateAsync(sourcePath, outputPath, GridThumbnailMaxWidth, GridThumbnailJpegQuality, cancellationToken)) {
             return;
         }
 
