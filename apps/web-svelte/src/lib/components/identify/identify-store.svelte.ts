@@ -25,6 +25,17 @@ import type { EntityCard, EntityDetailCard } from "$lib/api/entities";
 import { entityCardToThumbnailCard } from "$lib/entities/entity-grid";
 import { resolveEntityHrefById } from "$lib/entities/entity-route-resolver";
 import { requestMainScrollTop } from "$lib/stores/main-scroll";
+import {
+  buildRootReviewApplyPayload,
+  defaultFieldSelectionForReview,
+  defaultImageSelectionForReview,
+} from "$lib/components/identify-review";
+
+/** Options shared by the auto-identify path that controls whether resolving a queue item also navigates the review view. */
+interface IdentifyResolveOptions {
+  /** When false, the resolved item is upserted into the queue without navigating to its review view. Defaults to true. */
+  navigate?: boolean;
+}
 
 export type IdentifyView =
   | { kind: "dashboard" }
@@ -90,6 +101,9 @@ export class IdentifyStore {
   applyProgress = $state<IdentifyApplyProgress | null>(null);
   bulkSession = $state<IdentifyBulkSession | null>(null);
   bulkStarting = $state(false);
+  bulkAccepting = $state(false);
+  bulkAcceptDone = $state(0);
+  bulkAcceptTotal = $state(0);
   returnEntityId = $state<string | null>(null);
   reviewRootProposalId = $state<string | null>(null);
   reviewCascadeSelections = $state<Record<string, boolean>>({});
@@ -266,26 +280,27 @@ export class IdentifyStore {
     this.navigateTo({ kind: "kind-tab", entityKind });
   }
 
-  async queueEntity(entity: EntityCard, providerId?: string | null) {
+  async queueEntity(entity: EntityCard, providerId?: string | null, options: IdentifyResolveOptions = {}) {
     const [item, detail] = await Promise.all([
       addIdentifyQueueItem(entity.id),
       fetchEntityDetail(entity.id),
     ]);
     const mapped = queueItemFromApi(item, entity, detail);
     this.#upsertQueueItem(mapped);
-    return await this.#autoIdentifyQueueItem(mapped, providerId) ?? mapped;
+    return await this.#autoIdentifyQueueItem(mapped, providerId, options) ?? mapped;
   }
 
   async identifyEntity(
     entity: EntityCard,
     providerId: string,
     query?: { title?: string | null; url?: string | null; externalIds?: Record<string, string> | null; requireChoice?: boolean | null },
+    options: IdentifyResolveOptions = {},
   ) {
     this.identifyingId = entity.id;
     this.error = null;
     this.#setIdentifyingProvider(providerId, 0, 1, identifyQueryHasMatch(query) ? "matched" : "searching");
     try {
-      return await this.#searchWithTitleFallback(entity, providerId, query);
+      return await this.#searchWithTitleFallback(entity, providerId, query, options);
     } catch (err) {
       this.error = readError(err);
       this.#markQueueError(entity.id, readError(err));
@@ -295,8 +310,13 @@ export class IdentifyStore {
     }
   }
 
-  async identifyWithCandidate(entity: EntityCard, providerId: string, candidate: EntitySearchCandidate) {
-    return this.identifyEntity(entity, providerId, { externalIds: candidate.externalIds });
+  async identifyWithCandidate(
+    entity: EntityCard,
+    providerId: string,
+    candidate: EntitySearchCandidate,
+    options: IdentifyResolveOptions = {},
+  ) {
+    return this.identifyEntity(entity, providerId, { externalIds: candidate.externalIds }, options);
   }
 
   async backToSearch(entity: EntityCard, providerId?: string | null) {
@@ -384,12 +404,59 @@ export class IdentifyStore {
     this.error = null;
     try {
       for (const entity of entities) {
-        await this.queueEntity(entity, providerId);
+        await this.queueEntity(entity, providerId, { navigate: false });
       }
     } catch (err) {
       this.error = readError(err);
     } finally {
       this.bulkStarting = false;
+    }
+    // Queuing a batch should drop the user back on the dashboard queue for a
+    // quick glance rather than jumping into each item's review as it resolves.
+    this.navigateToDashboard();
+  }
+
+  /**
+   * Accepts a queued proposal with the default (accept-everything) selections and applies it,
+   * mirroring what the review screen would submit when nothing is deselected.
+   *
+   * @returns true when the item had a proposal that was applied, false when it was skipped.
+   */
+  async acceptQueueProposal(item: IdentifyQueueItem): Promise<boolean> {
+    if (item.state !== "proposal" || !item.proposal) return false;
+    const payload = buildDefaultApplyPayload(item.proposal);
+    const applied = await applyIdentifyQueueItem(
+      item.entityId,
+      payload.proposal,
+      payload.selectedFields,
+      payload.selectedImages,
+    );
+    this.#removeActiveQueueItem(applied.entityId);
+    return true;
+  }
+
+  /**
+   * Accepts every selected queue item that already has a proposal, applying them sequentially.
+   * Items without a ready proposal are ignored so the high-level "accept everything" flow stays safe.
+   */
+  async acceptQueueProposals(items: IdentifyQueueItem[]) {
+    const acceptable = items.filter((item) => item.state === "proposal" && item.proposal);
+    if (acceptable.length === 0) return;
+    this.bulkAccepting = true;
+    this.bulkAcceptDone = 0;
+    this.bulkAcceptTotal = acceptable.length;
+    this.error = null;
+    try {
+      for (const item of acceptable) {
+        try {
+          await this.acceptQueueProposal(item);
+        } catch (err) {
+          this.error = readError(err);
+        }
+        this.bulkAcceptDone++;
+      }
+    } finally {
+      this.bulkAccepting = false;
     }
   }
 
@@ -662,18 +729,43 @@ export class IdentifyStore {
     }
   }
 
-  async #autoIdentifyQueueItem(item: IdentifyQueueItem, providerId?: string | null) {
+  async #autoIdentifyQueueItem(
+    item: IdentifyQueueItem,
+    providerId?: string | null,
+    options: IdentifyResolveOptions = {},
+  ) {
     if (item.state !== "search" || item.candidates.length > 0) {
       return item;
     }
 
     const selectedProvider = providerId ?? item.provider;
-    if (selectedProvider) return this.identifyEntity(item.entity, selectedProvider);
+    const result = selectedProvider
+      ? await this.identifyEntity(item.entity, selectedProvider, undefined, options)
+      : await this.#identifyEntityWithAvailableProviders(item, options);
 
-    return this.#identifyEntityWithAvailableProviders(item);
+    return await this.#autoSelectBestCandidate(result, options);
   }
 
-  async #identifyEntityWithAvailableProviders(item: IdentifyQueueItem) {
+  /**
+   * When a search resolves to a candidate list instead of a confident proposal, automatically
+   * pick the top-ranked candidate so queuing always lands on a reviewable proposal. The user can
+   * still revisit the item and re-run the search to choose a different match.
+   */
+  async #autoSelectBestCandidate(
+    result: IdentifyQueueItem | null,
+    options: IdentifyResolveOptions,
+  ): Promise<IdentifyQueueItem | null> {
+    if (!result || result.state !== "search" || result.candidates.length === 0) {
+      return result;
+    }
+
+    const providerId = result.provider;
+    if (!providerId) return result;
+
+    return await this.identifyWithCandidate(result.entity, providerId, result.candidates[0], options) ?? result;
+  }
+
+  async #identifyEntityWithAvailableProviders(item: IdentifyQueueItem, options: IdentifyResolveOptions = {}) {
     const providers = this.providersForKind(item.entityKind);
     if (providers.length === 0) return item;
 
@@ -685,7 +777,7 @@ export class IdentifyStore {
       for (const [index, provider] of providers.entries()) {
         this.#setIdentifyingProvider(provider.id, index, providers.length);
         try {
-          const result = await this.#searchWithTitleFallback(item.entity, provider.id);
+          const result = await this.#searchWithTitleFallback(item.entity, provider.id, undefined, options);
           lastResult = result;
           if (isResolvedIdentifyResult(result)) return result;
         } catch (err) {
@@ -708,10 +800,11 @@ export class IdentifyStore {
     entity: EntityCard,
     providerId: string,
     query?: { title?: string | null; url?: string | null; externalIds?: Record<string, string> | null; requireChoice?: boolean | null },
+    options: IdentifyResolveOptions = {},
   ) {
-    const mapped = await this.#searchAndResolve(entity, providerId, query);
+    const mapped = await this.#searchAndResolve(entity, providerId, query, options);
     if (shouldFallbackToTitleSearch(entity, query, mapped)) {
-      return await this.#searchAndResolve(entity, providerId, { title: entity.title });
+      return await this.#searchAndResolve(entity, providerId, { title: entity.title }, options);
     }
 
     return mapped;
@@ -721,12 +814,13 @@ export class IdentifyStore {
     entity: EntityCard,
     providerId: string,
     query?: { title?: string | null; url?: string | null; externalIds?: Record<string, string> | null; requireChoice?: boolean | null },
+    options: IdentifyResolveOptions = {},
   ) {
     const item = await searchIdentifyQueueItem(entity.id, providerId, query);
     const detail = this.queue.find((queued) => queued.entityId === entity.id)?.detail ?? await fetchEntityDetail(entity.id);
     const mapped = queueItemFromApi(item, entity, detail);
     this.#upsertQueueItem(mapped);
-    this.reviewResolvedQueueItem(mapped);
+    if (options.navigate !== false) this.reviewResolvedQueueItem(mapped);
     return mapped;
   }
 
@@ -761,6 +855,19 @@ export class IdentifyStore {
     if (this.queue.some((item) => item.entityId === entityId)) return;
     this.navigateToDashboard();
   }
+}
+
+/**
+ * Builds the apply payload for accepting a proposal wholesale, selecting every available field,
+ * the default artwork for each kind, and all proposed tags — the same result as opening the review
+ * screen and accepting without changing anything.
+ */
+function buildDefaultApplyPayload(proposal: EntityMetadataProposal) {
+  return buildRootReviewApplyPayload(proposal, {
+    selectedFields: defaultFieldSelectionForReview(proposal),
+    selectedImages: defaultImageSelectionForReview(proposal),
+    selectedTags: Object.fromEntries((proposal.patch?.tags ?? []).map((tag) => [tag, true])),
+  });
 }
 
 async function fetchEntityDetail(entityId: string): Promise<EntityDetailCard | null> {

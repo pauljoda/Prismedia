@@ -1,7 +1,10 @@
 <script lang="ts">
   import {
+    Check,
     ChevronRight,
+    CornerDownRight,
     Flame,
+    Loader2,
     ScanSearch,
     Sparkles,
     X,
@@ -18,6 +21,12 @@
     store.queue.some((q) => q.state === "proposal" || q.state === "search" || q.state === "error"),
   );
 
+  const selectedItems = $derived(store.queue.filter((q) => selectedQueueIds.has(q.entityId)));
+  const acceptableSelectedCount = $derived(
+    selectedItems.filter((q) => q.state === "proposal" && q.proposal).length,
+  );
+  const allSelected = $derived(store.queue.length > 0 && selectedQueueIds.size === store.queue.length);
+
   function toggleQueueSelection(entityId: string) {
     const next = new Set(selectedQueueIds);
     if (next.has(entityId)) next.delete(entityId);
@@ -25,11 +34,28 @@
     selectedQueueIds = next;
   }
 
+  function toggleSelectAll() {
+    selectedQueueIds = allSelected ? new Set() : new Set(store.queue.map((q) => q.entityId));
+  }
+
   function cancelSelected() {
     for (const id of selectedQueueIds) {
       void store.deleteQueueItem(id);
     }
     selectedQueueIds = new Set();
+  }
+
+  async function acceptSelected() {
+    await store.acceptQueueProposals(selectedItems);
+    selectedQueueIds = new Set();
+  }
+
+  function proposedTitle(item: (typeof store.queue)[number]): string | null {
+    const proposed = item.proposal?.patch?.title?.trim();
+    if (!proposed) return null;
+    return proposed.localeCompare(item.title.trim(), undefined, { sensitivity: "accent" }) === 0
+      ? null
+      : proposed;
   }
 </script>
 
@@ -95,11 +121,34 @@
         <ScanSearch class="h-3.5 w-3.5 text-text-accent" />
         <span class="text-kicker text-text-accent">Review queue</span>
         <span class="font-mono text-[0.7rem] text-text-muted">{store.queue.length} items</span>
+        {#if store.bulkAccepting}
+          <span class="inline-flex items-center gap-1.5 font-mono text-[0.7rem] text-text-accent">
+            <Loader2 class="h-3 w-3 animate-spin" />
+            Accepting {store.bulkAcceptDone}/{store.bulkAcceptTotal}
+          </span>
+        {/if}
         <div class="flex-1"></div>
+        {#if acceptableSelectedCount > 0}
+          <button
+            type="button"
+            class="inline-flex h-7 items-center gap-1.5 rounded-xs border border-border-accent-strong px-2.5 text-[0.72rem] font-medium text-text-primary transition-all disabled:cursor-not-allowed disabled:opacity-40"
+            style="background: linear-gradient(135deg, rgba(242,194,106,0.24), rgba(242,194,106,0.1)); box-shadow: 0 0 18px rgba(242,194,106,0.16);"
+            disabled={store.bulkAccepting}
+            onclick={acceptSelected}
+          >
+            {#if store.bulkAccepting}
+              <Loader2 class="h-3 w-3 animate-spin" />
+            {:else}
+              <Check class="h-3 w-3" />
+            {/if}
+            Accept {acceptableSelectedCount}
+          </button>
+        {/if}
         {#if selectedQueueIds.size > 0}
           <button
             type="button"
-            class="inline-flex h-7 items-center gap-1.5 rounded-xs border border-border-default bg-surface-2 px-2.5 text-[0.72rem] font-medium text-text-muted transition-colors hover:border-error/50 hover:text-error-text"
+            class="inline-flex h-7 items-center gap-1.5 rounded-xs border border-border-default bg-surface-2 px-2.5 text-[0.72rem] font-medium text-text-muted transition-colors hover:border-error/50 hover:text-error-text disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={store.bulkAccepting}
             onclick={cancelSelected}
           >
             <X class="h-3 w-3" />
@@ -119,9 +168,17 @@
 
       <!-- Queue header -->
       <div class="hidden items-center gap-3 border-b border-border-default bg-surface-2 px-3.5 py-2 md:grid md:grid-cols-[32px_70px_minmax(0,2fr)_minmax(0,1fr)_90px_80px_100px]">
-        <span class="w-5"></span>
+        <label class="flex items-center">
+          <input
+            type="checkbox"
+            class="h-3.5 w-3.5 accent-accent-500"
+            checked={allSelected}
+            onchange={toggleSelectAll}
+            aria-label="Select all queued items"
+          />
+        </label>
         <span class="text-kicker">State</span>
-        <span class="text-kicker">Title</span>
+        <span class="text-kicker">Name</span>
         <span class="text-kicker">Provider</span>
         <span class="text-kicker">Kind</span>
         <span class="text-kicker">Match</span>
@@ -164,7 +221,7 @@
 
           <div class="min-w-0">
             <div class="flex min-w-0 items-center gap-2">
-              <div class="truncate font-heading text-[0.86rem] text-text-primary">{item.title}</div>
+              <div class="truncate font-mono text-[0.78rem] text-text-secondary" title={item.title}>{item.title}</div>
               {#if item.isNsfw}
                 <span
                   class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-xs border border-error/40 bg-error/10 text-error-text"
@@ -175,6 +232,13 @@
                 </span>
               {/if}
             </div>
+            {#if proposedTitle(item)}
+              {@const proposed = proposedTitle(item)}
+              <div class="flex min-w-0 items-center gap-1 text-text-accent" title={proposed}>
+                <CornerDownRight class="h-3 w-3 shrink-0 text-text-muted" />
+                <span class="truncate font-heading text-[0.86rem] font-semibold">{proposed}</span>
+              </div>
+            {/if}
             {#if item.state === "error" && item.errorMessage}
               <div class="truncate font-mono text-[0.66rem] text-error-text">{item.errorMessage}</div>
             {/if}
