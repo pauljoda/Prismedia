@@ -29,10 +29,19 @@ public sealed partial class LibraryScanPersistenceService {
             .Select(source => source.EntityId)
             .ToListAsync(cancellationToken)).ToHashSet();
 
-        var hasFingerprint = (await _db.EntityFileFingerprints.AsNoTracking()
-            .Where(f => ids.Contains(f.EntityId) && f.Algorithm == FingerprintAlgorithm.Md5)
+        var fingerprintRows = await _db.EntityFileFingerprints.AsNoTracking()
+            .Where(f => ids.Contains(f.EntityId) &&
+                (f.Algorithm == FingerprintAlgorithm.Md5 || f.Algorithm == FingerprintAlgorithm.Oshash))
+            .Select(f => new { f.EntityId, f.Algorithm })
+            .ToListAsync(cancellationToken);
+        var hasOshash = fingerprintRows
+            .Where(f => f.Algorithm == FingerprintAlgorithm.Oshash)
             .Select(f => f.EntityId)
-            .ToListAsync(cancellationToken)).ToHashSet();
+            .ToHashSet();
+        var hasMd5 = fingerprintRows
+            .Where(f => f.Algorithm == FingerprintAlgorithm.Md5)
+            .Select(f => f.EntityId)
+            .ToHashSet();
 
         var entityKinds = await _db.Entities.AsNoTracking()
             .Where(entity => ids.Contains(entity.Id))
@@ -79,7 +88,8 @@ public sealed partial class LibraryScanPersistenceService {
 
             result[id] = new DownstreamNeeds(
                 NeedsProbe: !hasTechnical.Contains(id) || !hasMediaSource.Contains(id),
-                NeedsFingerprint: !hasFingerprint.Contains(id),
+                MissingOshash: !hasOshash.Contains(id),
+                MissingMd5: !hasMd5.Contains(id),
                 NeedsPreview: needsPreview,
                 NeedsTrickplay: !hasTrickplay.Contains(id),
                 NeedsSubtitleExtraction: !hasUsableSubtitleState.Contains(id));

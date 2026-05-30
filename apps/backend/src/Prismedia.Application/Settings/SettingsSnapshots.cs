@@ -15,7 +15,8 @@ public sealed record ScanSettings(bool AutoScanEnabled, int IntervalMinutes);
 /// </summary>
 public sealed record GenerationSettings(
     bool AutoGenerateMetadata,
-    bool AutoGenerateFingerprints,
+    bool AutoGenerateOshash,
+    bool AutoGenerateMd5,
     bool GeneratePhash,
     bool AutoGeneratePreview,
     bool GenerateTrickplay,

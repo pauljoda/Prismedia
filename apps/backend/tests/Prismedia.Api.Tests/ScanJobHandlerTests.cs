@@ -26,7 +26,8 @@ public sealed class ScanJobHandlerTests {
         var persistence = new FakeScanPersistence([root]) {
             Settings = new LibrarySettingsData(
                 AutoGenerateMetadata: false,
-                AutoGenerateFingerprints: false,
+                AutoGenerateOshash: false,
+                AutoGenerateMd5: false,
                 GeneratePhash: false,
                 AutoGeneratePreview: false,
                 GenerateTrickplay: true,
@@ -38,7 +39,8 @@ public sealed class ScanJobHandlerTests {
             DownstreamNeedsById = new Dictionary<Guid, DownstreamNeeds> {
                 [videoId] = new(
                     NeedsProbe: false,
-                    NeedsFingerprint: false,
+                    MissingOshash: false,
+                    MissingMd5: false,
                     NeedsPreview: false,
                     NeedsTrickplay: true,
                     NeedsSubtitleExtraction: false)
@@ -90,7 +92,8 @@ public sealed class ScanJobHandlerTests {
         var persistence = new FakeScanPersistence([root]) {
             Settings = new LibrarySettingsData(
                 AutoGenerateMetadata: false,
-                AutoGenerateFingerprints: false,
+                AutoGenerateOshash: false,
+                AutoGenerateMd5: false,
                 GeneratePhash: false,
                 AutoGeneratePreview: false,
                 GenerateTrickplay: false,
@@ -102,7 +105,8 @@ public sealed class ScanJobHandlerTests {
             DownstreamNeedsById = new Dictionary<Guid, DownstreamNeeds> {
                 [videoId] = new(
                     NeedsProbe: false,
-                    NeedsFingerprint: false,
+                    MissingOshash: false,
+                    MissingMd5: false,
                     NeedsPreview: false,
                     NeedsTrickplay: false,
                     NeedsSubtitleExtraction: false)
@@ -162,7 +166,8 @@ public sealed class ScanJobHandlerTests {
             DownstreamNeedsById = new Dictionary<Guid, DownstreamNeeds> {
                 [videoId] = new(
                     NeedsProbe: false,
-                    NeedsFingerprint: false,
+                    MissingOshash: false,
+                    MissingMd5: false,
                     NeedsPreview: false,
                     NeedsTrickplay: false,
                     NeedsSubtitleExtraction: false)
@@ -222,7 +227,8 @@ public sealed class ScanJobHandlerTests {
             DownstreamNeedsById = new Dictionary<Guid, DownstreamNeeds> {
                 [videoId] = new(
                     NeedsProbe: false,
-                    NeedsFingerprint: false,
+                    MissingOshash: false,
+                    MissingMd5: false,
                     NeedsPreview: false,
                     NeedsTrickplay: false,
                     NeedsSubtitleExtraction: false)
@@ -283,7 +289,8 @@ public sealed class ScanJobHandlerTests {
             DownstreamNeedsById = new Dictionary<Guid, DownstreamNeeds> {
                 [videoId] = new(
                     NeedsProbe: false,
-                    NeedsFingerprint: false,
+                    MissingOshash: false,
+                    MissingMd5: false,
                     NeedsPreview: false,
                     NeedsTrickplay: false,
                     NeedsSubtitleExtraction: false)
@@ -488,7 +495,8 @@ public sealed class ScanJobHandlerTests {
             var persistence = new FakeScanPersistence([root]) {
                 Settings = new LibrarySettingsData(
                     AutoGenerateMetadata: false,
-                    AutoGenerateFingerprints: false,
+                    AutoGenerateOshash: false,
+                    AutoGenerateMd5: false,
                     GeneratePhash: false,
                     AutoGeneratePreview: false,
                     GenerateTrickplay: false,
@@ -617,7 +625,8 @@ public sealed class ScanJobHandlerTests {
 
     private static LibrarySettingsData DisabledGeneratedWorkSettings => new(
         AutoGenerateMetadata: false,
-        AutoGenerateFingerprints: false,
+        AutoGenerateOshash: false,
+        AutoGenerateMd5: false,
         GeneratePhash: false,
         AutoGeneratePreview: false,
         GenerateTrickplay: false,
@@ -649,7 +658,8 @@ public sealed class ScanJobHandlerTests {
         public bool LoadedEnabledRoots { get; private set; }
         public LibrarySettingsData Settings { get; init; } = new(
             AutoGenerateMetadata: true,
-            AutoGenerateFingerprints: true,
+            AutoGenerateOshash: true,
+            AutoGenerateMd5: true,
             GeneratePhash: false,
             AutoGeneratePreview: true,
             GenerateTrickplay: true,

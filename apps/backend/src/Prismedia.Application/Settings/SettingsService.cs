@@ -167,7 +167,8 @@ public sealed class SettingsService {
     public async Task<GenerationSettings> GetGenerationSettingsAsync(CancellationToken cancellationToken) {
         var values = await GetValueMapAsync([
             AppSettingKeys.GenerationAutoGenerateMetadata,
-            AppSettingKeys.GenerationAutoGenerateFingerprints,
+            AppSettingKeys.GenerationAutoGenerateOshash,
+            AppSettingKeys.GenerationAutoGenerateMd5,
             AppSettingKeys.GenerationGeneratePhash,
             AppSettingKeys.GenerationAutoGeneratePreview,
             AppSettingKeys.GenerationGenerateTrickplay,
@@ -180,7 +181,8 @@ public sealed class SettingsService {
 
         return new GenerationSettings(
             GetBoolean(values, AppSettingKeys.GenerationAutoGenerateMetadata),
-            GetBoolean(values, AppSettingKeys.GenerationAutoGenerateFingerprints),
+            GetBoolean(values, AppSettingKeys.GenerationAutoGenerateOshash),
+            GetBoolean(values, AppSettingKeys.GenerationAutoGenerateMd5),
             GetBoolean(values, AppSettingKeys.GenerationGeneratePhash),
             GetBoolean(values, AppSettingKeys.GenerationAutoGeneratePreview),
             GetBoolean(values, AppSettingKeys.GenerationGenerateTrickplay),

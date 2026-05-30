@@ -12,7 +12,8 @@ export const settingKeys = {
   scanAutoScanEnabled: "scan.autoScanEnabled",
   scanIntervalMinutes: "scan.intervalMinutes",
   generationAutoGenerateMetadata: "generation.autoGenerateMetadata",
-  generationAutoGenerateFingerprints: "generation.autoGenerateFingerprints",
+  generationAutoGenerateOshash: "generation.autoGenerateOshash",
+  generationAutoGenerateMd5: "generation.autoGenerateMd5",
   generationGeneratePhash: "generation.generatePhash",
   generationAutoGeneratePreview: "generation.autoGeneratePreview",
   generationGenerateTrickplay: "generation.generateTrickplay",
@@ -44,7 +45,8 @@ export const defaultLibrarySettings: LibrarySettings = {
   autoScanEnabled: false,
   scanIntervalMinutes: 60,
   autoGenerateMetadata: true,
-  autoGenerateFingerprints: true,
+  autoGenerateOshash: true,
+  autoGenerateMd5: false,
   generatePhash: false,
   autoGeneratePreview: true,
   generateTrickplay: true,
@@ -180,9 +182,13 @@ export function valuesToLibrarySettings(
       values[settingKeys.generationAutoGenerateMetadata],
       fallback.autoGenerateMetadata,
     ),
-    autoGenerateFingerprints: valueAsBoolean(
-      values[settingKeys.generationAutoGenerateFingerprints],
-      fallback.autoGenerateFingerprints,
+    autoGenerateOshash: valueAsBoolean(
+      values[settingKeys.generationAutoGenerateOshash],
+      fallback.autoGenerateOshash,
+    ),
+    autoGenerateMd5: valueAsBoolean(
+      values[settingKeys.generationAutoGenerateMd5],
+      fallback.autoGenerateMd5,
     ),
     generatePhash: valueAsBoolean(
       values[settingKeys.generationGeneratePhash],
