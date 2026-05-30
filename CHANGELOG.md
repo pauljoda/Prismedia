@@ -65,6 +65,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated web app manifest and mobile browser metadata for home-screen installation and browser UI theme colors.
 
 ### Fixed
+- Fixed library grids so each one again remembers its filters, sort, card size, layout, media wall, page size, and active preset per view and per device — drop a grid on any page and it restores the last way you left it.
 - Fixed production Docker builds so the pinned Jellyfin FFmpeg package is fetched from its stable versioned repository path instead of the rotating latest channel.
 - Fixed Identify cascade review ordering so provider episode proposals are matched by episode number, keeping episode 1 visible and local episodes in season order.
 - Fixed Identify cascades so a partially hydrated season still looks up missing local episodes, preventing episode 1 from being skipped when provider data starts at episode 2.

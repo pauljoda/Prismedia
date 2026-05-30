@@ -2,10 +2,40 @@ import { readFileSync } from "node:fs";
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
+import { createEntityGridPrefs, type EntityGridPrefs } from "$lib/entities/entity-grid-prefs";
+import { readCookie } from "$lib/utils/cookie";
 import EntityGrid from "./EntityGrid.test-harness.svelte";
+
+const GRID_PREFS_DEFAULTS = {
+  sortBy: "title",
+  sortDir: "asc",
+  mediaWall: false,
+  scale: 5,
+  pageSize: 250,
+} as const;
+
+/** Seeds this grid's persistence cookie with a partial view state for the test. */
+function seedGridPrefs(prefsKey: string, prefs: Partial<EntityGridPrefs>): void {
+  const api = createEntityGridPrefs(prefsKey, GRID_PREFS_DEFAULTS);
+  api.writeCookie({ ...api.defaults(), ...prefs });
+}
+
+/** Reads back this grid's persisted view state from its cookie. */
+function readGridPrefs(prefsKey: string): EntityGridPrefs | null {
+  const api = createEntityGridPrefs(prefsKey, GRID_PREFS_DEFAULTS);
+  return api.parse(readCookie(api.cookieName));
+}
+
+function clearAllCookies(): void {
+  for (const entry of document.cookie.split(";")) {
+    const name = entry.split("=")[0]?.trim();
+    if (name) document.cookie = `${name}=;path=/;max-age=0;samesite=lax`;
+  }
+}
 
 describe("EntityGrid pagination", () => {
   beforeEach(() => {
+    clearAllCookies();
     Object.defineProperty(window, "localStorage", {
       configurable: true,
       value: createLocalStorageStub(),
@@ -30,6 +60,7 @@ describe("EntityGrid pagination", () => {
   });
 
   afterEach(() => {
+    clearAllCookies();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -51,7 +82,7 @@ describe("EntityGrid pagination", () => {
 
   it("keeps saved thumbnail size preferences ahead of the mobile default", async () => {
     vi.stubGlobal("matchMedia", createMatchMedia(true));
-    window.localStorage.setItem("prismedia:entity-grid:mobile-saved-size-test", "7");
+    seedGridPrefs("mobile-saved-size-test", { scale: 7 });
     const cards = Array.from({ length: 6 }, (_, index) => card(index));
     const { container } = render(EntityGrid, {
       props: {
@@ -211,7 +242,7 @@ describe("EntityGrid pagination", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Media wall" }));
 
     await waitFor(() => {
-      expect(window.localStorage.getItem("prismedia:entity-grid-media-wall:media-wall-persist-test")).toBe("true");
+      expect(readGridPrefs("media-wall-persist-test")?.mediaWall).toBe(true);
       expect(container.querySelector(".cards")?.classList.contains("is-media-wall")).toBe(true);
     });
 
@@ -230,7 +261,7 @@ describe("EntityGrid pagination", () => {
   });
 
   it("lets a saved media wall preference override the default", async () => {
-    window.localStorage.setItem("prismedia:entity-grid-media-wall:media-wall-override-test", "false");
+    seedGridPrefs("media-wall-override-test", { mediaWall: false });
     const cards = Array.from({ length: 6 }, (_, index) => card(index));
     const { container } = render(EntityGrid, {
       props: {

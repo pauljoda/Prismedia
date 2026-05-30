@@ -13,6 +13,8 @@
   import type { EntityCapability } from "$lib/api/generated/model";
   import { updateEntityFlags } from "$lib/api/entity-mutations";
   import { createFilterPresets, type FilterPreset } from "$lib/filter-presets";
+  import { createEntityGridPrefs, type EntityGridPrefs } from "$lib/entities/entity-grid-prefs";
+  import { readCookie } from "$lib/utils/cookie";
   import { usePageSnapshots } from "$lib/stores/page-snapshots.svelte";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
   import {
@@ -120,20 +122,8 @@
     scrollMinHeight = 320,
   }: Props = $props();
 
-  function storageKey(): string | null {
-    return prefsKey ? `prismedia:entity-grid:${prefsKey}` : null;
-  }
-
   function presetStorageKey(): string | null {
     return prefsKey ? `prismedia:entity-grid-presets:${prefsKey}` : null;
-  }
-
-  function pageSizeStorageKey(): string | null {
-    return prefsKey ? `prismedia:entity-grid-page-size:${prefsKey}` : null;
-  }
-
-  function mediaWallStorageKey(): string | null {
-    return prefsKey ? `prismedia:entity-grid-media-wall:${prefsKey}` : null;
   }
 
   function isMobileThumbnailViewport(): boolean {
@@ -146,15 +136,8 @@
     return isMobileThumbnailViewport() ? minScale : DEFAULT_SCALE;
   }
 
-  function loadScale(): number {
-    const fallbackScale = defaultScale();
-    if (!browser) return fallbackScale;
-    const key = storageKey();
-    if (!key) return fallbackScale;
-    const raw = window.localStorage.getItem(key);
-    if (raw == null) return fallbackScale;
-    const parsed = Number(raw);
-    return Number.isFinite(parsed) ? Math.min(maxScale, Math.max(minScale, parsed)) : fallbackScale;
+  function clampScale(value: number): number {
+    return Math.min(maxScale, Math.max(minScale, value));
   }
 
   function normalizePageSize(value: number): number {
@@ -162,41 +145,39 @@
     return Number.isFinite(numeric) && numeric > 0 ? numeric : DEFAULT_PAGE_SIZE;
   }
 
-  function loadPageSize(): number {
-    const fallback = normalizePageSize(initialPageSize);
-    if (!browser) return fallback;
-    const key = pageSizeStorageKey();
-    if (!key) return fallback;
-    const raw = window.localStorage.getItem(key);
-    if (raw == null) return fallback;
-    return normalizePageSize(Number(raw));
-  }
-
-  function loadMediaWall(): boolean {
-    if (!browser) return initialMediaWall;
-    const key = mediaWallStorageKey();
-    if (!key) return initialMediaWall;
-    const raw = window.localStorage.getItem(key);
-    if (raw === "true") return true;
-    if (raw === "false") return false;
-    return initialMediaWall;
-  }
+  // Cookie-backed view-state store for this grid, built once from the stable
+  // prefsKey. Dropping an EntityGrid on any page with a prefsKey makes its
+  // filters, sort, card size, media wall, page size, and active preset persist
+  // across reloads — scoped to the device, with no cross-device sync layer.
+  // svelte-ignore state_referenced_locally
+  const prefsApi = browser && prefsKey
+    ? createEntityGridPrefs(prefsKey, {
+        sortBy: initialSortBy,
+        sortDir: initialSortDir,
+        mediaWall: initialMediaWall,
+        scale: defaultScale(),
+        pageSize: normalizePageSize(initialPageSize),
+      })
+    : null;
+  const persistedPrefs: EntityGridPrefs | null = prefsApi ? prefsApi.parse(readCookie(prefsApi.cookieName)) : null;
 
   let actionsMenuOpen = $state(false);
   let capabilityOverrides = $state(new Map<string, EntityCapability[]>());
-  let activeKind = $state(ENTITY_GRID_ALL_KINDS);
-  let activePresetId = $state<string | null>(null);
+  let activeKind = $state(persistedPrefs?.activeKind ?? ENTITY_GRID_ALL_KINDS);
+  let activePresetId = $state<string | null>(persistedPrefs?.activePresetId ?? null);
   let drawerOpen = $state(false);
-  let filterIds = $state<string[]>([]);
-  let includeNsfw = $state(true);
+  let filterIds = $state<string[]>(persistedPrefs?.filterIds ?? []);
+  let includeNsfw = $state(persistedPrefs?.includeNsfw ?? true);
   let presets = $state<FilterPreset[]>([]);
-  let query = $state("");
+  let query = $state(persistedPrefs?.query ?? "");
   let pageIndex = $state(0);
-  let pageSize = $state(DEFAULT_PAGE_SIZE);
-  let pendingAdvanceAfterLoad = $state(false);
-  let scale = $state(DEFAULT_SCALE);
   // svelte-ignore state_referenced_locally
-  let mediaWall = $state(initialMediaWall);
+  let pageSize = $state(persistedPrefs?.pageSize ?? normalizePageSize(initialPageSize));
+  let pendingAdvanceAfterLoad = $state(false);
+  // svelte-ignore state_referenced_locally
+  let scale = $state(persistedPrefs ? clampScale(persistedPrefs.scale) : defaultScale());
+  // svelte-ignore state_referenced_locally
+  let mediaWall = $state(persistedPrefs?.mediaWall ?? initialMediaWall);
   let selectedIds = $state<string[]>([]);
   // Selection is explicit: until the user turns it on, cards behave as plain links/activators
   // (a single tap navigates). Turning it on reveals the checkboxes and routes taps to selection.
@@ -207,13 +188,13 @@
   let measuredFillHeight = $state<string | null>(null);
   let hoverPreviewsResumeAt = 0;
   // svelte-ignore state_referenced_locally
-  let sortBy = $state<EntityGridSort>(initialSortBy);
+  let sortBy = $state<EntityGridSort>(persistedPrefs?.sortBy ?? initialSortBy);
   // svelte-ignore state_referenced_locally
-  let sortDir = $state<EntityGridSortDir>(initialSortDir);
+  let sortDir = $state<EntityGridSortDir>(persistedPrefs?.sortDir ?? initialSortDir);
   // Seed for the random sort. Regenerated each time Random is (re)selected so the
   // shuffle changes, but held stable across pagination within one shuffle.
   let randomSeed = $state(1);
-  let viewMode = $state<EntityGridViewMode>("grid");
+  let viewMode = $state<EntityGridViewMode>(persistedPrefs?.viewMode ?? "grid");
   const nsfw = useNsfw();
   const effectiveNsfwMode = $derived(nsfwMode ?? nsfw.mode);
 
@@ -330,9 +311,6 @@
   }
 
   onMount(() => {
-    scale = loadScale();
-    pageSize = loadPageSize();
-    mediaWall = loadMediaWall();
     if (mediaWall) viewMode = "grid";
     onPageSizeChange?.(pageSize);
     const key = presetStorageKey();
@@ -364,7 +342,7 @@
         sortDir = snapshot.sortDir;
         randomSeed = snapshot.randomSeed ?? randomSeed;
         viewMode = snapshot.viewMode;
-        mediaWall = snapshot.mediaWall ?? loadMediaWall();
+        mediaWall = snapshot.mediaWall ?? initialMediaWall;
         if (mediaWall) viewMode = "grid";
         selectedIds = snapshot.selectedIds;
         scale = snapshot.scale;
@@ -461,6 +439,29 @@
     onRequestChange?.(request);
   });
 
+  // Persist the full view state to this grid's cookie whenever a tracked
+  // control changes. Reading every field here registers them as dependencies so
+  // any change re-runs the effect. Only non-default state is stored; returning a
+  // grid to its defaults clears the cookie so stale view state never lingers.
+  $effect(() => {
+    const snapshot: EntityGridPrefs = {
+      query,
+      activeKind,
+      filterIds: [...filterIds],
+      includeNsfw,
+      sortBy,
+      sortDir,
+      viewMode,
+      mediaWall,
+      scale,
+      pageSize,
+      activePresetId,
+    };
+    if (!prefsApi) return;
+    if (prefsApi.isDefault(snapshot)) prefsApi.clearCookie();
+    else prefsApi.writeCookie(snapshot);
+  });
+
   $effect(() => {
     onRenderedCountChange?.(pagedCards.length);
   });
@@ -475,14 +476,7 @@
   });
 
   function persistScale(next: number) {
-    scale = Math.min(maxScale, Math.max(minScale, next));
-    const key = storageKey();
-    if (browser && key) window.localStorage.setItem(key, String(scale));
-  }
-
-  function persistMediaWall(next: boolean) {
-    const key = mediaWallStorageKey();
-    if (browser && key) window.localStorage.setItem(key, String(next));
+    scale = clampScale(next);
   }
 
   function setActiveKind(kind: string) {
@@ -543,14 +537,12 @@
     viewMode = value;
     if (value === "list") {
       mediaWall = false;
-      persistMediaWall(mediaWall);
     }
   }
 
   function setMediaWall(value: boolean) {
     mediaWall = value;
     if (value) viewMode = "grid";
-    persistMediaWall(mediaWall);
   }
 
   function savePresets(next: FilterPreset[]) {
@@ -621,7 +613,6 @@
     sortDir = initialSortDir;
     viewMode = "grid";
     mediaWall = initialMediaWall;
-    persistMediaWall(mediaWall);
     pageIndex = 0;
     onSelectionChange?.(selectedIds);
   }
@@ -679,8 +670,6 @@
   function setPageSize(value: number) {
     pageSize = normalizePageSize(value);
     pageIndex = 0;
-    const key = pageSizeStorageKey();
-    if (browser && key) window.localStorage.setItem(key, String(pageSize));
     onPageSizeChange?.(pageSize);
     queueMicrotask(scrollPageToTop);
   }
