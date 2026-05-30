@@ -226,7 +226,7 @@ public sealed partial class LibraryScanPersistenceService {
         var id = Guid.NewGuid();
 
         _db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKindRegistry.Book.Code, Title = title, IsNsfw = isNsfw, CreatedAt = now, UpdatedAt = now });
-        _db.BookDetails.Add(new BookDetailRow { EntityId = id, BookType = BookType.Book, LibraryRootId = libraryRootId });
+        _db.BookDetails.Add(new BookDetailRow { EntityId = id, BookType = BookType.Comic, LibraryRootId = libraryRootId });
         _db.EntityFiles.Add(new EntityFileRow {
             Id = Guid.NewGuid(),
             EntityId = id,

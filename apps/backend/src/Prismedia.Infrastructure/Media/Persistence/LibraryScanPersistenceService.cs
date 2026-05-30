@@ -19,6 +19,7 @@ public sealed partial class LibraryScanPersistenceService(PrismediaDbContext db)
     IBookScanPersistence,
     IDownstreamNeedsPersistence,
     IMediaProcessingStatePersistence,
-    IEntityRefreshTreePersistence {
+    IEntityRefreshTreePersistence,
+    IScanMetadataPersistence {
     private readonly PrismediaDbContext _db = db;
 }

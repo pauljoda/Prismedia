@@ -16,7 +16,9 @@ public sealed class ScanLibraryJobHandler(
     IFileDiscovery fileDiscovery,
     ILibraryScanRootPersistence roots,
     IVideoScanPersistence videos,
-    IDownstreamNeedsPersistence downstreamNeeds) : ScanJobHandler(logger, fileDiscovery, roots) {
+    IDownstreamNeedsPersistence downstreamNeeds,
+    IVideoSidecarMetadataReader? sidecars = null,
+    IScanMetadataPersistence? scanMetadata = null) : ScanJobHandler(logger, fileDiscovery, roots) {
     private const int BatchSize = 50;
     private static readonly Regex SeasonFolderPattern = new(
         @"^(?:Season\s*(?<season>\d{1,3})|S(?<season>\d{1,3}))$",
@@ -54,10 +56,27 @@ public sealed class ScanLibraryJobHandler(
                 for (var i = batchStart; i < batchEnd; i++) {
                     var filePath = files[i];
                     validPaths.Add(filePath);
-                    batchItems.Add(BuildVideoUpsertItem(filePath, root));
+                    var sidecar = sidecars is null
+                        ? null
+                        : await sidecars.ReadAsync(filePath, cancellationToken);
+                    batchItems.Add(BuildVideoUpsertItem(filePath, root, sidecar));
                 }
 
                 var entityIds = await videos.UpsertVideosBatchAsync(batchItems, cancellationToken);
+                if (scanMetadata is not null) {
+                    for (var i = 0; i < batchItems.Count && i < entityIds.Count; i++) {
+                        if (batchItems[i].Metadata is not { } metadata) {
+                            continue;
+                        }
+
+                        await scanMetadata.ApplyVideoSidecarMetadataAsync(
+                            entityIds[i],
+                            metadata,
+                            Path.GetFileNameWithoutExtension(batchItems[i].FilePath),
+                            batchItems[i].IsNsfw,
+                            cancellationToken);
+                    }
+                }
                 allEntityIds.AddRange(entityIds);
 
                 await context.ReportProgressAsync(
@@ -139,9 +158,10 @@ public sealed class ScanLibraryJobHandler(
             root.Label, files.Count, removed, orphans, report.ToLogString());
     }
 
-    private static VideoUpsertItem BuildVideoUpsertItem(string filePath, LibraryRootData root) {
-        var title = Path.GetFileNameWithoutExtension(filePath);
-        var episodeToken = ParseEpisodeToken(title);
+    private static VideoUpsertItem BuildVideoUpsertItem(string filePath, LibraryRootData root, VideoSidecarMetadata? metadata = null) {
+        var fallbackTitle = Path.GetFileNameWithoutExtension(filePath);
+        var title = string.IsNullOrWhiteSpace(metadata?.Title) ? fallbackTitle : metadata.Title.Trim();
+        var episodeToken = ParseEpisodeToken(fallbackTitle);
         var parentFolder = Path.GetDirectoryName(filePath);
 
         if (!string.IsNullOrWhiteSpace(parentFolder)) {
@@ -157,7 +177,8 @@ public sealed class ScanLibraryJobHandler(
                         new VideoSeriesScanInfo(seriesFolder, Path.GetFileName(seriesFolder)),
                         new VideoSeasonScanInfo(parentFolder, parentFolderName, seasonNumber),
                         episodeToken?.EpisodeNumber,
-                        AbsoluteEpisodeNumber: null);
+                        AbsoluteEpisodeNumber: null,
+                        Metadata: metadata);
                 }
             }
 
@@ -173,7 +194,8 @@ public sealed class ScanLibraryJobHandler(
                     new VideoSeriesScanInfo(grandparentFolder, Path.GetFileName(grandparentFolder)),
                     new VideoSeasonScanInfo(parentFolder, parentFolderName, episodeToken.SeasonNumber),
                     episodeToken.EpisodeNumber,
-                    AbsoluteEpisodeNumber: null);
+                    AbsoluteEpisodeNumber: null,
+                    Metadata: metadata);
             }
 
             if (episodeToken is not null && !SamePath(parentFolder, root.Path)) {
@@ -185,11 +207,12 @@ public sealed class ScanLibraryJobHandler(
                     new VideoSeriesScanInfo(parentFolder, parentFolderName),
                     Season: null,
                     episodeToken.EpisodeNumber,
-                    AbsoluteEpisodeNumber: null);
+                    AbsoluteEpisodeNumber: null,
+                    Metadata: metadata);
             }
         }
 
-        return new VideoUpsertItem(filePath, title, root.Id, root.IsNsfw);
+        return new VideoUpsertItem(filePath, title, root.Id, root.IsNsfw, Metadata: metadata);
     }
 
     private static bool TryParseSeasonFolder(string folderName, out int seasonNumber) {

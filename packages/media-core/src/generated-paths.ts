@@ -133,8 +133,6 @@ export function getSidecarPaths(videoFilePath: string) {
     preview: path.join(dir, `${stem}-preview.mp4`),
     sprite: path.join(dir, `${stem}-sprite.jpg`),
     trickplayVtt: path.join(dir, `${stem}-trickplay.vtt`),
-    nfo: path.join(dir, `${stem}.nfo`),
-    infoJson: path.join(dir, `${stem}.info.json`),
   };
 }
 

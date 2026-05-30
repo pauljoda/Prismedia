@@ -77,6 +77,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated web app manifest and mobile browser metadata for home-screen installation and browser UI theme colors.
 
 ### Fixed
+- Fixed library scans so video `.nfo` / `.info.json` sidecars and comic `ComicInfo.xml` files inside ZIP/CBZ archives are imported again for titles, descriptions, dates, studios, URLs, tags, and credits.
 - Fixed library grid thumbnails appearing blank or "snapping in" while scrolling, which happened because every card eagerly loaded a full-resolution cover image at once and flooded the browser's image decoder.
 - Fixed recurring automatic scans so a 60-minute interval fires on the hourly schedule and records the trigger time, preventing long-running scans from stacking up every scheduler tick.
 - Fixed adding a library so it now starts scanning immediately for exactly the media kinds it has enabled, instead of doing nothing until the optional periodic auto-scan runs — a books-only library now queues a book scan rather than a video scan.

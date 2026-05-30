@@ -13,11 +13,7 @@
     "test:unit": "vitest run --config vitest.config.ts"
   },
   "devDependencies": {
-    "@types/adm-zip": "^0.5.8",
     "@types/node": "^22.19.19",
     "typescript": "^5.9.3"
-  },
-  "dependencies": {
-    "adm-zip": "^0.5.17"
   }
 }

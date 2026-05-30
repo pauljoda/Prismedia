@@ -8,9 +8,6 @@ import {
   fileNameToTitle,
   naturalComparePaths,
   sortPathsNaturally,
-  parseComicInfoXml,
-  extractComicInfoFromZip,
-  normalizeNfoRating,
   getSidecarPaths,
   getVideoGeneratedDiskPaths,
   allVideoGeneratedDiskPaths,
@@ -26,7 +23,6 @@ import {
   resolveExistingMediaPath,
   getGeneratedCollectionDir,
 } from "./index";
-import AdmZip from "adm-zip";
 
 async function hasBinary(name: string): Promise<boolean> {
   try {
@@ -112,65 +108,6 @@ describe("natural path sorting", () => {
   });
 });
 
-describe("ComicInfo.xml helpers", () => {
-  const xml = `<?xml version="1.0" encoding="utf-8"?>
-<ComicInfo>
-  <Title>Example Comic</Title>
-  <Series>Example Series</Series>
-  <Number>2</Number>
-  <Count>5</Count>
-  <Volume>1</Volume>
-  <Summary>Long summary</Summary>
-  <Year>2026</Year>
-  <Month>5</Month>
-  <Day>8</Day>
-  <Writer>Ada Writer</Writer>
-  <Penciller>Pat Pencils</Penciller>
-  <Publisher>Panel House</Publisher>
-  <Genre>Adventure, Drama</Genre>
-  <Tags>tag one, tag two</Tags>
-  <Characters>Hero, Rival</Characters>
-  <Web>https://example.test/comic</Web>
-  <PageCount>42</PageCount>
-  <Manga>Yes</Manga>
-  <AgeRating>Teen</AgeRating>
-</ComicInfo>`;
-
-  it("parses common ComicInfo fields into normalized metadata", () => {
-    expect(parseComicInfoXml(xml)).toEqual({
-      title: "Example Comic",
-      series: "Example Series",
-      number: "2",
-      count: 5,
-      volume: 1,
-      summary: "Long summary",
-      date: "2026-05-08",
-      publisher: "Panel House",
-      urls: ["https://example.test/comic"],
-      pageCount: 42,
-      manga: "Yes",
-      ageRating: "Teen",
-      creators: ["Ada Writer", "Pat Pencils"],
-      tags: ["Adventure", "Drama", "tag one", "tag two", "Hero", "Rival", "Yes", "Teen"],
-    });
-  });
-
-  it("extracts ComicInfo.xml from zip/cbz archives", () => {
-    const dir = mkdtempSync(path.join(tmpdir(), "prismedia-comicinfo-test-"));
-    const zipPath = path.join(dir, "comic.cbz");
-    try {
-      const zip = new AdmZip();
-      zip.addFile("ComicInfo.xml", Buffer.from(xml));
-      zip.addFile("1.jpg", Buffer.from("fake image"));
-      zip.writeZip(zipPath);
-
-      expect(extractComicInfoFromZip(zipPath)?.title).toBe("Example Comic");
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
-});
-
 describe("fileNameToTitle", () => {
   it("strips extension and replaces separators", () => {
     expect(fileNameToTitle("/media/my-scene_title.mp4")).toBe("my scene title");
@@ -189,35 +126,6 @@ describe("fileNameToTitle", () => {
   });
 });
 
-describe("normalizeNfoRating", () => {
-  it("normalizes 0-5 star scale to 0-100", () => {
-    expect(normalizeNfoRating(0)).toBe(0);
-    expect(normalizeNfoRating(2.5)).toBe(50);
-    expect(normalizeNfoRating(5)).toBe(100);
-  });
-
-  it("normalizes 0-10 scale to 0-100", () => {
-    expect(normalizeNfoRating(7)).toBe(70);
-    expect(normalizeNfoRating(10)).toBe(100);
-  });
-
-  it("passes through 0-100 scale directly", () => {
-    expect(normalizeNfoRating(75)).toBe(75);
-    expect(normalizeNfoRating(100)).toBe(100);
-  });
-
-  it("returns null for invalid values", () => {
-    expect(normalizeNfoRating(-1)).toBeNull();
-    expect(normalizeNfoRating(NaN)).toBeNull();
-    expect(normalizeNfoRating(Infinity)).toBeNull();
-  });
-
-  it("returns null for vote counts (>100)", () => {
-    expect(normalizeNfoRating(500)).toBeNull();
-    expect(normalizeNfoRating(101)).toBeNull();
-  });
-});
-
 describe("getSidecarPaths", () => {
   it("generates expected sidecar paths", () => {
     const paths = getSidecarPaths("/media/scene.mp4");
@@ -226,12 +134,6 @@ describe("getSidecarPaths", () => {
     expect(paths.preview).toBe("/media/scene-preview.mp4");
     expect(paths.sprite).toBe("/media/scene-sprite.jpg");
     expect(paths.trickplayVtt).toBe("/media/scene-trickplay.vtt");
-    expect(paths.nfo).toBe("/media/scene.nfo");
-  });
-
-  it("strips original extension for nfo", () => {
-    const paths = getSidecarPaths("/media/my-video.mkv");
-    expect(paths.nfo).toBe("/media/my-video.nfo");
   });
 });
 

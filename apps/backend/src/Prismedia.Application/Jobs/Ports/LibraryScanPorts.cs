@@ -213,6 +213,7 @@ public sealed record LibrarySettingsData(
 /// <param name="Season">Optional season folder context when the file lives beneath a season grouping.</param>
 /// <param name="EpisodeNumber">Episode number parsed from the filename when available.</param>
 /// <param name="AbsoluteEpisodeNumber">Absolute episode number parsed from the filename when available.</param>
+/// <param name="Metadata">Optional sidecar metadata read during scan.</param>
 public sealed record VideoUpsertItem(
     string FilePath,
     string Title,
@@ -221,7 +222,8 @@ public sealed record VideoUpsertItem(
     VideoSeriesScanInfo? Series = null,
     VideoSeasonScanInfo? Season = null,
     int? EpisodeNumber = null,
-    int? AbsoluteEpisodeNumber = null);
+    int? AbsoluteEpisodeNumber = null,
+    VideoSidecarMetadata? Metadata = null);
 
 /// <summary>
 /// Series folder context inferred during a scan.

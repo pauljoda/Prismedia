@@ -51,7 +51,7 @@ export const supportedGalleryMediaExtensions = new Set([
   ...supportedAnimatedExtensions,
 ]);
 
-export const supportedZipExtensions = new Set([".zip", ".cbz", ".cbr"]);
+export const supportedZipExtensions = new Set([".zip", ".cbz"]);
 
 export const supportedAudioExtensions = new Set([
   ".mp3",

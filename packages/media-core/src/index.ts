@@ -1,5 +1,4 @@
 export * from "./audio";
-export * from "./book";
 export * from "./classifier";
 export * from "./discovery";
 export * from "./file-classification";
@@ -8,6 +7,5 @@ export * from "./generated-paths";
 export * from "./parsing";
 export * from "./probe";
 export * from "./process";
-export * from "./sidecars";
 export * from "./sorting";
 export * from "./subtitles";

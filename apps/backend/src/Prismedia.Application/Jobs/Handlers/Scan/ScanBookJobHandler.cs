@@ -7,7 +7,7 @@ using Prismedia.Domain.Entities;
 namespace Prismedia.Application.Jobs.Handlers.Scan;
 
 /// <summary>
-/// Discovers comic book archives (CBZ/CBR/ZIP), creates book/chapter/page entities,
+/// Discovers comic book archives (CBZ/ZIP), creates book/chapter/page entities,
 /// and chains downstream thumbnail jobs for pages.
 /// </summary>
 public sealed class ScanBookJobHandler(
@@ -15,7 +15,9 @@ public sealed class ScanBookJobHandler(
     IFileDiscovery fileDiscovery,
     ILibraryScanRootPersistence roots,
     IBookScanPersistence books,
-    IDownstreamNeedsPersistence downstreamNeeds) : ScanJobHandler(logger, fileDiscovery, roots) {
+    IDownstreamNeedsPersistence downstreamNeeds,
+    IComicInfoMetadataReader? comicInfoReader = null,
+    IScanMetadataPersistence? scanMetadata = null) : ScanJobHandler(logger, fileDiscovery, roots) {
     private static readonly HashSet<string> ImageExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif"
@@ -44,7 +46,10 @@ public sealed class ScanBookJobHandler(
                 continue;
             }
 
-            archiveItems.Add(BookArchiveItem.From(root.Path, archivePath, pageMembers));
+            var comicInfo = comicInfoReader is null
+                ? null
+                : await comicInfoReader.ReadAsync(archivePath, cancellationToken);
+            archiveItems.Add(BookArchiveItem.From(root.Path, archivePath, pageMembers, comicInfo));
         }
 
         var validBookPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -54,7 +59,16 @@ public sealed class ScanBookJobHandler(
             .GroupBy(item => item.BookPath, StringComparer.OrdinalIgnoreCase)
             .OrderBy(group => group.Key, NaturalPathComparer.Instance)) {
             var first = bookGroup.First();
-            var bookId = await books.UpsertBookAsync(first.BookPath, first.BookTitle, root.Id, root.IsNsfw, cancellationToken);
+            var bookMetadata = BestBookMetadata(bookGroup);
+            var bookIsNsfw = root.IsNsfw || bookGroup.Any(item => item.MarksNsfw);
+            var bookId = await books.UpsertBookAsync(first.BookPath, first.BookTitle, root.Id, bookIsNsfw, cancellationToken);
+            if (bookMetadata is not null && scanMetadata is not null) {
+                await scanMetadata.ApplyComicInfoMetadataAsync(
+                    bookId,
+                    bookMetadata,
+                    bookIsNsfw,
+                    cancellationToken);
+            }
             validBookPaths.Add(first.BookPath);
 
             var bookAutoIdentify = AutoIdentifyScanEnqueue.RequestFor(
@@ -72,7 +86,7 @@ public sealed class ScanBookJobHandler(
                 await UpsertChapterPagesAsync(
                     context,
                     settings,
-                    root,
+                    bookIsNsfw,
                     bookId,
                     directChapters[chapterIndex],
                     bookId,
@@ -99,7 +113,7 @@ public sealed class ScanBookJobHandler(
                     volumeFirst.VolumeTitle!,
                     bookId,
                     volumeIndex,
-                    root.IsNsfw,
+                    bookIsNsfw,
                     cancellationToken);
                 validVolumePaths.Add(volumePath);
 
@@ -111,7 +125,7 @@ public sealed class ScanBookJobHandler(
                     await UpsertChapterPagesAsync(
                         context,
                         settings,
-                        root,
+                        bookIsNsfw,
                         bookId,
                         chapters[chapterIndex],
                         volumeId,
@@ -136,7 +150,7 @@ public sealed class ScanBookJobHandler(
     private async Task UpsertChapterPagesAsync(
         JobContext context,
         LibrarySettingsData settings,
-        LibraryRootData root,
+        bool isNsfw,
         Guid bookId,
         BookArchiveItem item,
         Guid parentEntityId,
@@ -150,7 +164,7 @@ public sealed class ScanBookJobHandler(
             parentEntityId,
             chapterIndex,
             item.PageMembers.Count,
-            root.IsNsfw,
+            isNsfw || item.MarksNsfw,
             cancellationToken);
 
         for (var i = 0; i < item.PageMembers.Count; i++) {
@@ -158,7 +172,7 @@ public sealed class ScanBookJobHandler(
             var pagePath = $"{item.ArchivePath}::{memberPath}";
             var pageTitle = Path.GetFileNameWithoutExtension(memberPath);
 
-            var pageId = await books.UpsertBookPageAsync(pagePath, pageTitle, bookId, chapterId, i, root.IsNsfw, cancellationToken);
+            var pageId = await books.UpsertBookPageAsync(pagePath, pageTitle, bookId, chapterId, i, isNsfw || item.MarksNsfw, cancellationToken);
 
             if (settings.AutoGeneratePreview && !await downstreamNeeds.HasEntityFileAsync(pageId, EntityFileRole.Thumbnail, cancellationToken)) {
                 await context.EnqueueIfNeededAsync(new EnqueueJobRequest(
@@ -195,6 +209,15 @@ public sealed class ScanBookJobHandler(
         }
     }
 
+    private static ComicInfoMetadata? BestBookMetadata(IEnumerable<BookArchiveItem> items) =>
+        items.Select(item => item.Metadata)
+            .FirstOrDefault(metadata => metadata is not null &&
+                (!string.IsNullOrWhiteSpace(metadata.Series) ||
+                    !string.IsNullOrWhiteSpace(metadata.Summary) ||
+                    metadata.Tags.Count > 0 ||
+                    metadata.Creators.Count > 0 ||
+                    !string.IsNullOrWhiteSpace(metadata.Publisher)));
+
     private sealed record BookArchiveItem(
         string ArchivePath,
         string BookPath,
@@ -202,28 +225,39 @@ public sealed class ScanBookJobHandler(
         string? VolumePath,
         string? VolumeTitle,
         string ChapterTitle,
-        IReadOnlyList<string> PageMembers) {
-        public static BookArchiveItem From(string rootPath, string archivePath, IReadOnlyList<string> pageMembers) {
+        IReadOnlyList<string> PageMembers,
+        ComicInfoMetadata? Metadata,
+        bool MarksNsfw) {
+        public static BookArchiveItem From(
+            string rootPath,
+            string archivePath,
+            IReadOnlyList<string> pageMembers,
+            ComicInfoMetadata? metadata) {
             var relativePath = Path.GetRelativePath(rootPath, archivePath);
             var segments = relativePath
                 .Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries);
-            var chapterTitle = Path.GetFileNameWithoutExtension(archivePath);
+            var fallbackTitle = Path.GetFileNameWithoutExtension(archivePath);
+            var chapterTitle = string.IsNullOrWhiteSpace(metadata?.Title) ? fallbackTitle : metadata.Title.Trim();
 
             if (segments.Length <= 1) {
-                return new BookArchiveItem(archivePath, archivePath, chapterTitle, null, null, chapterTitle, pageMembers);
+                var rootBookTitle = FirstNonEmpty(metadata?.Series, metadata?.Title, chapterTitle)!;
+                return new BookArchiveItem(archivePath, archivePath, rootBookTitle, null, null, chapterTitle, pageMembers, metadata, metadata?.MarksNsfw == true);
             }
 
             var bookPath = Path.Combine(rootPath, segments[0]);
-            var bookTitle = segments[0];
+            var bookTitle = FirstNonEmpty(metadata?.Series, segments[0])!;
             if (segments.Length <= 2) {
-                return new BookArchiveItem(archivePath, bookPath, bookTitle, null, null, chapterTitle, pageMembers);
+                return new BookArchiveItem(archivePath, bookPath, bookTitle, null, null, chapterTitle, pageMembers, metadata, metadata?.MarksNsfw == true);
             }
 
             var volumePath = Path.GetDirectoryName(archivePath) ?? bookPath;
             var volumeTitle = Path.GetFileName(volumePath);
-            return new BookArchiveItem(archivePath, bookPath, bookTitle, volumePath, volumeTitle, chapterTitle, pageMembers);
+            return new BookArchiveItem(archivePath, bookPath, bookTitle, volumePath, volumeTitle, chapterTitle, pageMembers, metadata, metadata?.MarksNsfw == true);
         }
     }
+
+    private static string? FirstNonEmpty(params string?[] values) =>
+        values.Select(value => value?.Trim()).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
 
     private sealed class NaturalPathComparer : IComparer<string> {
         public static readonly NaturalPathComparer Instance = new();

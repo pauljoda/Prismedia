@@ -458,6 +458,78 @@ public sealed class ScanJobHandlerTests {
     }
 
     [Fact]
+    public async Task VideoScanReadsAndAppliesSidecarMetadata() {
+        var root = new LibraryRootData(
+            Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            "/media/videos",
+            "Videos",
+            Enabled: true,
+            Recursive: true,
+            ScanVideos: true,
+            ScanImages: false,
+            ScanAudio: false,
+            ScanBooks: false,
+            IsNsfw: false);
+        var videoId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        var metadata = new VideoSidecarMetadata {
+            Title = "Sidecar Title",
+            Description = "Sidecar plot",
+            Date = "2026-05-01",
+            Studio = "Sidecar Studio",
+            Tags = ["Noir", "Feature"],
+            Performers = ["Ada Actor"],
+            Urls = ["https://example.test/video"],
+            Rating = 4
+        };
+        var persistence = new FakeScanPersistence([root]) {
+            Settings = DisabledGeneratedWorkSettings,
+            UpsertedVideoIds = [videoId],
+            DownstreamNeedsById = new Dictionary<Guid, DownstreamNeeds> {
+                [videoId] = new(
+                    NeedsProbe: false,
+                    MissingOshash: false,
+                    MissingMd5: false,
+                    NeedsPreview: false,
+                    NeedsTrickplay: false,
+                    NeedsSubtitleExtraction: false,
+                    NeedsGridThumbnail: false)
+            }
+        };
+        var metadataPersistence = new RecordingScanMetadataPersistence();
+        var handler = new ScanLibraryJobHandler(
+            NullLogger<ScanLibraryJobHandler>.Instance,
+            new RecordingFileDiscovery(["/media/videos/movie.mkv"]),
+            persistence,
+            persistence,
+            persistence,
+            new StubVideoSidecarMetadataReader(metadata),
+            metadataPersistence);
+        var job = new JobRunSnapshot(
+            Guid.NewGuid(),
+            JobType.ScanLibrary,
+            JobRunStatus.Running,
+            Progress: 0,
+            Message: null,
+            PayloadJson: $$"""{"libraryRootId":"{{root.Id}}"}""",
+            TargetEntityKind: "library-root",
+            TargetEntityId: root.Id.ToString(),
+            TargetLabel: root.Label,
+            CreatedAt: DateTimeOffset.UtcNow,
+            StartedAt: DateTimeOffset.UtcNow,
+            FinishedAt: null);
+
+        await handler.HandleAsync(new JobContext(job, new RecordingJobQueue()), CancellationToken.None);
+
+        var item = Assert.Single(persistence.UpsertedVideoItems);
+        Assert.Equal("Sidecar Title", item.Title);
+        Assert.Same(metadata, item.Metadata);
+        var applied = Assert.Single(metadataPersistence.AppliedVideos);
+        Assert.Equal(videoId, applied.EntityId);
+        Assert.Equal("movie", applied.FallbackTitle);
+        Assert.Same(metadata, applied.Metadata);
+    }
+
+    [Fact]
     public async Task GalleryScanTreatsRootFilesAsLooseAndFoldersAsNestedGalleries() {
         var root = new LibraryRootData(
             Guid.Parse("11111111-1111-1111-1111-111111111111"),
@@ -700,6 +772,78 @@ public sealed class ScanJobHandlerTests {
             Assert.Equal([volumePath], persistence.ValidBookVolumePaths);
             Assert.Equal([chapterOnePath, chapterTwoPath], persistence.ValidBookChapterPaths);
             Assert.Equal([root.Id], persistence.LastScannedRootIds);
+        } finally {
+            tempRoot.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task BookScanReadsComicInfoForTitlesAndMetadata() {
+        var tempRoot = Directory.CreateTempSubdirectory("prismedia-comicinfo-scan-");
+        try {
+            var rootPath = tempRoot.FullName;
+            var bookPath = Path.Combine(rootPath, "Filename Series");
+            Directory.CreateDirectory(bookPath);
+            var archivePath = Path.Combine(bookPath, "chapter-001.cbz");
+            var metadata = new ComicInfoMetadata {
+                Series = "Metadata Series",
+                Title = "Metadata Chapter",
+                Summary = "Comic summary",
+                Publisher = "Metadata Publisher",
+                Tags = ["Drama"],
+                Creators = ["Ada Writer"],
+                Date = "2026-05",
+                MarksNsfw = true
+            };
+            CreateZip(archivePath, ["001.jpg"]);
+
+            var root = new LibraryRootData(
+                Guid.Parse("11111111-1111-1111-1111-111111111111"),
+                rootPath,
+                "Comics",
+                Enabled: true,
+                Recursive: true,
+                ScanVideos: false,
+                ScanImages: false,
+                ScanAudio: false,
+                ScanBooks: true,
+                IsNsfw: false);
+            var persistence = new FakeScanPersistence([root]) {
+                Settings = DisabledGeneratedWorkSettings
+            };
+            var metadataPersistence = new RecordingScanMetadataPersistence();
+            var handler = new ScanBookJobHandler(
+                NullLogger<ScanBookJobHandler>.Instance,
+                new RecordingFileDiscovery([archivePath]),
+                persistence,
+                persistence,
+                persistence,
+                new StubComicInfoMetadataReader(metadata),
+                metadataPersistence);
+            var job = new JobRunSnapshot(
+                Guid.NewGuid(),
+                JobType.ScanBook,
+                JobRunStatus.Running,
+                Progress: 0,
+                Message: null,
+                PayloadJson: $$"""{"libraryRootId":"{{root.Id}}"}""",
+                TargetEntityKind: "library-root",
+                TargetEntityId: root.Id.ToString(),
+                TargetLabel: root.Label,
+                CreatedAt: DateTimeOffset.UtcNow,
+                StartedAt: DateTimeOffset.UtcNow,
+                FinishedAt: null);
+
+            await handler.HandleAsync(new JobContext(job, new RecordingJobQueue()), CancellationToken.None);
+
+            var book = Assert.Single(persistence.UpsertedBooks);
+            Assert.Equal("Metadata Series", book.Title);
+            var chapter = Assert.Single(persistence.UpsertedBookChapters);
+            Assert.Equal("Metadata Chapter", chapter.Title);
+            var applied = Assert.Single(metadataPersistence.AppliedComics);
+            Assert.Equal(book.Id, applied.EntityId);
+            Assert.Same(metadata, applied.Metadata);
+            Assert.True(applied.MarkNsfw);
         } finally {
             tempRoot.Delete(recursive: true);
         }
@@ -1041,6 +1185,51 @@ public sealed class ScanJobHandlerTests {
     private sealed record BookVolumeRecord(Guid Id, string SourcePath, string Title, Guid BookEntityId, int SortOrder);
     private sealed record BookChapterRecord(Guid Id, string SourcePath, string Title, Guid ParentEntityId, int SortOrder, int PageCount);
     private sealed record BookPageRecord(Guid Id, string SourcePath, string Title, Guid BookEntityId, Guid ChapterEntityId, int SortOrder);
+
+    private sealed class StubVideoSidecarMetadataReader(VideoSidecarMetadata? metadata) : IVideoSidecarMetadataReader {
+        public Task<VideoSidecarMetadata?> ReadAsync(string videoFilePath, CancellationToken cancellationToken) =>
+            Task.FromResult(metadata);
+    }
+
+    private sealed class StubComicInfoMetadataReader(ComicInfoMetadata? metadata) : IComicInfoMetadataReader {
+        public Task<ComicInfoMetadata?> ReadAsync(string archivePath, CancellationToken cancellationToken) =>
+            Task.FromResult(metadata);
+    }
+
+    private sealed class RecordingScanMetadataPersistence : IScanMetadataPersistence {
+        public List<AppliedVideoMetadata> AppliedVideos { get; } = [];
+        public List<AppliedComicInfoMetadata> AppliedComics { get; } = [];
+
+        public Task ApplyVideoSidecarMetadataAsync(
+            Guid entityId,
+            VideoSidecarMetadata metadata,
+            string fallbackTitle,
+            bool markNsfw,
+            CancellationToken cancellationToken) {
+            AppliedVideos.Add(new AppliedVideoMetadata(entityId, metadata, fallbackTitle, markNsfw));
+            return Task.CompletedTask;
+        }
+
+        public Task ApplyComicInfoMetadataAsync(
+            Guid bookEntityId,
+            ComicInfoMetadata metadata,
+            bool markNsfw,
+            CancellationToken cancellationToken) {
+            AppliedComics.Add(new AppliedComicInfoMetadata(bookEntityId, metadata, markNsfw));
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed record AppliedVideoMetadata(
+        Guid EntityId,
+        VideoSidecarMetadata Metadata,
+        string FallbackTitle,
+        bool MarkNsfw);
+
+    private sealed record AppliedComicInfoMetadata(
+        Guid EntityId,
+        ComicInfoMetadata Metadata,
+        bool MarkNsfw);
 
     private sealed class NoopFileDiscovery : IFileDiscovery {
         public Task<IReadOnlyList<string>> DiscoverFilesAsync(string rootPath, MediaCategory category, bool recursive, IReadOnlySet<string> excludedPaths, CancellationToken cancellationToken) =>

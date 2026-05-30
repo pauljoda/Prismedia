@@ -23,6 +23,7 @@ using Prismedia.Infrastructure.Files;
 using Prismedia.Infrastructure.Media.Adapters;
 using Prismedia.Infrastructure.Media.Persistence;
 using Prismedia.Infrastructure.Media.Processing;
+using Prismedia.Infrastructure.Media.Sidecars;
 using Prismedia.Infrastructure.Organization;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Plugins;
@@ -168,6 +169,10 @@ public static class DependencyInjection {
             provider.GetRequiredService<LibraryScanPersistenceService>());
         services.AddScoped<IEntityRefreshTreePersistence>(provider =>
             provider.GetRequiredService<LibraryScanPersistenceService>());
+        services.AddScoped<IScanMetadataPersistence>(provider =>
+            provider.GetRequiredService<LibraryScanPersistenceService>());
+        services.AddSingleton<IVideoSidecarMetadataReader, VideoSidecarMetadataReader>();
+        services.AddSingleton<IComicInfoMetadataReader, ComicInfoMetadataReader>();
         services.AddScoped<IMaintenancePersistence>(provider =>
             new MaintenancePersistenceService(provider.GetRequiredService<PrismediaDbContext>(), dataDir));
         services.AddScoped<ICollectionRuleEngine, CollectionRuleEngine>();

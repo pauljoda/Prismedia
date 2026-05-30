@@ -857,6 +857,94 @@ public sealed class LibraryScanPersistenceServiceTests {
         Assert.Equal(3, chapter.SortOrder);
     }
 
+    [Fact]
+    public async Task ApplyVideoSidecarMetadataFillsMissingFieldsAndKeepsExistingDescription() {
+        await using var db = CreateContext();
+        var videoId = Guid.Parse("aaaaaaaa-1111-1111-1111-111111111111");
+        SeedVideo(db, videoId, "/media/movie.mkv");
+        var video = await db.Entities.FindAsync([videoId]);
+        video!.Title = "movie";
+        db.EntityDescriptions.Add(new EntityDescriptionRow {
+            EntityId = videoId,
+            Value = "User description",
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var service = new LibraryScanPersistenceService(db);
+        await service.ApplyVideoSidecarMetadataAsync(
+            videoId,
+            new VideoSidecarMetadata {
+                Title = "Sidecar Title",
+                Description = "Sidecar description",
+                Date = "2026-05-01",
+                Studio = "Sidecar Studio",
+                Tags = ["Noir"],
+                Performers = ["Ada Actor"],
+                Urls = ["https://example.test/video"],
+                Rating = 4
+            },
+            "movie",
+            markNsfw: true,
+            CancellationToken.None);
+
+        Assert.Equal("Sidecar Title", video.Title);
+        Assert.Equal(4, video.RatingValue);
+        Assert.Equal("User description", (await db.EntityDescriptions.FindAsync([videoId]))?.Value);
+        var release = await db.EntityDates.FindAsync([videoId, "release"]);
+        Assert.Equal("2026-05-01", release?.Value);
+        Assert.Equal(new DateOnly(2026, 5, 1), release?.SortableValue);
+        Assert.Equal(["https://example.test/video"], db.EntityUrls.Where(row => row.EntityId == videoId).Select(row => row.Url).ToArray());
+        Assert.Contains(db.EntityRelationshipLinks, row => row.EntityId == videoId && row.RelationshipCode == "tags");
+        Assert.Contains(db.EntityRelationshipLinks, row => row.EntityId == videoId && row.RelationshipCode == "studio");
+        Assert.Contains(db.EntityRelationshipLinks, row => row.EntityId == videoId && row.RelationshipCode == "cast" && row.MetadataJson!.Contains("performer"));
+        Assert.Contains(db.Entities, row => row.KindCode == EntityKindRegistry.Tag.Code && row.Title == "Noir" && row.IsNsfw);
+    }
+
+    [Fact]
+    public async Task ApplyComicInfoMetadataAddsMetadataWithoutOverwritingExistingBookTitle() {
+        await using var db = CreateContext();
+        var bookId = Guid.Parse("bbbbbbbb-1111-1111-1111-111111111111");
+        db.Entities.Add(new EntityRow {
+            Id = bookId,
+            KindCode = EntityKindRegistry.Book.Code,
+            Title = "User Book Title",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        db.BookDetails.Add(new BookDetailRow {
+            EntityId = bookId,
+            BookType = BookType.Comic
+        });
+        await db.SaveChangesAsync();
+
+        var service = new LibraryScanPersistenceService(db);
+        await service.ApplyComicInfoMetadataAsync(
+            bookId,
+            new ComicInfoMetadata {
+                Series = "ComicInfo Series",
+                Summary = "ComicInfo summary",
+                Date = "2026-05",
+                Publisher = "Comic Publisher",
+                Tags = ["Drama"],
+                Creators = ["Ada Writer"],
+                Urls = ["https://example.test/comic"],
+                MarksNsfw = true
+            },
+            markNsfw: true,
+            CancellationToken.None);
+
+        var book = await db.Entities.FindAsync([bookId]);
+        Assert.Equal("User Book Title", book!.Title);
+        Assert.True(book.IsNsfw);
+        Assert.Equal("ComicInfo summary", (await db.EntityDescriptions.FindAsync([bookId]))?.Value);
+        Assert.Equal("2026-05", (await db.EntityDates.FindAsync([bookId, "release"]))?.Value);
+        Assert.Equal(["https://example.test/comic"], db.EntityUrls.Where(row => row.EntityId == bookId).Select(row => row.Url).ToArray());
+        Assert.Contains(db.EntityRelationshipLinks, row => row.EntityId == bookId && row.RelationshipCode == "tags");
+        Assert.Contains(db.EntityRelationshipLinks, row => row.EntityId == bookId && row.RelationshipCode == "studio");
+        Assert.Contains(db.EntityRelationshipLinks, row => row.EntityId == bookId && row.RelationshipCode == "cast" && row.MetadataJson!.Contains("creator"));
+    }
+
     private static PrismediaDbContext CreateContext() {
         var options = new DbContextOptionsBuilder<PrismediaDbContext>()
             .UseInMemoryDatabase($"library-scan-persistence-{Guid.NewGuid():N}")

@@ -25,7 +25,7 @@ public static class SupportedExtensions {
 
     public static readonly IReadOnlySet<string> ComicArchive = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        ".cbz", ".cbr", ".zip"
+        ".cbz", ".zip"
     };
 
     /// <summary>
