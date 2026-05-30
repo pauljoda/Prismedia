@@ -90,6 +90,24 @@ public sealed class AutoIdentifyRunnerTests {
     }
 
     [Fact]
+    public async Task SkipsChildEntitiesSoOnlyTheParentIsIdentified() {
+        await using var db = CreateContext();
+        var seriesId = await SeedVideoAsync(db, organized: false);
+        var episodeId = await SeedVideoAsync(db, organized: false, parentId: seriesId);
+        var settings = await ConfigureAsync(db, enabled: true, providers: ["p1"], confidencePercent: 90m);
+        var identify = new FakeIdentifyProvider {
+            ProposalsByProvider = { ["p1"] = Proposal("p1", confidence: 0.99m, title: "Episode") },
+        };
+        var runner = new AutoIdentifyRunner(settings, identify, db, NullLogger<AutoIdentifyRunner>.Instance);
+
+        var result = await runner.RunAsync(episodeId, CancellationToken.None);
+
+        Assert.False(result.Applied);
+        Assert.Equal("child entity; its parent is identified instead", result.SkipReason);
+        Assert.Empty(identify.IdentifyCalls);
+    }
+
+    [Fact]
     public async Task SkipsWhenDisabled() {
         await using var db = CreateContext();
         var entityId = await SeedVideoAsync(db, organized: false);
@@ -127,13 +145,14 @@ public sealed class AutoIdentifyRunnerTests {
             Candidates: [],
             Relationships: []);
 
-    private static async Task<Guid> SeedVideoAsync(PrismediaDbContext db, bool organized) {
+    private static async Task<Guid> SeedVideoAsync(PrismediaDbContext db, bool organized, Guid? parentId = null) {
         var id = Guid.NewGuid();
         db.Entities.Add(new EntityRow {
             Id = id,
             KindCode = "video",
             Title = "video.mkv",
             IsOrganized = organized,
+            ParentEntityId = parentId,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow,
         });

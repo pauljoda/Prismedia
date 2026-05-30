@@ -49,6 +49,13 @@ public sealed class AutoIdentifyRunner(
             return new AutoIdentifyResult(false, SkipReason: "entity not found");
         }
 
+        // Only identify top-level entities. A child (an episode in a series, an image in a gallery,
+        // a track in an album) is filled by cascading from its identified parent, so identifying it
+        // directly would duplicate and conflict with the parent's work.
+        if (entity.ParentEntityId is not null) {
+            return new AutoIdentifyResult(false, SkipReason: "child entity; its parent is identified instead");
+        }
+
         if (!SelectorKindByEntityKind.TryGetValue(entity.KindCode, out var selectorKind)) {
             return new AutoIdentifyResult(false, SkipReason: $"kind '{entity.KindCode}' is not auto-identifiable");
         }
