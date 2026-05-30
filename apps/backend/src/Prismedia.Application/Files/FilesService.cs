@@ -1,6 +1,5 @@
 using Prismedia.Application.Jobs;
 using Prismedia.Contracts.Files;
-using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Files;
 
@@ -328,30 +327,18 @@ public sealed class FilesService(
             .ToArray();
         var queued = 0;
         foreach (var root in uniqueRoots) {
-            foreach (var type in ScanTypes(root)) {
-                var targetId = root.Id.ToString();
-                if (await jobs.HasPendingAsync(type, targetId, cancellationToken)) {
-                    continue;
-                }
-
-                await jobs.EnqueueAsync(new EnqueueJobRequest(
-                    Type: type,
-                    PayloadJson: new ScanRootPayload(root.Id).ToJson(),
-                    TargetEntityKind: "library-root",
-                    TargetEntityId: targetId,
-                    TargetLabel: root.Label), cancellationToken);
-                queued++;
-            }
+            queued += await LibraryScanJobs.QueueRootScansAsync(
+                jobs,
+                root.Id,
+                root.Label,
+                root.ScanVideos,
+                root.ScanImages,
+                root.ScanAudio,
+                root.ScanBooks,
+                cancellationToken);
         }
 
         return queued;
-    }
-
-    private static IEnumerable<JobType> ScanTypes(FileLibraryRoot root) {
-        if (root.ScanVideos) yield return JobType.ScanLibrary;
-        if (root.ScanImages) yield return JobType.ScanGallery;
-        if (root.ScanAudio) yield return JobType.ScanAudio;
-        if (root.ScanBooks) yield return JobType.ScanBook;
     }
 
     private static string CleanSegment(string name) {

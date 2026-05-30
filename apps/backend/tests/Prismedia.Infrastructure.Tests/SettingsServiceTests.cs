@@ -1,12 +1,85 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Application.Jobs;
 using Prismedia.Application.Settings;
+using Prismedia.Contracts.Settings;
+using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Settings;
 
 namespace Prismedia.Infrastructure.Tests;
 
 public sealed class SettingsServiceTests {
+    [Fact]
+    public async Task CreateLibraryRootQueuesScanForEachEnabledKind() {
+        await using var db = CreateContext();
+        var queue = new RecordingJobQueue();
+        var service = new SettingsService(new EfSettingsPersistence(db), queue);
+
+        await service.CreateLibraryRootAsync(
+            new LibraryRootCreateRequest(
+                Path: "/media/comics",
+                Label: "Comics",
+                Enabled: true,
+                Recursive: true,
+                ScanVideos: false,
+                ScanImages: false,
+                ScanAudio: false,
+                ScanBooks: true,
+                IsNsfw: false),
+            CancellationToken.None);
+
+        // A books-only library must queue a book scan and nothing else.
+        Assert.Equal([JobType.ScanBook], queue.Enqueued.Select(request => request.Type));
+    }
+
+    [Fact]
+    public async Task CreateLibraryRootQueuesAllDefaultKinds() {
+        await using var db = CreateContext();
+        var queue = new RecordingJobQueue();
+        var service = new SettingsService(new EfSettingsPersistence(db), queue);
+
+        // Omitting the scan flags uses the defaults (videos, images, audio on; books off).
+        await service.CreateLibraryRootAsync(
+            new LibraryRootCreateRequest(
+                Path: "/media/library",
+                Label: null,
+                Enabled: null,
+                Recursive: null,
+                ScanVideos: null,
+                ScanImages: null,
+                ScanAudio: null,
+                ScanBooks: null,
+                IsNsfw: null),
+            CancellationToken.None);
+
+        Assert.Equal(
+            [JobType.ScanLibrary, JobType.ScanGallery, JobType.ScanAudio],
+            queue.Enqueued.Select(request => request.Type));
+    }
+
+    [Fact]
+    public async Task CreateDisabledLibraryRootQueuesNoScans() {
+        await using var db = CreateContext();
+        var queue = new RecordingJobQueue();
+        var service = new SettingsService(new EfSettingsPersistence(db), queue);
+
+        await service.CreateLibraryRootAsync(
+            new LibraryRootCreateRequest(
+                Path: "/media/library",
+                Label: null,
+                Enabled: false,
+                Recursive: null,
+                ScanVideos: null,
+                ScanImages: null,
+                ScanAudio: null,
+                ScanBooks: null,
+                IsNsfw: null),
+            CancellationToken.None);
+
+        Assert.Empty(queue.Enqueued);
+    }
+
     [Fact]
     public async Task CatalogUsesRegistryDefaultsWithoutCreatingRows() {
         await using var db = CreateContext();
@@ -88,5 +161,69 @@ public sealed class SettingsServiceTests {
             .Options;
 
         return new PrismediaDbContext(options);
+    }
+
+    /// <summary>
+    /// Minimal <see cref="IJobQueueService"/> test double that records enqueued requests and
+    /// reports no pending work so scan deduplication never suppresses an enqueue.
+    /// </summary>
+    private sealed class RecordingJobQueue : IJobQueueService {
+        public List<EnqueueJobRequest> Enqueued { get; } = [];
+
+        public Task<JobRunSnapshot> EnqueueAsync(EnqueueJobRequest request, CancellationToken cancellationToken) {
+            Enqueued.Add(request);
+            return Task.FromResult(new JobRunSnapshot(
+                Guid.NewGuid(),
+                request.Type,
+                JobRunStatus.Queued,
+                0,
+                null,
+                request.PayloadJson ?? "{}",
+                request.TargetEntityKind,
+                request.TargetEntityId,
+                request.TargetLabel,
+                DateTimeOffset.UtcNow,
+                null,
+                null));
+        }
+
+        public Task<JobRunSnapshot> EnqueueAsync(JobType type, CancellationToken cancellationToken) =>
+            EnqueueAsync(new EnqueueJobRequest(type), cancellationToken);
+
+        public Task<bool> HasPendingAsync(JobType type, string? targetEntityId, CancellationToken cancellationToken) =>
+            Task.FromResult(false);
+
+        public Task<IReadOnlyList<JobRunSnapshot>> ListAsync(bool hideNsfw, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<JobRunSnapshot>>([]);
+
+        public Task<int> EnqueueBatchAsync(IReadOnlyList<EnqueueJobRequest> requests, CancellationToken cancellationToken) {
+            Enqueued.AddRange(requests);
+            return Task.FromResult(requests.Count);
+        }
+
+        public Task<int> CancelAsync(JobType? type, CancellationToken cancellationToken) => Task.FromResult(0);
+
+        public Task<bool> CancelRunAsync(Guid id, CancellationToken cancellationToken) => Task.FromResult(false);
+
+        public Task<int> ClearFailuresAsync(JobType? type, CancellationToken cancellationToken) => Task.FromResult(0);
+
+        public Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken) =>
+            Task.FromResult<JobRunSnapshot?>(null);
+
+        public Task<int> RecoverStaleRunningAsync(string currentWorkerId, TimeSpan staleAfter, CancellationToken cancellationToken) =>
+            Task.FromResult(0);
+
+        public Task UpdateProgressAsync(Guid id, int progress, string? message, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public Task CompleteAsync(Guid id, string? message, CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task FailAsync(Guid id, string message, TimeSpan retryDelay, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public Task<IReadOnlyList<JobQueueCount>> GetQueueCountsAsync(bool hideNsfw, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<JobQueueCount>>([]);
+
+        public Task<int> PruneHistoryAsync(TimeSpan retention, CancellationToken cancellationToken) => Task.FromResult(0);
     }
 }

@@ -65,6 +65,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated web app manifest and mobile browser metadata for home-screen installation and browser UI theme colors.
 
 ### Fixed
+- Fixed adding a library so it now starts scanning immediately for exactly the media kinds it has enabled, instead of doing nothing until the optional periodic auto-scan runs — a books-only library now queues a book scan rather than a video scan.
+- Fixed the background worker so it no longer stays offline after first boot: it now waits for the database to be ready instead of exiting when it starts before the database, and the production container automatically restarts the worker if it ever stops, so the job queue recovers on its own.
 - Fixed library grids so each one again remembers its filters, sort, card size, layout, media wall, page size, and active preset per view and per device — drop a grid on any page and it restores the last way you left it.
 - Fixed production Docker builds so the pinned Jellyfin FFmpeg package is fetched from its stable versioned repository path instead of the rotating latest channel.
 - Fixed Identify cascade review ordering so provider episode proposals are matched by episode number, keeping episode 1 visible and local episodes in season order.

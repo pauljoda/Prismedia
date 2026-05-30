@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Prismedia.Application.Jobs;
 using Prismedia.Contracts.Settings;
 
 namespace Prismedia.Application.Settings;
@@ -11,15 +12,25 @@ namespace Prismedia.Application.Settings;
 /// </summary>
 public sealed class SettingsService {
     private readonly ISettingsPersistence _persistence;
+    private readonly IJobQueueService? _jobs;
     private readonly ILogger<SettingsService>? _logger;
 
     /// <summary>
     /// Creates the service over the settings persistence port.
     /// </summary>
     /// <param name="persistence">Persistence adapter implemented by Infrastructure.</param>
+    /// <param name="jobs">
+    /// Optional job queue used to kick off an immediate scan when a library root is added.
+    /// When omitted (for example in infrastructure helpers that only read settings) creation
+    /// simply skips the kickoff scan.
+    /// </param>
     /// <param name="logger">Optional logger for invalid persisted setting values.</param>
-    public SettingsService(ISettingsPersistence persistence, ILogger<SettingsService>? logger = null) {
+    public SettingsService(
+        ISettingsPersistence persistence,
+        IJobQueueService? jobs = null,
+        ILogger<SettingsService>? logger = null) {
         _persistence = persistence;
+        _jobs = jobs;
         _logger = logger;
     }
 
@@ -298,8 +309,11 @@ public sealed class SettingsService {
     /// <summary>
     /// Adds a new watched media root. The label defaults to the trailing directory name when
     /// omitted by the caller, and falls back to the raw path when the directory name is empty.
+    /// When the root is enabled, a scan job is queued immediately for each enabled media kind
+    /// so newly added libraries begin scanning right away rather than waiting for the optional
+    /// recurring auto-scan (which is off by default).
     /// </summary>
-    public Task<LibraryRoot> CreateLibraryRootAsync(
+    public async Task<LibraryRoot> CreateLibraryRootAsync(
         LibraryRootCreateRequest request,
         CancellationToken cancellationToken) {
         ArgumentException.ThrowIfNullOrWhiteSpace(request.Path);
@@ -327,7 +341,24 @@ public sealed class SettingsService {
             CreatedAt: now,
             UpdatedAt: now);
 
-        return _persistence.AddLibraryRootAsync(state, cancellationToken);
+        var created = await _persistence.AddLibraryRootAsync(state, cancellationToken);
+
+        if (created.Enabled && _jobs is not null) {
+            var queued = await LibraryScanJobs.QueueRootScansAsync(
+                _jobs,
+                created.Id,
+                created.Label,
+                created.ScanVideos,
+                created.ScanImages,
+                created.ScanAudio,
+                created.ScanBooks,
+                cancellationToken);
+            _logger?.LogInformation(
+                "Queued {Count} scan job(s) for newly added library root '{Label}'.",
+                queued, created.Label);
+        }
+
+        return created;
     }
 
     /// <summary>

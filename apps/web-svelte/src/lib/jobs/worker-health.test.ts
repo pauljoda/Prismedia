@@ -25,7 +25,7 @@ describe("worker health presentation", () => {
     });
   });
 
-  it("shows restart guidance when the worker is offline", () => {
+  it("shows self-healing guidance when the worker is offline", () => {
     const status = describeWorkerHealth({
       status: "offline",
       workerId: null,

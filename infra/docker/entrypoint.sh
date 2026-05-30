@@ -60,16 +60,26 @@ gosu postgres pg_ctl -D "$PGDATA" -l /data/postgres/log -w -t 30 start
 gosu postgres psql -h 127.0.0.1 -tc "SELECT 1 FROM pg_database WHERE datname = 'prismedia'" | grep -q 1 || \
   gosu postgres createdb -h 127.0.0.1 prismedia
 
-# Note: database migrations run automatically in the shared .NET runtime
-# used by the API and worker.
+# Note: the .NET API owns and applies database migrations on startup. The worker
+# waits for the database to be reachable and migrated before processing jobs.
 
-# ── Start worker ──────────────────────────────────────────────────
-echo "[prismedia] Starting background worker..."
-DATABASE_URL="postgresql://postgres@127.0.0.1:5432/prismedia" \
-PRISMEDIA_CACHE_DIR="$CACHE_DIR" \
-PRISMEDIA_DATA_DIR="/data" \
-PRISMEDIA_SECRET="$PRISMEDIA_SECRET" \
-  dotnet /app/worker/Prismedia.Worker.dll &
+# ── Start worker (supervised, auto-restarting) ────────────────────
+# The worker waits for the database before processing jobs, but if it ever exits
+# (an unrecoverable startup wait, a crash, or an OOM kill) we restart it so the
+# background queue self-heals without requiring a full container restart. A short
+# backoff avoids a tight crash loop while the cause clears.
+echo "[prismedia] Starting background worker (supervised)..."
+(
+  while true; do
+    DATABASE_URL="postgresql://postgres@127.0.0.1:5432/prismedia" \
+    PRISMEDIA_CACHE_DIR="$CACHE_DIR" \
+    PRISMEDIA_DATA_DIR="/data" \
+    PRISMEDIA_SECRET="$PRISMEDIA_SECRET" \
+      dotnet /app/worker/Prismedia.Worker.dll
+    echo "[prismedia] Worker exited (code $?). Restarting in 3s..."
+    sleep 3
+  done
+) &
 
 # ── Start .NET API (foreground — keeps container alive) ───────────
 echo "[prismedia] Starting .NET API and web frontend on port 8008..."

@@ -2,7 +2,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Prismedia.Application.Settings;
-using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Jobs;
 
@@ -55,44 +54,19 @@ public sealed class JobScheduler(
                 continue;
             }
 
-            var rootId = root.Id.ToString();
+            var queued = await LibraryScanJobs.QueueRootScansAsync(
+                queue,
+                root.Id,
+                root.Label,
+                root.ScanVideos,
+                root.ScanImages,
+                root.ScanAudio,
+                root.ScanBooks,
+                cancellationToken);
 
-            if (root.ScanVideos) {
-                await EnqueueScanIfNeeded(queue, JobType.ScanLibrary, rootId, root.Label, cancellationToken);
-            }
-
-            if (root.ScanImages) {
-                await EnqueueScanIfNeeded(queue, JobType.ScanGallery, rootId, root.Label, cancellationToken);
-            }
-
-            if (root.ScanAudio) {
-                await EnqueueScanIfNeeded(queue, JobType.ScanAudio, rootId, root.Label, cancellationToken);
-            }
-
-            if (root.ScanBooks) {
-                await EnqueueScanIfNeeded(queue, JobType.ScanBook, rootId, root.Label, cancellationToken);
+            if (queued > 0) {
+                logger.LogInformation("Scheduled {Count} scan job(s) for root '{Label}'.", queued, root.Label);
             }
         }
-    }
-
-    private async Task EnqueueScanIfNeeded(
-        IJobQueueService queue,
-        JobType type,
-        string rootId,
-        string label,
-        CancellationToken cancellationToken) {
-        if (await queue.HasPendingAsync(type, rootId, cancellationToken)) {
-            return;
-        }
-
-        var request = new EnqueueJobRequest(
-            Type: type,
-            PayloadJson: new ScanRootPayload(Guid.Parse(rootId)).ToJson(),
-            TargetEntityKind: "library-root",
-            TargetEntityId: rootId,
-            TargetLabel: label);
-
-        await queue.EnqueueAsync(request, cancellationToken);
-        logger.LogInformation("Scheduled {JobType} for root '{Label}'.", type.ToCode(), label);
     }
 }
