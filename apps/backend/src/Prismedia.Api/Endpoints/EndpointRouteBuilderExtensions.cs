@@ -1,8 +1,11 @@
+using Prismedia.Api.Security;
+
 namespace Prismedia.Api.Endpoints;
 
 public static class EndpointRouteBuilderExtensions {
     public static IEndpointRouteBuilder MapPrismediaEndpoints(this IEndpointRouteBuilder routes) {
         routes.MapHealthEndpoints();
+        routes.MapSecurityEndpoints();
         routes.MapEntityEndpoints();
         routes.MapVideoEndpoints();
         routes.MapSeriesEndpoints();
@@ -15,6 +18,7 @@ public static class EndpointRouteBuilderExtensions {
         routes.MapStudioEndpoints();
         routes.MapTagEndpoints();
         routes.MapCollectionEndpoints();
+        routes.MapJellyfinCompatibilityEndpoints();
         routes.MapJellyfinPlaybackEndpoints();
         routes.MapJobEndpoints();
         routes.MapSettingsEndpoints();
@@ -42,6 +46,10 @@ internal static class NsfwVisibility {
     /// <param name="explicitHide">Optional route query override.</param>
     /// <param name="httpContext">Current HTTP context used to inspect the NSFW mode cookie.</param>
     public static bool ShouldHide(bool? explicitHide, HttpContext httpContext) {
+        if (httpContext.GetJellyfinProfile() is { } profile) {
+            return !profile.AllowNsfw;
+        }
+
         if (explicitHide is { } hide) {
             return hide;
         }

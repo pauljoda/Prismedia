@@ -8,6 +8,7 @@ using Prismedia.Application.Jobs;
 using Prismedia.Application.Organization;
 using Prismedia.Application.Settings;
 using Prismedia.Application.Health;
+using Prismedia.Application.Jellyfin;
 using Prismedia.Application.Jobs.Handlers;
 using Prismedia.Application.Jobs.Handlers.Generate;
 using Prismedia.Application.Jobs.Handlers.Identity;
@@ -18,6 +19,7 @@ using Prismedia.Application.Jobs.Handlers.Scan;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Domain.Entities;
 using Prismedia.Application.Plugins;
+using Prismedia.Application.Security;
 
 namespace Prismedia.Application;
 
@@ -32,10 +34,13 @@ public static class DependencyInjection {
         services.AddScoped<JobService>();
         services.AddScoped<EntityCapabilityService>();
         services.AddScoped<SettingsService>();
+        services.AddScoped<PrismediaSecurityService>();
+        services.AddScoped<JellyfinCatalogService>();
         services.AddScoped<OrganizeService>();
         services.AddScoped<FilesService>();
         services.AddScoped<IAudioStreamService, AudioStreamService>();
         services.AddSingleton<IIdentifyApplyProgressStore, InMemoryIdentifyApplyProgressStore>();
+        services.AddSingleton<AuthAttemptThrottle>();
 
         return services;
     }

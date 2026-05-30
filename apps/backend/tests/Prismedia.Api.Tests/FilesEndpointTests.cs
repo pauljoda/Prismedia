@@ -17,7 +17,7 @@ public sealed class FilesEndpointTests : IDisposable {
     public async Task ContentEndpointSupportsByteRangeRequests() {
         await File.WriteAllTextAsync(Path.Combine(_tempRoot.FullName, "clip.mp4"), "0123456789");
         using var factory = CreateFactory();
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
             $"/api/files/content?rootId={RootId}&path=clip.mp4");
@@ -36,7 +36,7 @@ public sealed class FilesEndpointTests : IDisposable {
     public async Task ContentEndpointSupportsHeadProbes() {
         await File.WriteAllTextAsync(Path.Combine(_tempRoot.FullName, "clip.mp4"), "0123456789");
         using var factory = CreateFactory();
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         using var response = await client.SendAsync(new HttpRequestMessage(
             HttpMethod.Head,
@@ -51,7 +51,7 @@ public sealed class FilesEndpointTests : IDisposable {
     [Fact]
     public async Task ChildrenEndpointRejectsTraversalOutsideRoot() {
         using var factory = CreateFactory();
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         using var response = await client.GetAsync($"/api/files/detail?rootId={RootId}&path=../outside.txt");
 
@@ -64,7 +64,7 @@ public sealed class FilesEndpointTests : IDisposable {
     public async Task ExclusionEndpointMarksExistingPathExcluded() {
         await File.WriteAllTextAsync(Path.Combine(_tempRoot.FullName, "skip.mp4"), "video");
         using var factory = CreateFactory();
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         using var response = await client.PostAsJsonAsync(
             "/api/files/exclusions",
@@ -78,7 +78,7 @@ public sealed class FilesEndpointTests : IDisposable {
     [Fact]
     public async Task RemoveExclusionEndpointClearsPathExclusion() {
         using var factory = CreateFactory();
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         using var response = await client.DeleteAsync(
             $"/api/files/exclusions?rootId={RootId}&path=skip.mp4");
@@ -101,7 +101,8 @@ public sealed class FilesEndpointTests : IDisposable {
                     services.AddScoped<IFilesPersistence>(_ => new FakeFilesPersistence(_tempRoot.FullName));
                     services.AddScoped<IJobQueueService, FakeJobQueue>();
                 });
-            });
+            })
+            .WithTestAuth();
 
     private sealed class FakeFilesPersistence(string rootPath) : IFilesPersistence {
         public Task<IReadOnlyList<FileLibraryRoot>> ListRootsAsync(CancellationToken cancellationToken) =>

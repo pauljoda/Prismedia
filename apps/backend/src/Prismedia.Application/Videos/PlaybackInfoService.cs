@@ -82,7 +82,7 @@ public sealed class PlaybackInfoService : IPlaybackInfoService {
             supportsDirectPlayback,
             transcodingAllowed,
             transcodingAllowed && !supportsDirectPlayback
-                ? BuildTranscodingUrl(itemId, mediaSourceId, playSessionId, selectedAudioStream?.StreamIndex)
+                ? BuildTranscodingUrl(itemId, mediaSourceId, playSessionId, selectedAudioStream?.StreamIndex, request?.AccessToken)
                 : null,
             transcodingAllowed && !supportsDirectPlayback ? "hls" : null,
             transcodingAllowed && !supportsDirectPlayback ? "ts" : null,
@@ -98,9 +98,16 @@ public sealed class PlaybackInfoService : IPlaybackInfoService {
         Guid itemId,
         string mediaSourceId,
         string playSessionId,
-        int? audioStreamIndex) {
+        int? audioStreamIndex,
+        string? accessToken) {
         var url = $"/Videos/{itemId:D}/master.m3u8?MediaSourceId={mediaSourceId}&PlaySessionId={playSessionId}";
-        return audioStreamIndex is null ? url : $"{url}&AudioStreamIndex={audioStreamIndex.Value}";
+        if (audioStreamIndex is not null) {
+            url = $"{url}&AudioStreamIndex={audioStreamIndex.Value}";
+        }
+
+        return string.IsNullOrWhiteSpace(accessToken)
+            ? url
+            : $"{url}&ApiKey={Uri.EscapeDataString(accessToken)}";
     }
 
     private static VideoSourceStream? SelectAudioStream(

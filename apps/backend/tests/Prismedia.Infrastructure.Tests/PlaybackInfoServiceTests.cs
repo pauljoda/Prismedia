@@ -125,6 +125,35 @@ public sealed class PlaybackInfoServiceTests {
         Assert.Null(hdrSource.TranscodingUrl);
     }
 
+    [Fact]
+    public async Task PlaybackInfoAddsJellyfinAccessTokenToTranscodingUrl() {
+        var videoId = Guid.Parse("56565656-5656-5656-5656-565656565656");
+        var service = new PlaybackInfoService(
+            new FakeVideoSourceService(new VideoSourceFile(
+                videoId,
+                "/media/movie.mkv",
+                "video/x-matroska",
+                false,
+                DurationSeconds: 60,
+                Width: 1920,
+                Height: 1080,
+                Streams:
+                [
+                    new(0, "Video", "h264", null, "Video", 1920, 1080, 24, null, null, null, true, false)
+                ])),
+            new TranscodeSessionService());
+
+        var info = await service.GetPlaybackInfoAsync(videoId, new PlaybackInfoQuery {
+            EnableDirectPlay = true,
+            EnableTranscoding = true,
+            AccessToken = "session/token+value"
+        }, CancellationToken.None);
+
+        Assert.NotNull(info);
+        var source = Assert.Single(info.MediaSources);
+        Assert.Contains("ApiKey=session%2Ftoken%2Bvalue", source.TranscodingUrl);
+    }
+
     private sealed class FakeVideoSourceService : IVideoSourceService {
         private readonly VideoSourceFile _source;
 

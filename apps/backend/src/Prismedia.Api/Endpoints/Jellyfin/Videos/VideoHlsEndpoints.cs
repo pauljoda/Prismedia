@@ -1,3 +1,4 @@
+using Prismedia.Application.Entities;
 using Prismedia.Application.Videos;
 
 namespace Prismedia.Api.Endpoints;
@@ -8,9 +9,10 @@ internal static class VideoHlsEndpoints {
             Guid itemId,
             int? audioStreamIndex,
             IHlsAssetService hlsAssets,
+            IEntityReadService entities,
             HttpContext httpContext,
             CancellationToken cancellationToken) =>
-            JellyfinPlaybackResults.StreamHlsAssetAsync(itemId, "master.m3u8", audioStreamIndex, hlsAssets, httpContext, cancellationToken))
+            JellyfinPlaybackResults.StreamHlsAssetAsync(itemId, "master.m3u8", audioStreamIndex, hlsAssets, entities, httpContext, cancellationToken))
             .WithName("GetJellyfinVideoMasterPlaylist")
             .WithSummary("Get Jellyfin Video Master Playlist.")
             .WithTags("Jellyfin Videos");
@@ -19,9 +21,10 @@ internal static class VideoHlsEndpoints {
             Guid itemId,
             int? audioStreamIndex,
             IHlsAssetService hlsAssets,
+            IEntityReadService entities,
             HttpContext httpContext,
             CancellationToken cancellationToken) =>
-            JellyfinPlaybackResults.StreamHlsAssetAsync(itemId, "master.m3u8", audioStreamIndex, hlsAssets, httpContext, cancellationToken))
+            JellyfinPlaybackResults.StreamHlsAssetAsync(itemId, "master.m3u8", audioStreamIndex, hlsAssets, entities, httpContext, cancellationToken))
             .ExcludeFromDescription();
 
         routes.MapGet("/Videos/{itemId:guid}/hls/{playlistId}/{segmentId}.{container}", (
@@ -31,9 +34,10 @@ internal static class VideoHlsEndpoints {
             string container,
             int? audioStreamIndex,
             IHlsAssetService hlsAssets,
+            IEntityReadService entities,
             HttpContext httpContext,
             CancellationToken cancellationToken) =>
-            JellyfinPlaybackResults.StreamHlsAssetAsync(itemId, $"v/{playlistId}/{segmentId}.{container}", audioStreamIndex, hlsAssets, httpContext, cancellationToken))
+            JellyfinPlaybackResults.StreamHlsAssetAsync(itemId, $"v/{playlistId}/{segmentId}.{container}", audioStreamIndex, hlsAssets, entities, httpContext, cancellationToken))
             .WithName("GetJellyfinVideoHlsSegment")
             .WithSummary("Get Jellyfin Video Hls Segment.")
             .WithTags("Jellyfin Videos");
@@ -45,9 +49,10 @@ internal static class VideoHlsEndpoints {
             string container,
             int? audioStreamIndex,
             IHlsAssetService hlsAssets,
+            IEntityReadService entities,
             HttpContext httpContext,
             CancellationToken cancellationToken) =>
-            JellyfinPlaybackResults.StreamHlsAssetAsync(itemId, $"v/{playlistId}/{segmentId}.{container}", audioStreamIndex, hlsAssets, httpContext, cancellationToken))
+            JellyfinPlaybackResults.StreamHlsAssetAsync(itemId, $"v/{playlistId}/{segmentId}.{container}", audioStreamIndex, hlsAssets, entities, httpContext, cancellationToken))
             .ExcludeFromDescription();
 
         routes.MapGet("/Videos/{itemId:guid}/v/{playlistId}/{segmentId}.{container}", (
@@ -57,9 +62,10 @@ internal static class VideoHlsEndpoints {
             string container,
             int? audioStreamIndex,
             IHlsAssetService hlsAssets,
+            IEntityReadService entities,
             HttpContext httpContext,
             CancellationToken cancellationToken) =>
-            JellyfinPlaybackResults.StreamHlsAssetAsync(itemId, $"v/{playlistId}/{segmentId}.{container}", audioStreamIndex, hlsAssets, httpContext, cancellationToken))
+            JellyfinPlaybackResults.StreamHlsAssetAsync(itemId, $"v/{playlistId}/{segmentId}.{container}", audioStreamIndex, hlsAssets, entities, httpContext, cancellationToken))
             .WithName("GetJellyfinVideoHlsRelativeAsset")
             .WithSummary("Get Jellyfin Video Hls Relative Asset.")
             .WithTags("Jellyfin Videos");
@@ -71,9 +77,10 @@ internal static class VideoHlsEndpoints {
             string container,
             int? audioStreamIndex,
             IHlsAssetService hlsAssets,
+            IEntityReadService entities,
             HttpContext httpContext,
             CancellationToken cancellationToken) =>
-            JellyfinPlaybackResults.StreamHlsAssetAsync(itemId, $"v/{playlistId}/{segmentId}.{container}", audioStreamIndex, hlsAssets, httpContext, cancellationToken))
+            JellyfinPlaybackResults.StreamHlsAssetAsync(itemId, $"v/{playlistId}/{segmentId}.{container}", audioStreamIndex, hlsAssets, entities, httpContext, cancellationToken))
             .ExcludeFromDescription();
 
         return routes;

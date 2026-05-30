@@ -25,6 +25,42 @@ public sealed class AppSettingRow {
     public DateTimeOffset UpdatedAt { get; set; }
 }
 
+public sealed class AppSecurityRow {
+    public int Id { get; set; }
+    public Guid ServerId { get; set; }
+    public string ApiKey { get; set; } = string.Empty;
+    public bool DefaultProfileSeeded { get; set; }
+    public DateTimeOffset ApiKeyCreatedAt { get; set; }
+    public DateTimeOffset ApiKeyUpdatedAt { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
+public sealed class JellyfinProfileRow {
+    public Guid Id { get; set; }
+    public string Username { get; set; } = string.Empty;
+    public string NormalizedUsername { get; set; } = string.Empty;
+    public string DisplayName { get; set; } = string.Empty;
+    public bool AllowNsfw { get; set; }
+    public bool Enabled { get; set; } = true;
+    public DateTimeOffset? LastLoginAt { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
+public sealed class JellyfinSessionRow {
+    public Guid Id { get; set; }
+    public Guid ProfileId { get; set; }
+    public string TokenHash { get; set; } = string.Empty;
+    public string? Client { get; set; }
+    public string? DeviceName { get; set; }
+    public string? DeviceId { get; set; }
+    public string? ApplicationVersion { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset LastSeenAt { get; set; }
+    public DateTimeOffset? InvalidatedAt { get; set; }
+}
+
 public sealed class ProviderConfigRow {
     public Guid Id { get; set; }
     public string ProviderCode { get; set; } = string.Empty;

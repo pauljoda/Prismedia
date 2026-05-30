@@ -88,6 +88,12 @@ public sealed class PrismediaDbContext : DbContext {
 
     public DbSet<AppSettingRow> AppSettings => Set<AppSettingRow>();
 
+    public DbSet<AppSecurityRow> AppSecurity => Set<AppSecurityRow>();
+
+    public DbSet<JellyfinProfileRow> JellyfinProfiles => Set<JellyfinProfileRow>();
+
+    public DbSet<JellyfinSessionRow> JellyfinSessions => Set<JellyfinSessionRow>();
+
     public DbSet<UiPreferenceRow> UiPreferences => Set<UiPreferenceRow>();
 
     public DbSet<ProviderConfigRow> ProviderConfigs => Set<ProviderConfigRow>();

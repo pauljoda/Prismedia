@@ -20,7 +20,7 @@ public sealed class EntityFileEndpointTests : IDisposable {
         await File.WriteAllTextAsync(filePath, "0123456789");
         using var factory = CreateFactory(new FakeEntityFileContentService(
             new EntityFileContent(EntityId, "source", filePath, "image/jpeg")));
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
         using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/entities/{EntityId}/files/source");
         request.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(2, 5);
 
@@ -40,7 +40,7 @@ public sealed class EntityFileEndpointTests : IDisposable {
         await File.WriteAllTextAsync(filePath, "0123456789");
         using var factory = CreateFactory(new FakeEntityFileContentService(
             new EntityFileContent(EntityId, "preview", filePath, "video/mp4")));
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         using var response = await client.SendAsync(new HttpRequestMessage(
             HttpMethod.Head,
@@ -55,7 +55,7 @@ public sealed class EntityFileEndpointTests : IDisposable {
     [Fact]
     public async Task EntityFileEndpointReturnsNotFoundForMissingRole() {
         using var factory = CreateFactory(new FakeEntityFileContentService(null));
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         using var response = await client.GetAsync($"/api/entities/{EntityId}/files/source");
 
@@ -67,7 +67,7 @@ public sealed class EntityFileEndpointTests : IDisposable {
         var filePath = Path.Combine(_tempDir, "missing.jpg");
         using var factory = CreateFactory(new FakeEntityFileContentService(
             new EntityFileContent(EntityId, "source", filePath, "image/jpeg")));
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         using var response = await client.GetAsync($"/api/entities/{EntityId}/files/source");
 
@@ -87,7 +87,7 @@ public sealed class EntityFileEndpointTests : IDisposable {
 
         using var factory = CreateFactory(new FakeEntityFileContentService(
             new EntityFileContent(EntityId, "source", $"{archivePath}::chapter/page-001.jpg", "image/jpeg")));
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         using var response = await client.GetAsync($"/api/entities/{EntityId}/files/source");
         var body = await response.Content.ReadAsStringAsync();
@@ -109,7 +109,8 @@ public sealed class EntityFileEndpointTests : IDisposable {
                 builder.ConfigureServices(services => {
                     services.AddSingleton(contentService);
                 });
-            });
+            })
+            .WithTestAuth();
 
     private sealed class FakeEntityFileContentService(EntityFileContent? content) : IEntityFileContentService {
         public Task<EntityFileContent?> GetContentAsync(

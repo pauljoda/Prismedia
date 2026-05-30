@@ -31,7 +31,7 @@ public sealed class UpdateCheckEndpointTests : IClassFixture<WebApplicationFacto
             DateTimeOffset.UtcNow,
             false,
             null));
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         using var response = await client.GetAsync("/api/update-check");
         var payload = await response.Content.ReadFromJsonAsync<UpdateCheckResponse>();
@@ -55,7 +55,7 @@ public sealed class UpdateCheckEndpointTests : IClassFixture<WebApplicationFacto
             false,
             null));
         using var factory = CreateFactory(service);
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         using var response = await client.GetAsync("/api/update-check?force=1");
 
@@ -70,13 +70,14 @@ public sealed class UpdateCheckEndpointTests : IClassFixture<WebApplicationFacto
             var changelogPath = Path.Combine(tempDir.FullName, "CHANGELOG.md");
             await File.WriteAllTextAsync(changelogPath, "# Changelog\n\n## [Unreleased]\n- Local test entry\n");
             using var factory = _factory.WithWebHostBuilder(builder => {
-                builder.ConfigureAppConfiguration((_, config) => {
-                    config.AddInMemoryCollection(new Dictionary<string, string?> {
-                        ["CHANGELOG_PATH"] = changelogPath,
+                    builder.ConfigureAppConfiguration((_, config) => {
+                        config.AddInMemoryCollection(new Dictionary<string, string?> {
+                            ["CHANGELOG_PATH"] = changelogPath,
+                        });
                     });
-                });
-            });
-            using var client = factory.CreateClient();
+                })
+                .WithTestAuth();
+            using var client = factory.CreateAuthenticatedClient();
 
             using var response = await client.GetAsync("/api/changelog");
             var content = await response.Content.ReadAsStringAsync();
@@ -162,7 +163,8 @@ public sealed class UpdateCheckEndpointTests : IClassFixture<WebApplicationFacto
                 services.RemoveAll<IUpdateCheckService>();
                 services.AddSingleton<IUpdateCheckService>(service);
             });
-        });
+        })
+        .WithTestAuth();
 
     private static GitHubReleaseUpdateCheckService CreateGitHubService(
         HttpMessageHandler handler,

@@ -14,12 +14,13 @@ public sealed class StaticSpaFallbackTests : IDisposable {
         File.WriteAllText(Path.Combine(_webRoot, "asset.txt"), "asset-ok");
 
         _factory = new WebApplicationFactory<Program>()
-            .WithWebHostBuilder(builder => builder.UseSetting("Prismedia:StaticWebRoot", _webRoot));
+            .WithWebHostBuilder(builder => builder.UseSetting("Prismedia:StaticWebRoot", _webRoot))
+            .WithTestAuth();
     }
 
     [Fact]
     public async Task ServesStaticFilesFromConfiguredWebRoot() {
-        using var client = _factory.CreateClient();
+        using var client = _factory.CreateAuthenticatedClient();
 
         var text = await client.GetStringAsync("/asset.txt");
 
@@ -28,7 +29,7 @@ public sealed class StaticSpaFallbackTests : IDisposable {
 
     [Fact]
     public async Task FallsBackToIndexForClientSideRoutes() {
-        using var client = _factory.CreateClient();
+        using var client = _factory.CreateAuthenticatedClient();
 
         var html = await client.GetStringAsync("/videos/11111111-1111-1111-1111-111111111111");
 
@@ -38,8 +39,9 @@ public sealed class StaticSpaFallbackTests : IDisposable {
     [Fact]
     public async Task ServesGeneratedAssetsWhenCacheDirectoryIsCreatedByStartup() {
         using var factory = new WebApplicationFactory<Program>()
-            .WithWebHostBuilder(builder => builder.UseSetting("Prismedia:CacheDir", _cacheRoot));
-        using var client = factory.CreateClient();
+            .WithWebHostBuilder(builder => builder.UseSetting("Prismedia:CacheDir", _cacheRoot))
+            .WithTestAuth();
+        using var client = factory.CreateAuthenticatedClient();
 
         using var health = await client.GetAsync("/api/health");
         health.EnsureSuccessStatusCode();

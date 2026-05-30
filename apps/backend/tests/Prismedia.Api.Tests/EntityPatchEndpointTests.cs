@@ -20,7 +20,7 @@ public sealed class EntityPatchEndpointTests {
     [Fact]
     public async Task KindGuardedEntityPatchAppliesMetadataAndReturnsUpdatedCard() {
         using var factory = CreateFactory(EntityMetadataPatchResult.Applied);
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         using var response = await client.PatchAsJsonAsync(
             $"/api/entities/video/{EntityId}",
@@ -38,7 +38,7 @@ public sealed class EntityPatchEndpointTests {
     [Fact]
     public async Task KindGuardedEntityPatchReturnsNotFoundForKindMismatch() {
         using var factory = CreateFactory(EntityMetadataPatchResult.KindMismatch);
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         using var response = await client.PatchAsJsonAsync(
             $"/api/entities/video-series/{EntityId}",
@@ -52,7 +52,7 @@ public sealed class EntityPatchEndpointTests {
     [Fact]
     public async Task DomainEntityPatchRoutesDelegateWithDomainKind() {
         using var factory = CreateFactory(EntityMetadataPatchResult.Applied);
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         using var response = await client.PatchAsJsonAsync(
             $"/api/videos/{EntityId}",
@@ -66,7 +66,7 @@ public sealed class EntityPatchEndpointTests {
     [Fact]
     public async Task EntityProgressPatchStoresSharedProgressCapability() {
         using var factory = CreateProgressFactory();
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         using var response = await client.PatchAsJsonAsync(
             $"/api/entities/{EntityId}/progress",
@@ -85,7 +85,7 @@ public sealed class EntityPatchEndpointTests {
     [Fact]
     public async Task EntityRatingPatchStoresSharedRatingCapability() {
         using var factory = CreateProgressFactory();
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         using var response = await client.PatchAsJsonAsync(
             $"/api/entities/{EntityId}/rating",
@@ -99,7 +99,7 @@ public sealed class EntityPatchEndpointTests {
     [Fact]
     public async Task EntityProgressPatchMarksProgressComplete() {
         using var factory = CreateProgressFactory();
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         using var response = await client.PatchAsJsonAsync(
             $"/api/entities/{EntityId}/progress",
@@ -115,7 +115,7 @@ public sealed class EntityPatchEndpointTests {
     [Fact]
     public async Task EntityProgressPatchOnBookChildStoresProgressOnBookParent() {
         using var factory = CreateProgressFactory();
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         using var response = await client.PatchAsJsonAsync(
             $"/api/entities/{ChapterId}/progress",
@@ -131,7 +131,7 @@ public sealed class EntityPatchEndpointTests {
     [Fact]
     public async Task EntityProgressPatchResolvesBookOwnerWithoutFullHydration() {
         using var factory = CreateProgressFactory();
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         using var response = await client.PatchAsJsonAsync(
             $"/api/entities/{EntityId}/progress",
@@ -146,7 +146,7 @@ public sealed class EntityPatchEndpointTests {
     [Fact]
     public async Task EntityProgressPatchIgnoresEarlierBookProgress() {
         using var factory = CreateProgressFactory();
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         await client.PatchAsJsonAsync(
             $"/api/entities/{EntityId}/progress",
@@ -187,7 +187,8 @@ public sealed class EntityPatchEndpointTests {
                         provider.GetRequiredService<FakeEntityMetadataPatchService>());
                     services.AddScoped<IEntityReadService, FakeEntityReadService>();
                 });
-            });
+            })
+            .WithTestAuth();
 
     private static WebApplicationFactory<Program> CreateProgressFactory() =>
         new WebApplicationFactory<Program>()
@@ -197,7 +198,8 @@ public sealed class EntityPatchEndpointTests {
                     services.AddScoped<IEntityWriteRepository>(provider =>
                         provider.GetRequiredService<FakeEntityWriteRepository>());
                 });
-            });
+            })
+            .WithTestAuth();
 
     private sealed class FakeEntityMetadataPatchService(EntityMetadataPatchResult result) : IEntityMetadataPatchService {
         public Guid? EntityId { get; private set; }

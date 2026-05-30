@@ -1,3 +1,4 @@
+using Prismedia.Application.Entities;
 using Prismedia.Application.Videos;
 using Prismedia.Contracts.Playback;
 using Prismedia.Contracts.System;
@@ -9,8 +10,10 @@ internal static class PlaybackInfoEndpoints {
         routes.MapGet("/Items/{itemId:guid}/PlaybackInfo", (
             Guid itemId,
             IPlaybackInfoService playback,
+            IEntityReadService entities,
+            HttpContext httpContext,
             CancellationToken cancellationToken) =>
-            JellyfinPlaybackResults.GetPlaybackInfoAsync(itemId, playback, null, cancellationToken))
+            JellyfinPlaybackResults.GetPlaybackInfoAsync(itemId, playback, entities, httpContext, null, cancellationToken))
             .WithName("GetJellyfinPlaybackInfo")
             .WithSummary("Get Jellyfin Playback Info.")
             .WithTags("Jellyfin Playback")
@@ -21,8 +24,10 @@ internal static class PlaybackInfoEndpoints {
             Guid itemId,
             PlaybackInfoRequest request,
             IPlaybackInfoService playback,
+            IEntityReadService entities,
+            HttpContext httpContext,
             CancellationToken cancellationToken) =>
-            JellyfinPlaybackResults.GetPlaybackInfoAsync(itemId, playback, request, cancellationToken))
+            JellyfinPlaybackResults.GetPlaybackInfoAsync(itemId, playback, entities, httpContext, request, cancellationToken))
             .WithName("PostJellyfinPlaybackInfo")
             .WithSummary("Post Jellyfin Playback Info.")
             .WithTags("Jellyfin Playback")

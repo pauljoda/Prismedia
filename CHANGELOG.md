@@ -14,6 +14,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Mobile install metadata now presents Prismedia with the correct app name, theme colors, and safer icon spacing for browser and home-screen surfaces.
 
 ### Added
+- Added a Jellyfin-compatible API layer so clients like Infuse can discover Prismedia, sign in with configured fake users, browse video libraries, load artwork, and play through Prismedia's existing video streaming pipeline.
+- Added a generated, human-typeable API key with Settings controls to reveal, copy, regenerate, and manage Jellyfin-compatible profile usernames with per-profile NSFW visibility.
 - Added Auto Identify, an opt-in setting that runs scanned media through your chosen plugins during library scans and applies the first match that meets a configurable confidence threshold (or is an exact match) — applying the full proposal exactly like a manual identify, including child entities, relationships, and artwork — then marks the item organized. Includes an ordered, searchable plugin picker, per-kind coverage (video, galleries, images, audio, books), and an option to re-identify already-organized items.
 - Added scale-appropriate library grid thumbnails: a small variant of each cover is generated at scan time and when you upload custom artwork, then served alongside the full image so the grid downloads a lightweight thumbnail for small cards and the full-resolution cover only at large card sizes. Existing libraries backfill these small variants on their next scan.
 - Added library-wide grid filters that apply across the whole collection: an adaptive status filter (Read/Unread/Reading for books and comics, Watched/Unwatched/In progress for video and audio), Favorites, Organized, rating thresholds, and Unrated.
@@ -37,6 +39,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Changed
+- API routes now require the generated API key, while the native web app receives it automatically as a same-origin HttpOnly cookie so normal browser use remains frictionless.
 - Scrubbing-preview (trickplay) generation is dramatically lighter on the CPU: each video is now sampled in a single ffmpeg pass instead of launching a separate process for every preview frame, and all background media generation (thumbnails, preview clips, trickplay, waveforms) runs at below-normal priority with a capped thread count. Libraries with many videos no longer peg every core or make playback and browsing stutter while previews are being built.
 - Library scans now take priority over the thumbnail and preview work they queue, so newly added media shows up in the library promptly instead of waiting behind a long backlog of preview generation.
 - Entity grids now lazy-load cover images and request the small thumbnail variant, dramatically cutting the network and image-decoding work needed to render large libraries.

@@ -2,6 +2,7 @@ using System.Net;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Prismedia.Application.Entities;
 using Prismedia.Application.Videos;
 
 namespace Prismedia.Api.Tests;
@@ -19,7 +20,7 @@ public sealed class VideoHlsEndpointTests : IDisposable {
         await File.WriteAllTextAsync(filePath, "#EXTM3U");
         using var factory = CreateFactory(new FakeHlsAssetService(
             new HlsAsset(filePath, "application/vnd.apple.mpegurl", "public, max-age=60")));
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         using var response = await client.GetAsync($"/Videos/{FakeHlsAssetService.VideoId}/master.m3u8");
         var body = await response.Content.ReadAsStringAsync();
@@ -36,7 +37,7 @@ public sealed class VideoHlsEndpointTests : IDisposable {
         await File.WriteAllTextAsync(filePath, "0123456789");
         using var factory = CreateFactory(new FakeHlsAssetService(
             new HlsAsset(filePath, "video/mp2t", "public, max-age=31536000, immutable")));
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         using var response = await client.SendAsync(new HttpRequestMessage(
             HttpMethod.Head,
@@ -51,7 +52,7 @@ public sealed class VideoHlsEndpointTests : IDisposable {
     [Fact]
     public async Task HlsAssetEndpointReturnsProblemDetailsWhenMissing() {
         using var factory = CreateFactory(new FakeHlsAssetService(null));
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         using var response = await client.GetAsync($"/Videos/{FakeHlsAssetService.VideoId}/hls/720p/seg_00000.ts");
 
@@ -67,7 +68,7 @@ public sealed class VideoHlsEndpointTests : IDisposable {
         using var factory = CreateFactory(
             new FakeHlsAssetService(null),
             new FakeVideoSubtitleAssetService(new VideoSubtitleAsset(filePath, "text/vtt; charset=utf-8")));
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         using var response = await client.GetAsync($"/api/videos/{FakeHlsAssetService.VideoId}/subtitles/{trackId}");
         var body = await response.Content.ReadAsStringAsync();
@@ -95,8 +96,10 @@ public sealed class VideoHlsEndpointTests : IDisposable {
                 builder.ConfigureServices(services => {
                     services.AddSingleton(hlsAssets);
                     services.AddSingleton(subtitleAssets);
+                    services.AddSingleton<IEntityReadService, TestAuth.VisibleEntityReadService>();
                 });
-            });
+            })
+            .WithTestAuth();
     }
 
     private sealed class FakeHlsAssetService : IHlsAssetService {

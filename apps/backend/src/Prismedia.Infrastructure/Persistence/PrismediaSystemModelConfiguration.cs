@@ -56,6 +56,52 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
         });
 
+        modelBuilder.Entity<AppSecurityRow>(entity => {
+            entity.ToTable("app_security");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(row => row.ServerId).HasColumnName("server_id");
+            entity.Property(row => row.ApiKey).HasColumnName("api_key").HasMaxLength(128).IsRequired();
+            entity.Property(row => row.DefaultProfileSeeded).HasColumnName("default_profile_seeded");
+            entity.Property(row => row.ApiKeyCreatedAt).HasColumnName("api_key_created_at");
+            entity.Property(row => row.ApiKeyUpdatedAt).HasColumnName("api_key_updated_at");
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+        });
+
+        modelBuilder.Entity<JellyfinProfileRow>(entity => {
+            entity.ToTable("jellyfin_profiles");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(row => row.Username).HasColumnName("username").HasMaxLength(64).IsRequired();
+            entity.Property(row => row.NormalizedUsername).HasColumnName("normalized_username").HasMaxLength(64).IsRequired();
+            entity.Property(row => row.DisplayName).HasColumnName("display_name").HasMaxLength(128).IsRequired();
+            entity.Property(row => row.AllowNsfw).HasColumnName("allow_nsfw");
+            entity.Property(row => row.Enabled).HasColumnName("enabled");
+            entity.Property(row => row.LastLoginAt).HasColumnName("last_login_at");
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            entity.HasIndex(row => row.NormalizedUsername).IsUnique();
+        });
+
+        modelBuilder.Entity<JellyfinSessionRow>(entity => {
+            entity.ToTable("jellyfin_sessions");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(row => row.ProfileId).HasColumnName("profile_id");
+            entity.Property(row => row.TokenHash).HasColumnName("token_hash").HasMaxLength(64).IsRequired();
+            entity.Property(row => row.Client).HasColumnName("client").HasMaxLength(128);
+            entity.Property(row => row.DeviceName).HasColumnName("device_name").HasMaxLength(128);
+            entity.Property(row => row.DeviceId).HasColumnName("device_id").HasMaxLength(256);
+            entity.Property(row => row.ApplicationVersion).HasColumnName("application_version").HasMaxLength(64);
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.Property(row => row.LastSeenAt).HasColumnName("last_seen_at");
+            entity.Property(row => row.InvalidatedAt).HasColumnName("invalidated_at");
+            entity.HasIndex(row => row.TokenHash).IsUnique();
+            entity.HasIndex(row => new { row.ProfileId, row.InvalidatedAt });
+            entity.HasOne<JellyfinProfileRow>().WithMany().HasForeignKey(row => row.ProfileId).OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<ProviderConfigRow>(entity => {
             entity.ToTable("provider_configs");
             entity.HasKey(row => row.Id);

@@ -13,7 +13,7 @@ public sealed class JobEndpointServiceTests {
     [Fact]
     public async Task JobsEndpointListsJobsFromQueueService() {
         using var factory = CreateFactory();
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         var response = await client.GetFromJsonAsync<JobListResponse>("/api/jobs");
 
@@ -26,7 +26,7 @@ public sealed class JobEndpointServiceTests {
     [Fact]
     public async Task CreateJobEndpointQueuesThroughQueueService() {
         using var factory = CreateFactory();
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         using var response = await client.PostAsync("/api/jobs/probe-video", null);
         var payload = await response.Content.ReadFromJsonAsync<JobCreateResponse>();
@@ -41,7 +41,7 @@ public sealed class JobEndpointServiceTests {
     [Fact]
     public async Task CreateJobEndpointRejectsUnknownJobType() {
         using var factory = CreateFactory();
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         using var response = await client.PostAsync("/api/jobs/not-real", null);
 
@@ -51,7 +51,7 @@ public sealed class JobEndpointServiceTests {
     [Fact]
     public async Task CancelJobsEndpointCancelsByOptionalType() {
         using var factory = CreateFactory();
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         var response = await client.DeleteFromJsonAsync<JobCancelResponse>("/api/jobs?type=scan-library");
 
@@ -62,7 +62,7 @@ public sealed class JobEndpointServiceTests {
     [Fact]
     public async Task ClearFailuresEndpointClearsByOptionalType() {
         using var factory = CreateFactory();
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         using var response = await client.PostAsync("/api/jobs/failures/clear?type=import-metadata", null);
         var payload = await response.Content.ReadFromJsonAsync<JobFailureClearResponse>();
@@ -78,7 +78,8 @@ public sealed class JobEndpointServiceTests {
                 builder.ConfigureServices(services => {
                     services.AddScoped<IJobQueueService, FakeJobQueueService>();
                 });
-            });
+            })
+            .WithTestAuth();
     }
 
     private sealed class FakeJobQueueService : IJobQueueService {

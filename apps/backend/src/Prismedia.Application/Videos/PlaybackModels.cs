@@ -17,6 +17,7 @@ public sealed record PlaybackInfoQuery {
     public string? MediaSourceId { get; init; }
     public string? PlaySessionId { get; init; }
     public IReadOnlyList<string>? SupportedVideoRangeTypes { get; init; }
+    public string? AccessToken { get; init; }
 }
 
 /// <summary>

@@ -2,6 +2,7 @@ using System.Net;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Prismedia.Application.Entities;
 using Prismedia.Application.Videos;
 
 namespace Prismedia.Api.Tests;
@@ -19,7 +20,7 @@ public sealed class VideoStreamEndpointTests : IDisposable {
         await File.WriteAllTextAsync(filePath, "0123456789");
         using var factory = CreateFactory(new FakeVideoSourceService(
             new VideoSourceFile(FakeVideoSourceService.VideoId, filePath, "video/mp4", true)));
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
         using var request = new HttpRequestMessage(
             HttpMethod.Get,
             $"/Videos/{FakeVideoSourceService.VideoId}/stream");
@@ -40,7 +41,7 @@ public sealed class VideoStreamEndpointTests : IDisposable {
         await File.WriteAllTextAsync(filePath, "0123456789");
         using var factory = CreateFactory(new FakeVideoSourceService(
             new VideoSourceFile(FakeVideoSourceService.VideoId, filePath, "video/mp4", true)));
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         using var response = await client.SendAsync(new HttpRequestMessage(
             HttpMethod.Head,
@@ -58,7 +59,7 @@ public sealed class VideoStreamEndpointTests : IDisposable {
         await File.WriteAllTextAsync(filePath, "0123456789");
         using var factory = CreateFactory(new FakeVideoSourceService(
             new VideoSourceFile(FakeVideoSourceService.VideoId, filePath, "video/x-matroska", false)));
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         using var response = await client.GetAsync($"/Videos/{FakeVideoSourceService.VideoId}/stream");
 
@@ -77,8 +78,10 @@ public sealed class VideoStreamEndpointTests : IDisposable {
             .WithWebHostBuilder(builder => {
                 builder.ConfigureServices(services => {
                     services.AddSingleton(sourceService);
+                    services.AddSingleton<IEntityReadService, TestAuth.VisibleEntityReadService>();
                 });
-            });
+            })
+            .WithTestAuth();
     }
 
     private sealed class FakeVideoSourceService : IVideoSourceService {

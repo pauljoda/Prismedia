@@ -1,6 +1,7 @@
 using System.Text.Json.Serialization.Metadata;
 using Prismedia.Api;
 using Prismedia.Api.Endpoints;
+using Prismedia.Api.Security;
 using Prismedia.Api.Serialization;
 using Prismedia.Application;
 using Prismedia.Contracts.Entities;
@@ -72,6 +73,8 @@ builder.Services.AddPrismediaInfrastructure(builder.Configuration, builder.Envir
 
 var app = builder.Build();
 
+app.UsePrismediaUiApiKeyCookie();
+
 if (app.Environment.IsDevelopment()) {
     app.MapOpenApi();
     app.UseCors("PrismediaDevCors");
@@ -94,6 +97,8 @@ app.UseStaticFiles(new StaticFileOptions {
     RequestPath = "/assets",
     ServeUnknownFileTypes = false,
 });
+
+app.UsePrismediaApiAuthentication();
 
 app.MapPrismediaEndpoints();
 

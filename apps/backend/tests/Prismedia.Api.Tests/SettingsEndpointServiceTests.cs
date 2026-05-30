@@ -13,7 +13,7 @@ public sealed class SettingsEndpointServiceTests {
     [Fact]
     public async Task SettingsCatalogEndpointReadsAndUpdatesThroughService() {
         using var factory = CreateFactory();
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         var catalog = await client.GetFromJsonAsync<SettingsCatalogResponse>("/api/settings");
         var updatedResponse = await client.PatchAsJsonAsync(
@@ -39,7 +39,7 @@ public sealed class SettingsEndpointServiceTests {
     [Fact]
     public async Task SettingsBatchAndResetEndpointsUseCentralRegistry() {
         using var factory = CreateFactory();
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         var batch = await client.PatchAsJsonAsync(
             "/api/settings",
@@ -61,7 +61,7 @@ public sealed class SettingsEndpointServiceTests {
     [Fact]
     public async Task SettingsEndpointsReturnProblemDetailsForUnknownAndInvalidKeys() {
         using var factory = CreateFactory();
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         var unknown = await client.GetAsync("/api/settings/not.real");
         var invalid = await client.PatchAsJsonAsync(
@@ -79,7 +79,7 @@ public sealed class SettingsEndpointServiceTests {
     [Fact]
     public async Task LibraryConfigPayloadIncludesCatalogAndWatchedRoots() {
         using var factory = CreateFactory();
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         var config = await client.GetFromJsonAsync<LibraryConfigResponse>("/api/settings/library");
         var roots = await client.GetFromJsonAsync<IReadOnlyList<LibraryRoot>>("/api/libraries");
@@ -101,7 +101,8 @@ public sealed class SettingsEndpointServiceTests {
                 builder.ConfigureServices(services => {
                     services.AddSingleton<ISettingsPersistence, FakeSettingsPersistence>();
                 });
-            });
+            })
+            .WithTestAuth();
 
     private sealed class FakeSettingsPersistence : ISettingsPersistence {
         private static readonly Guid RootId = Guid.Parse("22222222-2222-2222-2222-222222222222");

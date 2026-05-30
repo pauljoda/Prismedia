@@ -17,7 +17,7 @@ public sealed class HealthEndpointTests : IClassFixture<WebApplicationFactory<Pr
 
     [Fact]
     public async Task HealthEndpointReportsBackendReadiness() {
-        using var client = _factory.CreateClient();
+        using var client = _factory.CreateAuthenticatedClient();
 
         using var response = await client.GetAsync("/api/health");
         var payload = await response.Content.ReadFromJsonAsync<HealthResponse>();
@@ -33,7 +33,7 @@ public sealed class HealthEndpointTests : IClassFixture<WebApplicationFactory<Pr
         using var factory = CreateFactory(new WorkerHeartbeatSnapshot(
             "worker-1",
             DateTimeOffset.UtcNow));
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         using var response = await client.GetAsync("/api/health/worker");
         var payload = await response.Content.ReadFromJsonAsync<WorkerHealthResponse>();
@@ -48,7 +48,7 @@ public sealed class HealthEndpointTests : IClassFixture<WebApplicationFactory<Pr
     [Fact]
     public async Task WorkerHealthEndpointReportsOfflineWhenHeartbeatIsMissing() {
         using var factory = CreateFactory(null);
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         using var response = await client.GetAsync("/api/health/worker");
         var payload = await response.Content.ReadFromJsonAsync<WorkerHealthResponse>();

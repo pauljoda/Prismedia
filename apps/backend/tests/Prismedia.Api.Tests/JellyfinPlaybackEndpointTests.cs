@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Prismedia.Application.Entities;
 using Prismedia.Application.Videos;
 using Prismedia.Contracts.Playback;
 
@@ -41,7 +42,7 @@ public sealed class JellyfinPlaybackEndpointTests : IDisposable {
                     ],
                     TranscodingInfo: new TranscodingInfo("ts", "h264", "aac", "hls", IsVideoDirect: false, IsAudioDirect: false))
             ])));
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         var response = await client.PostAsJsonAsync($"/Items/{VideoId}/PlaybackInfo", new PlaybackInfoRequest {
             EnableDirectPlay = true,
@@ -63,7 +64,7 @@ public sealed class JellyfinPlaybackEndpointTests : IDisposable {
         await File.WriteAllTextAsync(path, "#EXTM3U\n");
         var hls = new RecordingHlsAssetService(new HlsAsset(path, "application/vnd.apple.mpegurl", "public, max-age=60"));
         using var factory = CreateFactory(hls: hls);
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         using var response = await client.GetAsync($"/Videos/{VideoId}/master.m3u8");
         var body = await response.Content.ReadAsStringAsync();
@@ -79,7 +80,7 @@ public sealed class JellyfinPlaybackEndpointTests : IDisposable {
         await File.WriteAllTextAsync(path, "segment");
         var hls = new RecordingHlsAssetService(new HlsAsset(path, "video/mp2t", "public, max-age=31536000, immutable"));
         using var factory = CreateFactory(hls: hls);
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         using var response = await client.GetAsync($"/Videos/{VideoId}/hls/720p/seg_00000.ts");
 
@@ -93,7 +94,7 @@ public sealed class JellyfinPlaybackEndpointTests : IDisposable {
         await File.WriteAllTextAsync(path, "#EXTM3U\n");
         var hls = new RecordingHlsAssetService(new HlsAsset(path, "application/vnd.apple.mpegurl", "public, max-age=60"));
         using var factory = CreateFactory(hls: hls);
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         using var response = await client.GetAsync($"/Videos/{VideoId}/hls/720p/stream.m3u8");
 
@@ -107,7 +108,7 @@ public sealed class JellyfinPlaybackEndpointTests : IDisposable {
         await File.WriteAllTextAsync(path, "#EXTM3U\n");
         var hls = new RecordingHlsAssetService(new HlsAsset(path, "application/vnd.apple.mpegurl", "public, max-age=60"));
         using var factory = CreateFactory(hls: hls);
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         using var response = await client.GetAsync($"/Videos/{VideoId}/hls/720p/stream.m3u8?AudioStreamIndex=2");
 
@@ -122,7 +123,7 @@ public sealed class JellyfinPlaybackEndpointTests : IDisposable {
         await File.WriteAllTextAsync(path, "#EXTM3U\n");
         var hls = new RecordingHlsAssetService(new HlsAsset(path, "application/vnd.apple.mpegurl", "public, max-age=60"));
         using var factory = CreateFactory(hls: hls);
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         using var response = await client.GetAsync($"/Videos/{VideoId}/v/720p/index.m3u8");
 
@@ -135,7 +136,7 @@ public sealed class JellyfinPlaybackEndpointTests : IDisposable {
         using var factory = CreateFactory(trickplay: new FakeTrickplayService(
             new TrickplayPlaylist("#EXTM3U\n#EXT-X-IMAGES-ONLY\n", "public, max-age=60"),
             null));
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         using var response = await client.GetAsync($"/Videos/{VideoId}/Trickplay/320/tiles.m3u8");
         var body = await response.Content.ReadAsStringAsync();
@@ -149,7 +150,7 @@ public sealed class JellyfinPlaybackEndpointTests : IDisposable {
     public async Task SessionProgressEndpointRecordsJellyfinProgressPayload() {
         var sessions = new RecordingPlaybackSessionService();
         using var factory = CreateFactory(sessions: sessions);
-        using var client = factory.CreateClient();
+        using var client = factory.CreateAuthenticatedClient();
 
         using var response = await client.PostAsJsonAsync("/Sessions/Playing/Progress", new PlaybackSessionRequest {
             ItemId = VideoId,
@@ -185,8 +186,10 @@ public sealed class JellyfinPlaybackEndpointTests : IDisposable {
                     services.AddSingleton(sessions ?? new RecordingPlaybackSessionService());
                     services.AddSingleton(sources ?? new FakeVideoSourceService(null));
                     services.AddSingleton(transcodes ?? new RecordingTranscodeSessionService());
+                    services.AddSingleton<IEntityReadService, TestAuth.VisibleEntityReadService>();
                 });
-            });
+            })
+            .WithTestAuth();
     }
 
     private sealed class FakePlaybackInfoService : IPlaybackInfoService {

@@ -2,13 +2,18 @@
   import { onMount } from "svelte";
   import {
     Captions,
+    Clipboard,
     Eye,
     Film,
     Flame,
+    KeyRound,
     Loader2,
+    RefreshCw,
     ScanSearch,
     Settings as SettingsIcon,
     Shield,
+    Trash2,
+    UserPlus,
   } from "@lucide/svelte";
   import { Button, Panel, StatusLed, cn } from "@prismedia/ui-svelte";
   import {
@@ -19,6 +24,16 @@
     type SettingsCatalogResponse,
     type SettingValue,
   } from "$lib/api/settings";
+  import {
+    createJellyfinProfile,
+    deleteJellyfinProfile,
+    fetchApiKey,
+    fetchJellyfinProfiles,
+    regenerateApiKey,
+    updateJellyfinProfile,
+    type ApiKeyResponse,
+    type JellyfinProfile,
+  } from "$lib/api/security";
   import {
     catalogToLibrarySettings,
     defaultLibrarySettings,
@@ -54,11 +69,19 @@
 
   let catalog = $state<SettingsCatalogResponse | null>(null);
   let roots = $state<LibraryRoot[]>([]);
+  let apiKey = $state<ApiKeyResponse | null>(null);
+  let apiKeyRevealed = $state(false);
+  let jellyfinProfiles = $state<JellyfinProfile[]>([]);
+  let profileUsername = $state("");
+  let profileDisplayName = $state("");
+  let profileAllowNsfw = $state(false);
 
   let savedMetadataStorageDedicated = $state(defaultLibrarySettings.metadataStorageDedicated);
   let pendingMetadataStorageDedicated = $state<boolean | null>(null);
   let message = $state<string | null>(null);
   let error = $state<string | null>(null);
+  let securityBusy = $state(false);
+  let profileBusy = $state(false);
 
   let metadataStorageDialogOpen = $state(false);
   let metadataStorageBusy = $state(false);
@@ -112,6 +135,7 @@
 
   onMount(() => {
     void loadConfig();
+    void loadSecurity();
   });
 
   function normalizeSubtitleStyle(value: string): SubtitleDisplayStyle {
@@ -154,6 +178,122 @@
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load settings");
+    }
+  }
+
+  async function loadSecurity() {
+    securityBusy = true;
+    try {
+      const [key, profiles] = await Promise.all([
+        fetchApiKey(),
+        fetchJellyfinProfiles(),
+      ]);
+      apiKey = key;
+      jellyfinProfiles = profiles;
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load API access settings");
+    } finally {
+      securityBusy = false;
+    }
+  }
+
+  async function copyApiKey() {
+    if (!apiKey) return;
+    try {
+      await navigator.clipboard.writeText(apiKey.apiKey);
+      flashMessage("API key copied.");
+    } catch {
+      setError("Could not copy the API key.");
+    }
+  }
+
+  async function handleRegenerateApiKey() {
+    if (!window.confirm("Regenerate the API key? Existing Jellyfin app sessions will need to sign in again.")) {
+      return;
+    }
+
+    securityBusy = true;
+    setError(null);
+    try {
+      const regenerated = await regenerateApiKey();
+      apiKey = regenerated;
+      apiKeyRevealed = true;
+      flashMessage(
+        regenerated.invalidatedSessions > 0
+          ? `API key regenerated. ${regenerated.invalidatedSessions} Jellyfin session(s) signed out.`
+          : "API key regenerated.",
+        4500,
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to regenerate API key");
+    } finally {
+      securityBusy = false;
+    }
+  }
+
+  async function createProfile() {
+    const username = profileUsername.trim();
+    if (!username) {
+      setError("Username is required.");
+      return;
+    }
+
+    profileBusy = true;
+    setError(null);
+    try {
+      const created = await createJellyfinProfile({
+        username,
+        displayName: profileDisplayName.trim() || null,
+        allowNsfw: profileAllowNsfw,
+        enabled: true,
+      });
+      jellyfinProfiles = [...jellyfinProfiles, created].sort((a, b) =>
+        a.username.localeCompare(b.username),
+      );
+      profileUsername = "";
+      profileDisplayName = "";
+      profileAllowNsfw = false;
+      flashMessage("Jellyfin profile created.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create Jellyfin profile");
+    } finally {
+      profileBusy = false;
+    }
+  }
+
+  async function patchProfile(id: string, patch: Parameters<typeof updateJellyfinProfile>[1]) {
+    profileBusy = true;
+    setError(null);
+    try {
+      const updated = await updateJellyfinProfile(id, patch);
+      jellyfinProfiles = jellyfinProfiles.map((profile) =>
+        profile.id === id ? updated : profile,
+      );
+      flashMessage("Jellyfin profile saved.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update Jellyfin profile");
+      await loadSecurity();
+    } finally {
+      profileBusy = false;
+    }
+  }
+
+  async function removeProfile(profile: JellyfinProfile) {
+    if (!window.confirm(`Delete Jellyfin profile "${profile.username}"?`)) {
+      return;
+    }
+
+    profileBusy = true;
+    setError(null);
+    try {
+      await deleteJellyfinProfile(profile.id);
+      jellyfinProfiles = jellyfinProfiles.filter((item) => item.id !== profile.id);
+      flashMessage("Jellyfin profile deleted.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete Jellyfin profile");
+    } finally {
+      profileBusy = false;
     }
   }
 
@@ -360,6 +500,170 @@
           {#each settingsInGroup(catalog, "visibility") as setting (setting.key)}
             <SettingsControl {setting} onCommit={handleSettingCommit} />
           {/each}
+        </div>
+      </div>
+    </div>
+  </Panel>
+
+  <!-- ── API Access ── -->
+  <Panel>
+    <div class="p-5 space-y-5">
+      <div class="flex items-center gap-2.5">
+        <KeyRound class="h-4 w-4 text-text-accent" />
+        <div>
+          <h2 class="text-kicker text-text-primary">API Access</h2>
+          <p class="text-[0.68rem] text-text-muted">
+            Jellyfin-compatible clients sign in with these profiles.
+          </p>
+        </div>
+      </div>
+
+      <div class="grid gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+        <div class="surface-well p-4 space-y-4">
+          <div class="space-y-1">
+            <div class="text-label text-text-primary">API key</div>
+            <div class="flex min-w-0 items-center gap-2">
+              <code class="min-w-0 flex-1 overflow-hidden text-ellipsis rounded-xs border border-border-subtle bg-surface-1 px-3 py-2 font-mono text-[0.8rem] text-text-primary">
+                {apiKey ? (apiKeyRevealed ? apiKey.apiKey : apiKey.apiKey.replace(/[a-z]/g, "*")) : "loading"}
+              </code>
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={!apiKey || securityBusy}
+                onclick={() => (apiKeyRevealed = !apiKeyRevealed)}
+                aria-label={apiKeyRevealed ? "Hide API key" : "Show API key"}
+                class="h-9 w-9 p-0"
+              >
+                <Eye class="h-4 w-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={!apiKey || securityBusy}
+                onclick={() => void copyApiKey()}
+                aria-label="Copy API key"
+                class="h-9 w-9 p-0"
+              >
+                <Clipboard class="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={securityBusy}
+            onclick={() => void handleRegenerateApiKey()}
+            class="no-lift w-full gap-2 border-border-subtle bg-surface-2/40 px-3.5 py-2.5 text-[0.8rem]"
+          >
+            {#if securityBusy}
+              <Loader2 class="h-4 w-4 animate-spin" />
+            {:else}
+              <RefreshCw class="h-4 w-4" />
+            {/if}
+            Regenerate key
+          </Button>
+        </div>
+
+        <div class="space-y-3">
+          <form
+            class="surface-well grid gap-3 p-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
+            onsubmit={(event) => {
+              event.preventDefault();
+              void createProfile();
+            }}
+          >
+            <label class="space-y-1">
+              <span class="text-label text-text-muted">Username</span>
+              <input
+                class="w-full rounded-xs border border-border-subtle bg-surface-1 px-3 py-2 text-[0.78rem] text-text-primary outline-none transition-colors focus:border-border-accent"
+                bind:value={profileUsername}
+                autocomplete="off"
+                disabled={profileBusy}
+              />
+            </label>
+            <label class="space-y-1">
+              <span class="text-label text-text-muted">Display name</span>
+              <input
+                class="w-full rounded-xs border border-border-subtle bg-surface-1 px-3 py-2 text-[0.78rem] text-text-primary outline-none transition-colors focus:border-border-accent"
+                bind:value={profileDisplayName}
+                autocomplete="off"
+                disabled={profileBusy}
+              />
+            </label>
+            <div class="flex items-end gap-2">
+              <label class="flex h-9 items-center gap-2 rounded-xs border border-border-subtle bg-surface-1 px-3 text-[0.72rem] text-text-secondary">
+                <input
+                  type="checkbox"
+                  bind:checked={profileAllowNsfw}
+                  disabled={profileBusy}
+                />
+                NSFW
+              </label>
+              <Button
+                type="submit"
+                variant="primary"
+                disabled={profileBusy || !profileUsername.trim()}
+                class="h-9 gap-2 px-3 text-[0.78rem]"
+              >
+                <UserPlus class="h-4 w-4" />
+                Add
+              </Button>
+            </div>
+          </form>
+
+          <div class="surface-well divide-y divide-border-subtle px-4">
+            {#each jellyfinProfiles as profile (profile.id)}
+              <div class="grid gap-3 py-3 md:grid-cols-[minmax(0,1fr)_auto_auto_auto] md:items-center">
+                <div class="min-w-0">
+                  <div class="truncate text-[0.82rem] font-medium text-text-primary">
+                    {profile.displayName}
+                  </div>
+                  <div class="truncate font-mono text-[0.68rem] text-text-muted">
+                    {profile.username}
+                  </div>
+                </div>
+                <label class="flex items-center gap-2 text-[0.72rem] text-text-secondary">
+                  <input
+                    type="checkbox"
+                    checked={profile.allowNsfw}
+                    disabled={profileBusy}
+                    onchange={(event) =>
+                      void patchProfile(profile.id, {
+                        allowNsfw: (event.currentTarget as HTMLInputElement).checked,
+                      })}
+                  />
+                  NSFW
+                </label>
+                <label class="flex items-center gap-2 text-[0.72rem] text-text-secondary">
+                  <input
+                    type="checkbox"
+                    checked={profile.enabled}
+                    disabled={profileBusy}
+                    onchange={(event) =>
+                      void patchProfile(profile.id, {
+                        enabled: (event.currentTarget as HTMLInputElement).checked,
+                      })}
+                  />
+                  Enabled
+                </label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  disabled={profileBusy}
+                  onclick={() => void removeProfile(profile)}
+                  aria-label={`Delete ${profile.username}`}
+                  class="h-8 w-8 justify-self-start p-0 text-status-error-text md:justify-self-end"
+                >
+                  <Trash2 class="h-4 w-4" />
+                </Button>
+              </div>
+            {:else}
+              <div class="py-4 text-[0.75rem] text-text-muted">
+                No Jellyfin profiles yet.
+              </div>
+            {/each}
+          </div>
         </div>
       </div>
     </div>

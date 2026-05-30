@@ -1,0 +1,215 @@
+using System.Text.Json.Serialization;
+
+namespace Prismedia.Contracts.Jellyfin;
+
+/// <summary>Jellyfin-compatible paged result envelope.</summary>
+public sealed record JellyfinQueryResult<T>(
+    [property: JsonPropertyName("Items")] IReadOnlyList<T> Items,
+    [property: JsonPropertyName("TotalRecordCount")] int TotalRecordCount,
+    [property: JsonPropertyName("StartIndex")] int StartIndex);
+
+/// <summary>Minimal Jellyfin-compatible public system information.</summary>
+public sealed record JellyfinPublicSystemInfo(
+    [property: JsonPropertyName("LocalAddress")] string LocalAddress,
+    [property: JsonPropertyName("ServerName")] string ServerName,
+    [property: JsonPropertyName("Version")] string Version,
+    [property: JsonPropertyName("ProductName")] string ProductName,
+    [property: JsonPropertyName("Id")] string Id,
+    [property: JsonPropertyName("StartupWizardCompleted")] bool StartupWizardCompleted);
+
+/// <summary>Minimal Jellyfin-compatible private system information.</summary>
+public sealed record JellyfinSystemInfo(
+    [property: JsonPropertyName("LocalAddress")] string LocalAddress,
+    [property: JsonPropertyName("ServerName")] string ServerName,
+    [property: JsonPropertyName("Version")] string Version,
+    [property: JsonPropertyName("ProductName")] string ProductName,
+    [property: JsonPropertyName("Id")] string Id,
+    [property: JsonPropertyName("StartupWizardCompleted")] bool StartupWizardCompleted,
+    [property: JsonPropertyName("OperatingSystem")] string OperatingSystem,
+    [property: JsonPropertyName("PackageName")] string PackageName,
+    [property: JsonPropertyName("ServerNameRaw")] string? ServerNameRaw = null);
+
+/// <summary>Jellyfin-compatible authenticate-by-name request.</summary>
+public sealed record JellyfinAuthenticateByNameRequest {
+    [JsonPropertyName("Username")]
+    public string? Username { get; init; }
+
+    [JsonPropertyName("Pw")]
+    public string? Password { get; init; }
+}
+
+/// <summary>Jellyfin-compatible authentication result.</summary>
+public sealed record JellyfinAuthenticationResult(
+    [property: JsonPropertyName("User")] JellyfinUserDto User,
+    [property: JsonPropertyName("SessionInfo")] JellyfinSessionInfoDto SessionInfo,
+    [property: JsonPropertyName("AccessToken")] string AccessToken,
+    [property: JsonPropertyName("ServerId")] string ServerId);
+
+/// <summary>Jellyfin-compatible user DTO for fake Prismedia profiles.</summary>
+public sealed record JellyfinUserDto(
+    [property: JsonPropertyName("Name")] string Name,
+    [property: JsonPropertyName("ServerId")] string ServerId,
+    [property: JsonPropertyName("ServerName")] string ServerName,
+    [property: JsonPropertyName("Id")] Guid Id,
+    [property: JsonPropertyName("HasPassword")] bool HasPassword,
+    [property: JsonPropertyName("HasConfiguredPassword")] bool HasConfiguredPassword,
+    [property: JsonPropertyName("HasConfiguredEasyPassword")] bool HasConfiguredEasyPassword,
+    [property: JsonPropertyName("EnableAutoLogin")] bool EnableAutoLogin,
+    [property: JsonPropertyName("LastLoginDate")] DateTimeOffset? LastLoginDate,
+    [property: JsonPropertyName("LastActivityDate")] DateTimeOffset? LastActivityDate,
+    [property: JsonPropertyName("Policy")] JellyfinUserPolicyDto Policy,
+    [property: JsonPropertyName("Configuration")] JellyfinUserConfigurationDto Configuration);
+
+/// <summary>Minimal Jellyfin-compatible user policy.</summary>
+public sealed record JellyfinUserPolicyDto(
+    [property: JsonPropertyName("IsAdministrator")] bool IsAdministrator,
+    [property: JsonPropertyName("IsHidden")] bool IsHidden,
+    [property: JsonPropertyName("IsDisabled")] bool IsDisabled,
+    [property: JsonPropertyName("EnableRemoteControlOfOtherUsers")] bool EnableRemoteControlOfOtherUsers,
+    [property: JsonPropertyName("EnableSharedDeviceControl")] bool EnableSharedDeviceControl,
+    [property: JsonPropertyName("EnableContentDeletion")] bool EnableContentDeletion,
+    [property: JsonPropertyName("EnableContentDownloading")] bool EnableContentDownloading,
+    [property: JsonPropertyName("EnableSyncTranscoding")] bool EnableSyncTranscoding,
+    [property: JsonPropertyName("EnableMediaPlayback")] bool EnableMediaPlayback);
+
+/// <summary>Minimal Jellyfin-compatible user configuration.</summary>
+public sealed record JellyfinUserConfigurationDto(
+    [property: JsonPropertyName("AudioLanguagePreference")] string? AudioLanguagePreference,
+    [property: JsonPropertyName("PlayDefaultAudioTrack")] bool PlayDefaultAudioTrack,
+    [property: JsonPropertyName("SubtitleLanguagePreference")] string? SubtitleLanguagePreference,
+    [property: JsonPropertyName("DisplayMissingEpisodes")] bool DisplayMissingEpisodes,
+    [property: JsonPropertyName("GroupedFolders")] IReadOnlyList<string> GroupedFolders,
+    [property: JsonPropertyName("SubtitleMode")] string SubtitleMode);
+
+/// <summary>Minimal Jellyfin-compatible session info.</summary>
+public sealed record JellyfinSessionInfoDto(
+    [property: JsonPropertyName("Id")] string Id,
+    [property: JsonPropertyName("UserId")] Guid UserId,
+    [property: JsonPropertyName("UserName")] string UserName,
+    [property: JsonPropertyName("Client")] string? Client,
+    [property: JsonPropertyName("DeviceName")] string? DeviceName,
+    [property: JsonPropertyName("DeviceId")] string? DeviceId,
+    [property: JsonPropertyName("ApplicationVersion")] string? ApplicationVersion,
+    [property: JsonPropertyName("IsActive")] bool IsActive);
+
+/// <summary>Jellyfin-compatible branding configuration.</summary>
+public sealed record JellyfinBrandingConfiguration(
+    [property: JsonPropertyName("LoginDisclaimer")] string LoginDisclaimer,
+    [property: JsonPropertyName("CustomCss")] string CustomCss,
+    [property: JsonPropertyName("SplashscreenEnabled")] bool SplashscreenEnabled);
+
+/// <summary>Jellyfin-compatible base item DTO with the subset Prismedia v1 exposes.</summary>
+public sealed record JellyfinBaseItemDto {
+    [JsonPropertyName("Name")]
+    public required string Name { get; init; }
+
+    [JsonPropertyName("ServerId")]
+    public required string ServerId { get; init; }
+
+    [JsonPropertyName("Id")]
+    public required Guid Id { get; init; }
+
+    [JsonPropertyName("Etag")]
+    public string? Etag { get; init; }
+
+    [JsonPropertyName("DateCreated")]
+    public DateTimeOffset? DateCreated { get; init; }
+
+    [JsonPropertyName("SortName")]
+    public string? SortName { get; init; }
+
+    [JsonPropertyName("Overview")]
+    public string? Overview { get; init; }
+
+    [JsonPropertyName("Type")]
+    public required string Type { get; init; }
+
+    [JsonPropertyName("MediaType")]
+    public string? MediaType { get; init; }
+
+    [JsonPropertyName("CollectionType")]
+    public string? CollectionType { get; init; }
+
+    [JsonPropertyName("ParentId")]
+    public Guid? ParentId { get; init; }
+
+    [JsonPropertyName("IsFolder")]
+    public bool IsFolder { get; init; }
+
+    [JsonPropertyName("ChildCount")]
+    public int? ChildCount { get; init; }
+
+    [JsonPropertyName("RecursiveItemCount")]
+    public int? RecursiveItemCount { get; init; }
+
+    [JsonPropertyName("RunTimeTicks")]
+    public long? RunTimeTicks { get; init; }
+
+    [JsonPropertyName("IndexNumber")]
+    public int? IndexNumber { get; init; }
+
+    [JsonPropertyName("ParentIndexNumber")]
+    public int? ParentIndexNumber { get; init; }
+
+    [JsonPropertyName("ImageTags")]
+    public IReadOnlyDictionary<string, string> ImageTags { get; init; } = new Dictionary<string, string>();
+
+    [JsonPropertyName("BackdropImageTags")]
+    public IReadOnlyList<string> BackdropImageTags { get; init; } = [];
+
+    [JsonPropertyName("PrimaryImageAspectRatio")]
+    public double? PrimaryImageAspectRatio { get; init; }
+
+    [JsonPropertyName("UserData")]
+    public JellyfinUserItemDataDto? UserData { get; init; }
+
+    [JsonPropertyName("MediaSources")]
+    public IReadOnlyList<object>? MediaSources { get; init; }
+
+    [JsonPropertyName("MediaStreams")]
+    public IReadOnlyList<object>? MediaStreams { get; init; }
+}
+
+/// <summary>Minimal Jellyfin-compatible user data DTO backed by Prismedia global state.</summary>
+public sealed record JellyfinUserItemDataDto(
+    [property: JsonPropertyName("PlaybackPositionTicks")] long PlaybackPositionTicks,
+    [property: JsonPropertyName("PlayCount")] int PlayCount,
+    [property: JsonPropertyName("IsFavorite")] bool IsFavorite,
+    [property: JsonPropertyName("Played")] bool Played,
+    [property: JsonPropertyName("Key")] string Key);
+
+/// <summary>Jellyfin-compatible image metadata.</summary>
+public sealed record JellyfinImageInfo(
+    [property: JsonPropertyName("ImageType")] string ImageType,
+    [property: JsonPropertyName("ImageIndex")] int? ImageIndex,
+    [property: JsonPropertyName("ImageTag")] string ImageTag);
+
+/// <summary>Minimal display preferences DTO accepted by Jellyfin clients.</summary>
+public sealed record JellyfinDisplayPreferencesDto {
+    [JsonPropertyName("Id")]
+    public string? Id { get; init; }
+
+    [JsonPropertyName("Client")]
+    public string? Client { get; init; }
+
+    [JsonPropertyName("SortBy")]
+    public string? SortBy { get; init; }
+
+    [JsonPropertyName("SortOrder")]
+    public string? SortOrder { get; init; }
+
+    [JsonPropertyName("RememberIndexing")]
+    public bool RememberIndexing { get; init; } = true;
+
+    [JsonPropertyName("RememberSorting")]
+    public bool RememberSorting { get; init; } = true;
+
+    [JsonPropertyName("ShowBackdrop")]
+    public bool ShowBackdrop { get; init; } = true;
+
+    [JsonPropertyName("ShowSidebar")]
+    public bool ShowSidebar { get; init; } = true;
+
+    [JsonPropertyName("CustomPrefs")]
+    public IReadOnlyDictionary<string, string> CustomPrefs { get; init; } = new Dictionary<string, string>();
+}

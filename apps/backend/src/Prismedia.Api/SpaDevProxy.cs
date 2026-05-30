@@ -16,10 +16,16 @@ public static class SpaDevProxy {
 
     private static readonly string[] JellyfinApiPrefixes =
     [
+        "/System",
+        "/Users",
+        "/UserViews",
         "/Items",
         "/Videos",
         "/Sessions",
-        "/UserPlayedItems"
+        "/UserPlayedItems",
+        "/UserItems",
+        "/Branding",
+        "/DisplayPreferences"
     ];
 
     public static void UseSpaDevServer(this WebApplication app, string viteUrl) {

@@ -44,6 +44,7 @@ export async function fetchApi<T>(path: string, init?: RequestInit): Promise<T> 
 
   const response = await fetch(apiPath(path), {
     ...init,
+    credentials: init?.credentials ?? "same-origin",
     headers,
   });
 
@@ -90,6 +91,7 @@ export async function orvalFetch<TData>(
 
   const response = await fetch(apiPath(path), {
     ...init,
+    credentials: init?.credentials ?? "same-origin",
     headers,
   });
 

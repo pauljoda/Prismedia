@@ -75,3 +75,36 @@ if (!globalThis.matchMedia) {
     }),
   });
 }
+
+if (
+  !globalThis.localStorage ||
+  typeof globalThis.localStorage.getItem !== "function" ||
+  typeof globalThis.localStorage.setItem !== "function" ||
+  typeof globalThis.localStorage.clear !== "function"
+) {
+  const values = new Map<string, string>();
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    writable: true,
+    value: {
+      get length() {
+        return values.size;
+      },
+      clear() {
+        values.clear();
+      },
+      getItem(key: string) {
+        return values.get(String(key)) ?? null;
+      },
+      key(index: number) {
+        return Array.from(values.keys())[index] ?? null;
+      },
+      removeItem(key: string) {
+        values.delete(String(key));
+      },
+      setItem(key: string, value: string) {
+        values.set(String(key), String(value));
+      },
+    } satisfies Storage,
+  });
+}

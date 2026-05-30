@@ -1,0 +1,287 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.RegularExpressions;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
+using Prismedia.Application.Collections;
+using Prismedia.Application.Entities;
+using Prismedia.Contracts.Collections;
+using Prismedia.Contracts.Entities;
+using Prismedia.Contracts.Jellyfin;
+using Prismedia.Contracts.Security;
+
+namespace Prismedia.Api.Tests;
+
+public sealed partial class SecurityEndpointTests : IDisposable {
+    private static readonly Guid NsfwVideoId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+    private readonly string _webRoot = Path.Combine(Path.GetTempPath(), $"prismedia-security-static-{Guid.NewGuid():N}");
+
+    public SecurityEndpointTests() {
+        Directory.CreateDirectory(_webRoot);
+        File.WriteAllText(Path.Combine(_webRoot, "index.html"), "<html><body>Prismedia</body></html>");
+    }
+
+    [Fact]
+    public async Task ProtectedApiRoutesRequireApiKey() {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync("/api/settings");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task BootstrapNavigationSetsHttpOnlyApiKeyCookie() {
+        using var factory = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(builder => builder.UseSetting("Prismedia:StaticWebRoot", _webRoot))
+            .WithTestAuth();
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions {
+            HandleCookies = false
+        });
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/library");
+        request.Headers.Accept.ParseAdd("text/html");
+
+        using var response = await client.SendAsync(request);
+
+        response.EnsureSuccessStatusCode();
+        var cookie = Assert.Single(response.Headers.GetValues("Set-Cookie"), value =>
+            value.StartsWith("prismedia-api-key=", StringComparison.Ordinal));
+        Assert.Contains("HttpOnly", cookie, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("SameSite=Lax", cookie, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ApiKeyHeaderAcceptsHumanNormalizedInput() {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Prismedia-Api-Key", " BAVA CADA DAFA ");
+
+        var response = await client.GetFromJsonAsync<ApiKeyResponse>("/api/security/api-key");
+
+        Assert.NotNull(response);
+        Assert.Equal(TestAuth.ApiKey, response.ApiKey);
+    }
+
+    [Fact]
+    public async Task InvalidApiKeyAttemptsAreThrottled() {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        HttpResponseMessage? response = null;
+
+        for (var i = 0; i < 9; i++) {
+            response?.Dispose();
+            using var request = new HttpRequestMessage(HttpMethod.Get, "/api/security/api-key");
+            request.Headers.Add("X-Prismedia-Api-Key", $"bad-key-{i}");
+            response = await client.SendAsync(request);
+        }
+
+        using (response) {
+            Assert.NotNull(response);
+            Assert.Equal(HttpStatusCode.TooManyRequests, response!.StatusCode);
+        }
+    }
+
+    [Fact]
+    public async Task JellyfinAuthenticationCreatesSessionAndRegenerationInvalidatesIt() {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+
+        var auth = await AuthenticateAsync(client, "Prismedia", TestAuth.ApiKey);
+        using var me = await JellyfinGetAsync(client, "/Users/Me", auth.AccessToken);
+
+        Assert.Equal(HttpStatusCode.OK, me.StatusCode);
+        using var nativeTokenRequest = new HttpRequestMessage(HttpMethod.Get, "/api/security/api-key");
+        nativeTokenRequest.Headers.Add("X-Emby-Token", auth.AccessToken);
+        using var nativeTokenResponse = await client.SendAsync(nativeTokenRequest);
+        Assert.Equal(HttpStatusCode.Unauthorized, nativeTokenResponse.StatusCode);
+
+        using var appClient = factory.CreateAuthenticatedClient();
+        using var rotationResponse = await appClient.PostAsJsonAsync("/api/security/api-key/regenerate", new { });
+        var rotation = await rotationResponse.Content.ReadFromJsonAsync<ApiKeyRegenerateResponse>();
+
+        Assert.NotNull(rotation);
+        Assert.Matches(HumanKeyRegex(), rotation.ApiKey);
+        Assert.Equal(1, rotation.InvalidatedSessions);
+        using var invalidated = await JellyfinGetAsync(client, "/Users/Me", auth.AccessToken);
+        Assert.Equal(HttpStatusCode.Unauthorized, invalidated.StatusCode);
+    }
+
+    [Fact]
+    public async Task JellyfinProfileControlsNsfwCatalogVisibility() {
+        using var factory = CreateFactory(new CatalogEntityReadService());
+        using var client = factory.CreateClient();
+
+        var sfwAuth = await AuthenticateAsync(client, "Prismedia", TestAuth.ApiKey);
+        using var sfwHidden = await JellyfinGetAsync(client, $"/Items/{NsfwVideoId:D}", sfwAuth.AccessToken);
+        Assert.Equal(HttpStatusCode.NotFound, sfwHidden.StatusCode);
+
+        using var appClient = factory.CreateAuthenticatedClient();
+        using var adultProfileResponse = await appClient.PostAsJsonAsync(
+            "/api/security/jellyfin-profiles",
+            new JellyfinProfileCreateRequest("Adult", null, AllowNsfw: true));
+        var adultProfile = await adultProfileResponse.Content.ReadFromJsonAsync<JellyfinProfileResponse>();
+        Assert.NotNull(adultProfile);
+
+        var adultAuth = await AuthenticateAsync(client, "Adult", TestAuth.ApiKey);
+        var visible = await JellyfinGetFromJsonAsync<JellyfinBaseItemDto>(
+            client,
+            $"/Items/{NsfwVideoId:D}",
+            adultAuth.AccessToken);
+
+        Assert.NotNull(visible);
+        Assert.Equal("Movie", visible.Type);
+    }
+
+    [Fact]
+    public async Task JellyfinRootCatalogRoutesReturnVirtualLibraries() {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+        var auth = await AuthenticateAsync(client, "Prismedia", TestAuth.ApiKey);
+
+        var views = await JellyfinGetFromJsonAsync<JellyfinQueryResult<JellyfinBaseItemDto>>(
+            client,
+            "/UserViews",
+            auth.AccessToken);
+        var rootItems = await JellyfinGetFromJsonAsync<JellyfinQueryResult<JellyfinBaseItemDto>>(
+            client,
+            $"/Items?ApiKey={Uri.EscapeDataString(auth.AccessToken)}",
+            token: null);
+
+        Assert.NotNull(views);
+        Assert.Equal(["Videos", "Series", "Collections"], views.Items.Select(item => item.Name).ToArray());
+        Assert.NotNull(rootItems);
+        Assert.Equal(3, rootItems.TotalRecordCount);
+    }
+
+    public void Dispose() {
+        if (Directory.Exists(_webRoot)) {
+            Directory.Delete(_webRoot, recursive: true);
+        }
+    }
+
+    private static WebApplicationFactory<Program> CreateFactory(IEntityReadService? entityReadService = null) =>
+        new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(builder => {
+                builder.ConfigureServices(services => {
+                    services.AddSingleton(entityReadService ?? new TestAuth.VisibleEntityReadService());
+                    services.AddSingleton<ICollectionItemReadService, EmptyCollectionItemReadService>();
+                });
+            })
+            .WithTestAuth();
+
+    private static async Task<JellyfinAuthenticationResult> AuthenticateAsync(
+        HttpClient client,
+        string username,
+        string password) {
+        using var response = await client.PostAsJsonAsync(
+            "/Users/AuthenticateByName",
+            new JellyfinAuthenticateByNameRequest {
+                Username = username,
+                Password = password
+            });
+        response.EnsureSuccessStatusCode();
+        var body = await response.Content.ReadFromJsonAsync<JellyfinAuthenticationResult>();
+        Assert.NotNull(body);
+        Assert.False(string.IsNullOrWhiteSpace(body.AccessToken));
+        return body;
+    }
+
+    private static async Task<HttpResponseMessage> JellyfinGetAsync(HttpClient client, string path, string token) {
+        var request = new HttpRequestMessage(HttpMethod.Get, path);
+        request.Headers.Add("X-Emby-Token", token);
+        return await client.SendAsync(request);
+    }
+
+    private static async Task<T?> JellyfinGetFromJsonAsync<T>(HttpClient client, string path, string? token) {
+        using var request = new HttpRequestMessage(HttpMethod.Get, path);
+        if (!string.IsNullOrWhiteSpace(token)) {
+            request.Headers.Add("X-Emby-Token", token);
+        }
+
+        using var response = await client.SendAsync(request);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<T>();
+    }
+
+    [GeneratedRegex("^[a-z]{3,5}-[a-z]{3,5}-[a-z]{3,5}$", RegexOptions.CultureInvariant)]
+    private static partial Regex HumanKeyRegex();
+
+    private sealed class CatalogEntityReadService : IEntityReadService {
+        public Task<EntityListResponse> ListAsync(
+            string? kind,
+            string? query,
+            string? cursor,
+            bool? hideNsfw,
+            int? limit,
+            CancellationToken cancellationToken,
+            Guid? referencedBy = null,
+            string? relationshipCode = null,
+            string? sort = null,
+            string? sortDir = null,
+            int? seed = null,
+            bool? favorite = null,
+            bool? organized = null,
+            int? ratingMin = null,
+            int? ratingMax = null,
+            bool? unrated = null,
+            string? status = null) =>
+            Task.FromResult(new EntityListResponse([Thumbnail(NsfwVideoId, isNsfw: true)], null, 1));
+
+        public Task<EntityCard?> GetAsync(Guid id, bool hideNsfw, CancellationToken cancellationToken) {
+            if (id == NsfwVideoId && hideNsfw) {
+                return Task.FromResult<EntityCard?>(null);
+            }
+
+            return Task.FromResult<EntityCard?>(id == NsfwVideoId ? Card(id) : null);
+        }
+
+        public Task<EntityThumbnailBatchResponse> GetThumbnailsAsync(
+            IReadOnlyList<Guid> ids,
+            bool hideNsfw,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new EntityThumbnailBatchResponse([]));
+
+        public Task<IEntityCard?> GetDetailAsync(Guid id, string kind, bool hideNsfw, CancellationToken cancellationToken) =>
+            Task.FromResult<IEntityCard?>(id == NsfwVideoId && !hideNsfw ? Card(id) with { Kind = kind } : null);
+
+        private static EntityCard Card(Guid id) =>
+            new() {
+                Id = id,
+                Kind = "video",
+                Title = "Hidden Movie",
+                ParentEntityId = null,
+                SortOrder = null,
+                Capabilities = [],
+                ChildrenByKind = [],
+                Relationships = []
+            };
+
+        private static EntityThumbnail Thumbnail(Guid id, bool isNsfw) =>
+            new(
+                id,
+                "video",
+                "Hidden Movie",
+                null,
+                null,
+                null,
+                null,
+                "none",
+                null,
+                [],
+                [],
+                null,
+                false,
+                isNsfw,
+                true);
+    }
+
+    private sealed class EmptyCollectionItemReadService : ICollectionItemReadService {
+        public Task<CollectionItemsResponse> ListItemsAsync(
+            Guid collectionId,
+            bool hideNsfw,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new CollectionItemsResponse([]));
+    }
+}
