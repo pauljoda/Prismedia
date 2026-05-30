@@ -32,6 +32,7 @@
   } from "$lib/settings/app-settings";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import SettingsControl from "$lib/components/settings/SettingsControl.svelte";
+  import AutoIdentifySection from "$lib/components/settings/AutoIdentifySection.svelte";
   import DiagnosticsSection from "$lib/components/settings/DiagnosticsSection.svelte";
   import WatchedLibrariesSection from "$lib/components/settings/WatchedLibrariesSection.svelte";
   import SubtitleCaptionOverlay from "$lib/components/SubtitleCaptionOverlay.svelte";
@@ -494,6 +495,9 @@
       </div>
     </div>
   </Panel>
+
+  <!-- ── Auto Identify ── -->
+  <AutoIdentifySection {catalog} onCommit={handleSettingCommit} />
 
   <!-- ── Diagnostics ── -->
   <DiagnosticsSection />

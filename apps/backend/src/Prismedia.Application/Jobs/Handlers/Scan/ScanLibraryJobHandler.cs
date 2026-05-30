@@ -100,6 +100,10 @@ public sealed class ScanLibraryJobHandler(
                         // Backfill the small grid variant for an existing cover (GeneratePreview, which
                         // also generates it, isn't running because a thumbnail already exists).
                         jobRequests.Add(new EnqueueJobRequest(JobType.GenerateGridThumbnail, TargetEntityKind: "video", TargetEntityId: entityIdStr, TargetLabel: label, Priority: 5));
+
+                    var autoIdentify = AutoIdentifyScanEnqueue.RequestFor(settings, "video", "video", entityIdStr, label);
+                    if (autoIdentify is not null)
+                        jobRequests.Add(autoIdentify);
                 }
 
                 if (jobRequests.Count > 0) {

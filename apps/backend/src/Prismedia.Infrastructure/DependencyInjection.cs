@@ -141,6 +141,7 @@ public static class DependencyInjection {
         services.AddScoped<IIdentifyQueueService>(provider =>
             provider.GetRequiredService<IdentifyQueueService>());
         services.AddScoped<IBulkIdentifyProvider, BulkIdentifyProviderAdapter>();
+        services.AddScoped<IAutoIdentifyRunner, AutoIdentifyRunner>();
     }
 
     private static void RegisterLibraryScanning(IServiceCollection services, string dataDir) {

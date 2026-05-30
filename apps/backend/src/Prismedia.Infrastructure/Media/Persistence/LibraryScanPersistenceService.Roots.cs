@@ -29,8 +29,9 @@ public sealed partial class LibraryScanPersistenceService {
     }
 
     public async Task<LibrarySettingsData> GetSettingsAsync(CancellationToken cancellationToken) {
-        var settings = await new SettingsService(new EfSettingsPersistence(_db))
-            .GetGenerationSettingsAsync(cancellationToken);
+        var settingsService = new SettingsService(new EfSettingsPersistence(_db));
+        var settings = await settingsService.GetGenerationSettingsAsync(cancellationToken);
+        var autoIdentify = await settingsService.GetAutoIdentifySettingsAsync(cancellationToken);
         return new LibrarySettingsData(
             settings.AutoGenerateMetadata,
             settings.AutoGenerateOshash,
@@ -41,7 +42,9 @@ public sealed partial class LibraryScanPersistenceService {
             settings.TrickplayIntervalSeconds,
             settings.PreviewClipDurationSeconds,
             settings.ThumbnailQuality,
-            settings.TrickplayQuality);
+            settings.TrickplayQuality,
+            autoIdentify.Enabled,
+            autoIdentify.EntityKinds);
     }
 
     public async Task UpdateRootLastScannedAsync(Guid rootId, CancellationToken cancellationToken) {

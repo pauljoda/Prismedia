@@ -186,6 +186,8 @@ public sealed record TrickplayInfoData(
     double IntervalSeconds,
     int Bandwidth);
 
+/// <param name="AutoIdentifyEnabled">Whether scanned media should be auto-identified via enabled plugins.</param>
+/// <param name="AutoIdentifyKinds">Selector kind codes (video, gallery, image, audio, book) auto identify applies to.</param>
 public sealed record LibrarySettingsData(
     bool AutoGenerateMetadata,
     bool AutoGenerateOshash,
@@ -196,7 +198,9 @@ public sealed record LibrarySettingsData(
     int TrickplayIntervalSeconds,
     int PreviewClipDurationSeconds,
     int ThumbnailQuality,
-    int TrickplayQuality);
+    int TrickplayQuality,
+    bool AutoIdentifyEnabled = false,
+    IReadOnlyList<string>? AutoIdentifyKinds = null);
 
 /// <summary>
 /// Describes a video file discovered by a scan and the structural series context inferred from its path.

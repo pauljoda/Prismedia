@@ -9,6 +9,7 @@ namespace Prismedia.Application.Settings;
 public static class AppSettingsRegistry {
     private const string Visibility = "visibility";
     private const string Scan = "scan";
+    private const string AutoIdentify = "autoIdentify";
     private const string Generation = "generation";
     private const string Jobs = "jobs";
     private const string Playback = "playback";
@@ -84,6 +85,60 @@ public static class AppSettingsRegistry {
                 min: 5,
                 max: 1440,
                 step: 5),
+
+            Boolean(
+                AppSettingKeys.AutoIdentifyEnabled,
+                AutoIdentify,
+                "Auto Identify",
+                "Let trusted plugins identify and fill new media automatically during scans.",
+                25,
+                "Auto identify during scans",
+                "When on, each scanned item runs through your enabled plugins and the first confident match is applied automatically — no manual review needed. Requires at least one installed plugin and can noticeably increase library scan times.",
+                false,
+                10),
+            StringList(
+                AppSettingKeys.AutoIdentifyProviders,
+                AutoIdentify,
+                "Auto Identify",
+                "Let trusted plugins identify and fill new media automatically during scans.",
+                25,
+                "Enabled plugins",
+                "Plugins tried in order during auto identify. The first one that returns a confident match wins.",
+                [],
+                20),
+            StringList(
+                AppSettingKeys.AutoIdentifyEntityKinds,
+                AutoIdentify,
+                "Auto Identify",
+                "Let trusted plugins identify and fill new media automatically during scans.",
+                25,
+                "Identify these kinds",
+                "Which kinds of scanned media auto identify applies to.",
+                ["video", "gallery", "image", "audio", "book"],
+                30),
+            Decimal(
+                AppSettingKeys.AutoIdentifyConfidenceThreshold,
+                AutoIdentify,
+                "Auto Identify",
+                "Let trusted plugins identify and fill new media automatically during scans.",
+                25,
+                "Auto-apply confidence",
+                "Minimum match confidence (or an exact match) required before a plugin result is applied without review.",
+                90m,
+                40,
+                min: 0m,
+                max: 100m,
+                step: 1m),
+            Boolean(
+                AppSettingKeys.AutoIdentifyUnorganizedOnly,
+                AutoIdentify,
+                "Auto Identify",
+                "Let trusted plugins identify and fill new media automatically during scans.",
+                25,
+                "Only un-organized items",
+                "When on, skip items already marked organized. Turn off to re-identify every item on each scan.",
+                true,
+                50),
 
             Boolean(
                 AppSettingKeys.GenerationAutoGenerateMetadata,

@@ -94,5 +94,9 @@ public enum JobType {
     // ── Identify ─────────────────────────────────────────────────
     /// <summary>Identifies multiple entities in batch via a provider plugin.</summary>
     [Code("bulk-identify")]
-    BulkIdentify
+    BulkIdentify,
+
+    /// <summary>Auto-identifies one scanned entity through the configured plugins and applies the first confident match.</summary>
+    [Code("auto-identify")]
+    AutoIdentify
 }

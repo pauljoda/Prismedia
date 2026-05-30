@@ -11,6 +11,21 @@ public sealed record VisibilitySettings(string DefaultMode, bool LanAutoEnable);
 public sealed record ScanSettings(bool AutoScanEnabled, int IntervalMinutes);
 
 /// <summary>
+/// Auto-identify settings that drive plugin-based identification during library scans.
+/// </summary>
+/// <param name="Enabled">Whether scanned media is auto-identified through enabled plugins.</param>
+/// <param name="Providers">Ordered provider ids tried during auto identify; the first confident match wins.</param>
+/// <param name="EntityKinds">Selector kind codes (video, gallery, image, audio, book) auto identify applies to.</param>
+/// <param name="ConfidenceThreshold">Minimum confidence as a 0–1 fraction required to auto-apply a non-exact match.</param>
+/// <param name="UnorganizedOnly">When true, items already marked organized are skipped.</param>
+public sealed record AutoIdentifySettings(
+    bool Enabled,
+    IReadOnlyList<string> Providers,
+    IReadOnlyList<string> EntityKinds,
+    double ConfidenceThreshold,
+    bool UnorganizedOnly);
+
+/// <summary>
 /// Media generation settings used by scan and maintenance jobs.
 /// </summary>
 public sealed record GenerationSettings(

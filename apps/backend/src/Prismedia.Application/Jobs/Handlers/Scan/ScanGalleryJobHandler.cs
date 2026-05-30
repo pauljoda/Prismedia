@@ -50,6 +50,11 @@ public sealed class ScanGalleryJobHandler(
                 root.IsNsfw,
                 cancellationToken);
             galleryIdsByPath[dirPath] = galleryId;
+
+            var galleryAutoIdentify = AutoIdentifyScanEnqueue.RequestFor(
+                settings, "gallery", "gallery", galleryId.ToString(), galleryTitle);
+            if (galleryAutoIdentify is not null)
+                await context.EnqueueIfNeededAsync(galleryAutoIdentify, cancellationToken);
         }
 
         var validLooseImagePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -91,6 +96,15 @@ public sealed class ScanGalleryJobHandler(
                     await context.EnqueueIfNeededAsync(new EnqueueJobRequest(
                         JobType.FingerprintImage, TargetEntityKind: "image",
                         TargetEntityId: imageId.ToString(), TargetLabel: title), cancellationToken);
+                }
+
+                // Only loose images (no owning gallery) are auto-identified individually; images
+                // inside a gallery are identified as part of that gallery.
+                if (galleryId is null) {
+                    var imageAutoIdentify = AutoIdentifyScanEnqueue.RequestFor(
+                        settings, "image", "image", imageId.ToString(), title);
+                    if (imageAutoIdentify is not null)
+                        await context.EnqueueIfNeededAsync(imageAutoIdentify, cancellationToken);
                 }
             }
 

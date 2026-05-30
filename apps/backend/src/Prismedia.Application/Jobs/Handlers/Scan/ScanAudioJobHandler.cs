@@ -89,6 +89,11 @@ public sealed class ScanAudioJobHandler(
                         JobType.FingerprintAudio, TargetEntityKind: "audio-track",
                         TargetEntityId: trackId.ToString(), TargetLabel: title), cancellationToken);
                 }
+
+                var autoIdentify = AutoIdentifyScanEnqueue.RequestFor(
+                    settings, "audio", "audio-track", trackId.ToString(), title);
+                if (autoIdentify is not null)
+                    await context.EnqueueIfNeededAsync(autoIdentify, cancellationToken);
             }
 
             processedDirs++;

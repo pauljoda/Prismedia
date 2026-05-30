@@ -63,6 +63,11 @@ export interface LibrarySettings {
   nsfwLanAutoEnable: boolean;
   autoScanEnabled: boolean;
   scanIntervalMinutes: number;
+  autoIdentifyEnabled: boolean;
+  autoIdentifyProviders: string[];
+  autoIdentifyEntityKinds: string[];
+  autoIdentifyConfidenceThreshold: number;
+  autoIdentifyUnorganizedOnly: boolean;
   autoGenerateMetadata: boolean;
   autoGenerateOshash: boolean;
   autoGenerateMd5: boolean;

@@ -10,6 +10,12 @@ public static class AppSettingKeys {
     public const string ScanAutoScanEnabled = "scan.autoScanEnabled";
     public const string ScanIntervalMinutes = "scan.intervalMinutes";
 
+    public const string AutoIdentifyEnabled = "autoIdentify.enabled";
+    public const string AutoIdentifyProviders = "autoIdentify.providers";
+    public const string AutoIdentifyEntityKinds = "autoIdentify.entityKinds";
+    public const string AutoIdentifyConfidenceThreshold = "autoIdentify.confidenceThreshold";
+    public const string AutoIdentifyUnorganizedOnly = "autoIdentify.unorganizedOnly";
+
     public const string GenerationAutoGenerateMetadata = "generation.autoGenerateMetadata";
     public const string GenerationAutoGenerateOshash = "generation.autoGenerateOshash";
     public const string GenerationAutoGenerateMd5 = "generation.autoGenerateMd5";

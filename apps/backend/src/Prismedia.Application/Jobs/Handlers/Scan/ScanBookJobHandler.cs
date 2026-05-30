@@ -57,6 +57,11 @@ public sealed class ScanBookJobHandler(
             var bookId = await books.UpsertBookAsync(first.BookPath, first.BookTitle, root.Id, root.IsNsfw, cancellationToken);
             validBookPaths.Add(first.BookPath);
 
+            var bookAutoIdentify = AutoIdentifyScanEnqueue.RequestFor(
+                settings, "book", "book", bookId.ToString(), first.BookTitle);
+            if (bookAutoIdentify is not null)
+                await context.EnqueueIfNeededAsync(bookAutoIdentify, cancellationToken);
+
             var directChapterPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var directChapters = bookGroup
                 .Where(item => item.VolumePath is null)

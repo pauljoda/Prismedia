@@ -11,6 +11,11 @@ export const settingKeys = {
   visibilityLanAutoEnable: "visibility.lanAutoEnable",
   scanAutoScanEnabled: "scan.autoScanEnabled",
   scanIntervalMinutes: "scan.intervalMinutes",
+  autoIdentifyEnabled: "autoIdentify.enabled",
+  autoIdentifyProviders: "autoIdentify.providers",
+  autoIdentifyEntityKinds: "autoIdentify.entityKinds",
+  autoIdentifyConfidenceThreshold: "autoIdentify.confidenceThreshold",
+  autoIdentifyUnorganizedOnly: "autoIdentify.unorganizedOnly",
   generationAutoGenerateMetadata: "generation.autoGenerateMetadata",
   generationAutoGenerateOshash: "generation.autoGenerateOshash",
   generationAutoGenerateMd5: "generation.autoGenerateMd5",
@@ -44,6 +49,11 @@ export const defaultLibrarySettings: LibrarySettings = {
   nsfwLanAutoEnable: false,
   autoScanEnabled: false,
   scanIntervalMinutes: 60,
+  autoIdentifyEnabled: false,
+  autoIdentifyProviders: [],
+  autoIdentifyEntityKinds: ["video", "gallery", "image", "audio", "book"],
+  autoIdentifyConfidenceThreshold: 90,
+  autoIdentifyUnorganizedOnly: true,
   autoGenerateMetadata: true,
   autoGenerateOshash: true,
   autoGenerateMd5: false,
@@ -132,6 +142,12 @@ export function valueAsStringListText(value: SettingValue | undefined, fallback 
   return fallback;
 }
 
+export function valueAsStringList(value: SettingValue | undefined, fallback: string[] = []): string[] {
+  if (Array.isArray(value)) return value.map((item) => String(item)).filter(Boolean);
+  if (typeof value === "string" && value.trim()) return parseStringList(value);
+  return fallback;
+}
+
 export function parseStringList(text: string): string[] {
   return text
     .split(",")
@@ -177,6 +193,26 @@ export function valuesToLibrarySettings(
     scanIntervalMinutes: valueAsNumber(
       values[settingKeys.scanIntervalMinutes],
       fallback.scanIntervalMinutes,
+    ),
+    autoIdentifyEnabled: valueAsBoolean(
+      values[settingKeys.autoIdentifyEnabled],
+      fallback.autoIdentifyEnabled,
+    ),
+    autoIdentifyProviders: valueAsStringList(
+      values[settingKeys.autoIdentifyProviders],
+      fallback.autoIdentifyProviders,
+    ),
+    autoIdentifyEntityKinds: valueAsStringList(
+      values[settingKeys.autoIdentifyEntityKinds],
+      fallback.autoIdentifyEntityKinds,
+    ),
+    autoIdentifyConfidenceThreshold: valueAsNumber(
+      values[settingKeys.autoIdentifyConfidenceThreshold],
+      fallback.autoIdentifyConfidenceThreshold,
+    ),
+    autoIdentifyUnorganizedOnly: valueAsBoolean(
+      values[settingKeys.autoIdentifyUnorganizedOnly],
+      fallback.autoIdentifyUnorganizedOnly,
     ),
     autoGenerateMetadata: valueAsBoolean(
       values[settingKeys.generationAutoGenerateMetadata],

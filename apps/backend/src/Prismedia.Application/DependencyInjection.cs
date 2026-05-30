@@ -93,6 +93,7 @@ public static class DependencyInjection {
 
         // Identify
         services.AddTransient<IJobHandler, BulkIdentifyJobHandler>();
+        services.AddTransient<IJobHandler, AutoIdentifyJobHandler>();
 
         // Background services
         services.AddSingleton<WorkerRuntimeIdentity>();

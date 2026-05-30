@@ -173,6 +173,28 @@ public sealed class SettingsService {
     }
 
     /// <summary>
+    /// Returns auto-identify settings used to drive plugin identification during scans.
+    /// The stored confidence threshold is a 0–100 percentage and is returned here as a 0–1 fraction.
+    /// </summary>
+    public async Task<AutoIdentifySettings> GetAutoIdentifySettingsAsync(CancellationToken cancellationToken) {
+        var values = await GetValueMapAsync([
+            AppSettingKeys.AutoIdentifyEnabled,
+            AppSettingKeys.AutoIdentifyProviders,
+            AppSettingKeys.AutoIdentifyEntityKinds,
+            AppSettingKeys.AutoIdentifyConfidenceThreshold,
+            AppSettingKeys.AutoIdentifyUnorganizedOnly,
+        ], cancellationToken);
+
+        var percent = GetFloat(values, AppSettingKeys.AutoIdentifyConfidenceThreshold);
+        return new AutoIdentifySettings(
+            GetBoolean(values, AppSettingKeys.AutoIdentifyEnabled),
+            GetStringList(values, AppSettingKeys.AutoIdentifyProviders),
+            GetStringList(values, AppSettingKeys.AutoIdentifyEntityKinds),
+            Math.Clamp(percent / 100d, 0d, 1d),
+            GetBoolean(values, AppSettingKeys.AutoIdentifyUnorganizedOnly));
+    }
+
+    /// <summary>
     /// Returns generation-pipeline settings used by scan and maintenance jobs.
     /// </summary>
     public async Task<GenerationSettings> GetGenerationSettingsAsync(CancellationToken cancellationToken) {

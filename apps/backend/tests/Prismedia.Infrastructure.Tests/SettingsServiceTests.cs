@@ -138,6 +138,48 @@ public sealed class SettingsServiceTests {
     }
 
     [Fact]
+    public async Task AutoIdentifySettingsDefaultOffWithFullKindCoverage() {
+        await using var db = CreateContext();
+        var service = new SettingsService(new EfSettingsPersistence(db));
+
+        var settings = await service.GetAutoIdentifySettingsAsync(CancellationToken.None);
+
+        Assert.False(settings.Enabled);
+        Assert.Empty(settings.Providers);
+        Assert.Equal(["video", "gallery", "image", "audio", "book"], settings.EntityKinds);
+        // Stored as a 0–100 percentage (default 90), surfaced to backend consumers as a 0–1 fraction.
+        Assert.Equal(0.9d, settings.ConfidenceThreshold, 3);
+        Assert.True(settings.UnorganizedOnly);
+        Assert.Empty(await db.AppSettings.ToArrayAsync());
+    }
+
+    [Fact]
+    public async Task AutoIdentifySettingsConvertThresholdAndPreserveProviderOrder() {
+        await using var db = CreateContext();
+        var service = new SettingsService(new EfSettingsPersistence(db));
+
+        await service.UpdateSettingsAsync(
+            new Dictionary<string, JsonElement> {
+                [AppSettingKeys.AutoIdentifyEnabled] = JsonSerializer.SerializeToElement(true),
+                [AppSettingKeys.AutoIdentifyConfidenceThreshold] = JsonSerializer.SerializeToElement(75m),
+                [AppSettingKeys.AutoIdentifyProviders] =
+                    JsonSerializer.SerializeToElement(new[] { "tmdb", "stash-erome" }),
+                [AppSettingKeys.AutoIdentifyEntityKinds] =
+                    JsonSerializer.SerializeToElement(new[] { "video" }),
+                [AppSettingKeys.AutoIdentifyUnorganizedOnly] = JsonSerializer.SerializeToElement(false),
+            },
+            CancellationToken.None);
+
+        var settings = await service.GetAutoIdentifySettingsAsync(CancellationToken.None);
+
+        Assert.True(settings.Enabled);
+        Assert.Equal(0.75d, settings.ConfidenceThreshold, 3);
+        Assert.Equal(["tmdb", "stash-erome"], settings.Providers);
+        Assert.Equal(["video"], settings.EntityKinds);
+        Assert.False(settings.UnorganizedOnly);
+    }
+
+    [Fact]
     public async Task SavingDecimalDefaultRemovesOverride() {
         await using var db = CreateContext();
         var service = new SettingsService(new EfSettingsPersistence(db));
