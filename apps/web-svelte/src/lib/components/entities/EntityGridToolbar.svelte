@@ -557,11 +557,9 @@
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
-    border: 1px solid var(--color-border-subtle, rgba(148, 158, 178, 0.07));
+    border: 1px solid var(--toolbar-detail-border);
     border-radius: var(--radius-sm, 6px);
-    background: rgba(12, 15, 21, 0.96);
-    backdrop-filter: blur(var(--glass-blur-md));
-    -webkit-backdrop-filter: blur(var(--glass-blur-md));
+    background: var(--toolbar-detail-glass);
     box-shadow: 0 8px 40px rgba(0, 0, 0, 0.60);
     padding: 1rem 1.05rem;
   }
