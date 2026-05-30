@@ -807,13 +807,6 @@
     />
   {/if}
 
-  <EntityGridTabs
-    {activeKind}
-    onActiveKindChange={setActiveKind}
-    {tabs}
-    totalCount={cards.length}
-  />
-
   {#if selectable}
     <div class="bulk-bar" role="status" aria-live="polite">
       <button
@@ -922,6 +915,13 @@
       {/if}
     </div>
   {/if}
+
+  <EntityGridTabs
+    {activeKind}
+    onActiveKindChange={setActiveKind}
+    {tabs}
+    totalCount={cards.length}
+  />
 
   <div
     bind:this={viewportEl}
@@ -1172,23 +1172,43 @@
     height: 100%;
   }
 
+  /*
+   * Selection ("Select") bar — the second lower bar in the toolbar stack. It
+   * tucks up behind the sticky toolbar shell (negative top margin, no top
+   * border, only bottom corners rounded) so it reads as sliding out from
+   * underneath the controls, matching the EntityDetail content card. The extra
+   * top padding offsets the slice hidden behind the shell so the buttons stay
+   * clear of the seam.
+   */
   .bulk-bar {
     position: relative;
     z-index: 3;
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    border: 1px solid var(--color-border-subtle, rgba(148, 158, 178, 0.07));
+    border: 1px solid var(--color-border, #1c2235);
+    border-top: 0;
     background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0)),
-      var(--color-surface-2, #11161d);
-    border-radius: var(--radius-sm, 6px);
-    box-shadow: 0 8px 40px rgba(0,0,0,0.60);
+      linear-gradient(180deg, rgba(19, 23, 31, 0.88), rgba(12, 15, 21, 0.96)),
+      var(--color-surface-2, #101420);
+    border-radius: 0 0 var(--radius-md, 10px) var(--radius-md, 10px);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.035),
+      0 10px 30px rgba(0, 0, 0, 0.24);
     color: var(--color-text-muted);
     font-family: var(--font-mono, "JetBrains Mono", monospace);
     font-size: 0.7rem;
-    padding: 0.55rem 0.7rem;
+    padding: 1.05rem 0.85rem 0.6rem;
     pointer-events: auto;
+  }
+
+  /*
+   * Pull the Select bar up under the toolbar shell. A dedicated child selector
+   * is needed to beat `.entity-grid > :first-child + *` (which zeroes the
+   * margin of the element directly after the toolbar).
+   */
+  .entity-grid > .bulk-bar {
+    margin-top: -0.5rem;
   }
 
   .bulk-count {

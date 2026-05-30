@@ -126,7 +126,8 @@
 </script>
 
 <div class="toolbar-shell">
-  <div class="toolbar-root">
+  <div class="toolbar-stack">
+    <div class="toolbar-hero">
     <div class="search-row">
       <label class="search-box">
         <Search class="search-icon" aria-hidden="true" />
@@ -322,8 +323,10 @@
         />
       </div>
     </div>
+    </div>
 
-    <div class="filter-row" class:is-active={activeFilters.length > 0 || canClearFiltersAndSort}>
+    {#if activeFilters.length > 0 || canClearFiltersAndSort}
+    <div class="filter-row toolbar-bar">
       <div class="filter-scroll" aria-live="polite">
         {#if activeFilters.length > 0}
           <span class="filter-chip-label" aria-hidden="true">
@@ -351,6 +354,7 @@
         </button>
       {/if}
     </div>
+    {/if}
   </div>
 </div>
 
@@ -407,18 +411,39 @@
     pointer-events: auto;
   }
 
-  .toolbar-root {
+  /*
+   * The toolbar mirrors the EntityDetail layering: a primary "hero" panel
+   * (search + controls) with all corners rounded, then lower bars that tuck
+   * up behind it with only their bottom corners rounded so each reads as
+   * sliding out from underneath the section above. The hero keeps the highest
+   * stacking order inside the shell so the lower bars disappear behind its
+   * bottom edge.
+   */
+  .toolbar-stack {
     display: flex;
     flex-direction: column;
-    gap: 0.6rem;
-    border: 1px solid var(--color-border-subtle, rgba(148, 158, 178, 0.07));
-    background: rgba(12, 15, 21, 0.96);
+    min-width: 0;
+    pointer-events: auto;
+  }
+
+  .toolbar-hero {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    border: 1px solid var(--color-border, #1c2235);
+    border-radius: var(--radius-md, 10px);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0) 42%),
+      linear-gradient(180deg, rgba(19, 23, 31, 0.94), rgba(12, 15, 21, 0.97)),
+      var(--color-surface-2, #101420);
     backdrop-filter: blur(var(--glass-blur-md));
     -webkit-backdrop-filter: blur(var(--glass-blur-md));
-    box-shadow: 0 8px 40px rgba(0,0,0,0.60);
-    border-radius: var(--radius-sm, 6px);
-    padding: 0.7rem 0.75rem;
-    pointer-events: auto;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.05),
+      0 8px 40px rgba(0, 0, 0, 0.60);
+    padding: 1rem 1.05rem;
   }
 
   .search-row {
@@ -937,20 +962,28 @@
     color: var(--color-text-accent, #f2c26a);
   }
 
+  /*
+   * Active-filters / Clear bar — the first lower bar. It pulls up 1px behind
+   * the hero (border-top dropped, only bottom corners rounded) so the seam
+   * between it and the hero reads as one continuous panel, matching the
+   * EntityDetail tab strip.
+   */
   .filter-row {
+    position: relative;
+    z-index: 1;
     display: flex;
     align-items: center;
     gap: 0.4rem;
-    padding: 0;
+    min-height: 2.1rem;
+    margin-top: -1px;
+    padding: 0.4rem 0.7rem;
+    border: 1px solid var(--color-border, #1c2235);
+    border-top: 0;
+    border-radius: 0 0 var(--radius-md, 10px) var(--radius-md, 10px);
+    background: rgba(12, 15, 21, 0.72);
+    backdrop-filter: blur(var(--glass-blur-sm));
+    -webkit-backdrop-filter: blur(var(--glass-blur-sm));
     pointer-events: auto;
-  }
-
-  .filter-row.is-active {
-    min-height: 2rem;
-    border: 1px solid var(--color-border-subtle, rgba(148, 158, 178, 0.07));
-    background: var(--color-surface-1, #0c0f15);
-    box-shadow: inset 0 2px 8px rgba(0,0,0,0.30);
-    padding: 0.3rem 0.5rem;
   }
 
   .filter-scroll {
@@ -1037,8 +1070,8 @@
    * space to its right.
    */
   @media (max-width: 520px) {
-    .toolbar-root {
-      padding: 0.6rem 0.6rem;
+    .toolbar-hero {
+      padding: 0.8rem 0.75rem;
     }
   }
 </style>
