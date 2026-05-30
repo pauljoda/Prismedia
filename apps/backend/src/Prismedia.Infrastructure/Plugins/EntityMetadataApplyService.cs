@@ -213,7 +213,10 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
             await UpsertUrlsAsync(entityId, patch.Urls, now, cancellationToken);
         }
 
-        await ApplySelectedRelationshipFieldsAsync(entity, selected, patch, now, cancellationToken);
+        // NSFW providers (e.g. Stash community scrapers) force every entity they touch — the
+        // root, its credited people, studio, and tags — to be marked NSFW.
+        var markNsfw = patch.Flags?.IsNsfw == true;
+        await ApplySelectedRelationshipFieldsAsync(entity, selected, patch, now, markNsfw, cancellationToken);
 
         if (selected.Contains("dates")) {
             await UpsertDatesAsync(entityId, patch.Dates, now, cancellationToken);

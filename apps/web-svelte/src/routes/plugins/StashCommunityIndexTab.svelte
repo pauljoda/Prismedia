@@ -1,14 +1,21 @@
 <script lang="ts">
   import { Check, Download, Loader2, RefreshCw, Search, X } from "@lucide/svelte";
   import { Badge, Button } from "@prismedia/ui-svelte";
-  import type { CommunityIndexEntry } from "$lib/api/plugins";
+
+  /** A Stash community scraper row with its locally-installed state resolved. */
+  export interface StashScraperRow {
+    providerId: string;
+    name: string;
+    version: string;
+    installed: boolean;
+  }
 
   interface Props {
-    entries: CommunityIndexEntry[];
+    entries: StashScraperRow[];
     installingId: string | null;
     loaded: boolean;
     loading: boolean;
-    onInstall: (id: string) => void;
+    onInstall: (providerId: string) => void;
     onRefresh: () => void;
   }
 
@@ -27,7 +34,7 @@
     const q = search.trim().toLowerCase();
     return q
       ? entries.filter((entry) =>
-          entry.name.toLowerCase().includes(q) || entry.id.toLowerCase().includes(q),
+          entry.name.toLowerCase().includes(q) || entry.providerId.toLowerCase().includes(q),
         )
       : entries;
   });
@@ -73,16 +80,13 @@
     </div>
   {:else}
     <div class="space-y-1 max-h-[600px] overflow-y-auto scrollbar-hidden">
-      {#each filteredEntries as entry (entry.id)}
+      {#each filteredEntries as entry (entry.providerId)}
         <div class="surface-card no-lift px-4 py-3 flex items-center gap-3">
           <div class="min-w-0 flex-1">
             <p class="text-sm font-medium">{entry.name}</p>
             <p class="text-text-disabled text-[0.65rem] mt-0.5 font-mono">
-              {entry.id}
-              <span class="text-text-disabled/60 ml-2">{entry.date}</span>
-              {#if entry.requires?.length}
-                <span class="text-text-disabled/60 ml-2">requires: {entry.requires.join(", ")}</span>
-              {/if}
+              {entry.providerId}
+              <span class="text-text-disabled/60 ml-2">{entry.version}</span>
             </p>
           </div>
           {#if entry.installed}
@@ -91,11 +95,11 @@
             </Badge>
           {:else}
             <button
-              onclick={() => onInstall(entry.id)}
-              disabled={installingId === entry.id}
+              onclick={() => onInstall(entry.providerId)}
+              disabled={installingId === entry.providerId}
               class="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-text-muted hover:text-text-accent transition-colors duration-fast shrink-0 disabled:opacity-40"
             >
-              {#if installingId === entry.id}
+              {#if installingId === entry.providerId}
                 <Loader2 class="h-3.5 w-3.5 animate-spin" />
               {:else}
                 <Download class="h-3.5 w-3.5" />

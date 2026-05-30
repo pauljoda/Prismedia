@@ -1,29 +1,21 @@
 import { fireEvent, render, screen } from "@testing-library/svelte";
 import type { ComponentProps } from "svelte";
 import { describe, expect, it, vi } from "vitest";
-import type { CommunityIndexEntry } from "$lib/api/plugins";
-import StashCommunityIndexTab from "./StashCommunityIndexTab.svelte";
+import StashCommunityIndexTab, { type StashScraperRow } from "./StashCommunityIndexTab.svelte";
 
 type StashCommunityIndexTabProps = ComponentProps<typeof StashCommunityIndexTab>;
 
-const entries: CommunityIndexEntry[] = [
+const entries: StashScraperRow[] = [
   {
-    id: "stashdb-video",
+    providerId: "stash-stashdb-video",
     name: "StashDB Video",
     version: "1.0.0",
-    date: "2026-01-01",
-    path: "stashdb-video.zip",
-    sha256: "abc",
-    requires: ["ffmpeg"],
     installed: false,
   },
   {
-    id: "fansdb-gallery",
+    providerId: "stash-fansdb-gallery",
     name: "FansDB Gallery",
     version: "1.0.0",
-    date: "2026-01-02",
-    path: "fansdb-gallery.zip",
-    sha256: "def",
     installed: true,
   },
 ];
@@ -69,6 +61,6 @@ describe("StashCommunityIndexTab", () => {
     await fireEvent.click(screen.getByRole("button", { name: /install/i }));
 
     expect(onRefresh).toHaveBeenCalled();
-    expect(onInstall).toHaveBeenCalledWith("stashdb-video");
+    expect(onInstall).toHaveBeenCalledWith("stash-stashdb-video");
   });
 });

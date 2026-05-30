@@ -289,7 +289,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             db,
             new PluginCatalogService(db, new PluginCatalogOptions([tempRoot], tempRoot, "1.0.0")),
             new IdentifyMatchHintResolver(db),
-            new DotnetPluginProcessRunner(executor, new PluginCatalogOptions([], tempRoot, "1.0.0")),
+            new IdentifyRunnerSelector([new DotnetPluginProcessRunner(executor, new PluginCatalogOptions([], tempRoot, "1.0.0"))]),
             new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(tempRoot)));
 
         return new IdentifyQueueService(db, identify, new InMemoryIdentifyApplyProgressStore());

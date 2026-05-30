@@ -111,3 +111,11 @@ public sealed record PluginProvider(
 /// Request body for saving plugin credential values.
 /// </summary>
 public sealed record PluginAuthUpdateRequest(IReadOnlyDictionary<string, string?> Values);
+
+/// <summary>
+/// A Stash community scraper available for installation from the CommunityScrapers index.
+/// </summary>
+/// <param name="ProviderId">Synthesized Prismedia provider id used to install the scraper.</param>
+/// <param name="Name">Human-readable scraper name.</param>
+/// <param name="Version">Index-reported version identifier.</param>
+public sealed record StashScraperListing(string ProviderId, string Name, string Version);

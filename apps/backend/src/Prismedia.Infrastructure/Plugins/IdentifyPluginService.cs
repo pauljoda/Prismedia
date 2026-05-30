@@ -14,19 +14,19 @@ public sealed class IdentifyPluginService : IIdentifyProviderService {
     private readonly PrismediaDbContext _db;
     private readonly PluginCatalogService _catalog;
     private readonly IdentifyMatchHintResolver _hints;
-    private readonly DotnetPluginProcessRunner _runner;
+    private readonly IdentifyRunnerSelector _runners;
     private readonly EntityMetadataApplyService _apply;
 
     public IdentifyPluginService(
         PrismediaDbContext db,
         PluginCatalogService catalog,
         IdentifyMatchHintResolver hints,
-        DotnetPluginProcessRunner runner,
+        IdentifyRunnerSelector runners,
         EntityMetadataApplyService apply) {
         _db = db;
         _catalog = catalog;
         _hints = hints;
-        _runner = runner;
+        _runners = runners;
         _apply = apply;
     }
 
@@ -276,7 +276,7 @@ public sealed class IdentifyPluginService : IIdentifyProviderService {
             StructuralContext: structuralContext,
             IncludeNsfw: includeNsfw);
 
-        var response = await _runner.IdentifyAsync(descriptor, request, cancellationToken);
+        var response = await _runners.Resolve(descriptor).IdentifyAsync(descriptor, request, cancellationToken);
         if (!response.Ok || response.Result is null) {
             visited.Remove(entity.Id);
             return response;

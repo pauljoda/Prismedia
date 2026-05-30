@@ -95,6 +95,18 @@ export function savePluginAuth(
 }
 
 
+/** A Stash community scraper available for install from the CommunityScrapers index. */
+export interface StashScraperListing {
+  providerId: string;
+  name: string;
+  version: string;
+}
+
+/** Lists Stash community scrapers available for install from the CommunityScrapers index. */
+export function fetchStashScrapers(): Promise<StashScraperListing[]> {
+  return fetchApi("/api/plugins/stash-scrapers");
+}
+
 function query(params: Record<string, string | number | boolean | null | undefined>): string {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {

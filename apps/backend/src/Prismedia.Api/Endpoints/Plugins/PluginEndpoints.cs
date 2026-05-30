@@ -17,6 +17,14 @@ public static class PluginEndpoints {
             .WithSummary("Lists compatible community plugins discovered from installed and local development sources.")
             .Produces<IReadOnlyList<PluginProvider>>();
 
+        group.MapGet("/stash-scrapers", async (
+            IPluginCatalogService plugins,
+            CancellationToken cancellationToken) =>
+            Results.Ok(await plugins.ListStashScrapersAsync(cancellationToken)))
+            .WithName("ListStashScrapers")
+            .WithSummary("Lists Stash community scrapers available for install from the CommunityScrapers index.")
+            .Produces<IReadOnlyList<StashScraperListing>>();
+
         group.MapPost("/{provider}", async (
             string provider,
             IPluginCatalogService plugins,

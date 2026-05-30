@@ -23,4 +23,7 @@ public interface IPluginCatalogService {
         string providerId,
         IReadOnlyDictionary<string, string?> values,
         CancellationToken cancellationToken);
+
+    /// <summary>Lists Stash community scrapers available for install from the remote index.</summary>
+    Task<IReadOnlyList<StashScraperListing>> ListStashScrapersAsync(CancellationToken cancellationToken);
 }

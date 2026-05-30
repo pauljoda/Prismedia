@@ -29,6 +29,7 @@ using Prismedia.Infrastructure.Plugins;
 using Prismedia.Infrastructure.Processes;
 using Prismedia.Infrastructure.Queue;
 using Prismedia.Infrastructure.Settings;
+using Prismedia.Infrastructure.StashCompat;
 using Prismedia.Infrastructure.Health;
 using Prismedia.Infrastructure.Videos;
 
@@ -108,8 +109,15 @@ public static class DependencyInjection {
             ResolvePluginDevPaths(configuration, pathBase),
             cacheDir,
             ResolveCurrentVersion(configuration, pathBase),
-            ResolvePluginIndexUrl(configuration)));
+            ResolvePluginIndexUrl(configuration),
+            ResolveStashScraperIndexUrl(configuration)));
         services.AddSingleton<DotnetPluginProcessRunner>();
+        services.AddSingleton<IIdentifyRunner>(provider =>
+            provider.GetRequiredService<DotnetPluginProcessRunner>());
+        services.AddSingleton<IIdentifyRunner>(provider => new StashCompatRunner(
+            new HttpClient { Timeout = TimeSpan.FromSeconds(30) },
+            new StashScriptExecutor(provider.GetRequiredService<ProcessExecutor>())));
+        services.AddSingleton<IdentifyRunnerSelector>();
         services.AddScoped(provider => new PluginCatalogService(
             provider.GetRequiredService<PrismediaDbContext>(),
             provider.GetRequiredService<PluginCatalogOptions>()));
@@ -311,6 +319,24 @@ public static class DependencyInjection {
         }
 
         return "https://raw.githubusercontent.com/pauljoda/Prismedia-Plugins/main/index.yml";
+    }
+
+    private static string? ResolveStashScraperIndexUrl(IConfiguration configuration) {
+        var configured = configuration["PRISMEDIA_STASH_SCRAPER_INDEX_URL"] ??
+            configuration["Prismedia:StashScrapers:IndexUrl"];
+        if (!string.IsNullOrWhiteSpace(configured)) {
+            return configured;
+        }
+
+        if (string.Equals(
+                configuration["PRISMEDIA_STASH_SCRAPERS_DISABLED"] ??
+                configuration["Prismedia:StashScrapers:Disabled"],
+                "true",
+                StringComparison.OrdinalIgnoreCase)) {
+            return null;
+        }
+
+        return "https://stashapp.github.io/CommunityScrapers/stable/index.yml";
     }
 
     private static string? FindRepoRoot(string start) {

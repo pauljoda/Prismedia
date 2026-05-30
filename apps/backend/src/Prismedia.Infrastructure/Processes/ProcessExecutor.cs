@@ -53,6 +53,65 @@ public class ProcessExecutor {
     }
 
     /// <summary>
+    /// Starts a process, writes a payload to its standard input, and captures its output.
+    /// Used by scrapers that follow the Stash stdin/stdout JSON protocol.
+    /// </summary>
+    /// <param name="fileName">Executable name or absolute path.</param>
+    /// <param name="arguments">Arguments passed without shell interpolation.</param>
+    /// <param name="standardInput">Text written to the process standard input, then closed.</param>
+    /// <param name="environment">Optional environment variables to set for the process.</param>
+    /// <param name="workingDirectory">Optional working directory for the process.</param>
+    /// <param name="cancellationToken">Token used to cancel process execution.</param>
+    /// <returns>Exit code plus captured standard output and standard error.</returns>
+    public virtual async Task<ProcessExecutionResult> RunWithStdinAsync(
+        string fileName,
+        IReadOnlyList<string> arguments,
+        string standardInput,
+        IReadOnlyDictionary<string, string>? environment,
+        string? workingDirectory,
+        CancellationToken cancellationToken) {
+        var startInfo = new ProcessStartInfo(fileName) {
+            RedirectStandardInput = true,
+            RedirectStandardError = true,
+            RedirectStandardOutput = true,
+            UseShellExecute = false
+        };
+
+        if (!string.IsNullOrWhiteSpace(workingDirectory)) {
+            startInfo.WorkingDirectory = workingDirectory;
+        }
+
+        foreach (var argument in arguments) {
+            startInfo.ArgumentList.Add(argument);
+        }
+
+        foreach (var (key, value) in environment ?? new Dictionary<string, string>()) {
+            startInfo.Environment[key] = value;
+        }
+
+        using var process = Process.Start(startInfo) ??
+            throw new InvalidOperationException($"Failed to start '{fileName}'.");
+
+        try {
+            await process.StandardInput.WriteAsync(standardInput);
+            process.StandardInput.Close();
+
+            var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+            var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
+            await process.WaitForExitAsync(cancellationToken);
+
+            return new ProcessExecutionResult(
+                process.ExitCode,
+                await stdoutTask,
+                await stderrTask);
+        } catch (OperationCanceledException) when (!process.HasExited) {
+            process.Kill(entireProcessTree: true);
+            await process.WaitForExitAsync(CancellationToken.None);
+            throw;
+        }
+    }
+
+    /// <summary>
     /// Starts a process and streams standard output directly to a file.
     /// </summary>
     /// <param name="fileName">Executable name or absolute path.</param>

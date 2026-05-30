@@ -671,7 +671,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             db,
             catalog,
             new IdentifyMatchHintResolver(db),
-            new DotnetPluginProcessRunner(executor, new PluginCatalogOptions([], _tempRoot, "1.0.0")),
+            new IdentifyRunnerSelector([new DotnetPluginProcessRunner(executor, new PluginCatalogOptions([], _tempRoot, "1.0.0"))]),
             new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(_tempRoot)));
 
         var response = await service.IdentifyAsync(seriesId, "tmdb", null, hideNsfw: false, CancellationToken.None);
@@ -1577,7 +1577,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             db,
             catalog,
             new IdentifyMatchHintResolver(db),
-            new DotnetPluginProcessRunner(executor, new PluginCatalogOptions([], _tempRoot, "1.0.0")),
+            new IdentifyRunnerSelector([new DotnetPluginProcessRunner(executor, new PluginCatalogOptions([], _tempRoot, "1.0.0"))]),
             new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(_tempRoot)));
 
         var response = await service.IdentifyAsync(seriesId, "tmdb", null, hideNsfw: false, CancellationToken.None);
@@ -1694,7 +1694,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             db,
             new PluginCatalogService(db, new PluginCatalogOptions([pluginDir], _tempRoot, "1.0.0")),
             new IdentifyMatchHintResolver(db),
-            new DotnetPluginProcessRunner(executor, new PluginCatalogOptions([], _tempRoot, "1.0.0")),
+            new IdentifyRunnerSelector([new DotnetPluginProcessRunner(executor, new PluginCatalogOptions([], _tempRoot, "1.0.0"))]),
             new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(_tempRoot)));
 
     private sealed class CapturingProcessExecutor : ProcessExecutor {

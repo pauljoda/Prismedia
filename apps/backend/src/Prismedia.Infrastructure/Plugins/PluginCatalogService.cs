@@ -8,6 +8,7 @@ using Prismedia.Contracts.Plugins;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
+using Prismedia.Infrastructure.StashCompat;
 
 namespace Prismedia.Infrastructure.Plugins;
 
@@ -22,7 +23,8 @@ public sealed record PluginCatalogOptions(
     IReadOnlyList<string> DevPaths,
     string CacheRoot,
     string CurrentPrismediaVersion,
-    string? CommunityIndexUrl = null);
+    string? CommunityIndexUrl = null,
+    string? StashScraperIndexUrl = null);
 
 /// <summary>
 /// Resolved local plugin artifact ready to execute.
@@ -132,6 +134,13 @@ public sealed class PluginCatalogService : IPluginCatalogService {
     /// </summary>
     public async Task<PluginProvider?> InstallAsync(string providerId, CancellationToken cancellationToken) {
         var descriptor = await FindProviderAsync(providerId, null, cancellationToken);
+        if (descriptor is null && providerId.StartsWith("stash-", StringComparison.OrdinalIgnoreCase)) {
+            var installer = new StashScraperInstaller(_http, StashScrapersRoot(), _options.StashScraperIndexUrl);
+            if (await installer.InstallAsync(providerId, cancellationToken)) {
+                descriptor = await FindProviderAsync(providerId, null, cancellationToken);
+            }
+        }
+
         descriptor ??= await PullProviderAsync(providerId, cancellationToken);
         if (descriptor is null) {
             return null;
@@ -150,7 +159,9 @@ public sealed class PluginCatalogService : IPluginCatalogService {
         }
 
         config.DisplayName = descriptor.Manifest.Name;
-        config.ProviderType = ProviderType.ExternalProcess;
+        config.ProviderType = descriptor.Manifest.Runtime.Equals("stash-compat", StringComparison.OrdinalIgnoreCase)
+            ? ProviderType.StashCompat
+            : ProviderType.ExternalProcess;
         config.SettingsJson = JsonSerializer.Serialize(new InstalledPluginSettings(
             descriptor.Manifest.Version,
             descriptor.ManifestPath,
@@ -298,11 +309,71 @@ public sealed class PluginCatalogService : IPluginCatalogService {
             }
         }
 
+        descriptors.AddRange(await DiscoverStashScrapersAsync(cancellationToken));
+
         return descriptors
             .GroupBy(descriptor => descriptor.Manifest.Id, StringComparer.OrdinalIgnoreCase)
             .Select(group => group.OrderByDescending(descriptor => ParseVersion(descriptor.Manifest.Version)).First())
             .ToArray();
     }
+
+    /// <summary>
+    /// Discovers installed Stash community scraper YAML files and synthesizes a provider
+    /// manifest for each. Stash scrapers carry no Prismedia manifest, so capabilities and
+    /// supported kinds are derived from the YAML's declared actions.
+    /// </summary>
+    private async Task<IReadOnlyList<PluginDescriptor>> DiscoverStashScrapersAsync(CancellationToken cancellationToken) {
+        var descriptors = new List<PluginDescriptor>();
+        foreach (var root in EnumerateStashScraperRoots().Where(Directory.Exists).Distinct(StringComparer.OrdinalIgnoreCase)) {
+            foreach (var yamlPath in EnumerateStashScraperPaths(root)) {
+                cancellationToken.ThrowIfCancellationRequested();
+                string yaml;
+                try {
+                    yaml = await File.ReadAllTextAsync(yamlPath, cancellationToken);
+                } catch (IOException) {
+                    continue;
+                }
+
+                var manifest = StashScraperManifestFactory.TryCreate(yaml, yamlPath);
+                if (manifest is null) {
+                    continue;
+                }
+
+                var directory = Path.GetDirectoryName(yamlPath) ?? root;
+                descriptors.Add(new PluginDescriptor(manifest, yamlPath, directory, yamlPath));
+            }
+        }
+
+        return descriptors;
+    }
+
+    private IEnumerable<string> EnumerateStashScraperRoots() {
+        foreach (var path in _options.DevPaths) {
+            yield return path;
+        }
+
+        yield return StashScrapersRoot();
+    }
+
+    private string StashScrapersRoot() => Path.Combine(_options.CacheRoot, "scrapers");
+
+    /// <summary>
+    /// Lists Stash community scrapers available in the remote CommunityScrapers index for install.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>Available index entries; empty when the index cannot be fetched.</returns>
+    public async Task<IReadOnlyList<StashScraperListing>> ListStashScrapersAsync(CancellationToken cancellationToken) {
+        var installer = new StashScraperInstaller(_http, StashScrapersRoot(), _options.StashScraperIndexUrl);
+        var entries = await installer.ListAvailableAsync(cancellationToken);
+        return entries
+            .Select(entry => new StashScraperListing(entry.ProviderId, entry.Name, entry.Version))
+            .ToArray();
+    }
+
+    private static IEnumerable<string> EnumerateStashScraperPaths(string root) =>
+        Directory.EnumerateFiles(root, "*.*", SearchOption.AllDirectories)
+            .Where(path => path.EndsWith(".yml", StringComparison.OrdinalIgnoreCase) ||
+                path.EndsWith(".yaml", StringComparison.OrdinalIgnoreCase));
 
     private PluginProvider ToProvider(
         PluginDescriptor descriptor,

@@ -36,18 +36,18 @@ public sealed partial class EntityMetadataApplyService {
         }
 
         if (fields.Contains("tags")) {
-            await ReplaceTagsAsync(owner.Id, patch.Tags, now, cancellationToken);
+            await ReplaceTagsAsync(owner.Id, patch.Tags, now, markNsfw: false, cancellationToken);
         }
 
         if (fields.Contains("studio")) {
             await RemoveRelationshipAsync(owner.Id, "studio", cancellationToken);
             if (!string.IsNullOrWhiteSpace(patch.Studio)) {
-                await SetStudioAsync(owner.Id, patch.Studio, now, cancellationToken);
+                await SetStudioAsync(owner.Id, patch.Studio, now, markNsfw: false, cancellationToken);
             }
         }
 
         if (fields.Contains("credits")) {
-            await ReplaceCreditsAsync(owner.Id, patch.Credits, now, cancellationToken);
+            await ReplaceCreditsAsync(owner.Id, patch.Credits, now, markNsfw: false, cancellationToken);
         }
 
         owner.UpdatedAt = now;
@@ -58,6 +58,7 @@ public sealed partial class EntityMetadataApplyService {
         ISet<string> selected,
         EntityMetadataPatch patch,
         DateTimeOffset now,
+        bool markNsfw,
         CancellationToken cancellationToken) {
         if (!selected.Contains("tags") &&
             !(selected.Contains("studio") && !string.IsNullOrWhiteSpace(patch.Studio)) &&
@@ -71,15 +72,15 @@ public sealed partial class EntityMetadataApplyService {
         }
 
         if (selected.Contains("tags")) {
-            await ReplaceTagsAsync(owner.Id, patch.Tags, now, cancellationToken);
+            await ReplaceTagsAsync(owner.Id, patch.Tags, now, markNsfw, cancellationToken);
         }
 
         if (selected.Contains("studio") && !string.IsNullOrWhiteSpace(patch.Studio)) {
-            await SetStudioAsync(owner.Id, patch.Studio, now, cancellationToken);
+            await SetStudioAsync(owner.Id, patch.Studio, now, markNsfw, cancellationToken);
         }
 
         if (selected.Contains("credits")) {
-            await ReplaceCreditsAsync(owner.Id, patch.Credits, now, cancellationToken);
+            await ReplaceCreditsAsync(owner.Id, patch.Credits, now, markNsfw, cancellationToken);
         }
 
         owner.UpdatedAt = now;
@@ -99,16 +100,20 @@ public sealed partial class EntityMetadataApplyService {
             return;
         }
 
+        // Cascade children carry the provider's NSFW flag in their patch; propagate it to the
+        // people, studio, and tags created beneath them.
+        var markNsfw = patch.Flags?.IsNsfw == true;
+
         if (patch.Tags.Count > 0) {
-            await ReplaceTagsAsync(owner.Id, patch.Tags, now, cancellationToken);
+            await ReplaceTagsAsync(owner.Id, patch.Tags, now, markNsfw, cancellationToken);
         }
 
         if (!string.IsNullOrWhiteSpace(patch.Studio)) {
-            await SetStudioAsync(owner.Id, patch.Studio, now, cancellationToken);
+            await SetStudioAsync(owner.Id, patch.Studio, now, markNsfw, cancellationToken);
         }
 
         if (patch.Credits.Count > 0) {
-            await ReplaceCreditsAsync(owner.Id, patch.Credits, now, cancellationToken);
+            await ReplaceCreditsAsync(owner.Id, patch.Credits, now, markNsfw, cancellationToken);
         }
 
         owner.UpdatedAt = now;
@@ -138,25 +143,27 @@ public sealed partial class EntityMetadataApplyService {
         return null;
     }
 
-    private async Task ReplaceTagsAsync(Guid entityId, IReadOnlyList<string> tags, DateTimeOffset now, CancellationToken cancellationToken) {
+    private async Task ReplaceTagsAsync(Guid entityId, IReadOnlyList<string> tags, DateTimeOffset now, bool markNsfw, CancellationToken cancellationToken) {
         await RemoveRelationshipAsync(entityId, "tags", cancellationToken);
 
         var order = 0;
         foreach (var name in tags.Where(value => !string.IsNullOrWhiteSpace(value)).Select(value => value.Trim()).Distinct(StringComparer.OrdinalIgnoreCase)) {
             var tag = await FindEntityByKindAndTitleAsync("tag", name, cancellationToken)
                 ?? CreateEntity("tag", name, now);
+            MarkNsfwIfRequested(tag, markNsfw, now);
             AddRelationship(entityId, "tags", "Tags", tag.Id, tag.KindCode, order++, null, now);
         }
     }
 
-    private async Task SetStudioAsync(Guid entityId, string studioName, DateTimeOffset now, CancellationToken cancellationToken) {
+    private async Task SetStudioAsync(Guid entityId, string studioName, DateTimeOffset now, bool markNsfw, CancellationToken cancellationToken) {
         var studio = await FindEntityByKindAndTitleAsync("studio", studioName.Trim(), cancellationToken)
             ?? CreateEntity("studio", studioName.Trim(), now);
+        MarkNsfwIfRequested(studio, markNsfw, now);
         await RemoveRelationshipAsync(entityId, "studio", cancellationToken);
         AddRelationship(entityId, "studio", "Studio", studio.Id, studio.KindCode, 0, null, now);
     }
 
-    private async Task ReplaceCreditsAsync(Guid entityId, IReadOnlyList<CreditPatch> credits, DateTimeOffset now, CancellationToken cancellationToken) {
+    private async Task ReplaceCreditsAsync(Guid entityId, IReadOnlyList<CreditPatch> credits, DateTimeOffset now, bool markNsfw, CancellationToken cancellationToken) {
         await RemoveRelationshipAsync(entityId, "cast", cancellationToken);
 
         var order = 0;
@@ -167,6 +174,7 @@ public sealed partial class EntityMetadataApplyService {
             if (!resolvedPeople.TryGetValue(personName, out var person)) {
                 person = await FindEntityByKindAndTitleAsync("person", personName, cancellationToken)
                     ?? CreateEntity("person", personName, now);
+                MarkNsfwIfRequested(person, markNsfw, now);
                 resolvedPeople[personName] = person;
             }
 
@@ -191,6 +199,19 @@ public sealed partial class EntityMetadataApplyService {
             });
             AddRelationship(entityId, "cast", "Cast", credit.Person.Id, credit.Person.KindCode, credit.SortOrder, metadata, now);
         }
+    }
+
+    /// <summary>
+    /// Marks a related entity (person, studio, or tag) NSFW when an NSFW provider created or
+    /// linked it, so adult metadata never leaks a clean classification onto its relations.
+    /// </summary>
+    private static void MarkNsfwIfRequested(EntityRow entity, bool markNsfw, DateTimeOffset now) {
+        if (!markNsfw || entity.IsNsfw == true) {
+            return;
+        }
+
+        entity.IsNsfw = true;
+        entity.UpdatedAt = now;
     }
 
     private async Task RemoveRelationshipAsync(Guid entityId, string code, CancellationToken cancellationToken) {

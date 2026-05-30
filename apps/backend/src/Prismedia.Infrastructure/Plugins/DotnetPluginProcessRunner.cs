@@ -7,7 +7,10 @@ namespace Prismedia.Infrastructure.Plugins;
 /// <summary>
 /// Executes dotnet-process plugins as short-lived child processes.
 /// </summary>
-public sealed class DotnetPluginProcessRunner {
+public sealed class DotnetPluginProcessRunner : IIdentifyRunner {
+    /// <summary>Runtime code claimed by this runner.</summary>
+    public const string RuntimeCode = "dotnet-process";
+
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) {
         PropertyNameCaseInsensitive = true,
         WriteIndented = false
@@ -20,6 +23,10 @@ public sealed class DotnetPluginProcessRunner {
         _processes = processes;
         _options = options;
     }
+
+    /// <inheritdoc />
+    public bool CanRun(PluginDescriptor descriptor) =>
+        descriptor.Manifest.Runtime.Equals(RuntimeCode, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Runs one identify request and parses the plugin response from stdout.

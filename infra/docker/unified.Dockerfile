@@ -105,10 +105,23 @@ RUN set -eux; \
     libsndfile1 \
     postgresql-16 \
     postgresql-client-16 \
-    postgresql-contrib-16; \
+    postgresql-contrib-16 \
+    python3 \
+    python3-pip; \
   rm -rf /var/lib/apt/lists/* /tmp/jellyfin-ffmpeg.deb; \
   mkdir -p /data/postgres /data/cache /media /run/postgresql; \
   chown -R postgres:postgres /data/postgres /run/postgresql
+
+# Install common runtime dependencies for Stash community scraper python scripts.
+# Stash scrapers ship a shared `py_common` module alongside the scraper and commonly import
+# these packages; installing them here lets python-backed scrapers run in the unified image.
+RUN pip3 install --no-cache-dir --break-system-packages \
+    requests \
+    lxml \
+    beautifulsoup4 \
+    cloudscraper \
+    python-dateutil \
+    stashapp-tools
 
 # Copy audiowaveform binary from builder
 COPY --from=audiowaveform-builder /usr/local/bin/audiowaveform /usr/local/bin/audiowaveform

@@ -4,18 +4,16 @@
   import PluginPageShell from "./PluginPageShell.svelte";
   import PrismediaCommunityTab from "./PrismediaCommunityTab.svelte";
   import StashCommunityIndexTab from "./StashCommunityIndexTab.svelte";
-  import StashBoxEndpointsTab from "./StashBoxEndpointsTab.svelte";
+  import type { StashScraperRow } from "./StashCommunityIndexTab.svelte";
   import type { PluginTabDefinition, PluginsTab } from "./plugin-page-types";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import {
-    fetchCommunityIndex,
     fetchInstalledScrapers,
     fetchPluginUpdates,
     fetchPluginProviders,
-    fetchStashBoxEndpoints,
+    fetchStashScrapers,
     installPrismediaPlugin,
     installPlugin,
-    installScraper,
     removePlugin,
     savePluginAuthKey,
     savePluginAuth,
@@ -24,16 +22,11 @@
     toggleScraper,
     togglePlugin,
     updatePlugin,
-    createStashBoxEndpoint,
-    updateStashBoxEndpoint,
-    deleteStashBoxEndpoint,
-    testStashBoxEndpoint,
     type InstalledPlugin,
     type PluginUpdateStatus,
-    type CommunityIndexEntry,
+    type StashScraperListing,
     type PluginProvider,
     type ScraperPackage,
-    type StashBoxEndpoint,
   } from "$lib/api/plugins";
 
   const nsfw = useNsfw();
@@ -59,23 +52,13 @@
   let authValues = $state<Record<string, string>>({});
   let authSavingFor = $state<string | null>(null);
 
-  let indexEntries = $state<CommunityIndexEntry[]>([]);
+  let stashScrapers = $state<StashScraperListing[]>([]);
   let indexLoading = $state(false);
   let indexLoaded = $state(false);
   let installingId = $state<string | null>(null);
 
   let prismediaLoading = $state(false);
   let prismediaLoaded = $state(false);
-
-  let stashBoxEndpoints = $state<StashBoxEndpoint[]>([]);
-  let showStashBoxForm = $state(false);
-  let editingStashBox = $state<StashBoxEndpoint | null>(null);
-  let sbName = $state("");
-  let sbEndpoint = $state("");
-  let sbApiKey = $state("");
-  let sbSaving = $state(false);
-  let sbTesting = $state<string | null>(null);
-  let sbTestResult = $state<{ id: string; valid: boolean; error?: string } | null>(null);
 
   function flashMessage(msg: string) {
     message = msg;
@@ -106,13 +89,11 @@
 
   async function loadInstalled() {
     try {
-      const [scrapersRes, endpointsRes, providers] = await Promise.all([
+      const [scrapersRes, providers] = await Promise.all([
         fetchInstalledScrapers().catch(() => ({ packages: [] as ScraperPackage[] })),
-        fetchStashBoxEndpoints().catch(() => ({ endpoints: [] as StashBoxEndpoint[] })),
         fetchPluginProviders().catch(() => [] as PluginProvider[]),
       ]);
       installed = scrapersRes.packages;
-      stashBoxEndpoints = endpointsRes.endpoints;
       installedPlugins = [];
       pluginProviders = providers;
     } catch (err) {
@@ -122,14 +103,13 @@
     }
   }
 
-  async function loadStashIndex(force = false) {
+  async function loadStashIndex(_force = false) {
     indexLoading = true;
     error = null;
     try {
-      const res = await fetchCommunityIndex(force);
-      indexEntries = res.entries;
+      stashScrapers = await fetchStashScrapers();
     } catch (err) {
-      error = err instanceof Error ? err.message : "Failed to fetch community index";
+      error = err instanceof Error ? err.message : "Failed to fetch Stash community index";
     } finally {
       indexLoaded = true;
       indexLoading = false;
@@ -155,7 +135,7 @@
 
   // In SFW mode, force tab away from NSFW tabs.
   $effect(() => {
-    if (isSfw && (tab === "stash-index" || tab === "stashbox")) tab = "installed";
+    if (isSfw && tab === "stash-index") tab = "installed";
   });
 
   // Auto-load indices when switching tabs.
@@ -181,26 +161,22 @@
       await uninstallScraper(pkg.id);
       flashMessage(`Removed ${pkg.name}`);
       await loadInstalled();
-      indexEntries = indexEntries.map((e) =>
-        e.id === pkg.packageId ? { ...e, installed: false } : e,
-      );
     } catch (err) {
       error = err instanceof Error ? err.message : "Failed to remove";
     }
   }
 
-  async function handleScraperInstall(packageId: string) {
-    installingId = packageId;
+  async function handleScraperInstall(providerId: string) {
+    installingId = providerId;
     error = null;
     try {
-      await installScraper(packageId);
-      flashMessage(`Installed ${packageId}`);
-      await loadInstalled();
-      indexEntries = indexEntries.map((e) =>
-        e.id === packageId ? { ...e, installed: true } : e,
-      );
+      const provider = await installPlugin(providerId);
+      pluginProviders = pluginProviders.some((row) => row.id === provider.id)
+        ? pluginProviders.map((row) => (row.id === provider.id ? provider : row))
+        : [...pluginProviders, provider];
+      flashMessage(`Installed ${provider.name}`);
     } catch (err) {
-      error = err instanceof Error ? err.message : `Failed to install ${packageId}`;
+      error = err instanceof Error ? err.message : `Failed to install ${providerId}`;
     } finally {
       installingId = null;
     }
@@ -369,100 +345,29 @@
     }
   }
 
-  function openAddStashBox() {
-    editingStashBox = null;
-    sbName = "";
-    sbEndpoint = "";
-    sbApiKey = "";
-    sbTestResult = null;
-    showStashBoxForm = true;
-  }
-
-  function openEditStashBox(ep: StashBoxEndpoint) {
-    editingStashBox = ep;
-    sbName = ep.name;
-    sbEndpoint = ep.endpoint;
-    sbApiKey = "";
-    sbTestResult = null;
-    showStashBoxForm = true;
-  }
-
-  async function saveStashBox() {
-    sbSaving = true;
-    error = null;
-    try {
-      if (editingStashBox) {
-        const updates: { name?: string; endpoint?: string; apiKey?: string } = {};
-        if (sbName !== editingStashBox.name) updates.name = sbName;
-        if (sbEndpoint !== editingStashBox.endpoint) updates.endpoint = sbEndpoint;
-        if (sbApiKey) updates.apiKey = sbApiKey;
-        const updated = await updateStashBoxEndpoint(editingStashBox.id, updates);
-        stashBoxEndpoints = stashBoxEndpoints.map((e) => (e.id === updated.id ? updated : e));
-      } else {
-        if (!sbApiKey) {
-          error = "API key is required";
-          sbSaving = false;
-          return;
-        }
-        const created = await createStashBoxEndpoint({
-          name: sbName,
-          endpoint: sbEndpoint,
-          apiKey: sbApiKey,
-        });
-        stashBoxEndpoints = [...stashBoxEndpoints, created];
-      }
-      showStashBoxForm = false;
-      flashMessage(editingStashBox ? "Endpoint updated." : "Endpoint added.");
-    } catch (err) {
-      error = err instanceof Error ? err.message : "Failed to save";
-    } finally {
-      sbSaving = false;
-    }
-  }
-
-  async function testEndpoint(ep: StashBoxEndpoint) {
-    sbTesting = ep.id;
-    sbTestResult = null;
-    try {
-      const r = await testStashBoxEndpoint(ep.id);
-      sbTestResult = { id: ep.id, ...r };
-    } catch {
-      sbTestResult = { id: ep.id, valid: false, error: "Request failed" };
-    } finally {
-      sbTesting = null;
-    }
-  }
-
-  async function toggleEndpointEnabled(ep: StashBoxEndpoint) {
-    try {
-      await updateStashBoxEndpoint(ep.id, { enabled: !ep.enabled });
-      stashBoxEndpoints = stashBoxEndpoints.map((e) =>
-        e.id === ep.id ? { ...e, enabled: !e.enabled } : e,
-      );
-      flashMessage(`${ep.name} ${ep.enabled ? "disabled" : "enabled"}.`);
-    } catch (err) {
-      error = err instanceof Error ? err.message : "Failed to toggle";
-    }
-  }
-
-  async function deleteEndpoint(ep: StashBoxEndpoint) {
-    try {
-      await deleteStashBoxEndpoint(ep.id);
-      stashBoxEndpoints = stashBoxEndpoints.filter((e) => e.id !== ep.id);
-      flashMessage(`${ep.name} removed.`);
-    } catch (err) {
-      error = err instanceof Error ? err.message : "Failed to remove";
-    }
-  }
-
   /* ─── Derived filtering ───────────────────────────────────── */
 
   const visibleScrapers = $derived(isSfw ? installed.filter((p) => !p.isNsfw) : installed);
   const visibleInstalledPlugins = $derived(
     isSfw ? installedPlugins.filter((p) => !p.isNsfw) : installedPlugins,
   );
-  const visibleProviderPlugins = $derived(pluginProviders);
-  const visibleInstalledProviders = $derived(visibleProviderPlugins.filter((plugin) => plugin.installed));
+  // Stash scrapers are providers too, but they belong under the Stash Community tab — keep them
+  // out of the Prismedia Community catalog listing.
+  const prismediaProviders = $derived(pluginProviders.filter((plugin) => !plugin.id.startsWith("stash-")));
+  const visibleInstalledProviders = $derived(pluginProviders.filter((plugin) => plugin.installed));
+
+  // Resolve each available Stash scraper's installed state from the provider catalog.
+  const installedProviderIds = $derived(
+    new Set(pluginProviders.filter((plugin) => plugin.installed).map((plugin) => plugin.id)),
+  );
+  const stashScraperRows = $derived<StashScraperRow[]>(
+    stashScrapers.map((scraper) => ({
+      providerId: scraper.providerId,
+      name: scraper.name,
+      version: scraper.version,
+      installed: installedProviderIds.has(scraper.providerId),
+    })),
+  );
 
   const installedCount = $derived(
     visibleScrapers.length + visibleInstalledPlugins.length + visibleInstalledProviders.length,
@@ -475,19 +380,13 @@
         {
           key: "prismedia-index",
           label: "Prismedia Community",
-          count: visibleProviderPlugins.length || null,
+          count: prismediaProviders.length || null,
           nsfw: false,
         },
         {
           key: "stash-index",
           label: "Stash Community",
-          count: indexEntries.length || null,
-          nsfw: true,
-        },
-        {
-          key: "stashbox",
-          label: "StashBox Endpoints",
-          count: stashBoxEndpoints.length,
+          count: stashScrapers.length || null,
           nsfw: true,
         },
       ] as PluginTabDefinition[]
@@ -552,39 +451,18 @@
         onInstall={(plugin) => void handleProviderInstall(plugin)}
         onRefresh={() => void loadPrismediaIndex()}
         onSaveAuth={(plugin, values) => void handleProviderSaveAuth(plugin, values)}
-        plugins={visibleProviderPlugins}
+        plugins={prismediaProviders}
       />
     {/if}
     <!-- STASH COMMUNITY INDEX TAB -->
     {#if tab === "stash-index" && !isSfw}
       <StashCommunityIndexTab
-        entries={indexEntries}
+        entries={stashScraperRows}
         {installingId}
         loaded={indexLoaded}
         loading={indexLoading}
-        onInstall={(id) => void handleScraperInstall(id)}
+        onInstall={(providerId) => void handleScraperInstall(providerId)}
         onRefresh={() => void loadStashIndex(true)}
-      />
-    {/if}
-
-    <!-- STASHBOX ENDPOINTS TAB -->
-    {#if tab === "stashbox" && !isSfw}
-      <StashBoxEndpointsTab
-        bind:apiKey={sbApiKey}
-        bind:endpoint={sbEndpoint}
-        bind:name={sbName}
-        bind:showForm={showStashBoxForm}
-        editingEndpoint={editingStashBox}
-        endpoints={stashBoxEndpoints}
-        onAdd={openAddStashBox}
-        onDelete={(endpoint) => void deleteEndpoint(endpoint)}
-        onEdit={openEditStashBox}
-        onSave={() => void saveStashBox()}
-        onTest={(endpoint) => void testEndpoint(endpoint)}
-        onToggleEnabled={(endpoint) => void toggleEndpointEnabled(endpoint)}
-        saving={sbSaving}
-        testingId={sbTesting}
-        testResult={sbTestResult}
       />
     {/if}
 </PluginPageShell>
