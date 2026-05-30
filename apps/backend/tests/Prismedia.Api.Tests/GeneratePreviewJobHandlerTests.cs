@@ -22,7 +22,8 @@ public sealed class GeneratePreviewJobHandlerTests : IDisposable {
         var persistence = new PreviewPersistence(sourcePath) {
             Settings = new LibrarySettingsData(
                 AutoGenerateMetadata: false,
-                AutoGenerateFingerprints: false,
+                AutoGenerateOshash: false,
+                AutoGenerateMd5: false,
                 GeneratePhash: false,
                 AutoGeneratePreview: false,
                 GenerateTrickplay: true,
@@ -77,7 +78,8 @@ public sealed class GeneratePreviewJobHandlerTests : IDisposable {
         var persistence = new PreviewPersistence(sourcePath) {
             Settings = new LibrarySettingsData(
                 AutoGenerateMetadata: false,
-                AutoGenerateFingerprints: false,
+                AutoGenerateOshash: false,
+                AutoGenerateMd5: false,
                 GeneratePhash: false,
                 AutoGeneratePreview: true,
                 GenerateTrickplay: true,
@@ -202,7 +204,8 @@ public sealed class GeneratePreviewJobHandlerTests : IDisposable {
     private sealed class PreviewPersistence(string sourcePath) : IMediaProcessingStatePersistence, ILibraryScanRootPersistence {
         public LibrarySettingsData Settings { get; init; } = new(
             AutoGenerateMetadata: false,
-            AutoGenerateFingerprints: false,
+            AutoGenerateOshash: false,
+            AutoGenerateMd5: false,
             GeneratePhash: false,
             AutoGeneratePreview: true,
             GenerateTrickplay: true,

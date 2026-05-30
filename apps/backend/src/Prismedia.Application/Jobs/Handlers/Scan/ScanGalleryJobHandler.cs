@@ -87,7 +87,7 @@ public sealed class ScanGalleryJobHandler(
                         TargetEntityId: imageId.ToString(), TargetLabel: title), cancellationToken);
                 }
 
-                if (settings.AutoGenerateFingerprints && !await downstreamNeeds.HasEntityFingerprintAsync(imageId, FingerprintAlgorithm.Md5, cancellationToken)) {
+                if (await FingerprintGating.ShouldFingerprintAsync(downstreamNeeds, settings, imageId, cancellationToken)) {
                     await context.EnqueueIfNeededAsync(new EnqueueJobRequest(
                         JobType.FingerprintImage, TargetEntityKind: "image",
                         TargetEntityId: imageId.ToString(), TargetLabel: title), cancellationToken);

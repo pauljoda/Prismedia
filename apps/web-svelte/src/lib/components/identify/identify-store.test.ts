@@ -392,35 +392,32 @@ describe("IdentifyStore", () => {
     }
   });
 
-  it("auto-selects the best candidate when a queued search returns choices", async () => {
+  it("leaves an ambiguous queued search on the candidate picker without auto-selecting", async () => {
     const store = new IdentifyStore();
     const movie = entity("video-1", { kind: "video", title: "Friendship" });
     addIdentifyQueueItem.mockResolvedValue(queueItem("video-1", { title: "Friendship" }));
     fetchIdentifyEntity.mockResolvedValue(detail("video-1", { kind: "video", title: "Friendship" }));
-    searchIdentifyQueueItem
-      .mockResolvedValueOnce(queueItem("video-1", {
-        state: "search",
-        provider: "tmdb",
-        candidates: [
-          { externalIds: { tmdb: "123" }, title: "Friendship", year: 2025, overview: null, posterUrl: null, popularity: null },
-          { externalIds: { tmdb: "456" }, title: "Old Friendship", year: 1998, overview: null, posterUrl: null, popularity: null },
-        ],
-      }))
-      .mockResolvedValueOnce(queueItem("video-1", {
-        state: "proposal",
-        provider: "tmdb",
-        proposal: proposal("tmdb:movie:123", { targetKind: "video", title: "Friendship" }),
-      }));
+    searchIdentifyQueueItem.mockResolvedValue(queueItem("video-1", {
+      state: "search",
+      provider: "tmdb",
+      candidates: [
+        { externalIds: { tmdb: "123" }, title: "Friendship", year: 2025, overview: null, posterUrl: null, popularity: null },
+        { externalIds: { tmdb: "456" }, title: "Old Friendship", year: 1998, overview: null, posterUrl: null, popularity: null },
+      ],
+    }));
 
     const queued = await store.queueEntity(movie, "tmdb");
 
-    expect(searchIdentifyQueueItem).toHaveBeenNthCalledWith(1, "video-1", "tmdb", undefined);
-    expect(searchIdentifyQueueItem).toHaveBeenNthCalledWith(2, "video-1", "tmdb", { externalIds: { tmdb: "123" } });
-    expect(queued?.state).toBe("proposal");
-    expect(store.view.kind).toBe("review-parent");
+    // The search runs once and the result is left for the user to choose from —
+    // no follow-up call is made to pick a candidate on their behalf.
+    expect(searchIdentifyQueueItem).toHaveBeenCalledTimes(1);
+    expect(searchIdentifyQueueItem).toHaveBeenCalledWith("video-1", "tmdb", undefined);
+    expect(queued?.state).toBe("search");
+    expect(queued?.candidates).toHaveLength(2);
+    expect(store.view.kind).toBe("review-choice");
   });
 
-  it("moves a queued batch to the dashboard without opening each review", async () => {
+  it("queues every batch entity up front, then searches them on the dashboard", async () => {
     const store = new IdentifyStore();
     const first = entity("video-1", { kind: "video", title: "First" });
     const second = entity("video-2", { kind: "video", title: "Second" });
@@ -428,19 +425,36 @@ describe("IdentifyStore", () => {
       .mockResolvedValueOnce(queueItem("video-1", { title: "First" }))
       .mockResolvedValueOnce(queueItem("video-2", { title: "Second" }));
     fetchIdentifyEntity.mockResolvedValue(null);
+    // The first lands a confident proposal; the second is ambiguous and must
+    // stay in `search` for the user rather than being auto-resolved.
     searchIdentifyQueueItem.mockImplementation((entityId: string) =>
-      Promise.resolve(queueItem(entityId, {
-        state: "proposal",
-        provider: "tmdb",
-        proposal: proposal(`tmdb:${entityId}`, { targetKind: "video" }),
-      })),
+      Promise.resolve(
+        entityId === "video-1"
+          ? queueItem("video-1", {
+              state: "proposal",
+              provider: "tmdb",
+              proposal: proposal("tmdb:video-1", { targetKind: "video" }),
+            })
+          : queueItem("video-2", {
+              state: "search",
+              provider: "tmdb",
+              candidates: [
+                { externalIds: { tmdb: "9" }, title: "Second", year: 2024, overview: null, posterUrl: null, popularity: null },
+              ],
+            }),
+      ),
     );
 
     await store.startBulk("tmdb", [first, second]);
 
+    // Both entities are added before any search runs, and the user lands on the
+    // dashboard rather than inside a per-item review.
+    expect(addIdentifyQueueItem).toHaveBeenCalledTimes(2);
     expect(store.view.kind).toBe("dashboard");
     expect(store.queue.map((item) => item.entityId)).toEqual(["video-1", "video-2"]);
-    expect(store.queue.every((item) => item.state === "proposal")).toBe(true);
+    expect(store.queue.find((item) => item.entityId === "video-1")?.state).toBe("proposal");
+    expect(store.queue.find((item) => item.entityId === "video-2")?.state).toBe("search");
+    expect(store.bulkSearching).toBe(false);
   });
 
   it("accepts selected queued proposals and clears them from the queue", async () => {

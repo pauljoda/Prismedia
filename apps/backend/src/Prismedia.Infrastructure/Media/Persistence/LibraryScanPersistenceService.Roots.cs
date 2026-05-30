@@ -33,7 +33,8 @@ public sealed partial class LibraryScanPersistenceService {
             .GetGenerationSettingsAsync(cancellationToken);
         return new LibrarySettingsData(
             settings.AutoGenerateMetadata,
-            settings.AutoGenerateFingerprints,
+            settings.AutoGenerateOshash,
+            settings.AutoGenerateMd5,
             settings.GeneratePhash,
             settings.AutoGeneratePreview,
             settings.GenerateTrickplay,

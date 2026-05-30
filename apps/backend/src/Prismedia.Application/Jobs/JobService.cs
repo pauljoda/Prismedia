@@ -11,6 +11,7 @@ public sealed class JobService {
     private readonly IJobQueueService _queue;
     private readonly IMaintenancePersistence _maintenance;
     private readonly IDownstreamNeedsPersistence _downstreamNeeds;
+    private readonly ILibraryScanRootPersistence _scanRoots;
 
     /// <summary>
     /// Creates a job service over the durable queue and maintenance persistence ports.
@@ -18,13 +19,16 @@ public sealed class JobService {
     /// <param name="queue">Queue port implemented by infrastructure persistence.</param>
     /// <param name="maintenance">Maintenance persistence port used to enumerate active entities for bulk operations.</param>
     /// <param name="downstreamNeeds">Persistence port used to check existing fingerprints during bulk backfill.</param>
+    /// <param name="scanRoots">Persistence port used to read generation settings during bulk backfill.</param>
     public JobService(
         IJobQueueService queue,
         IMaintenancePersistence maintenance,
-        IDownstreamNeedsPersistence downstreamNeeds) {
+        IDownstreamNeedsPersistence downstreamNeeds,
+        ILibraryScanRootPersistence scanRoots) {
         _queue = queue;
         _maintenance = maintenance;
         _downstreamNeeds = downstreamNeeds;
+        _scanRoots = scanRoots;
     }
 
     /// <summary>
@@ -112,11 +116,17 @@ public sealed class JobService {
     }
 
     /// <summary>
-    /// Enqueues fingerprint generation jobs for every active media entity that does not yet have a
-    /// stored MD5 fingerprint and does not already have a fingerprint job pending. Used by the
-    /// operations dashboard "backfill fingerprints" maintenance action.
+    /// Enqueues fingerprint generation jobs for every active media entity that is missing an enabled
+    /// fingerprint (oshash and/or MD5, per generation settings) and does not already have a fingerprint
+    /// job pending. Used by the operations dashboard "backfill fingerprints" maintenance action. When
+    /// both fingerprint algorithms are disabled, this is a no-op.
     /// </summary>
     public async Task<BulkJobResponse> BackfillFingerprintsAsync(CancellationToken cancellationToken) {
+        var settings = await _scanRoots.GetSettingsAsync(cancellationToken);
+        if (!settings.AutoGenerateOshash && !settings.AutoGenerateMd5) {
+            return new BulkJobResponse(0, 0);
+        }
+
         var fingerprintKinds = new (EntityKind Kind, JobType JobType)[]
         {
             (EntityKind.Video, JobType.FingerprintVideo),
@@ -128,10 +138,8 @@ public sealed class JobService {
         foreach (var (kind, jobType) in fingerprintKinds) {
             var entityIds = await _maintenance.GetActiveEntityIdsByKindAsync(kind, cancellationToken);
             foreach (var entityId in entityIds) {
-                if (await _downstreamNeeds.HasEntityFingerprintAsync(
-                        entityId,
-                        FingerprintAlgorithm.Md5,
-                        cancellationToken)) {
+                if (!await Handlers.FingerprintGating.ShouldFingerprintAsync(
+                        _downstreamNeeds, settings, entityId, cancellationToken)) {
                     skipped++;
                     continue;
                 }
