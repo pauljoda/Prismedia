@@ -114,7 +114,7 @@ describe("EntityDetail", () => {
     ].map((path) => readFileSync(path, "utf8"));
 
     expect(detailSource).toContain(":global(.hero-badge)");
-    expect(detailSource).toContain("var(--color-overlay-glass-accent)");
+    expect(detailSource).toContain("color-mix(in srgb, var(--color-surface-2) 82%, var(--color-accent-900) 18%)");
     expect(detailSource).toContain("0 0 8px rgba(242, 194, 106, 0.08)");
     expect(detailSource).toContain("text-shadow: 0 0 6px rgba(242, 194, 106, 0.16)");
 
@@ -160,7 +160,7 @@ describe("EntityDetail", () => {
     expect(source).toContain("border-radius: 0 0 var(--radius-md, 10px) var(--radius-md, 10px);");
     expect(source).toContain("class=\"detail-content-card detail-content-card--standalone\"");
     expect(source).toContain("class=\"detail-tab-panel detail-content-card detail-content-card--tabbed\"");
-    expect(source).toContain("backdrop-filter: blur(4px);");
+    expect(source.match(/\.detail-content-card\s*\{[\s\S]*?\n  \}/)?.[0]).not.toContain("backdrop-filter");
     expect(source).toContain("z-index: 2;");
     expect(source).toContain("--detail-slideout-inset: 5px;");
     expect(source).toContain("margin-inline: var(--detail-slideout-inset);");

@@ -275,7 +275,7 @@
               onclick={(e) => handleMarkerClick(e, marker)}
             >
               <div class="w-px flex-1 bg-accent-500/50"></div>
-              <div class="mb-0.5 whitespace-nowrap rounded-md px-1.5 py-px text-[0.5rem] font-medium tracking-wide uppercase leading-tight bg-black/80 text-accent-300 border border-accent-500/30 backdrop-blur-sm transition-colors group-hover/marker:border-accent-400/70 group-hover/marker:text-accent-100 group-focus-visible/marker:border-accent-400/70 group-focus-visible/marker:text-accent-100">
+              <div class="mb-0.5 whitespace-nowrap rounded-md px-1.5 py-px text-[0.5rem] font-medium tracking-wide uppercase leading-tight bg-black/90 text-accent-300 border border-accent-500/30 transition-colors group-hover/marker:border-accent-400/70 group-hover/marker:text-accent-100 group-focus-visible/marker:border-accent-400/70 group-focus-visible/marker:text-accent-100">
                 {marker.title}
               </div>
             </button>

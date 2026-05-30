@@ -188,9 +188,7 @@
     border: 1px solid var(--sk-border);
     border-top: 0;
     border-radius: 0 0 var(--radius-md, 10px) var(--radius-md, 10px);
-    background: rgba(12, 15, 21, 0.72);
-    backdrop-filter: blur(var(--glass-blur-sm));
-    -webkit-backdrop-filter: blur(var(--glass-blur-sm));
+    background: linear-gradient(180deg, rgba(19, 23, 31, 0.88), rgba(12, 15, 21, 0.96));
   }
 
   .skeleton-tab {

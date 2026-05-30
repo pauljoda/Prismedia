@@ -9,7 +9,7 @@ The aesthetic is a refined industrial control room — Blackmagic DaVinci Resolv
 ## Core Principles
 
 - **Controlled radii.** Tight, consistent radii from a unified scale (`XS 4px` through `2XL 24px`). Sharp default corners and bubbly pills are both off-language.
-- **Material base, glass overlay.** Base surfaces are solid dark material layers. Floating and interactive elements use glass (backdrop-blur + semi-transparent fill) layered above them.
+- **Material base, shell glass.** Base surfaces, cards, chips, badges, list items, and moving components are solid dark material layers. Glass (`backdrop-filter` + translucent fill) is reserved for shell-level overlays, high-level chrome, and static asset treatments.
 - **Color as signal.** Accent colors appear only on active, selected, or critical states. When they appear, they glow.
 - **Gradient fills for depth.** Subtle linear gradients distinguish surface planes. No flat solid fills on containers.
 - **Mobile first, desktop first-class.** Layout, touch targets, and navigation begin from a mobile interaction model, then expand deliberately for desktop. Neither platform is a degraded version of the other.
@@ -32,14 +32,16 @@ Base surfaces are solid, near-black. Subtle linear gradients move from top-left 
 | `surface-3` | `#202734`  | Slate Glass | Elevated panels, drawers              |
 | `surface-4` | `#2a3038`  | Carbon    | Tooltips, dropdowns, contextual overlays|
 
-### Glass Layers — Floating Surfaces
+### Glass Layers — Shell Surfaces
 
-Glass layers sit above material surfaces. They require `backdrop-filter: blur()` and a semi-transparent fill. Use glass for anything that floats above the base content layer: interactive media items, modals, command palettes, sheets.
+Glass layers sit above material surfaces. They require `backdrop-filter: blur()` and a semi-transparent fill, so they are expensive when repeated or animated. Use glass only when content can move behind shell-level or high-level chrome: app shell rails, sticky toolbars, command palettes, menus, modals, sheets, player chrome, and lightbox controls. Static asset treatments may blur the asset itself, such as hero reflections or poster backdrops.
+
+Do not use blur or glass recipes on cards, chips, badges, grid thumbnails, list rows, progress meters, or other repeated/moving components. Those surfaces should use material gradients, borders, glow, and shadow.
 
 | Token     | Fill                          | Blur  | Usage                                  |
 |-----------|-------------------------------|-------|----------------------------------------|
-| `glass-1` | `rgba(17, 22, 29, 0.72)`     | `12px`| Media items, interactive list items    |
-| `glass-2` | `rgba(17, 22, 29, 0.80)`     | `16px`| Command palette, floating panels       |
+| `glass-1` | `rgba(17, 22, 29, 0.72)`     | `12px`| Toolbars, player chrome, lightbox bars |
+| `glass-2` | `rgba(17, 22, 29, 0.80)`     | `16px`| Command palette, menus, floating shell panels |
 | `glass-3` | `rgba(17, 22, 29, 0.92)`     | `24px`| Sheets, drawers, full-screen overlays  |
 
 ### Accent — Brass Scale
@@ -168,12 +170,11 @@ box-shadow: var(--shadow-panel);
 
 The machined bevel (inset top/left highlights) reads as a lit panel edge — a material signal without fake 3D.
 
-### Glass Panel (media item, interactive list item)
+### Material Card (cards, chips, rows)
 
 ```css
-background: var(--color-overlay-glass);
-backdrop-filter: blur(12px);
--webkit-backdrop-filter: blur(12px);
+background: linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0)),
+            var(--color-surface-2);
 border: 1px solid var(--border-default);
 border-radius: var(--radius-sm);
 box-shadow: var(--shadow-panel);
@@ -189,7 +190,7 @@ border-color: var(--border-accent-strong);
 box-shadow: var(--shadow-glow-accent-strong);
 ```
 
-### Glass Panel (floating surface — command palette, popover, drawer)
+### Glass Panel (shell surface — command palette, menu, drawer)
 
 ```css
 background: var(--color-overlay-glass);
@@ -369,7 +370,7 @@ Height: 3px. Controlled radius. Fill: accent selection gradient (`accent-700` �
 
 - **No default shadcn appearance** shipped without token and composition overrides.
 - **No purple-gradient startup aesthetic.**
-- **No flat solid fills** on major containers — always gradient surface or glass recipe.
+- **No flat solid fills** on major containers — use material gradients by default, and glass only for shell-level overlays or static asset treatments.
 - **No bright neon status colors** — vivid but controlled signal palette only.
 - **No hover-only primary actions.** Everything reachable by tap on mobile.
 - **No decorative glow** — glow appears only on selected, active, or processing states. Never for style alone.

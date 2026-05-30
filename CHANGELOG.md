@@ -33,6 +33,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Changed
+- Restricted blur-backed glass treatments to shell-level overlays, high-level chrome, and static asset effects so repeated cards, chips, badges, and progress surfaces use cheaper material styling.
 - Split the single "Fingerprints" generation setting into separate "OpenSubtitles hash (oshash)" and "MD5 checksum" toggles. oshash stays on by default because it only reads a small slice of each file, while MD5 — which must read every byte and is the slow part of fingerprinting on large libraries — is now off by default and only computed when you turn it on. Disabling MD5 now actually skips the full-file read instead of computing it and throwing it away.
 - Queuing a batch for Identify now adds every selected item to the review queue up front and returns you to the dashboard immediately, then searches them there with live progress, instead of holding you on the originating tab while each item resolves one by one.
 - Identify queuing once again leaves an ambiguous search on the candidate picker for you to choose from, rather than auto-selecting the best guess, while confident matches still land directly on a reviewable proposal.
@@ -40,7 +41,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Refreshed the Plugins page to match the app design language, replacing the row of plain stat cards with a grounded header and tab bar where each tab carries its own count.
 - Defaulted adaptive HLS transcoding to Auto so fresh installs choose a safe native encoder when available before falling back to software.
 - Replaced Identify provider chip groups with a searchable provider dropdown so large plugin libraries stay navigable.
-- Restyled detail content so tabbed and non-tabbed sections render as a slightly inset subtle glass card emerging from the hero without covering the tab row corners.
+- Restyled detail content so tabbed and non-tabbed sections render as a slightly inset material card emerging from the hero without covering the tab row corners.
 - Softened detail-page hero badge glow so collection, gallery, season, and book status chips feel calmer against artwork.
 - Moved collection mode controls into the collection editor settings rail and removed the duplicate visibility toggle from that panel.
 - Refined the collection editor layout with a cleaner header, focused settings panel, and rule previews shown through the shared entity grid.
@@ -57,7 +58,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Removed the summary stats cards from the Identify dashboard so the page starts with actionable queue content.
 - Removed the redundant plugin inventory panel from the Identify dashboard.
 - Simplified the Identify dashboard header by removing the redundant manual refresh action.
-- Updated entity grid filter count badges to use Prism Noir Luxe brass-on-glass styling.
+- Updated entity grid filter count badges to use Prism Noir Luxe brass material styling.
 - Moved common thumbnail badges for NSFW, rating, and episode/season position onto the thumbnail image so below-title chips can focus on entity-specific metadata.
 - Removed bitrate from entity detail metadata chips because it is better treated as playback/runtime information than stable descriptive metadata.
 - Updated README, docs, browser, and install branding surfaces to prefer the red accent logo while keeping the in-app logo mode-aware.
@@ -143,8 +144,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Fixed audio player playback polish so track ratings save on the 0-5 scale, audio library track rows can be rated directly, waveform generation preserves binary sample data, and the player progress bar stays inside its shell.
 - Fixed entity artwork edit mode so poster controls overlay existing artwork, empty headers use only the upload affordance, and artwork frames preserve each entity's thumbnail shape.
 - Fixed custom entity artwork precedence so user-managed and plugin-managed thumbnails are preferred over generated scan thumbnails.
-- Fixed the book progress card so the resume panel uses the Prism Noir Luxe glass surface, controlled radius, and brass progress treatment.
-- Fixed detail hero chips so gallery, collection, season, and book badges share the Prism Noir Luxe glass treatment.
+- Fixed the book progress card so the resume panel uses the Prism Noir Luxe material surface, controlled radius, and brass progress treatment.
+- Fixed detail hero chips so gallery, collection, season, and book badges share the Prism Noir Luxe material treatment.
 - Fixed gallery detail pages so their EntityDetail wrapper uses the same full-width layout behavior as other detail pages.
 - Fixed cast thumbnails so saved character and role names appear as centered chips under people names on series, season, and video detail pages.
 - Fixed empty entity detail tabs so pages without displayable detail content no longer show a tab strip or "No details available" placeholder.

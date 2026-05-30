@@ -544,11 +544,9 @@
     border-radius: var(--radius-md, 10px);
     background:
       linear-gradient(145deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0) 32%),
-      var(--color-overlay-glass);
+      var(--color-surface-2);
     color: var(--color-text-muted, #8a93a6);
     box-shadow: var(--shadow-elevated);
-    backdrop-filter: blur(var(--glass-blur-md));
-    -webkit-backdrop-filter: blur(var(--glass-blur-md));
   }
 
   .progress-section::before {

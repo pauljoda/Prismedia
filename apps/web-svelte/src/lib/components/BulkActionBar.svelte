@@ -43,7 +43,7 @@
 
 <div
   class={cn(
-    "glass-1 flex flex-wrap items-center gap-2 border border-border-subtle px-3 py-2 transition-[border-color,box-shadow] duration-moderate",
+    "surface-card no-lift flex flex-wrap items-center gap-2 border border-border-subtle px-3 py-2 transition-[border-color,box-shadow] duration-moderate",
     selectedCount > 0 && "border-border-accent shadow-[var(--shadow-glow-accent)]",
   )}
 >

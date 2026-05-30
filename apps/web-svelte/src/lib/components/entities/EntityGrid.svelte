@@ -1179,9 +1179,9 @@
     align-items: center;
     gap: 0.75rem;
     border: 1px solid var(--color-border-subtle, rgba(148, 158, 178, 0.07));
-    background: rgba(12, 15, 21, 0.96);
-    backdrop-filter: blur(var(--glass-blur-md));
-    -webkit-backdrop-filter: blur(var(--glass-blur-md));
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0)),
+      var(--color-surface-2, #11161d);
     border-radius: var(--radius-sm, 6px);
     box-shadow: 0 8px 40px rgba(0,0,0,0.60);
     color: var(--color-text-muted);

@@ -59,7 +59,7 @@
 >
   {#if fullChrome && timelineHover}
     <div
-      class="pointer-events-none absolute bottom-[calc(100%+0.6rem)] z-20 w-[min(11rem,54vw)] border border-border-default bg-[rgba(12,15,21,0.72)] p-1.5 text-center shadow-[0_2px_12px_rgba(0,0,0,0.35)] backdrop-blur-[12px] rounded-[10px] overflow-hidden"
+      class="pointer-events-none absolute bottom-[calc(100%+0.6rem)] z-20 w-[min(11rem,54vw)] border border-border-default bg-surface-2/95 p-1.5 text-center shadow-[0_2px_12px_rgba(0,0,0,0.35)] rounded-[10px] overflow-hidden"
       style:left="clamp(0%, {timelineHover.percent}%, 100%)"
       style:transform="translateX(clamp(-95%, calc(-1 * {timelineHover.percent}%), -5%))"
     >

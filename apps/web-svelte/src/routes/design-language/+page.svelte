@@ -118,9 +118,9 @@
   ];
 
   const glassLevels = [
-    { label: "glass-1", opacity: "72%", blur: "12px" },
-    { label: "glass-2", opacity: "82%", blur: "16px" },
-    { label: "glass-3", opacity: "92%", blur: "24px" },
+    { label: "glass-1", opacity: "72%", blur: "12px", use: "toolbar chrome" },
+    { label: "glass-2", opacity: "82%", blur: "16px", use: "menus and palettes" },
+    { label: "glass-3", opacity: "92%", blur: "24px", use: "sheets and overlays" },
   ];
 
   const statusBadges = [
@@ -401,6 +401,7 @@
               >
                 <span class="text-mono text-text-primary">{glass.label}</span>
                 <span class="text-mono-sm text-text-muted">{glass.opacity} · {glass.blur}</span>
+                <span class="text-mono-sm text-text-disabled">{glass.use}</span>
               </div>
             {/each}
           </div>
@@ -1100,10 +1101,10 @@
         </Panel>
         <Panel>
           <div class="p-5 space-y-2">
-            <h3 class="text-h3 text-text-accent">Material base + glass overlay</h3>
+            <h3 class="text-h3 text-text-accent">Material base + shell glass</h3>
             <p class="text-body text-text-secondary">
-              Solid dark surfaces as the ground layer; glass for floating and interactive elements.
-              Three escalating weights: glass-1 → glass-2 → glass-3.
+              Solid dark surfaces as the ground layer; glass only for shell-level overlays,
+              high-level chrome, and static asset treatments.
             </p>
           </div>
         </Panel>

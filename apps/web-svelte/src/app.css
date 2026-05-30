@@ -300,11 +300,11 @@
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 4px 24px rgba(0,0,0,0.40);
   }
 
-  /* Card: glass surface, hover transitions to accent */
+  /* Card: material surface, hover transitions to accent */
   .surface-card {
-    background: rgba(11, 14, 18, 0.72);
-    backdrop-filter: blur(var(--glass-blur-sm));
-    -webkit-backdrop-filter: blur(var(--glass-blur-sm));
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0)),
+      var(--color-surface-2);
     border: 1px solid var(--color-border-default);
     border-radius: var(--radius-sm);
     box-shadow: 0 2px 12px rgba(0,0,0,0.35);
@@ -449,7 +449,7 @@
     }
   }
 
-  /* Elevated: floating panels with glass blur */
+  /* Elevated: shell-level overlays and floating panels with glass blur */
   .surface-elevated {
     background: rgba(16, 20, 32, 0.82);
     backdrop-filter: blur(var(--glass-blur-md));
@@ -461,7 +461,8 @@
   }
 
   /*
-   * Glass layers — three escalating weights for floating surfaces.
+   * Glass layers — only for shell-level overlays, static asset treatments,
+   * and high-level chrome with content moving behind it.
    */
   .glass-1 {
     background: rgba(11, 14, 18, 0.72);
@@ -482,7 +483,7 @@
     border-radius: var(--radius-md);
   }
 
-  /* Glass chip: aggressive blur for elements floating over media */
+  /* Player chip: material plate for elements floating over media */
   .player-chip {
     background: rgba(17, 22, 29, 0.92);
     border: 1px solid rgba(255, 255, 255, 0.1);
@@ -514,7 +515,7 @@
      Three visual variants the user can switch between. All respect the
      Dark Room sharp-corner rule — no border-radius anywhere. */
 
-  /* Stylized: Prism Noir glass plate with accent glow. */
+  /* Stylized: Prism Noir material plate with accent glow. */
   .video-caption-stylized {
     background: rgba(8, 9, 12, 0.78);
     padding: 0.4rem 1rem;
@@ -850,7 +851,6 @@
     background: rgba(255, 255, 255, 0.1);
     box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
     overflow: hidden;
-    backdrop-filter: blur(var(--glass-blur-xs));
   }
 
   .meter-fill {

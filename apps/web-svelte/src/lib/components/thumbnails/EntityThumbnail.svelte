@@ -952,8 +952,7 @@
     width: 3.5rem;
     height: 3.5rem;
     border: 1px solid rgb(242 194 106 / 0.25);
-    background: rgb(0 0 0 / 0.3);
-    backdrop-filter: blur(var(--glass-blur-xs));
+    background: linear-gradient(160deg, rgb(18 20 24 / 0.96), rgb(7 8 11 / 0.98));
     box-shadow:
       inset 0 1px 0 rgb(255 255 255 / 0.08),
       0 0 24px rgb(0 0 0 / 0.35);
@@ -1085,7 +1084,6 @@
     letter-spacing: 0;
     min-height: 1.35rem;
     padding: 0.25rem 0.38rem;
-    backdrop-filter: blur(var(--glass-blur-sm));
   }
 
   .badge :global(svg) {
@@ -1140,7 +1138,6 @@
     cursor: pointer;
     opacity: 0;
     pointer-events: none;
-    backdrop-filter: blur(var(--glass-blur-sm));
     transition:
       opacity 120ms ease,
       border-color 120ms ease,

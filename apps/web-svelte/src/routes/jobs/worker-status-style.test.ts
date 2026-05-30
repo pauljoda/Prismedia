@@ -7,7 +7,7 @@ describe("jobs worker status styling", () => {
 
     expect(source).toContain("worker-status-badge");
     expect(source).toContain("border-radius: var(--radius-xs)");
-    expect(source).toContain("var(--color-overlay-glass-accent)");
+    expect(source).toContain("color-mix(in srgb, var(--color-surface-2) 82%, var(--color-accent-900) 18%)");
     expect(source).toContain("var(--shadow-glow-accent)");
     expect(source).not.toContain("border border-border-subtle bg-surface-2/60 px-2 py-1");
   });

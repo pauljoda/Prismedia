@@ -2101,7 +2101,7 @@
     border-radius: var(--radius-xs);
     background:
       linear-gradient(135deg, rgba(242, 194, 106, 0.11), rgba(255, 255, 255, 0.03)),
-      var(--color-overlay-glass-accent);
+      color-mix(in srgb, var(--color-surface-2) 82%, var(--color-accent-900) 18%);
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.06),
       0 0 8px rgba(242, 194, 106, 0.08);
@@ -2135,8 +2135,6 @@
     border-top: 0;
     border-radius: 0 0 var(--radius-md, 10px) var(--radius-md, 10px);
     background: var(--detail-glass);
-    backdrop-filter: blur(var(--detail-glass-blur));
-    -webkit-backdrop-filter: blur(var(--detail-glass-blur));
     scrollbar-width: thin;
   }
 
@@ -2189,19 +2187,12 @@
     border-top: 0;
     border-radius: 0 0 var(--radius-md, 10px) var(--radius-md, 10px);
     background:
-      linear-gradient(180deg, rgba(19, 23, 31, 0.66), rgba(12, 15, 21, 0.86)),
-      rgba(12, 15, 21, 0.72);
+      linear-gradient(180deg, rgba(19, 23, 31, 0.88), rgba(12, 15, 21, 0.96)),
+      var(--detail-surface);
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.035),
       0 10px 30px rgba(0, 0, 0, 0.24);
     overflow: hidden;
-  }
-
-  @supports ((backdrop-filter: blur(4px)) or (-webkit-backdrop-filter: blur(4px))) {
-    .detail-content-card {
-      backdrop-filter: blur(4px);
-      -webkit-backdrop-filter: blur(4px);
-    }
   }
 
   .detail-content-card--tabbed {

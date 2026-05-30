@@ -623,7 +623,7 @@
     border-radius: var(--radius-xs);
     background:
       linear-gradient(135deg, rgba(255, 255, 255, 0.055), transparent 42%),
-      var(--color-overlay-glass-light);
+      color-mix(in srgb, var(--color-surface-2) 86%, var(--color-surface-1) 14%);
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.055),
       0 2px 8px rgba(0, 0, 0, 0.32);
@@ -645,7 +645,7 @@
     border-color: var(--color-border-accent);
     background:
       linear-gradient(135deg, rgba(242, 194, 106, 0.14), rgba(242, 194, 106, 0.035) 44%, transparent 100%),
-      var(--color-overlay-glass-accent);
+      color-mix(in srgb, var(--color-surface-2) 82%, var(--color-accent-900) 18%);
     box-shadow:
       inset 0 1px 0 rgba(242, 194, 106, 0.13),
       var(--shadow-glow-accent);

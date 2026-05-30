@@ -2,14 +2,14 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 describe("book progress card styling", () => {
-  it("uses the Prism Noir Luxe glass card treatment", async () => {
+  it("uses the Prism Noir Luxe material card treatment", async () => {
     const source = await readFile("src/routes/books/[id]/+page.svelte", "utf8");
 
     expect(source).toContain(".progress-section");
     expect(source).toContain("border-radius: var(--radius-md");
-    expect(source).toContain("var(--color-overlay-glass)");
+    expect(source).toContain("var(--color-surface-2)");
     expect(source).toContain("var(--shadow-elevated)");
-    expect(source).toContain("backdrop-filter: blur(var(--glass-blur-md))");
+    expect(source.match(/\.progress-section\s*\{[\s\S]*?\n  \}/)?.[0]).not.toContain("backdrop-filter");
     expect(source).toContain(".progress-track");
     expect(source).toContain("border-radius: var(--radius-xs");
     expect(source).not.toContain("background: var(--color-glass-1");

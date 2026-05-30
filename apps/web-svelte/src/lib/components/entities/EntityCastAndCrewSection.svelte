@@ -131,8 +131,7 @@
     overflow: visible;
     border: 1px solid rgb(255 255 255 / 0.14);
     border-radius: var(--radius-xs, 4px);
-    background: rgb(11 11 12 / 0.72);
-    backdrop-filter: blur(8px);
+    background: linear-gradient(180deg, rgb(18 20 24 / 0.96), rgb(9 10 12 / 0.98));
     color: rgb(196 201 212 / 0.88);
     font-family: var(--font-mono, "JetBrains Mono", monospace);
     font-size: 0.58rem;
