@@ -548,10 +548,14 @@ public sealed class EntityMetadataApplyServiceTests {
     }
 
     [Fact]
-    public async Task ApplyProposalChildrenWithoutTargetEntityIdsCreatesStructuralBookChildren() {
+    public async Task ApplyProposalChildrenWithoutTargetEntityIdsMatchesExistingStructuralBookChildren() {
         await using var db = CreateContext();
         var bookId = Guid.Parse("11111111-2222-3333-4444-555555555555");
+        var volumeId = Guid.Parse("11111111-2222-3333-4444-555555555556");
+        var chapterId = Guid.Parse("11111111-2222-3333-4444-555555555557");
         SeedEntity(db, bookId, "book", "Manga");
+        SeedEntity(db, volumeId, "book-volume", "Volume 1", parentEntityId: bookId, sortOrder: 1);
+        SeedEntity(db, chapterId, "book-chapter", "Chapter 1", parentEntityId: volumeId, sortOrder: 1);
         await db.SaveChangesAsync();
 
         var proposal = new EntityMetadataProposal(
@@ -600,20 +604,66 @@ public sealed class EntityMetadataApplyServiceTests {
         var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
         await service.ApplyAsync(bookId, proposal, selectedFields: ["externalIds"], selectedImages: null, CancellationToken.None);
 
-        var volume = await db.Entities.SingleAsync(row => row.KindCode == "book-volume");
-        var chapter = await db.Entities.SingleAsync(row => row.KindCode == "book-chapter");
-        Assert.Equal(bookId, volume.ParentEntityId);
-        Assert.Equal(volume.Id, chapter.ParentEntityId);
+        var volume = await db.Entities.SingleAsync(row => row.Id == volumeId);
+        var chapter = await db.Entities.SingleAsync(row => row.Id == chapterId);
+        Assert.Equal("Volume 1", volume.Title);
+        Assert.Equal("Chapter 1", chapter.Title);
         Assert.Equal(1, volume.SortOrder);
         Assert.Equal(1, chapter.SortOrder);
-        Assert.Equal("chapter-1", (await db.EntityExternalIds.SingleAsync(row => row.EntityId == chapter.Id)).Value);
+        Assert.Equal("chapter-1", (await db.EntityExternalIds.SingleAsync(row => row.EntityId == chapterId)).Value);
+        Assert.Equal(3, await db.Entities.CountAsync());
     }
 
     [Fact]
-    public async Task ApplyBookCascadePromotesStructuralChildStudioRelationshipToBook() {
+    public async Task ApplyProposalChildrenWithoutTargetEntityIdsDoesNotCreateMissingStructuralBookChildren() {
+        await using var db = CreateContext();
+        var bookId = Guid.Parse("11111111-2222-3333-4444-555555555558");
+        SeedEntity(db, bookId, "book", "Manga");
+        await db.SaveChangesAsync();
+
+        var proposal = new EntityMetadataProposal(
+            ProposalId: "mangadex:manga-1",
+            Provider: "mangadex",
+            TargetKind: "book",
+            Confidence: 1,
+            MatchReason: "external-id",
+            Patch: EmptyPatch(),
+            Images: [],
+            Children:
+            [
+                new EntityMetadataProposal(
+                    ProposalId: "mangadex:manga-1:volume:1",
+                    Provider: "mangadex",
+                    TargetKind: "book-volume",
+                    Confidence: 0.8m,
+                    MatchReason: "volume-map",
+                    Patch: EmptyPatch() with {
+                        Title = "Volume 1",
+                        ExternalIds = new Dictionary<string, string> { ["mangadex"] = "manga-1", ["volume"] = "1" },
+                        Positions = new Dictionary<string, int> { ["volumeNumber"] = 1 }
+                    },
+                    Images: [],
+                    Children: [],
+                    Candidates: [])
+            ],
+            Candidates: []);
+
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+        await service.ApplyAsync(bookId, proposal, selectedFields: ["externalIds"], selectedImages: null, CancellationToken.None);
+
+        Assert.Equal([bookId], await db.Entities.Select(row => row.Id).ToArrayAsync());
+        Assert.Empty(await db.EntityExternalIds.ToArrayAsync());
+    }
+
+    [Fact]
+    public async Task ApplyBookCascadePromotesMatchedStructuralChildStudioRelationshipToBook() {
         await using var db = CreateContext();
         var bookId = Guid.Parse("22222222-3333-4444-5555-666666666666");
+        var volumeId = Guid.Parse("22222222-3333-4444-5555-666666666667");
+        var chapterId = Guid.Parse("22222222-3333-4444-5555-666666666668");
         SeedEntity(db, bookId, "book", "Manga");
+        SeedEntity(db, volumeId, "book-volume", "Volume 1", parentEntityId: bookId, sortOrder: 1);
+        SeedEntity(db, chapterId, "book-chapter", "Chapter 1", parentEntityId: volumeId, sortOrder: 1);
         await db.SaveChangesAsync();
 
         var proposal = new EntityMetadataProposal(
@@ -661,14 +711,6 @@ public sealed class EntityMetadataApplyServiceTests {
         var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
         await service.ApplyAsync(bookId, proposal, selectedFields: ["externalIds"], selectedImages: null, CancellationToken.None);
 
-        var volumeId = await db.Entities
-            .Where(row => row.KindCode == "book-volume")
-            .Select(row => row.Id)
-            .SingleAsync();
-        var chapterId = await db.Entities
-            .Where(row => row.KindCode == "book-chapter")
-            .Select(row => row.Id)
-            .SingleAsync();
         var studioId = await db.Entities
             .Where(row => row.KindCode == "studio" && row.Title == "MangaPlus")
             .Select(row => row.Id)

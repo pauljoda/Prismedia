@@ -428,15 +428,15 @@ public sealed class IdentifyPluginService : IIdentifyProviderService {
         }
 
         var localChildren = await LoadStructuralChildrenAsync(parentEntityId, cancellationToken);
-        if (localChildren.Count == 0) {
-            return proposal;
-        }
-
         var children = new List<EntityMetadataProposal>(proposalChildren.Count);
         foreach (var childProposal in proposalChildren) {
+            if (EntityMetadataProposalTraversal.IsRelationshipKind(childProposal.TargetKind)) {
+                children.Add(childProposal);
+                continue;
+            }
+
             var localChild = localChildren.FirstOrDefault(child => IsSameStructuralChild(child, childProposal));
             if (localChild is null) {
-                children.Add(childProposal);
                 continue;
             }
 

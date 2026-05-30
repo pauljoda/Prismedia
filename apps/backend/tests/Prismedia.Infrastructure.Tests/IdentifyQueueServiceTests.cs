@@ -99,6 +99,36 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
     }
 
     [Fact]
+    public async Task SearchAsyncKeepsOnlyProviderStructuralChildrenMatchedToLocalChildren() {
+        await using var db = CreateContext();
+        var seriesId = Guid.Parse("33333333-3333-3333-3333-333333333335");
+        var episode1Id = Guid.Parse("33333333-3333-3333-3333-333333333336");
+        var episode2Id = Guid.Parse("33333333-3333-3333-3333-333333333337");
+        SeedProvider(db);
+        SeedEntity(db, seriesId, "video-series", "Known Series");
+        var episode1 = SeedEntity(db, episode1Id, "video", "Local Episode 1");
+        episode1.ParentEntityId = seriesId;
+        episode1.SortOrder = 1;
+        var episode2 = SeedEntity(db, episode2Id, "video", "Local Episode 2");
+        episode2.ParentEntityId = seriesId;
+        episode2.SortOrder = 2;
+        await db.SaveChangesAsync();
+        var service = CreateQueueService(db, new StructuralChildrenProcessExecutor(), _tempRoot);
+        await service.AddAsync(seriesId, CancellationToken.None);
+
+        var item = await service.SearchAsync(
+            seriesId,
+            new IdentifyQueueSearchRequest("tmdb", new IdentifyQuery(null, null, new Dictionary<string, string> { ["tmdb"] = "series-1" })),
+            hideNsfw: false,
+            CancellationToken.None);
+
+        Assert.NotNull(item.Proposal);
+        Assert.Equal([episode1Id, episode2Id], item.Proposal.Children.Select(child => child.TargetEntityId.GetValueOrDefault()).ToArray());
+        Assert.Equal(["Episode 1", "Episode 2"], item.Proposal.Children.Select(child => child.Patch.Title ?? string.Empty).ToArray());
+        Assert.DoesNotContain(item.Proposal.Children, child => child.Patch.Title == "Episode 3");
+    }
+
+    [Fact]
     public async Task SearchAsyncKeepsManualTitleSearchInCandidateStateWhenChoiceRequired() {
         await using var db = CreateContext();
         var entityId = Guid.Parse("33333333-3333-3333-3333-333333333334");
@@ -513,6 +543,59 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
                 SerializeWireProposal(request.Entity.Id, $"{request.Entity.Title} identified"),
                 string.Empty);
         }
+    }
+
+    private sealed class StructuralChildrenProcessExecutor : ProcessExecutor {
+        public override async Task<ProcessExecutionResult> RunAsync(
+            string fileName,
+            IReadOnlyList<string> arguments,
+            IReadOnlyDictionary<string, string>? environment,
+            CancellationToken cancellationToken) {
+            var requestJson = await File.ReadAllTextAsync(arguments[1], cancellationToken);
+            var request = JsonSerializer.Deserialize<IdentifyPluginRequest>(requestJson, JsonOptions)!;
+            var proposal = new EntityMetadataProposal(
+                "tmdb:series:1",
+                "tmdb",
+                "video-series",
+                1,
+                "external-id",
+                EmptyPatch("Known Series identified"),
+                [],
+                [
+                    EpisodeProposal(1),
+                    EpisodeProposal(2),
+                    EpisodeProposal(3)
+                ],
+                [],
+                TargetEntityId: request.Entity.Id,
+                Relationships: []);
+
+            var wire = new {
+                ok = true,
+                result = new {
+                    type = "proposal",
+                    proposal,
+                    candidates = Array.Empty<object>()
+                },
+                error = (string?)null
+            };
+            return new ProcessExecutionResult(0, JsonSerializer.Serialize(wire, JsonOptions), string.Empty);
+        }
+
+        private static EntityMetadataProposal EpisodeProposal(int episodeNumber) =>
+            new(
+                $"tmdb:series:1:episode:{episodeNumber}",
+                "tmdb",
+                "video",
+                0.9m,
+                "cascade",
+                EmptyPatch($"Episode {episodeNumber}") with {
+                    Positions = new Dictionary<string, int> { ["episodeNumber"] = episodeNumber }
+                },
+                [],
+                [],
+                [],
+                Relationships: []);
     }
 
     private sealed class CanonicalCandidateProcessExecutor : ProcessExecutor {

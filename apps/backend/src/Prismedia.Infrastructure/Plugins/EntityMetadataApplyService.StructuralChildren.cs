@@ -26,7 +26,7 @@ public sealed partial class EntityMetadataApplyService {
 
             var childEntity = child.TargetEntityId is { } existingId
                 ? await _db.Entities.FirstOrDefaultAsync(row => row.Id == existingId && row.DeletedAt == null, cancellationToken)
-                : await FindOrCreateStructuralChildAsync(parentEntityId, child, now, cancellationToken);
+                : await FindStructuralChildAsync(parentEntityId, child, cancellationToken);
 
             if (childEntity is null) {
                 continue;
@@ -59,34 +59,21 @@ public sealed partial class EntityMetadataApplyService {
         }
     }
 
-    private async Task<EntityRow?> FindOrCreateStructuralChildAsync(
+    private async Task<EntityRow?> FindStructuralChildAsync(
         Guid parentEntityId,
         EntityMetadataProposal child,
-        DateTimeOffset now,
         CancellationToken cancellationToken) {
         if (string.IsNullOrWhiteSpace(child.TargetKind) ||
-            !EntityKindRegistry.TryGet(child.TargetKind, out _) ||
-            string.IsNullOrWhiteSpace(child.Patch.Title)) {
+            !EntityKindRegistry.TryGet(child.TargetKind, out _)) {
             return null;
         }
 
-        var existing = await FindStructuralChildByExternalIdsAsync(parentEntityId, child, cancellationToken)
-            ?? await FindStructuralChildByTitleAsync(parentEntityId, child.TargetKind, child.Patch.Title, cancellationToken);
-        if (existing is not null) {
+        var existing = await FindStructuralChildByExternalIdsAsync(parentEntityId, child, cancellationToken);
+        if (existing is not null || string.IsNullOrWhiteSpace(child.Patch.Title)) {
             return existing;
         }
 
-        var entity = new EntityRow {
-            Id = Guid.NewGuid(),
-            KindCode = child.TargetKind,
-            Title = child.Patch.Title.Trim(),
-            ParentEntityId = parentEntityId,
-            SortOrder = EntityMetadataPositionRules.SortOrderFor(child.TargetKind, EntityMetadataPositionRules.Normalize(child.Patch.Positions)),
-            CreatedAt = now,
-            UpdatedAt = now
-        };
-        _db.Entities.Add(entity);
-        return entity;
+        return await FindStructuralChildByTitleAsync(parentEntityId, child.TargetKind, child.Patch.Title, cancellationToken);
     }
 
     private async Task<EntityRow?> FindStructuralChildByExternalIdsAsync(
