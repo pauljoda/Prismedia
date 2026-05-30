@@ -11,7 +11,8 @@ namespace Prismedia.Application.Jobs;
 /// </summary>
 public sealed class JobScheduler(
     IServiceScopeFactory scopeFactory,
-    ILogger<JobScheduler> logger) : BackgroundService {
+    ILogger<JobScheduler> logger,
+    TimeProvider? timeProvider = null) : BackgroundService {
     private static readonly TimeSpan CheckInterval = TimeSpan.FromSeconds(60);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
@@ -30,7 +31,7 @@ public sealed class JobScheduler(
         }
     }
 
-    private async Task ScheduleRecurringScansAsync(CancellationToken cancellationToken) {
+    internal async Task ScheduleRecurringScansAsync(CancellationToken cancellationToken) {
         await using var scope = scopeFactory.CreateAsyncScope();
         var settings = scope.ServiceProvider.GetRequiredService<SettingsService>();
         var queue = scope.ServiceProvider.GetRequiredService<IJobQueueService>();
@@ -42,15 +43,26 @@ public sealed class JobScheduler(
 
         var roots = await settings.ListLibraryRootsAsync(cancellationToken);
         var scanInterval = TimeSpan.FromMinutes(scanSettings.IntervalMinutes);
-        var now = DateTimeOffset.UtcNow;
+        var now = (timeProvider ?? TimeProvider.System).GetUtcNow();
+        var windowStart = GetWindowStart(now, scanInterval);
+        if (now - windowStart >= CheckInterval) {
+            return;
+        }
 
         foreach (var root in roots) {
             if (!root.Enabled) {
                 continue;
             }
 
-            var lastScanned = root.LastScannedAt;
-            if (lastScanned is not null && now - lastScanned < scanInterval) {
+            if (!LibraryScanJobs.ScanJobTypesFor(
+                root.ScanVideos,
+                root.ScanImages,
+                root.ScanAudio,
+                root.ScanBooks).Any()) {
+                continue;
+            }
+
+            if (root.LastScannedAt is not null && root.LastScannedAt >= windowStart) {
                 continue;
             }
 
@@ -64,9 +76,16 @@ public sealed class JobScheduler(
                 root.ScanBooks,
                 cancellationToken);
 
+            await settings.MarkLibraryRootScanTriggeredAsync(root.Id, now, cancellationToken);
+
             if (queued > 0) {
                 logger.LogInformation("Scheduled {Count} scan job(s) for root '{Label}'.", queued, root.Label);
             }
         }
+    }
+
+    private static DateTimeOffset GetWindowStart(DateTimeOffset now, TimeSpan interval) {
+        var ticksIntoWindow = now.UtcTicks % interval.Ticks;
+        return new DateTimeOffset(now.UtcDateTime.AddTicks(-ticksIntoWindow), TimeSpan.Zero);
     }
 }

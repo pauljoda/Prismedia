@@ -392,6 +392,28 @@ public sealed class SettingsService {
     }
 
     /// <summary>
+    /// Records that a recurring scan was triggered for one watched media root.
+    /// The timestamp marks scheduler intent rather than scan completion.
+    /// </summary>
+    /// <param name="id">Watched root identifier.</param>
+    /// <param name="triggeredAt">UTC time when the scheduler triggered the scan.</param>
+    /// <param name="cancellationToken">Token to cancel the persistence operation.</param>
+    public async Task<LibraryRoot?> MarkLibraryRootScanTriggeredAsync(
+        Guid id,
+        DateTimeOffset triggeredAt,
+        CancellationToken cancellationToken) {
+        var current = await _persistence.GetLibraryRootAsync(id, cancellationToken);
+        if (current is null) {
+            return null;
+        }
+
+        return await _persistence.SaveLibraryRootAsync(current with {
+            LastScannedAt = triggeredAt,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        }, cancellationToken);
+    }
+
+    /// <summary>
     /// Removes one watched media root.
     /// </summary>
     public Task<bool> DeleteLibraryRootAsync(Guid id, CancellationToken cancellationToken) =>

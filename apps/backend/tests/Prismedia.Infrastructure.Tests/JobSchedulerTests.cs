@@ -1,0 +1,209 @@
+using System.Text.Json;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
+using Prismedia.Application.Jobs;
+using Prismedia.Application.Settings;
+using Prismedia.Contracts.Settings;
+using Prismedia.Domain.Entities;
+
+namespace Prismedia.Infrastructure.Tests;
+
+public sealed class JobSchedulerTests {
+    [Fact]
+    public async Task ScheduleRecurringScansAsyncSkipsRootAwayFromScheduleBoundary() {
+        var rootId = Guid.NewGuid();
+        var settings = new SchedulerSettingsPersistence([
+            CreateRoot(rootId, lastScannedAt: null)
+        ]);
+        var queue = new SchedulerJobQueue();
+        await using var provider = CreateProvider(settings, queue);
+        var scheduler = CreateScheduler(provider, new DateTimeOffset(2026, 5, 30, 10, 37, 0, TimeSpan.Zero));
+
+        await scheduler.ScheduleRecurringScansAsync(CancellationToken.None);
+
+        Assert.Empty(queue.Enqueued);
+        Assert.Null(settings.Roots.Single().LastScannedAt);
+    }
+
+    [Fact]
+    public async Task ScheduleRecurringScansAsyncQueuesRootOnScheduleBoundaryAndRecordsTrigger() {
+        var rootId = Guid.NewGuid();
+        var triggeredAt = new DateTimeOffset(2026, 5, 30, 11, 0, 15, TimeSpan.Zero);
+        var settings = new SchedulerSettingsPersistence([
+            CreateRoot(rootId, lastScannedAt: null)
+        ]);
+        var queue = new SchedulerJobQueue();
+        await using var provider = CreateProvider(settings, queue);
+        var scheduler = CreateScheduler(provider, triggeredAt);
+
+        await scheduler.ScheduleRecurringScansAsync(CancellationToken.None);
+
+        var request = Assert.Single(queue.Enqueued);
+        Assert.Equal(JobType.ScanLibrary, request.Type);
+        Assert.Equal(rootId.ToString(), request.TargetEntityId);
+        Assert.Equal(triggeredAt, settings.Roots.Single().LastScannedAt);
+    }
+
+    [Fact]
+    public async Task ScheduleRecurringScansAsyncSkipsRootAlreadyTriggeredInCurrentWindow() {
+        var rootId = Guid.NewGuid();
+        var settings = new SchedulerSettingsPersistence([
+            CreateRoot(rootId, lastScannedAt: new DateTimeOffset(2026, 5, 30, 11, 0, 5, TimeSpan.Zero))
+        ]);
+        var queue = new SchedulerJobQueue();
+        await using var provider = CreateProvider(settings, queue);
+        var scheduler = CreateScheduler(provider, new DateTimeOffset(2026, 5, 30, 11, 0, 20, TimeSpan.Zero));
+
+        await scheduler.ScheduleRecurringScansAsync(CancellationToken.None);
+
+        Assert.Empty(queue.Enqueued);
+    }
+
+    private static ServiceProvider CreateProvider(
+        ISettingsPersistence settings,
+        IJobQueueService queue) {
+        var services = new ServiceCollection();
+        services.AddSingleton(settings);
+        services.AddScoped<SettingsService>();
+        services.AddSingleton(queue);
+        return services.BuildServiceProvider();
+    }
+
+    private static JobScheduler CreateScheduler(ServiceProvider provider, DateTimeOffset now) =>
+        new(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<JobScheduler>.Instance,
+            new FixedTimeProvider(now));
+
+    private static LibraryRoot CreateRoot(Guid id, DateTimeOffset? lastScannedAt) {
+        var now = DateTimeOffset.UtcNow;
+        return new LibraryRoot(
+            id,
+            "/media/library",
+            "Library",
+            Enabled: true,
+            Recursive: true,
+            ScanVideos: true,
+            ScanImages: false,
+            ScanAudio: false,
+            ScanBooks: false,
+            IsNsfw: false,
+            LastScannedAt: lastScannedAt,
+            CreatedAt: now,
+            UpdatedAt: now);
+    }
+
+    private sealed class SchedulerSettingsPersistence(IEnumerable<LibraryRoot> roots) : ISettingsPersistence {
+        private readonly List<LibraryRoot> _roots = roots.ToList();
+
+        public IReadOnlyList<LibraryRoot> Roots => _roots;
+
+        public Task<IReadOnlyDictionary<string, string>> LoadSettingOverridesAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyDictionary<string, string>>(new Dictionary<string, string> {
+                [AppSettingKeys.ScanAutoScanEnabled] = JsonSerializer.Serialize(true),
+                [AppSettingKeys.ScanIntervalMinutes] = JsonSerializer.Serialize(60),
+            });
+
+        public Task SaveSettingOverrideAsync(string key, string valueJson, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public Task SaveSettingOverridesAsync(IReadOnlyDictionary<string, string> values, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public Task DeleteSettingOverrideAsync(string key, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public Task<IReadOnlyList<LibraryRoot>> ListLibraryRootsAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<LibraryRoot>>(_roots.ToArray());
+
+        public Task<LibraryRoot?> GetLibraryRootAsync(Guid id, CancellationToken cancellationToken) =>
+            Task.FromResult(_roots.FirstOrDefault(root => root.Id == id));
+
+        public Task<LibraryRoot> AddLibraryRootAsync(LibraryRoot state, CancellationToken cancellationToken) =>
+            Task.FromResult(state);
+
+        public Task<LibraryRoot> SaveLibraryRootAsync(LibraryRoot state, CancellationToken cancellationToken) {
+            var index = _roots.FindIndex(root => root.Id == state.Id);
+            if (index >= 0) {
+                _roots[index] = state;
+            }
+
+            return Task.FromResult(state);
+        }
+
+        public Task<bool> DeleteLibraryRootAsync(Guid id, CancellationToken cancellationToken) =>
+            Task.FromResult(false);
+    }
+
+    private sealed class SchedulerJobQueue : IJobQueueService {
+        public List<EnqueueJobRequest> Enqueued { get; } = [];
+
+        public Task<bool> HasPendingAsync(JobType type, string? targetEntityId, CancellationToken cancellationToken) =>
+            Task.FromResult(false);
+
+        public Task<JobRunSnapshot> EnqueueAsync(EnqueueJobRequest request, CancellationToken cancellationToken) {
+            Enqueued.Add(request);
+            return Task.FromResult(NewSnapshot(request.Type));
+        }
+
+        public Task<JobRunSnapshot> EnqueueAsync(JobType type, CancellationToken cancellationToken) =>
+            Task.FromResult(NewSnapshot(type));
+
+        public Task<IReadOnlyList<JobRunSnapshot>> ListAsync(bool hideNsfw, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<JobRunSnapshot>>([]);
+
+        public Task<int> EnqueueBatchAsync(IReadOnlyList<EnqueueJobRequest> requests, CancellationToken cancellationToken) =>
+            Task.FromResult(0);
+
+        public Task<int> CancelAsync(JobType? type, CancellationToken cancellationToken) =>
+            Task.FromResult(0);
+
+        public Task<bool> CancelRunAsync(Guid id, CancellationToken cancellationToken) =>
+            Task.FromResult(false);
+
+        public Task<int> ClearFailuresAsync(JobType? type, CancellationToken cancellationToken) =>
+            Task.FromResult(0);
+
+        public Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken) =>
+            Task.FromResult<JobRunSnapshot?>(null);
+
+        public Task<int> RecoverStaleRunningAsync(string currentWorkerId, TimeSpan staleAfter, CancellationToken cancellationToken) =>
+            Task.FromResult(0);
+
+        public Task UpdateProgressAsync(Guid id, int progress, string? message, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public Task CompleteAsync(Guid id, string? message, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public Task FailAsync(Guid id, string message, TimeSpan retryDelay, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public Task<IReadOnlyList<JobQueueCount>> GetQueueCountsAsync(bool hideNsfw, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<JobQueueCount>>([]);
+
+        public Task<int> PruneHistoryAsync(TimeSpan retention, CancellationToken cancellationToken) =>
+            Task.FromResult(0);
+
+        private static JobRunSnapshot NewSnapshot(JobType type) {
+            var now = DateTimeOffset.UtcNow;
+            return new JobRunSnapshot(
+                Guid.NewGuid(),
+                type,
+                JobRunStatus.Queued,
+                Progress: 0,
+                Message: null,
+                PayloadJson: "{}",
+                TargetEntityKind: null,
+                TargetEntityId: null,
+                TargetLabel: null,
+                CreatedAt: now,
+                StartedAt: null,
+                FinishedAt: null);
+        }
+    }
+
+    private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider {
+        public override DateTimeOffset GetUtcNow() => now;
+    }
+}
