@@ -101,6 +101,9 @@ export class IdentifyStore {
   applyProgress = $state<IdentifyApplyProgress | null>(null);
   bulkSession = $state<IdentifyBulkSession | null>(null);
   bulkStarting = $state(false);
+  bulkSearching = $state(false);
+  bulkSearchDone = $state(0);
+  bulkSearchTotal = $state(0);
   bulkAccepting = $state(false);
   bulkAcceptDone = $state(0);
   bulkAcceptTotal = $state(0);
@@ -399,21 +402,90 @@ export class IdentifyStore {
     }
   }
 
+  /**
+   * Queues a batch for identify in two phases so the originating tab is never
+   * held open while matches resolve:
+   *
+   * 1. Every selected entity is added to the queue up front (a fast insert with
+   *    no provider lookup), each surfacing in the queue as it lands, and the
+   *    user is dropped back on the dashboard immediately.
+   * 2. The queued items are then searched one at a time on the dashboard. Items
+   *    with a confident match become reviewable proposals; anything ambiguous
+   *    stays in `search` for the user to pick a candidate — nothing is
+   *    auto-selected on their behalf.
+   */
   async startBulk(providerId: string, entities: EntityCard[]) {
     this.bulkStarting = true;
     this.error = null;
+    const pending: IdentifyQueueItem[] = [];
     try {
       for (const entity of entities) {
-        await this.queueEntity(entity, providerId, { navigate: false });
+        const queued = await this.#addEntityToQueue(entity, providerId);
+        if (queued) pending.push(queued);
       }
     } catch (err) {
       this.error = readError(err);
     } finally {
       this.bulkStarting = false;
     }
-    // Queuing a batch should drop the user back on the dashboard queue for a
-    // quick glance rather than jumping into each item's review as it resolves.
+
+    // Hand the user back to the dashboard now that everything is queued, then
+    // run the searches there so the queue fills in without pinning the tab.
     this.navigateToDashboard();
+    await this.#processQueueSearches(pending, providerId);
+  }
+
+  /**
+   * Adds a single entity to the queue without running a provider search. The
+   * passed card is reused for the queue row so the dashboard can render it
+   * immediately, and the chosen provider is recorded as a hint for the later
+   * search pass.
+   */
+  async #addEntityToQueue(entity: EntityCard, providerId?: string | null): Promise<IdentifyQueueItem | null> {
+    const item = await addIdentifyQueueItem(entity.id);
+    const mapped = queueItemFromApi(item, entity);
+    mapped.provider = item.provider ?? providerId ?? null;
+    this.#upsertQueueItem(mapped);
+    return mapped;
+  }
+
+  /**
+   * Runs the provider search for each freshly queued item in turn, leaving the
+   * result in whatever state the provider returned (proposal or candidate
+   * search). Items that were already resolved or removed are skipped.
+   */
+  async #processQueueSearches(items: IdentifyQueueItem[], providerId?: string | null) {
+    const searchable = items.filter((item) => item.state === "search" && item.candidates.length === 0);
+    if (searchable.length === 0) return;
+    this.bulkSearching = true;
+    this.bulkSearchDone = 0;
+    this.bulkSearchTotal = searchable.length;
+    this.error = null;
+    try {
+      for (const item of searchable) {
+        const current = this.queue.find((queued) => queued.entityId === item.entityId);
+        if (!current || current.state !== "search" || current.candidates.length > 0) {
+          this.bulkSearchDone++;
+          continue;
+        }
+        try {
+          await this.#runQueueSearch(current, providerId);
+        } catch (err) {
+          this.error = readError(err);
+        }
+        this.bulkSearchDone++;
+      }
+    } finally {
+      this.bulkSearching = false;
+    }
+  }
+
+  /** Searches a queued item without navigating, leaving ambiguous results in `search` for review. */
+  async #runQueueSearch(item: IdentifyQueueItem, providerId?: string | null) {
+    const selectedProvider = providerId ?? item.provider;
+    return selectedProvider
+      ? await this.identifyEntity(item.entity, selectedProvider, undefined, { navigate: false })
+      : await this.#identifyEntityWithAvailableProviders(item, { navigate: false });
   }
 
   /**
@@ -729,6 +801,12 @@ export class IdentifyStore {
     }
   }
 
+  /**
+   * Runs the provider search for a freshly queued item, leaving the result in
+   * whatever state the provider returned. A confident match becomes a reviewable
+   * proposal; an ambiguous result stays in `search` so the user picks the
+   * candidate themselves rather than having one chosen for them.
+   */
   async #autoIdentifyQueueItem(
     item: IdentifyQueueItem,
     providerId?: string | null,
@@ -739,30 +817,9 @@ export class IdentifyStore {
     }
 
     const selectedProvider = providerId ?? item.provider;
-    const result = selectedProvider
+    return selectedProvider
       ? await this.identifyEntity(item.entity, selectedProvider, undefined, options)
       : await this.#identifyEntityWithAvailableProviders(item, options);
-
-    return await this.#autoSelectBestCandidate(result, options);
-  }
-
-  /**
-   * When a search resolves to a candidate list instead of a confident proposal, automatically
-   * pick the top-ranked candidate so queuing always lands on a reviewable proposal. The user can
-   * still revisit the item and re-run the search to choose a different match.
-   */
-  async #autoSelectBestCandidate(
-    result: IdentifyQueueItem | null,
-    options: IdentifyResolveOptions,
-  ): Promise<IdentifyQueueItem | null> {
-    if (!result || result.state !== "search" || result.candidates.length === 0) {
-      return result;
-    }
-
-    const providerId = result.provider;
-    if (!providerId) return result;
-
-    return await this.identifyWithCandidate(result.entity, providerId, result.candidates[0], options) ?? result;
   }
 
   async #identifyEntityWithAvailableProviders(item: IdentifyQueueItem, options: IdentifyResolveOptions = {}) {

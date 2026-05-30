@@ -33,8 +33,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Changed
-- Queuing a batch for Identify now moves the items straight to the review queue and returns you to the dashboard for a quick glance instead of jumping into each result as it resolves.
-- Identify now auto-selects the best candidate when a queued search has no confident match, landing on a reviewable proposal you can still revise with Back to Search.
+- Queuing a batch for Identify now adds every selected item to the review queue up front and returns you to the dashboard immediately, then searches them there with live progress, instead of holding you on the originating tab while each item resolves one by one.
+- Identify queuing once again leaves an ambiguous search on the candidate picker for you to choose from, rather than auto-selecting the best guess, while confident matches still land directly on a reviewable proposal.
 - The Identify queue dashboard now lists both the current on-disk name and the proposed name for each item, and lets you select rows and accept their proposals in bulk straight from that high-level view.
 - Refreshed the Plugins page to match the app design language, replacing the row of plain stat cards with a grounded header and tab bar where each tab carries its own count.
 - Defaulted adaptive HLS transcoding to Auto so fresh installs choose a safe native encoder when available before falling back to software.
