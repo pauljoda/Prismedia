@@ -18,6 +18,25 @@ public sealed class AssetPathService {
     public string VideoThumbnailPath(Guid entityId) =>
         Path.Combine(_cacheRoot, "videos", entityId.ToString(), "thumb.jpg");
 
+    /// <summary>
+    /// Disk path for the small grid-sized cover variant. Stored in one flat,
+    /// kind-agnostic directory keyed by entity id so any entity kind shares the
+    /// same convention.
+    /// </summary>
+    public string GridThumbnailPath(Guid entityId) =>
+        Path.Combine(_cacheRoot, "grid-thumbs", entityId.ToString() + ".jpg");
+
+    /// <summary>Maps a stored <c>/assets/...</c> cover URL back to its cache-relative disk path.</summary>
+    public string? ResolveAssetDiskPath(string assetUrl) {
+        const string prefix = "/assets/";
+        if (string.IsNullOrEmpty(assetUrl) || !assetUrl.StartsWith(prefix, StringComparison.Ordinal)) {
+            return null;
+        }
+
+        var relative = assetUrl[prefix.Length..].Replace('/', Path.DirectorySeparatorChar);
+        return Path.Combine(_cacheRoot, relative);
+    }
+
     public string VideoPreviewPath(Guid entityId) =>
         Path.Combine(_cacheRoot, "videos", entityId.ToString(), "preview.mp4");
 
@@ -47,6 +66,9 @@ public sealed class AssetPathService {
 
     public static string VideoThumbnailUrl(Guid entityId) =>
         $"/assets/videos/{entityId}/thumb.jpg";
+
+    public static string GridThumbnailUrl(Guid entityId) =>
+        $"/assets/grid-thumbs/{entityId}.jpg";
 
     public static string VideoPreviewUrl(Guid entityId) =>
         $"/assets/videos/{entityId}/preview.mp4";

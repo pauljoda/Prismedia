@@ -99,6 +99,7 @@ function entity(id: string, options: Partial<EntityCard> = {}): EntityCard {
     parentEntityId: null,
     sortOrder: null,
     coverUrl: null,
+    coverThumbUrl: null,
     hoverKind: "none",
     hoverUrl: null,
     hoverImages: [],

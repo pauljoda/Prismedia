@@ -286,6 +286,7 @@ function thumbnail(id: string, kind: string, title: string, coverUrl: string, pa
     parentEntityId,
     sortOrder: null,
     coverUrl,
+    coverThumbUrl: null,
     hoverKind: "none",
     hoverUrl: null,
     hoverImages: [],

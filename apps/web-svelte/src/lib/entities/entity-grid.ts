@@ -359,6 +359,9 @@ export function entityCardToThumbnailCard(
     )?.path ??
     null;
 
+  // Small grid variant paired with the list cover, used for responsive srcset.
+  const coverThumbPath = !isFullEntityCard(entity) ? entity.coverThumbUrl ?? null : null;
+
   const spriteHover = findSpriteHover(entity);
   const imageSequence = previewAssets(entity, [ENTITY_FILE_ROLE.trickplay, ENTITY_FILE_ROLE.sprite]);
   const childSequence = imageSequence.length > 0 ? [] : childPreviewAssets(entity);
@@ -372,7 +375,9 @@ export function entityCardToThumbnailCard(
 
   return {
     aspectRatio: aspectRatioForEntity(entity),
-    cover: coverPath ? assetFromPath(coverPath, entity.title, ENTITY_FILE_ROLE.cover) : null,
+    cover: coverPath
+      ? { ...assetFromPath(coverPath, entity.title, ENTITY_FILE_ROLE.cover), thumbSrc: coverThumbPath ?? undefined }
+      : null,
     custom: customOverlayForEntity(entity),
     entity: {
       ...(isFullEntityCard(entity) ? entity : thumbnailToEntityShell(entity)),

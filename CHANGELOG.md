@@ -6,12 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 ### What's New
+- Library grids now load far faster and scroll smoothly even with hundreds of items. Covers are served as small grid-sized thumbnails and only loaded as cards come into view, so large libraries no longer stutter, lag, or pop in blank tiles while scrolling.
 - Library grids can now sort and filter across the entire collection instead of just the page on screen, including a Random shuffle that reorders the whole library (with a reshuffle button) and a new "Date added (newest)" default ordering.
 - Fresh instances now serve generated thumbnails as soon as the API starts, so newly scanned media no longer shows broken cover links when the cache directory did not exist yet.
 - Prismedia branding now uses the cleaned primary and NSFW logos throughout the app, with a larger sidebar brand lockup and a scalable vector line mark.
 - Mobile install metadata now presents Prismedia with the correct app name, theme colors, and safer icon spacing for browser and home-screen surfaces.
 
 ### Added
+- Added scale-appropriate library grid thumbnails: a small variant of each cover is generated at scan time and when you upload custom artwork, then served alongside the full image so the grid downloads a lightweight thumbnail for small cards and the full-resolution cover only at large card sizes. Existing libraries backfill these small variants on their next scan.
 - Added library-wide grid filters that apply across the whole collection: an adaptive status filter (Read/Unread/Reading for books and comics, Watched/Unwatched/In progress for video and audio), Favorites, Organized, rating thresholds, and Unrated.
 - Added Random, Date added, Rating, and Title sort options to library grids, with Random shuffling the entire library consistently across pages.
 - Added Stash community scraper compatibility for identification: browse and install scrapers from the Stash Community tab on the Plugins page (Python scrapers included), then identify videos by URL or name and map scraped scenes — title, date, studio, performers, director, tags, and cover art — into Prismedia. Credited performers and the studio are proposed as reviewable cards and their posters and bios are pulled from the scraper's performer/studio lookups. Stash scrapers are always NSFW, and every entity they create or touch is marked NSFW.
@@ -33,6 +35,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Changed
+- Entity grids now lazy-load cover images and request the small thumbnail variant, dramatically cutting the network and image-decoding work needed to render large libraries.
 - Deepened shared material card surfaces so plugin rows, settings cards, and other repeated panels keep a solid machined feel without relying on blur.
 - Restricted blur-backed glass treatments to shell-level overlays, high-level chrome, and static asset effects so repeated cards, chips, badges, and progress surfaces use cheaper material styling.
 - Split the single "Fingerprints" generation setting into separate "OpenSubtitles hash (oshash)" and "MD5 checksum" toggles. oshash stays on by default because it only reads a small slice of each file, while MD5 — which must read every byte and is the slow part of fingerprinting on large libraries — is now off by default and only computed when you turn it on. Disabling MD5 now actually skips the full-file read instead of computing it and throwing it away.
@@ -68,6 +71,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated web app manifest and mobile browser metadata for home-screen installation and browser UI theme colors.
 
 ### Fixed
+- Fixed library grid thumbnails appearing blank or "snapping in" while scrolling, which happened because every card eagerly loaded a full-resolution cover image at once and flooded the browser's image decoder.
+- Fixed recurring automatic scans so a 60-minute interval fires on the hourly schedule and records the trigger time, preventing long-running scans from stacking up every scheduler tick.
 - Fixed adding a library so it now starts scanning immediately for exactly the media kinds it has enabled, instead of doing nothing until the optional periodic auto-scan runs — a books-only library now queues a book scan rather than a video scan.
 - Fixed the background worker so it no longer stays offline after first boot: it now waits for the database to be ready instead of exiting when it starts before the database, and the production container automatically restarts the worker if it ever stops, so the job queue recovers on its own.
 - Fixed library grids so each one again remembers its filters, sort, card size, layout, media wall, page size, and active preset per view and per device — drop a grid on any page and it restores the last way you left it.

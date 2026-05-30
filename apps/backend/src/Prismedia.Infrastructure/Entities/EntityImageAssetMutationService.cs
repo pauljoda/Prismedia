@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Entities;
+using Prismedia.Application.Jobs.Ports;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
@@ -17,7 +18,8 @@ public sealed record EntityImageAssetStorageOptions(string CacheRoot);
 /// </summary>
 public sealed class EntityImageAssetMutationService(
     PrismediaDbContext db,
-    EntityImageAssetStorageOptions options) : IEntityImageAssetMutationService {
+    EntityImageAssetStorageOptions options,
+    IGridThumbnailService gridThumbnails) : IEntityImageAssetMutationService {
     private static readonly EntityFileRole[] ManualImageRoles =
     [
         EntityFileRole.Thumbnail,
@@ -88,6 +90,8 @@ public sealed class EntityImageAssetMutationService(
 
         entity.UpdatedAt = now;
         await db.SaveChangesAsync(cancellationToken);
+        // Refresh the small grid variant so it tracks the newly chosen cover.
+        await gridThumbnails.EnsureAsync(entityId, cancellationToken);
         return EntityImageAssetMutationResult.Updated;
     }
 
@@ -112,6 +116,8 @@ public sealed class EntityImageAssetMutationService(
 
         entity.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
+        // Rebuild the grid variant from whatever cover remains after the removal.
+        await gridThumbnails.EnsureAsync(entityId, cancellationToken);
         return EntityImageAssetMutationResult.Updated;
     }
 

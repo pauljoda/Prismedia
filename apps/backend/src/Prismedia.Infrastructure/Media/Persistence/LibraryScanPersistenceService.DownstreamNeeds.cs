@@ -53,6 +53,21 @@ public sealed partial class LibraryScanPersistenceService {
             .Select(f => f.EntityId)
             .ToListAsync(cancellationToken)).ToHashSet();
 
+        var hasCover = (await _db.EntityFiles.AsNoTracking()
+            .Where(f => ids.Contains(f.EntityId) && (
+                f.Role == EntityFileRole.Thumbnail ||
+                f.Role == EntityFileRole.Poster ||
+                f.Role == EntityFileRole.Cover ||
+                f.Role == EntityFileRole.Logo ||
+                f.Role == EntityFileRole.Backdrop))
+            .Select(f => f.EntityId)
+            .ToListAsync(cancellationToken)).ToHashSet();
+
+        var hasGridThumbnail = (await _db.EntityFiles.AsNoTracking()
+            .Where(f => ids.Contains(f.EntityId) && f.Role == EntityFileRole.GridThumbnail)
+            .Select(f => f.EntityId)
+            .ToListAsync(cancellationToken)).ToHashSet();
+
         var hasWaveform = (await _db.EntityFiles.AsNoTracking()
             .Where(f => ids.Contains(f.EntityId) && f.Role == EntityFileRole.Waveform)
             .Select(f => f.EntityId)
@@ -92,7 +107,10 @@ public sealed partial class LibraryScanPersistenceService {
                 MissingMd5: !hasMd5.Contains(id),
                 NeedsPreview: needsPreview,
                 NeedsTrickplay: !hasTrickplay.Contains(id),
-                NeedsSubtitleExtraction: !hasUsableSubtitleState.Contains(id));
+                NeedsSubtitleExtraction: !hasUsableSubtitleState.Contains(id),
+                // Backfill: an existing cover with no small variant yet. New entities
+                // (no cover at scan time) get theirs from GeneratePreview instead.
+                NeedsGridThumbnail: hasCover.Contains(id) && !hasGridThumbnail.Contains(id));
         }
 
         return result;

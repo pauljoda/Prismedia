@@ -332,6 +332,7 @@ function entity(overrides: Partial<EntityCard> = {}): EntityCard {
     parentEntityId: null,
     sortOrder: null,
     coverUrl: null,
+    coverThumbUrl: null,
     hoverKind: "none",
     hoverUrl: null,
     hoverImages: [],

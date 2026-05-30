@@ -96,6 +96,10 @@ public sealed class ScanLibraryJobHandler(
                     var shouldGenerateTrickplay = settings.GenerateTrickplay && entityNeeds.NeedsTrickplay;
                     if (shouldGeneratePreview || shouldGenerateTrickplay)
                         jobRequests.Add(new EnqueueJobRequest(JobType.GeneratePreview, TargetEntityKind: "video", TargetEntityId: entityIdStr, TargetLabel: label, Priority: 10));
+                    else if (entityNeeds.NeedsGridThumbnail)
+                        // Backfill the small grid variant for an existing cover (GeneratePreview, which
+                        // also generates it, isn't running because a thumbnail already exists).
+                        jobRequests.Add(new EnqueueJobRequest(JobType.GenerateGridThumbnail, TargetEntityKind: "video", TargetEntityId: entityIdStr, TargetLabel: label, Priority: 5));
                 }
 
                 if (jobRequests.Count > 0) {

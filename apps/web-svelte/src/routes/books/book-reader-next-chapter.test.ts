@@ -46,6 +46,7 @@ function thumbnail(id: string, kind: string, title: string, sortOrder: number): 
     parentEntityId: null,
     sortOrder,
     coverUrl: null,
+    coverThumbUrl: null,
     hoverKind: "none",
     hoverUrl: null,
     hoverImages: [],

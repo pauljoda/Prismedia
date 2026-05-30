@@ -43,7 +43,7 @@ public sealed class ScanJobHandlerTests {
                     MissingMd5: false,
                     NeedsPreview: false,
                     NeedsTrickplay: true,
-                    NeedsSubtitleExtraction: false)
+                    NeedsSubtitleExtraction: false,    NeedsGridThumbnail: false)
             }
         };
         var discovery = new RecordingFileDiscovery(["/media/videos/movie.mkv"]);
@@ -109,7 +109,7 @@ public sealed class ScanJobHandlerTests {
                     MissingMd5: false,
                     NeedsPreview: false,
                     NeedsTrickplay: false,
-                    NeedsSubtitleExtraction: false)
+                    NeedsSubtitleExtraction: false,    NeedsGridThumbnail: false)
             }
         };
         var discovery = new RecordingFileDiscovery([
@@ -170,7 +170,7 @@ public sealed class ScanJobHandlerTests {
                     MissingMd5: false,
                     NeedsPreview: false,
                     NeedsTrickplay: false,
-                    NeedsSubtitleExtraction: false)
+                    NeedsSubtitleExtraction: false,    NeedsGridThumbnail: false)
             }
         };
         var discovery = new RecordingFileDiscovery([
@@ -231,7 +231,7 @@ public sealed class ScanJobHandlerTests {
                     MissingMd5: false,
                     NeedsPreview: false,
                     NeedsTrickplay: false,
-                    NeedsSubtitleExtraction: false)
+                    NeedsSubtitleExtraction: false,    NeedsGridThumbnail: false)
             }
         };
         var discovery = new RecordingFileDiscovery([
@@ -293,7 +293,7 @@ public sealed class ScanJobHandlerTests {
                     MissingMd5: false,
                     NeedsPreview: false,
                     NeedsTrickplay: false,
-                    NeedsSubtitleExtraction: false)
+                    NeedsSubtitleExtraction: false,    NeedsGridThumbnail: false)
             }
         };
         var discovery = new RecordingFileDiscovery(["/media/videos/Keep/movie.mkv"]);

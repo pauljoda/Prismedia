@@ -245,6 +245,9 @@ public static class EntityCardProjector {
             .Select(file => file.Path)
             .FirstOrDefault();
 
+        var gridThumb = entity.EntityFiles
+            .FirstOrDefault(file => file.Role == EntityFileRole.GridThumbnail)?.Path;
+
         return new EntityThumbnail(
             entity.Id,
             EntityKindRegistry.ToCode(entity.Kind),
@@ -252,6 +255,7 @@ public static class EntityCardProjector {
             entity.ParentEntityId,
             entity.SortOrder,
             cover,
+            gridThumb,
             "none",
             null,
             [],

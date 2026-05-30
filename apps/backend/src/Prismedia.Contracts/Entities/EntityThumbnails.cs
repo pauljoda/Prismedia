@@ -19,6 +19,7 @@ public sealed record EntityThumbnail(
     Guid? ParentEntityId,
     int? SortOrder,
     string? CoverUrl,
+    string? CoverThumbUrl,
     string HoverKind,
     string? HoverUrl,
     IReadOnlyList<EntityThumbnailHoverImage> HoverImages,

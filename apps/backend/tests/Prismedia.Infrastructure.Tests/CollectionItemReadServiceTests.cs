@@ -118,6 +118,7 @@ public sealed class CollectionItemReadServiceTests {
                     row.ParentEntityId,
                     row.SortOrder,
                     null,
+                    null,
                     "none",
                     null,
                     [],

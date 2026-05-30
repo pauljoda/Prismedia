@@ -243,13 +243,15 @@ public sealed record VideoSeasonScanInfo(string FolderPath, string Title, int Se
 /// <param name="NeedsPreview">No preview asset (thumbnail or waveform) exists yet.</param>
 /// <param name="NeedsTrickplay">No trickplay tiles exist yet.</param>
 /// <param name="NeedsSubtitleExtraction">Embedded subtitles have not been extracted yet.</param>
+/// <param name="NeedsGridThumbnail">A cover exists but its small grid-card variant has not been generated yet.</param>
 public sealed record DownstreamNeeds(
     bool NeedsProbe,
     bool MissingOshash,
     bool MissingMd5,
     bool NeedsPreview,
     bool NeedsTrickplay,
-    bool NeedsSubtitleExtraction);
+    bool NeedsSubtitleExtraction,
+    bool NeedsGridThumbnail);
 
 /// <summary>
 /// Lightweight entity info used by the refresh-entity job to decide which downstream jobs to queue.

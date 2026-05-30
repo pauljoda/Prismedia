@@ -20,6 +20,8 @@ export interface EntityThumbnail {
   sortOrder: number | string | null;
   /** @nullable */
   coverUrl: string | null;
+  /** @nullable */
+  coverThumbUrl: string | null;
   hoverKind: string;
   /** @nullable */
   hoverUrl: string | null;

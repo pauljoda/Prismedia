@@ -14,6 +14,7 @@ function thumbnail(overrides: Partial<EntityThumbnail>): EntityThumbnail {
     parentEntityId: null,
     sortOrder: null,
     coverUrl: null,
+    coverThumbUrl: null,
     hoverKind: "none",
     hoverUrl: null,
     hoverImages: [],

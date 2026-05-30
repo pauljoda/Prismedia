@@ -57,6 +57,10 @@ public enum JobType {
     [Code("generate-image-thumbnail")]
     GenerateImageThumbnail,
 
+    /// <summary>Generates the small grid-card cover variant for an entity that already has a cover.</summary>
+    [Code("generate-grid-thumbnail")]
+    GenerateGridThumbnail,
+
     /// <summary>Generates thumbnails for comic book pages.</summary>
     [Code("generate-book-page-thumbnail")]
     GenerateBookPageThumbnail,

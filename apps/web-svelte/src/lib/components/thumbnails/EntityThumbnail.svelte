@@ -540,6 +540,8 @@
     {:else if isSpriteHover && card.cover}
       <img
         src={card.cover.src}
+        srcset={card.cover.thumbSrc ? `${card.cover.thumbSrc} 480w, ${card.cover.src} 1600w` : undefined}
+        sizes={card.cover.thumbSrc ? "auto" : undefined}
         alt={card.cover.alt}
         decoding="async"
         loading={imageLoading}
@@ -552,6 +554,8 @@
     {:else if asset && !showPlaceholder}
       <img
         src={asset.src}
+        srcset={asset.thumbSrc ? `${asset.thumbSrc} 480w, ${asset.src} 1600w` : undefined}
+        sizes={asset.thumbSrc ? "auto" : undefined}
         alt={asset.alt}
         decoding="async"
         loading={imageLoading}

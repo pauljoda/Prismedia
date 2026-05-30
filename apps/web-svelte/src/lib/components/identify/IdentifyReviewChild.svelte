@@ -119,6 +119,7 @@
       parentEntityId: null,
       sortOrder: null,
       coverUrl: null,
+      coverThumbUrl: null,
       hoverKind: "none",
       hoverUrl: null,
       hoverImages: [],

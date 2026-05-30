@@ -14,7 +14,8 @@ public sealed class GeneratePreviewJobHandler(
     ILogger<GeneratePreviewJobHandler> logger,
     IMediaAssetGenerator assets,
     IMediaProcessingStatePersistence persistence,
-    ILibraryScanRootPersistence roots) : EntityFileJobHandler(logger, persistence) {
+    ILibraryScanRootPersistence roots,
+    IGridThumbnailService gridThumbnails) : EntityFileJobHandler(logger, persistence) {
     public override JobType Type => JobType.GeneratePreview;
 
     protected override async Task ExecuteAsync(
@@ -41,6 +42,8 @@ public sealed class GeneratePreviewJobHandler(
                 await context.ReportProgressAsync(10, "Generating thumbnail and preview", cancellationToken);
                 await GenerateThumbnailAndPreviewAsync(entityId, filePath, settings, duration, width, height, cancellationToken);
             }
+            // Derive the small grid-card variant from the freshly generated cover.
+            await gridThumbnails.EnsureAsync(entityId, cancellationToken);
         }
 
         if (settings.GenerateTrickplay) {

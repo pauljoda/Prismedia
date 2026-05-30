@@ -23,7 +23,7 @@ public sealed class FingerprintGatingTests {
         MissingMd5: missingMd5,
         NeedsPreview: false,
         NeedsTrickplay: false,
-        NeedsSubtitleExtraction: false);
+        NeedsSubtitleExtraction: false,    NeedsGridThumbnail: false);
 
     [Theory]
     // oshash enabled and missing → fingerprint

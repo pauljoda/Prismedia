@@ -18,6 +18,12 @@ export interface EntityThumbnailAsset {
   src: string;
   alt: string;
   role?: string;
+  /**
+   * Optional small grid-sized variant of {@link src}. When present the cover
+   * `<img>` exposes it via `srcset` so the browser fetches the low-res image for
+   * small cards and the full-resolution `src` only at large sizes.
+   */
+  thumbSrc?: string;
 }
 
 /** Hover preview behavior supported by the shared thumbnail surface. */

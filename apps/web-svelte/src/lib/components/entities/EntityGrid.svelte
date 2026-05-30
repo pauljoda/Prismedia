@@ -737,7 +737,7 @@
   <EntityThumbnail
     {card}
     imageFetchPriority="auto"
-    imageLoading="eager"
+    imageLoading="lazy"
     layout={viewMode}
     linkable={!onCardActivate}
     mediaOnly={mediaWall}

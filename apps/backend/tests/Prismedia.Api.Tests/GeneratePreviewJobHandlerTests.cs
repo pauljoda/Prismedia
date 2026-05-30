@@ -6,6 +6,11 @@ using Prismedia.Domain.Entities;
 
 namespace Prismedia.Api.Tests;
 
+/// <summary>Test stub: grid-thumbnail generation is not exercised by these handler tests.</summary>
+internal sealed class NoopGridThumbnailService : IGridThumbnailService {
+    public Task EnsureAsync(Guid entityId, CancellationToken cancellationToken) => Task.CompletedTask;
+}
+
 public sealed class GeneratePreviewJobHandlerTests : IDisposable {
     private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"prismedia-preview-handler-{Guid.NewGuid():N}");
 
@@ -46,7 +51,8 @@ public sealed class GeneratePreviewJobHandlerTests : IDisposable {
             NullLogger<GeneratePreviewJobHandler>.Instance,
             assets,
             persistence,
-            persistence);
+            persistence,
+            new NoopGridThumbnailService());
         var job = new JobRunSnapshot(
             Guid.NewGuid(),
             JobType.GeneratePreview,
@@ -93,7 +99,8 @@ public sealed class GeneratePreviewJobHandlerTests : IDisposable {
             NullLogger<GeneratePreviewJobHandler>.Instance,
             assets,
             persistence,
-            persistence);
+            persistence,
+            new NoopGridThumbnailService());
         var job = new JobRunSnapshot(
             Guid.NewGuid(),
             JobType.GeneratePreview,

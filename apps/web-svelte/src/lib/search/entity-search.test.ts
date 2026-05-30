@@ -82,6 +82,7 @@ function entity(id: string, kind: string, title: string): EntityCard {
     parentEntityId: null,
     sortOrder: null,
     coverUrl: null,
+    coverThumbUrl: null,
     hoverKind: "none",
     hoverUrl: null,
     hoverImages: [],

@@ -1,11 +1,17 @@
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Entities;
+using Prismedia.Application.Jobs.Ports;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Entities;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 
 namespace Prismedia.Infrastructure.Tests;
+
+/// <summary>Test stub: grid-thumbnail regeneration is a side effect not asserted here.</summary>
+internal sealed class NoopGridThumbnailService : IGridThumbnailService {
+    public Task EnsureAsync(Guid entityId, CancellationToken cancellationToken) => Task.CompletedTask;
+}
 
 public sealed class EntityImageAssetMutationServiceTests : IDisposable {
     private readonly string _cacheRoot = Path.Combine(Path.GetTempPath(), $"prismedia-assets-{Guid.NewGuid():N}");
@@ -16,7 +22,7 @@ public sealed class EntityImageAssetMutationServiceTests : IDisposable {
         var entityId = Guid.Parse("16161616-1616-1616-1616-161616161616");
         SeedEntity(db, entityId, EntityKindRegistry.Video.Code, "Video");
         await db.SaveChangesAsync();
-        var service = new EntityImageAssetMutationService(db, new EntityImageAssetStorageOptions(_cacheRoot));
+        var service = new EntityImageAssetMutationService(db, new EntityImageAssetStorageOptions(_cacheRoot), new NoopGridThumbnailService());
 
         await using var content = new MemoryStream([0x89, 0x50, 0x4e, 0x47]);
         var result = await service.UploadAsync(entityId, "poster", "poster.png", "image/png", content, CancellationToken.None);
@@ -55,7 +61,7 @@ public sealed class EntityImageAssetMutationServiceTests : IDisposable {
                 UpdatedAt = now
             });
         await db.SaveChangesAsync();
-        var service = new EntityImageAssetMutationService(db, new EntityImageAssetStorageOptions(_cacheRoot));
+        var service = new EntityImageAssetMutationService(db, new EntityImageAssetStorageOptions(_cacheRoot), new NoopGridThumbnailService());
 
         var result = await service.ClearAsync(entityId, "poster", CancellationToken.None);
 

@@ -426,6 +426,9 @@ public sealed class EfEntityReadService : IEntityReadService {
         var technicalByEntity = await _db.EntityTechnical.AsNoTracking()
             .Where(technical => ids.Contains(technical.EntityId))
             .ToDictionaryAsync(technical => technical.EntityId, cancellationToken);
+        var gridThumbByEntity = await _db.EntityFiles.AsNoTracking()
+            .Where(file => ids.Contains(file.EntityId) && file.Role == EntityFileRole.GridThumbnail)
+            .ToDictionaryAsync(file => file.EntityId, file => file.Path, cancellationToken);
 
         return rows.Select(row => {
             var hoverUrl = hoverByEntity.GetValueOrDefault(row.Id);
@@ -442,6 +445,7 @@ public sealed class EfEntityReadService : IEntityReadService {
                 row.ParentEntityId,
                 row.SortOrder,
                 coverUrl,
+                gridThumbByEntity.GetValueOrDefault(row.Id),
                 hoverUrl is null ? "none" : "sprite",
                 hoverUrl,
                 hoverImages,
@@ -473,33 +477,7 @@ public sealed class EfEntityReadService : IEntityReadService {
             .GroupBy(file => file.EntityId)
             .ToDictionary(
                 group => group.Key,
-                group => group
-                    .OrderBy(file => CoverSourcePriority(file.Role, file.Source, file.Path))
-                    .ThenBy(file => CoverRolePriority(file.Role))
-                    .ThenBy(file => file.CreatedAt)
-                    .First()
-                    .Path);
-    }
-
-    private static int CoverRolePriority(EntityFileRole role) =>
-        role switch {
-            EntityFileRole.Thumbnail => 0,
-            EntityFileRole.Poster => 1,
-            EntityFileRole.Cover => 2,
-            EntityFileRole.Logo => 3,
-            _ => 4
-        };
-
-    private static int CoverSourcePriority(EntityFileRole role, string? source, string path) {
-        if (role == EntityFileRole.Backdrop) {
-            return 2;
-        }
-
-        return source == "custom" ||
-            path.Contains("/custom/artwork/", StringComparison.OrdinalIgnoreCase) ||
-            path.Contains("/plugins/artwork/", StringComparison.OrdinalIgnoreCase)
-                ? 0
-                : 1;
+                group => EntityCoverSelection.Select(group)!.Path);
     }
 
     private static IReadOnlyList<EntityThumbnailMeta> ProjectThumbnailMeta(

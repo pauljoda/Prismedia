@@ -12,6 +12,14 @@ public enum EntityFileRole {
     [Code("thumbnail")]
     Thumbnail,
 
+    /// <summary>
+    /// Small downscaled variant of the resolved cover, sized for grid cards.
+    /// Served alongside the full cover so the frontend can pick a scale-appropriate
+    /// image (low-res for small cards, full-res only at large sizes).
+    /// </summary>
+    [Code("grid-thumbnail")]
+    GridThumbnail,
+
     /// <summary>Primary poster or cover artwork.</summary>
     [Code("poster")]
     Poster,

@@ -92,6 +92,7 @@ public static class DependencyInjection {
             provider.GetRequiredService<MediaProbeService>(),
             provider.GetRequiredService<MediaToolOptions>()));
         services.AddSingleton<HashingService>();
+        services.AddSingleton<SkiaImageDownscaler>();
         services.AddSingleton<IFileDiscovery>(provider =>
             new FileDiscoveryAdapter(provider.GetRequiredService<FileDiscoveryService>()));
         services.AddSingleton<IMediaProbe>(provider =>
@@ -177,10 +178,16 @@ public static class DependencyInjection {
         services.AddScoped<IEntityWriteRepository>(provider => provider.GetRequiredService<EfEntityRepository>());
         services.AddScoped<IEntityReadService, EfEntityReadService>();
         services.AddScoped<IEntityFileContentService, EfEntityFileContentService>();
+        services.AddScoped<IGridThumbnailService>(provider =>
+            new GridThumbnailService(
+                provider.GetRequiredService<PrismediaDbContext>(),
+                provider.GetRequiredService<AssetPathService>(),
+                provider.GetRequiredService<SkiaImageDownscaler>()));
         services.AddScoped<IEntityImageAssetMutationService>(provider =>
             new EntityImageAssetMutationService(
                 provider.GetRequiredService<PrismediaDbContext>(),
-                new EntityImageAssetStorageOptions(cacheDir)));
+                new EntityImageAssetStorageOptions(cacheDir),
+                provider.GetRequiredService<IGridThumbnailService>()));
     }
 
     private static void RegisterFilesAndOrganization(IServiceCollection services) {

@@ -324,6 +324,7 @@ public sealed class CollectionCommandServiceTests {
                     row.ParentEntityId,
                     row.SortOrder,
                     null,
+                    null,
                     "none",
                     null,
                     [],
