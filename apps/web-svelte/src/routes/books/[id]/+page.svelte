@@ -76,6 +76,7 @@
   const peopleLabel = $derived(bookType === "comic" || bookType === "manga" ? "Artists" : "People");
   const bookTitle = $derived(book?.title ?? "Book");
   const chapterSummaries = $derived(combineChapterSummaries(chapterDetails, progressChapterSummary));
+  const chapterCards = $derived(chapterDetails.map((chapter) => chapter.card));
   const progressDisplay = $derived(bookEntityProgressDisplay(book, chapterSummaries));
   const selectedChapter = $derived(
     chapterDetails.find((chapter) => chapter.detail.id === selectedChapterId) ?? chapterDetails[0] ?? null,
@@ -440,19 +441,13 @@
           Chapters
           <span class="content-count">{chapterDetails.length}</span>
         </h2>
-        <div class="chapter-grid">
-          {#each chapterDetails as chapter (chapter.detail.id)}
-            <a class="chapter-card" href={`/books/${book.id}/chapters/${chapter.detail.id}`}>
-              <div class="chapter-card-body">
-                <span class="section-kicker">Ch. {chapter.summary.sortOrder + 1}</span>
-                <strong>{chapter.detail.title}</strong>
-                <span>
-                  {chapter.pages.length} page{chapter.pages.length === 1 ? "" : "s"}
-                </span>
-              </div>
-            </a>
-          {/each}
-        </div>
+        <EntityGrid
+          cards={chapterCards}
+          prefsKey={`book-${book.id}-chapters`}
+          initialSortBy="position"
+          emptyTitle="No chapters"
+          emptyMessage="No chapters found for this book."
+        />
       </section>
     {/if}
   {/if}
@@ -591,8 +586,7 @@
     white-space: nowrap;
   }
 
-  .progress-section strong,
-  .chapter-card strong {
+  .progress-section strong {
     display: block;
     color: var(--color-text-primary, #f2eed8);
     font-size: 0.92rem;
@@ -669,37 +663,6 @@
     background: var(--color-surface-3, #151a28);
   }
 
-  .chapter-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
-    gap: 0.75rem;
-  }
-
-  .chapter-card {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: start;
-    gap: 0.75rem;
-    min-height: 6.5rem;
-    padding: 0.9rem;
-    border: 1px solid var(--color-border-subtle, #1c2235);
-    border-radius: var(--radius-sm, 6px);
-    background: var(--color-surface-1, #0c0f15);
-    color: var(--color-text-muted, #8a93a6);
-    text-decoration: none;
-    transition: border-color 0.15s, box-shadow 0.15s;
-  }
-
-  .chapter-card:hover {
-    border-color: rgba(196, 154, 90, 0.42);
-    box-shadow: 0 0 18px rgb(196 154 90 / 0.12);
-  }
-
-  .chapter-card-body {
-    display: grid;
-    gap: 0.35rem;
-    min-width: 0;
-  }
 
 
 </style>

@@ -36,8 +36,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 - Entity grids now lazy-load cover images and request the small thumbnail variant, dramatically cutting the network and image-decoding work needed to render large libraries.
+- Image and comic-page thumbnails are now generated in-process during scans (with an automatic ffmpeg fallback for unusual formats like HEIC/AVIF), instead of launching a separate ffmpeg process for every file — noticeably faster scans on large image and comic libraries.
+- Uploading poster or header artwork now shows a spinner over the image while it is processed, so it is clear the upload is in progress.
 - Deepened shared material card surfaces so plugin rows, settings cards, and other repeated panels keep a solid machined feel without relying on blur.
 - Restricted blur-backed glass treatments to shell-level overlays, high-level chrome, and static asset effects so repeated cards, chips, badges, and progress surfaces use cheaper material styling.
+- Reworked the library grid toolbar to match the entity detail header: search and controls now sit in a larger raised hero panel, with the active-filters and selection bars tucking beneath it so the toolbar reads as one continuous, layered surface.
+- Entity detail pages now render their child collections through the shared library grid everywhere: book chapters and series seasons use the same thumbnails, sizing, and sorting as the rest of the app instead of one-off card layouts.
 - Split the single "Fingerprints" generation setting into separate "OpenSubtitles hash (oshash)" and "MD5 checksum" toggles. oshash stays on by default because it only reads a small slice of each file, while MD5 — which must read every byte and is the slow part of fingerprinting on large libraries — is now off by default and only computed when you turn it on. Disabling MD5 now actually skips the full-file read instead of computing it and throwing it away.
 - Queuing a batch for Identify now adds every selected item to the review queue up front and returns you to the dashboard immediately, then searches them there with live progress, instead of holding you on the originating tab while each item resolves one by one.
 - Identify queuing once again leaves an ambiguous search on the candidate picker for you to choose from, rather than auto-selecting the best guess, while confident matches still land directly on a reviewable proposal.

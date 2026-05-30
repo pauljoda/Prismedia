@@ -8,11 +8,13 @@ namespace Prismedia.Application.Jobs.Handlers.Generate;
 
 /// <summary>
 /// Generates a thumbnail for a comic book page entity by extracting the image from the
-/// archive and scaling it via ffmpeg.
+/// archive and scaling it through the shared image resizer (in-process SkiaSharp, with an
+/// ffmpeg fallback for exotic formats).
 /// </summary>
 public sealed class GenerateBookPageThumbnailJobHandler(
     ILogger<GenerateBookPageThumbnailJobHandler> logger,
     IMediaAssetGenerator assets,
+    IImageThumbnailGenerator imageThumbnails,
     IMediaProcessingStatePersistence persistence) : EntityFileJobHandler(logger, persistence) {
     public override JobType Type => JobType.GenerateBookPageThumbnail;
 
@@ -39,7 +41,7 @@ public sealed class GenerateBookPageThumbnailJobHandler(
             await context.ReportProgressAsync(60, "Generating thumbnail", cancellationToken);
 
             var thumbPath = assets.BookPageThumbnailPath(entityId);
-            var success = await assets.GenerateImageThumbnailAsync(tempPath, thumbPath, 640, 3, cancellationToken);
+            var success = await imageThumbnails.GenerateAsync(tempPath, thumbPath, 640, 80, cancellationToken);
 
             if (success) {
                 var size = new FileInfo(thumbPath).Length;

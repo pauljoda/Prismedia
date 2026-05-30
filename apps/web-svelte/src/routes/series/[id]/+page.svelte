@@ -34,7 +34,6 @@
     type EntityDetailTab,
   } from "$lib/components/entities/EntityDetail.svelte";
   import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
-  import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
   import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import { useAppChrome } from "$lib/stores/app-chrome.svelte";
@@ -285,13 +284,14 @@
           Seasons
           <span class="content-count">{seasonCards.length}</span>
         </h2>
-        <div class="season-row" aria-label="Seasons">
-          {#each seasonCards as seasonCard (seasonCard.entity.id)}
-            <div class="season-card">
-              <EntityThumbnail card={seasonCard} selectable={false} />
-            </div>
-          {/each}
-        </div>
+        <EntityGrid
+          cards={seasonCards}
+          prefsKey={`series-${series?.id}-seasons`}
+          initialSortBy="position"
+          selectable={false}
+          emptyTitle="No seasons"
+          emptyMessage="This series has no seasons."
+        />
       </section>
     {/if}
 
@@ -389,21 +389,6 @@
   .content-section {
     display: grid;
     gap: 0.75rem;
-  }
-
-  .season-row {
-    display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(8.5rem, 11rem);
-    gap: 0.75rem;
-    overflow-x: auto;
-    overscroll-behavior-inline: contain;
-    padding-bottom: 0.35rem;
-    scrollbar-width: thin;
-  }
-
-  .season-card {
-    min-width: 0;
   }
 
   .content-heading {

@@ -16,6 +16,7 @@
     Image as ImageIcon,
     Link,
     ListOrdered,
+    LoaderCircle,
     MonitorCog,
     Pencil,
     PencilOff,
@@ -572,6 +573,14 @@
     return assetBusyRole === role;
   }
 </script>
+
+{#snippet assetBusyOverlay(role: EntityFileRoleCode)}
+  {#if assetBusy(role)}
+    <div class="asset-busy-overlay" role="status" aria-label="Uploading artwork">
+      <LoaderCircle class="asset-busy-spinner h-6 w-6" />
+    </div>
+  {/if}
+{/snippet}
 
 {#snippet imageAssetActions(role: EntityFileRoleCode, label: "poster" | "header", hasAsset: boolean)}
   {#if isEditingActiveTab && canManageImages && roleSupported(role)}
@@ -1179,6 +1188,7 @@
               </div>
             {/if}
             {@render imageAssetActions(ENTITY_FILE_ROLE.poster, "poster", posterHasAsset)}
+            {@render assetBusyOverlay(ENTITY_FILE_ROLE.poster)}
           </div>
         {/if}
 
@@ -1338,6 +1348,7 @@
         {@render imageAssetActions(ENTITY_FILE_ROLE.backdrop, "header", headerHasAsset)}
       </div>
     {/if}
+    {@render assetBusyOverlay(ENTITY_FILE_ROLE.backdrop)}
 
     {#if heroMode === "image"}
       <!-- Sharp banner, mask fades bottom 10% -->
@@ -1747,6 +1758,38 @@
     display: flex;
     gap: 0.35rem;
     pointer-events: auto;
+  }
+
+  /* Spinner shown over the artwork while an upload + thumbnail generation is in flight. */
+  .asset-busy-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    display: grid;
+    place-items: center;
+    background: rgba(7, 8, 11, 0.55);
+    backdrop-filter: blur(2px);
+    -webkit-backdrop-filter: blur(2px);
+    pointer-events: none;
+    border-radius: inherit;
+  }
+
+  .asset-busy-overlay :global(.asset-busy-spinner) {
+    color: var(--detail-accent, #f2c26a);
+    filter: drop-shadow(0 0 8px var(--detail-accent-glow, rgb(242 194 106 / 0.4)));
+    animation: asset-busy-spin 0.8s linear infinite;
+  }
+
+  @keyframes asset-busy-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .asset-busy-overlay :global(.asset-busy-spinner) {
+      animation: none;
+    }
   }
 
   .poster-frame .image-asset-actions {
