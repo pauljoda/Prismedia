@@ -33,6 +33,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Changed
+- Split the single "Fingerprints" generation setting into separate "OpenSubtitles hash (oshash)" and "MD5 checksum" toggles. oshash stays on by default because it only reads a small slice of each file, while MD5 — which must read every byte and is the slow part of fingerprinting on large libraries — is now off by default and only computed when you turn it on. Disabling MD5 now actually skips the full-file read instead of computing it and throwing it away.
 - Queuing a batch for Identify now adds every selected item to the review queue up front and returns you to the dashboard immediately, then searches them there with live progress, instead of holding you on the originating tab while each item resolves one by one.
 - Identify queuing once again leaves an ambiguous search on the candidate picker for you to choose from, rather than auto-selecting the best guess, while confident matches still land directly on a reviewable proposal.
 - The Identify queue dashboard now lists both the current on-disk name and the proposed name for each item, and lets you select rows and accept their proposals in bulk straight from that high-level view.

@@ -86,7 +86,7 @@ public sealed class ScanLibraryJobHandler(
                     if (settings.AutoGenerateMetadata && entityNeeds.NeedsProbe)
                         jobRequests.Add(new EnqueueJobRequest(JobType.ProbeVideo, TargetEntityKind: "video", TargetEntityId: entityIdStr, TargetLabel: label, Priority: 30));
 
-                    if (settings.AutoGenerateFingerprints && entityNeeds.NeedsFingerprint)
+                    if (FingerprintGating.ShouldFingerprint(settings, entityNeeds))
                         jobRequests.Add(new EnqueueJobRequest(JobType.FingerprintVideo, TargetEntityKind: "video", TargetEntityId: entityIdStr, TargetLabel: label, Priority: 20));
 
                     if (entityNeeds.NeedsSubtitleExtraction)

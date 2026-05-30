@@ -14,7 +14,7 @@ export const queueDefinitions = [
   {
     name: "fingerprint",
     label: "Fingerprint",
-    description: "Generates md5 and oshash fingerprints for videos",
+    description: "Generates oshash and optional MD5 fingerprints for videos",
     concurrency: 1,
   },
   {
@@ -56,7 +56,7 @@ export const queueDefinitions = [
   {
     name: "image-fingerprint",
     label: "Image Fingerprint",
-    description: "Computes md5 and oshash fingerprints for images",
+    description: "Computes oshash and optional MD5 fingerprints for images",
     concurrency: 1,
   },
   {
@@ -74,7 +74,7 @@ export const queueDefinitions = [
   {
     name: "audio-fingerprint",
     label: "Audio Fingerprint",
-    description: "Computes md5 and oshash fingerprints for audio tracks",
+    description: "Computes oshash and optional MD5 fingerprints for audio tracks",
     concurrency: 1,
   },
   {

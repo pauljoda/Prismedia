@@ -84,7 +84,7 @@ public sealed class ScanAudioJobHandler(
                         TargetEntityId: trackId.ToString(), TargetLabel: title), cancellationToken);
                 }
 
-                if (settings.AutoGenerateFingerprints && !await downstreamNeeds.HasEntityFingerprintAsync(trackId, FingerprintAlgorithm.Md5, cancellationToken)) {
+                if (await FingerprintGating.ShouldFingerprintAsync(downstreamNeeds, settings, trackId, cancellationToken)) {
                     await context.EnqueueIfNeededAsync(new EnqueueJobRequest(
                         JobType.FingerprintAudio, TargetEntityKind: "audio-track",
                         TargetEntityId: trackId.ToString(), TargetLabel: title), cancellationToken);

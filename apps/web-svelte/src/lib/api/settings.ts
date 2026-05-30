@@ -64,7 +64,8 @@ export interface LibrarySettings {
   autoScanEnabled: boolean;
   scanIntervalMinutes: number;
   autoGenerateMetadata: boolean;
-  autoGenerateFingerprints: boolean;
+  autoGenerateOshash: boolean;
+  autoGenerateMd5: boolean;
   generatePhash: boolean;
   autoGeneratePreview: boolean;
   generateTrickplay: boolean;

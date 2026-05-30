@@ -188,7 +188,8 @@ public sealed record TrickplayInfoData(
 
 public sealed record LibrarySettingsData(
     bool AutoGenerateMetadata,
-    bool AutoGenerateFingerprints,
+    bool AutoGenerateOshash,
+    bool AutoGenerateMd5,
     bool GeneratePhash,
     bool AutoGeneratePreview,
     bool GenerateTrickplay,
@@ -236,9 +237,16 @@ public sealed record VideoSeasonScanInfo(string FolderPath, string Title, int Se
 /// <summary>
 /// Flags indicating which downstream jobs are still needed for an entity.
 /// </summary>
+/// <param name="NeedsProbe">Technical metadata has not been probed yet.</param>
+/// <param name="MissingOshash">No stored oshash fingerprint exists for the entity.</param>
+/// <param name="MissingMd5">No stored MD5 fingerprint exists for the entity.</param>
+/// <param name="NeedsPreview">No preview asset (thumbnail or waveform) exists yet.</param>
+/// <param name="NeedsTrickplay">No trickplay tiles exist yet.</param>
+/// <param name="NeedsSubtitleExtraction">Embedded subtitles have not been extracted yet.</param>
 public sealed record DownstreamNeeds(
     bool NeedsProbe,
-    bool NeedsFingerprint,
+    bool MissingOshash,
+    bool MissingMd5,
     bool NeedsPreview,
     bool NeedsTrickplay,
     bool NeedsSubtitleExtraction);

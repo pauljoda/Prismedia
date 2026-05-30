@@ -11,7 +11,8 @@ public static class AppSettingKeys {
     public const string ScanIntervalMinutes = "scan.intervalMinutes";
 
     public const string GenerationAutoGenerateMetadata = "generation.autoGenerateMetadata";
-    public const string GenerationAutoGenerateFingerprints = "generation.autoGenerateFingerprints";
+    public const string GenerationAutoGenerateOshash = "generation.autoGenerateOshash";
+    public const string GenerationAutoGenerateMd5 = "generation.autoGenerateMd5";
     public const string GenerationGeneratePhash = "generation.generatePhash";
     public const string GenerationAutoGeneratePreview = "generation.autoGeneratePreview";
     public const string GenerationGenerateTrickplay = "generation.generateTrickplay";
