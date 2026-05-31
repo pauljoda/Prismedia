@@ -83,6 +83,10 @@ public sealed class EfEntityReadService : IEntityReadService {
                     (normalizedRelationshipCode == null || link.RelationshipCode == normalizedRelationshipCode)));
         }
 
+        if (ShouldSuppressMovieChildVideos(kind, query, referencedBy)) {
+            entityQuery = SuppressMovieChildVideos(entityQuery);
+        }
+
         entityQuery = ApplyNsfwVisibility(entityQuery, hideNsfw == true);
         entityQuery = ApplyListFilters(entityQuery, favorite, organized, ratingMin, ratingMax, unrated, status);
 
@@ -324,6 +328,20 @@ public sealed class EfEntityReadService : IEntityReadService {
     private static bool ListBrowseShowsOnlyTopLevel(string kind) =>
         kind.Equals(EntityKindRegistry.Gallery.Code, StringComparison.OrdinalIgnoreCase) ||
         kind.Equals(EntityKindRegistry.AudioLibrary.Code, StringComparison.OrdinalIgnoreCase);
+
+    private static bool ShouldSuppressMovieChildVideos(string? kind, string? query, Guid? referencedBy) =>
+        kind is null ||
+        !string.IsNullOrWhiteSpace(query) ||
+        referencedBy is not null;
+
+    private IQueryable<EntityRow> SuppressMovieChildVideos(IQueryable<EntityRow> query) =>
+        query.Where(entity =>
+            entity.KindCode != EntityKindRegistry.Video.Code ||
+            entity.ParentEntityId == null ||
+            !_db.Entities.Any(parent =>
+                parent.Id == entity.ParentEntityId &&
+                parent.KindCode == EntityKindRegistry.Movie.Code &&
+                parent.DeletedAt == null));
 
     private async Task<bool> IsEntityHiddenAsync(Guid id, CancellationToken cancellationToken) =>
         await _db.Entities.AsNoTracking()

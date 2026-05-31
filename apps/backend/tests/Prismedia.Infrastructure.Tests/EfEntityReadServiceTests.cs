@@ -172,6 +172,118 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
+    public async Task ListAsyncSearchSuppressesMovieChildVideoButKeepsVideoBrowse() {
+        await using var db = CreateContext();
+        var movieId = Guid.Parse("aaaaaaaa-aaaa-4444-8888-aaaaaaaaaaaa");
+        var childVideoId = Guid.Parse("bbbbbbbb-bbbb-4444-8888-bbbbbbbbbbbb");
+        var now = DateTimeOffset.UtcNow;
+        db.Entities.AddRange(
+            new EntityRow {
+                Id = movieId,
+                KindCode = EntityKindRegistry.Movie.Code,
+                Title = "Friendship",
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new EntityRow {
+                Id = childVideoId,
+                KindCode = EntityKindRegistry.Video.Code,
+                Title = "Friendship",
+                ParentEntityId = movieId,
+                SortOrder = 0,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+        await db.SaveChangesAsync();
+
+        var repository = new EfEntityRepository(db, EntityMappers.Kinds(db), EntityMappers.Capabilities(db));
+        var service = new EfEntityReadService(db, repository, EntityMappers.Kinds(db));
+
+        var searchResult = await service.ListAsync(null, "Friendship", null, null, null, CancellationToken.None);
+        var searchedItem = Assert.Single(searchResult.Items);
+        Assert.Equal(movieId, searchedItem.Id);
+        Assert.Equal(EntityKindRegistry.Movie.Code, searchedItem.Kind);
+        Assert.Equal(1, searchResult.TotalCount);
+
+        var videoBrowseResult = await service.ListAsync(EntityKindRegistry.Video.Code, null, null, null, null, CancellationToken.None);
+        var browsedItem = Assert.Single(videoBrowseResult.Items);
+        Assert.Equal(childVideoId, browsedItem.Id);
+        Assert.Equal(movieId, browsedItem.ParentEntityId);
+        Assert.Equal(1, videoBrowseResult.TotalCount);
+    }
+
+    [Fact]
+    public async Task ListAsyncRelatedGridSuppressesMovieChildVideo() {
+        await using var db = CreateContext();
+        var tagId = Guid.Parse("11111111-aaaa-4444-8888-111111111111");
+        var movieId = Guid.Parse("22222222-aaaa-4444-8888-222222222222");
+        var childVideoId = Guid.Parse("33333333-aaaa-4444-8888-333333333333");
+        var now = DateTimeOffset.UtcNow;
+        db.Entities.AddRange(
+            new EntityRow {
+                Id = tagId,
+                KindCode = EntityKindRegistry.Tag.Code,
+                Title = "Comedy",
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new EntityRow {
+                Id = movieId,
+                KindCode = EntityKindRegistry.Movie.Code,
+                Title = "Friendship",
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new EntityRow {
+                Id = childVideoId,
+                KindCode = EntityKindRegistry.Video.Code,
+                Title = "Friendship",
+                ParentEntityId = movieId,
+                SortOrder = 0,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+        db.EntityRelationshipLinks.AddRange(
+            new EntityRelationshipLinkRow {
+                EntityId = movieId,
+                RelationshipCode = "tags",
+                Label = "Tags",
+                TargetEntityId = tagId,
+                TargetKindCode = EntityKindRegistry.Tag.Code,
+                SortOrder = 0,
+                CreatedAt = now
+            },
+            new EntityRelationshipLinkRow {
+                EntityId = childVideoId,
+                RelationshipCode = "tags",
+                Label = "Tags",
+                TargetEntityId = tagId,
+                TargetKindCode = EntityKindRegistry.Tag.Code,
+                SortOrder = 1,
+                CreatedAt = now
+            });
+        await db.SaveChangesAsync();
+
+        var repository = new EfEntityRepository(db, EntityMappers.Kinds(db), EntityMappers.Capabilities(db));
+        var service = new EfEntityReadService(db, repository, EntityMappers.Kinds(db));
+
+        var result = await service.ListAsync(
+            kind: null,
+            query: null,
+            cursor: null,
+            hideNsfw: null,
+            limit: null,
+            CancellationToken.None,
+            referencedBy: tagId,
+            relationshipCode: "tags");
+
+        var item = Assert.Single(result.Items);
+        Assert.Equal(movieId, item.Id);
+        Assert.Equal(EntityKindRegistry.Movie.Code, item.Kind);
+        Assert.Equal(1, result.TotalCount);
+    }
+
+    [Fact]
     public async Task ListAsyncProjectsVideoTrickplayPlaylistAsSpriteHover() {
         await using var db = CreateContext();
         var videoId = Guid.Parse("44444444-4444-4444-4444-444444444444");
