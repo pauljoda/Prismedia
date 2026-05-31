@@ -89,6 +89,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated web app manifest and mobile browser metadata for home-screen installation and browser UI theme colors.
 
 ### Fixed
+- Fixed Auto Identify and movie/video sidecar imports so provider or sidecar ratings no longer overwrite your personal rating field, and automatic Identify now runs one item at a time to avoid provider throttling.
 - Fixed searches and related grids so movies appear as movies only, without also showing their playable child video duplicate.
 - Fixed Jellyfin-compatible browsing in Infuse so playable videos include media source metadata and the Videos library only shows standalone videos while Series can return episodes recursively.
 - Fixed Infuse playback for Jellyfin-compatible episode files that need Jellyfin's direct stream route even when they are not browser-native containers.

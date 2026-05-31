@@ -97,6 +97,7 @@ public static class DependencyInjection {
         services.AddTransient<IJobHandler, LibraryMaintenanceJobHandler>();
 
         // Identify
+        services.AddSingleton<AutoIdentifyConcurrencyGate>();
         services.AddTransient<IJobHandler, BulkIdentifyJobHandler>();
         services.AddTransient<IJobHandler, AutoIdentifyJobHandler>();
 

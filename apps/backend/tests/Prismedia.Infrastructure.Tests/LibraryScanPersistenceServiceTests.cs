@@ -363,7 +363,6 @@ public sealed class LibraryScanPersistenceServiceTests {
                     Description = "Movie description",
                     Date = "2025-05-09",
                     Studio = "BoulderLight Pictures",
-                    Rating = 3,
                     Tags = ["Comedy"],
                     Performers = ["Tim Robinson", "Paul Rudd"]
                 },
@@ -387,7 +386,7 @@ public sealed class LibraryScanPersistenceServiceTests {
             source.Code == "folder" &&
             source.Value == "/media/Friendship");
         Assert.Equal("Movie description", (await db.EntityDescriptions.FindAsync([movie.Id]))?.Value);
-        Assert.Equal(3, movie.RatingValue);
+        Assert.Null(movie.RatingValue);
         Assert.Contains(db.EntityDates, date =>
             date.EntityId == movie.Id &&
             date.Code == "release" &&
@@ -994,15 +993,14 @@ public sealed class LibraryScanPersistenceServiceTests {
                 Studio = "Sidecar Studio",
                 Tags = ["Noir"],
                 Performers = ["Ada Actor"],
-                Urls = ["https://example.test/video"],
-                Rating = 4
+                Urls = ["https://example.test/video"]
             },
             "movie",
             markNsfw: true,
             CancellationToken.None);
 
         Assert.Equal("Sidecar Title", video.Title);
-        Assert.Equal(4, video.RatingValue);
+        Assert.Null(video.RatingValue);
         Assert.Equal("User description", (await db.EntityDescriptions.FindAsync([videoId]))?.Value);
         var release = await db.EntityDates.FindAsync([videoId, "release"]);
         Assert.Equal("2026-05-01", release?.Value);

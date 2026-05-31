@@ -31,6 +31,7 @@ public sealed class AutoIdentifyRunnerTests {
         var applyCall = Assert.Single(identify.ApplyCalls);
         Assert.Contains("title", applyCall.Fields);
         Assert.Contains("images", applyCall.Fields);
+        Assert.DoesNotContain("rating", applyCall.Fields);
         Assert.Equal("poster", Assert.Single(applyCall.SelectedImages!).Key);
         Assert.True((await db.Entities.SingleAsync()).IsOrganized);
     }
@@ -223,7 +224,9 @@ public sealed class AutoIdentifyRunnerTests {
                 Dates: new Dictionary<string, string>(),
                 Stats: new Dictionary<string, int>(),
                 Positions: new Dictionary<string, int>(),
-                Classification: null),
+                Classification: null) {
+                Rating = 4
+            },
             Images: [new ImageCandidate("poster", "https://img/poster.jpg", provider, 1m, null, null, null)],
             Children: [],
             Candidates: [],

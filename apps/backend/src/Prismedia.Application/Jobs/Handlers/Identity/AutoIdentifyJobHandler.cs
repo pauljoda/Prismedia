@@ -11,6 +11,7 @@ namespace Prismedia.Application.Jobs.Handlers;
 /// </summary>
 public sealed class AutoIdentifyJobHandler(
     IAutoIdentifyRunner runner,
+    AutoIdentifyConcurrencyGate gate,
     ILogger<AutoIdentifyJobHandler> logger) : IJobHandler {
     public JobType Type => JobType.AutoIdentify;
 
@@ -21,6 +22,7 @@ public sealed class AutoIdentifyJobHandler(
         }
 
         await context.ReportProgressAsync(10, "Identifying", cancellationToken);
+        using var lease = await gate.EnterAsync(cancellationToken);
         var result = await runner.RunAsync(entityId, cancellationToken);
 
         if (result.Applied) {

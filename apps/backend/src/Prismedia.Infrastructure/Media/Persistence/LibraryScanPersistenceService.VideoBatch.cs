@@ -202,7 +202,6 @@ public sealed partial class LibraryScanPersistenceService {
 
         var entity = await _db.Entities.FindAsync([movieId], cancellationToken);
         if (entity is not null) {
-            ApplyRatingIfMissing(entity, metadata.Rating, now);
             if (markNsfw) {
                 entity.IsNsfw = true;
             }

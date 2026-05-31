@@ -73,9 +73,6 @@ public sealed record VideoSidecarMetadata {
     /// <summary>Studio, uploader, channel, creator, or artist supplied by the sidecar.</summary>
     public string? Studio { get; init; }
 
-    /// <summary>User rating normalized onto Prismedia's 0-5 scale.</summary>
-    public int? Rating { get; init; }
-
     /// <summary>Canonical or reference URLs supplied by the sidecar.</summary>
     public IReadOnlyList<string> Urls { get; init; } = [];
 

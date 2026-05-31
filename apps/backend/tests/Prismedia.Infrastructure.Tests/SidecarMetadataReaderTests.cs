@@ -45,7 +45,6 @@ public sealed class SidecarMetadataReaderTests {
             Assert.Equal("NFO plot", metadata.Description);
             Assert.Equal("2026-05-02", metadata.Date);
             Assert.Equal("NFO Studio", metadata.Studio);
-            Assert.Equal(4, metadata.Rating);
             Assert.Equal(["https://example.test/json", "https://example.test/nfo"], metadata.Urls);
             Assert.Equal(["json-tag", "nfo-tag", "genre-tag"], metadata.Tags);
             Assert.Equal(["Ada Actor"], metadata.Performers);
@@ -83,7 +82,6 @@ public sealed class SidecarMetadataReaderTests {
             Assert.Equal("Suburban dad Craig falls hard for his charismatic new neighbor Austin.", metadata.Description);
             Assert.Equal("2025-05-09", metadata.Date);
             Assert.Equal("BoulderLight Pictures", metadata.Studio);
-            Assert.Equal(3, metadata.Rating);
             Assert.Equal(["Comedy"], metadata.Tags);
             Assert.Equal(["Tim Robinson", "Paul Rudd", "Andrew DeYoung"], metadata.Performers);
         } finally {

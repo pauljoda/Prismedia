@@ -21,7 +21,6 @@ public sealed partial class LibraryScanPersistenceService {
         ApplyTitleIfScannedFallback(entity, metadata.Title, fallbackTitle, now);
         await UpsertDescriptionIfMissingAsync(entityId, metadata.Description, now, cancellationToken);
         await UpsertDateIfMissingAsync(entityId, "release", metadata.Date, now, cancellationToken);
-        ApplyRatingIfMissing(entity, metadata.Rating, now);
         await AddUrlsAsync(entityId, metadata.Urls, now, cancellationToken);
         await AddTagsAsync(entityId, metadata.Tags, now, markNsfw, cancellationToken);
         await SetStudioIfMissingAsync(entityId, metadata.Studio, now, markNsfw, cancellationToken);
@@ -70,15 +69,6 @@ public sealed partial class LibraryScanPersistenceService {
             entity.Title = title.Trim();
             entity.UpdatedAt = now;
         }
-    }
-
-    private static void ApplyRatingIfMissing(EntityRow entity, int? rating, DateTimeOffset now) {
-        if (rating is null || entity.RatingValue is not null) {
-            return;
-        }
-
-        entity.RatingValue = Math.Clamp(rating.Value, 0, 5);
-        entity.UpdatedAt = now;
     }
 
     private async Task UpsertDescriptionIfMissingAsync(

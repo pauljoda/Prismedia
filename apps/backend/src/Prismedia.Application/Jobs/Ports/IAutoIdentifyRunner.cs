@@ -3,7 +3,7 @@ namespace Prismedia.Application.Jobs.Ports;
 /// <summary>
 /// Port that runs auto identify for a single entity: it walks the configured providers in order
 /// and applies the first proposal that clears the confidence/exact-match bar, exactly as a manual
-/// identify-and-apply would (full fields, structural children, relationships, and artwork).
+/// identify-and-apply would (metadata fields, structural children, relationships, and artwork).
 /// </summary>
 public interface IAutoIdentifyRunner {
     /// <summary>

@@ -731,8 +731,7 @@ public sealed class ScanJobHandlerTests {
             Studio = "Sidecar Studio",
             Tags = ["Noir", "Feature"],
             Performers = ["Ada Actor"],
-            Urls = ["https://example.test/video"],
-            Rating = 4
+            Urls = ["https://example.test/video"]
         };
         var persistence = new FakeScanPersistence([root]) {
             Settings = DisabledGeneratedWorkSettings,

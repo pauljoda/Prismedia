@@ -11,8 +11,8 @@ namespace Prismedia.Infrastructure.Plugins;
 /// <summary>
 /// Runs auto identify for a single scanned entity: it walks the user's ordered provider list and
 /// applies the first proposal that clears the configured confidence bar (or is an exact match),
-/// applying the full proposal — scalar fields, structural children, relationships, and artwork —
-/// exactly as a manual identify-and-apply would. Successfully identified entities are marked
+/// applying provider metadata — scalar fields, structural children, relationships, and artwork —
+/// while leaving user fields such as rating untouched. Successfully identified entities are marked
 /// organized so the un-organized-only gate skips them on later scans.
 /// </summary>
 public sealed class AutoIdentifyRunner(
@@ -184,9 +184,9 @@ public sealed class AutoIdentifyRunner(
     }
 
     /// <summary>
-    /// Builds the full set of field keys present in the proposal so the apply behaves like a manual
-    /// "select all" — scalar fields, relationships (credits/studio/tags), and artwork. Structural
-    /// children are always applied by the apply service regardless of the selected field set.
+    /// Builds the field keys present in the proposal so auto-apply imports provider metadata while
+    /// leaving user-owned fields such as rating untouched. Structural children are always applied by
+    /// the apply service regardless of the selected field set.
     /// </summary>
     private static IReadOnlyCollection<string> SelectAllPresentFields(EntityMetadataProposal proposal) {
         var patch = proposal.Patch;
@@ -201,7 +201,6 @@ public sealed class AutoIdentifyRunner(
             if (patch.Stats is { Count: > 0 }) fields.Add("stats");
             if (patch.Positions is { Count: > 0 }) fields.Add("positions");
             if (!string.IsNullOrWhiteSpace(patch.Classification)) fields.Add("classification");
-            if (patch.Rating.HasValue) fields.Add("rating");
             if (patch.Flags is not null) fields.Add("flags");
             if (patch.Tags is { Count: > 0 }) fields.Add("tags");
             if (!string.IsNullOrWhiteSpace(patch.Studio)) fields.Add("studio");

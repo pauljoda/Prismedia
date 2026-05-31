@@ -36,7 +36,6 @@ public sealed class VideoSidecarMetadataReader : IVideoSidecarMetadataReader {
                     return null;
                 }
 
-                var rating = FirstElementValue(document, "rating");
                 var urls = Unique(Elements(document, "url").Select(element => element.Value));
                 var tags = Unique(Elements(document, "tag")
                     .Concat(Elements(document, "genre"))
@@ -58,7 +57,6 @@ public sealed class VideoSidecarMetadataReader : IVideoSidecarMetadataReader {
                         FirstElementValue(document, "date"),
                         FirstElementValue(document, "year"))),
                     Studio = Clean(FirstElementValue(document, "studio")),
-                    Rating = NormalizeRating(rating),
                     Urls = urls,
                     Tags = tags,
                     Performers = performers,
@@ -125,7 +123,6 @@ public sealed class VideoSidecarMetadataReader : IVideoSidecarMetadataReader {
             Description = Clean(FirstString(json, "description", "plot", "synopsis")),
             Date = NormalizeDate(FirstString(json, "upload_date", "release_date", "date", "aired")),
             Studio = Clean(FirstString(json, "uploader", "channel", "creator", "studio", "artist")),
-            Rating = NormalizeRating(FirstNumber(json, "average_rating")),
             Urls = Unique(urls),
             Tags = Unique(tags),
             Performers = Unique(performers),
@@ -143,7 +140,6 @@ public sealed class VideoSidecarMetadataReader : IVideoSidecarMetadataReader {
             Description = FirstNonEmpty(nfo?.Description, json?.Description),
             Date = FirstNonEmpty(nfo?.Date, json?.Date),
             Studio = FirstNonEmpty(nfo?.Studio, json?.Studio),
-            Rating = nfo?.Rating ?? json?.Rating,
             Urls = urls,
             Tags = tags,
             Performers = performers,
@@ -247,21 +243,6 @@ public sealed class VideoSidecarMetadataReader : IVideoSidecarMetadataReader {
                 values.Add(item.GetString()!.Trim());
             }
         }
-    }
-
-    private static int? NormalizeRating(string? raw) =>
-        double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var number)
-            ? NormalizeRating(number)
-            : null;
-
-    private static int? NormalizeRating(double? raw) {
-        if (raw is null || !double.IsFinite(raw.Value) || raw < 0 || raw > 100) {
-            return null;
-        }
-
-        if (raw <= 5) return (int)Math.Round(raw.Value, MidpointRounding.AwayFromZero);
-        if (raw <= 10) return (int)Math.Round(raw.Value / 2, MidpointRounding.AwayFromZero);
-        return (int)Math.Round(raw.Value / 20, MidpointRounding.AwayFromZero);
     }
 
     private static double? ParseDurationSeconds(string? duration, string? runtimeMinutes) {
