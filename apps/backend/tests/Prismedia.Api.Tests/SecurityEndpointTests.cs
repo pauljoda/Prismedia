@@ -174,7 +174,7 @@ public sealed partial class SecurityEndpointTests : IDisposable {
             adultAuth.AccessToken);
 
         Assert.NotNull(visible);
-        Assert.Equal("Movie", visible.Type);
+        Assert.Equal("Video", visible.Type);
     }
 
     [Fact]
@@ -206,11 +206,11 @@ public sealed partial class SecurityEndpointTests : IDisposable {
 
         var videos = await JellyfinGetFromJsonAsync<JellyfinQueryResult<JellyfinBaseItemDto>>(
             client,
-            $"/Users/{auth.User.Id:D}/Items?ParentId={JellyfinCatalogService.VideosViewId:D}&IncludeItemTypes=Movie&Fields=MediaSources,MediaStreams",
+            $"/Users/{auth.User.Id:D}/Items?ParentId={JellyfinCatalogService.VideosViewId:D}&IncludeItemTypes=Video&Fields=MediaSources,MediaStreams",
             auth.AccessToken);
         var standalone = Assert.Single(videos!.Items);
 
-        Assert.Equal("Standalone Movie", standalone.Name);
+        Assert.Equal("Standalone Video", standalone.Name);
         Assert.Null(standalone.ParentId);
         Assert.Equal("FileSystem", standalone.LocationType);
         Assert.Equal("Full", standalone.PlayAccess);
@@ -480,7 +480,7 @@ public sealed partial class SecurityEndpointTests : IDisposable {
             bool? unrated = null,
             string? status = null) {
             IReadOnlyList<EntityThumbnail> items = kind switch {
-                "video" => [Thumbnail(StandaloneId, "video", "Standalone Movie", null, null), Thumbnail(EpisodeId, "video", "Pilot", SeasonId, 1)],
+                "video" => [Thumbnail(StandaloneId, "video", "Standalone Video", null, null), Thumbnail(EpisodeId, "video", "Pilot", SeasonId, 1)],
                 "video-series" => [Thumbnail(SeriesId, "video-series", "The Chair Company", null, null)],
                 _ => []
             };
@@ -488,7 +488,7 @@ public sealed partial class SecurityEndpointTests : IDisposable {
         }
 
         public Task<EntityCard?> GetAsync(Guid id, bool hideNsfw, CancellationToken cancellationToken) =>
-            Task.FromResult<EntityCard?>(id == StandaloneId ? VideoCard(id, "Standalone Movie", null, null, "/media/standalone.mkv") :
+            Task.FromResult<EntityCard?>(id == StandaloneId ? VideoCard(id, "Standalone Video", null, null, "/media/standalone.mkv") :
                 id == SeriesId ? SeriesCard() :
                 id == SeasonId ? SeasonCard() :
                 id == EpisodeId ? VideoCard(id, "Pilot", SeasonId, 1, "/media/the-chair-company/s01e01.mkv") :

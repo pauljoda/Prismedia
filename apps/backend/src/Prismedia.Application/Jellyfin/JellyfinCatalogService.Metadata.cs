@@ -449,7 +449,7 @@ public sealed partial class JellyfinCatalogService {
     private static string JellyfinType(string kind, Guid? parentId) =>
         kind.Trim().ToLowerInvariant() switch {
             "movie" => JellyfinProtocol.ItemTypes.Movie,
-            "video" => parentId is null ? JellyfinProtocol.ItemTypes.Movie : JellyfinProtocol.ItemTypes.Episode,
+            "video" => parentId is null ? JellyfinProtocol.ItemTypes.Video : JellyfinProtocol.ItemTypes.Episode,
             "video-series" => JellyfinProtocol.ItemTypes.Series,
             "video-season" => JellyfinProtocol.ItemTypes.Season,
             "collection" => JellyfinProtocol.ItemTypes.BoxSet,

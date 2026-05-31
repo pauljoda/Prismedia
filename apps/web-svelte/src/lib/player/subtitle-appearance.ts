@@ -87,7 +87,7 @@ export function captionClassName(style: SubtitleDisplayStyle): string {
 
 /** Pick the best track for the user's preferred language list. */
 export function pickPreferredSubtitleTrack(
-  tracks: { id: string; language: string }[],
+  tracks: { id: string; language: string; label?: string | null; isDefault?: boolean }[],
   preferredLanguages: string,
 ): string | null {
   if (!tracks.length) return null;
@@ -98,16 +98,14 @@ export function pickPreferredSubtitleTrack(
   if (prefs.length === 0) return tracks[0]!.id;
 
   for (const pref of prefs) {
-    const exact = tracks.find((t) => t.language.toLowerCase() === pref);
+    const exact = tracks.find((t) => subtitleTrackTokens(t).some((token) => token === pref));
     if (exact) return exact.id;
-    const prefix = tracks.find(
-      (t) =>
-        t.language.toLowerCase().startsWith(pref) ||
-        pref.startsWith(t.language.toLowerCase()),
+    const prefix = tracks.find((t) =>
+      subtitleTrackTokens(t).some((token) => token.startsWith(pref) || pref.startsWith(token)),
     );
     if (prefix) return prefix.id;
     const equiv = tracks.find((t) =>
-      iso639Equivalent(t.language.toLowerCase(), pref),
+      subtitleTrackTokens(t).some((token) => iso639Equivalent(token, pref)),
     );
     if (equiv) return equiv.id;
   }
@@ -129,6 +127,37 @@ const ISO639_PAIRS: Record<string, string> = {
   ar: "ara", ara: "ar",
   hi: "hin", hin: "hi",
 };
+
+const LANGUAGE_NAME_ALIASES: Record<string, string> = {
+  english: "en",
+  japanese: "ja",
+  spanish: "es",
+  french: "fr",
+  german: "de",
+  chinese: "zh",
+  korean: "ko",
+  portuguese: "pt",
+  russian: "ru",
+  italian: "it",
+  dutch: "nl",
+  arabic: "ar",
+  hindi: "hi",
+};
+
+function subtitleTrackTokens(track: {
+  language: string;
+  label?: string | null;
+}): string[] {
+  const rawTokens = [track.language, track.label]
+    .filter((value): value is string => Boolean(value?.trim()))
+    .flatMap((value) => {
+      const normalized = value.trim().toLowerCase();
+      return [normalized, normalized.replace(/\s*\([^)]*\)\s*/g, "").trim()];
+    })
+    .filter(Boolean);
+
+  return Array.from(new Set(rawTokens.flatMap((token) => [token, LANGUAGE_NAME_ALIASES[token]].filter(Boolean) as string[])));
+}
 
 function iso639Equivalent(a: string, b: string): boolean {
   return ISO639_PAIRS[a] === b || ISO639_PAIRS[b] === a;

@@ -60,6 +60,9 @@ public static class JellyfinProtocol {
 
     /// <summary>Jellyfin <c>BaseItemDto.Type</c> discriminators.</summary>
     public static class ItemTypes {
+        /// <summary>Standalone playable video (home-video library item).</summary>
+        public const string Video = "Video";
+
         /// <summary>Single film.</summary>
         public const string Movie = "Movie";
 

@@ -227,6 +227,7 @@
   let activeCueText = $state<string | null>(null);
   let localAppearance = $state<Partial<SubtitleAppearance> | null>(null);
   let autoSelected = false;
+  let autoSelectionKey = "";
   let googleCastFrameworkPromise: Promise<boolean> | null = null;
   let googleCastFrameworkAvailable = false;
 
@@ -1073,18 +1074,27 @@
   });
 
   $effect(() => {
+    const nextAutoSelectionKey = [
+      subtitleDefaults?.autoEnable ? "auto" : "manual",
+      subtitleDefaults?.preferredLanguages ?? "",
+      subtitleTracks.map((track) => `${track.id}:${track.language}:${track.label ?? ""}`).join("|"),
+    ].join("::");
+    if (nextAutoSelectionKey !== autoSelectionKey) {
+      autoSelectionKey = nextAutoSelectionKey;
+      autoSelected = false;
+    }
+
     if (autoSelected) return;
-    if (subtitleChoiceLocked) {
-      autoSelected = true;
-      return;
-    }
-    if (controlledSubtitleId !== undefined && controlledSubtitleId !== null) {
-      autoSelected = true;
-      return;
-    }
+    if (subtitleChoiceLocked) return;
+    if (controlledSubtitleId !== undefined && controlledSubtitleId !== null) return;
     if (!subtitleDefaults?.autoEnable || subtitleTracks.length === 0) return;
     const picked = pickPreferredSubtitleTrack(
-      subtitleTracks.map((track) => ({ id: track.id, language: track.language })),
+      subtitleTracks.map((track) => ({
+        id: track.id,
+        language: track.language,
+        label: track.label,
+        isDefault: track.isDefault,
+      })),
       subtitleDefaults.preferredLanguages,
     );
     if (picked) {

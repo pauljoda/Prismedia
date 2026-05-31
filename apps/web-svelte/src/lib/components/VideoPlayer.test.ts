@@ -111,6 +111,40 @@ describe("VideoPlayer", () => {
     });
   });
 
+  it("auto-selects after a stale subtitle lock is cleared without remounting", async () => {
+    const onActiveSubtitleTrackIdChange = vi.fn();
+
+    const { rerender } = render(VideoPlayer, {
+      props: {
+        subtitleTracks: [
+          makeTrack("track-ja", "ja"),
+          makeTrack("track-en", "en"),
+        ],
+        subtitleDefaults,
+        activeSubtitleTrackId: null,
+        subtitleChoiceLocked: true,
+        onActiveSubtitleTrackIdChange,
+      },
+    });
+
+    expect(onActiveSubtitleTrackIdChange).not.toHaveBeenCalled();
+
+    await rerender({
+      subtitleTracks: [
+        makeTrack("track-ja", "ja"),
+        makeTrack("track-en", "en"),
+      ],
+      subtitleDefaults,
+      activeSubtitleTrackId: null,
+      subtitleChoiceLocked: false,
+      onActiveSubtitleTrackIdChange,
+    });
+
+    await waitFor(() => {
+      expect(onActiveSubtitleTrackIdChange).toHaveBeenCalledWith("track-en");
+    });
+  });
+
   it("re-applies defaults for a new video after the parent clears a prior lock", async () => {
     const onActiveSubtitleTrackIdChange = vi.fn();
 
