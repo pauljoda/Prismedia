@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Entities;
+using Prismedia.Contracts.Media;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
 
@@ -45,20 +46,20 @@ public sealed class EfEntityFileContentService(PrismediaDbContext db) : IEntityF
 
     private static string MimeForExtension(string extension) =>
         extension.ToLowerInvariant() switch {
-            ".jpg" or ".jpeg" => "image/jpeg",
-            ".png" => "image/png",
-            ".gif" => "image/gif",
-            ".webp" => "image/webp",
-            ".avif" => "image/avif",
-            ".mp4" or ".m4v" => "video/mp4",
-            ".webm" => "video/webm",
-            ".ogg" or ".ogv" => "video/ogg",
-            ".mov" => "video/quicktime",
-            ".mkv" => "video/x-matroska",
-            ".avi" => "video/x-msvideo",
-            ".wmv" => "video/x-ms-wmv",
-            ".flv" => "video/x-flv",
-            ".ts" or ".m2ts" => "video/mp2t",
-            _ => "application/octet-stream",
+            ".jpg" or ".jpeg" => MediaContentTypes.ImageJpeg,
+            ".png" => MediaContentTypes.ImagePng,
+            ".gif" => MediaContentTypes.ImageGif,
+            ".webp" => MediaContentTypes.ImageWebp,
+            ".avif" => MediaContentTypes.ImageAvif,
+            ".mp4" or ".m4v" => MediaContentTypes.VideoMp4,
+            ".webm" => MediaContentTypes.VideoWebm,
+            ".ogg" or ".ogv" => MediaContentTypes.VideoOgg,
+            ".mov" => MediaContentTypes.VideoQuicktime,
+            ".mkv" => MediaContentTypes.VideoMatroska,
+            ".avi" => MediaContentTypes.VideoAvi,
+            ".wmv" => MediaContentTypes.VideoWmv,
+            ".flv" => MediaContentTypes.VideoFlv,
+            ".ts" or ".m2ts" => MediaContentTypes.VideoMp2t,
+            _ => MediaContentTypes.OctetStream,
         };
 }

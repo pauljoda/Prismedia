@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Audio;
+using Prismedia.Contracts.Media;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
 
@@ -66,15 +67,15 @@ public sealed class AudioSourceService : IAudioSourceService {
 
     private static string MimeForExtension(string extension) {
         return extension.ToLowerInvariant() switch {
-            ".mp3" => "audio/mpeg",
-            ".m4a" or ".aac" => "audio/mp4",
-            ".ogg" or ".oga" => "audio/ogg",
-            ".opus" => "audio/opus",
-            ".flac" => "audio/flac",
-            ".wav" => "audio/wav",
-            ".aiff" or ".aif" => "audio/aiff",
-            ".wma" => "audio/x-ms-wma",
-            _ => "application/octet-stream"
+            ".mp3" => MediaContentTypes.AudioMpeg,
+            ".m4a" or ".aac" => MediaContentTypes.AudioMp4,
+            ".ogg" or ".oga" => MediaContentTypes.AudioOgg,
+            ".opus" => MediaContentTypes.AudioOpus,
+            ".flac" => MediaContentTypes.AudioFlac,
+            ".wav" => MediaContentTypes.AudioWav,
+            ".aiff" or ".aif" => MediaContentTypes.AudioAiff,
+            ".wma" => MediaContentTypes.AudioWma,
+            _ => MediaContentTypes.OctetStream
         };
     }
 }

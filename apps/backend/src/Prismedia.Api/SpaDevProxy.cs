@@ -1,4 +1,5 @@
 using Prismedia.Api.Jellyfin;
+using Prismedia.Contracts.Media;
 
 namespace Prismedia.Api;
 
@@ -71,7 +72,7 @@ public static class SpaDevProxy {
             } catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException) {
                 if (context.Response.HasStarted) return;
                 context.Response.StatusCode = 503;
-                context.Response.ContentType = "text/html; charset=utf-8";
+                context.Response.ContentType = MediaContentTypes.HtmlUtf8;
                 await context.Response.WriteAsync(
                     """
                     <!DOCTYPE html>

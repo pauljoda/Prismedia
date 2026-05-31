@@ -1,6 +1,7 @@
 using Prismedia.Application.Jobs.Handlers;
 using Microsoft.Extensions.Logging;
 using Prismedia.Application.Jobs.Ports;
+using Prismedia.Contracts.Media;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Jobs.Handlers.Generate;
@@ -86,13 +87,13 @@ public sealed class GeneratePreviewJobHandler(
         if (thumbOk) {
             var size = new FileInfo(thumbPath).Length;
             await Persistence.UpsertEntityFileAsync(entityId, EntityFileRole.Thumbnail,
-                assets.VideoThumbnailUrl(entityId), "image/jpeg", size, cancellationToken);
+                assets.VideoThumbnailUrl(entityId), MediaContentTypes.ImageJpeg, size, cancellationToken);
         }
 
         if (previewOk) {
             var size = new FileInfo(previewPath).Length;
             await Persistence.UpsertEntityFileAsync(entityId, EntityFileRole.Preview,
-                assets.VideoPreviewUrl(entityId), "video/mp4", size, cancellationToken);
+                assets.VideoPreviewUrl(entityId), MediaContentTypes.VideoMp4, size, cancellationToken);
         }
     }
 
@@ -149,7 +150,7 @@ public sealed class GeneratePreviewJobHandler(
             cancellationToken);
 
         await Persistence.UpsertEntityFileAsync(entityId, EntityFileRole.Trickplay,
-            assets.TrickplayPlaylistUrl(entityId, frameWidth), "application/vnd.apple.mpegurl", null, cancellationToken);
+            assets.TrickplayPlaylistUrl(entityId, frameWidth), MediaContentTypes.HlsPlaylist, null, cancellationToken);
 
         return true;
     }

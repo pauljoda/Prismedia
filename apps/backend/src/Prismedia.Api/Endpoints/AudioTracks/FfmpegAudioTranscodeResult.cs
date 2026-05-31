@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Prismedia.Application.Audio;
+using Prismedia.Contracts.Media;
 
 namespace Prismedia.Api.Endpoints;
 
@@ -7,7 +8,7 @@ internal sealed class FfmpegAudioTranscodeResult(AudioStreamPlan stream) : IResu
     public async Task ExecuteAsync(HttpContext httpContext) {
         var response = httpContext.Response;
         response.StatusCode = StatusCodes.Status200OK;
-        response.ContentType = "audio/mpeg";
+        response.ContentType = MediaContentTypes.AudioMpeg;
         response.Headers.CacheControl = "no-store";
         response.Headers["X-Transcoded-From"] = stream.Codec ?? "unknown";
 

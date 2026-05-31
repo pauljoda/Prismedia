@@ -5,6 +5,7 @@ using Prismedia.Api.Security;
 using Prismedia.Api.Serialization;
 using Prismedia.Application;
 using Prismedia.Contracts.Entities;
+using Prismedia.Contracts.Media;
 using Prismedia.Contracts.System;
 using Prismedia.Infrastructure;
 using Prismedia.Infrastructure.Persistence;
@@ -108,7 +109,7 @@ var staticIndexPath = resolvedStaticWebRoot is not null
 
 if (File.Exists(staticIndexPath)) {
     app.MapFallback(async () =>
-        Results.Content(await File.ReadAllTextAsync(staticIndexPath), "text/html"));
+        Results.Content(await File.ReadAllTextAsync(staticIndexPath), MediaContentTypes.Html));
 } else {
     app.MapFallback(() => Results.NotFound(new ApiProblem(
         "not_found",

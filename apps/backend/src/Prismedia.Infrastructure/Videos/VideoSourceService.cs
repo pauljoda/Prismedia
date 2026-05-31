@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Videos;
+using Prismedia.Contracts.Media;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Media.Processing;
 using Prismedia.Infrastructure.Persistence;
@@ -199,16 +200,16 @@ public sealed class VideoSourceService : IVideoSourceService {
 
     private static string MimeForExtension(string extension) {
         return extension.ToLowerInvariant() switch {
-            ".mp4" or ".m4v" => "video/mp4",
-            ".webm" => "video/webm",
-            ".ogg" or ".ogv" => "video/ogg",
-            ".mov" => "video/quicktime",
-            ".mkv" => "video/x-matroska",
-            ".avi" => "video/x-msvideo",
-            ".wmv" => "video/x-ms-wmv",
-            ".flv" => "video/x-flv",
-            ".ts" or ".m2ts" => "video/mp2t",
-            _ => "application/octet-stream"
+            ".mp4" or ".m4v" => MediaContentTypes.VideoMp4,
+            ".webm" => MediaContentTypes.VideoWebm,
+            ".ogg" or ".ogv" => MediaContentTypes.VideoOgg,
+            ".mov" => MediaContentTypes.VideoQuicktime,
+            ".mkv" => MediaContentTypes.VideoMatroska,
+            ".avi" => MediaContentTypes.VideoAvi,
+            ".wmv" => MediaContentTypes.VideoWmv,
+            ".flv" => MediaContentTypes.VideoFlv,
+            ".ts" or ".m2ts" => MediaContentTypes.VideoMp2t,
+            _ => MediaContentTypes.OctetStream
         };
     }
 

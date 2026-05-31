@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Entities;
 using Prismedia.Application.Jobs.Ports;
+using Prismedia.Contracts.Media;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
@@ -143,27 +144,27 @@ public sealed class EntityImageAssetMutationService(
 
     private static string? NormalizeImageMimeType(string? contentType, string fileName) {
         var normalized = contentType?.Split(';')[0].Trim().ToLowerInvariant();
-        if (normalized is "image/jpeg" or "image/png" or "image/webp" or "image/gif" or "image/avif") {
+        if (normalized is MediaContentTypes.ImageJpeg or MediaContentTypes.ImagePng or MediaContentTypes.ImageWebp or MediaContentTypes.ImageGif or MediaContentTypes.ImageAvif) {
             return normalized;
         }
 
         return Path.GetExtension(fileName).ToLowerInvariant() switch {
-            ".jpg" or ".jpeg" => "image/jpeg",
-            ".png" => "image/png",
-            ".webp" => "image/webp",
-            ".gif" => "image/gif",
-            ".avif" => "image/avif",
+            ".jpg" or ".jpeg" => MediaContentTypes.ImageJpeg,
+            ".png" => MediaContentTypes.ImagePng,
+            ".webp" => MediaContentTypes.ImageWebp,
+            ".gif" => MediaContentTypes.ImageGif,
+            ".avif" => MediaContentTypes.ImageAvif,
             _ => null
         };
     }
 
     private static string ExtensionForMimeType(string mimeType) =>
         mimeType switch {
-            "image/jpeg" => ".jpg",
-            "image/png" => ".png",
-            "image/webp" => ".webp",
-            "image/gif" => ".gif",
-            "image/avif" => ".avif",
+            MediaContentTypes.ImageJpeg => ".jpg",
+            MediaContentTypes.ImagePng => ".png",
+            MediaContentTypes.ImageWebp => ".webp",
+            MediaContentTypes.ImageGif => ".gif",
+            MediaContentTypes.ImageAvif => ".avif",
             _ => ".img"
         };
 }

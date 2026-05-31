@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Jobs.Ports;
+using Prismedia.Contracts.Media;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Entities;
 using Prismedia.Infrastructure.Persistence;
@@ -58,7 +59,7 @@ public sealed class GridThumbnailService(
                 EntityId = entityId,
                 Role = EntityFileRole.GridThumbnail,
                 Path = url,
-                MimeType = "image/jpeg",
+                MimeType = MediaContentTypes.ImageJpeg,
                 SizeBytes = size,
                 Source = FileSourceKind.Scan.ToCode(),
                 CreatedAt = now,
@@ -66,7 +67,7 @@ public sealed class GridThumbnailService(
             });
         } else {
             existing.Path = url;
-            existing.MimeType = "image/jpeg";
+            existing.MimeType = MediaContentTypes.ImageJpeg;
             existing.SizeBytes = size;
             existing.UpdatedAt = now;
         }

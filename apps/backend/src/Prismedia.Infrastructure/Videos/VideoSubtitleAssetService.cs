@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Videos;
+using Prismedia.Contracts.Media;
 using Prismedia.Infrastructure.Persistence;
 
 namespace Prismedia.Infrastructure.Videos;
@@ -35,7 +36,7 @@ public sealed class VideoSubtitleAssetService : IVideoSubtitleAssetService {
             .Select(row => row.StoragePath)
             .SingleOrDefaultAsync(cancellationToken);
 
-        return ExistingAsset(path, "text/vtt; charset=utf-8");
+        return ExistingAsset(path, MediaContentTypes.VttUtf8);
     }
 
     /// <summary>
@@ -64,7 +65,7 @@ public sealed class VideoSubtitleAssetService : IVideoSubtitleAssetService {
             return null;
         }
 
-        return ExistingAsset(row.SourcePath, "text/x-ssa; charset=utf-8");
+        return ExistingAsset(row.SourcePath, MediaContentTypes.SsaUtf8);
     }
 
     private static VideoSubtitleAsset? ExistingAsset(string? path, string contentType) {

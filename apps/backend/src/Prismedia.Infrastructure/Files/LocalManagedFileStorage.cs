@@ -1,5 +1,6 @@
 using Prismedia.Application.Files;
 using Prismedia.Contracts.Files;
+using Prismedia.Contracts.Media;
 
 namespace Prismedia.Infrastructure.Files;
 
@@ -209,23 +210,23 @@ public sealed class LocalManagedFileStorage : IManagedFileStorage {
 
     private static string DetectMimeType(string fileName) =>
         Path.GetExtension(fileName).ToLowerInvariant() switch {
-            ".jpg" or ".jpeg" => "image/jpeg",
-            ".png" => "image/png",
-            ".gif" => "image/gif",
-            ".webp" => "image/webp",
-            ".avif" => "image/avif",
-            ".mp4" or ".m4v" => "video/mp4",
-            ".webm" => "video/webm",
-            ".mp3" => "audio/mpeg",
-            ".m4a" => "audio/mp4",
-            ".flac" => "audio/flac",
-            ".wav" => "audio/wav",
+            ".jpg" or ".jpeg" => MediaContentTypes.ImageJpeg,
+            ".png" => MediaContentTypes.ImagePng,
+            ".gif" => MediaContentTypes.ImageGif,
+            ".webp" => MediaContentTypes.ImageWebp,
+            ".avif" => MediaContentTypes.ImageAvif,
+            ".mp4" or ".m4v" => MediaContentTypes.VideoMp4,
+            ".webm" => MediaContentTypes.VideoWebm,
+            ".mp3" => MediaContentTypes.AudioMpeg,
+            ".m4a" => MediaContentTypes.AudioMp4,
+            ".flac" => MediaContentTypes.AudioFlac,
+            ".wav" => MediaContentTypes.AudioWav,
             ".txt" or ".log" or ".md" => "text/plain",
             ".json" => "application/json",
             ".xml" => "application/xml",
-            ".vtt" => "text/vtt",
+            ".vtt" => MediaContentTypes.Vtt,
             ".srt" => "text/plain",
-            _ => "application/octet-stream",
+            _ => MediaContentTypes.OctetStream,
         };
 
     private static bool IsPreviewable(string? mimeType) =>

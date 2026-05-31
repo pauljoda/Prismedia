@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Contracts.Entities;
+using Prismedia.Contracts.Media;
 using Prismedia.Contracts.Plugins;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
@@ -147,9 +148,9 @@ public sealed class PluginArtworkDownloader {
 
     private static string? MimeTypeFromExtension(string ext) =>
         ext.ToLowerInvariant() switch {
-            ".jpg" or ".jpeg" => "image/jpeg",
-            ".png" => "image/png",
-            ".webp" => "image/webp",
+            ".jpg" or ".jpeg" => MediaContentTypes.ImageJpeg,
+            ".png" => MediaContentTypes.ImagePng,
+            ".webp" => MediaContentTypes.ImageWebp,
             _ => null
         };
 }

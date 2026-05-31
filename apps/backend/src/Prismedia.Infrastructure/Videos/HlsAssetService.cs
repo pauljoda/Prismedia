@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Prismedia.Application.Settings;
 using Prismedia.Application.Videos;
+using Prismedia.Contracts.Media;
 using Prismedia.Infrastructure.Media.Processing;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Processes;
@@ -189,7 +190,7 @@ public sealed class HlsAssetService : IHlsAssetService {
                 return null;
             }
 
-            return new HlsAsset(segmentPath, "video/mp2t", "public, max-age=31536000, immutable");
+            return new HlsAsset(segmentPath, MediaContentTypes.VideoMp2t, "public, max-age=31536000, immutable");
         }
 
         return null;
@@ -1122,11 +1123,11 @@ public sealed class HlsAssetService : IHlsAssetService {
 
     private static string MimeForExtension(string extension) {
         return extension.ToLowerInvariant() switch {
-            ".m3u8" => "application/vnd.apple.mpegurl",
-            ".ts" => "video/mp2t",
-            ".mp4" or ".m4s" => "video/mp4",
-            ".vtt" => "text/vtt",
-            _ => "application/octet-stream"
+            ".m3u8" => MediaContentTypes.HlsPlaylist,
+            ".ts" => MediaContentTypes.VideoMp2t,
+            ".mp4" or ".m4s" => MediaContentTypes.VideoMp4,
+            ".vtt" => MediaContentTypes.Vtt,
+            _ => MediaContentTypes.OctetStream
         };
     }
 

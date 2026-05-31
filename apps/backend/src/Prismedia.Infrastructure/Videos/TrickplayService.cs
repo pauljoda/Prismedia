@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Videos;
+using Prismedia.Contracts.Media;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 
@@ -75,7 +76,7 @@ public sealed class TrickplayService : ITrickplayService {
         var path = Path.Combine(resolvedWidth.Root, $"{index}.jpg");
         var resolved = ResolveInside(resolvedWidth.Root, $"{index}.jpg");
         return resolved is not null && File.Exists(path)
-            ? new TrickplayTile(path, "image/jpeg", "public, max-age=31536000, immutable")
+            ? new TrickplayTile(path, MediaContentTypes.ImageJpeg, "public, max-age=31536000, immutable")
             : null;
     }
 

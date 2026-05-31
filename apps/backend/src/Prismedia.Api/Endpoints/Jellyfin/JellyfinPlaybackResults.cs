@@ -2,6 +2,7 @@ using Prismedia.Api.Security;
 using Prismedia.Api.Mapping;
 using Prismedia.Application.Entities;
 using Prismedia.Application.Videos;
+using Prismedia.Contracts.Media;
 using Prismedia.Contracts.Playback;
 using Prismedia.Contracts.System;
 
@@ -86,7 +87,7 @@ internal static class JellyfinPlaybackResults {
         }
 
         httpContext.Response.Headers.CacheControl = playlist.CacheControl;
-        return Results.Text(playlist.Content, "application/vnd.apple.mpegurl");
+        return Results.Text(playlist.Content, MediaContentTypes.HlsPlaylist);
     }
 
     internal static async Task<IResult> GetTrickplayTileAsync(

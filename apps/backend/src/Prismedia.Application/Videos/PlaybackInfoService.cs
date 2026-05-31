@@ -1,4 +1,5 @@
 using Prismedia.Application.Settings;
+using Prismedia.Contracts.Media;
 
 namespace Prismedia.Application.Videos;
 
@@ -311,7 +312,7 @@ public sealed class PlaybackInfoService : IPlaybackInfoService {
     }
 
     private static string? CodecFromContentType(string contentType) =>
-        contentType.Equals("video/mp4", StringComparison.OrdinalIgnoreCase) ? "h264" : null;
+        contentType.Equals(MediaContentTypes.VideoMp4, StringComparison.OrdinalIgnoreCase) ? "h264" : null;
 
     private static string? ContainerFromPath(string path) {
         var extension = Path.GetExtension(path).TrimStart('.').ToLowerInvariant();

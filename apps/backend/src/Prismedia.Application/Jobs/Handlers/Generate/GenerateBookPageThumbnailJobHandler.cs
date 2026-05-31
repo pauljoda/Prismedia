@@ -2,6 +2,7 @@ using Prismedia.Application.Jobs.Handlers;
 using System.IO.Compression;
 using Microsoft.Extensions.Logging;
 using Prismedia.Application.Jobs.Ports;
+using Prismedia.Contracts.Media;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Jobs.Handlers.Generate;
@@ -45,7 +46,7 @@ public sealed class GenerateBookPageThumbnailJobHandler(
 
             if (success) {
                 var size = new FileInfo(thumbPath).Length;
-                await Persistence.UpsertEntityFileAsync(entityId, EntityFileRole.Thumbnail, assets.BookPageThumbnailUrl(entityId), "image/jpeg", size, cancellationToken);
+                await Persistence.UpsertEntityFileAsync(entityId, EntityFileRole.Thumbnail, assets.BookPageThumbnailUrl(entityId), MediaContentTypes.ImageJpeg, size, cancellationToken);
                 logger.LogInformation("GenerateBookPageThumbnail: created thumbnail for {Label}", context.Job.TargetLabel);
             }
         } finally {

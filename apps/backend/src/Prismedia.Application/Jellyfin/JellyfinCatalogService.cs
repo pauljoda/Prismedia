@@ -1371,11 +1371,11 @@ public sealed class JellyfinCatalogService {
 
     private static string MimeTypeForPath(string path) =>
         Path.GetExtension(path).ToLowerInvariant() switch {
-            ".jpg" or ".jpeg" => "image/jpeg",
-            ".png" => "image/png",
-            ".webp" => "image/webp",
-            ".gif" => "image/gif",
-            ".avif" => "image/avif",
-            _ => "application/octet-stream"
+            ".jpg" or ".jpeg" => MediaContentTypes.ImageJpeg,
+            ".png" => MediaContentTypes.ImagePng,
+            ".webp" => MediaContentTypes.ImageWebp,
+            ".gif" => MediaContentTypes.ImageGif,
+            ".avif" => MediaContentTypes.ImageAvif,
+            _ => MediaContentTypes.OctetStream
         };
 }
