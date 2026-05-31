@@ -25,7 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added Prismedia Community plugin update detection and install actions so deployed providers can move to newer compatible repository versions.
 - Added global entity search results that show direct matches first, then related media for matched people, studios, and tags, with quick-open highlighted results in search and the command palette.
 - Added collection creation and editing, including manual, dynamic, and hybrid modes, rule previews, visibility, and cover mode.
-- Added collection item curation controls for adding, removing, and reordering manual media entries from collection detail pages.
+- Added an "Add to Collection" bulk action to library grids: turn on selection, pick one or more items, and add them to any existing collection from the selection toolbar. Collection detail pages now simply show their items, with curation handled from wherever the media lives.
 - Added explicit reference-backed entity grids on people, studio, and tag detail pages so related content is listed from actual incoming relationships instead of search matches.
 - Added audio playback with streaming, waveform visualization, and full transport controls.
 - Added edit-mode poster and header artwork upload, drag-and-drop, and clear controls for entity detail pages.

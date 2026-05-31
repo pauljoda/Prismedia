@@ -3,18 +3,12 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import {
-    ArrowDown,
-    ArrowUp,
-    ChevronDown,
     Layers,
-    Loader2,
-    Plus,
     RefreshCw,
     SlidersHorizontal,
     Trash2,
     X,
   } from "@lucide/svelte";
-  import { cn } from "@prismedia/ui-svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import {
     updateEntityRating,
@@ -24,14 +18,10 @@
   import { getCollection } from "$lib/api/generated/prismedia";
   import type { CollectionDetail } from "$lib/api/generated/model";
   import {
-    addCollectionItems,
     deleteCollection,
     fetchCollectionItems,
     refreshCollection,
-    removeCollectionItems,
-    reorderCollectionItems,
   } from "$lib/api/collections";
-  import { fetchEntities } from "$lib/api/entities";
   import { unwrapGenerated } from "$lib/api/generated-response";
   import {
     toggleOptimisticEntityFlag,
@@ -40,14 +30,12 @@
   import { entityCardToDetailCard, type EntityDetailCardFull } from "$lib/entities/entity-detail";
   import { entityCardToThumbnailCard } from "$lib/entities/entity-grid";
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
-  import type { CollectionItem } from "$lib/collections/models";
   import { getEntityHref } from "$lib/components/collections/collection-item-helpers";
   import EntityDetail, {
     type EntityDetailActionButton,
     type EntityMetadataUpdateRequest,
   } from "$lib/components/entities/EntityDetail.svelte";
   import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
-  import EntityPicker, { type EntityPickerItem } from "$lib/components/forms/EntityPicker.svelte";
   import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import { useAppChrome } from "$lib/stores/app-chrome.svelte";
@@ -62,23 +50,10 @@
   let errorMessage: string | null = $state(null);
   let lastNsfwMode = $state(nsfw.mode);
   let ratingBusy = $state(false);
-  let collectionItems = $state.raw<CollectionItem[]>([]);
   let itemCards = $state<EntityThumbnailCard[]>([]);
-  let addItemKind = $state<CollectionItem["entityType"]>("video");
-  let addSelection = $state<EntityPickerItem[]>([]);
-  let addingItem = $state(false);
   let refreshBusy = $state(false);
   let deleteBusy = $state(false);
   let itemMutationError = $state<string | null>(null);
-
-  const entityKinds: { value: CollectionItem["entityType"]; label: string }[] = [
-    { value: "video", label: "Video" },
-    { value: "video-series", label: "Series" },
-    { value: "gallery", label: "Gallery" },
-    { value: "image", label: "Image" },
-    { value: "book", label: "Book" },
-    { value: "audio-track", label: "Audio" },
-  ];
 
   const card = $derived.by((): EntityDetailCardFull | null => {
     if (!collection) return null;
@@ -88,7 +63,6 @@
       posterCard: collectionPosterCard(detailCard),
     };
   });
-  const canManuallyCurate = $derived(collection?.mode !== "dynamic");
   const canRefreshRules = $derived(collection?.mode === "dynamic" || collection?.mode === "hybrid");
   const heroActions = $derived.by((): EntityDetailActionButton[] => {
     if (!card) return [];
@@ -151,7 +125,6 @@
       const nextCollection = unwrapGenerated<CollectionDetail>(await getCollection(id), `Failed to fetch collection ${id}`);
       const nextItems = await fetchCollectionItems(id);
       collection = nextCollection;
-      collectionItems = nextItems;
       itemCards = nextItems
         .map((item) => item.entity ? entityCardToThumbnailCard(item.entity, getEntityHref(item, `/collections/${id}`)) : null)
         .filter((card): card is EntityThumbnailCard => Boolean(card));
@@ -222,64 +195,6 @@
         : { kind: "none" },
       href: undefined,
     };
-  }
-
-  async function searchAddableEntities(query: string): Promise<EntityPickerItem[]> {
-    const response = await fetchEntities({
-      kind: addItemKind,
-      query: query || undefined,
-      limit: 20,
-    });
-    return response.items.map((item) => ({
-      id: item.id,
-      title: item.title,
-      thumbnailUrl: item.coverUrl,
-      subtitle: item.meta.map((meta) => meta.label).filter(Boolean).join(" · "),
-    }));
-  }
-
-  async function handleAddSelection(values: EntityPickerItem[]) {
-    addSelection = [];
-    const item = values.at(-1);
-    if (!collection || !item || addingItem) return;
-    addingItem = true;
-    itemMutationError = null;
-    try {
-      await addCollectionItems(collection.id, {
-        items: [{ entityType: addItemKind, entityId: item.id }],
-      });
-      await loadCollection();
-    } catch (err) {
-      itemMutationError = err instanceof Error ? err.message : "Failed to add item.";
-    } finally {
-      addingItem = false;
-    }
-  }
-
-  async function removeItem(item: CollectionItem) {
-    if (!collection) return;
-    itemMutationError = null;
-    try {
-      await removeCollectionItems(collection.id, [item.id]);
-      await loadCollection();
-    } catch (err) {
-      itemMutationError = err instanceof Error ? err.message : "Failed to remove item.";
-    }
-  }
-
-  async function moveItem(index: number, direction: -1 | 1) {
-    if (!collection) return;
-    const nextIndex = index + direction;
-    if (nextIndex < 0 || nextIndex >= collectionItems.length) return;
-    const next = [...collectionItems];
-    [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
-    itemMutationError = null;
-    try {
-      await reorderCollectionItems(collection.id, next.map((item) => item.id));
-      await loadCollection();
-    } catch (err) {
-      itemMutationError = err instanceof Error ? err.message : "Failed to reorder items.";
-    }
   }
 
   async function refreshDynamicItems() {
@@ -370,126 +285,6 @@
           <X class="h-3 w-3" />
         </button>
       </div>
-    {/if}
-
-    {#if canManuallyCurate}
-      <section class="surface-panel p-5 space-y-4">
-        <div class="flex items-center justify-between gap-3">
-          <h2 class="m-0 font-heading text-[1.05rem] font-semibold text-text-primary flex items-center gap-2">
-            <Plus class="h-4 w-4 text-text-muted" />
-            Curate
-          </h2>
-          {#if addingItem}
-            <Loader2 class="h-4 w-4 animate-spin text-text-accent" />
-          {/if}
-        </div>
-
-        <!-- Add row -->
-        <div class="grid grid-cols-1 sm:grid-cols-[minmax(8rem,12rem)_minmax(0,1fr)] gap-3 items-end">
-          <div class="space-y-1.5">
-            <span class="text-kicker">Kind</span>
-            <div class="relative">
-              <select
-                bind:value={addItemKind}
-                disabled={addingItem}
-                class={cn(
-                  "w-full appearance-none rounded-xs border border-border-subtle bg-surface-2 px-3 py-2 pr-8 text-sm text-text-primary",
-                  "shadow-[inset_0_2px_8px_rgba(0,0,0,0.30)] transition-colors outline-none",
-                  "focus:border-border-accent focus:shadow-[inset_0_2px_8px_rgba(0,0,0,0.30),0_0_0_1px_rgba(242,194,106,0.35),0_0_8px_rgba(242,194,106,0.15)]",
-                  "disabled:cursor-not-allowed disabled:opacity-50",
-                )}
-              >
-                {#each entityKinds as kind (kind.value)}
-                  <option value={kind.value}>{kind.label}</option>
-                {/each}
-              </select>
-              <ChevronDown class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-text-muted" />
-            </div>
-          </div>
-          <EntityPicker
-            values={addSelection}
-            onChange={handleAddSelection}
-            onSearch={searchAddableEntities}
-            mode="single"
-            placeholder="Search media to add…"
-            disabled={addingItem}
-          />
-        </div>
-
-        <!-- Ordered item list -->
-        {#if collectionItems.length > 0}
-          <div class="rounded-sm border border-border-subtle overflow-hidden">
-            <ol class="m-0 p-0 list-none">
-              {#each collectionItems as item, index (item.id)}
-                <li
-                  class={cn(
-                    "grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2.5 transition-colors",
-                    "hover:bg-surface-2",
-                    index > 0 && "border-t border-border-subtle",
-                  )}
-                >
-                  <span class="text-[0.68rem] font-mono text-text-disabled tabular-nums w-5 text-center">
-                    {index + 1}
-                  </span>
-                  <div class="min-w-0">
-                    <a
-                      href={getEntityHref(item, `/collections/${collection.id}`)}
-                      class="block truncate text-[0.85rem] text-text-primary no-underline transition-colors hover:text-text-accent"
-                    >
-                      {item.entity?.title ?? "Unknown item"}
-                    </a>
-                    <span class="text-kicker">
-                      {item.entityType}{#if item.source !== "manual"} · {item.source}{/if}
-                    </span>
-                  </div>
-                  <div class="flex items-center gap-1">
-                    <button
-                      type="button"
-                      aria-label="Move up"
-                      title="Move up"
-                      disabled={index === 0}
-                      onclick={() => moveItem(index, -1)}
-                      class={cn(
-                        "inline-flex h-7 w-7 items-center justify-center rounded-xs border border-border-subtle bg-surface-2 text-text-muted transition-colors",
-                        "hover:border-border-accent hover:text-text-accent",
-                        "disabled:cursor-not-allowed disabled:opacity-30",
-                      )}
-                    >
-                      <ArrowUp class="h-3 w-3" />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label="Move down"
-                      title="Move down"
-                      disabled={index === collectionItems.length - 1}
-                      onclick={() => moveItem(index, 1)}
-                      class={cn(
-                        "inline-flex h-7 w-7 items-center justify-center rounded-xs border border-border-subtle bg-surface-2 text-text-muted transition-colors",
-                        "hover:border-border-accent hover:text-text-accent",
-                        "disabled:cursor-not-allowed disabled:opacity-30",
-                      )}
-                    >
-                      <ArrowDown class="h-3 w-3" />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label="Remove item"
-                      title="Remove item"
-                      onclick={() => removeItem(item)}
-                      class={cn(
-                        "inline-flex h-7 w-7 items-center justify-center rounded-xs border border-border-subtle bg-surface-2 text-text-muted transition-colors",
-                        "hover:border-error/50 hover:text-error-text",
-                      )}
-                    >
-                      <X class="h-3 w-3" />
-                    </button>
-                  </div>
-                </li>
-              {/each}
-            </ol>
-          </div>
-        {/if}
-      </section>
     {/if}
 
     {#if itemCards.length > 0}

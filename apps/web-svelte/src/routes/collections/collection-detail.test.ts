@@ -24,6 +24,7 @@ describe("collection detail route", () => {
   it("wires manual curation and collection-specific writes through the collection API", async () => {
     const detailSource = await readFile("src/routes/collections/[id]/+page.svelte", "utf8");
     const apiSource = await readFile("src/lib/api/collections.ts", "utf8");
+    const addMenuSource = await readFile("src/lib/components/entities/AddToCollectionMenu.svelte", "utf8");
     const editorSource = await readFile("src/lib/components/collections/CollectionEditor.svelte", "utf8");
     const modelsSource = await readFile("src/lib/collections/models.ts", "utf8");
     const conditionBuilderSource = await readFile("src/lib/components/collections/ConditionBuilder.svelte", "utf8");
@@ -34,8 +35,10 @@ describe("collection detail route", () => {
     expect(apiSource).toContain("addCollectionItems");
     expect(apiSource).toContain("reorderCollectionItems");
     expect(apiSource).toContain("previewCollectionRules");
-    expect(detailSource).toContain("EntityPicker");
-    expect(detailSource).toContain("removeCollectionItems");
+    // Manual curation now happens via the Add to Collection grid bulk action,
+    // which lists existing collections and adds the selection through the API.
+    expect(addMenuSource).toContain("fetchCollections");
+    expect(addMenuSource).toContain("addCollectionItems");
     expect(detailSource).toContain("refreshCollection");
     expect(editorSource).toContain("ConditionBuilder");
     expect(modelsSource).toContain("\"video-series\"");
@@ -51,7 +54,6 @@ describe("collection detail route", () => {
     expect(detailSource).toContain("standaloneMetadataSectionIds={[]}");
     expect(detailSource).toContain("Edit collection rules");
     expect(detailSource).toContain("icon: SlidersHorizontal");
-    expect(detailSource).toContain("value: \"video-series\", label: \"Series\"");
     expect(detailSource).not.toContain("value: \"collection\"");
     expect(conditionBuilderSource).not.toContain("value: \"collection\"");
     expect(modelsSource).not.toContain("\"collection\"");

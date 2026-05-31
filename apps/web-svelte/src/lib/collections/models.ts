@@ -5,6 +5,25 @@ export type CollectionCoverMode = "mosaic" | "custom" | "item";
 export type CollectionEntityType = "video" | "video-series" | "gallery" | "image" | "book" | "audio-track";
 export type CollectionItemSource = "manual" | "dynamic";
 
+/**
+ * Entity kind codes that can be stored as manual collection members. These mirror
+ * the backend `Collection.CanContain` rule and let the UI decide which selected
+ * library entities are eligible for an "Add to Collection" action.
+ */
+export const COLLECTION_ENTITY_TYPES: readonly CollectionEntityType[] = [
+  "video",
+  "video-series",
+  "gallery",
+  "image",
+  "book",
+  "audio-track",
+];
+
+/** Narrows an arbitrary entity kind code to a {@link CollectionEntityType}. */
+export function isCollectionEntityType(kind: string): kind is CollectionEntityType {
+  return (COLLECTION_ENTITY_TYPES as readonly string[]).includes(kind);
+}
+
 export type CollectionOperator =
   | "equals"
   | "not_equals"

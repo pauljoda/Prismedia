@@ -25,6 +25,7 @@
     type EntityGridBulkAction,
   } from "$lib/entities/entity-grid";
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
+  import { isCollectionEntityType, type CollectionEntityType } from "$lib/collections/models";
   import EntityGridFilterDrawer from "./EntityGridFilterDrawer.svelte";
   import EntityGridPagination from "./EntityGridPagination.svelte";
   import EntityGridTabs from "./EntityGridTabs.svelte";
@@ -219,6 +220,14 @@
   );
   const allSelectedNsfw = $derived(
     selectedCards.length > 0 && selectedCards.every((c) => isNsfw(c.entity.capabilities)),
+  );
+  // Members of the current selection that can live in a collection, mapped to the
+  // collection item reference shape. Kinds the backend rejects (people, studios,
+  // tags) are dropped so the Add to Collection menu only offers eligible items.
+  const collectionItems = $derived(
+    selectedCards
+      .filter((c) => isCollectionEntityType(c.entity.kind))
+      .map((c) => ({ entityType: c.entity.kind as CollectionEntityType, entityId: c.entity.id })),
   );
   const request = $derived(entityGridRequestFromState(gridState, filterOptions));
   const effectiveScrollMaxHeight = $derived(
@@ -765,6 +774,7 @@
     {activePresetId}
     {allSelectedNsfw}
     {bulkActions}
+    {collectionItems}
     canClearFiltersAndSort={Boolean(
       activeKind !== ENTITY_GRID_ALL_KINDS ||
         filterIds.length > 0 ||

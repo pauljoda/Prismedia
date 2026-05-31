@@ -3,6 +3,7 @@ import {
   createCollection as createCollectionRequest,
   deleteCollection as deleteCollectionRequest,
   listCollectionItems,
+  listCollections as listCollectionsRequest,
   previewCollectionRules as previewCollectionRulesRequest,
   refreshCollection as refreshCollectionRequest,
   removeCollectionItems as removeCollectionItemsRequest,
@@ -18,6 +19,7 @@ import type {
   CollectionRulePreviewResponse as GeneratedCollectionRulePreviewResponse,
   CollectionWriteRequest as GeneratedCollectionWriteRequest,
   CollectionDetail,
+  EntityListResponse,
 } from "$lib/api/generated/model";
 import { requestInit, unwrapGenerated, type RequestOptions } from "$lib/api/generated-response";
 import type {
@@ -34,6 +36,15 @@ interface CollectionItemMutationResponse {
 interface CollectionRefreshResponse {
   refreshed: boolean;
   itemCount: number;
+}
+
+export async function fetchCollections(
+  options?: RequestOptions,
+): Promise<EntityListResponse> {
+  return unwrapGenerated<EntityListResponse>(
+    await listCollectionsRequest(undefined, requestInit(options)),
+    "Failed to fetch collections",
+  );
 }
 
 export async function fetchCollectionItems(

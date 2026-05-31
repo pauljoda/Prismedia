@@ -28,6 +28,8 @@
     EntityGridSortDir,
     EntityGridViewMode,
   } from "$lib/entities/entity-grid";
+  import type { CollectionEntityType } from "$lib/collections/models";
+  import AddToCollectionMenu from "./AddToCollectionMenu.svelte";
   import EntityGridPresetDropdown from "./EntityGridPresetDropdown.svelte";
 
   interface Props {
@@ -35,6 +37,8 @@
     activePresetId?: string | null;
     allSelectedNsfw: boolean;
     bulkActions: EntityGridBulkAction[];
+    /** Collection-eligible members of the current selection, used by the Add to Collection menu. */
+    collectionItems: { entityType: CollectionEntityType; entityId: string }[];
     canClearFiltersAndSort: boolean;
     drawerOpen: boolean;
     filterOptions: EntityGridFilterOption[];
@@ -76,6 +80,7 @@
     activePresetId = null,
     allSelectedNsfw,
     bulkActions,
+    collectionItems,
     canClearFiltersAndSort,
     drawerOpen,
     filterOptions,
@@ -434,6 +439,10 @@
                 <Flame class="h-3.5 w-3.5" />
                 <span class="bulk-btn-label">{allSelectedNsfw ? "Mark SFW" : "Mark NSFW"}</span>
               </button>
+            {/if}
+
+            {#if selectedCount > 0 && collectionItems.length > 0}
+              <AddToCollectionMenu items={collectionItems} />
             {/if}
 
             {#if bulkActions.length > 0 && selectedCount > 0}

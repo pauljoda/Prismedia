@@ -11,6 +11,7 @@ describe("EntityGridToolbar", () => {
         activePresetId: null,
         allSelectedNsfw: false,
         bulkActions: [],
+        collectionItems: [],
         canClearFiltersAndSort: true,
         drawerOpen: false,
         filterOptions: [
@@ -69,6 +70,7 @@ describe("EntityGridToolbar", () => {
         activePresetId: null,
         allSelectedNsfw: false,
         bulkActions: [],
+        collectionItems: [],
         canClearFiltersAndSort: false,
         drawerOpen: false,
         filterOptions: [],
