@@ -2,9 +2,11 @@
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { BookOpen, Check, Info, Play, RotateCcw, SlidersHorizontal, Users } from "@lucide/svelte";
+  import { BookOpen, Info, Play, SlidersHorizontal, Users } from "@lucide/svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
+  import MediaProgressPanel from "$lib/components/MediaProgressPanel.svelte";
   import { getCapability } from "$lib/api/capabilities";
+  import { updateEntityProgress } from "$lib/api/playback";
   import { fetchBook, type BookDetail } from "$lib/api/media";
   import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
   import {
@@ -63,6 +65,7 @@
   let errorMessage: string | null = $state(null);
   let lastNsfwMode = $state(nsfw.mode);
   let ratingBusy = $state(false);
+  let progressBusy = $state(false);
   let chapterDetails = $state.raw<ChapterDetail[]>([]);
   let progressChapterSummary = $state.raw<BookReaderChapter | null>(null);
   let volumeCards = $state<EntityThumbnailCard[]>([]);
@@ -315,15 +318,47 @@
     }));
   }
 
-  function startProgressOver() {
-    if (!book || !progressDisplay) return;
-    void goto(bookReaderHref({
-      bookId: book.id,
-      kind: "book",
-      id: book.id,
-      returnId: book.id,
-      command: "start-over",
-    }));
+  /** Marks the book read or unread without moving the reading position. Independent of the cursor. */
+  async function handleToggleRead(read: boolean) {
+    if (!book || !progressDisplay || progressBusy) return;
+    progressBusy = true;
+    try {
+      await updateEntityProgress(book.id, {
+        currentEntityId: progressDisplay.chapterId,
+        unit: "page",
+        index: Math.max(0, progressDisplay.currentPage - 1),
+        total: progressDisplay.pageCount,
+        mode: progressDisplay.readerMode,
+        completed: read,
+      });
+      await loadBook();
+    } catch {
+      // best-effort; the panel reflects the last known state on failure
+    } finally {
+      progressBusy = false;
+    }
+  }
+
+  /** Resets reading progress to the first page and clears completion (bypasses the forward-only guard). */
+  async function startProgressOver() {
+    const firstChapter = chapterSummaries[0];
+    if (!book || !firstChapter || progressBusy) return;
+    progressBusy = true;
+    try {
+      await updateEntityProgress(book.id, {
+        currentEntityId: firstChapter.id,
+        unit: "page",
+        index: 0,
+        total: firstChapter.pageCount,
+        mode: progressDisplay?.readerMode ?? "paged",
+        reset: true,
+      });
+      await loadBook();
+    } catch {
+      // best-effort
+    } finally {
+      progressBusy = false;
+    }
   }
 
 </script>
@@ -386,44 +421,19 @@
 
     {#if progressDisplay}
       <section class="progress-section">
-        <button
-          type="button"
-          class="progress-summary"
-          onclick={progressDisplay.isComplete ? startProgressOver : resumeProgress}
-        >
-          <span class="section-kicker">Current chapter</span>
-          <strong>{progressDisplay.chapterLabel}</strong>
-          <span class="progress-detail-lines">
-            {#if progressDisplay.chapterPageLabel}
-              <span>{progressDisplay.chapterPageLabel}</span>
-            {/if}
-            {#if progressDisplay.workPageLabel}
-              <span>{progressDisplay.workPageLabel}</span>
-            {/if}
-          </span>
-        </button>
-        <span class="progress-percent">{progressDisplay.percent}%</span>
-        {#if progressDisplay.showMeter}
-          <span class="progress-track" aria-hidden="true">
-            <span style:width={`${progressDisplay.percent}%`}></span>
-          </span>
-        {/if}
-        <div class="progress-actions">
-          {#if !progressDisplay.isComplete}
-            <button type="button" class="reader-action primary" onclick={resumeProgress}>
-              <Play class="h-3.5 w-3.5" />
-              Resume
-            </button>
-          {/if}
-          <button
-            type="button"
-            class={["reader-action", progressDisplay.isComplete && "primary"]}
-            onclick={startProgressOver}
-          >
-            <RotateCcw class="h-3.5 w-3.5" />
-            Start over
-          </button>
-        </div>
+        <MediaProgressPanel
+          kind="read"
+          completed={progressDisplay.isComplete}
+          percent={progressDisplay.percent}
+          positionLabel={progressDisplay.workPageLabel ?? progressDisplay.chapterPageLabel ?? progressDisplay.pageLabel}
+          countLabel={progressDisplay.chapterLabel}
+          canResume={!progressDisplay.isComplete}
+          canStartOver
+          busy={progressBusy}
+          onToggleCompleted={handleToggleRead}
+          onResume={resumeProgress}
+          onStartOver={startProgressOver}
+        />
       </section>
     {/if}
 
@@ -485,8 +495,7 @@
     font-size: 0.85rem;
   }
 
-  .error-notice button,
-  .reader-action {
+  .error-notice button {
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
@@ -507,20 +516,10 @@
       background var(--duration-normal, 180ms) var(--ease-mechanical, ease);
   }
 
-  .reader-action:hover,
   .error-notice button:hover {
     color: var(--color-text-accent, #c49a5a);
     border-color: var(--color-border-accent-strong, rgba(242, 194, 106, 0.52));
     box-shadow: var(--shadow-card-hover, 0 8px 24px rgba(0, 0, 0, 0.4));
-  }
-
-  .reader-action.primary {
-    color: var(--color-text-accent-bright, #f5d48a);
-    border-color: var(--color-border-accent-strong, rgba(242, 194, 106, 0.52));
-    background:
-      linear-gradient(135deg, rgba(122, 94, 32, 0.28), rgba(242, 194, 106, 0.08)),
-      var(--color-overlay-glass-accent, rgba(36, 30, 18, 0.6));
-    box-shadow: var(--shadow-glow-accent, 0 0 25px rgba(242, 194, 106, 0.1));
   }
 
   :global(.meta-item) {
@@ -537,114 +536,11 @@
     opacity: 0.5;
   }
 
+  /* The shared MediaProgressPanel provides its own card surface; this wrapper only
+     participates in the page's section gap. */
   .progress-section {
-    position: relative;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 0.75rem 1rem;
-    overflow: hidden;
-    padding: 1rem 1.25rem;
-    text-align: left;
-    border: 1px solid var(--color-border-default, rgba(164, 172, 185, 0.12));
-    border-radius: var(--radius-md, 10px);
-    background:
-      linear-gradient(145deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0) 32%),
-      var(--color-surface-2);
-    color: var(--color-text-muted, #8a93a6);
-    box-shadow: var(--shadow-elevated);
-  }
-
-  .progress-section::before {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    content: "";
-    border-radius: inherit;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  }
-
-  .progress-summary {
-    position: relative;
+    display: block;
     min-width: 0;
-    border: 0;
-    padding: 0;
-    background: transparent;
-    color: inherit;
-    text-align: left;
-    cursor: pointer;
-  }
-
-  .progress-summary:hover strong {
-    color: var(--color-text-accent-bright, #f5d48a);
-  }
-
-  .progress-summary:focus-visible {
-    outline: 2px solid rgba(242, 194, 106, 0.5);
-    outline-offset: 0.35rem;
-  }
-
-  .progress-detail-lines {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.35rem 0.8rem;
-    margin-top: 0.4rem;
-    color: var(--color-text-secondary, #c8ccd4);
-    font-size: 0.86rem;
-  }
-
-  .progress-detail-lines span {
-    white-space: nowrap;
-  }
-
-  .progress-section strong {
-    display: block;
-    color: var(--color-text-primary, #f2eed8);
-    font-size: 0.92rem;
-    line-height: 1.35;
-  }
-
-  .section-kicker {
-    display: block;
-    margin-bottom: 0.25rem;
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.62rem;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--color-text-disabled, #5f687a);
-  }
-
-  .progress-percent {
-    position: relative;
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.95rem;
-    font-weight: 700;
-    color: var(--color-text-accent-bright, #f5d48a);
-  }
-
-  .progress-track {
-    position: relative;
-    grid-column: 1 / -1;
-    display: block;
-    height: 3px;
-    overflow: hidden;
-    border-radius: var(--radius-xs, 4px);
-    background: rgba(0, 0, 0, 0.35);
-    box-shadow: var(--shadow-well, inset 0 1px 3px rgba(0, 0, 0, 0.35));
-  }
-
-  .progress-track span {
-    display: block;
-    height: 100%;
-    border-radius: inherit;
-    background: linear-gradient(135deg, #7a5e20 0%, #d59a2a 58%, #f2c26a 100%);
-  }
-
-  .progress-actions {
-    position: relative;
-    grid-column: 1 / -1;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
   }
 
   .content-section {

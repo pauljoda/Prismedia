@@ -27,7 +27,7 @@ public sealed class PlaybackSessionServiceTests {
                 CancellationToken.None));
 
         var nativeState = await RunAsync(async (_, capabilities) =>
-            await capabilities.UpdatePlaybackAsync(VideoId, resumeSeconds: 90, durationSeconds: null, completed: false, CancellationToken.None));
+            await capabilities.UpdatePlaybackAsync(VideoId, resumeSeconds: 90, durationSeconds: null, completed: null, CancellationToken.None));
 
         // Compare the deterministic playback fields; LastPlayedAt is wall-clock "now" of each run.
         Assert.Equal(nativeState!.PlayCount, jellyfinState!.PlayCount);
@@ -46,6 +46,48 @@ public sealed class PlaybackSessionServiceTests {
         Assert.Equal(TimeSpan.Zero, state.ResumeTime);
     }
 
+    [Theory]
+    [InlineData(95, true, 1)]   // >= 90% completes and counts
+    [InlineData(50, false, 0)]  // mid-watch stores a resume point only
+    [InlineData(2, false, 0)]   // < 5% is treated as not started
+    public async Task ProgressThresholdsDeriveCompletion(int percent, bool expectCompleted, int expectPlayCount) {
+        const double runtimeSeconds = 1000;
+        var state = await RunAsync(
+            async (sessions, _) => await sessions.ProgressAsync(
+                new PlaybackSessionCommand {
+                    ItemId = VideoId,
+                    PositionTicks = (long)(runtimeSeconds * percent / 100 * TimeSpan.TicksPerSecond)
+                },
+                CancellationToken.None),
+            runtimeSeconds);
+
+        Assert.Equal(expectCompleted, state!.CompletedAt is not null);
+        Assert.Equal(expectPlayCount, state.PlayCount);
+        if (percent is >= 5 and < 90) {
+            Assert.True(state.ResumeTime > TimeSpan.Zero);
+        }
+    }
+
+    [Fact]
+    public async Task ProgressAfterCompletionDoesNotClearWatchedState() {
+        const double runtimeSeconds = 1000;
+        var state = await RunAsync(
+            async (sessions, _) => {
+                await sessions.MarkPlayedAsync(VideoId, CancellationToken.None);
+                await sessions.ProgressAsync(
+                    new PlaybackSessionCommand {
+                        ItemId = VideoId,
+                        PositionTicks = (long)(runtimeSeconds * 0.5 * TimeSpan.TicksPerSecond)
+                    },
+                    CancellationToken.None);
+            },
+            runtimeSeconds);
+
+        // A resume-range progress tick stores the position but leaves the watched flag.
+        Assert.NotNull(state!.CompletedAt);
+        Assert.Equal(1, state.PlayCount);
+    }
+
     [Fact]
     public async Task RepeatedProgressDoesNotInflatePlayCount() {
         var state = await RunAsync(async (sessions, _) => {
@@ -56,11 +98,14 @@ public sealed class PlaybackSessionServiceTests {
             }
         });
 
-        Assert.Equal(1, state!.PlayCount);
+        // Resume-only progress (no completion) never advances the play count; it only
+        // increments when a session reaches the watched threshold.
+        Assert.Equal(0, state!.PlayCount);
     }
 
     private static async Task<CapabilityPlayback.State?> RunAsync(
-        Func<PlaybackSessionService, EntityCapabilityService, Task> act) {
+        Func<PlaybackSessionService, EntityCapabilityService, Task> act,
+        double? runtimeSeconds = null) {
         await using var db = CreateContext();
         db.Entities.Add(new Persistence.Entities.EntityRow {
             Id = VideoId,
@@ -69,6 +114,13 @@ public sealed class PlaybackSessionServiceTests {
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
         });
+        if (runtimeSeconds is { } seconds) {
+            db.EntityTechnical.Add(new Persistence.Entities.EntityTechnicalRow {
+                EntityId = VideoId,
+                DurationSeconds = seconds,
+                UpdatedAt = DateTimeOffset.UtcNow
+            });
+        }
         await db.SaveChangesAsync();
 
         var repository = new EfEntityRepository(db, EntityMappers.Kinds(db), EntityMappers.Capabilities(db));

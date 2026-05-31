@@ -3,30 +3,28 @@ import type { EntityCapability } from "$lib/api/generated/model";
 import { extractVideoPlayerProps, getPlaybackState } from "./video-capabilities";
 
 describe("getPlaybackState", () => {
-  it("maps generated progress capability into playback resume state", () => {
+  it("maps the generated playback capability into resume state", () => {
     const capabilities: EntityCapability[] = [
       {
-        kind: "progress",
-        currentEntityId: "video-1",
-        unit: "seconds",
-        index: 42,
-        total: 120,
-        mode: "video",
+        kind: "playback",
+        playCount: 3,
+        playDurationSeconds: 120,
+        resumeSeconds: 42,
+        lastPlayedAt: "2026-05-15T10:00:00Z",
         completedAt: null,
-        updatedAt: "2026-05-15T10:00:00Z",
       },
     ];
 
     expect(getPlaybackState(capabilities)).toEqual({
-      playCount: 0,
-      playDurationSeconds: 0,
+      playCount: 3,
+      playDurationSeconds: 120,
       resumeSeconds: 42,
       lastPlayedAt: "2026-05-15T10:00:00Z",
       completedAt: null,
     });
   });
 
-  it("ignores non-second progress when deriving video resume position", () => {
+  it("returns null when the entity has no playback capability", () => {
     const capabilities: EntityCapability[] = [
       {
         kind: "progress",
@@ -40,7 +38,7 @@ describe("getPlaybackState", () => {
       },
     ];
 
-    expect(getPlaybackState(capabilities)?.resumeSeconds).toBe(0);
+    expect(getPlaybackState(capabilities)).toBeNull();
   });
 });
 

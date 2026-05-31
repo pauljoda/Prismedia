@@ -28,8 +28,8 @@ public sealed class EntityCapabilityTests {
             subtitlesExtractedAt: null,
             capabilities: [new CapabilityPlayback()]);
 
-        video.GetCapability<CapabilityPlayback>()!.Update(
-            TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(30), completed: false, DateTimeOffset.UtcNow);
+        video.GetCapability<CapabilityPlayback>()!.RecordResume(
+            TimeSpan.FromSeconds(10), DateTimeOffset.UtcNow);
 
         Assert.Equal(TimeSpan.FromSeconds(10), video.Playback!.ResumeTime);
     }

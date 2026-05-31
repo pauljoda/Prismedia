@@ -163,6 +163,7 @@ public static class JellyfinCompatibilityEndpoints {
         routes.MapGet("/Users/{userId:guid}/Views", GetUserViewsAsync)
             .WithTags("Jellyfin Catalog")
             .WithName("GetJellyfinUserViewsLegacy")
+            .ExcludeFromDescription()
             .Produces<JellyfinQueryResult<JellyfinBaseItemDto>>();
 
         routes.MapGet("/UserViews/GroupingOptions", async (
@@ -197,6 +198,7 @@ public static class JellyfinCompatibilityEndpoints {
         routes.MapGet("/Users/{userId:guid}/Items/Root", GetRootAsync)
             .WithTags("Jellyfin Catalog")
             .WithName("GetJellyfinItemsRootLegacy")
+            .ExcludeFromDescription()
             .Produces<JellyfinBaseItemDto>();
 
         routes.MapGet("/Items", GetItemsAsync)
@@ -207,6 +209,7 @@ public static class JellyfinCompatibilityEndpoints {
         routes.MapGet("/Users/{userId:guid}/Items", GetItemsAsync)
             .WithTags("Jellyfin Catalog")
             .WithName("GetJellyfinItemsLegacy")
+            .ExcludeFromDescription()
             .Produces<JellyfinQueryResult<JellyfinBaseItemDto>>();
 
         routes.MapGet("/Items/{itemId:guid}", GetItemAsync)
@@ -218,6 +221,7 @@ public static class JellyfinCompatibilityEndpoints {
         routes.MapGet("/Users/{userId:guid}/Items/{itemId:guid}", GetItemAsync)
             .WithTags("Jellyfin Catalog")
             .WithName("GetJellyfinItemLegacy")
+            .ExcludeFromDescription()
             .Produces<JellyfinBaseItemDto>()
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
@@ -229,6 +233,7 @@ public static class JellyfinCompatibilityEndpoints {
         routes.MapGet("/Users/{userId:guid}/Items/Latest", GetLatestAsync)
             .WithTags("Jellyfin Catalog")
             .WithName("GetJellyfinLatestItemsLegacy")
+            .ExcludeFromDescription()
             .Produces<IReadOnlyList<JellyfinBaseItemDto>>();
 
         routes.MapGet("/UserItems/Resume", GetResumeAsync)
@@ -239,6 +244,7 @@ public static class JellyfinCompatibilityEndpoints {
         routes.MapGet("/Users/{userId:guid}/Items/Resume", GetResumeAsync)
             .WithTags("Jellyfin Catalog")
             .WithName("GetJellyfinResumeItemsLegacy")
+            .ExcludeFromDescription()
             .Produces<JellyfinQueryResult<JellyfinBaseItemDto>>();
 
         routes.MapGet("/Shows/{seriesId:guid}/Seasons", GetSeriesSeasonsAsync)
@@ -249,6 +255,7 @@ public static class JellyfinCompatibilityEndpoints {
         routes.MapGet("/Users/{userId:guid}/Shows/{seriesId:guid}/Seasons", GetSeriesSeasonsAsync)
             .WithTags("Jellyfin Shows")
             .WithName("GetJellyfinSeriesSeasonsLegacy")
+            .ExcludeFromDescription()
             .Produces<JellyfinQueryResult<JellyfinBaseItemDto>>();
 
         routes.MapGet("/Shows/{seriesId:guid}/Episodes", GetSeriesEpisodesAsync)
@@ -259,6 +266,7 @@ public static class JellyfinCompatibilityEndpoints {
         routes.MapGet("/Users/{userId:guid}/Shows/{seriesId:guid}/Episodes", GetSeriesEpisodesAsync)
             .WithTags("Jellyfin Shows")
             .WithName("GetJellyfinSeriesEpisodesLegacy")
+            .ExcludeFromDescription()
             .Produces<JellyfinQueryResult<JellyfinBaseItemDto>>();
     }
 
@@ -339,7 +347,11 @@ public static class JellyfinCompatibilityEndpoints {
             .WithName("GetJellyfinDisplayPreferences")
             .Produces<JellyfinDisplayPreferencesDto>();
 
-        routes.MapPost("/DisplayPreferences/{displayPreferencesId}", () => Results.NoContent())
+        // The route template includes {displayPreferencesId}, so the handler must bind it for the
+        // generated OpenAPI document to declare it as a path parameter. Without the parameter the
+        // spec is invalid (templated segment with no matching parameter) and breaks client codegen.
+        routes.MapPost("/DisplayPreferences/{displayPreferencesId}", (string displayPreferencesId) =>
+                Results.NoContent())
             .WithTags("Jellyfin Display Preferences")
             .WithName("UpdateJellyfinDisplayPreferences")
             .Produces(StatusCodes.Status204NoContent);

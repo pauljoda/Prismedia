@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   fetchJellyfinPlaybackInfo,
   markJellyfinUserPlayedItem,
+  postJellyfinSessionProgress,
   updateEntityProgress,
 } from "./playback";
 
@@ -47,18 +48,30 @@ describe("playback API", () => {
           total: 10,
           mode: null,
           completed: false,
+          reset: false,
         }),
       }),
     );
   });
 
-  it("marks Jellyfin items played through generated routes", async () => {
+  it("marks Jellyfin items played through the root (non-/api) route", async () => {
     const fetchMock = mockFetch(undefined);
 
     await markJellyfinUserPlayedItem("video-1", true);
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/UserPlayedItems/video-1",
+      "/UserPlayedItems/video-1",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("posts Jellyfin session progress to the root (non-/api) route", async () => {
+    const fetchMock = mockFetch(undefined);
+
+    await postJellyfinSessionProgress("Playing/Progress", { ItemId: "video-1", PositionTicks: 100 });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/Sessions/Playing/Progress",
       expect.objectContaining({ method: "POST" }),
     );
   });

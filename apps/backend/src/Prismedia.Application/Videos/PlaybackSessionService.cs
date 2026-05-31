@@ -28,7 +28,7 @@ public sealed class PlaybackSessionService : IPlaybackSessionService {
             await UpdatePlaybackAsync(
                 request.ItemId,
                 ToSeconds(request.PositionTicks.Value),
-                completed: false,
+                completed: null,
                 cancellationToken);
         }
     }
@@ -43,7 +43,7 @@ public sealed class PlaybackSessionService : IPlaybackSessionService {
             await UpdatePlaybackAsync(
                 request.ItemId,
                 request.PositionTicks is >= 0 ? ToSeconds(request.PositionTicks.Value) : 0,
-                completed: false,
+                completed: null,
                 cancellationToken);
         }
 
@@ -67,7 +67,7 @@ public sealed class PlaybackSessionService : IPlaybackSessionService {
     private async Task<bool> UpdatePlaybackAsync(
         Guid itemId,
         double resumeSeconds,
-        bool completed,
+        bool? completed,
         CancellationToken cancellationToken) =>
         await _capabilities.UpdatePlaybackAsync(
             itemId,

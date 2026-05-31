@@ -263,7 +263,41 @@ public static class EntityCardProjector {
             entity.RatingValue,
             entity.IsFavorite ?? false,
             entity.IsNsfw ?? false,
-            entity.IsOrganized ?? false);
+            entity.IsOrganized ?? false) {
+            Progress = ResolveThumbnailProgress(entity)
+        };
+    }
+
+    /// <summary>
+    /// Computes the 0..1 progress meter fraction for a nested thumbnail from the hydrated
+    /// entity's playback and reading-progress capabilities, mirroring the row-based browse
+    /// projection so detail-page child grids match library grids.
+    /// </summary>
+    private static double? ResolveThumbnailProgress(Entity entity) {
+        if (entity.Playback is { } playback) {
+            if (playback.CompletedAt is not null) {
+                return 1.0;
+            }
+
+            var duration = entity.Technical?.Duration;
+            if (playback.ResumeTime > TimeSpan.Zero && duration is { } total && total > TimeSpan.Zero) {
+                return Math.Clamp(playback.ResumeTime.TotalSeconds / total.TotalSeconds, 0, 1);
+            }
+
+            return null;
+        }
+
+        if (entity.Progress is { } progress) {
+            if (progress.CompletedAt is not null) {
+                return 1.0;
+            }
+
+            if (progress.Total > 0 && progress.Index > 0) {
+                return Math.Clamp((double)progress.Index / progress.Total, 0, 1);
+            }
+        }
+
+        return null;
     }
 
     private static bool IsCustomPath(string path) =>

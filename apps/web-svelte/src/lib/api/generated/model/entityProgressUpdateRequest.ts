@@ -16,4 +16,5 @@ export interface EntityProgressUpdateRequest {
   mode: string | null;
   /** @nullable */
   completed: boolean | null;
+  reset?: boolean;
 }

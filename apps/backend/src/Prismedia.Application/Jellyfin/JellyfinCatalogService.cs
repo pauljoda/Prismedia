@@ -491,7 +491,7 @@ public sealed class JellyfinCatalogService {
             ImageTags = image.Tags,
             BackdropImageTags = image.BackdropImageTags,
             PrimaryImageAspectRatio = image.PrimaryImageAspectRatio,
-            UserData = UserDataFor(item.Id, flags?.IsFavorite == true, playback),
+            UserData = UserDataFor(item.Id, flags?.IsFavorite == true, playback, runtimeTicks),
             MediaSources = isPlayable ? [CatalogMediaSource(item.Id, item.Title, source?.Path ?? VirtualItemPath(item.Id), container, source?.Path, runtimeTicks, streams ?? [])] : null,
             MediaStreams = streams,
             Chapters = Chapters(markers)
@@ -1079,15 +1079,27 @@ public sealed class JellyfinCatalogService {
         string? PrimaryPath,
         double? PrimaryImageAspectRatio);
 
-    private static JellyfinUserItemDataDto UserDataFor(Guid id, bool isFavorite, PlaybackCapability? playback) {
+    private static JellyfinUserItemDataDto UserDataFor(
+        Guid id,
+        bool isFavorite,
+        PlaybackCapability? playback,
+        long? runtimeTicks = null) {
         var resumeTicks = playback is null ? 0 : TimeSpan.FromSeconds(playback.ResumeSeconds).Ticks;
         var playCount = playback?.PlayCount ?? 0;
+        var played = playback?.CompletedAt is not null || playCount > 0 && resumeTicks == 0;
+        var playedPercentage = played
+            ? 100d
+            : resumeTicks > 0 && runtimeTicks is > 0
+                ? Math.Clamp(resumeTicks / (double)runtimeTicks.Value * 100d, 0, 100)
+                : (double?)null;
         return new JellyfinUserItemDataDto(
             resumeTicks,
             playCount,
             isFavorite,
-            playback?.CompletedAt is not null || playCount > 0 && resumeTicks == 0,
-            id.ToString("N"));
+            played,
+            id.ToString("N"),
+            playedPercentage,
+            playback?.LastPlayedAt);
     }
 
     private static bool IsPlayableVideo(string kind) => kind.Equals("video", StringComparison.OrdinalIgnoreCase);

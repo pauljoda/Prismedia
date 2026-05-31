@@ -37,14 +37,16 @@ public sealed record PlaybackUpdateRequest(
 /// <param name="Index">Zero-based position within the tracked unit.</param>
 /// <param name="Total">Total number of tracked units available.</param>
 /// <param name="Mode">Optional reader/viewing mode associated with the progress.</param>
-/// <param name="Completed">When true, marks the progress complete; when false, clears completion.</param>
+/// <param name="Completed">When true, marks the progress complete; when false, clears completion in place. Independent of the cursor.</param>
+/// <param name="Reset">When true, resets the cursor to the supplied (start) position and clears completion, bypassing the forward-only guard.</param>
 public sealed record EntityProgressUpdateRequest(
     Guid CurrentEntityId,
     string Unit,
     int Index,
     int Total,
     string? Mode,
-    bool? Completed);
+    bool? Completed,
+    bool Reset = false);
 
 /// <summary>
 /// Request body for creating or updating a timeline marker.

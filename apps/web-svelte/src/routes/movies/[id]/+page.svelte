@@ -18,8 +18,10 @@
     fetchJellyfinPlaybackInfo,
     markJellyfinUserPlayedItem,
     postJellyfinSessionProgress,
+    updateEntityPlayback,
     type JellyfinPlaybackInfoResponse,
   } from "$lib/api/playback";
+  import { durationToSeconds } from "$lib/utils/format";
   import {
     updateEntityRating,
     updateEntityFlags,
@@ -172,13 +174,13 @@
         id: "details",
         label: "Details",
         icon: Info,
-        sections: ["description", "tags", "cast-and-crew", "links"],
+        sections: ["description", "playback", "tags", "cast-and-crew", "links"],
       },
       {
         id: "metadata",
         label: "Metadata",
         icon: SlidersHorizontal,
-        sections: ["technical", "dates", "playback", "source"],
+        sections: ["technical", "dates", "source"],
         layout: "grid",
       },
       {
@@ -214,6 +216,54 @@
     if (!video) return null;
     return getPlaybackState(video.capabilities);
   });
+
+  const durationSeconds = $derived.by(() => {
+    if (!video) return 0;
+    return durationToSeconds(getCapability(video.capabilities, "technical")?.duration ?? null) ?? 0;
+  });
+
+  let playbackBusy = $state(false);
+
+  /** Resumes inline playback from the stored position and brings the player into view. */
+  function handleResume() {
+    if (!playbackState) return;
+    resumeApplied = true;
+    playerHandle?.seekTo(playbackState.resumeSeconds);
+    videoWrapperEl?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  /** Marks the movie watched or unwatched via the shared playback capability, then refreshes. */
+  async function handleToggleWatched(watched: boolean) {
+    if (!video || playbackBusy) return;
+    playbackBusy = true;
+    try {
+      await updateEntityPlayback(video.id, { completed: watched });
+      await refreshMovie();
+    } catch {
+      // best-effort; the card reflects the last known state on failure
+    } finally {
+      playbackBusy = false;
+    }
+  }
+
+  /**
+   * Resets playback to the beginning. Reporting position 0 routes through the same start-over
+   * behaviour a Jellyfin client triggers (a sub-5% progress report clears resume and completion).
+   */
+  async function handleStartOver() {
+    if (!video || playbackBusy) return;
+    playbackBusy = true;
+    try {
+      await updateEntityPlayback(video.id, { resumeSeconds: 0 });
+      resumeApplied = true;
+      playerHandle?.seekTo(0);
+      await refreshMovie();
+    } catch {
+      // best-effort
+    } finally {
+      playbackBusy = false;
+    }
+  }
 
   const hasSubtitles = $derived((playerProps?.subtitleTracks.length ?? 0) > 0);
   const subtitlesEnabled = $derived(activeSubtitleId != null);
@@ -416,7 +466,13 @@
     currentTime = t;
     displayTime = t;
 
-    if (!resumeApplied && video && playbackState && playbackState.resumeSeconds > 5) {
+    if (
+      !resumeApplied &&
+      video &&
+      playbackState &&
+      !playbackState.completedAt &&
+      playbackState.resumeSeconds > 5
+    ) {
       resumeApplied = true;
       playerHandle?.seekTo(playbackState.resumeSeconds);
     }
@@ -699,6 +755,8 @@
           {creditCards}
           {videoId}
           {playbackState}
+          {durationSeconds}
+          {playbackBusy}
           {playerProps}
           {isTranscriptDockActive}
           {isTranscriptDocked}
@@ -707,6 +765,9 @@
           {displayTime}
           getCurrentTime={() => currentTime}
           onSeek={handleSeek}
+          onResume={handleResume}
+          onStartOver={handleStartOver}
+          onToggleWatched={handleToggleWatched}
           onRefresh={refreshMovie}
           onActiveSubtitleChange={handleActiveSubtitleChange}
           onTranscriptDockToggle={toggleTranscriptDock}

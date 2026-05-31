@@ -24,14 +24,14 @@ export interface EntitySearchCandidate {
      */
   popularity: number | string | null;
   /** @nullable */
-  candidateId: string | null;
+  candidateId?: string | null;
   /** @nullable */
-  source: string | null;
+  source?: string | null;
   /**
      * @nullable
      * @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?$
      */
-  confidence: number | string | null;
+  confidence?: number | string | null;
   /** @nullable */
-  matchReason: string | null;
+  matchReason?: string | null;
 }

@@ -436,6 +436,15 @@ public sealed class IdentifyPluginService : IIdentifyProviderService {
 
             var localChild = localChildren.FirstOrDefault(child => IsSameStructuralChild(child, childProposal));
             if (localChild is null) {
+                // No local entity matches this provider child. Preserve it unbound only when the
+                // provider advertised it as a structural container (e.g. a season the library has
+                // not scanned yet) so it can be proposed as a new child. Leaf children the provider
+                // cascaded (episodes, etc.) are dropped — we never invent playable items that have
+                // no local media file.
+                if (IsProviderAdvertisedStructuralChild(childProposal)) {
+                    children.Add(childProposal);
+                }
+
                 continue;
             }
 
@@ -448,6 +457,20 @@ public sealed class IdentifyPluginService : IIdentifyProviderService {
 
         return proposal with { Children = children };
     }
+
+    /// <summary>
+    /// Marks structural children the provider advertises as part of its own hierarchy (such as a
+    /// season or volume container) rather than leaf media cascaded from a parent identify. These
+    /// are preserved when no local entity matches so the user can materialize the missing
+    /// structure; leaf children with no local media file are not.
+    /// </summary>
+    private const string ProviderAdvertisedStructuralMatchReason = "provider-tree";
+
+    private static bool IsProviderAdvertisedStructuralChild(EntityMetadataProposal proposal) =>
+        string.Equals(
+            proposal.MatchReason,
+            ProviderAdvertisedStructuralMatchReason,
+            StringComparison.OrdinalIgnoreCase);
 
     private static IReadOnlyList<EntityMetadataProposal> MergeStructuralChildren(
         IReadOnlyList<EntityMetadataProposal> providerChildren,

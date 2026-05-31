@@ -278,6 +278,12 @@
   const nsfw = $derived(isNsfw(card.entity.capabilities));
   const rating = $derived(getRatingValue(card.entity.capabilities));
   const bottomLeft = $derived(card.custom?.bottomLeft);
+  // Playback/reading progress meter percentage, only when there is something to show.
+  const progressPercent = $derived(
+    card.progress != null && card.progress > 0
+      ? Math.min(100, Math.max(0, card.progress * 100))
+      : null,
+  );
   const href = $derived(interactive && linkable ? resolveEntityThumbnailHref(card) : undefined);
   const inSelectMode = $derived(selectMode && selectable);
   const effectiveHref = $derived(inSelectMode ? undefined : href);
@@ -638,6 +644,12 @@
       </div>
     {/if}
 
+    {#if progressPercent != null}
+      <div class="progress-meter" aria-hidden="true">
+        <span class="progress-meter-fill" style:width={`${progressPercent}%`}></span>
+      </div>
+    {/if}
+
   </div>
 
   {#if !imageOnly}
@@ -819,6 +831,22 @@
       radial-gradient(circle at 50% 45%, rgb(255 255 255 / 0.08), transparent 34%),
       linear-gradient(135deg, rgb(15 16 18 / 0.96), rgb(28 25 20 / 0.92)),
       #111;
+  }
+
+  /* Playback/reading progress meter pinned to the bottom edge of the artwork. */
+  .progress-meter {
+    position: absolute;
+    inset: auto 0 0 0;
+    z-index: 4;
+    height: 3px;
+    background: rgb(0 0 0 / 0.45);
+  }
+
+  .progress-meter-fill {
+    display: block;
+    height: 100%;
+    background: linear-gradient(135deg, #7a5e20 0%, #d59a2a 58%, #f2c26a 100%);
+    box-shadow: 0 0 6px rgb(242 194 106 / 0.55);
   }
 
   .media.is-image-loading {

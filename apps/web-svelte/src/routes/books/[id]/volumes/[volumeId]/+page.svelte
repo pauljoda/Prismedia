@@ -210,7 +210,8 @@
       index: position.pageIndex,
       total: position.pageCount,
       mode: volumeProgress?.readerMode ?? "paged",
-      completed,
+      // Mid-reading sends null; only the explicit end-of-volume save reports completion.
+      completed: completed ? true : null,
     });
   }
 

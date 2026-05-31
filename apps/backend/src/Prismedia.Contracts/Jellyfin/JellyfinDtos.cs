@@ -407,7 +407,9 @@ public sealed record JellyfinUserItemDataDto(
     [property: JsonPropertyName("PlayCount")] int PlayCount,
     [property: JsonPropertyName("IsFavorite")] bool IsFavorite,
     [property: JsonPropertyName("Played")] bool Played,
-    [property: JsonPropertyName("Key")] string Key);
+    [property: JsonPropertyName("Key")] string Key,
+    [property: JsonPropertyName("PlayedPercentage")] double? PlayedPercentage = null,
+    [property: JsonPropertyName("LastPlayedDate")] DateTimeOffset? LastPlayedDate = null);
 
 /// <summary>Jellyfin-compatible image metadata.</summary>
 public sealed record JellyfinImageInfo(

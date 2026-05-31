@@ -2,17 +2,18 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 describe("book progress card styling", () => {
-  it("uses the Prism Noir Luxe material card treatment", async () => {
-    const source = await readFile("src/routes/books/[id]/+page.svelte", "utf8");
+  it("renders the shared media progress panel with the material card treatment", async () => {
+    const page = await readFile("src/routes/books/[id]/+page.svelte", "utf8");
+    expect(page).toContain("<MediaProgressPanel");
+    expect(page).toContain('kind="read"');
 
-    expect(source).toContain(".progress-section");
-    expect(source).toContain("border-radius: var(--radius-md");
-    expect(source).toContain("var(--color-surface-2)");
-    expect(source).toContain("var(--shadow-elevated)");
-    expect(source.match(/\.progress-section\s*\{[\s\S]*?\n  \}/)?.[0]).not.toContain("backdrop-filter");
-    expect(source).toContain(".progress-track");
-    expect(source).toContain("border-radius: var(--radius-xs");
-    expect(source).not.toContain("background: var(--color-glass-1");
+    const panel = await readFile("src/lib/components/MediaProgressPanel.svelte", "utf8");
+    expect(panel).toContain("var(--color-surface-2");
+    expect(panel).toContain("border-radius: var(--radius-md");
+    // Reuses the shared design-language meter and accent tokens rather than hardcoded values.
+    expect(panel).toContain('class="meter-fill"');
+    expect(panel).toContain("var(--color-text-accent");
+    expect(panel).not.toContain("backdrop-filter");
   });
 
   it("omits empty chapter placeholders and softens chapter cards", async () => {
@@ -24,11 +25,14 @@ describe("book progress card styling", () => {
     expect(source).toContain("prefsKey={`book-${book.id}-chapters`}");
   });
 
-  it("shows only start over when book progress is complete", async () => {
-    const source = await readFile("src/routes/books/[id]/+page.svelte", "utf8");
+  it("offers resume only while reading is incomplete, with start over always available", async () => {
+    const page = await readFile("src/routes/books/[id]/+page.svelte", "utf8");
+    expect(page).toContain("canResume={!progressDisplay.isComplete}");
+    expect(page).toContain("canStartOver");
+    expect(page).toContain("onStartOver={startProgressOver}");
 
-    expect(source).toContain("onclick={progressDisplay.isComplete ? startProgressOver : resumeProgress}");
-    expect(source).toContain("{#if !progressDisplay.isComplete}");
-    expect(source).toContain('class={["reader-action", progressDisplay.isComplete && "primary"]}');
+    const panel = await readFile("src/lib/components/MediaProgressPanel.svelte", "utf8");
+    expect(panel).toContain("{#if canResume && onResume}");
+    expect(panel).toContain("{#if canStartOver && onStartOver}");
   });
 });

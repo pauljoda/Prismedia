@@ -53,9 +53,26 @@ public sealed class EntityCapabilityService {
             return true;
         }, cancellationToken);
 
+    /// <summary>Fraction of the runtime below which an item is treated as not started.</summary>
+    private const double StartedFraction = 0.05;
+
+    /// <summary>Fraction of the runtime at or above which an item is treated as watched.</summary>
+    private const double WatchedFraction = 0.90;
+
     /// <summary>
-    /// Updates the entity's playback capability. Seconds inputs are converted to <see cref="TimeSpan"/>.
+    /// Updates the entity's playback capability using Jellyfin-compatible thresholds so the
+    /// native player and Jellyfin clients (e.g. Infuse) converge on identical state for the
+    /// same inputs. When <paramref name="completed"/> is <c>null</c> (the normal progress/stop
+    /// path) the watched/resume decision is derived from <paramref name="resumeSeconds"/>
+    /// relative to the entity's known runtime: at or above <see cref="WatchedFraction"/> the
+    /// item is completed (and the play count incremented), below <see cref="StartedFraction"/>
+    /// it is treated as a fresh start, and in between the position is stored for resume.
     /// </summary>
+    /// <param name="id">Entity identifier.</param>
+    /// <param name="resumeSeconds">Current playback position in seconds, when known.</param>
+    /// <param name="durationSeconds">Watched duration delta to accumulate, when reported.</param>
+    /// <param name="completed">Explicit completion override; <c>null</c> derives from position.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
     public Task<EntityCard?> UpdatePlaybackAsync(
         Guid id,
         double? resumeSeconds,
@@ -63,11 +80,50 @@ public sealed class EntityCapabilityService {
         bool? completed,
         CancellationToken cancellationToken) =>
         MutateAsync(id, entity => {
-            entity.GetOrAddCapability(() => new CapabilityPlayback()).Update(
-                resumeSeconds is null ? null : TimeSpan.FromSeconds(resumeSeconds.Value),
-                durationSeconds is null ? null : TimeSpan.FromSeconds(durationSeconds.Value),
-                completed,
-                DateTimeOffset.UtcNow);
+            var playback = entity.GetOrAddCapability(() => new CapabilityPlayback());
+            var now = DateTimeOffset.UtcNow;
+
+            if (durationSeconds is > 0) {
+                playback.AccumulatePlayDuration(TimeSpan.FromSeconds(durationSeconds.Value));
+            }
+
+            // Explicit watched toggle. The completion flag is independent of the resume position:
+            // a resume value is only applied when the caller supplies one (e.g. a Jellyfin
+            // mark-played sends 0 to clear it), so the in-app toggle leaves the position untouched.
+            if (completed is { } watched) {
+                if (resumeSeconds is { } toggleSeconds) {
+                    playback.RecordResume(TimeSpan.FromSeconds(Math.Max(0, toggleSeconds)), now);
+                }
+
+                if (watched) {
+                    playback.MarkWatched(now);
+                } else {
+                    playback.MarkUnwatched(now);
+                }
+
+                return true;
+            }
+
+            if (resumeSeconds is not { } seconds) {
+                return true;
+            }
+
+            var position = TimeSpan.FromSeconds(Math.Max(0, seconds));
+            var runtime = entity.Technical?.Duration;
+            if (runtime is not { } total || total <= TimeSpan.Zero) {
+                playback.RecordResume(position, now);
+                return true;
+            }
+
+            var fraction = position.TotalSeconds / total.TotalSeconds;
+            if (fraction >= WatchedFraction) {
+                playback.RecordCompleted(now);
+            } else if (fraction < StartedFraction) {
+                playback.RecordStartOver(now);
+            } else {
+                playback.RecordResume(position, now);
+            }
+
             return true;
         }, cancellationToken);
 
@@ -82,11 +138,23 @@ public sealed class EntityCapabilityService {
         int total,
         string? mode,
         bool? completed,
+        bool reset,
         CancellationToken cancellationToken) {
         var ownerId = await ResolveProgressOwnerIdAsync(id, currentEntityId, cancellationToken);
         var entity = await _entities.FindShallowAsync(ownerId, cancellationToken);
         if (entity is null) {
             return null;
+        }
+
+        var progress = entity.GetOrAddCapability(() => new CapabilityProgress());
+        var now = DateTimeOffset.UtcNow;
+
+        // Explicit "mark unread": clear completion in place, independent of the cursor. Bypasses the
+        // forward-only guard so a finished item can be reopened without losing the page position.
+        if (!reset && completed == false) {
+            progress.MarkIncomplete(now);
+            await _entities.SaveAsync(entity, cancellationToken);
+            return EntityCardProjector.ToCard(entity);
         }
 
         var normalizedTotal = Math.Max(0, total);
@@ -101,7 +169,19 @@ public sealed class EntityCapabilityService {
                 normalizedTotal,
                 cancellationToken)
             : null;
-        var progress = entity.GetOrAddCapability(() => new CapabilityProgress());
+
+        var targetChapterId = proposedPosition?.ChapterId ?? currentEntityId;
+        var normalizedUnit = string.IsNullOrWhiteSpace(unit) ? "item" : unit.Trim();
+        var normalizedMode = string.IsNullOrWhiteSpace(mode) ? null : mode.Trim();
+
+        // Explicit "start over": jump to the requested (start) position and clear completion,
+        // bypassing the forward-only guard. MoveTo resets the completion flag.
+        if (reset) {
+            progress.MoveTo(targetChapterId, normalizedUnit, normalizedIndex, normalizedTotal, normalizedMode, now);
+            await _entities.SaveAsync(entity, cancellationToken);
+            return EntityCardProjector.ToCard(entity);
+        }
+
         var existingPosition = progress.CurrentEntityId is { } existingCurrentId && entity.Kind == EntityKind.Book
             ? await _entities.ResolveBookProgressPositionAsync(
                 ownerId,
@@ -118,17 +198,9 @@ public sealed class EntityCapabilityService {
             return EntityCardProjector.ToCard(entity);
         }
 
-        var now = DateTimeOffset.UtcNow;
-        progress.MoveTo(
-            proposedPosition?.ChapterId ?? currentEntityId,
-            string.IsNullOrWhiteSpace(unit) ? "item" : unit.Trim(),
-            normalizedIndex,
-            normalizedTotal,
-            string.IsNullOrWhiteSpace(mode) ? null : mode.Trim(),
-            now);
+        progress.MoveTo(targetChapterId, normalizedUnit, normalizedIndex, normalizedTotal, normalizedMode, now);
 
-        if (completed == true &&
-            (proposedPosition is null || proposedPosition.Index >= proposedPosition.Total - 1)) {
+        if (completed == true) {
             progress.MarkCompleted(now);
         }
 

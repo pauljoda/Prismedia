@@ -70,7 +70,7 @@ public sealed class EntityPatchEndpointTests {
 
         using var response = await client.PatchAsJsonAsync(
             $"/api/entities/{EntityId}/progress",
-            new EntityProgressUpdateRequest(ChapterId, "page", 7, 24, "webtoon", Completed: false));
+            new EntityProgressUpdateRequest(ChapterId, "page", 7, 24, "webtoon", Completed: null));
         var repository = factory.Services.GetRequiredService<FakeEntityWriteRepository>();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -113,13 +113,55 @@ public sealed class EntityPatchEndpointTests {
     }
 
     [Fact]
+    public async Task EntityProgressPatchResetReturnsToStartAndClearsCompletion() {
+        using var factory = CreateProgressFactory();
+        using var client = factory.CreateAuthenticatedClient();
+        var repository = factory.Services.GetRequiredService<FakeEntityWriteRepository>();
+
+        using var complete = await client.PatchAsJsonAsync(
+            $"/api/entities/{EntityId}/progress",
+            new EntityProgressUpdateRequest(ChapterId, "page", 23, 24, "paged", Completed: true));
+        Assert.NotNull(repository.SavedEntity?.Progress?.CompletedAt);
+
+        // Start over resets to the beginning and clears completion despite the forward-only guard.
+        using var response = await client.PatchAsJsonAsync(
+            $"/api/entities/{EntityId}/progress",
+            new EntityProgressUpdateRequest(ChapterId, "page", 0, 24, "paged", Completed: null, Reset: true));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(0, repository.SavedEntity?.Progress?.Index);
+        Assert.Null(repository.SavedEntity?.Progress?.CompletedAt);
+    }
+
+    [Fact]
+    public async Task EntityProgressPatchMarkUnreadClearsCompletionWithoutMovingTheCursor() {
+        using var factory = CreateProgressFactory();
+        using var client = factory.CreateAuthenticatedClient();
+        var repository = factory.Services.GetRequiredService<FakeEntityWriteRepository>();
+
+        using var complete = await client.PatchAsJsonAsync(
+            $"/api/entities/{EntityId}/progress",
+            new EntityProgressUpdateRequest(ChapterId, "page", 23, 24, "paged", Completed: true));
+        Assert.NotNull(repository.SavedEntity?.Progress?.CompletedAt);
+
+        // Mark unread clears completion in place, leaving the page position untouched.
+        using var response = await client.PatchAsJsonAsync(
+            $"/api/entities/{EntityId}/progress",
+            new EntityProgressUpdateRequest(ChapterId, "page", 23, 24, "paged", Completed: false));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Null(repository.SavedEntity?.Progress?.CompletedAt);
+        Assert.Equal(23, repository.SavedEntity?.Progress?.Index);
+    }
+
+    [Fact]
     public async Task EntityProgressPatchOnBookChildStoresProgressOnBookParent() {
         using var factory = CreateProgressFactory();
         using var client = factory.CreateAuthenticatedClient();
 
         using var response = await client.PatchAsJsonAsync(
             $"/api/entities/{ChapterId}/progress",
-            new EntityProgressUpdateRequest(ChapterId, "page", 2, 16, "paged", Completed: false));
+            new EntityProgressUpdateRequest(ChapterId, "page", 2, 16, "paged", Completed: null));
         var repository = factory.Services.GetRequiredService<FakeEntityWriteRepository>();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -150,10 +192,10 @@ public sealed class EntityPatchEndpointTests {
 
         await client.PatchAsJsonAsync(
             $"/api/entities/{EntityId}/progress",
-            new EntityProgressUpdateRequest(ChapterId, "page", 7, 24, "paged", Completed: false));
+            new EntityProgressUpdateRequest(ChapterId, "page", 7, 24, "paged", Completed: null));
         using var response = await client.PatchAsJsonAsync(
             $"/api/entities/{EntityId}/progress",
-            new EntityProgressUpdateRequest(ChapterId, "page", 2, 24, "paged", Completed: false));
+            new EntityProgressUpdateRequest(ChapterId, "page", 2, 24, "paged", Completed: null));
         var repository = factory.Services.GetRequiredService<FakeEntityWriteRepository>();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);

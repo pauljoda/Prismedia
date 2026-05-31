@@ -48,28 +48,83 @@ public sealed class CapabilityPlayback : EntityCapability {
     }
 
     /// <summary>
-    /// Applies a sparse playback update from UI or player events.
+    /// Records an in-progress position so the next session can resume there. Leaves the
+    /// completion timestamp and play count untouched; this is the mid-watch progress signal.
     /// </summary>
-    public void Update(TimeSpan? resumeTime, TimeSpan? duration, bool? completed, DateTimeOffset updatedAt) {
-        var nextResume = resumeTime is null
-            ? Value.ResumeTime
-            : resumeTime.Value < TimeSpan.Zero ? TimeSpan.Zero : resumeTime.Value;
-        var addedDuration = duration is null || duration.Value < TimeSpan.Zero
-            ? TimeSpan.Zero
-            : duration.Value;
-
+    /// <param name="position">Position where the next session should resume.</param>
+    /// <param name="at">Timestamp of the playback event.</param>
+    public void RecordResume(TimeSpan position, DateTimeOffset at) {
         Value = Value with {
-            PlayCount = Value.PlayCount == 0 && (resumeTime is not null || duration is not null || completed == true)
-                ? 1
-                : Value.PlayCount,
-            PlayDuration = Value.PlayDuration + addedDuration,
-            ResumeTime = nextResume,
-            LastPlayedAt = updatedAt,
-            CompletedAt = completed switch {
-                true => updatedAt,
-                false => null,
-                _ => Value.CompletedAt
-            }
+            ResumeTime = position < TimeSpan.Zero ? TimeSpan.Zero : position,
+            LastPlayedAt = at
         };
+    }
+
+    /// <summary>
+    /// Records that playback has effectively restarted from the beginning: clears the resume
+    /// position and re-arms completion (so a fresh watch-through can be counted again) without
+    /// affecting the existing play count.
+    /// </summary>
+    /// <param name="at">Timestamp of the playback event.</param>
+    public void RecordStartOver(DateTimeOffset at) {
+        Value = Value with {
+            ResumeTime = TimeSpan.Zero,
+            CompletedAt = null,
+            LastPlayedAt = at
+        };
+    }
+
+    /// <summary>
+    /// Records that playback reached the completion threshold. Increments the play count and
+    /// stamps the completion time only on the transition from not-completed to completed, so
+    /// repeated end-of-stream signals within a single session are idempotent. Always clears the
+    /// resume position so a completed item does not re-open mid-stream.
+    /// </summary>
+    /// <param name="at">Timestamp of the completion event.</param>
+    public void RecordCompleted(DateTimeOffset at) {
+        Value = Value with {
+            PlayCount = Value.CompletedAt is null ? Value.PlayCount + 1 : Value.PlayCount,
+            ResumeTime = TimeSpan.Zero,
+            CompletedAt = at,
+            LastPlayedAt = at
+        };
+    }
+
+    /// <summary>
+    /// Explicitly marks the entity watched without disturbing the resume position. Increments the
+    /// play count only on the transition from not-watched to watched. This is the manual
+    /// watched-toggle path, kept independent of playback position by design.
+    /// </summary>
+    /// <param name="at">Timestamp of the event.</param>
+    public void MarkWatched(DateTimeOffset at) {
+        Value = Value with {
+            PlayCount = Value.CompletedAt is null ? Value.PlayCount + 1 : Value.PlayCount,
+            CompletedAt = at,
+            LastPlayedAt = at
+        };
+    }
+
+    /// <summary>
+    /// Explicitly marks the entity not watched without disturbing the resume position or play
+    /// count. This is the manual watched-toggle path, kept independent of playback position.
+    /// </summary>
+    /// <param name="at">Timestamp of the event.</param>
+    public void MarkUnwatched(DateTimeOffset at) {
+        Value = Value with {
+            CompletedAt = null,
+            LastPlayedAt = at
+        };
+    }
+
+    /// <summary>
+    /// Accumulates additional watched duration into the running total.
+    /// </summary>
+    /// <param name="delta">Amount of playback time to add; non-positive values are ignored.</param>
+    public void AccumulatePlayDuration(TimeSpan delta) {
+        if (delta <= TimeSpan.Zero) {
+            return;
+        }
+
+        Value = Value with { PlayDuration = Value.PlayDuration + delta };
     }
 }

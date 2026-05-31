@@ -209,6 +209,34 @@ describe("entity grid helpers", () => {
     expect(thumbnail.meta?.map((item) => item.label)).not.toContain("season 1");
   });
 
+  it("derives a progress fraction from playback and reading-progress capabilities", () => {
+    const completed = entityCardToThumbnailCard(card("c-done", "video", "Watched", [
+      { kind: "playback", playCount: 1, playDurationSeconds: 0, resumeSeconds: 0, lastPlayedAt: null, completedAt: "2026-05-01T00:00:00Z" },
+    ]));
+    const resuming = entityCardToThumbnailCard(card("c-mid", "video", "Mid", [
+      { kind: "playback", playCount: 0, playDurationSeconds: 0, resumeSeconds: 75, lastPlayedAt: null, completedAt: null },
+      technical(), // 00:02:30 == 150s
+    ]));
+    const reading = entityCardToThumbnailCard(card("c-book", "book", "Reading", [
+      { kind: "progress", currentEntityId: null, unit: "page", index: 5, total: 10, mode: null, completedAt: null, updatedAt: null },
+    ]));
+    const noProgress = entityCardToThumbnailCard(card("c-none", "video", "Fresh", [flags(false)]));
+
+    expect(completed.progress).toBe(1);
+    expect(resuming.progress).toBeCloseTo(0.5);
+    expect(reading.progress).toBeCloseTo(0.5);
+    expect(noProgress.progress).toBeNull();
+  });
+
+  it("uses a lightweight thumbnail row's precomputed progress field", () => {
+    const thumbnail = entityCardToThumbnailCard({
+      ...thumbnailEntity("row-1", "video", "Row"),
+      progress: 0.42,
+    });
+
+    expect(thumbnail.progress).toBeCloseTo(0.42);
+  });
+
   it("uses cover fit for entity thumbnail images by default", () => {
     const thumbnail = entityCardToThumbnailCard(card("6", "person", "Performer", [
       flags(false),

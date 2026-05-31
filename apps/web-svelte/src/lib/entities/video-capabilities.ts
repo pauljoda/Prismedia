@@ -279,14 +279,13 @@ export interface PlaybackState {
 export function getPlaybackState(
   capabilities: EntityCapability[],
 ): PlaybackState | null {
-  const cap = getCapability(capabilities, CAPABILITY_KIND.progress);
+  const cap = getCapability(capabilities, CAPABILITY_KIND.playback);
   if (!cap) return null;
-  const resumeSeconds = cap.unit === "seconds" ? Number(cap.index) : 0;
   return {
-    playCount: 0,
-    playDurationSeconds: 0,
-    resumeSeconds: Number.isFinite(resumeSeconds) ? resumeSeconds : 0,
-    lastPlayedAt: cap.updatedAt,
-    completedAt: cap.completedAt ?? null,
+    playCount: positiveNumberValue(cap.playCount) ?? 0,
+    playDurationSeconds: positiveNumberValue(cap.playDurationSeconds) ?? 0,
+    resumeSeconds: positiveNumberValue(cap.resumeSeconds) ?? 0,
+    lastPlayedAt: cap.lastPlayedAt,
+    completedAt: cap.completedAt,
   };
 }

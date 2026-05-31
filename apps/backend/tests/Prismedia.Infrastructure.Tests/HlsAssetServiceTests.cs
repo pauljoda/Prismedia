@@ -235,7 +235,9 @@ public sealed class HlsAssetServiceTests : IDisposable {
         await File.WriteAllTextAsync(sourcePath, "source");
         var process = new ManifestWritingProcessExecutor();
         var service = new HlsAssetService(
-            new HlsAssetServiceOptions(_cacheRoot),
+            // Pin the software encoder so the libx264 assertion is host-independent; on macOS the
+            // Auto profile resolves to VideoToolbox, which is covered by its own test.
+            new HlsAssetServiceOptions(_cacheRoot, HlsTranscoderProfile.Software),
             new FakeVideoSourceService(new VideoSourceFile(
                 videoId,
                 sourcePath,

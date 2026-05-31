@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { goto } from "$app/navigation";
+  import { beforeNavigate, goto } from "$app/navigation";
   import { page } from "$app/state";
   import {
     Captions,
@@ -20,8 +20,10 @@
     fetchJellyfinPlaybackInfo,
     markJellyfinUserPlayedItem,
     postJellyfinSessionProgress,
+    updateEntityPlayback,
     type JellyfinPlaybackInfoResponse,
   } from "$lib/api/playback";
+  import { durationToSeconds } from "$lib/utils/format";
   import {
     updateEntityRating,
     updateEntityFlags,
@@ -92,6 +94,9 @@
   let resumeApplied = false;
   let playbackUpdateTimer: ReturnType<typeof setInterval> | null = null;
   let lastReportedTime = 0;
+  // Tracks which video id the playback session belongs to. Used so a same-video metadata
+  // refresh (e.g. onTracksChanged) does not reset playback tracking and kill the update timer.
+  let trackedVideoId: string | null = null;
   let hydratedSubtitlePrefsKey = "";
 
   // ── Transcript dock plumbing ───────────────────────────────────────
@@ -169,13 +174,13 @@
         id: "details",
         label: "Details",
         icon: Info,
-        sections: ["description", "tags", "cast-and-crew", "links"],
+        sections: ["description", "playback", "tags", "cast-and-crew", "links"],
       },
       {
         id: "metadata",
         label: "Metadata",
         icon: SlidersHorizontal,
-        sections: ["technical", "dates", "playback", "source"],
+        sections: ["technical", "dates", "source"],
         layout: "grid",
       },
       {
@@ -212,6 +217,54 @@
     return getPlaybackState(video.capabilities);
   });
 
+  const durationSeconds = $derived.by(() => {
+    if (!video) return 0;
+    return durationToSeconds(getCapability(video.capabilities, "technical")?.duration ?? null) ?? 0;
+  });
+
+  let playbackBusy = $state(false);
+
+  /** Resumes inline playback from the stored position and brings the player into view. */
+  function handleResume() {
+    if (!playbackState) return;
+    resumeApplied = true;
+    playerHandle?.seekTo(playbackState.resumeSeconds);
+    videoWrapperEl?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  /** Marks the video watched or unwatched via the shared playback capability, then refreshes. */
+  async function handleToggleWatched(watched: boolean) {
+    if (!video || playbackBusy) return;
+    playbackBusy = true;
+    try {
+      await updateEntityPlayback(video.id, { completed: watched });
+      await refreshVideo();
+    } catch {
+      // best-effort; the card reflects the last known state on failure
+    } finally {
+      playbackBusy = false;
+    }
+  }
+
+  /**
+   * Resets playback to the beginning. Reporting position 0 routes through the same start-over
+   * behaviour a Jellyfin client triggers (a sub-5% progress report clears resume and completion).
+   */
+  async function handleStartOver() {
+    if (!video || playbackBusy) return;
+    playbackBusy = true;
+    try {
+      await updateEntityPlayback(video.id, { resumeSeconds: 0 });
+      resumeApplied = true;
+      playerHandle?.seekTo(0);
+      await refreshVideo();
+    } catch {
+      // best-effort
+    } finally {
+      playbackBusy = false;
+    }
+  }
+
   const hasSubtitles = $derived((playerProps?.subtitleTracks.length ?? 0) > 0);
   const subtitlesEnabled = $derived(activeSubtitleId != null);
   const isTranscriptDockActive = $derived(userWantsDock && hasSubtitles && subtitlesEnabled);
@@ -229,6 +282,12 @@
   const showCastControls = $derived(librarySettings?.showCastControls ?? true);
 
   // ── Lifecycle ──────────────────────────────────────────────────────
+
+  // Flush the latest position before any client-side navigation (leaving the
+  // player or switching to another video) so resume points survive navigation.
+  beforeNavigate(() => {
+    flushPlaybackPosition();
+  });
 
   onMount(() => {
     void loadVideo();
@@ -271,8 +330,13 @@
     void loadVideo();
   });
 
-  // Reset play tracking when video ID changes.
+  // Reset play tracking only when the video ID actually changes. A same-video metadata
+  // refresh (refreshVideo via onTracksChanged) reassigns `video` but must not tear down the
+  // in-flight playback session, or progress reporting would stop after the first update.
   $effect(() => {
+    const nextId = video?.id ?? null;
+    if (nextId === trackedVideoId) return;
+    trackedVideoId = nextId;
     playTracked = false;
     resumeApplied = false;
     selectedAudioStreamIndex = null;
@@ -282,7 +346,6 @@
       clearInterval(playbackUpdateTimer);
       playbackUpdateTimer = null;
     }
-    video?.id;
   });
 
   $effect(() => {
@@ -417,10 +480,31 @@
     currentTime = t;
     displayTime = t;
 
-    if (!resumeApplied && video && playbackState && playbackState.resumeSeconds > 5) {
+    if (
+      !resumeApplied &&
+      video &&
+      playbackState &&
+      !playbackState.completedAt &&
+      playbackState.resumeSeconds > 5
+    ) {
       resumeApplied = true;
       playerHandle?.seekTo(playbackState.resumeSeconds);
     }
+  }
+
+  /**
+   * Reports the current playback position to the backend so it can store a resume
+   * point (or derive completion when near the end). Used on pause-adjacent teardown
+   * and SPA navigation, complementing the periodic in-stream progress reports.
+   */
+  function flushPlaybackPosition() {
+    if (!playTracked || !video || !playerProps || currentTime <= 0) return;
+    void postJellyfinSessionProgress("Playing/Stopped", {
+      ItemId: video.id,
+      MediaSourceId: playerProps.mediaSourceId,
+      PlaySessionId: playerProps.playSessionId,
+      PositionTicks: Math.round(currentTime * 10_000_000),
+    }).catch(() => {});
   }
 
   async function handlePlayStarted() {
@@ -461,11 +545,13 @@
       playbackUpdateTimer = null;
     }
     try {
+      // Report the real end position so the backend derives completion (and tears
+      // down the transcode session), then explicitly mark played as a guarantee.
       await postJellyfinSessionProgress("Playing/Stopped", {
         ItemId: video.id,
         MediaSourceId: playerProps.mediaSourceId,
         PlaySessionId: playerProps.playSessionId,
-        PositionTicks: 0,
+        PositionTicks: Math.round(currentTime * 10_000_000),
       });
       await markJellyfinUserPlayedItem(video.id, true);
     } catch {
@@ -694,6 +780,8 @@
           {creditCards}
           {videoId}
           {playbackState}
+          {durationSeconds}
+          {playbackBusy}
           {playerProps}
           {isTranscriptDockActive}
           {isTranscriptDocked}
@@ -702,6 +790,9 @@
           {displayTime}
           getCurrentTime={() => currentTime}
           onSeek={handleSeek}
+          onResume={handleResume}
+          onStartOver={handleStartOver}
+          onToggleWatched={handleToggleWatched}
           onRefresh={refreshVideo}
           onActiveSubtitleChange={handleActiveSubtitleChange}
           onTranscriptDockToggle={toggleTranscriptDock}

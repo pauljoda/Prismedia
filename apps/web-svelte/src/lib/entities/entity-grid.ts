@@ -332,6 +332,40 @@ function customOverlayForEntity(entity: EntityGridSourceEntity): EntityThumbnail
 }
 
 /**
+ * Resolves the 0..1 progress meter fraction for a thumbnail. Lightweight browse rows carry a
+ * precomputed `progress` field; full entity cards derive it from the shared playback capability
+ * (videos: completed → 1, else resume position over known runtime) or progress capability
+ * (books: completed → 1, else current index over total). Returns null when there is nothing to show.
+ */
+function progressForEntity(entity: EntityGridSourceEntity): number | null {
+  const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
+
+  if (!isFullEntityCard(entity)) {
+    const value = numberValue(entity.progress);
+    return value != null && Number.isFinite(value) ? clamp01(value) : null;
+  }
+
+  const capabilities = entity.capabilities;
+  const playback = getCapability(capabilities, CAPABILITY_KIND.playback);
+  if (playback) {
+    if (playback.completedAt) return 1;
+    const resumeSeconds = numberValue(playback.resumeSeconds) ?? 0;
+    const durationSeconds = durationToSeconds(getTechnicalCapability(capabilities)?.duration ?? null) ?? 0;
+    return resumeSeconds > 0 && durationSeconds > 0 ? clamp01(resumeSeconds / durationSeconds) : null;
+  }
+
+  const progress = getCapability(capabilities, CAPABILITY_KIND.progress);
+  if (progress) {
+    if (progress.completedAt) return 1;
+    const total = numberValue(progress.total) ?? 0;
+    const index = numberValue(progress.index) ?? 0;
+    return total > 0 && index > 0 ? clamp01(index / total) : null;
+  }
+
+  return null;
+}
+
+/**
  * Converts a generated entity card into the shared thumbnail card model.
  * The mapper reads only shared capabilities so every entity kind can flow
  * through one thumbnail component.
@@ -387,6 +421,7 @@ export function entityCardToThumbnailCard(
     hover,
     href,
     meta: metaForEntity(entity),
+    progress: progressForEntity(entity),
   };
 }
 

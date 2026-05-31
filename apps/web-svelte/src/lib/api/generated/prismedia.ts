@@ -5,6 +5,8 @@
  * OpenAPI spec version: 1.0.0
  */
 import type {
+  ApiKeyRegenerateResponse,
+  ApiKeyResponse,
   ApiProblem,
   ApplyIdentifyProposalRequest,
   ApplyIdentifyQueueItemRequest,
@@ -59,9 +61,13 @@ import type {
   GetFileDetailParams,
   GetGalleryParams,
   GetImageParams,
+  GetJellyfinDisplayPreferencesParams,
+  GetJellyfinItemImageParams,
+  GetJellyfinUserViewGroupingOptionsParams,
   GetJellyfinVideoHlsRelativeAssetParams,
   GetJellyfinVideoHlsSegmentParams,
   GetJellyfinVideoMasterPlaylistParams,
+  GetMovieParams,
   GetOrganizePlanParams,
   GetPersonParams,
   GetSettingValuesParams,
@@ -80,6 +86,22 @@ import type {
   IdentifyQueueItem,
   IdentifyQueueSearchRequest,
   ImageDetail,
+  JellyfinAuthenticateByNameRequest,
+  JellyfinAuthenticationResult,
+  JellyfinBaseItemDto,
+  JellyfinBrandingConfiguration,
+  JellyfinDisplayPreferencesDto,
+  JellyfinImageInfo,
+  JellyfinProfileCreateRequest,
+  JellyfinProfileResponse,
+  JellyfinProfileUpdateRequest,
+  JellyfinProfilesResponse,
+  JellyfinPublicSystemInfo,
+  JellyfinQueryResultOfJellyfinBaseItemDto,
+  JellyfinSpecialViewOptionDto,
+  JellyfinSystemInfo,
+  JellyfinUserDto,
+  JellyfinVirtualFolderInfoDto,
   JobCancelResponse,
   JobCreateResponse,
   JobFailureClearResponse,
@@ -102,12 +124,14 @@ import type {
   ListIdentifyQueueParams,
   ListImagesParams,
   ListJobsParams,
+  ListMoviesParams,
   ListPeopleParams,
   ListStudiosParams,
   ListTagsParams,
   ListVideoSeriesParams,
   ListVideosParams,
   MoveFileParams,
+  MovieDetail,
   OrganizeApplyResponse,
   OrganizePlanRequest,
   OrganizePlanResponse,
@@ -317,6 +341,1062 @@ export const getAudioStream = async (id: string, options?: RequestInit): Promise
 
 
 
+export type getJellyfinPingResponse200 = {
+  data: void
+  status: 200
+}
+
+export type getJellyfinPingResponseSuccess = (getJellyfinPingResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getJellyfinPingResponse = (getJellyfinPingResponseSuccess)
+
+export const getGetJellyfinPingUrl = () => {
+
+
+
+
+  return `/System/Ping`
+}
+
+/**
+ * @summary Gets a Jellyfin-compatible ping response.
+ */
+export const getJellyfinPing = async ( options?: RequestInit): Promise<getJellyfinPingResponse> => {
+
+  return orvalFetch<getJellyfinPingResponse>(getGetJellyfinPingUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getJellyfinPublicSystemInfoResponse200 = {
+  data: JellyfinPublicSystemInfo
+  status: 200
+}
+
+export type getJellyfinPublicSystemInfoResponseSuccess = (getJellyfinPublicSystemInfoResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getJellyfinPublicSystemInfoResponse = (getJellyfinPublicSystemInfoResponseSuccess)
+
+export const getGetJellyfinPublicSystemInfoUrl = () => {
+
+
+
+
+  return `/System/Info/Public`
+}
+
+export const getJellyfinPublicSystemInfo = async ( options?: RequestInit): Promise<getJellyfinPublicSystemInfoResponse> => {
+
+  return orvalFetch<getJellyfinPublicSystemInfoResponse>(getGetJellyfinPublicSystemInfoUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getJellyfinSystemInfoResponse200 = {
+  data: JellyfinSystemInfo
+  status: 200
+}
+
+export type getJellyfinSystemInfoResponseSuccess = (getJellyfinSystemInfoResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getJellyfinSystemInfoResponse = (getJellyfinSystemInfoResponseSuccess)
+
+export const getGetJellyfinSystemInfoUrl = () => {
+
+
+
+
+  return `/System/Info`
+}
+
+export const getJellyfinSystemInfo = async ( options?: RequestInit): Promise<getJellyfinSystemInfoResponse> => {
+
+  return orvalFetch<getJellyfinSystemInfoResponse>(getGetJellyfinSystemInfoUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getJellyfinBrandingConfigurationResponse200 = {
+  data: JellyfinBrandingConfiguration
+  status: 200
+}
+
+export type getJellyfinBrandingConfigurationResponseSuccess = (getJellyfinBrandingConfigurationResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getJellyfinBrandingConfigurationResponse = (getJellyfinBrandingConfigurationResponseSuccess)
+
+export const getGetJellyfinBrandingConfigurationUrl = () => {
+
+
+
+
+  return `/Branding/Configuration`
+}
+
+export const getJellyfinBrandingConfiguration = async ( options?: RequestInit): Promise<getJellyfinBrandingConfigurationResponse> => {
+
+  return orvalFetch<getJellyfinBrandingConfigurationResponse>(getGetJellyfinBrandingConfigurationUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getJellyfinBrandingCssResponse200 = {
+  data: void
+  status: 200
+}
+
+export type getJellyfinBrandingCssResponseSuccess = (getJellyfinBrandingCssResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getJellyfinBrandingCssResponse = (getJellyfinBrandingCssResponseSuccess)
+
+export const getGetJellyfinBrandingCssUrl = () => {
+
+
+
+
+  return `/Branding/Css`
+}
+
+export const getJellyfinBrandingCss = async ( options?: RequestInit): Promise<getJellyfinBrandingCssResponse> => {
+
+  return orvalFetch<getJellyfinBrandingCssResponse>(getGetJellyfinBrandingCssUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getJellyfinBrandingCssFileResponse200 = {
+  data: void
+  status: 200
+}
+
+export type getJellyfinBrandingCssFileResponseSuccess = (getJellyfinBrandingCssFileResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getJellyfinBrandingCssFileResponse = (getJellyfinBrandingCssFileResponseSuccess)
+
+export const getGetJellyfinBrandingCssFileUrl = () => {
+
+
+
+
+  return `/Branding/Css.css`
+}
+
+export const getJellyfinBrandingCssFile = async ( options?: RequestInit): Promise<getJellyfinBrandingCssFileResponse> => {
+
+  return orvalFetch<getJellyfinBrandingCssFileResponse>(getGetJellyfinBrandingCssFileUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getJellyfinPublicUsersResponse200 = {
+  data: JellyfinUserDto[]
+  status: 200
+}
+
+export type getJellyfinPublicUsersResponseSuccess = (getJellyfinPublicUsersResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getJellyfinPublicUsersResponse = (getJellyfinPublicUsersResponseSuccess)
+
+export const getGetJellyfinPublicUsersUrl = () => {
+
+
+
+
+  return `/Users/Public`
+}
+
+export const getJellyfinPublicUsers = async ( options?: RequestInit): Promise<getJellyfinPublicUsersResponse> => {
+
+  return orvalFetch<getJellyfinPublicUsersResponse>(getGetJellyfinPublicUsersUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getJellyfinUsersResponse200 = {
+  data: JellyfinUserDto[]
+  status: 200
+}
+
+export type getJellyfinUsersResponseSuccess = (getJellyfinUsersResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getJellyfinUsersResponse = (getJellyfinUsersResponseSuccess)
+
+export const getGetJellyfinUsersUrl = () => {
+
+
+
+
+  return `/Users`
+}
+
+export const getJellyfinUsers = async ( options?: RequestInit): Promise<getJellyfinUsersResponse> => {
+
+  return orvalFetch<getJellyfinUsersResponse>(getGetJellyfinUsersUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getJellyfinCurrentUserResponse200 = {
+  data: JellyfinUserDto
+  status: 200
+}
+
+export type getJellyfinCurrentUserResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type getJellyfinCurrentUserResponseSuccess = (getJellyfinCurrentUserResponse200) & {
+  headers: Headers;
+};
+export type getJellyfinCurrentUserResponseError = (getJellyfinCurrentUserResponse404) & {
+  headers: Headers;
+};
+
+export type getJellyfinCurrentUserResponse = (getJellyfinCurrentUserResponseSuccess | getJellyfinCurrentUserResponseError)
+
+export const getGetJellyfinCurrentUserUrl = () => {
+
+
+
+
+  return `/Users/Me`
+}
+
+export const getJellyfinCurrentUser = async ( options?: RequestInit): Promise<getJellyfinCurrentUserResponse> => {
+
+  return orvalFetch<getJellyfinCurrentUserResponse>(getGetJellyfinCurrentUserUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getJellyfinUserResponse200 = {
+  data: JellyfinUserDto
+  status: 200
+}
+
+export type getJellyfinUserResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type getJellyfinUserResponseSuccess = (getJellyfinUserResponse200) & {
+  headers: Headers;
+};
+export type getJellyfinUserResponseError = (getJellyfinUserResponse404) & {
+  headers: Headers;
+};
+
+export type getJellyfinUserResponse = (getJellyfinUserResponseSuccess | getJellyfinUserResponseError)
+
+export const getGetJellyfinUserUrl = (userId: string,) => {
+
+
+
+
+  return `/Users/${userId}`
+}
+
+export const getJellyfinUser = async (userId: string, options?: RequestInit): Promise<getJellyfinUserResponse> => {
+
+  return orvalFetch<getJellyfinUserResponse>(getGetJellyfinUserUrl(userId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type authenticateJellyfinUserByNameResponse200 = {
+  data: JellyfinAuthenticationResult
+  status: 200
+}
+
+export type authenticateJellyfinUserByNameResponse401 = {
+  data: ApiProblem
+  status: 401
+}
+
+export type authenticateJellyfinUserByNameResponse429 = {
+  data: ApiProblem
+  status: 429
+}
+
+export type authenticateJellyfinUserByNameResponseSuccess = (authenticateJellyfinUserByNameResponse200) & {
+  headers: Headers;
+};
+export type authenticateJellyfinUserByNameResponseError = (authenticateJellyfinUserByNameResponse401 | authenticateJellyfinUserByNameResponse429) & {
+  headers: Headers;
+};
+
+export type authenticateJellyfinUserByNameResponse = (authenticateJellyfinUserByNameResponseSuccess | authenticateJellyfinUserByNameResponseError)
+
+export const getAuthenticateJellyfinUserByNameUrl = () => {
+
+
+
+
+  return `/Users/AuthenticateByName`
+}
+
+export const authenticateJellyfinUserByName = async (jellyfinAuthenticateByNameRequest: JellyfinAuthenticateByNameRequest, options?: RequestInit): Promise<authenticateJellyfinUserByNameResponse> => {
+
+  return orvalFetch<authenticateJellyfinUserByNameResponse>(getAuthenticateJellyfinUserByNameUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      jellyfinAuthenticateByNameRequest,)
+  }
+);}
+
+
+
+export type getJellyfinUserViewsResponse200 = {
+  data: JellyfinQueryResultOfJellyfinBaseItemDto
+  status: 200
+}
+
+export type getJellyfinUserViewsResponseSuccess = (getJellyfinUserViewsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getJellyfinUserViewsResponse = (getJellyfinUserViewsResponseSuccess)
+
+export const getGetJellyfinUserViewsUrl = () => {
+
+
+
+
+  return `/UserViews`
+}
+
+export const getJellyfinUserViews = async ( options?: RequestInit): Promise<getJellyfinUserViewsResponse> => {
+
+  return orvalFetch<getJellyfinUserViewsResponse>(getGetJellyfinUserViewsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getJellyfinUserViewGroupingOptionsResponse200 = {
+  data: JellyfinSpecialViewOptionDto[]
+  status: 200
+}
+
+export type getJellyfinUserViewGroupingOptionsResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type getJellyfinUserViewGroupingOptionsResponseSuccess = (getJellyfinUserViewGroupingOptionsResponse200) & {
+  headers: Headers;
+};
+export type getJellyfinUserViewGroupingOptionsResponseError = (getJellyfinUserViewGroupingOptionsResponse404) & {
+  headers: Headers;
+};
+
+export type getJellyfinUserViewGroupingOptionsResponse = (getJellyfinUserViewGroupingOptionsResponseSuccess | getJellyfinUserViewGroupingOptionsResponseError)
+
+export const getGetJellyfinUserViewGroupingOptionsUrl = (params?: GetJellyfinUserViewGroupingOptionsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/UserViews/GroupingOptions?${stringifiedParams}` : `/UserViews/GroupingOptions`
+}
+
+export const getJellyfinUserViewGroupingOptions = async (params?: GetJellyfinUserViewGroupingOptionsParams, options?: RequestInit): Promise<getJellyfinUserViewGroupingOptionsResponse> => {
+
+  return orvalFetch<getJellyfinUserViewGroupingOptionsResponse>(getGetJellyfinUserViewGroupingOptionsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getJellyfinUserViewGroupingOptionsLegacyResponse200 = {
+  data: JellyfinSpecialViewOptionDto[]
+  status: 200
+}
+
+export type getJellyfinUserViewGroupingOptionsLegacyResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type getJellyfinUserViewGroupingOptionsLegacyResponseSuccess = (getJellyfinUserViewGroupingOptionsLegacyResponse200) & {
+  headers: Headers;
+};
+export type getJellyfinUserViewGroupingOptionsLegacyResponseError = (getJellyfinUserViewGroupingOptionsLegacyResponse404) & {
+  headers: Headers;
+};
+
+export type getJellyfinUserViewGroupingOptionsLegacyResponse = (getJellyfinUserViewGroupingOptionsLegacyResponseSuccess | getJellyfinUserViewGroupingOptionsLegacyResponseError)
+
+export const getGetJellyfinUserViewGroupingOptionsLegacyUrl = (userId: string,) => {
+
+
+
+
+  return `/Users/${userId}/GroupingOptions`
+}
+
+export const getJellyfinUserViewGroupingOptionsLegacy = async (userId: string, options?: RequestInit): Promise<getJellyfinUserViewGroupingOptionsLegacyResponse> => {
+
+  return orvalFetch<getJellyfinUserViewGroupingOptionsLegacyResponse>(getGetJellyfinUserViewGroupingOptionsLegacyUrl(userId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getJellyfinItemsRootResponse200 = {
+  data: JellyfinBaseItemDto
+  status: 200
+}
+
+export type getJellyfinItemsRootResponseSuccess = (getJellyfinItemsRootResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getJellyfinItemsRootResponse = (getJellyfinItemsRootResponseSuccess)
+
+export const getGetJellyfinItemsRootUrl = () => {
+
+
+
+
+  return `/Items/Root`
+}
+
+export const getJellyfinItemsRoot = async ( options?: RequestInit): Promise<getJellyfinItemsRootResponse> => {
+
+  return orvalFetch<getJellyfinItemsRootResponse>(getGetJellyfinItemsRootUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getJellyfinItemsResponse200 = {
+  data: JellyfinQueryResultOfJellyfinBaseItemDto
+  status: 200
+}
+
+export type getJellyfinItemsResponseSuccess = (getJellyfinItemsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getJellyfinItemsResponse = (getJellyfinItemsResponseSuccess)
+
+export const getGetJellyfinItemsUrl = () => {
+
+
+
+
+  return `/Items`
+}
+
+export const getJellyfinItems = async ( options?: RequestInit): Promise<getJellyfinItemsResponse> => {
+
+  return orvalFetch<getJellyfinItemsResponse>(getGetJellyfinItemsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getJellyfinItemResponse200 = {
+  data: JellyfinBaseItemDto
+  status: 200
+}
+
+export type getJellyfinItemResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type getJellyfinItemResponseSuccess = (getJellyfinItemResponse200) & {
+  headers: Headers;
+};
+export type getJellyfinItemResponseError = (getJellyfinItemResponse404) & {
+  headers: Headers;
+};
+
+export type getJellyfinItemResponse = (getJellyfinItemResponseSuccess | getJellyfinItemResponseError)
+
+export const getGetJellyfinItemUrl = (itemId: string,) => {
+
+
+
+
+  return `/Items/${itemId}`
+}
+
+export const getJellyfinItem = async (itemId: string, options?: RequestInit): Promise<getJellyfinItemResponse> => {
+
+  return orvalFetch<getJellyfinItemResponse>(getGetJellyfinItemUrl(itemId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getJellyfinLatestItemsResponse200 = {
+  data: JellyfinBaseItemDto[]
+  status: 200
+}
+
+export type getJellyfinLatestItemsResponseSuccess = (getJellyfinLatestItemsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getJellyfinLatestItemsResponse = (getJellyfinLatestItemsResponseSuccess)
+
+export const getGetJellyfinLatestItemsUrl = () => {
+
+
+
+
+  return `/Items/Latest`
+}
+
+export const getJellyfinLatestItems = async ( options?: RequestInit): Promise<getJellyfinLatestItemsResponse> => {
+
+  return orvalFetch<getJellyfinLatestItemsResponse>(getGetJellyfinLatestItemsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getJellyfinResumeItemsResponse200 = {
+  data: JellyfinQueryResultOfJellyfinBaseItemDto
+  status: 200
+}
+
+export type getJellyfinResumeItemsResponseSuccess = (getJellyfinResumeItemsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getJellyfinResumeItemsResponse = (getJellyfinResumeItemsResponseSuccess)
+
+export const getGetJellyfinResumeItemsUrl = () => {
+
+
+
+
+  return `/UserItems/Resume`
+}
+
+export const getJellyfinResumeItems = async ( options?: RequestInit): Promise<getJellyfinResumeItemsResponse> => {
+
+  return orvalFetch<getJellyfinResumeItemsResponse>(getGetJellyfinResumeItemsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getJellyfinSeriesSeasonsResponse200 = {
+  data: JellyfinQueryResultOfJellyfinBaseItemDto
+  status: 200
+}
+
+export type getJellyfinSeriesSeasonsResponseSuccess = (getJellyfinSeriesSeasonsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getJellyfinSeriesSeasonsResponse = (getJellyfinSeriesSeasonsResponseSuccess)
+
+export const getGetJellyfinSeriesSeasonsUrl = (seriesId: string,) => {
+
+
+
+
+  return `/Shows/${seriesId}/Seasons`
+}
+
+export const getJellyfinSeriesSeasons = async (seriesId: string, options?: RequestInit): Promise<getJellyfinSeriesSeasonsResponse> => {
+
+  return orvalFetch<getJellyfinSeriesSeasonsResponse>(getGetJellyfinSeriesSeasonsUrl(seriesId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getJellyfinSeriesEpisodesResponse200 = {
+  data: JellyfinQueryResultOfJellyfinBaseItemDto
+  status: 200
+}
+
+export type getJellyfinSeriesEpisodesResponseSuccess = (getJellyfinSeriesEpisodesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getJellyfinSeriesEpisodesResponse = (getJellyfinSeriesEpisodesResponseSuccess)
+
+export const getGetJellyfinSeriesEpisodesUrl = (seriesId: string,) => {
+
+
+
+
+  return `/Shows/${seriesId}/Episodes`
+}
+
+export const getJellyfinSeriesEpisodes = async (seriesId: string, options?: RequestInit): Promise<getJellyfinSeriesEpisodesResponse> => {
+
+  return orvalFetch<getJellyfinSeriesEpisodesResponse>(getGetJellyfinSeriesEpisodesUrl(seriesId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getJellyfinItemImagesResponse200 = {
+  data: JellyfinImageInfo[]
+  status: 200
+}
+
+export type getJellyfinItemImagesResponseSuccess = (getJellyfinItemImagesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getJellyfinItemImagesResponse = (getJellyfinItemImagesResponseSuccess)
+
+export const getGetJellyfinItemImagesUrl = (itemId: string,) => {
+
+
+
+
+  return `/Items/${itemId}/Images`
+}
+
+export const getJellyfinItemImages = async (itemId: string, options?: RequestInit): Promise<getJellyfinItemImagesResponse> => {
+
+  return orvalFetch<getJellyfinItemImagesResponse>(getGetJellyfinItemImagesUrl(itemId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getJellyfinItemImageResponse200 = {
+  data: void
+  status: 200
+}
+
+export type getJellyfinItemImageResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type getJellyfinItemImageResponseSuccess = (getJellyfinItemImageResponse200) & {
+  headers: Headers;
+};
+export type getJellyfinItemImageResponseError = (getJellyfinItemImageResponse404) & {
+  headers: Headers;
+};
+
+export type getJellyfinItemImageResponse = (getJellyfinItemImageResponseSuccess | getJellyfinItemImageResponseError)
+
+export const getGetJellyfinItemImageUrl = (itemId: string,
+    imageType: string,
+    params?: GetJellyfinItemImageParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/Items/${itemId}/Images/${imageType}?${stringifiedParams}` : `/Items/${itemId}/Images/${imageType}`
+}
+
+export const getJellyfinItemImage = async (itemId: string,
+    imageType: string,
+    params?: GetJellyfinItemImageParams, options?: RequestInit): Promise<getJellyfinItemImageResponse> => {
+
+  return orvalFetch<getJellyfinItemImageResponse>(getGetJellyfinItemImageUrl(itemId,imageType,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getJellyfinItemImageByIndexResponse200 = {
+  data: void
+  status: 200
+}
+
+export type getJellyfinItemImageByIndexResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type getJellyfinItemImageByIndexResponseSuccess = (getJellyfinItemImageByIndexResponse200) & {
+  headers: Headers;
+};
+export type getJellyfinItemImageByIndexResponseError = (getJellyfinItemImageByIndexResponse404) & {
+  headers: Headers;
+};
+
+export type getJellyfinItemImageByIndexResponse = (getJellyfinItemImageByIndexResponseSuccess | getJellyfinItemImageByIndexResponseError)
+
+export const getGetJellyfinItemImageByIndexUrl = (itemId: string,
+    imageType: string,
+    imageIndex: number,) => {
+
+
+
+
+  return `/Items/${itemId}/Images/${imageType}/${imageIndex}`
+}
+
+export const getJellyfinItemImageByIndex = async (itemId: string,
+    imageType: string,
+    imageIndex: number, options?: RequestInit): Promise<getJellyfinItemImageByIndexResponse> => {
+
+  return orvalFetch<getJellyfinItemImageByIndexResponse>(getGetJellyfinItemImageByIndexUrl(itemId,imageType,imageIndex),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getJellyfinVirtualFoldersResponse200 = {
+  data: JellyfinVirtualFolderInfoDto[]
+  status: 200
+}
+
+export type getJellyfinVirtualFoldersResponseSuccess = (getJellyfinVirtualFoldersResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getJellyfinVirtualFoldersResponse = (getJellyfinVirtualFoldersResponseSuccess)
+
+export const getGetJellyfinVirtualFoldersUrl = () => {
+
+
+
+
+  return `/Library/VirtualFolders`
+}
+
+/**
+ * @summary Gets Jellyfin-compatible virtual library folders.
+ */
+export const getJellyfinVirtualFolders = async ( options?: RequestInit): Promise<getJellyfinVirtualFoldersResponse> => {
+
+  return orvalFetch<getJellyfinVirtualFoldersResponse>(getGetJellyfinVirtualFoldersUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type postJellyfinCapabilitiesResponse204 = {
+  data: void
+  status: 204
+}
+
+export type postJellyfinCapabilitiesResponseSuccess = (postJellyfinCapabilitiesResponse204) & {
+  headers: Headers;
+};
+;
+
+export type postJellyfinCapabilitiesResponse = (postJellyfinCapabilitiesResponseSuccess)
+
+export const getPostJellyfinCapabilitiesUrl = () => {
+
+
+
+
+  return `/Sessions/Capabilities`
+}
+
+export const postJellyfinCapabilities = async ( options?: RequestInit): Promise<postJellyfinCapabilitiesResponse> => {
+
+  return orvalFetch<postJellyfinCapabilitiesResponse>(getPostJellyfinCapabilitiesUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type postJellyfinFullCapabilitiesResponse204 = {
+  data: void
+  status: 204
+}
+
+export type postJellyfinFullCapabilitiesResponseSuccess = (postJellyfinFullCapabilitiesResponse204) & {
+  headers: Headers;
+};
+;
+
+export type postJellyfinFullCapabilitiesResponse = (postJellyfinFullCapabilitiesResponseSuccess)
+
+export const getPostJellyfinFullCapabilitiesUrl = () => {
+
+
+
+
+  return `/Sessions/Capabilities/Full`
+}
+
+export const postJellyfinFullCapabilities = async ( options?: RequestInit): Promise<postJellyfinFullCapabilitiesResponse> => {
+
+  return orvalFetch<postJellyfinFullCapabilitiesResponse>(getPostJellyfinFullCapabilitiesUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type getJellyfinDisplayPreferencesResponse200 = {
+  data: JellyfinDisplayPreferencesDto
+  status: 200
+}
+
+export type getJellyfinDisplayPreferencesResponseSuccess = (getJellyfinDisplayPreferencesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getJellyfinDisplayPreferencesResponse = (getJellyfinDisplayPreferencesResponseSuccess)
+
+export const getGetJellyfinDisplayPreferencesUrl = (displayPreferencesId: string,
+    params?: GetJellyfinDisplayPreferencesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/DisplayPreferences/${displayPreferencesId}?${stringifiedParams}` : `/DisplayPreferences/${displayPreferencesId}`
+}
+
+export const getJellyfinDisplayPreferences = async (displayPreferencesId: string,
+    params?: GetJellyfinDisplayPreferencesParams, options?: RequestInit): Promise<getJellyfinDisplayPreferencesResponse> => {
+
+  return orvalFetch<getJellyfinDisplayPreferencesResponse>(getGetJellyfinDisplayPreferencesUrl(displayPreferencesId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type updateJellyfinDisplayPreferencesResponse204 = {
+  data: void
+  status: 204
+}
+
+export type updateJellyfinDisplayPreferencesResponseSuccess = (updateJellyfinDisplayPreferencesResponse204) & {
+  headers: Headers;
+};
+;
+
+export type updateJellyfinDisplayPreferencesResponse = (updateJellyfinDisplayPreferencesResponseSuccess)
+
+export const getUpdateJellyfinDisplayPreferencesUrl = (displayPreferencesId: string,) => {
+
+
+
+
+  return `/DisplayPreferences/${displayPreferencesId}`
+}
+
+export const updateJellyfinDisplayPreferences = async (displayPreferencesId: string, options?: RequestInit): Promise<updateJellyfinDisplayPreferencesResponse> => {
+
+  return orvalFetch<updateJellyfinDisplayPreferencesResponse>(getUpdateJellyfinDisplayPreferencesUrl(displayPreferencesId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
 export type getJellyfinPlaybackInfoResponse200 = {
   data: PlaybackInfoResponse
   status: 200
@@ -420,15 +1500,10 @@ export type getJellyfinVideoStreamResponse404 = {
   status: 404
 }
 
-export type getJellyfinVideoStreamResponse415 = {
-  data: ApiProblem
-  status: 415
-}
-
 export type getJellyfinVideoStreamResponseSuccess = (getJellyfinVideoStreamResponse200 | getJellyfinVideoStreamResponse206) & {
   headers: Headers;
 };
-export type getJellyfinVideoStreamResponseError = (getJellyfinVideoStreamResponse404 | getJellyfinVideoStreamResponse415) & {
+export type getJellyfinVideoStreamResponseError = (getJellyfinVideoStreamResponse404) & {
   headers: Headers;
 };
 
@@ -1011,6 +2086,251 @@ export const getChangelog = async ( options?: RequestInit): Promise<getChangelog
   {
     ...options,
     method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getApiKeyResponse200 = {
+  data: ApiKeyResponse
+  status: 200
+}
+
+export type getApiKeyResponseSuccess = (getApiKeyResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getApiKeyResponse = (getApiKeyResponseSuccess)
+
+export const getGetApiKeyUrl = () => {
+
+
+
+
+  return `/api/security/api-key`
+}
+
+/**
+ * @summary Gets the current app API key.
+ */
+export const getApiKey = async ( options?: RequestInit): Promise<getApiKeyResponse> => {
+
+  return orvalFetch<getApiKeyResponse>(getGetApiKeyUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type regenerateApiKeyResponse200 = {
+  data: ApiKeyRegenerateResponse
+  status: 200
+}
+
+export type regenerateApiKeyResponseSuccess = (regenerateApiKeyResponse200) & {
+  headers: Headers;
+};
+;
+
+export type regenerateApiKeyResponse = (regenerateApiKeyResponseSuccess)
+
+export const getRegenerateApiKeyUrl = () => {
+
+
+
+
+  return `/api/security/api-key/regenerate`
+}
+
+/**
+ * @summary Regenerates the app API key and invalidates Jellyfin sessions.
+ */
+export const regenerateApiKey = async ( options?: RequestInit): Promise<regenerateApiKeyResponse> => {
+
+  return orvalFetch<regenerateApiKeyResponse>(getRegenerateApiKeyUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type listJellyfinProfilesResponse200 = {
+  data: JellyfinProfilesResponse
+  status: 200
+}
+
+export type listJellyfinProfilesResponseSuccess = (listJellyfinProfilesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listJellyfinProfilesResponse = (listJellyfinProfilesResponseSuccess)
+
+export const getListJellyfinProfilesUrl = () => {
+
+
+
+
+  return `/api/security/jellyfin-profiles`
+}
+
+/**
+ * @summary Lists Jellyfin-compatible fake user profiles.
+ */
+export const listJellyfinProfiles = async ( options?: RequestInit): Promise<listJellyfinProfilesResponse> => {
+
+  return orvalFetch<listJellyfinProfilesResponse>(getListJellyfinProfilesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type createJellyfinProfileResponse200 = {
+  data: JellyfinProfileResponse
+  status: 200
+}
+
+export type createJellyfinProfileResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type createJellyfinProfileResponseSuccess = (createJellyfinProfileResponse200) & {
+  headers: Headers;
+};
+export type createJellyfinProfileResponseError = (createJellyfinProfileResponse400) & {
+  headers: Headers;
+};
+
+export type createJellyfinProfileResponse = (createJellyfinProfileResponseSuccess | createJellyfinProfileResponseError)
+
+export const getCreateJellyfinProfileUrl = () => {
+
+
+
+
+  return `/api/security/jellyfin-profiles`
+}
+
+/**
+ * @summary Creates a Jellyfin-compatible fake user profile.
+ */
+export const createJellyfinProfile = async (jellyfinProfileCreateRequest: JellyfinProfileCreateRequest, options?: RequestInit): Promise<createJellyfinProfileResponse> => {
+
+  return orvalFetch<createJellyfinProfileResponse>(getCreateJellyfinProfileUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      jellyfinProfileCreateRequest,)
+  }
+);}
+
+
+
+export type updateJellyfinProfileResponse200 = {
+  data: JellyfinProfileResponse
+  status: 200
+}
+
+export type updateJellyfinProfileResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type updateJellyfinProfileResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type updateJellyfinProfileResponseSuccess = (updateJellyfinProfileResponse200) & {
+  headers: Headers;
+};
+export type updateJellyfinProfileResponseError = (updateJellyfinProfileResponse400 | updateJellyfinProfileResponse404) & {
+  headers: Headers;
+};
+
+export type updateJellyfinProfileResponse = (updateJellyfinProfileResponseSuccess | updateJellyfinProfileResponseError)
+
+export const getUpdateJellyfinProfileUrl = (profileId: string,) => {
+
+
+
+
+  return `/api/security/jellyfin-profiles/${profileId}`
+}
+
+/**
+ * @summary Updates a Jellyfin-compatible fake user profile.
+ */
+export const updateJellyfinProfile = async (profileId: string,
+    jellyfinProfileUpdateRequest: JellyfinProfileUpdateRequest, options?: RequestInit): Promise<updateJellyfinProfileResponse> => {
+
+  return orvalFetch<updateJellyfinProfileResponse>(getUpdateJellyfinProfileUrl(profileId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      jellyfinProfileUpdateRequest,)
+  }
+);}
+
+
+
+export type deleteJellyfinProfileResponse204 = {
+  data: void
+  status: 204
+}
+
+export type deleteJellyfinProfileResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type deleteJellyfinProfileResponseSuccess = (deleteJellyfinProfileResponse204) & {
+  headers: Headers;
+};
+export type deleteJellyfinProfileResponseError = (deleteJellyfinProfileResponse404) & {
+  headers: Headers;
+};
+
+export type deleteJellyfinProfileResponse = (deleteJellyfinProfileResponseSuccess | deleteJellyfinProfileResponseError)
+
+export const getDeleteJellyfinProfileUrl = (profileId: string,) => {
+
+
+
+
+  return `/api/security/jellyfin-profiles/${profileId}`
+}
+
+/**
+ * @summary Deletes a Jellyfin-compatible fake user profile.
+ */
+export const deleteJellyfinProfile = async (profileId: string, options?: RequestInit): Promise<deleteJellyfinProfileResponse> => {
+
+  return orvalFetch<deleteJellyfinProfileResponse>(getDeleteJellyfinProfileUrl(profileId),
+  {
+    ...options,
+    method: 'DELETE'
 
 
   }
@@ -2038,6 +3358,151 @@ export const getVideoSubtitleSource = async (id: string,
     method: 'GET'
 
 
+  }
+);}
+
+
+
+export type listMoviesResponse200 = {
+  data: EntityListResponse
+  status: 200
+}
+
+export type listMoviesResponseSuccess = (listMoviesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listMoviesResponse = (listMoviesResponseSuccess)
+
+export const getListMoviesUrl = (params?: ListMoviesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/movies?${stringifiedParams}` : `/api/movies`
+}
+
+/**
+ * @summary List Movies.
+ */
+export const listMovies = async (params?: ListMoviesParams, options?: RequestInit): Promise<listMoviesResponse> => {
+
+  return orvalFetch<listMoviesResponse>(getListMoviesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getMovieResponse200 = {
+  data: MovieDetail
+  status: 200
+}
+
+export type getMovieResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type getMovieResponseSuccess = (getMovieResponse200) & {
+  headers: Headers;
+};
+export type getMovieResponseError = (getMovieResponse404) & {
+  headers: Headers;
+};
+
+export type getMovieResponse = (getMovieResponseSuccess | getMovieResponseError)
+
+export const getGetMovieUrl = (id: string,
+    params?: GetMovieParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/movies/${id}?${stringifiedParams}` : `/api/movies/${id}`
+}
+
+/**
+ * @summary Get Movies detail.
+ */
+export const getMovie = async (id: string,
+    params?: GetMovieParams, options?: RequestInit): Promise<getMovieResponse> => {
+
+  return orvalFetch<getMovieResponse>(getGetMovieUrl(id,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getMoviePatchResponse200 = {
+  data: MovieDetail
+  status: 200
+}
+
+export type getMoviePatchResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type getMoviePatchResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type getMoviePatchResponseSuccess = (getMoviePatchResponse200) & {
+  headers: Headers;
+};
+export type getMoviePatchResponseError = (getMoviePatchResponse400 | getMoviePatchResponse404) & {
+  headers: Headers;
+};
+
+export type getMoviePatchResponse = (getMoviePatchResponseSuccess | getMoviePatchResponseError)
+
+export const getGetMoviePatchUrl = (id: string,) => {
+
+
+
+
+  return `/api/movies/${id}`
+}
+
+/**
+ * @summary Update Movies detail.
+ */
+export const getMoviePatch = async (id: string,
+    entityMetadataUpdateRequest: EntityMetadataUpdateRequest, options?: RequestInit): Promise<getMoviePatchResponse> => {
+
+  return orvalFetch<getMoviePatchResponse>(getGetMoviePatchUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      entityMetadataUpdateRequest,)
   }
 );}
 

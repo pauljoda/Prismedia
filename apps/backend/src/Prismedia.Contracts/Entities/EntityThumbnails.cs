@@ -33,6 +33,13 @@ public sealed record EntityThumbnail(
     /// clients to route child media through richer parent detail surfaces.
     /// </summary>
     public string? ParentKind { get; init; }
+
+    /// <summary>
+    /// Fraction watched (videos) or read (books) in the range 0..1 for a thumbnail progress
+    /// meter, or <c>null</c> when the entity has no meaningful progress to show. A completed
+    /// item reads 1.0.
+    /// </summary>
+    public double? Progress { get; init; }
 }
 
 /// <summary>API-facing grouped entities for child and relationship collections.</summary>

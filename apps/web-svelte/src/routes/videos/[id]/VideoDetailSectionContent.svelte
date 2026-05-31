@@ -9,8 +9,8 @@
   import type { PlaybackState, VideoPlayerProps } from "$lib/entities/video-capabilities";
   import VideoMarkerEditor from "$lib/components/VideoMarkerEditor.svelte";
   import VideoTranscriptPanel from "$lib/components/VideoTranscriptPanel.svelte";
-  import { formatVideoTimestamp } from "./video-page-state";
-  import { MonitorCog, Calendar, Activity, Database } from "@lucide/svelte";
+  import VideoPlaybackStatus from "./VideoPlaybackStatus.svelte";
+  import { MonitorCog, Calendar, Database } from "@lucide/svelte";
 
   interface Props {
     section: EntityDetailSection;
@@ -19,6 +19,8 @@
     creditCards: EntityThumbnailCard[];
     videoId: string;
     playbackState: PlaybackState | null;
+    durationSeconds: number;
+    playbackBusy: boolean;
     playerProps: VideoPlayerProps;
     isTranscriptDockActive: boolean;
     isTranscriptDocked: boolean;
@@ -27,6 +29,9 @@
     displayTime: number;
     getCurrentTime: () => number;
     onSeek: (time: number) => void;
+    onResume: () => void;
+    onStartOver: () => void;
+    onToggleWatched: (watched: boolean) => void;
     onRefresh: () => void | Promise<void>;
     onActiveSubtitleChange: (id: string | null) => void;
     onTranscriptDockToggle: () => void;
@@ -39,6 +44,8 @@
     creditCards,
     videoId,
     playbackState,
+    durationSeconds,
+    playbackBusy,
     playerProps,
     isTranscriptDockActive,
     isTranscriptDocked,
@@ -47,6 +54,9 @@
     displayTime,
     getCurrentTime,
     onSeek,
+    onResume,
+    onStartOver,
+    onToggleWatched,
     onRefresh,
     onActiveSubtitleChange,
     onTranscriptDockToggle,
@@ -73,13 +83,17 @@
   {/if}
 {:else if section.id === "playback"}
   {#if playbackState}
-    {@const rows = [
-      { label: "Play Count", value: String(playbackState.playCount) },
-      ...(playbackState.resumeSeconds > 0
-        ? [{ label: "Resume", value: formatVideoTimestamp(playbackState.resumeSeconds) }]
-        : []),
-    ]}
-    <MetadataCard title="Playback" icon={Activity} {rows} />
+    <VideoPlaybackStatus
+      playCount={playbackState.playCount}
+      resumeSeconds={playbackState.resumeSeconds}
+      {durationSeconds}
+      completedAt={playbackState.completedAt}
+      livePositionSeconds={displayTime}
+      busy={playbackBusy}
+      {onResume}
+      {onStartOver}
+      {onToggleWatched}
+    />
   {/if}
 {:else if section.id === "source"}
   {#if card.sources.length > 0 || card.fingerprints.length > 0}

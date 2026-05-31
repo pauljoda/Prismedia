@@ -306,7 +306,9 @@
       index: Math.max(0, Math.min(position.pageIndex, Math.max(0, position.pageCount - 1))),
       total: position.pageCount,
       mode: readerMode,
-      completed,
+      // Only an explicit end-of-book save reports completion; mid-reading sends null so it does not
+      // get treated as an explicit "mark unread".
+      completed: completed ? true : null,
     });
   }
 

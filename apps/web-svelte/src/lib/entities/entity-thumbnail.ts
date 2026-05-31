@@ -94,6 +94,8 @@ export interface EntityThumbnailCard {
   hover: EntityThumbnailHoverPreview;
   href?: string;
   meta?: EntityThumbnailMetaItem[];
+  /** Fraction watched/read in 0..1 for the thumbnail progress meter, when meaningful. */
+  progress?: number | null;
   routeContext?: EntityRouteContext;
   subtitle?: string;
 }

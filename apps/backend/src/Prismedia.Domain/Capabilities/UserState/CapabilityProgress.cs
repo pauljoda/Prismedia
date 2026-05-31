@@ -50,4 +50,10 @@ public sealed class CapabilityProgress : EntityCapability {
         CompletedAt = completedAt;
         UpdatedAt = completedAt;
     }
+
+    /// <summary>Clears the completion flag while leaving the current position untouched.</summary>
+    public void MarkIncomplete(DateTimeOffset updatedAt) {
+        CompletedAt = null;
+        UpdatedAt = updatedAt;
+    }
 }

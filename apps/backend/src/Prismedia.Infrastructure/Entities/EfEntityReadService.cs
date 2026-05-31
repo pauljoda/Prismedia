@@ -458,6 +458,12 @@ public sealed class EfEntityReadService : IEntityReadService {
         var gridThumbByEntity = await _db.EntityFiles.AsNoTracking()
             .Where(file => ids.Contains(file.EntityId) && file.Role == EntityFileRole.GridThumbnail)
             .ToDictionaryAsync(file => file.EntityId, file => file.Path, cancellationToken);
+        var playbackByEntity = await _db.Set<EntityPlaybackRow>().AsNoTracking()
+            .Where(row => ids.Contains(row.EntityId))
+            .ToDictionaryAsync(row => row.EntityId, cancellationToken);
+        var progressByEntity = await _db.Set<EntityProgressRow>().AsNoTracking()
+            .Where(row => ids.Contains(row.EntityId))
+            .ToDictionaryAsync(row => row.EntityId, cancellationToken);
 
         return rows.Select(row => {
             var hoverUrl = hoverByEntity.GetValueOrDefault(row.Id);
@@ -485,9 +491,49 @@ public sealed class EfEntityReadService : IEntityReadService {
                 row.IsOrganized) {
                 ParentKind = row.ParentEntityId is { } parentId
                     ? parentKindByEntity.GetValueOrDefault(parentId)
-                    : null
+                    : null,
+                Progress = ResolveThumbnailProgress(
+                    playbackByEntity.GetValueOrDefault(row.Id),
+                    progressByEntity.GetValueOrDefault(row.Id),
+                    technicalByEntity.GetValueOrDefault(row.Id)?.DurationSeconds)
             };
         }).ToArray();
+    }
+
+    /// <summary>
+    /// Computes the 0..1 progress meter fraction for a thumbnail from its playback and reading
+    /// progress rows. Playback (video/audio) takes precedence: a completed item reads 1.0, an
+    /// item with a stored resume position reads its fraction of the known runtime, and anything
+    /// else reads <c>null</c>. Reading progress (books) falls back to completed → 1.0 or the
+    /// current index over the total. Returns <c>null</c> when there is nothing meaningful to show.
+    /// </summary>
+    private static double? ResolveThumbnailProgress(
+        EntityPlaybackRow? playback,
+        EntityProgressRow? progress,
+        double? durationSeconds) {
+        if (playback is not null) {
+            if (playback.CompletedAt is not null) {
+                return 1.0;
+            }
+
+            if (playback.ResumeSeconds > 0 && durationSeconds is > 0) {
+                return Math.Clamp(playback.ResumeSeconds / durationSeconds.Value, 0, 1);
+            }
+
+            return null;
+        }
+
+        if (progress is not null) {
+            if (progress.CompletedAt is not null) {
+                return 1.0;
+            }
+
+            if (progress.Total > 0 && progress.Index > 0) {
+                return Math.Clamp((double)progress.Index / progress.Total, 0, 1);
+            }
+        }
+
+        return null;
     }
 
     private async Task<IReadOnlyDictionary<Guid, string>> LoadCoverPathsAsync(

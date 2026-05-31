@@ -1,10 +1,4 @@
 import {
-  deleteJellyfinUserPlayedItem,
-  postJellyfinSessionPing,
-  postJellyfinSessionPlaying,
-  postJellyfinSessionProgress as postJellyfinSessionProgressRequest,
-  postJellyfinSessionStopped,
-  postJellyfinUserPlayedItem,
   recordAudioTrackPlay as recordAudioTrackPlayRequest,
   updateEntityPlayback as updateEntityPlaybackRequest,
   updateEntityProgress as updateEntityProgressRequest,
@@ -12,7 +6,6 @@ import {
 import type {
   EntityCard,
   EntityProgressUpdateRequest,
-  PlaybackSessionRequest,
   PlaybackUpdateRequest,
 } from "$lib/api/generated/model";
 import { requestInit, unwrapGenerated, type RequestOptions } from "$lib/api/generated-response";
@@ -122,24 +115,24 @@ export async function fetchJellyfinPlaybackInfo(
   return await response.json() as JellyfinPlaybackInfoResponse;
 }
 
+// The Jellyfin-compatible session and user-played endpoints are mounted at the server root
+// (e.g. /Sessions/Playing/Progress), not under the /api prefix the generated client uses — real
+// Jellyfin clients like Infuse require root paths. They must therefore be called via
+// jellyfinApiPath with a raw fetch, exactly like fetchJellyfinPlaybackInfo above. Routing them
+// through the generated /api client makes every progress report 404 and silently drop.
 export async function postJellyfinSessionProgress(
   path: "Playing" | "Playing/Progress" | "Playing/Ping" | "Playing/Stopped",
   request: JellyfinPlaybackSessionRequest,
   options?: RequestOptions,
 ): Promise<void> {
-  const payload = request as PlaybackSessionRequest;
-  switch (path) {
-    case "Playing":
-      await postJellyfinSessionPlaying(payload, requestInit(options));
-      return;
-    case "Playing/Progress":
-      await postJellyfinSessionProgressRequest(payload, requestInit(options));
-      return;
-    case "Playing/Ping":
-      await postJellyfinSessionPing(payload, requestInit(options));
-      return;
-    case "Playing/Stopped":
-      await postJellyfinSessionStopped(payload, requestInit(options));
+  const response = await fetch(jellyfinApiPath(`/Sessions/${path}`), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+    signal: options?.signal,
+  });
+  if (!response.ok) {
+    throw new Error(await response.text() || `Session ${path} ${response.status}`);
   }
 }
 
@@ -148,10 +141,12 @@ export async function markJellyfinUserPlayedItem(
   played: boolean,
   options?: RequestOptions,
 ): Promise<void> {
-  if (played) {
-    await postJellyfinUserPlayedItem(itemId, requestInit(options));
-  } else {
-    await deleteJellyfinUserPlayedItem(itemId, requestInit(options));
+  const response = await fetch(jellyfinApiPath(`/UserPlayedItems/${itemId}`), {
+    method: played ? "POST" : "DELETE",
+    signal: options?.signal,
+  });
+  if (!response.ok) {
+    throw new Error(await response.text() || `UserPlayedItems ${response.status}`);
   }
 }
 
@@ -175,6 +170,7 @@ export async function updateEntityProgress(
     total: number;
     mode?: string | null;
     completed?: boolean | null;
+    reset?: boolean;
   },
   options?: RequestOptions,
 ): Promise<EntityCard> {
@@ -188,6 +184,7 @@ export async function updateEntityProgress(
         total: payload.total,
         mode: payload.mode ?? null,
         completed: payload.completed ?? null,
+        reset: payload.reset ?? false,
       } as EntityProgressUpdateRequest,
       requestInit(options),
     ),
