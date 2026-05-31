@@ -20,10 +20,17 @@ internal sealed class SubtitlesCapabilityMapper(PrismediaDbContext db) : IEntity
             return;
         }
 
-        entity.RemoveCapability<CapabilitySubtitles>();
-        entity.AddCapability(new CapabilitySubtitles(rows.Select(r => new CapabilitySubtitles.Item(
+        // Mutate the existing capability in place so its ExtractedAt (set by the Video kind
+        // mapper from video_details) is preserved across track hydration.
+        var capability = entity.GetCapability<CapabilitySubtitles>();
+        if (capability is null) {
+            capability = new CapabilitySubtitles();
+            entity.AddCapability(capability);
+        }
+
+        capability.Hydrate(rows.Select(r => new CapabilitySubtitles.Item(
             r.Id, r.Language, r.Label, r.Format, r.Source,
-            r.StoragePath, r.SourceFormat, r.SourcePath, r.IsDefault)).ToArray()));
+            r.StoragePath, r.SourceFormat, r.SourcePath, r.IsDefault)).ToArray());
     }
 
     public Task ClearAsync(Entity entity, CancellationToken cancellationToken) {

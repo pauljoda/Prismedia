@@ -10,16 +10,11 @@ public sealed class Video : Entity {
     public Video(
         Guid id,
         string title,
-        DateTimeOffset? subtitlesExtractedAt,
         IEnumerable<EntityCapability>? capabilities = null)
         : base(id, title, capabilities) {
-        SubtitlesExtractedAt = subtitlesExtractedAt;
     }
 
     public override EntityKind Kind => EntityKind.Video;
-
-    /// <summary>When embedded subtitles were last extracted, when known.</summary>
-    public DateTimeOffset? SubtitlesExtractedAt { get; private set; }
 
     protected override IEnumerable<EntityCapability> CreateDefaultCapabilities() =>
     [

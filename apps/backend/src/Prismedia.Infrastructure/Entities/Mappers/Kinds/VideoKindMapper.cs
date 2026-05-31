@@ -14,7 +14,9 @@ internal sealed class VideoKindMapper(PrismediaDbContext db) : IEntityKindMapper
     public async Task<Entity> ConstructAsync(EntityRow row, CancellationToken cancellationToken) {
         var detail = await db.VideoDetails.AsNoTracking()
             .FirstOrDefaultAsync(d => d.EntityId == row.Id, cancellationToken);
-        return new Video(row.Id, row.Title, detail?.SubtitlesExtractedAt);
+        var video = new Video(row.Id, row.Title);
+        video.SubtitleCapability?.MarkExtracted(detail?.SubtitlesExtractedAt);
+        return video;
     }
 
     public async Task PersistDetailAsync(Entity entity, CancellationToken cancellationToken) {
@@ -24,7 +26,7 @@ internal sealed class VideoKindMapper(PrismediaDbContext db) : IEntityKindMapper
 
         var row = await db.VideoDetails.FindAsync([entity.Id], cancellationToken)
             ?? Track(new VideoDetailRow { EntityId = entity.Id });
-        row.SubtitlesExtractedAt = video.SubtitlesExtractedAt;
+        row.SubtitlesExtractedAt = video.SubtitleCapability?.ExtractedAt;
     }
 
     public IEntityCard ProjectDetail(
@@ -41,7 +43,7 @@ internal sealed class VideoKindMapper(PrismediaDbContext db) : IEntityKindMapper
             ChildrenByKind = card.ChildrenByKind,
             Relationships = card.Relationships,
             CreditMetadata = creditMetadata,
-            SubtitlesExtractedAt = (entity as Video)?.SubtitlesExtractedAt,
+            SubtitlesExtractedAt = (entity as Video)?.SubtitleCapability?.ExtractedAt,
         };
 
     private VideoDetailRow Track(VideoDetailRow row) {

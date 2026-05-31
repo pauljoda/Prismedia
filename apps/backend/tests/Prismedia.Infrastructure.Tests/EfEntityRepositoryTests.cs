@@ -125,7 +125,7 @@ public sealed class EfEntityRepositoryTests {
     public async Task SaveThenFindRoundTripsEveryPersistedCapabilityWithoutLoss() {
         await using var db = CreateContext();
         var id = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
-        var video = new Video(id, "Faithful", subtitlesExtractedAt: null);
+        var video = new Video(id, "Faithful");
 
         Set(video, new CapabilityDescription("A noir mystery"));
         Set(video, MakeTechnical(width: 1920, height: 1080, codec: "h264"));
@@ -176,7 +176,7 @@ public sealed class EfEntityRepositoryTests {
         var repository = new EfEntityRepository(db, EntityMappers.Kinds(db), EntityMappers.Capabilities(db));
 
         for (var i = 0; i < 3; i++) {
-            var video = new Video(id, "Retried", subtitlesExtractedAt: null);
+            var video = new Video(id, "Retried");
             Set(video, new CapabilityStats([new CapabilityStats.Item("scenes", 12), new CapabilityStats.Item("tags", 3)]));
             Set(video, new CapabilitySource([new CapabilitySource.Item("stash", "abc")]));
             video.AttachFile(EntityFileRole.Source, "/media/v.mp4", "video/mp4");

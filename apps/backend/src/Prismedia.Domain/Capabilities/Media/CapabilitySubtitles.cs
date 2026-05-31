@@ -8,6 +8,23 @@ namespace Prismedia.Domain.Capabilities;
 public sealed class CapabilitySubtitles(IEnumerable<CapabilitySubtitles.Item>? items = null)
     : CollectionCapability<CapabilitySubtitles.Item>(items) {
     /// <summary>
+    /// When embedded subtitles were last extracted for the owning media, or null when
+    /// extraction has not run. Tracks the extraction pass for the subtitle set as a whole.
+    /// </summary>
+    public DateTimeOffset? ExtractedAt { get; private set; }
+
+    /// <summary>Records when the embedded-subtitle extraction pass last completed.</summary>
+    /// <param name="extractedAt">Extraction timestamp, or null to clear it.</param>
+    public void MarkExtracted(DateTimeOffset? extractedAt) => ExtractedAt = extractedAt;
+
+    /// <summary>
+    /// Replaces the subtitle tracks in place, preserving the capability instance (and its
+    /// <see cref="ExtractedAt"/>) so infrastructure hydration does not discard sibling state.
+    /// </summary>
+    /// <param name="items">Replacement subtitle tracks.</param>
+    public void Hydrate(IEnumerable<Item> items) => ReplaceAll(items);
+
+    /// <summary>
     /// Describes a subtitle or caption track attached to a media entity.
     /// </summary>
     /// <param name="Id">Stable subtitle track identifier.</param>

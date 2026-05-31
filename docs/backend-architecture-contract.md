@@ -133,6 +133,53 @@ The acceptable shape is:
 - Browse/detail endpoints should prefer EF projections to DTOs instead of hydrating broad domain graphs.
 - Public plugin protocol names should use structural-context terminology, not graph terminology.
 
+## Capability Model
+
+Capabilities are optional behavior/state modules attached to a domain `Entity`. Two
+deliberate patterns exist and must not be "corrected" into uniformity:
+
+- **Domain capabilities** are concrete `EntityCapability` subclasses in
+  `Prismedia.Domain/Capabilities` (description, dates, stats, technical, playback,
+  markers, subtitles, fingerprints, source, classification, credits, position,
+  progress, lifetime). They carry their own state and persist via per-capability EF
+  mappers. A capability may legitimately be used by only one kind today (for example
+  markers/subtitles on `Video`, progress on `Book`); the capability is the persistence
+  and contract projection unit, so single-kind capabilities are acceptable and expected
+  to be reused as new kinds appear.
+- **Contract pseudo-capabilities** (`RatingCapability`, `FlagsCapability`,
+  `FilesCapability`, `LinksCapability`, `ImagesCapability` in `Prismedia.Contracts`) have
+  **no domain counterpart**. They project universal `Entity` properties
+  (`RatingValue`, the `IsFavorite/IsNsfw/IsOrganized` flags, `EntityFiles`, `Urls` +
+  `ExternalIds`) into the API as capabilities so the client sees one uniform "capability"
+  surface. The contract capability set is therefore a superset of the domain set. Do not
+  add domain classes for these.
+
+Subtitle extraction state (`CapabilitySubtitles.ExtractedAt`) lives on the subtitles
+capability. Its value is persisted on the `video_details.subtitles_extracted_at` column
+(owned by the Video kind mapper) rather than a dedicated capability table; the scan
+pipeline still queries that column directly for extraction gating.
+
+`CapabilityCredits` is a domain capability but is **not** emitted as a contract
+capability. It persists as `EntityRelationshipLinkRow` rows with relationship code
+`credits`/`cast`, storing only the target `Person` id plus the `CreditRole` (and optional
+character) in link metadata — never a cloned `Person`. On detail routes it is projected as
+a separate `EntityCreditMetadata` list, not as a capability DTO.
+
+## Stable Codes and Constants
+
+Stable string identifiers are owned by exactly one source and must not be retyped inline:
+
+- Closed sets are `[Code]`-bearing enums in `Prismedia.Domain` (entity kinds,
+  relationship kinds, file roles, file source, credit roles, job types, subtitle/playback
+  enums, identify states). Encode/decode through `CodecRegistry`; in EF LINQ, hoist
+  `.ToCode()` to a local first so the query translates.
+- Open-ended keys are constants classes (`ExternalIdProviders`, `MediaContentTypes`,
+  `JellyfinProtocol`, Api-side `JellyfinRoutes`, `AppSettingKeys`).
+- The frontend never hand-maintains these. `GET /api/_codegen/codes.json` (Development
+  only) publishes them and `pnpm api:generate` regenerates
+  `apps/web-svelte/src/lib/api/generated/codes.ts`. Frontend modules re-export the
+  generated constants and add only frontend-specific concerns (labels, routes).
+
 ## Current Audit
 
 ### Already Aligned

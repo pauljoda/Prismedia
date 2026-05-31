@@ -6,7 +6,7 @@ namespace Prismedia.Domain.Tests;
 public sealed class CapabilityStateTests {
     [Fact]
     public void FlagsPatchOnlyUpdatesProvidedValues() {
-        var video = new Video(Guid.NewGuid(), "Test", subtitlesExtractedAt: null);
+        var video = new Video(Guid.NewGuid(), "Test");
         video.PatchFlags(isFavorite: false, isNsfw: true, isOrganized: false);
 
         video.PatchFlags(isFavorite: true, isNsfw: null, isOrganized: null);

@@ -12,7 +12,6 @@ public sealed class EntityCapabilityTests {
         var video = new Video(
             Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
             "Projected Video",
-            subtitlesExtractedAt: null,
             capabilities: [playback]);
 
         var attached = video.GetCapability<CapabilityPlayback>();
@@ -25,7 +24,6 @@ public sealed class EntityCapabilityTests {
         var video = new Video(
             Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
             "Projected Video",
-            subtitlesExtractedAt: null,
             capabilities: [new CapabilityPlayback()]);
 
         video.GetCapability<CapabilityPlayback>()!.RecordResume(
@@ -39,7 +37,6 @@ public sealed class EntityCapabilityTests {
         var ex = Assert.Throws<ArgumentException>(() => new Video(
             Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"),
             "Projected Video",
-            subtitlesExtractedAt: null,
             capabilities: [new CapabilityPlayback(), new CapabilityPlayback()]));
 
         Assert.Contains(nameof(CapabilityPlayback), ex.Message);
@@ -63,7 +60,6 @@ public sealed class EntityCapabilityTests {
         var video = new Video(
             Guid.Parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"),
             "Projected Video",
-            subtitlesExtractedAt: null,
             capabilities: [playback]);
 
         var removed = video.RemoveCapability<CapabilityPlayback>();
@@ -80,8 +76,7 @@ public sealed class EntityCapabilityTests {
             parentEntityId: null);
         var episode = new Video(
             Guid.Parse("11111111-1111-1111-1111-111111111111"),
-            "Episode 1",
-            subtitlesExtractedAt: null);
+            "Episode 1");
         var series = new VideoSeries(
             Guid.Parse("22222222-2222-2222-2222-222222222222"),
             "Series");
@@ -100,8 +95,7 @@ public sealed class EntityCapabilityTests {
     public void EntityRelationshipsCanBeAddedAndReturnedByKindAndConcreteType() {
         var video = new Video(
             Guid.Parse("33333333-3333-3333-3333-333333333333"),
-            "Episode 1",
-            subtitlesExtractedAt: null);
+            "Episode 1");
         var person = new Person(
             Guid.Parse("44444444-4444-4444-4444-444444444444"),
             "Ada Person");
@@ -122,8 +116,7 @@ public sealed class EntityCapabilityTests {
     public void EntityRejectsDuplicateChildrenAndRelationships() {
         var video = new Video(
             Guid.Parse("66666666-6666-6666-6666-666666666666"),
-            "Episode 1",
-            subtitlesExtractedAt: null);
+            "Episode 1");
         var series = new VideoSeries(
             Guid.Parse("77777777-7777-7777-7777-777777777777"),
             "Series");
@@ -142,8 +135,7 @@ public sealed class EntityCapabilityTests {
             "Ada Person");
         var video = new Video(
             Guid.Parse("99999999-9999-9999-9999-999999999999"),
-            "Episode 1",
-            subtitlesExtractedAt: null);
+            "Episode 1");
 
         video.Credits!.Add(person, CreditRole.Actor, "Detective");
         person.Rename("Ada Renamed");
@@ -179,8 +171,7 @@ public sealed class EntityCapabilityTests {
         var factory = typeof(Entity).GetMethod("CreateDefaultCapabilities", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
         var video = new Video(
             Guid.Parse("dddddddd-eeee-ffff-0000-111111111111"),
-            "Episode 1",
-            subtitlesExtractedAt: null);
+            "Episode 1");
         var image = new Image(
             Guid.Parse("eeeeeeee-ffff-0000-1111-222222222222"),
             "Still");

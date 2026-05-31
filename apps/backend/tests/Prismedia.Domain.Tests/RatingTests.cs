@@ -8,7 +8,7 @@ public sealed class RatingTests {
     [InlineData(3)]
     [InlineData(5)]
     public void RateAcceptsIntegerRatingsOnTheSharedZeroToFiveScale(int value) {
-        var video = new Video(Guid.NewGuid(), "Test", subtitlesExtractedAt: null);
+        var video = new Video(Guid.NewGuid(), "Test");
 
         video.Rate(value);
 
@@ -19,7 +19,7 @@ public sealed class RatingTests {
     [InlineData(-1, 0)]
     [InlineData(6, 5)]
     public void RateClampsRatingsOutsideTheSharedZeroToFiveScale(int value, int normalizedValue) {
-        var video = new Video(Guid.NewGuid(), "Test", subtitlesExtractedAt: null);
+        var video = new Video(Guid.NewGuid(), "Test");
 
         video.Rate(value);
 
@@ -28,7 +28,7 @@ public sealed class RatingTests {
 
     [Fact]
     public void ClearRatingResetsToNull() {
-        var video = new Video(Guid.NewGuid(), "Test", subtitlesExtractedAt: null);
+        var video = new Video(Guid.NewGuid(), "Test");
         video.Rate(3);
 
         video.ClearRating();

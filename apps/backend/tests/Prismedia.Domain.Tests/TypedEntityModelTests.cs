@@ -77,7 +77,6 @@ public sealed class TypedEntityModelTests {
         var video = new Video(
             Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc"),
             "Feature",
-            subtitlesExtractedAt: null,
             capabilities:
             [
                 new CapabilityDescription("Direct description"),

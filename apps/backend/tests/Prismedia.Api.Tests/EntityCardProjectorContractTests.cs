@@ -15,7 +15,7 @@ public sealed class EntityCardProjectorContractTests {
 
     [Fact]
     public void ProjectsFileAndLinkCapabilitiesToContractOwnedWireShape() {
-        var video = new Video(Guid.NewGuid(), "Contract Video", subtitlesExtractedAt: null);
+        var video = new Video(Guid.NewGuid(), "Contract Video");
         video.AttachFile(EntityFileRole.Source, "/media/video.mkv", "video/x-matroska");
         video.AddUrl("https://example.test/video", "Example");
         video.SetExternalId("tmdb", "123", "https://tmdb.test/123");
@@ -40,7 +40,7 @@ public sealed class EntityCardProjectorContractTests {
 
     [Fact]
     public void ProjectsDomainCapabilityItemsToContractOwnedCodeValues() {
-        var video = new Video(Guid.NewGuid(), "Capability Video", subtitlesExtractedAt: null);
+        var video = new Video(Guid.NewGuid(), "Capability Video");
         video.AttachFile(EntityFileRole.Poster, "/art/poster.jpg", "image/jpeg");
         video.RequireCapability<CapabilityMarkers>().Add("Intro", 12.5, 20);
         video.RequireCapability<CapabilitySubtitles>().Add(
