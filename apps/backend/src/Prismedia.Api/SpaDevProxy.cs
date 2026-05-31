@@ -25,6 +25,7 @@ public static class SpaDevProxy {
         "/Sessions",
         "/UserPlayedItems",
         "/UserItems",
+        "/MediaSegments",
         "/Library",
         "/Branding",
         "/DisplayPreferences"

@@ -103,6 +103,47 @@ public sealed class PlaybackSessionServiceTests {
         Assert.Equal(0, state!.PlayCount);
     }
 
+    [Fact]
+    public async Task StartAtPositionZeroClearsResume() {
+        const double runtimeSeconds = 1000;
+        var state = await RunAsync(
+            async (sessions, _) => {
+                // Build a resume point, then send the Start-Over signal Infuse fires: a Playing
+                // report at position 0 (it reports the real resume position when resuming).
+                await sessions.ProgressAsync(
+                    new PlaybackSessionCommand {
+                        ItemId = VideoId,
+                        PositionTicks = (long)(runtimeSeconds * 0.5 * TimeSpan.TicksPerSecond)
+                    },
+                    CancellationToken.None);
+                await sessions.StartAsync(
+                    new PlaybackSessionCommand { ItemId = VideoId, PositionTicks = 0 },
+                    CancellationToken.None);
+            },
+            runtimeSeconds);
+
+        Assert.Equal(TimeSpan.Zero, state!.ResumeTime);
+    }
+
+    [Fact]
+    public async Task StartAtResumePositionKeepsResume() {
+        const double runtimeSeconds = 1000;
+        var resumeTicks = (long)(runtimeSeconds * 0.5 * TimeSpan.TicksPerSecond);
+        var state = await RunAsync(
+            async (sessions, _) => {
+                await sessions.ProgressAsync(
+                    new PlaybackSessionCommand { ItemId = VideoId, PositionTicks = resumeTicks },
+                    CancellationToken.None);
+                // Resuming (not starting over) reports the saved position — the resume must survive.
+                await sessions.StartAsync(
+                    new PlaybackSessionCommand { ItemId = VideoId, PositionTicks = resumeTicks },
+                    CancellationToken.None);
+            },
+            runtimeSeconds);
+
+        Assert.Equal(TimeSpan.FromSeconds(500), state!.ResumeTime);
+    }
+
     private static async Task<CapabilityPlayback.State?> RunAsync(
         Func<PlaybackSessionService, EntityCapabilityService, Task> act,
         double? runtimeSeconds = null) {

@@ -64,3 +64,16 @@ public interface IEntityWriteRepository {
 /// <param name="Index">Zero-based page index across the whole book.</param>
 /// <param name="Total">Total page count across the whole book.</param>
 public sealed record BookProgressPosition(Guid ChapterId, int Index, int Total);
+
+/// <summary>
+/// Raised by <see cref="IEntityWriteRepository.SaveAsync"/> when a concurrent writer modified the
+/// same entity between load and save (optimistic concurrency conflict). Callers that own the
+/// mutation can reload and re-apply it. This is a persistence-agnostic abstraction so the
+/// application layer can retry without depending on EF Core's <c>DbUpdateConcurrencyException</c>.
+/// </summary>
+public sealed class EntityConcurrencyConflictException : Exception {
+    /// <summary>Creates the conflict exception wrapping the underlying persistence failure.</summary>
+    public EntityConcurrencyConflictException(string message, Exception innerException)
+        : base(message, innerException) {
+    }
+}

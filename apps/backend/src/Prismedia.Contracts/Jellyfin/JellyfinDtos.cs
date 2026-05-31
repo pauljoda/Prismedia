@@ -209,6 +209,33 @@ public sealed record JellyfinBaseItemDto {
     [JsonPropertyName("CanDownload")]
     public bool? CanDownload { get; init; }
 
+    [JsonPropertyName("CanDelete")]
+    public bool? CanDelete { get; init; }
+
+    [JsonPropertyName("EnableMediaSourceDisplay")]
+    public bool? EnableMediaSourceDisplay { get; init; }
+
+    [JsonPropertyName("ChannelId")]
+    public string? ChannelId { get; init; }
+
+    [JsonPropertyName("DisplayPreferencesId")]
+    public string? DisplayPreferencesId { get; init; }
+
+    [JsonPropertyName("VideoType")]
+    public string? VideoType { get; init; }
+
+    [JsonPropertyName("Taglines")]
+    public IReadOnlyList<string>? Taglines { get; init; }
+
+    [JsonPropertyName("ProductionLocations")]
+    public IReadOnlyList<string>? ProductionLocations { get; init; }
+
+    [JsonPropertyName("LocalTrailerCount")]
+    public int? LocalTrailerCount { get; init; }
+
+    [JsonPropertyName("SpecialFeatureCount")]
+    public int? SpecialFeatureCount { get; init; }
+
     [JsonPropertyName("HasSubtitles")]
     public bool? HasSubtitles { get; init; }
 
@@ -245,6 +272,9 @@ public sealed record JellyfinBaseItemDto {
     [JsonPropertyName("IndexNumber")]
     public int? IndexNumber { get; init; }
 
+    [JsonPropertyName("IndexNumberEnd")]
+    public int? IndexNumberEnd { get; init; }
+
     [JsonPropertyName("ParentIndexNumber")]
     public int? ParentIndexNumber { get; init; }
 
@@ -260,11 +290,39 @@ public sealed record JellyfinBaseItemDto {
     [JsonPropertyName("SeasonName")]
     public string? SeasonName { get; init; }
 
+    [JsonPropertyName("SeriesPrimaryImageTag")]
+    public string? SeriesPrimaryImageTag { get; init; }
+
+    [JsonPropertyName("ParentLogoItemId")]
+    public Guid? ParentLogoItemId { get; init; }
+
+    [JsonPropertyName("ParentLogoImageTag")]
+    public string? ParentLogoImageTag { get; init; }
+
+    [JsonPropertyName("ParentBackdropItemId")]
+    public Guid? ParentBackdropItemId { get; init; }
+
+    [JsonPropertyName("ParentBackdropImageTags")]
+    public IReadOnlyList<string>? ParentBackdropImageTags { get; init; }
+
+    [JsonPropertyName("ParentThumbItemId")]
+    public Guid? ParentThumbItemId { get; init; }
+
+    [JsonPropertyName("ParentThumbImageTag")]
+    public string? ParentThumbImageTag { get; init; }
+
     [JsonPropertyName("ImageTags")]
     public IReadOnlyDictionary<string, string> ImageTags { get; init; } = new Dictionary<string, string>();
 
     [JsonPropertyName("BackdropImageTags")]
     public IReadOnlyList<string> BackdropImageTags { get; init; } = [];
+
+    /// <summary>
+    /// Per-image-type blurhash map (image type → image tag → blurhash) matching Jellyfin's shape.
+    /// Real Jellyfin always emits this key; inner maps are empty until blurhashes are computed.
+    /// </summary>
+    [JsonPropertyName("ImageBlurHashes")]
+    public IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>>? ImageBlurHashes { get; init; }
 
     [JsonPropertyName("PrimaryImageAspectRatio")]
     public double? PrimaryImageAspectRatio { get; init; }
@@ -303,7 +361,8 @@ public sealed record JellyfinBaseItemPersonDto(
     [property: JsonPropertyName("Id")] Guid Id,
     [property: JsonPropertyName("Role")] string? Role,
     [property: JsonPropertyName("Type")] string Type,
-    [property: JsonPropertyName("PrimaryImageTag")] string? PrimaryImageTag);
+    [property: JsonPropertyName("PrimaryImageTag")] string? PrimaryImageTag,
+    [property: JsonPropertyName("ImageBlurHashes")] IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>>? ImageBlurHashes = null);
 
 /// <summary>Jellyfin-compatible chapter marker.</summary>
 public sealed record JellyfinChapterInfoDto {
@@ -346,23 +405,77 @@ public sealed record JellyfinCatalogMediaSourceDto {
     [JsonPropertyName("Name")]
     public string? Name { get; init; }
 
+    [JsonPropertyName("ETag")]
+    public string? ETag { get; init; }
+
     [JsonPropertyName("RunTimeTicks")]
     public long? RunTimeTicks { get; init; }
+
+    [JsonPropertyName("Bitrate")]
+    public int? Bitrate { get; init; }
+
+    [JsonPropertyName("VideoType")]
+    public string VideoType { get; init; } = "VideoFile";
 
     [JsonPropertyName("IsRemote")]
     public bool IsRemote { get; init; }
 
-    [JsonPropertyName("SupportsDirectPlay")]
-    public bool SupportsDirectPlay { get; init; } = true;
+    [JsonPropertyName("ReadAtNativeFramerate")]
+    public bool ReadAtNativeFramerate { get; init; }
 
-    [JsonPropertyName("SupportsDirectStream")]
-    public bool SupportsDirectStream { get; init; } = true;
+    [JsonPropertyName("IgnoreDts")]
+    public bool IgnoreDts { get; init; }
+
+    [JsonPropertyName("IgnoreIndex")]
+    public bool IgnoreIndex { get; init; }
+
+    [JsonPropertyName("GenPtsInput")]
+    public bool GenPtsInput { get; init; }
 
     [JsonPropertyName("SupportsTranscoding")]
     public bool SupportsTranscoding { get; init; } = true;
 
+    [JsonPropertyName("SupportsDirectStream")]
+    public bool SupportsDirectStream { get; init; } = true;
+
+    [JsonPropertyName("SupportsDirectPlay")]
+    public bool SupportsDirectPlay { get; init; } = true;
+
+    [JsonPropertyName("IsInfiniteStream")]
+    public bool IsInfiniteStream { get; init; }
+
+    [JsonPropertyName("UseMostCompatibleTranscodingProfile")]
+    public bool UseMostCompatibleTranscodingProfile { get; init; }
+
+    [JsonPropertyName("RequiresOpening")]
+    public bool RequiresOpening { get; init; }
+
+    [JsonPropertyName("RequiresClosing")]
+    public bool RequiresClosing { get; init; }
+
+    [JsonPropertyName("RequiresLooping")]
+    public bool RequiresLooping { get; init; }
+
+    [JsonPropertyName("SupportsProbing")]
+    public bool SupportsProbing { get; init; } = true;
+
+    [JsonPropertyName("DefaultAudioStreamIndex")]
+    public int? DefaultAudioStreamIndex { get; init; }
+
     [JsonPropertyName("MediaStreams")]
     public IReadOnlyList<JellyfinCatalogMediaStreamDto> MediaStreams { get; init; } = [];
+
+    [JsonPropertyName("MediaAttachments")]
+    public IReadOnlyList<object> MediaAttachments { get; init; } = [];
+
+    [JsonPropertyName("Formats")]
+    public IReadOnlyList<object> Formats { get; init; } = [];
+
+    [JsonPropertyName("RequiredHttpHeaders")]
+    public IReadOnlyDictionary<string, string> RequiredHttpHeaders { get; init; } = new Dictionary<string, string>();
+
+    [JsonPropertyName("HasSegments")]
+    public bool HasSegments { get; init; }
 }
 
 /// <summary>Minimal Jellyfin-compatible media stream embedded in catalog item DTOs.</summary>
@@ -391,14 +504,38 @@ public sealed record JellyfinCatalogMediaStreamDto {
     [JsonPropertyName("AverageFrameRate")]
     public double? AverageFrameRate { get; init; }
 
+    [JsonPropertyName("RealFrameRate")]
+    public double? RealFrameRate { get; init; }
+
     [JsonPropertyName("BitRate")]
     public int? BitRate { get; init; }
+
+    [JsonPropertyName("Channels")]
+    public int? Channels { get; init; }
+
+    [JsonPropertyName("ChannelLayout")]
+    public string? ChannelLayout { get; init; }
+
+    [JsonPropertyName("SampleRate")]
+    public int? SampleRate { get; init; }
+
+    [JsonPropertyName("AspectRatio")]
+    public string? AspectRatio { get; init; }
+
+    [JsonPropertyName("VideoRange")]
+    public string? VideoRange { get; init; }
+
+    [JsonPropertyName("VideoRangeType")]
+    public string? VideoRangeType { get; init; }
 
     [JsonPropertyName("IsDefault")]
     public bool IsDefault { get; init; } = true;
 
     [JsonPropertyName("IsForced")]
     public bool IsForced { get; init; }
+
+    [JsonPropertyName("IsExternal")]
+    public bool IsExternal { get; init; }
 }
 
 /// <summary>Minimal Jellyfin-compatible user data DTO backed by Prismedia global state.</summary>
@@ -408,8 +545,20 @@ public sealed record JellyfinUserItemDataDto(
     [property: JsonPropertyName("IsFavorite")] bool IsFavorite,
     [property: JsonPropertyName("Played")] bool Played,
     [property: JsonPropertyName("Key")] string Key,
+    [property: JsonPropertyName("ItemId")] string ItemId,
     [property: JsonPropertyName("PlayedPercentage")] double? PlayedPercentage = null,
     [property: JsonPropertyName("LastPlayedDate")] DateTimeOffset? LastPlayedDate = null);
+
+/// <summary>
+/// Jellyfin-compatible media segment (intro/outro/recap/preview/commercial skip marker).
+/// Prismedia does not yet produce segments; the type exists so the empty paged result is typed.
+/// </summary>
+public sealed record JellyfinMediaSegmentDto(
+    [property: JsonPropertyName("Id")] string Id,
+    [property: JsonPropertyName("ItemId")] string ItemId,
+    [property: JsonPropertyName("Type")] string Type,
+    [property: JsonPropertyName("StartTicks")] long StartTicks,
+    [property: JsonPropertyName("EndTicks")] long EndTicks);
 
 /// <summary>Jellyfin-compatible image metadata.</summary>
 public sealed record JellyfinImageInfo(

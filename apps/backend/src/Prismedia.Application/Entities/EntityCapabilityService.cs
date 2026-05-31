@@ -248,17 +248,29 @@ public sealed class EntityCapabilityService {
             entity.GetOrAddCapability(() => new CapabilityMarkers()).Delete(markerId),
             cancellationToken);
 
+    /// <summary>Maximum optimistic-concurrency retries for a single user-state mutation.</summary>
+    private const int MaxConcurrencyRetries = 4;
+
     private async Task<EntityCard?> MutateAsync(
         Guid id,
         Func<Entity, bool> mutate,
         CancellationToken cancellationToken) {
-        var entity = await _entities.FindShallowAsync(id, cancellationToken);
-        if (entity is null || !mutate(entity)) {
-            return null;
-        }
+        // Reload-and-reapply on conflict: rapid playback reports (Infuse fires pause/unpause within
+        // milliseconds) race to write the same entity's state, and a lost optimistic-concurrency
+        // write must be retried against the latest row rather than surfaced as a 500.
+        for (var attempt = 0; ; attempt++) {
+            var entity = await _entities.FindShallowAsync(id, cancellationToken);
+            if (entity is null || !mutate(entity)) {
+                return null;
+            }
 
-        await _entities.SaveAsync(entity, cancellationToken);
-        return EntityCardProjector.ToCard(entity);
+            try {
+                await _entities.SaveAsync(entity, cancellationToken);
+                return EntityCardProjector.ToCard(entity);
+            } catch (EntityConcurrencyConflictException) when (attempt < MaxConcurrencyRetries) {
+                // Re-read the current row and apply the mutation again on the next loop iteration.
+            }
+        }
     }
 
     private async Task<Guid> ResolveProgressOwnerIdAsync(

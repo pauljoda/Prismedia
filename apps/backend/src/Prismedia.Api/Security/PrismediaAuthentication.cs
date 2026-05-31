@@ -28,6 +28,7 @@ internal static class PrismediaAuthentication {
         "/Sessions",
         "/UserPlayedItems",
         "/UserItems",
+        "/MediaSegments",
         "/Library",
         "/Branding",
         "/DisplayPreferences"

@@ -18,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Mobile install metadata now presents Prismedia with the correct app name, theme colors, and safer icon spacing for browser and home-screen surfaces.
 
 ### Added
+- Jellyfin clients like Infuse now get a closer match to real Jellyfin: Movies appear as their own library (alongside Videos, Series, and Collections) and play with their poster and backdrop artwork; TV episodes carry their series and season artwork (logo, backdrop, thumbnail, and series poster) so "Up Next" and episode tiles show the right images, even when opened directly; a Next Up shelf surfaces shows you're partway through; and detail pages no longer error while probing for trailers, bonus features, or skip markers.
 - Added first-class Movies: same-named single-file movie folders now scan as movie entities with their own Movies section, detail pages, plugin identify support, `movie.nfo` metadata, and poster/header artwork while still keeping the playable file visible in Videos.
 - Added a Jellyfin-compatible API layer so clients like Infuse can discover Prismedia, sign in with configured fake users, browse video libraries, load artwork, and play through Prismedia's existing video streaming pipeline.
 - Added a generated, human-typeable API key with Settings controls to reveal, copy, regenerate, and manage Jellyfin-compatible profile usernames with per-profile NSFW visibility.
@@ -89,6 +90,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated web app manifest and mobile browser metadata for home-screen installation and browser UI theme colors.
 
 ### Fixed
+- Fixed "Start Over" from Jellyfin clients like Infuse: starting an item from the beginning now clears its saved resume point, and rapid pause/resume reports no longer fail with a server error or silently lose a playback update.
 - Fixed Auto Identify and movie/video sidecar imports so provider or sidecar ratings no longer overwrite your personal rating field, and automatic Identify now runs one item at a time to avoid provider throttling.
 - Fixed searches and related grids so movies appear as movies only, without also showing their playable child video duplicate.
 - Fixed Jellyfin-compatible browsing in Infuse so playable videos include media source metadata and the Videos library only shows standalone videos while Series can return episodes recursively.

@@ -268,6 +268,48 @@ public static class JellyfinCompatibilityEndpoints {
             .WithName("GetJellyfinSeriesEpisodesLegacy")
             .ExcludeFromDescription()
             .Produces<JellyfinQueryResult<JellyfinBaseItemDto>>();
+
+        routes.MapGet("/Shows/NextUp", GetNextUpAsync)
+            .WithTags("Jellyfin Shows")
+            .WithName("GetJellyfinNextUp")
+            .Produces<JellyfinQueryResult<JellyfinBaseItemDto>>();
+
+        routes.MapGet("/Users/{userId:guid}/Shows/NextUp", GetNextUpAsync)
+            .WithTags("Jellyfin Shows")
+            .WithName("GetJellyfinNextUpLegacy")
+            .ExcludeFromDescription()
+            .Produces<JellyfinQueryResult<JellyfinBaseItemDto>>();
+
+        // Extras endpoints Infuse probes on every detail page. Prismedia has no local trailers or
+        // bonus features yet, so these return the empty Jellyfin envelope to avoid client 404s.
+        routes.MapGet("/Items/{itemId:guid}/LocalTrailers", EmptyItemListAsync)
+            .WithTags("Jellyfin Catalog")
+            .WithName("GetJellyfinLocalTrailers")
+            .Produces<IReadOnlyList<JellyfinBaseItemDto>>();
+
+        routes.MapGet("/Items/{itemId:guid}/SpecialFeatures", EmptyItemListAsync)
+            .WithTags("Jellyfin Catalog")
+            .WithName("GetJellyfinSpecialFeatures")
+            .Produces<IReadOnlyList<JellyfinBaseItemDto>>();
+
+        routes.MapGet("/Users/{userId:guid}/Items/{itemId:guid}/LocalTrailers", EmptyItemListAsync)
+            .WithTags("Jellyfin Catalog")
+            .WithName("GetJellyfinLocalTrailersLegacy")
+            .ExcludeFromDescription()
+            .Produces<IReadOnlyList<JellyfinBaseItemDto>>();
+
+        routes.MapGet("/Users/{userId:guid}/Items/{itemId:guid}/SpecialFeatures", EmptyItemListAsync)
+            .WithTags("Jellyfin Catalog")
+            .WithName("GetJellyfinSpecialFeaturesLegacy")
+            .ExcludeFromDescription()
+            .Produces<IReadOnlyList<JellyfinBaseItemDto>>();
+
+        // Media segments (intro/credit skip markers). Real Jellyfin returns an empty paged result
+        // when an item has none; match that shape rather than 404ing.
+        routes.MapGet("/MediaSegments/{itemId:guid}", GetMediaSegmentsAsync)
+            .WithTags("Jellyfin Catalog")
+            .WithName("GetJellyfinMediaSegments")
+            .Produces<JellyfinQueryResult<JellyfinMediaSegmentDto>>();
     }
 
     private static void MapJellyfinImageEndpoints(this IEndpointRouteBuilder routes) {
@@ -465,6 +507,29 @@ public static class JellyfinCompatibilityEndpoints {
             cancellationToken);
         return Results.Ok(result);
     }
+
+    private static async Task<IResult> GetNextUpAsync(
+        HttpContext httpContext,
+        PrismediaSecurityService security,
+        JellyfinCatalogService catalog,
+        CancellationToken cancellationToken) {
+        var state = await security.EnsureSecurityAsync(cancellationToken);
+        var start = TryInt(httpContext.Request.Query["StartIndex"].FirstOrDefault()) ?? 0;
+        var limit = TryInt(httpContext.Request.Query["Limit"].FirstOrDefault()) ?? 20;
+        var result = await catalog.GetNextUpAsync(
+            Math.Max(0, start),
+            Math.Clamp(limit, 1, 100),
+            state.ServerId.ToString("N"),
+            NsfwVisibility.ShouldHide(null, httpContext),
+            cancellationToken);
+        return Results.Ok(result);
+    }
+
+    private static IResult EmptyItemListAsync() =>
+        Results.Ok(Array.Empty<JellyfinBaseItemDto>());
+
+    private static IResult GetMediaSegmentsAsync() =>
+        Results.Ok(new JellyfinQueryResult<JellyfinMediaSegmentDto>([], 0, 0));
 
     private static async Task<IResult> GetSeriesSeasonsAsync(
         Guid seriesId,

@@ -26,6 +26,7 @@
 import http from "node:http";
 import https from "node:https";
 import fs from "node:fs";
+import zlib from "node:zlib";
 import { URL } from "node:url";
 
 function parseArgs(argv) {
@@ -79,6 +80,9 @@ const server = http.createServer((clientReq, clientRes) => {
   clientReq.on("end", () => {
     const requestBody = Buffer.concat(reqChunks);
     const upstreamHeaders = { ...clientReq.headers, host: upstream.host };
+    // Ask upstream for plain (uncompressed) bodies so captures are readable and the
+    // size cap counts real characters. We still decompress as a fallback below.
+    delete upstreamHeaders["accept-encoding"];
 
     const upstreamReq = upstreamClient.request(
       {
@@ -120,7 +124,7 @@ const server = http.createServer((clientReq, clientRes) => {
             resContentType: contentType,
             resHeaders: upstreamRes.headers,
             resBody: capture
-              ? decodeBody(Buffer.concat(resChunks), contentType, args.maxBody)
+              ? decodeBody(Buffer.concat(resChunks), contentType, args.maxBody, upstreamRes.headers["content-encoding"])
               : `<${contentType || "binary"} streamed, ${upstreamRes.headers["content-length"] ?? "?"} bytes — not captured>`,
           });
         });
@@ -144,8 +148,21 @@ const server = http.createServer((clientReq, clientRes) => {
   });
 });
 
-function decodeBody(buffer, contentType, max) {
+function decodeBody(buffer, contentType, max, contentEncoding) {
   if (!buffer || buffer.length === 0) return null;
+  // Fallback: if upstream compressed anyway (we strip accept-encoding, but be safe),
+  // decompress before decoding. A truncated (size-capped) body may fail to inflate;
+  // fall through to the raw bytes in that case.
+  const enc = (contentEncoding ?? "").toLowerCase();
+  if (enc) {
+    try {
+      if (enc.includes("gzip")) buffer = zlib.gunzipSync(buffer);
+      else if (enc.includes("br")) buffer = zlib.brotliDecompressSync(buffer);
+      else if (enc.includes("deflate")) buffer = zlib.inflateSync(buffer);
+    } catch {
+      return `<${enc}-encoded ${buffer.length} bytes — could not decompress (likely truncated by --max-body)>`;
+    }
+  }
   const text = buffer.subarray(0, max).toString("utf8");
   if ((contentType ?? "").toLowerCase().includes("json")) {
     try {

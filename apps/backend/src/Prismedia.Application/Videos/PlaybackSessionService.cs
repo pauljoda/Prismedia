@@ -17,9 +17,16 @@ public sealed class PlaybackSessionService : IPlaybackSessionService {
         _transcodes = transcodes;
     }
 
-    public Task StartAsync(PlaybackSessionCommand request, CancellationToken cancellationToken) {
+    public async Task StartAsync(PlaybackSessionCommand request, CancellationToken cancellationToken) {
         RegisterOrPing(request);
-        return Task.CompletedTask;
+
+        // Jellyfin clients report the real start position in the Playing event — the saved resume
+        // point when resuming — so a Playing at position 0 is an explicit "Start Over". Clear the
+        // resume immediately so the item no longer offers a stale resume point even if the client
+        // never reports further progress.
+        if (request.ItemId != Guid.Empty && request.PositionTicks is 0) {
+            await UpdatePlaybackAsync(request.ItemId, resumeSeconds: 0, completed: null, cancellationToken);
+        }
     }
 
     public async Task ProgressAsync(PlaybackSessionCommand request, CancellationToken cancellationToken) {

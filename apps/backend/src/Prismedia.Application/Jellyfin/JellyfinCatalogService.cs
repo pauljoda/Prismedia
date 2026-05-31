@@ -17,6 +17,7 @@ public sealed class JellyfinCatalogService {
     public static readonly Guid VideosViewId = Guid.Parse("10000000-0000-0000-0000-000000000002");
     public static readonly Guid SeriesViewId = Guid.Parse("10000000-0000-0000-0000-000000000003");
     public static readonly Guid CollectionsViewId = Guid.Parse("10000000-0000-0000-0000-000000000004");
+    public static readonly Guid MoviesViewId = Guid.Parse("10000000-0000-0000-0000-000000000005");
 
     private const int MaxBrowseItems = 5000;
     private static readonly string[] PremiereDatePriority = [
@@ -44,7 +45,8 @@ public sealed class JellyfinCatalogService {
     public JellyfinQueryResult<JellyfinBaseItemDto> GetUserViews(string serverId) {
         var views = new[]
         {
-            VirtualFolder(VideosViewId, "Videos", "movies", serverId),
+            VirtualFolder(MoviesViewId, "Movies", "movies", serverId),
+            VirtualFolder(VideosViewId, "Videos", "homevideos", serverId),
             VirtualFolder(SeriesViewId, "Series", "tvshows", serverId),
             VirtualFolder(CollectionsViewId, "Collections", "boxsets", serverId)
         };
@@ -60,8 +62,8 @@ public sealed class JellyfinCatalogService {
             Type = "AggregateFolder",
             CollectionType = "root",
             IsFolder = true,
-            ChildCount = 3,
-            RecursiveItemCount = 3,
+            ChildCount = 4,
+            RecursiveItemCount = 4,
             Etag = EtagFor(RootId, "root"),
             UserData = UserDataFor(RootId, isFavorite: false, playback: null)
         };
@@ -104,8 +106,12 @@ public sealed class JellyfinCatalogService {
             return GetRoot(serverId);
         }
 
+        if (id == MoviesViewId) {
+            return VirtualFolder(MoviesViewId, "Movies", "movies", serverId);
+        }
+
         if (id == VideosViewId) {
-            return VirtualFolder(VideosViewId, "Videos", "movies", serverId);
+            return VirtualFolder(VideosViewId, "Videos", "homevideos", serverId);
         }
 
         if (id == SeriesViewId) {
@@ -117,7 +123,56 @@ public sealed class JellyfinCatalogService {
         }
 
         var entity = await GetDetailedCardAsync(id, hideNsfw, cancellationToken);
-        return entity is null ? null : MapCard(entity, serverId);
+        if (entity is null) {
+            return null;
+        }
+
+        // When an episode is fetched directly (detail page) rather than listed under its parent,
+        // resolve its series/season context so the parent artwork (backdrop, logo, series poster)
+        // and SeriesId/SeasonId are populated — Infuse renders the episode hero from the parent
+        // backdrop, so without this the detail page shows a blank backdrop.
+        var context = await ResolveStandaloneContextAsync(entity, hideNsfw, cancellationToken);
+        return await MapDetailAsync(entity, serverId, context, hideNsfw, cancellationToken);
+    }
+
+    /// <summary>
+    /// Maps a detail card to a Jellyfin item, loading the playable video child for a movie so its
+    /// technical metadata, streams, and source path populate while the movie folder supplies artwork.
+    /// </summary>
+    private async Task<JellyfinBaseItemDto> MapDetailAsync(
+        IEntityCard detail,
+        string serverId,
+        ItemContext? context,
+        bool hideNsfw,
+        CancellationToken cancellationToken) {
+        if (!detail.Kind.Equals("movie", StringComparison.OrdinalIgnoreCase)) {
+            return MapCard(detail, serverId, context);
+        }
+
+        var childVideoId = detail.ChildrenByKind
+            .SelectMany(group => group.Entities)
+            .FirstOrDefault(child => child.Kind.Equals("video", StringComparison.OrdinalIgnoreCase))?.Id;
+        var playableChild = childVideoId is { } id
+            ? await GetDetailedCardAsync(id, hideNsfw, cancellationToken)
+            : null;
+        return MapCard(detail, serverId, context, playableChild);
+    }
+
+    /// <summary>
+    /// Builds parent (series/season) context for an item fetched on its own, by walking up to its
+    /// structural parent. Returns null for items that carry no parent artwork (movies, top-level).
+    /// </summary>
+    private async Task<ItemContext?> ResolveStandaloneContextAsync(
+        IEntityCard entity,
+        bool hideNsfw,
+        CancellationToken cancellationToken) {
+        if (!entity.Kind.Equals("video", StringComparison.OrdinalIgnoreCase) ||
+            entity.ParentEntityId is not { } parentId) {
+            return null;
+        }
+
+        var parent = await _entities.GetAsync(parentId, hideNsfw, cancellationToken);
+        return parent is null ? null : await ParentContextForAsync(parent, hideNsfw, cancellationToken);
     }
 
     /// <summary>Returns recently added playable videos.</summary>
@@ -168,6 +223,38 @@ public sealed class JellyfinCatalogService {
         var total = items.Count;
         var start = Math.Clamp(startIndex, 0, total);
         return new JellyfinQueryResult<JellyfinBaseItemDto>(items.Skip(start).Take(limit).ToArray(), total, start);
+    }
+
+    /// <summary>
+    /// Returns "Next Up" episodes for Jellyfin show shelves. v1 surfaces in-progress episodes
+    /// (the internal Continue projection scoped to series content); next-unwatched-after-completed
+    /// derivation is a planned enhancement. Movies are excluded — they belong to the resume shelf.
+    /// </summary>
+    public async Task<JellyfinQueryResult<JellyfinBaseItemDto>> GetNextUpAsync(
+        int startIndex,
+        int limit,
+        string serverId,
+        bool hideNsfw,
+        CancellationToken cancellationToken) {
+        var response = await _entities.ListAsync(
+            "video",
+            null,
+            null,
+            hideNsfw,
+            Math.Clamp(startIndex + limit, 1, 500),
+            cancellationToken,
+            sort: "added",
+            sortDir: "desc",
+            status: "in-progress");
+        var mapped = response.Items.Select(item => MapThumbnail(item, serverId)).ToArray();
+        var episodes = await HydrateCatalogItemsAsync(
+            mapped.Where(item => item.Type.Equals("Episode", StringComparison.OrdinalIgnoreCase)).ToArray(),
+            serverId,
+            hideNsfw,
+            cancellationToken);
+        var total = episodes.Count;
+        var start = Math.Clamp(startIndex, 0, total);
+        return new JellyfinQueryResult<JellyfinBaseItemDto>(episodes.Skip(start).Take(limit).ToArray(), total, start);
     }
 
     /// <summary>Lists image metadata for one item.</summary>
@@ -224,6 +311,11 @@ public sealed class JellyfinCatalogService {
         string serverId,
         bool hideNsfw,
         CancellationToken cancellationToken) {
+        if (parentId == MoviesViewId) {
+            var thumbnails = await FetchAllThumbnailsAsync("movie", query, hideNsfw, cancellationToken);
+            return thumbnails.Select(item => MapThumbnail(item, serverId)).ToArray();
+        }
+
         if (parentId == VideosViewId) {
             var thumbnails = await FetchAllThumbnailsAsync("video", query, hideNsfw, cancellationToken);
             return thumbnails
@@ -300,7 +392,9 @@ public sealed class JellyfinCatalogService {
             }
 
             var detail = await GetDetailedCardAsync(item.Id, hideNsfw, cancellationToken);
-            hydrated.Add(detail is null ? item : MapCard(detail, serverId, ItemContext.From(item)));
+            hydrated.Add(detail is null
+                ? item
+                : await MapDetailAsync(detail, serverId, ItemContext.From(item), hideNsfw, cancellationToken));
         }
 
         return hydrated;
@@ -364,7 +458,7 @@ public sealed class JellyfinCatalogService {
     }
 
     private static JellyfinBaseItemDto? MapCollectionItem(CollectionItemDetail item, string serverId, Guid collectionId) =>
-        item.Entity.Kind is "video" or "video-series" or "video-season"
+        item.Entity.Kind is "video" or "movie" or "video-series" or "video-season"
             ? MapThumbnail(item.Entity, serverId, collectionId)
             : null;
 
@@ -374,7 +468,7 @@ public sealed class JellyfinCatalogService {
         Guid? parentOverride = null,
         ItemContext? context = null) {
         var imageTags = ImageTags(item.Id, item.CoverUrl, null);
-        var isPlayable = IsPlayableVideo(item.Kind);
+        var isPlayable = IsPlayable(item.Kind);
         long? runtimeTicks = isPlayable ? RuntimeTicksFrom(item) ?? 0 : null;
         var container = isPlayable ? ContainerFrom(item) : null;
         var streams = isPlayable ? CatalogStreams(item, container) : null;
@@ -385,7 +479,7 @@ public sealed class JellyfinCatalogService {
             Etag = EtagFor(item.Id, item.CoverUrl ?? item.Title),
             SortName = item.Title,
             Type = JellyfinType(item.Kind, item.ParentEntityId),
-            MediaType = IsPlayableVideo(item.Kind) ? "Video" : null,
+            MediaType = isPlayable ? "Video" : null,
             Path = isPlayable ? VirtualItemPath(item.Id) : null,
             LocationType = isPlayable ? "FileSystem" : null,
             PlayAccess = isPlayable ? "Full" : null,
@@ -405,14 +499,35 @@ public sealed class JellyfinCatalogService {
             SeriesName = context?.SeriesName,
             SeasonId = context?.SeasonId,
             SeasonName = context?.SeasonName,
+            SeriesPrimaryImageTag = context?.SeriesPrimaryImageTag,
+            ParentLogoItemId = context?.ParentLogoItemId,
+            ParentLogoImageTag = context?.ParentLogoImageTag,
+            ParentBackdropItemId = context?.ParentBackdropItemId,
+            ParentBackdropImageTags = context?.ParentBackdropImageTags,
+            ParentThumbItemId = context?.ParentThumbItemId,
+            ParentThumbImageTag = context?.ParentThumbImageTag,
+            VideoType = isPlayable ? "VideoFile" : null,
+            CanDelete = isPlayable ? true : null,
+            EnableMediaSourceDisplay = isPlayable ? true : null,
+            DisplayPreferencesId = item.Id.ToString("N"),
+            LocalTrailerCount = isPlayable ? 0 : null,
+            SpecialFeatureCount = isPlayable ? 0 : null,
             UserData = UserDataFor(item.Id, item.IsFavorite, null),
             MediaSources = isPlayable ? [CatalogMediaSource(item.Id, item.Title, VirtualItemPath(item.Id), container, null, runtimeTicks, streams ?? [])] : null,
             MediaStreams = streams
         };
     }
 
-    private static JellyfinBaseItemDto MapCard(IEntityCard item, string serverId, ItemContext? context = null) {
-        var technical = item.Capabilities.OfType<TechnicalCapability>().FirstOrDefault();
+    private static JellyfinBaseItemDto MapCard(
+        IEntityCard item,
+        string serverId,
+        ItemContext? context = null,
+        IEntityCard? playableChild = null) {
+        // A movie's playable file, technical metadata, subtitles, and chapters live on its single
+        // video child, while artwork/description/dates/people live on the movie folder. When a child
+        // is supplied, source the media-bearing capabilities from it and everything else from the folder.
+        var media = playableChild ?? item;
+        var technical = media.Capabilities.OfType<TechnicalCapability>().FirstOrDefault();
         var playback = item.Capabilities.OfType<PlaybackCapability>().FirstOrDefault();
         var flags = item.Capabilities.OfType<FlagsCapability>().FirstOrDefault();
         var description = item.Capabilities.OfType<DescriptionCapability>().FirstOrDefault();
@@ -422,11 +537,11 @@ public sealed class JellyfinCatalogService {
         var lifetime = item.Capabilities.OfType<LifetimeCapability>().FirstOrDefault();
         var classification = item.Capabilities.OfType<ClassificationCapability>().FirstOrDefault();
         var links = item.Capabilities.OfType<LinksCapability>().FirstOrDefault();
-        var subtitles = item.Capabilities.OfType<SubtitlesCapability>().FirstOrDefault();
-        var markers = item.Capabilities.OfType<MarkersCapability>().FirstOrDefault();
+        var subtitles = media.Capabilities.OfType<SubtitlesCapability>().FirstOrDefault();
+        var markers = media.Capabilities.OfType<MarkersCapability>().FirstOrDefault();
         var image = ImageMetadata(item.Id, item.Capabilities);
-        var source = SourceFile(item);
-        var isPlayable = IsPlayableVideo(item.Kind);
+        var source = SourceFile(media);
+        var isPlayable = IsPlayable(item.Kind);
         long? runtimeTicks = isPlayable ? technical?.Duration?.Ticks ?? 0 : null;
         var container = isPlayable ? technical?.Container ?? ContainerFromPath(source?.Path) : null;
         var streams = isPlayable ? CatalogStreams(technical, container, subtitles) : null;
@@ -462,7 +577,7 @@ public sealed class JellyfinCatalogService {
             ExternalUrls = ExternalUrls(links),
             RemoteTrailers = RemoteTrailers(links),
             Type = JellyfinType(item.Kind, item.ParentEntityId),
-            MediaType = IsPlayableVideo(item.Kind) ? "Video" : null,
+            MediaType = isPlayable ? "Video" : null,
             Path = isPlayable ? source?.Path ?? VirtualItemPath(item.Id) : null,
             LocationType = isPlayable ? "FileSystem" : null,
             PlayAccess = isPlayable ? "Full" : null,
@@ -488,11 +603,24 @@ public sealed class JellyfinCatalogService {
             SeriesName = context?.SeriesName,
             SeasonId = context?.SeasonId,
             SeasonName = context?.SeasonName,
+            SeriesPrimaryImageTag = context?.SeriesPrimaryImageTag,
+            ParentLogoItemId = context?.ParentLogoItemId,
+            ParentLogoImageTag = context?.ParentLogoImageTag,
+            ParentBackdropItemId = context?.ParentBackdropItemId,
+            ParentBackdropImageTags = context?.ParentBackdropImageTags,
+            ParentThumbItemId = context?.ParentThumbItemId,
+            ParentThumbImageTag = context?.ParentThumbImageTag,
+            VideoType = isPlayable ? "VideoFile" : null,
+            CanDelete = isPlayable ? true : null,
+            EnableMediaSourceDisplay = isPlayable ? true : null,
+            DisplayPreferencesId = item.Id.ToString("N"),
+            LocalTrailerCount = isPlayable ? 0 : null,
+            SpecialFeatureCount = isPlayable ? 0 : null,
             ImageTags = image.Tags,
             BackdropImageTags = image.BackdropImageTags,
             PrimaryImageAspectRatio = image.PrimaryImageAspectRatio,
             UserData = UserDataFor(item.Id, flags?.IsFavorite == true, playback, runtimeTicks),
-            MediaSources = isPlayable ? [CatalogMediaSource(item.Id, item.Title, source?.Path ?? VirtualItemPath(item.Id), container, source?.Path, runtimeTicks, streams ?? [])] : null,
+            MediaSources = isPlayable ? [CatalogMediaSource(item.Id, item.Title, source?.Path ?? VirtualItemPath(item.Id), container, source?.Path, runtimeTicks, streams ?? [], technical)] : null,
             MediaStreams = streams,
             Chapters = Chapters(markers)
         };
@@ -515,7 +643,21 @@ public sealed class JellyfinCatalogService {
         bool hideNsfw,
         CancellationToken cancellationToken) {
         if (parent.Kind.Equals("video-series", StringComparison.OrdinalIgnoreCase)) {
-            return new ItemContext(parent.Id, parent.Title, null, null, null);
+            // Episodes directly under a series (no season): parent-image fields all come from the series.
+            var seriesImages = ImageMetadata(parent.Id, parent.Capabilities);
+            return new ItemContext(
+                parent.Id,
+                parent.Title,
+                null,
+                null,
+                null,
+                SeriesPrimaryImageTag: ImageTag(seriesImages, "Primary"),
+                ParentLogoItemId: ImageTag(seriesImages, "Logo") is null ? null : parent.Id,
+                ParentLogoImageTag: ImageTag(seriesImages, "Logo"),
+                ParentBackdropItemId: seriesImages.BackdropImageTags.Count == 0 ? null : parent.Id,
+                ParentBackdropImageTags: seriesImages.BackdropImageTags.Count == 0 ? null : seriesImages.BackdropImageTags,
+                ParentThumbItemId: ImageTag(seriesImages, "Thumb") is null ? null : parent.Id,
+                ParentThumbImageTag: ImageTag(seriesImages, "Thumb"));
         }
 
         if (!parent.Kind.Equals("video-season", StringComparison.OrdinalIgnoreCase)) {
@@ -527,6 +669,18 @@ public sealed class JellyfinCatalogService {
             series = await _entities.GetAsync(seriesId, hideNsfw, cancellationToken);
         }
 
+        // Series supplies the backdrop/logo/primary artwork; the season supplies the thumb
+        // (falling back to the series thumb) — matching how Jellyfin populates episode parent images.
+        var seriesImageMeta = series is null
+            ? null
+            : ImageMetadata(series.Id, series.Capabilities);
+        var seasonImageMeta = ImageMetadata(parent.Id, parent.Capabilities);
+        var thumbTag = ImageTag(seasonImageMeta, "Thumb") ?? (seriesImageMeta is null ? null : ImageTag(seriesImageMeta, "Thumb"));
+        var thumbItemId = ImageTag(seasonImageMeta, "Thumb") is not null
+            ? parent.Id
+            : thumbTag is null ? (Guid?)null : series?.Id;
+        var backdropTags = seriesImageMeta?.BackdropImageTags ?? [];
+
         var parentIndexNumber = PositionValue(
             parent.Capabilities.OfType<PositionCapability>().FirstOrDefault(),
             "season") ?? parent.SortOrder;
@@ -535,8 +689,18 @@ public sealed class JellyfinCatalogService {
             series?.Title,
             parent.Id,
             parent.Title,
-            parentIndexNumber);
+            parentIndexNumber,
+            SeriesPrimaryImageTag: seriesImageMeta is null ? null : ImageTag(seriesImageMeta, "Primary"),
+            ParentLogoItemId: seriesImageMeta is not null && ImageTag(seriesImageMeta, "Logo") is not null ? series?.Id : null,
+            ParentLogoImageTag: seriesImageMeta is null ? null : ImageTag(seriesImageMeta, "Logo"),
+            ParentBackdropItemId: backdropTags.Count == 0 ? null : series?.Id,
+            ParentBackdropImageTags: backdropTags.Count == 0 ? null : backdropTags,
+            ParentThumbItemId: thumbItemId,
+            ParentThumbImageTag: thumbTag);
     }
+
+    private static string? ImageTag(JellyfinImageMetadata images, string type) =>
+        images.Tags.TryGetValue(type, out var tag) ? tag : null;
 
     private static JellyfinCatalogMediaSourceDto CatalogMediaSource(
         Guid id,
@@ -545,12 +709,18 @@ public sealed class JellyfinCatalogService {
         string? container,
         string? filePath,
         long? runtimeTicks,
-        IReadOnlyList<JellyfinCatalogMediaStreamDto> streams) {
+        IReadOnlyList<JellyfinCatalogMediaStreamDto> streams,
+        TechnicalCapability? technical = null) {
         long? size = null;
         if (!string.IsNullOrWhiteSpace(filePath)) {
             var file = new FileInfo(filePath);
             size = file.Exists ? file.Length : null;
         }
+
+        var audioIndex = streams
+            .Where(stream => stream.Type.Equals("Audio", StringComparison.OrdinalIgnoreCase))
+            .Select(stream => (int?)stream.Index)
+            .FirstOrDefault();
 
         return new JellyfinCatalogMediaSourceDto {
             Id = id.ToString("N"),
@@ -558,7 +728,10 @@ public sealed class JellyfinCatalogService {
             Container = container,
             Size = size,
             Name = Path.GetFileName(path),
+            ETag = EtagFor(id, filePath ?? path),
             RunTimeTicks = runtimeTicks,
+            Bitrate = technical?.BitRate,
+            DefaultAudioStreamIndex = audioIndex,
             MediaStreams = streams
         };
     }
@@ -576,24 +749,51 @@ public sealed class JellyfinCatalogService {
                 Width = technical?.Width,
                 Height = technical?.Height,
                 AverageFrameRate = technical?.FrameRate,
+                RealFrameRate = technical?.FrameRate,
+                AspectRatio = AspectRatio(technical?.Width, technical?.Height),
                 BitRate = technical?.BitRate
             }
         };
 
+        // Audio stream — emitted when the probe captured any audio detail, so clients can resolve a
+        // default audio track. Codec is unknown at this layer (the technical capability only carries
+        // the video codec); HDR/Dolby-Vision and per-track audio codec metadata are a deferred pass.
+        var nextIndex = 1;
+        if (technical?.Channels is not null || technical?.SampleRate is not null) {
+            streams.Add(new JellyfinCatalogMediaStreamDto {
+                Index = nextIndex++,
+                Type = "Audio",
+                Channels = technical?.Channels,
+                ChannelLayout = ChannelLayout(technical?.Channels),
+                SampleRate = technical?.SampleRate,
+                IsDefault = true
+            });
+        }
+
         if (subtitles?.Items.Count > 0) {
-            streams.AddRange(subtitles.Items.Select((subtitle, index) => new JellyfinCatalogMediaStreamDto {
-                Index = index + 1,
+            streams.AddRange(subtitles.Items.Select(subtitle => new JellyfinCatalogMediaStreamDto {
+                Index = nextIndex++,
                 Type = "Subtitle",
                 Codec = subtitle.Format,
                 Language = EmptyAsNull(subtitle.Language),
                 DisplayTitle = EmptyAsNull(subtitle.Label) ?? subtitle.Language,
                 IsDefault = subtitle.IsDefault,
-                IsForced = false
+                IsForced = false,
+                IsExternal = true
             }));
         }
 
         return streams;
     }
+
+    private static string? ChannelLayout(int? channels) =>
+        channels switch {
+            1 => "mono",
+            2 => "stereo",
+            6 => "5.1",
+            8 => "7.1",
+            _ => null
+        };
 
     private static IReadOnlyList<JellyfinCatalogMediaStreamDto> CatalogStreams(
         EntityThumbnail item,
@@ -667,7 +867,14 @@ public sealed class JellyfinCatalogService {
         Guid? SeasonId,
         string? SeasonName,
         int? ParentIndexNumber,
-        Guid? ParentId = null) {
+        Guid? ParentId = null,
+        string? SeriesPrimaryImageTag = null,
+        Guid? ParentLogoItemId = null,
+        string? ParentLogoImageTag = null,
+        Guid? ParentBackdropItemId = null,
+        IReadOnlyList<string>? ParentBackdropImageTags = null,
+        Guid? ParentThumbItemId = null,
+        string? ParentThumbImageTag = null) {
         public static ItemContext? From(JellyfinBaseItemDto item) =>
             item.SeriesId is null &&
             item.SeriesName is null &&
@@ -682,7 +889,14 @@ public sealed class JellyfinCatalogService {
                     item.SeasonId,
                     item.SeasonName,
                     item.ParentIndexNumber,
-                    item.ParentId);
+                    item.ParentId,
+                    item.SeriesPrimaryImageTag,
+                    item.ParentLogoItemId,
+                    item.ParentLogoImageTag,
+                    item.ParentBackdropItemId,
+                    item.ParentBackdropImageTags,
+                    item.ParentThumbItemId,
+                    item.ParentThumbImageTag);
     }
 
     private static IReadOnlyList<JellyfinBaseItemDto> ApplyItemTypeFilter(
@@ -1098,17 +1312,27 @@ public sealed class JellyfinCatalogService {
             isFavorite,
             played,
             id.ToString("N"),
+            id.ToString("N"),
             playedPercentage,
             playback?.LastPlayedAt);
     }
 
     private static bool IsPlayableVideo(string kind) => kind.Equals("video", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Whether a kind is a playable leaf in the Jellyfin projection. Movies and videos both map to
+    /// playable items (a movie streams through its single video child, resolved in the source service).
+    /// </summary>
+    private static bool IsPlayable(string kind) =>
+        kind.Equals("video", StringComparison.OrdinalIgnoreCase) ||
+        kind.Equals("movie", StringComparison.OrdinalIgnoreCase);
+
     private static bool IsFolder(string kind) =>
         kind is "video-series" or "video-season" or "collection";
 
     private static string JellyfinType(string kind, Guid? parentId) =>
         kind.Trim().ToLowerInvariant() switch {
+            "movie" => "Movie",
             "video" => parentId is null ? "Movie" : "Episode",
             "video-series" => "Series",
             "video-season" => "Season",

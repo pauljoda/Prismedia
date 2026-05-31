@@ -46,12 +46,20 @@ public sealed class VideoSourceService : IVideoSourceService {
 
     /// <inheritdoc />
     public async Task<VideoSourceFile?> GetSourceAsync(Guid id, CancellationToken cancellationToken) {
+        // A movie is a folder aggregate around one playable video child, so resolve a movie id to
+        // its child video before locating the source. This lets Jellyfin clients stream, probe
+        // playback info, and fetch HLS using the movie's own id (all three funnel through here).
+        var videoId = await ResolvePlayableVideoIdAsync(id, cancellationToken);
+        if (videoId is null) {
+            return null;
+        }
+
         var source = await (
             from entity in _db.Entities.AsNoTracking()
             join file in _db.EntityFiles.AsNoTracking() on entity.Id equals file.EntityId
             join technical in _db.EntityTechnical.AsNoTracking() on entity.Id equals technical.EntityId into technicalRows
             from technical in technicalRows.DefaultIfEmpty()
-            where entity.Id == id &&
+            where entity.Id == videoId.Value &&
                 entity.KindCode == EntityKindRegistry.Video.Code &&
                 entity.DeletedAt == null &&
                 file.Role == EntityFileRole.Source
@@ -66,7 +74,7 @@ public sealed class VideoSourceService : IVideoSourceService {
         }
 
         var mediaSource = await _db.MediaSources.AsNoTracking()
-            .Where(row => row.EntityId == id && row.Path == source.File.Path)
+            .Where(row => row.EntityId == videoId.Value && row.Path == source.File.Path)
             .OrderByDescending(row => row.UpdatedAt)
             .FirstOrDefaultAsync(cancellationToken);
         List<VideoSourceStream> streams = mediaSource is null
@@ -143,7 +151,7 @@ public sealed class VideoSourceService : IVideoSourceService {
             !RequiresTranscodeExtensions.Contains(extension);
 
         return new VideoSourceFile(
-            id,
+            videoId.Value,
             source.File.Path,
             source.File.MimeType ?? MimeForExtension(extension),
             directPlayable,
@@ -159,6 +167,34 @@ public sealed class VideoSourceService : IVideoSourceService {
             source.Technical?.SampleRate,
             source.Technical?.Channels,
             streams);
+    }
+
+    /// <summary>
+    /// Resolves the id whose source file should be streamed: a video id maps to itself, a movie id
+    /// maps to its single playable video child, and anything else (or a missing entity) yields null.
+    /// </summary>
+    private async Task<Guid?> ResolvePlayableVideoIdAsync(Guid id, CancellationToken cancellationToken) {
+        var kind = await _db.Entities.AsNoTracking()
+            .Where(entity => entity.Id == id && entity.DeletedAt == null)
+            .Select(entity => entity.KindCode)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (string.Equals(kind, EntityKindRegistry.Video.Code, StringComparison.Ordinal)) {
+            return id;
+        }
+
+        if (string.Equals(kind, EntityKindRegistry.Movie.Code, StringComparison.Ordinal)) {
+            return await _db.Entities.AsNoTracking()
+                .Where(child => child.ParentEntityId == id &&
+                    child.KindCode == EntityKindRegistry.Video.Code &&
+                    child.DeletedAt == null)
+                .OrderBy(child => child.SortOrder ?? int.MaxValue)
+                .ThenBy(child => child.Id)
+                .Select(child => (Guid?)child.Id)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        return null;
     }
 
     private static string MimeForExtension(string extension) {

@@ -154,14 +154,24 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
         // pure database work with no file IO between the flushes, so the transaction stays short.
         // The in-memory test provider has no transaction support, and if a caller already opened a
         // transaction we participate in it rather than nesting.
-        if (!_db.Database.IsRelational() || _db.Database.CurrentTransaction is not null) {
-            await SaveCoreAsync(entity, cancellationToken);
-            return;
-        }
+        try {
+            if (!_db.Database.IsRelational() || _db.Database.CurrentTransaction is not null) {
+                await SaveCoreAsync(entity, cancellationToken);
+                return;
+            }
 
-        await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
-        await SaveCoreAsync(entity, cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
+            await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+            await SaveCoreAsync(entity, cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        } catch (DbUpdateConcurrencyException ex) {
+            // Translate EF's optimistic-concurrency failure into a persistence-agnostic conflict so
+            // application services can reload and retry without referencing EF Core. Detach the stale
+            // tracked entries so a retry on the same DbContext re-reads current rows.
+            _db.ChangeTracker.Clear();
+            throw new EntityConcurrencyConflictException(
+                $"Concurrent modification of entity '{entity.Id}'.",
+                ex);
+        }
     }
 
     private async Task SaveCoreAsync(Entity entity, CancellationToken cancellationToken) {
