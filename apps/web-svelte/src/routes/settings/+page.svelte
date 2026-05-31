@@ -4,6 +4,7 @@
     Captions,
     Clipboard,
     Eye,
+    EyeOff,
     Film,
     Flame,
     KeyRound,
@@ -15,7 +16,7 @@
     Trash2,
     UserPlus,
   } from "@lucide/svelte";
-  import { Button, Panel, StatusLed, cn } from "@prismedia/ui-svelte";
+  import { Badge, Button, Checkbox, Panel, StatusLed, TextInput, Toggle, cn } from "@prismedia/ui-svelte";
   import {
     fetchLibraryConfig,
     updateSetting,
@@ -513,40 +514,52 @@
         <div>
           <h2 class="text-kicker text-text-primary">API Access</h2>
           <p class="text-[0.68rem] text-text-muted">
-            Jellyfin-compatible clients sign in with these profiles.
+            Jellyfin-compatible clients connect with the server key, then sign in as a profile.
           </p>
         </div>
       </div>
 
       <div class="grid gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-        <div class="surface-well p-4 space-y-4">
-          <div class="space-y-1">
-            <div class="text-label text-text-primary">API key</div>
+        <!-- Server key -->
+        <div class="surface-well flex flex-col gap-4 p-4">
+          <div class="space-y-1.5">
+            <div class="text-label text-text-muted">Server key</div>
             <div class="flex min-w-0 items-center gap-2">
-              <code class="min-w-0 flex-1 overflow-hidden text-ellipsis rounded-xs border border-border-subtle bg-surface-1 px-3 py-2 font-mono text-[0.8rem] text-text-primary">
-                {apiKey ? (apiKeyRevealed ? apiKey.apiKey : apiKey.apiKey.replace(/[a-z]/g, "*")) : "loading"}
+              <code class="min-w-0 flex-1 overflow-hidden text-ellipsis rounded-xs border border-border-subtle bg-surface-1 px-3 py-2 font-mono text-[0.8rem] tracking-wide text-text-primary shadow-[inset_0_1px_3px_rgba(0,0,0,0.25)]">
+                {apiKey
+                  ? apiKeyRevealed
+                    ? apiKey.apiKey
+                    : "•".repeat(Math.min(apiKey.apiKey.length, 40))
+                  : "Loading…"}
               </code>
               <Button
                 type="button"
                 variant="ghost"
+                size="icon"
                 disabled={!apiKey || securityBusy}
                 onclick={() => (apiKeyRevealed = !apiKeyRevealed)}
-                aria-label={apiKeyRevealed ? "Hide API key" : "Show API key"}
-                class="h-9 w-9 p-0"
+                aria-label={apiKeyRevealed ? "Hide server key" : "Show server key"}
               >
-                <Eye class="h-4 w-4" />
+                {#if apiKeyRevealed}
+                  <EyeOff class="h-4 w-4" />
+                {:else}
+                  <Eye class="h-4 w-4" />
+                {/if}
               </Button>
               <Button
                 type="button"
                 variant="ghost"
+                size="icon"
                 disabled={!apiKey || securityBusy}
                 onclick={() => void copyApiKey()}
-                aria-label="Copy API key"
-                class="h-9 w-9 p-0"
+                aria-label="Copy server key"
               >
                 <Clipboard class="h-4 w-4" />
               </Button>
             </div>
+            <p class="text-[0.68rem] leading-relaxed text-text-muted">
+              Shared across all clients. Regenerating signs out every connected device.
+            </p>
           </div>
 
           <Button
@@ -554,7 +567,7 @@
             variant="secondary"
             disabled={securityBusy}
             onclick={() => void handleRegenerateApiKey()}
-            class="no-lift w-full gap-2 border-border-subtle bg-surface-2/40 px-3.5 py-2.5 text-[0.8rem]"
+            class="mt-auto w-full gap-2"
           >
             {#if securityBusy}
               <Loader2 class="h-4 w-4 animate-spin" />
@@ -565,102 +578,127 @@
           </Button>
         </div>
 
+        <!-- Profiles -->
         <div class="space-y-3">
           <form
-            class="surface-well grid gap-3 p-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
+            class="surface-well space-y-3 p-4"
             onsubmit={(event) => {
               event.preventDefault();
               void createProfile();
             }}
           >
-            <label class="space-y-1">
-              <span class="text-label text-text-muted">Username</span>
-              <input
-                class="w-full rounded-xs border border-border-subtle bg-surface-1 px-3 py-2 text-[0.78rem] text-text-primary outline-none transition-colors focus:border-border-accent"
-                bind:value={profileUsername}
-                autocomplete="off"
-                disabled={profileBusy}
-              />
-            </label>
-            <label class="space-y-1">
-              <span class="text-label text-text-muted">Display name</span>
-              <input
-                class="w-full rounded-xs border border-border-subtle bg-surface-1 px-3 py-2 text-[0.78rem] text-text-primary outline-none transition-colors focus:border-border-accent"
-                bind:value={profileDisplayName}
-                autocomplete="off"
-                disabled={profileBusy}
-              />
-            </label>
-            <div class="flex items-end gap-2">
-              <label class="flex h-9 items-center gap-2 rounded-xs border border-border-subtle bg-surface-1 px-3 text-[0.72rem] text-text-secondary">
-                <input
-                  type="checkbox"
-                  bind:checked={profileAllowNsfw}
+            <div class="grid gap-3 sm:grid-cols-2">
+              <label class="space-y-1">
+                <span class="text-label text-text-muted">Username</span>
+                <TextInput
+                  size="sm"
+                  value={profileUsername}
+                  oninput={(event) => (profileUsername = event.currentTarget.value)}
+                  autocomplete="off"
+                  placeholder="jellyfin-user"
                   disabled={profileBusy}
                 />
-                NSFW
+              </label>
+              <label class="space-y-1">
+                <span class="text-label text-text-muted">Display name</span>
+                <TextInput
+                  size="sm"
+                  value={profileDisplayName}
+                  oninput={(event) => (profileDisplayName = event.currentTarget.value)}
+                  autocomplete="off"
+                  placeholder="Shown in clients"
+                  disabled={profileBusy}
+                />
+              </label>
+            </div>
+            <div class="flex items-center justify-between gap-3">
+              <label class="flex cursor-pointer items-center gap-2 text-[0.78rem] text-text-secondary">
+                <Checkbox
+                  checked={profileAllowNsfw}
+                  disabled={profileBusy}
+                  onchange={(event) =>
+                    (profileAllowNsfw = (event.currentTarget as HTMLInputElement).checked)}
+                />
+                Allow NSFW content
               </label>
               <Button
                 type="submit"
                 variant="primary"
+                size="sm"
                 disabled={profileBusy || !profileUsername.trim()}
-                class="h-9 gap-2 px-3 text-[0.78rem]"
+                class="gap-2"
               >
                 <UserPlus class="h-4 w-4" />
-                Add
+                Add profile
               </Button>
             </div>
           </form>
 
           <div class="surface-well divide-y divide-border-subtle px-4">
             {#each jellyfinProfiles as profile (profile.id)}
-              <div class="grid gap-3 py-3 md:grid-cols-[minmax(0,1fr)_auto_auto_auto] md:items-center">
-                <div class="min-w-0">
-                  <div class="truncate text-[0.82rem] font-medium text-text-primary">
-                    {profile.displayName}
-                  </div>
-                  <div class="truncate font-mono text-[0.68rem] text-text-muted">
-                    {profile.username}
+              <div
+                class={cn(
+                  "flex flex-wrap items-center gap-x-5 gap-y-3 py-3 transition-opacity",
+                  !profile.enabled && "opacity-55",
+                )}
+              >
+                <div class="flex min-w-0 flex-1 items-center gap-2.5">
+                  <StatusLed status={profile.enabled ? "active" : "idle"} size="sm" />
+                  <div class="min-w-0">
+                    <div class="flex items-center gap-2">
+                      <span class="truncate text-[0.82rem] font-medium text-text-primary">
+                        {profile.displayName}
+                      </span>
+                      {#if profile.allowNsfw}
+                        <Badge variant="warning">NSFW</Badge>
+                      {/if}
+                    </div>
+                    <div class="truncate font-mono text-[0.68rem] text-text-muted">
+                      {profile.username}
+                    </div>
                   </div>
                 </div>
-                <label class="flex items-center gap-2 text-[0.72rem] text-text-secondary">
-                  <input
-                    type="checkbox"
+
+                <div class="flex items-center gap-2">
+                  <span class="text-label text-text-muted">NSFW</span>
+                  <Toggle
+                    size="sm"
                     checked={profile.allowNsfw}
                     disabled={profileBusy}
-                    onchange={(event) =>
-                      void patchProfile(profile.id, {
-                        allowNsfw: (event.currentTarget as HTMLInputElement).checked,
-                      })}
+                    ariaLabel={`Allow NSFW for ${profile.username}`}
+                    onchange={(checked) => void patchProfile(profile.id, { allowNsfw: checked })}
                   />
-                  NSFW
-                </label>
-                <label class="flex items-center gap-2 text-[0.72rem] text-text-secondary">
-                  <input
-                    type="checkbox"
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="text-label text-text-muted">Enabled</span>
+                  <Toggle
+                    size="sm"
                     checked={profile.enabled}
                     disabled={profileBusy}
-                    onchange={(event) =>
-                      void patchProfile(profile.id, {
-                        enabled: (event.currentTarget as HTMLInputElement).checked,
-                      })}
+                    ariaLabel={`Enable ${profile.username}`}
+                    onchange={(checked) => void patchProfile(profile.id, { enabled: checked })}
                   />
-                  Enabled
-                </label>
+                </div>
+
                 <Button
                   type="button"
                   variant="ghost"
+                  size="icon"
                   disabled={profileBusy}
                   onclick={() => void removeProfile(profile)}
                   aria-label={`Delete ${profile.username}`}
-                  class="h-8 w-8 justify-self-start p-0 text-status-error-text md:justify-self-end"
+                  class="text-status-error-text hover:bg-error-muted/20"
                 >
                   <Trash2 class="h-4 w-4" />
                 </Button>
               </div>
             {:else}
-              <div class="py-4 text-[0.75rem] text-text-muted">
-                No Jellyfin profiles yet.
+              <div class="flex flex-col items-center gap-1 py-8 text-center">
+                <UserPlus class="h-5 w-5 text-text-disabled" />
+                <p class="text-[0.78rem] font-medium text-text-secondary">No profiles yet</p>
+                <p class="text-[0.68rem] text-text-muted">
+                  Add a profile above so a client can sign in.
+                </p>
               </div>
             {/each}
           </div>

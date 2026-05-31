@@ -44,6 +44,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Changed
+- Refined the Settings API Access panel: the server key is now clearly labeled and masked, profile toggles for NSFW and Enabled use the design-system switches with at-a-glance status, the add-profile form uses the standard inputs and checkbox, and an empty state explains how to get started.
 - API routes now require the generated API key, while the native web app receives it automatically as a same-origin HttpOnly cookie so normal browser use remains frictionless.
 - Jellyfin-compatible item responses now expose richer Prismedia metadata to clients like Infuse, including dates, ratings, credits, studios, tags, provider IDs, chapters, subtitles, technical dimensions, and additional artwork tags.
 - Scrubbing-preview (trickplay) generation is dramatically lighter on the CPU: each video is now sampled in a single ffmpeg pass instead of launching a separate process for every preview frame, and all background media generation (thumbnails, preview clips, trickplay, waveforms) runs at below-normal priority with a capped thread count. Libraries with many videos no longer peg every core or make playback and browsing stutter while previews are being built.
