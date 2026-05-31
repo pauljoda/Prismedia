@@ -240,6 +240,26 @@ public static class JellyfinCompatibilityEndpoints {
             .WithTags("Jellyfin Catalog")
             .WithName("GetJellyfinResumeItemsLegacy")
             .Produces<JellyfinQueryResult<JellyfinBaseItemDto>>();
+
+        routes.MapGet("/Shows/{seriesId:guid}/Seasons", GetSeriesSeasonsAsync)
+            .WithTags("Jellyfin Shows")
+            .WithName("GetJellyfinSeriesSeasons")
+            .Produces<JellyfinQueryResult<JellyfinBaseItemDto>>();
+
+        routes.MapGet("/Users/{userId:guid}/Shows/{seriesId:guid}/Seasons", GetSeriesSeasonsAsync)
+            .WithTags("Jellyfin Shows")
+            .WithName("GetJellyfinSeriesSeasonsLegacy")
+            .Produces<JellyfinQueryResult<JellyfinBaseItemDto>>();
+
+        routes.MapGet("/Shows/{seriesId:guid}/Episodes", GetSeriesEpisodesAsync)
+            .WithTags("Jellyfin Shows")
+            .WithName("GetJellyfinSeriesEpisodes")
+            .Produces<JellyfinQueryResult<JellyfinBaseItemDto>>();
+
+        routes.MapGet("/Users/{userId:guid}/Shows/{seriesId:guid}/Episodes", GetSeriesEpisodesAsync)
+            .WithTags("Jellyfin Shows")
+            .WithName("GetJellyfinSeriesEpisodesLegacy")
+            .Produces<JellyfinQueryResult<JellyfinBaseItemDto>>();
     }
 
     private static void MapJellyfinImageEndpoints(this IEndpointRouteBuilder routes) {
@@ -428,6 +448,47 @@ public static class JellyfinCompatibilityEndpoints {
         var result = await catalog.GetResumeAsync(
             Math.Max(0, start),
             Math.Clamp(limit, 1, 100),
+            state.ServerId.ToString("N"),
+            NsfwVisibility.ShouldHide(null, httpContext),
+            cancellationToken);
+        return Results.Ok(result);
+    }
+
+    private static async Task<IResult> GetSeriesSeasonsAsync(
+        Guid seriesId,
+        HttpContext httpContext,
+        PrismediaSecurityService security,
+        JellyfinCatalogService catalog,
+        CancellationToken cancellationToken) {
+        var state = await security.EnsureSecurityAsync(cancellationToken);
+        var query = ItemQueryFrom(httpContext.Request) with {
+            ParentId = seriesId,
+            Recursive = false,
+            IncludeItemTypes = ["Season"]
+        };
+        var result = await catalog.GetItemsAsync(
+            query,
+            state.ServerId.ToString("N"),
+            NsfwVisibility.ShouldHide(null, httpContext),
+            cancellationToken);
+        return Results.Ok(result);
+    }
+
+    private static async Task<IResult> GetSeriesEpisodesAsync(
+        Guid seriesId,
+        HttpContext httpContext,
+        PrismediaSecurityService security,
+        JellyfinCatalogService catalog,
+        CancellationToken cancellationToken) {
+        var state = await security.EnsureSecurityAsync(cancellationToken);
+        var seasonId = TryGuid(httpContext.Request.Query["SeasonId"].FirstOrDefault());
+        var query = ItemQueryFrom(httpContext.Request) with {
+            ParentId = seasonId ?? seriesId,
+            Recursive = seasonId is null,
+            IncludeItemTypes = ["Episode"]
+        };
+        var result = await catalog.GetItemsAsync(
+            query,
             state.ServerId.ToString("N"),
             NsfwVisibility.ShouldHide(null, httpContext),
             cancellationToken);

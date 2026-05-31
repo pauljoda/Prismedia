@@ -45,12 +45,6 @@ internal static class JellyfinPlaybackResults {
             return Results.NotFound(new ApiProblem("video_stream_not_found", $"Video stream '{itemId}' was not found."));
         }
 
-        if (!source.DirectPlayable) {
-            return Results.Json(
-                new ApiProblem("video_stream_not_direct_playable", "Direct playback is not available for this container."),
-                statusCode: StatusCodes.Status415UnsupportedMediaType);
-        }
-
         return Results.File(File.OpenRead(source.Path), source.ContentType, enableRangeProcessing: true);
     }
 

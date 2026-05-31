@@ -23,6 +23,7 @@ internal static class PrismediaAuthentication {
         "/Users",
         "/UserViews",
         "/Items",
+        "/Shows",
         "/Videos",
         "/Sessions",
         "/UserPlayedItems",

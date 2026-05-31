@@ -71,7 +71,11 @@ public sealed class JellyfinCatalogService {
         var total = items.Count;
         var start = Math.Clamp(query.StartIndex, 0, total);
         var limit = Math.Clamp(query.Limit ?? total, 0, total);
-        var page = items.Skip(start).Take(limit).ToArray();
+        var page = await HydrateCatalogItemsAsync(
+            items.Skip(start).Take(limit).ToArray(),
+            serverId,
+            hideNsfw,
+            cancellationToken);
         return new JellyfinQueryResult<JellyfinBaseItemDto>(page, total, start);
     }
 
@@ -116,7 +120,11 @@ public sealed class JellyfinCatalogService {
             cancellationToken,
             sort: "added",
             sortDir: "desc");
-        var items = response.Items.Select(item => MapThumbnail(item, serverId)).ToArray();
+        var items = await HydrateCatalogItemsAsync(
+            response.Items.Select(item => MapThumbnail(item, serverId)).ToArray(),
+            serverId,
+            hideNsfw,
+            cancellationToken);
         return new JellyfinQueryResult<JellyfinBaseItemDto>(items, response.TotalCount, 0);
     }
 
@@ -137,8 +145,12 @@ public sealed class JellyfinCatalogService {
             sort: "added",
             sortDir: "desc",
             status: "in-progress");
-        var items = response.Items.Select(item => MapThumbnail(item, serverId)).ToArray();
-        var total = items.Length;
+        var items = await HydrateCatalogItemsAsync(
+            response.Items.Select(item => MapThumbnail(item, serverId)).ToArray(),
+            serverId,
+            hideNsfw,
+            cancellationToken);
+        var total = items.Count;
         var start = Math.Clamp(startIndex, 0, total);
         return new JellyfinQueryResult<JellyfinBaseItemDto>(items.Skip(start).Take(limit).ToArray(), total, start);
     }
@@ -193,7 +205,10 @@ public sealed class JellyfinCatalogService {
         CancellationToken cancellationToken) {
         if (parentId == VideosViewId) {
             var thumbnails = await FetchAllThumbnailsAsync("video", query, hideNsfw, cancellationToken);
-            return thumbnails.Select(item => MapThumbnail(item, serverId)).ToArray();
+            return thumbnails
+                .Where(item => item.ParentEntityId is null)
+                .Select(item => MapThumbnail(item, serverId))
+                .ToArray();
         }
 
         if (parentId == SeriesViewId) {
@@ -220,12 +235,59 @@ public sealed class JellyfinCatalogService {
                 .ToArray();
         }
 
+        var context = await ParentContextForAsync(parent, hideNsfw, cancellationToken);
         var childThumbnails = parent.ChildrenByKind
             .SelectMany(group => group.Entities)
             .Where(child => query.Recursive || child.ParentEntityId == parentId)
             .ToArray();
-        return childThumbnails.Select(child => MapThumbnail(child, serverId, parentId)).ToArray();
+
+        if (query.Recursive && parent.Kind.Equals("video-series", StringComparison.OrdinalIgnoreCase)) {
+            var descendants = new List<JellyfinBaseItemDto>();
+            foreach (var child in childThumbnails) {
+                if (!child.Kind.Equals("video-season", StringComparison.OrdinalIgnoreCase)) {
+                    descendants.Add(MapThumbnail(child, serverId, parentId, context));
+                    continue;
+                }
+
+                var season = await _entities.GetAsync(child.Id, hideNsfw, cancellationToken);
+                if (season is null) {
+                    continue;
+                }
+
+                var seasonContext = await ParentContextForAsync(season, hideNsfw, cancellationToken);
+                descendants.AddRange(season.ChildrenByKind
+                    .SelectMany(group => group.Entities)
+                    .Select(grandchild => MapThumbnail(grandchild, serverId, child.Id, seasonContext)));
+            }
+
+            return descendants;
+        }
+
+        return childThumbnails.Select(child => MapThumbnail(child, serverId, parentId, context)).ToArray();
     }
+
+    private async Task<IReadOnlyList<JellyfinBaseItemDto>> HydrateCatalogItemsAsync(
+        IReadOnlyList<JellyfinBaseItemDto> items,
+        string serverId,
+        bool hideNsfw,
+        CancellationToken cancellationToken) {
+        var hydrated = new List<JellyfinBaseItemDto>(items.Count);
+        foreach (var item in items) {
+            if (!ShouldHydrateCatalogItem(item)) {
+                hydrated.Add(item);
+                continue;
+            }
+
+            var detail = await _entities.GetAsync(item.Id, hideNsfw, cancellationToken);
+            hydrated.Add(detail is null ? item : MapCard(detail, serverId, ItemContext.From(item)));
+        }
+
+        return hydrated;
+    }
+
+    private static bool ShouldHydrateCatalogItem(JellyfinBaseItemDto item) =>
+        item.MediaType?.Equals("Video", StringComparison.OrdinalIgnoreCase) == true ||
+        item.Type is "Series" or "Season" or "BoxSet";
 
     private async Task<IReadOnlyList<JellyfinBaseItemDto>> ItemsByIdAsync(
         IReadOnlyList<Guid> ids,
@@ -273,8 +335,16 @@ public sealed class JellyfinCatalogService {
             ? MapThumbnail(item.Entity, serverId, collectionId)
             : null;
 
-    private static JellyfinBaseItemDto MapThumbnail(EntityThumbnail item, string serverId, Guid? parentOverride = null) {
+    private static JellyfinBaseItemDto MapThumbnail(
+        EntityThumbnail item,
+        string serverId,
+        Guid? parentOverride = null,
+        ItemContext? context = null) {
         var imageTags = ImageTags(item.Id, item.CoverUrl, null);
+        var isPlayable = IsPlayableVideo(item.Kind);
+        long? runtimeTicks = isPlayable ? RuntimeTicksFrom(item) ?? 0 : null;
+        var container = isPlayable ? ContainerFrom(item) : null;
+        var streams = isPlayable ? CatalogStreams(item, container) : null;
         return new JellyfinBaseItemDto {
             Id = item.Id,
             Name = item.Title,
@@ -283,6 +353,13 @@ public sealed class JellyfinCatalogService {
             SortName = item.Title,
             Type = JellyfinType(item.Kind, item.ParentEntityId),
             MediaType = IsPlayableVideo(item.Kind) ? "Video" : null,
+            Path = isPlayable ? VirtualItemPath(item.Id) : null,
+            LocationType = isPlayable ? "FileSystem" : null,
+            PlayAccess = isPlayable ? "Full" : null,
+            Container = container,
+            MediaSourceCount = isPlayable ? 1 : null,
+            SupportsResume = isPlayable ? true : null,
+            SupportsSync = isPlayable ? true : null,
             CollectionType = CollectionType(item.Kind),
             ParentId = parentOverride ?? item.ParentEntityId,
             IsFolder = IsFolder(item.Kind),
@@ -290,19 +367,29 @@ public sealed class JellyfinCatalogService {
             BackdropImageTags = imageTags.Backdrop is null ? [] : [imageTags.Backdrop],
             PrimaryImageAspectRatio = 0.6667,
             IndexNumber = item.SortOrder,
+            ParentIndexNumber = context?.ParentIndexNumber,
+            SeriesId = context?.SeriesId,
+            SeriesName = context?.SeriesName,
+            SeasonId = context?.SeasonId,
+            SeasonName = context?.SeasonName,
             UserData = UserDataFor(item.Id, item.IsFavorite, null),
-            MediaSources = IsPlayableVideo(item.Kind) ? [] : null,
-            MediaStreams = IsPlayableVideo(item.Kind) ? [] : null
+            MediaSources = isPlayable ? [CatalogMediaSource(item.Id, item.Title, VirtualItemPath(item.Id), container, null, runtimeTicks, streams ?? [])] : null,
+            MediaStreams = streams
         };
     }
 
-    private static JellyfinBaseItemDto MapCard(IEntityCard item, string serverId) {
+    private static JellyfinBaseItemDto MapCard(IEntityCard item, string serverId, ItemContext? context = null) {
         var technical = item.Capabilities.OfType<TechnicalCapability>().FirstOrDefault();
         var playback = item.Capabilities.OfType<PlaybackCapability>().FirstOrDefault();
         var flags = item.Capabilities.OfType<FlagsCapability>().FirstOrDefault();
         var description = item.Capabilities.OfType<DescriptionCapability>().FirstOrDefault();
         var position = item.Capabilities.OfType<PositionCapability>().FirstOrDefault();
         var image = PrimaryAndBackdrop(item.Capabilities);
+        var source = SourceFile(item);
+        var isPlayable = IsPlayableVideo(item.Kind);
+        long? runtimeTicks = isPlayable ? technical?.Duration?.Ticks ?? 0 : null;
+        var container = isPlayable ? technical?.Container ?? ContainerFromPath(source?.Path) : null;
+        var streams = isPlayable ? CatalogStreams(technical, container) : null;
         var childCount = item.ChildrenByKind.Sum(group => group.Entities.Count);
 
         return new JellyfinBaseItemDto {
@@ -314,20 +401,31 @@ public sealed class JellyfinCatalogService {
             Overview = description?.Value,
             Type = JellyfinType(item.Kind, item.ParentEntityId),
             MediaType = IsPlayableVideo(item.Kind) ? "Video" : null,
+            Path = isPlayable ? source?.Path ?? VirtualItemPath(item.Id) : null,
+            LocationType = isPlayable ? "FileSystem" : null,
+            PlayAccess = isPlayable ? "Full" : null,
+            Container = container,
+            MediaSourceCount = isPlayable ? 1 : null,
+            SupportsResume = isPlayable ? true : null,
+            SupportsSync = isPlayable ? true : null,
             CollectionType = CollectionType(item.Kind),
-            ParentId = item.ParentEntityId,
+            ParentId = context?.ParentId ?? item.ParentEntityId,
             IsFolder = IsFolder(item.Kind),
             ChildCount = childCount == 0 ? null : childCount,
             RecursiveItemCount = childCount == 0 ? null : childCount,
-            RunTimeTicks = technical?.Duration is { } duration ? duration.Ticks : null,
+            RunTimeTicks = runtimeTicks,
             IndexNumber = PositionValue(position, "episode") ?? PositionValue(position, "sort") ?? item.SortOrder,
-            ParentIndexNumber = PositionValue(position, "season"),
+            ParentIndexNumber = PositionValue(position, "season") ?? context?.ParentIndexNumber,
+            SeriesId = context?.SeriesId,
+            SeriesName = context?.SeriesName,
+            SeasonId = context?.SeasonId,
+            SeasonName = context?.SeasonName,
             ImageTags = image.PrimaryTag is null ? new Dictionary<string, string>() : new Dictionary<string, string> { ["Primary"] = image.PrimaryTag },
             BackdropImageTags = image.BackdropTag is null ? [] : [image.BackdropTag],
             PrimaryImageAspectRatio = image.PrimaryTag is null ? null : 0.6667,
             UserData = UserDataFor(item.Id, flags?.IsFavorite == true, playback),
-            MediaSources = IsPlayableVideo(item.Kind) ? [] : null,
-            MediaStreams = IsPlayableVideo(item.Kind) ? [] : null
+            MediaSources = isPlayable ? [CatalogMediaSource(item.Id, item.Title, source?.Path ?? VirtualItemPath(item.Id), container, source?.Path, runtimeTicks, streams ?? [])] : null,
+            MediaStreams = streams
         };
     }
 
@@ -342,6 +440,165 @@ public sealed class JellyfinCatalogService {
             Etag = EtagFor(id, collectionType),
             UserData = UserDataFor(id, isFavorite: false, playback: null)
         };
+
+    private async Task<ItemContext?> ParentContextForAsync(
+        IEntityCard parent,
+        bool hideNsfw,
+        CancellationToken cancellationToken) {
+        if (parent.Kind.Equals("video-series", StringComparison.OrdinalIgnoreCase)) {
+            return new ItemContext(parent.Id, parent.Title, null, null, null);
+        }
+
+        if (!parent.Kind.Equals("video-season", StringComparison.OrdinalIgnoreCase)) {
+            return null;
+        }
+
+        IEntityCard? series = null;
+        if (parent.ParentEntityId is { } seriesId) {
+            series = await _entities.GetAsync(seriesId, hideNsfw, cancellationToken);
+        }
+
+        var parentIndexNumber = PositionValue(
+            parent.Capabilities.OfType<PositionCapability>().FirstOrDefault(),
+            "season") ?? parent.SortOrder;
+        return new ItemContext(
+            parent.ParentEntityId,
+            series?.Title,
+            parent.Id,
+            parent.Title,
+            parentIndexNumber);
+    }
+
+    private static JellyfinCatalogMediaSourceDto CatalogMediaSource(
+        Guid id,
+        string name,
+        string path,
+        string? container,
+        string? filePath,
+        long? runtimeTicks,
+        IReadOnlyList<JellyfinCatalogMediaStreamDto> streams) {
+        long? size = null;
+        if (!string.IsNullOrWhiteSpace(filePath)) {
+            var file = new FileInfo(filePath);
+            size = file.Exists ? file.Length : null;
+        }
+
+        return new JellyfinCatalogMediaSourceDto {
+            Id = id.ToString("N"),
+            Path = path,
+            Container = container,
+            Size = size,
+            Name = Path.GetFileName(path),
+            RunTimeTicks = runtimeTicks,
+            MediaStreams = streams
+        };
+    }
+
+    private static IReadOnlyList<JellyfinCatalogMediaStreamDto> CatalogStreams(
+        TechnicalCapability? technical,
+        string? container) =>
+        [
+            new JellyfinCatalogMediaStreamDto {
+                Index = 0,
+                Type = "Video",
+                Codec = technical?.Codec,
+                DisplayTitle = StreamDisplayTitle(technical, container),
+                Width = technical?.Width,
+                Height = technical?.Height,
+                AverageFrameRate = technical?.FrameRate,
+                BitRate = technical?.BitRate
+            }
+        ];
+
+    private static IReadOnlyList<JellyfinCatalogMediaStreamDto> CatalogStreams(
+        EntityThumbnail item,
+        string? container) =>
+        [
+            new JellyfinCatalogMediaStreamDto {
+                Index = 0,
+                Type = "Video",
+                Codec = item.Meta.FirstOrDefault(meta => meta.Icon.Equals("video", StringComparison.OrdinalIgnoreCase) &&
+                    !meta.Label.Contains("p", StringComparison.OrdinalIgnoreCase) &&
+                    !meta.Label.Equals(container, StringComparison.OrdinalIgnoreCase))?.Label,
+                DisplayTitle = item.Meta.FirstOrDefault(meta => meta.Icon.Equals("video", StringComparison.OrdinalIgnoreCase))?.Label
+            }
+        ];
+
+    private static string? StreamDisplayTitle(TechnicalCapability? technical, string? container) {
+        var parts = new[]
+        {
+            technical?.Height is { } height ? $"{height}p" : null,
+            technical?.Codec,
+            container
+        };
+        var title = string.Join(" - ", parts.Where(part => !string.IsNullOrWhiteSpace(part)));
+        return title.Length == 0 ? null : title;
+    }
+
+    private static EntityFile? SourceFile(IEntityCard item) =>
+        item.Capabilities
+            .OfType<FilesCapability>()
+            .SelectMany(files => files.Items)
+            .FirstOrDefault(file => file.Role.Equals("source", StringComparison.OrdinalIgnoreCase));
+
+    private static string VirtualItemPath(Guid id) => $"/{id:N}";
+
+    private static long? RuntimeTicksFrom(EntityThumbnail item) {
+        var label = item.Meta.FirstOrDefault(meta => meta.Icon.Equals("duration", StringComparison.OrdinalIgnoreCase))?.Label;
+        if (string.IsNullOrWhiteSpace(label)) {
+            return null;
+        }
+
+        var parts = label.Split(':', StringSplitOptions.TrimEntries);
+        if (parts.Length is < 2 or > 3 || parts.Any(part => !int.TryParse(part, out _))) {
+            return null;
+        }
+
+        var values = parts.Select(int.Parse).ToArray();
+        var duration = values.Length == 2
+            ? new TimeSpan(0, values[0], values[1])
+            : new TimeSpan(values[0], values[1], values[2]);
+        return duration.Ticks;
+    }
+
+    private static string? ContainerFrom(EntityThumbnail item) =>
+        item.Meta
+            .Where(meta => meta.Icon.Equals("video", StringComparison.OrdinalIgnoreCase))
+            .Select(meta => meta.Label)
+            .LastOrDefault(label => !label.Contains("p", StringComparison.OrdinalIgnoreCase));
+
+    private static string? ContainerFromPath(string? path) {
+        if (string.IsNullOrWhiteSpace(path)) {
+            return null;
+        }
+
+        var extension = Path.GetExtension(path);
+        return string.IsNullOrWhiteSpace(extension) ? null : extension.TrimStart('.').ToLowerInvariant();
+    }
+
+    private sealed record ItemContext(
+        Guid? SeriesId,
+        string? SeriesName,
+        Guid? SeasonId,
+        string? SeasonName,
+        int? ParentIndexNumber,
+        Guid? ParentId = null) {
+        public static ItemContext? From(JellyfinBaseItemDto item) =>
+            item.SeriesId is null &&
+            item.SeriesName is null &&
+            item.SeasonId is null &&
+            item.SeasonName is null &&
+            item.ParentIndexNumber is null &&
+            item.ParentId is null
+                ? null
+                : new ItemContext(
+                    item.SeriesId,
+                    item.SeriesName,
+                    item.SeasonId,
+                    item.SeasonName,
+                    item.ParentIndexNumber,
+                    item.ParentId);
+    }
 
     private static IReadOnlyList<JellyfinBaseItemDto> ApplyItemTypeFilter(
         IReadOnlyList<JellyfinBaseItemDto> items,

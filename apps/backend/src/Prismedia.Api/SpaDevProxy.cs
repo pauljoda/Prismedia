@@ -20,6 +20,7 @@ public static class SpaDevProxy {
         "/Users",
         "/UserViews",
         "/Items",
+        "/Shows",
         "/Videos",
         "/Sessions",
         "/UserPlayedItems",

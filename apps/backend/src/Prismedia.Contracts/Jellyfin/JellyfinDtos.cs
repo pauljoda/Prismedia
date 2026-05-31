@@ -134,6 +134,27 @@ public sealed record JellyfinBaseItemDto {
     [JsonPropertyName("MediaType")]
     public string? MediaType { get; init; }
 
+    [JsonPropertyName("Path")]
+    public string? Path { get; init; }
+
+    [JsonPropertyName("LocationType")]
+    public string? LocationType { get; init; }
+
+    [JsonPropertyName("PlayAccess")]
+    public string? PlayAccess { get; init; }
+
+    [JsonPropertyName("Container")]
+    public string? Container { get; init; }
+
+    [JsonPropertyName("MediaSourceCount")]
+    public int? MediaSourceCount { get; init; }
+
+    [JsonPropertyName("SupportsResume")]
+    public bool? SupportsResume { get; init; }
+
+    [JsonPropertyName("SupportsSync")]
+    public bool? SupportsSync { get; init; }
+
     [JsonPropertyName("CollectionType")]
     public string? CollectionType { get; init; }
 
@@ -158,6 +179,18 @@ public sealed record JellyfinBaseItemDto {
     [JsonPropertyName("ParentIndexNumber")]
     public int? ParentIndexNumber { get; init; }
 
+    [JsonPropertyName("SeriesId")]
+    public Guid? SeriesId { get; init; }
+
+    [JsonPropertyName("SeriesName")]
+    public string? SeriesName { get; init; }
+
+    [JsonPropertyName("SeasonId")]
+    public Guid? SeasonId { get; init; }
+
+    [JsonPropertyName("SeasonName")]
+    public string? SeasonName { get; init; }
+
     [JsonPropertyName("ImageTags")]
     public IReadOnlyDictionary<string, string> ImageTags { get; init; } = new Dictionary<string, string>();
 
@@ -171,10 +204,85 @@ public sealed record JellyfinBaseItemDto {
     public JellyfinUserItemDataDto? UserData { get; init; }
 
     [JsonPropertyName("MediaSources")]
-    public IReadOnlyList<object>? MediaSources { get; init; }
+    public IReadOnlyList<JellyfinCatalogMediaSourceDto>? MediaSources { get; init; }
 
     [JsonPropertyName("MediaStreams")]
-    public IReadOnlyList<object>? MediaStreams { get; init; }
+    public IReadOnlyList<JellyfinCatalogMediaStreamDto>? MediaStreams { get; init; }
+}
+
+/// <summary>Minimal Jellyfin-compatible media source embedded in catalog item DTOs.</summary>
+public sealed record JellyfinCatalogMediaSourceDto {
+    [JsonPropertyName("Id")]
+    public required string Id { get; init; }
+
+    [JsonPropertyName("Path")]
+    public required string Path { get; init; }
+
+    [JsonPropertyName("Protocol")]
+    public string Protocol { get; init; } = "File";
+
+    [JsonPropertyName("Type")]
+    public string Type { get; init; } = "Default";
+
+    [JsonPropertyName("Container")]
+    public string? Container { get; init; }
+
+    [JsonPropertyName("Size")]
+    public long? Size { get; init; }
+
+    [JsonPropertyName("Name")]
+    public string? Name { get; init; }
+
+    [JsonPropertyName("RunTimeTicks")]
+    public long? RunTimeTicks { get; init; }
+
+    [JsonPropertyName("IsRemote")]
+    public bool IsRemote { get; init; }
+
+    [JsonPropertyName("SupportsDirectPlay")]
+    public bool SupportsDirectPlay { get; init; } = true;
+
+    [JsonPropertyName("SupportsDirectStream")]
+    public bool SupportsDirectStream { get; init; } = true;
+
+    [JsonPropertyName("SupportsTranscoding")]
+    public bool SupportsTranscoding { get; init; } = true;
+
+    [JsonPropertyName("MediaStreams")]
+    public IReadOnlyList<JellyfinCatalogMediaStreamDto> MediaStreams { get; init; } = [];
+}
+
+/// <summary>Minimal Jellyfin-compatible media stream embedded in catalog item DTOs.</summary>
+public sealed record JellyfinCatalogMediaStreamDto {
+    [JsonPropertyName("Index")]
+    public int Index { get; init; }
+
+    [JsonPropertyName("Type")]
+    public required string Type { get; init; }
+
+    [JsonPropertyName("Codec")]
+    public string? Codec { get; init; }
+
+    [JsonPropertyName("DisplayTitle")]
+    public string? DisplayTitle { get; init; }
+
+    [JsonPropertyName("Width")]
+    public int? Width { get; init; }
+
+    [JsonPropertyName("Height")]
+    public int? Height { get; init; }
+
+    [JsonPropertyName("AverageFrameRate")]
+    public double? AverageFrameRate { get; init; }
+
+    [JsonPropertyName("BitRate")]
+    public int? BitRate { get; init; }
+
+    [JsonPropertyName("IsDefault")]
+    public bool IsDefault { get; init; } = true;
+
+    [JsonPropertyName("IsForced")]
+    public bool IsForced { get; init; }
 }
 
 /// <summary>Minimal Jellyfin-compatible user data DTO backed by Prismedia global state.</summary>

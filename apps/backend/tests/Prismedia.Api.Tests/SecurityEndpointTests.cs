@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Prismedia.Application.Collections;
 using Prismedia.Application.Entities;
+using Prismedia.Application.Jellyfin;
 using Prismedia.Contracts.Collections;
 using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Jellyfin;
@@ -196,6 +197,71 @@ public sealed partial class SecurityEndpointTests : IDisposable {
         Assert.Equal(3, rootItems.TotalRecordCount);
     }
 
+    [Fact]
+    public async Task JellyfinBrowseItemsExposePlayableCatalogShapeForInfuse() {
+        using var factory = CreateFactory(new InfuseBrowseEntityReadService());
+        using var client = factory.CreateClient();
+        var auth = await AuthenticateAsync(client, "Prismedia", TestAuth.ApiKey);
+
+        var videos = await JellyfinGetFromJsonAsync<JellyfinQueryResult<JellyfinBaseItemDto>>(
+            client,
+            $"/Users/{auth.User.Id:D}/Items?ParentId={JellyfinCatalogService.VideosViewId:D}&IncludeItemTypes=Movie&Fields=MediaSources,MediaStreams",
+            auth.AccessToken);
+        var standalone = Assert.Single(videos!.Items);
+
+        Assert.Equal("Standalone Movie", standalone.Name);
+        Assert.Null(standalone.ParentId);
+        Assert.Equal("FileSystem", standalone.LocationType);
+        Assert.Equal("Full", standalone.PlayAccess);
+        Assert.True(standalone.RunTimeTicks > 0);
+        Assert.Single(standalone.MediaSources!);
+        Assert.Single(standalone.MediaStreams!);
+
+        var seriesItems = await JellyfinGetFromJsonAsync<JellyfinQueryResult<JellyfinBaseItemDto>>(
+            client,
+            $"/Users/{auth.User.Id:D}/Items?ParentId={JellyfinCatalogService.SeriesViewId:D}",
+            auth.AccessToken);
+        var series = Assert.Single(seriesItems!.Items);
+
+        Assert.Equal(1, series.ChildCount);
+        Assert.Equal(1, series.RecursiveItemCount);
+
+        var seasons = await JellyfinGetFromJsonAsync<JellyfinQueryResult<JellyfinBaseItemDto>>(
+            client,
+            $"/Shows/{series.Id:D}/Seasons",
+            auth.AccessToken);
+        var season = Assert.Single(seasons!.Items);
+
+        Assert.Equal(InfuseBrowseEntityReadService.SeasonId, season.Id);
+        Assert.Equal("Season 1", season.Name);
+        Assert.Equal(series.Id, season.ParentId);
+        Assert.Equal(1, season.ChildCount);
+
+        var episodes = await JellyfinGetFromJsonAsync<JellyfinQueryResult<JellyfinBaseItemDto>>(
+            client,
+            $"/Users/{auth.User.Id:D}/Items?ParentId={series.Id:D}&Recursive=true&IncludeItemTypes=Episode&Fields=MediaSources,MediaStreams",
+            auth.AccessToken);
+        var episode = Assert.Single(episodes!.Items);
+
+        Assert.Equal("Pilot", episode.Name);
+        Assert.Equal(series.Id, episode.SeriesId);
+        Assert.Equal("The Chair Company", episode.SeriesName);
+        Assert.Equal(InfuseBrowseEntityReadService.SeasonId, episode.SeasonId);
+        Assert.Equal(1, episode.ParentIndexNumber);
+        Assert.Single(episode.MediaSources!);
+        Assert.Single(episode.MediaStreams!);
+
+        var showEpisodes = await JellyfinGetFromJsonAsync<JellyfinQueryResult<JellyfinBaseItemDto>>(
+            client,
+            $"/Shows/{series.Id:D}/Episodes?SeasonId={InfuseBrowseEntityReadService.SeasonId:D}&Fields=MediaSources,MediaStreams",
+            auth.AccessToken);
+        var showEpisode = Assert.Single(showEpisodes!.Items);
+
+        Assert.Equal(episode.Id, showEpisode.Id);
+        Assert.Equal(InfuseBrowseEntityReadService.SeasonId, showEpisode.ParentId);
+        Assert.Single(showEpisode.MediaSources!);
+    }
+
     public void Dispose() {
         if (Directory.Exists(_webRoot)) {
             Directory.Delete(_webRoot, recursive: true);
@@ -324,5 +390,112 @@ public sealed partial class SecurityEndpointTests : IDisposable {
             bool hideNsfw,
             CancellationToken cancellationToken) =>
             Task.FromResult(new CollectionItemsResponse([]));
+    }
+
+    private sealed class InfuseBrowseEntityReadService : IEntityReadService {
+        private static readonly Guid StandaloneId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        private static readonly Guid SeriesId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+        public static readonly Guid SeasonId = Guid.Parse("44444444-4444-4444-4444-444444444444");
+        private static readonly Guid EpisodeId = Guid.Parse("55555555-5555-5555-5555-555555555555");
+
+        public Task<EntityListResponse> ListAsync(
+            string? kind,
+            string? query,
+            string? cursor,
+            bool? hideNsfw,
+            int? limit,
+            CancellationToken cancellationToken,
+            Guid? referencedBy = null,
+            string? relationshipCode = null,
+            string? sort = null,
+            string? sortDir = null,
+            int? seed = null,
+            bool? favorite = null,
+            bool? organized = null,
+            int? ratingMin = null,
+            int? ratingMax = null,
+            bool? unrated = null,
+            string? status = null) {
+            IReadOnlyList<EntityThumbnail> items = kind switch {
+                "video" => [Thumbnail(StandaloneId, "video", "Standalone Movie", null, null), Thumbnail(EpisodeId, "video", "Pilot", SeasonId, 1)],
+                "video-series" => [Thumbnail(SeriesId, "video-series", "The Chair Company", null, null)],
+                _ => []
+            };
+            return Task.FromResult(new EntityListResponse(items, null, items.Count));
+        }
+
+        public Task<EntityCard?> GetAsync(Guid id, bool hideNsfw, CancellationToken cancellationToken) =>
+            Task.FromResult<EntityCard?>(id == StandaloneId ? VideoCard(id, "Standalone Movie", null, null, "/media/standalone.mkv") :
+                id == SeriesId ? SeriesCard() :
+                id == SeasonId ? SeasonCard() :
+                id == EpisodeId ? VideoCard(id, "Pilot", SeasonId, 1, "/media/the-chair-company/s01e01.mkv") :
+                null);
+
+        public Task<EntityThumbnailBatchResponse> GetThumbnailsAsync(
+            IReadOnlyList<Guid> ids,
+            bool hideNsfw,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new EntityThumbnailBatchResponse([]));
+
+        public Task<IEntityCard?> GetDetailAsync(Guid id, string kind, bool hideNsfw, CancellationToken cancellationToken) =>
+            Task.FromResult<IEntityCard?>(null);
+
+        private static EntityCard SeriesCard() =>
+            new() {
+                Id = SeriesId,
+                Kind = "video-series",
+                Title = "The Chair Company",
+                ParentEntityId = null,
+                SortOrder = null,
+                Capabilities = [],
+                ChildrenByKind = [new EntityGroup("video-season", "Seasons", [Thumbnail(SeasonId, "video-season", "Season 1", SeriesId, 1)])],
+                Relationships = []
+            };
+
+        private static EntityCard SeasonCard() =>
+            new() {
+                Id = SeasonId,
+                Kind = "video-season",
+                Title = "Season 1",
+                ParentEntityId = SeriesId,
+                SortOrder = 1,
+                Capabilities = [new PositionCapability([new EntityPosition("season", 1)])],
+                ChildrenByKind = [new EntityGroup("video", "Episodes", [Thumbnail(EpisodeId, "video", "Pilot", SeasonId, 1)])],
+                Relationships = []
+            };
+
+        private static EntityCard VideoCard(Guid id, string title, Guid? parentId, int? sortOrder, string path) =>
+            new() {
+                Id = id,
+                Kind = "video",
+                Title = title,
+                ParentEntityId = parentId,
+                SortOrder = sortOrder,
+                Capabilities = [
+                    new TechnicalCapability(TimeSpan.FromMinutes(42), 1920, 1080, 23.976, 4_000_000, null, null, "h264", "mkv", "matroska"),
+                    new FilesCapability([new EntityFile("source", path, "video/x-matroska")]),
+                    new PositionCapability(sortOrder is null ? [] : [new EntityPosition("episode", sortOrder.Value)])
+                ],
+                ChildrenByKind = [],
+                Relationships = []
+            };
+
+        private static EntityThumbnail Thumbnail(Guid id, string kind, string title, Guid? parentId, int? sortOrder) =>
+            new(
+                id,
+                kind,
+                title,
+                parentId,
+                sortOrder,
+                null,
+                null,
+                "none",
+                null,
+                [],
+                [new EntityThumbnailMeta("duration", "42:00"), new EntityThumbnailMeta("video", "1080p"), new EntityThumbnailMeta("video", "H264"), new EntityThumbnailMeta("video", "mkv")],
+                null,
+                false,
+                false,
+                true);
     }
 }

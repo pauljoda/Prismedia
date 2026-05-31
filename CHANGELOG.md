@@ -82,6 +82,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated web app manifest and mobile browser metadata for home-screen installation and browser UI theme colors.
 
 ### Fixed
+- Fixed Jellyfin-compatible browsing in Infuse so playable videos include media source metadata and the Videos library only shows standalone videos while Series can return episodes recursively.
+- Fixed Infuse playback for Jellyfin-compatible episode files that need Jellyfin's direct stream route even when they are not browser-native containers.
 - Fixed Infuse Jellyfin setup so its virtual library validation request returns Jellyfin-shaped folder data instead of the web app's HTML 404.
 - Fixed Infuse Jellyfin setup so its user-view grouping validation request succeeds after sign-in.
 - Fixed Jellyfin-compatible server setup for clients that probe with POST ping, send the login password as `Password`, or use the legacy user-id authentication route.

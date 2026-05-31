@@ -54,7 +54,7 @@ public sealed class VideoStreamEndpointTests : IDisposable {
     }
 
     [Fact]
-    public async Task StreamEndpointRejectsNonDirectPlayableSources() {
+    public async Task StreamEndpointServesNonBrowserDirectPlayableSourcesForJellyfinClients() {
         var filePath = Path.Combine(_tempDir, "source.mkv");
         await File.WriteAllTextAsync(filePath, "0123456789");
         using var factory = CreateFactory(new FakeVideoSourceService(
@@ -62,9 +62,11 @@ public sealed class VideoStreamEndpointTests : IDisposable {
         using var client = factory.CreateAuthenticatedClient();
 
         using var response = await client.GetAsync($"/Videos/{FakeVideoSourceService.VideoId}/stream");
+        var body = await response.Content.ReadAsStringAsync();
 
-        Assert.Equal(HttpStatusCode.UnsupportedMediaType, response.StatusCode);
-        Assert.Equal("application/json", response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("video/x-matroska", response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("0123456789", body);
     }
 
     public void Dispose() {

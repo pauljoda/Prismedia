@@ -10,8 +10,7 @@ internal static class VideoStreamEndpoints {
             .WithTags("Jellyfin Videos")
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status206PartialContent)
-            .Produces<ApiProblem>(StatusCodes.Status404NotFound)
-            .Produces<ApiProblem>(StatusCodes.Status415UnsupportedMediaType);
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
         routes.MapMethods("/Videos/{itemId:guid}/stream", [HttpMethods.Head], JellyfinPlaybackResults.StreamVideoAsync)
             .ExcludeFromDescription();
