@@ -1,7 +1,30 @@
 # Architecture Cleanup & Consolidation Plan
 
-Status: **proposed** — coordination document for a multi-phase cleanup pass.
+Status: **in progress** — coordination document for a multi-phase cleanup pass.
 Date opened: 2026-05-31.
+
+## Progress (2026-05-31)
+
+- **Phase 1 (typed identifiers): done.** `RelationshipKind` + `FileSourceKind` enums,
+  `JellyfinProtocol` + `JellyfinRoutes`, `ExternalIdProviders`, `MediaContentTypes`, plus a
+  source-scanning drift-guard test. No migrations (codes unchanged).
+- **Phase 2 (codegen): done.** `GET /api/_codegen/codes.json` (dev-only) + `gen-codes.mjs`
+  wired into `api:generate` emit `generated/codes.ts`; `entity-codes.ts`/`app-settings.ts`
+  re-export it. `EntityFileRole` drift reconciled (dead `banner/full/hero/original`
+  branches removed).
+- **Phase 3 (capability/relation tidy): done.** Subtitle extraction timestamp moved onto
+  `CapabilitySubtitles.ExtractedAt` (no migration — column kept on `video_details`).
+  Capability model + credits projection documented in the architecture contract.
+- **Phase 4 (decompose large files): partially done / deferred.** `SettingsService`
+  library-root use cases split into a partial. The remaining splits — the playback hot
+  paths `JellyfinCatalogService` (1381) and `HlsAssetService` (1167),
+  `JellyfinCompatibilityEndpoints`, `EfEntityReadService`, `IdentifyPluginService`,
+  `PluginCatalogService` — are **deferred**. Rationale: partial-class splits do not reduce
+  LOC or sprawl (they add files and spread one class), and mechanically cutting
+  streaming/Jellyfin hot-path code is best done as small, individually-reviewed PRs rather
+  than batched. Recommend doing them one file per PR with `verify`.
+- **Phase 5 (closeout): done.** Audit script clean; full backend suite + frontend
+  typecheck green; LOC delta captured below.
 
 This plan consolidates the audit of the Prismedia backend + frontend and sequences
 the cleanup into ordered, independently-shippable phases. It exists so the work can
