@@ -5,10 +5,12 @@ import packageJson from "../../package.json";
 
 export const APP_VERSION = packageJson.version;
 
-export type ReleaseUpdateStatusKind = "available" | "current" | "unknown";
+export type ReleaseUpdateStatusKind = "available" | "current" | "unknown" | "development";
 
 export interface ReleaseUpdateStatus {
   status: ReleaseUpdateStatusKind;
+  /** Release channel of the running build: dev, alpha, beta, or release. */
+  channel: string;
   localVersion: string;
   latestVersion: string | null;
   latestUrl: string | null;

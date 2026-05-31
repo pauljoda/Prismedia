@@ -14,6 +14,7 @@ using Prismedia.Contracts.System;
 namespace Prismedia.Api.Tests;
 
 public sealed class UpdateCheckEndpointTests : IClassFixture<WebApplicationFactory<Program>> {
+    private const string TagsUrl = "https://ghcr.io/v2/pauljoda/prismedia/tags/list?n=200";
     private readonly WebApplicationFactory<Program> _factory;
 
     public UpdateCheckEndpointTests(WebApplicationFactory<Program> factory) {
@@ -24,9 +25,10 @@ public sealed class UpdateCheckEndpointTests : IClassFixture<WebApplicationFacto
     public async Task UpdateCheckEndpointReturnsNonBlockingStatus() {
         using var factory = CreateFactory(new UpdateCheckResponse(
             "current",
+            "release",
             "1.0.0",
             "1.0.0",
-            "https://github.com/pauljoda/Prismedia/releases/tag/v1.0.0",
+            "https://github.com/pauljoda/Prismedia/pkgs/container/prismedia",
             false,
             DateTimeOffset.UtcNow,
             false,
@@ -39,6 +41,7 @@ public sealed class UpdateCheckEndpointTests : IClassFixture<WebApplicationFacto
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(payload);
         Assert.Equal("current", payload.Status);
+        Assert.Equal("release", payload.Channel);
         Assert.False(payload.UpdateAvailable);
         Assert.Equal("1.0.0", payload.LocalVersion);
     }
@@ -47,9 +50,10 @@ public sealed class UpdateCheckEndpointTests : IClassFixture<WebApplicationFacto
     public async Task UpdateCheckEndpointPassesForceFlagToService() {
         var service = new FakeUpdateCheckService(new UpdateCheckResponse(
             "available",
+            "alpha",
             "1.0.0",
             "1.1.0",
-            "https://github.com/pauljoda/Prismedia/releases/tag/v1.1.0",
+            "https://github.com/pauljoda/Prismedia/pkgs/container/prismedia",
             true,
             DateTimeOffset.UtcNow,
             false,
@@ -91,43 +95,149 @@ public sealed class UpdateCheckEndpointTests : IClassFixture<WebApplicationFacto
     }
 
     [Fact]
-    public async Task UpdateCheckServiceReportsAvailableReleaseFromConfiguredGitHubRepo() {
-        using var handler = new StubHttpMessageHandler(request => {
-            Assert.Equal("https://api.github.com/repos/pauljoda/Prismedia/releases/latest", request.RequestUri?.ToString());
-            return JsonResponse("""
-                {
-                  "tag_name": "v1.1.0",
-                  "html_url": "https://github.com/pauljoda/Prismedia/releases/tag/v1.1.0"
-                }
-                """);
+    public async Task VersionedChannelReportsAvailableFromNewestChannelTag() {
+        using var handler = new StubHttpMessageHandler(request => request.RequestUri?.AbsoluteUri switch {
+            var uri when uri!.StartsWith("https://ghcr.io/token", StringComparison.Ordinal) => TokenResponse(),
+            TagsUrl => TagsResponse("release-1.0.0", "release-1.1.0", "alpha-1.2.0", "dev", "sha-abc1234"),
+            _ => throw new InvalidOperationException($"Unexpected request: {request.RequestUri}"),
         });
-        var service = CreateGitHubService(handler, new Dictionary<string, string?> {
+        var service = CreateGhcrService(handler, new Dictionary<string, string?> {
+            ["PRISMEDIA_CHANNEL"] = "release",
             ["PRISMEDIA_VERSION"] = "1.0.0",
+            ["PRISMEDIA_COMMIT"] = "abc1234",
         });
 
         var result = await service.CheckAsync(force: false, CancellationToken.None);
 
         Assert.Equal("available", result.Status);
+        Assert.Equal("release", result.Channel);
         Assert.True(result.UpdateAvailable);
         Assert.Equal("1.1.0", result.LatestVersion);
-        Assert.Equal("https://github.com/pauljoda/Prismedia/releases/tag/v1.1.0", result.LatestUrl);
-        Assert.False(result.FromCache);
+    }
+
+    [Fact]
+    public async Task VersionedChannelReportsCurrentWhenLatestMatchesLocal() {
+        using var handler = new StubHttpMessageHandler(request => request.RequestUri?.AbsoluteUri switch {
+            var uri when uri!.StartsWith("https://ghcr.io/token", StringComparison.Ordinal) => TokenResponse(),
+            TagsUrl => TagsResponse("alpha-1.2.0", "alpha-1.1.0"),
+            _ => throw new InvalidOperationException($"Unexpected request: {request.RequestUri}"),
+        });
+        var service = CreateGhcrService(handler, new Dictionary<string, string?> {
+            ["PRISMEDIA_CHANNEL"] = "alpha",
+            ["PRISMEDIA_VERSION"] = "1.2.0",
+            ["PRISMEDIA_COMMIT"] = "abc1234",
+        });
+
+        var result = await service.CheckAsync(force: false, CancellationToken.None);
+
+        Assert.Equal("current", result.Status);
+        Assert.False(result.UpdateAvailable);
+        Assert.Equal("1.2.0", result.LatestVersion);
+    }
+
+    [Fact]
+    public async Task VersionedChannelReportsUnknownWhenNoChannelImagesPublished() {
+        using var handler = new StubHttpMessageHandler(request => request.RequestUri?.AbsoluteUri switch {
+            var uri when uri!.StartsWith("https://ghcr.io/token", StringComparison.Ordinal) => TokenResponse(),
+            TagsUrl => TagsResponse("release-1.0.0", "dev"),
+            _ => throw new InvalidOperationException($"Unexpected request: {request.RequestUri}"),
+        });
+        var service = CreateGhcrService(handler, new Dictionary<string, string?> {
+            ["PRISMEDIA_CHANNEL"] = "beta",
+            ["PRISMEDIA_VERSION"] = "1.0.0",
+            ["PRISMEDIA_COMMIT"] = "abc1234",
+        });
+
+        var result = await service.CheckAsync(force: false, CancellationToken.None);
+
+        Assert.Equal("unknown", result.Status);
+        Assert.False(result.UpdateAvailable);
+        Assert.NotNull(result.Error);
+    }
+
+    [Fact]
+    public async Task DevChannelReportsAvailableWhenChannelDigestDiffersFromLocal() {
+        using var handler = new StubHttpMessageHandler(request => {
+            var uri = request.RequestUri?.AbsoluteUri ?? string.Empty;
+            if (uri.StartsWith("https://ghcr.io/token", StringComparison.Ordinal)) return TokenResponse();
+            if (uri.EndsWith("/manifests/dev", StringComparison.Ordinal)) return ManifestResponse("sha256:newbuild");
+            if (uri.EndsWith("/manifests/1.0.0-abc1234", StringComparison.Ordinal)) return ManifestResponse("sha256:oldbuild");
+            throw new InvalidOperationException($"Unexpected request: {uri}");
+        });
+        var service = CreateGhcrService(handler, new Dictionary<string, string?> {
+            ["PRISMEDIA_CHANNEL"] = "dev",
+            ["PRISMEDIA_VERSION"] = "1.0.0",
+            ["PRISMEDIA_COMMIT"] = "abc1234",
+        });
+
+        var result = await service.CheckAsync(force: false, CancellationToken.None);
+
+        Assert.Equal("available", result.Status);
+        Assert.Equal("dev", result.Channel);
+        Assert.True(result.UpdateAvailable);
+        Assert.Null(result.LatestVersion);
+        Assert.NotNull(result.LatestUrl);
+    }
+
+    [Fact]
+    public async Task DevChannelReportsCurrentWhenChannelDigestMatchesLocal() {
+        using var handler = new StubHttpMessageHandler(request => {
+            var uri = request.RequestUri?.AbsoluteUri ?? string.Empty;
+            if (uri.StartsWith("https://ghcr.io/token", StringComparison.Ordinal)) return TokenResponse();
+            if (uri.EndsWith("/manifests/dev", StringComparison.Ordinal)) return ManifestResponse("sha256:samebuild");
+            if (uri.EndsWith("/manifests/1.0.0-abc1234", StringComparison.Ordinal)) return ManifestResponse("sha256:samebuild");
+            throw new InvalidOperationException($"Unexpected request: {uri}");
+        });
+        var service = CreateGhcrService(handler, new Dictionary<string, string?> {
+            ["PRISMEDIA_CHANNEL"] = "dev",
+            ["PRISMEDIA_VERSION"] = "1.0.0",
+            ["PRISMEDIA_COMMIT"] = "abc1234",
+        });
+
+        var result = await service.CheckAsync(force: false, CancellationToken.None);
+
+        Assert.Equal("current", result.Status);
+        Assert.False(result.UpdateAvailable);
+    }
+
+    [Fact]
+    public async Task LocalBuildWithoutCommitReportsDevelopmentWithoutNetworkCalls() {
+        var calls = 0;
+        using var handler = new StubHttpMessageHandler(_ => {
+            calls++;
+            throw new InvalidOperationException("The registry must not be contacted for local builds.");
+        });
+        var service = CreateGhcrService(handler, new Dictionary<string, string?> {
+            ["PRISMEDIA_CHANNEL"] = "dev",
+            ["PRISMEDIA_VERSION"] = "1.0.0",
+            // No PRISMEDIA_COMMIT -> local build.
+        });
+
+        var result = await service.CheckAsync(force: false, CancellationToken.None);
+
+        Assert.Equal("development", result.Status);
+        Assert.Equal("dev", result.Channel);
+        Assert.False(result.UpdateAvailable);
+        Assert.Equal(0, calls);
     }
 
     [Fact]
     public async Task UpdateCheckServiceCachesSuccessfulResultsUntilForced() {
-        var calls = 0;
-        using var handler = new StubHttpMessageHandler(_ => {
-            calls++;
-            return JsonResponse("""
-                {
-                  "tag_name": "v1.0.0",
-                  "html_url": "https://github.com/pauljoda/Prismedia/releases/tag/v1.0.0"
-                }
-                """);
+        var tagCalls = 0;
+        using var handler = new StubHttpMessageHandler(request => {
+            var uri = request.RequestUri?.AbsoluteUri ?? string.Empty;
+            if (uri.StartsWith("https://ghcr.io/token", StringComparison.Ordinal)) return TokenResponse();
+            if (uri == TagsUrl) {
+                tagCalls++;
+                return TagsResponse("release-1.0.0");
+            }
+
+            throw new InvalidOperationException($"Unexpected request: {uri}");
         });
-        var service = CreateGitHubService(handler, new Dictionary<string, string?> {
+        var service = CreateGhcrService(handler, new Dictionary<string, string?> {
+            ["PRISMEDIA_CHANNEL"] = "release",
             ["PRISMEDIA_VERSION"] = "1.0.0",
+            ["PRISMEDIA_COMMIT"] = "abc1234",
         });
 
         var first = await service.CheckAsync(force: false, CancellationToken.None);
@@ -137,7 +247,7 @@ public sealed class UpdateCheckEndpointTests : IClassFixture<WebApplicationFacto
         Assert.False(first.FromCache);
         Assert.True(second.FromCache);
         Assert.False(third.FromCache);
-        Assert.Equal(2, calls);
+        Assert.Equal(2, tagCalls);
     }
 
     [Theory]
@@ -148,7 +258,7 @@ public sealed class UpdateCheckEndpointTests : IClassFixture<WebApplicationFacto
         string latest,
         string local,
         int expectedSign) {
-        var comparison = GitHubReleaseUpdateCheckService.CompareVersions(latest, local);
+        var comparison = GhcrUpdateCheckService.CompareVersions(latest, local);
 
         Assert.NotNull(comparison);
         Assert.Equal(expectedSign, Math.Sign(comparison.Value));
@@ -166,17 +276,33 @@ public sealed class UpdateCheckEndpointTests : IClassFixture<WebApplicationFacto
         })
         .WithTestAuth();
 
-    private static GitHubReleaseUpdateCheckService CreateGitHubService(
+    private static GhcrUpdateCheckService CreateGhcrService(
         HttpMessageHandler handler,
         IReadOnlyDictionary<string, string?> settings) {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(settings)
             .Build();
-        return new GitHubReleaseUpdateCheckService(
+        return new GhcrUpdateCheckService(
             new StubHttpClientFactory(handler),
             configuration,
             new StubWebHostEnvironment(Directory.GetCurrentDirectory()),
-            NullLogger<GitHubReleaseUpdateCheckService>.Instance);
+            NullLogger<GhcrUpdateCheckService>.Instance);
+    }
+
+    private static HttpResponseMessage TokenResponse() =>
+        JsonResponse("""{"token":"test-token"}""");
+
+    private static HttpResponseMessage TagsResponse(params string[] tags) {
+        var quoted = string.Join(",", tags.Select(tag => $"\"{tag}\""));
+        return JsonResponse($$"""{"name":"pauljoda/prismedia","tags":[{{quoted}}]}""");
+    }
+
+    private static HttpResponseMessage ManifestResponse(string digest) {
+        var response = new HttpResponseMessage(HttpStatusCode.OK) {
+            Content = new StringContent("{}", Encoding.UTF8, "application/vnd.oci.image.index.v1+json"),
+        };
+        response.Headers.TryAddWithoutValidation("Docker-Content-Digest", digest);
+        return response;
     }
 
     private static HttpResponseMessage JsonResponse(string content) =>

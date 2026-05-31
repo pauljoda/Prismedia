@@ -42,6 +42,12 @@
   const brandLogoSize = $derived(isExpanded ? 40 : 34);
   const brandLogoNsfw = $derived(nsfw.mode === "show");
   const updateAvailable = $derived(releaseStatus?.updateAvailable === true);
+  // Surface the running build's channel (dev/alpha/beta); release is the default and stays clean.
+  const channelLabel = $derived.by(() => {
+    const channel = releaseStatus?.channel?.trim().toLowerCase();
+    if (!channel || channel === "release") return null;
+    return channel;
+  });
   const pathname = $derived(page.url.pathname);
   const docsHref = "https://pauljoda.github.io/Prismedia/docs/users/quick-start";
 
@@ -411,7 +417,12 @@
           )}
         >
           <span class="text-mono-sm text-text-disabled transition-colors group-hover:text-text-accent">
-            v{APP_VERSION}
+            v{releaseStatus?.localVersion ?? APP_VERSION}
+            {#if channelLabel}
+              <span
+                class="ml-1 rounded-xs bg-surface-2 px-1 text-mono-sm text-[0.6rem] uppercase tracking-wide text-text-muted"
+              >{channelLabel}</span>
+            {/if}
             {#if updateAvailable}
               <span class="sr-only">Update available</span>
             {/if}

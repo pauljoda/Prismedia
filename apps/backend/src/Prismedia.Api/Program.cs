@@ -53,11 +53,11 @@ builder.Services.AddOpenApi(options => {
     };
 });
 builder.Services.AddHealthChecks();
-builder.Services.AddHttpClient(GitHubReleaseUpdateCheckService.HttpClientName, client => {
-    client.Timeout = TimeSpan.FromSeconds(3);
+builder.Services.AddHttpClient(GhcrUpdateCheckService.HttpClientName, client => {
+    client.Timeout = TimeSpan.FromSeconds(5);
     client.DefaultRequestHeaders.UserAgent.ParseAdd("Prismedia-UpdateCheck/1.0");
 });
-builder.Services.AddSingleton<IUpdateCheckService, GitHubReleaseUpdateCheckService>();
+builder.Services.AddSingleton<IUpdateCheckService, GhcrUpdateCheckService>();
 builder.Services.AddCors(options => {
     options.AddPolicy("PrismediaDevCors", policy => {
         policy

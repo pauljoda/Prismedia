@@ -117,15 +117,19 @@
   let dialogRef: HTMLDialogElement | null = $state(null);
 
   const blocks = $derived(content ? parseChangelog(content) : []);
+  // Dev builds advertise updates by digest, so latestVersion is null while latestUrl is present.
   const updateAvailable = $derived(
-    releaseStatus?.updateAvailable === true && !!releaseStatus.latestVersion && !!releaseStatus.latestUrl,
+    releaseStatus?.updateAvailable === true && !!releaseStatus.latestUrl,
+  );
+  const updateLabel = $derived(
+    releaseStatus?.latestVersion ? `v${releaseStatus.latestVersion}` : "New build",
   );
   const releaseStatusLabel = $derived.by(() => {
-    if (checkingRelease) return "Checking GitHub";
-    if (updateAvailable) return `v${releaseStatus?.latestVersion} available`;
-    if (releaseStatus?.status === "current") return "Up to date";
-    if (releaseStatus?.status === "unknown") return "Release status unavailable";
-    return "Release status pending";
+    if (checkingRelease) return "Checking registry";
+    if (updateAvailable) return `${updateLabel} available`;
+    if (releaseStatus?.status === "current" || releaseStatus?.status === "development") return "Up to date";
+    if (releaseStatus?.status === "unknown") return "Update status unavailable";
+    return "Update status pending";
   });
 
   async function loadChangelog() {
@@ -270,9 +274,9 @@
         class="update-banner mb-4 grid gap-1 px-3.5 py-3 text-sm transition hover:border-border-accent-strong hover:shadow-[var(--shadow-glow-accent-strong)] sm:grid-cols-[1fr_auto] sm:items-center"
       >
         <span class="font-heading font-semibold text-text-primary">
-          Update available: v{releaseStatus?.latestVersion}
+          Update available: {updateLabel}
         </span>
-        <span class="font-mono text-[0.68rem] uppercase tracking-[0.16em] text-text-accent">Open release</span>
+        <span class="font-mono text-[0.68rem] uppercase tracking-[0.16em] text-text-accent">Open package</span>
       </a>
     {/if}
 

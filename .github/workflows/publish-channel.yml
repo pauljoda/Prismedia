@@ -44,6 +44,8 @@ jobs:
           version="$(node -p "require('./package.json').version")"
           short_sha="${GITHUB_SHA::7}"
           channel="${{ inputs.channel }}"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${short_sha}" >> "$GITHUB_OUTPUT"
           {
             echo "tags<<EOF"
             echo "${IMAGE_NAME}:${channel}"
@@ -66,5 +68,9 @@ jobs:
           push: true
           platforms: linux/amd64
           tags: ${{ steps.tags.outputs.tags }}
+          build-args: |
+            PRISMEDIA_CHANNEL=${{ inputs.channel }}
+            PRISMEDIA_VERSION=${{ steps.tags.outputs.version }}
+            PRISMEDIA_COMMIT=${{ steps.tags.outputs.short_sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

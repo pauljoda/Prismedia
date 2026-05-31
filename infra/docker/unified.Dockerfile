@@ -132,6 +132,15 @@ ENV PRISMEDIA_PHASH_BIN=/usr/local/bin/prismedia-phash
 
 WORKDIR /app
 
+# Build identity baked in by CI so the running app knows its channel/version/commit and can
+# ask GHCR whether a newer image exists on the same channel.
+ARG PRISMEDIA_CHANNEL=dev
+ARG PRISMEDIA_VERSION=0.0.0
+ARG PRISMEDIA_COMMIT=unknown
+ENV PRISMEDIA_CHANNEL=${PRISMEDIA_CHANNEL}
+ENV PRISMEDIA_VERSION=${PRISMEDIA_VERSION}
+ENV PRISMEDIA_COMMIT=${PRISMEDIA_COMMIT}
+
 # Explicit path so the changelog API route never has to guess
 ENV CHANGELOG_PATH=/app/CHANGELOG.md
 ENV PUBLIC_APP_URL=http://localhost:8008

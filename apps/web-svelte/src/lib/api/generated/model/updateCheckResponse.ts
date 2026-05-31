@@ -7,6 +7,7 @@
 
 export interface UpdateCheckResponse {
   status: string;
+  channel: string;
   localVersion: string;
   /** @nullable */
   latestVersion: string | null;
