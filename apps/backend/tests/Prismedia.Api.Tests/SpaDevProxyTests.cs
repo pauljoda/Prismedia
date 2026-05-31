@@ -8,6 +8,8 @@ public sealed class SpaDevProxyTests {
     [InlineData("/assets/videos/1/thumb.jpg", true)]
     [InlineData("/Videos/0d42e2e4-b181-4392-aae8-3c2184422a97/stream", true)]
     [InlineData("/Videos/ActiveEncodings", true)]
+    [InlineData("/Library/VirtualFolders", true)]
+    [InlineData("/library", false)]
     [InlineData("/videos", false)]
     [InlineData("/videos/0d42e2e4-b181-4392-aae8-3c2184422a97", false)]
     public void BackendRouteClassifierKeepsLowercaseSpaRoutesOnVite(string path, bool expected) {

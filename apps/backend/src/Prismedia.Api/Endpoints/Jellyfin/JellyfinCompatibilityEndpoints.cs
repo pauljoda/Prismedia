@@ -13,6 +13,7 @@ public static class JellyfinCompatibilityEndpoints {
         routes.MapJellyfinUserEndpoints();
         routes.MapJellyfinCatalogEndpoints();
         routes.MapJellyfinImageEndpoints();
+        routes.MapJellyfinLibraryEndpoints();
         routes.MapJellyfinCompatibilityNoOps();
         return routes;
     }
@@ -271,6 +272,24 @@ public static class JellyfinCompatibilityEndpoints {
             .ExcludeFromDescription();
     }
 
+    private static void MapJellyfinLibraryEndpoints(this IEndpointRouteBuilder routes) {
+        routes.MapGet("/Library/VirtualFolders", async (
+            PrismediaSecurityService security,
+            JellyfinCatalogService catalog,
+            CancellationToken cancellationToken) => {
+            var state = await security.EnsureSecurityAsync(cancellationToken);
+            var folders = catalog.GetUserViews(state.ServerId.ToString("N"))
+                .Items
+                .Select(ToVirtualFolder)
+                .ToArray();
+            return Results.Ok(folders);
+        })
+            .WithTags("Jellyfin Library")
+            .WithName("GetJellyfinVirtualFolders")
+            .WithSummary("Gets Jellyfin-compatible virtual library folders.")
+            .Produces<IReadOnlyList<JellyfinVirtualFolderInfoDto>>();
+    }
+
     private static void MapJellyfinCompatibilityNoOps(this IEndpointRouteBuilder routes) {
         routes.MapPost("/Sessions/Capabilities", () => Results.NoContent())
             .WithTags("Jellyfin Sessions")
@@ -340,6 +359,17 @@ public static class JellyfinCompatibilityEndpoints {
             .ToArray();
         return Results.Ok(options);
     }
+
+    private static JellyfinVirtualFolderInfoDto ToVirtualFolder(JellyfinBaseItemDto item) =>
+        new(
+            item.Name,
+            [],
+            VirtualFolderCollectionType(item),
+            new JellyfinLibraryOptionsDto(),
+            item.Id.ToString("N"),
+            item.Id.ToString("N"),
+            RefreshProgress: null,
+            RefreshStatus: null);
 
     private static async Task<IResult> GetItemsAsync(
         HttpContext httpContext,
@@ -590,6 +620,13 @@ public static class JellyfinCompatibilityEndpoints {
             DisplayMissingEpisodes: false,
             GroupedFolders: [],
             SubtitleMode: "Default");
+
+    private static string VirtualFolderCollectionType(JellyfinBaseItemDto item) =>
+        item.CollectionType switch {
+            "tvshows" => "tvshows",
+            "boxsets" => "boxsets",
+            _ => "movies"
+        };
 
     private static IReadOnlyList<string> SplitCsv(string? value) =>
         string.IsNullOrWhiteSpace(value)

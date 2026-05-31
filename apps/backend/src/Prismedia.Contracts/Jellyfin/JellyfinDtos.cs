@@ -196,6 +196,35 @@ public sealed record JellyfinSpecialViewOptionDto(
     [property: JsonPropertyName("Name")] string? Name,
     [property: JsonPropertyName("Id")] string? Id);
 
+/// <summary>Jellyfin-compatible virtual folder information.</summary>
+public sealed record JellyfinVirtualFolderInfoDto(
+    [property: JsonPropertyName("Name")] string Name,
+    [property: JsonPropertyName("Locations")] IReadOnlyList<string> Locations,
+    [property: JsonPropertyName("CollectionType")] string CollectionType,
+    [property: JsonPropertyName("LibraryOptions")] JellyfinLibraryOptionsDto LibraryOptions,
+    [property: JsonPropertyName("ItemId")] string ItemId,
+    [property: JsonPropertyName("PrimaryImageItemId")] string PrimaryImageItemId,
+    [property: JsonPropertyName("RefreshProgress")] double? RefreshProgress,
+    [property: JsonPropertyName("RefreshStatus")] string? RefreshStatus);
+
+/// <summary>Minimal Jellyfin-compatible library options for virtual folders.</summary>
+public sealed record JellyfinLibraryOptionsDto {
+    [JsonPropertyName("Enabled")]
+    public bool Enabled { get; init; } = true;
+
+    [JsonPropertyName("EnablePhotos")]
+    public bool EnablePhotos { get; init; }
+
+    [JsonPropertyName("EnableRealtimeMonitor")]
+    public bool EnableRealtimeMonitor { get; init; }
+
+    [JsonPropertyName("PathInfos")]
+    public IReadOnlyList<object> PathInfos { get; init; } = [];
+
+    [JsonPropertyName("TypeOptions")]
+    public IReadOnlyList<object> TypeOptions { get; init; } = [];
+}
+
 /// <summary>Minimal display preferences DTO accepted by Jellyfin clients.</summary>
 public sealed record JellyfinDisplayPreferencesDto {
     [JsonPropertyName("Id")]

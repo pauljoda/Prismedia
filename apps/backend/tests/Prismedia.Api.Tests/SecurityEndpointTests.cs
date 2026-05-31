@@ -138,6 +138,15 @@ public sealed partial class SecurityEndpointTests : IDisposable {
 
         Assert.NotNull(groupingOptions);
         Assert.Equal(["Collections", "Series", "Videos"], groupingOptions.Select(item => item.Name ?? "").ToArray());
+
+        var virtualFolders = await JellyfinGetFromJsonAsync<IReadOnlyList<JellyfinVirtualFolderInfoDto>>(
+            client,
+            "/Library/VirtualFolders",
+            auth.AccessToken);
+
+        Assert.NotNull(virtualFolders);
+        Assert.Equal(["Videos", "Series", "Collections"], virtualFolders.Select(item => item.Name).ToArray());
+        Assert.All(virtualFolders, folder => Assert.True(folder.LibraryOptions.Enabled));
     }
 
     [Fact]

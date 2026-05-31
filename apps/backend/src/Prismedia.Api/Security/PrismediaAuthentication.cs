@@ -27,6 +27,7 @@ internal static class PrismediaAuthentication {
         "/Sessions",
         "/UserPlayedItems",
         "/UserItems",
+        "/Library",
         "/Branding",
         "/DisplayPreferences"
     ];
@@ -169,7 +170,10 @@ internal static class PrismediaAuthentication {
 
     private static bool IsJellyfinRequest(PathString requestPath) {
         var path = requestPath.Value ?? string.Empty;
-        return JellyfinPrefixes.Any(prefix => path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+        return path.StartsWith("/Library", StringComparison.Ordinal) ||
+            JellyfinPrefixes
+                .Where(prefix => !string.Equals(prefix, "/Library", StringComparison.Ordinal))
+                .Any(prefix => path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
     }
 
     private static bool IsPublicJellyfinRoute(HttpRequest request) {
