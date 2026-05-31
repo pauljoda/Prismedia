@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Plugins;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
@@ -70,7 +71,7 @@ public sealed partial class IdentifyMatchHintResolver {
 
     private static bool TryParseProviderId(string provider, IReadOnlyList<string> urls, out string id) {
         id = string.Empty;
-        if (!string.Equals(provider, "tmdb", StringComparison.OrdinalIgnoreCase)) {
+        if (!string.Equals(provider, ExternalIdProviders.Tmdb, StringComparison.OrdinalIgnoreCase)) {
             return false;
         }
 

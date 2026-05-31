@@ -1219,10 +1219,10 @@ public sealed class JellyfinCatalogService {
 
     private static string ProviderLabel(string provider) =>
         provider.Trim().ToLowerInvariant() switch {
-            "anidb" => "AniDB",
-            "imdb" => "IMDb",
-            "tmdb" => "TMDb",
-            "tvdb" => "TVDb",
+            ExternalIdProviders.AniDb => "AniDB",
+            ExternalIdProviders.Imdb => "IMDb",
+            ExternalIdProviders.Tmdb => "TMDb",
+            ExternalIdProviders.Tvdb => "TVDb",
             _ => TitleLabel(provider)
         };
 
