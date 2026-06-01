@@ -800,8 +800,8 @@ public sealed class ScanJobHandlerTests {
         var discovery = new RecordingFileDiscovery(
             directoryGroups: new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase) {
                 ["/media/images"] = ["/media/images/root.png"],
-                ["/media/images/Gallery"] = ["/media/images/Gallery/a.png"],
-                ["/media/images/Gallery/A secondGallery"] = ["/media/images/Gallery/A secondGallery/b.png"]
+                ["/media/images/Gallery"] = ["/media/images/Gallery/a.png", "/media/images/Gallery/a2.png"],
+                ["/media/images/Gallery/A secondGallery"] = ["/media/images/Gallery/A secondGallery/b.png", "/media/images/Gallery/A secondGallery/b2.png"]
             });
         var handler = new ScanGalleryJobHandler(
             NullLogger<ScanGalleryJobHandler>.Instance,
@@ -840,7 +840,15 @@ public sealed class ScanJobHandlerTests {
                 Assert.Equal(nestedGallery.Id, image.GalleryEntityId);
             },
             image => {
+                Assert.Equal("/media/images/Gallery/A secondGallery/b2.png", image.FilePath);
+                Assert.Equal(nestedGallery.Id, image.GalleryEntityId);
+            },
+            image => {
                 Assert.Equal("/media/images/Gallery/a.png", image.FilePath);
+                Assert.Equal(gallery.Id, image.GalleryEntityId);
+            },
+            image => {
+                Assert.Equal("/media/images/Gallery/a2.png", image.FilePath);
                 Assert.Equal(gallery.Id, image.GalleryEntityId);
             },
             image => {
@@ -849,10 +857,158 @@ public sealed class ScanJobHandlerTests {
             });
         Assert.Equal(["/media/images/root.png"], persistence.ValidLooseImagePaths);
         Assert.Equal(["/media/images/Gallery", "/media/images/Gallery/A secondGallery"], persistence.ValidGalleryPaths);
-        Assert.Equal(["/media/images/Gallery/a.png"], persistence.ValidImagePathsByGalleryId[gallery.Id]);
-        Assert.Equal(["/media/images/Gallery/A secondGallery/b.png"], persistence.ValidImagePathsByGalleryId[nestedGallery.Id]);
+        Assert.Equal(["/media/images/Gallery/a.png", "/media/images/Gallery/a2.png"], persistence.ValidImagePathsByGalleryId[gallery.Id]);
+        Assert.Equal(["/media/images/Gallery/A secondGallery/b.png", "/media/images/Gallery/A secondGallery/b2.png"], persistence.ValidImagePathsByGalleryId[nestedGallery.Id]);
         Assert.Equal([root.Id], persistence.LastScannedRootIds);
     }
+
+    [Fact]
+    public async Task GalleryScanCollapsesSingleImageLeafIntoParentGallery() {
+        var root = new LibraryRootData(
+            Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            "/media/images",
+            "Images",
+            Enabled: true,
+            Recursive: true,
+            ScanVideos: false,
+            ScanImages: true,
+            ScanAudio: false,
+            ScanBooks: false,
+            IsNsfw: false);
+        var persistence = new FakeScanPersistence([root]) {
+            Settings = DisabledGeneratedWorkSettings
+        };
+        // "Set" is a real gallery (two images); "Solo" holds a single image and no nested gallery, so
+        // it collapses and its lone image is reparented to "Set".
+        var discovery = new RecordingFileDiscovery(
+            directoryGroups: new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase) {
+                ["/media/images/Set"] = ["/media/images/Set/cover.png", "/media/images/Set/p2.png"],
+                ["/media/images/Set/Solo"] = ["/media/images/Set/Solo/only.png"]
+            });
+        var handler = new ScanGalleryJobHandler(
+            NullLogger<ScanGalleryJobHandler>.Instance,
+            discovery,
+            persistence,
+            persistence,
+            persistence);
+        var job = GalleryJob(root);
+
+        await handler.HandleAsync(new JobContext(job, new RecordingJobQueue()), CancellationToken.None);
+
+        var setGallery = Assert.Single(persistence.UpsertedGalleries);
+        Assert.Equal("/media/images/Set", setGallery.FolderPath);
+        Assert.DoesNotContain(persistence.UpsertedGalleries, gallery => gallery.FolderPath == "/media/images/Set/Solo");
+
+        var solo = Assert.Single(persistence.UpsertedImages, image => image.FilePath == "/media/images/Set/Solo/only.png");
+        Assert.Equal(setGallery.Id, solo.GalleryEntityId);
+        Assert.Equal(2, solo.SortOrder);
+
+        Assert.Equal(["/media/images/Set"], persistence.ValidGalleryPaths);
+        Assert.Equal(
+            ["/media/images/Set/cover.png", "/media/images/Set/p2.png", "/media/images/Set/Solo/only.png"],
+            persistence.ValidImagePathsByGalleryId[setGallery.Id]);
+        Assert.Empty(persistence.ValidLooseImagePaths);
+    }
+
+    [Fact]
+    public async Task GalleryScanCollapsesSingleImageFolderUnderRootIntoLooseImage() {
+        var root = new LibraryRootData(
+            Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            "/media/images",
+            "Images",
+            Enabled: true,
+            Recursive: true,
+            ScanVideos: false,
+            ScanImages: true,
+            ScanAudio: false,
+            ScanBooks: false,
+            IsNsfw: false);
+        var persistence = new FakeScanPersistence([root]) {
+            Settings = DisabledGeneratedWorkSettings
+        };
+        // "Solo" is directly under the root and holds a single image with no surviving ancestor
+        // gallery, so the image becomes loose.
+        var discovery = new RecordingFileDiscovery(
+            directoryGroups: new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase) {
+                ["/media/images/Solo"] = ["/media/images/Solo/only.png"]
+            });
+        var handler = new ScanGalleryJobHandler(
+            NullLogger<ScanGalleryJobHandler>.Instance,
+            discovery,
+            persistence,
+            persistence,
+            persistence);
+        var job = GalleryJob(root);
+
+        await handler.HandleAsync(new JobContext(job, new RecordingJobQueue()), CancellationToken.None);
+
+        Assert.Empty(persistence.UpsertedGalleries);
+        Assert.Empty(persistence.ValidGalleryPaths);
+        var solo = Assert.Single(persistence.UpsertedImages);
+        Assert.Equal("/media/images/Solo/only.png", solo.FilePath);
+        Assert.Null(solo.GalleryEntityId);
+        Assert.Equal(["/media/images/Solo/only.png"], persistence.ValidLooseImagePaths);
+    }
+
+    [Fact]
+    public async Task GalleryScanDoesNotCollapseSingleImageFolderWithChildGallery() {
+        var root = new LibraryRootData(
+            Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            "/media/images",
+            "Images",
+            Enabled: true,
+            Recursive: true,
+            ScanVideos: false,
+            ScanImages: true,
+            ScanAudio: false,
+            ScanBooks: false,
+            IsNsfw: false);
+        var persistence = new FakeScanPersistence([root]) {
+            Settings = DisabledGeneratedWorkSettings
+        };
+        // "Set" holds one image but also a child folder with images, so it is not a leaf and must
+        // remain a gallery rather than collapsing its single direct image.
+        var discovery = new RecordingFileDiscovery(
+            directoryGroups: new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase) {
+                ["/media/images/Set"] = ["/media/images/Set/one.png"],
+                ["/media/images/Set/Sub"] = ["/media/images/Set/Sub/leaf.png", "/media/images/Set/Sub/leaf2.png"]
+            });
+        var handler = new ScanGalleryJobHandler(
+            NullLogger<ScanGalleryJobHandler>.Instance,
+            discovery,
+            persistence,
+            persistence,
+            persistence);
+        var job = GalleryJob(root);
+
+        await handler.HandleAsync(new JobContext(job, new RecordingJobQueue()), CancellationToken.None);
+
+        var setGallery = Assert.Single(persistence.UpsertedGalleries, gallery => gallery.FolderPath == "/media/images/Set");
+        var subGallery = Assert.Single(persistence.UpsertedGalleries, gallery => gallery.FolderPath == "/media/images/Set/Sub");
+        Assert.Equal(setGallery.Id, subGallery.ParentGalleryEntityId);
+        Assert.Equal(["/media/images/Set", "/media/images/Set/Sub"], persistence.ValidGalleryPaths);
+
+        var directImage = Assert.Single(persistence.UpsertedImages, image => image.FilePath == "/media/images/Set/one.png");
+        Assert.Equal(setGallery.Id, directImage.GalleryEntityId);
+        Assert.Equal(["/media/images/Set/one.png"], persistence.ValidImagePathsByGalleryId[setGallery.Id]);
+        Assert.Equal(
+            ["/media/images/Set/Sub/leaf.png", "/media/images/Set/Sub/leaf2.png"],
+            persistence.ValidImagePathsByGalleryId[subGallery.Id]);
+    }
+
+    private static JobRunSnapshot GalleryJob(LibraryRootData root) => new(
+        Guid.NewGuid(),
+        JobType.ScanGallery,
+        JobRunStatus.Running,
+        Progress: 0,
+        Message: null,
+        PayloadJson: $$"""{"libraryRootId":"{{root.Id}}"}""",
+        TargetEntityKind: "library-root",
+        TargetEntityId: root.Id.ToString(),
+        TargetLabel: root.Label,
+        CreatedAt: DateTimeOffset.UtcNow,
+        StartedAt: DateTimeOffset.UtcNow,
+        FinishedAt: null);
 
     [Fact]
     public async Task AudioScanTreatsRootTracksAsLooseAndFoldersAsNestedLibraries() {

@@ -753,6 +753,63 @@ public sealed class LibraryScanPersistenceServiceTests {
     }
 
     [Fact]
+    public async Task RescanMigratesSingleImageGalleryByReparentingThenRemovingGallery() {
+        await using var db = CreateContext();
+        var service = new LibraryScanPersistenceService(db);
+        var rootId = Guid.Parse("a1a1a1a1-a1a1-a1a1-a1a1-a1a1a1a1a1a1");
+
+        // Seed the library as it was scanned under the old rule: "Solo" is a one-image gallery nested
+        // under the surviving "Set" gallery.
+        var setGalleryId = await service.UpsertGalleryAsync(
+            "/media/images/Set", "Set", rootId, parentGalleryEntityId: null, sortOrder: 0, isNsfw: false, CancellationToken.None);
+        var soloGalleryId = await service.UpsertGalleryAsync(
+            "/media/images/Set/Solo", "Solo", rootId, setGalleryId, sortOrder: 0, isNsfw: false, CancellationToken.None);
+        var soloImageId = await service.UpsertImageAsync(
+            "/media/images/Set/Solo/only.jpg", "only", soloGalleryId, sizeBytes: 12, sortOrder: 0, isNsfw: false, CancellationToken.None);
+
+        // The new scan reparents the lone image to the survivor first, then drops the collapsed folder
+        // from the valid gallery set.
+        await service.UpsertImageAsync(
+            "/media/images/Set/Solo/only.jpg", "only", setGalleryId, sizeBytes: 12, sortOrder: 1, isNsfw: false, CancellationToken.None);
+        var removed = await service.RemoveStaleGalleriesInRootAsync(
+            rootId,
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "/media/images/Set" },
+            CancellationToken.None);
+
+        Assert.Equal(1, removed);
+        Assert.False(await db.Entities.AnyAsync(entity => entity.Id == soloGalleryId));
+        var image = await db.Entities.SingleAsync(entity => entity.Id == soloImageId);
+        Assert.Equal(setGalleryId, image.ParentEntityId);
+        Assert.True(await db.Entities.AnyAsync(entity => entity.Id == setGalleryId));
+    }
+
+    [Fact]
+    public async Task RescanMigratesSingleImageGalleryToLooseImage() {
+        await using var db = CreateContext();
+        var service = new LibraryScanPersistenceService(db);
+        var rootId = Guid.Parse("b2b2b2b2-b2b2-b2b2-b2b2-b2b2b2b2b2b2");
+
+        // Seed a one-image gallery directly under the root with no surviving ancestor.
+        var soloGalleryId = await service.UpsertGalleryAsync(
+            "/media/images/Solo", "Solo", rootId, parentGalleryEntityId: null, sortOrder: 0, isNsfw: false, CancellationToken.None);
+        var soloImageId = await service.UpsertImageAsync(
+            "/media/images/Solo/only.jpg", "only", soloGalleryId, sizeBytes: 12, sortOrder: 0, isNsfw: false, CancellationToken.None);
+
+        // The new scan makes the image loose, then removes the now-empty gallery folder.
+        await service.UpsertImageAsync(
+            "/media/images/Solo/only.jpg", "only", galleryEntityId: null, sizeBytes: 12, sortOrder: 0, isNsfw: false, CancellationToken.None);
+        var removed = await service.RemoveStaleGalleriesInRootAsync(
+            rootId,
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+            CancellationToken.None);
+
+        Assert.Equal(1, removed);
+        Assert.False(await db.Entities.AnyAsync(entity => entity.Id == soloGalleryId));
+        var image = await db.Entities.SingleAsync(entity => entity.Id == soloImageId);
+        Assert.Null(image.ParentEntityId);
+    }
+
+    [Fact]
     public async Task RemoveStaleAudioLibrariesInRootRemovesStaleFolderSubtree() {
         await using var db = CreateContext();
         var service = new LibraryScanPersistenceService(db);
