@@ -80,6 +80,7 @@ export const JOB_TYPE = {
   generateImageThumbnail: "generate-image-thumbnail",
   generateGridThumbnail: "generate-grid-thumbnail",
   generateBookPageThumbnail: "generate-book-page-thumbnail",
+  generateBookCoverThumbnail: "generate-book-cover-thumbnail",
   generateAudioWaveform: "generate-audio-waveform",
   extractSubtitles: "extract-subtitles",
   importMetadata: "import-metadata",
