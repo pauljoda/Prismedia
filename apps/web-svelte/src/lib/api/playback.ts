@@ -11,6 +11,18 @@ import type {
 import { requestInit, unwrapGenerated, type RequestOptions } from "$lib/api/generated-response";
 import { jellyfinApiPath } from "$lib/api/orval-fetch";
 
+export interface JellyfinDirectPlayProfile {
+  Type?: string;
+  Container?: string;
+  VideoCodec?: string;
+  AudioCodec?: string;
+}
+
+export interface JellyfinDeviceProfile {
+  MaxStreamingBitrate?: number | null;
+  DirectPlayProfiles?: JellyfinDirectPlayProfile[];
+}
+
 export interface JellyfinPlaybackInfoRequest {
   UserId?: string | null;
   StartTimeTicks?: number | null;
@@ -23,6 +35,7 @@ export interface JellyfinPlaybackInfoRequest {
   MediaSourceId?: string | null;
   PlaySessionId?: string | null;
   SupportedVideoRangeTypes?: string[] | null;
+  DeviceProfile?: JellyfinDeviceProfile | null;
 }
 
 export interface JellyfinMediaStreamInfo {

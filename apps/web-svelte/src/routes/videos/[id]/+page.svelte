@@ -23,6 +23,7 @@
     updateEntityPlayback,
     type JellyfinPlaybackInfoResponse,
   } from "$lib/api/playback";
+  import { getBrowserDeviceProfile } from "$lib/player/browser-device-profile";
   import { durationToSeconds } from "$lib/utils/format";
   import {
     updateEntityRating,
@@ -468,6 +469,8 @@
         EnableTranscoding: true,
         PlaySessionId: playSessionId ?? undefined,
         AudioStreamIndex: audioStreamIndex ?? undefined,
+        // Tell the server what this browser can actually decode so it only transcodes when it must.
+        DeviceProfile: getBrowserDeviceProfile(),
       });
     } catch {
       return null;
