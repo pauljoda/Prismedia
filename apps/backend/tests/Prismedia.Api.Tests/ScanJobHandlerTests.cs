@@ -1258,6 +1258,78 @@ public sealed class ScanJobHandlerTests {
     }
 
     [Fact]
+    public async Task SingleFileBookScanMaterializesFolderAsBookSeriesWithChildBooks() {
+        var tempRoot = Directory.CreateTempSubdirectory("prismedia-single-book-series-scan-");
+        try {
+            var rootPath = tempRoot.FullName;
+            var seriesPath = Path.Combine(rootPath, "Game of Thrones");
+            Directory.CreateDirectory(seriesPath);
+            var firstBookPath = Path.Combine(seriesPath, "01 - A Game of Thrones.pdf");
+            var secondBookPath = Path.Combine(seriesPath, "02 - A Clash of Kings.epub");
+            await File.WriteAllTextAsync(firstBookPath, "pdf");
+            await File.WriteAllTextAsync(secondBookPath, "epub");
+
+            var root = new LibraryRootData(
+                Guid.Parse("11111111-1111-1111-1111-111111111111"),
+                rootPath,
+                "Books",
+                Enabled: true,
+                Recursive: true,
+                ScanVideos: false,
+                ScanImages: false,
+                ScanAudio: false,
+                ScanBooks: true,
+                IsNsfw: false);
+            var persistence = new FakeScanPersistence([root]) {
+                Settings = DisabledGeneratedWorkSettings
+            };
+            var handler = new ScanBookJobHandler(
+                NullLogger<ScanBookJobHandler>.Instance,
+                new RecordingFileDiscovery([secondBookPath, firstBookPath]),
+                persistence,
+                persistence,
+                persistence);
+            var job = new JobRunSnapshot(
+                Guid.NewGuid(),
+                JobType.ScanBook,
+                JobRunStatus.Running,
+                Progress: 0,
+                Message: null,
+                PayloadJson: $$"""{"libraryRootId":"{{root.Id}}"}""",
+                TargetEntityKind: "library-root",
+                TargetEntityId: root.Id.ToString(),
+                TargetLabel: root.Label,
+                CreatedAt: DateTimeOffset.UtcNow,
+                StartedAt: DateTimeOffset.UtcNow,
+                FinishedAt: null);
+
+            await handler.HandleAsync(new JobContext(job, new RecordingJobQueue()), CancellationToken.None);
+
+            var series = Assert.Single(persistence.UpsertedBookSeries);
+            Assert.Equal(seriesPath, series.SourcePath);
+            Assert.Equal("Game of Thrones", series.Title);
+
+            Assert.Collection(
+                persistence.UpsertedBooks,
+                book => {
+                    Assert.Equal(firstBookPath, book.SourcePath);
+                    Assert.Equal("01 - A Game of Thrones", book.Title);
+                    Assert.Equal(series.Id, book.ParentEntityId);
+                    Assert.Equal(0, book.SortOrder);
+                },
+                book => {
+                    Assert.Equal(secondBookPath, book.SourcePath);
+                    Assert.Equal("02 - A Clash of Kings", book.Title);
+                    Assert.Equal(series.Id, book.ParentEntityId);
+                    Assert.Equal(1, book.SortOrder);
+                });
+            Assert.Equal([seriesPath, firstBookPath, secondBookPath], persistence.ValidBookPaths);
+        } finally {
+            tempRoot.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task HandlesScheduledLibraryRootPayloadAsSingleRootScan() {
         var targetRoot = new LibraryRootData(
             Guid.Parse("11111111-1111-1111-1111-111111111111"),
@@ -1362,6 +1434,7 @@ public sealed class ScanJobHandlerTests {
         public List<AudioTrackRecord> UpsertedAudioTracks { get; } = [];
         public List<AudioLibraryRecord> UpsertedAudioLibraries { get; } = [];
         public List<BookRecord> UpsertedBooks { get; } = [];
+        public List<BookSeriesRecord> UpsertedBookSeries { get; } = [];
         public List<BookVolumeRecord> UpsertedBookVolumes { get; } = [];
         public List<BookChapterRecord> UpsertedBookChapters { get; } = [];
         public List<BookPageRecord> UpsertedBookPages { get; } = [];
@@ -1442,13 +1515,29 @@ public sealed class ScanJobHandlerTests {
 
         public Task<Guid> UpsertBookAsync(string sourcePath, string title, Guid libraryRootId, bool isNsfw, CancellationToken cancellationToken) {
             var id = IdFor($"book:{sourcePath}");
-            UpsertedBooks.Add(new BookRecord(id, sourcePath, title, libraryRootId));
+            UpsertedBooks.Add(new BookRecord(id, sourcePath, title, libraryRootId, null, null));
             return Task.FromResult(id);
         }
 
-        public Task<Guid> UpsertSingleFileBookAsync(string sourcePath, string title, Guid libraryRootId, bool isNsfw, BookType bookType, BookFormat format, string contentType, CancellationToken cancellationToken) {
+        public Task<Guid> UpsertBookSeriesAsync(string folderPath, string title, Guid libraryRootId, bool isNsfw, CancellationToken cancellationToken) {
+            var id = IdFor($"book-series:{folderPath}");
+            UpsertedBookSeries.Add(new BookSeriesRecord(id, folderPath, title, libraryRootId));
+            return Task.FromResult(id);
+        }
+
+        public Task<Guid> UpsertSingleFileBookAsync(
+            string sourcePath,
+            string title,
+            Guid libraryRootId,
+            bool isNsfw,
+            BookType bookType,
+            BookFormat format,
+            string contentType,
+            Guid? parentBookEntityId,
+            int? sortOrder,
+            CancellationToken cancellationToken) {
             var id = IdFor($"book:{sourcePath}");
-            UpsertedBooks.Add(new BookRecord(id, sourcePath, title, libraryRootId));
+            UpsertedBooks.Add(new BookRecord(id, sourcePath, title, libraryRootId, parentBookEntityId, sortOrder));
             return Task.FromResult(id);
         }
 
@@ -1606,7 +1695,8 @@ public sealed class ScanJobHandlerTests {
     private sealed record GalleryRecord(Guid Id, string FolderPath, string Title, Guid LibraryRootId, Guid? ParentGalleryEntityId, int SortOrder);
     private sealed record AudioTrackRecord(Guid Id, string FilePath, string Title, Guid? AudioLibraryEntityId, int SortOrder);
     private sealed record AudioLibraryRecord(Guid Id, string FolderPath, string Title, Guid LibraryRootId, Guid? ParentAudioLibraryEntityId, int SortOrder);
-    private sealed record BookRecord(Guid Id, string SourcePath, string Title, Guid LibraryRootId);
+    private sealed record BookRecord(Guid Id, string SourcePath, string Title, Guid LibraryRootId, Guid? ParentEntityId, int? SortOrder);
+    private sealed record BookSeriesRecord(Guid Id, string SourcePath, string Title, Guid LibraryRootId);
     private sealed record BookVolumeRecord(Guid Id, string SourcePath, string Title, Guid BookEntityId, int SortOrder);
     private sealed record BookChapterRecord(Guid Id, string SourcePath, string Title, Guid ParentEntityId, int SortOrder, int PageCount);
     private sealed record BookPageRecord(Guid Id, string SourcePath, string Title, Guid BookEntityId, Guid ChapterEntityId, int SortOrder);

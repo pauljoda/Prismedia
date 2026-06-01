@@ -215,7 +215,10 @@ public sealed partial class LibraryScanPersistenceService {
         var existing = await FindEntityBySourcePath(EntityKindRegistry.Book.Code, sourcePath, cancellationToken);
         if (existing is not null) {
             existing.Title = title;
+            existing.ParentEntityId = null;
+            existing.SortOrder = null;
             existing.UpdatedAt = DateTimeOffset.UtcNow;
+            if (isNsfw) existing.IsNsfw = true;
             var detail = await _db.BookDetails.FindAsync([existing.Id], cancellationToken);
             if (detail is not null) detail.LibraryRootId = libraryRootId;
             await _db.SaveChangesAsync(cancellationToken);
@@ -241,23 +244,19 @@ public sealed partial class LibraryScanPersistenceService {
         return id;
     }
 
-    public async Task<Guid> UpsertSingleFileBookAsync(
-        string sourcePath,
-        string title,
-        Guid libraryRootId,
-        bool isNsfw,
-        BookType bookType,
-        BookFormat format,
-        string contentType,
-        CancellationToken cancellationToken) {
-        var existing = await FindEntityBySourcePath(EntityKindRegistry.Book.Code, sourcePath, cancellationToken);
+    public async Task<Guid> UpsertBookSeriesAsync(string folderPath, string title, Guid libraryRootId, bool isNsfw, CancellationToken cancellationToken) {
+        var existing = await FindEntityBySourcePath(EntityKindRegistry.Book.Code, folderPath, cancellationToken);
         if (existing is not null) {
             existing.Title = title;
+            existing.ParentEntityId = null;
+            existing.SortOrder = null;
             existing.UpdatedAt = DateTimeOffset.UtcNow;
+            if (isNsfw) existing.IsNsfw = true;
             var detail = await _db.BookDetails.FindAsync([existing.Id], cancellationToken);
             if (detail is not null) {
                 detail.LibraryRootId = libraryRootId;
-                detail.Format = format;
+                detail.BookType = BookType.Book;
+                detail.Format = BookFormat.ImageArchive;
             }
             await _db.SaveChangesAsync(cancellationToken);
             return existing.Id;
@@ -267,6 +266,52 @@ public sealed partial class LibraryScanPersistenceService {
         var id = Guid.NewGuid();
 
         _db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKindRegistry.Book.Code, Title = title, IsNsfw = isNsfw, CreatedAt = now, UpdatedAt = now });
+        _db.BookDetails.Add(new BookDetailRow { EntityId = id, BookType = BookType.Book, Format = BookFormat.ImageArchive, LibraryRootId = libraryRootId });
+        _db.EntityFiles.Add(new EntityFileRow {
+            Id = Guid.NewGuid(),
+            EntityId = id,
+            Role = EntityFileRole.Source,
+            Path = folderPath,
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+
+        await _db.SaveChangesAsync(cancellationToken);
+        return id;
+    }
+
+    public async Task<Guid> UpsertSingleFileBookAsync(
+        string sourcePath,
+        string title,
+        Guid libraryRootId,
+        bool isNsfw,
+        BookType bookType,
+        BookFormat format,
+        string contentType,
+        Guid? parentBookEntityId,
+        int? sortOrder,
+        CancellationToken cancellationToken) {
+        var existing = await FindEntityBySourcePath(EntityKindRegistry.Book.Code, sourcePath, cancellationToken);
+        if (existing is not null) {
+            existing.Title = title;
+            existing.ParentEntityId = parentBookEntityId;
+            existing.SortOrder = sortOrder;
+            existing.UpdatedAt = DateTimeOffset.UtcNow;
+            if (isNsfw) existing.IsNsfw = true;
+            var detail = await _db.BookDetails.FindAsync([existing.Id], cancellationToken);
+            if (detail is not null) {
+                detail.LibraryRootId = libraryRootId;
+                detail.BookType = bookType;
+                detail.Format = format;
+            }
+            await _db.SaveChangesAsync(cancellationToken);
+            return existing.Id;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var id = Guid.NewGuid();
+
+        _db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKindRegistry.Book.Code, Title = title, ParentEntityId = parentBookEntityId, SortOrder = sortOrder, IsNsfw = isNsfw, CreatedAt = now, UpdatedAt = now });
         _db.BookDetails.Add(new BookDetailRow { EntityId = id, BookType = bookType, Format = format, LibraryRootId = libraryRootId });
         _db.EntityFiles.Add(new EntityFileRow {
             Id = Guid.NewGuid(),

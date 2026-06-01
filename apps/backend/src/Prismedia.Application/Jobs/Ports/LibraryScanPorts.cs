@@ -50,9 +50,18 @@ public interface IBookScanPersistence {
     Task<Guid> UpsertBookAsync(string sourcePath, string title, Guid libraryRootId, bool isNsfw, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Upserts a folder-backed book series parent used to group single-file EPUB/PDF books.
+    /// The parent is still represented by the book entity kind so existing book detail and
+    /// thumbnail surfaces can render it as the library entry point.
+    /// </summary>
+    Task<Guid> UpsertBookSeriesAsync(string folderPath, string title, Guid libraryRootId, bool isNsfw, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Upserts a single-file book (EPUB/PDF) where the file itself is the whole book and
     /// no chapter/page entities are created. Stores the book format and content type so the
     /// reader can stream the raw file and select the matching renderer.
+    /// When <paramref name="parentBookEntityId"/> is supplied, the book is attached under
+    /// a folder-backed book series parent and ordered by <paramref name="sortOrder"/>.
     /// </summary>
     Task<Guid> UpsertSingleFileBookAsync(
         string sourcePath,
@@ -62,6 +71,8 @@ public interface IBookScanPersistence {
         BookType bookType,
         BookFormat format,
         string contentType,
+        Guid? parentBookEntityId,
+        int? sortOrder,
         CancellationToken cancellationToken);
 
     Task<Guid> UpsertBookVolumeAsync(string folderPath, string title, Guid bookEntityId, int sortOrder, bool isNsfw, CancellationToken cancellationToken);

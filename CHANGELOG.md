@@ -50,6 +50,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Changed
+- Book scans now group EPUB and PDF files that live inside a folder into a folder-backed book series, so the Books library shows the folder once and the detail page opens into the books inside it. Root-level EPUB/PDF files still scan as standalone books.
 - Library scans now skip single-image gallery folders. When a folder holds just one image and nothing else, that image is shown directly under its parent gallery (or as a loose image when there is no parent) instead of as a gallery containing a single picture — a common artifact of some downloaders. Existing libraries clean themselves up the next time they scan.
 - NSFW plugins now stay completely hidden while you browse in SFW mode. Every Stash scraper counts as NSFW, along with any plugin marked NSFW, so they disappear from the Plugins page (installed list and the Prismedia/Stash community catalogs), the Auto Identify provider picker, and the identify provider options until you reveal NSFW content.
 - Identify now respects content ratings even from mainstream providers: when a provider like TMDB or MangaDex returns a mature rating (R, NC-17, TV-MA, 18+, pornographic, and similar), that proposal — and everything it brings in — is marked NSFW automatically.

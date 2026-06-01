@@ -1027,6 +1027,40 @@ public sealed class LibraryScanPersistenceServiceTests {
     }
 
     [Fact]
+    public async Task UpsertSingleFileBookCanAttachToFolderBackedBookSeries() {
+        await using var db = CreateContext();
+        var service = new LibraryScanPersistenceService(db);
+        var rootId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        var seriesId = await service.UpsertBookSeriesAsync(
+            "/media/books/Game of Thrones",
+            "Game of Thrones",
+            rootId,
+            isNsfw: false,
+            CancellationToken.None);
+
+        var bookId = await service.UpsertSingleFileBookAsync(
+            "/media/books/Game of Thrones/01 - A Game of Thrones.pdf",
+            "A Game of Thrones",
+            rootId,
+            isNsfw: false,
+            BookType.Book,
+            BookFormat.Pdf,
+            Prismedia.Contracts.Media.MediaContentTypes.Pdf,
+            seriesId,
+            sortOrder: 0,
+            CancellationToken.None);
+
+        var series = await db.Entities.FindAsync([seriesId]);
+        var book = await db.Entities.FindAsync([bookId]);
+        var detail = await db.BookDetails.FindAsync([bookId]);
+        Assert.Equal(EntityKindRegistry.Book.Code, series!.KindCode);
+        Assert.Null(series.ParentEntityId);
+        Assert.Equal(seriesId, book!.ParentEntityId);
+        Assert.Equal(0, book.SortOrder);
+        Assert.Equal(BookFormat.Pdf, detail!.Format);
+    }
+
+    [Fact]
     public async Task ApplyVideoSidecarMetadataFillsMissingFieldsAndKeepsExistingDescription() {
         await using var db = CreateContext();
         var videoId = Guid.Parse("aaaaaaaa-1111-1111-1111-111111111111");

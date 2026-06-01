@@ -68,6 +68,7 @@
   let progressBusy = $state(false);
   let chapterDetails = $state.raw<ChapterDetail[]>([]);
   let progressChapterSummary = $state.raw<BookReaderChapter | null>(null);
+  let childBookCards = $state<EntityThumbnailCard[]>([]);
   let volumeCards = $state<EntityThumbnailCard[]>([]);
   let studioCards = $state<EntityThumbnailCard[]>([]);
   let creditCards = $state<EntityThumbnailCard[]>([]);
@@ -207,6 +208,9 @@
       book = nextBook;
       chapterDetails = chapters;
       progressChapterSummary = progressSummary;
+      childBookCards = thumbnailsToCards(orderedBookChildren(nextBook, ENTITY_KIND.book), {
+        hrefFor: (childBook) => `/books/${childBook.id}`,
+      });
       volumeCards = thumbnailsToCards(orderedBookChildren(nextBook, ENTITY_KIND.bookVolume), {
         hrefFor: (volume) => `/books/${nextBook.id}/volumes/${volume.id}`,
       });
@@ -489,6 +493,23 @@
           onToggleCompleted={handleToggleRead}
           onResume={resumeProgress}
           onStartOver={startProgressOver}
+        />
+      </section>
+    {/if}
+
+    {#if childBookCards.length > 0}
+      <section class="content-section">
+        <h2 class="content-heading">
+          <BookOpen class="h-4 w-4" />
+          Books
+          <span class="content-count">{childBookCards.length}</span>
+        </h2>
+        <EntityGrid
+          cards={childBookCards}
+          prefsKey={`book-${book.id}-books`}
+          initialSortBy="position"
+          emptyTitle="No books"
+          emptyMessage="No books found for this series."
         />
       </section>
     {/if}

@@ -54,6 +54,7 @@ public sealed class ScanBookJobHandler(
         }
 
         var validBookPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var archiveBookPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var processedArchiveCount = 0;
 
         foreach (var bookGroup in archiveItems
@@ -71,6 +72,7 @@ public sealed class ScanBookJobHandler(
                     cancellationToken);
             }
             validBookPaths.Add(first.BookPath);
+            archiveBookPaths.Add(first.BookPath);
 
             // A book is the top-level root of its volumes/chapters/pages, so identify it directly.
             var bookAutoIdentify = AutoIdentifyScanEnqueue.RequestFor(
@@ -145,15 +147,16 @@ public sealed class ScanBookJobHandler(
             await books.RemoveStaleBookVolumesAsync(bookId, validVolumePaths, cancellationToken);
         }
 
-        await ScanSingleFileBooksAsync(context, root, settings, excludedPaths, validBookPaths, cancellationToken);
+        await ScanSingleFileBooksAsync(context, root, settings, excludedPaths, validBookPaths, archiveBookPaths, cancellationToken);
 
         await books.RemoveStaleBooksInRootAsync(root.Id, validBookPaths, cancellationToken);
         await Roots.RemoveEntitiesInExcludedPathsAsync(root.Id, cancellationToken);
     }
 
     /// <summary>
-    /// Discovers single-file books (EPUB/PDF) in the root and upserts one book entity per file
-    /// with no chapter/page entities. Records their source paths so stale cleanup keeps them.
+    /// Discovers single-file books (EPUB/PDF) and upserts either standalone book entities
+    /// for root-level files or a folder-backed book parent with child book entities.
+    /// Records every source path so stale cleanup keeps the current hierarchy.
     /// </summary>
     private async Task ScanSingleFileBooksAsync(
         JobContext context,
@@ -161,6 +164,7 @@ public sealed class ScanBookJobHandler(
         LibrarySettingsData settings,
         IReadOnlySet<string> excludedPaths,
         ISet<string> validBookPaths,
+        IReadOnlySet<string> archiveBookPaths,
         CancellationToken cancellationToken) {
         var bookFiles = await FileDiscovery.DiscoverFilesAsync(
             root.Path, MediaCategory.Book, root.Recursive, excludedPaths, cancellationToken);
@@ -170,6 +174,7 @@ public sealed class ScanBookJobHandler(
 
         logger.LogInformation("ScanBook: found {Count} single-file books in {Label}", bookFiles.Count, root.Label);
 
+        var items = new List<SingleFileBookItem>();
         foreach (var sourcePath in bookFiles.OrderBy(path => path, NaturalPathComparer.Instance)) {
             var format = BookFormatFor(sourcePath);
             if (format is null) {
@@ -182,33 +187,95 @@ public sealed class ScanBookJobHandler(
             var fallbackTitle = Path.GetFileNameWithoutExtension(sourcePath);
             var title = FirstNonEmpty(metadata?.Title, metadata?.Series, fallbackTitle)!;
             var isNsfw = root.IsNsfw || metadata?.MarksNsfw == true;
+            items.Add(SingleFileBookItem.From(root.Path, sourcePath, title, isNsfw, format.Value, metadata));
+        }
 
-            var bookId = await books.UpsertSingleFileBookAsync(
-                sourcePath,
-                title,
-                root.Id,
-                isNsfw,
-                DefaultBookTypeFor(format.Value),
-                format.Value,
-                ContentTypeFor(format.Value),
+        foreach (var looseItem in items
+            .Where(item => item.SeriesPath is null)
+            .OrderBy(item => item.SourcePath, NaturalPathComparer.Instance)) {
+            await UpsertSingleFileBookAsync(
+                context,
+                settings,
+                root,
+                looseItem,
+                validBookPaths,
+                parentBookEntityId: null,
+                sortOrder: null,
                 cancellationToken);
-            validBookPaths.Add(sourcePath);
+        }
 
-            if (metadata is not null && scanMetadata is not null) {
-                await scanMetadata.ApplyComicInfoMetadataAsync(bookId, metadata, isNsfw, cancellationToken);
+        foreach (var seriesGroup in items
+            .Where(item => item.SeriesPath is not null)
+            .GroupBy(item => item.SeriesPath!, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(group => group.Key, NaturalPathComparer.Instance)) {
+            var first = seriesGroup.First();
+            var seriesIsNsfw = root.IsNsfw || seriesGroup.Any(item => item.IsNsfw);
+            var seriesId = await books.UpsertBookSeriesAsync(
+                first.SeriesPath!,
+                first.SeriesTitle!,
+                root.Id,
+                seriesIsNsfw,
+                cancellationToken);
+            validBookPaths.Add(first.SeriesPath!);
+
+            if (!archiveBookPaths.Contains(first.SeriesPath!)) {
+                await books.RemoveStaleBookChaptersAsync(seriesId, new HashSet<string>(StringComparer.OrdinalIgnoreCase), cancellationToken);
+                await books.RemoveStaleBookVolumesAsync(seriesId, new HashSet<string>(StringComparer.OrdinalIgnoreCase), cancellationToken);
             }
 
-            if (settings.AutoGeneratePreview &&
-                !await downstreamNeeds.HasEntityFileAsync(bookId, EntityFileRole.Thumbnail, cancellationToken)) {
-                await context.EnqueueIfNeededAsync(new EnqueueJobRequest(
-                    JobType.GenerateBookCoverThumbnail, TargetEntityKind: "book",
-                    TargetEntityId: bookId.ToString(), TargetLabel: title), cancellationToken);
+            var booksInSeries = seriesGroup
+                .OrderBy(item => item.SourcePath, NaturalPathComparer.Instance)
+                .ToArray();
+            for (var index = 0; index < booksInSeries.Length; index++) {
+                await UpsertSingleFileBookAsync(
+                    context,
+                    settings,
+                    root,
+                    booksInSeries[index],
+                    validBookPaths,
+                    seriesId,
+                    index,
+                    cancellationToken);
             }
+        }
+    }
 
-            var autoIdentify = AutoIdentifyScanEnqueue.RequestFor(settings, "book", bookId.ToString(), title);
-            if (autoIdentify is not null) {
-                await context.EnqueueIfNeededAsync(autoIdentify, cancellationToken);
-            }
+    private async Task UpsertSingleFileBookAsync(
+        JobContext context,
+        LibrarySettingsData settings,
+        LibraryRootData root,
+        SingleFileBookItem item,
+        ISet<string> validBookPaths,
+        Guid? parentBookEntityId,
+        int? sortOrder,
+        CancellationToken cancellationToken) {
+        var bookId = await books.UpsertSingleFileBookAsync(
+            item.SourcePath,
+            item.Title,
+            root.Id,
+            item.IsNsfw,
+            DefaultBookTypeFor(item.Format),
+            item.Format,
+            ContentTypeFor(item.Format),
+            parentBookEntityId,
+            sortOrder,
+            cancellationToken);
+        validBookPaths.Add(item.SourcePath);
+
+        if (item.Metadata is not null && scanMetadata is not null) {
+            await scanMetadata.ApplyComicInfoMetadataAsync(bookId, item.Metadata, item.IsNsfw, cancellationToken);
+        }
+
+        if (settings.AutoGeneratePreview &&
+            !await downstreamNeeds.HasEntityFileAsync(bookId, EntityFileRole.Thumbnail, cancellationToken)) {
+            await context.EnqueueIfNeededAsync(new EnqueueJobRequest(
+                JobType.GenerateBookCoverThumbnail, TargetEntityKind: "book",
+                TargetEntityId: bookId.ToString(), TargetLabel: item.Title), cancellationToken);
+        }
+
+        var autoIdentify = AutoIdentifyScanEnqueue.RequestFor(settings, "book", bookId.ToString(), item.Title);
+        if (autoIdentify is not null) {
+            await context.EnqueueIfNeededAsync(autoIdentify, cancellationToken);
         }
     }
 
@@ -333,6 +400,33 @@ public sealed class ScanBookJobHandler(
             var volumePath = Path.GetDirectoryName(archivePath) ?? bookPath;
             var volumeTitle = Path.GetFileName(volumePath);
             return new BookArchiveItem(archivePath, bookPath, bookTitle, volumePath, volumeTitle, chapterTitle, pageMembers, metadata, metadata?.MarksNsfw == true);
+        }
+    }
+
+    private sealed record SingleFileBookItem(
+        string SourcePath,
+        string Title,
+        bool IsNsfw,
+        BookFormat Format,
+        ComicInfoMetadata? Metadata,
+        string? SeriesPath,
+        string? SeriesTitle) {
+        public static SingleFileBookItem From(
+            string rootPath,
+            string sourcePath,
+            string title,
+            bool isNsfw,
+            BookFormat format,
+            ComicInfoMetadata? metadata) {
+            var relativePath = Path.GetRelativePath(rootPath, sourcePath);
+            var segments = relativePath
+                .Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries);
+            if (segments.Length <= 1) {
+                return new SingleFileBookItem(sourcePath, title, isNsfw, format, metadata, null, null);
+            }
+
+            var seriesPath = Path.Combine(rootPath, segments[0]);
+            return new SingleFileBookItem(sourcePath, title, isNsfw, format, metadata, seriesPath, segments[0]);
         }
     }
 

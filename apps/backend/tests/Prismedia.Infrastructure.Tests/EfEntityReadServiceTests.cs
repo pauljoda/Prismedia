@@ -650,6 +650,52 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
+    public async Task ListAsyncShowsOnlyTopLevelBooksWhenBooksHaveChildBooks() {
+        await using var db = CreateContext();
+        var seriesId = Guid.Parse("aaaaaaaa-1111-1111-1111-111111111111");
+        var childBookId = Guid.Parse("bbbbbbbb-2222-2222-2222-222222222222");
+        var looseBookId = Guid.Parse("cccccccc-3333-3333-3333-333333333333");
+        var now = DateTimeOffset.UtcNow;
+        db.Entities.AddRange(
+            new EntityRow {
+                Id = seriesId,
+                KindCode = EntityKindRegistry.Book.Code,
+                Title = "Game of Thrones",
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new EntityRow {
+                Id = childBookId,
+                KindCode = EntityKindRegistry.Book.Code,
+                Title = "A Game of Thrones",
+                ParentEntityId = seriesId,
+                SortOrder = 0,
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new EntityRow {
+                Id = looseBookId,
+                KindCode = EntityKindRegistry.Book.Code,
+                Title = "Standalone",
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+        db.BookDetails.AddRange(
+            new BookDetailRow { EntityId = seriesId },
+            new BookDetailRow { EntityId = childBookId, Format = BookFormat.Pdf },
+            new BookDetailRow { EntityId = looseBookId, Format = BookFormat.Epub });
+        await db.SaveChangesAsync();
+
+        var repository = new EfEntityRepository(db, EntityMappers.Kinds(db), EntityMappers.Capabilities(db));
+        var service = new EfEntityReadService(db, repository, EntityMappers.Kinds(db));
+
+        var result = await service.ListAsync(EntityKindRegistry.Book.Code, null, null, null, null, CancellationToken.None);
+
+        Assert.Equal(2, result.TotalCount);
+        Assert.Equal([seriesId, looseBookId], result.Items.Select(item => item.Id).Order().ToArray());
+    }
+
+    [Fact]
     public async Task GetDetailAsyncProjectsOnlyDirectChildren() {
         await using var db = CreateContext();
         var bookId = Guid.Parse("11111111-1111-1111-1111-111111111111");

@@ -327,7 +327,8 @@ public sealed partial class EfEntityReadService : IEntityReadService {
 
     private static bool ListBrowseShowsOnlyTopLevel(string kind) =>
         kind.Equals(EntityKindRegistry.Gallery.Code, StringComparison.OrdinalIgnoreCase) ||
-        kind.Equals(EntityKindRegistry.AudioLibrary.Code, StringComparison.OrdinalIgnoreCase);
+        kind.Equals(EntityKindRegistry.AudioLibrary.Code, StringComparison.OrdinalIgnoreCase) ||
+        kind.Equals(EntityKindRegistry.Book.Code, StringComparison.OrdinalIgnoreCase);
 
     private static bool ShouldSuppressMovieChildVideos(string? kind, string? query, Guid? referencedBy) =>
         kind is null ||
