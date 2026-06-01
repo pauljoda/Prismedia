@@ -2,11 +2,14 @@
   import { onMount, tick } from "svelte";
   import {
     AlertTriangle,
+    ChevronDown,
+    ChevronUp,
     Download,
     List,
     Maximize,
     Minus,
     Plus,
+    Search,
     StretchVertical,
     X,
   } from "@lucide/svelte";
@@ -123,6 +126,89 @@
 
   function toggleGap() {
     gapless = !gapless;
+  }
+
+  // ── In-document search ──
+  let searchOpen = $state(false);
+  let searchQuery = $state("");
+  let searchBusy = $state(false);
+  let searchMatches = $state.raw<number[]>([]); // page index of each occurrence, in order
+  let searchActive = $state(0);
+  let textIndex: string[] | null = null;
+  let searchDebounce = 0;
+  let searchInputEl = $state<HTMLInputElement>();
+
+  async function buildTextIndex() {
+    if (textIndex || !pdf) return;
+    const idx: string[] = [];
+    for (let i = 1; i <= pageCount; i++) {
+      try {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        idx.push(content.items.map((it: any) => (typeof it.str === "string" ? it.str : "")).join(" ").toLowerCase());
+      } catch {
+        idx.push("");
+      }
+    }
+    textIndex = idx;
+  }
+
+  async function runSearch() {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) {
+      searchMatches = [];
+      searchActive = 0;
+      return;
+    }
+    searchBusy = true;
+    await buildTextIndex();
+    searchBusy = false;
+    const matches: number[] = [];
+    textIndex?.forEach((text, page) => {
+      let from = text.indexOf(query);
+      while (from !== -1) {
+        matches.push(page);
+        from = text.indexOf(query, from + query.length);
+      }
+    });
+    searchMatches = matches;
+    searchActive = 0;
+    if (matches.length > 0) scrollToPage(matches[0]);
+  }
+
+  function onSearchInput() {
+    if (searchDebounce) window.clearTimeout(searchDebounce);
+    searchDebounce = window.setTimeout(() => void runSearch(), 250);
+  }
+
+  function gotoMatch(delta: number) {
+    if (searchMatches.length === 0) return;
+    searchActive = (searchActive + delta + searchMatches.length) % searchMatches.length;
+    scrollToPage(searchMatches[searchActive]);
+  }
+
+  async function toggleSearch() {
+    searchOpen = !searchOpen;
+    if (searchOpen) {
+      await tick();
+      searchInputEl?.focus();
+    } else {
+      searchQuery = "";
+      searchMatches = [];
+      searchActive = 0;
+    }
+  }
+
+  function onSearchKeydown(event: KeyboardEvent) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      if (searchMatches.length) gotoMatch(event.shiftKey ? -1 : 1);
+      else void runSearch();
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      void toggleSearch();
+    }
   }
 
   // Pinch-to-zoom: two-finger gesture scales the page column live via CSS transform, then commits
@@ -465,6 +551,17 @@
       </button>
     {/if}
 
+    <button
+      type="button"
+      onclick={() => void toggleSearch()}
+      class:active-reader-control={searchOpen}
+      class="reader-mode-button"
+      aria-label="Search document"
+      title="Search"
+    >
+      <Search class="h-4 w-4" />
+    </button>
+
     <div class="flex items-center gap-1 border-l border-border-subtle pl-2">
       <button
         type="button"
@@ -553,6 +650,47 @@
       </div>
     {/if}
   </div>
+
+  {#if searchOpen}
+    <div class="pdf-search" data-reader-control>
+      <Search class="h-4 w-4 shrink-0 text-text-muted" />
+      <input
+        bind:this={searchInputEl}
+        bind:value={searchQuery}
+        oninput={onSearchInput}
+        onkeydown={onSearchKeydown}
+        type="search"
+        placeholder="Search document…"
+        class="pdf-search-input"
+      />
+      <span class="pdf-search-count">
+        {#if searchBusy}…{:else if searchQuery.trim()}{searchMatches.length ? `${searchActive + 1}/${searchMatches.length}` : "0/0"}{/if}
+      </span>
+      <button
+        type="button"
+        class="reader-mode-button"
+        onclick={() => gotoMatch(-1)}
+        disabled={searchMatches.length === 0}
+        aria-label="Previous match"
+        title="Previous match"
+      >
+        <ChevronUp class="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        class="reader-mode-button"
+        onclick={() => gotoMatch(1)}
+        disabled={searchMatches.length === 0}
+        aria-label="Next match"
+        title="Next match"
+      >
+        <ChevronDown class="h-4 w-4" />
+      </button>
+      <button type="button" class="reader-mode-button" onclick={() => void toggleSearch()} aria-label="Close search" title="Close">
+        <X class="h-4 w-4" />
+      </button>
+    </div>
+  {/if}
 </ReaderShell>
 
 {#if tocOpen}
@@ -678,6 +816,40 @@
     color: var(--color-text-secondary);
     text-align: center;
     pointer-events: none;
+  }
+
+  .pdf-search {
+    position: absolute;
+    top: max(3.25rem, calc(env(safe-area-inset-top) + 3rem));
+    right: 0.75rem;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    max-width: calc(100vw - 1.5rem);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--radius-md);
+    background: var(--color-overlay-heavy);
+    padding: 0.4rem 0.5rem;
+    backdrop-filter: blur(var(--glass-blur-md));
+    box-shadow: var(--shadow-glow-accent);
+  }
+
+  .pdf-search-input {
+    width: min(14rem, 40vw);
+    border: none;
+    background: transparent;
+    color: var(--color-text-primary);
+    font-size: 0.82rem;
+    outline: none;
+  }
+
+  .pdf-search-count {
+    min-width: 3.5ch;
+    text-align: center;
+    font-family: var(--font-mono, monospace);
+    font-size: 0.62rem;
+    color: var(--color-text-muted);
   }
 
   .reader-mode-button {
