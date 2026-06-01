@@ -3,6 +3,8 @@
   import {
     AlertTriangle,
     ChevronDown,
+    ChevronLeft,
+    ChevronRight,
     ChevronUp,
     Download,
     List,
@@ -13,8 +15,12 @@
     StretchVertical,
     X,
   } from "@lucide/svelte";
+  import { BookOpen, Rows3 } from "@lucide/svelte";
   import { apiAssetUrl as toApiUrl } from "$lib/api/orval-fetch";
+  import { comicTapZone } from "$lib/components/comic-reader";
   import ReaderShell from "$lib/components/reader/ReaderShell.svelte";
+
+  type ReaderFlow = "scrolled" | "paged";
 
   interface TocEntry {
     label: string;
@@ -128,6 +134,28 @@
     gapless = !gapless;
   }
 
+  // ── Paged mode (single page per view via scroll-snap + comic-style gestures) ──
+  let flow = $state<ReaderFlow>("scrolled");
+
+  function setFlow(next: ReaderFlow) {
+    if (next === flow) return;
+    flow = next;
+    if (next === "paged") setScale(fitPageScale());
+    else setScale(fitWidthScale());
+  }
+
+  // Paged-mode tap zones via a plain click (so it never blocks native scroll-snap swipe or wheel).
+  // The text layer is non-interactive in paged mode, so taps land here: sides turn, centre toggles.
+  function handleStageClick(event: MouseEvent) {
+    if (flow !== "paged") return;
+    if ((event.target as HTMLElement)?.closest?.("[data-reader-control]")) return;
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    const zone = comicTapZone(event.clientX - rect.left, rect.width);
+    if (zone === "previous") goPrev();
+    else if (zone === "next") goNext();
+    else shell?.toggleControls();
+  }
+
   // ── In-document search ──
   let searchOpen = $state(false);
   let searchQuery = $state("");
@@ -225,7 +253,7 @@
   }
 
   function handleStagePointerDown(event: PointerEvent) {
-    if (event.pointerType === "mouse") return;
+    if (event.pointerType === "mouse" || flow === "paged") return;
     pinchPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (pinchPointers.size === 2) {
       pinching = true;
@@ -342,10 +370,12 @@
 
   function goPrev() {
     scrollToPage(currentPage - 1);
+    shell?.showControls();
   }
 
   function goNext() {
     scrollToPage(currentPage + 1);
+    shell?.showControls();
   }
 
   async function resolveDestPage(dest: unknown): Promise<number | null> {
@@ -565,44 +595,71 @@
     <div class="flex items-center gap-1 border-l border-border-subtle pl-2">
       <button
         type="button"
-        onclick={zoomOut}
-        disabled={scale <= MIN_SCALE}
+        onclick={() => setFlow("scrolled")}
+        class:active-reader-control={flow === "scrolled"}
         class="reader-mode-button"
-        aria-label="Zoom out"
-        title="Zoom out"
+        aria-label="Scrolled reading"
+        title="Scrolled (selectable text)"
       >
-        <Minus class="h-4 w-4" />
+        <Rows3 class="h-4 w-4" />
       </button>
-      <span class="min-w-[3ch] text-center font-mono text-[0.62rem] tabular-nums text-text-muted">{zoomPercent}%</span>
       <button
         type="button"
-        onclick={zoomIn}
-        disabled={scale >= MAX_SCALE}
+        onclick={() => setFlow("paged")}
+        class:active-reader-control={flow === "paged"}
         class="reader-mode-button"
-        aria-label="Zoom in"
-        title="Zoom in"
+        aria-label="Paged reading"
+        title="Paged (one page per view)"
       >
-        <Plus class="h-4 w-4" />
-      </button>
-      <button type="button" onclick={fitWidth} class="reader-mode-button" aria-label="Fit width" title="Fit width">
-        <span class="text-[0.62rem]">W</span>
-      </button>
-      <button type="button" onclick={fitPage} class="reader-mode-button" aria-label="Fit page" title="Fit one page in view">
-        <Maximize class="h-4 w-4" />
+        <BookOpen class="h-4 w-4" />
       </button>
     </div>
 
+    {#if flow === "scrolled"}
+      <div class="flex items-center gap-1 border-l border-border-subtle pl-2">
+        <button
+          type="button"
+          onclick={zoomOut}
+          disabled={scale <= MIN_SCALE}
+          class="reader-mode-button"
+          aria-label="Zoom out"
+          title="Zoom out"
+        >
+          <Minus class="h-4 w-4" />
+        </button>
+        <span class="min-w-[3ch] text-center font-mono text-[0.62rem] tabular-nums text-text-muted">{zoomPercent}%</span>
+        <button
+          type="button"
+          onclick={zoomIn}
+          disabled={scale >= MAX_SCALE}
+          class="reader-mode-button"
+          aria-label="Zoom in"
+          title="Zoom in"
+        >
+          <Plus class="h-4 w-4" />
+        </button>
+        <button type="button" onclick={fitWidth} class="reader-mode-button" aria-label="Fit width" title="Fit width">
+          <span class="text-[0.62rem]">W</span>
+        </button>
+        <button type="button" onclick={fitPage} class="reader-mode-button" aria-label="Fit page" title="Fit one page in view">
+          <Maximize class="h-4 w-4" />
+        </button>
+      </div>
+    {/if}
+
     <div class="flex items-center gap-1 border-l border-border-subtle pl-2">
-      <button
-        type="button"
-        onclick={toggleGap}
-        class:active-reader-control={gapless}
-        class="reader-mode-button"
-        aria-label="Toggle page gaps"
-        title={gapless ? "Show page gaps" : "Remove page gaps"}
-      >
-        <StretchVertical class="h-4 w-4" />
-      </button>
+      {#if flow === "scrolled"}
+        <button
+          type="button"
+          onclick={toggleGap}
+          class:active-reader-control={gapless}
+          class="reader-mode-button"
+          aria-label="Toggle page gaps"
+          title={gapless ? "Show page gaps" : "Remove page gaps"}
+        >
+          <StretchVertical class="h-4 w-4" />
+        </button>
+      {/if}
       {#if downloadHref}
         <a
           href={downloadHref}
@@ -617,11 +674,13 @@
     </div>
   {/snippet}
 
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
   <div
     class="pdf-stage"
+    class:paged={flow === "paged"}
     bind:this={scrollEl}
     onscroll={handleScroll}
+    onclick={handleStageClick}
     onpointerdown={handleStagePointerDown}
     onpointermove={handleStagePointerMove}
     onpointerup={handleStagePointerEnd}
@@ -650,6 +709,30 @@
       </div>
     {/if}
   </div>
+
+  {#if ready && flow === "paged"}
+    <!-- Fixed over the stage (siblings, not inside the scroller) so they don't scroll away. -->
+    <button
+      type="button"
+      onclick={goPrev}
+      data-reader-control
+      class="reader-nav-button reader-nav-prev"
+      aria-label="Previous page"
+      title="Previous (←)"
+    >
+      <ChevronLeft class="h-6 w-6" />
+    </button>
+    <button
+      type="button"
+      onclick={goNext}
+      data-reader-control
+      class="reader-nav-button reader-nav-next"
+      aria-label="Next page"
+      title="Next (→)"
+    >
+      <ChevronRight class="h-6 w-6" />
+    </button>
+  {/if}
 
   {#if searchOpen}
     <div class="pdf-search" data-reader-control>
@@ -752,6 +835,62 @@
   /* Stitch pages together with no gap for a continuous document feel. */
   .pdf-pages.gapless {
     gap: 0;
+  }
+
+  /* Paged mode: one page per view via scroll-snap; the gesture overlay drives turns. */
+  .pdf-stage.paged {
+    scroll-snap-type: y mandatory;
+  }
+
+  .pdf-stage.paged .pdf-page {
+    scroll-snap-align: center;
+    scroll-snap-stop: always;
+  }
+
+  /* In paged mode the text layer must not eat taps (it has no selection there); taps drive
+     the comic-style tap zones instead. */
+  .pdf-stage.paged :global(.pdf-text-layer),
+  .pdf-stage.paged :global(.pdf-link-layer) {
+    pointer-events: none;
+  }
+
+  .reader-nav-button {
+    position: absolute;
+    top: 50%;
+    z-index: 10;
+    display: none;
+    height: 2.75rem;
+    width: 2.75rem;
+    transform: translateY(-50%);
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--radius-sm);
+    background: var(--color-overlay-heavy);
+    color: var(--color-text-secondary);
+    backdrop-filter: blur(var(--glass-blur-sm));
+  }
+
+  .reader-nav-prev {
+    left: 0.75rem;
+  }
+
+  .reader-nav-next {
+    right: 0.75rem;
+  }
+
+  .reader-nav-button:hover,
+  .reader-nav-button:focus-visible {
+    border-color: var(--color-border-accent-strong);
+    color: var(--color-text-accent-bright);
+    box-shadow: var(--shadow-glow-accent);
+    outline: none;
+  }
+
+  @media (min-width: 640px) {
+    .reader-nav-button {
+      display: flex;
+    }
   }
 
   .pdf-page {
