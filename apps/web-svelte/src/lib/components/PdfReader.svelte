@@ -1,6 +1,15 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
-  import { AlertTriangle, List, X } from "@lucide/svelte";
+  import {
+    AlertTriangle,
+    Download,
+    List,
+    Maximize,
+    Minus,
+    Plus,
+    StretchVertical,
+    X,
+  } from "@lucide/svelte";
   import { apiAssetUrl as toApiUrl } from "$lib/api/orval-fetch";
   import ReaderShell from "$lib/components/reader/ReaderShell.svelte";
 
@@ -39,6 +48,13 @@
   let toc = $state.raw<TocEntry[]>([]);
   let tocOpen = $state(false);
 
+  const MIN_SCALE = 0.25;
+  const MAX_SCALE = 6;
+  let scale = $state(1);
+  let gapless = $state(false);
+  const zoomPercent = $derived(Math.round(scale * 100));
+  const downloadHref = $derived(toApiUrl(sourceUrl));
+
   const hasToc = $derived(toc.length > 0);
   const pageIndexes = $derived(Array.from({ length: pageCount }, (_, i) => i));
 
@@ -49,18 +65,108 @@
   let wrappers: HTMLDivElement[] = [];
   const rendered = new Set<number>();
   const rendering = new Set<number>();
-  let renderScale = 1;
   let observer: IntersectionObserver | null = null;
-  // Placeholder page dimensions (from page 1) so the scroll height — and therefore each page's
-  // offsetTop — is correct before pages lazily render. Without this, resume can't locate a page.
+  // Unscaled page-1 dimensions, used to derive fit scales and placeholder sizes (the scroll
+  // height — and each page's offsetTop — must be correct before pages lazily render so resume works).
+  let pageBaseW = 0;
+  let pageBaseH = 0;
   let baseWidth = 0;
   let baseHeight = 0;
 
-  function computeScale(pageWidthPx: number): number {
-    if (!scrollEl) return 1;
-    // Fit the page width to the available column (capped so very wide pages stay readable).
-    const available = Math.min(scrollEl.clientWidth - 24, 1100);
-    return available > 0 && pageWidthPx > 0 ? available / pageWidthPx : 1;
+  function fitWidthScale(): number {
+    if (!scrollEl || pageBaseW <= 0) return scale || 1;
+    const available = Math.min(scrollEl.clientWidth - 24, 1400);
+    return available > 0 ? available / pageBaseW : 1;
+  }
+
+  function fitPageScale(): number {
+    if (!scrollEl || pageBaseW <= 0 || pageBaseH <= 0) return scale || 1;
+    const availW = scrollEl.clientWidth - 24;
+    const availH = scrollEl.clientHeight - 24;
+    return Math.min(availW / pageBaseW, availH / pageBaseH);
+  }
+
+  function clampScale(value: number): number {
+    return Math.max(MIN_SCALE, Math.min(MAX_SCALE, value));
+  }
+
+  // Re-render the visible pages at the current scale and keep the current page in view.
+  function applyScale() {
+    if (pageBaseW <= 0) return;
+    baseWidth = pageBaseW * scale;
+    baseHeight = pageBaseH * scale;
+    for (const wrapper of wrappers) {
+      if (wrapper) {
+        wrapper.style.width = `${baseWidth}px`;
+        wrapper.style.height = `${baseHeight}px`;
+      }
+    }
+    for (const index of [...rendered]) unloadPage(index);
+    rendered.clear();
+    // Re-observe so the IntersectionObserver re-renders whatever is currently on screen.
+    observer?.disconnect();
+    for (const wrapper of wrappers) if (wrapper) observer?.observe(wrapper);
+    scrollToPage(currentPage, "auto");
+  }
+
+  function setScale(next: number) {
+    const clamped = clampScale(next);
+    if (Math.abs(clamped - scale) < 0.001) return;
+    scale = clamped;
+    applyScale();
+  }
+
+  const fitWidth = () => setScale(fitWidthScale());
+  const fitPage = () => setScale(fitPageScale());
+  const zoomIn = () => setScale(scale * 1.2);
+  const zoomOut = () => setScale(scale / 1.2);
+
+  function toggleGap() {
+    gapless = !gapless;
+  }
+
+  // Pinch-to-zoom: two-finger gesture scales the page column live via CSS transform, then commits
+  // to a crisp re-render on release. One-finger scrolling stays native (touch-action: pan-y).
+  const pinchPointers = new Map<number, { x: number; y: number }>();
+  let pinchStartDist = 0;
+  let pinchStartScale = 1;
+  let pinching = $state(false);
+  let pinchRatio = $state(1);
+
+  function pointerDistance(): number {
+    const pts = [...pinchPointers.values()];
+    return pts.length < 2 ? 0 : Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+  }
+
+  function handleStagePointerDown(event: PointerEvent) {
+    if (event.pointerType === "mouse") return;
+    pinchPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (pinchPointers.size === 2) {
+      pinching = true;
+      pinchStartDist = pointerDistance();
+      pinchStartScale = scale;
+      pinchRatio = 1;
+    }
+  }
+
+  function handleStagePointerMove(event: PointerEvent) {
+    if (!pinchPointers.has(event.pointerId)) return;
+    pinchPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (pinching && pinchPointers.size === 2) {
+      event.preventDefault();
+      const dist = pointerDistance();
+      pinchRatio = pinchStartDist > 0 ? dist / pinchStartDist : 1;
+    }
+  }
+
+  function handleStagePointerEnd(event: PointerEvent) {
+    if (!pinchPointers.delete(event.pointerId)) return;
+    if (pinching && pinchPointers.size < 2) {
+      pinching = false;
+      const target = clampScale(pinchStartScale * pinchRatio);
+      pinchRatio = 1;
+      setScale(target);
+    }
   }
 
   async function renderPage(index: number) {
@@ -70,11 +176,9 @@
     rendering.add(index);
     try {
       const page = await pdf.getPage(index + 1);
-      const unscaled = page.getViewport({ scale: 1 });
-      if (!renderScale || renderScale === 1) renderScale = computeScale(unscaled.width);
-      const cssViewport = page.getViewport({ scale: renderScale });
+      const cssViewport = page.getViewport({ scale });
       const dpr = Math.min(globalThis.devicePixelRatio || 1, 2);
-      const deviceViewport = page.getViewport({ scale: renderScale * dpr });
+      const deviceViewport = page.getViewport({ scale: scale * dpr });
 
       wrapper.style.height = `${cssViewport.height}px`;
       wrapper.style.width = `${cssViewport.width}px`;
@@ -92,7 +196,7 @@
       textLayerDiv.className = "pdf-text-layer";
       textLayerDiv.style.width = `${cssViewport.width}px`;
       textLayerDiv.style.height = `${cssViewport.height}px`;
-      textLayerDiv.style.setProperty("--scale-factor", String(renderScale));
+      textLayerDiv.style.setProperty("--scale-factor", String(scale));
       const textLayer = new pdfjsLib.TextLayer({
         textContentSource: page.streamTextContent(),
         container: textLayerDiv,
@@ -199,9 +303,11 @@
         try {
           const first = await pdf.getPage(1);
           const vp = first.getViewport({ scale: 1 });
-          renderScale = computeScale(vp.width);
-          baseWidth = vp.width * renderScale;
-          baseHeight = vp.height * renderScale;
+          pageBaseW = vp.width;
+          pageBaseH = vp.height;
+          scale = clampScale(fitWidthScale());
+          baseWidth = pageBaseW * scale;
+          baseHeight = pageBaseH * scale;
         } catch {
           baseWidth = scrollEl ? Math.min(scrollEl.clientWidth - 24, 1100) : 800;
           baseHeight = baseWidth * 1.414;
@@ -295,11 +401,78 @@
         <span class="hidden sm:inline">Contents</span>
       </button>
     {/if}
+
+    <div class="flex items-center gap-1 border-l border-border-subtle pl-2">
+      <button
+        type="button"
+        onclick={zoomOut}
+        disabled={scale <= MIN_SCALE}
+        class="reader-mode-button"
+        aria-label="Zoom out"
+        title="Zoom out"
+      >
+        <Minus class="h-4 w-4" />
+      </button>
+      <span class="min-w-[3ch] text-center font-mono text-[0.62rem] tabular-nums text-text-muted">{zoomPercent}%</span>
+      <button
+        type="button"
+        onclick={zoomIn}
+        disabled={scale >= MAX_SCALE}
+        class="reader-mode-button"
+        aria-label="Zoom in"
+        title="Zoom in"
+      >
+        <Plus class="h-4 w-4" />
+      </button>
+      <button type="button" onclick={fitWidth} class="reader-mode-button" aria-label="Fit width" title="Fit width">
+        <span class="text-[0.62rem]">W</span>
+      </button>
+      <button type="button" onclick={fitPage} class="reader-mode-button" aria-label="Fit page" title="Fit one page in view">
+        <Maximize class="h-4 w-4" />
+      </button>
+    </div>
+
+    <div class="flex items-center gap-1 border-l border-border-subtle pl-2">
+      <button
+        type="button"
+        onclick={toggleGap}
+        class:active-reader-control={gapless}
+        class="reader-mode-button"
+        aria-label="Toggle page gaps"
+        title={gapless ? "Show page gaps" : "Remove page gaps"}
+      >
+        <StretchVertical class="h-4 w-4" />
+      </button>
+      {#if downloadHref}
+        <a
+          href={downloadHref}
+          download
+          class="reader-mode-button"
+          aria-label="Download PDF"
+          title="Download original PDF"
+        >
+          <Download class="h-4 w-4" />
+        </a>
+      {/if}
+    </div>
   {/snippet}
 
-  <div class="pdf-stage" bind:this={scrollEl} onscroll={handleScroll}>
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="pdf-stage"
+    bind:this={scrollEl}
+    onscroll={handleScroll}
+    onpointerdown={handleStagePointerDown}
+    onpointermove={handleStagePointerMove}
+    onpointerup={handleStagePointerEnd}
+    onpointercancel={handleStagePointerEnd}
+  >
     {#if ready}
-      <div class="pdf-pages">
+      <div
+        class="pdf-pages"
+        class:gapless
+        style={pinching ? `transform: scale(${pinchRatio}); transform-origin: center top` : ""}
+      >
         {#each pageIndexes as index (index)}
           <div class="pdf-page" data-page-index={index} bind:this={wrappers[index]}></div>
         {/each}
@@ -360,9 +533,11 @@
     position: absolute;
     inset: 0;
     overflow-y: auto;
-    overflow-x: hidden;
+    overflow-x: auto;
     background: #0b0c0f;
     overscroll-behavior: contain;
+    /* Allow native one-finger scroll while we handle two-finger pinch ourselves. */
+    touch-action: pan-x pan-y;
   }
 
   .pdf-pages {
@@ -371,6 +546,11 @@
     align-items: center;
     gap: 1rem;
     padding: max(3.5rem, env(safe-area-inset-top)) 0 4rem;
+  }
+
+  /* Stitch pages together with no gap for a continuous document feel. */
+  .pdf-pages.gapless {
+    gap: 0;
   }
 
   .pdf-page {
