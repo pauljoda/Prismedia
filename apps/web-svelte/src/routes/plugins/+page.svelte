@@ -352,9 +352,15 @@
     isSfw ? installedPlugins.filter((p) => !p.isNsfw) : installedPlugins,
   );
   // Stash scrapers are providers too, but they belong under the Stash Community tab — keep them
-  // out of the Prismedia Community catalog listing.
-  const prismediaProviders = $derived(pluginProviders.filter((plugin) => !plugin.id.startsWith("stash-")));
-  const visibleInstalledProviders = $derived(pluginProviders.filter((plugin) => plugin.installed));
+  // out of the Prismedia Community catalog listing. NSFW providers stay hidden in SFW mode.
+  const prismediaProviders = $derived(
+    pluginProviders.filter(
+      (plugin) => !plugin.id.startsWith("stash-") && (!isSfw || !plugin.isNsfw),
+    ),
+  );
+  const visibleInstalledProviders = $derived(
+    pluginProviders.filter((plugin) => plugin.installed && (!isSfw || !plugin.isNsfw)),
+  );
 
   // Resolve each available Stash scraper's installed state from the provider catalog.
   const installedProviderIds = $derived(

@@ -90,17 +90,17 @@ public sealed partial class IdentifyPluginService : IIdentifyProviderService {
             cancellationToken);
 
         if (directResult.Ok && directResult.Result?.Patch is not null) {
-            return MarkNsfwIfNeeded(directResult, providerIsNsfw);
+            return ApplyNsfwPolicies(directResult, providerIsNsfw);
         }
 
         if (entity.ParentEntityId is not null) {
             var cascadeResult = await CascadeFromParentAsync(entity, descriptor, auth, includeNsfw: !hideNsfw, cancellationToken);
             if (cascadeResult is not null) {
-                return MarkNsfwIfNeeded(cascadeResult, providerIsNsfw);
+                return ApplyNsfwPolicies(cascadeResult, providerIsNsfw);
             }
         }
 
-        return MarkNsfwIfNeeded(directResult, providerIsNsfw);
+        return ApplyNsfwPolicies(directResult, providerIsNsfw);
     }
 
     private async Task<bool> ProviderIsNsfwAsync(PluginDescriptor descriptor, CancellationToken cancellationToken) =>
@@ -110,10 +110,36 @@ public sealed partial class IdentifyPluginService : IIdentifyProviderService {
             .Where(row => row.ProviderCode == descriptor.Manifest.Id && row.Enabled)
             .AnyAsync(row => row.IsNsfw, cancellationToken);
 
-    private static IdentifyPluginResponse MarkNsfwIfNeeded(IdentifyPluginResponse response, bool providerIsNsfw) =>
-        providerIsNsfw && response.Ok && response.Result is not null
-            ? response with { Result = MarkProposalTreeNsfw(response.Result) }
-            : response;
+    /// <summary>
+    /// Applies NSFW marking to a proposal tree. Two independent rules contribute: an NSFW provider
+    /// (such as a Stash community scraper) marks its entire proposal tree, and any node whose
+    /// provider-supplied classification reads as mature (R, 18+, pornographic, and so on) marks
+    /// that node and everything beneath it — even when the provider itself is not NSFW.
+    /// </summary>
+    private static IdentifyPluginResponse ApplyNsfwPolicies(IdentifyPluginResponse response, bool providerIsNsfw) {
+        if (!response.Ok || response.Result is null) {
+            return response;
+        }
+
+        var result = providerIsNsfw ? MarkProposalTreeNsfw(response.Result) : response.Result;
+        result = MarkMatureClassificationNsfw(result);
+        return response with { Result = result };
+    }
+
+    private static EntityMetadataProposal MarkMatureClassificationNsfw(EntityMetadataProposal proposal) {
+        if (proposal.Patch is null) {
+            return proposal;
+        }
+
+        if (ContentClassificationNsfwPolicy.IsMature(proposal.Patch.Classification)) {
+            return MarkProposalTreeNsfw(proposal);
+        }
+
+        return proposal with {
+            Children = proposal.Children.Select(MarkMatureClassificationNsfw).ToArray(),
+            Relationships = (proposal.Relationships ?? []).Select(MarkMatureClassificationNsfw).ToArray()
+        };
+    }
 
     private static EntityMetadataProposal MarkProposalTreeNsfw(EntityMetadataProposal proposal) {
         if (proposal.Patch is null) {

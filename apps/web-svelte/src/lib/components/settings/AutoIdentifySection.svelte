@@ -21,6 +21,7 @@
     SettingValue,
   } from "$lib/api/settings";
   import { fetchPluginProviders, type PluginProvider } from "$lib/api/plugins";
+  import { filterNsfwAware } from "$lib/nsfw/aware-providers";
 
   interface Props {
     catalog: SettingsCatalogResponse | null;
@@ -56,8 +57,11 @@
     valueAsStringList(findSetting(catalog, settingKeys.autoIdentifyEntityKinds)?.value),
   );
 
-  // Only installed and enabled providers are eligible for auto identify.
-  const installed = $derived(providers.filter((p) => p.installed && p.enabled));
+  // Only installed and enabled providers are eligible for auto identify. NSFW providers (including
+  // every Stash scraper) stay hidden in SFW mode so they never surface in the settings list.
+  const installed = $derived(
+    filterNsfwAware(providers.filter((p) => p.installed && p.enabled)),
+  );
   const hasPlugins = $derived(installed.length > 0);
   const masterToggleDisabled = $derived(!hasPlugins && !enabled);
 

@@ -123,8 +123,10 @@ export class IdentifyStore {
 
   supportedKinds = $derived.by((): IdentifyKindInfo[] => {
     const kindMap = new Map<string, IdentifyKindInfo>();
+    const hideNsfw = this.#getHideNsfw();
     for (const provider of this.providers) {
       if (!provider.installed || !provider.enabled) continue;
+      if (hideNsfw && provider.isNsfw) continue;
       for (const support of provider.supports) {
         if (!kindMap.has(support.entityKind)) {
           kindMap.set(support.entityKind, {
@@ -169,11 +171,15 @@ export class IdentifyStore {
   });
 
   providersForKind(kind: string): PluginProvider[] {
+    // Hide NSFW providers (including every Stash scraper) while browsing in SFW mode so they are
+    // never offered as identify sources.
+    const hideNsfw = this.#getHideNsfw();
     return this.providers.filter(
       (provider) =>
         provider.installed &&
         provider.enabled &&
         provider.missingAuthKeys.length === 0 &&
+        (!hideNsfw || !provider.isNsfw) &&
         provider.supports.some((support) => support.entityKind === kind),
     );
   }

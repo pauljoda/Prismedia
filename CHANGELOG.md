@@ -47,6 +47,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Changed
+- NSFW plugins now stay completely hidden while you browse in SFW mode. Every Stash scraper counts as NSFW, along with any plugin marked NSFW, so they disappear from the Plugins page (installed list and the Prismedia/Stash community catalogs), the Auto Identify provider picker, and the identify provider options until you reveal NSFW content.
+- Identify now respects content ratings even from mainstream providers: when a provider like TMDB or MangaDex returns a mature rating (R, NC-17, TV-MA, 18+, pornographic, and similar), that proposal — and everything it brings in — is marked NSFW automatically.
 - The command palette now shows only a few results per category, each grouped in its own section with a "See all" link to the full search filtered to that category, so high-count categories like People no longer bury everything else.
 - Refined the Settings API Access panel: the server key is now clearly labeled and masked, profile toggles for NSFW and Enabled use the design-system switches with at-a-glance status, the add-profile form uses the standard inputs and checkbox, and an empty state explains how to get started.
 - API routes now require the generated API key, while the native web app receives it automatically as a same-origin HttpOnly cookie so normal browser use remains frictionless.
