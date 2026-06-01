@@ -118,7 +118,6 @@ public sealed partial class HlsAssetService {
             }
 
             if (result.ExitCode != 0 &&
-                effectiveTranscoderProfile == HlsTranscoderProfile.Software &&
                 NeedsToneMapping(source) &&
                 IsMissingVideoFilterError(result.StandardError)) {
                 _logger?.LogWarning(

@@ -43,6 +43,13 @@ public sealed partial class HlsAssetService {
             arguments.AddRange(["-vaapi_device", vaapiDevice]);
         }
 
+        // When tone mapping on VideoToolbox, offload decode to the GPU as well; ffmpeg downloads the
+        // frames for the CPU tone-map filter, leaving only that filter on the CPU. Decode hardware
+        // acceleration must be declared before the input.
+        if (transcoderProfile == HlsTranscoderProfile.VideoToolbox && enableToneMapping && NeedsToneMapping(source)) {
+            arguments.AddRange(["-hwaccel", "videotoolbox"]);
+        }
+
         arguments.AddRange(
         [
             "-i",
@@ -314,8 +321,18 @@ public sealed partial class HlsAssetService {
 
     private static HlsTranscoderProfile ResolveEffectiveTranscoderProfile(
         VideoSourceFile source,
-        HlsTranscoderProfile requestedProfile) =>
-        NeedsToneMapping(source) ? HlsTranscoderProfile.Software : requestedProfile;
+        HlsTranscoderProfile requestedProfile) {
+        if (!NeedsToneMapping(source)) {
+            return requestedProfile;
+        }
+
+        // VideoToolbox keeps decode and encode on the GPU while the HDR/Dolby Vision tone map runs
+        // on the CPU, which is dramatically faster than an all-software transcode. Other accelerators
+        // have no wired tone-map path, so they fall back to software to guarantee correct SDR output.
+        return requestedProfile == HlsTranscoderProfile.VideoToolbox
+            ? HlsTranscoderProfile.VideoToolbox
+            : HlsTranscoderProfile.Software;
+    }
 
     private static bool NeedsToneMapping(VideoSourceFile source) {
         var range = VideoPlaybackRangePolicy.Classify(PrimaryVideoStream(source));
