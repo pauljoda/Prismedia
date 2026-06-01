@@ -162,7 +162,9 @@
     const selection = doc.getSelection?.();
     if (selection && !selection.isCollapsed) return;
 
-    const width = doc.documentElement?.clientWidth || (doc.defaultView?.innerWidth ?? 0);
+    // Use the iframe's visible viewport width. In paged mode foliate columnizes the document
+    // so documentElement.clientWidth is the full multi-column width, which would skew the zones.
+    const width = doc.defaultView?.innerWidth || doc.documentElement?.clientWidth || 0;
     if (width <= 0) {
       shell?.toggleControls();
       return;
@@ -174,6 +176,10 @@
   }
 
   function attachContentTaps(doc: Document) {
+    // foliate can emit `load` for a document more than once; bind the tap handler only once.
+    const marked = doc as Document & { __prismediaTaps?: boolean };
+    if (marked.__prismediaTaps) return;
+    marked.__prismediaTaps = true;
     doc.addEventListener("click", (event) => handleContentTap(event as MouseEvent, doc));
   }
 
@@ -470,7 +476,7 @@
     position: absolute;
     top: 50%;
     z-index: 10;
-    display: none;
+    display: flex;
     height: 2.75rem;
     width: 2.75rem;
     transform: translateY(-50%);
@@ -561,11 +567,5 @@
   .toc-item:disabled {
     color: var(--color-text-muted);
     cursor: default;
-  }
-
-  @media (min-width: 640px) {
-    .reader-nav-button {
-      display: flex;
-    }
   }
 </style>

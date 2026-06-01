@@ -16,12 +16,15 @@ lazily and only when a PDF is opened.
 
 Local modifications (re-apply when updating the pinned commit):
 
-- `pdf.js`: the asset base in `pdfjsPath` was made relative (`./vendor/pdfjs/...`) so
-  Vite's `new URL(..., import.meta.url)` resolution accepts it, and the two layer-CSS
-  values are imported at build time via `?raw` instead of being fetched with a
-  module-level top-level `await` (which our build target does not support).
-- `vendor/pdfjs`: the `*.map` source maps (~7.7MB) were omitted; the runtime `.mjs`,
-  CSS, `cmaps/`, and `standard_fonts/` are kept.
+- `pdf.js`: the two layer-CSS values are imported at build time via `?raw` (instead of a
+  module-level top-level `await fetchText`, which our build target rejects), and
+  `pdfjsPath` returns a plain absolute URL under `/foliate-pdfjs/` rather than using
+  `new URL(..., import.meta.url)` — Vite rewrites a dynamic `new URL` into a glob lookup
+  that returns `undefined` for the `cmaps/`/`standard_fonts/` directories.
+- `vendor/pdfjs`: only the bundled bits live here now — `pdf.mjs` (statically imported) and
+  the two layer CSS files (imported `?raw`). The runtime assets fetched by pdf.js at run time
+  (`pdf.worker.mjs`, `cmaps/`, `standard_fonts/`) live in `static/foliate-pdfjs/` so they are
+  served at a stable URL. The `*.map` source maps (~7.7MB) were omitted.
 
 Dev/build files (`reader.js`, `reader.html`, `tests/`, `rollup/`, config) were not
 vendored. Update by re-copying the runtime modules from a newer pinned commit.

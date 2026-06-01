@@ -1,11 +1,14 @@
 // Patched for Vite/Prismedia (see PROVENANCE.md):
-//  - the asset base must be relative ("./") for new URL(..., import.meta.url) resolution
 //  - the layer CSS is imported at build time (?raw) instead of fetched at module top level,
 //    which removes the top-level await our build target does not support
+//  - runtime pdfjs assets (worker, cmaps, standard fonts) are served from `static/foliate-pdfjs/`
+//    at a stable absolute URL. We must NOT build that URL with `new URL(..., import.meta.url)`
+//    because Vite rewrites a dynamic `new URL` into a glob lookup that returns `undefined` for
+//    the cmaps/standard_fonts *directories*.
 import textLayerBuilderCSS from './vendor/pdfjs/text_layer_builder.css?raw'
 import annotationLayerBuilderCSS from './vendor/pdfjs/annotation_layer_builder.css?raw'
 
-const pdfjsPath = path => new URL(`./vendor/pdfjs/${path}`, import.meta.url).toString()
+const pdfjsPath = path => `/foliate-pdfjs/${path}`
 
 import './vendor/pdfjs/pdf.mjs'
 const pdfjsLib = globalThis.pdfjsLib
