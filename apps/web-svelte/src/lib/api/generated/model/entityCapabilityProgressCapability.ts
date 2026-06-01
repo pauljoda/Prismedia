@@ -31,4 +31,6 @@ export interface EntityCapabilityProgressCapability {
      * @pattern ^-?(?:0|[1-9]\d*)$
      */
   workTotal?: number | string | null;
+  /** @nullable */
+  location?: string | null;
 }

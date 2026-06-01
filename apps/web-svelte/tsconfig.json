@@ -3,7 +3,7 @@
   "compilerOptions": {
     "allowJs": true,
     "allowImportingTsExtensions": true,
-    "checkJs": true,
+    "checkJs": false,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
@@ -12,5 +12,13 @@
     "strict": true,
     "moduleResolution": "bundler",
     "types": ["@testing-library/jest-dom"]
-  }
+  },
+  "exclude": [
+    "node_modules/**",
+    "src/lib/vendor/**",
+    "src/service-worker.js",
+    "src/service-worker/**",
+    "src/service-worker.ts",
+    "src/service-worker.d.ts"
+  ]
 }

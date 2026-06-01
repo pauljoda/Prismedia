@@ -76,6 +76,10 @@
 
   const bookId = $derived(page.params.id ?? "");
   const bookType = $derived(book?.bookType ?? null);
+  // Single-file books (EPUB/PDF) are read straight from the source file with no chapter entities.
+  const isSingleFileBook = $derived(!!book && book.format !== "image-archive");
+  const singleFileProgress = $derived(book && isSingleFileBook ? getCapability(book.capabilities, "progress") : null);
+  const singleFileInProgress = $derived(!!singleFileProgress?.location && !singleFileProgress?.completedAt);
   const peopleLabel = $derived(bookType === "comic" || bookType === "manga" ? "Artists" : "People");
   const bookTitle = $derived(book?.title ?? "Book");
   const chapterSummaries = $derived(combineChapterSummaries(chapterDetails, progressChapterSummary));
@@ -105,7 +109,16 @@
   const heroActions = $derived.by((): EntityDetailActionButton[] => {
     const actions: EntityDetailActionButton[] = [];
     if (identifyAction.action) actions.push(identifyAction.action);
-    if (readerPageCount > 0) {
+    if (isSingleFileBook) {
+      actions.push({
+        id: "read-book",
+        label: singleFileInProgress ? "Resume" : singleFileProgress?.completedAt ? "Re-read" : "Read",
+        icon: Play,
+        iconFill: "currentColor",
+        variant: "primary",
+        onClick: openSingleFileReader,
+      });
+    } else if (readerPageCount > 0) {
       actions.push({
         id: "read-book",
         label: primaryReadLabel,
@@ -304,6 +317,17 @@
       id: selectedChapter.detail.id,
       returnId: book.id,
       command: selectedProgress && !selectedProgress.isComplete ? "resume" : undefined,
+    }));
+  }
+
+  function openSingleFileReader() {
+    if (!book) return;
+    void goto(bookReaderHref({
+      bookId: book.id,
+      kind: "book",
+      id: book.id,
+      returnId: book.id,
+      command: singleFileInProgress ? "resume" : singleFileProgress?.completedAt ? "start-over" : undefined,
     }));
   }
 

@@ -171,6 +171,7 @@ export async function updateEntityProgress(
     mode?: string | null;
     completed?: boolean | null;
     reset?: boolean;
+    location?: string | null;
   },
   options?: RequestOptions,
 ): Promise<EntityCard> {
@@ -185,6 +186,7 @@ export async function updateEntityProgress(
         mode: payload.mode ?? null,
         completed: payload.completed ?? null,
         reset: payload.reset ?? false,
+        location: payload.location ?? null,
       } as EntityProgressUpdateRequest,
       requestInit(options),
     ),

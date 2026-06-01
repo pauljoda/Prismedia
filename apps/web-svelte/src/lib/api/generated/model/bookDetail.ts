@@ -9,6 +9,7 @@ import type { EntityGroup } from './entityGroup';
 
 export interface BookDetail {
   bookType: string;
+  format: string;
   /** @nullable */
   coverPageId: string | null;
   id: string;

@@ -23,8 +23,13 @@
   import { ENTITY_KIND } from "$lib/entities/entity-codes";
   import type { EntityThumbnail } from "$lib/api/generated/model";
   import ComicReader from "$lib/components/ComicReader.svelte";
+  import BookFileReader from "$lib/components/BookFileReader.svelte";
   import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
   import { useNsfw } from "$lib/nsfw/store.svelte";
+
+  // Book formats whose reader streams the raw source file (no chapter/page entities).
+  const SINGLE_FILE_FORMATS = new Set(["epub", "pdf"]);
+  type ReaderFlow = "paginated" | "scrolled";
 
   type LoadState = "loading" | "ready" | "error";
   type ReaderMode = "paged" | "webtoon";
@@ -49,6 +54,16 @@
   let errorMessage: string | null = $state(null);
   let progressSaveQueue: Promise<void> = Promise.resolve();
 
+  // Single-file book reader state (EPUB/PDF).
+  let singleFileBook = $state(false);
+  let singleFileSource = $state("");
+  let singleFileContentType = $state("application/epub+zip");
+  let singleFileLocation = $state.raw<string | null>(null);
+  let singleFileFlow = $state.raw<ReaderFlow>("paginated");
+  let singleFileSaveLocation: string | null = null;
+  let singleFileSaveFraction = 0;
+  let singleFileFlowMode: ReaderFlow = "paginated";
+
   const bookId = $derived(page.params.id ?? "");
   const readerPages = $derived(
     readerChapters.flatMap((chapter) => chapter.pages.map(entityPageToReaderImage)),
@@ -72,6 +87,12 @@
 
     try {
       const nextBook = await fetchBook(bookId);
+
+      if (SINGLE_FILE_FORMATS.has(nextBook.format)) {
+        await loadSingleFileReader(nextBook, nextContext);
+        return;
+      }
+
       const resolved = await resolveReader(nextBook, nextContext);
       book = nextBook;
       context = nextContext;
@@ -87,6 +108,63 @@
       errorMessage = err instanceof Error ? err.message : String(err);
       loadState = "error";
     }
+  }
+
+  async function loadSingleFileReader(nextBook: BookDetail, nextContext: BookReaderRouteContext) {
+    const progress = getCapability(nextBook.capabilities, "progress");
+    const resume = nextContext.command !== "start-over" && !progress?.completedAt;
+    singleFileBook = true;
+    singleFileSource = `/entities/${nextBook.id}/files/source`;
+    singleFileContentType = nextBook.format === "pdf" ? "application/pdf" : "application/epub+zip";
+    singleFileLocation = resume ? progress?.location ?? null : null;
+    singleFileFlow = progress?.mode === "scrolled" ? "scrolled" : "paginated";
+    singleFileFlowMode = singleFileFlow;
+    singleFileSaveLocation = singleFileLocation;
+    singleFileSaveFraction = resume ? Number(progress?.index ?? 0) / 10000 : 0;
+    book = nextBook;
+    context = nextContext;
+    readerTitle = nextBook.title;
+    returnHref = await resolveReaderReturnHref(nextBook.id, nextContext);
+    loadState = "ready";
+  }
+
+  function handleSingleFileLocation(location: { cfi: string | null; fraction: number; label: string | null }) {
+    singleFileSaveLocation = location.cfi;
+    singleFileSaveFraction = location.fraction;
+    void queueSingleFileSave().catch(() => undefined);
+  }
+
+  function handleSingleFileFlow(flow: ReaderFlow) {
+    singleFileFlowMode = flow;
+    void queueSingleFileSave().catch(() => undefined);
+  }
+
+  async function saveSingleFileProgress(completed = false) {
+    if (!book) return;
+    const percent = Math.max(0, Math.min(10000, Math.round(singleFileSaveFraction * 10000)));
+    await updateEntityProgress(book.id, {
+      currentEntityId: book.id,
+      unit: "cfi",
+      index: percent,
+      total: 10000,
+      mode: singleFileFlowMode,
+      location: singleFileSaveLocation,
+      completed: completed ? true : null,
+    });
+  }
+
+  function queueSingleFileSave(completed = false) {
+    const nextSave = progressSaveQueue
+      .catch(() => undefined)
+      .then(() => saveSingleFileProgress(completed));
+    progressSaveQueue = nextSave;
+    return nextSave;
+  }
+
+  async function closeSingleFileReader() {
+    const completed = singleFileSaveFraction >= 0.995;
+    await queueSingleFileSave(completed).catch(() => undefined);
+    await goto(returnHref);
   }
 
   async function resolveReader(nextBook: BookDetail, nextContext: BookReaderRouteContext) {
@@ -370,7 +448,20 @@
   <title>{readerTitle} · Prismedia</title>
 </svelte:head>
 
-{#if loadState === "ready"}
+{#if loadState === "ready" && singleFileBook}
+  <BookFileReader
+    sourceUrl={singleFileSource}
+    contentType={singleFileContentType}
+    title={readerTitle}
+    presentation="page"
+    closeIcon="back"
+    initialLocation={singleFileLocation}
+    initialFlow={singleFileFlow}
+    onLocationChange={handleSingleFileLocation}
+    onFlowChange={handleSingleFileFlow}
+    onClose={() => void closeSingleFileReader()}
+  />
+{:else if loadState === "ready"}
   <ComicReader
     images={readerPages}
     initialIndex={readerIndex}

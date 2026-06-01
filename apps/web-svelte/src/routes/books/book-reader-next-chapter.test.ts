@@ -66,6 +66,7 @@ function bookDetail(): BookDetail {
     parentEntityId: null,
     sortOrder: 0,
     bookType: "comic",
+    format: "image-archive",
     coverPageId: null,
     capabilities: [],
     childrenByKind: [

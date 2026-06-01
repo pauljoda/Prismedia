@@ -49,6 +49,7 @@ describe("playback API", () => {
           mode: null,
           completed: false,
           reset: false,
+          location: null,
         }),
       }),
     );
