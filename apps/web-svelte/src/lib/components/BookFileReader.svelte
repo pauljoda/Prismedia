@@ -154,33 +154,79 @@
     onLocationChange?.({ cfi, fraction, label });
   }
 
-  // Comic-style tap zones injected into the rendered content document: left/right thirds
-  // turn the page, the centre toggles the chrome. Swipe is handled by foliate natively.
-  function handleContentTap(event: MouseEvent, doc: Document) {
-    const target = event.target as HTMLElement | null;
-    if (target?.closest?.("a[href]")) return;
-    const selection = doc.getSelection?.();
-    if (selection && !selection.isCollapsed) return;
+  // Comic-style gesture overlay (paged mode only). foliate columnizes the page into a single
+  // wide iframe inside an inaccessible (closed shadow DOM) scroller, so tap coordinates can't be
+  // read reliably from inside the content. Instead we capture pointer gestures on an overlay in
+  // the top window — exactly like the comic reader — and drive foliate via goLeft/goRight.
+  interface ReaderPointerGesture {
+    pointerId: number;
+    startX: number;
+    startY: number;
+    moved: boolean;
+  }
 
-    // Use the iframe's visible viewport width. In paged mode foliate columnizes the document
-    // so documentElement.clientWidth is the full multi-column width, which would skew the zones.
-    const width = doc.defaultView?.innerWidth || doc.documentElement?.clientWidth || 0;
-    if (width <= 0) {
-      shell?.toggleControls();
+  let readerPointerGesture: ReaderPointerGesture | null = null;
+  const READER_SWIPE_THRESHOLD = 50;
+
+  function handleGesturePointerDown(event: PointerEvent) {
+    readerPointerGesture = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      moved: false,
+    };
+    if (event.pointerType !== "mouse") {
+      (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
+    }
+  }
+
+  function handleGesturePointerMove(event: PointerEvent) {
+    if (!readerPointerGesture || readerPointerGesture.pointerId !== event.pointerId) return;
+    const deltaX = event.clientX - readerPointerGesture.startX;
+    const deltaY = event.clientY - readerPointerGesture.startY;
+    if (Math.hypot(deltaX, deltaY) > 10) readerPointerGesture.moved = true;
+  }
+
+  function clearGesture() {
+    readerPointerGesture = null;
+  }
+
+  function handleGesturePointerUp(event: PointerEvent) {
+    const gesture = readerPointerGesture;
+    clearGesture();
+
+    if (gesture && gesture.pointerId === event.pointerId) {
+      const dx = event.clientX - gesture.startX;
+      const dy = event.clientY - gesture.startY;
+      const absX = Math.abs(dx);
+      const absY = Math.abs(dy);
+
+      // Touch swipe: horizontal turns the page, a downward swipe dismisses — matching the comic reader.
+      if (event.pointerType !== "mouse" && Math.max(absX, absY) > READER_SWIPE_THRESHOLD) {
+        if (absX > absY * 1.3) {
+          if (dx < 0) goNext();
+          else goPrev();
+          return;
+        }
+        if (absY > absX * 1.3 && dy > 0) {
+          onClose();
+          return;
+        }
+        return;
+      }
+
+      if (gesture.moved) return;
+    }
+
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    const zone = comicTapZone(event.clientX - rect.left, rect.width);
+    if (event.pointerType === "mouse") {
+      if (zone === "controls") shell?.toggleControls();
       return;
     }
-    const zone = comicTapZone(event.clientX, width);
     if (zone === "previous") goPrev();
     else if (zone === "next") goNext();
     else shell?.toggleControls();
-  }
-
-  function attachContentTaps(doc: Document) {
-    // foliate can emit `load` for a document more than once; bind the tap handler only once.
-    const marked = doc as Document & { __prismediaTaps?: boolean };
-    if (marked.__prismediaTaps) return;
-    marked.__prismediaTaps = true;
-    doc.addEventListener("click", (event) => handleContentTap(event as MouseEvent, doc));
   }
 
   onMount(() => {
@@ -206,12 +252,6 @@
         view.style.width = "100%";
         view.style.height = "100%";
         stageEl.append(view);
-
-        // Inject tap zones into every rendered section/page document as it loads.
-        view.addEventListener("load", (event: Event) => {
-          const doc = (event as CustomEvent).detail?.doc as Document | undefined;
-          if (doc) attachContentTaps(doc);
-        });
 
         await view.open(file);
         if (disposed) return;
@@ -328,6 +368,17 @@
   {/snippet}
 
   <div class="book-reader-stage" bind:this={stageEl}>
+    {#if ready && flow === "paginated"}
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div
+        class="book-reader-gestures"
+        onpointerdown={handleGesturePointerDown}
+        onpointermove={handleGesturePointerMove}
+        onpointerup={handleGesturePointerUp}
+        onpointercancel={clearGesture}
+      ></div>
+    {/if}
+
     {#if ready}
       <button
         type="button"
@@ -421,6 +472,15 @@
     color: var(--color-text-secondary);
     text-align: center;
     pointer-events: none;
+  }
+
+  /* Captures comic-style tap/swipe gestures above the foliate view in paged mode.
+     Sits below the edge nav buttons (z-index 10) so those still receive their own clicks. */
+  .book-reader-gestures {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    touch-action: none;
   }
 
   .book-reader-end {
