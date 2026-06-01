@@ -471,7 +471,7 @@ public sealed class HlsAssetServiceTests : IDisposable {
                 sourcePath,
                 "video/x-matroska",
                 false,
-                DurationSeconds: 180,
+                DurationSeconds: 600,
                 Width: 1920,
                 Height: 960)),
             process,
@@ -480,7 +480,9 @@ public sealed class HlsAssetServiceTests : IDisposable {
         var initialSegment = service.GetAssetAsync(videoId, "v/720p/seg_00000.ts", null, CancellationToken.None);
         await process.InitialGenerationStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
-        var farSegment = await service.GetAssetAsync(videoId, "v/720p/seg_00020.ts", null, CancellationToken.None)
+        // A segment far beyond the running generation's reuse window is treated as a forward seek:
+        // it starts a fresh generation at the seek point and the original generation is replaced.
+        var farSegment = await service.GetAssetAsync(videoId, "v/720p/seg_00070.ts", null, CancellationToken.None)
             .WaitAsync(TimeSpan.FromSeconds(5));
 
         process.ReleaseInitialGeneration();
@@ -488,7 +490,7 @@ public sealed class HlsAssetServiceTests : IDisposable {
 
         Assert.Null(replacedInitialSegment);
         Assert.NotNull(farSegment);
-        Assert.Equal("seg_00020.ts", Path.GetFileName(farSegment.Path));
+        Assert.Equal("seg_00070.ts", Path.GetFileName(farSegment.Path));
         Assert.Equal(2, process.ArgumentHistory.Count);
         Assert.Contains(process.ArgumentHistory, arguments => {
             var startNumberIndex = arguments.ToList().IndexOf("-start_number");
@@ -496,7 +498,7 @@ public sealed class HlsAssetServiceTests : IDisposable {
         });
         Assert.Contains(process.ArgumentHistory, arguments => {
             var startNumberIndex = arguments.ToList().IndexOf("-start_number");
-            return startNumberIndex >= 0 && arguments[startNumberIndex + 1] == "19";
+            return startNumberIndex >= 0 && arguments[startNumberIndex + 1] == "69";
         });
     }
 

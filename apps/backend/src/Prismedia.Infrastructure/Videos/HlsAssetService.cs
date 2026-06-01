@@ -18,7 +18,15 @@ namespace Prismedia.Infrastructure.Videos;
 public sealed partial class HlsAssetService : IHlsAssetService {
     private const int SegmentDurationSeconds = 6;
     private const int VirtualCacheFormatVersion = 9;
-    private const int ActiveGenerationReuseWindowSegments = 12;
+
+    // How far ahead of a running generation's start/frontier a requested segment may be while still
+    // attaching to that generation instead of starting a new one. This must comfortably exceed the
+    // player's forward buffer depth (maxBufferLength 240s ÷ 6s ≈ 40 segments): while buffering, the
+    // player requests segments well ahead of the transcode frontier, and if those requests fell
+    // outside this window the server would cancel the running transcode and cold-start a new one —
+    // which under hardware-encoder contention overruns the fragment timeout and stalls playback. A
+    // genuine forward seek beyond this window still starts a fresh generation at the seek point.
+    private const int ActiveGenerationReuseWindowSegments = 50;
     private static readonly TimeSpan SegmentPollInterval = TimeSpan.FromMilliseconds(100);
     private static readonly ConcurrentDictionary<string, VirtualRenditionGeneration> ActiveRenditions = new();
     private static readonly ConcurrentDictionary<Guid, SemaphoreSlim> VirtualCacheRefreshLocks = new();
