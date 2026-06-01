@@ -4,6 +4,8 @@
     Check,
     CheckCheck,
     ChevronDown,
+    ChevronsDownUp,
+    ChevronsUpDown,
     EllipsisVertical,
     Flame,
     Grid2x2,
@@ -12,12 +14,17 @@
     LayoutGrid,
     List,
     ListChecks,
+    Rows3,
     RotateCcw,
     Search,
     Shuffle,
     SlidersHorizontal,
     X,
   } from "@lucide/svelte";
+  import { onMount } from "svelte";
+  import { slide } from "svelte/transition";
+  import { cubicOut } from "svelte/easing";
+  import { browser } from "$app/environment";
   import { cn } from "@prismedia/ui-svelte";
   import type { FilterPreset } from "$lib/filter-presets";
   import { entityGridFilterFromId } from "$lib/entities/entity-grid";
@@ -40,6 +47,8 @@
     /** Collection-eligible members of the current selection, used by the Add to Collection menu. */
     collectionItems: { entityType: CollectionEntityType; entityId: string }[];
     canClearFiltersAndSort: boolean;
+    /** When true, exposes the vertical feed view mode toggle. */
+    enableFeedView?: boolean;
     drawerOpen: boolean;
     filterOptions: EntityGridFilterOption[];
     maxScale: number;
@@ -82,6 +91,7 @@
     bulkActions,
     collectionItems,
     canClearFiltersAndSort,
+    enableFeedView = false,
     drawerOpen,
     filterOptions,
     maxScale,
@@ -145,6 +155,59 @@
       .filter((option): option is EntityGridFilterOption => Boolean(option)),
   );
 
+  // The active-filter chip row and the selection/bulk row are the two secondary
+  // toolbar rows that can be collapsed to keep the bar compact (especially on
+  // mobile). The toggle only appears when at least one of them is present.
+  const hasCollapsibleRows = $derived(
+    selectable || activeFilters.length > 0 || canClearFiltersAndSort,
+  );
+
+  let barsCollapsed = $state(false);
+  // Once the user collapses/expands by hand, scrolling stops driving the state.
+  let collapsePinned = $state(false);
+
+  function toggleBars() {
+    barsCollapsed = !barsCollapsed;
+    collapsePinned = true;
+  }
+
+  // Auto-collapse the secondary rows while scrolling down and bring them back a
+  // beat after scrolling up, unless the user has taken manual control.
+  onMount(() => {
+    if (!browser) return;
+    let lastY = window.scrollY;
+    let expandTimer: ReturnType<typeof setTimeout> | undefined;
+
+    function scrollTopOf(target: EventTarget | null): number {
+      if (target instanceof HTMLElement) return target.scrollTop;
+      return window.scrollY;
+    }
+
+    function onScroll(event: Event) {
+      if (collapsePinned) return;
+      const y = scrollTopOf(event.target);
+      const delta = y - lastY;
+      lastY = y;
+      if (Math.abs(delta) < 8) return;
+
+      if (delta > 0 && y > 48) {
+        clearTimeout(expandTimer);
+        barsCollapsed = true;
+      } else if (delta < 0) {
+        clearTimeout(expandTimer);
+        expandTimer = setTimeout(() => {
+          if (!collapsePinned) barsCollapsed = false;
+        }, 200);
+      }
+    }
+
+    window.addEventListener("scroll", onScroll, { capture: true, passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll, { capture: true });
+      clearTimeout(expandTimer);
+    };
+  });
+
   function removeFilter(id: string) {
     onActiveFilterIdsChange(activeFilterIds.filter((filterId) => filterId !== id));
   }
@@ -178,10 +241,8 @@
           </button>
         {/if}
       </label>
-    </div>
 
-    <div class="controls-row">
-      <div class="control-cluster">
+      <div class="search-sort">
         <div class="relative">
           <button
             type="button"
@@ -200,7 +261,7 @@
               aria-label="Close sort menu"
               onclick={() => (sortOpen = false)}
             ></button>
-            <div class="sort-menu">
+            <div class="sort-menu sort-menu-end">
               {#each SORT_OPTIONS as opt (opt.value)}
                 <button
                   type="button"
@@ -239,9 +300,11 @@
             <ChevronDown class={cn("h-3.5 w-3.5 dir-arrow", sortDir === "asc" && "is-up")} />
           </button>
         {/if}
+      </div>
+    </div>
 
-        <span class="cluster-divider" aria-hidden="true"></span>
-
+    <div class="controls-row">
+      <div class="control-cluster">
         <div class="view-toggle" aria-label="View mode">
           <button
             type="button"
@@ -263,20 +326,33 @@
           >
             <List class="h-3.5 w-3.5" />
           </button>
+          {#if enableFeedView}
+            <button
+              type="button"
+              class:is-active={viewMode === "feed"}
+              title="Feed view"
+              aria-label="Feed view"
+              aria-pressed={viewMode === "feed"}
+              onclick={() => onViewModeChange("feed")}
+            >
+              <Rows3 class="h-3.5 w-3.5" />
+            </button>
+          {/if}
         </div>
 
-        <button
-          type="button"
-          class={cn("ctrl-btn ctrl-icon", mediaWall && "is-active")}
-          title="Media wall"
-          aria-label="Media wall"
-          aria-pressed={mediaWall}
-          onclick={() => onMediaWallChange(!mediaWall)}
-        >
-          <Image class="h-3.5 w-3.5" />
-        </button>
+        {#if viewMode !== "feed"}
+          <button
+            type="button"
+            class={cn("ctrl-btn ctrl-icon", mediaWall && "is-active")}
+            title="Media wall"
+            aria-label="Media wall"
+            aria-pressed={mediaWall}
+            onclick={() => onMediaWallChange(!mediaWall)}
+          >
+            <Image class="h-3.5 w-3.5" />
+          </button>
 
-        <label class="thumb-size-inline" title="Drag to change thumbnail size">
+          <label class="thumb-size-inline" title="Drag to change thumbnail size">
           <Grid2x2 class="thumb-size-icon thumb-size-icon-min" aria-hidden="true" />
           <span class="sr-only">Thumbnail columns</span>
           <input
@@ -326,6 +402,7 @@
             </div>
           {/if}
         </div>
+        {/if}
       </div>
 
       <div class="control-cluster control-cluster-trailing">
@@ -350,12 +427,30 @@
           {onOverwritePreset}
           {onDeletePreset}
         />
+
+        {#if hasCollapsibleRows}
+          <button
+            type="button"
+            class="ctrl-btn ctrl-icon collapse-toggle"
+            class:is-active={barsCollapsed}
+            title={barsCollapsed ? "Show filter and selection rows" : "Hide filter and selection rows"}
+            aria-label={barsCollapsed ? "Show filter and selection rows" : "Hide filter and selection rows"}
+            aria-expanded={!barsCollapsed}
+            onclick={toggleBars}
+          >
+            {#if barsCollapsed}
+              <ChevronsUpDown class="h-3.5 w-3.5" />
+            {:else}
+              <ChevronsDownUp class="h-3.5 w-3.5" />
+            {/if}
+          </button>
+        {/if}
       </div>
     </div>
     </div>
 
-    {#if activeFilters.length > 0 || canClearFiltersAndSort}
-    <div class="filter-row toolbar-bar">
+    {#if !barsCollapsed && (activeFilters.length > 0 || canClearFiltersAndSort)}
+    <div class="filter-row toolbar-bar" transition:slide={{ duration: 200, easing: cubicOut }}>
       <div class="filter-scroll" aria-live="polite">
         {#if activeFilters.length > 0}
           <span class="filter-chip-label" aria-hidden="true">
@@ -385,8 +480,8 @@
     </div>
     {/if}
 
-    {#if selectable}
-      <div class="bulk-bar toolbar-bar" role="status" aria-live="polite">
+    {#if selectable && !barsCollapsed}
+      <div class="bulk-bar toolbar-bar" role="status" aria-live="polite" transition:slide={{ duration: 200, easing: cubicOut }}>
         <button
           type="button"
           class="bulk-btn select-toggle"
@@ -607,8 +702,22 @@
   .search-row {
     display: flex;
     align-items: center;
-    gap: 0.65rem;
+    gap: 0.5rem;
     min-width: 0;
+  }
+
+  /* Compact sort controls tucked to the right of the search box. */
+  .search-sort {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  /* Anchor the dropdown to the right since the trigger sits near the edge. */
+  .sort-menu-end {
+    left: auto;
+    right: 0;
   }
 
   .search-box {
@@ -720,19 +829,6 @@
     justify-content: flex-end;
     flex-wrap: nowrap;
     flex-shrink: 0;
-  }
-
-  .cluster-divider {
-    display: inline-block;
-    width: 1px;
-    height: 1.1rem;
-    background: linear-gradient(
-      to bottom,
-      transparent,
-      rgb(255 255 255 / 0.08),
-      transparent
-    );
-    margin: 0 0.15rem;
   }
 
   .ctrl-btn {

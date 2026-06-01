@@ -11,4 +11,5 @@
   emptyTitle="No galleries"
   emptyMessage="No galleries in your library yet. Add a library root and scan to get started."
   errorMessage="Failed to load galleries."
+  enableFeedView
 />

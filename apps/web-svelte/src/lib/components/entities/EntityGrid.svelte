@@ -49,6 +49,12 @@
      * filter labels (e.g. Read/Unread for books vs Watched/Unwatched for video).
      */
     entityKind?: string;
+    /**
+     * When true, the toolbar exposes a vertical "feed" view mode (single-column,
+     * content sized to its aspect, with inline autoplay for video-capable items).
+     * Only meaningful for image/gallery routes.
+     */
+    enableFeedView?: boolean;
     hasMore?: boolean;
     initialPageSize?: number;
     initialMediaWall?: boolean;
@@ -95,6 +101,7 @@
     initialSortBy = "title",
     initialSortDir = "asc",
     dockControls = true,
+    enableFeedView = false,
     loading = false,
     loadingMore = false,
     loadMoreError = null,
@@ -188,7 +195,20 @@
   // Seed for the random sort. Regenerated each time Random is (re)selected so the
   // shuffle changes, but held stable across pagination within one shuffle.
   let randomSeed = $state(1);
-  let viewMode = $state<EntityGridViewMode>(persistedPrefs?.viewMode ?? "grid");
+  // Fall back to grid when a persisted "feed" preference lands on a route that does
+  // not offer the feed toggle, so a stale device pref can't strand the view.
+  // svelte-ignore state_referenced_locally
+  let viewMode = $state<EntityGridViewMode>(
+    persistedPrefs?.viewMode === "feed" && !enableFeedView ? "grid" : (persistedPrefs?.viewMode ?? "grid"),
+  );
+  // The feed view pulls in the inline video player, so it is code-split and only
+  // loaded the first time the feed is actually shown.
+  let FeedComponent = $state<typeof import("./EntityFeed.svelte").default | null>(null);
+  $effect(() => {
+    if (viewMode === "feed" && !FeedComponent) {
+      void import("./EntityFeed.svelte").then((module) => (FeedComponent = module.default));
+    }
+  });
   const nsfw = useNsfw();
   const effectiveNsfwMode = $derived(nsfwMode ?? nsfw.mode);
 
@@ -537,7 +557,7 @@
 
   function setViewMode(value: EntityGridViewMode) {
     viewMode = value;
-    if (value === "list") {
+    if (value !== "grid") {
       mediaWall = false;
     }
   }
@@ -750,7 +770,7 @@
     {card}
     imageFetchPriority="auto"
     imageLoading="lazy"
-    layout={viewMode}
+    layout={viewMode === "feed" ? "grid" : viewMode}
     linkable={!onCardActivate}
     mediaOnly={mediaWall}
     onActivate={onCardActivate ? (activatedCard) => onCardActivate(activatedCard, pagedCards) : undefined}
@@ -785,6 +805,7 @@
         mediaWall !== initialMediaWall ||
         selectedIds.length > 0,
     )}
+    {enableFeedView}
     {drawerOpen}
     {filterOptions}
     {maxScale}
@@ -855,6 +876,8 @@
           </div>
         {/each}
       </div>
+    {:else if visibleCards.length > 0 && viewMode === "feed" && FeedComponent}
+      <FeedComponent cards={pagedCards} onActivate={onCardActivate} />
     {:else if visibleCards.length > 0}
       <div
         class="cards"

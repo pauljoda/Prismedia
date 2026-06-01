@@ -26,6 +26,7 @@
     actionLabel?: string;
     emptyMessage: string;
     emptyTitle: string;
+    enableFeedView?: boolean;
     enableLightbox?: boolean;
     errorMessage?: string;
     icon: Component;
@@ -46,6 +47,7 @@
     actionLabel,
     emptyMessage,
     emptyTitle,
+    enableFeedView = false,
     enableLightbox = false,
     errorMessage,
     icon: Icon,
@@ -234,6 +236,7 @@
       loading={page.loadState === "loading"}
       entityKind={kind}
       {prefsKey}
+      {enableFeedView}
       {emptyTitle}
       {emptyMessage}
       {initialMediaWall}

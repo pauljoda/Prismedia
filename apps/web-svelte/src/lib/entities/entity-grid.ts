@@ -33,7 +33,7 @@ export const ENTITY_GRID_ALL_KINDS = "all";
 
 export type EntityGridSort = "title" | "kind" | "rating" | "position" | "added" | "random";
 export type EntityGridSortDir = "asc" | "desc";
-export type EntityGridViewMode = "grid" | "list";
+export type EntityGridViewMode = "grid" | "list" | "feed";
 
 /**
  * Server-resolvable list parameters derived from the active grid controls.
