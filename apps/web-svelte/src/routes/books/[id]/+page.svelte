@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { goto } from "$app/navigation";
+  import { afterNavigate, goto } from "$app/navigation";
   import { page } from "$app/state";
   import { BookOpen, Info, Play, SlidersHorizontal, Users } from "@lucide/svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
@@ -74,6 +74,8 @@
   let creditCards = $state<EntityThumbnailCard[]>([]);
   let relationshipTags = $state<EntityDetailTag[]>([]);
   let selectedChapterId: string | null = $state(null);
+  let loadedBookId: string | null = null;
+  let loadToken = 0;
 
   const bookId = $derived(page.params.id ?? "");
   const bookType = $derived(book?.bookType ?? null);
@@ -177,8 +179,18 @@
   });
 
   onMount(() => {
-    void loadBook();
+    loadCurrentBookIfNeeded();
   });
+
+  afterNavigate(() => {
+    loadCurrentBookIfNeeded();
+  });
+
+  function loadCurrentBookIfNeeded() {
+    if (!bookId || bookId === loadedBookId) return;
+    loadedBookId = bookId;
+    void loadBook(bookId);
+  }
 
   $effect(() => {
     if (nsfw.mode === lastNsfwMode) return;
@@ -194,16 +206,18 @@
     ]);
   });
 
-  async function loadBook() {
+  async function loadBook(targetBookId = bookId) {
+    const token = ++loadToken;
     loadState = "loading";
     errorMessage = null;
     try {
-      const nextBook = await fetchBook(bookId);
+      const nextBook = await fetchBook(targetBookId);
       const [relationships, chapters] = await Promise.all([
         hydrateStandardRelationshipCards(nextBook),
         hydrateChapters(nextBook),
       ]);
       const progressSummary = await hydrateProgressChapterSummary(nextBook, chapters);
+      if (token !== loadToken) return;
 
       book = nextBook;
       chapterDetails = chapters;
@@ -222,6 +236,7 @@
       selectedChapterId = nextProgress?.chapterId ?? chapters[0]?.detail.id ?? null;
       loadState = "ready";
     } catch (err) {
+      if (token !== loadToken) return;
       if (redirectHiddenEntityNotFound(err, nsfw.mode)) return;
       errorMessage = err instanceof Error ? err.message : String(err);
       loadState = "error";

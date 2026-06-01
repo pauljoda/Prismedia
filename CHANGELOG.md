@@ -100,6 +100,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated web app manifest and mobile browser metadata for home-screen installation and browser UI theme colors.
 
 ### Fixed
+- Fixed book series child navigation so selecting a book inside a series loads that book's own detail page instead of leaving the parent series detail on screen.
 - Jellyfin clients like Infuse now play files they can handle directly instead of being forced through a server transcode. Playback negotiation reads the client's own device profile (which containers, codecs, and audio formats it supports) and lets capable clients direct-play — most importantly 4K HEVC 10-bit Dolby Vision titles with Dolby Atmos in MKV, which previously pegged the server with a slow software transcode and stuttered, and now stream instantly with no server load.
 - Kept mobile flyouts and dropdowns inside the screen, including the library grid thumbnail-size slider, filter preset menus, pagination page-size menus, and similar compact controls.
 - Restored mobile lightbox gestures: swipe left/right to move between items and swipe down to dismiss now work again.
