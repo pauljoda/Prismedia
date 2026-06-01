@@ -158,6 +158,31 @@
     atEnd = fraction >= 0.999;
     counterLabel = `${Math.round(fraction * 100)}%${label ? ` · ${label}` : ""}`;
     onLocationChange?.({ cfi, fraction, label });
+    warmAdjacentSections();
+  }
+
+  // Warm the neighbouring sections so navigation is instant instead of flashing. For PDF each
+  // section is a page whose load() parses the page and caches its rendered output (the slow part),
+  // so pre-loading ahead removes the per-turn delay; for EPUB it primes the next section's content.
+  function warmAdjacentSections() {
+    const sections = view?.book?.sections;
+    if (!Array.isArray(sections)) return;
+    let current: number | undefined;
+    try {
+      current = view.renderer?.getContents?.()?.[0]?.index;
+    } catch {
+      current = undefined;
+    }
+    if (typeof current !== "number") return;
+    // Look a couple ahead (and one behind for back-navigation); load() is cached, so repeats are free.
+    for (const offset of [1, 2, -1]) {
+      const section = sections[current + offset];
+      try {
+        void section?.load?.();
+      } catch {
+        // ignore warm-up failures; the page still renders on demand
+      }
+    }
   }
 
   // Comic-style gesture overlay (paged mode only). foliate columnizes the page into a single
