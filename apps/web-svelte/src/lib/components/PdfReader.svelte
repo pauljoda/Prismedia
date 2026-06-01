@@ -204,7 +204,9 @@
       });
       await textLayer.render();
 
-      wrapper.replaceChildren(canvas, textLayerDiv);
+      const linkLayer = await buildLinkLayer(page, cssViewport);
+
+      wrapper.replaceChildren(canvas, textLayerDiv, ...(linkLayer ? [linkLayer] : []));
       rendered.add(index);
     } catch {
       // leave the placeholder; it will retry if it scrolls back into view
@@ -258,6 +260,67 @@
 
   function goNext() {
     scrollToPage(currentPage + 1);
+  }
+
+  async function resolveDestPage(dest: unknown): Promise<number | null> {
+    try {
+      const explicit = typeof dest === "string" ? await pdf.getDestination(dest) : dest;
+      if (Array.isArray(explicit) && explicit[0]) return await pdf.getPageIndex(explicit[0]);
+    } catch {
+      /* ignore */
+    }
+    return null;
+  }
+
+  // Build a transparent overlay of clickable links from the page's annotations: internal links
+  // jump to the target page, external URLs open in a new tab. Positioned via the viewport so it
+  // does not depend on pdf.js's annotation-layer CSS.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async function buildLinkLayer(page: any, viewport: any): Promise<HTMLDivElement | null> {
+    let annotations: Array<Record<string, unknown>> = [];
+    try {
+      annotations = await page.getAnnotations();
+    } catch {
+      return null;
+    }
+    const links = annotations.filter(
+      (a) => a.subtype === "Link" && (typeof a.url === "string" || a.dest != null),
+    );
+    if (links.length === 0) return null;
+
+    const layer = document.createElement("div");
+    layer.className = "pdf-link-layer";
+    layer.style.width = `${viewport.width}px`;
+    layer.style.height = `${viewport.height}px`;
+    for (const annotation of links) {
+      const rect = viewport.convertToViewportRectangle(annotation.rect as number[]);
+      const left = Math.min(rect[0], rect[2]);
+      const top = Math.min(rect[1], rect[3]);
+      const width = Math.abs(rect[2] - rect[0]);
+      const height = Math.abs(rect[3] - rect[1]);
+      const link = document.createElement("a");
+      link.className = "pdf-link";
+      link.style.left = `${left}px`;
+      link.style.top = `${top}px`;
+      link.style.width = `${width}px`;
+      link.style.height = `${height}px`;
+      if (typeof annotation.url === "string") {
+        link.href = annotation.url;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+      } else {
+        link.href = "#";
+        const dest = annotation.dest;
+        link.addEventListener("click", (event) => {
+          event.preventDefault();
+          void resolveDestPage(dest).then((idx) => {
+            if (idx !== null) scrollToPage(idx);
+          });
+        });
+      }
+      layer.append(link);
+    }
+    return layer;
   }
 
   function normalizeOutline(items: unknown, resolve: (dest: unknown) => Promise<number | null>): Promise<TocEntry[]> {
@@ -586,6 +649,24 @@
 
   :global(.pdf-text-layer ::selection) {
     background: rgba(242, 194, 106, 0.35);
+  }
+
+  /* Transparent clickable link overlay (internal page jumps + external URLs). */
+  :global(.pdf-link-layer) {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+  }
+
+  :global(.pdf-link-layer .pdf-link) {
+    position: absolute;
+    display: block;
+    border-radius: 2px;
+  }
+
+  :global(.pdf-link-layer .pdf-link:hover) {
+    background: rgba(242, 194, 106, 0.18);
+    box-shadow: 0 0 0 1px rgba(242, 194, 106, 0.4);
   }
 
   .pdf-message {
