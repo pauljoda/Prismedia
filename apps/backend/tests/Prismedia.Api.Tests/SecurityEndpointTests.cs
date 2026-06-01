@@ -453,6 +453,12 @@ public sealed partial class SecurityEndpointTests : IDisposable {
             bool hideNsfw,
             CancellationToken cancellationToken) =>
             Task.FromResult(new CollectionItemsResponse([]));
+
+        public Task<IReadOnlyDictionary<Guid, string>> ResolveCoverPathsAsync(
+            IReadOnlyList<Guid> collectionIds,
+            bool hideNsfw,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyDictionary<Guid, string>>(new Dictionary<Guid, string>());
     }
 
     private sealed class InfuseBrowseEntityReadService : IEntityReadService {

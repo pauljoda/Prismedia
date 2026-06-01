@@ -476,7 +476,10 @@ public static partial class JellyfinCompatibilityEndpoints {
             request.Query["SortBy"].FirstOrDefault(),
             request.Query["SortOrder"].FirstOrDefault(),
             TryBool(request.Query["IsFavorite"].FirstOrDefault()),
-            TryBool(request.Query["IsPlayed"].FirstOrDefault()));
+            TryBool(request.Query["IsPlayed"].FirstOrDefault()),
+            // Infuse drills into a cast member with PersonIds (plural CSV); accept the singular
+            // PersonId form too so either client spelling resolves the performer's filmography.
+            SplitGuids(request.Query["PersonIds"].FirstOrDefault() ?? request.Query["PersonId"].FirstOrDefault()));
 
     private static string VirtualFolderCollectionType(JellyfinBaseItemDto item) =>
         item.CollectionType switch {

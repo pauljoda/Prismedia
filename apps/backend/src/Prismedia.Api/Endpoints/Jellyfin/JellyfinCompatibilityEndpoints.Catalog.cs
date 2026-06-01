@@ -12,11 +12,16 @@ namespace Prismedia.Api.Endpoints;
 /// </summary>
 public static partial class JellyfinCompatibilityEndpoints {
     private static async Task<IResult> GetUserViewsAsync(
+        HttpContext httpContext,
         PrismediaSecurityService security,
         JellyfinCatalogService catalog,
         CancellationToken cancellationToken) {
         var state = await security.EnsureSecurityAsync(cancellationToken);
-        return Results.Ok(catalog.GetUserViews(state.ServerId.ToString("N")));
+        var views = await catalog.GetUserViewsWithArtworkAsync(
+            state.ServerId.ToString("N"),
+            NsfwVisibility.ShouldHide(null, httpContext),
+            cancellationToken);
+        return Results.Ok(views);
     }
 
     private static async Task<IResult> GetRootAsync(

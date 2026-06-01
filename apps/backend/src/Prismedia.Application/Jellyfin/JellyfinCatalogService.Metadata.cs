@@ -444,7 +444,7 @@ public sealed partial class JellyfinCatalogService {
         kind.Equals("movie", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsFolder(string kind) =>
-        kind is "video-series" or "video-season" or "collection";
+        kind is "video-series" or "video-season" or "collection" or "person";
 
     private static string JellyfinType(string kind, Guid? parentId) =>
         kind.Trim().ToLowerInvariant() switch {
@@ -453,6 +453,7 @@ public sealed partial class JellyfinCatalogService {
             "video-series" => JellyfinProtocol.ItemTypes.Series,
             "video-season" => JellyfinProtocol.ItemTypes.Season,
             "collection" => JellyfinProtocol.ItemTypes.BoxSet,
+            "person" => JellyfinProtocol.ItemTypes.Person,
             _ => JellyfinProtocol.ItemTypes.Folder
         };
 

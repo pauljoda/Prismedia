@@ -43,6 +43,7 @@ public sealed partial class JellyfinCatalogService {
             CollectionType = CollectionType(item.Kind),
             ParentId = parentOverride ?? item.ParentEntityId,
             IsFolder = IsFolder(item.Kind),
+            RunTimeTicks = runtimeTicks,
             ImageTags = imageTags.Primary is null ? new Dictionary<string, string>() : new Dictionary<string, string> { ["Primary"] = imageTags.Primary },
             BackdropImageTags = imageTags.Backdrop is null ? [] : [imageTags.Backdrop],
             PrimaryImageAspectRatio = 0.6667,
@@ -179,8 +180,17 @@ public sealed partial class JellyfinCatalogService {
         };
     }
 
-    private static JellyfinBaseItemDto VirtualFolder(Guid id, string name, string collectionType, string serverId) =>
-        new() {
+    private static JellyfinBaseItemDto VirtualFolder(
+        Guid id,
+        string name,
+        string collectionType,
+        string serverId,
+        string? coverPath = null) {
+        // Surface a representative item poster as the library tile artwork so clients like Infuse
+        // render a real thumbnail instead of a generic folder icon. The tag is keyed on the resolved
+        // cover path so the image endpoint can serve the same asset for the synthetic view id.
+        var primaryTag = coverPath is null ? null : EtagFor(id, coverPath);
+        return new() {
             Id = id,
             Name = name,
             ServerId = serverId,
@@ -188,8 +198,13 @@ public sealed partial class JellyfinCatalogService {
             CollectionType = collectionType,
             IsFolder = true,
             Etag = EtagFor(id, collectionType),
+            ImageTags = primaryTag is null
+                ? new Dictionary<string, string>()
+                : new Dictionary<string, string> { ["Primary"] = primaryTag },
+            PrimaryImageAspectRatio = primaryTag is null ? null : 0.6667,
             UserData = UserDataFor(id, isFavorite: false, playback: null)
         };
+    }
 
     private async Task<ItemContext?> ParentContextForAsync(
         IEntityCard parent,

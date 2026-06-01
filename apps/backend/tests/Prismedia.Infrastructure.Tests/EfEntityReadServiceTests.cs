@@ -1161,6 +1161,32 @@ public sealed class EfEntityReadServiceTests {
         Assert.Equal(inProgressBook, Assert.Single(reading.Items).Id);
     }
 
+    [Fact]
+    public async Task ListAsyncSortsByMostRecentEngagementForLastPlayed() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var playedToday = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var playedLastWeek = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        var neverPlayed = Guid.Parse("33333333-3333-3333-3333-333333333333");
+        db.Entities.AddRange(
+            new EntityRow { Id = playedToday, KindCode = EntityKindRegistry.Video.Code, Title = "Today", CreatedAt = now.AddYears(-1), UpdatedAt = now },
+            new EntityRow { Id = playedLastWeek, KindCode = EntityKindRegistry.Video.Code, Title = "Last Week", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = neverPlayed, KindCode = EntityKindRegistry.Video.Code, Title = "Never", CreatedAt = now, UpdatedAt = now });
+        db.EntityPlayback.AddRange(
+            new EntityPlaybackRow { EntityId = playedToday, PlayCount = 1, LastPlayedAt = now, UpdatedAt = now },
+            new EntityPlaybackRow { EntityId = playedLastWeek, PlayCount = 1, LastPlayedAt = now.AddDays(-7), UpdatedAt = now.AddDays(-7) });
+        await db.SaveChangesAsync();
+
+        var service = CreateService(db);
+
+        var result = await service.ListAsync(
+            EntityKindRegistry.Video.Code, null, null, null, null, CancellationToken.None,
+            sort: "last-played", sortDir: "desc");
+
+        // Most recently played first, then older, with the never-played entity sorted last.
+        Assert.Equal([playedToday, playedLastWeek, neverPlayed], result.Items.Select(item => item.Id).ToArray());
+    }
+
     private static EfEntityReadService CreateService(PrismediaDbContext db) {
         var repository = new EfEntityRepository(db, EntityMappers.Kinds(db), EntityMappers.Capabilities(db));
         return new EfEntityReadService(db, repository, EntityMappers.Kinds(db));

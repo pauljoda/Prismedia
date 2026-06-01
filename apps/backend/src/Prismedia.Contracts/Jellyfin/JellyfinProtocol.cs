@@ -78,6 +78,9 @@ public static class JellyfinProtocol {
         /// <summary>Collection / box set.</summary>
         public const string BoxSet = "BoxSet";
 
+        /// <summary>Performer / cast or crew member.</summary>
+        public const string Person = "Person";
+
         /// <summary>Generic folder.</summary>
         public const string Folder = "Folder";
 

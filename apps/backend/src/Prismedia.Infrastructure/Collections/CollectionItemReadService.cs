@@ -73,4 +73,67 @@ public sealed class CollectionItemReadService(
 
         return new CollectionItemsResponse(items);
     }
+
+    public async Task<IReadOnlyDictionary<Guid, string>> ResolveCoverPathsAsync(
+        IReadOnlyList<Guid> collectionIds,
+        bool hideNsfw,
+        CancellationToken cancellationToken) {
+        if (collectionIds.Count == 0) {
+            return new Dictionary<Guid, string>();
+        }
+
+        var ids = collectionIds.Distinct().ToArray();
+
+        // Configured cover item wins; capture it per collection so it can override the
+        // first-member fallback resolved below.
+        var coverItemByCollection = await db.CollectionDetails.AsNoTracking()
+            .Where(detail => ids.Contains(detail.EntityId) && detail.CoverItemEntityId != null)
+            .ToDictionaryAsync(detail => detail.EntityId, detail => detail.CoverItemEntityId!.Value, cancellationToken);
+
+        // First visible member per collection, in collection sort order, as the fallback cover.
+        var memberRows = await (
+            from item in db.CollectionItemDetails.AsNoTracking()
+            join entity in db.Entities.AsNoTracking() on item.ItemEntityId equals entity.Id
+            where ids.Contains(item.CollectionEntityId) &&
+                  entity.DeletedAt == null &&
+                  (!hideNsfw || !entity.IsNsfw)
+            orderby item.SortOrder, entity.Title, item.Id
+            select new { item.CollectionEntityId, item.ItemEntityId }).ToArrayAsync(cancellationToken);
+        var firstMemberByCollection = memberRows
+            .GroupBy(row => row.CollectionEntityId)
+            .ToDictionary(group => group.Key, group => group.First().ItemEntityId);
+
+        // Representative entity per collection: configured cover item, else first member.
+        var representativeByCollection = new Dictionary<Guid, Guid>();
+        foreach (var collectionId in ids) {
+            if (coverItemByCollection.TryGetValue(collectionId, out var coverItemId)) {
+                representativeByCollection[collectionId] = coverItemId;
+            } else if (firstMemberByCollection.TryGetValue(collectionId, out var memberId)) {
+                representativeByCollection[collectionId] = memberId;
+            }
+        }
+
+        if (representativeByCollection.Count == 0) {
+            return new Dictionary<Guid, string>();
+        }
+
+        // Reuse the batched thumbnail projection so the cover we report matches the one the
+        // representative entity would render with everywhere else.
+        var thumbnails = await entities.GetThumbnailsAsync(
+            representativeByCollection.Values.Distinct().ToArray(),
+            hideNsfw,
+            cancellationToken);
+        var coverByEntity = thumbnails.Items
+            .Where(thumbnail => thumbnail.CoverUrl is not null)
+            .ToDictionary(thumbnail => thumbnail.Id, thumbnail => thumbnail.CoverUrl!);
+
+        var result = new Dictionary<Guid, string>();
+        foreach (var pair in representativeByCollection) {
+            if (coverByEntity.TryGetValue(pair.Value, out var coverUrl)) {
+                result[pair.Key] = coverUrl;
+            }
+        }
+
+        return result;
+    }
 }

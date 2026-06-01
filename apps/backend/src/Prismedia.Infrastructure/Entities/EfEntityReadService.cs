@@ -120,6 +120,11 @@ public sealed partial class EfEntityReadService : IEntityReadService {
                 .Where(rowsById.ContainsKey)
                 .Select(id => rowsById[id])
                 .ToArray();
+        } else if (sortKey == ListSort.LastPlayed) {
+            rows = await ApplyLastPlayedOrdering(entityQuery, descending)
+                .Skip(offset)
+                .Take(pageSize + 1)
+                .ToArrayAsync(cancellationToken);
         } else {
             rows = await ApplyOrdering(entityQuery, sortKey, descending)
                 .Skip(offset)
@@ -139,6 +144,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         DateAdded,
         Rating,
         Random,
+        LastPlayed,
     }
 
     private static ListSort ParseSort(string? sort) =>
@@ -146,6 +152,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             "added" or "date" or "date-added" or "dateadded" or "createdat" or "created" or "recent" => ListSort.DateAdded,
             "rating" => ListSort.Rating,
             "random" or "shuffle" => ListSort.Random,
+            "last-played" or "lastplayed" or "recently-played" or "recently-watched" or "played" => ListSort.LastPlayed,
             _ => ListSort.Title,
         };
 
@@ -173,6 +180,40 @@ public sealed partial class EfEntityReadService : IEntityReadService {
                 ? query.OrderByDescending(entity => entity.Title).ThenByDescending(entity => entity.Id)
                 : query.OrderBy(entity => entity.Title).ThenBy(entity => entity.Id),
         };
+
+    /// <summary>
+    /// Orders entities by most recent engagement — the playback last-played time (videos/audio,
+    /// falling back to the playback row's update time) or the reading-progress update time
+    /// (books/comics). Entities with no engagement sort last regardless of direction, so the
+    /// "recently played/watched" surfaces only lead with things the user has actually touched.
+    /// </summary>
+    private IQueryable<EntityRow> ApplyLastPlayedOrdering(IQueryable<EntityRow> query, bool descending) {
+        var playback = _db.Set<EntityPlaybackRow>();
+        var progress = _db.Set<EntityProgressRow>();
+        var keyed = query.Select(entity => new {
+            entity,
+            recency = playback
+                          .Where(row => row.EntityId == entity.Id)
+                          .Select(row => (DateTimeOffset?)(row.LastPlayedAt ?? row.UpdatedAt))
+                          .FirstOrDefault()
+                      ?? progress
+                          .Where(row => row.EntityId == entity.Id)
+                          .Select(row => (DateTimeOffset?)row.UpdatedAt)
+                          .FirstOrDefault()
+        });
+
+        var ordered = descending
+            ? keyed.OrderByDescending(item => item.recency != null)
+                .ThenByDescending(item => item.recency)
+                .ThenByDescending(item => item.entity.CreatedAt)
+                .ThenBy(item => item.entity.Id)
+            : keyed.OrderByDescending(item => item.recency != null)
+                .ThenBy(item => item.recency)
+                .ThenBy(item => item.entity.CreatedAt)
+                .ThenBy(item => item.entity.Id);
+
+        return ordered.Select(item => item.entity);
+    }
 
     /// <summary>
     /// Applies the server-side library filters that span the whole matching set:
