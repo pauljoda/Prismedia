@@ -161,10 +161,21 @@ describe("video-player-load", () => {
       maxBufferSize: 800_000_000,
       startLevel: -1,
       startPosition: 0,
+      fragLoadPolicy: {
+        default: {
+          maxTimeToFirstByteMs: 60_000,
+          maxLoadTimeMs: 120_000,
+          timeoutRetry: { maxNumRetry: 2, retryDelayMs: 0, maxRetryDelayMs: 0 },
+          errorRetry: { maxNumRetry: 4, retryDelayMs: 1000, maxRetryDelayMs: 8000 },
+        },
+      },
     });
     // Memory is bounded by the byte cap rather than the time length, so a high-bitrate 4K stream
     // cannot grow the buffer without limit.
     expect(config.maxBufferSize).toBeLessThanOrEqual(1_000_000_000);
+    // On-demand transcoding can make the first segment slow; the fragment timeout must exceed
+    // hls.js's 10s default so playback waits instead of aborting.
+    expect(config.fragLoadPolicy.default.maxTimeToFirstByteMs).toBeGreaterThan(10_000);
   });
 
   it("uses the hls2 readiness endpoint before loading adaptive streams", () => {

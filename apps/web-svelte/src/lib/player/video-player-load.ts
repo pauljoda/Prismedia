@@ -25,6 +25,15 @@ export interface AdaptiveAutoLevelSelection {
   nextAutoLevel: -1;
 }
 
+export interface HlsLoadPolicy {
+  default: {
+    maxTimeToFirstByteMs: number;
+    maxLoadTimeMs: number;
+    timeoutRetry: { maxNumRetry: number; retryDelayMs: number; maxRetryDelayMs: number };
+    errorRetry: { maxNumRetry: number; retryDelayMs: number; maxRetryDelayMs: number };
+  };
+}
+
 export interface AdaptiveHlsBufferConfig {
   backBufferLength: number;
   capLevelToPlayerSize: boolean;
@@ -34,6 +43,7 @@ export interface AdaptiveHlsBufferConfig {
   maxBufferSize: number;
   startLevel: number;
   startPosition: number;
+  fragLoadPolicy: HlsLoadPolicy;
 }
 
 // The player buffers deeply so a brief pause builds a large cushion that then drains while playback
@@ -46,6 +56,13 @@ const ExtendedHlsMaxBufferLengthSeconds = 240;
 const ExtendedHlsMaxMaxBufferLengthSeconds = 240;
 const ExtendedHlsMaxBufferSizeBytes = 800 * 1000 * 1000;
 const ExtendedHlsBackBufferLengthSeconds = 60;
+
+// Renditions are transcoded on demand, so a fragment request can block while the server produces
+// that segment — most noticeably the cold-start first segment of a 4K HDR title, which takes well
+// over hls.js's 10s default time-to-first-byte. Give the transcoder generous time (and a few
+// retries) so playback waits for the segment instead of aborting with a fragLoadTimeOut and stalling.
+const ExtendedHlsMaxTimeToFirstByteMs = 60_000;
+const ExtendedHlsMaxLoadTimeMs = 120_000;
 
 export interface AdaptiveSeekPlanInput {
   streamMode: VideoPlaybackMode;
@@ -177,6 +194,14 @@ export function adaptiveHlsBufferConfig(): AdaptiveHlsBufferConfig {
     maxBufferSize: ExtendedHlsMaxBufferSizeBytes,
     startLevel: -1,
     startPosition: 0,
+    fragLoadPolicy: {
+      default: {
+        maxTimeToFirstByteMs: ExtendedHlsMaxTimeToFirstByteMs,
+        maxLoadTimeMs: ExtendedHlsMaxLoadTimeMs,
+        timeoutRetry: { maxNumRetry: 2, retryDelayMs: 0, maxRetryDelayMs: 0 },
+        errorRetry: { maxNumRetry: 4, retryDelayMs: 1000, maxRetryDelayMs: 8000 },
+      },
+    },
   };
 }
 
