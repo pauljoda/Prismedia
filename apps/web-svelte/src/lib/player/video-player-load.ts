@@ -36,9 +36,16 @@ export interface AdaptiveHlsBufferConfig {
   startPosition: number;
 }
 
-const ExtendedHlsMaxBufferLengthSeconds = 600;
-const ExtendedHlsMaxMaxBufferLengthSeconds = 600;
-const ExtendedHlsMaxBufferSizeBytes = 1_250 * 1000 * 1000;
+// Look-ahead is intentionally bounded. Renditions are transcoded on demand by a single forward
+// ffmpeg per stream, so a client that buffers far ahead forces the server to spawn extra parallel
+// transcodes for the not-yet-reached segments; on hardware encoders (e.g. VideoToolbox) those
+// sessions contend for one encoder and every one drops below real time, which stalls playback.
+// Keeping the forward buffer well under the server's generation reuse window (72s) means the
+// client only ever requests segments the single running transcode already has or is about to
+// produce, so playback stays ahead without fanning out the transcoder.
+const ExtendedHlsMaxBufferLengthSeconds = 30;
+const ExtendedHlsMaxMaxBufferLengthSeconds = 48;
+const ExtendedHlsMaxBufferSizeBytes = 300 * 1000 * 1000;
 
 export interface AdaptiveSeekPlanInput {
   streamMode: VideoPlaybackMode;

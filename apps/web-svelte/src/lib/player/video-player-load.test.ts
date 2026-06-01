@@ -150,17 +150,21 @@ describe("video-player-load", () => {
     });
   });
 
-  it("raises adaptive HLS buffer limits without disabling quota recovery", () => {
-    expect(adaptiveHlsBufferConfig()).toEqual({
+  it("bounds adaptive HLS look-ahead so on-demand transcodes are not fanned out", () => {
+    const config = adaptiveHlsBufferConfig();
+    expect(config).toEqual({
       backBufferLength: Infinity,
       capLevelToPlayerSize: false,
       frontBufferFlushThreshold: Infinity,
-      maxBufferLength: 600,
-      maxMaxBufferLength: 600,
-      maxBufferSize: 1_250_000_000,
+      maxBufferLength: 30,
+      maxMaxBufferLength: 48,
+      maxBufferSize: 300_000_000,
       startLevel: -1,
       startPosition: 0,
     });
+    // Look-ahead must stay under the server's 72s (12-segment) generation reuse window so the
+    // client never requests segments the single forward transcode has not nearly reached.
+    expect(config.maxMaxBufferLength).toBeLessThan(72);
   });
 
   it("uses the hls2 readiness endpoint before loading adaptive streams", () => {

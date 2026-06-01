@@ -23,6 +23,11 @@ public sealed partial class HlsAssetService : IHlsAssetService {
     private static readonly ConcurrentDictionary<string, VirtualRenditionGeneration> ActiveRenditions = new();
     private static readonly ConcurrentDictionary<Guid, SemaphoreSlim> VirtualCacheRefreshLocks = new();
 
+    // Serializes the "reuse an active generation or start a new one" decision per stream so that a
+    // burst of near-simultaneous startup segment requests (the player filling its initial buffer)
+    // collapses onto one forward transcode instead of each racing to spawn its own.
+    private static readonly ConcurrentDictionary<string, SemaphoreSlim> VirtualGenerationLocks = new();
+
     private readonly HlsAssetServiceOptions _options;
     private readonly IVideoSourceService? _sources;
     private readonly ProcessExecutor? _processes;
@@ -278,11 +283,28 @@ public sealed partial class HlsAssetService : IHlsAssetService {
             return outputPath;
         }
 
-        var generationStartSegment = PrerollSegmentIndex(segmentIndex);
-        var generation = FindActiveRenditionGeneration(id, rendition, audioCacheKey, segmentIndex);
-        if (generation is null) {
-            CancelActiveRenditionGenerations(id, audioCacheKey, rendition);
-            generation = StartVirtualRenditionGeneration(id, source, rendition, audioCacheKey, audioStreamIndex, generationStartSegment);
+        // Decide-and-start under a per-stream lock so concurrent startup requests reuse one
+        // generation instead of each spawning a parallel transcode that would then contend for the
+        // hardware encoder. Waiting for the segment happens outside the lock so multiple waiters can
+        // pull from the same running generation concurrently.
+        var generationLock = VirtualGenerationLocks.GetOrAdd(
+            $"{id}/{audioCacheKey}/{rendition.Name}",
+            _ => new SemaphoreSlim(1, 1));
+        await generationLock.WaitAsync(cancellationToken);
+        VirtualRenditionGeneration generation;
+        try {
+            if (File.Exists(outputPath) && new FileInfo(outputPath).Length > 0) {
+                return outputPath;
+            }
+
+            generation = FindActiveRenditionGeneration(id, rendition, audioCacheKey, segmentIndex);
+            if (generation is null) {
+                CancelActiveRenditionGenerations(id, audioCacheKey, rendition);
+                generation = StartVirtualRenditionGeneration(
+                    id, source, rendition, audioCacheKey, audioStreamIndex, PrerollSegmentIndex(segmentIndex));
+            }
+        } finally {
+            generationLock.Release();
         }
 
         await WaitForVirtualSegmentAsync(id, rendition, audioCacheKey, segmentIndex, outputPath, generation, cancellationToken);
@@ -311,12 +333,42 @@ public sealed partial class HlsAssetService : IHlsAssetService {
     }
 
     private static bool ShouldReuseActiveGeneration(VirtualRenditionGeneration generation, int segmentIndex) {
+        // Never reuse for a segment before the generation's start (a backward seek): it will never
+        // produce that segment.
+        if (segmentIndex < generation.StartSegment) {
+            return false;
+        }
+
+        // Close to the start the generation will reach the segment quickly.
         if (segmentIndex - generation.StartSegment <= ActiveGenerationReuseWindowSegments) {
             return true;
         }
 
+        // Otherwise reuse only when the segment is already produced, or within the reuse window of
+        // the generation's current production frontier (so normal look-ahead attaches to the running
+        // transcode, while a seek far beyond the frontier still starts a fresh generation).
         var stagedPath = Path.Combine(generation.StagingDirectory, $"seg_{segmentIndex:00000}.ts");
-        return File.Exists(stagedPath) && new FileInfo(stagedPath).Length > 0;
+        if (File.Exists(stagedPath) && new FileInfo(stagedPath).Length > 0) {
+            return true;
+        }
+
+        var frontier = LatestStagedSegment(generation.StagingDirectory);
+        return frontier >= 0 && segmentIndex - frontier <= ActiveGenerationReuseWindowSegments;
+    }
+
+    private static int LatestStagedSegment(string stagingDirectory) {
+        if (!Directory.Exists(stagingDirectory)) {
+            return -1;
+        }
+
+        var latest = -1;
+        foreach (var path in Directory.EnumerateFiles(stagingDirectory, "seg_*.ts")) {
+            if (ParseSegmentIndex(Path.GetFileName(path)) is { } index && index > latest) {
+                latest = index;
+            }
+        }
+
+        return latest;
     }
 
     private static void CancelActiveRenditionGenerations(
