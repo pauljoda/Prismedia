@@ -22,6 +22,7 @@ public sealed class FileDiscoveryAdapter(FileDiscoveryService inner) : IFileDisc
         MediaCategory.Image => SupportedExtensions.Image,
         MediaCategory.Audio => SupportedExtensions.Audio,
         MediaCategory.ComicArchive => SupportedExtensions.ComicArchive,
+        MediaCategory.Book => SupportedExtensions.Book,
         _ => throw new ArgumentOutOfRangeException(nameof(category))
     };
 }

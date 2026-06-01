@@ -179,7 +179,8 @@ public static class EntityCardProjector {
                 progress.Total,
                 progress.Mode,
                 progress.CompletedAt,
-                progress.UpdatedAt));
+                progress.UpdatedAt,
+                Location: progress.Location));
         }
 
         if (entity.Position is { } position) {

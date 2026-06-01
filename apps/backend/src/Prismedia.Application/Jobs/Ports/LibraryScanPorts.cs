@@ -48,6 +48,22 @@ public interface IAudioScanPersistence {
 /// <summary>Book/comic scan persistence operations for discovered archives/pages and stale cleanup.</summary>
 public interface IBookScanPersistence {
     Task<Guid> UpsertBookAsync(string sourcePath, string title, Guid libraryRootId, bool isNsfw, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Upserts a single-file book (EPUB/PDF) where the file itself is the whole book and
+    /// no chapter/page entities are created. Stores the book format and content type so the
+    /// reader can stream the raw file and select the matching renderer.
+    /// </summary>
+    Task<Guid> UpsertSingleFileBookAsync(
+        string sourcePath,
+        string title,
+        Guid libraryRootId,
+        bool isNsfw,
+        BookType bookType,
+        BookFormat format,
+        string contentType,
+        CancellationToken cancellationToken);
+
     Task<Guid> UpsertBookVolumeAsync(string folderPath, string title, Guid bookEntityId, int sortOrder, bool isNsfw, CancellationToken cancellationToken);
     Task<Guid> UpsertBookChapterAsync(string archivePath, string title, Guid parentEntityId, int sortOrder, int pageCount, bool isNsfw, CancellationToken cancellationToken);
     Task<Guid> UpsertBookPageAsync(string filePath, string title, Guid bookEntityId, Guid chapterEntityId, int sortOrder, bool isNsfw, CancellationToken cancellationToken);

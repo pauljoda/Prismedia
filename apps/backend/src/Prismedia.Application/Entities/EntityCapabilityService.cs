@@ -139,6 +139,7 @@ public sealed class EntityCapabilityService {
         string? mode,
         bool? completed,
         bool reset,
+        string? location,
         CancellationToken cancellationToken) {
         var ownerId = await ResolveProgressOwnerIdAsync(id, currentEntityId, cancellationToken);
         var entity = await _entities.FindShallowAsync(ownerId, cancellationToken);
@@ -173,11 +174,12 @@ public sealed class EntityCapabilityService {
         var targetChapterId = proposedPosition?.ChapterId ?? currentEntityId;
         var normalizedUnit = string.IsNullOrWhiteSpace(unit) ? "item" : unit.Trim();
         var normalizedMode = string.IsNullOrWhiteSpace(mode) ? null : mode.Trim();
+        var normalizedLocation = string.IsNullOrWhiteSpace(location) ? null : location.Trim();
 
         // Explicit "start over": jump to the requested (start) position and clear completion,
         // bypassing the forward-only guard. MoveTo resets the completion flag.
         if (reset) {
-            progress.MoveTo(targetChapterId, normalizedUnit, normalizedIndex, normalizedTotal, normalizedMode, now);
+            progress.MoveTo(targetChapterId, normalizedUnit, normalizedIndex, normalizedTotal, normalizedMode, now, normalizedLocation);
             await _entities.SaveAsync(entity, cancellationToken);
             return EntityCardProjector.ToCard(entity);
         }
@@ -198,7 +200,7 @@ public sealed class EntityCapabilityService {
             return EntityCardProjector.ToCard(entity);
         }
 
-        progress.MoveTo(targetChapterId, normalizedUnit, normalizedIndex, normalizedTotal, normalizedMode, now);
+        progress.MoveTo(targetChapterId, normalizedUnit, normalizedIndex, normalizedTotal, normalizedMode, now, normalizedLocation);
 
         if (completed == true) {
             progress.MarkCompleted(now);

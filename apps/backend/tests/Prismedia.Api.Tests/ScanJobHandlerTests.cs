@@ -1446,6 +1446,12 @@ public sealed class ScanJobHandlerTests {
             return Task.FromResult(id);
         }
 
+        public Task<Guid> UpsertSingleFileBookAsync(string sourcePath, string title, Guid libraryRootId, bool isNsfw, BookType bookType, BookFormat format, string contentType, CancellationToken cancellationToken) {
+            var id = IdFor($"book:{sourcePath}");
+            UpsertedBooks.Add(new BookRecord(id, sourcePath, title, libraryRootId));
+            return Task.FromResult(id);
+        }
+
         public Task<Guid> UpsertBookVolumeAsync(string folderPath, string title, Guid bookEntityId, int sortOrder, bool isNsfw, CancellationToken cancellationToken) {
             var id = IdFor($"book-volume:{folderPath}");
             UpsertedBookVolumes.Add(new BookVolumeRecord(id, folderPath, title, bookEntityId, sortOrder));

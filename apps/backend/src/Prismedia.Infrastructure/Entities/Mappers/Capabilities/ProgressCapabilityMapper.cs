@@ -22,7 +22,8 @@ internal sealed class ProgressCapabilityMapper(PrismediaDbContext db) : IEntityC
             row.Total,
             row.Mode,
             row.CompletedAt,
-            row.UpdatedAt));
+            row.UpdatedAt,
+            row.Location));
     }
 
     public Task ClearAsync(Entity entity, CancellationToken cancellationToken) {
@@ -32,7 +33,7 @@ internal sealed class ProgressCapabilityMapper(PrismediaDbContext db) : IEntityC
 
     public Task PersistAsync(Entity entity, CancellationToken cancellationToken) {
         if (entity.Progress is { } progress &&
-            (progress.UpdatedAt is not null || progress.CurrentEntityId is not null || progress.Index != 0 || progress.Total != 0)) {
+            (progress.UpdatedAt is not null || progress.CurrentEntityId is not null || progress.Index != 0 || progress.Total != 0 || progress.Location is not null)) {
             db.EntityProgress.Add(new EntityProgressRow {
                 EntityId = entity.Id,
                 CurrentEntityId = progress.CurrentEntityId,
@@ -40,6 +41,7 @@ internal sealed class ProgressCapabilityMapper(PrismediaDbContext db) : IEntityC
                 Index = progress.Index,
                 Total = progress.Total,
                 Mode = progress.Mode,
+                Location = progress.Location,
                 CompletedAt = progress.CompletedAt,
                 UpdatedAt = progress.UpdatedAt ?? DateTimeOffset.UtcNow,
             });

@@ -25,6 +25,37 @@ public interface IComicInfoMetadataReader {
 }
 
 /// <summary>
+/// Reads descriptive metadata embedded in single-file books (EPUB/PDF), normalized into the
+/// shared <see cref="ComicInfoMetadata"/> shape so the scan applies it through one path.
+/// </summary>
+public interface IBookFileMetadataReader {
+    /// <summary>
+    /// Reads metadata (title, authors, description, publisher, language, series, tags) from a
+    /// single-file book, or returns null when the file cannot be read.
+    /// </summary>
+    /// <param name="sourcePath">Absolute path to the EPUB/PDF file.</param>
+    /// <param name="format">Book format selecting the parser.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task<ComicInfoMetadata?> ReadAsync(string sourcePath, Prismedia.Domain.Entities.BookFormat format, CancellationToken cancellationToken);
+}
+
+/// <summary>
+/// Extracts a cover/first-page image from a single-file book to a temporary image file that
+/// the thumbnail pipeline can resize. Returns null when no cover can be produced.
+/// </summary>
+public interface IBookCoverImageExtractor {
+    /// <summary>
+    /// Writes the book's cover image (EPUB embedded cover, or rendered PDF first page) to a
+    /// temporary file and returns its path. The caller owns deletion of the returned file.
+    /// </summary>
+    /// <param name="sourcePath">Absolute path to the EPUB/PDF file.</param>
+    /// <param name="format">Book format selecting the extraction strategy.</param>
+    /// <param name="entityId">Book entity id, used to name the temp file.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task<string?> ExtractCoverToTempAsync(string sourcePath, Prismedia.Domain.Entities.BookFormat format, Guid entityId, CancellationToken cancellationToken);
+}
+
+/// <summary>
 /// Persists scanner-discovered descriptive metadata into the entity model.
 /// </summary>
 public interface IScanMetadataPersistence {

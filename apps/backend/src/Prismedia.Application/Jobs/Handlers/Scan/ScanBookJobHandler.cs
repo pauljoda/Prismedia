@@ -17,7 +17,8 @@ public sealed class ScanBookJobHandler(
     IBookScanPersistence books,
     IDownstreamNeedsPersistence downstreamNeeds,
     IComicInfoMetadataReader? comicInfoReader = null,
-    IScanMetadataPersistence? scanMetadata = null) : ScanJobHandler(logger, fileDiscovery, roots) {
+    IScanMetadataPersistence? scanMetadata = null,
+    IBookFileMetadataReader? bookFileMetadata = null) : ScanJobHandler(logger, fileDiscovery, roots) {
     private static readonly HashSet<string> ImageExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif"
@@ -144,9 +145,87 @@ public sealed class ScanBookJobHandler(
             await books.RemoveStaleBookVolumesAsync(bookId, validVolumePaths, cancellationToken);
         }
 
+        await ScanSingleFileBooksAsync(context, root, settings, excludedPaths, validBookPaths, cancellationToken);
+
         await books.RemoveStaleBooksInRootAsync(root.Id, validBookPaths, cancellationToken);
         await Roots.RemoveEntitiesInExcludedPathsAsync(root.Id, cancellationToken);
     }
+
+    /// <summary>
+    /// Discovers single-file books (EPUB/PDF) in the root and upserts one book entity per file
+    /// with no chapter/page entities. Records their source paths so stale cleanup keeps them.
+    /// </summary>
+    private async Task ScanSingleFileBooksAsync(
+        JobContext context,
+        LibraryRootData root,
+        LibrarySettingsData settings,
+        IReadOnlySet<string> excludedPaths,
+        ISet<string> validBookPaths,
+        CancellationToken cancellationToken) {
+        var bookFiles = await FileDiscovery.DiscoverFilesAsync(
+            root.Path, MediaCategory.Book, root.Recursive, excludedPaths, cancellationToken);
+        if (bookFiles.Count == 0) {
+            return;
+        }
+
+        logger.LogInformation("ScanBook: found {Count} single-file books in {Label}", bookFiles.Count, root.Label);
+
+        foreach (var sourcePath in bookFiles.OrderBy(path => path, NaturalPathComparer.Instance)) {
+            var format = BookFormatFor(sourcePath);
+            if (format is null) {
+                continue;
+            }
+
+            var metadata = bookFileMetadata is null
+                ? null
+                : await bookFileMetadata.ReadAsync(sourcePath, format.Value, cancellationToken);
+            var fallbackTitle = Path.GetFileNameWithoutExtension(sourcePath);
+            var title = FirstNonEmpty(metadata?.Title, metadata?.Series, fallbackTitle)!;
+            var isNsfw = root.IsNsfw || metadata?.MarksNsfw == true;
+
+            var bookId = await books.UpsertSingleFileBookAsync(
+                sourcePath,
+                title,
+                root.Id,
+                isNsfw,
+                DefaultBookTypeFor(format.Value),
+                format.Value,
+                ContentTypeFor(format.Value),
+                cancellationToken);
+            validBookPaths.Add(sourcePath);
+
+            if (metadata is not null && scanMetadata is not null) {
+                await scanMetadata.ApplyComicInfoMetadataAsync(bookId, metadata, isNsfw, cancellationToken);
+            }
+
+            if (settings.AutoGeneratePreview &&
+                !await downstreamNeeds.HasEntityFileAsync(bookId, EntityFileRole.Thumbnail, cancellationToken)) {
+                await context.EnqueueIfNeededAsync(new EnqueueJobRequest(
+                    JobType.GenerateBookCoverThumbnail, TargetEntityKind: "book",
+                    TargetEntityId: bookId.ToString(), TargetLabel: title), cancellationToken);
+            }
+
+            var autoIdentify = AutoIdentifyScanEnqueue.RequestFor(settings, "book", bookId.ToString(), title);
+            if (autoIdentify is not null) {
+                await context.EnqueueIfNeededAsync(autoIdentify, cancellationToken);
+            }
+        }
+    }
+
+    private static BookFormat? BookFormatFor(string sourcePath) =>
+        Path.GetExtension(sourcePath).ToLowerInvariant() switch {
+            ".epub" => BookFormat.Epub,
+            ".pdf" => BookFormat.Pdf,
+            _ => null
+        };
+
+    private static BookType DefaultBookTypeFor(BookFormat format) =>
+        format == BookFormat.Epub ? BookType.Novel : BookType.Book;
+
+    private static string ContentTypeFor(BookFormat format) =>
+        format == BookFormat.Pdf
+            ? Prismedia.Contracts.Media.MediaContentTypes.Pdf
+            : Prismedia.Contracts.Media.MediaContentTypes.Epub;
 
     private async Task UpsertChapterPagesAsync(
         JobContext context,

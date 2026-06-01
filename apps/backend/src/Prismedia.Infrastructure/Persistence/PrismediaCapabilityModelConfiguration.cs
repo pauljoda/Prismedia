@@ -88,6 +88,7 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.Index).HasColumnName("index");
             entity.Property(row => row.Total).HasColumnName("total");
             entity.Property(row => row.Mode).HasColumnName("mode").HasMaxLength(64);
+            entity.Property(row => row.Location).HasColumnName("location");
             entity.Property(row => row.CompletedAt).HasColumnName("completed_at");
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
             entity.HasOne<EntityRow>().WithOne().HasForeignKey<EntityProgressRow>(row => row.EntityId).OnDelete(DeleteBehavior.Cascade);

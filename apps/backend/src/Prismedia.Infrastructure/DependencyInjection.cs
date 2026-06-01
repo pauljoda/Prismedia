@@ -182,6 +182,8 @@ public static class DependencyInjection {
             provider.GetRequiredService<LibraryScanPersistenceService>());
         services.AddSingleton<IVideoSidecarMetadataReader, VideoSidecarMetadataReader>();
         services.AddSingleton<IComicInfoMetadataReader, ComicInfoMetadataReader>();
+        services.AddSingleton<IBookFileMetadataReader, Media.Books.BookFileMetadataReader>();
+        services.AddSingleton<IBookCoverImageExtractor, Media.Books.BookCoverImageExtractor>();
         services.AddScoped<IMaintenancePersistence>(provider =>
             new MaintenancePersistenceService(provider.GetRequiredService<PrismediaDbContext>(), dataDir));
         services.AddScoped<ICollectionRuleEngine, CollectionRuleEngine>();

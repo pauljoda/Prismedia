@@ -102,4 +102,11 @@ public static class MediaContentTypes {
 
     /// <summary>HTML markup with UTF-8 charset.</summary>
     public const string HtmlUtf8 = "text/html; charset=utf-8";
+
+    // ── Books ───────────────────────────────────────────────────────────
+    /// <summary>EPUB book container.</summary>
+    public const string Epub = "application/epub+zip";
+
+    /// <summary>PDF document.</summary>
+    public const string Pdf = "application/pdf";
 }

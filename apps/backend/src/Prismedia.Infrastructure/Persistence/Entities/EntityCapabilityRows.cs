@@ -63,6 +63,7 @@ public sealed class EntityProgressRow {
     public int Index { get; set; }
     public int Total { get; set; }
     public string? Mode { get; set; }
+    public string? Location { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }

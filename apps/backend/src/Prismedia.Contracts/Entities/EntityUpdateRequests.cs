@@ -39,6 +39,7 @@ public sealed record PlaybackUpdateRequest(
 /// <param name="Mode">Optional reader/viewing mode associated with the progress.</param>
 /// <param name="Completed">When true, marks the progress complete; when false, clears completion in place. Independent of the cursor.</param>
 /// <param name="Reset">When true, resets the cursor to the supplied (start) position and clears completion, bypassing the forward-only guard.</param>
+/// <param name="Location">Optional format-specific resume locator (e.g. an EPUB CFI) stored alongside the index.</param>
 public sealed record EntityProgressUpdateRequest(
     Guid CurrentEntityId,
     string Unit,
@@ -46,7 +47,8 @@ public sealed record EntityProgressUpdateRequest(
     int Total,
     string? Mode,
     bool? Completed,
-    bool Reset = false);
+    bool Reset = false,
+    string? Location = null);
 
 /// <summary>
 /// Request body for creating or updating a timeline marker.

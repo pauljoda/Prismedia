@@ -87,6 +87,7 @@ public static class DependencyInjection {
         services.AddTransient<IJobHandler, GenerateGridThumbnailJobHandler>();
         services.AddTransient<IJobHandler, GenerateImageThumbnailJobHandler>();
         services.AddTransient<IJobHandler, GenerateBookPageThumbnailJobHandler>();
+        services.AddTransient<IJobHandler, GenerateBookCoverThumbnailJobHandler>();
         services.AddTransient<IJobHandler, GenerateAudioWaveformJobHandler>();
         services.AddTransient<IJobHandler, ExtractSubtitlesJobHandler>();
 

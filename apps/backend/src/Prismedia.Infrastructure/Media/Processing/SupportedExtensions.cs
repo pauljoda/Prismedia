@@ -29,6 +29,15 @@ public static class SupportedExtensions {
     };
 
     /// <summary>
+    /// Single-file book formats (EPUB, PDF). Each file is one self-contained book whose
+    /// chapters live inside the file, unlike comic archives which group pages and chapters.
+    /// </summary>
+    public static readonly IReadOnlySet<string> Book = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ".epub"
+    };
+
+    /// <summary>
     /// Filename suffixes that indicate a generated/derived file (preview, thumb, sample).
     /// Files whose name (without extension) ends with one of these are skipped during scanning.
     /// </summary>

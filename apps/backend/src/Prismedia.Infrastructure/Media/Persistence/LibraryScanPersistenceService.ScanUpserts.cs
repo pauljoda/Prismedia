@@ -241,6 +241,48 @@ public sealed partial class LibraryScanPersistenceService {
         return id;
     }
 
+    public async Task<Guid> UpsertSingleFileBookAsync(
+        string sourcePath,
+        string title,
+        Guid libraryRootId,
+        bool isNsfw,
+        BookType bookType,
+        BookFormat format,
+        string contentType,
+        CancellationToken cancellationToken) {
+        var existing = await FindEntityBySourcePath(EntityKindRegistry.Book.Code, sourcePath, cancellationToken);
+        if (existing is not null) {
+            existing.Title = title;
+            existing.UpdatedAt = DateTimeOffset.UtcNow;
+            var detail = await _db.BookDetails.FindAsync([existing.Id], cancellationToken);
+            if (detail is not null) {
+                detail.LibraryRootId = libraryRootId;
+                detail.Format = format;
+            }
+            await _db.SaveChangesAsync(cancellationToken);
+            return existing.Id;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var id = Guid.NewGuid();
+
+        _db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKindRegistry.Book.Code, Title = title, IsNsfw = isNsfw, CreatedAt = now, UpdatedAt = now });
+        _db.BookDetails.Add(new BookDetailRow { EntityId = id, BookType = bookType, Format = format, LibraryRootId = libraryRootId });
+        _db.EntityFiles.Add(new EntityFileRow {
+            Id = Guid.NewGuid(),
+            EntityId = id,
+            Role = EntityFileRole.Source,
+            Path = sourcePath,
+            MimeType = contentType,
+            SizeBytes = LibraryScanFileSystem.TryGetFileSize(sourcePath),
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+
+        await _db.SaveChangesAsync(cancellationToken);
+        return id;
+    }
+
     public async Task<Guid> UpsertBookVolumeAsync(string folderPath, string title, Guid bookEntityId, int sortOrder, bool isNsfw, CancellationToken cancellationToken) {
         var existing = await FindEntityBySourcePath(EntityKindRegistry.BookVolume.Code, folderPath, cancellationToken);
         if (existing is not null) {

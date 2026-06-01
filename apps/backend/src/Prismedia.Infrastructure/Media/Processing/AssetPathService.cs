@@ -58,6 +58,9 @@ public sealed class AssetPathService {
     public string BookPageThumbnailPath(Guid entityId) =>
         Path.Combine(_cacheRoot, "book-pages", entityId.ToString(), "thumb.jpg");
 
+    public string BookCoverThumbnailPath(Guid entityId) =>
+        Path.Combine(_cacheRoot, "book-covers", entityId.ToString(), "thumb.jpg");
+
     public string AudioWaveformPath(Guid entityId) =>
         Path.Combine(_cacheRoot, "audio-tracks", entityId.ToString(), "waveform.json");
 
@@ -84,6 +87,9 @@ public sealed class AssetPathService {
 
     public static string BookPageThumbnailUrl(Guid entityId) =>
         $"/assets/book-pages/{entityId}/thumb.jpg";
+
+    public static string BookCoverThumbnailUrl(Guid entityId) =>
+        $"/assets/book-covers/{entityId}/thumb.jpg";
 
     public static string AudioWaveformUrl(Guid entityId) =>
         $"/assets/audio-tracks/{entityId}/waveform.json";

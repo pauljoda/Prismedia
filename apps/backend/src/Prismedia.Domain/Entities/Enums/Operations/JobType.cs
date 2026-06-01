@@ -65,6 +65,10 @@ public enum JobType {
     [Code("generate-book-page-thumbnail")]
     GenerateBookPageThumbnail,
 
+    /// <summary>Generates the cover thumbnail for a single-file book (EPUB/PDF).</summary>
+    [Code("generate-book-cover-thumbnail")]
+    GenerateBookCoverThumbnail,
+
     /// <summary>Generates waveform peak data for audio playback visualization.</summary>
     [Code("generate-audio-waveform")]
     GenerateAudioWaveform,

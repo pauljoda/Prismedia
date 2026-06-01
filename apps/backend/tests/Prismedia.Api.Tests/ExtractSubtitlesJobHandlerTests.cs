@@ -103,6 +103,7 @@ public sealed class ExtractSubtitlesJobHandlerTests : IDisposable {
         public string TrickplayTileDir(Guid entityId, int width) => throw new NotSupportedException();
         public string ImageThumbnailPath(Guid entityId) => throw new NotSupportedException();
         public string BookPageThumbnailPath(Guid entityId) => throw new NotSupportedException();
+        public string BookCoverThumbnailPath(Guid entityId) => throw new NotSupportedException();
         public string AudioWaveformPath(Guid entityId) => throw new NotSupportedException();
         public string VideoThumbnailUrl(Guid entityId) => throw new NotSupportedException();
         public string VideoPreviewUrl(Guid entityId) => throw new NotSupportedException();
@@ -110,6 +111,7 @@ public sealed class ExtractSubtitlesJobHandlerTests : IDisposable {
         public string TrickplayPlaylistUrl(Guid entityId, int width) => throw new NotSupportedException();
         public string ImageThumbnailUrl(Guid entityId) => throw new NotSupportedException();
         public string BookPageThumbnailUrl(Guid entityId) => throw new NotSupportedException();
+        public string BookCoverThumbnailUrl(Guid entityId) => throw new NotSupportedException();
         public string AudioWaveformUrl(Guid entityId) => throw new NotSupportedException();
     }
 

@@ -11,4 +11,5 @@ public sealed record ProgressCapability(
     DateTimeOffset? CompletedAt,
     DateTimeOffset? UpdatedAt,
     int? WorkIndex = null,
-    int? WorkTotal = null) : EntityCapability;
+    int? WorkTotal = null,
+    string? Location = null) : EntityCapability;
