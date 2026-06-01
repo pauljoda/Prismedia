@@ -330,9 +330,20 @@
     inset: 0;
   }
 
+  /*
+   * The feed item already reserves the asset's true aspect (portrait, square, or
+   * landscape). The shared player otherwise forces its video-page sizing — a
+   * fixed 16/9 ratio plus a viewport-derived max-width — which letterboxes a
+   * portrait clip into a centered landscape strip that no longer matches the
+   * poster. Neutralise that sizing here so the player simply fills the reserved
+   * box and the video lines up with the poster it replaces.
+   */
   .feed-video :global(media-player) {
     width: 100%;
     height: 100%;
+    aspect-ratio: auto;
+    max-width: none;
+    margin-inline: 0;
   }
 
   .feed-placeholder {

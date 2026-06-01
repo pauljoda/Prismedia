@@ -337,6 +337,7 @@
           prefsKey={`gallery-${gallery?.id}-images`}
           selectable={false}
           initialMediaWall
+          enableFeedView
           onCardActivate={openImageLightbox}
           emptyTitle="No images"
           emptyMessage="This gallery has no images."

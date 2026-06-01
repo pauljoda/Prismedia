@@ -70,6 +70,10 @@
   let pointerStart: { x: number; y: number; t: number } | null = null;
   let panning = $state(false);
   let lastTapAt = 0;
+  // When a swipe over a video is consumed as navigation/dismiss, the browser
+  // still fires a trailing click that would otherwise toggle play. This flag
+  // lets a capture-phase click handler swallow exactly that one click.
+  let suppressStageClick = false;
 
   const current = $derived(entities[index] ?? null);
   const currentRating = $derived.by(() => {
@@ -186,7 +190,17 @@
   }
 
   function handlePointerDown(event: PointerEvent) {
-    if (isCurrentVideo) return;
+    suppressStageClick = false;
+    if (isCurrentVideo) {
+      // Track touch gestures so a horizontal swipe navigates (or a downward
+      // swipe dismisses) even over a video. Mouse and the timeline scrubber
+      // (which stops propagation) keep their normal behaviour: a plain tap
+      // still toggles play because we never capture the pointer here.
+      pointerStart =
+        event.pointerType === "mouse" ? null : { x: event.clientX, y: event.clientY, t: Date.now() };
+      panning = false;
+      return;
+    }
     if (event.pointerType === "mouse" && event.button !== 0) return;
     (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
     pointerStart = { x: event.clientX, y: event.clientY, t: Date.now() };
@@ -202,8 +216,31 @@
 
   function handlePointerUp(event: PointerEvent) {
     if (isCurrentVideo) {
+      const start = pointerStart;
       pointerStart = null;
       panning = false;
+      if (!start) return;
+
+      const dx = event.clientX - start.x;
+      const dy = event.clientY - start.y;
+      const elapsed = Date.now() - start.t;
+      const absX = Math.abs(dx);
+      const absY = Math.abs(dy);
+      if (elapsed < 700 && Math.max(absX, absY) > 60) {
+        if (absX > absY * 1.3) {
+          if (dx < 0) goNext();
+          else goPrev();
+          // Swallow the trailing click so it doesn't toggle play on the
+          // outgoing video.
+          suppressStageClick = true;
+          return;
+        }
+        if (absY > absX * 1.3 && dy > 0) {
+          onClose();
+          suppressStageClick = true;
+          return;
+        }
+      }
       return;
     }
 
@@ -253,6 +290,13 @@
       }
       lastTapAt = now;
     }
+  }
+
+  function handleStageClickCapture(event: MouseEvent) {
+    if (!suppressStageClick) return;
+    suppressStageClick = false;
+    event.preventDefault();
+    event.stopPropagation();
   }
 
   function handleDoubleClick(event: MouseEvent) {
@@ -387,6 +431,7 @@
         onpointermove={handlePointerMove}
         onpointerup={handlePointerUp}
         onpointercancel={handlePointerUp}
+        onclickcapture={handleStageClickCapture}
         ondblclick={handleDoubleClick}
         style:cursor={!isCurrentVideo && scale > fitScale + 0.02 ? (panning ? "grabbing" : "grab") : "default"}
       >
@@ -680,7 +725,9 @@
     gap: 0.35rem;
     overflow-x: auto;
     border-top: 1px solid var(--color-border-subtle, #1c2235);
-    padding: 0.4rem 0.5rem;
+    /* Keep the strip clear of the device's home indicator / gesture area so the
+       thumbnails stay tappable instead of sitting flush against the edge. */
+    padding: 0.4rem 0.5rem calc(0.4rem + env(safe-area-inset-bottom, 0px));
   }
 
   .thumb-button {
@@ -715,6 +762,23 @@
 
     .keyboard-hints {
       display: none;
+    }
+
+    /* Larger, more separated targets and extra bottom clearance make the strip
+       comfortable to use on touch devices. */
+    .thumb-strip {
+      gap: 0.45rem;
+      padding: 0.5rem 0.5rem calc(0.55rem + env(safe-area-inset-bottom, 0px));
+    }
+
+    .thumb-button {
+      width: 3.25rem;
+    }
+
+    /* When a single item (e.g. a video) is open there is no strip, so the
+       bottom control bar is the lowest element — keep it off the edge too. */
+    .bottom-bar {
+      padding-bottom: calc(0.5rem + env(safe-area-inset-bottom, 0px));
     }
   }
 </style>
