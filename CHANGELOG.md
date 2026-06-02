@@ -54,6 +54,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 - The MusicBrainz plugin now paces its requests to stay within MusicBrainz's rate limit, so identifying an artist (which cascades through its albums and tracks) no longer overruns the provider and comes back empty. The Identify button now shows on artist and album pages, and the Identify screen labels music sections correctly ("Artists" with a mic icon, "Albums") instead of raw codes.
+- Music identify now comes back with the right artwork and people: artist search results show the band photo, album covers resolve reliably (including albums whose cover only lives at the release-group level), and the artist review page now lists the band's performers with their roles — the same Credits section a series uses for its cast.
+- Returning to search from an in-progress identify review now clears the children it was resolving, so re-picking a result starts cleanly instead of leaving stale, half-identified child tiles in the grid.
 
 ### Changed
 - Audio scans now enforce the `Album/Songs` and `Artist/Album/Songs` folder layouts instead of turning every folder level into a nested album. Existing music libraries reconcile themselves the next time they scan: an artist folder that was previously read as a containing "album" becomes a proper artist grouping, and disc subfolders fold into their album as sections.

@@ -364,6 +364,10 @@ export class IdentifyStore {
       return null;
     }
 
+    // Returning to search abandons the current proposal, so drop any in-progress child
+    // identification: its results no longer have a proposal to attach to, and re-picking a
+    // candidate must start the children fresh rather than leave stale tiles in the grid.
+    this.#resetChildIdentification();
     return this.identifyEntity(entity, selectedProvider, { title: entity.title, requireChoice: true });
   }
 
@@ -720,6 +724,7 @@ export class IdentifyStore {
     this.#childAbort.clear();
     this.#childQueue = [];
     this.#childContext = null;
+    this.#childIdentifyProposalId = null;
     this.childIdentify = {};
   }
 

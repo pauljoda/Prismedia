@@ -12,6 +12,8 @@ const addIdentifyQueueItem = vi.fn();
 const searchIdentifyQueueItem = vi.fn();
 const applyIdentifyQueueItem = vi.fn();
 const fetchIdentifyApplyProgress = vi.fn();
+const identifyEntityTransient = vi.fn();
+const saveIdentifyQueueProposal = vi.fn();
 
 vi.mock("$lib/api/plugins", async (importOriginal) => {
   const actual = await importOriginal<typeof import("$lib/api/plugins")>();
@@ -32,6 +34,8 @@ vi.mock("$lib/api/identify-client", async (importOriginal) => {
     searchIdentifyQueueItem: (...args: unknown[]) => searchIdentifyQueueItem(...args),
     applyIdentifyQueueItem: (...args: unknown[]) => applyIdentifyQueueItem(...args),
     fetchIdentifyApplyProgress: (...args: unknown[]) => fetchIdentifyApplyProgress(...args),
+    identifyEntityTransient: (...args: unknown[]) => identifyEntityTransient(...args),
+    saveIdentifyQueueProposal: (...args: unknown[]) => saveIdentifyQueueProposal(...args),
   };
 });
 
@@ -52,6 +56,12 @@ describe("IdentifyStore", () => {
     addIdentifyQueueItem.mockResolvedValue(queueItem("video-1"));
     searchIdentifyQueueItem.mockResolvedValue(queueItem("video-1", { state: "search" }));
     applyIdentifyQueueItem.mockResolvedValue(queueItem("video-1", { state: "done" }));
+    identifyEntityTransient.mockReset();
+    saveIdentifyQueueProposal.mockReset();
+    // Keep child lookups pending so children stay in their initial loading/queued state for the
+    // duration of a test rather than resolving and mutating the proposal mid-assertion.
+    identifyEntityTransient.mockReturnValue(new Promise(() => {}));
+    saveIdentifyQueueProposal.mockResolvedValue(queueItem("video-1"));
     fetchIdentifyApplyProgress.mockResolvedValue({
       id: "apply-1",
       entityId: "video-1",
@@ -363,6 +373,31 @@ describe("IdentifyStore", () => {
       requireChoice: true,
     });
     expect(store.view.kind).toBe("review-choice");
+  });
+
+  it("clears in-progress child identification when returning to search", async () => {
+    const store = new IdentifyStore();
+    const artist = entity("artist-1", { kind: "music-artist", title: "Imagine Dragons" });
+    const artistProposal = proposal("musicbrainz:artist:1", {
+      targetKind: "music-artist",
+      title: "Imagine Dragons",
+    });
+    store.queue = [{
+      ...queueItem("artist-1", { state: "proposal", provider: "musicbrainz", proposal: artistProposal }),
+      entity: artist,
+      detail: detail("artist-1", { kind: "music-artist", title: "Imagine Dragons" }),
+    }];
+
+    store.startChildIdentification("artist-1", artistProposal, "musicbrainz", [
+      { id: "album-1", kind: "audio-library", title: "Evolve", coverUrl: null },
+      { id: "album-2", kind: "audio-library", title: "Origins", coverUrl: null },
+    ]);
+    expect(Object.keys(store.childIdentify)).toHaveLength(2);
+
+    searchIdentifyQueueItem.mockResolvedValue(queueItem("artist-1", { state: "search" }));
+    await store.backToSearch(artist, "musicbrainz");
+
+    expect(store.childIdentify).toEqual({});
   });
 
   it("keeps apply progress visible briefly before navigating away", async () => {
