@@ -32,7 +32,11 @@ public sealed class JobHistoryPruner(
                 logger.LogError(ex, "Job history prune failed.");
             }
 
-            await Task.Delay(PruneInterval, stoppingToken);
+            try {
+                await Task.Delay(PruneInterval, stoppingToken);
+            } catch (OperationCanceledException) {
+                break;
+            }
         }
     }
 }

@@ -105,17 +105,21 @@ public sealed class QueueWorker(
         DateTimeOffset nextConcurrencyRefreshAt,
         CancellationToken stoppingToken) {
         var delay = NextCheckDelay(nextConcurrencyRefreshAt);
-        if (runningJobs.Count == 0) {
-            await Task.Delay(delay, stoppingToken);
-            return;
-        }
+        try {
+            if (runningJobs.Count == 0) {
+                await Task.Delay(delay, stoppingToken);
+                return;
+            }
 
-        var jobCompletion = Task.WhenAny(runningJobs);
-        var refreshDelay = Task.Delay(delay, stoppingToken);
-        var completed = await Task.WhenAny(jobCompletion, refreshDelay);
-        if (completed == jobCompletion) {
-            var finishedJob = await jobCompletion;
-            runningJobs.Remove(finishedJob);
+            var jobCompletion = Task.WhenAny(runningJobs);
+            var refreshDelay = Task.Delay(delay, stoppingToken);
+            var completed = await Task.WhenAny(jobCompletion, refreshDelay);
+            if (completed == jobCompletion) {
+                var finishedJob = await jobCompletion;
+                runningJobs.Remove(finishedJob);
+            }
+        } catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) {
+            // Host is shutting down; return so the worker loop exits cleanly.
         }
     }
 

@@ -21,12 +21,16 @@ public sealed class WorkerHeartbeatPublisher(
             try {
                 await heartbeatStore.WriteAsync(workerIdentity.WorkerId, DateTimeOffset.UtcNow, stoppingToken);
             } catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) {
-                throw;
+                break;
             } catch (Exception ex) {
                 logger.LogWarning(ex, "Failed to publish worker heartbeat.");
             }
 
-            await Task.Delay(HeartbeatInterval, stoppingToken);
+            try {
+                await Task.Delay(HeartbeatInterval, stoppingToken);
+            } catch (OperationCanceledException) {
+                break;
+            }
         }
     }
 }

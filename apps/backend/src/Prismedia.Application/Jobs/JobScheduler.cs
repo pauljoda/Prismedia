@@ -27,7 +27,11 @@ public sealed class JobScheduler(
                 logger.LogError(ex, "Scheduler tick failed.");
             }
 
-            await Task.Delay(CheckInterval, stoppingToken);
+            try {
+                await Task.Delay(CheckInterval, stoppingToken);
+            } catch (OperationCanceledException) {
+                break;
+            }
         }
     }
 
