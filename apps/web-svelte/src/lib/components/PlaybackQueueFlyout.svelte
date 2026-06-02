@@ -18,7 +18,11 @@
   const cover = $derived(playback.context?.coverUrl ?? null);
 
   function onWindowPointerDown(event: PointerEvent) {
-    if (root && !root.contains(event.target as Node)) onClose();
+    // Guard against the toggle button: it lives in the flyout's anchor wrapper, so checking the
+    // anchor (not just the flyout) lets the trigger's own click close the flyout instead of this
+    // handler closing it first and the trigger immediately reopening it.
+    const anchor = root?.parentElement ?? root;
+    if (anchor && !anchor.contains(event.target as Node)) onClose();
   }
 </script>
 
@@ -26,7 +30,7 @@
 
 <div
   bind:this={root}
-  class="absolute bottom-full right-0 z-30 mb-2 max-h-[60vh] w-80 max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-lg border border-border-subtle bg-surface-1 shadow-[0_16px_40px_rgba(0,0,0,0.5)]"
+  class="absolute bottom-full right-0 z-30 mb-2 max-h-[70vh] w-80 max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-lg border border-border-subtle bg-surface-1 shadow-[0_16px_40px_rgba(0,0,0,0.5)]"
   use:keepFlyoutOnScreen
 >
   <div class="flex items-center justify-between border-b border-border-subtle px-3 py-2">
@@ -47,9 +51,9 @@
     </button>
   </div>
 
-  <div class="max-h-[calc(60vh-2.5rem)] overflow-y-auto">
+  <div class="max-h-[calc(70vh-2.5rem)] overflow-y-auto">
     {#if current}
-      <div class="px-3 pt-2">
+      <div class="sticky top-0 z-10 bg-surface-1 px-3 pt-2 pb-1.5 shadow-[0_6px_8px_-6px_rgba(0,0,0,0.6)]">
         <p class="text-kicker">Now playing</p>
         <div class="mt-1 flex items-center gap-2.5 rounded-sm bg-surface-2 px-2 py-1.5">
           <div class="h-8 w-8 shrink-0 overflow-hidden rounded">

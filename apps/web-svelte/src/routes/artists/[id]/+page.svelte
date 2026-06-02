@@ -1,14 +1,17 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { page } from "$app/state";
-  import { Disc3 } from "@lucide/svelte";
+  import { Disc3, Play, Shuffle } from "@lucide/svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
-  import { fetchMusicArtist, type MusicArtistDetail } from "$lib/api/media";
+  import { fetchMusicArtist, fetchAudioLibrary, type MusicArtistDetail } from "$lib/api/media";
   import {
     updateEntityRating,
     updateEntityFlags,
     updateEntityMetadata,
   } from "$lib/api/entity-mutations";
+  import { assetUrl } from "$lib/api/orval-fetch";
+  import { getCapability } from "$lib/api/capabilities";
+  import type { AudioTrackListItemDto } from "@prismedia/contracts";
   import {
     toggleOptimisticEntityFlag,
     updateOptimisticEntityRating,
@@ -20,7 +23,9 @@
     hydrateStandardRelationshipCards,
     thumbnailsToCards,
   } from "$lib/entities/entity-relationship-thumbnails";
+  import { entityThumbnailToTrackItem } from "$lib/entities/audio-track-items";
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
+  import { useAudioPlayback, type PlaybackContext } from "$lib/stores/audio-playback.svelte";
   import EntityCastAndCrewSection from "$lib/components/entities/EntityCastAndCrewSection.svelte";
   import EntityDetail, {
     type EntityDetailActionButton,
@@ -36,6 +41,7 @@
 
   const nsfw = useNsfw();
   const appChrome = useAppChrome();
+  const playback = useAudioPlayback()!;
 
   let loadState: LoadState = $state("loading");
   let artist = $state<MusicArtistDetail | null>(null);
@@ -45,6 +51,13 @@
   let albumCards = $state<EntityThumbnailCard[]>([]);
   let creditCards = $state<EntityThumbnailCard[]>([]);
   let relationshipTags = $state<EntityDetailTag[]>([]);
+  let queueBusy = $state(false);
+
+  const artistCoverUrl = $derived.by(() => {
+    if (!artist) return undefined;
+    const images = getCapability(artist.capabilities, "images");
+    return assetUrl(images?.coverUrl ?? images?.thumbnailUrl) || undefined;
+  });
 
   const card = $derived.by((): EntityDetailCardFull | null => {
     if (!artist) return null;
@@ -55,8 +68,68 @@
   });
 
   const identifyAction = useIdentifyDetailAction(() => artist?.id, () => artist?.kind);
-  const heroActions = $derived.by((): EntityDetailActionButton[] =>
-    identifyAction.action ? [identifyAction.action] : []);
+  const heroActions = $derived.by((): EntityDetailActionButton[] => {
+    const actions: EntityDetailActionButton[] = [];
+    if (albumCards.length > 0) {
+      actions.push(
+        {
+          id: "play-all",
+          label: queueBusy ? "Loading…" : "Play All",
+          icon: Play,
+          iconFill: "currentColor",
+          variant: "primary",
+          disabled: queueBusy,
+          onClick: () => void playArtist(false),
+        },
+        {
+          id: "shuffle",
+          label: "Shuffle",
+          icon: Shuffle,
+          disabled: queueBusy,
+          onClick: () => void playArtist(true),
+        },
+      );
+    }
+    if (identifyAction.action) actions.push(identifyAction.action);
+    return actions;
+  });
+
+  function artistContext(): PlaybackContext {
+    return {
+      artistId: artist?.id ?? null,
+      artistName: artist?.title ?? null,
+      albumTitle: null,
+      coverUrl: artistCoverUrl ?? null,
+    };
+  }
+
+  /** Walk a library and all of its nested sub-libraries, collecting ordered track items. */
+  async function collectLibraryTracks(libraryId: string): Promise<AudioTrackListItemDto[]> {
+    const detail = await fetchAudioLibrary(libraryId).catch(() => null);
+    if (!detail) return [];
+    const trackGroup = detail.childrenByKind.find((g) => g.kind === "audio-track");
+    const tracks = (trackGroup?.entities ?? [])
+      .map((thumb) => entityThumbnailToTrackItem(thumb, detail.id))
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+    const subLibIds = detail.childrenByKind
+      .filter((g) => g.kind === "audio-library")
+      .flatMap((g) => g.entities.map((e) => e.id));
+    const subTracks = (await Promise.all(subLibIds.map(collectLibraryTracks))).flat();
+    return [...tracks, ...subTracks];
+  }
+
+  async function playArtist(shuffle: boolean) {
+    if (queueBusy || albumCards.length === 0) return;
+    queueBusy = true;
+    try {
+      const albumIds = albumCards.map((c) => c.entity.id);
+      const tracks = (await Promise.all(albumIds.map(collectLibraryTracks))).flat();
+      if (tracks.length === 0) return;
+      playback.play(tracks, shuffle ? undefined : tracks[0].id, artistContext(), { shuffle });
+    } finally {
+      queueBusy = false;
+    }
+  }
 
   onMount(() => {
     void loadArtist();

@@ -52,6 +52,9 @@
   );
   const artistHref = $derived(ctx?.artistId ? resolveEntityHref("music-artist", ctx.artistId) : undefined);
   const coverUrl = $derived(ctx?.coverUrl ?? null);
+  // Album label: a single-album context wins; otherwise fall back to the track's own album
+  // so mixed-album queues (e.g. an artist Play All) still show the right album per track.
+  const albumLabel = $derived(ctx?.albumTitle ?? activeTrack?.embeddedAlbum ?? null);
 
   function isKeyboardShortcutSuppressed(target: EventTarget | null): boolean {
     if (!(target instanceof HTMLElement)) return false;
@@ -315,7 +318,7 @@
 <div
   bind:this={rootEl}
   class={cn(
-    "fixed bottom-16 left-3 right-3 z-[55] mx-auto max-w-3xl overflow-hidden rounded-xl border border-border-subtle bg-surface-1/90 shadow-xl shadow-black/40 backdrop-blur-xl md:bottom-4 md:left-64 md:right-4",
+    "fixed bottom-16 left-3 right-3 z-[55] mx-auto max-w-3xl rounded-xl border border-white/10 bg-surface-1/70 shadow-[0_18px_56px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.07)] backdrop-blur-2xl md:bottom-4 md:left-64 md:right-4",
   )}
 >
   <!-- Now-playing + progress -->
@@ -341,8 +344,8 @@
           {:else}
             Unknown artist
           {/if}
-          {#if ctx?.albumTitle}
-            <span class="text-text-disabled"> · {ctx.albumTitle}</span>
+          {#if albumLabel}
+            <span class="text-text-disabled"> · {albumLabel}</span>
           {/if}
         </p>
       {:else}
