@@ -28,6 +28,54 @@ public sealed class VideoDirectPlayPolicyTests {
             VideoCodec: videoCodec,
             AudioCodec: audioCodec);
 
+    // A Dolby Vision MKV whose primary video stream carries the DV profile/base-layer fields the
+    // remux gate reads to decide whether a stream copy can render correctly on a non-DV client.
+    private static VideoSourceFile DolbyVisionSource(
+        string path,
+        int dvProfile,
+        int dvBlSignalCompatibilityId) =>
+        new(
+            Guid.NewGuid(),
+            path,
+            "video/x-matroska",
+            DirectPlayable: false,
+            Container: "matroska",
+            VideoCodec: "hevc",
+            AudioCodec: "eac3",
+            Streams:
+            [
+                new VideoSourceStream(
+                    StreamIndex: 0,
+                    Type: "Video",
+                    Codec: "hevc",
+                    Language: null,
+                    Title: null,
+                    Width: 3840,
+                    Height: 2160,
+                    FrameRate: 24,
+                    BitRate: null,
+                    SampleRate: null,
+                    Channels: null,
+                    IsDefault: true,
+                    IsForced: false,
+                    DvProfile: dvProfile,
+                    DvBlSignalCompatibilityId: dvBlSignalCompatibilityId),
+                new VideoSourceStream(
+                    StreamIndex: 1,
+                    Type: "Audio",
+                    Codec: "eac3",
+                    Language: "eng",
+                    Title: null,
+                    Width: null,
+                    Height: null,
+                    FrameRate: null,
+                    BitRate: null,
+                    SampleRate: 48000,
+                    Channels: 6,
+                    IsDefault: true,
+                    IsForced: false),
+            ]);
+
     [Fact]
     public void CapableClientDirectPlaysDolbyVisionHevcAtmosMkv() {
         var source = Source("/media/e02.mkv", "matroska", "hevc", "eac3");
@@ -57,6 +105,84 @@ public sealed class VideoDirectPlayPolicyTests {
             selectedAudioCodec: "eac3",
             range: VideoPlaybackRange.Dovi,
             profile: CapableClient,
+            supportedVideoRangeTypes: ["SDR", "HDR10"],
+            directPlayAllowed: true,
+            directStreamAllowed: true,
+            transcodingAllowed: true);
+
+        Assert.Equal(VideoPlaybackMethod.Remux, decision.Method);
+    }
+
+    [Fact]
+    public void DolbyVisionProfile5TranscodesRatherThanCopyingToAClientThatCannotRenderIt() {
+        // Profile 5 has an ICtCp base layer with no HDR10 fallback. A browser-class client decodes the
+        // HEVC bitstream without Dolby Vision processing and shows a magenta/green cast, so the policy
+        // must tone-map (transcode) instead of stream-copying, even though the client decodes HEVC.
+        var browserClient = new ClientPlaybackProfile(
+            MaxStreamingBitrate: null,
+            DirectPlayProfiles: [new ClientDirectPlayProfile("Video", "mp4,webm", "hevc,h264,av1", "aac,opus")]);
+        var source = DolbyVisionSource("/media/p5.mkv", dvProfile: 5, dvBlSignalCompatibilityId: 0);
+
+        var decision = VideoDirectPlayPolicy.Decide(
+            source,
+            selectedAudioCodec: "eac3",
+            range: VideoPlaybackRange.Dovi,
+            profile: browserClient,
+            supportedVideoRangeTypes: ["SDR", "HDR10"],
+            directPlayAllowed: true,
+            directStreamAllowed: true,
+            transcodingAllowed: true);
+
+        Assert.Equal(VideoPlaybackMethod.Transcode, decision.Method);
+    }
+
+    [Fact]
+    public void DolbyVisionProfile5RemuxesToAClientThatAdvertisesDolbyVision() {
+        // A real Dolby Vision client (advertises DOVI) processes the RPU itself, so copying Profile 5
+        // unchanged is correct — the tone-map gate only blocks copies to clients that cannot render it.
+        var source = DolbyVisionSource("/media/p5.mkv", dvProfile: 5, dvBlSignalCompatibilityId: 0);
+
+        var decision = VideoDirectPlayPolicy.Decide(
+            source,
+            selectedAudioCodec: "eac3",
+            range: VideoPlaybackRange.Dovi,
+            profile: CapableClient,
+            supportedVideoRangeTypes: ["DOVI", "HDR10"],
+            directPlayAllowed: true,
+            directStreamAllowed: false, // force the Remux branch rather than DirectPlay
+            transcodingAllowed: true);
+
+        Assert.Equal(VideoPlaybackMethod.Transcode, decision.Method);
+
+        var remuxable = VideoDirectPlayPolicy.Decide(
+            source,
+            selectedAudioCodec: "eac3",
+            range: VideoPlaybackRange.Dovi,
+            profile: new ClientPlaybackProfile(
+                MaxStreamingBitrate: null,
+                DirectPlayProfiles: [new ClientDirectPlayProfile("Video", "mp4", "hevc", "aac")]),
+            supportedVideoRangeTypes: ["DOVI", "HDR10"],
+            directPlayAllowed: true,
+            directStreamAllowed: true,
+            transcodingAllowed: true);
+
+        Assert.Equal(VideoPlaybackMethod.Remux, remuxable.Method);
+    }
+
+    [Fact]
+    public void DolbyVisionProfile8WithHdr10BaseLayerRemuxesToAnHevcClient() {
+        // Profile 8.1 carries an HDR10-compatible base layer (compatibility id 1); a client that decodes
+        // HEVC renders the copied base layer correctly as HDR10, so a stream copy stays valid.
+        var profile = new ClientPlaybackProfile(
+            MaxStreamingBitrate: null,
+            DirectPlayProfiles: [new ClientDirectPlayProfile("Video", "mp4", "hevc", "aac")]);
+        var source = DolbyVisionSource("/media/p8.mkv", dvProfile: 8, dvBlSignalCompatibilityId: 1);
+
+        var decision = VideoDirectPlayPolicy.Decide(
+            source,
+            selectedAudioCodec: "eac3",
+            range: VideoPlaybackRange.Dovi,
+            profile: profile,
             supportedVideoRangeTypes: ["SDR", "HDR10"],
             directPlayAllowed: true,
             directStreamAllowed: true,

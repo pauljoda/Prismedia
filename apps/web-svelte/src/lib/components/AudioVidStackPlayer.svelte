@@ -700,20 +700,22 @@
   .audio-notes :global(.audio-note-2) { animation: audio-note-center 2.4s ease-out infinite; animation-delay: 0.8s; }
   .audio-notes :global(.audio-note-3) { animation: audio-note-right 2.4s ease-out infinite; animation-delay: 1.6s; }
 
+  /* translateX(-50% …) self-centers each note on the spawn point regardless of its
+     own width, so the cluster originates from the true upper-center of the artwork. */
   @keyframes audio-note-left {
-    0% { opacity: 0; transform: translate(0, 4px) scale(0.7) rotate(6deg); }
+    0% { opacity: 0; transform: translate(-50%, 4px) scale(0.7) rotate(6deg); }
     18% { opacity: 0.95; }
-    100% { opacity: 0; transform: translate(-16px, -26px) scale(1.05) rotate(-14deg); }
+    100% { opacity: 0; transform: translate(calc(-50% - 16px), -26px) scale(1.05) rotate(-14deg); }
   }
   @keyframes audio-note-center {
-    0% { opacity: 0; transform: translate(0, 4px) scale(0.7) rotate(-4deg); }
+    0% { opacity: 0; transform: translate(-50%, 4px) scale(0.7) rotate(-4deg); }
     18% { opacity: 0.95; }
-    100% { opacity: 0; transform: translate(0, -32px) scale(1.1) rotate(6deg); }
+    100% { opacity: 0; transform: translate(-50%, -32px) scale(1.1) rotate(6deg); }
   }
   @keyframes audio-note-right {
-    0% { opacity: 0; transform: translate(0, 4px) scale(0.7) rotate(-6deg); }
+    0% { opacity: 0; transform: translate(-50%, 4px) scale(0.7) rotate(-6deg); }
     18% { opacity: 0.95; }
-    100% { opacity: 0; transform: translate(16px, -26px) scale(1.05) rotate(14deg); }
+    100% { opacity: 0; transform: translate(calc(-50% + 16px), -26px) scale(1.05) rotate(14deg); }
   }
 
   @media (prefers-reduced-motion: reduce) {
