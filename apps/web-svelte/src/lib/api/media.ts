@@ -4,6 +4,7 @@ import {
   getBook,
   getGallery,
   getImage,
+  getMusicArtist,
   getVideo,
   getVideoSeason,
   getVideoSeries,
@@ -24,6 +25,7 @@ import type {
   GalleryDetail,
   ImageDetail,
   MovieDetail,
+  MusicArtistDetail,
   VideoDetail,
   VideoSeasonDetail,
   VideoSeriesDetail,
@@ -37,6 +39,7 @@ export type {
   GalleryDetail,
   ImageDetail,
   MovieDetail,
+  MusicArtistDetail,
   VideoDetail,
   VideoSeasonDetail,
   VideoSeriesDetail,
@@ -152,6 +155,15 @@ export function fetchAudioLibrary(
 ): Promise<AudioLibraryDetail> {
   return getAudioLibrary(id, undefined, requestInit(options)).then((response) =>
     unwrapGenerated(response, `Failed to fetch audio library ${id}`),
+  );
+}
+
+export function fetchMusicArtist(
+  id: string,
+  options?: RequestOptions,
+): Promise<MusicArtistDetail> {
+  return getMusicArtist(id, undefined, requestInit(options)).then((response) =>
+    unwrapGenerated(response, `Failed to fetch artist ${id}`),
   );
 }
 

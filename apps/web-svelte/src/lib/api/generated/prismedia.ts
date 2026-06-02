@@ -68,6 +68,7 @@ import type {
   GetJellyfinVideoHlsSegmentParams,
   GetJellyfinVideoMasterPlaylistParams,
   GetMovieParams,
+  GetMusicArtistParams,
   GetOrganizePlanParams,
   GetPersonParams,
   GetSettingValuesParams,
@@ -126,6 +127,7 @@ import type {
   ListImagesParams,
   ListJobsParams,
   ListMoviesParams,
+  ListMusicArtistsParams,
   ListPeopleParams,
   ListStudiosParams,
   ListTagsParams,
@@ -133,6 +135,7 @@ import type {
   ListVideosParams,
   MoveFileParams,
   MovieDetail,
+  MusicArtistDetail,
   OrganizeApplyResponse,
   OrganizePlanRequest,
   OrganizePlanResponse,
@@ -4243,6 +4246,151 @@ export const getBookPatch = async (id: string,
     entityMetadataUpdateRequest: EntityMetadataUpdateRequest, options?: RequestInit): Promise<getBookPatchResponse> => {
 
   return orvalFetch<getBookPatchResponse>(getGetBookPatchUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      entityMetadataUpdateRequest,)
+  }
+);}
+
+
+
+export type listMusicArtistsResponse200 = {
+  data: EntityListResponse
+  status: 200
+}
+
+export type listMusicArtistsResponseSuccess = (listMusicArtistsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listMusicArtistsResponse = (listMusicArtistsResponseSuccess)
+
+export const getListMusicArtistsUrl = (params?: ListMusicArtistsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/music-artists?${stringifiedParams}` : `/api/music-artists`
+}
+
+/**
+ * @summary List Artists.
+ */
+export const listMusicArtists = async (params?: ListMusicArtistsParams, options?: RequestInit): Promise<listMusicArtistsResponse> => {
+
+  return orvalFetch<listMusicArtistsResponse>(getListMusicArtistsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getMusicArtistResponse200 = {
+  data: MusicArtistDetail
+  status: 200
+}
+
+export type getMusicArtistResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type getMusicArtistResponseSuccess = (getMusicArtistResponse200) & {
+  headers: Headers;
+};
+export type getMusicArtistResponseError = (getMusicArtistResponse404) & {
+  headers: Headers;
+};
+
+export type getMusicArtistResponse = (getMusicArtistResponseSuccess | getMusicArtistResponseError)
+
+export const getGetMusicArtistUrl = (id: string,
+    params?: GetMusicArtistParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/music-artists/${id}?${stringifiedParams}` : `/api/music-artists/${id}`
+}
+
+/**
+ * @summary Get Artists detail.
+ */
+export const getMusicArtist = async (id: string,
+    params?: GetMusicArtistParams, options?: RequestInit): Promise<getMusicArtistResponse> => {
+
+  return orvalFetch<getMusicArtistResponse>(getGetMusicArtistUrl(id,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getMusicArtistPatchResponse200 = {
+  data: MusicArtistDetail
+  status: 200
+}
+
+export type getMusicArtistPatchResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type getMusicArtistPatchResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type getMusicArtistPatchResponseSuccess = (getMusicArtistPatchResponse200) & {
+  headers: Headers;
+};
+export type getMusicArtistPatchResponseError = (getMusicArtistPatchResponse400 | getMusicArtistPatchResponse404) & {
+  headers: Headers;
+};
+
+export type getMusicArtistPatchResponse = (getMusicArtistPatchResponseSuccess | getMusicArtistPatchResponseError)
+
+export const getGetMusicArtistPatchUrl = (id: string,) => {
+
+
+
+
+  return `/api/music-artists/${id}`
+}
+
+/**
+ * @summary Update Artists detail.
+ */
+export const getMusicArtistPatch = async (id: string,
+    entityMetadataUpdateRequest: EntityMetadataUpdateRequest, options?: RequestInit): Promise<getMusicArtistPatchResponse> => {
+
+  return orvalFetch<getMusicArtistPatchResponse>(getGetMusicArtistPatchUrl(id),
   {
     ...options,
     method: 'PATCH',

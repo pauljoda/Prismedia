@@ -4,6 +4,7 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { DeviceProfileRequest } from './deviceProfileRequest';
 
 export interface PlaybackInfoRequest {
   /** @nullable */
@@ -40,4 +41,5 @@ export interface PlaybackInfoRequest {
   PlaySessionId?: string | null;
   /** @nullable */
   SupportedVideoRangeTypes?: string[] | null;
+  DeviceProfile?: null | DeviceProfileRequest;
 }

@@ -46,6 +46,7 @@ const ROUTE_RULES: EntityRouteRule[] = [
   { kind: ENTITY_KIND.bookVolume, topLevel: false, browsePath: "/books", resolve: (id, parent) => parent ? `/books/${parent.id}/volumes/${id}` : undefined },
   { kind: ENTITY_KIND.bookChapter, topLevel: false, browsePath: "/books", resolve: (id, parent) => parent ? `/books/${parent.id}/chapters/${id}` : undefined },
   { kind: ENTITY_KIND.image, topLevel: true, browsePath: "/images", resolve: (id) => `/images/${id}` },
+  { kind: ENTITY_KIND.musicArtist, topLevel: true, browsePath: "/artists", resolve: (id) => `/artists/${id}` },
   { kind: ENTITY_KIND.audioLibrary, topLevel: true, browsePath: "/audio", resolve: (id) => `/audio/${id}` },
   { kind: ENTITY_KIND.audioTrack, topLevel: false, browsePath: "/audio", resolve: (id, parent) => parent ? `/audio/${parent.id}/tracks/${id}` : undefined },
   { kind: ENTITY_KIND.person, topLevel: true, browsePath: "/people", resolve: (id) => `/people/${id}` },

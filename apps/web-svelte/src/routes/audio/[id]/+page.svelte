@@ -52,6 +52,7 @@
   let creditCards = $state<EntityThumbnailCard[]>([]);
   let relationshipTags = $state<EntityDetailTag[]>([]);
   let trackItems = $state<AudioTrackListItemDto[]>([]);
+  let artistLink = $state<{ id: string; title: string } | null>(null);
 
   let activeTrackId = $state<string | null>(null);
   let isPlaying = $state(false);
@@ -128,10 +129,16 @@
       const nonTrackGroups = nextLibrary.childrenByKind.filter((g) => g.kind !== "audio-track");
       const nonTrackIds = nonTrackGroups.flatMap((g) => g.entities.map((e) => e.id));
 
-      const [children, relationships] = await Promise.all([
+      // The album's parent (when set) is its artist grouping; resolve its title for a back-link.
+      const parentId = nextLibrary.parentEntityId;
+      const [children, relationships, parentThumbs] = await Promise.all([
         fetchOrderedEntityThumbnails(nonTrackIds),
         hydrateStandardRelationshipCards(nextLibrary),
+        parentId ? fetchOrderedEntityThumbnails([parentId]) : Promise.resolve([]),
       ]);
+
+      const parentThumb = parentThumbs.find((t) => t.kind === "music-artist");
+      artistLink = parentThumb ? { id: parentThumb.id, title: parentThumb.title } : null;
 
       library = nextLibrary;
       childCards = thumbnailsToCards(children, {
@@ -262,15 +269,19 @@
       actionButtons={heroActions}
     >
       {#snippet heroMeta()}
+        {#if artistLink}
+          <a href={resolveEntityHref("music-artist", artistLink.id)} class="meta-item is-studio">{artistLink.title}</a>
+        {/if}
         {#if studio}
+          {#if artistLink}<span class="meta-sep"></span>{/if}
           <a href={resolveEntityHref("studio", studio.id)} class="meta-item is-studio">{studio.title}</a>
         {/if}
         {#each dates as date, i (date.code)}
-          {#if studio || i > 0}<span class="meta-sep"></span>{/if}
+          {#if artistLink || studio || i > 0}<span class="meta-sep"></span>{/if}
           <span class="meta-item">{date.value}</span>
         {/each}
         {#if trackItems.length > 0}
-          {#if studio || dates.length > 0}<span class="meta-sep"></span>{/if}
+          {#if artistLink || studio || dates.length > 0}<span class="meta-sep"></span>{/if}
           <span class="meta-item">{trackItems.length} {trackItems.length === 1 ? "track" : "tracks"}</span>
         {/if}
       {/snippet}
