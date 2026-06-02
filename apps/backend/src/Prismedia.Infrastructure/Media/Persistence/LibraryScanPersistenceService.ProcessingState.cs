@@ -287,12 +287,30 @@ public sealed partial class LibraryScanPersistenceService {
         await _db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task UpsertAudioTrackTagsAsync(Guid entityId, string? artist, string? album, CancellationToken cancellationToken) {
+    public async Task UpsertAudioTrackTagsAsync(Guid entityId, string? artist, string? album, int? trackNumber, CancellationToken cancellationToken) {
         var detail = await _db.AudioTrackDetails.FindAsync([entityId], cancellationToken);
         if (detail is null) return;
 
         if (artist is not null) detail.EmbeddedArtist = artist;
         if (album is not null) detail.EmbeddedAlbum = album;
+
+        // Use the embedded track-number tag to set the album-global sort order, so identify can match
+        // the track to its release track by position even when the filename is messy or unsorted. Only
+        // for single-disc albums (one section), where the track number maps 1:1 to album-global order;
+        // multi-disc albums keep their scanned order to avoid cross-disc position collisions.
+        if (trackNumber is > 0 and var number) {
+            var entity = await _db.Entities.FindAsync([entityId], cancellationToken);
+            if (entity?.ParentEntityId is { } albumId) {
+                var sectionCount = await _db.AudioTrackDetails.AsNoTracking()
+                    .Where(d => _db.Entities.Any(e => e.Id == d.EntityId && e.ParentEntityId == albumId && e.DeletedAt == null))
+                    .Select(d => d.SectionOrder)
+                    .Distinct()
+                    .CountAsync(cancellationToken);
+                if (sectionCount <= 1) {
+                    entity.SortOrder = number - 1;
+                }
+            }
+        }
 
         await _db.SaveChangesAsync(cancellationToken);
     }

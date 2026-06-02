@@ -32,8 +32,9 @@ public sealed class ProbeAudioJobHandler(
             probe.SampleRate, probe.Channels, probe.Codec, probe.Container, null,
             cancellationToken);
 
-        if (probe.Artist is not null || probe.Album is not null) {
-            await Persistence.UpsertAudioTrackTagsAsync(entityId, probe.Artist, probe.Album, cancellationToken);
+        var trackNumber = ParseTrackNumber(probe.TrackNumber);
+        if (probe.Artist is not null || probe.Album is not null || trackNumber is not null) {
+            await Persistence.UpsertAudioTrackTagsAsync(entityId, probe.Artist, probe.Album, trackNumber, cancellationToken);
         }
 
         var settings = await roots.GetSettingsAsync(cancellationToken);
@@ -47,5 +48,18 @@ public sealed class ProbeAudioJobHandler(
             context.Job.TargetLabel, probe.DurationSeconds, probe.Codec, probe.SampleRate);
 
         await context.ReportProgressAsync(100, "Probe complete", cancellationToken);
+    }
+
+    /// <summary>
+    /// Parses a track number from an embedded <c>track</c> tag, which can be "7", "07", or "7/14".
+    /// Returns null when there is no usable leading number.
+    /// </summary>
+    private static int? ParseTrackNumber(string? tag) {
+        if (string.IsNullOrWhiteSpace(tag)) {
+            return null;
+        }
+
+        var head = tag.Split('/')[0].Trim();
+        return int.TryParse(head, out var number) && number > 0 ? number : null;
     }
 }
