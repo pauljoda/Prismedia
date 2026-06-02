@@ -51,6 +51,21 @@
   );
   const localCandidates = $derived(searchedCandidates ?? candidates);
 
+  // Navigating between items reuses this component instance, so local search state must be cleared
+  // when the entity changes — otherwise a previous item's searched candidates and query stick around.
+  let lastEntityId = $state<string | null>(null);
+  $effect(() => {
+    if (entity.id === lastEntityId) return;
+    lastEntityId = entity.id;
+    searchedCandidates = null;
+    searchedProviderId = null;
+    searchTitle = "";
+    searchYear = "";
+    selectedProviderId = null;
+    checkingCandidateKey = null;
+    checkingCandidateTitle = null;
+  });
+
   async function handleRescan() {
     if (!activeProvider || rescanning) return;
     rescanning = true;

@@ -52,7 +52,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Fixed
-- Identifying a music artist or album no longer fans out into a metadata lookup for every album and track underneath it — a request storm that external providers like MusicBrainz rate-limited and rejected. Artists and albums are now identified on their own, and the Identify button shows on artist and album pages. The Identify screen also labels music sections correctly ("Artists" with a mic icon, "Albums") instead of raw codes.
+- The MusicBrainz plugin now paces its requests to stay within MusicBrainz's rate limit, so identifying an artist (which cascades through its albums and tracks) no longer overruns the provider and comes back empty. The Identify button now shows on artist and album pages, and the Identify screen labels music sections correctly ("Artists" with a mic icon, "Albums") instead of raw codes.
 
 ### Changed
 - Audio scans now enforce the `Album/Songs` and `Artist/Album/Songs` folder layouts instead of turning every folder level into a nested album. Existing music libraries reconcile themselves the next time they scan: an artist folder that was previously read as a containing "album" becomes a proper artist grouping, and disc subfolders fold into their album as sections.

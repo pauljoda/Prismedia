@@ -30,14 +30,6 @@ public sealed partial class IdentifyPluginService {
                 continue;
             }
 
-            // Music albums and tracks are identified independently (against separate provider
-            // endpoints), not as a single provider tree like a series' episodes. Cascading would
-            // fan one artist identify out into a call per album and per track — a request storm
-            // that rate-limited providers reject — so they are excluded from the cascade.
-            if (!ParticipatesInChildIdentifyCascade(child.Entity.KindCode)) {
-                continue;
-            }
-
             var providerChild = providerStructuralChildren.FirstOrDefault(proposal => IsSameStructuralChild(child, proposal));
             if (providerChild is not null) {
                 structuralChildren.Add(await HydrateMatchedProviderChildAsync(
@@ -448,18 +440,6 @@ public sealed partial class IdentifyPluginService {
 
     private static bool SupportsKind(PluginManifest manifest, string kind) =>
         manifest.Supports.Any(support => PluginEntityKindCompatibility.SupportsKind(support, kind));
-
-    /// <summary>
-    /// Whether a structural child of the identified entity should be recursively identified as
-    /// part of its parent's identify. True for genuine provider-tree hierarchies (a series' seasons
-    /// and episodes, a book's volumes/chapters/pages). False for music artists, albums, and tracks,
-    /// which are independently identifiable entities — identifying an artist must not fan out into
-    /// a separate provider request for every album and track.
-    /// </summary>
-    private static bool ParticipatesInChildIdentifyCascade(string childKind) =>
-        !childKind.Equals(EntityKindRegistry.MusicArtist.Code, StringComparison.OrdinalIgnoreCase) &&
-        !childKind.Equals(EntityKindRegistry.AudioLibrary.Code, StringComparison.OrdinalIgnoreCase) &&
-        !childKind.Equals(EntityKindRegistry.AudioTrack.Code, StringComparison.OrdinalIgnoreCase);
 
     private sealed record StructuralChild(int? SortOrder, EntityRow Entity);
 }
