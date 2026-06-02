@@ -171,6 +171,7 @@ export class AudioPlaybackStore {
     }
   }
 
+  /** Fully clears playback: empties the queue, resets transport, and drops shuffle/repeat. */
   clear() {
     this.queue = [];
     this.order = [];
@@ -179,6 +180,8 @@ export class AudioPlaybackStore {
     this.playing = false;
     this.currentTime = 0;
     this.duration = 0;
+    this.shuffle = false;
+    this.repeat = "off";
   }
 
   /** The global player registers element control here; returns a detach function. */

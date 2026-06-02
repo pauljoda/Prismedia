@@ -16,6 +16,7 @@
     Volume1,
     Volume2,
     VolumeX,
+    X,
   } from "@lucide/svelte";
   import { cn } from "@prismedia/ui-svelte";
   import { formatDuration } from "@prismedia/contracts";
@@ -63,6 +64,11 @@
   function collapse() {
     collapsed = true;
     queueOpen = false;
+  }
+
+  function dismiss() {
+    if (audioEl) audioEl.pause();
+    playback.clear();
   }
 
   function isKeyboardShortcutSuppressed(target: EventTarget | null): boolean {
@@ -405,6 +411,16 @@
         --:--
       {/if}
     </span>
+
+    <button
+      type="button"
+      onclick={dismiss}
+      title="Close player"
+      aria-label="Close player and clear queue"
+      class="-mr-1 shrink-0 rounded-full p-1 text-text-disabled transition-colors hover:bg-white/5 hover:text-text-primary"
+    >
+      <X class="h-3.5 w-3.5" />
+    </button>
   </div>
 
   <!-- Progress scrubber -->
