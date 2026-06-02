@@ -366,9 +366,11 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             ? query.Where(entity => !entity.IsNsfw)
             : query;
 
+    // Audio libraries (albums) are intentionally excluded: an album's only parent is now its
+    // artist grouping (a different kind), so every album is a browsable top-level item in the
+    // Audio view — filtering to ParentEntityId == null would hide every album that has an artist.
     private static bool ListBrowseShowsOnlyTopLevel(string kind) =>
         kind.Equals(EntityKindRegistry.Gallery.Code, StringComparison.OrdinalIgnoreCase) ||
-        kind.Equals(EntityKindRegistry.AudioLibrary.Code, StringComparison.OrdinalIgnoreCase) ||
         kind.Equals(EntityKindRegistry.Book.Code, StringComparison.OrdinalIgnoreCase);
 
     private static bool ShouldSuppressMovieChildVideos(string? kind, string? query, Guid? referencedBy) =>

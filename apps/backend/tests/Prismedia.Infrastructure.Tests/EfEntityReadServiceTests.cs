@@ -485,24 +485,34 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
-    public async Task ListAsyncReturnsOnlyTopLevelAudioLibrariesForAudioBrowse() {
+    public async Task ListAsyncReturnsAlbumsIncludingThoseGroupedUnderAnArtist() {
+        // Albums now nest under an artist grouping rather than under another album, so the audio
+        // browse must surface every album — both loose albums and albums that have an artist.
         await using var db = CreateContext();
-        var libraryId = Guid.Parse("33333333-3333-3333-3333-333333333333");
-        var nestedLibraryId = Guid.Parse("44444444-4444-4444-4444-444444444444");
+        var artistId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        var looseAlbumId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+        var artistAlbumId = Guid.Parse("44444444-4444-4444-4444-444444444444");
         var now = DateTimeOffset.UtcNow;
         db.Entities.AddRange(
             new EntityRow {
-                Id = libraryId,
-                KindCode = EntityKindRegistry.AudioLibrary.Code,
-                Title = "Album",
+                Id = artistId,
+                KindCode = EntityKindRegistry.MusicArtist.Code,
+                Title = "Imagine Dragons",
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new EntityRow {
-                Id = nestedLibraryId,
+                Id = looseAlbumId,
                 KindCode = EntityKindRegistry.AudioLibrary.Code,
-                Title = "Disc 2",
-                ParentEntityId = libraryId,
+                Title = "Loose Album",
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new EntityRow {
+                Id = artistAlbumId,
+                KindCode = EntityKindRegistry.AudioLibrary.Code,
+                Title = "Evolve",
+                ParentEntityId = artistId,
                 SortOrder = 1,
                 CreatedAt = now,
                 UpdatedAt = now
@@ -513,10 +523,10 @@ public sealed class EfEntityReadServiceTests {
         var service = new EfEntityReadService(db, repository, EntityMappers.Kinds(db));
 
         var result = await service.ListAsync(EntityKindRegistry.AudioLibrary.Code, null, null, null, null, CancellationToken.None);
-        var item = Assert.Single(result.Items);
 
-        Assert.Equal(libraryId, item.Id);
-        Assert.Equal(1, result.TotalCount);
+        Assert.Equal(2, result.TotalCount);
+        Assert.Contains(result.Items, item => item.Id == looseAlbumId);
+        Assert.Contains(result.Items, item => item.Id == artistAlbumId);
     }
 
     [Fact]
