@@ -32,7 +32,15 @@ internal static class FfmpegToneMapping {
         var colorParameters = InputHdrColorParameters(colorTransfer);
 
         if (RequiresDolbyVisionToneMapping(dvProfile, dvBlSignalCompatibilityId)) {
-            return $"{colorParameters},{scaleFilter},tonemapx=tonemap=bt2390:desat=0:peak=400:t=bt709:m=bt709:p=bt709:format=yuv420p";
+            // Dolby Vision Profile 5 (and any base layer with no standard-compatible signal) carries its
+            // colour transform in the per-frame RPU rather than in stream colour tags. tonemapx applies
+            // that RPU itself (apply_dovi, on by default), but only while the RPU side data is still
+            // attached to the frame — and swscale drops it. So tonemapx must run on the full-resolution
+            // decoded frames BEFORE the scale, and we must NOT override the (intentionally unknown) input
+            // colour tags with setparams: forcing bt2020nc makes tonemapx treat the ICtCp base layer as
+            // plain HDR10 and produce a magenta/green cast. (VideoToolbox decode preserves the RPU, so the
+            // accelerated decode + CPU tonemap path renders identically to software decode.)
+            return $"tonemapx=tonemap=bt2390:desat=0:peak=100:t=bt709:m=bt709:p=bt709:r=tv:format=yuv420p,{scaleFilter}";
         }
 
         var chain = $"{colorParameters},zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0:peak=100,zscale=t=bt709:m=bt709:p=bt709:out_range=tv,{scaleFilter}";

@@ -75,6 +75,28 @@ public sealed class FfmpegToneMappingTests {
         Assert.DoesNotContain("tonemapx", filter);
     }
 
+    [Theory]
+    [InlineData(5, null)]    // Dolby Vision profile 5
+    [InlineData(null, 0)]    // base layer with no HDR-compatible signal
+    public void DolbyVisionToneMapsBeforeScalingWithoutOverridingInputColorTags(
+        int? dvProfile,
+        int? dvBlSignalCompatibilityId) {
+        // Profile 5 carries its colour transform in the per-frame RPU. tonemapx applies that RPU itself,
+        // but swscale drops the RPU side data — so tonemapx must run on the full-resolution decoded frame
+        // BEFORE the scale, and must not force bt2020nc onto the (intentionally unknown) base-layer tags,
+        // which would make it render the ICtCp base layer as plain HDR10 and produce a magenta/green cast.
+        var filter = FfmpegToneMapping.BuildFilter(
+            "smpte2084", dvProfile, dvBlSignalCompatibilityId, "scale=960:-2");
+
+        Assert.StartsWith("tonemapx=", filter);
+        Assert.EndsWith("scale=960:-2", filter);
+        Assert.DoesNotContain("setparams", filter);
+        Assert.True(
+            filter.IndexOf("tonemapx", StringComparison.Ordinal) <
+            filter.IndexOf("scale=960:-2", StringComparison.Ordinal),
+            "tonemapx must precede the scale so the Dolby Vision RPU is applied before swscale drops it.");
+    }
+
     [Fact]
     public void PreservesHlgInputTransferParameters() {
         var filter = FfmpegToneMapping.BuildFilter("arib-std-b67", null, null, "scale=960:-2");
