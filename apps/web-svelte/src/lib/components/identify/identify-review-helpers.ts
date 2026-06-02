@@ -157,8 +157,13 @@ export function childMeta(child: EntityMetadataProposal): EntityThumbnailCard["m
   const positions = child.patch?.positions ?? {};
   const episode = positions.episode ?? positions.episodeNumber;
   const season = positions.season ?? positions.seasonNumber;
+  // Track sort order is 0-based (track 1 → 0), so present it as a 1-based track number.
+  const sortOrder = positions.sortOrder ?? positions.sort;
+  const track = positions.track ?? positions.trackNumber ?? (sortOrder != null ? sortOrder + 1 : undefined);
   if (episode) {
     meta.push({ icon: "count", label: `E${String(episode).padStart(2, "0")}` });
+  } else if (child.targetKind === "audio-track" && track) {
+    meta.push({ icon: "count", label: String(track).padStart(2, "0") });
   } else if (season) {
     meta.push({ icon: "count", label: `S${String(season).padStart(2, "0")}` });
   }
