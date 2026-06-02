@@ -19,6 +19,7 @@ internal static class IdentifyEntityEndpoints {
                     entityId,
                     request.Provider,
                     request.Query,
+                    request.ParentExternalIds,
                     NsfwVisibility.ShouldHide(hideNsfw, httpContext),
                     cancellationToken);
                 return response.Ok

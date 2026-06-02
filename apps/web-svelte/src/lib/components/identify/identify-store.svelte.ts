@@ -138,7 +138,7 @@ export class IdentifyStore {
   #childAbort = new Map<string, AbortController>();
   #childQueue: string[] = [];
   #childPumpActive = false;
-  #childContext: { parentEntityId: string; provider: string; childEntities: StructuralChildEntity[] } | null = null;
+  #childContext: { parentEntityId: string; provider: string; childEntities: StructuralChildEntity[]; parentExternalIds: Record<string, string> } | null = null;
   #stopApplyProgressPolling: (() => void) | null = null;
 
   constructor(getHideNsfw: () => boolean = () => false) {
@@ -660,7 +660,12 @@ export class IdentifyStore {
     childEntities: StructuralChildEntity[],
   ) {
     this.#resetChildIdentification();
-    this.#childContext = { parentEntityId, provider, childEntities };
+    this.#childContext = {
+      parentEntityId,
+      provider,
+      childEntities,
+      parentExternalIds: proposal.patch?.externalIds ?? {},
+    };
     const resolved = new Set(
       (proposal.children ?? [])
         .map((child) => child.targetEntityId)
@@ -735,7 +740,7 @@ export class IdentifyStore {
     this.#childAbort.set(childEntityId, controller);
     this.#setChildStatus(childEntityId, { status: "loading" });
     try {
-      const result = await identifyEntityTransient(child.id, context.provider, null, { signal: controller.signal });
+      const result = await identifyEntityTransient(child.id, context.provider, null, context.parentExternalIds, { signal: controller.signal });
       if (this.childIdentify[childEntityId]?.status === "cancelled") return;
       if (result?.patch?.title && result.proposalId) {
         this.#appendChildProposal({ ...result, targetEntityId: child.id });

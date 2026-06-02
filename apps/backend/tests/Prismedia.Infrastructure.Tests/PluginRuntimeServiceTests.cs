@@ -602,7 +602,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
         var executor = new CapturingProcessExecutor();
         var service = CreateIdentifyService(db, executor, _tempRoot);
 
-        var response = await service.IdentifyAsync(entityId, "tmdb", null, hideNsfw: true, CancellationToken.None);
+        var response = await service.IdentifyAsync(entityId, "tmdb", null, parentExternalIds: null, hideNsfw: true, CancellationToken.None);
 
         Assert.False(response.Ok);
         Assert.Null(response.Result);
@@ -674,7 +674,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
         var executor = new CapturingProcessExecutor();
         var service = CreateIdentifyService(db, executor, pluginDir);
 
-        var response = await service.IdentifyAsync(movieId, "tmdb", null, hideNsfw: false, CancellationToken.None);
+        var response = await service.IdentifyAsync(movieId, "tmdb", null, parentExternalIds: null, hideNsfw: false, CancellationToken.None);
 
         Assert.True(response.Ok);
         Assert.Equal("video", executor.CapturedRequest?.Entity.Kind);
@@ -747,7 +747,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
 
         var service = CreateIdentifyService(db, new ProviderChildTreeProcessExecutor(seriesId, null), pluginDir);
 
-        var response = await service.IdentifyAsync(seriesId, "tmdb", null, hideNsfw: false, CancellationToken.None);
+        var response = await service.IdentifyAsync(seriesId, "tmdb", null, parentExternalIds: null, hideNsfw: false, CancellationToken.None);
 
         Assert.True(response.Ok);
         var child = Assert.Single(response.Result!.Children);
@@ -819,7 +819,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
         var executor = new ProviderChildTreeProcessExecutor(seriesId, seasonId);
         var service = CreateIdentifyService(db, executor, pluginDir);
 
-        var response = await service.IdentifyAsync(seriesId, "tmdb", null, hideNsfw: false, CancellationToken.None);
+        var response = await service.IdentifyAsync(seriesId, "tmdb", null, parentExternalIds: null, hideNsfw: false, CancellationToken.None);
 
         Assert.True(response.Ok);
         Assert.Equal([seriesId], executor.Requests.Select(request => request.Entity.Id).ToArray());
@@ -878,7 +878,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
         var executor = new ParentOnlyProposalProcessExecutor("music-artist", "Imagine Dragons");
         var service = CreateIdentifyService(db, executor, pluginDir);
 
-        var response = await service.IdentifyAsync(artistId, "musicbrainz", null, hideNsfw: false, CancellationToken.None);
+        var response = await service.IdentifyAsync(artistId, "musicbrainz", null, parentExternalIds: null, hideNsfw: false, CancellationToken.None);
 
         Assert.True(response.Ok);
         Assert.Equal([artistId], executor.Requests.Select(request => request.Entity.Id).ToArray());
@@ -970,7 +970,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
         var executor = new FullSeasonProcessExecutor(seasonId);
         var service = CreateIdentifyService(db, executor, pluginDir);
 
-        var response = await service.IdentifyAsync(seasonId, "tmdb", null, hideNsfw: false, CancellationToken.None);
+        var response = await service.IdentifyAsync(seasonId, "tmdb", null, parentExternalIds: null, hideNsfw: false, CancellationToken.None);
 
         Assert.True(response.Ok);
         Assert.Equal([seasonId], executor.Requests.Select(request => request.Entity.Id).ToArray());
@@ -1049,7 +1049,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
         var executor = new StructuralContextCapturingProcessExecutor();
         var service = CreateIdentifyService(db, executor, pluginDir);
 
-        var response = await service.IdentifyAsync(seriesId, "tmdb", null, hideNsfw: false, CancellationToken.None);
+        var response = await service.IdentifyAsync(seriesId, "tmdb", null, parentExternalIds: null, hideNsfw: false, CancellationToken.None);
 
         Assert.True(response.Ok);
         Assert.Equal("search", Assert.Single(executor.Requests).Action);
@@ -1125,6 +1125,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             videoId,
             "tmdb",
             new IdentifyQuery("Friendship", null, null),
+            parentExternalIds: null,
             hideNsfw: false,
             CancellationToken.None);
 
@@ -1215,7 +1216,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
         var executor = new StructuralContextCapturingProcessExecutor();
         var service = CreateIdentifyService(db, executor, pluginDir);
 
-        var response = await service.IdentifyAsync(episodeId, "tmdb", null, hideNsfw: false, CancellationToken.None);
+        var response = await service.IdentifyAsync(episodeId, "tmdb", null, parentExternalIds: null, hideNsfw: false, CancellationToken.None);
 
         Assert.True(response.Ok);
         var request = Assert.Single(executor.Requests);

@@ -156,6 +156,27 @@ public sealed partial class IdentifyPluginService {
         return ancestors;
     }
 
+    /// <summary>
+    /// Merges client-supplied parent provider IDs (from a parent proposal not yet applied) into the
+    /// immediate ancestor snapshot so a plugin can resolve a child within its parent's context.
+    /// </summary>
+    private static IReadOnlyList<IdentifyEntitySnapshot> MergeImmediateParentExternalIds(
+        IReadOnlyList<IdentifyEntitySnapshot> ancestors,
+        IReadOnlyDictionary<string, string>? parentExternalIds) {
+        if (parentExternalIds is not { Count: > 0 } || ancestors.Count == 0) {
+            return ancestors;
+        }
+
+        var immediate = ancestors[0];
+        var merged = new Dictionary<string, string>(immediate.ExternalIds ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase);
+        foreach (var (key, value) in parentExternalIds) {
+            merged[key] = value;
+        }
+
+        var updated = new List<IdentifyEntitySnapshot>(ancestors) { [0] = immediate with { ExternalIds = merged } };
+        return updated;
+    }
+
     private async Task<IdentifyEntitySnapshot> SnapshotAsync(
         EntityRow entity,
         string providerId,

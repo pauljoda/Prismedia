@@ -327,7 +327,8 @@ public sealed class AutoIdentifyRunnerTests {
         }
 
         public Task<IdentifyPluginResponse> IdentifyAsync(
-            Guid entityId, string providerId, IdentifyQuery? query, bool hideNsfw, CancellationToken cancellationToken) {
+            Guid entityId, string providerId, IdentifyQuery? query,
+            IReadOnlyDictionary<string, string>? parentExternalIds, bool hideNsfw, CancellationToken cancellationToken) {
             IdentifyCalls.Add((entityId, providerId, query));
             if (query?.ExternalIds is not null &&
                 query.ExternalIds.TryGetValue(providerId, out var externalId) &&

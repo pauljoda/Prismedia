@@ -158,6 +158,7 @@ export * from './identifyApplyProgress';
 export * from './identifyBulkStartRequest';
 export * from './identifyEntityParams';
 export * from './identifyEntityRequest';
+export * from './identifyEntityRequestParentExternalIds';
 export * from './identifyQuery';
 export * from './identifyQueryExternalIds';
 export * from './identifyQueueItem';

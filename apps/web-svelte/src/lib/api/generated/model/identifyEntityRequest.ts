@@ -4,9 +4,12 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { IdentifyEntityRequestParentExternalIds } from './identifyEntityRequestParentExternalIds';
 import type { IdentifyQuery } from './identifyQuery';
 
 export interface IdentifyEntityRequest {
   provider: string;
   query: null | IdentifyQuery;
+  /** @nullable */
+  parentExternalIds?: IdentifyEntityRequestParentExternalIds;
 }

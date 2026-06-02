@@ -113,6 +113,7 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
             entityId,
             request.Provider,
             request.Query,
+            parentExternalIds: null,
             hideNsfw,
             cancellationToken);
 

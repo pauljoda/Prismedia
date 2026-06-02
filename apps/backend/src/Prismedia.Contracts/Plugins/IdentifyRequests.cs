@@ -74,7 +74,18 @@ public sealed record IdentifyPluginRequest(
 /// <summary>
 /// Request body for identifying one entity with a provider.
 /// </summary>
-public sealed record IdentifyEntityRequest(string Provider, IdentifyQuery? Query);
+/// <param name="Provider">Provider id to run the lookup against.</param>
+/// <param name="Query">Optional user-provided query override.</param>
+/// <param name="ParentExternalIds">
+/// The just-resolved (but not yet applied) provider IDs of the entity's parent, supplied by the
+/// client during incremental child identify. They are merged into the immediate ancestor snapshot
+/// so a plugin can resolve a child within its parent's context (e.g. an album within an artist's
+/// releases) even before the parent's metadata has been saved.
+/// </param>
+public sealed record IdentifyEntityRequest(
+    string Provider,
+    IdentifyQuery? Query,
+    IReadOnlyDictionary<string, string>? ParentExternalIds = null);
 
 /// <summary>
 /// Request body for starting a transient bulk identify review session.

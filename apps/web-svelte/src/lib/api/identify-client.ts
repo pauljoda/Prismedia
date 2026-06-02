@@ -162,11 +162,12 @@ export function identifyEntityTransient(
   entityId: string,
   provider: string,
   query?: IdentifyQuery | null,
+  parentExternalIds?: Record<string, string> | null,
   options?: RequestOptions & { signal?: AbortSignal },
 ): Promise<EntityMetadataProposal> {
   return identifyEntityRequest(
     entityId,
-    { provider, query: query ?? null } as IdentifyEntityRequest,
+    { provider, query: query ?? null, parentExternalIds: parentExternalIds ?? null } as IdentifyEntityRequest,
     undefined,
     { ...requestInit(options), signal: options?.signal },
   ).then((response) =>

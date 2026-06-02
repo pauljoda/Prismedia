@@ -71,7 +71,7 @@ public sealed class AutoIdentifyRunner(
 
             IdentifyPluginResponse response;
             try {
-                response = await identify.IdentifyAsync(entityId, providerId, query: null, hideNsfw: false, cancellationToken);
+                response = await identify.IdentifyAsync(entityId, providerId, query: null, parentExternalIds: null, hideNsfw: false, cancellationToken);
             } catch (Exception ex) {
                 logger.LogWarning(ex, "AutoIdentify: provider {Provider} failed for entity {EntityId}", providerId, entityId);
                 continue;
@@ -93,6 +93,7 @@ public sealed class AutoIdentifyRunner(
                         entityId,
                         providerId,
                         new IdentifyQuery(Title: null, Url: null, ExternalIds: candidate.ExternalIds),
+                        parentExternalIds: null,
                         hideNsfw: false,
                         cancellationToken);
                 } catch (Exception ex) {

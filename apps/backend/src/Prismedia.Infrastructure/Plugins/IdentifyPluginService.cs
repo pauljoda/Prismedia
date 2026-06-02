@@ -48,6 +48,7 @@ public sealed partial class IdentifyPluginService : IIdentifyProviderService {
         Guid entityId,
         string providerId,
         IdentifyQuery? query,
+        IReadOnlyDictionary<string, string>? parentExternalIds,
         bool hideNsfw,
         CancellationToken cancellationToken) {
         if (hideNsfw && await _db.Entities.AsNoTracking()
@@ -77,7 +78,9 @@ public sealed partial class IdentifyPluginService : IIdentifyProviderService {
             return new IdentifyPluginResponse(false, null, $"Missing required plugin credentials: {string.Join(", ", missingAuth)}.");
         }
 
-        var ancestors = await LoadAncestorSnapshotsAsync(entity, descriptor.Manifest.Id, cancellationToken);
+        var ancestors = MergeImmediateParentExternalIds(
+            await LoadAncestorSnapshotsAsync(entity, descriptor.Manifest.Id, cancellationToken),
+            parentExternalIds);
         var directResult = await IdentifyEntityWithStructuralContextAsync(
             entity,
             descriptor,
