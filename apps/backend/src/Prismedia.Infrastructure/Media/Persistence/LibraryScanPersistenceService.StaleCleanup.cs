@@ -134,6 +134,15 @@ public sealed partial class LibraryScanPersistenceService {
         return await RemoveStaleContainerEntitiesBySourcePath(libraryIds, validFolderPaths, cancellationToken);
     }
 
+    public async Task<int> RemoveStaleMusicArtistsInRootAsync(Guid rootId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken) {
+        var artistIds = await _db.MusicArtistDetails.AsNoTracking()
+            .Where(mad => mad.LibraryRootId == rootId)
+            .Select(mad => mad.EntityId)
+            .ToListAsync(cancellationToken);
+
+        return await RemoveStaleContainerEntitiesBySourcePath(artistIds, validFolderPaths, cancellationToken);
+    }
+
     public async Task<int> RemoveStaleBookVolumesAsync(Guid bookEntityId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken) {
         var volumeIds = await _db.Entities.AsNoTracking()
             .Where(entity => entity.ParentEntityId == bookEntityId && entity.KindCode == EntityKindRegistry.BookVolume.Code)

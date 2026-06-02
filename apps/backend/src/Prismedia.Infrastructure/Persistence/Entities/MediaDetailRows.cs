@@ -27,6 +27,11 @@ public sealed class BookChapterDetailRow {
     public Guid? CoverPageEntityId { get; set; }
 }
 
+public sealed class MusicArtistDetailRow {
+    public Guid EntityId { get; set; }
+    public Guid? LibraryRootId { get; set; }
+}
+
 public sealed class AudioLibraryDetailRow {
     public Guid EntityId { get; set; }
     public Guid? LibraryRootId { get; set; }
@@ -36,4 +41,13 @@ public sealed class AudioTrackDetailRow {
     public Guid EntityId { get; set; }
     public string? EmbeddedArtist { get; set; }
     public string? EmbeddedAlbum { get; set; }
+
+    /// <summary>
+    /// Label of the album section (disc) this track belongs to, e.g. "Disc 1". Null when
+    /// the album has no sections. Track ordering within a section restarts per section.
+    /// </summary>
+    public string? SectionLabel { get; set; }
+
+    /// <summary>Zero-based ordinal of the track's section within the album.</summary>
+    public int SectionOrder { get; set; }
 }

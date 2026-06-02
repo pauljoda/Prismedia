@@ -56,6 +56,15 @@ public enum EntityKind {
     [EntityKindMeta(EntityKindCategory.Media, EntityStorageShape.File, "Images", typeof(Prismedia.Domain.Media.Image))]
     Image,
 
+    /// <summary>
+    /// Music artist or band: a folder-backed grouping that gathers an artist's albums
+    /// (<see cref="EntityKind.AudioLibrary"/> children) under one heading, like a gallery
+    /// groups images.
+    /// </summary>
+    [Code("music-artist")]
+    [EntityKindMeta(EntityKindCategory.Media, EntityStorageShape.Folder, "Artists", typeof(Prismedia.Domain.Media.MusicArtist))]
+    MusicArtist,
+
     /// <summary>Person taxonomy entity.</summary>
     [Code("person")]
     [EntityKindMeta(EntityKindCategory.Taxonomy, EntityStorageShape.None, "People", typeof(Prismedia.Domain.Taxonomy.Person))]

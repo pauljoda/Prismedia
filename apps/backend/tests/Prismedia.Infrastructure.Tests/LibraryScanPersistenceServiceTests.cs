@@ -526,7 +526,7 @@ public sealed class LibraryScanPersistenceServiceTests {
             "/media/audio/Albums",
             "Albums",
             rootId,
-            parentAudioLibraryEntityId: null,
+            parentEntityId: null,
             sortOrder: 0,
             isNsfw: false,
             CancellationToken.None);
@@ -591,7 +591,7 @@ public sealed class LibraryScanPersistenceServiceTests {
             "/media/audio/Album",
             "Album",
             Guid.Parse("44444444-4444-4444-4444-444444444444"),
-            parentAudioLibraryEntityId: null,
+            parentEntityId: null,
             sortOrder: 0,
             isNsfw: false,
             CancellationToken.None);
@@ -600,6 +600,8 @@ public sealed class LibraryScanPersistenceServiceTests {
             "song",
             libraryId,
             sortOrder: 2,
+            sectionLabel: null,
+            sectionOrder: 0,
             isNsfw: false,
             CancellationToken.None);
 
@@ -608,6 +610,8 @@ public sealed class LibraryScanPersistenceServiceTests {
             "song",
             audioLibraryId: null,
             sortOrder: 0,
+            sectionLabel: null,
+            sectionOrder: 0,
             isNsfw: false,
             CancellationToken.None);
 
@@ -819,7 +823,7 @@ public sealed class LibraryScanPersistenceServiceTests {
             "/media/audio/Album",
             "Album",
             rootId,
-            parentAudioLibraryEntityId: null,
+            parentEntityId: null,
             sortOrder: 0,
             isNsfw: false,
             CancellationToken.None);
@@ -828,6 +832,8 @@ public sealed class LibraryScanPersistenceServiceTests {
             "stale",
             staleLibraryId,
             sortOrder: 0,
+            sectionLabel: null,
+            sectionOrder: 0,
             isNsfw: false,
             CancellationToken.None);
         var nestedLibraryId = await service.UpsertAudioLibraryAsync(
@@ -843,13 +849,15 @@ public sealed class LibraryScanPersistenceServiceTests {
             "nested",
             nestedLibraryId,
             sortOrder: 0,
+            sectionLabel: null,
+            sectionOrder: 0,
             isNsfw: false,
             CancellationToken.None);
         var validLibraryId = await service.UpsertAudioLibraryAsync(
             "/media/audio/Keep",
             "Keep",
             rootId,
-            parentAudioLibraryEntityId: null,
+            parentEntityId: null,
             sortOrder: 1,
             isNsfw: false,
             CancellationToken.None);
@@ -858,6 +866,8 @@ public sealed class LibraryScanPersistenceServiceTests {
             "valid",
             validLibraryId,
             sortOrder: 0,
+            sectionLabel: null,
+            sectionOrder: 0,
             isNsfw: false,
             CancellationToken.None);
 
@@ -925,7 +935,7 @@ public sealed class LibraryScanPersistenceServiceTests {
             "/media/audio",
             "audio",
             rootId,
-            parentAudioLibraryEntityId: null,
+            parentEntityId: null,
             sortOrder: 0,
             isNsfw: false,
             CancellationToken.None);
@@ -934,6 +944,8 @@ public sealed class LibraryScanPersistenceServiceTests {
             "missing",
             oldRootLibraryId,
             sortOrder: 0,
+            sectionLabel: null,
+            sectionOrder: 0,
             isNsfw: false,
             CancellationToken.None);
         var validLooseTrackId = await service.UpsertAudioTrackAsync(
@@ -941,6 +953,8 @@ public sealed class LibraryScanPersistenceServiceTests {
             "valid",
             audioLibraryId: null,
             sortOrder: 0,
+            sectionLabel: null,
+            sectionOrder: 0,
             isNsfw: false,
             CancellationToken.None);
 

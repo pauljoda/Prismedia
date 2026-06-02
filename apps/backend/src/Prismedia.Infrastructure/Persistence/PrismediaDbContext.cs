@@ -70,6 +70,8 @@ public sealed class PrismediaDbContext : DbContext {
 
     public DbSet<BookChapterDetailRow> BookChapterDetails => Set<BookChapterDetailRow>();
 
+    public DbSet<MusicArtistDetailRow> MusicArtistDetails => Set<MusicArtistDetailRow>();
+
     public DbSet<AudioLibraryDetailRow> AudioLibraryDetails => Set<AudioLibraryDetailRow>();
 
     public DbSet<AudioTrackDetailRow> AudioTrackDetails => Set<AudioTrackDetailRow>();

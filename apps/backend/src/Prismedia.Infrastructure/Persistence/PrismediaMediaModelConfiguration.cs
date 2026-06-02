@@ -62,6 +62,15 @@ internal static partial class PrismediaModelConfiguration {
     }
 
     private static void ConfigureAudio(ModelBuilder modelBuilder) {
+        modelBuilder.Entity<MusicArtistDetailRow>(entity => {
+            entity.ToTable("music_artist_details");
+            entity.HasKey(row => row.EntityId);
+            entity.Property(row => row.EntityId).HasColumnName("entity_id");
+            entity.Property(row => row.LibraryRootId).HasColumnName("library_root_id");
+            entity.HasOne<EntityRow>().WithOne().HasForeignKey<MusicArtistDetailRow>(row => row.EntityId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<LibraryRootRow>().WithMany().HasForeignKey(row => row.LibraryRootId).OnDelete(DeleteBehavior.SetNull);
+        });
+
         modelBuilder.Entity<AudioLibraryDetailRow>(entity => {
             entity.ToTable("audio_library_details");
             entity.HasKey(row => row.EntityId);
@@ -77,6 +86,8 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.EntityId).HasColumnName("entity_id");
             entity.Property(row => row.EmbeddedArtist).HasColumnName("embedded_artist");
             entity.Property(row => row.EmbeddedAlbum).HasColumnName("embedded_album");
+            entity.Property(row => row.SectionLabel).HasColumnName("section_label");
+            entity.Property(row => row.SectionOrder).HasColumnName("section_order").HasDefaultValue(0);
             entity.HasOne<EntityRow>().WithOne().HasForeignKey<AudioTrackDetailRow>(row => row.EntityId).OnDelete(DeleteBehavior.Cascade);
         });
     }

@@ -156,11 +156,18 @@ public sealed partial class LibraryScanPersistenceService {
             }
         }
 
+        var musicArtistCode = EntityKindRegistry.MusicArtist.Code;
         var roots = new Dictionary<Guid, AutoIdentifyRootTarget>();
         foreach (var id in entityIds) {
             var current = id;
             var guard = 0;
             while (info.TryGetValue(current, out var node) && node.ParentId is { } parent && guard++ < 64) {
+                // An artist grouping is identified on demand, not as part of the scan cascade, so an
+                // album stays its own auto-identify root rather than collapsing into the artist.
+                if (info.TryGetValue(parent, out var parentNode) && parentNode.KindCode == musicArtistCode) {
+                    break;
+                }
+
                 current = parent;
             }
 

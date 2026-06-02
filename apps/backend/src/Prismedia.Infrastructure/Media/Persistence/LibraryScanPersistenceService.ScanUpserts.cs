@@ -130,7 +130,7 @@ public sealed partial class LibraryScanPersistenceService {
         return id;
     }
 
-    public async Task<Guid> UpsertAudioTrackAsync(string filePath, string title, Guid? audioLibraryId, int sortOrder, bool isNsfw, CancellationToken cancellationToken) {
+    public async Task<Guid> UpsertAudioTrackAsync(string filePath, string title, Guid? audioLibraryId, int sortOrder, string? sectionLabel, int sectionOrder, bool isNsfw, CancellationToken cancellationToken) {
         var existing = await FindEntityBySourcePath(EntityKindRegistry.AudioTrack.Code, filePath, cancellationToken);
         if (existing is not null) {
             var updatedAt = DateTimeOffset.UtcNow;
@@ -143,7 +143,7 @@ public sealed partial class LibraryScanPersistenceService {
                 if (isNsfw) tracked.IsNsfw = true;
             }
 
-            await EnsureAudioTrackDetailAsync(existing.Id, cancellationToken);
+            await EnsureAudioTrackDetailAsync(existing.Id, sectionLabel, sectionOrder, cancellationToken);
             await _db.SaveChangesAsync(cancellationToken);
             return existing.Id;
         }
@@ -152,7 +152,7 @@ public sealed partial class LibraryScanPersistenceService {
         var id = Guid.NewGuid();
 
         _db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKindRegistry.AudioTrack.Code, Title = title, ParentEntityId = audioLibraryId, SortOrder = audioLibraryId is null ? null : sortOrder, IsNsfw = isNsfw, CreatedAt = now, UpdatedAt = now });
-        _db.AudioTrackDetails.Add(new AudioTrackDetailRow { EntityId = id });
+        _db.AudioTrackDetails.Add(new AudioTrackDetailRow { EntityId = id, SectionLabel = sectionLabel, SectionOrder = sectionOrder });
         _db.EntityFiles.Add(new EntityFileRow {
             Id = Guid.NewGuid(),
             EntityId = id,
@@ -171,7 +171,7 @@ public sealed partial class LibraryScanPersistenceService {
         string folderPath,
         string title,
         Guid libraryRootId,
-        Guid? parentAudioLibraryEntityId,
+        Guid? parentEntityId,
         int sortOrder,
         bool isNsfw,
         CancellationToken cancellationToken) {
@@ -180,7 +180,7 @@ public sealed partial class LibraryScanPersistenceService {
             var tracked = await _db.Entities.FindAsync([existing.Id], cancellationToken);
             if (tracked is not null) {
                 tracked.Title = title;
-                tracked.ParentEntityId = parentAudioLibraryEntityId;
+                tracked.ParentEntityId = parentEntityId;
                 tracked.SortOrder = sortOrder;
                 tracked.UpdatedAt = DateTimeOffset.UtcNow;
                 if (isNsfw) tracked.IsNsfw = true;
@@ -196,8 +196,51 @@ public sealed partial class LibraryScanPersistenceService {
         var now = DateTimeOffset.UtcNow;
         var id = Guid.NewGuid();
 
-        _db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKindRegistry.AudioLibrary.Code, Title = title, ParentEntityId = parentAudioLibraryEntityId, SortOrder = sortOrder, IsNsfw = isNsfw, CreatedAt = now, UpdatedAt = now });
+        _db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKindRegistry.AudioLibrary.Code, Title = title, ParentEntityId = parentEntityId, SortOrder = sortOrder, IsNsfw = isNsfw, CreatedAt = now, UpdatedAt = now });
         _db.AudioLibraryDetails.Add(new AudioLibraryDetailRow { EntityId = id, LibraryRootId = libraryRootId });
+        _db.EntityFiles.Add(new EntityFileRow {
+            Id = Guid.NewGuid(),
+            EntityId = id,
+            Role = EntityFileRole.Source,
+            Path = folderPath,
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+
+        await _db.SaveChangesAsync(cancellationToken);
+        return id;
+    }
+
+    public async Task<Guid> UpsertMusicArtistAsync(
+        string folderPath,
+        string title,
+        Guid libraryRootId,
+        int sortOrder,
+        bool isNsfw,
+        CancellationToken cancellationToken) {
+        var existing = await FindEntityBySourcePath(EntityKindRegistry.MusicArtist.Code, folderPath, cancellationToken);
+        if (existing is not null) {
+            var tracked = await _db.Entities.FindAsync([existing.Id], cancellationToken);
+            if (tracked is not null) {
+                tracked.Title = title;
+                tracked.ParentEntityId = null;
+                tracked.SortOrder = sortOrder;
+                tracked.UpdatedAt = DateTimeOffset.UtcNow;
+                if (isNsfw) tracked.IsNsfw = true;
+            }
+
+            var detail = await _db.MusicArtistDetails.FindAsync([existing.Id], cancellationToken);
+            if (detail is not null) detail.LibraryRootId = libraryRootId;
+            else _db.MusicArtistDetails.Add(new MusicArtistDetailRow { EntityId = existing.Id, LibraryRootId = libraryRootId });
+            await _db.SaveChangesAsync(cancellationToken);
+            return existing.Id;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var id = Guid.NewGuid();
+
+        _db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKindRegistry.MusicArtist.Code, Title = title, ParentEntityId = null, SortOrder = sortOrder, IsNsfw = isNsfw, CreatedAt = now, UpdatedAt = now });
+        _db.MusicArtistDetails.Add(new MusicArtistDetailRow { EntityId = id, LibraryRootId = libraryRootId });
         _db.EntityFiles.Add(new EntityFileRow {
             Id = Guid.NewGuid(),
             EntityId = id,

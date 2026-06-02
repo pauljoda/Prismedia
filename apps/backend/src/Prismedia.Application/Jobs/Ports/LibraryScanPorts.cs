@@ -38,11 +38,30 @@ public interface IImageGalleryScanPersistence {
 
 /// <summary>Audio scan persistence operations for discovered tracks/libraries and stale cleanup.</summary>
 public interface IAudioScanPersistence {
-    Task<Guid> UpsertAudioTrackAsync(string filePath, string title, Guid? audioLibraryId, int sortOrder, bool isNsfw, CancellationToken cancellationToken);
-    Task<Guid> UpsertAudioLibraryAsync(string folderPath, string title, Guid libraryRootId, Guid? parentAudioLibraryEntityId, int sortOrder, bool isNsfw, CancellationToken cancellationToken);
+    /// <summary>
+    /// Upserts an audio track under its album. <paramref name="sectionLabel"/> names the
+    /// album section (disc) the track belongs to, or null for an unsectioned album;
+    /// <paramref name="sectionOrder"/> orders sections within the album. <paramref name="sortOrder"/>
+    /// is the album-global ordinal (sections concatenated in section order, then file order)
+    /// so play-all ordering is preserved.
+    /// </summary>
+    Task<Guid> UpsertAudioTrackAsync(string filePath, string title, Guid? audioLibraryId, int sortOrder, string? sectionLabel, int sectionOrder, bool isNsfw, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Upserts an album folder. <paramref name="parentEntityId"/> is the owning
+    /// <see cref="EntityKind.MusicArtist"/> id, or null for an album with no artist folder.
+    /// </summary>
+    Task<Guid> UpsertAudioLibraryAsync(string folderPath, string title, Guid libraryRootId, Guid? parentEntityId, int sortOrder, bool isNsfw, CancellationToken cancellationToken);
+
+    /// <summary>Upserts an artist folder that groups albums under one heading.</summary>
+    Task<Guid> UpsertMusicArtistAsync(string folderPath, string title, Guid libraryRootId, int sortOrder, bool isNsfw, CancellationToken cancellationToken);
+
     Task<int> RemoveStaleLooseAudioTracksInRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken);
     Task<int> RemoveStaleAudioTracksInLibraryAsync(Guid libraryEntityId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken);
     Task<int> RemoveStaleAudioLibrariesInRootAsync(Guid rootId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken);
+
+    /// <summary>Removes artist groupings in the root whose folders no longer exist.</summary>
+    Task<int> RemoveStaleMusicArtistsInRootAsync(Guid rootId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken);
 }
 
 /// <summary>Book/comic scan persistence operations for discovered archives/pages and stale cleanup.</summary>

@@ -1257,32 +1257,38 @@ public sealed class ScanJobHandlerTests {
 
         await handler.HandleAsync(new JobContext(job, new RecordingJobQueue()), CancellationToken.None);
 
+        // "Album" holds tracks directly, so it is a single album; its "Disc 2" subfolder becomes a
+        // section of that album rather than a nested library. No artist folder exists here.
         Assert.DoesNotContain(persistence.UpsertedAudioLibraries, library => library.FolderPath == root.Path);
+        Assert.DoesNotContain(persistence.UpsertedAudioLibraries, item => item.FolderPath == "/media/audio/Album/Disc 2");
+        Assert.Empty(persistence.UpsertedMusicArtists);
         var album = Assert.Single(persistence.UpsertedAudioLibraries, item => item.FolderPath == "/media/audio/Album");
-        var disc = Assert.Single(persistence.UpsertedAudioLibraries, item => item.FolderPath == "/media/audio/Album/Disc 2");
         Assert.Null(album.ParentAudioLibraryEntityId);
         Assert.Equal(0, album.SortOrder);
-        Assert.Equal(album.Id, disc.ParentAudioLibraryEntityId);
-        Assert.Equal(0, disc.SortOrder);
 
         Assert.Collection(
             persistence.UpsertedAudioTracks.OrderBy(track => track.FilePath, StringComparer.OrdinalIgnoreCase),
             track => {
                 Assert.Equal("/media/audio/Album/Disc 2/two.flac", track.FilePath);
-                Assert.Equal(disc.Id, track.AudioLibraryEntityId);
+                Assert.Equal(album.Id, track.AudioLibraryEntityId);
+                Assert.Equal("Disc 2", track.SectionLabel);
+                Assert.Equal(1, track.SectionOrder);
             },
             track => {
                 Assert.Equal("/media/audio/Album/one.flac", track.FilePath);
                 Assert.Equal(album.Id, track.AudioLibraryEntityId);
+                Assert.Null(track.SectionLabel);
+                Assert.Equal(0, track.SectionOrder);
             },
             track => {
                 Assert.Equal("/media/audio/root.flac", track.FilePath);
                 Assert.Null(track.AudioLibraryEntityId);
             });
         Assert.Equal(["/media/audio/root.flac"], persistence.ValidLooseAudioTrackPaths);
-        Assert.Equal(["/media/audio/Album", "/media/audio/Album/Disc 2"], persistence.ValidAudioLibraryPaths);
-        Assert.Equal(["/media/audio/Album/one.flac"], persistence.ValidAudioTrackPathsByLibraryId[album.Id]);
-        Assert.Equal(["/media/audio/Album/Disc 2/two.flac"], persistence.ValidAudioTrackPathsByLibraryId[disc.Id]);
+        Assert.Equal(["/media/audio/Album"], persistence.ValidAudioLibraryPaths);
+        Assert.Equal(
+            ["/media/audio/Album/Disc 2/two.flac", "/media/audio/Album/one.flac"],
+            persistence.ValidAudioTrackPathsByLibraryId[album.Id].OrderBy(path => path, StringComparer.OrdinalIgnoreCase));
         Assert.Equal([root.Id], persistence.LastScannedRootIds);
     }
 
@@ -1636,6 +1642,7 @@ public sealed class ScanJobHandlerTests {
         public List<GalleryRecord> UpsertedGalleries { get; } = [];
         public List<AudioTrackRecord> UpsertedAudioTracks { get; } = [];
         public List<AudioLibraryRecord> UpsertedAudioLibraries { get; } = [];
+        public List<MusicArtistRecord> UpsertedMusicArtists { get; } = [];
         public List<BookRecord> UpsertedBooks { get; } = [];
         public List<BookSeriesRecord> UpsertedBookSeries { get; } = [];
         public List<BookVolumeRecord> UpsertedBookVolumes { get; } = [];
@@ -1648,6 +1655,7 @@ public sealed class ScanJobHandlerTests {
         public IReadOnlyList<string> ValidLooseAudioTrackPaths { get; private set; } = [];
         public Dictionary<Guid, IReadOnlyList<string>> ValidAudioTrackPathsByLibraryId { get; } = [];
         public IReadOnlyList<string> ValidAudioLibraryPaths { get; private set; } = [];
+        public IReadOnlyList<string> ValidMusicArtistPaths { get; private set; } = [];
         public IReadOnlyList<string> ValidBookPaths { get; private set; } = [];
         public IReadOnlyList<string> ValidBookVolumePaths { get; private set; } = [];
         public IReadOnlyList<string> ValidBookChapterPaths { get; private set; } = [];
@@ -1698,21 +1706,21 @@ public sealed class ScanJobHandlerTests {
             return Task.FromResult(id);
         }
 
-        public Task<Guid> UpsertAudioTrackAsync(string filePath, string title, Guid audioLibraryId, int sortOrder, bool isNsfw, CancellationToken cancellationToken) =>
-            UpsertAudioTrackAsync(filePath, title, (Guid?)audioLibraryId, sortOrder, isNsfw, cancellationToken);
-
-        public Task<Guid> UpsertAudioTrackAsync(string filePath, string title, Guid? audioLibraryId, int sortOrder, bool isNsfw, CancellationToken cancellationToken) {
+        public Task<Guid> UpsertAudioTrackAsync(string filePath, string title, Guid? audioLibraryId, int sortOrder, string? sectionLabel, int sectionOrder, bool isNsfw, CancellationToken cancellationToken) {
             var id = IdFor($"audio-track:{filePath}");
-            UpsertedAudioTracks.Add(new AudioTrackRecord(id, filePath, title, audioLibraryId, sortOrder));
+            UpsertedAudioTracks.Add(new AudioTrackRecord(id, filePath, title, audioLibraryId, sortOrder, sectionLabel, sectionOrder));
             return Task.FromResult(id);
         }
 
-        public Task<Guid> UpsertAudioLibraryAsync(string folderPath, string title, Guid libraryRootId, bool isNsfw, CancellationToken cancellationToken) =>
-            UpsertAudioLibraryAsync(folderPath, title, libraryRootId, parentAudioLibraryEntityId: null, sortOrder: 0, isNsfw, cancellationToken);
-
-        public Task<Guid> UpsertAudioLibraryAsync(string folderPath, string title, Guid libraryRootId, Guid? parentAudioLibraryEntityId, int sortOrder, bool isNsfw, CancellationToken cancellationToken) {
+        public Task<Guid> UpsertAudioLibraryAsync(string folderPath, string title, Guid libraryRootId, Guid? parentEntityId, int sortOrder, bool isNsfw, CancellationToken cancellationToken) {
             var id = IdFor($"audio-library:{folderPath}");
-            UpsertedAudioLibraries.Add(new AudioLibraryRecord(id, folderPath, title, libraryRootId, parentAudioLibraryEntityId, sortOrder));
+            UpsertedAudioLibraries.Add(new AudioLibraryRecord(id, folderPath, title, libraryRootId, parentEntityId, sortOrder));
+            return Task.FromResult(id);
+        }
+
+        public Task<Guid> UpsertMusicArtistAsync(string folderPath, string title, Guid libraryRootId, int sortOrder, bool isNsfw, CancellationToken cancellationToken) {
+            var id = IdFor($"music-artist:{folderPath}");
+            UpsertedMusicArtists.Add(new MusicArtistRecord(id, folderPath, title, libraryRootId, sortOrder));
             return Task.FromResult(id);
         }
 
@@ -1797,6 +1805,11 @@ public sealed class ScanJobHandlerTests {
 
         public Task<int> RemoveStaleAudioLibrariesInRootAsync(Guid rootId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken) {
             ValidAudioLibraryPaths = validFolderPaths.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToArray();
+            return Task.FromResult(0);
+        }
+
+        public Task<int> RemoveStaleMusicArtistsInRootAsync(Guid rootId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken) {
+            ValidMusicArtistPaths = validFolderPaths.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToArray();
             return Task.FromResult(0);
         }
 
@@ -1896,8 +1909,9 @@ public sealed class ScanJobHandlerTests {
 
     private sealed record ImageRecord(Guid Id, string FilePath, string Title, Guid? GalleryEntityId, int SortOrder);
     private sealed record GalleryRecord(Guid Id, string FolderPath, string Title, Guid LibraryRootId, Guid? ParentGalleryEntityId, int SortOrder);
-    private sealed record AudioTrackRecord(Guid Id, string FilePath, string Title, Guid? AudioLibraryEntityId, int SortOrder);
+    private sealed record AudioTrackRecord(Guid Id, string FilePath, string Title, Guid? AudioLibraryEntityId, int SortOrder, string? SectionLabel, int SectionOrder);
     private sealed record AudioLibraryRecord(Guid Id, string FolderPath, string Title, Guid LibraryRootId, Guid? ParentAudioLibraryEntityId, int SortOrder);
+    private sealed record MusicArtistRecord(Guid Id, string FolderPath, string Title, Guid LibraryRootId, int SortOrder);
     private sealed record BookRecord(Guid Id, string SourcePath, string Title, Guid LibraryRootId, Guid? ParentEntityId, int? SortOrder);
     private sealed record BookSeriesRecord(Guid Id, string SourcePath, string Title, Guid LibraryRootId);
     private sealed record BookVolumeRecord(Guid Id, string SourcePath, string Title, Guid BookEntityId, int SortOrder);

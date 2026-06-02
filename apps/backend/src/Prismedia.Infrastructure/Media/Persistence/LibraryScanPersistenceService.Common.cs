@@ -25,12 +25,22 @@ public sealed partial class LibraryScanPersistenceService {
 
     private async Task EnsureAudioTrackDetailAsync(
         Guid trackId,
+        string? sectionLabel,
+        int sectionOrder,
         CancellationToken cancellationToken) {
         var detail = _db.AudioTrackDetails.Local.FirstOrDefault(row => row.EntityId == trackId)
             ?? await _db.AudioTrackDetails.FindAsync([trackId], cancellationToken);
         if (detail is null) {
-            _db.AudioTrackDetails.Add(new AudioTrackDetailRow { EntityId = trackId });
+            _db.AudioTrackDetails.Add(new AudioTrackDetailRow {
+                EntityId = trackId,
+                SectionLabel = sectionLabel,
+                SectionOrder = sectionOrder,
+            });
+            return;
         }
+
+        detail.SectionLabel = sectionLabel;
+        detail.SectionOrder = sectionOrder;
     }
 
     private async Task UpsertPositionAsync(
