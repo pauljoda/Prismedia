@@ -27,17 +27,31 @@ public sealed partial class IdentifyPluginService {
         var boundProviderProposal = await BindLocalStructuralTargetsAsync(providerProposal, entity.Id, cancellationToken);
         var titledProposal = EnsureMeaningfulTitle(boundProviderProposal, entity.Title);
 
+        // Base children for every streamed root: relationships (cast, studios, tags) plus any provider
+        // child that has no local entity yet (e.g. an unscanned season) so it can be materialized.
+        // Crucially we exclude provider children already bound to a LOCAL entity here: those only
+        // appear once the cascade has fully resolved them below, so a child being present in the
+        // streamed proposal reliably means it is done — which is what the review grid keys off. Without
+        // this, a provider that returns its whole tree up front (e.g. MangaDex volumes, a TMDB season)
+        // would show every child as "matched" instantly while the cascade was still resolving their
+        // own children, with no per-child progress.
+        var baseChildren = (titledProposal.Children ?? [])
+            .Where(child =>
+                EntityMetadataProposalTraversal.IsRelationshipKind(child.TargetKind) ||
+                child.TargetEntityId is null)
+            .ToArray();
+
         // Builds the root proposal shape from the children resolved so far — used both for the final
         // return and for each partial-root the streaming sink publishes.
         EntityMetadataProposal Root(IReadOnlyList<EntityMetadataProposal> structural) => titledProposal with {
             TargetKind = entity.KindCode,
             TargetEntityId = entity.Id,
-            Children = MergeStructuralChildren(titledProposal.Children, structural),
+            Children = MergeStructuralChildren(baseChildren, structural),
             Relationships = EntityMetadataProposalTraversal.Relationships(titledProposal)
         };
 
-        // Seed the sink with the root + provider-advertised tree before any local-child cascade, so the
-        // queue item shows the parent immediately with a stable ProposalId.
+        // Seed the sink with the parent (no local children yet) so the queue item shows it immediately
+        // with a stable ProposalId; children stream in one at a time as the cascade resolves each.
         if (sink is not null) {
             await SafeFlushAsync(sink, Root([]), cancellationToken);
         }

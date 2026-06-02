@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Jobs;
+using Prismedia.Application.Jobs.Ports;
 using Prismedia.Application.Plugins;
 using Prismedia.Contracts.Plugins;
 using Prismedia.Domain.Entities;
@@ -117,16 +118,31 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         var service = CreateQueueService(db, new StructuralChildrenProcessExecutor(), _tempRoot);
         await service.AddAsync(seriesId, CancellationToken.None);
 
+        var query = new IdentifyQuery(null, null, new Dictionary<string, string> { ["tmdb"] = "series-1" });
         var item = await service.SearchAsync(
             seriesId,
-            new IdentifyQueueSearchRequest("tmdb", new IdentifyQuery(null, null, new Dictionary<string, string> { ["tmdb"] = "series-1" })),
+            new IdentifyQueueSearchRequest("tmdb", query),
             hideNsfw: false,
             CancellationToken.None);
 
+        // The seed identifies the parent only and enqueues a cascade; its local children stream in as
+        // the cascade fully resolves each, so the seed proposal carries none yet.
         Assert.NotNull(item.Proposal);
-        Assert.Equal([episode1Id, episode2Id], item.Proposal.Children.Select(child => child.TargetEntityId.GetValueOrDefault()).ToArray());
-        Assert.Equal(["Episode 1", "Episode 2"], item.Proposal.Children.Select(child => child.Patch.Title ?? string.Empty).ToArray());
-        Assert.DoesNotContain(item.Proposal.Children, child => child.Patch.Title == "Episode 3");
+        Assert.Empty(item.Proposal.Children);
+        Assert.True(item.CascadeRunning);
+
+        // Run the cascade (the worker does this in production) and re-read the streamed proposal: each
+        // local episode is bound to its provider track by position, and the phantom Episode 3 (with no
+        // local file) is dropped.
+        await service.RunCascadeAsync(
+            new IdentifyCascadePayload(seriesId, "tmdb", query, HideNsfw: false),
+            CancellationToken.None);
+        var resolved = await service.GetAsync(seriesId, CancellationToken.None);
+
+        Assert.NotNull(resolved?.Proposal);
+        Assert.Equal([episode1Id, episode2Id], resolved!.Proposal!.Children.Select(child => child.TargetEntityId.GetValueOrDefault()).ToArray());
+        Assert.Equal(["Episode 1", "Episode 2"], resolved.Proposal.Children.Select(child => child.Patch.Title ?? string.Empty).ToArray());
+        Assert.DoesNotContain(resolved.Proposal.Children, child => child.Patch.Title == "Episode 3");
     }
 
     [Fact]
