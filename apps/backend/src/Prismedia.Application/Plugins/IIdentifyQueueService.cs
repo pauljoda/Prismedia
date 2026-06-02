@@ -31,6 +31,16 @@ public interface IIdentifyQueueService {
         ApplyIdentifyQueueItemRequest request,
         CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Persists an in-progress proposal back onto the queued entity without applying it. Used while
+    /// children are identified incrementally so resolved children survive navigation and refresh.
+    /// The proposal must be the queue item's own root proposal (same proposal id and kind).
+    /// </summary>
+    Task<IdentifyQueueItem> SaveProposalAsync(
+        Guid entityId,
+        EntityMetadataProposal proposal,
+        CancellationToken cancellationToken);
+
     /// <summary>Removes an entity from the active identify queue.</summary>
     Task<IdentifyQueueItem?> DeleteAsync(Guid entityId, CancellationToken cancellationToken);
 }

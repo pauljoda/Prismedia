@@ -259,6 +259,7 @@ export * from './ratingUpdateRequest';
 export * from './removeFileExclusionParams';
 export * from './renameFileParams';
 export * from './rescanFileRootParams';
+export * from './saveIdentifyQueueProposalRequest';
 export * from './searchIdentifyQueueItemParams';
 export * from './settingConstraints';
 export * from './settingDescriptor';

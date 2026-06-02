@@ -92,6 +92,25 @@ internal static class IdentifyQueueEndpoints {
             .Produces<ApiProblem>(StatusCodes.Status400BadRequest)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
+        group.MapPut("/queue/entities/{entityId:guid}/proposal", async (
+            Guid entityId,
+            SaveIdentifyQueueProposalRequest request,
+            IIdentifyQueueService queue,
+            CancellationToken cancellationToken) => {
+                try {
+                    return Results.Ok(await queue.SaveProposalAsync(entityId, request.Proposal, cancellationToken));
+                } catch (InvalidOperationException ex) {
+                    return Results.BadRequest(new ApiProblem("identify_queue_proposal_invalid", ex.Message));
+                } catch (KeyNotFoundException ex) {
+                    return Results.NotFound(new ApiProblem("entity_not_found", ex.Message));
+                }
+            })
+            .WithName("SaveIdentifyQueueProposal")
+            .WithSummary("Persists an in-progress identify proposal (e.g. resolved children) without applying it.")
+            .Produces<IdentifyQueueItem>()
+            .Produces<ApiProblem>(StatusCodes.Status400BadRequest)
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+
         group.MapGet("/queue/entities/{entityId:guid}/apply-progress/{progressId:guid}", (
             Guid entityId,
             Guid progressId,

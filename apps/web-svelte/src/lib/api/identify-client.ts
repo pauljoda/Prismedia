@@ -4,6 +4,7 @@ import {
   identifyEntity as identifyEntityRequest,
   applyIdentifyQueueItem as applyIdentifyQueueItemRequest,
   deleteIdentifyQueueItem as deleteIdentifyQueueItemRequest,
+  saveIdentifyQueueProposal as saveIdentifyQueueProposalRequest,
   getIdentifyQueueItem as getIdentifyQueueItemRequest,
   getGetIdentifyQueueItemUrl,
   listIdentifyProviders,
@@ -16,6 +17,7 @@ import type {
   IdentifyEntityRequest,
   IdentifyQueueSearchRequest,
   ListIdentifyQueueParams,
+  SaveIdentifyQueueProposalRequest,
 } from "$lib/api/generated/model";
 import { requestInit, unwrapGenerated, type RequestOptions } from "$lib/api/generated-response";
 import { apiPath, fetchApi } from "$lib/api/orval-fetch";
@@ -146,6 +148,20 @@ export async function fetchIdentifyApplyProgress(
 export function deleteIdentifyQueueItem(entityId: string, options?: RequestOptions): Promise<IdentifyQueueItem> {
   return deleteIdentifyQueueItemRequest(entityId, requestInit(options)).then((response) =>
     unwrapGenerated(response, "Failed to delete identify queue item") as IdentifyQueueItem,
+  );
+}
+
+/**
+ * Persists an in-progress identify proposal back onto the queued entity (without applying it), so
+ * incrementally resolved children survive navigation and page refresh.
+ */
+export function saveIdentifyQueueProposal(
+  entityId: string,
+  proposal: EntityMetadataProposal,
+  options?: RequestOptions,
+): Promise<IdentifyQueueItem> {
+  return saveIdentifyQueueProposalRequest(entityId, { proposal } as SaveIdentifyQueueProposalRequest, requestInit(options)).then((response) =>
+    unwrapGenerated(response, "Failed to save identify proposal") as IdentifyQueueItem,
   );
 }
 

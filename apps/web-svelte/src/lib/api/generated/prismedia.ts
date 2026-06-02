@@ -152,6 +152,7 @@ import type {
   RemoveFileExclusionParams,
   RenameFileParams,
   RescanFileRootParams,
+  SaveIdentifyQueueProposalRequest,
   SearchIdentifyQueueItemParams,
   SettingDescriptor,
   SettingUpdateRequest,
@@ -7745,6 +7746,56 @@ export const applyIdentifyQueueItem = async (entityId: string,
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       applyIdentifyQueueItemRequest,)
+  }
+);}
+
+
+
+export type saveIdentifyQueueProposalResponse200 = {
+  data: IdentifyQueueItem
+  status: 200
+}
+
+export type saveIdentifyQueueProposalResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type saveIdentifyQueueProposalResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type saveIdentifyQueueProposalResponseSuccess = (saveIdentifyQueueProposalResponse200) & {
+  headers: Headers;
+};
+export type saveIdentifyQueueProposalResponseError = (saveIdentifyQueueProposalResponse400 | saveIdentifyQueueProposalResponse404) & {
+  headers: Headers;
+};
+
+export type saveIdentifyQueueProposalResponse = (saveIdentifyQueueProposalResponseSuccess | saveIdentifyQueueProposalResponseError)
+
+export const getSaveIdentifyQueueProposalUrl = (entityId: string,) => {
+
+
+
+
+  return `/api/identify/queue/entities/${entityId}/proposal`
+}
+
+/**
+ * @summary Persists an in-progress identify proposal (e.g. resolved children) without applying it.
+ */
+export const saveIdentifyQueueProposal = async (entityId: string,
+    saveIdentifyQueueProposalRequest: SaveIdentifyQueueProposalRequest, options?: RequestInit): Promise<saveIdentifyQueueProposalResponse> => {
+
+  return orvalFetch<saveIdentifyQueueProposalResponse>(getSaveIdentifyQueueProposalUrl(entityId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      saveIdentifyQueueProposalRequest,)
   }
 );}
 

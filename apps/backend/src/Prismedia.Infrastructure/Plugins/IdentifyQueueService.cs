@@ -232,6 +232,33 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
     }
 
     /// <summary>
+    /// Persists an updated in-progress proposal onto the queued entity (e.g. as children resolve)
+    /// without applying it, so the accumulated proposal survives navigation and page refresh.
+    /// </summary>
+    public async Task<IdentifyQueueItem> SaveProposalAsync(
+        Guid entityId,
+        EntityMetadataProposal proposal,
+        CancellationToken cancellationToken) {
+        ArgumentNullException.ThrowIfNull(proposal);
+
+        var row = await _db.IdentifyQueueItems
+            .FirstOrDefaultAsync(item => item.EntityId == entityId, cancellationToken)
+            ?? throw new KeyNotFoundException($"Identify queue item for entity '{entityId}' was not found.");
+        var entity = await LoadEntityAsync(entityId, cancellationToken)
+            ?? throw new KeyNotFoundException($"Entity '{entityId}' was not found.");
+        var storedProposal = Deserialize<EntityMetadataProposal>(row.ProposalJson)
+            ?? throw new InvalidOperationException("Identify queue item has no proposal to update.");
+        if (!string.Equals(proposal.ProposalId, storedProposal.ProposalId, StringComparison.Ordinal)) {
+            throw new InvalidOperationException("Only the queue item's own root proposal can be saved.");
+        }
+
+        row.ProposalJson = JsonSerializer.Serialize(proposal, JsonOptions);
+        row.UpdatedAt = DateTimeOffset.UtcNow;
+        await _db.SaveChangesAsync(cancellationToken);
+        return MapRow(row, entity);
+    }
+
+    /// <summary>
     /// Removes an item from the active identify queue without applying metadata.
     /// </summary>
     public async Task<IdentifyQueueItem?> DeleteAsync(Guid entityId, CancellationToken cancellationToken) {

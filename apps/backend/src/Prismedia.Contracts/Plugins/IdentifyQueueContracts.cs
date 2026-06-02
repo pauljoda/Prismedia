@@ -79,3 +79,10 @@ public sealed record ApplyIdentifyQueueItemRequest(
     IReadOnlyList<string> SelectedFields,
     IReadOnlyDictionary<string, string?>? SelectedImages,
     Guid? ProgressId = null);
+
+/// <summary>
+/// Request body for persisting an in-progress identify proposal back onto a queued entity (without
+/// applying it), so client-side progress such as incrementally resolved children survives refresh.
+/// </summary>
+/// <param name="Proposal">The queue item's own root proposal, updated with resolved children.</param>
+public sealed record SaveIdentifyQueueProposalRequest(EntityMetadataProposal Proposal);

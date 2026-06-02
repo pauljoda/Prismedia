@@ -10,6 +10,7 @@ import {
   fetchIdentifyQueue,
   fetchIdentifyQueueItem,
   identifyEntityTransient,
+  saveIdentifyQueueProposal,
   searchIdentifyQueueItem,
 } from "$lib/api/identify-client";
 import { fetchPluginProviders } from "$lib/api/plugins";
@@ -140,6 +141,8 @@ export class IdentifyStore {
   #childPumpActive = false;
   #childIdentifyProposalId: string | null = null;
   #childContext: { parentEntityId: string; provider: string; childEntities: StructuralChildEntity[]; parentExternalIds: Record<string, string> } | null = null;
+  #proposalSaveEntityId: string | null = null;
+  #proposalSaveInFlight = false;
   #stopApplyProgressPolling: (() => void) | null = null;
 
   constructor(getHideNsfw: () => boolean = () => false) {
@@ -800,6 +803,35 @@ export class IdentifyStore {
     const view = this.view;
     if (view.kind === "review-parent" && view.entity.id === context.parentEntityId) {
       this.view = { ...view, proposal: nextProposal };
+    }
+
+    // Persist the accumulated proposal to the backend queue item so resolved children survive a
+    // page refresh. Coalesced so only one save runs at a time and the latest proposal always wins.
+    this.#persistParentProposal(context.parentEntityId);
+  }
+
+  #persistParentProposal(entityId: string) {
+    this.#proposalSaveEntityId = entityId;
+    if (this.#proposalSaveInFlight) return;
+    void this.#runProposalSaveLoop();
+  }
+
+  async #runProposalSaveLoop() {
+    this.#proposalSaveInFlight = true;
+    try {
+      while (this.#proposalSaveEntityId) {
+        const entityId = this.#proposalSaveEntityId;
+        this.#proposalSaveEntityId = null;
+        const proposal = this.queue.find((item) => item.entityId === entityId)?.proposal;
+        if (!proposal) continue;
+        try {
+          await saveIdentifyQueueProposal(entityId, proposal);
+        } catch {
+          // Best-effort persistence; the in-memory proposal is still correct for this session.
+        }
+      }
+    } finally {
+      this.#proposalSaveInFlight = false;
     }
   }
 
