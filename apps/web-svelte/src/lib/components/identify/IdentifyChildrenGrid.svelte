@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Check, Loader2 } from "@lucide/svelte";
+  import { Check, Clock, Loader2 } from "@lucide/svelte";
   import { cn } from "@prismedia/ui-svelte";
   import { assetUrl } from "$lib/api/orval-fetch";
   import type { EntityMetadataProposal } from "$lib/api/identify-types";
@@ -20,8 +20,31 @@
 
   const store = useIdentifyStore();
 
+  const matchedIds = $derived(
+    new Set((proposal.children ?? []).map((child) => child.targetEntityId).filter((id): id is string => Boolean(id))),
+  );
+
+  // The cascade resolves children serially in this order, flushing each as it matches. So everything
+  // up to the last matched child has been processed (matched, or attempted with no match), the next
+  // one is what's currently being identified, and the rest are still queued.
+  const lastMatchedIndex = $derived.by(() => {
+    let last = -1;
+    childEntities.forEach((child, index) => {
+      if (matchedIds.has(child.id)) last = index;
+    });
+    return last;
+  });
+
   function matchedProposal(childId: string): EntityMetadataProposal | null {
     return (proposal.children ?? []).find((child) => child.targetEntityId === childId) ?? null;
+  }
+
+  function statusFor(childId: string, index: number): "matched" | "loading" | "queued" | "none" {
+    if (matchedIds.has(childId)) return "matched";
+    if (!cascadeRunning) return "none";
+    if (index <= lastMatchedIndex) return "none"; // already processed, no match found
+    if (index === lastMatchedIndex + 1) return "loading"; // currently identifying
+    return "queued";
   }
 
   function coverFor(childId: string, fallback: string | null): string | undefined {
@@ -35,9 +58,9 @@
 </script>
 
 <div class="grid grid-cols-2 gap-2 p-3.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-  {#each childEntities as child (child.id)}
+  {#each childEntities as child, index (child.id)}
     {@const matched = matchedProposal(child.id)}
-    {@const status = matched ? "matched" : cascadeRunning ? "loading" : "none"}
+    {@const status = statusFor(child.id, index)}
     {@const cover = coverFor(child.id, child.coverUrl)}
     {@const noMatch = status === "none"}
     {@const selected = matched ? store.isReviewProposalSelected(matched.proposalId) : false}
@@ -58,6 +81,8 @@
 
           {#if status === "loading"}
             <div class="child-overlay"><Loader2 class="h-5 w-5 animate-spin" /><span>Identifying…</span></div>
+          {:else if status === "queued"}
+            <div class="child-overlay child-overlay-muted"><Clock class="h-4 w-4" /><span>Queued</span></div>
           {:else if noMatch}
             <div class="child-overlay child-overlay-muted"><span>No match found</span></div>
           {/if}
