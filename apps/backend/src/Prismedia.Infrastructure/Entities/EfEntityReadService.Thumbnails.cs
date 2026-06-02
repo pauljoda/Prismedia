@@ -47,6 +47,13 @@ public sealed partial class EfEntityReadService {
         var technicalByEntity = await _db.EntityTechnical.AsNoTracking()
             .Where(technical => ids.Contains(technical.EntityId))
             .ToDictionaryAsync(technical => technical.EntityId, cancellationToken);
+        // Section (disc) labels for audio tracks, surfaced as a thumbnail chip so album track
+        // lists can group multi-disc albums and restart numbering per section.
+        var sectionByEntity = rows.Any(row => row.KindCode == EntityKindRegistry.AudioTrack.Code)
+            ? await _db.AudioTrackDetails.AsNoTracking()
+                .Where(detail => ids.Contains(detail.EntityId) && detail.SectionLabel != null)
+                .ToDictionaryAsync(detail => detail.EntityId, detail => detail.SectionLabel!, cancellationToken)
+            : new Dictionary<Guid, string>();
         var gridThumbByEntity = await _db.EntityFiles.AsNoTracking()
             .Where(file => ids.Contains(file.EntityId) && file.Role == EntityFileRole.GridThumbnail)
             .ToDictionaryAsync(file => file.EntityId, file => file.Path, cancellationToken);
@@ -76,7 +83,7 @@ public sealed partial class EfEntityReadService {
                 hoverUrl is null ? "none" : "sprite",
                 hoverUrl,
                 hoverImages,
-                ProjectThumbnailMeta(row, technicalByEntity.GetValueOrDefault(row.Id)),
+                ProjectThumbnailMeta(row, technicalByEntity.GetValueOrDefault(row.Id), sectionByEntity.GetValueOrDefault(row.Id)),
                 row.RatingValue,
                 row.IsFavorite,
                 row.IsNsfw,
@@ -153,12 +160,16 @@ public sealed partial class EfEntityReadService {
 
     private static IReadOnlyList<EntityThumbnailMeta> ProjectThumbnailMeta(
         EntityRow row,
-        EntityTechnicalRow? technical) {
+        EntityTechnicalRow? technical,
+        string? sectionLabel = null) {
+        var meta = new List<EntityThumbnailMeta>(MaxThumbnailMeta);
+        // Lead with the disc/section chip so it survives the meta cap and clients can group tracks.
+        Add(meta, "disc", sectionLabel);
+
         if (technical is null) {
-            return [];
+            return meta;
         }
 
-        var meta = new List<EntityThumbnailMeta>(MaxThumbnailMeta);
         Add(meta, "duration", FormatDuration(technical.DurationSeconds));
         if (technical.Width is { } width && technical.Height is { } height) {
             Add(meta, row.KindCode == EntityKindRegistry.Video.Code ? "video" : "image", FormatResolution(width, height));
