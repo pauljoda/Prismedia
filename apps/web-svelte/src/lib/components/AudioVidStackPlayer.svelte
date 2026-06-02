@@ -339,7 +339,7 @@
     title="Expand player"
     aria-label="Expand audio player"
     class={cn(
-      "audio-mini fixed bottom-[calc(3.65rem+max(1.25rem,env(safe-area-inset-bottom,0px))+0.5rem)] left-3 z-[55] h-14 w-14 overflow-visible rounded-xl border border-white/10 bg-surface-1/70 shadow-[0_14px_40px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.07)] backdrop-blur-2xl transition-transform hover:scale-105 md:bottom-4 md:left-64",
+      "audio-mini fixed bottom-[calc(3.65rem+max(1.25rem,env(safe-area-inset-bottom,0px))+1.1rem)] left-3 z-[55] h-14 w-14 overflow-visible rounded-xl border border-white/10 bg-surface-1/70 shadow-[0_14px_40px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.07)] backdrop-blur-2xl transition-transform hover:scale-105 md:bottom-4 md:left-64",
     )}
   >
     {#if playing}
@@ -363,7 +363,7 @@
 <div
   bind:this={rootEl}
   class={cn(
-    "fixed bottom-[calc(3.65rem+max(1.25rem,env(safe-area-inset-bottom,0px))+0.5rem)] left-3 right-3 z-[55] mx-auto max-w-3xl rounded-xl border border-white/10 bg-surface-1/70 shadow-[0_18px_56px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.07)] backdrop-blur-2xl md:bottom-4 md:left-64 md:right-4",
+    "fixed bottom-[calc(3.65rem+max(1.25rem,env(safe-area-inset-bottom,0px))+1.1rem)] left-3 right-3 z-[55] mx-auto max-w-3xl rounded-xl border border-white/10 bg-surface-1/70 shadow-[0_18px_56px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.07)] backdrop-blur-2xl md:bottom-4 md:left-64 md:right-4",
   )}
 >
   <!-- Now-playing + progress -->
