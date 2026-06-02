@@ -33,6 +33,7 @@
   import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
   import AudioVidStackPlayer from "$lib/components/AudioVidStackPlayer.svelte";
   import AudioTrackList from "$lib/components/AudioTrackList.svelte";
+  import { useIdentifyDetailAction } from "$lib/components/identify/use-identify-detail-action.svelte";
   import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import { useAppChrome } from "$lib/stores/app-chrome.svelte";
@@ -80,24 +81,29 @@
     const images = getCapability(library.capabilities, "images");
     return assetUrl(images?.coverUrl ?? images?.thumbnailUrl) || undefined;
   });
+  const identifyAction = useIdentifyDetailAction(() => library?.id, () => library?.kind);
   const heroActions = $derived.by((): EntityDetailActionButton[] => {
-    if (trackItems.length === 0) return [];
-    return [
-      {
-        id: "play-all",
-        label: "Play All",
-        icon: Play,
-        iconFill: "currentColor",
-        variant: "primary",
-        onClick: playAll,
-      },
-      {
-        id: "shuffle",
-        label: "Shuffle",
-        icon: Shuffle,
-        onClick: shuffleAll,
-      },
-    ];
+    const actions: EntityDetailActionButton[] = [];
+    if (trackItems.length > 0) {
+      actions.push(
+        {
+          id: "play-all",
+          label: "Play All",
+          icon: Play,
+          iconFill: "currentColor",
+          variant: "primary",
+          onClick: playAll,
+        },
+        {
+          id: "shuffle",
+          label: "Shuffle",
+          icon: Shuffle,
+          onClick: shuffleAll,
+        },
+      );
+    }
+    if (identifyAction.action) actions.push(identifyAction.action);
+    return actions;
   });
 
   onMount(() => {

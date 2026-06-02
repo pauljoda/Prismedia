@@ -23,9 +23,11 @@
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
   import EntityCastAndCrewSection from "$lib/components/entities/EntityCastAndCrewSection.svelte";
   import EntityDetail, {
+    type EntityDetailActionButton,
     type EntityMetadataUpdateRequest,
   } from "$lib/components/entities/EntityDetail.svelte";
   import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
+  import { useIdentifyDetailAction } from "$lib/components/identify/use-identify-detail-action.svelte";
   import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import { useAppChrome } from "$lib/stores/app-chrome.svelte";
@@ -51,6 +53,10 @@
       tags: relationshipTags,
     };
   });
+
+  const identifyAction = useIdentifyDetailAction(() => artist?.id, () => artist?.kind);
+  const heroActions = $derived.by((): EntityDetailActionButton[] =>
+    identifyAction.action ? [identifyAction.action] : []);
 
   onMount(() => {
     void loadArtist();
@@ -148,6 +154,7 @@
       {ratingBusy}
       peopleLabel="Members"
       posterSize="large"
+      actionButtons={heroActions}
     >
       {#snippet heroMeta()}
         {#if albumCards.length > 0}
