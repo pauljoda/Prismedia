@@ -386,7 +386,13 @@
       // mobile because the layout reserves a band at the bottom for the fixed
       // MobileNav — anchoring against the scrolling container keeps the
       // pagination strip above that band instead of behind it.
-      return findScrollAncestor(el)?.getBoundingClientRect().bottom ?? window.innerHeight;
+      const scrollAncestor = findScrollAncestor(el);
+      if (!scrollAncestor) return window.innerHeight;
+      // Subtract the ancestor's bottom padding (the layout reserves it for the
+      // floating audio player) so the grid fills to just above that space rather
+      // than under it — and never stacks an extra empty band beneath itself.
+      const padBottom = parseFloat(getComputedStyle(scrollAncestor).paddingBottom) || 0;
+      return scrollAncestor.getBoundingClientRect().bottom - padBottom;
     }
 
     function measureViewport() {

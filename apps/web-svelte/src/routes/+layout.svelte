@@ -108,6 +108,15 @@
   const bottomDockPadding = $derived(
     chrome.bottomDockInsetPx > 0 ? `${chrome.bottomDockInsetPx + 16}px` : "0px",
   );
+
+  // The floating-player inset changes the scroll container's bottom padding, which
+  // viewport-fitting components (e.g. EntityGrid) read on resize. A padding-only
+  // change doesn't trip their ResizeObserver, so nudge a re-measure when it changes.
+  $effect(() => {
+    void chrome.bottomDockInsetPx;
+    if (!browser) return;
+    window.dispatchEvent(new Event("resize"));
+  });
 </script>
 
 <div
@@ -130,9 +139,10 @@
       chrome.sidebarCollapsed ? "md:ml-14" : "md:ml-60",
     )}
     style:transition-timing-function="var(--ease-mechanical)"
+    style:padding-bottom="var(--prismedia-bottom-dock-padding)"
   >
     <CanvasHeader />
-    <div class="flex-1 p-5" style:padding-bottom="calc(1.25rem + var(--prismedia-bottom-dock-padding))">
+    <div class="flex-1 p-5">
       {@render pageContent()}
     </div>
   </main>

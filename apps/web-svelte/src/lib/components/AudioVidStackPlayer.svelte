@@ -315,10 +315,14 @@
     };
   });
 
-  // Reserve layout space for the player bar so page content isn't hidden behind it.
+  // Reserve layout space for the full player bar so page content isn't hidden behind it.
+  // The mini bubble floats in a corner and doesn't span the content, so it reserves nothing.
   $effect(() => {
     const node = rootEl;
-    if (!node) return;
+    if (!node || collapsed) {
+      chrome.clearBottomDockInset("audio-player");
+      return;
+    }
     const update = () => chrome.setBottomDockInset("audio-player", node.getBoundingClientRect().height);
     update();
     const observer = new ResizeObserver(update);
@@ -686,19 +690,30 @@
   }
   .audio-notes :global(.audio-note) {
     position: absolute;
+    left: 0;
     color: #f2c26a;
     opacity: 0;
     filter: drop-shadow(0 0 4px rgba(242, 194, 106, 0.55));
-    animation: audio-note-float 2.4s ease-out infinite;
   }
-  .audio-notes :global(.audio-note-1) { left: -8px; animation-delay: 0s; }
-  .audio-notes :global(.audio-note-2) { left: 0; animation-delay: 0.8s; }
-  .audio-notes :global(.audio-note-3) { left: 8px; animation-delay: 1.6s; }
+  /* Three notes fan out evenly: one drifts left, one rises center, one drifts right. */
+  .audio-notes :global(.audio-note-1) { animation: audio-note-left 2.4s ease-out infinite; animation-delay: 0s; }
+  .audio-notes :global(.audio-note-2) { animation: audio-note-center 2.4s ease-out infinite; animation-delay: 0.8s; }
+  .audio-notes :global(.audio-note-3) { animation: audio-note-right 2.4s ease-out infinite; animation-delay: 1.6s; }
 
-  @keyframes audio-note-float {
-    0% { opacity: 0; transform: translate(0, 4px) scale(0.7) rotate(-8deg); }
+  @keyframes audio-note-left {
+    0% { opacity: 0; transform: translate(0, 4px) scale(0.7) rotate(6deg); }
     18% { opacity: 0.95; }
-    100% { opacity: 0; transform: translate(9px, -28px) scale(1.05) rotate(10deg); }
+    100% { opacity: 0; transform: translate(-16px, -26px) scale(1.05) rotate(-14deg); }
+  }
+  @keyframes audio-note-center {
+    0% { opacity: 0; transform: translate(0, 4px) scale(0.7) rotate(-4deg); }
+    18% { opacity: 0.95; }
+    100% { opacity: 0; transform: translate(0, -32px) scale(1.1) rotate(6deg); }
+  }
+  @keyframes audio-note-right {
+    0% { opacity: 0; transform: translate(0, 4px) scale(0.7) rotate(-6deg); }
+    18% { opacity: 0.95; }
+    100% { opacity: 0; transform: translate(16px, -26px) scale(1.05) rotate(14deg); }
   }
 
   @media (prefers-reduced-motion: reduce) {

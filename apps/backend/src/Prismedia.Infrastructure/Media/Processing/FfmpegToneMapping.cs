@@ -1,3 +1,5 @@
+using Prismedia.Application.Videos;
+
 namespace Prismedia.Infrastructure.Media.Processing;
 
 /// <summary>
@@ -40,13 +42,14 @@ internal static class FfmpegToneMapping {
     /// <summary>
     /// Decides whether a Dolby Vision source must use the Dolby-specific tone-mapping chain rather than
     /// the generic HDR10/HLG chain. Profile 8 sources with an HDR10-compatible base layer fall through
-    /// to the HDR10 chain.
+    /// to the HDR10 chain. Delegates to <see cref="VideoPlaybackRangePolicy.RequiresDolbyVisionToneMapping"/>
+    /// so the filter selection and the playback decision cannot drift apart.
     /// </summary>
     /// <param name="dvProfile">Dolby Vision profile when present.</param>
     /// <param name="dvBlSignalCompatibilityId">Dolby Vision base-layer signal compatibility id when present.</param>
     /// <returns>True when the Dolby Vision tone-mapping chain is required.</returns>
     public static bool RequiresDolbyVisionToneMapping(int? dvProfile, int? dvBlSignalCompatibilityId) =>
-        dvProfile is 5 || dvBlSignalCompatibilityId is 0;
+        VideoPlaybackRangePolicy.RequiresDolbyVisionToneMapping(dvProfile, dvBlSignalCompatibilityId);
 
     private static string InputHdrColorParameters(string? colorTransfer) {
         var transfer = string.Equals(colorTransfer, "arib-std-b67", StringComparison.OrdinalIgnoreCase)

@@ -91,11 +91,15 @@ public static class VideoDirectPlayPolicy {
         }
 
         // Remux: the client can decode the video codec but needs a different container (and possibly
-        // a transcoded audio track). The video is copied unchanged, so dynamic range is irrelevant
-        // here — there is no tone map to apply and the client renders whatever range the stream
-        // carries (an HDR/Dolby Vision HEVC stream is handed to the client as-is). Only DirectPlay
-        // and Transcode care about the client's advertised range support.
-        if (directStreamAllowed && bitrateOk) {
+        // a transcoded audio track). The video is copied unchanged, so for SDR and standard HDR
+        // (HDR10/HLG/HDR10+) the dynamic range is irrelevant — the client renders whatever range the
+        // stream carries. The exception is a Dolby Vision stream with no client-renderable base layer
+        // (Profile 5, or base-layer signal compatibility id 0): its base layer is not a conformant
+        // HDR/SDR signal, so a decoder without Dolby Vision processing (every browser) shows a
+        // magenta/green cast. Such a stream may only be copied to a client that advertised it can
+        // render Dolby Vision; otherwise it must fall through to a tone-mapped transcode.
+        var copyableRange = !RequiresDolbyVisionToneMapping(source) || rangeAllowed;
+        if (directStreamAllowed && bitrateOk && copyableRange) {
             foreach (var container in RemuxContainerPreference) {
                 var match = videoProfiles.FirstOrDefault(candidate =>
                     ContainerMatches(candidate.Container, container) &&
@@ -110,6 +114,18 @@ public static class VideoDirectPlayPolicy {
         }
 
         return new VideoPlaybackDecision(VideoPlaybackMethod.Transcode);
+    }
+
+    // True when the source's primary video stream is a Dolby Vision layer that cannot be handed to a
+    // non-Dolby-Vision decoder by a plain stream copy (Profile 5 / base-layer compatibility id 0).
+    private static bool RequiresDolbyVisionToneMapping(VideoSourceFile source) {
+        var stream = source.Streams?
+            .Where(candidate => candidate.Type.Equals("Video", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(candidate => candidate.StreamIndex)
+            .FirstOrDefault();
+        return VideoPlaybackRangePolicy.RequiresDolbyVisionToneMapping(
+            stream?.DvProfile,
+            stream?.DvBlSignalCompatibilityId);
     }
 
     private static bool ContainerMatches(string? profileContainers, string sourceContainer) =>

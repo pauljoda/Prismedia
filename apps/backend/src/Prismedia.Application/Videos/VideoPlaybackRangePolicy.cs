@@ -59,6 +59,22 @@ public static class VideoPlaybackRangePolicy {
     }
 
     /// <summary>
+    /// Decides whether a Dolby Vision stream must be tone mapped rather than handed to a client by a
+    /// plain stream copy. Profile 5 carries an ICtCp (IPTPQc2) base layer, and a base-layer signal
+    /// compatibility id of 0 likewise has no standard-conformant fallback, so a decoder that lacks
+    /// Dolby Vision processing renders the base layer with a magenta/green cast. Such streams must be
+    /// tone mapped (transcoded), never remuxed. Profile 7/8 streams with an HDR10-compatible (id 1) or
+    /// HLG-compatible (id 4) base layer render correctly as that range and may be copied like any other
+    /// HDR stream. This is the single source of truth shared by tone-map filter selection and the
+    /// DirectPlay/Remux/Transcode decision.
+    /// </summary>
+    /// <param name="dvProfile">Dolby Vision profile when present.</param>
+    /// <param name="dvBlSignalCompatibilityId">Dolby Vision base-layer signal compatibility id when present.</param>
+    /// <returns>True when the Dolby Vision tone-mapping chain is required.</returns>
+    public static bool RequiresDolbyVisionToneMapping(int? dvProfile, int? dvBlSignalCompatibilityId) =>
+        dvProfile is 5 || dvBlSignalCompatibilityId is 0;
+
+    /// <summary>
     /// Returns true when the range is SDR or the client explicitly advertised support for the HDR range type.
     /// </summary>
     /// <param name="range">Classified source dynamic range.</param>
