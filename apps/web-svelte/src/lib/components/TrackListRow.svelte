@@ -296,8 +296,8 @@
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto auto;
     grid-template-areas:
-      "title title title title"
-      "index rating time actions";
+      "index title  title  actions"
+      "index rating time   actions";
     align-items: center;
     column-gap: 0.75rem;
     row-gap: 0.45rem;
@@ -305,7 +305,7 @@
     padding: 0.75rem;
   }
 
-  .index-cell { grid-area: index; justify-self: start; }
+  .index-cell { grid-area: index; justify-self: start; align-self: start; }
   .title-cell { grid-area: title; }
   .rating-cell { grid-area: rating; justify-self: start; }
   .time-cell { grid-area: time; justify-self: end; }
@@ -345,6 +345,7 @@
 
     .index-cell {
       justify-self: center;
+      align-self: center;
     }
 
     .track-title,

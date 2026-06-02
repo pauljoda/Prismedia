@@ -140,21 +140,11 @@ public sealed class VideoDirectPlayPolicyTests {
     public void DolbyVisionProfile5RemuxesToAClientThatAdvertisesDolbyVision() {
         // A real Dolby Vision client (advertises DOVI) processes the RPU itself, so copying Profile 5
         // unchanged is correct — the tone-map gate only blocks copies to clients that cannot render it.
+        // The client decodes HEVC only in mp4 (not the source's mkv container), so the verdict is a
+        // Remux rather than a DirectPlay.
         var source = DolbyVisionSource("/media/p5.mkv", dvProfile: 5, dvBlSignalCompatibilityId: 0);
 
         var decision = VideoDirectPlayPolicy.Decide(
-            source,
-            selectedAudioCodec: "eac3",
-            range: VideoPlaybackRange.Dovi,
-            profile: CapableClient,
-            supportedVideoRangeTypes: ["DOVI", "HDR10"],
-            directPlayAllowed: true,
-            directStreamAllowed: false, // force the Remux branch rather than DirectPlay
-            transcodingAllowed: true);
-
-        Assert.Equal(VideoPlaybackMethod.Transcode, decision.Method);
-
-        var remuxable = VideoDirectPlayPolicy.Decide(
             source,
             selectedAudioCodec: "eac3",
             range: VideoPlaybackRange.Dovi,
@@ -166,7 +156,7 @@ public sealed class VideoDirectPlayPolicyTests {
             directStreamAllowed: true,
             transcodingAllowed: true);
 
-        Assert.Equal(VideoPlaybackMethod.Remux, remuxable.Method);
+        Assert.Equal(VideoPlaybackMethod.Remux, decision.Method);
     }
 
     [Fact]
