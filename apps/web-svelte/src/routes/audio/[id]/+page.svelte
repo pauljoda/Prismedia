@@ -31,17 +31,18 @@
     type EntityMetadataUpdateRequest,
   } from "$lib/components/entities/EntityDetail.svelte";
   import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
-  import AudioVidStackPlayer from "$lib/components/AudioVidStackPlayer.svelte";
   import AudioTrackList from "$lib/components/AudioTrackList.svelte";
   import { useIdentifyDetailAction } from "$lib/components/identify/use-identify-detail-action.svelte";
   import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import { useAppChrome } from "$lib/stores/app-chrome.svelte";
+  import { useAudioPlayback, type PlaybackContext } from "$lib/stores/audio-playback.svelte";
 
   type LoadState = "loading" | "ready" | "error";
 
   const nsfw = useNsfw();
   const appChrome = useAppChrome();
+  const playback = useAudioPlayback()!;
 
   let loadState: LoadState = $state("loading");
   let library = $state<AudioLibraryDetail | null>(null);
@@ -54,10 +55,6 @@
   let relationshipTags = $state<EntityDetailTag[]>([]);
   let trackItems = $state<AudioTrackListItemDto[]>([]);
   let artistLink = $state<{ id: string; title: string } | null>(null);
-
-  let activeTrackId = $state<string | null>(null);
-  let isPlaying = $state(false);
-  let shufflePlayKey = $state(0);
 
   const card = $derived.by((): EntityDetailCardFull | null => {
     if (!library) return null;
@@ -236,17 +233,31 @@
     await loadLibrary();
   }
 
+  function albumContext(): PlaybackContext {
+    return {
+      albumId: library?.id ?? null,
+      albumTitle: library?.title ?? null,
+      artistId: artistLink?.id ?? null,
+      artistName: artistLink?.title ?? null,
+      coverUrl: coverUrl ?? null,
+    };
+  }
+
   function playAll() {
     const firstTrack = trackItems[0];
     if (!firstTrack) return;
-    activeTrackId = firstTrack.id;
-    isPlaying = true;
+    playback.play(trackItems, firstTrack.id, albumContext(), { shuffle: false });
   }
 
   function shuffleAll() {
     if (trackItems.length === 0) return;
-    shufflePlayKey += 1;
-    isPlaying = true;
+    playback.play(trackItems, undefined, albumContext(), { shuffle: true });
+  }
+
+  function playTrack(trackId: string) {
+    // Re-clicking the current track toggles play/pause; otherwise (re)load the album from that track.
+    if (playback.isCurrent(trackId)) playback.toggle();
+    else playback.play(trackItems, trackId, albumContext(), { shuffle: false });
   }
 </script>
 
@@ -254,7 +265,7 @@
   <title>{library?.title ?? "Audio"} · Prismedia</title>
 </svelte:head>
 
-<div class={trackItems.length > 0 ? "detail-page has-audio-player" : "detail-page"}>
+<div class="detail-page">
   {#if loadState === "loading"}
     <EntityDetailSkeleton posterAspect="1 / 1" />
   {:else if loadState === "error"}
@@ -320,20 +331,11 @@
     {/if}
 
     {#if trackItems.length > 0}
-      <AudioVidStackPlayer
-        tracks={trackItems}
-        {activeTrackId}
-        onTrackChange={(id) => (activeTrackId = id)}
-        libraryCoverUrl={coverUrl}
-        {shufflePlayKey}
-        onPlayingChange={(p) => (isPlaying = p)}
-      />
-
       <AudioTrackList
         tracks={trackItems}
-        {activeTrackId}
-        {isPlaying}
-        onPlay={(id) => (activeTrackId = id)}
+        activeTrackId={playback.currentTrack?.id ?? null}
+        isPlaying={playback.playing}
+        onPlay={playTrack}
         onRatingChange={handleTrackRatingChange}
         onRename={handleTrackRename}
       />
@@ -349,7 +351,6 @@
 
 <style>
   .detail-page { display: grid; gap: 1.25rem; padding: 0; max-width: none; margin: 0; }
-  .detail-page.has-audio-player { padding-bottom: calc(12rem + env(safe-area-inset-bottom, 0px)); }
   .error-notice { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem; border: 1px solid color-mix(in srgb, #ef4444 50%, var(--color-border, #1c2235)); background: var(--color-surface-2, #101420); color: var(--color-text-muted, #8a93a6); font-size: 0.85rem; }
   .error-notice button { border: 1px solid var(--color-border, #1c2235); background: var(--color-surface-3, #151a28); color: var(--color-text-muted, #8a93a6); padding: 0.4rem 0.8rem; font-size: 0.78rem; cursor: pointer; }
 
@@ -368,5 +369,4 @@
   .empty-children { padding: 2rem; border: 1px solid var(--color-border-subtle, #1c2235); background: var(--color-surface-1, #0c0f15); color: var(--color-text-muted, #8a93a6); text-align: center; font-size: 0.85rem; }
 
   @media (min-width: 640px) { .credits-section { padding: 1rem 2rem; } }
-  @media (min-width: 768px) { .detail-page.has-audio-player { padding-bottom: 11rem; } }
 </style>

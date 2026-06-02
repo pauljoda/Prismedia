@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import {
+    ListMusic,
     Music,
     Pause,
     Play,
@@ -14,59 +15,43 @@
     VolumeX,
   } from "@lucide/svelte";
   import { cn } from "@prismedia/ui-svelte";
-  import { formatDuration, type AudioTrackListItemDto } from "@prismedia/contracts";
+  import { formatDuration } from "@prismedia/contracts";
   import { apiAssetUrl, assetUrl } from "$lib/api/orval-fetch";
+  import { resolveEntityHref } from "$lib/entities/entity-codes";
   import AudioWaveformFilmstrip from "./AudioWaveformFilmstrip.svelte";
+  import PlaybackQueueFlyout from "./PlaybackQueueFlyout.svelte";
   import { waveformForDisplay } from "./audio-waveform";
+  import { useAudioPlayback } from "$lib/stores/audio-playback.svelte";
+  import { useAppChrome } from "$lib/stores/app-chrome.svelte";
 
-  type RepeatMode = "off" | "all" | "one";
-
-  interface Props {
-    tracks: AudioTrackListItemDto[];
-    activeTrackId: string | null;
-    onTrackChange: (trackId: string) => void;
-    class?: string;
-    libraryCoverUrl?: string;
-    shufflePlayKey?: number;
-    onPlaybackComplete?: () => void;
-    onPlayingChange?: (playing: boolean) => void;
-  }
-
-  let {
-    tracks,
-    activeTrackId,
-    onTrackChange,
-    class: className = "",
-    libraryCoverUrl,
-    shufflePlayKey = 0,
-    onPlaybackComplete,
-    onPlayingChange,
-  }: Props = $props();
+  const playback = useAudioPlayback()!;
+  const chrome = useAppChrome();
 
   let audioEl: HTMLAudioElement | null = $state(null);
-  let playing = $state(false);
-  let currentTime = $state(0);
-  let duration = $state(0);
+  let rootEl: HTMLElement | null = $state(null);
   let volume = $state(1);
   let muted = $state(false);
   let waveformData = $state<number[] | null>(null);
-  let repeat = $state<RepeatMode>("off");
-  let shuffle = $state(false);
   let timelineDragging = $state(false);
+  let queueOpen = $state(false);
 
   let timelineDraggingRef = false;
-  let lastShufflePlayKey = 0;
   let currentSrcTrackId: string | null = null;
 
-  const activeTrack = $derived(tracks.find((t) => t.id === activeTrackId) ?? null);
-  const activeIndex = $derived(
-    activeTrack ? tracks.findIndex((t) => t.id === activeTrackId) : -1,
-  );
-  const hasNext = $derived(activeIndex >= 0 && activeIndex < tracks.length - 1);
-  const hasPrev = $derived(activeIndex > 0);
+  const activeTrack = $derived(playback.currentTrack);
+  const ctx = $derived(playback.context);
+  const currentTime = $derived(playback.currentTime);
+  const duration = $derived(playback.duration);
+  const playing = $derived(playback.playing);
   const progress = $derived(
     duration > 0 ? Math.max(0, Math.min(100, (currentTime / duration) * 100)) : 0,
   );
+
+  const artistName = $derived(
+    ctx?.artistName ?? activeTrack?.embeddedArtist ?? activeTrack?.performers?.[0]?.name ?? null,
+  );
+  const artistHref = $derived(ctx?.artistId ? resolveEntityHref("music-artist", ctx.artistId) : undefined);
+  const coverUrl = $derived(ctx?.coverUrl ?? null);
 
   function isKeyboardShortcutSuppressed(target: EventTarget | null): boolean {
     if (!(target instanceof HTMLElement)) return false;
@@ -78,9 +63,7 @@
     if (!audioEl) return;
     const playPromise = audioEl.play();
     if (playPromise && typeof playPromise.catch === "function") {
-      void playPromise.catch((error: unknown) => {
-        console.error("Audio play failed:", error);
-      });
+      void playPromise.catch((error: unknown) => console.error("Audio play failed:", error));
     }
   }
 
@@ -92,14 +75,14 @@
         console.warn("Failed to reset audio position:", error);
       }
     }
-    currentTime = 0;
-    duration = nextDuration;
+    playback.currentTime = 0;
+    playback.duration = nextDuration;
   }
 
   function handleSeek(time: number) {
     if (!audioEl) return;
     audioEl.currentTime = time;
-    currentTime = time;
+    playback.currentTime = time;
   }
 
   function toggleMute() {
@@ -108,55 +91,16 @@
     muted = audioEl.muted;
   }
 
-  function cycleRepeat() {
-    repeat = repeat === "off" ? "all" : repeat === "all" ? "one" : "off";
-  }
-
-  function playAll() {
-    if (tracks.length === 0) return;
-    if (shuffle) {
-      const randomTrack = tracks[Math.floor(Math.random() * tracks.length)];
-      resetPlaybackPosition(randomTrack?.duration ?? 0);
-      onTrackChange(randomTrack!.id);
-      return;
-    }
-    resetPlaybackPosition(tracks[0]?.duration ?? 0);
-    onTrackChange(tracks[0]!.id);
-  }
-
   function togglePlay() {
     if (!audioEl) return;
-    if (!activeTrack) {
-      playAll();
-      return;
-    }
-    if (audioEl.paused) {
-      requestPlay();
-    } else {
-      audioEl.pause();
-    }
+    if (audioEl.paused) requestPlay();
+    else audioEl.pause();
   }
 
   function handleNext() {
-    if (tracks.length === 0) return;
-    if (shuffle) {
-      const otherTracks = tracks.filter((t) => t.id !== activeTrackId);
-      if (otherTracks.length > 0) {
-        const randomTrack = otherTracks[Math.floor(Math.random() * otherTracks.length)];
-        resetPlaybackPosition(randomTrack?.duration ?? 0);
-        onTrackChange(randomTrack!.id);
-      }
-      return;
-    }
-    if (hasNext) {
-      const nextTrack = tracks[activeIndex + 1]!;
-      resetPlaybackPosition(nextTrack.duration ?? 0);
-      onTrackChange(nextTrack.id);
-      return;
-    }
-    if (repeat === "all") {
-      resetPlaybackPosition(tracks[0]?.duration ?? 0);
-      onTrackChange(tracks[0]!.id);
+    // The Next button advances even in repeat-one; the play position effect loads the new track.
+    if (playback.next()) {
+      resetPlaybackPosition(playback.currentTrack?.duration ?? 0);
     }
   }
 
@@ -165,50 +109,22 @@
       resetPlaybackPosition(duration);
       return;
     }
-    if (hasPrev) {
-      const prevTrack = tracks[activeIndex - 1]!;
-      resetPlaybackPosition(prevTrack.duration ?? 0);
-      onTrackChange(prevTrack.id);
+    if (playback.prev()) {
+      resetPlaybackPosition(playback.currentTrack?.duration ?? 0);
     }
   }
 
   function handleTrackEnd() {
-    if (repeat === "one") {
-      if (audioEl) {
-        resetPlaybackPosition(duration);
-        requestPlay();
-      }
+    if (playback.repeat === "one") {
+      resetPlaybackPosition(duration);
+      requestPlay();
       return;
     }
-
-    if (shuffle) {
-      const otherTracks = tracks.filter((t) => t.id !== activeTrackId);
-      if (otherTracks.length > 0) {
-        const randomTrack = otherTracks[Math.floor(Math.random() * otherTracks.length)];
-        resetPlaybackPosition(randomTrack?.duration ?? 0);
-        onTrackChange(randomTrack!.id);
-      } else if (repeat === "all" && tracks.length > 0) {
-        resetPlaybackPosition(tracks[0]?.duration ?? 0);
-        onTrackChange(tracks[0]!.id);
-      }
+    if (playback.next()) {
+      resetPlaybackPosition(playback.currentTrack?.duration ?? 0);
       return;
     }
-
-    if (activeIndex >= 0 && activeIndex < tracks.length - 1) {
-      const nextTrack = tracks[activeIndex + 1]!;
-      resetPlaybackPosition(nextTrack.duration ?? 0);
-      onTrackChange(nextTrack.id);
-      return;
-    }
-
-    if (repeat === "all" && tracks.length > 0) {
-      resetPlaybackPosition(tracks[0]?.duration ?? 0);
-      onTrackChange(tracks[0]!.id);
-      return;
-    }
-
-    playing = false;
-    onPlaybackComplete?.();
+    playback.playing = false;
   }
 
   function handleVolumeInput(event: Event) {
@@ -228,50 +144,44 @@
     void fetch(url, { method: "POST" }).catch(() => {});
   }
 
-  // Switch audio source when active track changes
+  // Switch audio source when the current track changes.
   $effect(() => {
     if (!audioEl) return;
-    if (!activeTrack) {
+    const track = activeTrack;
+    if (!track) {
       currentSrcTrackId = null;
       audioEl.removeAttribute("src");
       audioEl.load();
-      playing = false;
-      currentTime = 0;
-      duration = 0;
+      playback.playing = false;
+      playback.currentTime = 0;
+      playback.duration = 0;
       return;
     }
 
-    if (activeTrack.id === currentSrcTrackId) return;
-    currentSrcTrackId = activeTrack.id;
+    if (track.id === currentSrcTrackId) return;
+    currentSrcTrackId = track.id;
 
-    const nextSrc = apiAssetUrl(`/audio-stream/${activeTrack.id}`);
+    const nextSrc = apiAssetUrl(`/audio-stream/${track.id}`);
     if (!nextSrc) return;
 
     audioEl.src = nextSrc;
-    resetPlaybackPosition(activeTrack.duration ?? 0);
+    resetPlaybackPosition(track.duration ?? 0);
     audioEl.load();
-
-    // Call play() directly — the browser queues it until data arrives.
-    // This also satisfies the user-gesture autoplay requirement since
-    // the track change is triggered by a click handler.
+    // play() is queued until data arrives; the user gesture that changed the track satisfies autoplay.
     requestPlay();
   });
 
-  // Load waveform data for the active track.
-  // Try the explicit waveformPath first, then fall back to the
-  // conventional URL pattern so tracks loaded from lightweight
-  // entity thumbnails still get waveforms when available.
+  // Load waveform data for the current track.
   $effect(() => {
-    if (!activeTrack) {
+    const track = activeTrack;
+    if (!track) {
       waveformData = null;
       return;
     }
 
-    // Waveform files are served by the static-files middleware at /assets/,
-    // NOT through the /api/ prefix, so use assetUrl() (bare path) here.
     const waveformUrl =
-      (activeTrack.waveformPath ? assetUrl(activeTrack.waveformPath) : null) ||
-      assetUrl(`/assets/audio-tracks/${activeTrack.id}/waveform.json`);
+      (track.waveformPath ? assetUrl(track.waveformPath) : null) ||
+      assetUrl(`/assets/audio-tracks/${track.id}/waveform.json`);
     if (!waveformUrl) {
       waveformData = null;
       return;
@@ -288,8 +198,7 @@
         waveformData = Array.isArray(payload.data) ? waveformForDisplay(payload.data) : null;
       })
       .catch(() => {
-        if (cancelled) return;
-        waveformData = null;
+        if (!cancelled) waveformData = null;
       });
 
     return () => {
@@ -297,21 +206,18 @@
     };
   });
 
-  // Handle shuffle play key
+  // Reserve layout space for the player bar so page content isn't hidden behind it.
   $effect(() => {
-    if (shufflePlayKey === 0 || shufflePlayKey === lastShufflePlayKey || tracks.length === 0) {
-      return;
-    }
-    lastShufflePlayKey = shufflePlayKey;
-    shuffle = true;
-    const randomTrack = tracks[Math.floor(Math.random() * tracks.length)];
-    if (randomTrack?.id === activeTrackId) {
-      resetPlaybackPosition(randomTrack.duration ?? 0);
-      requestPlay();
-    } else if (randomTrack) {
-      resetPlaybackPosition(randomTrack.duration ?? 0);
-      onTrackChange(randomTrack.id);
-    }
+    const node = rootEl;
+    if (!node) return;
+    const update = () => chrome.setBottomDockInset("audio-player", node.getBoundingClientRect().height);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(node);
+    return () => {
+      observer.disconnect();
+      chrome.clearBottomDockInset("audio-player");
+    };
   });
 
   onMount(() => {
@@ -319,26 +225,19 @@
     if (!audio) return;
 
     const handleTimeUpdate = () => {
-      if (!timelineDraggingRef) currentTime = audio.currentTime;
+      if (!timelineDraggingRef) playback.currentTime = audio.currentTime;
     };
     const handleDurationChange = () => {
-      if (Number.isFinite(audio.duration)) duration = audio.duration;
+      if (Number.isFinite(audio.duration)) playback.duration = audio.duration;
     };
-    const handlePlay = () => {
-      playing = true;
-      onPlayingChange?.(true);
-    };
-    const handlePause = () => {
-      playing = false;
-      onPlayingChange?.(false);
-    };
+    const handlePlay = () => (playback.playing = true);
+    const handlePause = () => (playback.playing = false);
     const handleEnded = () => {
-      if (activeTrackId) recordTrackPlay(activeTrackId);
+      if (playback.currentTrack) recordTrackPlay(playback.currentTrack.id);
       handleTrackEnd();
     };
     const handleError = () => {
-      playing = false;
-      onPlayingChange?.(false);
+      playback.playing = false;
       console.error("Audio element error:", audio.error);
     };
 
@@ -349,6 +248,7 @@
     audio.addEventListener("pause", handlePause);
     audio.addEventListener("ended", handleEnded);
     audio.addEventListener("error", handleError);
+    const detachController = playback.attachController({ toggle: togglePlay, seek: handleSeek });
 
     return () => {
       audio.removeEventListener("timeupdate", handleTimeUpdate);
@@ -358,6 +258,7 @@
       audio.removeEventListener("pause", handlePause);
       audio.removeEventListener("ended", handleEnded);
       audio.removeEventListener("error", handleError);
+      detachController();
     };
   });
 
@@ -403,9 +304,7 @@
     }
   }
 
-  const VolumeIcon = $derived(
-    muted || volume === 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2,
-  );
+  const VolumeIcon = $derived(muted || volume === 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2);
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -413,20 +312,17 @@
 <!-- Hidden audio element -->
 <audio bind:this={audioEl} preload="auto"></audio>
 
-<div class={cn(
-  "fixed bottom-16 left-3 right-3 z-[55] mx-auto max-w-3xl overflow-hidden rounded-xl border border-border-subtle bg-surface-1/90 shadow-xl shadow-black/40 backdrop-blur-xl md:bottom-4 md:left-64 md:right-4",
-  className,
-)}>
+<div
+  bind:this={rootEl}
+  class={cn(
+    "fixed bottom-16 left-3 right-3 z-[55] mx-auto max-w-3xl overflow-hidden rounded-xl border border-border-subtle bg-surface-1/90 shadow-xl shadow-black/40 backdrop-blur-xl md:bottom-4 md:left-64 md:right-4",
+  )}
+>
   <!-- Now-playing + progress -->
   <div class="flex items-center gap-2.5 px-3 pt-2.5 pb-1">
     <div class="player-artwork relative h-9 w-9 shrink-0 overflow-hidden rounded-md">
-      {#if libraryCoverUrl}
-        <img
-          src={libraryCoverUrl}
-          alt=""
-          class="h-full w-full object-cover"
-          decoding="async"
-        />
+      {#if coverUrl}
+        <img src={coverUrl} alt="" class="h-full w-full object-cover" decoding="async" />
       {:else}
         <div class="flex h-full w-full items-center justify-center bg-black/20 text-accent-500/80">
           <Music class="h-4 w-4" />
@@ -438,7 +334,16 @@
       {#if activeTrack}
         <p class="truncate text-[0.8rem] font-medium leading-tight text-text-primary">{activeTrack.title}</p>
         <p class="truncate text-[0.68rem] leading-tight text-text-muted">
-          {activeTrack.embeddedArtist ?? "Unknown artist"}
+          {#if artistName && artistHref}
+            <a href={artistHref} class="transition-colors hover:text-text-accent">{artistName}</a>
+          {:else if artistName}
+            {artistName}
+          {:else}
+            Unknown artist
+          {/if}
+          {#if ctx?.albumTitle}
+            <span class="text-text-disabled"> · {ctx.albumTitle}</span>
+          {/if}
         </p>
       {:else}
         <p class="text-[0.8rem] text-text-muted">No track playing</p>
@@ -494,23 +399,14 @@
   <!-- Waveform (only when data available) -->
   {#if activeTrack && waveformData && duration > 0}
     <div class="overflow-hidden border-t border-border-subtle/50 bg-black/30">
-      <AudioWaveformFilmstrip
-        peaks={waveformData}
-        {duration}
-        {audioEl}
-        onSeek={handleSeek}
-      />
+      <AudioWaveformFilmstrip peaks={waveformData} {duration} {audioEl} onSeek={handleSeek} />
     </div>
   {/if}
 
   <!-- Transport controls -->
   <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-x-2 px-2 py-1.5">
     <div class="group/vol flex min-w-0 items-center gap-1">
-      <button
-        type="button"
-        onclick={toggleMute}
-        class="p-1 text-text-disabled transition-colors hover:text-text-muted"
-      >
+      <button type="button" onclick={toggleMute} class="p-1 text-text-disabled transition-colors hover:text-text-muted">
         <VolumeIcon class="h-3 w-3" />
       </button>
       <div class="w-0 overflow-hidden transition-all duration-200 group-hover/vol:w-16">
@@ -529,12 +425,9 @@
     <div class="flex items-center gap-0.5">
       <button
         type="button"
-        onclick={() => (shuffle = !shuffle)}
-        title={shuffle ? "Shuffle: on" : "Shuffle: off"}
-        class={cn(
-          "p-1.5 transition-colors",
-          shuffle ? "text-accent-500" : "text-text-disabled hover:text-text-muted",
-        )}
+        onclick={() => playback.toggleShuffle()}
+        title={playback.shuffle ? "Shuffle: on" : "Shuffle: off"}
+        class={cn("p-1.5 transition-colors", playback.shuffle ? "text-accent-500" : "text-text-disabled hover:text-text-muted")}
       >
         <Shuffle class="h-3 w-3" />
       </button>
@@ -542,7 +435,7 @@
       <button
         type="button"
         onclick={handlePrev}
-        disabled={!activeTrack && tracks.length === 0}
+        disabled={!activeTrack}
         class="p-1.5 text-text-muted transition-colors hover:text-text-primary disabled:text-text-disabled"
       >
         <SkipBack class="h-3.5 w-3.5" />
@@ -568,7 +461,7 @@
       <button
         type="button"
         onclick={handleNext}
-        disabled={!activeTrack && tracks.length === 0}
+        disabled={!activeTrack || !playback.hasNext}
         class="p-1.5 text-text-muted transition-colors hover:text-text-primary disabled:text-text-disabled"
       >
         <SkipForward class="h-3.5 w-3.5" />
@@ -576,14 +469,11 @@
 
       <button
         type="button"
-        onclick={cycleRepeat}
-        title={repeat === "off" ? "Repeat: off" : repeat === "all" ? "Repeat: all" : "Repeat: one"}
-        class={cn(
-          "p-1.5 transition-colors",
-          repeat !== "off" ? "text-accent-500" : "text-text-disabled hover:text-text-muted",
-        )}
+        onclick={() => playback.cycleRepeat()}
+        title={playback.repeat === "off" ? "Repeat: off" : playback.repeat === "all" ? "Repeat: all" : "Repeat: one"}
+        class={cn("p-1.5 transition-colors", playback.repeat !== "off" ? "text-accent-500" : "text-text-disabled hover:text-text-muted")}
       >
-        {#if repeat === "one"}
+        {#if playback.repeat === "one"}
           <Repeat1 class="h-3 w-3" />
         {:else}
           <Repeat class="h-3 w-3" />
@@ -591,6 +481,20 @@
       </button>
     </div>
 
-    <div class="min-w-0" aria-hidden="true"></div>
+    <div class="flex min-w-0 items-center justify-end">
+      <div class="relative">
+        <button
+          type="button"
+          onclick={() => (queueOpen = !queueOpen)}
+          title="Queue"
+          class={cn("p-1.5 transition-colors", queueOpen ? "text-accent-500" : "text-text-disabled hover:text-text-muted")}
+        >
+          <ListMusic class="h-3.5 w-3.5" />
+        </button>
+        {#if queueOpen}
+          <PlaybackQueueFlyout onClose={() => (queueOpen = false)} />
+        {/if}
+      </div>
+    </div>
   </div>
 </div>

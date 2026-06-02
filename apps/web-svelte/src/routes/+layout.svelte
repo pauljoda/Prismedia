@@ -9,6 +9,7 @@
   import CanvasHeader from "$lib/components/CanvasHeader.svelte";
   import MobileNav from "$lib/components/MobileNav.svelte";
   import CommandPalette from "$lib/components/CommandPalette.svelte";
+  import AudioVidStackPlayer from "$lib/components/AudioVidStackPlayer.svelte";
 
   import { type NsfwMode, parseNsfwModeCookie } from "$lib/nsfw/cookie";
   import { provideNsfw } from "$lib/nsfw/store.svelte";
@@ -18,6 +19,7 @@
   import { MAIN_SCROLL_TOP_EVENT } from "$lib/stores/main-scroll";
   import { providePageSnapshots, type AppPageSnapshot } from "$lib/stores/page-snapshots.svelte";
   import { provideSearch } from "$lib/stores/search.svelte";
+  import { provideAudioPlayback } from "$lib/stores/audio-playback.svelte";
 
   function readNsfwCookie(): NsfwMode | null {
     if (!browser) return null;
@@ -50,6 +52,7 @@
   const chrome = provideAppChrome(() => layoutData.initialCollapsed);
   provideNavCustomization();
   provideSearch();
+  const playback = provideAudioPlayback();
   let mainScroller = $state<HTMLElement | null>(null);
 
   function scrollMainToTop() {
@@ -135,4 +138,7 @@
 
   <MobileNav />
   <CommandPalette />
+  {#if playback.currentTrack}
+    <AudioVidStackPlayer />
+  {/if}
 </div>

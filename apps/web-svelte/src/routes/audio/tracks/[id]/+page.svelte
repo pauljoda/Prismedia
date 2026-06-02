@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { page } from "$app/state";
-  import { Music } from "@lucide/svelte";
+  import { Music, Play } from "@lucide/svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import { fetchAudioTrack, type AudioTrackDetail } from "$lib/api/media";
   import { fetchEntityThumbnails } from "$lib/api/entities";
@@ -17,10 +17,10 @@
     updateOptimisticEntityRating,
   } from "$lib/entities/entity-detail-state";
   import EntityDetail, {
+    type EntityDetailActionButton,
     type EntityMetadataUpdateRequest,
   } from "$lib/components/entities/EntityDetail.svelte";
   import EntityCastAndCrewSection from "$lib/components/entities/EntityCastAndCrewSection.svelte";
-  import AudioVidStackPlayer from "$lib/components/AudioVidStackPlayer.svelte";
   import { entityCardToDetailCard, type EntityDetailCardFull, type EntityDetailTag } from "$lib/entities/entity-detail";
   import { resolveEntityHref } from "$lib/entities/entity-routes";
   import { hydrateStandardRelationshipCards } from "$lib/entities/entity-relationship-thumbnails";
@@ -29,11 +29,13 @@
   import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import { useAppChrome } from "$lib/stores/app-chrome.svelte";
+  import { useAudioPlayback } from "$lib/stores/audio-playback.svelte";
 
   type LoadState = "loading" | "ready" | "error";
 
   const nsfw = useNsfw();
   const appChrome = useAppChrome();
+  const playback = useAudioPlayback()!;
 
   let loadState: LoadState = $state("loading");
   let track = $state<AudioTrackDetail | null>(null);
@@ -61,6 +63,32 @@
   });
 
   const trackItem = $derived(track ? audioTrackDetailToListItem(track) : null);
+
+  const heroActions = $derived.by((): EntityDetailActionButton[] => {
+    if (!trackItem) return [];
+    const isCurrent = playback.isCurrent(trackItem.id);
+    return [{
+      id: "play",
+      label: isCurrent && playback.playing ? "Pause" : "Play",
+      icon: Play,
+      iconFill: "currentColor",
+      variant: "primary",
+      onClick: playTrack,
+    }];
+  });
+
+  function playTrack() {
+    if (!trackItem) return;
+    if (playback.isCurrent(trackItem.id)) {
+      playback.toggle();
+      return;
+    }
+    playback.play([trackItem], trackItem.id, {
+      albumTitle: trackItem.embeddedAlbum,
+      artistName: trackItem.embeddedArtist,
+      coverUrl: parentCoverUrl ?? null,
+    });
+  }
 
   onMount(() => {
     void loadTrack();
@@ -158,6 +186,7 @@
       {ratingBusy}
       peopleLabel="Performers"
       posterSize="large"
+      actionButtons={heroActions}
     >
       {#snippet heroMeta()}
         {#if studio}
@@ -182,13 +211,6 @@
         {/if}
       {/snippet}
     </EntityDetail>
-
-    <AudioVidStackPlayer
-      tracks={[trackItem]}
-      activeTrackId={track.id}
-      onTrackChange={() => {}}
-      libraryCoverUrl={parentCoverUrl}
-    />
   {/if}
 </div>
 

@@ -12,15 +12,15 @@ describe("audio library page", () => {
 
     expect(pageSource).toContain("Play All");
     expect(pageSource).toContain("Shuffle");
-    expect(pageSource).toContain("{shufflePlayKey}");
     expect(pageSource.indexOf("Sub-Libraries")).toBeLessThan(pageSource.lastIndexOf("<AudioTrackList"));
   });
 
-  it("adds bottom clearance when the floating audio player is present", () => {
+  it("drives the shared global playback store instead of mounting a per-page player", () => {
     const pageSource = source();
 
-    expect(pageSource).toContain("detail-page has-audio-player");
-    expect(pageSource).toContain(".detail-page.has-audio-player");
-    expect(pageSource).toContain("padding-bottom");
+    // The player is mounted once at the root layout; the page hands its tracks to the store.
+    expect(pageSource).not.toContain("<AudioVidStackPlayer");
+    expect(pageSource).toContain("useAudioPlayback");
+    expect(pageSource).toContain("playback.play(");
   });
 });
