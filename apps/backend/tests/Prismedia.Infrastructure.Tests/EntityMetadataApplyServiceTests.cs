@@ -282,6 +282,48 @@ public sealed class EntityMetadataApplyServiceTests {
     }
 
     [Fact]
+    public async Task ApplyCreditsToMusicArtistPersistsBandMembersOnTheArtist() {
+        // A music artist is its own relationship owner: identifying a band (e.g. Imagine Dragons)
+        // saves the members as Cast links on the artist so the artist detail surfaces them.
+        await using var db = CreateContext();
+        var artistId = Guid.Parse("a5715a5e-1d29-4c3f-9b1f-1a2b3c4d5e6f");
+        SeedEntity(db, artistId, "music-artist", "Imagine Dragons");
+        await db.SaveChangesAsync();
+
+        var proposal = new EntityMetadataProposal(
+            ProposalId: "musicbrainz:artist:1",
+            Provider: "musicbrainz",
+            TargetKind: "music-artist",
+            Confidence: 1,
+            MatchReason: "external-id",
+            Patch: EmptyPatch() with {
+                Credits =
+                [
+                    new CreditPatch("Dan Reynolds", "Vocals", null, 0),
+                    new CreditPatch("Wayne Sermon", "Guitar", null, 1)
+                ]
+            },
+            Images: [],
+            Children: [],
+            Candidates: []);
+
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+        await service.ApplyAsync(artistId, proposal, ["credits"], selectedImages: null, CancellationToken.None);
+
+        var memberLinks = await db.EntityRelationshipLinks
+            .Where(row => row.EntityId == artistId && row.RelationshipCode == RelationshipKind.Cast.ToCode())
+            .OrderBy(row => row.SortOrder)
+            .ToArrayAsync();
+        Assert.Equal(2, memberLinks.Length);
+        Assert.All(memberLinks, link => Assert.Equal("person", link.TargetKindCode));
+        Assert.Equal(["Dan Reynolds", "Wayne Sermon"], await db.Entities
+            .Where(row => row.KindCode == "person")
+            .OrderBy(row => row.Title)
+            .Select(row => row.Title)
+            .ToArrayAsync());
+    }
+
+    [Fact]
     public async Task ApplySeriesCascadePersistsEpisodeMetadataAndCredits() {
         await using var db = CreateContext();
         var seriesId = Guid.Parse("22222222-2222-2222-2222-222222222222");

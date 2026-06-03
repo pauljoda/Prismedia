@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { page } from "$app/state";
-  import { Music, Play } from "@lucide/svelte";
+  import { Play } from "@lucide/svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import { fetchAudioTrack, type AudioTrackDetail } from "$lib/api/media";
   import { fetchEntityThumbnails } from "$lib/api/entities";
@@ -203,11 +203,6 @@
           <div class="credits-section">
             <EntityCastAndCrewSection {studioCards} {creditCards} castLabel="Performers" />
           </div>
-        {:else}
-          <div class="empty-inline">
-            <Music class="h-4 w-4" />
-            <span>No credited performers yet.</span>
-          </div>
         {/if}
       {/snippet}
     </EntityDetail>
@@ -218,8 +213,7 @@
   .detail-page { display: grid; gap: 1.25rem; padding: 0; max-width: none; margin: 0; }
   .error-notice { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem; border: 1px solid color-mix(in srgb, #ef4444 50%, var(--color-border, #1c2235)); background: var(--color-surface-2, #101420); color: var(--color-text-muted, #8a93a6); font-size: 0.85rem; }
   .error-notice button { border: 1px solid var(--color-border, #1c2235); background: var(--color-surface-3, #151a28); color: var(--color-text-muted, #8a93a6); padding: 0.4rem 0.8rem; font-size: 0.78rem; cursor: pointer; }
-  .credits-section { display: grid; gap: 0.7rem; margin-top: 1rem; }
-  .empty-inline { display: inline-flex; align-items: center; gap: 0.45rem; color: var(--color-text-muted, #8a93a6); font-size: 0.8rem; }
+  .credits-section { display: grid; gap: 0.7rem; padding: 1rem 1.5rem 1.5rem; }
   :global(.meta-item) { white-space: nowrap; font-size: 0.82rem; }
   :global(.meta-item.is-studio) { color: var(--color-text-accent, #c49a5a); text-decoration: none; transition: opacity 0.15s; }
   :global(.meta-item.is-studio:hover) { opacity: 0.8; }

@@ -17,6 +17,7 @@ public sealed partial class EntityMetadataApplyService {
         EntityKindRegistry.Gallery.Code,
         EntityKindRegistry.Image.Code,
         EntityKindRegistry.Movie.Code,
+        EntityKindRegistry.MusicArtist.Code,
         EntityKindRegistry.Video.Code,
         EntityKindRegistry.VideoSeries.Code
     };
