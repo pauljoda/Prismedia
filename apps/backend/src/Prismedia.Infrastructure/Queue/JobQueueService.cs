@@ -42,11 +42,32 @@ public sealed class JobQueueService : IJobQueueService {
             .ToList();
     }
 
+    /// <summary>
+    /// Library scan job types. Each scan covers every enabled root of its kind, so only one of each
+    /// may be queued or running at a time — see the singleton guard in <see cref="EnqueueAsync(EnqueueJobRequest, CancellationToken)"/>.
+    /// </summary>
+    private static readonly JobType[] ScanJobTypes =
+        [JobType.ScanLibrary, JobType.ScanGallery, JobType.ScanBook, JobType.ScanAudio];
+
     public async Task<JobRunSnapshot> EnqueueAsync(JobType type, CancellationToken cancellationToken) {
         return await EnqueueAsync(new EnqueueJobRequest(type), cancellationToken);
     }
 
     public async Task<JobRunSnapshot> EnqueueAsync(EnqueueJobRequest request, CancellationToken cancellationToken) {
+        // Scans are per-kind singletons: a scan job already walks every enabled root of its kind
+        // (skipping unchanged ones), so a second scan of the same kind would only duplicate work. When
+        // one is already queued or running, return the in-flight job instead of stacking another.
+        if (ScanJobTypes.Contains(request.Type)) {
+            var existing = await _db.JobRuns.AsNoTracking()
+                .Where(job => job.Type == request.Type &&
+                              (job.Status == JobRunStatus.Queued || job.Status == JobRunStatus.Running))
+                .OrderBy(job => job.CreatedAt)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (existing is not null) {
+                return ToSnapshot(existing);
+            }
+        }
+
         var now = DateTimeOffset.UtcNow;
         var row = new JobRunRow {
             Id = Guid.NewGuid(),

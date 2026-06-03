@@ -40,8 +40,37 @@ public sealed class JobSchedulerTests {
 
         var request = Assert.Single(queue.Enqueued);
         Assert.Equal(JobType.ScanLibrary, request.Type);
-        Assert.Equal(rootId.ToString(), request.TargetEntityId);
+        // Scans are aggregate per-kind singletons that cover every enabled root, so there is no
+        // per-root target.
+        Assert.Null(request.TargetEntityId);
         Assert.Equal(triggeredAt, settings.Roots.Single().LastScannedAt);
+    }
+
+    [Fact]
+    public async Task ScheduleRecurringScansEnqueuesOneScanPerEnabledKindAcrossAllDueRoots() {
+        var videoRoot = CreateRoot(Guid.NewGuid(), lastScannedAt: null);
+        var imageBookRoot = CreateRoot(Guid.NewGuid(), lastScannedAt: null) with {
+            ScanVideos = false,
+            ScanImages = true,
+            ScanBooks = true,
+        };
+        var settings = new SchedulerSettingsPersistence([videoRoot, imageBookRoot]);
+        var queue = new SchedulerJobQueue();
+        await using var provider = CreateProvider(settings, queue);
+        var scheduler = CreateScheduler(provider, new DateTimeOffset(2026, 5, 30, 11, 0, 15, TimeSpan.Zero));
+
+        await scheduler.ScheduleRecurringScansAsync(CancellationToken.None);
+
+        // One scan per enabled kind across both roots: video from the first, image + book from the
+        // second — and nothing per-root.
+        var types = queue.Enqueued.Select(request => request.Type).ToHashSet();
+        Assert.Equal(3, queue.Enqueued.Count);
+        Assert.Contains(JobType.ScanLibrary, types);
+        Assert.Contains(JobType.ScanGallery, types);
+        Assert.Contains(JobType.ScanBook, types);
+        Assert.DoesNotContain(JobType.ScanAudio, types);
+        Assert.All(queue.Enqueued, request => Assert.Null(request.TargetEntityId));
+        Assert.All(settings.Roots, root => Assert.NotNull(root.LastScannedAt));
     }
 
     [Fact]

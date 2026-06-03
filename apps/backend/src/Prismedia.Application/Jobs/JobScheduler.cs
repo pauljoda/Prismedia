@@ -53,6 +53,15 @@ public sealed class JobScheduler(
             return;
         }
 
+        // Collect the kinds that have at least one enabled root due for a scan. Each scan job is a
+        // per-kind singleton that covers every enabled root of that kind, so a single aggregate scan
+        // per due kind replaces the previous per-root fan-out.
+        var scanVideos = false;
+        var scanImages = false;
+        var scanAudio = false;
+        var scanBooks = false;
+        var dueRootIds = new List<Guid>();
+
         foreach (var root in roots) {
             if (!root.Enabled) {
                 continue;
@@ -70,21 +79,26 @@ public sealed class JobScheduler(
                 continue;
             }
 
-            var queued = await LibraryScanJobs.QueueRootScansAsync(
-                queue,
-                root.Id,
-                root.Label,
-                root.ScanVideos,
-                root.ScanImages,
-                root.ScanAudio,
-                root.ScanBooks,
-                cancellationToken);
+            scanVideos |= root.ScanVideos;
+            scanImages |= root.ScanImages;
+            scanAudio |= root.ScanAudio;
+            scanBooks |= root.ScanBooks;
+            dueRootIds.Add(root.Id);
+        }
 
-            await settings.MarkLibraryRootScanTriggeredAsync(root.Id, now, cancellationToken);
+        if (dueRootIds.Count == 0) {
+            return;
+        }
 
-            if (queued > 0) {
-                logger.LogInformation("Scheduled {Count} scan job(s) for root '{Label}'.", queued, root.Label);
-            }
+        var queued = await LibraryScanJobs.QueueScansForKindsAsync(
+            queue, scanVideos, scanImages, scanAudio, scanBooks, cancellationToken);
+
+        foreach (var rootId in dueRootIds) {
+            await settings.MarkLibraryRootScanTriggeredAsync(rootId, now, cancellationToken);
+        }
+
+        if (queued > 0) {
+            logger.LogInformation("Scheduled {Count} aggregate scan job(s) across {Roots} due root(s).", queued, dueRootIds.Count);
         }
     }
 

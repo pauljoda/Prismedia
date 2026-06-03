@@ -89,17 +89,15 @@ public sealed partial class SettingsService {
         var created = await _persistence.AddLibraryRootAsync(state, cancellationToken);
 
         if (created.Enabled && _jobs is not null) {
-            var queued = await LibraryScanJobs.QueueRootScansAsync(
+            var queued = await LibraryScanJobs.QueueScansForKindsAsync(
                 _jobs,
-                created.Id,
-                created.Label,
                 created.ScanVideos,
                 created.ScanImages,
                 created.ScanAudio,
                 created.ScanBooks,
                 cancellationToken);
             _logger?.LogInformation(
-                "Queued {Count} scan job(s) for newly added library root '{Label}'.",
+                "Queued {Count} scan job(s) after adding library root '{Label}'.",
                 queued, created.Label);
         }
 

@@ -25,6 +25,31 @@ public sealed class JobQueueServiceTests {
     }
 
     [Fact]
+    public async Task ScanJobsArePerKindSingletonsThatDropDuplicateEnqueues() {
+        await using var db = CreateContext();
+        var service = new JobQueueService(db);
+
+        var first = await service.EnqueueAsync(JobType.ScanLibrary, CancellationToken.None);
+        // A second scan of the same kind returns the in-flight job instead of stacking another.
+        var duplicate = await service.EnqueueAsync(JobType.ScanLibrary, CancellationToken.None);
+        // A scan of a different kind is independent and is enqueued normally.
+        var gallery = await service.EnqueueAsync(JobType.ScanGallery, CancellationToken.None);
+
+        Assert.Equal(first.Id, duplicate.Id);
+        Assert.NotEqual(first.Id, gallery.Id);
+        Assert.Equal(2, await db.JobRuns.CountAsync());
+
+        // Once the first scan reaches a terminal state, a fresh scan of that kind enqueues again.
+        var firstRow = await db.JobRuns.FirstAsync(job => job.Id == first.Id);
+        firstRow.Status = JobRunStatus.Completed;
+        await db.SaveChangesAsync();
+
+        var rescan = await service.EnqueueAsync(JobType.ScanLibrary, CancellationToken.None);
+        Assert.NotEqual(first.Id, rescan.Id);
+        Assert.Equal(3, await db.JobRuns.CountAsync());
+    }
+
+    [Fact]
     public async Task ListKeepsActiveAndFailedRunsVisibleWhenBacklogExceedsRecentLimit() {
         await using var db = CreateContext();
         var service = new JobQueueService(db);

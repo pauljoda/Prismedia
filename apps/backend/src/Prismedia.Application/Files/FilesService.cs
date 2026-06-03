@@ -325,20 +325,19 @@ public sealed class FilesService(
             .Select(group => group.First())
             .Where(root => root.Enabled)
             .ToArray();
-        var queued = 0;
-        foreach (var root in uniqueRoots) {
-            queued += await LibraryScanJobs.QueueRootScansAsync(
-                jobs,
-                root.Id,
-                root.Label,
-                root.ScanVideos,
-                root.ScanImages,
-                root.ScanAudio,
-                root.ScanBooks,
-                cancellationToken);
+        if (uniqueRoots.Length == 0) {
+            return 0;
         }
 
-        return queued;
+        // Scans are per-kind singletons covering every enabled root, so a file change in any affected
+        // root enqueues at most one scan per kind across all of them.
+        return await LibraryScanJobs.QueueScansForKindsAsync(
+            jobs,
+            uniqueRoots.Any(root => root.ScanVideos),
+            uniqueRoots.Any(root => root.ScanImages),
+            uniqueRoots.Any(root => root.ScanAudio),
+            uniqueRoots.Any(root => root.ScanBooks),
+            cancellationToken);
     }
 
     private static string CleanSegment(string name) {
