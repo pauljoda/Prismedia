@@ -48,8 +48,10 @@ public static class HlsTranscoderProfiles {
 /// <param name="TranscoderProfile">Encoder profile used for new virtual HLS segments.</param>
 /// <param name="FfmpegPath">Executable name or absolute path for ffmpeg.</param>
 /// <param name="VaapiDevice">Linux render device used by the VA-API encoder profile.</param>
+/// <param name="FfprobePath">Executable name or absolute path for ffprobe.</param>
 public sealed record HlsAssetServiceOptions(
     string CacheRoot,
     HlsTranscoderProfile TranscoderProfile = HlsTranscoderProfile.Auto,
     string FfmpegPath = "ffmpeg",
-    string VaapiDevice = "/dev/dri/renderD128");
+    string VaapiDevice = "/dev/dri/renderD128",
+    string FfprobePath = "ffprobe");

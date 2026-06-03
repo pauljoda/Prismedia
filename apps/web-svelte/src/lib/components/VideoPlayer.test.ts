@@ -679,4 +679,76 @@ describe("VideoPlayer", () => {
       expect.anything(),
     );
   });
+
+  // Phase 1 parity: when the server hands the browser a stream it cannot actually decode
+  // (e.g. an optimistic HEVC/DOVI remux), a fatal media error must escalate to a re-negotiated
+  // transcode rather than dead-ending — mirroring Jellyfin's re-request-with-DirectPlay-off recovery.
+  async function renderWithFatalErrorSource(
+    onForceTranscode: ((atSeconds: number) => Promise<string | null>) | undefined,
+  ) {
+    render(VideoPlayer, {
+      props: {
+        src: "/api/videos/video-1/hls/master.m3u8",
+        directSrc: "",
+        defaultPlaybackMode: "hls",
+        onForceTranscode,
+      },
+    });
+    const player = await waitFor(() => {
+      const el = document.querySelector("media-player");
+      expect(el?.getAttribute("src")).toBe("/api/videos/video-1/hls/master.m3u8");
+      return el as Element;
+    });
+    return player;
+  }
+
+  it("recovers from a fatal decode error by negotiating a forced transcode and swapping in place", async () => {
+    const onForceTranscode = vi
+      .fn<(atSeconds: number) => Promise<string | null>>()
+      .mockResolvedValue("/api/videos/video-1/hls/forced.m3u8");
+    const player = await renderWithFatalErrorSource(onForceTranscode);
+
+    await fireEvent(player, new CustomEvent("error", { detail: new Error("PIPELINE_ERROR_DECODE") }));
+
+    await waitFor(() => expect(onForceTranscode).toHaveBeenCalledTimes(1));
+    await waitFor(() => {
+      expect(document.querySelector("media-player")?.getAttribute("src")).toBe(
+        "/api/videos/video-1/hls/forced.m3u8",
+      );
+    });
+  });
+
+  it("negotiates a forced transcode at most once per source", async () => {
+    const onForceTranscode = vi
+      .fn<(atSeconds: number) => Promise<string | null>>()
+      .mockResolvedValue("/api/videos/video-1/hls/forced.m3u8");
+    const player = await renderWithFatalErrorSource(onForceTranscode);
+
+    await fireEvent(player, new CustomEvent("error", { detail: new Error("decode") }));
+    await waitFor(() => expect(onForceTranscode).toHaveBeenCalledTimes(1));
+    await waitFor(() => {
+      expect(document.querySelector("media-player")?.getAttribute("src")).toBe(
+        "/api/videos/video-1/hls/forced.m3u8",
+      );
+    });
+
+    const swapped = document.querySelector("media-player") as Element;
+    await fireEvent(swapped, new CustomEvent("error", { detail: new Error("decode again") }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(onForceTranscode).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows a terminal notice when no compatible stream is available", async () => {
+    const onForceTranscode = vi
+      .fn<(atSeconds: number) => Promise<string | null>>()
+      .mockResolvedValue(null);
+    const player = await renderWithFatalErrorSource(onForceTranscode);
+
+    await fireEvent(player, new CustomEvent("error", { detail: new Error("decode") }));
+
+    await waitFor(() => expect(onForceTranscode).toHaveBeenCalledTimes(1));
+    expect(document.querySelector("media-player")?.getAttribute("src")).toBe(
+      "/api/videos/video-1/hls/master.m3u8",
+    );
+  });
 });

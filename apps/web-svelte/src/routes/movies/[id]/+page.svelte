@@ -15,12 +15,15 @@
   import { fetchMovie, fetchVideo, type MovieDetail, type VideoDetail } from "$lib/api/media";
   import { fetchSettingsValues, type LibrarySettings } from "$lib/api/settings";
   import {
-    fetchJellyfinPlaybackInfo,
     markJellyfinUserPlayedItem,
     postJellyfinSessionProgress,
     updateEntityPlayback,
     type JellyfinPlaybackInfoResponse,
   } from "$lib/api/playback";
+  import {
+    loadPlaybackInfo as loadPlaybackInfoRequest,
+    negotiateForceTranscodeSrc,
+  } from "$lib/player/playback-negotiation";
   import { durationToSeconds } from "$lib/utils/format";
   import {
     updateEntityRating,
@@ -447,17 +450,16 @@
     playSessionId?: string | null,
     audioStreamIndex?: number | null,
   ) {
-    try {
-      return await fetchJellyfinPlaybackInfo(videoId, {
-        EnableDirectPlay: true,
-        EnableDirectStream: true,
-        EnableTranscoding: true,
-        PlaySessionId: playSessionId ?? undefined,
-        AudioStreamIndex: audioStreamIndex ?? undefined,
-      });
-    } catch {
-      return null;
-    }
+    return await loadPlaybackInfoRequest(videoId, {
+      playSessionId,
+      audioStreamIndex,
+    });
+  }
+
+  // Player callback: re-negotiate a guaranteed-playable transcode after a fatal decode error.
+  async function forceTranscodeFallback(): Promise<string | null> {
+    if (!video) return null;
+    return negotiateForceTranscodeSrc(video, selectedAudioStreamIndex, playbackInfo?.PlaySessionId);
   }
 
   // ── Player event handlers ──────────────────────────────────────────
@@ -666,6 +668,7 @@
             isTranscriptSidecarOpen={userWantsDock && hasSubtitles}
             onTranscriptSidecarToggle={toggleTranscriptDock}
             {defaultPlaybackMode}
+            onForceTranscode={forceTranscodeFallback}
             {showCastControls}
             onEnded={handleVideoEnded}
           />

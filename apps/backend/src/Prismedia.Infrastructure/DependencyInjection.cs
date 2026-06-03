@@ -234,7 +234,8 @@ public static class DependencyInjection {
             cacheDir,
             HlsTranscoderProfiles.ParseOrDefault(configuration["PRISMEDIA_HLS_TRANSCODER"] ?? configuration["Prismedia:Hls:Transcoder"]),
             mediaToolOptions.FfmpegPath,
-            configuration["PRISMEDIA_VAAPI_DEVICE"] ?? configuration["Prismedia:Hls:VaapiDevice"] ?? "/dev/dri/renderD128"));
+            configuration["PRISMEDIA_VAAPI_DEVICE"] ?? configuration["Prismedia:Hls:VaapiDevice"] ?? "/dev/dri/renderD128",
+            mediaToolOptions.FfprobePath));
         services.AddSingleton<ITranscodeSessionService, TranscodeSessionService>();
         services.AddScoped<IHlsAssetService, HlsAssetService>();
         services.AddScoped<IPlaybackInfoService, PlaybackInfoService>();

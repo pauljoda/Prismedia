@@ -130,6 +130,15 @@
     isTranscriptSidecarOpen?: boolean;
     onTranscriptSidecarToggle?: () => void;
     defaultPlaybackMode?: "direct" | "hls";
+    /**
+     * Last-resort recovery for a fatal decode/MSE error. Invoked after direct↔HLS
+     * fallback is exhausted (e.g. the server remuxed a stream the browser cannot
+     * actually decode). Should re-negotiate PlaybackInfo with direct play and
+     * stream-copy disabled and return a guaranteed-playable transcode URL, or null
+     * if no compatible stream is available. Mirrors Jellyfin's re-request-with-
+     * DirectPlay-off recovery so anything that fails to decode escalates to H.264.
+     */
+    onForceTranscode?: (atSeconds: number) => Promise<string | null>;
     showCastControls?: boolean;
     chrome?: "full" | "minimal";
     enableKeyboardShortcuts?: boolean;
@@ -167,6 +176,7 @@
     isTranscriptSidecarOpen = false,
     onTranscriptSidecarToggle,
     defaultPlaybackMode,
+    onForceTranscode,
     showCastControls = true,
     chrome = "full",
     enableKeyboardShortcuts = true,
@@ -202,6 +212,10 @@
   let markerChaptersTrack: TextTrack | null = null;
   let hlsReadySrc: string | undefined = $state();
   let failedDirectSrc = $state<string | null>(null);
+  // Last-resort transcode URL obtained via onForceTranscode after direct↔HLS fallback fails.
+  // When set it overrides the HLS source; reset whenever a genuinely new source loads.
+  let forcedTranscodeSrc = $state<string | null>(null);
+  let forceTranscodeRequested = false;
 
   let playbackMode = $state<PlaybackMode>("hls");
   let qualityMode = $state<QualityMode>("auto");
@@ -258,7 +272,9 @@
   const effectiveMode = $derived<PlaybackMode>(
     playbackMode === "direct" && directAvailable ? "direct" : "hls",
   );
-  const requestedPlayerSrc = $derived(effectiveMode === "direct" ? directSrc : src);
+  // The active HLS URL: a forced-transcode URL (recovery) takes precedence over the negotiated src.
+  const effectiveHlsSrc = $derived(forcedTranscodeSrc ?? src);
+  const requestedPlayerSrc = $derived(effectiveMode === "direct" ? directSrc : effectiveHlsSrc);
   const playerSrc = $derived(requestedPlayerSrc === hlsReadySrc ? requestedPlayerSrc : undefined);
   const hasFilmStrip = $derived(Boolean(trickplayPlaylist && duration > 0));
   const markerChapterCues = $derived(buildTimelineChapterCues(markers, duration));
@@ -679,6 +695,7 @@
         pendingAutoPlay = true;
         return;
       }
+      if (tryForceTranscodeFallback()) return;
       console.error("ERROR MediaPlayer [vidstack] play request failed", error);
     }
   }
@@ -686,7 +703,7 @@
   function applyPlaybackFallback(): boolean {
     const nextMode = fallbackPlaybackModeForError({
       effectiveMode,
-      hlsSrc: src,
+      hlsSrc: effectiveHlsSrc,
       directSrc,
       directPlayable: directAvailable,
       directFailed: failedDirectSrc === directSrc,
@@ -704,6 +721,41 @@
     playbackMode = nextMode;
     qualityMode = nextMode === "direct" ? "direct" : "auto";
     buffering = true;
+    return true;
+  }
+
+  /**
+   * Final recovery tier: when direct↔HLS fallback can no longer help (e.g. the server
+   * remuxed a stream this browser can't actually decode, so both the direct file and the
+   * copy fail), ask the host to re-negotiate a guaranteed-playable transcode and swap to it
+   * in place, preserving position. Returns true when an attempt was kicked off so the caller
+   * suppresses the terminal error notice. Runs at most once per source.
+   */
+  function tryForceTranscodeFallback(): boolean {
+    if (!onForceTranscode || forceTranscodeRequested) return false;
+    forceTranscodeRequested = true;
+    pendingSeekTime = currentTime > 0.25 ? currentTime : null;
+    pendingAutoPlay = playing || autoPlay || pendingAutoPlay;
+    buffering = true;
+    playerNotice = "Switching to a compatible stream…";
+    void (async () => {
+      let url: string | null = null;
+      try {
+        url = await onForceTranscode(pendingSeekTime ?? 0);
+      } catch {
+        url = null;
+      }
+      if (url && url !== effectiveHlsSrc) {
+        // Block direct play and pin to the forced transcode; the source effect reloads it.
+        failedDirectSrc = directSrc ?? null;
+        forcedTranscodeSrc = url;
+        playbackMode = "hls";
+        qualityMode = "auto";
+      } else {
+        playerNotice = "Playback error: no compatible stream is available.";
+        buffering = false;
+      }
+    })();
     return true;
   }
 
@@ -986,6 +1038,8 @@
     if (nextKey === lastSourceKey) return;
     lastSourceKey = nextKey;
     failedDirectSrc = null;
+    forcedTranscodeSrc = null;
+    forceTranscodeRequested = false;
     playbackMode = initialPlaybackMode();
     qualityMode = playbackMode === "direct" ? "direct" : "auto";
     currentTime = 0;
@@ -1432,6 +1486,7 @@
     const detail = (event as MediaErrorEvent).detail;
     const message = detail instanceof Error ? detail.message : "Playback failed.";
     if (applyPlaybackFallback()) return;
+    if (tryForceTranscodeFallback()) return;
     playerNotice = `${effectiveMode === "direct" ? "Direct" : "Adaptive"} playback error: ${message}`;
     buffering = false;
   }

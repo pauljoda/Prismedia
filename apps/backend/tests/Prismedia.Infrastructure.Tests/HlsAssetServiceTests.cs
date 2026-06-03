@@ -52,6 +52,44 @@ public sealed class HlsAssetServiceTests : IDisposable {
     }
 
     [Fact]
+    public void RemuxSegmentDurationsMatchFfmpegStreamCopyBoundaries() {
+        // Models a 1080p source with a 2.002s GOP (keyframe every 2.002s) over ~1951.296s, which is
+        // exactly what ffmpeg's stream-copy HLS muxer cuts into 325 segments: 324 of 6.006s (three
+        // GOPs each, the first keyframe at/after every 6s mark) plus a short final segment.
+        const double gop = 2.002;
+        const double totalDuration = 1951.296;
+        var keyframes = new List<double>();
+        for (var t = 0.0; t < totalDuration; t += gop) {
+            keyframes.Add(Math.Round(t, 6));
+        }
+
+        var durations = HlsAssetService.BuildRemuxSegmentDurations(keyframes, totalDuration);
+
+        Assert.Equal(325, durations.Count);
+        Assert.All(durations.Take(durations.Count - 1), duration => Assert.Equal(6.006, duration, 3));
+        Assert.Equal(totalDuration, durations.Sum(), 3);
+        // The final segment is shorter and never starts a new boundary for the trailing sub-6s keyframes.
+        Assert.True(durations[^1] < 6.006);
+    }
+
+    [Fact]
+    public void RemuxVodPlaylistIsCompleteAndSeekable() {
+        var durations = new List<double> { 6.006, 6.006, 4.2 };
+
+        var playlist = HlsAssetService.BuildRemuxVodPlaylist(durations);
+
+        Assert.StartsWith("#EXTM3U", playlist);
+        Assert.Contains("#EXT-X-PLAYLIST-TYPE:VOD", playlist);
+        Assert.Contains("#EXT-X-MAP:URI=\"init.mp4\"", playlist);
+        Assert.Contains("#EXT-X-TARGETDURATION:6", playlist);
+        Assert.Contains("#EXTINF:6.006000,\nseg_00000.m4s", playlist);
+        Assert.Contains("#EXTINF:4.200000,\nseg_00002.m4s", playlist);
+        Assert.EndsWith("#EXT-X-ENDLIST\n", playlist);
+        // A growing EVENT playlist (the old behavior) would limit the seekable range; assert we never emit it.
+        Assert.DoesNotContain("EVENT", playlist);
+    }
+
+    [Fact]
     public async Task VirtualManifestIsVodAndCoversFullDuration() {
         var videoId = Guid.Parse("33333333-3333-3333-3333-333333333333");
         var sourcePath = Path.Combine(_cacheRoot, "source.mkv");
