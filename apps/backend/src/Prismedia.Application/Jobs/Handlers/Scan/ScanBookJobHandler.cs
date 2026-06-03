@@ -277,7 +277,7 @@ public sealed class ScanBookJobHandler(
             !await downstreamNeeds.HasEntityFileAsync(bookId, EntityFileRole.Thumbnail, cancellationToken)) {
             await context.EnqueueIfNeededAsync(new EnqueueJobRequest(
                 JobType.GenerateBookCoverThumbnail, TargetEntityKind: "book",
-                TargetEntityId: bookId.ToString(), TargetLabel: item.Title), cancellationToken);
+                TargetEntityId: bookId.ToString(), TargetLabel: item.Title, Priority: JobPriorities.Thumbnail), cancellationToken);
         }
 
         var autoIdentify = AutoIdentifyScanEnqueue.RequestFor(settings, "book", bookId.ToString(), item.Title);
@@ -331,7 +331,7 @@ public sealed class ScanBookJobHandler(
             if (settings.AutoGeneratePreview && !await downstreamNeeds.HasEntityFileAsync(pageId, EntityFileRole.Thumbnail, cancellationToken)) {
                 await context.EnqueueIfNeededAsync(new EnqueueJobRequest(
                     JobType.GenerateBookPageThumbnail, TargetEntityKind: "book-page",
-                    TargetEntityId: pageId.ToString(), TargetLabel: pageTitle), cancellationToken);
+                    TargetEntityId: pageId.ToString(), TargetLabel: pageTitle, Priority: JobPriorities.Thumbnail), cancellationToken);
             }
         }
     }

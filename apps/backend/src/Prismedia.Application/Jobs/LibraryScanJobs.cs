@@ -32,13 +32,8 @@ public static class LibraryScanJobs {
         if (scanBooks) yield return JobType.ScanBook;
     }
 
-    /// <summary>
-    /// Priority for scan jobs. Scan creates the lightweight entities the UI shows, so it must
-    /// out-rank the downstream asset jobs it spawns (probe 40, fingerprint 30, …) — otherwise a new
-    /// scan stalls behind a large trickplay/preview backlog and newly added media takes a long time
-    /// to appear in the library.
-    /// </summary>
-    public const int ScanPriority = 60;
+    /// <summary>Priority for scan jobs — see <see cref="JobPriorities.Scan"/>.</summary>
+    public const int ScanPriority = JobPriorities.Scan;
 
     /// <summary>
     /// Enqueues one scan job per enabled media kind. Each scan job covers every enabled library root

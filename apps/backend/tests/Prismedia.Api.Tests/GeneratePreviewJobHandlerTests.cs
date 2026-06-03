@@ -125,7 +125,7 @@ public sealed class GeneratePreviewJobHandlerTests : IDisposable {
         var probe = Assert.Single(queue.Enqueued);
         Assert.Equal(JobType.ProbeVideo, probe.Type);
         Assert.Equal(entityId.ToString(), probe.TargetEntityId);
-        Assert.Equal(30, probe.Priority);
+        Assert.Equal(JobPriorities.Probe, probe.Priority);
     }
 
     public void Dispose() {

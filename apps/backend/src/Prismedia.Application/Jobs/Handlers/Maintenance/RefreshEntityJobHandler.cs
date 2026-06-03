@@ -49,31 +49,31 @@ public sealed class RefreshEntityJobHandler(
             switch (entity.KindCode) {
                 case "video":
                     if (settings.AutoGenerateMetadata && entityNeeds.NeedsProbe)
-                        jobRequests.Add(new EnqueueJobRequest(JobType.ProbeVideo, TargetEntityKind: entity.KindCode, TargetEntityId: idStr, TargetLabel: entity.Title, Priority: 30));
+                        jobRequests.Add(new EnqueueJobRequest(JobType.ProbeVideo, TargetEntityKind: entity.KindCode, TargetEntityId: idStr, TargetLabel: entity.Title, Priority: JobPriorities.Probe));
                     if (FingerprintGating.ShouldFingerprint(settings, entityNeeds))
-                        jobRequests.Add(new EnqueueJobRequest(JobType.FingerprintVideo, TargetEntityKind: entity.KindCode, TargetEntityId: idStr, TargetLabel: entity.Title, Priority: 20));
+                        jobRequests.Add(new EnqueueJobRequest(JobType.FingerprintVideo, TargetEntityKind: entity.KindCode, TargetEntityId: idStr, TargetLabel: entity.Title, Priority: JobPriorities.Fingerprint));
                     if (entityNeeds.NeedsSubtitleExtraction)
-                        jobRequests.Add(new EnqueueJobRequest(JobType.ExtractSubtitles, TargetEntityKind: entity.KindCode, TargetEntityId: idStr, TargetLabel: entity.Title, Priority: 20));
+                        jobRequests.Add(new EnqueueJobRequest(JobType.ExtractSubtitles, TargetEntityKind: entity.KindCode, TargetEntityId: idStr, TargetLabel: entity.Title, Priority: JobPriorities.Sidecar));
                     if ((settings.AutoGeneratePreview && entityNeeds.NeedsPreview) || (settings.GenerateTrickplay && entityNeeds.NeedsTrickplay))
-                        jobRequests.Add(new EnqueueJobRequest(JobType.GeneratePreview, TargetEntityKind: entity.KindCode, TargetEntityId: idStr, TargetLabel: entity.Title, Priority: 10));
+                        jobRequests.Add(new EnqueueJobRequest(JobType.GeneratePreview, TargetEntityKind: entity.KindCode, TargetEntityId: idStr, TargetLabel: entity.Title, Priority: JobPriorities.Preview));
                     break;
                 case "image":
                     if (FingerprintGating.ShouldFingerprint(settings, entityNeeds))
-                        jobRequests.Add(new EnqueueJobRequest(JobType.FingerprintImage, TargetEntityKind: entity.KindCode, TargetEntityId: idStr, TargetLabel: entity.Title, Priority: 20));
+                        jobRequests.Add(new EnqueueJobRequest(JobType.FingerprintImage, TargetEntityKind: entity.KindCode, TargetEntityId: idStr, TargetLabel: entity.Title, Priority: JobPriorities.Fingerprint));
                     if (entityNeeds.NeedsPreview)
-                        jobRequests.Add(new EnqueueJobRequest(JobType.GenerateImageThumbnail, TargetEntityKind: entity.KindCode, TargetEntityId: idStr, TargetLabel: entity.Title, Priority: 10));
+                        jobRequests.Add(new EnqueueJobRequest(JobType.GenerateImageThumbnail, TargetEntityKind: entity.KindCode, TargetEntityId: idStr, TargetLabel: entity.Title, Priority: JobPriorities.Thumbnail));
                     break;
                 case "audio-track":
                     if (entityNeeds.NeedsProbe)
-                        jobRequests.Add(new EnqueueJobRequest(JobType.ProbeAudio, TargetEntityKind: entity.KindCode, TargetEntityId: idStr, TargetLabel: entity.Title, Priority: 30));
+                        jobRequests.Add(new EnqueueJobRequest(JobType.ProbeAudio, TargetEntityKind: entity.KindCode, TargetEntityId: idStr, TargetLabel: entity.Title, Priority: JobPriorities.Probe));
                     if (FingerprintGating.ShouldFingerprint(settings, entityNeeds))
-                        jobRequests.Add(new EnqueueJobRequest(JobType.FingerprintAudio, TargetEntityKind: entity.KindCode, TargetEntityId: idStr, TargetLabel: entity.Title, Priority: 20));
+                        jobRequests.Add(new EnqueueJobRequest(JobType.FingerprintAudio, TargetEntityKind: entity.KindCode, TargetEntityId: idStr, TargetLabel: entity.Title, Priority: JobPriorities.Fingerprint));
                     if (entityNeeds.NeedsPreview)
-                        jobRequests.Add(new EnqueueJobRequest(JobType.GenerateAudioWaveform, TargetEntityKind: entity.KindCode, TargetEntityId: idStr, TargetLabel: entity.Title, Priority: 10));
+                        jobRequests.Add(new EnqueueJobRequest(JobType.GenerateAudioWaveform, TargetEntityKind: entity.KindCode, TargetEntityId: idStr, TargetLabel: entity.Title, Priority: JobPriorities.Waveform));
                     break;
                 case "book-page":
                     if (entityNeeds.NeedsPreview)
-                        jobRequests.Add(new EnqueueJobRequest(JobType.GenerateBookPageThumbnail, TargetEntityKind: entity.KindCode, TargetEntityId: idStr, TargetLabel: entity.Title, Priority: 10));
+                        jobRequests.Add(new EnqueueJobRequest(JobType.GenerateBookPageThumbnail, TargetEntityKind: entity.KindCode, TargetEntityId: idStr, TargetLabel: entity.Title, Priority: JobPriorities.Thumbnail));
                     break;
             }
         }

@@ -151,13 +151,13 @@ public sealed class ScanAudioJobHandler(
         if (settings.AutoGenerateMetadata && !await downstreamNeeds.HasEntityTechnicalAsync(trackId, cancellationToken)) {
             await context.EnqueueIfNeededAsync(new EnqueueJobRequest(
                 JobType.ProbeAudio, TargetEntityKind: "audio-track",
-                TargetEntityId: trackId.ToString(), TargetLabel: title), cancellationToken);
+                TargetEntityId: trackId.ToString(), TargetLabel: title, Priority: JobPriorities.Probe), cancellationToken);
         }
 
         if (await FingerprintGating.ShouldFingerprintAsync(downstreamNeeds, settings, trackId, cancellationToken)) {
             await context.EnqueueIfNeededAsync(new EnqueueJobRequest(
                 JobType.FingerprintAudio, TargetEntityKind: "audio-track",
-                TargetEntityId: trackId.ToString(), TargetLabel: title), cancellationToken);
+                TargetEntityId: trackId.ToString(), TargetLabel: title, Priority: JobPriorities.Fingerprint), cancellationToken);
         }
     }
 

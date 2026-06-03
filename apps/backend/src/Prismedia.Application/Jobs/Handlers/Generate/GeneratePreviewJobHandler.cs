@@ -33,7 +33,7 @@ public sealed class GeneratePreviewJobHandler(
                     TargetEntityKind: "video",
                     TargetEntityId: entityId.ToString(),
                     TargetLabel: context.Job.TargetLabel,
-                    Priority: 30),
+                    Priority: JobPriorities.Probe),
                 cancellationToken);
             throw new InvalidOperationException($"Cannot generate trickplay for {entityId} until video probe metadata is available.");
         }
