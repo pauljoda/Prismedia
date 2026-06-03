@@ -391,14 +391,15 @@
     audio.addEventListener("error", handleError);
     const detachController = playback.attachController({ toggle: togglePlay, seek: handleSeek });
     // Wire OS media controls (lock screen, media keys, Bluetooth) to the play queue.
+    // Deliberately omit seekbackward/seekforward: on iOS those skip buttons replace the
+    // next/previous-track buttons, which a queue-based player needs. seekto still powers the
+    // lock-screen scrubber without hiding next/previous.
     const detachMediaSession = setMediaSessionHandlers({
       play: requestPlay,
       pause: () => audio.pause(),
       previoustrack: handlePrev,
       nexttrack: handleNext,
       seekto: handleSeek,
-      seekbackward: (offset) => handleSeek(Math.max(0, audio.currentTime - offset)),
-      seekforward: (offset) => handleSeek(audio.currentTime + offset),
       stop: dismiss,
     });
 
