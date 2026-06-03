@@ -216,6 +216,24 @@
     font-variant-numeric: tabular-nums;
   }
 
+  /*
+   * The compact opt-out keeps dense desktop controls small, but a focused text
+   * <input>/<textarea> sized below 16px still triggers the iOS focus-zoom that
+   * native selects are exempt from. On coarse-pointer (touch) devices, re-assert
+   * the 16px floor for compact text inputs so they never zoom; fine-pointer
+   * (desktop) keeps the compact size. Selects stay compact everywhere.
+   */
+  @media (pointer: coarse) {
+    input.allow-compact-input-text:not([type="button"]):not([type="checkbox"]):not(
+        [type="color"]
+      ):not([type="file"]):not([type="hidden"]):not([type="image"]):not(
+        [type="radio"]
+      ):not([type="range"]):not([type="reset"]):not([type="submit"]),
+    textarea.allow-compact-input-text {
+      font-size: max(16px, 1em) !important;
+    }
+  }
+
   /* ── Typography voices ── */
   h1,
   h2,
