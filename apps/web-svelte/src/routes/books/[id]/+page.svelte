@@ -22,6 +22,7 @@
   import {
     bookEntityProgressDisplay,
     orderedBookChildren,
+    singleFileBookProgressDisplay,
     type BookEntityProgressDisplay,
     type BookReaderChapter,
   } from "$lib/entities/book-entity-reader";
@@ -84,6 +85,8 @@
   const singleFileProgress = $derived(book && isSingleFileBook ? getCapability(book.capabilities, "progress") : null);
   // Started once a position has been saved (EPUB and PDF both set currentEntityId to the book id).
   const singleFileInProgress = $derived(!!singleFileProgress?.currentEntityId && !singleFileProgress?.completedAt);
+  // Single-file books have no chapter entities, so they need their own progress-panel display.
+  const singleFileProgressDisplay = $derived(isSingleFileBook ? singleFileBookProgressDisplay(book) : null);
   const peopleLabel = $derived(bookType === "comic" || bookType === "manga" ? "Artists" : "People");
   const bookTitle = $derived(book?.title ?? "Book");
   const chapterSummaries = $derived(combineChapterSummaries(chapterDetails, progressChapterSummary));
@@ -436,6 +439,61 @@
     }
   }
 
+  function resumeSingleFile() {
+    if (!book) return;
+    void goto(bookReaderHref({
+      bookId: book.id,
+      kind: "book",
+      id: book.id,
+      returnId: book.id,
+      command: "resume",
+    }));
+  }
+
+  /** Marks a single-file book read or unread without moving the saved reading position. */
+  async function handleToggleSingleFileRead(read: boolean) {
+    if (!book || !singleFileProgressDisplay || progressBusy) return;
+    progressBusy = true;
+    try {
+      await updateEntityProgress(book.id, {
+        currentEntityId: book.id,
+        unit: singleFileProgressDisplay.unit,
+        index: singleFileProgressDisplay.index,
+        total: singleFileProgressDisplay.total,
+        mode: singleFileProgressDisplay.mode,
+        location: singleFileProgressDisplay.location,
+        completed: read,
+      });
+      await loadBook();
+    } catch {
+      // best-effort; the panel reflects the last known state on failure
+    } finally {
+      progressBusy = false;
+    }
+  }
+
+  /** Resets a single-file book to the beginning and clears completion. */
+  async function startSingleFileOver() {
+    if (!book || !singleFileProgressDisplay || progressBusy) return;
+    progressBusy = true;
+    try {
+      await updateEntityProgress(book.id, {
+        currentEntityId: book.id,
+        unit: singleFileProgressDisplay.unit,
+        index: 0,
+        total: singleFileProgressDisplay.total,
+        mode: singleFileProgressDisplay.mode,
+        location: null,
+        reset: true,
+      });
+      await loadBook();
+    } catch {
+      // best-effort
+    } finally {
+      progressBusy = false;
+    }
+  }
+
 </script>
 
 <svelte:head>
@@ -483,6 +541,8 @@
       {#snippet heroBadges()}
         {#if progressDisplay}
           <span class="hero-badge">{progressDisplay.percent}%</span>
+        {:else if singleFileProgressDisplay}
+          <span class="hero-badge">{singleFileProgressDisplay.percent}%</span>
         {/if}
       {/snippet}
 
@@ -508,6 +568,21 @@
           onToggleCompleted={handleToggleRead}
           onResume={resumeProgress}
           onStartOver={startProgressOver}
+        />
+      </section>
+    {:else if singleFileProgressDisplay}
+      <section class="progress-section">
+        <MediaProgressPanel
+          kind="read"
+          completed={singleFileProgressDisplay.isComplete}
+          percent={singleFileProgressDisplay.percent}
+          positionLabel={singleFileProgressDisplay.positionLabel}
+          canResume={!singleFileProgressDisplay.isComplete}
+          canStartOver
+          busy={progressBusy}
+          onToggleCompleted={handleToggleSingleFileRead}
+          onResume={resumeSingleFile}
+          onStartOver={startSingleFileOver}
         />
       </section>
     {/if}

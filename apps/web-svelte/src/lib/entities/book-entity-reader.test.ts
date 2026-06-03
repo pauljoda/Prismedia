@@ -4,6 +4,7 @@ import {
   bookEntityProgressDisplay,
   entityPageToReaderImage,
   orderedBookChildren,
+  singleFileBookProgressDisplay,
 } from "./book-entity-reader";
 
 function thumbnail(overrides: Partial<EntityThumbnail>): EntityThumbnail {
@@ -175,6 +176,110 @@ describe("book entity reader helpers", () => {
       showMeter: false,
       pageLabel: null,
       detailLabel: "Read",
+    });
+  });
+
+  it("returns no single-file progress before a book has been opened", () => {
+    expect(singleFileBookProgressDisplay(entity({ capabilities: [] }))).toBeNull();
+    expect(
+      singleFileBookProgressDisplay(
+        entity({
+          capabilities: [
+            {
+              kind: "progress",
+              currentEntityId: null,
+              unit: "page",
+              index: 0,
+              total: 0,
+              mode: null,
+              completedAt: null,
+              updatedAt: null,
+            },
+          ],
+        }),
+      ),
+    ).toBeNull();
+  });
+
+  it("describes single-file PDF progress with a page position", () => {
+    const display = singleFileBookProgressDisplay(
+      entity({
+        capabilities: [
+          {
+            kind: "progress",
+            currentEntityId: "book-1",
+            unit: "page",
+            index: 44,
+            total: 200,
+            mode: "scrolled",
+            completedAt: null,
+            updatedAt: "2026-05-22T12:00:00.000Z",
+          },
+        ],
+      }),
+    );
+
+    expect(display).toMatchObject({
+      percent: 23,
+      isComplete: false,
+      positionLabel: "Page 45 of 200",
+      unit: "page",
+      index: 44,
+      total: 200,
+      mode: "scrolled",
+    });
+  });
+
+  it("describes single-file EPUB progress as a percentage of the reading fraction", () => {
+    const display = singleFileBookProgressDisplay(
+      entity({
+        capabilities: [
+          {
+            kind: "progress",
+            currentEntityId: "book-1",
+            unit: "cfi",
+            index: 3300,
+            total: 10000,
+            mode: "paged",
+            completedAt: null,
+            updatedAt: "2026-05-22T12:00:00.000Z",
+            location: "epubcfi(/6/14!/4/2)",
+          },
+        ],
+      }),
+    );
+
+    expect(display).toMatchObject({
+      percent: 33,
+      isComplete: false,
+      positionLabel: "33% read",
+      unit: "cfi",
+      location: "epubcfi(/6/14!/4/2)",
+    });
+  });
+
+  it("treats a completed single-file book as fully read with no position label", () => {
+    const display = singleFileBookProgressDisplay(
+      entity({
+        capabilities: [
+          {
+            kind: "progress",
+            currentEntityId: "book-1",
+            unit: "cfi",
+            index: 10000,
+            total: 10000,
+            mode: "paged",
+            completedAt: "2026-05-30T12:00:00.000Z",
+            updatedAt: "2026-05-30T12:00:00.000Z",
+          },
+        ],
+      }),
+    );
+
+    expect(display).toMatchObject({
+      percent: 100,
+      isComplete: true,
+      positionLabel: null,
     });
   });
 });
