@@ -231,6 +231,19 @@
     window.addEventListener("resize", measureAvailableHeight);
     return () => window.removeEventListener("resize", measureAvailableHeight);
   });
+
+  // Playback fraction (0..1) per inline video, driving the thin bottom progress
+  // bar that mirrors the lightbox player's minimal timeline.
+  let progressById = $state(new Map<string, number>());
+
+  function trackVideoProgress(id: string, video: HTMLVideoElement) {
+    const duration = video.duration;
+    const fraction =
+      Number.isFinite(duration) && duration > 0 ? Math.min(1, video.currentTime / duration) : 0;
+    const next = new Map(progressById);
+    next.set(id, fraction);
+    progressById = next;
+  }
 </script>
 
 <div
@@ -284,9 +297,20 @@
               loop
               playsinline
               preload="metadata"
+              ontimeupdate={(event) => trackVideoProgress(card.entity.id, event.currentTarget)}
             ></video>
           {/if}
         </NsfwBlur>
+
+        {#if showVideo && source}
+          <!-- Thin playback progress bar mirroring the lightbox player's minimal timeline. -->
+          <div class="feed-progress" aria-hidden="true">
+            <div
+              class="feed-progress-fill"
+              style:width={`${(progressById.get(card.entity.id) ?? 0) * 100}%`}
+            ></div>
+          </div>
+        {/if}
 
         <!-- Capture taps above the player so the feed stays purely visual: a tap
              opens the lightbox (or links to the entity) rather than toggling play. -->
@@ -399,6 +423,28 @@
   .feed-placeholder {
     width: 100%;
     aspect-ratio: 4 / 3;
+  }
+
+  /*
+   * Thin playback progress bar pinned to the bottom of the media, above the tap
+   * overlay (z-index 2) but non-interactive so taps still open the lightbox.
+   */
+  .feed-progress {
+    position: absolute;
+    inset-inline: 0;
+    bottom: 0;
+    z-index: 3;
+    height: 3px;
+    background: rgb(255 255 255 / 0.16);
+    pointer-events: none;
+  }
+
+  .feed-progress-fill {
+    height: 100%;
+    width: 0;
+    background: var(--color-text-accent, #f2c26a);
+    box-shadow: 0 0 6px rgb(242 194 106 / 0.5);
+    transition: width 0.12s linear;
   }
 
   .feed-open {
