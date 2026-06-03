@@ -29,6 +29,18 @@ internal static class BaseEntityModelConfiguration {
             entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
             entity.Property(row => row.KindCode).HasColumnName("kind_code").HasMaxLength(64).IsRequired();
             entity.Property(row => row.Title).HasColumnName("title").HasMaxLength(512).IsRequired();
+            entity.Property(row => row.SortName)
+                .HasColumnName("sort_title")
+                .HasComputedColumnSql(
+                    """
+                    trim(CASE
+                        WHEN lower(title) LIKE 'the %' THEN substr(title, 5)
+                        WHEN lower(title) LIKE 'an %' THEN substr(title, 4)
+                        WHEN lower(title) LIKE 'a %' THEN substr(title, 3)
+                        ELSE title
+                    END)
+                    """,
+                    stored: true);
             entity.Property(row => row.ParentEntityId).HasColumnName("parent_entity_id");
             entity.Property(row => row.SortOrder).HasColumnName("sort_order");
             entity.Property(row => row.RatingValue).HasColumnName("rating_value");
@@ -38,6 +50,7 @@ internal static class BaseEntityModelConfiguration {
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
             entity.HasIndex(row => new { row.KindCode, row.Title });
+            entity.HasIndex(row => new { row.KindCode, row.SortName });
             entity.HasIndex(row => row.ParentEntityId);
             entity.HasOne<EntityKindRow>()
                 .WithMany()
