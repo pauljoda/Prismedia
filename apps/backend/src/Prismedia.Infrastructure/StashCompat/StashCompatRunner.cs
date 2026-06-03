@@ -197,7 +197,7 @@ public sealed class StashCompatRunner : IIdentifyRunner {
             request.Hints.Urls.FirstOrDefault());
         var title = !string.IsNullOrWhiteSpace(request.Query.Title)
             ? request.Query.Title
-            : request.Entity.Title;
+            : request.Hints.Title ?? request.Entity.Title;
         return new StashScrapeInput(
             Url: url,
             Title: title,

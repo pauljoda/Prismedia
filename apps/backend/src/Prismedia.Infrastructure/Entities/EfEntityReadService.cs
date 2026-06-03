@@ -206,15 +206,15 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             ListSort.Rating => descending
                 ? query.OrderBy(entity => entity.RatingValue == null)
                     .ThenByDescending(entity => entity.RatingValue)
-                    .ThenBy(entity => entity.Title)
+                    .ThenBy(entity => entity.SortName)
                     .ThenBy(entity => entity.Id)
                 : query.OrderBy(entity => entity.RatingValue == null)
                     .ThenBy(entity => entity.RatingValue)
-                    .ThenBy(entity => entity.Title)
+                    .ThenBy(entity => entity.SortName)
                     .ThenBy(entity => entity.Id),
             _ => descending
-                ? query.OrderByDescending(entity => entity.Title).ThenByDescending(entity => entity.Id)
-                : query.OrderBy(entity => entity.Title).ThenBy(entity => entity.Id),
+                ? query.OrderByDescending(entity => entity.SortName).ThenByDescending(entity => entity.Id)
+                : query.OrderBy(entity => entity.SortName).ThenBy(entity => entity.Id),
         };
 
     /// <summary>
@@ -271,10 +271,10 @@ public sealed partial class EfEntityReadService : IEntityReadService {
 
         var ordered = descending
             ? keyed.OrderByDescending(item => item.references)
-                .ThenBy(item => item.entity.Title)
+                .ThenBy(item => item.entity.SortName)
                 .ThenBy(item => item.entity.Id)
             : keyed.OrderBy(item => item.references)
-                .ThenBy(item => item.entity.Title)
+                .ThenBy(item => item.entity.SortName)
                 .ThenBy(item => item.entity.Id);
 
         return ordered.Select(item => item.entity);

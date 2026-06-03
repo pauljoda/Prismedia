@@ -66,7 +66,7 @@ public sealed partial class IdentifyMatchHintResolver {
             .Select(row => row.Path)
             .FirstOrDefaultAsync(cancellationToken);
 
-        return new IdentifyMatchHints(externalIds, urls, title, filePath);
+        return new IdentifyMatchHints(externalIds, urls, IdentifyQueryNormalizer.NormalizeForSearch(title), filePath);
     }
 
     private static bool TryParseProviderId(string provider, IReadOnlyList<string> urls, out string id) {
