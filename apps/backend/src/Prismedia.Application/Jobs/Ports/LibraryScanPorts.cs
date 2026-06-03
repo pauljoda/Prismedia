@@ -10,6 +10,13 @@ public interface ILibraryScanRootPersistence {
     Task UpdateRootLastScannedAsync(Guid rootId, CancellationToken cancellationToken);
     Task<IReadOnlySet<string>> GetExcludedPathsForRootAsync(Guid rootId, CancellationToken cancellationToken);
     Task<int> RemoveEntitiesInExcludedPathsAsync(Guid rootId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Deletes tags that nothing references (no inbound relationship links). Returns the count
+    /// removed. Lives here, on the scan-root port, because orphan-tag cleanup runs once at the end of
+    /// every scan kind — not just the video scan — so the base scan handler can invoke it.
+    /// </summary>
+    Task<int> RemoveOrphanTagsAsync(CancellationToken cancellationToken);
 }
 
 /// <summary>Video scan persistence operations for discovered files and stale cleanup.</summary>
@@ -18,9 +25,6 @@ public interface IVideoScanPersistence {
     Task<int> RemoveStaleVideosByRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken);
     Task<int> RemoveStaleMoviesByRootAsync(Guid rootId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken);
     Task<int> RemoveOrphanSeriesAndSeasonsAsync(CancellationToken cancellationToken);
-
-    /// <summary>Deletes tags that nothing references (no inbound relationship links). Returns the count removed.</summary>
-    Task<int> RemoveOrphanTagsAsync(CancellationToken cancellationToken);
 
     /// <summary>
     /// Upserts a batch of video entities in a single database round-trip,

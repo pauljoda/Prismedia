@@ -179,24 +179,6 @@ public sealed class ScanLibraryJobHandler(
             root.Label, files.Count, removed, orphans, report.ToLogString());
     }
 
-    /// <summary>
-    /// Deletes tags that nothing references when the "Remove orphan tags" setting is on. Runs once
-    /// per scan job regardless of whether any root's detailed pass ran, because a tag's last
-    /// reference is usually removed by untagging or deleting media — which does not change files —
-    /// so the cleanup must not be gated on the incremental fast path.
-    /// </summary>
-    protected override async Task AfterScanAsync(JobContext context, CancellationToken cancellationToken) {
-        var settings = await Roots.GetSettingsAsync(cancellationToken);
-        if (!settings.RemoveOrphanTags) {
-            return;
-        }
-
-        var removed = await videos.RemoveOrphanTagsAsync(cancellationToken);
-        if (removed > 0) {
-            logger.LogInformation("ScanLibrary: removed {Count} orphan tags with no references", removed);
-        }
-    }
-
     private static VideoUpsertItem BuildVideoUpsertItem(
         string filePath,
         LibraryRootData root,

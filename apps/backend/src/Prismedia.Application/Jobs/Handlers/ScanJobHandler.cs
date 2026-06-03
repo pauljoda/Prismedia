@@ -63,7 +63,7 @@ public abstract class ScanJobHandler(
         // Runs once per scan job after every root is processed — including when every root's detailed
         // pass was skipped by the incremental fast path — so global cleanup that does not depend on
         // file changes (e.g. orphaned taxonomy) still happens on an otherwise no-op rescan.
-        await AfterScanAsync(context, cancellationToken);
+        await RemoveOrphanTagsIfEnabledAsync(cancellationToken);
     }
 
     /// <summary>
@@ -144,13 +144,23 @@ public abstract class ScanJobHandler(
     protected abstract Task ScanRootCoreAsync(JobContext context, LibraryRootData root, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Runs once after all eligible roots for this scan job have been processed, even when every
-    /// root's detailed pass was skipped by the incremental fast path. Base implementation is a no-op;
-    /// handlers override it for global, non-per-root cleanup that must happen regardless of file
-    /// changes (for example deleting orphaned taxonomy).
+    /// Deletes tags that nothing references when the "Remove orphan tags" setting is on. Runs once at
+    /// the end of <em>every</em> scan job — video, audio, books, images — not just one kind, so any
+    /// scan keeps the tag list tidy. A tag's last reference is usually dropped by untagging or
+    /// deleting media, which changes no files, so this runs even when the incremental fast path
+    /// skipped every root's detailed pass.
     /// </summary>
-    protected virtual Task AfterScanAsync(JobContext context, CancellationToken cancellationToken) =>
-        Task.CompletedTask;
+    private async Task RemoveOrphanTagsIfEnabledAsync(CancellationToken cancellationToken) {
+        var settings = await roots.GetSettingsAsync(cancellationToken);
+        if (!settings.RemoveOrphanTags) {
+            return;
+        }
+
+        var removed = await roots.RemoveOrphanTagsAsync(cancellationToken);
+        if (removed > 0) {
+            logger.LogInformation("{JobType}: removed {Count} orphan tags with no references", Type.ToCode(), removed);
+        }
+    }
 
     /// <summary>File discovery port for subclass use.</summary>
     protected IFileDiscovery FileDiscovery => fileDiscovery;
