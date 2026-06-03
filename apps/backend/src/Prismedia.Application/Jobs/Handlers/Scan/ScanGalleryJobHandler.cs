@@ -14,12 +14,15 @@ public sealed class ScanGalleryJobHandler(
     IFileDiscovery fileDiscovery,
     ILibraryScanRootPersistence roots,
     IImageGalleryScanPersistence images,
-    IDownstreamNeedsPersistence downstreamNeeds) : ScanJobHandler(logger, fileDiscovery, roots) {
+    IDownstreamNeedsPersistence downstreamNeeds,
+    IScanSnapshotStore? snapshots = null) : ScanJobHandler(logger, fileDiscovery, roots, snapshots) {
     public override JobType Type => JobType.ScanGallery;
 
     protected override bool IsEligibleRoot(LibraryRootData root) => root.ScanImages;
 
-    protected override async Task ScanRootAsync(JobContext context, LibraryRootData root, CancellationToken cancellationToken) {
+    protected override IReadOnlyList<MediaCategory> ScanCategories => [MediaCategory.Image];
+
+    protected override async Task ScanRootCoreAsync(JobContext context, LibraryRootData root, CancellationToken cancellationToken) {
         logger.LogInformation("ScanGallery: discovering images in {Path}", root.Path);
         var excludedPaths = await Roots.GetExcludedPathsForRootAsync(root.Id, cancellationToken);
 

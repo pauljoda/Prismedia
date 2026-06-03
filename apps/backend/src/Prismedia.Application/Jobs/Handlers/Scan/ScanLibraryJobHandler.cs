@@ -17,8 +17,9 @@ public sealed class ScanLibraryJobHandler(
     ILibraryScanRootPersistence roots,
     IVideoScanPersistence videos,
     IDownstreamNeedsPersistence downstreamNeeds,
+    IScanSnapshotStore? snapshots = null,
     IVideoSidecarMetadataReader? sidecars = null,
-    IScanMetadataPersistence? scanMetadata = null) : ScanJobHandler(logger, fileDiscovery, roots) {
+    IScanMetadataPersistence? scanMetadata = null) : ScanJobHandler(logger, fileDiscovery, roots, snapshots) {
     private const int BatchSize = 50;
     private static readonly Regex SeasonFolderPattern = new(
         @"^(?:Season\s*(?<season>\d{1,3})|S(?<season>\d{1,3}))$",
@@ -34,7 +35,9 @@ public sealed class ScanLibraryJobHandler(
 
     protected override bool IsEligibleRoot(LibraryRootData root) => root.ScanVideos;
 
-    protected override async Task ScanRootAsync(
+    protected override IReadOnlyList<MediaCategory> ScanCategories => [MediaCategory.Video];
+
+    protected override async Task ScanRootCoreAsync(
         JobContext context, LibraryRootData root, CancellationToken cancellationToken) {
         var timer = new JobPhaseTimer();
 

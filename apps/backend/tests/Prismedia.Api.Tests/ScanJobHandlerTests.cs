@@ -4,6 +4,7 @@ using Prismedia.Application.Jobs;
 using Prismedia.Application.Jobs.Handlers;
 using Prismedia.Application.Jobs.Handlers.Scan;
 using Prismedia.Application.Jobs.Ports;
+using Prismedia.Application.Jobs.Scanning;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Api.Tests;
@@ -1030,8 +1031,8 @@ public sealed class ScanJobHandlerTests {
             persistence,
             persistence,
             persistence,
-            new StubVideoSidecarMetadataReader(metadata),
-            metadataPersistence);
+            sidecars: new StubVideoSidecarMetadataReader(metadata),
+            scanMetadata: metadataPersistence);
         var job = new JobRunSnapshot(
             Guid.NewGuid(),
             JobType.ScanLibrary,
@@ -1508,8 +1509,8 @@ public sealed class ScanJobHandlerTests {
                 persistence,
                 persistence,
                 persistence,
-                new StubComicInfoMetadataReader(metadata),
-                metadataPersistence);
+                comicInfoReader: new StubComicInfoMetadataReader(metadata),
+                scanMetadata: metadataPersistence);
             var job = new JobRunSnapshot(
                 Guid.NewGuid(),
                 JobType.ScanBook,
@@ -1703,6 +1704,68 @@ public sealed class ScanJobHandlerTests {
             queue.ProgressMessages);
     }
 
+    [Fact]
+    public async Task SnapshotSkipsDetailedScanWhenNoFilesChanged() {
+        var root = new LibraryRootData(
+            Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            "/media/videos", "Videos",
+            Enabled: true, Recursive: true,
+            ScanVideos: true, ScanImages: false, ScanAudio: false, ScanBooks: false, IsNsfw: false);
+        var persistence = new FakeScanPersistence([root]);
+        var snapshots = new FakeScanSnapshotStore();
+        var discovery = new RecordingFileDiscovery(["/media/videos/a.mkv", "/media/videos/b.mkv"]);
+        var handler = new RecordingScanHandler(persistence, snapshots, discovery);
+        var job = SingleRootScanJob(root);
+
+        // First scan: no snapshot yet, so the detailed scan runs and records the snapshot.
+        await handler.HandleAsync(new JobContext(job, new NoopJobQueue()), CancellationToken.None);
+        Assert.Equal([root.Id], handler.ScannedRootIds);
+        Assert.Equal(1, snapshots.ApplyCount);
+
+        // Second scan with the identical file set: the detailed scan is skipped (no new root id).
+        await handler.HandleAsync(new JobContext(job, new NoopJobQueue()), CancellationToken.None);
+        Assert.Equal([root.Id], handler.ScannedRootIds);
+        Assert.Equal(1, snapshots.ApplyCount);
+    }
+
+    [Fact]
+    public async Task SnapshotRescansWhenAFileIsAdded() {
+        var root = new LibraryRootData(
+            Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            "/media/videos", "Videos",
+            Enabled: true, Recursive: true,
+            ScanVideos: true, ScanImages: false, ScanAudio: false, ScanBooks: false, IsNsfw: false);
+        var persistence = new FakeScanPersistence([root]);
+        var snapshots = new FakeScanSnapshotStore();
+        var job = SingleRootScanJob(root);
+
+        // First scan sees one file and builds the snapshot.
+        var first = new RecordingScanHandler(persistence, snapshots, new RecordingFileDiscovery(["/media/videos/a.mkv"]));
+        await first.HandleAsync(new JobContext(job, new NoopJobQueue()), CancellationToken.None);
+        Assert.Equal([root.Id], first.ScannedRootIds);
+
+        // A later scan (sharing the snapshot store) sees an added file, so it must rescan.
+        var second = new RecordingScanHandler(persistence, snapshots, new RecordingFileDiscovery(["/media/videos/a.mkv", "/media/videos/b.mkv"]));
+        await second.HandleAsync(new JobContext(job, new NoopJobQueue()), CancellationToken.None);
+        Assert.Equal([root.Id], second.ScannedRootIds);
+        Assert.Equal(2, snapshots.ApplyCount);
+    }
+
+    private static JobRunSnapshot SingleRootScanJob(LibraryRootData root) =>
+        new(
+            Guid.NewGuid(),
+            JobType.ScanLibrary,
+            JobRunStatus.Running,
+            Progress: 0,
+            Message: null,
+            PayloadJson: $$"""{"libraryRootId":"{{root.Id}}"}""",
+            TargetEntityKind: "library-root",
+            TargetEntityId: root.Id.ToString(),
+            TargetLabel: root.Label,
+            CreatedAt: DateTimeOffset.UtcNow,
+            StartedAt: DateTimeOffset.UtcNow,
+            FinishedAt: null);
+
     private static void CreateZip(string path, IReadOnlyList<string> members) {
         using var stream = File.Create(path);
         using var archive = new ZipArchive(stream, ZipArchiveMode.Create);
@@ -1725,19 +1788,52 @@ public sealed class ScanJobHandlerTests {
         ThumbnailQuality: 2,
         TrickplayQuality: 2);
 
-    private sealed class RecordingScanHandler(FakeScanPersistence persistence)
-        : ScanJobHandler(NullLogger<RecordingScanHandler>.Instance, new NoopFileDiscovery(), persistence) {
+    private sealed class RecordingScanHandler(
+        FakeScanPersistence persistence,
+        IScanSnapshotStore? snapshots = null,
+        IFileDiscovery? discovery = null)
+        : ScanJobHandler(NullLogger<RecordingScanHandler>.Instance, discovery ?? new NoopFileDiscovery(), persistence, snapshots) {
         public List<Guid> ScannedRootIds { get; } = [];
 
         public override JobType Type => JobType.ScanLibrary;
 
         protected override bool IsEligibleRoot(LibraryRootData root) => root.ScanVideos;
 
-        protected override Task ScanRootAsync(
+        protected override IReadOnlyList<MediaCategory> ScanCategories => [MediaCategory.Video];
+
+        protected override Task ScanRootCoreAsync(
             JobContext context,
             LibraryRootData root,
             CancellationToken cancellationToken) {
             ScannedRootIds.Add(root.Id);
+            return Task.CompletedTask;
+        }
+    }
+
+    /// <summary>In-memory <see cref="IScanSnapshotStore"/> for exercising the incremental fast path.</summary>
+    private sealed class FakeScanSnapshotStore : IScanSnapshotStore {
+        private readonly Dictionary<(Guid Root, string Kind), Dictionary<string, FileSignature>> _store = new();
+
+        public int ApplyCount { get; private set; }
+
+        public Task<IReadOnlyList<FileSignature>> LoadAsync(Guid rootId, string scanKind, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<FileSignature>>(
+                _store.TryGetValue((rootId, scanKind), out var map) ? map.Values.ToArray() : []);
+
+        public Task ApplyAsync(Guid rootId, string scanKind, ScanDelta delta, CancellationToken cancellationToken) {
+            if (!delta.HasChanges) {
+                return Task.CompletedTask;
+            }
+
+            ApplyCount++;
+            if (!_store.TryGetValue((rootId, scanKind), out var map)) {
+                map = new Dictionary<string, FileSignature>(StringComparer.OrdinalIgnoreCase);
+                _store[(rootId, scanKind)] = map;
+            }
+
+            foreach (var added in delta.Added) map[added.Path] = added;
+            foreach (var changed in delta.Changed) map[changed.Path] = changed;
+            foreach (var removed in delta.Removed) map.Remove(removed.Path);
             return Task.CompletedTask;
         }
     }
@@ -2092,6 +2188,9 @@ public sealed class ScanJobHandlerTests {
 
         public Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> DiscoverFilesByDirectoryAsync(string rootPath, MediaCategory category, bool recursive, IReadOnlySet<string> excludedPaths, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
+
+        public Task<IReadOnlyList<FileSignature>> DiscoverFileSignaturesAsync(string rootPath, MediaCategory category, bool recursive, IReadOnlySet<string> excludedPaths, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<FileSignature>>([]);
     }
 
     private sealed class RecordingFileDiscovery(
@@ -2119,6 +2218,19 @@ public sealed class ScanJobHandlerTests {
                     group => (IReadOnlyList<string>)group.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToArray(),
                     StringComparer.OrdinalIgnoreCase);
             return Task.FromResult<IReadOnlyDictionary<string, IReadOnlyList<string>>>(grouped);
+        }
+
+        public Task<IReadOnlyList<FileSignature>> DiscoverFileSignaturesAsync(
+            string rootPath, MediaCategory category, bool recursive, IReadOnlySet<string> excludedPaths, CancellationToken cancellationToken) {
+            LastExcludedPaths = excludedPaths.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToArray();
+            var all = directoryGroups is not null
+                ? directoryGroups.Values.SelectMany(group => group)
+                : files ?? [];
+            // Deterministic signatures so a re-run with the same inputs produces an identical snapshot.
+            var signatures = all
+                .Select(path => new FileSignature(path, path.Length, 0))
+                .ToArray();
+            return Task.FromResult<IReadOnlyList<FileSignature>>(signatures);
         }
     }
 

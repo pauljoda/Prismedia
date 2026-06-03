@@ -1,3 +1,5 @@
+using Prismedia.Application.Jobs.Scanning;
+
 namespace Prismedia.Infrastructure.Media.Processing;
 
 /// <summary>
@@ -25,9 +27,40 @@ public sealed class FileDiscoveryService {
             return Task.FromResult<IReadOnlyList<string>>(results);
         }
 
-        WalkDirectory(rootPath, extensions, recursive, NormalizeExcludedPaths(excludedPaths), results, cancellationToken);
+        WalkDirectory(rootPath, extensions, recursive, NormalizeExcludedPaths(excludedPaths), results.Add, cancellationToken);
         results.Sort(StringComparer.OrdinalIgnoreCase);
         return Task.FromResult<IReadOnlyList<string>>(results);
+    }
+
+    /// <summary>
+    /// Walks a root path like <see cref="DiscoverFilesAsync"/> but returns each matched file together
+    /// with its size and last-write time (UTC ticks) for cheap change detection. Files that disappear
+    /// between enumeration and stat are skipped. Results are sorted by path.
+    /// </summary>
+    public Task<IReadOnlyList<FileSignature>> DiscoverFileSignaturesAsync(
+        string rootPath,
+        IReadOnlySet<string> extensions,
+        bool recursive,
+        IReadOnlySet<string>? excludedPaths,
+        CancellationToken cancellationToken) {
+        var results = new List<FileSignature>();
+
+        if (!Directory.Exists(rootPath)) {
+            return Task.FromResult<IReadOnlyList<FileSignature>>(results);
+        }
+
+        WalkDirectory(rootPath, extensions, recursive, NormalizeExcludedPaths(excludedPaths), file => {
+            try {
+                var info = new FileInfo(file);
+                results.Add(new FileSignature(file, info.Length, info.LastWriteTimeUtc.Ticks));
+            } catch (FileNotFoundException) {
+                // File was removed between enumeration and stat; treat as not present.
+            } catch (IOException) {
+                // Transient access issue; skip rather than fail the whole snapshot.
+            }
+        }, cancellationToken);
+        results.Sort(static (left, right) => string.Compare(left.Path, right.Path, StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult<IReadOnlyList<FileSignature>>(results);
     }
 
     /// <summary>
@@ -47,7 +80,7 @@ public sealed class FileDiscoveryService {
                 new Dictionary<string, IReadOnlyList<string>>());
         }
 
-        WalkDirectory(rootPath, extensions, recursive, NormalizeExcludedPaths(excludedPaths), allFiles, cancellationToken);
+        WalkDirectory(rootPath, extensions, recursive, NormalizeExcludedPaths(excludedPaths), allFiles.Add, cancellationToken);
 
         var grouped = new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase);
 
@@ -64,7 +97,7 @@ public sealed class FileDiscoveryService {
         IReadOnlySet<string> extensions,
         bool recursive,
         IReadOnlySet<string> excludedPaths,
-        List<string> results,
+        Action<string> onFile,
         CancellationToken cancellationToken) {
         cancellationToken.ThrowIfCancellationRequested();
         if (IsExcluded(directory, excludedPaths)) {
@@ -85,7 +118,7 @@ public sealed class FileDiscoveryService {
                 if (SupportedExtensions.IsGeneratedSuffix(nameWithoutExt))
                     continue;
 
-                results.Add(file);
+                onFile(file);
             }
 
             if (!recursive)
@@ -100,7 +133,7 @@ public sealed class FileDiscoveryService {
                 if (dirName.StartsWith('.'))
                     continue;
 
-                WalkDirectory(subDir, extensions, recursive, excludedPaths, results, cancellationToken);
+                WalkDirectory(subDir, extensions, recursive, excludedPaths, onFile, cancellationToken);
             }
         } catch (UnauthorizedAccessException) {
             // skip inaccessible directories silently

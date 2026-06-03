@@ -16,9 +16,10 @@ public sealed class ScanBookJobHandler(
     ILibraryScanRootPersistence roots,
     IBookScanPersistence books,
     IDownstreamNeedsPersistence downstreamNeeds,
+    IScanSnapshotStore? snapshots = null,
     IComicInfoMetadataReader? comicInfoReader = null,
     IScanMetadataPersistence? scanMetadata = null,
-    IBookFileMetadataReader? bookFileMetadata = null) : ScanJobHandler(logger, fileDiscovery, roots) {
+    IBookFileMetadataReader? bookFileMetadata = null) : ScanJobHandler(logger, fileDiscovery, roots, snapshots) {
     private static readonly HashSet<string> ImageExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif"
@@ -28,7 +29,9 @@ public sealed class ScanBookJobHandler(
 
     protected override bool IsEligibleRoot(LibraryRootData root) => root.ScanBooks;
 
-    protected override async Task ScanRootAsync(JobContext context, LibraryRootData root, CancellationToken cancellationToken) {
+    protected override IReadOnlyList<MediaCategory> ScanCategories => [MediaCategory.ComicArchive, MediaCategory.Book];
+
+    protected override async Task ScanRootCoreAsync(JobContext context, LibraryRootData root, CancellationToken cancellationToken) {
         logger.LogInformation("ScanBook: discovering archives in {Path}", root.Path);
         var excludedPaths = await Roots.GetExcludedPathsForRootAsync(root.Id, cancellationToken);
 

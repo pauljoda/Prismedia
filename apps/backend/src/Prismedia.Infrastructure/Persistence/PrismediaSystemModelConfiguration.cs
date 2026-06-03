@@ -39,6 +39,19 @@ internal static partial class PrismediaModelConfiguration {
             entity.HasOne<LibraryRootRow>().WithMany().HasForeignKey(row => row.LibraryRootId).OnDelete(DeleteBehavior.Cascade);
         });
 
+        modelBuilder.Entity<ScannedFileRow>(entity => {
+            entity.ToTable("scanned_files");
+            entity.HasKey(row => new { row.LibraryRootId, row.ScanKind, row.Path });
+            entity.Property(row => row.LibraryRootId).HasColumnName("library_root_id");
+            entity.Property(row => row.ScanKind).HasColumnName("scan_kind").HasMaxLength(64).IsRequired();
+            entity.Property(row => row.Path).HasColumnName("path");
+            entity.Property(row => row.SizeBytes).HasColumnName("size_bytes");
+            entity.Property(row => row.ModifiedTicks).HasColumnName("modified_ticks");
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            entity.HasIndex(row => new { row.LibraryRootId, row.ScanKind });
+            entity.HasOne<LibraryRootRow>().WithMany().HasForeignKey(row => row.LibraryRootId).OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<UiPreferenceRow>(entity => {
             entity.ToTable("ui_prefs");
             entity.HasKey(row => row.Key);

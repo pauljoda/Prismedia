@@ -88,6 +88,8 @@ public sealed class PrismediaDbContext : DbContext {
 
     public DbSet<MediaFileIgnoreRow> MediaFileIgnores => Set<MediaFileIgnoreRow>();
 
+    public DbSet<ScannedFileRow> ScannedFiles => Set<ScannedFileRow>();
+
     public DbSet<AppSettingRow> AppSettings => Set<AppSettingRow>();
 
     public DbSet<AppSecurityRow> AppSecurity => Set<AppSecurityRow>();

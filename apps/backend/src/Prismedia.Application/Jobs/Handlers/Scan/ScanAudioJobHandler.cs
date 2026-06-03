@@ -17,12 +17,15 @@ public sealed class ScanAudioJobHandler(
     IFileDiscovery fileDiscovery,
     ILibraryScanRootPersistence roots,
     IAudioScanPersistence audio,
-    IDownstreamNeedsPersistence downstreamNeeds) : ScanJobHandler(logger, fileDiscovery, roots) {
+    IDownstreamNeedsPersistence downstreamNeeds,
+    IScanSnapshotStore? snapshots = null) : ScanJobHandler(logger, fileDiscovery, roots, snapshots) {
     public override JobType Type => JobType.ScanAudio;
 
     protected override bool IsEligibleRoot(LibraryRootData root) => root.ScanAudio;
 
-    protected override async Task ScanRootAsync(JobContext context, LibraryRootData root, CancellationToken cancellationToken) {
+    protected override IReadOnlyList<MediaCategory> ScanCategories => [MediaCategory.Audio];
+
+    protected override async Task ScanRootCoreAsync(JobContext context, LibraryRootData root, CancellationToken cancellationToken) {
         logger.LogInformation("ScanAudio: discovering audio files in {Path}", root.Path);
         var excludedPaths = await Roots.GetExcludedPathsForRootAsync(root.Id, cancellationToken);
 

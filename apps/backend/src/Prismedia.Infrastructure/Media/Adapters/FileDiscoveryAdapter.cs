@@ -1,5 +1,6 @@
 using Prismedia.Infrastructure.Media.Processing;
 using Prismedia.Application.Jobs.Ports;
+using Prismedia.Application.Jobs.Scanning;
 
 namespace Prismedia.Infrastructure.Media.Adapters;
 
@@ -15,6 +16,11 @@ public sealed class FileDiscoveryAdapter(FileDiscoveryService inner) : IFileDisc
     public Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> DiscoverFilesByDirectoryAsync(
         string rootPath, MediaCategory category, bool recursive, IReadOnlySet<string> excludedPaths, CancellationToken cancellationToken) {
         return inner.DiscoverFilesByDirectoryAsync(rootPath, ExtensionsFor(category), recursive, excludedPaths, cancellationToken);
+    }
+
+    public Task<IReadOnlyList<FileSignature>> DiscoverFileSignaturesAsync(
+        string rootPath, MediaCategory category, bool recursive, IReadOnlySet<string> excludedPaths, CancellationToken cancellationToken) {
+        return inner.DiscoverFileSignaturesAsync(rootPath, ExtensionsFor(category), recursive, excludedPaths, cancellationToken);
     }
 
     private static IReadOnlySet<string> ExtensionsFor(MediaCategory category) => category switch {
