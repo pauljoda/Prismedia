@@ -1,0 +1,69 @@
+{
+  "_comment": "Canonical browser capability profiles in Jellyfin DeviceProfile shape, modeled on jellyfin-web/src/scripts/browserDeviceProfile.js. The SAME profile is sent to both Jellyfin and Prismedia so the comparison isolates the decision engine, not the profile. CodecProfiles encode the real constraints (HEVC Main10/level/range, H.264 level/range) that Jellyfin honors and Prismedia currently ignores.",
+
+  "chrome-mac": {
+    "MaxStreamingBitrate": 120000000,
+    "MaxStaticBitrate": 100000000,
+    "DirectPlayProfiles": [
+      { "Type": "Video", "Container": "mp4,m4v", "VideoCodec": "h264,hevc,vp9,av1", "AudioCodec": "aac,ac3,eac3,mp3,opus,flac" },
+      { "Type": "Video", "Container": "webm", "VideoCodec": "vp8,vp9,av1", "AudioCodec": "opus,vorbis" },
+      { "Type": "Video", "Container": "hls", "VideoCodec": "h264,hevc,vp9,av1", "AudioCodec": "aac,ac3,eac3,mp3,opus,flac" }
+    ],
+    "TranscodingProfiles": [
+      { "Type": "Video", "Container": "mp4", "Protocol": "hls", "VideoCodec": "h264", "AudioCodec": "aac,mp3", "Context": "Streaming", "MaxAudioChannels": "2", "MinSegments": 1, "BreakOnNonKeyFrames": true }
+    ],
+    "CodecProfiles": [
+      { "Type": "Video", "Codec": "h264", "Conditions": [
+        { "Condition": "EqualsAny", "Property": "VideoProfile", "Value": "high|main|baseline|constrained baseline", "IsRequired": false },
+        { "Condition": "LessThanEqual", "Property": "VideoLevel", "Value": "51", "IsRequired": false },
+        { "Condition": "EqualsAny", "Property": "VideoRangeType", "Value": "SDR", "IsRequired": false } ] },
+      { "Type": "Video", "Codec": "hevc", "Conditions": [
+        { "Condition": "EqualsAny", "Property": "VideoProfile", "Value": "main|main 10", "IsRequired": false },
+        { "Condition": "LessThanEqual", "Property": "VideoLevel", "Value": "153", "IsRequired": false },
+        { "Condition": "EqualsAny", "Property": "VideoRangeType", "Value": "SDR|HDR10|HLG|HDR10Plus", "IsRequired": false } ] }
+    ]
+  },
+
+  "firefox": {
+    "MaxStreamingBitrate": 120000000,
+    "MaxStaticBitrate": 100000000,
+    "DirectPlayProfiles": [
+      { "Type": "Video", "Container": "mp4,m4v", "VideoCodec": "h264,vp9,av1", "AudioCodec": "aac,mp3,opus,flac" },
+      { "Type": "Video", "Container": "webm", "VideoCodec": "vp8,vp9,av1", "AudioCodec": "opus,vorbis" },
+      { "Type": "Video", "Container": "hls", "VideoCodec": "h264", "AudioCodec": "aac,mp3" }
+    ],
+    "TranscodingProfiles": [
+      { "Type": "Video", "Container": "mp4", "Protocol": "hls", "VideoCodec": "h264", "AudioCodec": "aac,mp3", "Context": "Streaming", "MaxAudioChannels": "2", "MinSegments": 1, "BreakOnNonKeyFrames": true }
+    ],
+    "CodecProfiles": [
+      { "Type": "Video", "Codec": "h264", "Conditions": [
+        { "Condition": "EqualsAny", "Property": "VideoProfile", "Value": "high|main|baseline|constrained baseline", "IsRequired": false },
+        { "Condition": "LessThanEqual", "Property": "VideoLevel", "Value": "52", "IsRequired": false },
+        { "Condition": "EqualsAny", "Property": "VideoRangeType", "Value": "SDR", "IsRequired": false } ] }
+    ]
+  },
+
+  "safari": {
+    "MaxStreamingBitrate": 120000000,
+    "MaxStaticBitrate": 100000000,
+    "DirectPlayProfiles": [
+      { "Type": "Video", "Container": "mp4,m4v,mov", "VideoCodec": "h264,hevc", "AudioCodec": "aac,ac3,eac3,mp3,alac,flac" },
+      { "Type": "Video", "Container": "hls", "VideoCodec": "h264,hevc", "AudioCodec": "aac,ac3,eac3,mp3,alac,flac" }
+    ],
+    "TranscodingProfiles": [
+      { "Type": "Video", "Container": "ts", "Protocol": "hls", "VideoCodec": "h264", "AudioCodec": "aac,mp3", "Context": "Streaming", "MaxAudioChannels": "6", "MinSegments": 2, "BreakOnNonKeyFrames": false }
+    ],
+    "CodecProfiles": [
+      { "Type": "Video", "Codec": "h264", "Conditions": [
+        { "Condition": "EqualsAny", "Property": "VideoProfile", "Value": "high|main|baseline|constrained baseline", "IsRequired": false },
+        { "Condition": "LessThanEqual", "Property": "VideoLevel", "Value": "52", "IsRequired": false },
+        { "Condition": "EqualsAny", "Property": "VideoRangeType", "Value": "SDR", "IsRequired": false } ] },
+      { "Type": "Video", "Codec": "hevc", "Conditions": [
+        { "Condition": "EqualsAny", "Property": "VideoProfile", "Value": "main|main 10", "IsRequired": false },
+        { "Condition": "LessThanEqual", "Property": "VideoLevel", "Value": "183", "IsRequired": false },
+        { "Condition": "Equals", "Property": "VideoCodecTag", "Value": "hvc1", "IsRequired": true },
+        { "Condition": "LessThanEqual", "Property": "VideoFramerate", "Value": "60", "IsRequired": true },
+        { "Condition": "EqualsAny", "Property": "VideoRangeType", "Value": "SDR|HDR10|HLG|HDR10Plus|DOVIWithHDR10|DOVIWithHLG|DOVIWithSDR", "IsRequired": false } ] }
+    ]
+  }
+}

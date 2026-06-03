@@ -1,0 +1,746 @@
+[
+  {
+    "name": "Friendship (2025) Bluray-1080p.mp4",
+    "probe": {
+      "container": "mp4",
+      "vcodec": "h264",
+      "vprofile": "High",
+      "level": 41,
+      "bitdepth": "8",
+      "range": "SDR",
+      "height": 1080,
+      "fps": 23.98,
+      "acodec": "aac",
+      "achannels": 6
+    },
+    "profiles": {
+      "chrome-mac": {
+        "prismedia": {
+          "verdict": "DirectPlay",
+          "detail": "",
+          "reasons": "",
+          "transcodingUrl": null
+        },
+        "jellyfin": {
+          "verdict": "DirectPlay",
+          "detail": "",
+          "reasons": "",
+          "transcodingUrl": null
+        },
+        "agree": true
+      },
+      "firefox": {
+        "prismedia": {
+          "verdict": "DirectPlay",
+          "detail": "",
+          "reasons": "",
+          "transcodingUrl": null
+        },
+        "jellyfin": {
+          "verdict": "DirectPlay",
+          "detail": "",
+          "reasons": "",
+          "transcodingUrl": null
+        },
+        "agree": true
+      },
+      "safari": {
+        "prismedia": {
+          "verdict": "DirectPlay",
+          "detail": "",
+          "reasons": "",
+          "transcodingUrl": null
+        },
+        "jellyfin": {
+          "verdict": "DirectPlay",
+          "detail": "",
+          "reasons": "",
+          "transcodingUrl": null
+        },
+        "agree": true
+      }
+    }
+  },
+  {
+    "name": "JUJUTSU KAISEN - S03E11 - Tokyo Colony No. 1, Part 5 WEBRip-2160p.mkv",
+    "probe": {
+      "container": "mkv",
+      "vcodec": "hevc",
+      "vprofile": "Main 10",
+      "level": 150,
+      "bitdepth": "10",
+      "range": "SDR",
+      "height": 2160,
+      "fps": 23.98,
+      "acodec": "opus",
+      "achannels": 2
+    },
+    "profiles": {
+      "chrome-mac": {
+        "prismedia": {
+          "verdict": "Remux",
+          "detail": "v=copy a=aac",
+          "reasons": "",
+          "transcodingUrl": "/Videos/d023f2c8-d7da-4be6-9d9b-2148c211ce48/hls/remux/stream.m3u8?MediaSourceId=8f7c4c5dcdfa4d059db5f46d15207066&PlaySessionId=d1044393407f406192ff8e2f4aaff307&AudioStreamIndex=1"
+        },
+        "jellyfin": {
+          "verdict": "Transcode",
+          "detail": "v=h264 a=aac,mp3",
+          "reasons": "ContainerNotSupported,SubtitleCodecNotSupported",
+          "transcodingUrl": "/videos/cc53e8bf-50a5-40c4-38e4-f988e7979648/master.m3u8?&DeviceId=parity-cli&MediaSourceId=cc53e8bf50a540c438e4f988e7979648&VideoCodec=h264&AudioCodec=aac,mp3&AudioStreamIndex=1&SubtitleStreamIndex=2&VideoBitrate=119616000&AudioBitrate=384000&MaxFramerate=23.976025&SegmentContainer=mp4&MinSegments=1&BreakOnNonKeyFrames=True&PlaySessionId=2ee015bba8654c0a807c1cc6a7e37a1c&ApiKey=be7763418ff14f0785f0ccf083ff8d9f&TranscodingMaxAudioChannels=2&RequireAvc=false&EnableAudioVbrEncoding=true&Tag=109581149f12ffa2e489913d11be0eaa&SubtitleMethod=Encode&hevc-level=150&hevc-videobitdepth=10&hevc-profile=main10&h264-profile=high,main,baseline,constrainedbaseline&h264-level=51&h264-rangetype=SDR&TranscodeReasons=ContainerNotSupported,SubtitleCodecNotSupported"
+        },
+        "agree": false
+      },
+      "firefox": {
+        "prismedia": {
+          "verdict": "Transcode",
+          "detail": "v=h264 a=aac",
+          "reasons": "",
+          "transcodingUrl": "/Videos/d023f2c8-d7da-4be6-9d9b-2148c211ce48/master.m3u8?MediaSourceId=8f7c4c5dcdfa4d059db5f46d15207066&PlaySessionId=54b8db29bd5b461b93892f2da5820d77&AudioStreamIndex=1"
+        },
+        "jellyfin": {
+          "verdict": "Transcode",
+          "detail": "v=h264 a=aac,mp3",
+          "reasons": "ContainerNotSupported,VideoCodecNotSupported,SubtitleCodecNotSupported",
+          "transcodingUrl": "/videos/cc53e8bf-50a5-40c4-38e4-f988e7979648/master.m3u8?&DeviceId=parity-cli&MediaSourceId=cc53e8bf50a540c438e4f988e7979648&VideoCodec=h264&AudioCodec=aac,mp3&AudioStreamIndex=1&SubtitleStreamIndex=2&VideoBitrate=119616000&AudioBitrate=384000&MaxFramerate=23.976025&SegmentContainer=mp4&MinSegments=1&BreakOnNonKeyFrames=True&PlaySessionId=cd7dd627ba364960a9f6ef60b4f5b28c&ApiKey=be7763418ff14f0785f0ccf083ff8d9f&TranscodingMaxAudioChannels=2&RequireAvc=false&EnableAudioVbrEncoding=true&Tag=109581149f12ffa2e489913d11be0eaa&SubtitleMethod=Encode&hevc-level=150&hevc-videobitdepth=10&hevc-profile=main10&h264-profile=high,main,baseline,constrainedbaseline&h264-level=52&h264-rangetype=SDR&TranscodeReasons=ContainerNotSupported,VideoCodecNotSupported,SubtitleCodecNotSupported"
+        },
+        "agree": true
+      },
+      "safari": {
+        "prismedia": {
+          "verdict": "Remux",
+          "detail": "v=copy a=aac",
+          "reasons": "",
+          "transcodingUrl": "/Videos/d023f2c8-d7da-4be6-9d9b-2148c211ce48/hls/remux/stream.m3u8?MediaSourceId=8f7c4c5dcdfa4d059db5f46d15207066&PlaySessionId=f4ab5f58ac7e4833a0d1eb01244c8367&AudioStreamIndex=1"
+        },
+        "jellyfin": {
+          "verdict": "Transcode",
+          "detail": "v=h264 a=aac,mp3",
+          "reasons": "ContainerNotSupported,AudioCodecNotSupported,SubtitleCodecNotSupported,VideoCodecTagNotSupported",
+          "transcodingUrl": "/videos/cc53e8bf-50a5-40c4-38e4-f988e7979648/master.m3u8?&DeviceId=parity-cli&MediaSourceId=cc53e8bf50a540c438e4f988e7979648&VideoCodec=h264&AudioCodec=aac,mp3&AudioStreamIndex=1&SubtitleStreamIndex=2&VideoBitrate=119616000&AudioBitrate=384000&MaxFramerate=23.976025&SegmentContainer=ts&MinSegments=2&BreakOnNonKeyFrames=False&PlaySessionId=810ff0ddb0034776b70a77b6eb462e88&ApiKey=be7763418ff14f0785f0ccf083ff8d9f&TranscodingMaxAudioChannels=6&RequireAvc=false&EnableAudioVbrEncoding=true&Tag=109581149f12ffa2e489913d11be0eaa&SubtitleMethod=Encode&hevc-level=150&hevc-videobitdepth=10&hevc-profile=main10&h264-profile=high,main,baseline,constrainedbaseline&h264-level=52&h264-rangetype=SDR&TranscodeReasons=ContainerNotSupported,AudioCodecNotSupported,SubtitleCodecNotSupported,VideoCodecTagNotSupported"
+        },
+        "agree": false
+      }
+    }
+  },
+  {
+    "name": "The Chair Company - S01E01 - Life goes by too f-king fast, it really does WEBDL-1080p.mkv",
+    "probe": {
+      "container": "mkv",
+      "vcodec": "h264",
+      "vprofile": "High",
+      "level": 40,
+      "bitdepth": "8",
+      "range": "SDR",
+      "height": 960,
+      "fps": 23.98,
+      "acodec": "eac3",
+      "achannels": 6
+    },
+    "profiles": {
+      "chrome-mac": {
+        "prismedia": {
+          "verdict": "Remux",
+          "detail": "v=copy a=aac",
+          "reasons": "",
+          "transcodingUrl": "/Videos/e267df6b-d616-4e9b-a488-7b2224bd366d/hls/remux/stream.m3u8?MediaSourceId=e8c241df8c7945f9842fa83fba3088ef&PlaySessionId=725b470addb34a85bf86197b76744e6d&AudioStreamIndex=1"
+        },
+        "jellyfin": {
+          "verdict": "Remux",
+          "detail": "v=copy a=aac,mp3",
+          "reasons": "ContainerNotSupported",
+          "transcodingUrl": "/videos/32cec9a0-81e8-e9e1-51b9-374203fa636b/master.m3u8?&DeviceId=parity-cli&MediaSourceId=32cec9a081e8e9e151b9374203fa636b&VideoCodec=h264&AudioCodec=aac,mp3&AudioStreamIndex=1&VideoBitrate=119616000&AudioBitrate=384000&MaxFramerate=23.976025&SegmentContainer=mp4&MinSegments=1&BreakOnNonKeyFrames=True&PlaySessionId=529c3cefd7014f4b8c58d265b3cba932&ApiKey=be7763418ff14f0785f0ccf083ff8d9f&TranscodingMaxAudioChannels=2&RequireAvc=false&EnableAudioVbrEncoding=true&Tag=a064694762a80a91498b9982da806071&h264-level=40&h264-videobitdepth=8&h264-profile=high&h264-rangetype=SDR&TranscodeReasons=ContainerNotSupported"
+        },
+        "agree": true
+      },
+      "firefox": {
+        "prismedia": {
+          "verdict": "Remux",
+          "detail": "v=copy a=aac",
+          "reasons": "",
+          "transcodingUrl": "/Videos/e267df6b-d616-4e9b-a488-7b2224bd366d/hls/remux/stream.m3u8?MediaSourceId=e8c241df8c7945f9842fa83fba3088ef&PlaySessionId=0a5a489c00bd456eb7bc90d409d90703&AudioStreamIndex=1"
+        },
+        "jellyfin": {
+          "verdict": "Remux",
+          "detail": "v=copy a=aac,mp3",
+          "reasons": "ContainerNotSupported,AudioCodecNotSupported",
+          "transcodingUrl": "/videos/32cec9a0-81e8-e9e1-51b9-374203fa636b/master.m3u8?&DeviceId=parity-cli&MediaSourceId=32cec9a081e8e9e151b9374203fa636b&VideoCodec=h264&AudioCodec=aac,mp3&AudioStreamIndex=1&VideoBitrate=119616000&AudioBitrate=384000&MaxFramerate=23.976025&SegmentContainer=mp4&MinSegments=1&BreakOnNonKeyFrames=True&PlaySessionId=363312c5f7ab482eb174c77ebf1ca559&ApiKey=be7763418ff14f0785f0ccf083ff8d9f&TranscodingMaxAudioChannels=2&RequireAvc=false&EnableAudioVbrEncoding=true&Tag=a064694762a80a91498b9982da806071&h264-level=40&h264-videobitdepth=8&h264-profile=high&h264-rangetype=SDR&TranscodeReasons=ContainerNotSupported,AudioCodecNotSupported"
+        },
+        "agree": true
+      },
+      "safari": {
+        "prismedia": {
+          "verdict": "Remux",
+          "detail": "v=copy a=aac",
+          "reasons": "",
+          "transcodingUrl": "/Videos/e267df6b-d616-4e9b-a488-7b2224bd366d/hls/remux/stream.m3u8?MediaSourceId=e8c241df8c7945f9842fa83fba3088ef&PlaySessionId=faa24d5ef98246c2b2e4cdf4b07588e1&AudioStreamIndex=1"
+        },
+        "jellyfin": {
+          "verdict": "Remux",
+          "detail": "v=copy a=aac,mp3",
+          "reasons": "ContainerNotSupported",
+          "transcodingUrl": "/videos/32cec9a0-81e8-e9e1-51b9-374203fa636b/master.m3u8?&DeviceId=parity-cli&MediaSourceId=32cec9a081e8e9e151b9374203fa636b&VideoCodec=h264&AudioCodec=aac,mp3&AudioStreamIndex=1&VideoBitrate=119360000&AudioBitrate=640000&MaxFramerate=23.976025&SegmentContainer=ts&MinSegments=2&BreakOnNonKeyFrames=False&PlaySessionId=9dc71be3062d4b9191954ccada4343ee&ApiKey=be7763418ff14f0785f0ccf083ff8d9f&TranscodingMaxAudioChannels=6&RequireAvc=false&EnableAudioVbrEncoding=true&Tag=a064694762a80a91498b9982da806071&h264-level=40&h264-videobitdepth=8&h264-profile=high&h264-rangetype=SDR&TranscodeReasons=ContainerNotSupported"
+        },
+        "agree": true
+      }
+    }
+  },
+  {
+    "name": "The Chair Company - S01E02 - New Blood. There\u2019s 5 Rons Now WEBDL-2160p.mkv",
+    "probe": {
+      "container": "mkv",
+      "vcodec": "hevc",
+      "vprofile": "Main 10",
+      "level": 153,
+      "bitdepth": "10",
+      "range": "DOVI",
+      "height": 1920,
+      "fps": 23.98,
+      "acodec": "eac3",
+      "achannels": 6
+    },
+    "profiles": {
+      "chrome-mac": {
+        "prismedia": {
+          "verdict": "Remux",
+          "detail": "v=copy a=aac",
+          "reasons": "",
+          "transcodingUrl": "/Videos/d8d166f3-33b3-42d5-a5cd-d12af1b2cdef/hls/remux/stream.m3u8?MediaSourceId=6ae37ff8a5e0447d9dbb0a003a56e0bc&PlaySessionId=8284fedf86f14cfca4f863706d6b61bb&AudioStreamIndex=1"
+        },
+        "jellyfin": {
+          "verdict": "Transcode",
+          "detail": "v=h264 a=aac,mp3",
+          "reasons": "ContainerNotSupported,VideoRangeTypeNotSupported",
+          "transcodingUrl": "/videos/1d49e1df-80fa-7fcc-0593-9eaf707e7918/master.m3u8?&DeviceId=parity-cli&MediaSourceId=1d49e1df80fa7fcc05939eaf707e7918&VideoCodec=h264&AudioCodec=aac,mp3&AudioStreamIndex=1&VideoBitrate=119616000&AudioBitrate=384000&MaxFramerate=23.976025&SegmentContainer=mp4&MinSegments=1&BreakOnNonKeyFrames=True&PlaySessionId=b9751e9635f8479c9a16d02395db4120&ApiKey=be7763418ff14f0785f0ccf083ff8d9f&TranscodingMaxAudioChannels=2&RequireAvc=false&EnableAudioVbrEncoding=true&Tag=ea48b7281033fb2274c010c64ef22a29&hevc-level=153&hevc-videobitdepth=10&hevc-profile=main10&h264-profile=high,main,baseline,constrainedbaseline&h264-level=51&h264-rangetype=SDR&TranscodeReasons=ContainerNotSupported,VideoRangeTypeNotSupported"
+        },
+        "agree": false
+      },
+      "firefox": {
+        "prismedia": {
+          "verdict": "Transcode",
+          "detail": "v=h264 a=aac",
+          "reasons": "",
+          "transcodingUrl": "/Videos/d8d166f3-33b3-42d5-a5cd-d12af1b2cdef/master.m3u8?MediaSourceId=6ae37ff8a5e0447d9dbb0a003a56e0bc&PlaySessionId=57a1fab3aa204477a6f21593e294d096&AudioStreamIndex=1"
+        },
+        "jellyfin": {
+          "verdict": "Transcode",
+          "detail": "v=h264 a=aac,mp3",
+          "reasons": "ContainerNotSupported,VideoCodecNotSupported,AudioCodecNotSupported",
+          "transcodingUrl": "/videos/1d49e1df-80fa-7fcc-0593-9eaf707e7918/master.m3u8?&DeviceId=parity-cli&MediaSourceId=1d49e1df80fa7fcc05939eaf707e7918&VideoCodec=h264&AudioCodec=aac,mp3&AudioStreamIndex=1&VideoBitrate=119616000&AudioBitrate=384000&MaxFramerate=23.976025&SegmentContainer=mp4&MinSegments=1&BreakOnNonKeyFrames=True&PlaySessionId=8dab7e476f084e1294d44f067d377c5f&ApiKey=be7763418ff14f0785f0ccf083ff8d9f&TranscodingMaxAudioChannels=2&RequireAvc=false&EnableAudioVbrEncoding=true&Tag=ea48b7281033fb2274c010c64ef22a29&hevc-level=153&hevc-videobitdepth=10&hevc-profile=main10&h264-profile=high,main,baseline,constrainedbaseline&h264-level=52&h264-rangetype=SDR&TranscodeReasons=ContainerNotSupported,VideoCodecNotSupported,AudioCodecNotSupported"
+        },
+        "agree": true
+      },
+      "safari": {
+        "prismedia": {
+          "verdict": "Remux",
+          "detail": "v=copy a=aac",
+          "reasons": "",
+          "transcodingUrl": "/Videos/d8d166f3-33b3-42d5-a5cd-d12af1b2cdef/hls/remux/stream.m3u8?MediaSourceId=6ae37ff8a5e0447d9dbb0a003a56e0bc&PlaySessionId=35cf5ecef3b740bd9d698b000da1647d&AudioStreamIndex=1"
+        },
+        "jellyfin": {
+          "verdict": "Transcode",
+          "detail": "v=h264 a=aac,mp3",
+          "reasons": "ContainerNotSupported,VideoCodecTagNotSupported",
+          "transcodingUrl": "/videos/1d49e1df-80fa-7fcc-0593-9eaf707e7918/master.m3u8?&DeviceId=parity-cli&MediaSourceId=1d49e1df80fa7fcc05939eaf707e7918&VideoCodec=h264&AudioCodec=aac,mp3&AudioStreamIndex=1&VideoBitrate=119360000&AudioBitrate=640000&MaxFramerate=23.976025&SegmentContainer=ts&MinSegments=2&BreakOnNonKeyFrames=False&PlaySessionId=9baee27da57a4a03a54f2625478d4ad9&ApiKey=be7763418ff14f0785f0ccf083ff8d9f&TranscodingMaxAudioChannels=6&RequireAvc=false&EnableAudioVbrEncoding=true&Tag=ea48b7281033fb2274c010c64ef22a29&hevc-level=153&hevc-videobitdepth=10&hevc-profile=main10&h264-profile=high,main,baseline,constrainedbaseline&h264-level=52&h264-rangetype=SDR&TranscodeReasons=ContainerNotSupported,VideoCodecTagNotSupported"
+        },
+        "agree": false
+      }
+    }
+  },
+  {
+    "name": "The Chair Company - S01E03 - @BrownDerbyHistoricVids Little bit of Hollywood! Okayyy WEBDL-1080p.mkv",
+    "probe": {
+      "container": "mkv",
+      "vcodec": "h264",
+      "vprofile": "High",
+      "level": 40,
+      "bitdepth": "8",
+      "range": "SDR",
+      "height": 960,
+      "fps": 23.98,
+      "acodec": "eac3",
+      "achannels": 6
+    },
+    "profiles": {
+      "chrome-mac": {
+        "prismedia": {
+          "verdict": "Remux",
+          "detail": "v=copy a=aac",
+          "reasons": "",
+          "transcodingUrl": "/Videos/2f5f5b7b-c489-49ac-8afa-39248d89b245/hls/remux/stream.m3u8?MediaSourceId=32cb4fe342804bff89c5d58940d9388a&PlaySessionId=bcc6243678a7476280f1722f62598dc1&AudioStreamIndex=1"
+        },
+        "jellyfin": {
+          "verdict": "Remux",
+          "detail": "v=copy a=aac,mp3",
+          "reasons": "ContainerNotSupported",
+          "transcodingUrl": "/videos/af29ab95-591c-8082-7240-37a365814ee0/master.m3u8?&DeviceId=parity-cli&MediaSourceId=af29ab95591c8082724037a365814ee0&VideoCodec=h264&AudioCodec=aac,mp3&AudioStreamIndex=1&VideoBitrate=119616000&AudioBitrate=384000&MaxFramerate=23.976025&SegmentContainer=mp4&MinSegments=1&BreakOnNonKeyFrames=True&PlaySessionId=e834b6892e6746dfb2a21c18b21e1f9f&ApiKey=be7763418ff14f0785f0ccf083ff8d9f&TranscodingMaxAudioChannels=2&RequireAvc=false&EnableAudioVbrEncoding=true&Tag=461ade1ecd0ce181983b20267812c0a6&h264-level=40&h264-videobitdepth=8&h264-profile=high&h264-rangetype=SDR&TranscodeReasons=ContainerNotSupported"
+        },
+        "agree": true
+      },
+      "firefox": {
+        "prismedia": {
+          "verdict": "Remux",
+          "detail": "v=copy a=aac",
+          "reasons": "",
+          "transcodingUrl": "/Videos/2f5f5b7b-c489-49ac-8afa-39248d89b245/hls/remux/stream.m3u8?MediaSourceId=32cb4fe342804bff89c5d58940d9388a&PlaySessionId=d47abc4e6ea14e668f3caed43d5a72f2&AudioStreamIndex=1"
+        },
+        "jellyfin": {
+          "verdict": "Remux",
+          "detail": "v=copy a=aac,mp3",
+          "reasons": "ContainerNotSupported,AudioCodecNotSupported",
+          "transcodingUrl": "/videos/af29ab95-591c-8082-7240-37a365814ee0/master.m3u8?&DeviceId=parity-cli&MediaSourceId=af29ab95591c8082724037a365814ee0&VideoCodec=h264&AudioCodec=aac,mp3&AudioStreamIndex=1&VideoBitrate=119616000&AudioBitrate=384000&MaxFramerate=23.976025&SegmentContainer=mp4&MinSegments=1&BreakOnNonKeyFrames=True&PlaySessionId=689e8a849ec24a018dcf11879b3ceb67&ApiKey=be7763418ff14f0785f0ccf083ff8d9f&TranscodingMaxAudioChannels=2&RequireAvc=false&EnableAudioVbrEncoding=true&Tag=461ade1ecd0ce181983b20267812c0a6&h264-level=40&h264-videobitdepth=8&h264-profile=high&h264-rangetype=SDR&TranscodeReasons=ContainerNotSupported,AudioCodecNotSupported"
+        },
+        "agree": true
+      },
+      "safari": {
+        "prismedia": {
+          "verdict": "Remux",
+          "detail": "v=copy a=aac",
+          "reasons": "",
+          "transcodingUrl": "/Videos/2f5f5b7b-c489-49ac-8afa-39248d89b245/hls/remux/stream.m3u8?MediaSourceId=32cb4fe342804bff89c5d58940d9388a&PlaySessionId=73ce124f935444978bc7746dc7acbb59&AudioStreamIndex=1"
+        },
+        "jellyfin": {
+          "verdict": "Remux",
+          "detail": "v=copy a=aac,mp3",
+          "reasons": "ContainerNotSupported",
+          "transcodingUrl": "/videos/af29ab95-591c-8082-7240-37a365814ee0/master.m3u8?&DeviceId=parity-cli&MediaSourceId=af29ab95591c8082724037a365814ee0&VideoCodec=h264&AudioCodec=aac,mp3&AudioStreamIndex=1&VideoBitrate=119360000&AudioBitrate=640000&MaxFramerate=23.976025&SegmentContainer=ts&MinSegments=2&BreakOnNonKeyFrames=False&PlaySessionId=24c9a0e7246f489cad6133ed6d2f5d4b&ApiKey=be7763418ff14f0785f0ccf083ff8d9f&TranscodingMaxAudioChannels=6&RequireAvc=false&EnableAudioVbrEncoding=true&Tag=461ade1ecd0ce181983b20267812c0a6&h264-level=40&h264-videobitdepth=8&h264-profile=high&h264-rangetype=SDR&TranscodeReasons=ContainerNotSupported"
+        },
+        "agree": true
+      }
+    }
+  },
+  {
+    "name": "The Chair Company - S01E04 - Bahld Harmon birthplace (disputed) WEBDL-2160p.mkv",
+    "probe": {
+      "container": "mkv",
+      "vcodec": "hevc",
+      "vprofile": "Main 10",
+      "level": 153,
+      "bitdepth": "10",
+      "range": "DOVI",
+      "height": 1920,
+      "fps": 23.98,
+      "acodec": "eac3",
+      "achannels": 6
+    },
+    "profiles": {
+      "chrome-mac": {
+        "prismedia": {
+          "verdict": "Remux",
+          "detail": "v=copy a=aac",
+          "reasons": "",
+          "transcodingUrl": "/Videos/1588dbbc-af44-4e10-8372-e43f0fb403ef/hls/remux/stream.m3u8?MediaSourceId=d4dc6f309d85448e8c445a624a460403&PlaySessionId=70a2ebaf206c46d8a63decabeddf5ae7&AudioStreamIndex=2"
+        },
+        "jellyfin": {
+          "verdict": "Transcode",
+          "detail": "v=h264 a=aac,mp3",
+          "reasons": "ContainerNotSupported,SubtitleCodecNotSupported,VideoRangeTypeNotSupported",
+          "transcodingUrl": "/videos/47c6f9fe-9a90-0c9f-ff49-c1526a324d32/master.m3u8?&DeviceId=parity-cli&MediaSourceId=47c6f9fe9a900c9fff49c1526a324d32&VideoCodec=h264&AudioCodec=aac,mp3&AudioStreamIndex=1&SubtitleStreamIndex=3&VideoBitrate=119616000&AudioBitrate=384000&MaxFramerate=23.976025&SegmentContainer=mp4&MinSegments=1&BreakOnNonKeyFrames=True&PlaySessionId=47e26d64c20e4cdd8333f537d750cd80&ApiKey=be7763418ff14f0785f0ccf083ff8d9f&TranscodingMaxAudioChannels=2&RequireAvc=false&EnableAudioVbrEncoding=true&Tag=e7a621e43418daed00239ed514557596&SubtitleMethod=Encode&hevc-level=153&hevc-videobitdepth=10&hevc-profile=main10&h264-profile=high,main,baseline,constrainedbaseline&h264-level=51&h264-rangetype=SDR&TranscodeReasons=ContainerNotSupported,SubtitleCodecNotSupported,VideoRangeTypeNotSupported"
+        },
+        "agree": false
+      },
+      "firefox": {
+        "prismedia": {
+          "verdict": "Transcode",
+          "detail": "v=h264 a=aac",
+          "reasons": "",
+          "transcodingUrl": "/Videos/1588dbbc-af44-4e10-8372-e43f0fb403ef/master.m3u8?MediaSourceId=d4dc6f309d85448e8c445a624a460403&PlaySessionId=ce37609dd1dd4661ba28a08c48dba03e&AudioStreamIndex=2"
+        },
+        "jellyfin": {
+          "verdict": "Transcode",
+          "detail": "v=h264 a=aac,mp3",
+          "reasons": "ContainerNotSupported,VideoCodecNotSupported,AudioCodecNotSupported,SubtitleCodecNotSupported",
+          "transcodingUrl": "/videos/47c6f9fe-9a90-0c9f-ff49-c1526a324d32/master.m3u8?&DeviceId=parity-cli&MediaSourceId=47c6f9fe9a900c9fff49c1526a324d32&VideoCodec=h264&AudioCodec=aac,mp3&AudioStreamIndex=1&SubtitleStreamIndex=3&VideoBitrate=119616000&AudioBitrate=384000&MaxFramerate=23.976025&SegmentContainer=mp4&MinSegments=1&BreakOnNonKeyFrames=True&PlaySessionId=61d55c7e5bcf411a9b2ea6b55f34d4fe&ApiKey=be7763418ff14f0785f0ccf083ff8d9f&TranscodingMaxAudioChannels=2&RequireAvc=false&EnableAudioVbrEncoding=true&Tag=e7a621e43418daed00239ed514557596&SubtitleMethod=Encode&hevc-level=153&hevc-videobitdepth=10&hevc-profile=main10&h264-profile=high,main,baseline,constrainedbaseline&h264-level=52&h264-rangetype=SDR&TranscodeReasons=ContainerNotSupported,VideoCodecNotSupported,AudioCodecNotSupported,SubtitleCodecNotSupported"
+        },
+        "agree": true
+      },
+      "safari": {
+        "prismedia": {
+          "verdict": "Remux",
+          "detail": "v=copy a=aac",
+          "reasons": "",
+          "transcodingUrl": "/Videos/1588dbbc-af44-4e10-8372-e43f0fb403ef/hls/remux/stream.m3u8?MediaSourceId=d4dc6f309d85448e8c445a624a460403&PlaySessionId=d26f47575de044bda95cd40923f0901c&AudioStreamIndex=2"
+        },
+        "jellyfin": {
+          "verdict": "Transcode",
+          "detail": "v=h264 a=aac,mp3",
+          "reasons": "ContainerNotSupported,SubtitleCodecNotSupported,VideoCodecTagNotSupported",
+          "transcodingUrl": "/videos/47c6f9fe-9a90-0c9f-ff49-c1526a324d32/master.m3u8?&DeviceId=parity-cli&MediaSourceId=47c6f9fe9a900c9fff49c1526a324d32&VideoCodec=h264&AudioCodec=aac,mp3&AudioStreamIndex=1&SubtitleStreamIndex=3&VideoBitrate=119360000&AudioBitrate=640000&MaxFramerate=23.976025&SegmentContainer=ts&MinSegments=2&BreakOnNonKeyFrames=False&PlaySessionId=6697e0b1ccbf4f24a5d847878745da9f&ApiKey=be7763418ff14f0785f0ccf083ff8d9f&TranscodingMaxAudioChannels=6&RequireAvc=false&EnableAudioVbrEncoding=true&Tag=e7a621e43418daed00239ed514557596&SubtitleMethod=Encode&hevc-level=153&hevc-videobitdepth=10&hevc-profile=main10&h264-profile=high,main,baseline,constrainedbaseline&h264-level=52&h264-rangetype=SDR&TranscodeReasons=ContainerNotSupported,SubtitleCodecNotSupported,VideoCodecTagNotSupported"
+        },
+        "agree": false
+      }
+    }
+  },
+  {
+    "name": "The Chair Company - S01E05 - I won. Zoom in WEBDL-2160p.mkv",
+    "probe": {
+      "container": "mkv",
+      "vcodec": "hevc",
+      "vprofile": "Main 10",
+      "level": 153,
+      "bitdepth": "10",
+      "range": "DOVI",
+      "height": 1920,
+      "fps": 23.98,
+      "acodec": "eac3",
+      "achannels": 6
+    },
+    "profiles": {
+      "chrome-mac": {
+        "prismedia": {
+          "verdict": "Remux",
+          "detail": "v=copy a=aac",
+          "reasons": "",
+          "transcodingUrl": "/Videos/61664847-c5c6-407b-a065-08501d1d7d84/hls/remux/stream.m3u8?MediaSourceId=a1bb0fbca7e5459480aabbe5fac767db&PlaySessionId=9bbcbe9d73fd4de8844ef6bb8f8a7caa&AudioStreamIndex=1"
+        },
+        "jellyfin": {
+          "verdict": "Transcode",
+          "detail": "v=h264 a=aac,mp3",
+          "reasons": "ContainerNotSupported,VideoRangeTypeNotSupported",
+          "transcodingUrl": "/videos/6e591fc2-1633-bd63-8478-169086658e02/master.m3u8?&DeviceId=parity-cli&MediaSourceId=6e591fc21633bd638478169086658e02&VideoCodec=h264&AudioCodec=aac,mp3&AudioStreamIndex=1&VideoBitrate=119616000&AudioBitrate=384000&MaxFramerate=23.976025&SegmentContainer=mp4&MinSegments=1&BreakOnNonKeyFrames=True&PlaySessionId=422d8b6642ca4851913aa8b6e9b6ff4e&ApiKey=be7763418ff14f0785f0ccf083ff8d9f&TranscodingMaxAudioChannels=2&RequireAvc=false&EnableAudioVbrEncoding=true&Tag=aa72637599e7c3fa7c06472c1a87f1fe&hevc-level=153&hevc-videobitdepth=10&hevc-profile=main10&h264-profile=high,main,baseline,constrainedbaseline&h264-level=51&h264-rangetype=SDR&TranscodeReasons=ContainerNotSupported,VideoRangeTypeNotSupported"
+        },
+        "agree": false
+      },
+      "firefox": {
+        "prismedia": {
+          "verdict": "Transcode",
+          "detail": "v=h264 a=aac",
+          "reasons": "",
+          "transcodingUrl": "/Videos/61664847-c5c6-407b-a065-08501d1d7d84/master.m3u8?MediaSourceId=a1bb0fbca7e5459480aabbe5fac767db&PlaySessionId=67818d369fc249f187524dfe97f616b3&AudioStreamIndex=1"
+        },
+        "jellyfin": {
+          "verdict": "Transcode",
+          "detail": "v=h264 a=aac,mp3",
+          "reasons": "ContainerNotSupported,VideoCodecNotSupported,AudioCodecNotSupported",
+          "transcodingUrl": "/videos/6e591fc2-1633-bd63-8478-169086658e02/master.m3u8?&DeviceId=parity-cli&MediaSourceId=6e591fc21633bd638478169086658e02&VideoCodec=h264&AudioCodec=aac,mp3&AudioStreamIndex=1&VideoBitrate=119616000&AudioBitrate=384000&MaxFramerate=23.976025&SegmentContainer=mp4&MinSegments=1&BreakOnNonKeyFrames=True&PlaySessionId=25cf42ef3aaa47b7917c8c14f75227a2&ApiKey=be7763418ff14f0785f0ccf083ff8d9f&TranscodingMaxAudioChannels=2&RequireAvc=false&EnableAudioVbrEncoding=true&Tag=aa72637599e7c3fa7c06472c1a87f1fe&hevc-level=153&hevc-videobitdepth=10&hevc-profile=main10&h264-profile=high,main,baseline,constrainedbaseline&h264-level=52&h264-rangetype=SDR&TranscodeReasons=ContainerNotSupported,VideoCodecNotSupported,AudioCodecNotSupported"
+        },
+        "agree": true
+      },
+      "safari": {
+        "prismedia": {
+          "verdict": "Remux",
+          "detail": "v=copy a=aac",
+          "reasons": "",
+          "transcodingUrl": "/Videos/61664847-c5c6-407b-a065-08501d1d7d84/hls/remux/stream.m3u8?MediaSourceId=a1bb0fbca7e5459480aabbe5fac767db&PlaySessionId=e14cd4e0bc744f919d30dc474859c8fa&AudioStreamIndex=1"
+        },
+        "jellyfin": {
+          "verdict": "Transcode",
+          "detail": "v=h264 a=aac,mp3",
+          "reasons": "ContainerNotSupported,VideoCodecTagNotSupported",
+          "transcodingUrl": "/videos/6e591fc2-1633-bd63-8478-169086658e02/master.m3u8?&DeviceId=parity-cli&MediaSourceId=6e591fc21633bd638478169086658e02&VideoCodec=h264&AudioCodec=aac,mp3&AudioStreamIndex=1&VideoBitrate=119360000&AudioBitrate=640000&MaxFramerate=23.976025&SegmentContainer=ts&MinSegments=2&BreakOnNonKeyFrames=False&PlaySessionId=fc801f91753949d29760faace778195d&ApiKey=be7763418ff14f0785f0ccf083ff8d9f&TranscodingMaxAudioChannels=6&RequireAvc=false&EnableAudioVbrEncoding=true&Tag=aa72637599e7c3fa7c06472c1a87f1fe&hevc-level=153&hevc-videobitdepth=10&hevc-profile=main10&h264-profile=high,main,baseline,constrainedbaseline&h264-level=52&h264-rangetype=SDR&TranscodeReasons=ContainerNotSupported,VideoCodecTagNotSupported"
+        },
+        "agree": false
+      }
+    }
+  },
+  {
+    "name": "The Chair Company - S01E06 - Happy Birthday, A Friend WEBDL-1080p.mkv",
+    "probe": {
+      "container": "mkv",
+      "vcodec": "h264",
+      "vprofile": "High",
+      "level": 40,
+      "bitdepth": "8",
+      "range": "SDR",
+      "height": 960,
+      "fps": 23.98,
+      "acodec": "eac3",
+      "achannels": 6
+    },
+    "profiles": {
+      "chrome-mac": {
+        "prismedia": {
+          "verdict": "Remux",
+          "detail": "v=copy a=aac",
+          "reasons": "",
+          "transcodingUrl": "/Videos/5df02785-da42-4b51-b16e-71dbb29d6398/hls/remux/stream.m3u8?MediaSourceId=114ad5207305499a87b642a62fc4a753&PlaySessionId=e498a60db51c49e88ca77a8dec47f2b4&AudioStreamIndex=1"
+        },
+        "jellyfin": {
+          "verdict": "Remux",
+          "detail": "v=copy a=aac,mp3",
+          "reasons": "ContainerNotSupported",
+          "transcodingUrl": "/videos/b329b1be-a0e0-89ef-38ae-d271b1dc46fe/master.m3u8?&DeviceId=parity-cli&MediaSourceId=b329b1bea0e089ef38aed271b1dc46fe&VideoCodec=h264&AudioCodec=aac,mp3&AudioStreamIndex=1&VideoBitrate=119616000&AudioBitrate=384000&MaxFramerate=23.976025&SegmentContainer=mp4&MinSegments=1&BreakOnNonKeyFrames=True&PlaySessionId=1714e5d55b634daca8a04a33f0477614&ApiKey=be7763418ff14f0785f0ccf083ff8d9f&TranscodingMaxAudioChannels=2&RequireAvc=false&EnableAudioVbrEncoding=true&Tag=605d6277a914ac92b87fb70bc93ee29a&h264-level=40&h264-videobitdepth=8&h264-profile=high&h264-rangetype=SDR&TranscodeReasons=ContainerNotSupported"
+        },
+        "agree": true
+      },
+      "firefox": {
+        "prismedia": {
+          "verdict": "Remux",
+          "detail": "v=copy a=aac",
+          "reasons": "",
+          "transcodingUrl": "/Videos/5df02785-da42-4b51-b16e-71dbb29d6398/hls/remux/stream.m3u8?MediaSourceId=114ad5207305499a87b642a62fc4a753&PlaySessionId=a0902a3f30eb42e28f1bae53b5eecc08&AudioStreamIndex=1"
+        },
+        "jellyfin": {
+          "verdict": "Remux",
+          "detail": "v=copy a=aac,mp3",
+          "reasons": "ContainerNotSupported,AudioCodecNotSupported",
+          "transcodingUrl": "/videos/b329b1be-a0e0-89ef-38ae-d271b1dc46fe/master.m3u8?&DeviceId=parity-cli&MediaSourceId=b329b1bea0e089ef38aed271b1dc46fe&VideoCodec=h264&AudioCodec=aac,mp3&AudioStreamIndex=1&VideoBitrate=119616000&AudioBitrate=384000&MaxFramerate=23.976025&SegmentContainer=mp4&MinSegments=1&BreakOnNonKeyFrames=True&PlaySessionId=c7381d09f89d441a97f9109348725c3f&ApiKey=be7763418ff14f0785f0ccf083ff8d9f&TranscodingMaxAudioChannels=2&RequireAvc=false&EnableAudioVbrEncoding=true&Tag=605d6277a914ac92b87fb70bc93ee29a&h264-level=40&h264-videobitdepth=8&h264-profile=high&h264-rangetype=SDR&TranscodeReasons=ContainerNotSupported,AudioCodecNotSupported"
+        },
+        "agree": true
+      },
+      "safari": {
+        "prismedia": {
+          "verdict": "Remux",
+          "detail": "v=copy a=aac",
+          "reasons": "",
+          "transcodingUrl": "/Videos/5df02785-da42-4b51-b16e-71dbb29d6398/hls/remux/stream.m3u8?MediaSourceId=114ad5207305499a87b642a62fc4a753&PlaySessionId=103c61962f5a4325a9bf1de248ea17c7&AudioStreamIndex=1"
+        },
+        "jellyfin": {
+          "verdict": "Remux",
+          "detail": "v=copy a=aac,mp3",
+          "reasons": "ContainerNotSupported",
+          "transcodingUrl": "/videos/b329b1be-a0e0-89ef-38ae-d271b1dc46fe/master.m3u8?&DeviceId=parity-cli&MediaSourceId=b329b1bea0e089ef38aed271b1dc46fe&VideoCodec=h264&AudioCodec=aac,mp3&AudioStreamIndex=1&VideoBitrate=119360000&AudioBitrate=640000&MaxFramerate=23.976025&SegmentContainer=ts&MinSegments=2&BreakOnNonKeyFrames=False&PlaySessionId=67c9e3811c7442248f35190fbdb5fb20&ApiKey=be7763418ff14f0785f0ccf083ff8d9f&TranscodingMaxAudioChannels=6&RequireAvc=false&EnableAudioVbrEncoding=true&Tag=605d6277a914ac92b87fb70bc93ee29a&h264-level=40&h264-videobitdepth=8&h264-profile=high&h264-rangetype=SDR&TranscodeReasons=ContainerNotSupported"
+        },
+        "agree": true
+      }
+    }
+  },
+  {
+    "name": "The Chair Company - S01E07 - I Said to My Dog, I Asked Him, How Do You Like My Hippie Shirt WEBDL-2160p.mkv",
+    "probe": {
+      "container": "mkv",
+      "vcodec": "hevc",
+      "vprofile": "Main 10",
+      "level": 153,
+      "bitdepth": "10",
+      "range": "DOVI",
+      "height": 1920,
+      "fps": 23.98,
+      "acodec": "eac3",
+      "achannels": 6
+    },
+    "profiles": {
+      "chrome-mac": {
+        "prismedia": {
+          "verdict": "Remux",
+          "detail": "v=copy a=aac",
+          "reasons": "",
+          "transcodingUrl": "/Videos/996578c4-a46f-4e41-bd4a-94ebdbd16634/hls/remux/stream.m3u8?MediaSourceId=4e3d3de43a8946459f925a998492b404&PlaySessionId=b19cef50e68d49718220f3ecd255584a&AudioStreamIndex=1"
+        },
+        "jellyfin": {
+          "verdict": "Transcode",
+          "detail": "v=h264 a=aac,mp3",
+          "reasons": "ContainerNotSupported,VideoRangeTypeNotSupported",
+          "transcodingUrl": "/videos/b809fcbf-00c0-99a8-b3ac-1ec90462a5ac/master.m3u8?&DeviceId=parity-cli&MediaSourceId=b809fcbf00c099a8b3ac1ec90462a5ac&VideoCodec=h264&AudioCodec=aac,mp3&AudioStreamIndex=1&VideoBitrate=119616000&AudioBitrate=384000&MaxFramerate=23.976025&SegmentContainer=mp4&MinSegments=1&BreakOnNonKeyFrames=True&PlaySessionId=392e4ce5522342ea9e4bd56d150c1a87&ApiKey=be7763418ff14f0785f0ccf083ff8d9f&TranscodingMaxAudioChannels=2&RequireAvc=false&EnableAudioVbrEncoding=true&Tag=8f1bb2b35d70e41aeadccbe52e33389e&hevc-level=153&hevc-videobitdepth=10&hevc-profile=main10&h264-profile=high,main,baseline,constrainedbaseline&h264-level=51&h264-rangetype=SDR&TranscodeReasons=ContainerNotSupported,VideoRangeTypeNotSupported"
+        },
+        "agree": false
+      },
+      "firefox": {
+        "prismedia": {
+          "verdict": "Transcode",
+          "detail": "v=h264 a=aac",
+          "reasons": "",
+          "transcodingUrl": "/Videos/996578c4-a46f-4e41-bd4a-94ebdbd16634/master.m3u8?MediaSourceId=4e3d3de43a8946459f925a998492b404&PlaySessionId=97d17151bbb44d16ae7f3c971ec078fd&AudioStreamIndex=1"
+        },
+        "jellyfin": {
+          "verdict": "Transcode",
+          "detail": "v=h264 a=aac,mp3",
+          "reasons": "ContainerNotSupported,VideoCodecNotSupported,AudioCodecNotSupported",
+          "transcodingUrl": "/videos/b809fcbf-00c0-99a8-b3ac-1ec90462a5ac/master.m3u8?&DeviceId=parity-cli&MediaSourceId=b809fcbf00c099a8b3ac1ec90462a5ac&VideoCodec=h264&AudioCodec=aac,mp3&AudioStreamIndex=1&VideoBitrate=119616000&AudioBitrate=384000&MaxFramerate=23.976025&SegmentContainer=mp4&MinSegments=1&BreakOnNonKeyFrames=True&PlaySessionId=df73d97dd1e44da58a778a7e8c057a43&ApiKey=be7763418ff14f0785f0ccf083ff8d9f&TranscodingMaxAudioChannels=2&RequireAvc=false&EnableAudioVbrEncoding=true&Tag=8f1bb2b35d70e41aeadccbe52e33389e&hevc-level=153&hevc-videobitdepth=10&hevc-profile=main10&h264-profile=high,main,baseline,constrainedbaseline&h264-level=52&h264-rangetype=SDR&TranscodeReasons=ContainerNotSupported,VideoCodecNotSupported,AudioCodecNotSupported"
+        },
+        "agree": true
+      },
+      "safari": {
+        "prismedia": {
+          "verdict": "Remux",
+          "detail": "v=copy a=aac",
+          "reasons": "",
+          "transcodingUrl": "/Videos/996578c4-a46f-4e41-bd4a-94ebdbd16634/hls/remux/stream.m3u8?MediaSourceId=4e3d3de43a8946459f925a998492b404&PlaySessionId=7dd62fea83ad41a2883ac763ab72627f&AudioStreamIndex=1"
+        },
+        "jellyfin": {
+          "verdict": "Transcode",
+          "detail": "v=h264 a=aac,mp3",
+          "reasons": "ContainerNotSupported,VideoCodecTagNotSupported",
+          "transcodingUrl": "/videos/b809fcbf-00c0-99a8-b3ac-1ec90462a5ac/master.m3u8?&DeviceId=parity-cli&MediaSourceId=b809fcbf00c099a8b3ac1ec90462a5ac&VideoCodec=h264&AudioCodec=aac,mp3&AudioStreamIndex=1&VideoBitrate=119360000&AudioBitrate=640000&MaxFramerate=23.976025&SegmentContainer=ts&MinSegments=2&BreakOnNonKeyFrames=False&PlaySessionId=c5084ae1856a473ca82de67f32d4e2d1&ApiKey=be7763418ff14f0785f0ccf083ff8d9f&TranscodingMaxAudioChannels=6&RequireAvc=false&EnableAudioVbrEncoding=true&Tag=8f1bb2b35d70e41aeadccbe52e33389e&hevc-level=153&hevc-videobitdepth=10&hevc-profile=main10&h264-profile=high,main,baseline,constrainedbaseline&h264-level=52&h264-rangetype=SDR&TranscodeReasons=ContainerNotSupported,VideoCodecTagNotSupported"
+        },
+        "agree": false
+      }
+    }
+  },
+  {
+    "name": "The Chair Company - S01E08 - Minnie Mouse coming back wasn't on my bingo card WEBDL-2160p.mkv",
+    "probe": {
+      "container": "mkv",
+      "vcodec": "hevc",
+      "vprofile": "Main 10",
+      "level": 153,
+      "bitdepth": "10",
+      "range": "DOVI",
+      "height": 1920,
+      "fps": 23.98,
+      "acodec": "eac3",
+      "achannels": 6
+    },
+    "profiles": {
+      "chrome-mac": {
+        "prismedia": {
+          "verdict": "Transcode",
+          "detail": "v=h264 a=aac",
+          "reasons": "",
+          "transcodingUrl": "/Videos/6731b5ab-544b-41ea-9286-635a7a656de7/master.m3u8?MediaSourceId=12a66022a56b402186f03d2b7a9d026d&PlaySessionId=875ebdcc072b46cc89ebdd3fdc8ca679&AudioStreamIndex=1"
+        },
+        "jellyfin": {
+          "verdict": "Transcode",
+          "detail": "v=h264 a=aac,mp3",
+          "reasons": "ContainerNotSupported,VideoRangeTypeNotSupported",
+          "transcodingUrl": "/videos/458cfd1a-5078-5104-267f-1b1918745107/master.m3u8?&DeviceId=parity-cli&MediaSourceId=458cfd1a50785104267f1b1918745107&VideoCodec=h264&AudioCodec=aac,mp3&AudioStreamIndex=1&VideoBitrate=119616000&AudioBitrate=384000&MaxFramerate=23.976025&SegmentContainer=mp4&MinSegments=1&BreakOnNonKeyFrames=True&PlaySessionId=92e77951b9af4a70af4561965797b383&ApiKey=be7763418ff14f0785f0ccf083ff8d9f&TranscodingMaxAudioChannels=2&RequireAvc=false&EnableAudioVbrEncoding=true&Tag=6bb75ead4b0e96966e89700fd9432903&hevc-level=153&hevc-videobitdepth=10&hevc-profile=main10&h264-profile=high,main,baseline,constrainedbaseline&h264-level=51&h264-rangetype=SDR&TranscodeReasons=ContainerNotSupported,VideoRangeTypeNotSupported"
+        },
+        "agree": true
+      },
+      "firefox": {
+        "prismedia": {
+          "verdict": "Transcode",
+          "detail": "v=h264 a=aac",
+          "reasons": "",
+          "transcodingUrl": "/Videos/6731b5ab-544b-41ea-9286-635a7a656de7/master.m3u8?MediaSourceId=12a66022a56b402186f03d2b7a9d026d&PlaySessionId=7cd9c85a848647e69ad3941265ec3247&AudioStreamIndex=1"
+        },
+        "jellyfin": {
+          "verdict": "Transcode",
+          "detail": "v=h264 a=aac,mp3",
+          "reasons": "ContainerNotSupported,VideoCodecNotSupported,AudioCodecNotSupported",
+          "transcodingUrl": "/videos/458cfd1a-5078-5104-267f-1b1918745107/master.m3u8?&DeviceId=parity-cli&MediaSourceId=458cfd1a50785104267f1b1918745107&VideoCodec=h264&AudioCodec=aac,mp3&AudioStreamIndex=1&VideoBitrate=119616000&AudioBitrate=384000&MaxFramerate=23.976025&SegmentContainer=mp4&MinSegments=1&BreakOnNonKeyFrames=True&PlaySessionId=11ed206cb0eb453e9486004e5b1f431e&ApiKey=be7763418ff14f0785f0ccf083ff8d9f&TranscodingMaxAudioChannels=2&RequireAvc=false&EnableAudioVbrEncoding=true&Tag=6bb75ead4b0e96966e89700fd9432903&hevc-level=153&hevc-videobitdepth=10&hevc-profile=main10&h264-profile=high,main,baseline,constrainedbaseline&h264-level=52&h264-rangetype=SDR&TranscodeReasons=ContainerNotSupported,VideoCodecNotSupported,AudioCodecNotSupported"
+        },
+        "agree": true
+      },
+      "safari": {
+        "prismedia": {
+          "verdict": "Transcode",
+          "detail": "v=h264 a=aac",
+          "reasons": "",
+          "transcodingUrl": "/Videos/6731b5ab-544b-41ea-9286-635a7a656de7/master.m3u8?MediaSourceId=12a66022a56b402186f03d2b7a9d026d&PlaySessionId=2b9e05104fb243e881ba7184271c1692&AudioStreamIndex=1"
+        },
+        "jellyfin": {
+          "verdict": "Transcode",
+          "detail": "v=h264 a=aac,mp3",
+          "reasons": "ContainerNotSupported,VideoRangeTypeNotSupported,VideoCodecTagNotSupported",
+          "transcodingUrl": "/videos/458cfd1a-5078-5104-267f-1b1918745107/master.m3u8?&DeviceId=parity-cli&MediaSourceId=458cfd1a50785104267f1b1918745107&VideoCodec=h264&AudioCodec=aac,mp3&AudioStreamIndex=1&VideoBitrate=119360000&AudioBitrate=640000&MaxFramerate=23.976025&SegmentContainer=ts&MinSegments=2&BreakOnNonKeyFrames=False&PlaySessionId=82fdf713930743d79b1a16ced8ee5872&ApiKey=be7763418ff14f0785f0ccf083ff8d9f&TranscodingMaxAudioChannels=6&RequireAvc=false&EnableAudioVbrEncoding=true&Tag=6bb75ead4b0e96966e89700fd9432903&hevc-level=153&hevc-videobitdepth=10&hevc-profile=main10&h264-profile=high,main,baseline,constrainedbaseline&h264-level=52&h264-rangetype=SDR&TranscodeReasons=ContainerNotSupported,VideoRangeTypeNotSupported,VideoCodecTagNotSupported"
+        },
+        "agree": true
+      }
+    }
+  },
+  {
+    "name": "Zelda & Jazz [OH69pRR5OfI].mp4",
+    "probe": {
+      "container": "mp4",
+      "vcodec": "h264",
+      "vprofile": "High",
+      "level": 42,
+      "bitdepth": "8",
+      "range": "SDR",
+      "height": 1080,
+      "fps": 60.0,
+      "acodec": "aac",
+      "achannels": 2
+    },
+    "profiles": {
+      "chrome-mac": {
+        "prismedia": {
+          "verdict": "DirectPlay",
+          "detail": "",
+          "reasons": "",
+          "transcodingUrl": null
+        },
+        "jellyfin": {
+          "verdict": "DirectPlay",
+          "detail": "",
+          "reasons": "",
+          "transcodingUrl": null
+        },
+        "agree": true
+      },
+      "firefox": {
+        "prismedia": {
+          "verdict": "DirectPlay",
+          "detail": "",
+          "reasons": "",
+          "transcodingUrl": null
+        },
+        "jellyfin": {
+          "verdict": "DirectPlay",
+          "detail": "",
+          "reasons": "",
+          "transcodingUrl": null
+        },
+        "agree": true
+      },
+      "safari": {
+        "prismedia": {
+          "verdict": "DirectPlay",
+          "detail": "",
+          "reasons": "",
+          "transcodingUrl": null
+        },
+        "jellyfin": {
+          "verdict": "DirectPlay",
+          "detail": "",
+          "reasons": "",
+          "transcodingUrl": null
+        },
+        "agree": true
+      }
+    }
+  },
+  {
+    "name": "bbb_sunflower_2160p_60fps_normal.mp4",
+    "probe": {
+      "container": "mp4",
+      "vcodec": "h264",
+      "vprofile": "High",
+      "level": 51,
+      "bitdepth": "8",
+      "range": "SDR",
+      "height": 2160,
+      "fps": 60.0,
+      "acodec": "mp3",
+      "achannels": 2
+    },
+    "profiles": {
+      "chrome-mac": {
+        "prismedia": {
+          "verdict": "DirectPlay",
+          "detail": "",
+          "reasons": "",
+          "transcodingUrl": null
+        },
+        "jellyfin": {
+          "verdict": "DirectPlay",
+          "detail": "",
+          "reasons": "",
+          "transcodingUrl": null
+        },
+        "agree": true
+      },
+      "firefox": {
+        "prismedia": {
+          "verdict": "DirectPlay",
+          "detail": "",
+          "reasons": "",
+          "transcodingUrl": null
+        },
+        "jellyfin": {
+          "verdict": "DirectPlay",
+          "detail": "",
+          "reasons": "",
+          "transcodingUrl": null
+        },
+        "agree": true
+      },
+      "safari": {
+        "prismedia": {
+          "verdict": "DirectPlay",
+          "detail": "",
+          "reasons": "",
+          "transcodingUrl": null
+        },
+        "jellyfin": {
+          "verdict": "DirectPlay",
+          "detail": "",
+          "reasons": "",
+          "transcodingUrl": null
+        },
+        "agree": true
+      }
+    }
+  }
+]

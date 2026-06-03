@@ -1,0 +1,4 @@
+# generated comparison runs (keep baseline-*.md/json committed as the reference)
+*.json
+*.md
+!baseline-*
