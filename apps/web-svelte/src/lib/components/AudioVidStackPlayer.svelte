@@ -27,6 +27,12 @@
   import { waveformForDisplay } from "./audio-waveform";
   import { useAudioPlayback } from "$lib/stores/audio-playback.svelte";
   import { useAppChrome } from "$lib/stores/app-chrome.svelte";
+  import {
+    setMediaSessionHandlers,
+    setMediaSessionMetadata,
+    setMediaSessionPlaybackState,
+    setMediaSessionPosition,
+  } from "$lib/media-session";
 
   const playback = useAudioPlayback()!;
   const chrome = useAppChrome();
@@ -60,6 +66,26 @@
   // Album label: a single-album context wins; otherwise fall back to the track's own album
   // so mixed-album queues (e.g. an artist Play All) still show the right album per track.
   const albumLabel = $derived(ctx?.albumTitle ?? activeTrack?.embeddedAlbum ?? null);
+
+  // Publish now-playing metadata to the OS media controls (lock screen, media keys, Bluetooth).
+  $effect(() => {
+    const track = activeTrack;
+    if (!track) {
+      setMediaSessionMetadata(null);
+      return;
+    }
+    setMediaSessionMetadata({
+      title: track.title,
+      artist: artistName,
+      album: albumLabel,
+      artwork: coverUrl,
+    });
+  });
+
+  // Keep the OS play/pause indicator in sync with the actual playback state.
+  $effect(() => {
+    setMediaSessionPlaybackState(activeTrack ? (playing ? "playing" : "paused") : "none");
+  });
 
   function collapse() {
     collapsed = true;
@@ -339,9 +365,11 @@
 
     const handleTimeUpdate = () => {
       if (!timelineDraggingRef) playback.currentTime = audio.currentTime;
+      setMediaSessionPosition(audio.duration, audio.currentTime);
     };
     const handleDurationChange = () => {
       if (Number.isFinite(audio.duration)) playback.duration = audio.duration;
+      setMediaSessionPosition(audio.duration, audio.currentTime);
     };
     const handlePlay = () => (playback.playing = true);
     const handlePause = () => (playback.playing = false);
@@ -362,6 +390,17 @@
     audio.addEventListener("ended", handleEnded);
     audio.addEventListener("error", handleError);
     const detachController = playback.attachController({ toggle: togglePlay, seek: handleSeek });
+    // Wire OS media controls (lock screen, media keys, Bluetooth) to the play queue.
+    const detachMediaSession = setMediaSessionHandlers({
+      play: requestPlay,
+      pause: () => audio.pause(),
+      previoustrack: handlePrev,
+      nexttrack: handleNext,
+      seekto: handleSeek,
+      seekbackward: (offset) => handleSeek(Math.max(0, audio.currentTime - offset)),
+      seekforward: (offset) => handleSeek(audio.currentTime + offset),
+      stop: dismiss,
+    });
 
     return () => {
       audio.removeEventListener("timeupdate", handleTimeUpdate);
@@ -372,6 +411,8 @@
       audio.removeEventListener("ended", handleEnded);
       audio.removeEventListener("error", handleError);
       detachController();
+      detachMediaSession();
+      setMediaSessionMetadata(null);
     };
   });
 

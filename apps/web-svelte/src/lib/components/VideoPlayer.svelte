@@ -104,6 +104,10 @@
     sourceHeight?: number | null;
     colorPipelineLabel?: string | null;
     poster?: string;
+    /** Title of the playing media, published to the OS media controls via the Media Session API. */
+    mediaTitle?: string;
+    /** Series, show, or studio shown as the "artist" on the OS media controls. */
+    mediaArtist?: string;
     markers?: VideoPlayerMarker[];
     duration?: number;
     onMarkerClick?: (marker: VideoPlayerMarker) => void;
@@ -143,6 +147,8 @@
     sourceHeight = null,
     colorPipelineLabel = null,
     poster,
+    mediaTitle,
+    mediaArtist,
     markers = [],
     duration: propDuration,
     onMarkerClick,
@@ -1438,7 +1444,8 @@
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <media-player
         class="prismedia-media-engine"
-        title="Prismedia video"
+        title={mediaTitle || "Prismedia video"}
+        artist={mediaArtist || undefined}
         src={playerSrc}
         poster={poster}
         streamType="on-demand"

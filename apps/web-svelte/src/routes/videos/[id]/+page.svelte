@@ -707,6 +707,8 @@
             sourceHeight={playerProps.sourceHeight}
             colorPipelineLabel={playerProps.colorPipelineLabel}
             poster={playerProps.poster}
+            mediaTitle={video.title}
+            mediaArtist={seriesRef?.title}
             markers={playerProps.markers}
             duration={playerProps.duration || undefined}
             onPlayStarted={handlePlayStarted}
