@@ -55,6 +55,22 @@ function mediaSession(): MediaSession | null {
   return navigator.mediaSession ?? null;
 }
 
+/**
+ * Resolves an artwork URL to an absolute URL. The OS Now-Playing handler fetches artwork outside
+ * the page context and does not reliably resolve root-relative paths (notably on WebKit), so cover
+ * art served from a path like `/assets/...` must be made absolute or it silently fails to appear.
+ */
+export function absoluteArtworkUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  if (/^https?:\/\//i.test(url) || url.startsWith("data:") || url.startsWith("blob:")) return url;
+  if (typeof window === "undefined") return url;
+  try {
+    return new URL(url, window.location.origin).href;
+  } catch {
+    return url;
+  }
+}
+
 /** Safely registers (or clears, when fn is null) one action handler, ignoring unsupported actions. */
 function setHandler(
   session: MediaSession,
@@ -82,7 +98,12 @@ export function setMediaSessionMetadata(info: MediaSessionTrackInfo | null): voi
     return;
   }
 
-  const artwork = info.artwork ? [{ src: info.artwork, sizes: "512x512", type: "" }] : [];
+  // Declare a range of sizes for one image so the OS picks it regardless of the slot it needs;
+  // the src must be absolute (see absoluteArtworkUrl) for the artwork to render in OS controls.
+  const artworkUrl = absoluteArtworkUrl(info.artwork);
+  const artwork = artworkUrl
+    ? [{ src: artworkUrl, sizes: "96x96 192x192 256x256 384x384 512x512" }]
+    : [];
   session.metadata = new MediaMetadata({
     title: info.title,
     artist: info.artist ?? "",

@@ -51,6 +51,7 @@
     exitDocumentFullscreen,
     isDocumentFullscreen,
   } from "$lib/fullscreen";
+  import { absoluteArtworkUrl } from "$lib/media-session";
   import {
     adaptiveHlsBufferConfig,
     canUseDirectPlayback,
@@ -179,6 +180,15 @@
   let containerEl: HTMLDivElement | undefined = $state();
   let player: MediaPlayerElement | undefined = $state();
   let videoEl: HTMLVideoElement | null = $state(null);
+
+  // Feed VidStack an absolute artwork URL for the OS Media Session. VidStack otherwise falls back to
+  // the (root-relative) poster, which the OS Now-Playing handler cannot resolve, so the thumbnail
+  // never appears on the lock screen / media controls.
+  $effect(() => {
+    if (!player) return;
+    const url = absoluteArtworkUrl(poster);
+    player.artwork = url ? [{ src: url, sizes: "96x96 192x192 256x256 384x384 512x512" }] : [];
+  });
   let directCapabilityProbe: HTMLVideoElement | null = $state(null);
   let mediaMounted = $state(false);
   let controlsTimeout: number | null = null;
