@@ -42,7 +42,7 @@ async function resolveEntityHrefForRecord(
     return book?.kind === ENTITY_KIND.book ? `/books/${book.id}/chapters/${entity.id}` : null;
   }
 
-  if (entity.kind === ENTITY_KIND.videoSeason || entity.kind === ENTITY_KIND.audioTrack) {
+  if (entity.kind === ENTITY_KIND.videoSeason) {
     const parent = await parentRecord(entity, fetchRecord, seen);
     if (!parent) return null;
     if (!isEntityKindCode(parent.kind)) return null;
