@@ -71,6 +71,30 @@ export function absoluteArtworkUrl(url: string | null | undefined): string | nul
   }
 }
 
+/** Best-effort MIME type from a URL's file extension; undefined when unknown. */
+function guessImageType(url: string): string | undefined {
+  const path = url.split("?")[0].toLowerCase();
+  if (path.endsWith(".jpg") || path.endsWith(".jpeg")) return "image/jpeg";
+  if (path.endsWith(".png")) return "image/png";
+  if (path.endsWith(".webp")) return "image/webp";
+  if (path.endsWith(".avif")) return "image/avif";
+  if (path.endsWith(".gif")) return "image/gif";
+  return undefined;
+}
+
+/**
+ * Builds a Media Session artwork list from a single cover/poster URL. The URL is made absolute (the
+ * OS handler fetches it outside the page) and a single concrete size is declared with an inferred
+ * type — the most broadly compatible shape across Chromium and WebKit. Returns an empty list when
+ * no URL is available.
+ */
+export function buildMediaArtwork(url: string | null | undefined): MediaImage[] {
+  const absolute = absoluteArtworkUrl(url);
+  if (!absolute) return [];
+  const type = guessImageType(absolute);
+  return [type ? { src: absolute, sizes: "512x512", type } : { src: absolute, sizes: "512x512" }];
+}
+
 /** Safely registers (or clears, when fn is null) one action handler, ignoring unsupported actions. */
 function setHandler(
   session: MediaSession,
@@ -98,18 +122,26 @@ export function setMediaSessionMetadata(info: MediaSessionTrackInfo | null): voi
     return;
   }
 
-  // Declare a range of sizes for one image so the OS picks it regardless of the slot it needs;
-  // the src must be absolute (see absoluteArtworkUrl) for the artwork to render in OS controls.
-  const artworkUrl = absoluteArtworkUrl(info.artwork);
-  const artwork = artworkUrl
-    ? [{ src: artworkUrl, sizes: "96x96 192x192 256x256 384x384 512x512" }]
-    : [];
-  session.metadata = new MediaMetadata({
-    title: info.title,
-    artist: info.artist ?? "",
-    album: info.album ?? "",
-    artwork,
-  });
+  const artwork = buildMediaArtwork(info.artwork);
+  const build = (withArtwork: boolean) =>
+    new MediaMetadata({
+      title: info.title,
+      artist: info.artist ?? "",
+      album: info.album ?? "",
+      artwork: withArtwork ? artwork : [],
+    });
+
+  // Some engines (notably WebKit) can reject an artwork entry and throw from the MediaMetadata
+  // constructor; fall back to metadata without artwork so the title and artist still appear.
+  try {
+    session.metadata = build(artwork.length > 0);
+  } catch {
+    try {
+      session.metadata = build(false);
+    } catch {
+      // Give up rather than letting a metadata failure break playback.
+    }
+  }
 }
 
 /**

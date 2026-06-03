@@ -51,7 +51,7 @@
     exitDocumentFullscreen,
     isDocumentFullscreen,
   } from "$lib/fullscreen";
-  import { absoluteArtworkUrl } from "$lib/media-session";
+  import { buildMediaArtwork } from "$lib/media-session";
   import {
     adaptiveHlsBufferConfig,
     canUseDirectPlayback,
@@ -186,8 +186,7 @@
   // never appears on the lock screen / media controls.
   $effect(() => {
     if (!player) return;
-    const url = absoluteArtworkUrl(poster);
-    player.artwork = url ? [{ src: url, sizes: "96x96 192x192 256x256 384x384 512x512" }] : [];
+    player.artwork = buildMediaArtwork(poster);
   });
   let directCapabilityProbe: HTMLVideoElement | null = $state(null);
   let mediaMounted = $state(false);
