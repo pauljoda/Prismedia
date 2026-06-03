@@ -420,6 +420,11 @@ describe("server-resolved filters and sorting", () => {
     expect(entityGridRequestFromState(gridState({ sortBy: "position" }), []).server.sort).toBeUndefined();
   });
 
+  it("forwards the reference-count sort with direction for taxonomy grids", () => {
+    expect(entityGridRequestFromState(gridState({ sortBy: "references", sortDir: "desc" }), []).server)
+      .toMatchObject({ sort: "references", sortDir: "desc" });
+  });
+
   it("does not re-filter the loaded page on server-resolved filters", () => {
     const cards = [
       entityCardToThumbnailCard(flaggedThumb({ id: "fav", title: "Favorite", isFavorite: true })),
@@ -439,6 +444,8 @@ describe("server-resolved filters and sorting", () => {
     expect(applyEntityGridState(cards, gridState({ sortBy: "random", randomSeed: 1 })).map((c) => c.entity.id))
       .toEqual(["a", "b"]);
     expect(applyEntityGridState(cards, gridState({ sortBy: "added" })).map((c) => c.entity.id))
+      .toEqual(["a", "b"]);
+    expect(applyEntityGridState(cards, gridState({ sortBy: "references" })).map((c) => c.entity.id))
       .toEqual(["a", "b"]);
   });
 });

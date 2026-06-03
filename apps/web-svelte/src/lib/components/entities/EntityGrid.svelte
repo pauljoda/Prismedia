@@ -201,6 +201,10 @@
   let viewMode = $state<EntityGridViewMode>(
     persistedPrefs?.viewMode === "feed" && !enableFeedView ? "grid" : (persistedPrefs?.viewMode ?? "grid"),
   );
+  // Manual collapse of the secondary toolbar rows, persisted per grid like the
+  // rest of the view state. Scroll-driven collapse is handled inside the toolbar
+  // and never written here.
+  let barsCollapsed = $state(persistedPrefs?.barsCollapsed ?? false);
   // The feed view pulls in the inline video player, so it is code-split and only
   // loaded the first time the feed is actually shown.
   let FeedComponent = $state<typeof import("./EntityFeed.svelte").default | null>(null);
@@ -484,6 +488,7 @@
       scale,
       pageSize,
       activePresetId,
+      barsCollapsed,
     };
     if (!prefsStore) return;
     if (prefsStore.isDefault(snapshot)) prefsStore.clear();
@@ -801,6 +806,7 @@
     activeFilterIds={filterIds}
     {activePresetId}
     {allSelectedNsfw}
+    {barsCollapsed}
     {bulkActions}
     {collectionItems}
     canClearFiltersAndSort={Boolean(
@@ -821,6 +827,7 @@
     {minScale}
     onActiveFilterIdsChange={setFilterIds}
     onApplyPreset={applyPreset}
+    onBarsCollapsedChange={(collapsed) => (barsCollapsed = collapsed)}
     onClearFiltersAndSort={clearFiltersAndSort}
     onClearSelection={clearSelection}
     onDeletePreset={deletePreset}

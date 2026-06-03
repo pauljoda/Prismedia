@@ -1327,6 +1327,45 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
+    public async Task ListAsyncSortsTaxonomyByReferenceCount() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var heavy = Guid.Parse("dddddddd-0000-0000-0000-000000000001"); // 2 references
+        var light = Guid.Parse("dddddddd-0000-0000-0000-000000000002"); // 1 reference
+        var none = Guid.Parse("dddddddd-0000-0000-0000-000000000003");  // 0 references
+        var v1 = Guid.Parse("dddddddd-0000-0000-0000-000000000011");
+        var v2 = Guid.Parse("dddddddd-0000-0000-0000-000000000012");
+
+        db.Entities.AddRange(
+            new EntityRow { Id = heavy, KindCode = EntityKindRegistry.Tag.Code, Title = "Heavy", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = light, KindCode = EntityKindRegistry.Tag.Code, Title = "Light", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = none, KindCode = EntityKindRegistry.Tag.Code, Title = "None", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = v1, KindCode = EntityKindRegistry.Video.Code, Title = "V1", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = v2, KindCode = EntityKindRegistry.Video.Code, Title = "V2", CreatedAt = now, UpdatedAt = now });
+        db.EntityRelationshipLinks.AddRange(Link(v1, heavy), Link(v2, heavy), Link(v1, light));
+        await db.SaveChangesAsync();
+
+        var service = CreateService(db);
+        var kind = EntityKindRegistry.Tag.Code;
+
+        var desc = await service.ListAsync(kind, null, null, null, null, CancellationToken.None, sort: "references", sortDir: "desc");
+        Assert.Equal(new[] { heavy, light, none }, desc.Items.Select(item => item.Id).ToArray());
+
+        var asc = await service.ListAsync(kind, null, null, null, null, CancellationToken.None, sort: "references", sortDir: "asc");
+        Assert.Equal(new[] { none, light, heavy }, asc.Items.Select(item => item.Id).ToArray());
+
+        static EntityRelationshipLinkRow Link(Guid source, Guid target) =>
+            new() {
+                EntityId = source,
+                RelationshipCode = "tags",
+                Label = "Tags",
+                TargetEntityId = target,
+                TargetKindCode = EntityKindRegistry.Tag.Code,
+                CreatedAt = DateTimeOffset.UtcNow,
+            };
+    }
+
+    [Fact]
     public async Task GetThumbnailsAsyncSurfacesReferenceCountsAndChipsForTaxonomy() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;

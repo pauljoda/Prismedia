@@ -37,6 +37,8 @@ export interface EntityGridPrefs {
   scale: number;
   pageSize: number;
   activePresetId: string | null;
+  /** Whether the secondary toolbar rows (filters/selection) are collapsed. */
+  barsCollapsed: boolean;
 }
 
 /**
@@ -74,7 +76,7 @@ export interface EntityGridPrefsStore {
 }
 
 const STORAGE_PREFIX = "prismedia:entity-grid-state:";
-const VALID_SORTS: readonly EntityGridSort[] = ["title", "kind", "rating", "position", "added", "random"];
+const VALID_SORTS: readonly EntityGridSort[] = ["title", "kind", "rating", "position", "added", "random", "references"];
 const VALID_SORT_DIRS: readonly EntityGridSortDir[] = ["asc", "desc"];
 const VALID_VIEW_MODES: readonly EntityGridViewMode[] = ["grid", "list"];
 
@@ -122,6 +124,7 @@ export function createEntityGridPrefs(
     scale: defaults.scale,
     pageSize: defaults.pageSize,
     activePresetId: null,
+    barsCollapsed: false,
   });
 
   const validate = (parsed: Record<string, unknown>): EntityGridPrefs => ({
@@ -136,6 +139,7 @@ export function createEntityGridPrefs(
     scale: finiteNumber(parsed.scale, defaults.scale),
     pageSize: positiveInt(parsed.pageSize, defaults.pageSize),
     activePresetId: typeof parsed.activePresetId === "string" ? parsed.activePresetId : null,
+    barsCollapsed: typeof parsed.barsCollapsed === "boolean" ? parsed.barsCollapsed : false,
   });
 
   function load(): EntityGridPrefs | null {

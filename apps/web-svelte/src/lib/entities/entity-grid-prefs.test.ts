@@ -31,6 +31,7 @@ describe("entity-grid prefs", () => {
       scale: 8,
       pageSize: 100,
       activePresetId: "preset-1",
+      barsCollapsed: true,
     });
 
     expect(store.load()).toEqual({
@@ -45,6 +46,7 @@ describe("entity-grid prefs", () => {
       scale: 8,
       pageSize: 100,
       activePresetId: "preset-1",
+      barsCollapsed: true,
     });
   });
 
@@ -67,6 +69,7 @@ describe("entity-grid prefs", () => {
       scale: 9,
       pageSize: 250,
       activePresetId: null,
+      barsCollapsed: false,
     });
   });
 

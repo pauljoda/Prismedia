@@ -31,7 +31,7 @@ import {
  */
 export const ENTITY_GRID_ALL_KINDS = "all";
 
-export type EntityGridSort = "title" | "kind" | "rating" | "position" | "added" | "random";
+export type EntityGridSort = "title" | "kind" | "rating" | "position" | "added" | "random" | "references";
 export type EntityGridSortDir = "asc" | "desc";
 export type EntityGridViewMode = "grid" | "list" | "feed";
 
@@ -992,10 +992,10 @@ export function applyEntityGridState(
     return filters.every((filter) => entityMatchesFilter(card.entity.capabilities, filter));
   });
 
-  // Random and date-added ordering are produced by the server across the whole
+  // Random, date-added, and reference-count ordering are produced by the server across the whole
   // result set; preserve the order the cards arrived in rather than reshuffling
   // the loaded page locally.
-  if (state.sortBy === "random" || state.sortBy === "added") {
+  if (state.sortBy === "random" || state.sortBy === "added" || state.sortBy === "references") {
     return filtered;
   }
 
@@ -1061,6 +1061,9 @@ export function entityGridRequestFromState(
     server.sortDir = state.sortDir;
   } else if (state.sortBy === "title") {
     server.sort = "title";
+    server.sortDir = state.sortDir;
+  } else if (state.sortBy === "references") {
+    server.sort = "references";
     server.sortDir = state.sortDir;
   }
 

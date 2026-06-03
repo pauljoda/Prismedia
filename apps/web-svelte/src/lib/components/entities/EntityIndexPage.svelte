@@ -304,7 +304,7 @@
       {emptyTitle}
       {emptyMessage}
       {initialMediaWall}
-      initialSortBy="added"
+      initialSortBy={isManageableTaxonomyKind(kind) ? "references" : "added"}
       initialSortDir="desc"
       initialPageSize={page.pageSize}
       hasMore={page.nextCursor !== null}

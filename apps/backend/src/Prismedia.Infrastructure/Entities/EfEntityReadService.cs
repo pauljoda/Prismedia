@@ -133,6 +133,11 @@ public sealed partial class EfEntityReadService : IEntityReadService {
                 .Skip(offset)
                 .Take(pageSize + 1)
                 .ToArrayAsync(cancellationToken);
+        } else if (sortKey == ListSort.References) {
+            rows = await ApplyReferenceCountOrdering(entityQuery, descending)
+                .Skip(offset)
+                .Take(pageSize + 1)
+                .ToArrayAsync(cancellationToken);
         } else {
             rows = await ApplyOrdering(entityQuery, sortKey, descending)
                 .Skip(offset)
@@ -153,6 +158,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         Rating,
         Random,
         LastPlayed,
+        References,
     }
 
     /// <summary>
@@ -182,6 +188,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             "rating" => ListSort.Rating,
             "random" or "shuffle" => ListSort.Random,
             "last-played" or "lastplayed" or "recently-played" or "recently-watched" or "played" => ListSort.LastPlayed,
+            "references" or "reference-count" or "referencecount" or "refs" => ListSort.References,
             _ => ListSort.Title,
         };
 
@@ -239,6 +246,35 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             : keyed.OrderByDescending(item => item.recency != null)
                 .ThenBy(item => item.recency)
                 .ThenBy(item => item.entity.CreatedAt)
+                .ThenBy(item => item.entity.Id);
+
+        return ordered.Select(item => item.entity);
+    }
+
+    /// <summary>
+    /// Orders entities by how many distinct source entities reference them — the same count the
+    /// reference-count chips show (a person's crediting media, a tag's tagged media). Used to sort
+    /// taxonomy grids by usage; descending leads with the most-used entries. Ties break by title then
+    /// id so offset paging stays stable. Entities with no references (count 0) sort to the end when
+    /// descending and to the front when ascending, naturally.
+    /// </summary>
+    private IQueryable<EntityRow> ApplyReferenceCountOrdering(IQueryable<EntityRow> query, bool descending) {
+        var links = _db.EntityRelationshipLinks;
+        var keyed = query.Select(entity => new {
+            entity,
+            references = links
+                .Where(link => link.TargetEntityId == entity.Id)
+                .Select(link => link.EntityId)
+                .Distinct()
+                .Count()
+        });
+
+        var ordered = descending
+            ? keyed.OrderByDescending(item => item.references)
+                .ThenBy(item => item.entity.Title)
+                .ThenBy(item => item.entity.Id)
+            : keyed.OrderBy(item => item.references)
+                .ThenBy(item => item.entity.Title)
                 .ThenBy(item => item.entity.Id);
 
         return ordered.Select(item => item.entity);

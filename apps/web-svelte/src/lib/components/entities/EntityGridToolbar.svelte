@@ -44,6 +44,8 @@
     activeFilterIds: string[];
     activePresetId?: string | null;
     allSelectedNsfw: boolean;
+    /** Persisted collapse state for the secondary toolbar rows; seeds the initial view. */
+    barsCollapsed?: boolean;
     bulkActions: EntityGridBulkAction[];
     /** Collection-eligible members of the current selection, used by the Add to Collection menu. */
     collectionItems: { entityType: CollectionEntityType; entityId: string }[];
@@ -51,11 +53,15 @@
     /** When true, exposes the vertical feed view mode toggle. */
     enableFeedView?: boolean;
     drawerOpen: boolean;
+    /** Kind code of the grid, used to offer kind-specific sorts (e.g. references for taxonomy). */
+    entityKind?: string;
     filterOptions: EntityGridFilterOption[];
     maxScale: number;
     minScale: number;
     onActiveFilterIdsChange: (ids: string[]) => void;
     onApplyPreset: (preset: FilterPreset) => void;
+    /** Fired when the user manually collapses/expands the secondary rows, so the state can persist. */
+    onBarsCollapsedChange?: (collapsed: boolean) => void;
     onClearFiltersAndSort: () => void;
     onClearSelection: () => void;
     onDeletePreset: (id: string) => void;
@@ -89,16 +95,19 @@
     activeFilterIds,
     activePresetId = null,
     allSelectedNsfw,
+    barsCollapsed: initialBarsCollapsed = false,
     bulkActions,
     collectionItems,
     canClearFiltersAndSort,
     enableFeedView = false,
     drawerOpen,
+    entityKind,
     filterOptions,
     maxScale,
     minScale,
     onActiveFilterIdsChange,
     onApplyPreset,
+    onBarsCollapsedChange,
     onClearFiltersAndSort,
     onClearSelection,
     onDeletePreset,
@@ -135,16 +144,23 @@
     random: "Random",
     kind: "Kind",
     position: "Position",
+    references: "References",
   };
 
-  const SORT_OPTIONS: { value: EntityGridSort; label: string }[] = [
+  // Reference-count sort only applies to taxonomy kinds (tags/people/studios), which are the
+  // targets of relationship links; it is the default sort for those grids.
+  const TAXONOMY_KINDS = new Set(["tag", "person", "studio"]);
+  const SORT_OPTIONS = $derived<{ value: EntityGridSort; label: string }[]>([
     { value: "title", label: "Title" },
     { value: "added", label: "Date added" },
+    ...(entityKind != null && TAXONOMY_KINDS.has(entityKind)
+      ? [{ value: "references" as const, label: "References" }]
+      : []),
     { value: "rating", label: "Rating" },
     { value: "random", label: "Random" },
     { value: "kind", label: "Kind" },
     { value: "position", label: "Position" },
-  ];
+  ]);
 
   let sortOpen = $state(false);
   let thumbSizeOpen = $state(false);
@@ -163,13 +179,19 @@
     selectable || activeFilters.length > 0 || canClearFiltersAndSort,
   );
 
-  let barsCollapsed = $state(false);
+  // Seed from the persisted preference. A saved collapsed state is treated as a
+  // manual choice, so it starts pinned and scrolling won't immediately undo it.
+  // svelte-ignore state_referenced_locally
+  let barsCollapsed = $state(initialBarsCollapsed);
   // Once the user collapses/expands by hand, scrolling stops driving the state.
-  let collapsePinned = $state(false);
+  // svelte-ignore state_referenced_locally
+  let collapsePinned = $state(initialBarsCollapsed);
 
   function toggleBars() {
     barsCollapsed = !barsCollapsed;
     collapsePinned = true;
+    // Only manual toggles persist; scroll-driven collapse stays ephemeral.
+    onBarsCollapsedChange?.(barsCollapsed);
   }
 
   // Auto-collapse the secondary rows while scrolling down and bring them back a
