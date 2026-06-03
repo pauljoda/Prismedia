@@ -199,6 +199,7 @@ public static class DependencyInjection {
 
     private static void RegisterEntities(IServiceCollection services, string cacheDir) {
         RegisterEntityMappers(services);
+        RegisterThumbnailContributors(services);
         services.AddScoped<EfEntityRepository>();
         services.AddScoped<IEntityWriteRepository>(provider => provider.GetRequiredService<EfEntityRepository>());
         services.AddScoped<IEntityReadService, EfEntityReadService>();
@@ -252,6 +253,15 @@ public static class DependencyInjection {
         services.AddScoped<ISettingsPersistence, EfSettingsPersistence>();
         services.AddScoped<ISecurityPersistence, EfSecurityPersistence>();
         services.AddScoped<IJellyfinImageFileService, JellyfinImageFileService>();
+    }
+
+    private static void RegisterThumbnailContributors(IServiceCollection services) {
+        var contributorType = typeof(Entities.Thumbnails.IThumbnailContributor);
+        foreach (var type in contributorType.Assembly.GetTypes()
+                     .Where(type => type is { IsClass: true, IsAbstract: false } &&
+                                    contributorType.IsAssignableFrom(type))) {
+            services.AddScoped(contributorType, type);
+        }
     }
 
     private static void RegisterEntityMappers(IServiceCollection services) {

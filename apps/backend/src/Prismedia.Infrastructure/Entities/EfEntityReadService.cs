@@ -27,14 +27,17 @@ public sealed partial class EfEntityReadService : IEntityReadService {
     private readonly PrismediaDbContext _db;
     private readonly EfEntityRepository _repository;
     private readonly IReadOnlyDictionary<EntityKind, IEntityKindMapper> _kindMappers;
+    private readonly IReadOnlyList<Thumbnails.IThumbnailContributor> _thumbnailContributors;
 
     public EfEntityReadService(
         PrismediaDbContext db,
         EfEntityRepository repository,
-        IEnumerable<IEntityKindMapper> kindMappers) {
+        IEnumerable<IEntityKindMapper> kindMappers,
+        IEnumerable<Thumbnails.IThumbnailContributor> thumbnailContributors) {
         _db = db;
         _repository = repository;
         _kindMappers = kindMappers.ToDictionary(mapper => mapper.Kind);
+        _thumbnailContributors = thumbnailContributors.ToArray();
     }
 
     public async Task<EntityListResponse> ListAsync(

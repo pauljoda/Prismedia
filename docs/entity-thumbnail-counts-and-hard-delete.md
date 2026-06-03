@@ -170,3 +170,22 @@ distinct-count group-by) via the relationship model configuration → generated 
   and the matching numeric `ReferenceCounts`.
 - A media grid page issues no reference-count query (contributor self-filters to taxonomy).
 - Deleting a referencing video drops the count by one on next load (no stale cache).
+
+### Implementation notes / deviations
+
+- **Technical chips were not extracted into a contributor.** The base projection already loads
+  `EntityTechnical` for progress, so building technical chips there is free; a separate
+  `MediaTechnicalChipContributor` would re-query the same table on every media grid page. The base
+  seeds `Meta`, contributors append, and the combined list is capped. The extraction can happen
+  later when progress also moves to a contributor. The seam is still proven by the reference-count
+  contributor (always runs, batch-scoped, DI-discovered).
+- **Collections were dropped from scope.** Collection membership lives in the collection item table
+  (and smart collections are rule-based), not in `entity_relationship_links`, so the inbound-link
+  query returns nothing for them. Reference counts cover taxonomy (person/studio/tag). A collection
+  item-count contributor over the item table is a clean follow-up.
+- **Count chips merge by icon.** Kinds that share a glyph (movie + video-series + video all map to
+  the "video" icon) are summed into one chip so a card shows "🎬 5" rather than three "🎬 1" chips.
+  `ReferenceCounts` stays granular per kind for compatibility layers.
+- **Index outcome.** The composite `(target_entity_id, entity_id)` index supersedes the
+  auto-created single-column FK index, so the migration drops the latter — a net wash in index
+  count.

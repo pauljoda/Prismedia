@@ -4,6 +4,7 @@ using Prismedia.Application.Entities;
 using Prismedia.Contracts.Entities;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Entities.Mappers;
+using Prismedia.Infrastructure.Entities.Thumbnails;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 
@@ -86,7 +87,7 @@ public sealed partial class EfEntityReadService {
                     .Select(title => title!)
                     .ToArray());
 
-        return rows.Select(row => {
+        var baseThumbnails = rows.Select(row => {
             var hoverUrl = hoverByEntity.GetValueOrDefault(row.Id);
             var hoverImages = hoverImagesByEntity.GetValueOrDefault(row.Id) ?? [];
             var coverUrl = coverByEntity.GetValueOrDefault(row.Id);
@@ -121,6 +122,28 @@ public sealed partial class EfEntityReadService {
                     progressByEntity.GetValueOrDefault(row.Id),
                     technicalByEntity.GetValueOrDefault(row.Id)?.DurationSeconds)
             };
+        }).ToArray();
+
+        // Let registered contributors fold in extra, kind-scoped data (e.g. taxonomy reference
+        // counts) over the whole page. Each self-filters and runs at most one batched query, and
+        // they share the scoped DbContext so they run sequentially. Their extra chips append after
+        // the base technical chips and the combined list is capped at MaxThumbnailMeta.
+        var contributions = new ThumbnailContributions(rows);
+        foreach (var contributor in _thumbnailContributors) {
+            await contributor.ContributeAsync(contributions, cancellationToken);
+        }
+
+        return baseThumbnails.Select(thumbnail => {
+            var extraMeta = contributions.ExtraMetaFor(thumbnail.Id);
+            var referenceCounts = contributions.ReferenceCountsFor(thumbnail.Id);
+            if (extraMeta.Count == 0 && referenceCounts is null) {
+                return thumbnail;
+            }
+
+            var meta = extraMeta.Count == 0
+                ? thumbnail.Meta
+                : thumbnail.Meta.Concat(extraMeta).Take(MaxThumbnailMeta).ToArray();
+            return thumbnail with { Meta = meta, ReferenceCounts = referenceCounts };
         }).ToArray();
     }
 

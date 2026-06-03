@@ -4,6 +4,7 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { EntityKindCount } from './entityKindCount';
 import type { EntityThumbnailHoverImage } from './entityThumbnailHoverImage';
 import type { EntityThumbnailMeta } from './entityThumbnailMeta';
 
@@ -51,4 +52,6 @@ export interface EntityThumbnail {
   playCount?: number | string | null;
   /** @nullable */
   genres?: string[] | null;
+  /** @nullable */
+  referenceCounts?: EntityKindCount[] | null;
 }

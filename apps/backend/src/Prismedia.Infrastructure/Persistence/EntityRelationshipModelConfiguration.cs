@@ -19,6 +19,10 @@ internal static class EntityRelationshipModelConfiguration {
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");
             entity.HasIndex(row => new { row.EntityId, row.RelationshipCode, row.SortOrder });
             entity.HasIndex(row => new { row.TargetKindCode, row.TargetEntityId });
+            // Backs the live reference-count rollup: filter by target_entity_id, count distinct
+            // source entity_id grouped by source kind. Leading with target_entity_id and covering
+            // entity_id keeps the aggregate index-only.
+            entity.HasIndex(row => new { row.TargetEntityId, row.EntityId });
             entity.HasOne<EntityRow>()
                 .WithMany()
                 .HasForeignKey(row => row.EntityId)
