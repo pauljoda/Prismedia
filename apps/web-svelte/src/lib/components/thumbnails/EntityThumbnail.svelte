@@ -1030,7 +1030,6 @@
     width: 3.5rem;
     height: 3.5rem;
     color: rgb(255 255 255 / 0.15);
-    animation: spin-disc 12s linear infinite;
   }
 
   .placeholder :global(.placeholder-note) {
@@ -1040,21 +1039,12 @@
     color: rgb(255 255 255 / 0.4);
   }
 
-  @keyframes spin-disc {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-  }
-
   @keyframes thumbnail-skeleton-shimmer {
     from { background-position: 180% 0, 0 0; }
     to { background-position: -80% 0, 0 0; }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .placeholder :global(.placeholder-disc) {
-      animation: none;
-    }
-
     .image-loading-skeleton {
       animation: none;
     }

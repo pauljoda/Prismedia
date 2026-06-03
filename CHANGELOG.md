@@ -64,6 +64,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Fixed
+- The music player's waveform no longer flickers while you scrub it with a trackpad or mouse wheel. The moving playhead and your scrubbing were fighting over the position each frame; scrubbing now holds the playhead steady and it resumes following playback once you stop.
+- Music cover-art placeholders no longer spin. Tracks and albums without artwork showed a slowly rotating record icon, which made a page of them look perpetually busy; the placeholder is now still.
 - Audio tracks now open correctly from the dashboard and anywhere else they're listed — their link pointed at a page that didn't exist, so clicking a recently-played or in-progress track led nowhere; it now opens the track page.
 - Library grid filters now apply to your whole collection, not just the items already on screen. Filtering by NSFW / Not NSFW, Has file / No file, or Played / Unplayed is now resolved on the server across the entire library and paginated from there, so the count and pages are correct and nothing is missed when a match lives beyond the loaded page.
 - Abandoned video transcodes no longer pile up and bog down the server. When you close a tab, lose connection, or leave a video paused for a while, the background ffmpeg job that was preparing it is now stopped automatically (with a hard ceiling that stops any job that has run far too long), and stopping playback now reliably halts stream-copy jobs too. Already-prepared parts stay cached, so resuming picks right back up.

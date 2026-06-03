@@ -110,7 +110,11 @@
 
   onMount(() => {
     const tick = () => {
-      if (!dragging && audioEl) {
+      // While the user is scrubbing — by pointer drag (`dragging`) or by wheel/trackpad
+      // (`stripDragging`, set without `dragging`) — leave the playhead where the scrub put it.
+      // Otherwise this loop would overwrite it each frame with the audio element's still-catching-up
+      // currentTime, making the strip fight the scrub position and flicker.
+      if (!dragging && !stripDragging && audioEl) {
         applyPosition(audioEl.currentTime);
       }
       animationFrame = window.requestAnimationFrame(tick);
