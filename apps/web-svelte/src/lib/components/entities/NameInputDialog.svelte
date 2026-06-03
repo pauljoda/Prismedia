@@ -1,0 +1,128 @@
+<script lang="ts">
+  import { Loader2, X } from "@lucide/svelte";
+  import { Button, textInputVariants } from "@prismedia/ui-svelte";
+
+  interface Props {
+    open: boolean;
+    title: string;
+    placeholder?: string;
+    confirmLabel?: string;
+    maxlength?: number;
+    /** Submit handler. May be async; the dialog shows a spinner and surfaces thrown errors. */
+    onConfirm: (value: string) => void | Promise<void>;
+    onClose: () => void;
+  }
+
+  let {
+    open,
+    title,
+    placeholder = "Name",
+    confirmLabel = "Create",
+    maxlength = 120,
+    onConfirm,
+    onClose,
+  }: Props = $props();
+
+  let dialogRef = $state<HTMLDialogElement | null>(null);
+  let inputRef = $state<HTMLInputElement | null>(null);
+  let draft = $state("");
+  let busy = $state(false);
+  let error = $state<string | null>(null);
+
+  $effect(() => {
+    if (!dialogRef) return;
+    if (open) {
+      draft = "";
+      error = null;
+      busy = false;
+      dialogRef.showModal();
+      queueMicrotask(() => inputRef?.focus());
+    } else if (dialogRef.open) {
+      dialogRef.close();
+    }
+  });
+
+  async function confirm() {
+    const trimmed = draft.trim();
+    if (!trimmed || busy) return;
+    busy = true;
+    error = null;
+    try {
+      await onConfirm(trimmed);
+      onClose();
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err);
+      busy = false;
+    }
+  }
+
+  function handleBackdropClick(event: MouseEvent) {
+    if (event.target === dialogRef && !busy) onClose();
+  }
+</script>
+
+<dialog
+  bind:this={dialogRef}
+  onclick={handleBackdropClick}
+  onclose={onClose}
+  aria-label={title}
+  class="name-dialog fixed inset-0 m-auto h-fit w-[min(92vw,26rem)] border border-border-default p-0 text-text-primary open:block"
+>
+  <form
+    method="dialog"
+    class="flex flex-col gap-4 p-5"
+    onsubmit={(e) => {
+      e.preventDefault();
+      void confirm();
+    }}
+  >
+    <div class="flex items-start justify-between gap-4">
+      <h2 class="font-heading text-base font-semibold tracking-wide text-text-primary">{title}</h2>
+      <button
+        type="button"
+        onclick={onClose}
+        disabled={busy}
+        class="flex h-8 w-8 shrink-0 items-center justify-center rounded-sm text-text-muted transition-colors hover:bg-surface-2 hover:text-text-primary disabled:opacity-50"
+        aria-label="Cancel"
+      >
+        <X class="h-4 w-4" />
+      </button>
+    </div>
+
+    <input
+      bind:this={inputRef}
+      bind:value={draft}
+      class={textInputVariants({ size: "lg" })}
+      {placeholder}
+      {maxlength}
+      disabled={busy}
+    />
+
+    {#if error}
+      <p class="text-body-sm text-error-400">{error}</p>
+    {/if}
+
+    <div class="flex justify-end gap-2">
+      <Button type="button" variant="ghost" size="md" onclick={onClose} disabled={busy}>Cancel</Button>
+      <Button type="submit" variant="primary" size="md" disabled={!draft.trim() || busy}>
+        {#if busy}
+          <Loader2 class="h-4 w-4 animate-spin" />
+        {/if}
+        {confirmLabel}
+      </Button>
+    </div>
+  </form>
+</dialog>
+
+<style>
+  .name-dialog {
+    background: var(--color-surface-1);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-panel);
+  }
+  .name-dialog::backdrop {
+    background: rgb(0 0 0 / 0.6);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+</style>

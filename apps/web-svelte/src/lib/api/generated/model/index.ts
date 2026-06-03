@@ -77,6 +77,7 @@ export * from './entityCapabilitySubtitlesCapabilityKind';
 export * from './entityCapabilityTechnicalCapability';
 export * from './entityCapabilityTechnicalCapabilityKind';
 export * from './entityCard';
+export * from './entityCreateRequest';
 export * from './entityCreditMetadata';
 export * from './entityDate';
 export * from './entityExternalId';

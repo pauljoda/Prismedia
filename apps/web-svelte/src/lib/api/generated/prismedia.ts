@@ -31,6 +31,7 @@ import type {
   CreateFileFolderParams,
   DeleteFileParams,
   EntityCard,
+  EntityCreateRequest,
   EntityFlagsUpdateRequest,
   EntityListResponse,
   EntityMarkerWriteRequest,
@@ -5176,6 +5177,93 @@ export const listPeople = async (params?: ListPeopleParams, options?: RequestIni
 
 
 
+export type createPersonResponse201 = {
+  data: PersonDetail
+  status: 201
+}
+
+export type createPersonResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type createPersonResponseSuccess = (createPersonResponse201) & {
+  headers: Headers;
+};
+export type createPersonResponseError = (createPersonResponse400) & {
+  headers: Headers;
+};
+
+export type createPersonResponse = (createPersonResponseSuccess | createPersonResponseError)
+
+export const getCreatePersonUrl = () => {
+
+
+
+
+  return `/api/people`
+}
+
+/**
+ * @summary Create Taxonomy.
+ */
+export const createPerson = async (entityCreateRequest: EntityCreateRequest, options?: RequestInit): Promise<createPersonResponse> => {
+
+  return orvalFetch<createPersonResponse>(getCreatePersonUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      entityCreateRequest,)
+  }
+);}
+
+
+
+export type deletePersonResponse204 = {
+  data: void
+  status: 204
+}
+
+export type deletePersonResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type deletePersonResponseSuccess = (deletePersonResponse204) & {
+  headers: Headers;
+};
+export type deletePersonResponseError = (deletePersonResponse404) & {
+  headers: Headers;
+};
+
+export type deletePersonResponse = (deletePersonResponseSuccess | deletePersonResponseError)
+
+export const getDeletePersonUrl = (id: string,) => {
+
+
+
+
+  return `/api/people/${id}`
+}
+
+/**
+ * @summary Delete Taxonomy.
+ */
+export const deletePerson = async (id: string, options?: RequestInit): Promise<deletePersonResponse> => {
+
+  return orvalFetch<deletePersonResponse>(getDeletePersonUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
 export type getPersonResponse200 = {
   data: PersonDetail
   status: 200
@@ -5321,6 +5409,93 @@ export const listStudios = async (params?: ListStudiosParams, options?: RequestI
 
 
 
+export type createStudioResponse201 = {
+  data: StudioDetail
+  status: 201
+}
+
+export type createStudioResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type createStudioResponseSuccess = (createStudioResponse201) & {
+  headers: Headers;
+};
+export type createStudioResponseError = (createStudioResponse400) & {
+  headers: Headers;
+};
+
+export type createStudioResponse = (createStudioResponseSuccess | createStudioResponseError)
+
+export const getCreateStudioUrl = () => {
+
+
+
+
+  return `/api/studios`
+}
+
+/**
+ * @summary Create Taxonomy.
+ */
+export const createStudio = async (entityCreateRequest: EntityCreateRequest, options?: RequestInit): Promise<createStudioResponse> => {
+
+  return orvalFetch<createStudioResponse>(getCreateStudioUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      entityCreateRequest,)
+  }
+);}
+
+
+
+export type deleteStudioResponse204 = {
+  data: void
+  status: 204
+}
+
+export type deleteStudioResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type deleteStudioResponseSuccess = (deleteStudioResponse204) & {
+  headers: Headers;
+};
+export type deleteStudioResponseError = (deleteStudioResponse404) & {
+  headers: Headers;
+};
+
+export type deleteStudioResponse = (deleteStudioResponseSuccess | deleteStudioResponseError)
+
+export const getDeleteStudioUrl = (id: string,) => {
+
+
+
+
+  return `/api/studios/${id}`
+}
+
+/**
+ * @summary Delete Taxonomy.
+ */
+export const deleteStudio = async (id: string, options?: RequestInit): Promise<deleteStudioResponse> => {
+
+  return orvalFetch<deleteStudioResponse>(getDeleteStudioUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
 export type getStudioResponse200 = {
   data: StudioDetail
   status: 200
@@ -5459,6 +5634,93 @@ export const listTags = async (params?: ListTagsParams, options?: RequestInit): 
   {
     ...options,
     method: 'GET'
+
+
+  }
+);}
+
+
+
+export type createTagResponse201 = {
+  data: TagDetail
+  status: 201
+}
+
+export type createTagResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type createTagResponseSuccess = (createTagResponse201) & {
+  headers: Headers;
+};
+export type createTagResponseError = (createTagResponse400) & {
+  headers: Headers;
+};
+
+export type createTagResponse = (createTagResponseSuccess | createTagResponseError)
+
+export const getCreateTagUrl = () => {
+
+
+
+
+  return `/api/tags`
+}
+
+/**
+ * @summary Create Taxonomy.
+ */
+export const createTag = async (entityCreateRequest: EntityCreateRequest, options?: RequestInit): Promise<createTagResponse> => {
+
+  return orvalFetch<createTagResponse>(getCreateTagUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      entityCreateRequest,)
+  }
+);}
+
+
+
+export type deleteTagResponse204 = {
+  data: void
+  status: 204
+}
+
+export type deleteTagResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type deleteTagResponseSuccess = (deleteTagResponse204) & {
+  headers: Headers;
+};
+export type deleteTagResponseError = (deleteTagResponse404) & {
+  headers: Headers;
+};
+
+export type deleteTagResponse = (deleteTagResponseSuccess | deleteTagResponseError)
+
+export const getDeleteTagUrl = (id: string,) => {
+
+
+
+
+  return `/api/tags/${id}`
+}
+
+/**
+ * @summary Delete Taxonomy.
+ */
+export const deleteTag = async (id: string, options?: RequestInit): Promise<deleteTagResponse> => {
+
+  return orvalFetch<deleteTagResponse>(getDeleteTagUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
 
 
   }

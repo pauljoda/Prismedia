@@ -1293,6 +1293,38 @@ public sealed class EfEntityReadServiceTests {
         Assert.Equal(sfwUnplayedNoFile, Assert.Single(unplayed.Items).Id);
     }
 
+    [Fact]
+    public async Task ListAsyncFiltersOrphanedTaxonomyAcrossTheWholeSet() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var referencedTag = Guid.Parse("bbbbbbbb-0000-0000-0000-000000000001");
+        var orphanTag = Guid.Parse("bbbbbbbb-0000-0000-0000-000000000002");
+        var videoId = Guid.Parse("bbbbbbbb-0000-0000-0000-000000000003");
+
+        db.Entities.AddRange(
+            new EntityRow { Id = referencedTag, KindCode = EntityKindRegistry.Tag.Code, Title = "Used", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = orphanTag, KindCode = EntityKindRegistry.Tag.Code, Title = "Unused", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = videoId, KindCode = EntityKindRegistry.Video.Code, Title = "Film", CreatedAt = now, UpdatedAt = now });
+        db.EntityRelationshipLinks.Add(new EntityRelationshipLinkRow {
+            EntityId = videoId,
+            RelationshipCode = "tags",
+            Label = "Tags",
+            TargetEntityId = referencedTag,
+            TargetKindCode = EntityKindRegistry.Tag.Code,
+            CreatedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        var service = CreateService(db);
+        var kind = EntityKindRegistry.Tag.Code;
+
+        var orphans = await service.ListAsync(kind, null, null, null, null, CancellationToken.None, orphaned: true);
+        Assert.Equal(orphanTag, Assert.Single(orphans.Items).Id);
+
+        var referenced = await service.ListAsync(kind, null, null, null, null, CancellationToken.None, orphaned: false);
+        Assert.Equal(referencedTag, Assert.Single(referenced.Items).Id);
+    }
+
     private static EfEntityReadService CreateService(PrismediaDbContext db) {
         var repository = new EfEntityRepository(db, EntityMappers.Kinds(db), EntityMappers.Capabilities(db));
         return new EfEntityReadService(db, repository, EntityMappers.Kinds(db));

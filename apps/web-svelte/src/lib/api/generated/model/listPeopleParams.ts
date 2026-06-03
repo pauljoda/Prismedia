@@ -31,4 +31,5 @@ ratingMin?: number | string;
 ratingMax?: number | string;
 unrated?: boolean;
 status?: string;
+orphaned?: boolean;
 };

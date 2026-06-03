@@ -1,6 +1,8 @@
 <script lang="ts">
   import type { Component } from "svelte";
   import { onMount } from "svelte";
+  import { Plus } from "@lucide/svelte";
+  import { goto } from "$app/navigation";
   import {
     getImagesCapability,
     getRatingValue,
@@ -13,10 +15,18 @@
     type UniversalLightboxEntity,
   } from "$lib/components/universal-lightbox-media";
   import EntityGrid from "./EntityGrid.svelte";
+  import NameInputDialog from "./NameInputDialog.svelte";
+  import ConfirmDialog from "./ConfirmDialog.svelte";
   import { EntityIndexPageState } from "./entity-index-page.svelte.ts";
-  import type { EntityGridRequest } from "$lib/entities/entity-grid";
+  import type { EntityGridBulkAction, EntityGridRequest } from "$lib/entities/entity-grid";
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
+  import { resolveEntityHref } from "$lib/entities/entity-routes";
   import { updateEntityRating } from "$lib/api/entity-mutations";
+  import {
+    createTaxonomyEntity,
+    deleteTaxonomyEntity,
+    isManageableTaxonomyKind,
+  } from "$lib/api/taxonomy";
   import { fetchImage, type ImageDetail } from "$lib/api/media";
   import type { EntityCard } from "$lib/api/entities";
 
@@ -36,6 +46,11 @@
     prefsKey: string;
     resolveHref?: (item: EntityCard) => string | undefined;
     title: string;
+    /**
+     * Singular noun for the entity, used in the add button and delete confirmation (e.g. "tag").
+     * Required to expose create/delete management for the user-managed taxonomy kinds.
+     */
+    itemNoun?: string;
   }
 
   type UniversalLightboxComponent = typeof import("$lib/components/UniversalLightbox.svelte").default;
@@ -57,9 +72,53 @@
     resolveHref,
     title,
     lightboxTitle = title,
+    itemNoun,
   }: Props = $props();
 
   const nsfw = useNsfw();
+  // Create/delete management is offered only for the user-managed taxonomy kinds and when the
+  // page provides a singular noun for the labels.
+  const canManage = $derived(isManageableTaxonomyKind(kind) && Boolean(itemNoun));
+  const noun = $derived(itemNoun ?? "item");
+
+  let createOpen = $state(false);
+  let confirmDeleteOpen = $state(false);
+  let pendingDeleteIds = $state<string[]>([]);
+
+  const bulkActions = $derived<EntityGridBulkAction[]>(
+    canManage
+      ? [
+          {
+            id: "delete",
+            label: `Delete ${noun}`,
+            tone: "danger",
+            onRun: (selectedIds) => {
+              pendingDeleteIds = selectedIds;
+              confirmDeleteOpen = true;
+            },
+          },
+        ]
+      : [],
+  );
+
+  async function handleCreate(name: string) {
+    if (!isManageableTaxonomyKind(kind)) return;
+    const { id } = await createTaxonomyEntity(kind, { title: name, isNsfw: false });
+    const href = resolveEntityHref(kind, id);
+    if (href) {
+      await goto(href);
+    } else {
+      await page.loadInitial();
+    }
+  }
+
+  async function handleConfirmDelete() {
+    if (!isManageableTaxonomyKind(kind)) return;
+    const ids = pendingDeleteIds;
+    await Promise.all(ids.map((id) => deleteTaxonomyEntity(kind, id)));
+    pendingDeleteIds = [];
+    await page.loadInitial();
+  }
   const page = new EntityIndexPageState({
     getKind: () => kind,
     getHideNsfw: () => nsfw.mode === "off",
@@ -216,6 +275,11 @@
         {/if}
         <span>{actionLabel}</span>
       </a>
+    {:else if canManage}
+      <button type="button" class="page-head-action" onclick={() => (createOpen = true)}>
+        <Plus class="h-4 w-4" />
+        <span>Add {noun}</span>
+      </button>
     {/if}
   </header>
 
@@ -247,6 +311,7 @@
       loadingMore={page.loadingMore}
       loadMoreError={page.loadMoreError}
       {remoteTotalCount}
+      bulkActions={canManage ? bulkActions : undefined}
       onCardActivate={enableLightbox ? handleCardActivate : undefined}
       onPageSizeChange={(size) => page.setPageSize(size)}
       onLoadMore={() => page.loadMore()}
@@ -254,6 +319,26 @@
     />
   {/if}
 </section>
+
+{#if canManage}
+  <NameInputDialog
+    open={createOpen}
+    title={`New ${noun}`}
+    placeholder={`${noun.charAt(0).toUpperCase()}${noun.slice(1)} name`}
+    confirmLabel="Create"
+    onConfirm={handleCreate}
+    onClose={() => (createOpen = false)}
+  />
+  <ConfirmDialog
+    open={confirmDeleteOpen}
+    title={`Delete ${pendingDeleteIds.length === 1 ? noun : `${pendingDeleteIds.length} ${noun}s`}?`}
+    message={`This removes ${pendingDeleteIds.length === 1 ? `the ${noun}` : `these ${noun}s`} and detaches ${pendingDeleteIds.length === 1 ? "it" : "them"} from any media. This cannot be undone.`}
+    confirmLabel="Delete"
+    danger
+    onConfirm={handleConfirmDelete}
+    onClose={() => (confirmDeleteOpen = false)}
+  />
+{/if}
 
 {#if enableLightbox && lightboxEntities.length > 0 && UniversalLightboxLazy && ImageLightboxDetailsLazy}
   <UniversalLightboxLazy

@@ -12,5 +12,6 @@ public static class PeopleEndpoints {
             "ListPeople",
             "GetPerson",
             typeof(EntityListResponse),
-            typeof(PersonDetail));
+            typeof(PersonDetail),
+            manageable: true);
 }

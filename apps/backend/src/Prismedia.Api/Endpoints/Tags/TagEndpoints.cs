@@ -12,5 +12,6 @@ public static class TagEndpoints {
             "ListTags",
             "GetTag",
             typeof(EntityListResponse),
-            typeof(TagDetail));
+            typeof(TagDetail),
+            manageable: true);
 }

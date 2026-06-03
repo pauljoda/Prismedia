@@ -145,6 +145,7 @@ public static class DependencyInjection {
             new PluginArtworkServiceOptions(cacheDir)));
         services.AddScoped<IEntityMetadataPatchService>(provider =>
             provider.GetRequiredService<EntityMetadataApplyService>());
+        services.AddScoped<IEntityManagementService, EntityManagementService>();
         services.AddScoped<IdentifyPluginService>();
         services.AddScoped<IIdentifyProviderService>(provider =>
             provider.GetRequiredService<IdentifyPluginService>());

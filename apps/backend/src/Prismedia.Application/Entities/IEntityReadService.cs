@@ -50,6 +50,10 @@ public interface IEntityReadService {
     /// When set, keeps only entities that have been played/read (true) or never engaged (false),
     /// resolved against the playback (videos/audio) and progress (books/comics) records.
     /// </param>
+    /// <param name="orphaned">
+    /// When true, keeps only entities that nothing references (no inbound relationship links) — the
+    /// orphaned/empty tags, people, and studios. When false, keeps only referenced entities.
+    /// </param>
     Task<EntityListResponse> ListAsync(
         string? kind,
         string? query,
@@ -72,7 +76,8 @@ public interface IEntityReadService {
         string? bookFormat = null,
         bool? nsfw = null,
         bool? hasFile = null,
-        bool? played = null);
+        bool? played = null,
+        bool? orphaned = null);
 
     /// <summary>
     /// Gets one active entity as the shared entity card read model.

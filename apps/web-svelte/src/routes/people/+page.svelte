@@ -6,6 +6,7 @@
 <EntityIndexPage
   kind="person"
   title="People"
+  itemNoun="person"
   icon={Users}
   prefsKey="people"
   emptyTitle="No people"

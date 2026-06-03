@@ -48,7 +48,8 @@ internal static class TestAuth {
             string? bookFormat = null,
             bool? nsfw = null,
             bool? hasFile = null,
-            bool? played = null) =>
+            bool? played = null,
+            bool? orphaned = null) =>
             Task.FromResult(new EntityListResponse([], null, 0));
 
         public Task<EntityCard?> GetAsync(Guid id, bool hideNsfw, CancellationToken cancellationToken) =>

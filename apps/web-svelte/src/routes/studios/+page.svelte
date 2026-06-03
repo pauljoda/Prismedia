@@ -6,6 +6,7 @@
 <EntityIndexPage
   kind="studio"
   title="Studios"
+  itemNoun="studio"
   icon={Building2}
   prefsKey="studios"
   emptyTitle="No studios"

@@ -99,7 +99,8 @@ public sealed class CollectionItemReadServiceTests {
             string? bookFormat = null,
             bool? nsfw = null,
             bool? hasFile = null,
-            bool? played = null) =>
+            bool? played = null,
+            bool? orphaned = null) =>
             throw new NotSupportedException();
 
         public Task<EntityCard?> GetAsync(Guid id, bool hideNsfw, CancellationToken cancellationToken) =>

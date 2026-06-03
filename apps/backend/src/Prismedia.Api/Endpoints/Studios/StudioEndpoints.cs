@@ -12,5 +12,6 @@ public static class StudioEndpoints {
             "ListStudios",
             "GetStudio",
             typeof(EntityListResponse),
-            typeof(StudioDetail));
+            typeof(StudioDetail),
+            manageable: true);
 }

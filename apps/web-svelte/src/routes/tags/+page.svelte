@@ -6,6 +6,7 @@
 <EntityIndexPage
   kind="tag"
   title="Tags"
+  itemNoun="tag"
   icon={TagIcon}
   prefsKey="tags"
   emptyTitle="No tags"

@@ -62,6 +62,8 @@ export interface EntityGridServerQuery {
   hasFile?: boolean;
   /** When set, keep only entities that have been played/read (true) or never engaged (false). */
   played?: boolean;
+  /** When true, keep only orphaned entities (nothing references them) — for taxonomy cleanup. */
+  orphaned?: boolean;
 }
 
 export interface EntityGridKindTab {
@@ -517,6 +519,7 @@ export function isServerResolvedFilterId(id: string): boolean {
     id === "files:has:false" ||
     id === "progress:played:true" ||
     id === "progress:played:false" ||
+    id === "taxonomy:orphaned" ||
     id === "rating:unrated" ||
     id.startsWith("rating:min:") ||
     id.startsWith("rating:max:") ||
@@ -554,6 +557,8 @@ export function buildServerQueryFromFilters(filterIds: string[]): EntityGridServ
       server.played = true;
     } else if (id === "progress:played:false") {
       server.played = false;
+    } else if (id === "taxonomy:orphaned") {
+      server.orphaned = true;
     } else if (id === "rating:unrated") {
       server.unrated = true;
     } else if (id.startsWith("rating:min:")) {
@@ -595,7 +600,10 @@ function addUniqueOption(options: Map<string, EntityGridFilterOption>, option: O
  * returned cards. Counts reflect entities that would match the filter, not just
  * entities that support the capability family.
  */
-export function buildCapabilityFilterOptions(cards: EntityThumbnailCard[]): EntityGridFilterOption[] {
+export function buildCapabilityFilterOptions(
+  cards: EntityThumbnailCard[],
+  kind?: string,
+): EntityGridFilterOption[] {
   const options = new Map<string, EntityGridFilterOption>();
   const hasDates = true;
   const hasFiles = true;
@@ -603,6 +611,17 @@ export function buildCapabilityFilterOptions(cards: EntityThumbnailCard[]): Enti
   const hasProgress = true;
   const hasRating = cards.some((card) => getRatingValue(card.entity.capabilities) > 0);
   const hasTechnical = cards.some((card) => Boolean(getTechnicalCapability(card.entity.capabilities)));
+
+  // Taxonomy kinds can be filtered to the orphaned/empty entries nothing references — resolved
+  // server-side so it spans the whole library, not just the loaded page.
+  if (kind === ENTITY_KIND.tag || kind === ENTITY_KIND.person || kind === ENTITY_KIND.studio) {
+    addUniqueOption(options, {
+      id: "taxonomy:orphaned",
+      label: "Orphaned",
+      capabilityKind: CAPABILITY_KIND.flags,
+      value: "orphaned",
+    });
+  }
 
   if (hasRating) {
     for (const value of [1, 2, 3, 4, 5]) {

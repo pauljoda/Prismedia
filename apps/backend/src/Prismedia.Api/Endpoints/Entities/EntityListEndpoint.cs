@@ -29,6 +29,7 @@ internal static class EntityListEndpoint {
             bool? nsfw,
             bool? hasFile,
             bool? played,
+            bool? orphaned,
             HttpContext httpContext,
             IEntityReadService entities,
             CancellationToken cancellationToken) => {
@@ -58,7 +59,8 @@ internal static class EntityListEndpoint {
                     bookFormat,
                     nsfw,
                     hasFile,
-                    played));
+                    played,
+                    orphaned));
             })
             .WithName("ListEntities")
             .WithSummary("List Entities.")
