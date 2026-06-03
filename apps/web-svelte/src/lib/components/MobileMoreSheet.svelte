@@ -1,5 +1,6 @@
 <script lang="ts">
   import {
+    BookOpen,
     Check,
     ChevronDown,
     ChevronLeft,
@@ -20,8 +21,10 @@
   import { cn } from "@prismedia/ui-svelte";
   import { useNavCustomization } from "$lib/stores/nav-customization.svelte";
   import { appShellNavIconMap } from "./app-shell-nav-icon-map";
+  import ChangelogDialog from "./ChangelogDialog.svelte";
   import RenameSectionDialog from "./nav/RenameSectionDialog.svelte";
   import MoveToSectionDialog from "./nav/MoveToSectionDialog.svelte";
+  import { APP_VERSION, fetchReleaseUpdateStatus, type ReleaseUpdateStatus } from "$lib/version";
 
   interface Props {
     /** Whether the sheet is in the DOM (kept true through the close animation). */
@@ -42,6 +45,23 @@
   const pathname = $derived(page.url.pathname);
   const sections = $derived(nav.resolvedSections);
   const favorites = $derived(nav.resolvedFavorites);
+
+  // Mirror the desktop sidebar footer: surface the changelog (with update LED), the running
+  // build's version/channel, and the docs link so they are reachable from mobile too.
+  const docsHref = "https://pauljoda.github.io/Prismedia/docs/users/quick-start";
+  let releaseStatus = $state<ReleaseUpdateStatus | null>(null);
+  const updateAvailable = $derived(releaseStatus?.updateAvailable === true);
+  const channelLabel = $derived.by(() => {
+    const channel = releaseStatus?.channel?.trim().toLowerCase();
+    if (!channel || channel === "release") return null;
+    return channel;
+  });
+
+  $effect(() => {
+    void fetchReleaseUpdateStatus().then((status) => {
+      releaseStatus = status;
+    });
+  });
 
   const opened = $derived(mounted && progress > 0.5);
   const useTransition = $derived(!dragging && !reduceMotion);
@@ -408,6 +428,36 @@
             <RotateCcw class="h-4 w-4" />
             <span>Reset</span>
           </button>
+        </div>
+      {:else}
+        <!-- Footer actions: changelog (with update indicator) and docs, matching the desktop sidebar. -->
+        <div class="mt-2 space-y-0.5 border-t border-border-subtle pt-3">
+          <ChangelogDialog version={APP_VERSION}>
+            <div
+              class="flex w-full items-center gap-3 rounded-sm px-2.5 py-2.5 text-sm text-text-muted active:bg-surface-2"
+            >
+              <span class={cn("led led-sm shrink-0", updateAvailable ? "led-active" : "led-idle")}></span>
+              <span class="flex-1 text-left">{updateAvailable ? "Update available" : "Changelog"}</span>
+              <span class="text-mono-sm text-text-disabled">
+                v{releaseStatus?.localVersion ?? APP_VERSION}
+                {#if channelLabel}
+                  <span
+                    class="ml-1 rounded-xs bg-surface-2 px-1 text-mono-sm text-[0.6rem] uppercase tracking-wide text-text-muted"
+                  >{channelLabel}</span>
+                {/if}
+              </span>
+            </div>
+          </ChangelogDialog>
+          <a
+            href={docsHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="flex items-center gap-3 rounded-sm px-2.5 py-2.5 text-sm text-text-muted active:bg-surface-2"
+            onclick={onClose}
+          >
+            <BookOpen class="h-4 w-4 shrink-0" />
+            <span class="flex-1">Docs</span>
+          </a>
         </div>
       {/if}
     </nav>
