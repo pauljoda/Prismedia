@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
   import { browser } from "$app/environment";
-  import VideoPlayer from "../VideoPlayer.svelte";
   import NsfwBlur from "../nsfw/NsfwBlur.svelte";
   import { getCapability, getImagesCapability, isNsfw as hasNsfwFlag } from "$lib/api/capabilities";
   import { entityFileUrl } from "$lib/api/files";
@@ -27,9 +26,14 @@
      * each item links to its entity page instead.
      */
     onActivate?: (card: EntityThumbnailCard, cards: EntityThumbnailCard[]) => void;
+    /**
+     * Media-wall variant: drop the caption block and edge-to-edge framing so each
+     * item is just its media, mirroring the grid's media-wall mode.
+     */
+    mediaWall?: boolean;
   }
 
-  let { cards, onActivate }: Props = $props();
+  let { cards, onActivate, mediaWall = false }: Props = $props();
 
   // How many items on either side of the centered item keep a live, autoplaying
   // player mounted. The centered item plus these neighbours stay "always playing"
@@ -156,25 +160,40 @@
   // and swapping poster<->player are all reflow-free.
   let aspectById = $state(new Map<string, string>());
 
-  function reservedAspect(card: EntityThumbnailCard): string | undefined {
+  function reservedDimensions(card: EntityThumbnailCard): { width: number; height: number } | undefined {
     const cached = aspectById.get(card.entity.id);
-    if (cached) return cached;
+    if (cached) {
+      const [w, h] = cached.split(" / ").map(Number);
+      if (w > 0 && h > 0) return { width: w, height: h };
+    }
 
     // Authoritative dimensions from the hydrated detail, when available.
     const technical = technicalOf(card);
     const width = numberOf(technical?.width);
     const height = numberOf(technical?.height);
-    if (width && height) return `${width} / ${height}`;
+    if (width && height) return { width, height };
 
     // Dimensions the card already carried (full entity cards). The per-kind
     // fallback ("square" etc.) is intentionally ignored so browse images are not
     // forced into a placeholder shape before their real size is measured.
     const ratio = card.aspectRatio;
     if (typeof ratio === "object" && ratio.width > 0 && ratio.height > 0) {
-      return `${ratio.width} / ${ratio.height}`;
+      return { width: ratio.width, height: ratio.height };
     }
 
     return undefined;
+  }
+
+  function reservedAspect(card: EntityThumbnailCard): string | undefined {
+    const dims = reservedDimensions(card);
+    return dims ? `${dims.width} / ${dims.height}` : undefined;
+  }
+
+  // Numeric width/height ratio used to cap a portrait item's width so its
+  // aspect box, at the capped height, fits without pillarboxing.
+  function reservedRatio(card: EntityThumbnailCard): number | undefined {
+    const dims = reservedDimensions(card);
+    return dims ? dims.width / dims.height : undefined;
   }
 
   // Record the poster's intrinsic size the first time it loads so the slot is
@@ -188,17 +207,45 @@
       aspectById = next;
     }
   }
+
+  // Cap each item's media to what fits in the scroll viewport beneath the sticky
+  // toolbar, so even a tall portrait clip stays fully visible without scrolling.
+  // Measured from the scroll container (which sits below the toolbar and does not
+  // move as the feed scrolls); falls back to a safe viewport fraction via CSS.
+  let feedEl = $state<HTMLElement | null>(null);
+  let maxMediaHeight = $state<number | null>(null);
+
+  function measureAvailableHeight() {
+    if (!browser || !feedEl) return;
+    const scroller = feedEl.closest(".grid-viewport") ?? feedEl.parentElement;
+    const top = scroller ? scroller.getBoundingClientRect().top : 0;
+    const available = window.innerHeight - top - 24;
+    maxMediaHeight = available > 240 ? Math.round(available) : null;
+  }
+
+  $effect(() => {
+    if (!browser) return;
+    // Re-measure when the card set changes (the feed may mount after the viewport).
+    void cards.length;
+    measureAvailableHeight();
+    window.addEventListener("resize", measureAvailableHeight);
+    return () => window.removeEventListener("resize", measureAvailableHeight);
+  });
 </script>
 
-<div class="feed">
+<div
+  class="feed"
+  class:is-media-wall={mediaWall}
+  bind:this={feedEl}
+  style:--feed-max-h={maxMediaHeight ? `${maxMediaHeight}px` : undefined}
+>
   {#each cards as card, index (card.entity.id)}
     {@const href = onActivate ? undefined : resolveEntityThumbnailHref(card)}
     {@const cover = card.cover}
     {@const showVideo = isWithinWindow(index) && isVideoCard(card)}
     {@const source = showVideo ? videoSourceFor(card) : null}
-    {@const technical = showVideo ? technicalOf(card) : null}
     {@const aspect = reservedAspect(card)}
-    <article class="feed-item" use:trackVisibility={index}>
+    <article class="feed-item" use:trackVisibility={index} style:--ratio={reservedRatio(card)}>
       <div class="feed-media" class:has-aspect={Boolean(aspect)} style:aspect-ratio={aspect}>
         <NsfwBlur isNsfw={lightboxEntity(card).isNsfw === true}>
           <!--
@@ -220,22 +267,24 @@
           {/if}
 
           {#if showVideo && source}
-            <div class="feed-video">
-              <VideoPlayer
-                directSrc={source}
-                codec={technical?.codec}
-                sourceWidth={numberOf(technical?.width)}
-                sourceHeight={numberOf(technical?.height)}
-                poster={cover?.src ?? undefined}
-                defaultPlaybackMode="direct"
-                showCastControls={false}
-                chrome="minimal"
-                enableKeyboardShortcuts={false}
-                initialMuted
-                autoPlay
-                autoRepeat
-              />
-            </div>
+            <!--
+              Inline preview uses a plain muted, looping autoplay video. Muted
+              autoplay is the only playback browsers allow without a user gesture,
+              so it reliably plays inline — unlike the full player, which on an
+              autoplay block tries to fall back to an HLS stream these single-file
+              entities don't have and then silently stays on the poster. A tap
+              still opens the lightbox for full playback with controls and sound.
+            -->
+            <video
+              class="feed-video"
+              src={source}
+              poster={cover?.src ?? undefined}
+              muted
+              autoplay
+              loop
+              playsinline
+              preload="metadata"
+            ></video>
           {/if}
         </NsfwBlur>
 
@@ -278,7 +327,13 @@
 
   .feed-item {
     width: 100%;
-    max-width: 640px;
+    /*
+     * Default cap of 640px, further narrowed for tall items so that at the
+     * available viewport height (--feed-max-h) the item's aspect box fits fully
+     * on screen: max usable width = available-height x (w/h). Landscape items
+     * keep the 640px cap; portrait items shrink instead of overflowing.
+     */
+    max-width: min(640px, calc(var(--feed-max-h, 70vh) * var(--ratio, 1)));
     border: 1px solid var(--color-border-subtle);
     border-radius: var(--radius-lg, 16px);
     background: var(--color-surface-raised, rgb(20 16 12 / 0.6));
@@ -313,9 +368,15 @@
 
   /*
    * Reserved-aspect mode: the box owns the height, so the poster and the inline
-   * player both absolutely fill it. Mounting/unmounting the player as items
-   * scroll in and out of the play window then causes zero layout shift.
+   * video both absolutely fill it (zero layout shift as the video mounts). The
+   * box is capped to the available viewport height (set per-feed as --feed-max-h,
+   * with a safe 70vh fallback); width follows from the capped height so a tall
+   * portrait clip narrows to stay fully on screen rather than being cropped.
    */
+  .feed-media.has-aspect {
+    max-height: var(--feed-max-h, 70vh);
+  }
+
   .feed-media.has-aspect .feed-poster {
     position: absolute;
     inset: 0;
@@ -324,26 +385,15 @@
     object-fit: cover;
   }
 
-  /* The inline player overlays the poster without affecting layout height. */
+  /* The inline video overlays the poster without affecting layout height. The
+     item width already matches the asset aspect, so cover fills it exactly. */
   .feed-video {
     position: absolute;
     inset: 0;
-  }
-
-  /*
-   * The feed item already reserves the asset's true aspect (portrait, square, or
-   * landscape). The shared player otherwise forces its video-page sizing — a
-   * fixed 16/9 ratio plus a viewport-derived max-width — which letterboxes a
-   * portrait clip into a centered landscape strip that no longer matches the
-   * poster. Neutralise that sizing here so the player simply fills the reserved
-   * box and the video lines up with the poster it replaces.
-   */
-  .feed-video :global(media-player) {
     width: 100%;
     height: 100%;
-    aspect-ratio: auto;
-    max-width: none;
-    margin-inline: 0;
+    object-fit: cover;
+    background: #000;
   }
 
   .feed-placeholder {
@@ -399,5 +449,24 @@
     border: 1px solid var(--color-border-subtle);
     border-radius: var(--radius-xs, 4px);
     padding: 0.15rem 0.45rem;
+  }
+
+  /*
+   * Media-wall variant: just the media, no caption or card chrome, with tighter
+   * spacing — the feed counterpart of the grid's media-wall mode.
+   */
+  .feed.is-media-wall {
+    gap: 0.75rem;
+  }
+
+  .feed.is-media-wall .feed-item {
+    border: none;
+    border-radius: var(--radius-md, 10px);
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .feed.is-media-wall .feed-caption {
+    display: none;
   }
 </style>

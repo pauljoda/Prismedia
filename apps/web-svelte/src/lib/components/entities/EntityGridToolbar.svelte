@@ -341,7 +341,7 @@
           {/if}
         </div>
 
-        {#if viewMode !== "feed"}
+        {#if viewMode !== "list"}
           <button
             type="button"
             class={cn("ctrl-btn ctrl-icon", mediaWall && "is-active")}

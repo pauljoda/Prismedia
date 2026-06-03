@@ -333,7 +333,7 @@
   }
 
   onMount(() => {
-    if (mediaWall) viewMode = "grid";
+    if (mediaWall && viewMode === "list") viewMode = "grid";
     onPageSizeChange?.(pageSize);
     const key = presetStorageKey();
     if (key) presets = createFilterPresets(key).load();
@@ -365,7 +365,7 @@
         randomSeed = snapshot.randomSeed ?? randomSeed;
         viewMode = snapshot.viewMode;
         mediaWall = snapshot.mediaWall ?? initialMediaWall;
-        if (mediaWall) viewMode = "grid";
+        if (mediaWall && viewMode === "list") viewMode = "grid";
         selectedIds = snapshot.selectedIds;
         scale = snapshot.scale;
         pageSize = normalizePageSize(snapshot.pageSize ?? pageSize);
@@ -563,14 +563,16 @@
 
   function setViewMode(value: EntityGridViewMode) {
     viewMode = value;
-    if (value !== "grid") {
+    // Media wall applies to the grid and the feed but not the row-based list.
+    if (value === "list") {
       mediaWall = false;
     }
   }
 
   function setMediaWall(value: boolean) {
     mediaWall = value;
-    if (value) viewMode = "grid";
+    // The list layout has no media-wall variant, so enabling it there falls back to the grid.
+    if (value && viewMode === "list") viewMode = "grid";
   }
 
   function savePresets(next: FilterPreset[]) {
@@ -883,7 +885,7 @@
         {/each}
       </div>
     {:else if visibleCards.length > 0 && viewMode === "feed" && FeedComponent}
-      <FeedComponent cards={pagedCards} onActivate={onCardActivate} />
+      <FeedComponent cards={pagedCards} onActivate={onCardActivate} {mediaWall} />
     {:else if visibleCards.length > 0}
       <div
         class="cards"
