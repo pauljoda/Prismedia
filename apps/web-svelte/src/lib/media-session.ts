@@ -82,17 +82,24 @@ function guessImageType(url: string): string | undefined {
   return undefined;
 }
 
+/** Standard artwork slot sizes the OS may request; declaring several improves WebKit/iOS pickup. */
+const ARTWORK_SIZES = ["96x96", "128x128", "192x192", "256x256", "384x384", "512x512"];
+
 /**
  * Builds a Media Session artwork list from a single cover/poster URL. The URL is made absolute (the
- * OS handler fetches it outside the page) and a single concrete size is declared with an inferred
- * type — the most broadly compatible shape across Chromium and WebKit. Returns an empty list when
- * no URL is available.
+ * OS handler fetches it outside the page) and emitted as one well-formed entry per standard size,
+ * all pointing at the same image. Multiple single-size entries (rather than one entry with a
+ * space-separated `sizes` string) is the broadly compatible shape: WebKit throws from the
+ * MediaMetadata constructor on the multi-token form, but accepts these, and iOS only renders
+ * artwork when a size it wants is offered. Returns an empty list when no URL is available.
  */
 export function buildMediaArtwork(url: string | null | undefined): MediaImage[] {
   const absolute = absoluteArtworkUrl(url);
   if (!absolute) return [];
   const type = guessImageType(absolute);
-  return [type ? { src: absolute, sizes: "512x512", type } : { src: absolute, sizes: "512x512" }];
+  return ARTWORK_SIZES.map((sizes) =>
+    type ? { src: absolute, sizes, type } : { src: absolute, sizes },
+  );
 }
 
 /** Safely registers (or clears, when fn is null) one action handler, ignoring unsupported actions. */

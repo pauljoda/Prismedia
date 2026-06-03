@@ -20,16 +20,23 @@ describe("absoluteArtworkUrl", () => {
 });
 
 describe("buildMediaArtwork", () => {
-  it("produces a single absolute entry with an inferred type", () => {
+  it("emits absolute, well-formed entries at multiple sizes with an inferred type", () => {
     const artwork = buildMediaArtwork("/assets/a/cover.jpg");
-    expect(artwork).toEqual([
-      { src: `${window.location.origin}/assets/a/cover.jpg`, sizes: "512x512", type: "image/jpeg" },
-    ]);
+    const src = `${window.location.origin}/assets/a/cover.jpg`;
+    expect(artwork.length).toBeGreaterThan(1);
+    expect(artwork).toContainEqual({ src, sizes: "512x512", type: "image/jpeg" });
+    // Every entry is a single-token size (no space-separated list, which WebKit rejects).
+    for (const entry of artwork) {
+      expect(entry.src).toBe(src);
+      expect(entry.type).toBe("image/jpeg");
+      expect(entry.sizes).toMatch(/^\d+x\d+$/);
+    }
   });
 
   it("omits the type when the extension is unknown", () => {
     const artwork = buildMediaArtwork("/assets/a/cover");
-    expect(artwork).toEqual([{ src: `${window.location.origin}/assets/a/cover`, sizes: "512x512" }]);
+    expect(artwork.every((entry) => !("type" in entry))).toBe(true);
+    expect(artwork[0]?.src).toBe(`${window.location.origin}/assets/a/cover`);
   });
 
   it("returns an empty list when there is no url", () => {
