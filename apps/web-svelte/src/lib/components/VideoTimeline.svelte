@@ -124,8 +124,18 @@
   }
 
   .video-time-slider {
+    /* Authoritative played gradient for OUR overlay divs (`is-played`, chapter fill). */
+    --prismedia-fill-gradient: linear-gradient(90deg, var(--color-accent-500), var(--color-accent-300));
     --media-slider-track-bg: rgba(255, 255, 255, 0.18);
-    --media-slider-track-fill-bg: linear-gradient(90deg, var(--color-accent-500), var(--color-accent-300));
+    /*
+     * VidStack's own track-fill is positioned from the media element's raw duration. For a still-
+     * growing on-demand HLS playlist (e.g. the SDR-direct adaptive path) that duration is only the
+     * produced-so-far length, so VidStack paints its fill to ~100% and the brass overruns the real
+     * playhead. We drive the visible fill ourselves from `playbackProgressPercent` (computed against
+     * the authoritative max(video.duration, propDuration)), so keep VidStack's duration-driven fill
+     * transparent and let `.is-played` be the single source of truth.
+     */
+    --media-slider-track-fill-bg: transparent;
     --media-slider-track-progress-bg: transparent;
     --media-slider-chapter-hover-transform: scaleY(2.2);
     bottom: 0.75rem;
@@ -194,8 +204,13 @@
   }
 
   .video-slider-track-fill {
-    background: var(--media-slider-track-fill-bg);
-    box-shadow: 0 0 12px rgba(196, 154, 90, 0.40);
+    /*
+     * Per-chapter fill is positioned by VidStack's `--chapter-fill`, which derives from the media
+     * element's raw (possibly still-growing) duration and can overrun the real playhead. The visible
+     * played fill is `.is-played` (driven by our authoritative duration), so this stays invisible —
+     * the chapter elements remain only for hover/scrub geometry.
+     */
+    background: transparent;
     width: var(--chapter-fill, 0%);
     z-index: 2;
   }
@@ -215,7 +230,7 @@
   }
 
   .video-slider-native-progress.is-played {
-    background: var(--media-slider-track-fill-bg);
+    background: var(--prismedia-fill-gradient);
     box-shadow: 0 0 12px rgba(196, 154, 90, 0.40);
     width: var(--prismedia-slider-fill, 0%);
     z-index: 3;
