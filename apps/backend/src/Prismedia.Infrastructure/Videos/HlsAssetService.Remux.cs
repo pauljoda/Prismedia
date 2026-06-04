@@ -208,11 +208,7 @@ public sealed partial class HlsAssetService {
             "copy",
         };
 
-        // Browsers (especially Safari/WebKit) require the hvc1 sample-entry tag for HEVC in fMP4; the
-        // hev1 tag the source may carry does not play. Copying does not change the bitstream, only the tag.
-        if (IsHevcCodec(source.VideoCodec)) {
-            arguments.AddRange(["-tag:v", "hvc1"]);
-        }
+        arguments.AddRange(HevcSampleEntryTagArguments(source));
 
         arguments.AddRange(
         [
@@ -411,4 +407,42 @@ public sealed partial class HlsAssetService {
         codec is not null &&
         (codec.Equals("hevc", StringComparison.OrdinalIgnoreCase) ||
             codec.Equals("h265", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Chooses the HEVC sample-entry codec tag (and any required muxer flags) for a stream copy.
+    /// </summary>
+    /// <remarks>
+    /// Browsers require an explicit tag because the source's hev1 tag (or no tag, from an MKV) does not
+    /// play in fMP4, and the tag must match the stream's actual signal:
+    /// <list type="bullet">
+    /// <item>Dolby Vision (Profile 7/8 with an RPU) is tagged <c>dvh1</c> and muxed with <c>-strict -2</c>
+    /// so the muxer writes the <c>dvvC</c> configuration box, keeping the stream properly signalled as
+    /// Dolby Vision so the client's DV decoder handles it. Tagging a DV stream as plain <c>hvc1</c> drops
+    /// the <c>dvvC</c> box while leaving the RPU NAL units in the bitstream, and browser decoders then
+    /// reject it (the failure that otherwise forces a fallback transcode). Mirrors Jellyfin's
+    /// DirectStream remux of Dolby Vision sources.</item>
+    /// <item>Plain HEVC (SDR/HDR10/HLG) is tagged <c>hvc1</c>, which Safari/WebKit require.</item>
+    /// </list>
+    /// Non-HEVC sources need no tag override.
+    /// </remarks>
+    internal static IReadOnlyList<string> HevcSampleEntryTagArguments(VideoSourceFile source) {
+        if (!IsHevcCodec(source.VideoCodec)) {
+            return [];
+        }
+
+        return IsDolbyVision(source)
+            ? ["-tag:v", "dvh1", "-strict", "-2"]
+            : ["-tag:v", "hvc1"];
+    }
+
+    // True when the source's primary video stream carries a Dolby Vision layer (a profile and/or an
+    // RPU). Such streams must be remuxed with the dvh1 tag and the dvvC configuration box so the
+    // client's Dolby Vision decoder engages; a plain hvc1 tag mis-signals them and breaks playback.
+    private static bool IsDolbyVision(VideoSourceFile source) {
+        var stream = source.Streams?
+            .Where(candidate => candidate.Type.Equals("Video", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(candidate => candidate.StreamIndex)
+            .FirstOrDefault();
+        return stream is not null && (stream.DvProfile is not null || stream.RpuPresentFlag == true);
+    }
 }

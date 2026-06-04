@@ -89,6 +89,42 @@ public sealed class HlsAssetServiceTests : IDisposable {
         Assert.DoesNotContain("EVENT", playlist);
     }
 
+    private static VideoSourceFile HevcSource(string videoCodec, int? dvProfile, bool rpu) =>
+        new(
+            EntityId: Guid.NewGuid(),
+            Path: "/media/x.mkv",
+            ContentType: "video/x-matroska",
+            DirectPlayable: false,
+            VideoCodec: videoCodec,
+            Streams: [new VideoSourceStream(
+                StreamIndex: 0, Type: "Video", Codec: videoCodec, Language: null, Title: null,
+                Width: 3840, Height: 1920, FrameRate: 24, BitRate: null, SampleRate: null, Channels: null,
+                IsDefault: true, IsForced: false, DvProfile: dvProfile, RpuPresentFlag: rpu)]);
+
+    [Fact]
+    public void DolbyVisionRemuxIsTaggedDvh1WithStrictFlagSoTheDoviConfigBoxIsWritten() {
+        // A Dolby Vision Profile 8 stream (with RPU) must be tagged dvh1 and muxed with -strict -2 so the
+        // dvvC config box is written; tagging it plain hvc1 drops the box and browsers reject the stream.
+        var args = HlsAssetService.HevcSampleEntryTagArguments(HevcSource("hevc", dvProfile: 8, rpu: true));
+
+        Assert.Equal(["-tag:v", "dvh1", "-strict", "-2"], args);
+    }
+
+    [Fact]
+    public void PlainHevcRemuxIsTaggedHvc1() {
+        // Non-Dolby-Vision HEVC (SDR/HDR10/HLG) keeps the hvc1 tag Safari/WebKit require.
+        var args = HlsAssetService.HevcSampleEntryTagArguments(HevcSource("hevc", dvProfile: null, rpu: false));
+
+        Assert.Equal(["-tag:v", "hvc1"], args);
+    }
+
+    [Fact]
+    public void NonHevcRemuxAddsNoTagOverride() {
+        var args = HlsAssetService.HevcSampleEntryTagArguments(HevcSource("h264", dvProfile: null, rpu: false));
+
+        Assert.Empty(args);
+    }
+
     [Fact]
     public async Task VirtualManifestIsVodAndCoversFullDuration() {
         var videoId = Guid.Parse("33333333-3333-3333-3333-333333333333");
