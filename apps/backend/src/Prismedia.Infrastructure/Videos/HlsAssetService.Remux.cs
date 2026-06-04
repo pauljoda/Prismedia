@@ -16,6 +16,13 @@ namespace Prismedia.Infrastructure.Videos;
 /// smooth with negligible server load, matching how other media servers serve HEVC to browsers.
 /// </summary>
 public sealed partial class HlsAssetService {
+    // Stream-copy input pacing (see RemuxArguments). The copy reads at RemuxReadRate× realtime — far
+    // above 1× playback so it stays well ahead of the viewer, far below an unthrottled copy that would
+    // race the whole file to disk and pin every core. The first RemuxInitialBurstSeconds are read flat
+    // out so the player gets an immediate buffer before the rate cap engages.
+    private const int RemuxReadRate = 10;
+    private const int RemuxInitialBurstSeconds = 30;
+
     // One whole-file remux generation per (item, audio track); the ffmpeg job runs to completion in
     // the background and the served files (init.mp4, seg_*.m4s, index.m3u8) appear as it progresses.
     private static readonly ConcurrentDictionary<string, RemuxGeneration> RemuxGenerations = new();
@@ -204,6 +211,16 @@ public sealed partial class HlsAssetService {
             "-loglevel",
             "error",
             "-nostats",
+            // Pace the stream copy instead of writing the whole file to disk as fast as the drive allows.
+            // An unthrottled copy of a long 4K source pins every core for the burst it takes to copy the
+            // entire timeline up front; Jellyfin avoids this by reading copy-remux input at a bounded rate
+            // (-readrate). We read the first RemuxInitialBurstSeconds as fast as possible so playback has an
+            // immediate buffer, then cap at RemuxReadRate× realtime — far above playback speed (so the copy
+            // always stays well ahead) but far below "race the whole file", keeping CPU near Jellyfin's.
+            "-readrate_initial_burst",
+            RemuxInitialBurstSeconds.ToString(CultureInfo.InvariantCulture),
+            "-readrate",
+            RemuxReadRate.ToString(CultureInfo.InvariantCulture),
             "-i",
             source.Path,
             "-map",
