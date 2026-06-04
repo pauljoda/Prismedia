@@ -16,11 +16,15 @@ namespace Prismedia.Infrastructure.Videos;
 /// smooth with negligible server load, matching how other media servers serve HEVC to browsers.
 /// </summary>
 public sealed partial class HlsAssetService {
-    // Stream-copy input pacing (see RemuxArguments). The copy reads at RemuxReadRate× realtime — far
-    // above 1× playback so it stays well ahead of the viewer, far below an unthrottled copy that would
-    // race the whole file to disk and pin every core. The first RemuxInitialBurstSeconds are read flat
-    // out so the player gets an immediate buffer before the rate cap engages.
-    private const int RemuxReadRate = 10;
+    // Stream-copy input pacing (see RemuxArguments). The copy reads at RemuxReadRate× realtime. A pure
+    // copy is light on CPU at any rate (it is I/O- and audio-transcode-bound, ~1 core), so we pace it
+    // high: high enough that the linear copy reaches a deep resume/seek position within a few seconds
+    // (a 28-minute episode copies end-to-end in ~30s), but bounded so it does not saturate disk I/O on a
+    // shared box. This is the trade for keeping a single linear copy instead of a per-seek restart, which
+    // is unreliable for open-GOP HEVC (ffmpeg's input seek lands on a different keyframe phase than the
+    // copy's segment boundaries, so seeked segments would not align with the VOD playlist). The first
+    // RemuxInitialBurstSeconds are read flat out so the player gets an immediate buffer at startup.
+    private const int RemuxReadRate = 60;
     private const int RemuxInitialBurstSeconds = 30;
 
     // One whole-file remux generation per (item, audio track); the ffmpeg job runs to completion in
