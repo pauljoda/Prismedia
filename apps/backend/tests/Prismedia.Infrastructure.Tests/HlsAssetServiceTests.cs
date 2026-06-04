@@ -102,12 +102,13 @@ public sealed class HlsAssetServiceTests : IDisposable {
                 IsDefault: true, IsForced: false, DvProfile: dvProfile, RpuPresentFlag: rpu)]);
 
     [Fact]
-    public void DolbyVisionRemuxIsTaggedDvh1WithStrictFlagSoTheDoviConfigBoxIsWritten() {
-        // A Dolby Vision Profile 8 stream (with RPU) must be tagged dvh1 and muxed with -strict -2 so the
-        // dvvC config box is written; tagging it plain hvc1 drops the box and browsers reject the stream.
+    public void DolbyVisionRemuxIsTaggedHvc1NotDvh1SoNonDoviBrowsersAcceptIt() {
+        // A Dolby Vision Profile 8 stream is tagged plain hvc1, NOT dvh1: a dvh1 sample entry advertises
+        // Dolby Vision and a browser whose MSE can't decode it (e.g. Chromium) rejects the buffer
+        // outright. With hvc1 the browser decodes the HEVC base layer and ignores the DV RPU.
         var args = HlsAssetService.HevcSampleEntryTagArguments(HevcSource("hevc", dvProfile: 8, rpu: true));
 
-        Assert.Equal(["-tag:v", "dvh1", "-strict", "-2"], args);
+        Assert.Equal(["-tag:v", "hvc1"], args);
     }
 
     [Fact]

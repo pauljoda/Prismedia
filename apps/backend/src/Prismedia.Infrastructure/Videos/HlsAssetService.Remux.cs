@@ -447,40 +447,27 @@ public sealed partial class HlsAssetService {
             codec.Equals("h265", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
-    /// Chooses the HEVC sample-entry codec tag (and any required muxer flags) for a stream copy.
+    /// Chooses the HEVC sample-entry codec tag for a stream copy. HEVC is always tagged <c>hvc1</c>;
+    /// non-HEVC sources need no override.
     /// </summary>
     /// <remarks>
-    /// Browsers require an explicit tag because the source's hev1 tag (or no tag, from an MKV) does not
-    /// play in fMP4, and the tag must match the stream's actual signal:
-    /// <list type="bullet">
-    /// <item>Dolby Vision (Profile 7/8 with an RPU) is tagged <c>dvh1</c> and muxed with <c>-strict -2</c>
-    /// so the muxer writes the <c>dvvC</c> configuration box, keeping the stream properly signalled as
-    /// Dolby Vision so the client's DV decoder handles it. Tagging a DV stream as plain <c>hvc1</c> drops
-    /// the <c>dvvC</c> box while leaving the RPU NAL units in the bitstream, and browser decoders then
-    /// reject it (the failure that otherwise forces a fallback transcode). Mirrors Jellyfin's
-    /// DirectStream remux of Dolby Vision sources.</item>
-    /// <item>Plain HEVC (SDR/HDR10/HLG) is tagged <c>hvc1</c>, which Safari/WebKit require.</item>
-    /// </list>
-    /// Non-HEVC sources need no tag override.
+    /// Browsers require an explicit tag because the source's <c>hev1</c> tag (or no tag, from an MKV)
+    /// does not play in fMP4. <c>hvc1</c> is the universally safe choice — it is what every HEVC-capable
+    /// browser accepts (verified: Chromium's <c>MediaSource.isTypeSupported('…hvc1…')</c> is true).
+    /// <para>
+    /// We deliberately do NOT tag Dolby Vision sources <c>dvh1</c>. A <c>dvh1</c> sample entry advertises
+    /// Dolby Vision, and a browser whose MSE cannot decode it (Chromium reports
+    /// <c>isTypeSupported('…dvh1.08.06…')</c> false) rejects the buffer outright — instant failure and a
+    /// fallback to a heavy transcode. With an <c>hvc1</c> tag the same browser decodes the HEVC base
+    /// layer and simply ignores the Dolby Vision RPU NAL units (Profile 7/8 carry a conformant HDR10/HLG
+    /// base, so this renders correctly). This mirrors what a reference client (Jellyfin) serves to a
+    /// non-Dolby-Vision browser: <c>-codec:v copy -tag:v hvc1</c>, reported as "HEVC (direct)". Tagging
+    /// <c>dvh1</c> would only be correct for a client that advertised Dolby Vision support — which the
+    /// browser device profile does not currently probe; until it does, <c>hvc1</c> is the right default.
+    /// (Profile 5, whose ICtCp base has no conformant fallback, never reaches the remux — it is gated to
+    /// a tone-mapped transcode by <see cref="VideoPlaybackRangePolicy"/>.)
+    /// </para>
     /// </remarks>
-    internal static IReadOnlyList<string> HevcSampleEntryTagArguments(VideoSourceFile source) {
-        if (!IsHevcCodec(source.VideoCodec)) {
-            return [];
-        }
-
-        return IsDolbyVision(source)
-            ? ["-tag:v", "dvh1", "-strict", "-2"]
-            : ["-tag:v", "hvc1"];
-    }
-
-    // True when the source's primary video stream carries a Dolby Vision layer (a profile and/or an
-    // RPU). Such streams must be remuxed with the dvh1 tag and the dvvC configuration box so the
-    // client's Dolby Vision decoder engages; a plain hvc1 tag mis-signals them and breaks playback.
-    private static bool IsDolbyVision(VideoSourceFile source) {
-        var stream = source.Streams?
-            .Where(candidate => candidate.Type.Equals("Video", StringComparison.OrdinalIgnoreCase))
-            .OrderBy(candidate => candidate.StreamIndex)
-            .FirstOrDefault();
-        return stream is not null && (stream.DvProfile is not null || stream.RpuPresentFlag == true);
-    }
+    internal static IReadOnlyList<string> HevcSampleEntryTagArguments(VideoSourceFile source) =>
+        IsHevcCodec(source.VideoCodec) ? ["-tag:v", "hvc1"] : [];
 }
