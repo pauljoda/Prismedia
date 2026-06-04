@@ -189,7 +189,6 @@ export const SETTING_KEYS = {
   generationAutoGenerateMetadata: "generation.autoGenerateMetadata",
   generationAutoGenerateOshash: "generation.autoGenerateOshash",
   generationAutoGeneratePreview: "generation.autoGeneratePreview",
-  generationGeneratePhash: "generation.generatePhash",
   generationGenerateTrickplay: "generation.generateTrickplay",
   generationMetadataStorageDedicated: "generation.metadataStorageDedicated",
   generationPreviewClipDurationSeconds: "generation.previewClipDurationSeconds",

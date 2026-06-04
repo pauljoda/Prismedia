@@ -240,7 +240,6 @@ export const detailLabRows: EntityDetailLabRow[] = [
             ]),
             fingerprints([
               { algorithm: "oshash", value: "a1b2c3d4e5f60718" },
-              { algorithm: "phash", value: "9876543210abcdef" },
               { algorithm: "md5", value: "d41d8cd98f00b204e9800998ecf8427e" },
             ]),
             markers([

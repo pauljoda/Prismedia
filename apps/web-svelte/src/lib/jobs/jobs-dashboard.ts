@@ -62,7 +62,7 @@ const _JOB_DEFINITIONS = [
     type: "fingerprint-video",
     queueName: "fingerprint",
     label: "Video Fingerprint",
-    description: "Computes MD5, oshash, and optional perceptual hash for videos.",
+    description: "Computes MD5 and oshash for videos.",
   },
   {
     type: "fingerprint-image",

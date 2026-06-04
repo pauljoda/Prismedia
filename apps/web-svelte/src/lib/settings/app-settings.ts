@@ -25,7 +25,6 @@ export const defaultLibrarySettings: LibrarySettings = {
   autoGenerateMetadata: true,
   autoGenerateOshash: true,
   autoGenerateMd5: false,
-  generatePhash: false,
   autoGeneratePreview: true,
   generateTrickplay: true,
   metadataStorageDedicated: true,
@@ -193,10 +192,6 @@ export function valuesToLibrarySettings(
     autoGenerateMd5: valueAsBoolean(
       values[settingKeys.generationAutoGenerateMd5],
       fallback.autoGenerateMd5,
-    ),
-    generatePhash: valueAsBoolean(
-      values[settingKeys.generationGeneratePhash],
-      fallback.generatePhash,
     ),
     autoGeneratePreview: valueAsBoolean(
       values[settingKeys.generationAutoGeneratePreview],

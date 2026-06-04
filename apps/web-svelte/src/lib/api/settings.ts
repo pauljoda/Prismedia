@@ -71,7 +71,6 @@ export interface LibrarySettings {
   autoGenerateMetadata: boolean;
   autoGenerateOshash: boolean;
   autoGenerateMd5: boolean;
-  generatePhash: boolean;
   autoGeneratePreview: boolean;
   generateTrickplay: boolean;
   metadataStorageDedicated: boolean;
