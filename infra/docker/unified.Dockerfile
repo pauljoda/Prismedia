@@ -28,18 +28,6 @@ COPY . .
 
 RUN pnpm release:check && pnpm --filter @prismedia/web-svelte build
 
-# ── Stage 3a: Build prismedia-phash (Stash-compatible video pHash) ──
-FROM golang:1.23-alpine AS phash-builder
-
-RUN apk add --no-cache git
-
-WORKDIR /src/phash
-COPY infra/phash/go.mod infra/phash/go.sum ./
-RUN go mod download
-
-COPY infra/phash/ ./
-RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /out/prismedia-phash .
-
 # ── Stage 3: Build audiowaveform from source ────────────────────
 FROM ubuntu:noble AS audiowaveform-builder
 
@@ -125,10 +113,6 @@ RUN pip3 install --no-cache-dir --break-system-packages \
 
 # Copy audiowaveform binary from builder
 COPY --from=audiowaveform-builder /usr/local/bin/audiowaveform /usr/local/bin/audiowaveform
-
-# Copy prismedia-phash binary (Stash-compatible video perceptual hash)
-COPY --from=phash-builder /out/prismedia-phash /usr/local/bin/prismedia-phash
-ENV PRISMEDIA_PHASH_BIN=/usr/local/bin/prismedia-phash
 
 WORKDIR /app
 
