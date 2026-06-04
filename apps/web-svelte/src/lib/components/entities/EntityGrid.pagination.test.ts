@@ -54,7 +54,7 @@ describe("EntityGrid pagination", () => {
     vi.restoreAllMocks();
   });
 
-  it("defaults mobile thumbnail grids to the largest card size when no saved size exists", async () => {
+  it("defaults mobile thumbnail grids to the second-from-largest card size when no saved size exists", async () => {
     vi.stubGlobal("matchMedia", createMatchMedia(true));
     const cards = Array.from({ length: 6 }, (_, index) => card(index));
     const { container } = render(EntityGrid, {
@@ -64,8 +64,9 @@ describe("EntityGrid pagination", () => {
       },
     });
 
+    // minScale (2) is the largest size; the mobile default starts one step in.
     await waitFor(() => {
-      expect(container.querySelector<HTMLElement>(".entity-grid")?.style.getPropertyValue("--col-count")).toBe("2");
+      expect(container.querySelector<HTMLElement>(".entity-grid")?.style.getPropertyValue("--col-count")).toBe("3");
     });
   });
 
