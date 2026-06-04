@@ -65,6 +65,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Fixed
+- Re-identifying media that was already matched once now recovers instead of failing. Once a plugin saved a provider id to an item, every later identify was locked to looking that id up — so an artist's albums and tracks that were found by name on the first pass could silently come back empty on a re-run. Identify now falls back to a fresh search (the way the first pass ran) whenever the id lookup turns up nothing, so re-identifying an artist re-fills its children instead of dropping them.
 - The music player's waveform no longer flickers while you scrub it with a trackpad or mouse wheel. The moving playhead and your scrubbing were fighting over the position each frame; scrubbing now holds the playhead steady and it resumes following playback once you stop.
 - Music cover-art placeholders no longer spin. Tracks and albums without artwork showed a slowly rotating record icon, which made a page of them look perpetually busy; the placeholder is now still.
 - Audio tracks now open correctly from the dashboard and anywhere else they're listed — their link pointed at a page that didn't exist, so clicking a recently-played or in-progress track led nowhere; it now opens the track page.

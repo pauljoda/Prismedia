@@ -300,9 +300,10 @@ public sealed partial class IdentifyPluginService : IIdentifyProviderService {
             ? new IdentifyStructuralContext(ancestors, positions)
             : null;
         var pluginRequestKind = PluginEntityKindCompatibility.RequestKindFor(descriptor.Manifest, entity.KindCode);
+        var resolvedAction = ResolveAction(descriptor.Manifest, entity.KindCode, query, hints);
         var request = new IdentifyPluginRequest(
             ProtocolVersion: 2,
-            Action: ResolveAction(descriptor.Manifest, entity.KindCode, query, hints),
+            Action: resolvedAction,
             Auth: auth,
             Entity: await SnapshotAsync(entity, descriptor.Manifest.Id, cancellationToken, pluginRequestKind),
             Query: query ?? new IdentifyQuery(null, null, null),
@@ -311,6 +312,7 @@ public sealed partial class IdentifyPluginService : IIdentifyProviderService {
             IncludeNsfw: includeNsfw);
 
         var response = await _runners.Resolve(descriptor).IdentifyAsync(descriptor, request, cancellationToken);
+        response = await FallBackToSearchAsync(descriptor, entity, request, resolvedAction, response, cancellationToken);
         if (!response.Ok || response.Result is null) {
             visited.Remove(entity.Id);
             return response;
@@ -334,6 +336,44 @@ public sealed partial class IdentifyPluginService : IIdentifyProviderService {
             sink);
         visited.Remove(entity.Id);
         return response with { Result = proposal };
+    }
+
+    /// <summary>
+    /// Recovers a re-identify that a stored id or url routed down the lookup path. Once any provider id
+    /// or url is persisted on an entity, <see cref="ResolveAction"/> locks it into lookup-id/lookup-url,
+    /// so a provider whose id lookup is flakier than its search — or that never implemented id lookup for
+    /// this kind — can no longer re-find an entity it originally matched by name. When the lookup path
+    /// returns no usable patch, retry once as a clean search, stripping the stored ids and urls from both
+    /// the hints and the entity snapshot so the request runs exactly as the first identify did before
+    /// anything was stored. The original failing response is preserved if the search also finds nothing.
+    /// </summary>
+    private async Task<IdentifyPluginResponse> FallBackToSearchAsync(
+        PluginDescriptor descriptor,
+        EntityRow entity,
+        IdentifyPluginRequest request,
+        string resolvedAction,
+        IdentifyPluginResponse response,
+        CancellationToken cancellationToken) {
+        var lookupRouted = resolvedAction.Equals("lookup-id", StringComparison.OrdinalIgnoreCase) ||
+            resolvedAction.Equals("lookup-url", StringComparison.OrdinalIgnoreCase);
+        if (!lookupRouted || (response.Ok && response.Result?.Patch is not null)) {
+            return response;
+        }
+
+        var supportsSearch = PluginEntityKindCompatibility
+            .ActionsFor(descriptor.Manifest, entity.KindCode)
+            .Any(action => action.Equals("search", StringComparison.OrdinalIgnoreCase));
+        if (!supportsSearch) {
+            return response;
+        }
+
+        var searchRequest = request with {
+            Action = "search",
+            Hints = request.Hints with { ExternalIds = new Dictionary<string, string>(), Urls = [] },
+            Entity = request.Entity with { ExternalIds = new Dictionary<string, string>(), Urls = [] }
+        };
+        var searchResponse = await _runners.Resolve(descriptor).IdentifyAsync(descriptor, searchRequest, cancellationToken);
+        return searchResponse.Ok && searchResponse.Result?.Patch is not null ? searchResponse : response;
     }
 
 }

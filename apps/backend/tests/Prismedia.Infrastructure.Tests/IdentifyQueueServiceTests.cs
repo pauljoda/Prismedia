@@ -16,6 +16,35 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
     private readonly string _tempRoot = Path.Combine(Path.GetTempPath(), $"prismedia-identify-queue-{Guid.NewGuid():N}");
 
     [Fact]
+    public async Task ReidentifyFallsBackToSearchWhenStoredIdLookupFindsNothing() {
+        await using var db = CreateContext();
+        var entityId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+        SeedProvider(db);
+        SeedEntity(db, entityId, "video", "Stored Movie");
+        // A prior identify persisted a provider id, so ResolveAction routes this re-run to lookup-id.
+        db.EntityExternalIds.Add(new EntityExternalIdRow {
+            Id = Guid.NewGuid(),
+            EntityId = entityId,
+            Provider = "tmdb",
+            Value = "123",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var executor = new LookupMissSearchHitProcessExecutor();
+        var identify = CreateIdentifyService(db, executor, _tempRoot);
+
+        var response = await identify.IdentifyAsync(entityId, "tmdb", null, null, hideNsfw: false, CancellationToken.None);
+
+        // The id lookup found nothing, so the cascade fell back to a clean search the way the very
+        // first identify ran before any id was stored — and that search matched.
+        Assert.True(response.Ok);
+        Assert.NotNull(response.Result?.Patch);
+        Assert.Equal("Stored Movie via search", response.Result!.Patch!.Title);
+        Assert.Equal(["lookup-id", "search"], executor.Actions);
+    }
+
+    [Fact]
     public async Task AddAsyncCreatesDurableSearchItemForEntity() {
         await using var db = CreateContext();
         var entityId = Guid.Parse("11111111-1111-1111-1111-111111111111");
@@ -330,16 +359,20 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
     private static IdentifyQueueService CreateQueueService(
         PrismediaDbContext db,
         ProcessExecutor executor,
+        string tempRoot) =>
+        new(db, CreateIdentifyService(db, executor, tempRoot), new InMemoryIdentifyApplyProgressStore(), new RecordingJobQueue());
+
+    private static IdentifyPluginService CreateIdentifyService(
+        PrismediaDbContext db,
+        ProcessExecutor executor,
         string tempRoot) {
         WriteManifest(tempRoot);
-        var identify = new IdentifyPluginService(
+        return new IdentifyPluginService(
             db,
             new PluginCatalogService(db, new PluginCatalogOptions([tempRoot], tempRoot, "1.0.0")),
             new IdentifyMatchHintResolver(db),
             new IdentifyRunnerSelector([new DotnetPluginProcessRunner(executor, new PluginCatalogOptions([], tempRoot, "1.0.0"))]),
             new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(tempRoot)));
-
-        return new IdentifyQueueService(db, identify, new InMemoryIdentifyApplyProgressStore(), new RecordingJobQueue());
     }
 
     /// <summary>Minimal in-memory job queue for tests: records enqueues, no worker runs the cascade.</summary>
@@ -674,6 +707,39 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             };
 
             return Task.FromResult(new ProcessExecutionResult(0, JsonSerializer.Serialize(wire, JsonOptions), string.Empty));
+        }
+    }
+
+    /// <summary>
+    /// Mimics a provider whose id lookup yields nothing (throttled, or never implemented for the kind)
+    /// while its title search still matches — the shape that regressed re-identify once an id was stored.
+    /// Records each requested action so a test can assert the lookup-id → search fallback fired.
+    /// </summary>
+    private sealed class LookupMissSearchHitProcessExecutor : ProcessExecutor {
+        public List<string> Actions { get; } = [];
+
+        public override async Task<ProcessExecutionResult> RunAsync(
+            string fileName,
+            IReadOnlyList<string> arguments,
+            IReadOnlyDictionary<string, string>? environment,
+            CancellationToken cancellationToken, bool lowPriority = false) {
+            var requestJson = await File.ReadAllTextAsync(arguments[1], cancellationToken);
+            var request = JsonSerializer.Deserialize<IdentifyPluginRequest>(requestJson, JsonOptions)!;
+            Actions.Add(request.Action);
+
+            if (request.Action == "search") {
+                return new ProcessExecutionResult(
+                    0,
+                    SerializeWireProposal(request.Entity.Id, $"{request.Entity.Title} via search"),
+                    string.Empty);
+            }
+
+            var none = new {
+                ok = true,
+                result = new { type = "none", proposal = (object?)null, candidates = Array.Empty<object>() },
+                error = (string?)null
+            };
+            return new ProcessExecutionResult(0, JsonSerializer.Serialize(none, JsonOptions), string.Empty);
         }
     }
 
