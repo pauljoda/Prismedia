@@ -140,6 +140,39 @@
     return buildLightboxVideoSources(entity)[0]?.src ?? entityFileUrl(card.entity.id, ENTITY_FILE_ROLE.source);
   }
 
+  // Animated still formats that play as a plain <img> (no <video> element): the
+  // generated cover thumbnail is a single frozen frame, so to actually animate
+  // them the feed loads the original source — exactly what the lightbox does.
+  // Scoped to formats that are virtually always animated when present (a still
+  // GIF is rare and tiny) so we don't pull full-resolution static WebP/AVIF
+  // photos just to show them.
+  const animatedImageFormats = new Set(["gif", "apng"]);
+
+  function fileExtension(path: string | null | undefined): string {
+    const clean = path?.split("?")[0]?.split("#")[0] ?? "";
+    return clean.includes(".") ? clean.split(".").pop()?.toLowerCase() ?? "" : "";
+  }
+
+  // Source URL for an in-window animated image, or null when the item isn't an
+  // animated still (videos are handled separately as a <video> overlay).
+  function animatedImageSourceFor(card: EntityThumbnailCard): string | null {
+    const entity = hydrated[card.entity.id];
+    if (!entity || entity.kind !== ENTITY_KIND.image) return null;
+    if (isLightboxVideoCapable(entity)) return null;
+    const source = getCapability(entity.capabilities, CAPABILITY_KIND.files)?.items.find(
+      (file) => file.role === ENTITY_FILE_ROLE.source,
+    );
+    if (!source) return null;
+    const mime = source.mimeType?.toLowerCase() ?? "";
+    const mimeSubtype = mime.startsWith("image/") ? mime.slice("image/".length) : "";
+    const format = (technicalOf(card)?.format ?? "").toLowerCase();
+    const animated =
+      animatedImageFormats.has(fileExtension(source.path)) ||
+      animatedImageFormats.has(mimeSubtype) ||
+      animatedImageFormats.has(format);
+    return animated ? entityFileUrl(card.entity.id, ENTITY_FILE_ROLE.source) : null;
+  }
+
   function numberOf(value: number | string | null | undefined): number | null {
     if (typeof value === "number") return Number.isFinite(value) && value > 0 ? value : null;
     if (typeof value === "string" && value.trim() !== "") {
@@ -257,6 +290,7 @@
     {@const cover = card.cover}
     {@const showVideo = isWithinWindow(index) && isVideoCard(card)}
     {@const source = showVideo ? videoSourceFor(card) : null}
+    {@const animatedSrc = !showVideo && isWithinWindow(index) ? animatedImageSourceFor(card) : null}
     {@const aspect = reservedAspect(card)}
     <article class="feed-item" use:trackVisibility={index} style:--ratio={reservedRatio(card)}>
       <div class="feed-media" class:has-aspect={Boolean(aspect)} style:aspect-ratio={aspect}>
@@ -299,6 +333,15 @@
               preload="metadata"
               ontimeupdate={(event) => trackVideoProgress(card.entity.id, event.currentTarget)}
             ></video>
+          {:else if animatedSrc}
+            <!--
+              Animated stills (GIF/APNG) animate on their own as an <img>; the
+              browser loops them with no controls. Overlaying the original source
+              over the static poster keeps the same zero-reflow behaviour as the
+              inline video and stops animating once the item scrolls out of the
+              play window.
+            -->
+            <img class="feed-animated" src={animatedSrc} alt={card.entity.title} loading="lazy" />
           {/if}
         </NsfwBlur>
 
@@ -409,9 +452,11 @@
     object-fit: cover;
   }
 
-  /* The inline video overlays the poster without affecting layout height. The
-     item width already matches the asset aspect, so cover fills it exactly. */
-  .feed-video {
+  /* The inline video (or animated still) overlays the poster without affecting
+     layout height. The item width already matches the asset aspect, so cover
+     fills it exactly. */
+  .feed-video,
+  .feed-animated {
     position: absolute;
     inset: 0;
     width: 100%;
