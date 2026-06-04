@@ -738,6 +738,23 @@ describe("VideoPlayer", () => {
     expect(onForceTranscode).toHaveBeenCalledTimes(1);
   });
 
+  it("does NOT force a transcode on a transient/network error (keeps the remux)", async () => {
+    // A network/abort/startup error must not tear down a working remux. Only a genuine decode
+    // failure escalates; everything else recovers on its own.
+    const onForceTranscode = vi
+      .fn<(atSeconds: number) => Promise<string | null>>()
+      .mockResolvedValue("/api/videos/video-1/hls/forced.m3u8");
+    const player = await renderWithFatalErrorSource(onForceTranscode);
+
+    await fireEvent(player, new CustomEvent("error", { detail: { code: 2, message: "network error" } }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(onForceTranscode).not.toHaveBeenCalled();
+    expect(document.querySelector("media-player")?.getAttribute("src")).toBe(
+      "/api/videos/video-1/hls/master.m3u8",
+    );
+  });
+
   it("shows a terminal notice when no compatible stream is available", async () => {
     const onForceTranscode = vi
       .fn<(atSeconds: number) => Promise<string | null>>()

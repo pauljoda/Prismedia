@@ -216,6 +216,10 @@
   // When set it overrides the HLS source; reset whenever a genuinely new source loads.
   let forcedTranscodeSrc = $state<string | null>(null);
   let forceTranscodeRequested = false;
+  // A single play() retry guard. A play() rejection on first attempt is usually transient (the
+  // source is still spinning up, or the request was interrupted by a load); we retry once rather
+  // than treating it as a fatal error. Reset on each new source.
+  let playRetried = false;
 
   let playbackMode = $state<PlaybackMode>("hls");
   let qualityMode = $state<QualityMode>("auto");
@@ -690,12 +694,22 @@
       if (video?.paused) {
         await video.play();
       }
+      playRetried = false;
     } catch (error) {
-      if (applyPlaybackFallback()) {
-        pendingAutoPlay = true;
+      // A play() rejection is transient: the source (e.g. an on-demand remux) may still be
+      // producing its first segment, or the request was interrupted by a load. Do NOT fall back
+      // or force a transcode here — that would cancel a remux before it ever serves a segment
+      // (the "play, fail, play again" symptom). Retry once; a genuinely undecodable stream surfaces
+      // as a media 'error' event, where the decode-gated fallback lives.
+      if (!playRetried) {
+        playRetried = true;
+        window.setTimeout(() => {
+          if (player && (mediaElement()?.paused ?? player.paused)) {
+            void playWithFallback();
+          }
+        }, 400);
         return;
       }
-      if (tryForceTranscodeFallback()) return;
       console.error("ERROR MediaPlayer [vidstack] play request failed", error);
     }
   }
@@ -1040,6 +1054,7 @@
     failedDirectSrc = null;
     forcedTranscodeSrc = null;
     forceTranscodeRequested = false;
+    playRetried = false;
     playbackMode = initialPlaybackMode();
     qualityMode = playbackMode === "direct" ? "direct" : "auto";
     currentTime = 0;
@@ -1482,11 +1497,30 @@
     refreshQualities();
   }
 
+  // True only for a genuine, unrecoverable codec/decode failure (the browser cannot play this
+  // stream at all) — MediaError DECODE (3) or SRC_NOT_SUPPORTED (4), or an equivalent message.
+  // Network/abort/transient errors return false: those recover on their own and must NOT trigger a
+  // transcode fallback, or a perfectly playable remux gets abandoned for a heavy re-encode.
+  function isFatalDecodeError(detail: unknown): boolean {
+    const d = detail as { code?: number; mediaError?: { code?: number }; message?: string } | null;
+    const code = d?.code ?? d?.mediaError?.code;
+    if (code === 3 || code === 4) return true;
+    const message = (d?.message ?? "").toLowerCase();
+    return message.includes("decode") ||
+      message.includes("not supported") ||
+      message.includes("buffer append") ||
+      message.includes("src_not_supported");
+  }
+
   function handleError(event: Event) {
     const detail = (event as MediaErrorEvent).detail;
-    const message = detail instanceof Error ? detail.message : "Playback failed.";
+    const message = detail instanceof Error
+      ? detail.message
+      : (detail as { message?: string } | null)?.message ?? "Playback failed.";
     if (applyPlaybackFallback()) return;
-    if (tryForceTranscodeFallback()) return;
+    // Only escalate to a re-negotiated transcode when the browser genuinely cannot decode the
+    // stream. A transient/network error here would otherwise tear down a working remux.
+    if (isFatalDecodeError(detail) && tryForceTranscodeFallback()) return;
     playerNotice = `${effectiveMode === "direct" ? "Direct" : "Adaptive"} playback error: ${message}`;
     buffering = false;
   }
