@@ -965,14 +965,12 @@ export interface VideoDetailDto extends VideoListItemDto {
   subtitleTracks: VideoSubtitleTrackDto[];
   /**
    * Whether the video has computed fingerprints used for fingerprint-
-   * based identify lookups (Stash-Box). `phash` is the perceptual hash
-   * computed by the phash worker; `oshash` and `checksumMd5` are file
-   * hashes computed during scan. The Identify flyout uses these to
+   * based identify lookups (Stash-Box). `oshash` and `checksumMd5` are
+   * file hashes computed during scan. The Identify flyout uses these to
    * surface helper text when a Stash-Box provider would have nothing
    * to query against.
    */
   fingerprints: {
-    hasPhash: boolean;
     hasOshash: boolean;
     hasChecksumMd5: boolean;
   };

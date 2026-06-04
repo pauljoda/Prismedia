@@ -125,7 +125,6 @@ export interface ScraperSceneFragment {
   details?: string;
   oshash?: string;
   checksum?: string;
-  phash?: string;
   duration?: number;
   file_path?: string;
 }

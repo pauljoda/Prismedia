@@ -126,7 +126,6 @@ function pluginInputToSceneFragment(input: PluginInput): ScraperSceneFragment {
     details: input.details,
     oshash: input.oshash,
     checksum: input.checksumMd5,
-    phash: input.phash,
     duration: input.duration,
     file_path: input.filePath,
   };

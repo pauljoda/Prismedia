@@ -183,7 +183,6 @@ export interface PluginInput {
   details?: string;
   oshash?: string;
   checksumMd5?: string;
-  phash?: string;
   duration?: number;
   filePath?: string;
   /** For folder cascade: the external series ID to resolve episodes for. */

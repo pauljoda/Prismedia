@@ -16,22 +16,11 @@ import {
   computeMd5,
   computeMd5AndOsHash,
   computeOsHash,
-  computePhash,
-  runProcess,
   isCorruptMediaError,
   CorruptMediaError,
   resolveExistingMediaPath,
   getGeneratedCollectionDir,
 } from "./index";
-
-async function hasBinary(name: string): Promise<boolean> {
-  try {
-    await runProcess("which", [name]);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 describe("isVideoFile", () => {
   it("recognizes standard video extensions", () => {
@@ -197,58 +186,6 @@ describe("getGeneratedCollectionDir", () => {
     } finally {
       if (prev === undefined) delete process.env.PRISMEDIA_CACHE_DIR;
       else process.env.PRISMEDIA_CACHE_DIR = prev;
-    }
-  });
-});
-
-describe("computePhash", () => {
-  it("returns null when duration is zero or negative", async () => {
-    // No binary call happens — duration guard short-circuits.
-    expect(await computePhash("/nonexistent.mp4", 0)).toBeNull();
-    expect(await computePhash("/nonexistent.mp4", -5)).toBeNull();
-    expect(await computePhash("/nonexistent.mp4", null)).toBeNull();
-    expect(await computePhash("/nonexistent.mp4", undefined)).toBeNull();
-  });
-
-  it("returns null with a warning when the helper binary is missing", async () => {
-    const prev = process.env.PRISMEDIA_PHASH_BIN;
-    process.env.PRISMEDIA_PHASH_BIN = "/nonexistent/prismedia-phash-missing";
-    try {
-      const result = await computePhash("/nonexistent.mp4", 10);
-      expect(result).toBeNull();
-    } finally {
-      if (prev === undefined) delete process.env.PRISMEDIA_PHASH_BIN;
-      else process.env.PRISMEDIA_PHASH_BIN = prev;
-    }
-  });
-
-  it("produces a 16-char hex hash for a real video and is deterministic", { timeout: 30_000 }, async () => {
-    const ffmpegAvailable = await hasBinary("ffmpeg");
-    const phashAvailable = await hasBinary("prismedia-phash");
-    if (!ffmpegAvailable || !phashAvailable) {
-      // Skip cleanly when the toolchain isn't installed on this dev machine.
-      return;
-    }
-
-    const dir = mkdtempSync(path.join(tmpdir(), "prismedia-phash-test-"));
-    const video = path.join(dir, "test.mp4");
-    try {
-      await runProcess("ffmpeg", [
-        "-y",
-        "-f", "lavfi",
-        "-i", "testsrc=duration=5:size=320x180:rate=30",
-        "-c:v", "libx264",
-        "-pix_fmt", "yuv420p",
-        video,
-      ]);
-
-      const first = await computePhash(video, 5);
-      const second = await computePhash(video, 5);
-      expect(first).not.toBeNull();
-      expect(first).toMatch(/^[0-9a-f]{16}$/);
-      expect(first).toBe(second);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
     }
   });
 });

@@ -341,6 +341,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Fixed shared toggle accessibility metadata and cleared remaining Svelte diagnostics from the design-system demo page.
 
 ### Removed
+- Removed Stash-compatible perceptual hashing (pHash). Prismedia no longer computes video or image pHashes, the "Perceptual hash (pHash)" generation setting is gone, and fingerprint identify/contribution now relies on MD5 and oshash. The MD5 and OpenSubtitles (oshash) fingerprints are unchanged, and Stash-Box identify and fingerprint submission continue to work with them.
 
 ### Docs
 - Documented the music library folder contract in the library organization guide: the supported `Album/Songs` and `Artist/Album/Songs` layouts, how folders are classified leaf-first, disc sections for multi-disc albums, and artist members.

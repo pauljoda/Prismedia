@@ -7,7 +7,7 @@
 
 // ─── Primitives ────────────────────────────────────────────────────
 
-export type FingerprintAlgorithm = "MD5" | "OSHASH" | "PHASH";
+export type FingerprintAlgorithm = "MD5" | "OSHASH";
 
 export interface StashBoxFingerprint {
   hash: string;

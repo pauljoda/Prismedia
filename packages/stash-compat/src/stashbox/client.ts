@@ -145,7 +145,7 @@ query FindSceneByID($id: ID!) {
 }
 ${ALL_FRAGMENTS}`;
 
-// Mutation for contributing a single fingerprint (md5/oshash/phash) to a
+// Mutation for contributing a single fingerprint (md5/oshash) to a
 // StashBox-protocol server. Input shape matches upstream stash-box schema.
 const SUBMIT_FINGERPRINT = `
 mutation SubmitFingerprint($input: FingerprintSubmission!) {
@@ -312,7 +312,7 @@ export class StashBoxClient {
   }
 
   /**
-   * Submit a single fingerprint (md5/oshash/phash) to associate it with a
+   * Submit a single fingerprint (md5/oshash) to associate it with a
    * remote StashBox scene. Mirrors Stash's SubmitFingerprints loop: one
    * mutation per (scene, algorithm) pair, serialized through the token bucket.
    * Returns the server's boolean ack.

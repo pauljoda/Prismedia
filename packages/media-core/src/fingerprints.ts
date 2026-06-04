@@ -1,14 +1,8 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { open, stat } from "node:fs/promises";
-import { runProcess } from "./process";
 
-export const supportedFingerprintKinds = [
-  "md5",
-  "oshash",
-  "image-phash",
-  "video-phash",
-] as const;
+export const supportedFingerprintKinds = ["md5", "oshash"] as const;
 
 export type FingerprintKind = (typeof supportedFingerprintKinds)[number];
 
@@ -81,34 +75,6 @@ export async function computeMd5AndOsHash(
     md5: md5.digest("hex"),
     oshash: (h & BigInt("0xFFFFFFFFFFFFFFFF")).toString(16).padStart(16, "0"),
   };
-}
-
-export async function computePhash(
-  filePath: string,
-  duration: number | null | undefined,
-): Promise<string | null> {
-  if (!duration || duration <= 0) return null;
-
-  const bin = process.env.PRISMEDIA_PHASH_BIN ?? "prismedia-phash";
-
-  try {
-    const { stdout } = await runProcess(bin, ["-file", filePath, "-duration", String(duration)]);
-    const hash = stdout.trim();
-    if (!/^[0-9a-f]{16}$/.test(hash)) {
-      throw new Error(`prismedia-phash returned unexpected output: ${hash}`);
-    }
-    return hash;
-  } catch (err: unknown) {
-    const code = (err as NodeJS.ErrnoException)?.code;
-    if (code === "ENOENT") {
-      console.warn(
-        `[computePhash] ${bin} not found on PATH - skipping phash for ${filePath}. ` +
-          `Install the helper (see infra/phash) or build the unified Docker image to enable phash generation.`,
-      );
-      return null;
-    }
-    throw err;
-  }
 }
 
 function readUInt64LE(buffer: Buffer, offset: number) {

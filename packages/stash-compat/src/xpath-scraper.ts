@@ -156,8 +156,6 @@ function buildQueryURL(
       value = fragment.checksum;
     } else if (placeholder === "oshash" && fragment.oshash) {
       value = fragment.oshash;
-    } else if (placeholder === "phash" && fragment.phash) {
-      value = fragment.phash;
     }
 
     if (!value) return null;
