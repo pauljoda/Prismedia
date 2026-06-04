@@ -431,7 +431,8 @@ public sealed partial class HlsAssetService {
             _options.CacheRoot,
             HlsTranscoderProfiles.ParseOrDefault(settings.TranscoderProfile, _options.TranscoderProfile),
             string.IsNullOrWhiteSpace(settings.FfmpegPath) ? _options.FfmpegPath : settings.FfmpegPath.Trim(),
-            string.IsNullOrWhiteSpace(settings.VaapiDevice) ? _options.VaapiDevice : settings.VaapiDevice.Trim());
+            string.IsNullOrWhiteSpace(settings.VaapiDevice) ? _options.VaapiDevice : settings.VaapiDevice.Trim(),
+            _options.FfprobePath);
     }
 
     private static void ResetStagingDirectory(string stagingDirectory) {

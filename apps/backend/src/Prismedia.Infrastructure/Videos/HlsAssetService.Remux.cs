@@ -51,14 +51,22 @@ public sealed partial class HlsAssetService {
             return null;
         }
 
+        // Resolve the transcoder options once, here on the request thread, and thread them through both
+        // the background remux generation and the keyframe-probed playlist. Resolving reads settings from
+        // the scoped DbContext; the background generation task outlives the request, so if it (or the
+        // playlist probe running concurrently) re-resolved, two operations would hit the same DbContext at
+        // once ("a second operation was started on this context") and the disposed context after the
+        // request ends. Pre-resolving keeps every DbContext read on the request thread, in sequence.
+        var options = await ResolveTranscoderOptionsAsync(cancellationToken);
+
         var remuxDir = VirtualPath(id, "remux", audioCacheKey);
-        await EnsureRemuxStartedAsync(id, source, audioCacheKey, audioStreamIndex, remuxDir, cancellationToken);
+        await EnsureRemuxStartedAsync(id, source, audioCacheKey, audioStreamIndex, remuxDir, options, cancellationToken);
 
         // The playlist is served as a complete VOD manifest computed up front from the source's
         // keyframe layout, so the whole timeline is seekable immediately. The init/segment files are
         // produced by the background remux and waited on individually as the player requests them.
         if (fileName.Equals("index.m3u8", StringComparison.OrdinalIgnoreCase)) {
-            return await GetRemuxPlaylistAssetAsync(id, source, audioCacheKey, remuxDir, cancellationToken);
+            return await GetRemuxPlaylistAssetAsync(id, source, audioCacheKey, remuxDir, options, cancellationToken);
         }
 
         var filePath = Path.Combine(remuxDir, fileName);
@@ -86,13 +94,14 @@ public sealed partial class HlsAssetService {
         VideoSourceFile source,
         string audioCacheKey,
         string remuxDir,
+        HlsAssetServiceOptions options,
         CancellationToken cancellationToken) {
         var vodPath = Path.Combine(remuxDir, "index.vod.m3u8");
         if (File.Exists(vodPath) && new FileInfo(vodPath).Length > 0) {
             return new HlsAsset(vodPath, MediaContentTypes.HlsPlaylist, CacheControlForExtension(".m3u8"));
         }
 
-        var durations = await ComputeRemuxSegmentDurationsAsync(source, cancellationToken);
+        var durations = await ComputeRemuxSegmentDurationsAsync(source, options, cancellationToken);
         if (durations is null || durations.Count == 0) {
             // Keyframe probe unavailable: serve ffmpeg's growing event playlist as a best-effort
             // fallback so playback still works, accepting the limited seek window.
@@ -120,6 +129,7 @@ public sealed partial class HlsAssetService {
         string audioCacheKey,
         int? audioStreamIndex,
         string remuxDir,
+        HlsAssetServiceOptions options,
         CancellationToken cancellationToken) {
         var key = $"{id}/{audioCacheKey}";
         if (RemuxGenerations.ContainsKey(key)) {
@@ -143,7 +153,7 @@ public sealed partial class HlsAssetService {
 
             var cancellation = new CancellationTokenSource();
             RemuxGenerations[key] = new RemuxGeneration(
-                GenerateRemuxAsync(id, source, audioStreamIndex, remuxDir, key, cancellation.Token),
+                GenerateRemuxAsync(id, source, audioStreamIndex, remuxDir, key, options, cancellation.Token),
                 cancellation,
                 id,
                 DateTimeOffset.UtcNow);
@@ -158,6 +168,7 @@ public sealed partial class HlsAssetService {
         int? audioStreamIndex,
         string remuxDir,
         string key,
+        HlsAssetServiceOptions options,
         CancellationToken cancellationToken) {
         try {
             if (Directory.Exists(remuxDir)) {
@@ -165,7 +176,6 @@ public sealed partial class HlsAssetService {
             }
 
             Directory.CreateDirectory(remuxDir);
-            var options = await ResolveTranscoderOptionsAsync(cancellationToken);
             var arguments = RemuxArguments(source, audioStreamIndex, remuxDir);
             var result = await _processes!.RunAsync(options.FfmpegPath, arguments, environment: null, cancellationToken);
             if (result.ExitCode != 0) {
@@ -271,12 +281,13 @@ public sealed partial class HlsAssetService {
     /// </returns>
     private async Task<IReadOnlyList<double>?> ComputeRemuxSegmentDurationsAsync(
         VideoSourceFile source,
+        HlsAssetServiceOptions options,
         CancellationToken cancellationToken) {
         if (source.DurationSeconds is not > 0) {
             return null;
         }
 
-        var keyframes = await ProbeVideoKeyframeTimesAsync(source.Path, cancellationToken);
+        var keyframes = await ProbeVideoKeyframeTimesAsync(source.Path, options, cancellationToken);
         if (keyframes is null || keyframes.Count < 1) {
             return null;
         }
@@ -293,12 +304,12 @@ public sealed partial class HlsAssetService {
     /// </remarks>
     private async Task<IReadOnlyList<double>?> ProbeVideoKeyframeTimesAsync(
         string sourcePath,
+        HlsAssetServiceOptions options,
         CancellationToken cancellationToken) {
         if (_processes is null) {
             return null;
         }
 
-        var options = await ResolveTranscoderOptionsAsync(cancellationToken);
         var arguments = new[]
         {
             "-v", "error",
