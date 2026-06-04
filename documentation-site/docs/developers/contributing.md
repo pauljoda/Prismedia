@@ -12,10 +12,11 @@ This page covers what to know before opening a PR: how to run things locally, wh
 
 ### Prerequisites
 
-- **Node.js 20+** (or 22 — both work).
+- **Node.js 22**.
 - **pnpm** 10+ (`corepack enable` is the easiest path).
+- **.NET 10 SDK** for the API and worker.
 - **Docker** for the Postgres container.
-- **ffmpeg**, **audiowaveform**, and the `prismedia-phash` Go binary on `PATH` if you want to exercise media work outside Docker. The unified Docker image bundles these so most work happens in the container.
+- **ffmpeg** and **audiowaveform** on `PATH` if you want to exercise media work outside Docker. The unified Docker image bundles these so most work happens in the container.
 
 ### Two ways to run
 

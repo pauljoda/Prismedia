@@ -92,7 +92,8 @@ const config: Config = {
           position: 'left',
           label: 'Docs',
         },
-        {to: '/docs/users/quick-start', label: 'Users', position: 'left'},
+        {to: '/docs/getting-started/install', label: 'Get Started', position: 'left'},
+        {to: '/docs/jellyfin/overview', label: 'Jellyfin', position: 'left'},
         {to: '/docs/developers/architecture', label: 'Developers', position: 'left'},
         {to: '/docs/plugins/overview', label: 'Plugins', position: 'left'},
         {
@@ -118,8 +119,8 @@ const config: Config = {
               to: '/docs/intro',
             },
             {
-              label: 'Quick start',
-              to: '/docs/users/quick-start',
+              label: 'Install & Run',
+              to: '/docs/getting-started/install',
             },
           ],
         },

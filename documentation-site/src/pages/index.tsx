@@ -8,17 +8,19 @@ import Heading from '@theme/Heading';
 import styles from './index.module.css';
 
 const CAPABILITIES = [
-  'Videos',
+  'Movies',
   'Series',
+  'Videos',
   'Comics',
   'Manga',
-  'Books',
+  'eBooks',
   'Galleries',
   'Images',
   'Audio',
   'People',
   'Studios',
   'Tags',
+  'Collections',
   'Plugins',
   'Files',
 ];
@@ -49,16 +51,28 @@ const FEATURES = [
       'A durable Identify queue lets you run providers, compare proposals, choose artwork, walk child records, and accept only what belongs in your library.',
   },
   {
-    kicker: 'Operations',
+    kicker: 'Jobs',
     title: 'Background jobs you can see',
     body:
-      'Scan, probe, thumbnail, sprite, HLS, and import jobs run in the background. The Operations dashboard mirrors every job in real time — so you always know what the system is doing.',
+      'Scan, probe, thumbnail, sprite, waveform, HLS, subtitle, and import jobs run in the background. The Jobs dashboard mirrors every queue in real time — so you always know what the system is doing.',
+  },
+  {
+    kicker: 'Reading',
+    title: 'Comics, EPUBs, and PDFs',
+    body:
+      'Comic archives, EPUBs, and PDFs are first-class entities with a built-in reader — paged and webtoon comics, reflowable EPUBs, and a full PDF reader with search, zoom, and resume.',
+  },
+  {
+    kicker: 'Jellyfin',
+    title: 'Play in Infuse and Manet',
+    body:
+      'An experimental Jellyfin-compatible API lets clients like Infuse and Manet sign in and stream your video and audio, with per-profile NSFW filtering and two-way resume sync.',
   },
   {
     kicker: 'Library',
     title: 'Collections are simple groupings',
     body:
-      'Create manual, dynamic, or hybrid collections as organizational views over videos, series, galleries, images, books, and audio tracks.',
+      'Create manual, dynamic, or hybrid collections as organizational views over movies, series, galleries, images, books, and audio tracks.',
   },
   {
     kicker: 'Deploy',
@@ -129,7 +143,7 @@ function Hero() {
             image. No cloud. No configuration.
           </p>
           <div className={styles.actions}>
-            <Link className={styles.primaryAction} to="/docs/users/quick-start">
+            <Link className={styles.primaryAction} to="/docs/getting-started/install">
               Get started
               <span className={styles.actionArrow} aria-hidden>→</span>
             </Link>
@@ -194,7 +208,7 @@ function Pathways() {
           </p>
         </div>
         <div className={styles.pathGrid}>
-          <Link className={styles.pathItem} to="/docs/users/quick-start">
+          <Link className={styles.pathItem} to="/docs/getting-started/install">
             <span className={styles.pathKicker}>01 · Run it</span>
             <strong className={styles.pathTitle}>Set up your media library</strong>
             <p className={styles.pathBody}>
@@ -326,13 +340,13 @@ function CtaBlock() {
         </Heading>
         <p className={styles.ctaSubtext}>
           Mount your media, expose one port, and you are running.
-          No cloud accounts, no API keys, no external dependencies.
+          No cloud accounts and no external dependencies.
         </p>
         <div className={styles.ctaCode}>
           <kbd>docker pull ghcr.io/pauljoda/prismedia:latest</kbd>
         </div>
         <div className={styles.ctaActions}>
-          <Link className={styles.primaryAction} to="/docs/users/quick-start">
+          <Link className={styles.primaryAction} to="/docs/getting-started/install">
             Get started
             <span className={styles.actionArrow} aria-hidden>→</span>
           </Link>

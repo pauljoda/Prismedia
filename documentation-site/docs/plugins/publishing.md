@@ -64,7 +64,7 @@ When the user installs your plugin, Prismedia inserts a row into `plugin_package
 | `enabled` | Defaults to `true` on install. |
 | `source_index` | Where it came from: `prismedia-community`, `stash-community`, or `local`. |
 
-You can manage installed packages from the [Identify and Plugins](../users/identify-and-scrape.md#plugin-management) workflow or query directly:
+You can manage installed packages from the [Identify & Metadata](../using/identify.md#plugin-management) workflow or query directly:
 
 ```sql
 SELECT plugin_id, version, runtime, source_index, enabled, sha256

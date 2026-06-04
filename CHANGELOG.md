@@ -344,6 +344,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Removed Stash-compatible perceptual hashing (pHash). Prismedia no longer computes video or image pHashes, the "Perceptual hash (pHash)" generation setting is gone, and fingerprint identify/contribution now relies on MD5 and oshash. The MD5 and OpenSubtitles (oshash) fingerprints are unchanged, and Stash-Box identify and fingerprint submission continue to work with them.
 
 ### Docs
+- Overhauled the documentation site and README for the current app, restructured into Getting Started, Using Prismedia, Library & Scanning, Jellyfin Clients, Deployment & Security, Developers, Plugins, and Advanced.
+- Added a Library & Scanning reference with per-entity-type folder trees and exact supported-extension lists for videos/movies/series, images and galleries, comics and eBooks (`.cbz`/`.zip`, `.epub`, `.pdf`), and audio.
+- Added Jellyfin Compatibility docs covering tested clients (Infuse, Manet, Finamp, Symfonium), creating sign-in profiles, the API key, per-profile NSFW "servers", and client setup.
+- Added Deployment & Security docs: authentication and API keys, and a reverse-proxy guide listing the Jellyfin routes that must bypass auth middleware (with Authelia and Authentik examples).
+- Documented customizable sidebar navigation and mobile gestures, the comic/EPUB/PDF readers, Auto Identify, and the cascade identify flow.
+- Removed perceptual-hash (pHash) and StashBox-endpoint documentation; Stash interop is now documented as wrapping community scrapers, and fingerprint identify is documented around oshash/MD5.
 - Documented the music library folder contract in the library organization guide: the supported `Album/Songs` and `Artist/Album/Songs` layouts, how folders are classified leaf-first, disc sections for multi-disc albums, and artist members.
 - Replaced stale README and documentation screenshots with fresh captures from the current Prismedia app shell.
 - Added a books and comics browsing screenshot to show book detail progress, resume, and volume context.

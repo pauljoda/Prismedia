@@ -47,11 +47,9 @@ All three speak the **same protocol** at the `executePlugin()` boundary:
 
 Whether you write TypeScript or Python, your code answers a single question: *"given this input and these credentials, what metadata do you have?"*
 
-## A separate concept: StashBox
+## Wrapping Stash community scrapers
 
-**StashBox endpoints** are not plugins. They use a fingerprint-based GraphQL protocol (PHash, OSHash, MD5) to look up content. Configuration lives in `stashbox_endpoints` rows; queries go through the client in `packages/stash-compat/src/stashbox/`.
-
-StashBox results land in the same UI as plugin results — `scrape_results` rows reviewed and accepted in the same drawer — but the path that produced them is different. The dedicated docs are at [Advanced · StashBox](../advanced/stashbox.md).
+The Stash community's YAML site scrapers can be **wrapped** as Stash-compatible plugins and run through the same execution boundary as native ones. The adapter maps Prismedia actions onto Stash actions and normalizes the result. See [Stash Compatibility](../advanced/stash-compatibility.md) for the user-facing flow and [Stash Compatibility (plugin authors)](./stash-compat.md) for the wrapper format.
 
 ## What a plugin produces
 

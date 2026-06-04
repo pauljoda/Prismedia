@@ -5,24 +5,64 @@ const sidebars: SidebarsConfig = {
     'intro',
     {
       type: 'category',
-      label: 'Users',
+      label: 'Getting Started',
       collapsed: false,
       items: [
-        'users/quick-start',
-        'users/first-boot',
-        'users/library-organization',
-        'users/browsing',
-        'users/playback',
-        'users/identify-and-scrape',
-        'users/operations',
-        'users/settings',
-        'users/upgrading',
+        'getting-started/install',
+        'getting-started/first-library',
+        'getting-started/identify-walkthrough',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Using Prismedia',
+      collapsed: false,
+      items: [
+        'using/browsing',
+        'using/playback',
+        'using/navigation',
+        'using/identify',
+        'using/collections',
+        'using/jobs',
+        'using/settings',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Library & Scanning',
+      collapsed: false,
+      items: [
+        'library/overview',
+        'library/videos',
+        'library/images-galleries',
+        'library/books',
+        'library/audio',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Jellyfin Clients',
+      collapsed: false,
+      items: [
+        'jellyfin/overview',
+        'jellyfin/profiles',
+        'jellyfin/clients',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Deployment & Security',
+      collapsed: false,
+      items: [
+        'deployment/authentication',
+        'deployment/reverse-proxy',
+        'deployment/upgrading',
       ],
     },
     {
       type: 'category',
       label: 'Developers',
-      collapsed: false,
+      collapsed: true,
       items: [
         'developers/architecture',
         'developers/monorepo',
@@ -36,7 +76,7 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: 'Plugins',
-      collapsed: false,
+      collapsed: true,
       items: [
         'plugins/overview',
         'plugins/manifest',
@@ -50,10 +90,9 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: 'Advanced',
-      collapsed: false,
+      collapsed: true,
       items: [
-        'advanced/phash-contribution',
-        'advanced/stashbox',
+        'advanced/stash-compatibility',
         'advanced/troubleshooting',
       ],
     },

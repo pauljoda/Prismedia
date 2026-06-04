@@ -69,7 +69,7 @@ Declare only what your plugin can actually answer. The engine uses the map to fi
 | --- | --- | --- | --- |
 | `videoByURL` | `url` | `NormalizedVideoResult` | Identify on a single video, user pastes a URL. |
 | `videoByName` | `title`, `name`, `date` | `NormalizedVideoResult` | Identify on a single video, name-based fallback. |
-| `videoByFragment` | `oshash`, `checksumMd5`, `phash`, `duration` | `NormalizedVideoResult` | Fingerprint-based lookup (StashBox-style). |
+| `videoByFragment` | `oshash`, `checksumMd5`, `duration` | `NormalizedVideoResult` | Fingerprint-based lookup. |
 
 ### Folder / series identification
 

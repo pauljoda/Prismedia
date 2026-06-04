@@ -7,15 +7,15 @@
 <p align="center">
   <strong>A private, self-hosted media library for the whole household.</strong>
   <br />
-  Video-first, with first-class images, galleries, books, comics, audio, people, studios, tags, collections, plugins, and file management.
+  Video-first, with first-class movies, series, images, galleries, comics, eBooks, audio, people, studios, tags, collections, plugins, and file management.
 </p>
 
 <p align="center">
   <a href="https://pauljoda.github.io/Prismedia/">
     <img alt="Read the docs" src="https://img.shields.io/badge/Docs-Prismedia-d59a2a?style=for-the-badge&logo=gitbook&logoColor=111111" />
   </a>
-  <a href="https://pauljoda.github.io/Prismedia/docs/users/quick-start">
-    <img alt="Quick start guide" src="https://img.shields.io/badge/Quick_Start-Docker-202734?style=for-the-badge&logo=docker&logoColor=white" />
+  <a href="https://pauljoda.github.io/Prismedia/docs/getting-started/install">
+    <img alt="Quick start guide" src="https://img.shields.io/badge/Get_Started-Docker-202734?style=for-the-badge&logo=docker&logoColor=white" />
   </a>
   <a href="https://github.com/pauljoda/Prismedia/pkgs/container/prismedia">
     <img alt="Container image" src="https://img.shields.io/badge/GHCR-prismedia-0b0e12?style=for-the-badge&logo=github&logoColor=white" />
@@ -36,11 +36,11 @@
 
 ## What Is Prismedia?
 
-Prismedia is a private media library for self-hosted collections. It is optimized for a single trusted user or household on a private LAN: mount your media, open a browser, and browse from your phone, tablet, desktop, or TV browser.
+Prismedia is a private media library for self-hosted collections. It is optimized for a single trusted user or household on a private LAN: mount your media, open a browser, and browse from your phone, tablet, desktop, or TV browser. It can also serve your library to **Jellyfin client apps** like Infuse and Manet.
 
 The production image is intentionally simple. PostgreSQL 16, ffmpeg, the .NET API, the .NET worker, and the built Svelte frontend all ship together as one Docker image. Application data lives in `/data`; your library lives under `/media`; the web app listens on port `8008`.
 
-Prismedia owns its own library model. Stash-compatible plugins and StashBox metadata are supported for discovery and identification workflows, but Prismedia's schema, UI, and release process are built around its own media entities.
+Prismedia owns its own library model. Stash community scrapers can be wrapped as identify providers for discovery workflows, but Prismedia's schema, UI, and release process are built around its own media entities.
 
 ## Quick Start
 
@@ -82,10 +82,14 @@ docker compose up -d
 
 | Mount | Purpose |
 | --- | --- |
-| `/data` | PostgreSQL data, generated cache, thumbnails, waveforms, trickplay, HLS output, plugin state |
+| `/data` | PostgreSQL data, generated cache, thumbnails, waveforms, trickplay, HLS output, plugin state, encryption secret |
 | `/media` | Your mounted media folders |
 
 Mount `/media` read-only if Prismedia should only scan and play files. Mount it read-write if you want browser uploads, renames, moves, deletes, and file-manager organization.
+
+### Access
+
+The web app is open on your LAN and authenticates itself automatically (a same-origin HttpOnly cookie). The **`/api/*` and Jellyfin routes require an API key**, generated on first boot and shown in **Settings → API Access** — you'll need it for external API calls and for signing in from Jellyfin clients. See [Authentication & API Keys](https://pauljoda.github.io/Prismedia/docs/deployment/authentication).
 
 ### Image Tags
 
@@ -104,7 +108,7 @@ Read [CHANGELOG.md](CHANGELOG.md) before upgrading a library you care about.
 
 ### Library And Search
 
-Prismedia has dedicated browse surfaces for videos, series, images, galleries, books, audio, people, studios, tags, and collections. The dashboard gives you recent activity and library health; the search page and command palette jump across every entity type.
+Prismedia has dedicated browse surfaces for movies, series, videos, images, galleries, comics, eBooks, audio, artists, people, studios, tags, and collections. The dashboard leads with Continue Watching and Recently Watched; the search page and command palette jump across every entity type.
 
 <p align="center">
   <img src="docs/screenshots/videos.png" alt="Video library" width="49%" />
@@ -121,9 +125,9 @@ The **Files** workspace mirrors watched library roots and gives you practical fi
 
 ### Playback And Reading
 
-Videos stream directly when the browser can play them and fall back to on-demand HLS when they need transcoding. Detail pages include subtitles, transcript management, trickplay previews, resume state, metadata editing, and artwork controls.
+Videos direct-play when the client can decode them, stream-copy (remux) where possible, and fall back to on-demand HLS only when a transcode is truly needed. Detail pages include subtitles, transcript management, trickplay previews, resume, metadata editing, and artwork controls.
 
-Books and comics open in a dedicated reader with paged and vertical reading modes. Images and galleries use a lightbox with metadata and linked entities. Audio libraries provide album-style track lists, waveforms, and a persistent player.
+Comics (`.cbz`/`.zip`), EPUBs, and PDFs open in a built-in reader — paged and webtoon comics, reflowable EPUBs, and a full PDF reader with selectable text, zoom, search, outline, and resume. Images and galleries use a lightbox with metadata and linked entities. Audio plays through a persistent bar with a queue, shuffle, waveforms, and OS media-control integration.
 
 <p align="center">
   <img src="docs/screenshots/video-detail.png" alt="Video detail" width="49%" />
@@ -132,18 +136,33 @@ Books and comics open in a dedicated reader with paged and vertical reading mode
 
 ### Metadata And Identify
 
-The Identify workspace keeps a durable review queue. Add videos, series, books, galleries, images, people, or studios, run providers, review field-by-field proposals, choose artwork, walk into child proposals, and accept when the result is right.
+The Identify workspace keeps a durable review queue. Add movies, series, videos, books, galleries, images, people, studios, or audio, run providers, review field-by-field proposals, choose artwork, walk into streaming child proposals (seasons/episodes, volumes/chapters, albums/tracks), and accept when the result is right. **Auto Identify** can apply confident matches automatically during scans.
 
-Plugins can be native TypeScript, Python, or Stash-compatible scraper packages. StashBox endpoints are available for fingerprint lookup and contribution workflows.
+Plugins can be native TypeScript or Python, and Stash community scrapers can be wrapped as providers.
 
 <p align="center">
   <img src="docs/screenshots/identify.png" alt="Identify queue" width="49%" />
   <img src="docs/screenshots/plugins.png" alt="Plugins" width="49%" />
 </p>
 
+### Jellyfin Clients (Experimental)
+
+A Jellyfin-compatible API lets client apps discover Prismedia, sign in, and stream — tested with **Infuse** (video + audio) and music clients like **Manet**, **Finamp**, and **Symfonium**. Create lightweight "fake user" profiles, sign in with the app API key, and give each profile its own NSFW visibility so you can run separate SFW and NSFW "servers" in your client. Resume position and play counts sync both ways. See [Jellyfin Compatibility](https://pauljoda.github.io/Prismedia/docs/jellyfin/overview).
+
+### Navigation And Mobile
+
+The sidebar is yours to arrange — rename, reorder, group, hide, and collapse sections — and your layout is saved on the server and follows you across devices. On phones, a roomy bottom bar holds up to four pinned destinations, and a navigation drawer opens by swiping up from the bar. Every view is touch-first and avoids hover-only core actions.
+
+<p align="center">
+  <img src="docs/screenshots/mobile-dashboard.png" alt="Mobile dashboard" width="24%" />
+  <img src="docs/screenshots/mobile-videos.png" alt="Mobile videos" width="24%" />
+  <img src="docs/screenshots/mobile-video-detail.png" alt="Mobile video detail" width="24%" />
+  <img src="docs/screenshots/mobile-files.png" alt="Mobile files" width="24%" />
+</p>
+
 ### Collections
 
-Collections are simple groupings for browsing and curation. They can be manual, rule-driven, or hybrid, and they can contain videos, series, galleries, images, books, and audio tracks. They are not a global playback queue; they are an organizational view over your library.
+Collections are simple groupings for browsing and curation. They can be manual, rule-driven, or hybrid, and they can contain movies, series, galleries, images, books, and audio tracks. They are not a global playback queue; they are an organizational view over your library.
 
 <p align="center">
   <img src="docs/screenshots/collections.png" alt="Collections" width="100%" />
@@ -151,22 +170,11 @@ Collections are simple groupings for browsing and curation. They can be manual, 
 
 ### Jobs, Settings, And Visibility
 
-Long-running work runs in the .NET worker and is visible in **Jobs**: scans, probes, previews, thumbnails, sprites, HLS, subtitles, identify, imports, collection refreshes, and maintenance. Settings control watched libraries, NSFW visibility, playback, subtitles, generated storage, worker concurrency, and diagnostics.
+Long-running work runs in the .NET worker and is visible in **Jobs**: scans, probes, previews, thumbnails, sprites, waveforms, HLS, subtitles, identify, imports, collection refreshes, and maintenance. Settings control watched libraries, NSFW visibility, playback, subtitles, generated storage, worker concurrency, API access, and diagnostics.
 
 <p align="center">
   <img src="docs/screenshots/jobs.png" alt="Jobs" width="49%" />
   <img src="docs/screenshots/settings.png" alt="Settings" width="49%" />
-</p>
-
-### Mobile
-
-The Svelte frontend is mobile-first. Navigation, entity grids, detail pages, readers, lightboxes, and the audio player are designed to work from a phone without relying on hover-only actions.
-
-<p align="center">
-  <img src="docs/screenshots/mobile-dashboard.png" alt="Mobile dashboard" width="24%" />
-  <img src="docs/screenshots/mobile-videos.png" alt="Mobile videos" width="24%" />
-  <img src="docs/screenshots/mobile-video-detail.png" alt="Mobile video detail" width="24%" />
-  <img src="docs/screenshots/mobile-files.png" alt="Mobile files" width="24%" />
 </p>
 
 ## Design Language
@@ -177,12 +185,12 @@ The design language lives in [docs/design-language.md](docs/design-language.md) 
 
 ## Documentation
 
-- [Quick Start](https://pauljoda.github.io/Prismedia/docs/users/quick-start)
-- [First Boot](https://pauljoda.github.io/Prismedia/docs/users/first-boot)
-- [Browsing The Library](https://pauljoda.github.io/Prismedia/docs/users/browsing)
-- [Library Organization](https://pauljoda.github.io/Prismedia/docs/users/library-organization)
-- [Playback](https://pauljoda.github.io/Prismedia/docs/users/playback)
-- [Identify And Plugins](https://pauljoda.github.io/Prismedia/docs/users/identify-and-scrape)
+- [Install & Run](https://pauljoda.github.io/Prismedia/docs/getting-started/install)
+- [Your First Library & Scan](https://pauljoda.github.io/Prismedia/docs/getting-started/first-library)
+- [Identify & Enrich Your Media](https://pauljoda.github.io/Prismedia/docs/getting-started/identify-walkthrough)
+- [Library & Scanning](https://pauljoda.github.io/Prismedia/docs/library/overview)
+- [Jellyfin Compatibility](https://pauljoda.github.io/Prismedia/docs/jellyfin/overview)
+- [Reverse Proxy & Auth Middleware](https://pauljoda.github.io/Prismedia/docs/deployment/reverse-proxy)
 - [Architecture](https://pauljoda.github.io/Prismedia/docs/developers/architecture)
 
 ## Development
@@ -190,7 +198,7 @@ The design language lives in [docs/design-language.md](docs/design-language.md) 
 ### Prerequisites
 
 - Node.js 22
-- pnpm 10.30.3
+- pnpm 10
 - .NET 10 SDK
 - Docker
 - ffmpeg for media work outside the unified image
