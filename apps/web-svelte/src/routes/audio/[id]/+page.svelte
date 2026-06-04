@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { page } from "$app/state";
-  import { Info, Music, Play, Shuffle, SlidersHorizontal, Users } from "@lucide/svelte";
+  import { Info, MicVocal, Music, Play, Shuffle, SlidersHorizontal, Users } from "@lucide/svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import { fetchAudioLibrary, type AudioLibraryDetail } from "$lib/api/media";
   import {
@@ -53,6 +53,7 @@
   let ratingBusy = $state(false);
   let childCards = $state<EntityThumbnailCard[]>([]);
   let studioCards = $state<EntityThumbnailCard[]>([]);
+  let artistCards = $state<EntityThumbnailCard[]>([]);
   let creditCards = $state<EntityThumbnailCard[]>([]);
   let relationshipTags = $state<EntityDetailTag[]>([]);
   let trackItems = $state<AudioTrackListItemDto[]>([]);
@@ -108,7 +109,7 @@
   // Description + artist/studio/performers stay on the main "Details" tab; metadata cards move to a
   // separate "Metadata" tab. Empty sections and tabs auto-hide.
   const detailSections = $derived.by((): EntityDetailSection[] => [
-    { id: "performers", label: "Performers", icon: Users, hidden: studioCards.length === 0 && creditCards.length === 0 },
+    { id: "performers", label: "Performers", icon: Users, hidden: artistCards.length === 0 && studioCards.length === 0 && creditCards.length === 0 },
     { id: "stats", label: "Stats" },
     { id: "dates", label: "Dates" },
     { id: "classification", label: "Classification" },
@@ -143,23 +144,6 @@
     return appChrome.setBreadcrumbs(crumbs);
   });
 
-  /**
-   * Routes any performer credit whose name matches the album's music artist to the artist page
-   * (`/artists/{id}`) rather than the standalone person entity, giving an easier link back to the
-   * artist's catalog. Other performers keep their default person routing.
-   */
-  function relinkArtistCredits(
-    cards: EntityThumbnailCard[],
-    artist: { id: string; title: string } | null,
-  ): EntityThumbnailCard[] {
-    const artistHref = artist ? resolveEntityHref("music-artist", artist.id) : undefined;
-    if (!artist || !artistHref) return cards;
-    const artistName = artist.title.trim().toLowerCase();
-    return cards.map((card) =>
-      card.entity.title.trim().toLowerCase() === artistName ? { ...card, href: artistHref } : card,
-    );
-  }
-
   async function loadLibrary() {
     loadState = "loading";
     errorMessage = null;
@@ -188,10 +172,21 @@
         hrefFor: (thumbnail) => resolveEntityHref("audio-library", thumbnail.id),
       });
       studioCards = relationships.studioCards;
-      // Performers are stored as `person` credits, but for an album the artist itself usually
-      // appears as a performer. Prefer the music-artist page for that card so it links to the
-      // album grouping instead of the standalone person entity.
-      creditCards = relinkArtistCredits(relationships.creditCards, resolvedArtist);
+      // An album is always scanned under its artist, so surface that music-artist as the lead
+      // "Artist" card (its own thumbnail, linking to /artists/{id}). Performer credits are stored
+      // as separate `person` entities, so drop any that merely duplicate the artist by name to
+      // avoid showing the same name twice.
+      artistCards = parentThumb
+        ? thumbnailsToCards([parentThumb], {
+            hrefFor: (thumbnail) => resolveEntityHref("music-artist", thumbnail.id),
+          })
+        : [];
+      creditCards = resolvedArtist
+        ? relationships.creditCards.filter(
+            (card) =>
+              card.entity.title.trim().toLowerCase() !== resolvedArtist.title.trim().toLowerCase(),
+          )
+        : relationships.creditCards;
       relationshipTags = relationships.relationshipTags;
 
       // Build track items from entity thumbnails already in the response — no N+1 fetches
@@ -350,8 +345,15 @@
 
 
       {#snippet sectionContent(section)}
-        {#if section.id === "performers" && (studioCards.length > 0 || creditCards.length > 0)}
-          <EntityCastAndCrewSection {studioCards} {creditCards} castLabel="Performers" />
+        {#if section.id === "performers" && (artistCards.length > 0 || studioCards.length > 0 || creditCards.length > 0)}
+          <EntityCastAndCrewSection
+            {studioCards}
+            {creditCards}
+            relatedCards={artistCards}
+            relatedLabel="Artist"
+            relatedIcon={MicVocal}
+            castLabel="Performers"
+          />
         {/if}
       {/snippet}
     </EntityDetail>
