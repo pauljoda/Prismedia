@@ -212,12 +212,11 @@
       alert("Library roots cannot be deleted here.");
       return;
     }
-    if (meta.kind === "directory") {
-      const typed = prompt(`Type ${meta.name} to permanently delete this folder and everything inside it.`);
-      if (typed !== meta.name) return;
-    } else if (!confirm(`Permanently delete ${meta.name}?`)) {
-      return;
-    }
+    const message =
+      meta.kind === "directory"
+        ? `Permanently delete ${meta.name} and everything inside it?`
+        : `Permanently delete ${meta.name}?`;
+    if (!confirm(message)) return;
     await apiDeleteFile(meta.rootId, meta.path);
     selectedTreePath = null;
     detail = null;

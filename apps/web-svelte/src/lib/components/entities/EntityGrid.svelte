@@ -142,7 +142,10 @@
   }
 
   function defaultScale(): number {
-    return isMobileThumbnailViewport() ? minScale : DEFAULT_SCALE;
+    // On phones the very largest thumbnails (minScale) can feel oversized, so
+    // start one step in — the second-from-largest size reads better as a default
+    // while still leaning large for touch. Desktop keeps the roomier default.
+    return isMobileThumbnailViewport() ? clampScale(minScale + 1) : DEFAULT_SCALE;
   }
 
   function clampScale(value: number): number {

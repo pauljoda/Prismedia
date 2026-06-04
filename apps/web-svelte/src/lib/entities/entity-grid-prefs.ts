@@ -78,7 +78,7 @@ export interface EntityGridPrefsStore {
 const STORAGE_PREFIX = "prismedia:entity-grid-state:";
 const VALID_SORTS: readonly EntityGridSort[] = ["title", "kind", "rating", "position", "added", "random", "references"];
 const VALID_SORT_DIRS: readonly EntityGridSortDir[] = ["asc", "desc"];
-const VALID_VIEW_MODES: readonly EntityGridViewMode[] = ["grid", "list"];
+const VALID_VIEW_MODES: readonly EntityGridViewMode[] = ["grid", "list", "feed"];
 
 function oneOf<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
   return typeof value === "string" && (allowed as readonly string[]).includes(value) ? (value as T) : fallback;
