@@ -37,7 +37,7 @@
   import { useIdentifyDetailAction } from "$lib/components/identify/use-identify-detail-action.svelte";
   import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
   import { useNsfw } from "$lib/nsfw/store.svelte";
-  import { useAppChrome } from "$lib/stores/app-chrome.svelte";
+  import { useAppChrome, type AppBreadcrumb } from "$lib/stores/app-chrome.svelte";
   import { useAudioPlayback, type PlaybackContext } from "$lib/stores/audio-playback.svelte";
 
   type LoadState = "loading" | "ready" | "error";
@@ -133,11 +133,32 @@
 
   $effect(() => {
     if (!library) return;
-    return appChrome.setBreadcrumbs([
-      { label: "Audio", href: "/audio" },
-      { label: library.title },
-    ]);
+    // Albums are scanned under their artist, so surface the artist as a breadcrumb crumb
+    // ("Audio / Imagine Dragons / Evolve") when the music-artist parent resolved.
+    const crumbs: AppBreadcrumb[] = [{ label: "Audio", href: "/audio" }];
+    if (artistLink) {
+      crumbs.push({ label: artistLink.title, href: resolveEntityHref("music-artist", artistLink.id) });
+    }
+    crumbs.push({ label: library.title });
+    return appChrome.setBreadcrumbs(crumbs);
   });
+
+  /**
+   * Routes any performer credit whose name matches the album's music artist to the artist page
+   * (`/artists/{id}`) rather than the standalone person entity, giving an easier link back to the
+   * artist's catalog. Other performers keep their default person routing.
+   */
+  function relinkArtistCredits(
+    cards: EntityThumbnailCard[],
+    artist: { id: string; title: string } | null,
+  ): EntityThumbnailCard[] {
+    const artistHref = artist ? resolveEntityHref("music-artist", artist.id) : undefined;
+    if (!artist || !artistHref) return cards;
+    const artistName = artist.title.trim().toLowerCase();
+    return cards.map((card) =>
+      card.entity.title.trim().toLowerCase() === artistName ? { ...card, href: artistHref } : card,
+    );
+  }
 
   async function loadLibrary() {
     loadState = "loading";
@@ -159,14 +180,18 @@
       ]);
 
       const parentThumb = parentThumbs.find((t) => t.kind === "music-artist");
-      artistLink = parentThumb ? { id: parentThumb.id, title: parentThumb.title } : null;
+      const resolvedArtist = parentThumb ? { id: parentThumb.id, title: parentThumb.title } : null;
+      artistLink = resolvedArtist;
 
       library = nextLibrary;
       childCards = thumbnailsToCards(children, {
         hrefFor: (thumbnail) => resolveEntityHref("audio-library", thumbnail.id),
       });
       studioCards = relationships.studioCards;
-      creditCards = relationships.creditCards;
+      // Performers are stored as `person` credits, but for an album the artist itself usually
+      // appears as a performer. Prefer the music-artist page for that card so it links to the
+      // album grouping instead of the standalone person entity.
+      creditCards = relinkArtistCredits(relationships.creditCards, resolvedArtist);
       relationshipTags = relationships.relationshipTags;
 
       // Build track items from entity thumbnails already in the response — no N+1 fetches

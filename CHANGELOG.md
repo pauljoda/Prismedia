@@ -99,6 +99,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - The video play button now shows its loading spinner while a stream is starting up, so a cold first play no longer looks like nothing happened. Previously the button flipped straight to the pause icon over a black frame while the stream prepared its first few seconds, with no spinner, so it seemed unresponsive and invited repeated play taps; it now spins until the picture is ready.
 
 ### Changed
+- Album pages now lead with their artist. The breadcrumb shows the artist between Audio and the album ("Audio / Imagine Dragons / Evolve"), and a performer that is the album's artist now links to the artist page instead of a standalone person — so it's one tap back to the rest of that artist's music.
 - Pushes to `main` now publish only the `dev` container image tag; validation, documentation-site publishing, alpha, beta, release, and immutable channel tags are published only through manual workflows.
 - The Files tab now opens with every folder collapsed, including the library roots, so you start with a clean top-level overview and expand only the branches you want. Expanding or collapsing a folder no longer forces other branches back open.
 - Alphabetical sorting now ignores leading articles. Titles that start with "The", "A", or "An" sort by the next word — so "The Grinch" files under G next to other G titles instead of bunching everything up under T — across every library grid and taxonomy list.
