@@ -389,20 +389,38 @@ public sealed partial class HlsAssetService {
     }
 
     /// <summary>
-    /// Replicates ffmpeg's stream-copy HLS boundary rule: a new segment starts at the first keyframe
-    /// whose timestamp is at least <see cref="SegmentDurationSeconds" /> past the current segment's
-    /// start. The final segment runs from the last boundary to the end of the source.
+    /// Replicates ffmpeg's stream-copy HLS boundary rule: it cuts at the first keyframe at or after
+    /// each point on a <em>fixed grid</em> of <see cref="SegmentDurationSeconds" /> multiples
+    /// (<c>6s, 12s, 18s, …</c> from the first keyframe), advancing the target to the next grid line
+    /// strictly past each cut. The final segment runs from the last boundary to the end of the source.
     /// </summary>
+    /// <remarks>
+    /// The grid is essential: ffmpeg does NOT measure "<see cref="SegmentDurationSeconds" /> past the
+    /// previous cut" (which would drift on irregular, scene-cut keyframes and skip keyframes that land
+    /// just shy of the drifted threshold). A drifted prediction yields fewer, longer segments than
+    /// ffmpeg actually writes, so the VOD playlist we hand the player references the same
+    /// <c>seg_NNNNN</c> filenames as ffmpeg's real output but with mismatched durations — corrupting
+    /// seeking and cutting the buffer short of the true end. Cutting on the absolute grid reproduces
+    /// ffmpeg's segmentation exactly so playlist entries line up with the segments on disk.
+    /// </remarks>
     internal static IReadOnlyList<double> BuildRemuxSegmentDurations(
         IReadOnlyList<double> keyframeTimes,
         double totalDuration) {
         var durations = new List<double>();
-        var segmentStart = keyframeTimes[0];
+        var first = keyframeTimes[0];
+        var segmentStart = first;
+        var target = first + SegmentDurationSeconds;
         foreach (var keyframe in keyframeTimes) {
-            if (keyframe - segmentStart >= SegmentDurationSeconds) {
-                durations.Add(keyframe - segmentStart);
-                segmentStart = keyframe;
+            if (keyframe < target) {
+                continue;
             }
+
+            durations.Add(keyframe - segmentStart);
+            segmentStart = keyframe;
+            // Advance to the first grid line strictly greater than this cut, skipping any grid lines a
+            // long GOP jumped over so one segment can legitimately span several multiples.
+            var steps = Math.Floor((keyframe - first) / SegmentDurationSeconds) + 1;
+            target = first + steps * SegmentDurationSeconds;
         }
 
         var lastDuration = totalDuration - segmentStart;

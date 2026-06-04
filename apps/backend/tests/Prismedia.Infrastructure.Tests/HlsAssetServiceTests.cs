@@ -73,6 +73,23 @@ public sealed class HlsAssetServiceTests : IDisposable {
     }
 
     [Fact]
+    public void RemuxSegmentDurationsCutOnFixedGridNotDriftingFromPreviousCut() {
+        // Irregular, scene-cut keyframes (real VBR content) expose the bug a regular GOP hides.
+        // ffmpeg cuts at the first keyframe at/after each fixed 6s grid line (6, 12, 18, ...), so the
+        // 12s cut lands on the keyframe at 12.813 — giving a 5.839s second segment. A rule that instead
+        // waits 6s past the PREVIOUS cut (6.974) would require >= 12.974 and skip 12.813, drifting to a
+        // longer 6.740s segment and, cumulatively, fewer/misaligned segments than ffmpeg writes.
+        var keyframes = new List<double> { 0.0, 4.972, 5.339, 6.974, 10.444, 11.645, 12.813, 13.714, 20.721 };
+
+        var durations = HlsAssetService.BuildRemuxSegmentDurations(keyframes, 25.0);
+
+        Assert.Equal(6.974, durations[0], 3); // first cut: first keyframe >= 6
+        Assert.Equal(5.839, durations[1], 3); // second cut: first keyframe >= 12 (12.813), NOT >= 12.974
+        Assert.Equal(7.908, durations[2], 3); // third cut: first keyframe >= 18 (20.721)
+        Assert.Equal(25.0, durations.Sum(), 3);
+    }
+
+    [Fact]
     public void RemuxVodPlaylistIsCompleteAndSeekable() {
         var durations = new List<double> { 6.006, 6.006, 4.2 };
 
