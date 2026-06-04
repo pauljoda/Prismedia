@@ -26,6 +26,13 @@ export interface EntityIndexPageStateOptions {
   getKind: () => string;
   getHideNsfw: () => boolean;
   resolveHref?: (item: EntityCard) => string | undefined;
+  /**
+   * Server query parameters that always apply to this index, regardless of the
+   * grid's filter controls. Used by constrained sub-views (e.g. Comics/eBooks
+   * lock `bookType`). Spread after the user's {@link serverQuery} so the lock
+   * always wins.
+   */
+  lockedServerQuery?: Partial<EntityGridServerQuery>;
 }
 
 export class EntityIndexPageState {
@@ -76,6 +83,7 @@ export class EntityIndexPageState {
         hideNsfw: this.#options.getHideNsfw(),
         limit: this.pageSize,
         ...this.serverQuery,
+        ...this.#options.lockedServerQuery,
       }, { signal });
       if (signal.aborted) return;
       this.items = response.items;
@@ -102,6 +110,7 @@ export class EntityIndexPageState {
         hideNsfw: this.#options.getHideNsfw(),
         limit: this.pageSize,
         ...this.serverQuery,
+        ...this.#options.lockedServerQuery,
       });
       this.items = [...this.items, ...response.items];
       this.nextCursor = response.nextCursor;

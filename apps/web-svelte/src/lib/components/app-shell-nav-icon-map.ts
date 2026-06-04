@@ -2,6 +2,8 @@ import type { Component } from "svelte";
 import {
   Activity,
   Building2,
+  BookCopy,
+  BookMarked,
   BookOpen,
   Clapperboard,
   Film,
@@ -31,6 +33,8 @@ export const appShellNavIconMap: Record<string, Component<Record<string, unknown
   clapperboard: Clapperboard as unknown as Component<Record<string, unknown>>,
   images: Images as unknown as Component<Record<string, unknown>>,
   "book-open": BookOpen as unknown as Component<Record<string, unknown>>,
+  "book-copy": BookCopy as unknown as Component<Record<string, unknown>>,
+  "book-marked": BookMarked as unknown as Component<Record<string, unknown>>,
   image: Image as unknown as Component<Record<string, unknown>>,
   music: Music as unknown as Component<Record<string, unknown>>,
   "mic-vocal": MicVocal as unknown as Component<Record<string, unknown>>,

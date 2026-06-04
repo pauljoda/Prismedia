@@ -9,6 +9,7 @@ using Prismedia.Application.Organization;
 using Prismedia.Application.Settings;
 using Prismedia.Application.Health;
 using Prismedia.Application.Jellyfin;
+using Prismedia.Application.Navigation;
 using Prismedia.Application.Jobs.Handlers;
 using Prismedia.Application.Jobs.Handlers.Generate;
 using Prismedia.Application.Jobs.Handlers.Identity;
@@ -34,6 +35,7 @@ public static class DependencyInjection {
         services.AddScoped<JobService>();
         services.AddScoped<EntityCapabilityService>();
         services.AddScoped<SettingsService>();
+        services.AddScoped<NavLayoutService>();
         services.AddScoped<PrismediaSecurityService>();
         services.AddScoped<JellyfinCatalogService>();
         services.AddScoped<OrganizeService>();

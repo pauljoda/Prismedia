@@ -1,6 +1,8 @@
+import { browser } from "$app/environment";
 import { createContext } from "$lib/utils/context";
 import {
   buildNavCatalog,
+  defaultNavPrefs,
   resolveFavorites,
   resolveNav,
   MAX_MOBILE_FAVORITES,
@@ -9,9 +11,12 @@ import {
   type ResolvedNavItem,
   type ResolvedNavSection,
 } from "$lib/nav/nav-catalog";
-import { navPrefsStore, readNavPrefs } from "$lib/nav/nav-prefs";
+import { fetchNavLayout, saveNavLayout } from "$lib/api/nav-layout";
 
 const ctx = createContext<NavCustomizationStore>("NavCustomization");
+
+/** Debounce window for coalescing rapid edits (e.g. drag-and-drop) into one save. */
+const SAVE_DEBOUNCE_MS = 400;
 
 /** Build a section id that does not collide with any existing one. */
 function uniqueSectionId(existing: NavPrefs["sections"], label: string): string {
@@ -30,16 +35,17 @@ function uniqueSectionId(existing: NavPrefs["sections"], label: string): string 
 }
 
 /**
- * Reactive, per-device navigation customization. Holds the saved {@link NavPrefs}
- * and the transient edit-mode flag, derives render-ready sections/favorites from
- * the static catalog, and exposes mutations that persist to the `prismedia-nav`
- * cookie on every change.
+ * Reactive navigation customization. Holds the saved {@link NavPrefs} and the
+ * transient edit-mode flag, derives render-ready sections/favorites from the static
+ * catalog, and exposes mutations that persist to the server (shared across devices)
+ * on every change. The layout is seeded from code defaults, then hydrated once from
+ * the server on boot via {@link hydrateFromServer}.
  */
 export class NavCustomizationStore {
   /** Static, code-owned catalog of all known routes. */
   readonly catalog: NavCatalogItem[] = buildNavCatalog();
 
-  prefs = $state<NavPrefs>(navPrefsStore.defaults());
+  prefs = $state<NavPrefs>(defaultNavPrefs());
   editing = $state(false);
 
   /** Sections resolved for rendering (includes hidden items, flagged). */
@@ -49,14 +55,37 @@ export class NavCustomizationStore {
     resolveFavorites(this.catalog, this.prefs, this.resolvedSections),
   );
 
-  constructor(initial: NavPrefs) {
-    this.prefs = initial;
+  /** Set once the user has made an edit, so a late server hydrate never clobbers it. */
+  #dirty = false;
+  #saveTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * Load the server-persisted layout once on boot. No-ops if the user has already
+   * edited, if a layout fails to load, or if the server has nothing stored (the
+   * seeded defaults stay in place). Never re-persists what it loads.
+   */
+  async hydrateFromServer() {
+    if (this.#dirty) return;
+    let loaded: NavPrefs | null;
+    try {
+      loaded = await fetchNavLayout();
+    } catch {
+      return;
+    }
+    if (!loaded || this.#dirty) return;
+    this.prefs = loaded;
   }
 
-  /** Replace prefs and persist. */
+  /** Replace prefs and schedule a debounced save to the server. */
   private commit(next: NavPrefs) {
     this.prefs = next;
-    navPrefsStore.writeCookie(next);
+    this.#dirty = true;
+    if (!browser) return;
+    if (this.#saveTimer) clearTimeout(this.#saveTimer);
+    this.#saveTimer = setTimeout(() => {
+      this.#saveTimer = null;
+      void saveNavLayout(this.prefs).catch(() => {});
+    }, SAVE_DEBOUNCE_MS);
   }
 
   private mapSections(fn: (section: NavPrefs["sections"][number]) => NavPrefs["sections"][number]) {
@@ -226,12 +255,14 @@ export class NavCustomizationStore {
 
   /** Restore the seeded layout. */
   reset() {
-    this.commit(navPrefsStore.defaults());
+    this.commit(defaultNavPrefs());
   }
 }
 
 export function provideNavCustomization() {
-  return ctx.provide(new NavCustomizationStore(readNavPrefs()));
+  const store = ctx.provide(new NavCustomizationStore());
+  if (browser) void store.hydrateFromServer();
+  return store;
 }
 
 export const useNavCustomization = ctx.use;

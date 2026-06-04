@@ -91,6 +91,47 @@ export function defaultNavPrefs(catalog: NavCatalogItem[] = buildNavCatalog()): 
 /** The bottom-4 the app shipped with before customization existed. */
 export const DEFAULT_MOBILE_FAVORITES = ["/files", "/videos", "/galleries", "/people"];
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function asStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
+}
+
+/**
+ * Permissively validate an arbitrary value (the server layout document) into
+ * {@link NavPrefs}. Returns `null` when the shape is unusable so callers fall back
+ * to seeded defaults rather than throwing. Accepts either the persisted `version`
+ * key or the in-memory `v` key. Unknown sections/items are kept verbatim and
+ * reconciled against the live catalog later by {@link resolveNav}.
+ */
+export function normalizeNavPrefs(parsed: unknown): NavPrefs | null {
+  if (!isRecord(parsed)) return null;
+  if ((parsed.v ?? parsed.version) !== 1) return null;
+  if (!Array.isArray(parsed.sections)) return null;
+
+  const sections: NavPrefs["sections"] = [];
+  for (const raw of parsed.sections) {
+    if (!isRecord(raw)) continue;
+    if (typeof raw.id !== "string" || typeof raw.label !== "string") continue;
+    sections.push({
+      id: raw.id,
+      label: raw.label,
+      items: asStringArray(raw.items),
+      collapsed: raw.collapsed === true,
+    });
+  }
+  if (sections.length === 0) return null;
+
+  return {
+    v: 1,
+    sections,
+    hidden: asStringArray(parsed.hidden),
+    mobileFavorites: asStringArray(parsed.mobileFavorites).slice(0, MAX_MOBILE_FAVORITES),
+  };
+}
+
 /**
  * Reconcile saved {@link NavPrefs} against the live {@link NavCatalogItem}
  * catalog to produce render-ready sections.

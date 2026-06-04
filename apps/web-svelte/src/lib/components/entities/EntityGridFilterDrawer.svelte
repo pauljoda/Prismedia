@@ -12,10 +12,18 @@
     activeFilterIds: string[];
     filterOptions: EntityGridFilterOption[];
     entityKind?: string;
+    /** Hide the book type/format chips (constrained views that already lock the type). */
+    lockBookFilters?: boolean;
     onActiveFilterIdsChange: (ids: string[]) => void;
   }
 
-  let { activeFilterIds, filterOptions, entityKind, onActiveFilterIdsChange }: Props = $props();
+  let {
+    activeFilterIds,
+    filterOptions,
+    entityKind,
+    lockBookFilters = false,
+    onActiveFilterIdsChange,
+  }: Props = $props();
 
   // Adaptive engagement-status labels. Reading kinds phrase the status as
   // Read/Unread/Reading; everything else uses Watched/Unwatched/In progress.
@@ -70,7 +78,7 @@
 
   // Book type/format are properties of the book detail row, so they only make sense on the
   // Books grid; the server resolves them across the whole library.
-  const showBookFilters = $derived(entityKind === "book");
+  const showBookFilters = $derived(entityKind === "book" && !lockBookFilters);
 
   // Taxonomy kinds (tags/people/studios) can be filtered by whether anything references them,
   // resolved server-side across the whole library. The two chips are mutually exclusive — neither

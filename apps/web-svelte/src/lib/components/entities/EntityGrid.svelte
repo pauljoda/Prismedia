@@ -55,6 +55,12 @@
      * Only meaningful for image/gallery routes.
      */
     enableFeedView?: boolean;
+    /**
+     * Hide the book type/format filter chips. Used by constrained book sub-views
+     * (Comics/eBooks) that already lock the book type, where exposing the chips
+     * would be redundant and confusing.
+     */
+    lockBookFilters?: boolean;
     hasMore?: boolean;
     initialPageSize?: number;
     initialMediaWall?: boolean;
@@ -95,6 +101,7 @@
     emptyMessage = "Try adjusting your search or filters.",
     emptyTitle = "Nothing present",
     entityKind,
+    lockBookFilters = false,
     hasMore = false,
     initialPageSize = DEFAULT_PAGE_SIZE,
     initialMediaWall = false,
@@ -862,6 +869,7 @@
       activeFilterIds={filterIds}
       {filterOptions}
       {entityKind}
+      {lockBookFilters}
       onActiveFilterIdsChange={setFilterIds}
     />
   {/if}

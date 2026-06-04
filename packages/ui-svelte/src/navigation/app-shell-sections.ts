@@ -8,17 +8,43 @@ export const appShellSections = [
     ],
   },
   {
+    id: "video",
+    kicker: "Video",
+    items: [
+      { label: "Movies", href: "/movies", icon: "clapperboard" },
+      { label: "Series", href: "/series", icon: "folder" },
+      { label: "Videos", href: "/videos", icon: "film" },
+    ],
+  },
+  {
+    id: "images",
+    kicker: "Images",
+    items: [
+      { label: "Galleries", href: "/galleries", icon: "images" },
+      { label: "Images", href: "/images", icon: "image" },
+    ],
+  },
+  {
+    id: "audio",
+    kicker: "Audio",
+    items: [
+      { label: "Artists", href: "/artists", icon: "mic-vocal" },
+      { label: "Audio", href: "/audio", icon: "music" },
+    ],
+  },
+  {
+    id: "books",
+    kicker: "Books",
+    items: [
+      { label: "Books", href: "/books", icon: "book-open" },
+      { label: "Comics", href: "/comics", icon: "book-copy" },
+      { label: "eBooks", href: "/ebooks", icon: "book-marked" },
+    ],
+  },
+  {
     id: "browse",
     kicker: "Browse",
     items: [
-      { label: "Videos", href: "/videos", icon: "film" },
-      { label: "Movies", href: "/movies", icon: "clapperboard" },
-      { label: "Series", href: "/series", icon: "folder" },
-      { label: "Images", href: "/images", icon: "image" },
-      { label: "Galleries", href: "/galleries", icon: "images" },
-      { label: "Books", href: "/books", icon: "book-open" },
-      { label: "Artists", href: "/artists", icon: "mic-vocal" },
-      { label: "Audio", href: "/audio", icon: "music" },
       { label: "People", href: "/people", icon: "users" },
       { label: "Studios", href: "/studios", icon: "building" },
       { label: "Tags", href: "/tags", icon: "tags" },

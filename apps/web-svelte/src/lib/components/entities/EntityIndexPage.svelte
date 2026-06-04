@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Component } from "svelte";
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
   import { Plus } from "@lucide/svelte";
   import { goto } from "$app/navigation";
   import {
@@ -18,7 +18,11 @@
   import NameInputDialog from "./NameInputDialog.svelte";
   import ConfirmDialog from "./ConfirmDialog.svelte";
   import { EntityIndexPageState } from "./entity-index-page.svelte.ts";
-  import type { EntityGridBulkAction, EntityGridRequest } from "$lib/entities/entity-grid";
+  import type {
+    EntityGridBulkAction,
+    EntityGridRequest,
+    EntityGridServerQuery,
+  } from "$lib/entities/entity-grid";
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
   import { resolveEntityHref } from "$lib/entities/entity-routes";
   import { updateEntityRating } from "$lib/api/entity-mutations";
@@ -43,6 +47,14 @@
     initialMediaWall?: boolean;
     kind: string;
     lightboxTitle?: string;
+    /**
+     * Server filter parameters that always apply, regardless of the grid's filter
+     * controls. Used by constrained sub-views such as Comics/eBooks to lock the
+     * book type. Spread after the user's filters so the lock always wins.
+     */
+    lockedServerQuery?: Partial<EntityGridServerQuery>;
+    /** Hide the book type/format filter chips (for routes that already lock the type). */
+    lockBookFilters?: boolean;
     prefsKey: string;
     resolveHref?: (item: EntityCard) => string | undefined;
     title: string;
@@ -68,6 +80,8 @@
     icon: Icon,
     initialMediaWall = false,
     kind,
+    lockedServerQuery,
+    lockBookFilters = false,
     prefsKey,
     resolveHref,
     title,
@@ -123,6 +137,8 @@
     getKind: () => kind,
     getHideNsfw: () => nsfw.mode === "off",
     resolveHref: (item) => resolveHref?.(item),
+    // Static per-route literal; capture once at construction.
+    lockedServerQuery: untrack(() => lockedServerQuery),
   });
 
   let lastNsfwMode = $state(nsfw.mode);
@@ -300,6 +316,7 @@
       loading={page.loadState === "loading"}
       entityKind={kind}
       {prefsKey}
+      {lockBookFilters}
       {enableFeedView}
       {emptyTitle}
       {emptyMessage}
