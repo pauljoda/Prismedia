@@ -10,7 +10,13 @@ namespace Prismedia.Application.Jobs.Ports;
 /// </summary>
 public interface IIdentifyCascadeRunner {
     /// <summary>Runs the cascade described by <paramref name="payload"/> to completion.</summary>
-    Task RunAsync(IdentifyCascadePayload payload, CancellationToken cancellationToken);
+    /// <param name="payload">The entity, provider, and query that seeded the root proposal.</param>
+    /// <param name="cascadeJobId">
+    /// Id of this cascade's own job run. The cascade only streams onto the queue item while the item is
+    /// still queued and still marked with this id, so a removed or superseded item is left untouched.
+    /// </param>
+    /// <param name="cancellationToken">Cancellation token for the running cascade.</param>
+    Task RunAsync(IdentifyCascadePayload payload, Guid cascadeJobId, CancellationToken cancellationToken);
 }
 
 /// <summary>

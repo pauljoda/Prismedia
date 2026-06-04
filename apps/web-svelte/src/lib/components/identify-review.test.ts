@@ -288,6 +288,26 @@ describe("identify review helpers", () => {
     })).toBe("https://example.test/poster.jpg");
   });
 
+  it("downsizes googleusercontent cover art for review previews while preserving size flags", () => {
+    // YouTube cover art arrives upsized to =w1000-h1000; the preview shrinks it but keeps the url's flags.
+    expect(reviewImagePreviewUrl({
+      kind: "cover",
+      url: "https://yt3.googleusercontent.com/abc=w1000-h1000-l90-rj",
+      source: "youtube",
+    })).toBe("https://yt3.googleusercontent.com/abc=w360-h360-l90-rj");
+    // Square (=sN) hints and bare urls are both normalised to a small preview request.
+    expect(reviewImagePreviewUrl({
+      kind: "cover",
+      url: "https://lh3.googleusercontent.com/xyz=s1080",
+      source: "youtube",
+    })).toBe("https://lh3.googleusercontent.com/xyz=s360");
+    expect(reviewImagePreviewUrl({
+      kind: "backdrop",
+      url: "https://yt3.googleusercontent.com/banner=w1920-h1080",
+      source: "youtube",
+    })).toBe("https://yt3.googleusercontent.com/banner=w720-h720");
+  });
+
   it("carries walked child field and artwork choices into the root apply payload", () => {
     const episode = proposal("episode-1", "video", {
       title: "Episode 1",

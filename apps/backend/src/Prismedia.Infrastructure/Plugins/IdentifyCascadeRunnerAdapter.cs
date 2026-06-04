@@ -7,6 +7,6 @@ namespace Prismedia.Infrastructure.Plugins;
 /// runs the entity's full child-tree cascade and streams the growing proposal onto the queue item.
 /// </summary>
 internal sealed class IdentifyCascadeRunnerAdapter(IdentifyQueueService queueService) : IIdentifyCascadeRunner {
-    public Task RunAsync(IdentifyCascadePayload payload, CancellationToken cancellationToken) =>
-        queueService.RunCascadeAsync(payload, cancellationToken);
+    public Task RunAsync(IdentifyCascadePayload payload, Guid cascadeJobId, CancellationToken cancellationToken) =>
+        queueService.RunCascadeAsync(payload, cascadeJobId, cancellationToken);
 }

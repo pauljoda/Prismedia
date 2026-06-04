@@ -173,7 +173,9 @@ export function reviewableImages(images: ImageCandidate[], targetKind?: string |
 }
 
 export function reviewImagePreviewUrl(image: ImageCandidate, targetKind?: string | null): string {
-  return tmdbPreviewUrl(image.url, image.kind, targetKind) ?? image.url;
+  return tmdbPreviewUrl(image.url, image.kind, targetKind)
+    ?? googlePreviewUrl(image.url, image.kind)
+    ?? image.url;
 }
 
 export function defaultImageSelectionForReview(result: EntityMetadataProposal): Record<string, string | null> {
@@ -473,6 +475,32 @@ function tmdbPreviewUrl(url: string, kind: string, targetKind?: string | null): 
   parts[sizeIndex] = tmdbPreviewSize(kind, targetKind);
   parsed.pathname = parts.join("/");
   return parsed.toString();
+}
+
+/**
+ * Right-sizes a googleusercontent image (YouTube cover art, channel logos) for review previews.
+ * Providers hand back covers upsized to ~1000px (hundreds of KB to MB each); rendering ~200px grid
+ * tiles by hotlinking dozens of those at once makes the browser drop some loads, leaving broken
+ * thumbnails. googleusercontent encodes the requested size in a trailing `=wW-hH` / `=sN` segment, so
+ * we rewrite it down to a preview size — the same approach `tmdbPreviewUrl` takes for tmdb. The
+ * proposal's original full-resolution url is left untouched, so the artwork applied on accept is
+ * unchanged; only the on-screen preview shrinks. Returns null for non-googleusercontent urls.
+ */
+function googlePreviewUrl(url: string, kind: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+
+  if (!parsed.hostname.endsWith(".googleusercontent.com")) return null;
+
+  const size = kind.toLowerCase() === "backdrop" ? 720 : 360;
+  // Size hints live in the last path segment as `=wW-hH(-flags)` or `=sN(-flags)`; preserve any flags.
+  if (/=w\d+-h\d+/.test(url)) return url.replace(/=w\d+-h\d+/, `=w${size}-h${size}`);
+  if (/=s\d+/.test(url)) return url.replace(/=s\d+/, `=s${size}`);
+  return `${url}=w${size}-h${size}`;
 }
 
 function tmdbPreviewSize(kind: string, targetKind?: string | null): string {

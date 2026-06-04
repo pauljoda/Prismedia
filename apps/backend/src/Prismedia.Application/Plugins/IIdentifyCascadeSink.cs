@@ -18,4 +18,13 @@ public interface IIdentifyCascadeSink {
     /// <param name="partialRoot">The root proposal with the children resolved so far.</param>
     /// <param name="cancellationToken">Cancellation token for the running cascade.</param>
     Task OnEntityResolvedAsync(EntityMetadataProposal partialRoot, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Reports whether the cascade still has a live destination — i.e. the parent it is streaming into
+    /// is still queued and still owned by this cascade run. The cascade checks this before walking each
+    /// top-level child and stops the walk when it returns false, so a queue item the user removed (or
+    /// that a newer search superseded) is never re-populated by an orphaned background walk.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token for the running cascade.</param>
+    Task<bool> IsActiveAsync(CancellationToken cancellationToken);
 }

@@ -163,8 +163,10 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         // Run the cascade (the worker does this in production) and re-read the streamed proposal: each
         // local episode is bound to its provider track by position, and the phantom Episode 3 (with no
         // local file) is dropped.
+        var cascadeJobId = (await db.IdentifyQueueItems.AsNoTracking().SingleAsync(i => i.EntityId == seriesId)).CascadeJobId!.Value;
         await service.RunCascadeAsync(
             new IdentifyCascadePayload(seriesId, "tmdb", query, HideNsfw: false),
+            cascadeJobId,
             CancellationToken.None);
         var resolved = await service.GetAsync(seriesId, CancellationToken.None);
 
@@ -172,6 +174,96 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         Assert.Equal([episode1Id, episode2Id], resolved!.Proposal!.Children.Select(child => child.TargetEntityId.GetValueOrDefault()).ToArray());
         Assert.Equal(["Episode 1", "Episode 2"], resolved.Proposal.Children.Select(child => child.Patch.Title ?? string.Empty).ToArray());
         Assert.DoesNotContain(resolved.Proposal.Children, child => child.Patch.Title == "Episode 3");
+    }
+
+    [Fact]
+    public async Task RunCascadeDoesNotReviveAQueueItemRemovedBeforeItRuns() {
+        await using var db = CreateContext();
+        var seriesId = Guid.Parse("55555555-5555-5555-5555-555555555550");
+        var episode1Id = Guid.Parse("55555555-5555-5555-5555-555555555551");
+        var episode2Id = Guid.Parse("55555555-5555-5555-5555-555555555552");
+        SeedProvider(db);
+        SeedEntity(db, seriesId, "video-series", "Known Series");
+        var episode1 = SeedEntity(db, episode1Id, "video", "Local Episode 1");
+        episode1.ParentEntityId = seriesId;
+        episode1.SortOrder = 1;
+        var episode2 = SeedEntity(db, episode2Id, "video", "Local Episode 2");
+        episode2.ParentEntityId = seriesId;
+        episode2.SortOrder = 2;
+        await db.SaveChangesAsync();
+        var service = CreateQueueService(db, new StructuralChildrenProcessExecutor(), _tempRoot);
+        await service.AddAsync(seriesId, CancellationToken.None);
+
+        var query = new IdentifyQuery(null, null, new Dictionary<string, string> { ["tmdb"] = "series-1" });
+        await service.SearchAsync(seriesId, new IdentifyQueueSearchRequest("tmdb", query), hideNsfw: false, CancellationToken.None);
+        var cascadeJobId = (await db.IdentifyQueueItems.AsNoTracking().SingleAsync(i => i.EntityId == seriesId)).CascadeJobId!.Value;
+
+        // The user removes the item from the queue before the background cascade gets to run.
+        await service.DeleteAsync(seriesId, CancellationToken.None);
+
+        // The now-orphaned cascade runs anyway (job cancellation does not interrupt an in-flight worker).
+        // It must drop the walk on the removed parent and never re-populate it with children.
+        await service.RunCascadeAsync(
+            new IdentifyCascadePayload(seriesId, "tmdb", query, HideNsfw: false),
+            cascadeJobId,
+            CancellationToken.None);
+
+        var row = await db.IdentifyQueueItems.AsNoTracking().SingleAsync(i => i.EntityId == seriesId);
+        Assert.Equal(IdentifyQueueState.Deleted, row.State);
+        var resolved = await service.GetAsync(seriesId, CancellationToken.None);
+        Assert.True(resolved?.Proposal is null || resolved.Proposal.Children.Count == 0);
+    }
+
+    [Fact]
+    public async Task RunCascadeForASupersededSearchDoesNotStreamChildrenOntoTheItem() {
+        // Identify with provider A enqueues cascade A. The user goes back to search and re-runs with a
+        // different plugin, which enqueues cascade B and stamps the queue item with B's job id. Cascade A
+        // is still running in the worker; it must not stream its child tree onto the item now owned by B,
+        // otherwise the two cascades overwrite each other by GUID and the children show up duplicated.
+        await using var db = CreateContext();
+        var seriesId = Guid.Parse("66666666-6666-6666-6666-666666666660");
+        var episode1Id = Guid.Parse("66666666-6666-6666-6666-666666666661");
+        var episode2Id = Guid.Parse("66666666-6666-6666-6666-666666666662");
+        var supersedingJobId = Guid.Parse("66666666-6666-6666-6666-6666666666bb");
+        SeedProvider(db);
+        SeedEntity(db, seriesId, "video-series", "Known Series");
+        var episode1 = SeedEntity(db, episode1Id, "video", "Local Episode 1");
+        episode1.ParentEntityId = seriesId;
+        episode1.SortOrder = 1;
+        var episode2 = SeedEntity(db, episode2Id, "video", "Local Episode 2");
+        episode2.ParentEntityId = seriesId;
+        episode2.SortOrder = 2;
+        // The item is mid-review with the seeded parent proposal (no children yet), already owned by the
+        // newer cascade B.
+        var seed = new EntityMetadataProposal(
+            "tmdb:series:1", "tmdb", "video-series", 1, "external-id",
+            EmptyPatch("Known Series identified"), [], [], [], TargetEntityId: seriesId, Relationships: []);
+        db.IdentifyQueueItems.Add(new IdentifyQueueItemRow {
+            Id = Guid.NewGuid(),
+            EntityId = seriesId,
+            State = IdentifyQueueState.Proposal,
+            ProviderCode = "tmdb",
+            Action = "lookup-id",
+            ProposalJson = JsonSerializer.Serialize(seed, JsonOptions),
+            CascadeJobId = supersedingJobId,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var service = CreateQueueService(db, new StructuralChildrenProcessExecutor(), _tempRoot);
+
+        // The orphaned cascade A runs with its own (now-stale) job id.
+        var query = new IdentifyQuery(null, null, new Dictionary<string, string> { ["tmdb"] = "series-1" });
+        await service.RunCascadeAsync(
+            new IdentifyCascadePayload(seriesId, "tmdb", query, HideNsfw: false),
+            Guid.Parse("66666666-6666-6666-6666-6666666666aa"),
+            CancellationToken.None);
+
+        var resolved = await service.GetAsync(seriesId, CancellationToken.None);
+        Assert.NotNull(resolved?.Proposal);
+        Assert.Empty(resolved!.Proposal!.Children);
+        var row = await db.IdentifyQueueItems.AsNoTracking().SingleAsync(i => i.EntityId == seriesId);
+        Assert.Equal(supersedingJobId, row.CascadeJobId);
     }
 
     [Fact]

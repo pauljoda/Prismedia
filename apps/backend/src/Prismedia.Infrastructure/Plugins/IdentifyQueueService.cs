@@ -225,11 +225,15 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
         row.CascadeJobId = null;
     }
 
-    /// <summary>Clears the cascade marker for an entity once its background walk finishes.</summary>
-    public async Task ClearCascadeJobAsync(Guid entityId, CancellationToken cancellationToken) {
+    /// <summary>
+    /// Clears the cascade marker for an entity once this cascade's background walk finishes. Only clears
+    /// when the marker still names <paramref name="cascadeJobId"/>, so a cascade that was superseded by a
+    /// newer search (which already stamped its own job id) does not wipe the newer run's marker.
+    /// </summary>
+    public async Task ClearCascadeJobAsync(Guid entityId, Guid cascadeJobId, CancellationToken cancellationToken) {
         var row = await _db.IdentifyQueueItems
             .FirstOrDefaultAsync(item => item.EntityId == entityId, cancellationToken);
-        if (row?.CascadeJobId is null) {
+        if (row?.CascadeJobId != cascadeJobId) {
             return;
         }
 
@@ -242,9 +246,9 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
     /// Runs the background full-tree cascade for a queued entity, streaming the growing proposal onto
     /// the queue item as each child resolves and clearing the cascade marker when finished.
     /// </summary>
-    public async Task RunCascadeAsync(IdentifyCascadePayload payload, CancellationToken cancellationToken) {
+    public async Task RunCascadeAsync(IdentifyCascadePayload payload, Guid cascadeJobId, CancellationToken cancellationToken) {
         try {
-            var sink = new QueueProposalSink(this, payload.EntityId);
+            var sink = new QueueProposalSink(this, payload.EntityId, cascadeJobId);
             var response = await _identify.IdentifyAsync(
                 payload.EntityId,
                 payload.Provider,
@@ -255,14 +259,30 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
                 cascadeChildren: true,
                 sink: sink);
 
-            if (response.Ok && response.Result?.Patch is not null) {
-                // Persist the final tree (the last stream flush already carries it, but make the
-                // terminal state explicit and resilient to a 0-child cascade that never flushed).
+            // Persist the final tree (the last stream flush already carries it, but make the terminal
+            // state explicit and resilient to a 0-child cascade that never flushed) — but only while the
+            // item is still queued and still ours, so a removed or superseded item is never revived.
+            if (response.Ok && response.Result?.Patch is not null
+                && await IsCascadeActiveAsync(payload.EntityId, cascadeJobId, cancellationToken)) {
                 await SaveProposalSafelyAsync(payload.EntityId, response.Result, cancellationToken);
             }
         } finally {
-            await ClearCascadeJobAsync(payload.EntityId, CancellationToken.None);
+            await ClearCascadeJobAsync(payload.EntityId, cascadeJobId, CancellationToken.None);
         }
+    }
+
+    /// <summary>
+    /// Reports whether a background cascade still has a live destination: the queue item exists, is still
+    /// being reviewed (a <see cref="IdentifyQueueState.Proposal"/>), and is still marked with this
+    /// cascade's job id (or transiently unmarked). Returns false once the user removes the item or a
+    /// newer search supersedes it, which is the signal for the cascade to stop walking and stop writing.
+    /// </summary>
+    private async Task<bool> IsCascadeActiveAsync(Guid entityId, Guid cascadeJobId, CancellationToken cancellationToken) {
+        var row = await _db.IdentifyQueueItems
+            .AsNoTracking()
+            .FirstOrDefaultAsync(item => item.EntityId == entityId, cancellationToken);
+        return row is { State: IdentifyQueueState.Proposal }
+            && (row.CascadeJobId == cascadeJobId || row.CascadeJobId is null);
     }
 
     private async Task SaveProposalSafelyAsync(Guid entityId, EntityMetadataProposal proposal, CancellationToken cancellationToken) {
@@ -275,10 +295,23 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
         }
     }
 
-    /// <summary>Streams partial cascade roots onto the queue item via <see cref="SaveProposalAsync"/>.</summary>
-    private sealed class QueueProposalSink(IdentifyQueueService owner, Guid entityId) : IIdentifyCascadeSink {
-        public Task OnEntityResolvedAsync(EntityMetadataProposal partialRoot, CancellationToken cancellationToken) =>
-            owner.SaveProposalSafelyAsync(entityId, partialRoot, cancellationToken);
+    /// <summary>
+    /// Streams partial cascade roots onto the queue item via <see cref="SaveProposalAsync"/>, but only
+    /// while the item is still queued and still owned by this cascade run. <see cref="IsActiveAsync"/>
+    /// lets the walk stop early; the re-check inside <see cref="OnEntityResolvedAsync"/> closes the gap
+    /// between that check and the write so a just-removed item is never revived by a late flush.
+    /// </summary>
+    private sealed class QueueProposalSink(IdentifyQueueService owner, Guid entityId, Guid cascadeJobId) : IIdentifyCascadeSink {
+        public Task<bool> IsActiveAsync(CancellationToken cancellationToken) =>
+            owner.IsCascadeActiveAsync(entityId, cascadeJobId, cancellationToken);
+
+        public async Task OnEntityResolvedAsync(EntityMetadataProposal partialRoot, CancellationToken cancellationToken) {
+            if (!await owner.IsCascadeActiveAsync(entityId, cascadeJobId, cancellationToken)) {
+                return;
+            }
+
+            await owner.SaveProposalSafelyAsync(entityId, partialRoot, cancellationToken);
+        }
     }
 
     /// <summary>

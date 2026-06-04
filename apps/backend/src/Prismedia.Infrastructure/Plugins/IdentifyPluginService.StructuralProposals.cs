@@ -68,6 +68,15 @@ public sealed partial class IdentifyPluginService {
             var existingChildren = await LoadStructuralChildrenAsync(entity.Id, cancellationToken);
             var providerStructuralChildren = EntityMetadataProposalTraversal.StructuralChildren(boundProviderProposal);
             foreach (var child in existingChildren) {
+                // Sanity-check before each child that the streaming destination is still live. If the
+                // user removed this item from the queue (or a newer search superseded it), the sink
+                // reports inactive and we drop the rest of the walk — otherwise an orphaned background
+                // cascade keeps resolving children and re-populates the removed item, popping it back
+                // into the queue and conflicting with the next time it is queued.
+                if (sink is not null && !await sink.IsActiveAsync(cancellationToken)) {
+                    break;
+                }
+
                 if (!SupportsKind(descriptor.Manifest, child.Entity.KindCode)) {
                     continue;
                 }
