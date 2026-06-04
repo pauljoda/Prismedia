@@ -36,6 +36,11 @@ public sealed partial class HlsAssetService {
         Guid EntityId,
         DateTimeOffset StartedAtUtc);
 
+    // Last time any asset of a remux key was requested. The reaper treats an actively-fetched copy as
+    // live on the strength of this alone (no session ping required), so a playing client's in-progress
+    // copy is never cancelled mid-stream — which previously orphaned the job and forced a restart.
+    private static readonly ConcurrentDictionary<string, DateTimeOffset> RemuxLastRequestedUtc = new();
+
     private async Task<HlsAsset?> TryGetRemuxAssetAsync(
         Guid id,
         VideoSourceFile source,
@@ -65,6 +70,9 @@ public sealed partial class HlsAssetService {
         // once ("a second operation was started on this context") and the disposed context after the
         // request ends. Pre-resolving keeps every DbContext read on the request thread, in sequence.
         var options = await ResolveTranscoderOptionsAsync(cancellationToken);
+
+        // Mark this remux as actively fetched so the reaper keeps it alive while playback is ongoing.
+        RemuxLastRequestedUtc[$"{id}/{audioCacheKey}"] = DateTimeOffset.UtcNow;
 
         var remuxDir = VirtualPath(id, "remux", audioCacheKey);
         await EnsureRemuxStartedAsync(id, source, audioCacheKey, audioStreamIndex, remuxDir, options, cancellationToken);
@@ -178,10 +186,12 @@ public sealed partial class HlsAssetService {
         HlsAssetServiceOptions options,
         CancellationToken cancellationToken) {
         try {
-            if (Directory.Exists(remuxDir)) {
-                Directory.Delete(remuxDir, recursive: true);
-            }
-
+            // Do NOT wipe the directory. If a prior copy was interrupted (reaper, navigation, a fault),
+            // the already-produced segments must survive: the client is actively reading them, and the
+            // VOD playlist lists them as available. Deleting here was the root of the 404 storm — every
+            // restart pulled the segments out from under hls.js, which then errored and fell back to a
+            // full transcode. ffmpeg re-copies over the existing files (atomically, via the temp_file
+            // flag); the copy is deterministic so re-produced segments are byte-identical.
             Directory.CreateDirectory(remuxDir);
             var arguments = RemuxArguments(source, audioStreamIndex, remuxDir);
             var result = await _processes!.RunAsync(options.FfmpegPath, arguments, environment: null, cancellationToken);

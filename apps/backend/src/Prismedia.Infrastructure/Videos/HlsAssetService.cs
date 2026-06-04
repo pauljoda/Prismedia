@@ -453,16 +453,34 @@ public sealed partial class HlsAssetService : IHlsAssetService {
         }
 
         foreach (var (key, remux) in RemuxGenerations) {
+            // An in-progress copy that was requested recently is being actively played, even if its
+            // session ping lapsed (hls.js can go quiet for the length of its buffer). Never cancel it —
+            // cancelling orphans the job, and the next request restarts it, which is exactly the churn
+            // that used to break playback. Only reap copies with no recent request (or past max age).
+            var recentlyRequested = RemuxLastRequestedUtc.TryGetValue(key, out var lastRequested) &&
+                now - lastRequested < RemuxActiveWindow;
+            if (!remux.Task.IsCompleted &&
+                (now - remux.StartedAtUtc) <= maxLifetime &&
+                recentlyRequested) {
+                continue;
+            }
+
             if (!remux.Task.IsCompleted &&
                 ShouldReapJob(remux.EntityId, remux.StartedAtUtc, now, liveItemIds, idleGrace, maxLifetime) &&
                 RemuxGenerations.TryRemove(key, out var removed)) {
                 removed.Cancellation.Cancel();
+                RemuxLastRequestedUtc.TryRemove(key, out _);
                 reaped++;
             }
         }
 
         return reaped;
     }
+
+    // A remux copy requested within this window is treated as actively played and never reaped (unless
+    // it exceeds the absolute max lifetime). Comfortably longer than the client's forward buffer so a
+    // quiet, fully-buffered player does not look abandoned. The copy itself finishes in ~3 min anyway.
+    private static readonly TimeSpan RemuxActiveWindow = TimeSpan.FromMinutes(5);
 
     private static bool ShouldReapJob(
         Guid entityId,
