@@ -28,6 +28,7 @@
 ## Release Channels
 
 - Every push to `main` builds only `ghcr.io/pauljoda/prismedia:dev`.
+- Validation, documentation-site publishing, and channel image publishing are manual workflows.
 - Manual channel publishing is handled by `.github/workflows/publish-channel.yml`.
 - The manual workflow accepts `alpha`, `beta`, or `release`.
 - `alpha` publishes `alpha`, `alpha-<version>`, and `alpha-<version>-<short-sha>`.
