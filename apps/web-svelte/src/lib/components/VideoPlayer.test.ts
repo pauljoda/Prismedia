@@ -519,6 +519,20 @@ describe("VideoPlayer", () => {
     expect(source).toContain('video.addEventListener("progress", onProgress)');
   });
 
+  it("shows the loading spinner on a cold play before the first segment is renderable", async () => {
+    const source = await readFile("src/lib/components/VideoPlayer.svelte", "utf8");
+
+    // A cold on-demand remux has no renderable data yet, so 'canplay'/'playing' are delayed and
+    // 'waiting' never fires from a standing start. Buffering must be raised on the play intent
+    // (both the explicit play path and the 'play' event) so the play button spins instead of
+    // flashing to a dead pause icon over a black frame.
+    expect(source).toContain("(mediaElement()?.readyState ?? 0) < 3 /* HAVE_FUTURE_DATA */");
+    const coldBufferingMatches = source.match(
+      /\(mediaElement\(\)\?\.readyState \?\? 0\) < 3 \/\* HAVE_FUTURE_DATA \*\/\) \{\s*buffering = true;/g,
+    );
+    expect(coldBufferingMatches?.length).toBe(2);
+  });
+
   it("lets in-player marker chips seek without being swallowed by the overlay", async () => {
     const source = await readFile("src/lib/components/VideoPlayer.svelte", "utf8");
 

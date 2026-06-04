@@ -688,6 +688,14 @@
 
   async function playWithFallback() {
     if (!player) return;
+    // A cold source (on-demand remux still producing its first segment) has no renderable data yet,
+    // so 'canplay'/'playing' won't fire for a while and 'waiting' never fires from a standing start.
+    // Surface the loading state immediately on the play intent so the control shows a spinner instead
+    // of a dead pause icon over a black frame (otherwise it looks like the click did nothing and users
+    // mash the button). 'canplay'/'playing'/'seeked' all clear it once data arrives.
+    if ((mediaElement()?.readyState ?? 0) < 3 /* HAVE_FUTURE_DATA */) {
+      buffering = true;
+    }
     try {
       await player.play();
       const video = mediaElement();
@@ -1431,6 +1439,11 @@
   function handlePlay(_event: Event) {
     playing = true;
     endedTracked = false;
+    // Mirror playWithFallback: if playback starts before there is renderable data (cold remux),
+    // keep the loading spinner up rather than flashing to a pause icon over a black frame.
+    if ((mediaElement()?.readyState ?? 0) < 3 /* HAVE_FUTURE_DATA */) {
+      buffering = true;
+    }
     if (!playTracked) {
       playTracked = true;
       onPlayStarted?.();
