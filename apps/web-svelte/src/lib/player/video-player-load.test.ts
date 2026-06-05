@@ -150,18 +150,34 @@ describe("video-player-load", () => {
     });
   });
 
-  it("buffers deeply (for pause-to-buffer) while keeping memory bounded by bytes", () => {
+  it("keeps a modest forward buffer (coupled to the server reuse window) bounded by bytes", () => {
     const config = adaptiveHlsBufferConfig();
     expect(config).toEqual({
       backBufferLength: 60,
       capLevelToPlayerSize: false,
       frontBufferFlushThreshold: Infinity,
-      maxBufferLength: 240,
-      maxMaxBufferLength: 240,
+      maxBufferLength: 30,
+      maxMaxBufferLength: 30,
       maxBufferSize: 800_000_000,
       startLevel: -1,
       startPosition: 0,
       fragLoadPolicy: {
+        default: {
+          maxTimeToFirstByteMs: 60_000,
+          maxLoadTimeMs: 120_000,
+          timeoutRetry: { maxNumRetry: 2, retryDelayMs: 0, maxRetryDelayMs: 0 },
+          errorRetry: { maxNumRetry: 4, retryDelayMs: 1000, maxRetryDelayMs: 8000 },
+        },
+      },
+      manifestLoadPolicy: {
+        default: {
+          maxTimeToFirstByteMs: 60_000,
+          maxLoadTimeMs: 120_000,
+          timeoutRetry: { maxNumRetry: 2, retryDelayMs: 0, maxRetryDelayMs: 0 },
+          errorRetry: { maxNumRetry: 4, retryDelayMs: 1000, maxRetryDelayMs: 8000 },
+        },
+      },
+      playlistLoadPolicy: {
         default: {
           maxTimeToFirstByteMs: 60_000,
           maxLoadTimeMs: 120_000,
@@ -176,6 +192,10 @@ describe("video-player-load", () => {
     // On-demand transcoding can make the first segment slow; the fragment timeout must exceed
     // hls.js's 10s default so playback waits instead of aborting.
     expect(config.fragLoadPolicy.default.maxTimeToFirstByteMs).toBeGreaterThan(10_000);
+    // The remux source is a bare media playlist; the manifest/playlist timeouts must also exceed the
+    // 10s default so the cold first play (waiting on ffmpeg's first event playlist) doesn't abort.
+    expect(config.manifestLoadPolicy.default.maxTimeToFirstByteMs).toBeGreaterThan(10_000);
+    expect(config.playlistLoadPolicy.default.maxTimeToFirstByteMs).toBeGreaterThan(10_000);
   });
 
   it("uses the hls2 readiness endpoint before loading adaptive streams", () => {

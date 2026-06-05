@@ -45,6 +45,18 @@ public sealed partial class HlsAssetService {
     // copy is never cancelled mid-stream — which previously orphaned the job and forced a restart.
     private static readonly ConcurrentDictionary<string, DateTimeOffset> RemuxLastRequestedUtc = new();
 
+    // Background keyframe-probe + VOD-playlist build per (item, audio track). The remux media playlist
+    // must NOT block the request thread on a whole-file ffprobe keyframe walk: on a long 4K source that
+    // walk runs tens of seconds and exceeds the client's manifest-load timeout, so the manifest never
+    // returns. Instead we serve ffmpeg's growing event playlist immediately and compute the precise VOD
+    // playlist here, off the request thread, swapping it in (index.vod.m3u8) on a later poll.
+    private static readonly ConcurrentDictionary<string, Task> RemuxVodComputations = new();
+
+    // How long a cold first request waits for ffmpeg to write its first event playlist before giving up
+    // and letting the client retry — keeps the manifest response well inside the client timeout even if
+    // ffmpeg stalls, so the synchronous-probe hang can never recur.
+    private static readonly TimeSpan EventPlaylistWaitBudget = TimeSpan.FromSeconds(8);
+
     private async Task<HlsAsset?> TryGetRemuxAssetAsync(
         Guid id,
         VideoSourceFile source,
@@ -81,9 +93,9 @@ public sealed partial class HlsAssetService {
         var remuxDir = VirtualPath(id, "remux", audioCacheKey);
         await EnsureRemuxStartedAsync(id, source, audioCacheKey, audioStreamIndex, remuxDir, options, cancellationToken);
 
-        // The playlist is served as a complete VOD manifest computed up front from the source's
-        // keyframe layout, so the whole timeline is seekable immediately. The init/segment files are
-        // produced by the background remux and waited on individually as the player requests them.
+        // The playlist is served as ffmpeg's growing event playlist immediately, while the complete VOD
+        // manifest (full seekable timeline) is computed off the request thread and swapped in once ready.
+        // The init/segment files are produced by the background remux and waited on as the player asks.
         if (fileName.Equals("index.m3u8", StringComparison.OrdinalIgnoreCase)) {
             return await GetRemuxPlaylistAssetAsync(id, source, audioCacheKey, remuxDir, options, cancellationToken);
         }
@@ -97,16 +109,18 @@ public sealed partial class HlsAssetService {
     }
 
     /// <summary>
-    /// Resolves the remux media playlist as a complete <c>#EXT-X-PLAYLIST-TYPE:VOD</c> manifest.
+    /// Resolves the remux media playlist, returning the complete <c>#EXT-X-PLAYLIST-TYPE:VOD</c> manifest
+    /// once it has been built and ffmpeg's growing <c>EVENT</c> playlist until then.
     /// </summary>
     /// <remarks>
-    /// The legacy remux served ffmpeg's own growing <c>EVENT</c> playlist, which only listed segments
-    /// that had already been copied. Because hls.js limits the seekable range to the segments a live
-    /// playlist advertises, the timeline appeared to "buffer" far ahead of playback and seeking past
-    /// the copied region snapped back to it. Here we probe the source's keyframe timestamps, replicate
-    /// ffmpeg's stream-copy segment boundaries exactly, and emit the full segment list with
-    /// <c>#EXT-X-ENDLIST</c> so the player reports the entire duration as seekable from the first load.
-    /// If the keyframe probe fails we fall back to serving ffmpeg's growing playlist as before.
+    /// The full VOD manifest needs the source's keyframe timestamps, which come from a whole-file ffprobe
+    /// packet walk — tens of seconds on a long 4K source. Running that on the request thread blocked the
+    /// manifest past the client's manifest-load timeout, so the manifest never returned and the player
+    /// reported a network timeout. Instead the keyframe probe + VOD build run off the request thread
+    /// (<see cref="ComputeRemuxVodAsync"/>); the request returns ffmpeg's growing <c>EVENT</c> playlist
+    /// immediately (seekable only to the copied frontier, with <c>no-cache</c> so the player re-polls),
+    /// and the precise VOD playlist — emitted with <c>#EXT-X-ENDLIST</c> so the whole duration is
+    /// seekable — is served from <c>index.vod.m3u8</c> on a later poll once the background build lands it.
     /// </remarks>
     private async Task<HlsAsset?> GetRemuxPlaylistAssetAsync(
         Guid id,
@@ -120,26 +134,76 @@ public sealed partial class HlsAssetService {
             return new HlsAsset(vodPath, MediaContentTypes.HlsPlaylist, CacheControlForExtension(".m3u8"));
         }
 
-        var durations = await ComputeRemuxSegmentDurationsAsync(source, options, cancellationToken);
-        if (durations is null || durations.Count == 0) {
-            // Keyframe probe unavailable: serve ffmpeg's growing event playlist as a best-effort
-            // fallback so playback still works, accepting the limited seek window.
-            _logger?.LogWarning(
-                "Remux keyframe probe failed for {VideoId}; serving the growing event playlist.",
-                id);
-            var legacyPath = Path.Combine(remuxDir, "index.m3u8");
-            if (!await WaitForRemuxFileAsync(id, audioCacheKey, legacyPath, cancellationToken)) {
-                return null;
-            }
+        // Cold first request: kick the keyframe probe + VOD build onto a background task (deduped per
+        // remux key) and serve the growing event playlist now, bounded so a stalled ffmpeg can never
+        // re-introduce the manifest hang. The VOD takes over on a later poll once the build lands.
+        EnsureRemuxVodComputationStarted(id, source, audioCacheKey, remuxDir, options);
 
-            return new HlsAsset(legacyPath, MediaContentTypes.HlsPlaylist, "no-cache");
+        var legacyPath = Path.Combine(remuxDir, "index.m3u8");
+        if (!await WaitForRemuxFileAsync(id, audioCacheKey, legacyPath, cancellationToken, EventPlaylistWaitBudget)) {
+            return null;
         }
 
-        Directory.CreateDirectory(remuxDir);
-        var tempPath = vodPath + "." + Path.GetRandomFileName();
-        await File.WriteAllTextAsync(tempPath, BuildRemuxVodPlaylist(durations), cancellationToken);
-        File.Move(tempPath, vodPath, overwrite: true);
-        return new HlsAsset(vodPath, MediaContentTypes.HlsPlaylist, CacheControlForExtension(".m3u8"));
+        return new HlsAsset(legacyPath, MediaContentTypes.HlsPlaylist, "no-cache");
+    }
+
+    /// <summary>
+    /// Ensures the background keyframe-probe + VOD-playlist build for a remux is running, at most one per
+    /// <c>{id}/{audioCacheKey}</c>. Concurrent manifest requests collapse onto the single in-flight build.
+    /// </summary>
+    private void EnsureRemuxVodComputationStarted(
+        Guid id,
+        VideoSourceFile source,
+        string audioCacheKey,
+        string remuxDir,
+        HlsAssetServiceOptions options) {
+        var key = $"{id}/{audioCacheKey}";
+        if (RemuxVodComputations.ContainsKey(key)) {
+            return;
+        }
+
+        RemuxVodComputations.GetOrAdd(key, _ => ComputeRemuxVodAsync(id, source, audioCacheKey, remuxDir, options, key));
+    }
+
+    /// <summary>
+    /// Probes the source keyframes and writes the precise VOD playlist (<c>index.vod.m3u8</c>) off the
+    /// request thread, so a slow whole-file probe never blocks the manifest response.
+    /// </summary>
+    private async Task ComputeRemuxVodAsync(
+        Guid id,
+        VideoSourceFile source,
+        string audioCacheKey,
+        string remuxDir,
+        HlsAssetServiceOptions options,
+        string key) {
+        try {
+            // CRITICAL: never use the request's CancellationToken — a request abort must not kill the
+            // probe (that was the original bug). Link to the remux generation's lifetime so an explicit
+            // Stop or the reaper can still cancel it; otherwise run uncancelled.
+            var token = RemuxGenerations.TryGetValue(key, out var generation)
+                ? generation.Cancellation.Token
+                : CancellationToken.None;
+
+            var durations = await ComputeRemuxSegmentDurationsAsync(source, options, token);
+            if (durations is null || durations.Count == 0) {
+                _logger?.LogWarning(
+                    "Remux keyframe probe produced no segments for {VideoId}; keeping the event playlist.",
+                    id);
+                return;
+            }
+
+            Directory.CreateDirectory(remuxDir);
+            var vodPath = Path.Combine(remuxDir, "index.vod.m3u8");
+            var tempPath = vodPath + "." + Path.GetRandomFileName();
+            await File.WriteAllTextAsync(tempPath, BuildRemuxVodPlaylist(durations), token);
+            File.Move(tempPath, vodPath, overwrite: true);
+        } catch (OperationCanceledException) {
+            // Playback stopped; the next play recomputes from scratch.
+        } catch (Exception ex) {
+            _logger?.LogWarning(ex, "Background remux VOD computation failed for {VideoId}.", id);
+        } finally {
+            RemuxVodComputations.TryRemove(key, out _);
+        }
     }
 
     private async Task EnsureRemuxStartedAsync(
@@ -322,8 +386,10 @@ public sealed partial class HlsAssetService {
         Guid id,
         string audioCacheKey,
         string filePath,
-        CancellationToken cancellationToken) {
+        CancellationToken cancellationToken,
+        TimeSpan? budget = null) {
         var key = $"{id}/{audioCacheKey}";
+        var deadline = budget is { } window ? DateTimeOffset.UtcNow + window : (DateTimeOffset?)null;
         while (true) {
             if (File.Exists(filePath) && new FileInfo(filePath).Length > 0) {
                 return true;
@@ -332,6 +398,13 @@ public sealed partial class HlsAssetService {
             if (RemuxGenerations.TryGetValue(key, out var generation) && generation.Task.IsCompleted) {
                 // Generation finished (or failed); the file will not appear if it is not there now.
                 return File.Exists(filePath) && new FileInfo(filePath).Length > 0;
+            }
+
+            // A bounded wait (the cold event-playlist case) gives up rather than risk re-introducing a
+            // long manifest hang if ffmpeg stalls; the client simply re-polls. The segment waits pass no
+            // budget and keep their original unbounded behaviour.
+            if (deadline is { } limit && DateTimeOffset.UtcNow >= limit) {
+                return false;
             }
 
             await Task.Delay(SegmentPollInterval, cancellationToken);
