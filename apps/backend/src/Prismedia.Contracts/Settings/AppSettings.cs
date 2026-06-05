@@ -9,6 +9,13 @@ namespace Prismedia.Contracts.Settings;
 public sealed record SettingsCatalogResponse(IReadOnlyList<SettingsGroup> Groups);
 
 /// <summary>
+/// On-disk transcode/remux cache usage, for the Transcode Cache settings card.
+/// </summary>
+/// <param name="UsedBytes">Current size of the cache on disk, in bytes.</param>
+/// <param name="MaxBytes">Configured maximum size in bytes, or 0 when the cache is unlimited.</param>
+public sealed record TranscodeCacheStatusResponse(long UsedBytes, long MaxBytes);
+
+/// <summary>
 /// One display group in the centralized settings catalog.
 /// </summary>
 /// <param name="Key">Stable group key.</param>

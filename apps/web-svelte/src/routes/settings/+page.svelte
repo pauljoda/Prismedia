@@ -50,6 +50,7 @@
   import SettingsControl from "$lib/components/settings/SettingsControl.svelte";
   import AutoIdentifySection from "$lib/components/settings/AutoIdentifySection.svelte";
   import DiagnosticsSection from "$lib/components/settings/DiagnosticsSection.svelte";
+  import TranscodeCacheSection from "$lib/components/settings/TranscodeCacheSection.svelte";
   import WatchedLibrariesSection from "$lib/components/settings/WatchedLibrariesSection.svelte";
   import SubtitleCaptionOverlay from "$lib/components/SubtitleCaptionOverlay.svelte";
   import type {
@@ -841,6 +842,9 @@
 
   <!-- ── Auto Identify ── -->
   <AutoIdentifySection {catalog} onCommit={handleSettingCommit} />
+
+  <!-- ── Transcode Cache ── -->
+  <TranscodeCacheSection {catalog} onCommit={handleSettingCommit} />
 
   <!-- ── Diagnostics ── -->
   <DiagnosticsSection />

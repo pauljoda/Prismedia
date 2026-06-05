@@ -16,6 +16,7 @@ public static class AppSettingsRegistry {
     private const string Playback = "playback";
     private const string Subtitles = "subtitles";
     private const string Hls = "hls";
+    private const string TranscodeCache = "transcodeCache";
 
     private static readonly IReadOnlyDictionary<string, SettingDefinition> ByKey;
 
@@ -450,6 +451,20 @@ public static class AppSettingsRegistry {
                 50,
                 min: 0,
                 max: 64,
+                step: 1),
+
+            Integer(
+                AppSettingKeys.HlsMaxCacheSizeGb,
+                TranscodeCache,
+                "Transcode Cache",
+                "On-disk cache of transcoded and remuxed video, kept so repeat plays and seeks are instant.",
+                75,
+                "Maximum cache size (GB)",
+                "When the transcode cache grows past this, the least-recently-played cached videos are removed automatically so it never fills the disk. 0 means no limit. Removing cached output is safe — it is regenerated the next time the video is played.",
+                10,
+                10,
+                min: 0,
+                max: 1000,
                 step: 1),
         };
 

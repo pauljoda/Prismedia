@@ -288,6 +288,7 @@ public sealed partial class SettingsService {
             AppSettingKeys.HlsVaapiDevice,
             AppSettingKeys.HlsEnableAdaptiveBitrate,
             AppSettingKeys.HlsEncodingThreadCount,
+            AppSettingKeys.HlsMaxCacheSizeGb,
         ], cancellationToken);
 
         return new HlsSettings(
@@ -295,7 +296,8 @@ public sealed partial class SettingsService {
             GetString(values, AppSettingKeys.HlsFfmpegPath),
             GetString(values, AppSettingKeys.HlsVaapiDevice),
             GetBoolean(values, AppSettingKeys.HlsEnableAdaptiveBitrate),
-            GetInt(values, AppSettingKeys.HlsEncodingThreadCount));
+            GetInt(values, AppSettingKeys.HlsEncodingThreadCount),
+            GetInt(values, AppSettingKeys.HlsMaxCacheSizeGb));
     }
 
     private async Task<IReadOnlyDictionary<string, JsonElement>> GetValueMapAsync(

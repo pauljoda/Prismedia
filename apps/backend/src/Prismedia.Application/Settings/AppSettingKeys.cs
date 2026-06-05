@@ -47,4 +47,5 @@ public static class AppSettingKeys {
     public const string HlsVaapiDevice = "hls.vaapiDevice";
     public const string HlsEnableAdaptiveBitrate = "hls.enableAdaptiveBitrate";
     public const string HlsEncodingThreadCount = "hls.encodingThreadCount";
+    public const string HlsMaxCacheSizeGb = "hls.maxCacheSizeGb";
 }
