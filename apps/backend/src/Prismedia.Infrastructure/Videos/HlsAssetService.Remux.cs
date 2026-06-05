@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Globalization;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Prismedia.Application.Videos;
 using Prismedia.Contracts.Media;
@@ -134,9 +135,23 @@ public sealed partial class HlsAssetService {
             return new HlsAsset(vodPath, MediaContentTypes.HlsPlaylist, CacheControlForExtension(".m3u8"));
         }
 
-        // Cold first request: kick the keyframe probe + VOD build onto a background task (deduped per
-        // remux key) and serve the growing event playlist now, bounded so a stalled ffmpeg can never
-        // re-introduce the manifest hang. The VOD takes over on a later poll once the build lands.
+        // If the source's keyframes are already cached durably (this item has been played before, or was
+        // pre-warmed), building the full VOD playlist is instant — no probe. Do it synchronously so the
+        // player gets the whole seekable timeline on the FIRST request, even though the segment cache was
+        // evicted. The durable keyframe cache lives outside the evictable transcode cache, so this is the
+        // common path once an item has been played once.
+        if (source.DurationSeconds is > 0 &&
+            TryReadDurableKeyframes(id, source) is { Count: > 0 } cachedKeyframes) {
+            return await WriteRemuxVodAsync(
+                remuxDir,
+                BuildRemuxSegmentDurations(cachedKeyframes, source.DurationSeconds.Value),
+                cancellationToken);
+        }
+
+        // Never-indexed source: kick the keyframe probe + VOD build onto a background task (deduped per
+        // remux key; it persists the durable keyframe cache so the next play is instant) and serve the
+        // growing event playlist now, bounded so a stalled ffmpeg can never re-introduce the manifest
+        // hang. The full VOD takes over once the build lands.
         EnsureRemuxVodComputationStarted(id, source, audioCacheKey, remuxDir, options);
 
         var legacyPath = Path.Combine(remuxDir, "index.m3u8");
@@ -145,6 +160,19 @@ public sealed partial class HlsAssetService {
         }
 
         return new HlsAsset(legacyPath, MediaContentTypes.HlsPlaylist, "no-cache");
+    }
+
+    /// <summary>Writes the remux VOD playlist atomically and returns it as a cacheable asset.</summary>
+    private async Task<HlsAsset> WriteRemuxVodAsync(
+        string remuxDir,
+        IReadOnlyList<double> durations,
+        CancellationToken cancellationToken) {
+        Directory.CreateDirectory(remuxDir);
+        var vodPath = Path.Combine(remuxDir, "index.vod.m3u8");
+        var tempPath = vodPath + "." + Path.GetRandomFileName();
+        await File.WriteAllTextAsync(tempPath, BuildRemuxVodPlaylist(durations), cancellationToken);
+        File.Move(tempPath, vodPath, overwrite: true);
+        return new HlsAsset(vodPath, MediaContentTypes.HlsPlaylist, CacheControlForExtension(".m3u8"));
     }
 
     /// <summary>
@@ -184,7 +212,8 @@ public sealed partial class HlsAssetService {
                 ? generation.Cancellation.Token
                 : CancellationToken.None;
 
-            var durations = await ComputeRemuxSegmentDurationsAsync(source, options, token);
+            // Probes (and persists the durable keyframe cache) then writes the VOD playlist.
+            var durations = await ComputeRemuxSegmentDurationsAsync(id, source, options, token);
             if (durations is null || durations.Count == 0) {
                 _logger?.LogWarning(
                     "Remux keyframe probe produced no segments for {VideoId}; keeping the event playlist.",
@@ -192,11 +221,7 @@ public sealed partial class HlsAssetService {
                 return;
             }
 
-            Directory.CreateDirectory(remuxDir);
-            var vodPath = Path.Combine(remuxDir, "index.vod.m3u8");
-            var tempPath = vodPath + "." + Path.GetRandomFileName();
-            await File.WriteAllTextAsync(tempPath, BuildRemuxVodPlaylist(durations), token);
-            File.Move(tempPath, vodPath, overwrite: true);
+            await WriteRemuxVodAsync(remuxDir, durations, token);
         } catch (OperationCanceledException) {
             // Playback stopped; the next play recomputes from scratch.
         } catch (Exception ex) {
@@ -419,6 +444,7 @@ public sealed partial class HlsAssetService {
     /// cannot be probed (in which case the caller falls back to ffmpeg's own playlist).
     /// </returns>
     private async Task<IReadOnlyList<double>?> ComputeRemuxSegmentDurationsAsync(
+        Guid id,
         VideoSourceFile source,
         HlsAssetServiceOptions options,
         CancellationToken cancellationToken) {
@@ -426,13 +452,79 @@ public sealed partial class HlsAssetService {
             return null;
         }
 
-        var keyframes = await ProbeVideoKeyframeTimesAsync(source.Path, options, cancellationToken);
+        // Prefer the durable keyframe cache (a whole-file ffprobe walk is slow on a 4K source); only
+        // probe — and persist the result — when it is missing or stale.
+        var keyframes = TryReadDurableKeyframes(id, source);
+        if (keyframes is null) {
+            keyframes = await ProbeVideoKeyframeTimesAsync(source.Path, options, cancellationToken);
+            if (keyframes is { Count: > 0 }) {
+                TryWriteDurableKeyframes(id, source, keyframes);
+            }
+        }
+
         if (keyframes is null || keyframes.Count < 1) {
             return null;
         }
 
         return BuildRemuxSegmentDurations(keyframes, source.DurationSeconds.Value);
     }
+
+    // Durable per-video keyframe cache, stored OUTSIDE the evictable transcode cache roots
+    // (hlsv/hls/hls2) so the transcode-cache size cap cannot delete it. Keyed by video id and
+    // validated against the source's path/size/modified time so a replaced file recomputes.
+    private string KeyframeCachePath(Guid id) =>
+        Path.Combine(Path.GetFullPath(_options.CacheRoot), "keyframes", $"{id}.json");
+
+    private IReadOnlyList<double>? TryReadDurableKeyframes(Guid id, VideoSourceFile source) {
+        var path = KeyframeCachePath(id);
+        if (!File.Exists(path)) {
+            return null;
+        }
+
+        try {
+            var info = new FileInfo(source.Path);
+            if (!info.Exists) {
+                return null;
+            }
+
+            var cache = JsonSerializer.Deserialize<DurableKeyframeCache>(File.ReadAllText(path));
+            if (cache is null ||
+                !string.Equals(cache.SourcePath, source.Path, StringComparison.Ordinal) ||
+                cache.SourceSize != info.Length ||
+                cache.SourceModifiedUtc != info.LastWriteTimeUtc) {
+                return null;
+            }
+
+            return cache.KeyframeTimes;
+        } catch {
+            return null;
+        }
+    }
+
+    private void TryWriteDurableKeyframes(Guid id, VideoSourceFile source, IReadOnlyList<double> keyframes) {
+        try {
+            var info = new FileInfo(source.Path);
+            if (!info.Exists) {
+                return;
+            }
+
+            var path = KeyframeCachePath(id);
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            var payload = JsonSerializer.Serialize(
+                new DurableKeyframeCache(source.Path, info.Length, info.LastWriteTimeUtc, keyframes));
+            var tempPath = path + "." + Path.GetRandomFileName();
+            File.WriteAllText(tempPath, payload);
+            File.Move(tempPath, path, overwrite: true);
+        } catch (Exception ex) {
+            _logger?.LogWarning(ex, "Failed to persist the keyframe cache for {VideoId}.", id);
+        }
+    }
+
+    private sealed record DurableKeyframeCache(
+        string SourcePath,
+        long SourceSize,
+        DateTime SourceModifiedUtc,
+        IReadOnlyList<double> KeyframeTimes);
 
     /// <summary>
     /// Reads the presentation timestamps of every video keyframe packet from the source.
