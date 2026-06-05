@@ -226,7 +226,7 @@ describe("UniversalLightbox", () => {
     expect(links).toEqual([
       { rel: "preload", as: "image", href: "/api/entities/image-1/files/source" },
       { rel: "preload", as: "image", href: "/assets/images/image-video-1/thumb.jpg" },
-      { rel: "prefetch", as: "video", href: "/api/entities/image-video-1/files/source" },
+      { rel: "prefetch", as: "video", href: "/api/entities/image-video-1/files/preview" },
     ]);
   });
 

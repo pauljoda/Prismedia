@@ -88,6 +88,9 @@ const videoMimeTypes = new Map<string, string>([
   ["ogv", "video/ogg"],
 ]);
 
+const animatedStillExtensions = new Set(["gif", "apng"]);
+const animatedStillMimeTypes = new Set(["image/gif", "image/apng"]);
+
 export function lightboxEntityFromCard(card: EntityThumbnailCard): UniversalLightboxEntity {
   return {
     id: card.entity.id,
@@ -181,8 +184,8 @@ export function buildLightboxPreloadSources(
         add(entity.coverUrl, "preload", "image");
 
         if (entity.kind !== ENTITY_KIND.video) {
-          const source = buildLightboxVideoSources(entity, options)[0]?.src;
-          add(source, "prefetch", "video");
+          const preview = buildLightboxVideoSources(entity)[0]?.src;
+          add(preview, "prefetch", "video");
         }
         continue;
       }
@@ -196,6 +199,7 @@ export function buildLightboxPreloadSources(
 
 export function isLightboxVideoCapable(entity: UniversalLightboxEntity): boolean {
   if (entity.kind === ENTITY_KIND.video) return true;
+  if (isAnimatedStillImage(entity)) return false;
 
   const files = getCapability(entity.capabilities, CAPABILITY_KIND.files)?.items ?? [];
   if (files.some((file) => file.mimeType?.toLowerCase().startsWith("video/"))) return true;
@@ -207,6 +211,24 @@ export function isLightboxVideoCapable(entity: UniversalLightboxEntity): boolean
   if (technical?.format && videoContainers.has(technical.format.toLowerCase())) return true;
 
   return videoExtensions.has(extensionOf(entity.title));
+}
+
+export function isAnimatedStillImage(entity: UniversalLightboxEntity): boolean {
+  if (entity.kind !== ENTITY_KIND.image) return false;
+
+  const files = getCapability(entity.capabilities, CAPABILITY_KIND.files)?.items ?? [];
+  const sourceFile = files.find((file) => file.role === ENTITY_FILE_ROLE.source) ?? files[0];
+  const sourceMime = sourceFile?.mimeType?.toLowerCase();
+  if (sourceMime && animatedStillMimeTypes.has(sourceMime)) return true;
+  if (animatedStillExtensions.has(extensionOf(sourceFile?.path))) return true;
+
+  const technical = getCapability(entity.capabilities, CAPABILITY_KIND.technical);
+  const format = technical?.format?.toLowerCase();
+  if (format && animatedStillExtensions.has(format)) return true;
+  const container = technical?.container?.toLowerCase();
+  if (container && animatedStillExtensions.has(container)) return true;
+
+  return animatedStillExtensions.has(extensionOf(entity.title));
 }
 
 export function mimeTypeForEntity(entity: UniversalLightboxEntity): string | undefined {

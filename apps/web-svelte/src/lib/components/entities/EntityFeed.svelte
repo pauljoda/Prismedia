@@ -13,6 +13,7 @@
   } from "$lib/entities/entity-thumbnail";
   import {
     buildLightboxVideoSources,
+    isAnimatedStillImage,
     isLightboxVideoCapable,
     lightboxEntityFromCard,
     type UniversalLightboxEntity,
@@ -134,23 +135,13 @@
     return entity ? isLightboxVideoCapable(entity) : false;
   }
 
-  function videoSourceFor(card: EntityThumbnailCard): string | null {
+  function videoSourceFor(card: EntityThumbnailCard, allowOriginalFallback = false): string | null {
     const entity = hydrated[card.entity.id];
     if (!entity) return null;
-    return buildLightboxVideoSources(entity)[0]?.src ?? null;
-  }
 
-  // Animated still formats that play as a plain <img> (no <video> element): the
-  // generated cover thumbnail is a single frozen frame, so to actually animate
-  // them the feed loads the original source — exactly what the lightbox does.
-  // Scoped to formats that are virtually always animated when present (a still
-  // GIF is rare and tiny) so we don't pull full-resolution static WebP/AVIF
-  // photos just to show them.
-  const animatedImageFormats = new Set(["gif", "apng"]);
-
-  function fileExtension(path: string | null | undefined): string {
-    const clean = path?.split("?")[0]?.split("#")[0] ?? "";
-    return clean.includes(".") ? clean.split(".").pop()?.toLowerCase() ?? "" : "";
+    const preview = buildLightboxVideoSources(entity)[0]?.src ?? null;
+    if (preview || !allowOriginalFallback) return preview;
+    return buildLightboxVideoSources(entity, { preferOriginal: true })[0]?.src ?? null;
   }
 
   // Source URL for an in-window animated image, or null when the item isn't an
@@ -158,19 +149,11 @@
   function animatedImageSourceFor(card: EntityThumbnailCard): string | null {
     const entity = hydrated[card.entity.id];
     if (!entity || entity.kind !== ENTITY_KIND.image) return null;
-    if (isLightboxVideoCapable(entity)) return null;
+    if (!isAnimatedStillImage(entity)) return null;
     const source = getCapability(entity.capabilities, CAPABILITY_KIND.files)?.items.find(
       (file) => file.role === ENTITY_FILE_ROLE.source,
     );
-    if (!source) return null;
-    const mime = source.mimeType?.toLowerCase() ?? "";
-    const mimeSubtype = mime.startsWith("image/") ? mime.slice("image/".length) : "";
-    const format = (technicalOf(card)?.format ?? "").toLowerCase();
-    const animated =
-      animatedImageFormats.has(fileExtension(source.path)) ||
-      animatedImageFormats.has(mimeSubtype) ||
-      animatedImageFormats.has(format);
-    return animated ? entityFileUrl(card.entity.id, ENTITY_FILE_ROLE.source) : null;
+    return source ? entityFileUrl(card.entity.id, ENTITY_FILE_ROLE.source) : null;
   }
 
   function numberOf(value: number | string | null | undefined): number | null {
@@ -301,7 +284,7 @@
     {@const href = onActivate ? undefined : resolveEntityThumbnailHref(card)}
     {@const cover = card.cover}
     {@const showVideo = isWithinWindow(index) && isVideoCard(card)}
-    {@const source = showVideo ? videoSourceFor(card) : null}
+    {@const source = showVideo ? videoSourceFor(card, index === activeIndex) : null}
     {@const animatedSrc = !showVideo && isWithinWindow(index) ? animatedImageSourceFor(card) : null}
     {@const aspect = reservedAspect(card)}
     <article class="feed-item" use:trackVisibility={index} style:--ratio={reservedRatio(card)}>

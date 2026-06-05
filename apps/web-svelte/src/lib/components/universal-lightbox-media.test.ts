@@ -4,6 +4,7 @@ import {
   buildLightboxImageSource,
   buildLightboxPreloadSources,
   buildLightboxVideoSources,
+  isAnimatedStillImage,
   isLightboxVideoCapable,
   lightboxEntityFromCard,
   type UniversalLightboxEntity,
@@ -62,7 +63,7 @@ describe("universal-lightbox-media", () => {
     });
   });
 
-  it("detects animated image entities from mime type, technical duration, and file extension", () => {
+  it("detects video-capable image entities from mime type, technical duration, and file extension", () => {
     expect(isLightboxVideoCapable(entity({
       capabilities: [{ kind: "files", items: [{ role: "source", path: "/media/clip.webm", mimeType: "video/webm" }] }],
     }))).toBe(true);
@@ -73,6 +74,43 @@ describe("universal-lightbox-media", () => {
 
     expect(isLightboxVideoCapable(entity({ title: "clip.mp4", capabilities: [] }))).toBe(true);
     expect(isLightboxVideoCapable(entity({ title: "photo.jpg", capabilities: [] }))).toBe(false);
+  });
+
+  it("keeps animated still images on the image path even when they have duration metadata", () => {
+    const gif = entity({
+      title: "loop.gif",
+      capabilities: [
+        { kind: "files", items: [{ role: "source", path: "/media/loop.gif", mimeType: "image/gif" }] },
+        {
+          kind: "technical",
+          duration: "00:00:04",
+          width: 640,
+          height: 360,
+          frameRate: null,
+          bitRate: null,
+          sampleRate: null,
+          channels: null,
+          codec: null,
+          container: null,
+          format: "gif",
+        },
+      ],
+    });
+
+    expect(isAnimatedStillImage(gif)).toBe(true);
+    expect(isLightboxVideoCapable(gif)).toBe(false);
+  });
+
+  it("recognizes APNG still animation from the source extension", () => {
+    const apng = entity({
+      title: "spark.png",
+      capabilities: [
+        { kind: "files", items: [{ role: "source", path: "/media/spark.apng", mimeType: "image/png" }] },
+      ],
+    });
+
+    expect(isAnimatedStillImage(apng)).toBe(true);
+    expect(isLightboxVideoCapable(apng)).toBe(false);
   });
 
   it("uses generated previews, not original sources, for image-entity animated playback", () => {
@@ -165,7 +203,7 @@ describe("universal-lightbox-media", () => {
     })).toEqual([
       { src: "/api/entities/previous/files/source", rel: "preload", as: "image" },
       { src: "/assets/images/animated/thumb.jpg", rel: "preload", as: "image" },
-      { src: "/api/entities/animated/files/source", rel: "prefetch", as: "video" },
+      { src: "/api/entities/animated/files/preview", rel: "prefetch", as: "video" },
       { src: "/assets/videos/movie/poster.jpg", rel: "preload", as: "image" },
     ]);
   });
