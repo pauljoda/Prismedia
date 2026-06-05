@@ -119,6 +119,25 @@ describe("UniversalLightbox", () => {
     expect(screen.queryByText("800 × 600")).not.toBeInTheDocument();
   });
 
+  it("can suppress rating controls and hotkeys for read-only previews", async () => {
+    const onRatingChange = vi.fn();
+    render(UniversalLightboxHarness, {
+      props: {
+        entities: [still],
+        initialIndex: 0,
+        onClose: vi.fn(),
+        onRatingChange,
+        showRatingControls: false,
+      },
+    });
+
+    await fireEvent.keyDown(window, { key: "5" });
+
+    expect(onRatingChange).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Rate 1" })).not.toBeInTheDocument();
+    expect(screen.queryByText("1-5 rate")).not.toBeInTheDocument();
+  });
+
   it("uses provided detail content as the info back page", async () => {
     render(UniversalLightboxDetailsHarness, {
       props: {

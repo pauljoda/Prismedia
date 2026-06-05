@@ -3,8 +3,13 @@
   import { ImageOff, Loader2 } from "@lucide/svelte";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
   import type { EntityCard } from "$lib/api/entities";
+  import type { EntityThumbnail as EntityThumbnailDto } from "$lib/api/generated/model";
   import { fetchSeason, fetchSeries } from "$lib/api/media";
-  import { ENTITY_KIND } from "$lib/entities/entity-codes";
+  import {
+    ENTITY_KIND,
+    isEntityKindCode,
+    resolveEntityHref,
+  } from "$lib/entities/entity-codes";
   import { getChildIds } from "$lib/entities/entity-children";
   import {
     fetchOrderedEntityThumbnails,
@@ -25,11 +30,20 @@
 
   const isSingle = $derived(cards.length === 1);
 
+  function previewHrefFor(thumbnail: EntityThumbnailDto): string | undefined {
+    const parent =
+      thumbnail.parentEntityId && thumbnail.parentKind && isEntityKindCode(thumbnail.parentKind)
+        ? { kind: thumbnail.parentKind, id: thumbnail.parentEntityId }
+        : undefined;
+    return resolveEntityHref(thumbnail.kind, thumbnail.id, parent);
+  }
+
   /**
    * Resolves which entities to preview as thumbnails. Series and seasons have no
    * file of their own, so they preview as a row of example episodes (drilling into
-   * the first season when a series only groups seasons). Everything else previews
-   * as its own thumbnail, whose hover/scrub gives enough context to identify it.
+   * the first season when a series only groups seasons). Books/comics and other
+   * concrete entities preview as their own thumbnail, whose cover/hover gives
+   * enough context to identify it.
    */
   async function resolvePreviewIds(): Promise<string[]> {
     if (entity.kind === ENTITY_KIND.videoSeries) {
@@ -51,7 +65,7 @@
       return getChildIds(season, ENTITY_KIND.video);
     }
 
-    // video, movie, image, gallery — the item's own thumbnail.
+    // video, movie, image, gallery, book — the item's own thumbnail.
     return [entity.id];
   }
 
@@ -60,7 +74,7 @@
     try {
       const ids = await resolvePreviewIds();
       const thumbnails = await fetchOrderedEntityThumbnails(ids.slice(0, PREVIEW_LIMIT));
-      cards = thumbnailsToCards(thumbnails);
+      cards = thumbnailsToCards(thumbnails, { hrefFor: previewHrefFor });
     } catch {
       // Leave the preview empty on failure; identification still works.
     } finally {
@@ -82,7 +96,7 @@
     </div>
   {:else if isSingle}
     <div class="max-w-sm">
-      <EntityThumbnail card={cards[0]} linkable={false} />
+      <EntityThumbnail card={cards[0]} linkTarget="_blank" />
     </div>
   {:else}
     <div class="flex flex-col gap-2">
@@ -91,7 +105,7 @@
       </span>
       <div class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
         {#each cards as card (card.entity.id)}
-          <EntityThumbnail {card} linkable={false} />
+          <EntityThumbnail {card} linkTarget="_blank" />
         {/each}
       </div>
     </div>

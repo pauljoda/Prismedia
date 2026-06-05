@@ -1080,6 +1080,8 @@ public sealed class LibraryScanPersistenceServiceTests {
             "Game of Thrones",
             rootId,
             isNsfw: false,
+            BookType.Book,
+            BookFormat.Pdf,
             CancellationToken.None);
 
         var bookId = await service.UpsertSingleFileBookAsync(
@@ -1096,9 +1098,12 @@ public sealed class LibraryScanPersistenceServiceTests {
 
         var series = await db.Entities.FindAsync([seriesId]);
         var book = await db.Entities.FindAsync([bookId]);
+        var seriesDetail = await db.BookDetails.FindAsync([seriesId]);
         var detail = await db.BookDetails.FindAsync([bookId]);
         Assert.Equal(EntityKindRegistry.Book.Code, series!.KindCode);
         Assert.Null(series.ParentEntityId);
+        Assert.Equal(BookType.Book, seriesDetail!.BookType);
+        Assert.Equal(BookFormat.Pdf, seriesDetail.Format);
         Assert.Equal(seriesId, book!.ParentEntityId);
         Assert.Equal(0, book.SortOrder);
         Assert.Equal(BookFormat.Pdf, detail!.Format);
@@ -1137,14 +1142,64 @@ public sealed class LibraryScanPersistenceServiceTests {
             "Game of Thrones",
             rootId,
             isNsfw: false,
+            BookType.Novel,
+            BookFormat.Epub,
             CancellationToken.None);
 
         var firstBook = await db.Entities.FindAsync([firstBookId]);
         var secondBook = await db.Entities.FindAsync([secondBookId]);
+        var seriesDetail = await db.BookDetails.FindAsync([seriesId]);
         Assert.Equal(seriesId, firstBook!.ParentEntityId);
         Assert.Equal(0, firstBook.SortOrder);
         Assert.Equal(seriesId, secondBook!.ParentEntityId);
         Assert.Equal(1, secondBook.SortOrder);
+        Assert.Equal(BookType.Novel, seriesDetail!.BookType);
+        Assert.Equal(BookFormat.Epub, seriesDetail.Format);
+    }
+
+    [Fact]
+    public async Task UpsertBookAsyncCorrectsExistingArchiveBookClassification() {
+        await using var db = CreateContext();
+        var service = new LibraryScanPersistenceService(db);
+        var bookId = Guid.Parse("bbbbbbbb-1111-1111-1111-111111111111");
+        const string sourcePath = "/media/comics/Always Go With the Flow";
+        var now = DateTimeOffset.UtcNow;
+        db.Entities.Add(new EntityRow {
+            Id = bookId,
+            KindCode = EntityKindRegistry.Book.Code,
+            Title = "Always Go With the Flow",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.BookDetails.Add(new BookDetailRow {
+            EntityId = bookId,
+            BookType = BookType.Book,
+            Format = BookFormat.Pdf
+        });
+        db.EntityFiles.Add(new EntityFileRow {
+            Id = Guid.NewGuid(),
+            EntityId = bookId,
+            Role = EntityFileRole.Source,
+            Path = sourcePath,
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+
+        var result = await service.UpsertBookAsync(
+            sourcePath,
+            "Always Go With the Flow!",
+            RootId,
+            isNsfw: false,
+            CancellationToken.None);
+
+        Assert.Equal(bookId, result);
+        var book = await db.Entities.FindAsync([bookId]);
+        var detail = await db.BookDetails.FindAsync([bookId]);
+        Assert.Equal("Always Go With the Flow!", book!.Title);
+        Assert.Equal(BookType.Comic, detail!.BookType);
+        Assert.Equal(BookFormat.ImageArchive, detail.Format);
+        Assert.Equal(RootId, detail.LibraryRootId);
     }
 
     [Fact]

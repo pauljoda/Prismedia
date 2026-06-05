@@ -1721,6 +1721,8 @@ public sealed class ScanJobHandlerTests {
             var series = Assert.Single(persistence.UpsertedBookSeries);
             Assert.Equal(seriesPath, series.SourcePath);
             Assert.Equal("Game of Thrones", series.Title);
+            Assert.Equal(BookType.Book, series.BookType);
+            Assert.Equal(BookFormat.Pdf, series.Format);
 
             Assert.Collection(
                 persistence.UpsertedBooks,
@@ -2077,9 +2079,9 @@ public sealed class ScanJobHandlerTests {
             return Task.FromResult(id);
         }
 
-        public Task<Guid> UpsertBookSeriesAsync(string folderPath, string title, Guid libraryRootId, bool isNsfw, CancellationToken cancellationToken) {
+        public Task<Guid> UpsertBookSeriesAsync(string folderPath, string title, Guid libraryRootId, bool isNsfw, BookType bookType, BookFormat format, CancellationToken cancellationToken) {
             var id = IdFor($"book-series:{folderPath}");
-            UpsertedBookSeries.Add(new BookSeriesRecord(id, folderPath, title, libraryRootId));
+            UpsertedBookSeries.Add(new BookSeriesRecord(id, folderPath, title, libraryRootId, bookType, format));
             return Task.FromResult(id);
         }
 
@@ -2267,7 +2269,7 @@ public sealed class ScanJobHandlerTests {
     private sealed record AudioLibraryRecord(Guid Id, string FolderPath, string Title, Guid LibraryRootId, Guid? ParentAudioLibraryEntityId, int SortOrder);
     private sealed record MusicArtistRecord(Guid Id, string FolderPath, string Title, Guid LibraryRootId, int SortOrder);
     private sealed record BookRecord(Guid Id, string SourcePath, string Title, Guid LibraryRootId, Guid? ParentEntityId, int? SortOrder);
-    private sealed record BookSeriesRecord(Guid Id, string SourcePath, string Title, Guid LibraryRootId);
+    private sealed record BookSeriesRecord(Guid Id, string SourcePath, string Title, Guid LibraryRootId, BookType BookType, BookFormat Format);
     private sealed record BookVolumeRecord(Guid Id, string SourcePath, string Title, Guid BookEntityId, int SortOrder);
     private sealed record BookChapterRecord(Guid Id, string SourcePath, string Title, Guid ParentEntityId, int SortOrder, int PageCount);
     private sealed record BookPageRecord(Guid Id, string SourcePath, string Title, Guid BookEntityId, Guid ChapterEntityId, int SortOrder);

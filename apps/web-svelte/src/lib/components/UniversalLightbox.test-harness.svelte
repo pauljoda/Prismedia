@@ -9,6 +9,7 @@
     onClose: () => void;
     onIndexChange?: (index: number) => void;
     onRatingChange?: (entityId: string, rating: number | null) => void;
+    showRatingControls?: boolean;
   }
 
   let {
@@ -17,6 +18,7 @@
     onClose,
     onIndexChange,
     onRatingChange,
+    showRatingControls = true,
   }: Props = $props();
 
   provideNsfw(() => ({ initialMode: "show", lanAutoEnable: false }));
@@ -28,4 +30,5 @@
   {onClose}
   {onIndexChange}
   {onRatingChange}
+  {showRatingControls}
 />

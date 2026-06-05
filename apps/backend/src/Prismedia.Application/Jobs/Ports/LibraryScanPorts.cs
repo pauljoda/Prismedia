@@ -80,7 +80,14 @@ public interface IBookScanPersistence {
     /// The parent is still represented by the book entity kind so existing book detail and
     /// thumbnail surfaces can render it as the library entry point.
     /// </summary>
-    Task<Guid> UpsertBookSeriesAsync(string folderPath, string title, Guid libraryRootId, bool isNsfw, CancellationToken cancellationToken);
+    Task<Guid> UpsertBookSeriesAsync(
+        string folderPath,
+        string title,
+        Guid libraryRootId,
+        bool isNsfw,
+        BookType bookType,
+        BookFormat format,
+        CancellationToken cancellationToken);
 
     /// <summary>
     /// Upserts a single-file book (EPUB/PDF) where the file itself is the whole book and

@@ -222,6 +222,8 @@ public sealed class ScanBookJobHandler(
                 first.SeriesTitle!,
                 root.Id,
                 seriesIsNsfw,
+                DefaultBookTypeFor(first.Format),
+                first.Format,
                 cancellationToken);
             validBookPaths.Add(first.SeriesPath!);
 

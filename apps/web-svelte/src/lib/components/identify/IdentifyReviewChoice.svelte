@@ -1,6 +1,7 @@
 <script lang="ts">
   import {
     ChevronRight,
+    Eye,
     Layers,
     Loader2,
     RefreshCw,
@@ -11,8 +12,10 @@
   import { cn } from "@prismedia/ui-svelte";
   import IdentifyProviderSelect from "./IdentifyProviderSelect.svelte";
   import IdentifyTargetPreview from "./IdentifyTargetPreview.svelte";
+  import UniversalLightbox from "$lib/components/UniversalLightbox.svelte";
   import type { EntitySearchCandidate } from "$lib/api/identify-types";
   import type { EntityCard } from "$lib/api/entities";
+  import type { UniversalLightboxEntity } from "$lib/components/universal-lightbox-media";
   import { identifyCandidateKey } from "./identify-candidate-card";
   import { entityKindIcon } from "./identify-icons";
   import { aspectRatioForKind, toAspectRatioValue } from "$lib/entities/entity-thumbnail";
@@ -29,6 +32,9 @@
   const store = useIdentifyStore();
   const candidateAspect = $derived(toAspectRatioValue(aspectRatioForKind(entity.kind)));
   const CandidateKindIcon = $derived(entityKindIcon(entity.kind));
+  const entityTypeLabel = $derived(
+    entity.meta.find((item) => item.icon === "book" && /^(book|comic|manga|novel)$/i.test(item.label))?.label ?? entity.kind,
+  );
   let searchTitle = $state("");
   let searchYear = $state("");
   let selectedProviderId = $state<string | null>(null);
@@ -37,6 +43,7 @@
   let rescanning = $state(false);
   let checkingCandidateKey = $state<string | null>(null);
   let checkingCandidateTitle = $state<string | null>(null);
+  let previewCandidate = $state<UniversalLightboxEntity | null>(null);
   let searchedCandidates = $state<EntitySearchCandidate[] | null>(null);
 
   const providerOptions = $derived(store.providersForKind(entity.kind));
@@ -50,6 +57,7 @@
       activeProvider,
   );
   const localCandidates = $derived(searchedCandidates ?? candidates);
+  const previewEntities = $derived(previewCandidate ? [previewCandidate] : []);
 
   // Navigating between items reuses this component instance, so local search state must be cleared
   // when the entity changes — otherwise a previous item's searched candidates and query stick around.
@@ -64,6 +72,7 @@
     selectedProviderId = null;
     checkingCandidateKey = null;
     checkingCandidateTitle = null;
+    previewCandidate = null;
   });
 
   async function handleRescan() {
@@ -129,6 +138,24 @@
   function candidateTitle(candidate: EntitySearchCandidate): string {
     return candidate.title?.trim() || "Untitled match";
   }
+
+  function openCandidatePreview(event: MouseEvent, candidate: EntitySearchCandidate, candidateKey: string) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!candidate.posterUrl) return;
+    previewCandidate = {
+      id: `candidate-${candidateKey}`,
+      kind: entity.kind,
+      title: candidateTitle(candidate),
+      capabilities: [],
+      coverUrl: candidate.posterUrl,
+      isNsfw: entity.isNsfw,
+    };
+  }
+
+  function closeCandidatePreview() {
+    previewCandidate = null;
+  }
 </script>
 
 <div class="flex flex-col gap-4">
@@ -148,7 +175,7 @@
       <div class="flex items-baseline gap-2">
         <h2 class="truncate">{entity.title}</h2>
         <span class="rounded-xs border border-phosphor-600/20 bg-surface-3 px-1.5 py-0.5 font-mono text-[0.6rem] text-phosphor-600">
-          {entity.kind}
+          {entityTypeLabel}
         </span>
       </div>
       <div class="mt-0.5 truncate font-mono text-[0.7rem] text-text-muted">awaiting match</div>
@@ -281,6 +308,17 @@
                 />
               {/if}
             </div>
+            {#if hasCover}
+              <button
+                type="button"
+                class="mt-1.5 inline-flex h-7 w-full items-center justify-center rounded-xs border border-border-default bg-surface-2 text-text-muted transition-colors hover:border-border-accent hover:bg-surface-3 hover:text-text-accent focus-visible:border-border-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent-500/60"
+                aria-label={`Preview ${candidateTitle(candidate)} artwork`}
+                title="Preview artwork"
+                onclick={(event) => openCandidatePreview(event, candidate, candidateKey)}
+              >
+                <Eye class="h-3.5 w-3.5" />
+              </button>
+            {/if}
           </div>
 
           <div class="flex min-w-0 flex-col justify-center gap-1.5 py-1">
@@ -320,4 +358,14 @@
       {/each}
     </div>
   </section>
+
+  {#if previewEntities.length > 0}
+    <UniversalLightbox
+      entities={previewEntities}
+      initialIndex={0}
+      onClose={closeCandidatePreview}
+      showRatingControls={false}
+      sharedKey="identify-candidate-preview"
+    />
+  {/if}
 </div>

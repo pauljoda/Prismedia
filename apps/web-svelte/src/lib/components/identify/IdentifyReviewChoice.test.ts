@@ -1,8 +1,15 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EntitySearchCandidate, PluginProvider } from "$lib/api/identify-types";
 import type { EntityThumbnail as EntityCard } from "$lib/api/generated/model";
 import IdentifyReviewChoice from "./IdentifyReviewChoice.svelte";
+
+vi.mock("vidstack/player", () => ({}));
+vi.mock("vidstack/player/layouts", () => ({}));
+vi.mock("vidstack/player/ui", () => ({}));
+vi.mock("vidstack", () => ({
+  isHLSProvider: () => false,
+}));
 
 const store = vi.hoisted(() => ({
   error: null as string | null,
@@ -17,8 +24,17 @@ vi.mock("./identify-store.svelte", () => ({
   useIdentifyStore: () => store,
 }));
 
+vi.mock("$lib/nsfw/store.svelte", () => ({
+  useNsfw: () => ({ mode: "show" }),
+}));
+
 describe("IdentifyReviewChoice", () => {
   beforeEach(() => {
+    globalThis.ResizeObserver = class {
+      observe() {}
+      disconnect() {}
+      unobserve() {}
+    };
     store.error = null;
     store.identifyingId = null;
     store.providers = [];
@@ -26,6 +42,10 @@ describe("IdentifyReviewChoice", () => {
     store.providersForKind.mockReturnValue([provider()]);
     store.identifyWithCandidate.mockReset();
     store.navigateToDashboard.mockReset();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it("selects a candidate from the combined thumbnail and description card", async () => {
@@ -51,6 +71,23 @@ describe("IdentifyReviewChoice", () => {
     await fireEvent.click(screen.getByText("A family man investigates a far-reaching conspiracy."));
 
     expect(store.identifyWithCandidate).toHaveBeenCalledWith(entity(), "tmdb", candidate);
+  });
+
+  it("opens candidate artwork from the eye preview without selecting the match", async () => {
+    const candidate = searchCandidate();
+    render(IdentifyReviewChoice, {
+      props: {
+        entity: entity(),
+        candidates: [candidate],
+      },
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Preview The Chair Company artwork" }));
+
+    expect(store.identifyWithCandidate).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "The Chair Company" })).toHaveAttribute("src", candidate.posterUrl);
+    expect(screen.queryByRole("button", { name: "Rate 1" })).not.toBeInTheDocument();
   });
 
   it("shows loading only on the selected candidate while a tree is being checked", async () => {
@@ -100,6 +137,22 @@ describe("IdentifyReviewChoice", () => {
 
     expect(screen.getByRole("button", { name: "Provider: AniList" })).toBeInTheDocument();
   });
+
+  it("shows the target preview and comic type label for book-kind comics", () => {
+    render(IdentifyReviewChoice, {
+      props: {
+        entity: entity({
+          kind: "book",
+          title: "Always Go With the Flow!",
+          meta: [{ icon: "book", label: "Comic" }],
+        }),
+        candidates: [],
+      },
+    });
+
+    expect(screen.getByRole("button", { name: /To Identify/ })).toBeInTheDocument();
+    expect(screen.getByText("Comic")).toBeInTheDocument();
+  });
 });
 
 function provider(id = "tmdb", name = "The Movie Database"): PluginProvider {
@@ -116,7 +169,7 @@ function provider(id = "tmdb", name = "The Movie Database"): PluginProvider {
   };
 }
 
-function entity(): EntityCard {
+function entity(overrides: Partial<EntityCard> = {}): EntityCard {
   return {
     id: "series-1",
     kind: "video-series",
@@ -133,6 +186,7 @@ function entity(): EntityCard {
     isFavorite: false,
     isNsfw: false,
     isOrganized: false,
+    ...overrides,
   };
 }
 

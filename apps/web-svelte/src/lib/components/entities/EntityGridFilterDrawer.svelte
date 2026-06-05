@@ -12,7 +12,7 @@
     activeFilterIds: string[];
     filterOptions: EntityGridFilterOption[];
     entityKind?: string;
-    /** Hide the book type/format chips (constrained views that already lock the type). */
+    /** Hide the book type/format chips (constrained views that already lock those filters). */
     lockBookFilters?: boolean;
     onActiveFilterIdsChange: (ids: string[]) => void;
   }

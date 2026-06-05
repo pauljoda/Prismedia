@@ -16,6 +16,7 @@
   // are matching. People, studios, and tags are non-visual and already show a
   // thumbnail elsewhere, so the section is omitted for them entirely.
   const VISUAL_KINDS = new Set<string>([
+    ENTITY_KIND.book,
     ENTITY_KIND.video,
     ENTITY_KIND.movie,
     ENTITY_KIND.image,

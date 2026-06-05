@@ -1249,6 +1249,34 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
+    public async Task ListAsyncProjectsBookTypeMetaForBookThumbnails() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var comicId = Guid.Parse("55555555-5555-5555-5555-555555555555");
+        db.Entities.Add(new EntityRow {
+            Id = comicId,
+            KindCode = EntityKindRegistry.Book.Code,
+            Title = "Comic Archive",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.BookDetails.Add(new BookDetailRow {
+            EntityId = comicId,
+            BookType = BookType.Comic,
+            Format = BookFormat.ImageArchive
+        });
+        await db.SaveChangesAsync();
+
+        var service = CreateService(db);
+
+        var result = await service.ListAsync(
+            EntityKindRegistry.Book.Code, null, null, null, null, CancellationToken.None, bookType: "comic");
+        var item = Assert.Single(result.Items);
+
+        Assert.Contains(new EntityThumbnailMeta("book", "Comic"), item.Meta);
+    }
+
+    [Fact]
     public async Task ListAsyncFiltersByNsfwHasFileAndPlayedAcrossTheWholeSet() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;

@@ -37,7 +37,7 @@ Browse images and galleries as **Grid**, **List**, or **Feed** (a full-width col
 
 ## Comics and eBooks
 
-The **Comics** section narrows the Books library to comics and manga; **eBooks** narrows it to books and novels; **Books** lists everything. See [Books, Comics & eBooks](../library/books.md).
+The **Comics** section narrows the Books library to comics and manga; **eBooks** narrows it to EPUB/PDF books and novels; **Books** lists everything. See [Books, Comics & eBooks](../library/books.md).
 
 ![Book detail with reading progress](/img/screenshots/books.png)
 

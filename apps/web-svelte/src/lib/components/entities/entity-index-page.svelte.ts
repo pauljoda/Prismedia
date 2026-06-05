@@ -29,7 +29,7 @@ export interface EntityIndexPageStateOptions {
   /**
    * Server query parameters that always apply to this index, regardless of the
    * grid's filter controls. Used by constrained sub-views (e.g. Comics/eBooks
-   * lock `bookType`). Spread after the user's {@link serverQuery} so the lock
+   * lock book type/format). Spread after the user's {@link serverQuery} so the lock
    * always wins.
    */
   lockedServerQuery?: Partial<EntityGridServerQuery>;

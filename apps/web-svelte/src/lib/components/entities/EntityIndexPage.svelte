@@ -50,10 +50,10 @@
     /**
      * Server filter parameters that always apply, regardless of the grid's filter
      * controls. Used by constrained sub-views such as Comics/eBooks to lock the
-     * book type. Spread after the user's filters so the lock always wins.
+     * book type/format. Spread after the user's filters so the lock always wins.
      */
     lockedServerQuery?: Partial<EntityGridServerQuery>;
-    /** Hide the book type/format filter chips (for routes that already lock the type). */
+    /** Hide the book type/format filter chips (for routes that already lock those filters). */
     lockBookFilters?: boolean;
     prefsKey: string;
     resolveHref?: (item: EntityCard) => string | undefined;

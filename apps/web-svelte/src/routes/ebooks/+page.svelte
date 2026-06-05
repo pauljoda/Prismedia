@@ -8,9 +8,9 @@
   title="eBooks"
   icon={BookMarked}
   prefsKey="ebooks"
-  lockedServerQuery={{ bookType: "book,novel" }}
+  lockedServerQuery={{ bookType: "book,novel", bookFormat: "epub,pdf" }}
   lockBookFilters
   emptyTitle="No eBooks"
-  emptyMessage="No eBooks in your library yet. Add a library root with book or novel files and scan to get started."
+  emptyMessage="No eBooks in your library yet. Add a library root with EPUB or PDF files and scan to get started."
   errorMessage="Failed to load eBooks."
 />

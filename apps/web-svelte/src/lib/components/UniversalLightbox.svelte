@@ -37,6 +37,7 @@
     onRatingChange?: (entityId: string, rating: number | null) => void;
     detailsContent?: Snippet<[UniversalLightboxEntity]>;
     sharedKey?: string;
+    showRatingControls?: boolean;
   }
 
   let {
@@ -46,6 +47,7 @@
     onIndexChange,
     onRatingChange,
     detailsContent,
+    showRatingControls = true,
   }: Props = $props();
 
   const MIN_SCALE = 0.3;
@@ -90,11 +92,12 @@
   const fallbackPoster = $derived(current?.coverUrl ?? undefined);
   const counterText = $derived(`${index + 1} / ${entities.length}`);
   const canOpenDetails = $derived(Boolean(detailsContent && current));
-  const keyboardHintText = $derived(
-    canOpenDetails
-      ? "← → navigate · +/- zoom · 0 reset · i details · 1-5 rate · esc close"
-      : "← → navigate · +/- zoom · 0 reset · 1-5 rate · esc close",
-  );
+  const keyboardHintText = $derived.by(() => {
+    const ratingHint = showRatingControls ? " · 1-5 rate" : "";
+    return canOpenDetails
+      ? `← → navigate · +/- zoom · 0 reset · i details${ratingHint} · esc close`
+      : `← → navigate · +/- zoom · 0 reset${ratingHint} · esc close`;
+  });
   const downloadHref = $derived(currentImageSource?.src ?? primaryVideoSource?.src ?? undefined);
 
   $effect(() => {
@@ -306,7 +309,7 @@
   }
 
   function handleRate(value: number) {
-    if (!current) return;
+    if (!current || !showRatingControls) return;
     const next = currentRating === value ? null : value;
     ratingOverrides = { ...ratingOverrides, [current.id]: next };
     onRatingChange?.(current.id, next);
@@ -333,11 +336,15 @@
         "0": () => resetTransform(),
         "i": () => { if (canOpenDetails) infoOpen = !infoOpen; },
         "I": () => { if (canOpenDetails) infoOpen = !infoOpen; },
-        "1": () => handleRate(1),
-        "2": () => handleRate(2),
-        "3": () => handleRate(3),
-        "4": () => handleRate(4),
-        "5": () => handleRate(5),
+        ...(showRatingControls
+          ? {
+              "1": () => handleRate(1),
+              "2": () => handleRate(2),
+              "3": () => handleRate(3),
+              "4": () => handleRate(4),
+              "5": () => handleRate(5),
+            }
+          : {}),
       },
     });
 
@@ -374,13 +381,15 @@
       {/if}
       <div class="counter">{counterText}</div>
     </div>
-    <div class="rating-buttons">
-      {#each [1, 2, 3, 4, 5] as n (n)}
-        <Button variant="ghost" size="icon" onclick={() => handleRate(n)} class="lightbox-button" aria-label={`Rate ${n}`} title={`${n} stars`}>
-          <Star class={cn("h-4 w-4", (currentRating ?? 0) >= n && "is-filled")} />
-        </Button>
-      {/each}
-    </div>
+    {#if showRatingControls}
+      <div class="rating-buttons">
+        {#each [1, 2, 3, 4, 5] as n (n)}
+          <Button variant="ghost" size="icon" onclick={() => handleRate(n)} class="lightbox-button" aria-label={`Rate ${n}`} title={`${n} stars`}>
+            <Star class={cn("h-4 w-4", (currentRating ?? 0) >= n && "is-filled")} />
+          </Button>
+        {/each}
+      </div>
+    {/if}
     {#if canOpenDetails}
       <Button
         variant="ghost"
@@ -465,6 +474,7 @@
                   src={currentImageSource.src}
                   alt={current.title}
                   class="lightbox-image"
+                  referrerpolicy="no-referrer"
                   style:width="{naturalW || "auto"}px"
                   style:height="{naturalH || "auto"}px"
                   onload={handleImageLoad}

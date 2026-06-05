@@ -44,6 +44,7 @@
     imageLoading?: EntityThumbnailImageLoading;
     layout?: "grid" | "list";
     linkable?: boolean;
+    linkTarget?: "_self" | "_blank" | "_parent" | "_top";
     mediaOnly?: boolean;
     hoverPreviewsEnabled?: boolean;
     hoverPreviewSuppressed?: () => boolean;
@@ -64,6 +65,7 @@
     imageLoading = "lazy",
     layout = "grid",
     linkable = true,
+    linkTarget,
     mediaOnly = false,
     hoverPreviewsEnabled = true,
     hoverPreviewSuppressed,
@@ -500,6 +502,8 @@
 <svelte:element
   this={effectiveHref ? "a" : "article"}
   href={effectiveHref || undefined}
+  target={effectiveHref ? linkTarget : undefined}
+  rel={effectiveHref && linkTarget === "_blank" ? "noopener noreferrer" : undefined}
   role={selectionRole}
   tabindex={selectionTabIndex}
   class="entity-thumbnail"

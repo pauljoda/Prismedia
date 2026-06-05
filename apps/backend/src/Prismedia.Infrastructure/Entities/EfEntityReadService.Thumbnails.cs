@@ -55,6 +55,11 @@ public sealed partial class EfEntityReadService {
                 .Where(detail => ids.Contains(detail.EntityId) && detail.SectionLabel != null)
                 .ToDictionaryAsync(detail => detail.EntityId, detail => detail.SectionLabel!, cancellationToken)
             : new Dictionary<Guid, string>();
+        var bookTypeByEntity = rows.Any(row => row.KindCode == EntityKindRegistry.Book.Code)
+            ? await _db.BookDetails.AsNoTracking()
+                .Where(detail => ids.Contains(detail.EntityId))
+                .ToDictionaryAsync(detail => detail.EntityId, detail => detail.BookType, cancellationToken)
+            : new Dictionary<Guid, BookType>();
         var gridThumbByEntity = await _db.EntityFiles.AsNoTracking()
             .Where(file => ids.Contains(file.EntityId) && file.Role == EntityFileRole.GridThumbnail)
             .ToDictionaryAsync(file => file.EntityId, file => file.Path, cancellationToken);
@@ -91,6 +96,7 @@ public sealed partial class EfEntityReadService {
             var hoverUrl = hoverByEntity.GetValueOrDefault(row.Id);
             var hoverImages = hoverImagesByEntity.GetValueOrDefault(row.Id) ?? [];
             var coverUrl = coverByEntity.GetValueOrDefault(row.Id);
+            var bookType = bookTypeByEntity.TryGetValue(row.Id, out var value) ? value : (BookType?)null;
             if (coverUrl is null && UsesRepresentativeCover(row.KindCode) && hoverImages.Count > 0) {
                 coverUrl = hoverImages[0].Path;
             }
@@ -106,7 +112,11 @@ public sealed partial class EfEntityReadService {
                 hoverUrl is null ? "none" : "sprite",
                 hoverUrl,
                 hoverImages,
-                ProjectThumbnailMeta(row, technicalByEntity.GetValueOrDefault(row.Id), sectionByEntity.GetValueOrDefault(row.Id)),
+                ProjectThumbnailMeta(
+                    row,
+                    technicalByEntity.GetValueOrDefault(row.Id),
+                    sectionByEntity.GetValueOrDefault(row.Id),
+                    bookType),
                 row.RatingValue,
                 row.IsFavorite,
                 row.IsNsfw,
@@ -209,10 +219,12 @@ public sealed partial class EfEntityReadService {
     private static IReadOnlyList<EntityThumbnailMeta> ProjectThumbnailMeta(
         EntityRow row,
         EntityTechnicalRow? technical,
-        string? sectionLabel = null) {
+        string? sectionLabel = null,
+        BookType? bookType = null) {
         var meta = new List<EntityThumbnailMeta>(MaxThumbnailMeta);
         // Lead with the disc/section chip so it survives the meta cap and clients can group tracks.
         Add(meta, "disc", sectionLabel);
+        Add(meta, "book", FormatBookType(bookType));
 
         if (technical is null) {
             return meta;
@@ -232,6 +244,15 @@ public sealed partial class EfEntityReadService {
 
         return meta.Take(MaxThumbnailMeta).ToArray();
     }
+
+    private static string? FormatBookType(BookType? bookType) =>
+        bookType switch {
+            BookType.Book => "Book",
+            BookType.Comic => "Comic",
+            BookType.Manga => "Manga",
+            BookType.Novel => "Novel",
+            _ => null
+        };
 
     private static void Add(List<EntityThumbnailMeta> meta, string icon, string? label) {
         if (!string.IsNullOrWhiteSpace(label)) {

@@ -22,7 +22,7 @@ These share the **Books** library but show up under focused sidebar sections:
 | --- | --- |
 | **Books** | Everything (comics, manga, books, novels). |
 | **Comics** | Book types `comic` and `manga`. |
-| **eBooks** | Book types `book` and `novel`. |
+| **eBooks** | Book types `book` and `novel`, limited to EPUB/PDF formats. |
 
 Book **type** (Book / Comic / Manga / Novel) and **format** (Comic Archive / EPUB / PDF) are also filterable from the library filter drawer. EPUB defaults to type *Novel*; PDF defaults to type *Book*; comic archives are *Comic*/*Manga* (with `ComicInfo.xml`'s `Manga` flag taken into account).
 

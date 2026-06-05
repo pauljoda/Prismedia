@@ -257,13 +257,22 @@ public sealed partial class LibraryScanPersistenceService {
     public async Task<Guid> UpsertBookAsync(string sourcePath, string title, Guid libraryRootId, bool isNsfw, CancellationToken cancellationToken) {
         var existing = await FindEntityBySourcePath(EntityKindRegistry.Book.Code, sourcePath, cancellationToken);
         if (existing is not null) {
-            existing.Title = title;
-            existing.ParentEntityId = null;
-            existing.SortOrder = null;
-            existing.UpdatedAt = DateTimeOffset.UtcNow;
-            if (isNsfw) existing.IsNsfw = true;
+            var tracked = await _db.Entities.FindAsync([existing.Id], cancellationToken);
+            if (tracked is not null) {
+                tracked.Title = title;
+                tracked.ParentEntityId = null;
+                tracked.SortOrder = null;
+                tracked.UpdatedAt = DateTimeOffset.UtcNow;
+                if (isNsfw) tracked.IsNsfw = true;
+            }
             var detail = await _db.BookDetails.FindAsync([existing.Id], cancellationToken);
-            if (detail is not null) detail.LibraryRootId = libraryRootId;
+            if (detail is not null) {
+                detail.LibraryRootId = libraryRootId;
+                detail.BookType = BookType.Comic;
+                detail.Format = BookFormat.ImageArchive;
+            } else {
+                _db.BookDetails.Add(new BookDetailRow { EntityId = existing.Id, BookType = BookType.Comic, Format = BookFormat.ImageArchive, LibraryRootId = libraryRootId });
+            }
             await _db.SaveChangesAsync(cancellationToken);
             return existing.Id;
         }
@@ -272,7 +281,7 @@ public sealed partial class LibraryScanPersistenceService {
         var id = Guid.NewGuid();
 
         _db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKindRegistry.Book.Code, Title = title, IsNsfw = isNsfw, CreatedAt = now, UpdatedAt = now });
-        _db.BookDetails.Add(new BookDetailRow { EntityId = id, BookType = BookType.Comic, LibraryRootId = libraryRootId });
+        _db.BookDetails.Add(new BookDetailRow { EntityId = id, BookType = BookType.Comic, Format = BookFormat.ImageArchive, LibraryRootId = libraryRootId });
         _db.EntityFiles.Add(new EntityFileRow {
             Id = Guid.NewGuid(),
             EntityId = id,
@@ -287,19 +296,31 @@ public sealed partial class LibraryScanPersistenceService {
         return id;
     }
 
-    public async Task<Guid> UpsertBookSeriesAsync(string folderPath, string title, Guid libraryRootId, bool isNsfw, CancellationToken cancellationToken) {
+    public async Task<Guid> UpsertBookSeriesAsync(
+        string folderPath,
+        string title,
+        Guid libraryRootId,
+        bool isNsfw,
+        BookType bookType,
+        BookFormat format,
+        CancellationToken cancellationToken) {
         var existing = await FindEntityBySourcePath(EntityKindRegistry.Book.Code, folderPath, cancellationToken);
         if (existing is not null) {
-            existing.Title = title;
-            existing.ParentEntityId = null;
-            existing.SortOrder = null;
-            existing.UpdatedAt = DateTimeOffset.UtcNow;
-            if (isNsfw) existing.IsNsfw = true;
+            var tracked = await _db.Entities.FindAsync([existing.Id], cancellationToken);
+            if (tracked is not null) {
+                tracked.Title = title;
+                tracked.ParentEntityId = null;
+                tracked.SortOrder = null;
+                tracked.UpdatedAt = DateTimeOffset.UtcNow;
+                if (isNsfw) tracked.IsNsfw = true;
+            }
             var detail = await _db.BookDetails.FindAsync([existing.Id], cancellationToken);
             if (detail is not null) {
                 detail.LibraryRootId = libraryRootId;
-                detail.BookType = BookType.Book;
-                detail.Format = BookFormat.ImageArchive;
+                detail.BookType = bookType;
+                detail.Format = format;
+            } else {
+                _db.BookDetails.Add(new BookDetailRow { EntityId = existing.Id, BookType = bookType, Format = format, LibraryRootId = libraryRootId });
             }
             await ReparentSingleFileBooksUnderSeriesAsync(existing.Id, folderPath, libraryRootId, DateTimeOffset.UtcNow, cancellationToken);
             await _db.SaveChangesAsync(cancellationToken);
@@ -310,7 +331,7 @@ public sealed partial class LibraryScanPersistenceService {
         var id = Guid.NewGuid();
 
         _db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKindRegistry.Book.Code, Title = title, IsNsfw = isNsfw, CreatedAt = now, UpdatedAt = now });
-        _db.BookDetails.Add(new BookDetailRow { EntityId = id, BookType = BookType.Book, Format = BookFormat.ImageArchive, LibraryRootId = libraryRootId });
+        _db.BookDetails.Add(new BookDetailRow { EntityId = id, BookType = bookType, Format = format, LibraryRootId = libraryRootId });
         _db.EntityFiles.Add(new EntityFileRow {
             Id = Guid.NewGuid(),
             EntityId = id,
@@ -388,11 +409,14 @@ public sealed partial class LibraryScanPersistenceService {
         CancellationToken cancellationToken) {
         var existing = await FindEntityBySourcePath(EntityKindRegistry.Book.Code, sourcePath, cancellationToken);
         if (existing is not null) {
-            existing.Title = title;
-            existing.ParentEntityId = parentBookEntityId;
-            existing.SortOrder = sortOrder;
-            existing.UpdatedAt = DateTimeOffset.UtcNow;
-            if (isNsfw) existing.IsNsfw = true;
+            var tracked = await _db.Entities.FindAsync([existing.Id], cancellationToken);
+            if (tracked is not null) {
+                tracked.Title = title;
+                tracked.ParentEntityId = parentBookEntityId;
+                tracked.SortOrder = sortOrder;
+                tracked.UpdatedAt = DateTimeOffset.UtcNow;
+                if (isNsfw) tracked.IsNsfw = true;
+            }
             var detail = await _db.BookDetails.FindAsync([existing.Id], cancellationToken);
             if (detail is not null) {
                 detail.LibraryRootId = libraryRootId;

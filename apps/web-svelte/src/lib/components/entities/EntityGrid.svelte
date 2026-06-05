@@ -57,7 +57,7 @@
     enableFeedView?: boolean;
     /**
      * Hide the book type/format filter chips. Used by constrained book sub-views
-     * (Comics/eBooks) that already lock the book type, where exposing the chips
+     * (Comics/eBooks) that already lock book type/format, where exposing the chips
      * would be redundant and confusing.
      */
     lockBookFilters?: boolean;

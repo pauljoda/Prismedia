@@ -193,6 +193,19 @@ describe("EntityThumbnail", () => {
     expect(link?.getAttribute("href")).toBe("/people/person-1");
   });
 
+  it("can open shared thumbnail links in a safe new tab", () => {
+    const { container } = render(EntityThumbnail, {
+      props: {
+        card: personCard(),
+        linkTarget: "_blank",
+      },
+    });
+
+    const link = container.querySelector<HTMLAnchorElement>("a.entity-thumbnail");
+    expect(link?.getAttribute("target")).toBe("_blank");
+    expect(link?.getAttribute("rel")).toBe("noopener noreferrer");
+  });
+
   it("resolves nested gallery cards to their gallery detail route", () => {
     const { container } = render(EntityThumbnail, {
       props: {
