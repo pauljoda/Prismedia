@@ -135,23 +135,25 @@ public sealed partial class HlsAssetService {
             return new HlsAsset(vodPath, MediaContentTypes.HlsPlaylist, CacheControlForExtension(".m3u8"));
         }
 
-        // If the source's keyframes are already cached durably (this item has been played before, or was
-        // pre-warmed), building the full VOD playlist is instant — no probe. Do it synchronously so the
-        // player gets the whole seekable timeline on the FIRST request, even though the segment cache was
-        // evicted. The durable keyframe cache lives outside the evictable transcode cache, so this is the
-        // common path once an item has been played once.
+        // Fast path: get the keyframe times cheaply — from the durable cache, or by reading the
+        // Matroska Cues index directly (near-instant; no whole-file ffprobe walk). When available,
+        // build the full VOD playlist synchronously so the player gets the whole seekable timeline on
+        // the FIRST request, even though the segment cache was evicted. This is the common case for the
+        // .mkv movies that remux.
         if (source.DurationSeconds is > 0 &&
-            TryReadDurableKeyframes(id, source) is { Count: > 0 } cachedKeyframes) {
+            TryFastKeyframes(id, source) is { Count: > 1 } fastKeyframes) {
+            TryWriteDurableKeyframes(id, source, fastKeyframes);
             return await WriteRemuxVodAsync(
                 remuxDir,
-                BuildRemuxSegmentDurations(cachedKeyframes, source.DurationSeconds.Value),
+                BuildRemuxSegmentDurations(fastKeyframes, source.DurationSeconds.Value),
                 cancellationToken);
         }
 
-        // Never-indexed source: kick the keyframe probe + VOD build onto a background task (deduped per
-        // remux key; it persists the durable keyframe cache so the next play is instant) and serve the
-        // growing event playlist now, bounded so a stalled ffmpeg can never re-introduce the manifest
-        // hang. The full VOD takes over once the build lands.
+        // No fast index (e.g. a container with no keyframe index, or an .mkv missing Cues): kick the
+        // whole-file keyframe probe + VOD build onto a background task (deduped per remux key; it
+        // persists the durable keyframe cache so the next play is instant) and serve the growing event
+        // playlist now, bounded so a stalled ffmpeg can never re-introduce the manifest hang. The full
+        // VOD takes over once the build lands.
         EnsureRemuxVodComputationStarted(id, source, audioCacheKey, remuxDir, options);
 
         var legacyPath = Path.Combine(remuxDir, "index.m3u8");
@@ -452,22 +454,25 @@ public sealed partial class HlsAssetService {
             return null;
         }
 
-        // Prefer the durable keyframe cache (a whole-file ffprobe walk is slow on a 4K source); only
-        // probe — and persist the result — when it is missing or stale.
-        var keyframes = TryReadDurableKeyframes(id, source);
-        if (keyframes is null) {
-            keyframes = await ProbeVideoKeyframeTimesAsync(source.Path, options, cancellationToken);
-            if (keyframes is { Count: > 0 }) {
-                TryWriteDurableKeyframes(id, source, keyframes);
-            }
-        }
-
-        if (keyframes is null || keyframes.Count < 1) {
+        // Prefer the fast keyframe sources (durable cache, then the Matroska Cues index); only fall back
+        // to the slow whole-file ffprobe walk when neither is available, and persist whatever we get.
+        var keyframes = TryFastKeyframes(id, source)
+            ?? await ProbeVideoKeyframeTimesAsync(source.Path, options, cancellationToken);
+        if (keyframes is { Count: > 0 }) {
+            TryWriteDurableKeyframes(id, source, keyframes);
+        } else {
             return null;
         }
 
         return BuildRemuxSegmentDurations(keyframes, source.DurationSeconds.Value);
     }
+
+    // Fast, non-blocking keyframe sources: the durable per-video cache, then a direct read of the
+    // Matroska Cues index. Returns null when neither is available (the caller then runs the slow
+    // ffprobe scan in the background). Never touches the source's full data, so it is safe to call
+    // synchronously on the request thread.
+    private IReadOnlyList<double>? TryFastKeyframes(Guid id, VideoSourceFile source) =>
+        TryReadDurableKeyframes(id, source) ?? MatroskaKeyframeReader.TryReadKeyframeTimes(source.Path, _logger);
 
     // Durable per-video keyframe cache, stored OUTSIDE the evictable transcode cache roots
     // (hlsv/hls/hls2) so the transcode-cache size cap cannot delete it. Keyed by video id and
