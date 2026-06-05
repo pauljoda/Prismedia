@@ -611,6 +611,9 @@
     const video = mediaElement();
     if (player.paused && video?.paused !== false) void playWithFallback();
     else {
+      // Clear any deferred play intent so pausing while the media is still loading actually stays
+      // paused (a pending intent would otherwise resume it once 'canplay' fires).
+      pendingAutoPlay = false;
       void player.pause();
       mediaElement()?.pause();
       playing = false;
@@ -703,12 +706,18 @@
         await video.play();
       }
       playRetried = false;
-    } catch (error) {
-      // A play() rejection is transient: the source (e.g. an on-demand remux) may still be
-      // producing its first segment, or the request was interrupted by a load. Do NOT fall back
-      // or force a transcode here — that would cancel a remux before it ever serves a segment
-      // (the "play, fail, play again" symptom). Retry once; a genuinely undecodable stream surfaces
-      // as a media 'error' event, where the decode-gated fallback lives.
+    } catch {
+      // A play() rejection means the media isn't ready yet ("media not ready"): a direct file still
+      // loading its first frames, an on-demand remux producing its first segment, or a load in flight.
+      // Do NOT fall back or force a transcode here — that would cancel a remux before it serves a
+      // segment (the "play, fail, play again" symptom). Keep the play INTENT alive instead of a single
+      // short retry that gives up: defer to 'canplay' so playback starts the moment data arrives,
+      // however long that takes, so one press always plays. A short retry also covers the case where
+      // the media became ready between the failure and now (so 'canplay' will not fire again). A
+      // genuinely undecodable stream surfaces as a media 'error' event, where the decode-gated
+      // fallback lives.
+      buffering = true;
+      pendingAutoPlay = true;
       if (!playRetried) {
         playRetried = true;
         window.setTimeout(() => {
@@ -716,9 +725,7 @@
             void playWithFallback();
           }
         }, 400);
-        return;
       }
-      console.error("ERROR MediaPlayer [vidstack] play request failed", error);
     }
   }
 
