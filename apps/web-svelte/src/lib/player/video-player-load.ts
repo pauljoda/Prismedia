@@ -48,14 +48,16 @@ export interface AdaptiveHlsBufferConfig {
   playlistLoadPolicy: HlsLoadPolicy;
 }
 
-// The player buffers deeply so a brief pause builds a large cushion that then drains while playback
-// continues to fill it — the behavior users expect from streaming apps. This is safe because hls.js
-// loads fragments sequentially: it stays right behind the server's single forward transcode rather
-// than leaping ahead, so the server keeps serving one generation (no parallel-transcode fan-out)
-// regardless of how deep the buffer grows. The byte cap, not the time length, is the practical
-// limit and keeps memory bounded on high-bitrate 4K sources.
-const ExtendedHlsMaxBufferLengthSeconds = 240;
-const ExtendedHlsMaxMaxBufferLengthSeconds = 240;
+// The player keeps a modest forward buffer rather than racing far ahead. A deep buffer made the
+// player request segments well ahead of the server's linear transcode frontier, which forced the
+// reuse window (HlsAssetService.ActiveGenerationReuseWindowSegments) to stay correspondingly wide —
+// and a wide reuse window is exactly what makes a forward seek/resume slow, because the player
+// attaches to the running job and waits while it grinds to the target instead of restarting there.
+// Keeping the buffer near the reuse window lets that window be tight, so a forward seek beyond it
+// cold-starts a fresh transcode at the seek point (fast). These two values are coupled and must move
+// together. The byte cap still bounds memory on high-bitrate 4K sources.
+const ExtendedHlsMaxBufferLengthSeconds = 30;
+const ExtendedHlsMaxMaxBufferLengthSeconds = 30;
 const ExtendedHlsMaxBufferSizeBytes = 800 * 1000 * 1000;
 const ExtendedHlsBackBufferLengthSeconds = 60;
 

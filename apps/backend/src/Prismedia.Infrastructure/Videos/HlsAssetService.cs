@@ -20,13 +20,15 @@ public sealed partial class HlsAssetService : IHlsAssetService {
     private const int VirtualCacheFormatVersion = 9;
 
     // How far ahead of a running generation's start/frontier a requested segment may be while still
-    // attaching to that generation instead of starting a new one. This must comfortably exceed the
-    // player's forward buffer depth (maxBufferLength 240s ÷ 6s ≈ 40 segments): while buffering, the
-    // player requests segments well ahead of the transcode frontier, and if those requests fell
-    // outside this window the server would cancel the running transcode and cold-start a new one —
-    // which under hardware-encoder contention overruns the fragment timeout and stalls playback. A
-    // genuine forward seek beyond this window still starts a fresh generation at the seek point.
-    private const int ActiveGenerationReuseWindowSegments = 50;
+    // attaching to that generation instead of starting a new one. It must comfortably exceed the
+    // player's forward buffer depth (now maxBufferLength ~30s ÷ 6s = 5 segments) so normal buffering
+    // never falls outside the window and cold-starts a competing transcode; the small margin above
+    // that absorbs jitter and brief encoder contention. A forward seek (or resume) beyond this window
+    // starts a fresh generation AT the seek point instead of making the player wait while the linear
+    // transcode grinds from its current position to the target — the cause of slow forward seeks. The
+    // old 50-segment (300s) window was sized for the previous 240s client buffer; tightening it is
+    // coupled with the buffer reduction in adaptiveHlsBufferConfig() and must move together with it.
+    private const int ActiveGenerationReuseWindowSegments = 8;
     private static readonly TimeSpan SegmentPollInterval = TimeSpan.FromMilliseconds(100);
     private static readonly ConcurrentDictionary<string, VirtualRenditionGeneration> ActiveRenditions = new();
     private static readonly ConcurrentDictionary<Guid, SemaphoreSlim> VirtualCacheRefreshLocks = new();

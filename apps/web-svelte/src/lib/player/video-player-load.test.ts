@@ -150,14 +150,14 @@ describe("video-player-load", () => {
     });
   });
 
-  it("buffers deeply (for pause-to-buffer) while keeping memory bounded by bytes", () => {
+  it("keeps a modest forward buffer (coupled to the server reuse window) bounded by bytes", () => {
     const config = adaptiveHlsBufferConfig();
     expect(config).toEqual({
       backBufferLength: 60,
       capLevelToPlayerSize: false,
       frontBufferFlushThreshold: Infinity,
-      maxBufferLength: 240,
-      maxMaxBufferLength: 240,
+      maxBufferLength: 30,
+      maxMaxBufferLength: 30,
       maxBufferSize: 800_000_000,
       startLevel: -1,
       startPosition: 0,
