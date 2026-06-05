@@ -205,9 +205,20 @@ describe("extractVideoPlayerProps", () => {
     }, 2);
 
     expect(props.audioTracks).toEqual([
-      expect.objectContaining({ streamIndex: 1, label: "Spanish · AAC · 2ch", selected: false }),
-      expect.objectContaining({ streamIndex: 2, label: "English · AAC · 2ch · Default", selected: true }),
+      expect.objectContaining({
+        streamIndex: 1,
+        label: "Spanish · AAC · 2ch",
+        formatLabel: "AAC Stereo",
+        selected: false,
+      }),
+      expect.objectContaining({
+        streamIndex: 2,
+        label: "English · AAC · 2ch · Default",
+        formatLabel: "AAC Stereo",
+        selected: true,
+      }),
     ]);
+    expect(props.audioFormatLabel).toBe("AAC Stereo");
   });
 
   it("trusts playback negotiation when HDR sources must transcode", () => {
@@ -272,5 +283,14 @@ describe("extractVideoPlayerProps", () => {
     expect(props.directSrc).toBe("");
     expect(props.src).toBe("/Videos/video-1/master.m3u8");
     expect(props.colorPipelineLabel).toBe("HDR10 -> SDR tone map H.264");
+    expect(props.resolutionLabel).toBe("4K");
+    expect(props.dynamicRangeLabel).toBe("HDR10");
+    expect(props.videoCodecLabel).toBe("HEVC");
+    expect(props.streamMethod).toBe("transcode");
+    expect(props.qualityRungs.length).toBeGreaterThan(0);
+    expect(props.qualityRungs[0]).toMatchObject({
+      name: "120mbps",
+      url: "/Videos/video-1/hls/120mbps/stream.m3u8",
+    });
   });
 });

@@ -23,11 +23,27 @@ export interface VideoPlayerAudioTrack {
   streamIndex: number;
   label: string;
   selected: boolean;
+  /** Short, viewer-friendly format descriptor (e.g. "Dolby Atmos 7.1") for the status badge. */
+  formatLabel?: string | null;
 }
 
 export type PlaybackMode = "direct" | "hls";
 
-export type QualityMode = "direct" | "auto" | number;
+// "direct" plays the original file, "auto" lets the server pick, and any other string is a quality-rung
+// name (e.g. "8mbps") the viewer pinned. (string & {}) keeps editor autocomplete for the literals.
+export type QualityMode = "direct" | "auto" | (string & {});
+
+/** A manual quality tier the player can pin, resolved to a ready-to-load variant playlist URL. */
+export interface PlayerQualityRung {
+  /** Server rendition name (e.g. "8mbps"). */
+  name: string;
+  /** Viewer-facing label, e.g. "1080p · 8 Mbps". */
+  label: string;
+  /** Target video bitrate in bits per second, used for the persisted max-quality preference. */
+  bitrate: number;
+  /** Absolute variant-playlist URL that streams this tier. */
+  url: string;
+}
 
 export type SettingsView = "root" | "quality" | "speed" | "audio" | "captions" | "subtitle-style";
 

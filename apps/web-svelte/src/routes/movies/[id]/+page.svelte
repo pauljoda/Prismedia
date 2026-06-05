@@ -650,6 +650,12 @@
             sourceWidth={playerProps.sourceWidth}
             sourceHeight={playerProps.sourceHeight}
             colorPipelineLabel={playerProps.colorPipelineLabel}
+            resolutionLabel={playerProps.resolutionLabel}
+            dynamicRangeLabel={playerProps.dynamicRangeLabel}
+            videoCodecLabel={playerProps.videoCodecLabel}
+            audioFormatLabel={playerProps.audioFormatLabel}
+            streamMethod={playerProps.streamMethod}
+            qualityRungs={playerProps.qualityRungs}
             poster={playerProps.poster}
             mediaTitle={video?.title}
             mediaArtist={primaryStudio?.title}
