@@ -183,14 +183,18 @@ describe("VideoPlayer", () => {
         src: "/api/video-stream/video-1/hls2/master.m3u8",
         directSrc: "/api/video-stream/video-1/source",
         defaultPlaybackMode: "hls",
-        colorPipelineLabel: "DOVI P5 -> SDR tone map H.264",
+        streamMethod: "transcode",
+        resolutionLabel: "4K",
+        dynamicRangeLabel: "Dolby Vision",
+        audioFormatLabel: "Dolby Atmos 7.1",
       },
     });
 
     expect(screen.getByTestId("vidstack-video-player")).toBeInTheDocument();
-    expect(screen.getByText("Adaptive HLS")).toBeInTheDocument();
-    expect(screen.getByText("DOVI P5 -> SDR tone map H.264")).toBeInTheDocument();
-    expect(screen.getByTestId("playback-quality-chip")).toHaveTextContent("Auto");
+    expect(screen.getByTestId("playback-method-chip")).toHaveTextContent("Transcoding");
+    expect(screen.getByTestId("resolution-chip")).toHaveTextContent("4K");
+    expect(screen.getByTestId("dynamic-range-chip")).toHaveTextContent("Dolby Vision");
+    expect(screen.getByTestId("audio-format-chip")).toHaveTextContent("Dolby Atmos 7.1");
     expect(screen.getByRole("button", { name: "Cast" })).toBeInTheDocument();
     const settingsButton = screen.getByRole("button", { name: "Player settings" });
     await fireEvent.click(settingsButton);
@@ -250,7 +254,7 @@ describe("VideoPlayer", () => {
     expect(source).toContain("mediaElement()?.pause();");
   });
 
-  it("shows native source dimensions in the adaptive quality chip", () => {
+  it("derives the resolution badge from source dimensions with exact pixels in the tooltip", () => {
     render(VideoPlayer, {
       props: {
         src: "/api/videos/video-1/hls/master.m3u8",
@@ -260,10 +264,9 @@ describe("VideoPlayer", () => {
       },
     });
 
-    const chip = screen.getByTestId("playback-quality-chip");
-    expect(chip).toHaveTextContent("Auto");
-    expect(chip).toHaveTextContent("Native 3840x1920");
-    expect(chip).toHaveAttribute("title", "Native 3840x1920");
+    const chip = screen.getByTestId("resolution-chip");
+    expect(chip).toHaveTextContent("4K");
+    expect(chip).toHaveAttribute("title", "3840x1920");
   });
 
   it("shows server-provided audio tracks when the HLS provider exposes only one muxed track", async () => {

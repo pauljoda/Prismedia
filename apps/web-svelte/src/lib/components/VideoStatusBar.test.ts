@@ -3,39 +3,42 @@ import { describe, expect, it } from "vitest";
 import VideoStatusBar from "./VideoStatusBar.svelte";
 
 describe("VideoStatusBar", () => {
-  it("shows stream quality and instrumentation for HLS", () => {
+  it("shows viewer-friendly content badges and the delivery method", () => {
     render(VideoStatusBar, {
       props: {
-        activePlaybackLabel: "HLS",
-        bandwidthLabel: "8.0 Mbps",
-        bufferAhead: 4.25,
-        droppedFrames: 2,
-        mode: "hls",
-        qualityLabel: "1080p",
+        playbackMethod: "transcode",
+        methodLabel: "Transcoding",
+        methodHint: "Converting the video for your browser",
+        methodDetail: "1080p · H.264 · SDR",
+        resolutionLabel: "4K",
+        videoDetail: "3840x2160 · HEVC",
+        dynamicRangeLabel: "Dolby Vision",
+        audioFormatLabel: "Dolby Atmos 7.1",
+        bufferSeconds: 12.42,
         showControls: true,
       },
     });
 
-    expect(screen.getByText("HLS")).toBeInTheDocument();
-    expect(screen.getByTestId("playback-quality-chip")).toHaveTextContent("1080p");
-    expect(screen.getByText("8.0 Mbps")).toBeInTheDocument();
-    expect(screen.getByText("4.3s")).toBeInTheDocument();
-    expect(screen.getByText("2")).toBeInTheDocument();
+    expect(screen.getByTestId("playback-method-chip")).toHaveTextContent("Transcoding");
+    expect(screen.getByTestId("resolution-chip")).toHaveTextContent("4K");
+    expect(screen.getByTestId("dynamic-range-chip")).toHaveTextContent("Dolby Vision");
+    expect(screen.getByTestId("audio-format-chip")).toHaveTextContent("Dolby Atmos 7.1");
+    expect(screen.getByTestId("buffer-chip")).toHaveTextContent("12.4s");
   });
 
-  it("hides quality and ABR details for direct playback", () => {
+  it("omits the HDR badge for SDR sources and labels direct play", () => {
     render(VideoStatusBar, {
       props: {
-        activePlaybackLabel: "Direct",
-        bandwidthLabel: "-",
-        bufferAhead: 0,
-        mode: "direct",
-        qualityLabel: "Source",
+        playbackMethod: "direct",
+        methodLabel: "Direct Play",
+        resolutionLabel: "1080p",
+        dynamicRangeLabel: null,
+        audioFormatLabel: "Stereo AAC",
         showControls: true,
       },
     });
 
-    expect(screen.queryByTestId("playback-quality-chip")).not.toBeInTheDocument();
-    expect(screen.queryByText("ABR")).not.toBeInTheDocument();
+    expect(screen.getByTestId("playback-method-chip")).toHaveTextContent("Direct Play");
+    expect(screen.queryByTestId("dynamic-range-chip")).not.toBeInTheDocument();
   });
 });

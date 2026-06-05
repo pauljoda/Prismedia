@@ -23,6 +23,8 @@ export interface VideoPlayerAudioTrack {
   streamIndex: number;
   label: string;
   selected: boolean;
+  /** Short, viewer-friendly format descriptor (e.g. "Dolby Atmos 7.1") for the status badge. */
+  formatLabel?: string | null;
 }
 
 export type PlaybackMode = "direct" | "hls";

@@ -58,6 +58,7 @@
     fallbackPlaybackModeForError,
     hlsStatusUrlForSrc,
   } from "$lib/player/video-player-load";
+  import { playbackMethodBadge, resolutionBadge, type StreamMethod } from "$lib/player/media-badges";
   import {
     pickPreferredSubtitleTrack,
     readLocalSubtitleAppearance,
@@ -104,6 +105,16 @@
     sourceWidth?: number | null;
     sourceHeight?: number | null;
     colorPipelineLabel?: string | null;
+    /** Marketing resolution tier of the source ("4K", "1080p", …) for the status badge. */
+    resolutionLabel?: string | null;
+    /** Friendly HDR format of the source ("Dolby Vision", "HDR10", …), or null for SDR. */
+    dynamicRangeLabel?: string | null;
+    /** Source video codec as viewers know it ("HEVC", "H.264", …). */
+    videoCodecLabel?: string | null;
+    /** Default audio track's format descriptor ("Dolby Atmos 7.1", …) for the status badge. */
+    audioFormatLabel?: string | null;
+    /** The server's negotiated delivery method, before any client-side fallback. */
+    streamMethod?: StreamMethod;
     poster?: string;
     /** Title of the playing media, published to the OS media controls via the Media Session API. */
     mediaTitle?: string;
@@ -156,6 +167,11 @@
     sourceWidth = null,
     sourceHeight = null,
     colorPipelineLabel = null,
+    resolutionLabel = null,
+    dynamicRangeLabel = null,
+    videoCodecLabel = null,
+    audioFormatLabel = null,
+    streamMethod = "transcode",
     poster,
     mediaTitle,
     mediaArtist,
@@ -233,11 +249,10 @@
   let playbackRate = $state(1);
   let showControls = $state(true);
   let bufferAhead = $state(0);
-  let bandwidthEstimate = $state<number | null>(null);
-  let droppedFrames = $state<number | null>(null);
   let qualityOptions = $state<QualityOption[]>([{ value: "auto", label: "Auto" }]);
   let activeQualityLabel = $state<string | null>(null);
   let activeQualityDimensionsLabel = $state<string | null>(null);
+  let activeQualityResolutionLabel = $state<string | null>(null);
   let audioTracks = $state<AudioTrackOption[]>([]);
   let selectedAudioTrackLabel = $state<string | null>(null);
   let playerNotice = $state<string | null>(null);
@@ -314,24 +329,41 @@
         : activeQualityLabel ?? "Quality",
   );
   const sourceResolutionLabel = $derived(formatDimensions(sourceWidth, sourceHeight));
-  const activeQualityDetailLabel = $derived.by(() => {
-    if (activeQualityDimensionsLabel && sourceResolutionLabel) {
-      if (activeQualityDimensionsLabel === sourceResolutionLabel) {
-        return `Native ${sourceResolutionLabel}`;
-      }
-      return `Current ${activeQualityDimensionsLabel} · Native ${sourceResolutionLabel}`;
-    }
-    if (activeQualityDimensionsLabel) return `Current ${activeQualityDimensionsLabel}`;
-    if (sourceResolutionLabel) return `Native ${sourceResolutionLabel}`;
-    return null;
+  // Prefer the negotiated tier, but stay self-sufficient by deriving it from the raw dimensions.
+  const resolutionBadgeLabel = $derived(resolutionLabel ?? resolutionBadge(sourceWidth, sourceHeight));
+  // What is actually happening to the stream right now: a forced recovery transcode wins, then the
+  // player's own direct/HLS choice, otherwise the server's negotiated plan. A server "direct" plan
+  // while the player is on HLS still means the picture is copied (stream-copy), i.e. "Direct Stream".
+  const playbackMethod = $derived<StreamMethod>(
+    forcedTranscodeSrc
+      ? "transcode"
+      : effectiveMode === "direct"
+        ? "direct"
+        : streamMethod === "direct"
+          ? "remux"
+          : streamMethod,
+  );
+  const playbackMethodLabel = $derived(playbackMethodBadge(playbackMethod).label);
+  const playbackMethodHint = $derived(playbackMethodBadge(playbackMethod).hint);
+  // When transcoding, show the output the viewer is getting (quality, and SDR when tone-mapped).
+  const playbackMethodDetail = $derived.by(() => {
+    if (playbackMethod !== "transcode") return null;
+    // The server always transcodes to H.264, tone-mapping HDR down to SDR; show that real output.
+    const parts: string[] = [];
+    if (activeQualityResolutionLabel) parts.push(activeQualityResolutionLabel);
+    parts.push("H.264");
+    if (dynamicRangeLabel) parts.push("SDR");
+    return parts.join(" · ");
   });
-  const activePlaybackLabel = $derived(
-    effectiveMode === "direct" ? "Direct Playback" : "Adaptive HLS",
+  // The audio format of the track the viewer is hearing, tracking selection when there are several.
+  const activeAudioFormatLabel = $derived(
+    audioTrackOptions.find((track) => track.selected)?.formatLabel ?? audioFormatLabel,
+  );
+  // Tooltip detail for the video badge: exact pixels and source codec for anyone who wants it.
+  const videoBadgeDetail = $derived(
+    [sourceResolutionLabel, videoCodecLabel].filter(Boolean).join(" · ") || null,
   );
   const fullChrome = $derived(chrome === "full");
-  const activePlaybackDetailLabel = $derived(
-    colorPipelineLabel ?? (effectiveMode === "direct" ? null : "SDR -> H.264 SDR"),
-  );
   const playbackProgressPercent = $derived(
     duration > 0 ? Math.max(0, Math.min(100, (currentTime / duration) * 100)) : 0,
   );
@@ -491,6 +523,7 @@
       ];
       activeQualityLabel = null;
       activeQualityDimensionsLabel = null;
+      activeQualityResolutionLabel = null;
       return;
     }
     const qualities = player.qualities?.toArray?.() ?? [];
@@ -513,6 +546,9 @@
     activeQualityDimensionsLabel = selected
       ? qualityDimensionsLabel(selected)
       : activeQualityDimensionsLabel;
+    activeQualityResolutionLabel = selected
+      ? resolutionBadge(selected.width, selected.height)
+      : activeQualityResolutionLabel;
     if (player.qualities?.auto) qualityMode = "auto";
   }
 
@@ -1628,16 +1664,17 @@
 
     {#if fullChrome}
       <VideoStatusBar
-        activePlaybackDetailLabel={activePlaybackDetailLabel}
-        activePlaybackLabel={activePlaybackLabel}
-        bandwidthLabel={formatBandwidth(bandwidthEstimate)}
-        {bufferAhead}
-        {droppedFrames}
-        mode={effectiveMode}
+        audioFormatLabel={activeAudioFormatLabel}
+        bufferSeconds={bufferAhead}
+        dynamicRangeLabel={dynamicRangeLabel}
+        methodDetail={playbackMethodDetail}
+        methodHint={playbackMethodHint}
+        methodLabel={playbackMethodLabel}
+        playbackMethod={playbackMethod}
         {playerNotice}
-        qualityDetailLabel={activeQualityDetailLabel}
-        qualityLabel={selectedQualityLabel}
+        resolutionLabel={resolutionBadgeLabel}
         {showControls}
+        videoDetail={videoBadgeDetail}
       />
 
       <div

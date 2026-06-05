@@ -12,6 +12,13 @@ import type {
   VideoSubtitleTrack,
 } from "$lib/player/subtitle-types";
 import { positiveNumberValue } from "$lib/utils/format";
+import {
+  audioFormatBadge,
+  dynamicRangeBadge,
+  resolutionBadge,
+  videoCodecBadge,
+  type StreamMethod,
+} from "$lib/player/media-badges";
 import { CAPABILITY_KIND, ENTITY_FILE_ROLE } from "./entity-codes";
 
 export interface VideoPlayerProps {
@@ -29,6 +36,16 @@ export interface VideoPlayerProps {
   subtitleTracks: VideoSubtitleTrack[];
   audioTracks: VideoPlayerAudioTrack[];
   colorPipelineLabel: string | null;
+  /** Marketing resolution tier of the source ("4K", "1080p", …), or null when unknown. */
+  resolutionLabel: string | null;
+  /** Friendly HDR format of the source ("Dolby Vision", "HDR10", …), or null for SDR. */
+  dynamicRangeLabel: string | null;
+  /** Source video codec as viewers know it ("HEVC", "H.264", …). */
+  videoCodecLabel: string | null;
+  /** Default audio track's format descriptor ("Dolby Atmos 7.1", …) for the status badge. */
+  audioFormatLabel: string | null;
+  /** The server's negotiated delivery method, before any client-side fallback. */
+  streamMethod: StreamMethod;
 }
 
 export function extractVideoPlayerProps(
@@ -66,6 +83,8 @@ export function extractVideoPlayerProps(
   const hlsSrc = mediaSource?.TranscodingUrl
     ? jellyfinApiPath(mediaSource.TranscodingUrl)
     : jellyfinApiPath(`/Videos/${videoId}/master.m3u8`);
+  const defaultAudioStream =
+    audioStreams.find((stream) => stream.Index === defaultAudioStreamIndex) ?? audioStreams[0] ?? null;
 
   return {
     src: hlsSrc,
@@ -85,16 +104,40 @@ export function extractVideoPlayerProps(
     playSessionId: playbackInfo?.PlaySessionId ?? null,
     mediaSourceId: mediaSource?.Id ?? null,
     colorPipelineLabel: colorPipelineLabel(videoStream, mediaSource?.TranscodingInfo ?? null),
+    resolutionLabel: resolutionBadge(
+      videoStream?.Width ?? positiveNumberValue(technical?.width),
+      videoStream?.Height ?? positiveNumberValue(technical?.height),
+    ),
+    dynamicRangeLabel: dynamicRangeBadge(videoStream),
+    videoCodecLabel: videoCodecBadge(videoStream?.Codec ?? technical?.codec),
+    audioFormatLabel: audioFormatBadge(defaultAudioStream),
+    streamMethod: resolveStreamMethod(mediaSource),
     audioTracks: audioStreams.map((stream) => ({
       id: `audio-${stream.Index}`,
       streamIndex: stream.Index,
       label: audioStreamLabel(stream),
+      formatLabel: audioFormatBadge(stream),
       selected: defaultAudioStreamIndex === stream.Index,
     })),
     subtitleTracks: (subtitles?.items ?? []).map((s) =>
       mapEntitySubtitle(videoId, { ...s, source: String(s.source) }),
     ),
   };
+}
+
+// Reads the server's negotiated delivery decision. SupportsDirectPlay means the raw file plays as-is;
+// otherwise the TranscodingInfo says whether the video is copied (remux) or re-encoded. The player may
+// still fall back at runtime, so this is only the starting plan.
+function resolveStreamMethod(
+  mediaSource: {
+    SupportsDirectPlay?: boolean | null;
+    TranscodingInfo?: { IsVideoDirect?: boolean | null } | null;
+  } | null | undefined,
+): StreamMethod {
+  if (!mediaSource) return "transcode";
+  if (mediaSource.SupportsDirectPlay) return "direct";
+  if (mediaSource.TranscodingInfo?.IsVideoDirect) return "remux";
+  return "transcode";
 }
 
 function colorPipelineLabel(
