@@ -92,13 +92,16 @@ public sealed class PlaybackInfoService : IPlaybackInfoService {
             if (isRemux) {
                 transcodingUrl = BuildRemuxUrl(itemId, mediaSourceId, playSessionId, selectedAudioStream?.StreamIndex, request?.AccessToken);
                 transcodingContainer = "mp4";
+                // The remux copies AAC audio (preserving its channel layout) and transcodes anything else
+                // to stereo AAC, so advertise direct audio only when the selected track is AAC.
+                var audioCopied = string.Equals(selectedAudioStream?.Codec, "aac", StringComparison.OrdinalIgnoreCase);
                 transcodingInfo = new TranscodingInfoResult(
                     "mp4",
                     source.VideoCodec ?? videoStream?.Codec ?? "hevc",
                     "aac",
                     "hls",
                     IsVideoDirect: true,
-                    IsAudioDirect: false);
+                    IsAudioDirect: audioCopied);
             } else {
                 transcodingUrl = BuildTranscodingUrl(itemId, mediaSourceId, playSessionId, selectedAudioStream?.StreamIndex, request?.AccessToken);
                 transcodingContainer = "ts";

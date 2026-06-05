@@ -121,6 +121,41 @@ public sealed class HlsAssetServiceTests : IDisposable {
         Assert.DoesNotContain("EVENT", playlist);
     }
 
+    [Fact]
+    public void RemuxCopiesAacAudioPreservingChannelsAndTranscodesOthersToStereoAac() {
+        // AAC audio is copied (no pointless AAC->AAC re-encode; 5.1/7.1 is preserved instead of downmixed),
+        // which every fMP4-HLS client can decode. Any other codec is transcoded to the safe stereo-AAC
+        // baseline because we cannot assume the client decodes it.
+        Assert.Equal(
+            ["-c:a", "copy"],
+            HlsAssetService.RemuxAudioArguments(RemuxAudioSource("aac"), audioStreamIndex: null));
+        Assert.Equal(
+            ["-c:a", "aac", "-ac", "2", "-b:a", "192k", "-ar", "48000"],
+            HlsAssetService.RemuxAudioArguments(RemuxAudioSource("eac3"), audioStreamIndex: null));
+        // An explicit absolute stream index resolves the codec of that stream.
+        Assert.Equal(
+            ["-c:a", "copy"],
+            HlsAssetService.RemuxAudioArguments(RemuxAudioSource("aac"), audioStreamIndex: 1));
+    }
+
+    private static VideoSourceFile RemuxAudioSource(string audioCodec) =>
+        new(
+            EntityId: Guid.NewGuid(),
+            Path: "/media/x.mkv",
+            ContentType: "video/x-matroska",
+            DirectPlayable: false,
+            VideoCodec: "hevc",
+            Streams: [
+                new VideoSourceStream(
+                    StreamIndex: 0, Type: "Video", Codec: "hevc", Language: null, Title: null,
+                    Width: 1920, Height: 1080, FrameRate: 24, BitRate: null, SampleRate: null, Channels: null,
+                    IsDefault: true, IsForced: false),
+                new VideoSourceStream(
+                    StreamIndex: 1, Type: "Audio", Codec: audioCodec, Language: "eng", Title: null,
+                    Width: null, Height: null, FrameRate: null, BitRate: null, SampleRate: 48000, Channels: 6,
+                    IsDefault: true, IsForced: false)
+            ]);
+
     private static VideoSourceFile HevcSource(string videoCodec, int? dvProfile, bool rpu) =>
         new(
             EntityId: Guid.NewGuid(),

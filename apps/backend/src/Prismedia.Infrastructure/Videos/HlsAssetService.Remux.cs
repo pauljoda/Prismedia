@@ -254,17 +254,10 @@ public sealed partial class HlsAssetService {
         };
 
         arguments.AddRange(HevcSampleEntryTagArguments(source));
+        arguments.AddRange(RemuxAudioArguments(source, audioStreamIndex));
 
         arguments.AddRange(
         [
-            "-c:a",
-            "aac",
-            "-ac",
-            "2",
-            "-b:a",
-            "192k",
-            "-ar",
-            "48000",
             "-f",
             "hls",
             "-hls_time",
@@ -286,6 +279,44 @@ public sealed partial class HlsAssetService {
 
         return arguments;
     }
+
+    /// <summary>
+    /// Builds the audio output arguments for a stream-copy remux.
+    /// </summary>
+    /// <remarks>
+    /// AAC source audio is copied (<c>-c:a copy</c>): re-encoding AAC to AAC is pointless work, and a copy
+    /// preserves the original channel layout (5.1/7.1) instead of downmixing to stereo. Every
+    /// fMP4-HLS-capable client decodes AAC, so this is universally safe without inspecting the client's
+    /// audio capabilities. Any other codec is transcoded to stereo AAC — the safe universal baseline —
+    /// because we cannot assume the client can decode it. Honoring the full per-client copy decision for
+    /// AC3/EAC3/etc. is gated on the device-profile audio capability and is tracked separately (see
+    /// docs/hls-streaming-parity-plan.md, Track B / CopyAudio).
+    /// </remarks>
+    internal static IReadOnlyList<string> RemuxAudioArguments(VideoSourceFile source, int? audioStreamIndex) =>
+        IsAacCodec(SelectedAudioStreamCodec(source, audioStreamIndex))
+            ? ["-c:a", "copy"]
+            : ["-c:a", "aac", "-ac", "2", "-b:a", "192k", "-ar", "48000"];
+
+    // Resolves the codec of the audio stream the remux maps, mirroring the -map expression: a null index
+    // maps "0:a:0?" (the first audio stream); an explicit index maps "0:{index}?" (that absolute stream).
+    private static string? SelectedAudioStreamCodec(VideoSourceFile source, int? audioStreamIndex) {
+        var streams = source.Streams;
+        if (streams is not { Count: > 0 }) {
+            return null;
+        }
+
+        if (audioStreamIndex is { } index) {
+            return streams.FirstOrDefault(stream => stream.StreamIndex == index)?.Codec;
+        }
+
+        return streams
+            .Where(stream => stream.Type.Equals("Audio", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(stream => stream.StreamIndex)
+            .FirstOrDefault()?.Codec;
+    }
+
+    private static bool IsAacCodec(string? codec) =>
+        codec is not null && codec.Equals("aac", StringComparison.OrdinalIgnoreCase);
 
     private async Task<bool> WaitForRemuxFileAsync(
         Guid id,
