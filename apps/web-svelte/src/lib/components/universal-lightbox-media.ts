@@ -29,6 +29,16 @@ export interface BuildLightboxVideoSourceOptions {
   preferOriginal?: boolean;
 }
 
+export interface UniversalLightboxPreloadSource {
+  src: string;
+  rel: "preload" | "prefetch";
+  as: "image" | "video";
+}
+
+export interface BuildLightboxPreloadSourceOptions extends BuildLightboxVideoSourceOptions {
+  radius?: number;
+}
+
 const videoExtensions = new Set([
   "mp4",
   "m4v",
@@ -140,6 +150,50 @@ export function buildLightboxVideoSources(
   return sources;
 }
 
+export function buildLightboxPreloadSources(
+  entities: UniversalLightboxEntity[],
+  index: number,
+  options: BuildLightboxPreloadSourceOptions = {},
+): UniversalLightboxPreloadSource[] {
+  const radius = Math.max(0, options.radius ?? 2);
+  if (entities.length <= 1 || radius === 0) return [];
+
+  const sources: UniversalLightboxPreloadSource[] = [];
+  const seenSources = new Set<string>();
+  const seenIndexes = new Set<number>([index]);
+
+  function add(src: string | null | undefined, rel: UniversalLightboxPreloadSource["rel"], as: UniversalLightboxPreloadSource["as"]) {
+    if (!src || seenSources.has(src)) return;
+    seenSources.add(src);
+    sources.push({ src, rel, as });
+  }
+
+  for (let distance = 1; distance <= radius; distance += 1) {
+    for (const direction of [-1, 1]) {
+      const neighborIndex = normalizedNeighborIndex(index + direction * distance, entities.length);
+      if (seenIndexes.has(neighborIndex)) continue;
+      seenIndexes.add(neighborIndex);
+
+      const entity = entities[neighborIndex];
+      if (!entity) continue;
+
+      if (isLightboxVideoCapable(entity)) {
+        add(entity.coverUrl, "preload", "image");
+
+        if (entity.kind !== ENTITY_KIND.video) {
+          const source = buildLightboxVideoSources(entity, options)[0]?.src;
+          add(source, "prefetch", "video");
+        }
+        continue;
+      }
+
+      add(buildLightboxImageSource(entity)?.src ?? entity.coverUrl, "preload", "image");
+    }
+  }
+
+  return sources;
+}
+
 export function isLightboxVideoCapable(entity: UniversalLightboxEntity): boolean {
   if (entity.kind === ENTITY_KIND.video) return true;
 
@@ -170,6 +224,10 @@ export function mimeTypeForEntity(entity: UniversalLightboxEntity): string | und
 
 function hasFileRole(entity: UniversalLightboxEntity, role: EntityFileRoleCode): boolean {
   return getCapability(entity.capabilities, CAPABILITY_KIND.files)?.items.some((file) => file.role === role) === true;
+}
+
+function normalizedNeighborIndex(index: number, length: number): number {
+  return ((index % length) + length) % length;
 }
 
 function extensionOf(path: string | null | undefined): string {

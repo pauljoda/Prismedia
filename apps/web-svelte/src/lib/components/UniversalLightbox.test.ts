@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
+import { tick } from "svelte";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import UniversalLightboxHarness from "./UniversalLightbox.test-harness.svelte";
 import UniversalLightboxDetailsHarness from "./UniversalLightbox.details-test-harness.svelte";
@@ -205,6 +206,28 @@ describe("UniversalLightbox", () => {
     const source = await readFile("src/lib/components/UniversalLightbox.svelte", "utf8");
 
     expect(source).toContain("buildLightboxVideoSources(current, { preferOriginal: true })");
+  });
+
+  it("preloads neighboring lightbox media for smoother navigation", async () => {
+    render(UniversalLightboxHarness, {
+      props: { entities: [still, second, animatedWithPreview], initialIndex: 1, onClose: vi.fn() },
+    });
+
+    await tick();
+
+    const links = Array.from(
+      document.head.querySelectorAll<HTMLLinkElement>("link[data-lightbox-preload]"),
+    ).map((link) => ({
+      rel: link.getAttribute("rel"),
+      as: link.getAttribute("as"),
+      href: link.getAttribute("href"),
+    }));
+
+    expect(links).toEqual([
+      { rel: "preload", as: "image", href: "/api/entities/image-1/files/source" },
+      { rel: "preload", as: "image", href: "/assets/images/image-video-1/thumb.jpg" },
+      { rel: "prefetch", as: "video", href: "/api/entities/image-video-1/files/source" },
+    ]);
   });
 
   it("sizes embedded minimal videos with a real responsive lightbox frame", async () => {

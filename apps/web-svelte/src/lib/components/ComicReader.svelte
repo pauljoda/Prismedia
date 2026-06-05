@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { browser } from "$app/environment";
   import { tick, untrack } from "svelte";
   import {
     BookOpen,
@@ -67,6 +68,7 @@
   let programmaticWebtoonScroll = false;
   let nextChapterBusy = $state(false);
   let readerPointerGesture: ReaderPointerGesture | null = null;
+  const warmedImages = new Map<string, HTMLImageElement>();
 
   const hasNextChapter = $derived(Boolean(onNextChapter));
   const hasEndAction = $derived(images.length > 0);
@@ -95,6 +97,13 @@
       .map((image) => (image ? imageSrc(image) : ""))
       .filter(Boolean),
   );
+  const visibleSources = $derived(
+    spread
+      .map((pageIndex) => images[pageIndex])
+      .map((image) => (image ? imageSrc(image) : ""))
+      .filter(Boolean),
+  );
+  const warmSources = $derived([...new Set([...visibleSources, ...preloadSources])]);
 
   function setReaderIndex(nextIndex: number) {
     const maxIndex =
@@ -180,6 +189,23 @@
 
   function imageSrc(image: ImageListItemDto) {
     return toApiUrl(image.fullPath ?? image.thumbnailPath) ?? "";
+  }
+
+  function warmImage(src: string) {
+    if (!browser || !src || warmedImages.has(src)) return;
+
+    const img = new Image();
+    warmedImages.set(src, img);
+    img.decoding = "async";
+    img.loading = "eager";
+    img.onerror = () => {
+      warmedImages.delete(src);
+    };
+    img.src = src;
+
+    if (typeof img.decode === "function") {
+      void img.decode().catch(() => undefined);
+    }
   }
 
   // A committed swipe must travel at least this far; shorter drags are neither a
@@ -303,6 +329,20 @@
     webtoonStage;
     const targetIndex = untrack(() => index);
     void scrollWebtoonToIndex(targetIndex);
+  });
+
+  $effect(() => {
+    if (!browser) return;
+
+    const desiredSources = new Set(warmSources);
+    for (const src of desiredSources) {
+      warmImage(src);
+    }
+    for (const src of warmedImages.keys()) {
+      if (!desiredSources.has(src)) {
+        warmedImages.delete(src);
+      }
+    }
   });
 </script>
 
@@ -492,7 +532,7 @@
                   alt={image.title}
                   class="max-h-full max-w-full object-contain shadow-[0_0_30px_rgba(0,0,0,0.45)]"
                   loading="eager"
-                  decoding="async"
+                  decoding="sync"
                 />
               </NsfwBlur>
             {/if}

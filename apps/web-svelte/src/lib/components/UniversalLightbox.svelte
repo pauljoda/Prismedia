@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { browser } from "$app/environment";
   import { onMount, untrack, type Snippet } from "svelte";
   import {
     ChevronLeft,
@@ -24,6 +25,7 @@
   import VideoPlayer, { type VideoPlayerHandle } from "./VideoPlayer.svelte";
   import {
     buildLightboxImageSource,
+    buildLightboxPreloadSources,
     buildLightboxVideoSources,
     isLightboxVideoCapable,
     type UniversalLightboxEntity,
@@ -38,6 +40,11 @@
     detailsContent?: Snippet<[UniversalLightboxEntity]>;
     sharedKey?: string;
     showRatingControls?: boolean;
+  }
+
+  interface WarmedImageDimensions {
+    width: number;
+    height: number;
   }
 
   let {
@@ -69,10 +76,13 @@
   let videoPlayerHandle: VideoPlayerHandle | undefined = $state();
   let videoMuted = $state(true);
   let videoReady = $state(false);
+  let warmedImages = $state<Record<string, WarmedImageDimensions>>({});
   let stripThumbEls: Array<HTMLButtonElement | undefined> = $state([]);
   let pointerStart: { x: number; y: number; t: number } | null = null;
   let panning = $state(false);
   let lastTapAt = 0;
+  let activeMediaKey: string | null = null;
+  const pendingImageWarmers = new Map<string, HTMLImageElement>();
   // When a swipe over a video is consumed as navigation/dismiss, the browser
   // still fires a trailing click that would otherwise toggle play. This flag
   // lets a capture-phase click handler swallow exactly that one click.
@@ -91,9 +101,14 @@
   const isCurrentVideo = $derived(current ? isLightboxVideoCapable(current) : false);
   const currentVideoSources = $derived(current ? buildLightboxVideoSources(current, { preferOriginal: true }) : []);
   const primaryVideoSource = $derived(currentVideoSources[0] ?? null);
+  const currentMediaKey = $derived(current ? `${current.id}:${currentImageSource?.src ?? primaryVideoSource?.src ?? ""}` : null);
   const hasCurrentVideoPlayback = $derived(Boolean(isCurrentVideo && primaryVideoSource));
   const primaryVideoCodec = $derived(primaryVideoSource?.quality === "original" ? currentTechnical?.codec : null);
   const fallbackPoster = $derived(current?.coverUrl ?? undefined);
+  const preloadSources = $derived(buildLightboxPreloadSources(entities, index, { preferOriginal: true }));
+  const preloadImageSources = $derived(
+    preloadSources.filter((source) => source.as === "image").map((source) => source.src),
+  );
   const counterText = $derived(`${index + 1} / ${entities.length}`);
   const canOpenDetails = $derived(Boolean(detailsContent && current));
   const keyboardHintText = $derived.by(() => {
@@ -116,9 +131,15 @@
 
   $effect(() => {
     if (!current) return;
-    ready = isCurrentVideo;
-    naturalW = positiveNumberValue(currentTechnical?.width) ?? 0;
-    naturalH = positiveNumberValue(currentTechnical?.height) ?? 0;
+    if (activeMediaKey === currentMediaKey) return;
+    activeMediaKey = currentMediaKey;
+
+    const warmed = !isCurrentVideo && currentImageSource
+      ? untrack(() => warmedImages[currentImageSource.src])
+      : undefined;
+    ready = isCurrentVideo || Boolean(warmed);
+    naturalW = positiveNumberValue(currentTechnical?.width) ?? warmed?.width ?? 0;
+    naturalH = positiveNumberValue(currentTechnical?.height) ?? warmed?.height ?? 0;
     translateX = 0;
     translateY = 0;
     scale = 1;
@@ -126,6 +147,25 @@
     videoMuted = true;
     videoReady = false;
     videoPlayerHandle = undefined;
+    if (warmed) {
+      scheduleFitForCurrentMedia(currentMediaKey);
+    }
+  });
+
+  $effect(() => {
+    if (!browser) return;
+    for (const src of preloadImageSources) {
+      warmImage(src);
+    }
+  });
+
+  $effect(() => {
+    if (!current || isCurrentVideo || ready || !currentImageSource) return;
+    const warmed = warmedImages[currentImageSource.src];
+    if (!warmed) return;
+    naturalW = naturalW || positiveNumberValue(currentTechnical?.width) || warmed.width;
+    naturalH = naturalH || positiveNumberValue(currentTechnical?.height) || warmed.height;
+    scheduleFitForCurrentMedia(currentMediaKey);
   });
 
   function goPrev() {
@@ -168,10 +208,50 @@
     ready = true;
   }
 
+  function scheduleFitForCurrentMedia(mediaKey: string | null) {
+    if (!mediaKey) return;
+    queueMicrotask(() => {
+      if (activeMediaKey !== mediaKey) return;
+      applyFit();
+    });
+  }
+
+  function rememberWarmedImage(src: string | null | undefined, width: number, height: number) {
+    if (!src) return;
+    const next = {
+      width: width > 0 ? width : 1,
+      height: height > 0 ? height : 1,
+    };
+    const currentDimensions = warmedImages[src];
+    if (currentDimensions?.width === next.width && currentDimensions.height === next.height) return;
+    warmedImages = { ...warmedImages, [src]: next };
+  }
+
+  function warmImage(src: string | null | undefined) {
+    if (!browser || !src) return;
+    if (untrack(() => warmedImages[src]) || pendingImageWarmers.has(src)) return;
+
+    const img = new Image();
+    pendingImageWarmers.set(src, img);
+    img.decoding = "async";
+    img.onload = () => {
+      pendingImageWarmers.delete(src);
+      rememberWarmedImage(src, img.naturalWidth, img.naturalHeight);
+    };
+    img.onerror = () => {
+      pendingImageWarmers.delete(src);
+    };
+    img.src = src;
+    if (img.complete && img.naturalWidth > 0) {
+      img.onload?.(new Event("load"));
+    }
+  }
+
   function handleImageLoad(event: Event) {
     const el = event.currentTarget as HTMLImageElement;
     naturalW = el.naturalWidth || naturalW || 1;
     naturalH = el.naturalHeight || naturalH || 1;
+    rememberWarmedImage(el.getAttribute("src") ?? currentImageSource?.src, naturalW, naturalH);
     applyFit();
   }
 
@@ -371,6 +451,12 @@
   });
 
 </script>
+
+<svelte:head>
+  {#each preloadSources as source (`${source.rel}:${source.as}:${source.src}`)}
+    <link data-lightbox-preload rel={source.rel} as={source.as} href={source.src} />
+  {/each}
+</svelte:head>
 
 <div
   use:portal

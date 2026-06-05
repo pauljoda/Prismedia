@@ -318,6 +318,55 @@ describe("ComicReader", () => {
     ]);
   });
 
+  it("decode-warms the current spread and nearby pages for seamless page turns", async () => {
+    const decoded: string[] = [];
+    const OriginalImage = globalThis.Image;
+    class DecodeWarmImage {
+      decoding = "";
+      loading = "";
+      onerror: (() => void) | null = null;
+      #src = "";
+
+      get src() {
+        return this.#src;
+      }
+
+      set src(value: string) {
+        this.#src = value;
+      }
+
+      decode() {
+        decoded.push(this.#src);
+        return Promise.resolve();
+      }
+    }
+    vi.stubGlobal("Image", DecodeWarmImage);
+
+    try {
+      render(ComicReader, {
+        props: {
+          images: makeImages(6),
+          initialIndex: 2,
+          title: "Comic",
+          onClose: vi.fn(),
+        },
+      });
+
+      await tick();
+      await Promise.resolve();
+
+      expect(decoded).toEqual([
+        "/api/assets/images/image-3/full",
+        "/api/assets/images/image-1/full",
+        "/api/assets/images/image-2/full",
+        "/api/assets/images/image-4/full",
+        "/api/assets/images/image-5/full",
+      ]);
+    } finally {
+      vi.stubGlobal("Image", OriginalImage);
+    }
+  });
+
   it("reports the nearest page while scrolling in webtoon mode", async () => {
     const onIndexChange = vi.fn();
     const { container, getByLabelText } = render(ComicReader, {

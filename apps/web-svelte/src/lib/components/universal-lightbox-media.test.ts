@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { EntityCapability, EntityCapabilityImagesCapability } from "$lib/api/generated/model";
 import {
   buildLightboxImageSource,
+  buildLightboxPreloadSources,
   buildLightboxVideoSources,
   isLightboxVideoCapable,
   lightboxEntityFromCard,
@@ -125,6 +126,47 @@ describe("universal-lightbox-media", () => {
     }))).toEqual([
       { src: "/api/entities/image-1/files/preview", type: "video/mp4", quality: "fallback" },
       { src: "/api/entities/image-1/files/source", type: "video/webm", quality: "original" },
+    ]);
+  });
+
+  it("builds nearby preload hints without pulling full true-video sources", () => {
+    const previous = entity({ id: "previous", title: "Previous.jpg" });
+    const current = entity({ id: "current", title: "Current.jpg" });
+    const animated = entity({
+      id: "animated",
+      title: "clip.webm",
+      coverUrl: "/assets/images/animated/thumb.jpg",
+      capabilities: [
+        {
+          kind: "files",
+          items: [
+            { role: "source", path: "/media/clip.webm", mimeType: "video/webm" },
+            { role: "preview", path: "/assets/images/animated/preview.mp4", mimeType: "video/mp4" },
+          ],
+        },
+      ],
+    });
+    const movie = entity({
+      id: "movie",
+      kind: "video",
+      title: "Movie.mp4",
+      coverUrl: "/assets/videos/movie/poster.jpg",
+      capabilities: [
+        {
+          kind: "files",
+          items: [{ role: "source", path: "/media/movie.mp4", mimeType: "video/mp4" }],
+        },
+      ],
+    });
+
+    expect(buildLightboxPreloadSources([previous, current, animated, movie], 1, {
+      preferOriginal: true,
+      radius: 2,
+    })).toEqual([
+      { src: "/api/entities/previous/files/source", rel: "preload", as: "image" },
+      { src: "/assets/images/animated/thumb.jpg", rel: "preload", as: "image" },
+      { src: "/api/entities/animated/files/source", rel: "prefetch", as: "video" },
+      { src: "/assets/videos/movie/poster.jpg", rel: "preload", as: "image" },
     ]);
   });
 
