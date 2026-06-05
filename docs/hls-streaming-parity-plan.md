@@ -15,6 +15,17 @@ This plan is the **playback/streaming** half of Jellyfin parity. Its app-facing 
 
 ---
 
+## Implementation status — branch `feat/hls-streaming-parity`
+
+- **P0.1 single main HLS variant — DONE.** Master playlist advertises one top, source-capped rung by default; full ladder behind the new `hls.enableAdaptiveBitrate` setting (default off). This alone collapses N concurrent transcodes to one per session and neutralises the audit's "concurrent rendition" finding.
+- **P0.4 thread cap — DONE.** Software transcode emits `-threads` (`ProcessorCount - 1` default, configurable via `hls.encodingThreadCount`); remux copies cap at `-threads 2`.
+- **P0.2 teardown/window/guard — re-scoped.** With single-variant default there is only one rendition, so the concurrent-rendition orphan can't arise and the existing per-rendition teardown already cancels the same-rendition job on a forward-seek restart. Broadening teardown across renditions broke adaptive switching (test `FarVirtualSegmentDoesNotCancelOtherActiveRenditions...`) for zero benefit in the default — **reverted**. The hard concurrency semaphore is **skipped** (real starvation risk for a 2nd viewer; marginal for a single-user household). The 24s seek-window tighten is **coupled to the buffer reduction** and folded into P0.3.
+- **P0.5 tonemapx health check — deferred.** tonemapx is guaranteed present in the shipped jellyfin-ffmpeg image, and the degraded software-no-tonemap path already logs a runtime warning (`HlsAssetService.Generation.cs:122`). Revisit only if a non-jellyfin ffmpeg override becomes supported.
+- **P0.3 (buffer 30s/6s + 24s seek window + stdin throttle) — REMAINING.** These three are coupled and must ship together (a 240s buffer defeats any pause; a tight window without the small buffer causes restart churn). The stdin throttle needs net-new `ProcessExecutor` streaming-stdin support and **real-playback validation on the dev stack** (a blind throttle can stall playback), so it is the next coherent change rather than a blind edit. Note: for the heavy 4K-HDR pin case the throttle adds little — a slow software encode never races ahead — so P0.1 + P0.4 already deliver the bulk of the CPU win; P0.3 mainly bounds easy-encode burst and tightens seeks.
+- **Track B (app direct-play parity) — REMAINING**, the larger structural win for heavy content (HEVC/HDR/DoVi decoded natively, never transcoded).
+
+---
+
 ## 0. Verification summary (re-confirmed against source + real ffmpeg)
 
 **Prismedia current state**
