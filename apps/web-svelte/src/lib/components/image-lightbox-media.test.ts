@@ -16,23 +16,23 @@ const baseImage = {
 };
 
 describe("image-lightbox-media", () => {
-  it("uses the highest-quality full video before the generated preview", () => {
+  it("uses the generated preview before the original video for playback", () => {
     expect(buildLightboxVideoSources(baseImage)).toEqual([
-      { src: "/assets/images/image-1/full", type: "video/mp4", quality: "original" },
       { src: "/assets/images/image-1/preview", type: "video/mp4", quality: "fallback" },
+      { src: "/assets/images/image-1/full", type: "video/mp4", quality: "original" },
     ]);
   });
 
-  it("keeps the MP4 preview as a mobile Safari fallback for WebM originals", () => {
+  it("prefers the MP4 preview when the original is WebM", () => {
     expect(buildLightboxVideoSources({ ...baseImage, format: "webm", title: "clip.webm" })).toEqual([
-      { src: "/assets/images/image-1/full", type: "video/webm", quality: "original" },
       { src: "/assets/images/image-1/preview", type: "video/mp4", quality: "fallback" },
+      { src: "/assets/images/image-1/full", type: "video/webm", quality: "original" },
     ]);
   });
 
   it("does not duplicate the same URL when only one video path is available", () => {
     expect(buildLightboxVideoSources({ ...baseImage, previewPath: "/assets/images/image-1/full" })).toEqual([
-      { src: "/assets/images/image-1/full", type: "video/mp4", quality: "original" },
+      { src: "/assets/images/image-1/full", type: "video/mp4", quality: "fallback" },
     ]);
   });
 

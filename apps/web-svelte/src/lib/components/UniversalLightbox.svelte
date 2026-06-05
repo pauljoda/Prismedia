@@ -78,6 +78,7 @@
   let suppressStageClick = false;
 
   const current = $derived(entities[index] ?? null);
+  const currentTechnical = $derived(current ? getCapability(current.capabilities, CAPABILITY_KIND.technical) : null);
   const currentRating = $derived.by(() => {
     if (!current) return null;
     const override = ratingOverrides[current.id];
@@ -89,6 +90,7 @@
   const isCurrentVideo = $derived(current ? isLightboxVideoCapable(current) : false);
   const currentVideoSources = $derived(current ? buildLightboxVideoSources(current) : []);
   const primaryVideoSource = $derived(currentVideoSources[0] ?? null);
+  const primaryVideoCodec = $derived(primaryVideoSource?.quality === "original" ? currentTechnical?.codec : null);
   const fallbackPoster = $derived(current?.coverUrl ?? undefined);
   const counterText = $derived(`${index + 1} / ${entities.length}`);
   const canOpenDetails = $derived(Boolean(detailsContent && current));
@@ -113,8 +115,8 @@
   $effect(() => {
     if (!current) return;
     ready = isCurrentVideo;
-    naturalW = positiveNumberValue(getCapability(current.capabilities, CAPABILITY_KIND.technical)?.width) ?? 0;
-    naturalH = positiveNumberValue(getCapability(current.capabilities, CAPABILITY_KIND.technical)?.height) ?? 0;
+    naturalW = positiveNumberValue(currentTechnical?.width) ?? 0;
+    naturalH = positiveNumberValue(currentTechnical?.height) ?? 0;
     translateX = 0;
     translateY = 0;
     scale = 1;
@@ -456,9 +458,9 @@
                 <VideoPlayer
                   bind:handle={videoPlayerHandle}
                   directSrc={primaryVideoSource.src}
-                  codec={getCapability(current.capabilities, CAPABILITY_KIND.technical)?.codec}
-                  sourceWidth={positiveNumberValue(getCapability(current.capabilities, CAPABILITY_KIND.technical)?.width)}
-                  sourceHeight={positiveNumberValue(getCapability(current.capabilities, CAPABILITY_KIND.technical)?.height)}
+                  codec={primaryVideoCodec}
+                  sourceWidth={positiveNumberValue(currentTechnical?.width)}
+                  sourceHeight={positiveNumberValue(currentTechnical?.height)}
                   poster={fallbackPoster}
                   defaultPlaybackMode="direct"
                   showCastControls={false}

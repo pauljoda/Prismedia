@@ -74,7 +74,7 @@ describe("universal-lightbox-media", () => {
     expect(isLightboxVideoCapable(entity({ title: "photo.jpg", capabilities: [] }))).toBe(false);
   });
 
-  it("builds original video sources before preview fallbacks", () => {
+  it("builds preview video sources before originals for animated playback", () => {
     expect(buildLightboxVideoSources(entity({
       title: "clip.webm",
       capabilities: [
@@ -87,8 +87,8 @@ describe("universal-lightbox-media", () => {
         },
       ],
     }))).toEqual([
-      { src: "/api/entities/image-1/files/source", type: "video/webm", quality: "original" },
       { src: "/api/entities/image-1/files/preview", type: "video/mp4", quality: "fallback" },
+      { src: "/api/entities/image-1/files/source", type: "video/webm", quality: "original" },
     ]);
   });
 

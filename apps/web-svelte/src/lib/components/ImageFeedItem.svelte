@@ -17,7 +17,7 @@
   let { image, index, isActive, shouldLoad, onOpen, onActive }: Props = $props();
 
   const src = $derived(toApiUrl(image.thumbnailPath));
-  const videoSrc = $derived(toApiUrl(image.fullPath ?? image.previewPath));
+  const videoSrc = $derived(toApiUrl(image.previewPath ?? image.fullPath));
   const canPreview = $derived(image.isVideo && Boolean(videoSrc));
   const shouldRenderPreview = $derived(canPreview && shouldLoad);
   const activeDetector = elementInView({ rootMargin: "-18% 0px -18% 0px", threshold: 0.55 });

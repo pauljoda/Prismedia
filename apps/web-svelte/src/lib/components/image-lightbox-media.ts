@@ -54,8 +54,8 @@ export function buildLightboxVideoSources(image: LightboxMediaImage): LightboxVi
     sources.push({ src, type, quality });
   }
 
-  add(image.fullPath, "original", mimeTypeForImageVideoFormat(image.format, image.title));
   add(image.previewPath, "fallback", "video/mp4");
+  add(image.fullPath, "original", mimeTypeForImageVideoFormat(image.format, image.title));
 
   if (sources.length === 0) {
     add(image.thumbnailPath, "fallback");
