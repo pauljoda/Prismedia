@@ -207,7 +207,13 @@
   <!-- Context bar -->
   <div class="grid grid-cols-[auto_1fr_auto_auto_auto] items-center gap-4 rounded-sm border border-border-subtle bg-surface-1 p-3.5 shadow-well">
     {#if contextPosterUrl}
-      <img src={contextPosterUrl} alt="" class={cn("rounded-xs object-cover", coverIsSquare ? "h-14 w-14" : contextImageWide ? "h-12 w-[5.5rem]" : "h-16 w-11")} decoding="async" />
+      <img
+        src={contextPosterUrl}
+        alt=""
+        class={cn("rounded-xs object-cover", coverIsSquare ? "h-14 w-14" : contextImageWide ? "h-12 w-[5.5rem]" : "h-16 w-11")}
+        decoding="async"
+        referrerpolicy="no-referrer"
+      />
     {:else}
       <div class={cn("grid place-items-center rounded-xs bg-surface-3", coverIsSquare ? "h-14 w-14" : contextImageWide ? "h-12 w-[5.5rem]" : "h-16 w-11")}>
         <Layers class="h-5 w-5 text-text-disabled" />
@@ -392,6 +398,7 @@
               class="h-full w-full object-cover"
               loading="lazy"
               decoding="async"
+              referrerpolicy="no-referrer"
               fetchpriority="low"
               onload={(e) => e.currentTarget.closest('.identify-artwork-tile')?.classList.add('is-loaded')}
             />
