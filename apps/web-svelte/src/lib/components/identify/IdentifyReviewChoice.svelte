@@ -275,6 +275,7 @@
                   alt=""
                   loading="lazy"
                   decoding="async"
+                  referrerpolicy="no-referrer"
                   class="absolute inset-0 h-full w-full object-cover"
                   onerror={(event) => ((event.currentTarget as HTMLImageElement).style.display = "none")}
                 />

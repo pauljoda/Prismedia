@@ -72,6 +72,7 @@ public sealed partial class HlsAssetService {
         var transcoderOptions = await ResolveTranscoderOptionsAsync(cancellationToken);
         var transcoderProfile = ResolveTranscoderProfile(transcoderOptions);
         var effectiveTranscoderProfile = ResolveEffectiveTranscoderProfile(source, transcoderProfile);
+        var threadCount = ResolveEncoderThreadCount(transcoderOptions.EncodingThreadCount);
         if (effectiveTranscoderProfile != transcoderProfile) {
             _logger?.LogInformation(
                 "Virtual HLS generation for HDR/Dolby Vision source {VideoId} is using software tone mapping instead of {TranscoderProfile}.",
@@ -91,7 +92,8 @@ public sealed partial class HlsAssetService {
                     playlistPath,
                     segmentPattern,
                     effectiveTranscoderProfile,
-                    transcoderOptions.VaapiDevice),
+                    transcoderOptions.VaapiDevice,
+                    threadCount),
                 environment: null,
                 cancellationToken);
 
@@ -114,7 +116,8 @@ public sealed partial class HlsAssetService {
                         playlistPath,
                         segmentPattern,
                         HlsTranscoderProfile.Software,
-                        transcoderOptions.VaapiDevice),
+                        transcoderOptions.VaapiDevice,
+                        threadCount),
                     environment: null,
                     cancellationToken);
             }
@@ -140,6 +143,7 @@ public sealed partial class HlsAssetService {
                         segmentPattern,
                         HlsTranscoderProfile.Software,
                         transcoderOptions.VaapiDevice,
+                        threadCount,
                         enableToneMapping: false),
                     environment: null,
                     cancellationToken);

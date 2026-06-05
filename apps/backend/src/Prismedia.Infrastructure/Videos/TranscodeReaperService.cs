@@ -1,5 +1,7 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Prismedia.Application.Settings;
 using Prismedia.Application.Videos;
 
 namespace Prismedia.Infrastructure.Videos;
@@ -12,6 +14,12 @@ namespace Prismedia.Infrastructure.Videos;
 /// ffmpeg process tree while leaving already-produced segments in the cache, so a reaped session
 /// resumes from cache and only re-encodes from the frontier. This is the single, universal cleanup
 /// path: every transcode and remux is keyed by item id, so one sweep covers them all.
+/// <para>
+/// The same sweep also enforces the configured transcode-cache size limit: cancelling a job leaves
+/// its segments on disk, so without a ceiling the cache would grow indefinitely as more videos are
+/// watched. After reaping, the least-recently-played cached items (that are not currently playing)
+/// are evicted until the cache is back under the limit.
+/// </para>
 /// </summary>
 public sealed class TranscodeReaperService : BackgroundService {
     /// <summary>How often the reaper sweeps for abandoned jobs.</summary>
@@ -31,13 +39,19 @@ public sealed class TranscodeReaperService : BackgroundService {
     private static readonly TimeSpan MaxLifetime = TimeSpan.FromHours(6);
 
     private readonly ITranscodeSessionService _sessions;
+    private readonly ITranscodeCacheService _cache;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<TranscodeReaperService> _logger;
 
-    /// <summary>Creates the reaper over the shared transcode session registry.</summary>
+    /// <summary>Creates the reaper over the shared transcode session registry and cache manager.</summary>
     public TranscodeReaperService(
         ITranscodeSessionService sessions,
+        ITranscodeCacheService cache,
+        IServiceScopeFactory scopeFactory,
         ILogger<TranscodeReaperService> logger) {
         _sessions = sessions;
+        _cache = cache;
+        _scopeFactory = scopeFactory;
         _logger = logger;
     }
 
@@ -47,7 +61,7 @@ public sealed class TranscodeReaperService : BackgroundService {
         try {
             while (await timer.WaitForNextTickAsync(stoppingToken)) {
                 try {
-                    Sweep();
+                    await SweepAsync(stoppingToken);
                 } catch (Exception ex) {
                     _logger.LogWarning(ex, "Transcode reaper sweep failed.");
                 }
@@ -57,7 +71,7 @@ public sealed class TranscodeReaperService : BackgroundService {
         }
     }
 
-    private void Sweep() {
+    private async Task SweepAsync(CancellationToken cancellationToken) {
         var liveItemIds = _sessions.LiveItemIds(SessionTtl);
         var staleSessions = _sessions.ReapStaleSessions(SessionTtl);
         var reapedJobs = HlsAssetService.ReapOrphanedJobs(liveItemIds, IdleGrace, MaxLifetime);
@@ -66,6 +80,24 @@ public sealed class TranscodeReaperService : BackgroundService {
                 "Transcode reaper cleared {StaleSessions} abandoned session(s) and cancelled {ReapedJobs} orphaned or expired ffmpeg job(s).",
                 staleSessions,
                 reapedJobs);
+        }
+
+        var maxBytes = await ResolveCacheLimitBytesAsync(cancellationToken);
+        if (maxBytes > 0) {
+            _cache.PruneToLimit(maxBytes, liveItemIds);
+        }
+    }
+
+    // Reads the configured maximum cache size (in bytes) from settings; 0 means unlimited.
+    private async Task<long> ResolveCacheLimitBytesAsync(CancellationToken cancellationToken) {
+        try {
+            await using var scope = _scopeFactory.CreateAsyncScope();
+            var settings = scope.ServiceProvider.GetRequiredService<SettingsService>();
+            var hls = await settings.GetHlsSettingsAsync(cancellationToken);
+            return ITranscodeCacheService.GigabytesToBytes(hls.MaxCacheSizeGb);
+        } catch (Exception ex) {
+            _logger.LogWarning(ex, "Could not read the transcode cache limit; skipping eviction this sweep.");
+            return 0;
         }
     }
 }

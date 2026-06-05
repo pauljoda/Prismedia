@@ -147,9 +147,15 @@ public sealed partial class HlsAssetService : IHlsAssetService {
 
         if (normalizedAssetPath.Equals("master.m3u8", StringComparison.OrdinalIgnoreCase)) {
             var trickplayStreams = await GetTrickplayStreamsAsync(id, cancellationToken);
+            var transcoderOptions = await ResolveTranscoderOptionsAsync(cancellationToken);
             return await WriteTextAssetAsync(
                 VirtualPath(id, audioCacheKey, "master.m3u8"),
-                BuildVirtualMasterPlaylist(source, renditions, trickplayStreams, selectedAudioStreamIndex),
+                BuildVirtualMasterPlaylist(
+                    source,
+                    renditions,
+                    trickplayStreams,
+                    selectedAudioStreamIndex,
+                    transcoderOptions.EnableAdaptiveBitrate),
                 ".m3u8",
                 cancellationToken);
         }
@@ -583,9 +589,17 @@ public sealed partial class HlsAssetService : IHlsAssetService {
         VideoSourceFile source,
         IReadOnlyList<VirtualHlsRendition> renditions,
         IReadOnlyList<VirtualTrickplayStream> trickplayStreams,
-        int? audioStreamIndex) {
+        int? audioStreamIndex,
+        bool adaptiveBitrate) {
+        // Default to a single rung (the highest, source-capped quality) like the reference media
+        // server: advertising the full ladder lets the player switch quality and spawn a second
+        // concurrent transcode, which is the main way one viewer pins the CPU. Adaptive bitrate is
+        // opt-in via settings; when on, the full ladder is advertised.
+        var advertised = adaptiveBitrate || renditions.Count == 0
+            ? renditions
+            : renditions.Take(1).ToArray();
         var lines = new List<string> { "#EXTM3U", "#EXT-X-VERSION:6" };
-        foreach (var rendition in renditions) {
+        foreach (var rendition in advertised) {
             var width = ScaledWidth(source.Width, source.Height, rendition.Height);
             var resolution = width is null ? "" : $",RESOLUTION={width}x{rendition.Height}";
             var codecs = H264CodecForHeight(rendition.Height);

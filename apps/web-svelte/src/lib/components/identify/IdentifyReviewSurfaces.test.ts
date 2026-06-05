@@ -136,6 +136,9 @@ describe("Identify review surfaces", () => {
     expect(backdropGroup?.classList.contains("identify-artwork-grid")).toBe(true);
     expect(posterGroup?.querySelectorAll(".identify-artwork-tile")).toHaveLength(2);
     expect(backdropGroup?.querySelectorAll(".identify-artwork-tile")).toHaveLength(2);
+    for (const img of container.querySelectorAll(".identify-artwork-tile img")) {
+      expect(img).toHaveAttribute("referrerpolicy", "no-referrer");
+    }
   });
 
   it("labels the field diff panel as base fields and collapses panel content from the header", async () => {

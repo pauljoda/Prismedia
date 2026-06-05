@@ -175,6 +175,30 @@ export async function resetSetting(
   return normalizeSettingDescriptor(response);
 }
 
+export interface TranscodeCacheStatus {
+  usedBytes: number;
+  maxBytes: number;
+}
+
+function normalizeTranscodeCacheStatus(raw: { usedBytes?: number; maxBytes?: number }): TranscodeCacheStatus {
+  return {
+    usedBytes: Number(raw?.usedBytes ?? 0),
+    maxBytes: Number(raw?.maxBytes ?? 0),
+  };
+}
+
+export async function fetchTranscodeCacheStatus(options?: RequestOptions): Promise<TranscodeCacheStatus> {
+  return normalizeTranscodeCacheStatus(
+    await fetchApi("/settings/transcode-cache", { signal: options?.signal }),
+  );
+}
+
+export async function clearTranscodeCache(options?: RequestOptions): Promise<TranscodeCacheStatus> {
+  return normalizeTranscodeCacheStatus(
+    await fetchApi("/settings/transcode-cache/clear", { method: "POST", signal: options?.signal }),
+  );
+}
+
 export async function fetchLibraryConfig(options?: RequestOptions): Promise<LibraryConfigResponse> {
   const response = unwrapGenerated<GeneratedLibraryConfigResponse>(
     await getLibraryConfig(requestInit(options)),

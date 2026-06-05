@@ -90,6 +90,21 @@ public sealed class HlsAssetServiceTests : IDisposable {
     }
 
     [Fact]
+    public void RemuxSegmentDurationsCutShortWhenLongGopOvershootsThreshold() {
+        // A long GOP that overshoots a grid line, followed by a keyframe just past it, is where the
+        // threshold-advance rule matters. ffmpeg advances its cut threshold by exactly one segment length
+        // (6 -> 12 -> 18 -> 24) and cuts at the first keyframe at/after the current threshold; it does NOT
+        // jump the threshold past the keyframe that triggered the cut. Verified empirically against
+        // jellyfin-ffmpeg: keyframes [0,19,20,25] over a 30s source produce FOUR segments [19,1,5,5].
+        // (Jumping the threshold past the cut would skip the keyframe at 20 and wrongly produce [19,6,5].)
+        var keyframes = new List<double> { 0.0, 19.0, 20.0, 25.0 };
+
+        var durations = HlsAssetService.BuildRemuxSegmentDurations(keyframes, 30.0);
+
+        Assert.Equal([19.0, 1.0, 5.0, 5.0], durations);
+    }
+
+    [Fact]
     public void RemuxVodPlaylistIsCompleteAndSeekable() {
         var durations = new List<double> { 6.006, 6.006, 4.2 };
 
@@ -105,6 +120,41 @@ public sealed class HlsAssetServiceTests : IDisposable {
         // A growing EVENT playlist (the old behavior) would limit the seekable range; assert we never emit it.
         Assert.DoesNotContain("EVENT", playlist);
     }
+
+    [Fact]
+    public void RemuxCopiesAacAudioPreservingChannelsAndTranscodesOthersToStereoAac() {
+        // AAC audio is copied (no pointless AAC->AAC re-encode; 5.1/7.1 is preserved instead of downmixed),
+        // which every fMP4-HLS client can decode. Any other codec is transcoded to the safe stereo-AAC
+        // baseline because we cannot assume the client decodes it.
+        Assert.Equal(
+            ["-c:a", "copy"],
+            HlsAssetService.RemuxAudioArguments(RemuxAudioSource("aac"), audioStreamIndex: null));
+        Assert.Equal(
+            ["-c:a", "aac", "-ac", "2", "-b:a", "192k", "-ar", "48000"],
+            HlsAssetService.RemuxAudioArguments(RemuxAudioSource("eac3"), audioStreamIndex: null));
+        // An explicit absolute stream index resolves the codec of that stream.
+        Assert.Equal(
+            ["-c:a", "copy"],
+            HlsAssetService.RemuxAudioArguments(RemuxAudioSource("aac"), audioStreamIndex: 1));
+    }
+
+    private static VideoSourceFile RemuxAudioSource(string audioCodec) =>
+        new(
+            EntityId: Guid.NewGuid(),
+            Path: "/media/x.mkv",
+            ContentType: "video/x-matroska",
+            DirectPlayable: false,
+            VideoCodec: "hevc",
+            Streams: [
+                new VideoSourceStream(
+                    StreamIndex: 0, Type: "Video", Codec: "hevc", Language: null, Title: null,
+                    Width: 1920, Height: 1080, FrameRate: 24, BitRate: null, SampleRate: null, Channels: null,
+                    IsDefault: true, IsForced: false),
+                new VideoSourceStream(
+                    StreamIndex: 1, Type: "Audio", Codec: audioCodec, Language: "eng", Title: null,
+                    Width: null, Height: null, FrameRate: null, BitRate: null, SampleRate: 48000, Channels: 6,
+                    IsDefault: true, IsForced: false)
+            ]);
 
     private static VideoSourceFile HevcSource(string videoCodec, int? dvProfile, bool rpu) =>
         new(
@@ -169,14 +219,14 @@ public sealed class HlsAssetServiceTests : IDisposable {
 
         Assert.NotNull(master);
         var masterPlaylist = await File.ReadAllTextAsync(master.Path);
+        // Single-variant default (adaptive bitrate off): only the top, source-capped rung is advertised,
+        // matching the reference media server's single-stream default so a client quality switch cannot
+        // spawn a second concurrent transcode.
         Assert.Contains("hls/40mbps/stream.m3u8", masterPlaylist);
-        Assert.Contains("hls/20mbps/stream.m3u8", masterPlaylist);
-        Assert.Contains("hls/15mbps/stream.m3u8", masterPlaylist);
-        Assert.Contains("hls/8mbps/stream.m3u8", masterPlaylist);
-        Assert.Contains("hls/720kbps/stream.m3u8", masterPlaylist);
         Assert.Contains("RESOLUTION=3840x1920", masterPlaylist);
-        Assert.Contains("RESOLUTION=2880x1440", masterPlaylist);
-        Assert.Contains("RESOLUTION=960x480", masterPlaylist);
+        Assert.DoesNotContain("hls/20mbps/stream.m3u8", masterPlaylist);
+        Assert.DoesNotContain("hls/8mbps/stream.m3u8", masterPlaylist);
+        Assert.DoesNotContain("hls/720kbps/stream.m3u8", masterPlaylist);
         Assert.NotNull(variant);
         var playlist = await File.ReadAllTextAsync(variant.Path);
         Assert.Contains("#EXT-X-PLAYLIST-TYPE:VOD", playlist);
@@ -184,6 +234,39 @@ public sealed class HlsAssetServiceTests : IDisposable {
         Assert.Contains("#EXTINF:1.000000,", playlist);
         Assert.Contains("#EXT-X-ENDLIST", playlist);
         Assert.False(process.WasCalled);
+    }
+
+    [Fact]
+    public async Task VirtualMasterAdvertisesFullLadderWhenAdaptiveBitrateEnabled() {
+        var videoId = Guid.Parse("33333333-3333-3333-3333-333333333334");
+        var sourcePath = Path.Combine(_cacheRoot, "source.mkv");
+        await File.WriteAllTextAsync(sourcePath, "source");
+        var service = new HlsAssetService(
+            new HlsAssetServiceOptions(_cacheRoot, EnableAdaptiveBitrate: true),
+            new FakeVideoSourceService(new VideoSourceFile(
+                videoId,
+                sourcePath,
+                "video/x-matroska",
+                false,
+                DurationSeconds: 13,
+                Width: 3840,
+                Height: 1920,
+                BitRate: 22_000_000,
+                VideoCodec: "hevc")),
+            new ManifestWritingProcessExecutor(),
+            NullLogger<HlsAssetService>.Instance);
+
+        var master = await service.GetAssetAsync(videoId, "master.m3u8", null, CancellationToken.None);
+
+        Assert.NotNull(master);
+        var masterPlaylist = await File.ReadAllTextAsync(master.Path);
+        // With adaptive bitrate enabled the full ladder is advertised so the player can switch quality.
+        Assert.Contains("hls/40mbps/stream.m3u8", masterPlaylist);
+        Assert.Contains("hls/20mbps/stream.m3u8", masterPlaylist);
+        Assert.Contains("hls/8mbps/stream.m3u8", masterPlaylist);
+        Assert.Contains("hls/720kbps/stream.m3u8", masterPlaylist);
+        Assert.Contains("RESOLUTION=2880x1440", masterPlaylist);
+        Assert.Contains("RESOLUTION=960x480", masterPlaylist);
     }
 
     [Fact]

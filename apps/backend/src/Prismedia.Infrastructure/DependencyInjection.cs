@@ -237,6 +237,7 @@ public static class DependencyInjection {
             configuration["PRISMEDIA_VAAPI_DEVICE"] ?? configuration["Prismedia:Hls:VaapiDevice"] ?? "/dev/dri/renderD128",
             mediaToolOptions.FfprobePath));
         services.AddSingleton<ITranscodeSessionService, TranscodeSessionService>();
+        services.AddSingleton<ITranscodeCacheService, TranscodeCacheService>();
         services.AddScoped<IHlsAssetService, HlsAssetService>();
         services.AddScoped<IPlaybackInfoService, PlaybackInfoService>();
         services.AddScoped<IPlaybackSessionService, PlaybackSessionService>();

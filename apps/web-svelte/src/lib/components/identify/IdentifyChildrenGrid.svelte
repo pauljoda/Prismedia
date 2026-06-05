@@ -74,7 +74,7 @@
           aria-label={matched ? `Review ${matched.patch?.title ?? child.title}` : child.title}
         >
           {#if cover}
-            <img src={cover} alt={child.title} loading="lazy" />
+            <img src={cover} alt={child.title} loading="lazy" referrerpolicy="no-referrer" />
           {:else}
             <div class="child-cover-empty"></div>
           {/if}

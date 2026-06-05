@@ -67,7 +67,29 @@ public sealed record SubtitleSettings(
 /// <summary>
 /// HLS transcoder and ffmpeg tool settings.
 /// </summary>
+/// <param name="TranscoderProfile">Encoder profile used for new adaptive HLS segments.</param>
+/// <param name="FfmpegPath">Command or absolute path used for ffmpeg.</param>
+/// <param name="VaapiDevice">Render device path used by VA-API transcodes.</param>
+/// <param name="EnableAdaptiveBitrate">
+/// When true the master playlist advertises the full adaptive bitrate ladder so clients can switch
+/// quality. When false (the default) it advertises a single rung, matching Jellyfin's single-stream
+/// default — this is the primary defence against a quality switch spawning a second concurrent
+/// transcode and pinning the CPU.
+/// </param>
+/// <param name="EncodingThreadCount">
+/// Hard cap on ffmpeg encoder threads. 0 (the default) means "auto": leave one core free
+/// (<c>ProcessorCount - 1</c>) so a single transcode cannot saturate the whole box.
+/// </param>
+/// <param name="MaxCacheSizeGb">
+/// Maximum size, in gigabytes, of the on-disk transcode/remux cache. When the cache exceeds this,
+/// the least-recently-used cached items (that are not currently playing) are evicted. 0 means no
+/// limit. Eviction is non-destructive — it only removes cached HLS output, which is regenerated on
+/// the next watch.
+/// </param>
 public sealed record HlsSettings(
     string TranscoderProfile,
     string FfmpegPath,
-    string VaapiDevice);
+    string VaapiDevice,
+    bool EnableAdaptiveBitrate,
+    int EncodingThreadCount,
+    int MaxCacheSizeGb);

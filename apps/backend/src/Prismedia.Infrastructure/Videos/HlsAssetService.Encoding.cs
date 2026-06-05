@@ -25,6 +25,7 @@ public sealed partial class HlsAssetService {
         string segmentPattern,
         HlsTranscoderProfile transcoderProfile,
         string vaapiDevice,
+        int threadCount,
         bool enableToneMapping = true) {
         var gop = Math.Max(1, (int)Math.Ceiling(SegmentDurationSeconds * (source.FrameRate ?? 24)));
         var startSeconds = startSegment * SegmentDurationSeconds;
@@ -70,7 +71,7 @@ public sealed partial class HlsAssetService {
             audioStreamIndex is null ? "0:a:0?" : $"0:{audioStreamIndex.Value}?"
         ]);
 
-        arguments.AddRange(VideoEncoderArguments(rendition, transcoderProfile));
+        arguments.AddRange(VideoEncoderArguments(rendition, transcoderProfile, threadCount));
 
         arguments.AddRange(
         [
@@ -163,7 +164,8 @@ public sealed partial class HlsAssetService {
 
     private static IReadOnlyList<string> VideoEncoderArguments(
         VirtualHlsRendition rendition,
-        HlsTranscoderProfile transcoderProfile) {
+        HlsTranscoderProfile transcoderProfile,
+        int threadCount) {
         var encoder = transcoderProfile switch {
             HlsTranscoderProfile.VideoToolbox => "h264_videotoolbox",
             HlsTranscoderProfile.Vaapi => "h264_vaapi",
@@ -179,8 +181,14 @@ public sealed partial class HlsAssetService {
         };
 
         if (transcoderProfile == HlsTranscoderProfile.Software) {
+            // Cap libx264 worker threads so one transcode cannot saturate every core. Without this,
+            // x264 grabs ~1.5x the core count in worker threads and pins the box; the reference media
+            // server always emits an explicit -threads. Hardware encoders do their work on the GPU and
+            // are left at ffmpeg defaults.
             arguments.AddRange(
             [
+                "-threads",
+                threadCount.ToString(),
                 "-preset",
                 "veryfast",
                 "-crf",
@@ -432,8 +440,18 @@ public sealed partial class HlsAssetService {
             HlsTranscoderProfiles.ParseOrDefault(settings.TranscoderProfile, _options.TranscoderProfile),
             string.IsNullOrWhiteSpace(settings.FfmpegPath) ? _options.FfmpegPath : settings.FfmpegPath.Trim(),
             string.IsNullOrWhiteSpace(settings.VaapiDevice) ? _options.VaapiDevice : settings.VaapiDevice.Trim(),
-            _options.FfprobePath);
+            _options.FfprobePath,
+            settings.EnableAdaptiveBitrate,
+            settings.EncodingThreadCount);
     }
+
+    // Resolves the hard ffmpeg thread cap for a software transcode. A configured value is clamped to
+    // the host's core count; 0 (auto) leaves one core free so a single transcode never freezes the
+    // API/worker/PostgreSQL. Hardware encoders ignore this — their work runs on the GPU.
+    private static int ResolveEncoderThreadCount(int configured) =>
+        configured > 0
+            ? Math.Min(configured, Environment.ProcessorCount)
+            : Math.Max(1, Environment.ProcessorCount - 1);
 
     private static void ResetStagingDirectory(string stagingDirectory) {
         if (Directory.Exists(stagingDirectory)) {

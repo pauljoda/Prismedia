@@ -1,4 +1,5 @@
 using Prismedia.Application.Settings;
+using Prismedia.Application.Videos;
 using Prismedia.Contracts.Settings;
 using Prismedia.Contracts.System;
 
@@ -8,6 +9,33 @@ public static class SettingsEndpoints {
     public static RouteGroupBuilder MapSettingsEndpoints(this IEndpointRouteBuilder routes) {
         var group = routes.MapGroup("/api/settings")
             .WithTags("Settings");
+
+        group.MapGet("/transcode-cache", async (
+            ITranscodeCacheService cache,
+            SettingsService settings,
+            CancellationToken cancellationToken) => {
+            var hls = await settings.GetHlsSettingsAsync(cancellationToken);
+            return Results.Ok(new TranscodeCacheStatusResponse(
+                cache.ComputeSizeBytes(),
+                ITranscodeCacheService.GigabytesToBytes(hls.MaxCacheSizeGb)));
+        })
+            .WithName("GetTranscodeCacheStatus")
+            .WithSummary("Gets the current transcode cache size and configured limit.")
+            .Produces<TranscodeCacheStatusResponse>();
+
+        group.MapPost("/transcode-cache/clear", async (
+            ITranscodeCacheService cache,
+            SettingsService settings,
+            CancellationToken cancellationToken) => {
+            cache.Clear();
+            var hls = await settings.GetHlsSettingsAsync(cancellationToken);
+            return Results.Ok(new TranscodeCacheStatusResponse(
+                cache.ComputeSizeBytes(),
+                ITranscodeCacheService.GigabytesToBytes(hls.MaxCacheSizeGb)));
+        })
+            .WithName("ClearTranscodeCache")
+            .WithSummary("Clears the on-disk transcode cache.")
+            .Produces<TranscodeCacheStatusResponse>();
 
         group.MapGet("/", (
             SettingsService settings,

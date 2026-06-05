@@ -42,6 +42,7 @@ describe("IdentifyReviewChoice", () => {
     const thumbnail = container.querySelector<HTMLElement>(".identify-candidate-card > div");
     expect(thumbnail).not.toBeNull();
     expect(thumbnail?.getAttribute("tabindex")).toBeNull();
+    expect(container.querySelector(`img[src="${candidate.posterUrl}"]`)).toHaveAttribute("referrerpolicy", "no-referrer");
 
     await fireEvent.click(thumbnail!);
     expect(store.identifyWithCandidate).toHaveBeenCalledWith(entity(), "tmdb", candidate);

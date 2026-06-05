@@ -16,6 +16,7 @@ public static class AppSettingsRegistry {
     private const string Playback = "playback";
     private const string Subtitles = "subtitles";
     private const string Hls = "hls";
+    private const string TranscodeCache = "transcodeCache";
 
     private static readonly IReadOnlyDictionary<string, SettingDefinition> ByKey;
 
@@ -428,6 +429,43 @@ public static class AppSettingsRegistry {
                 30,
                 inputKind: "path",
                 emptyStringUsesDefault: true),
+            Boolean(
+                AppSettingKeys.HlsEnableAdaptiveBitrate,
+                Hls,
+                "HLS Transcoding",
+                "Encoder and tool paths used for adaptive HLS output.",
+                70,
+                "Adaptive bitrate streaming",
+                "When on, the player can switch between quality levels (and may spawn a second transcode to do so). Off (the default) serves a single stream, matching the reference media server and keeping CPU bounded to one transcode per viewer.",
+                false,
+                40),
+            Integer(
+                AppSettingKeys.HlsEncodingThreadCount,
+                Hls,
+                "HLS Transcoding",
+                "Encoder and tool paths used for adaptive HLS output.",
+                70,
+                "Encoder thread cap",
+                "Maximum CPU threads a single software transcode may use. 0 means automatic, which leaves one core free so a transcode never freezes the rest of the app.",
+                0,
+                50,
+                min: 0,
+                max: 64,
+                step: 1),
+
+            Integer(
+                AppSettingKeys.HlsMaxCacheSizeGb,
+                TranscodeCache,
+                "Transcode Cache",
+                "On-disk cache of transcoded and remuxed video, kept so repeat plays and seeks are instant.",
+                75,
+                "Maximum cache size (GB)",
+                "When the transcode cache grows past this, the least-recently-played cached videos are removed automatically so it never fills the disk. 0 means no limit. Removing cached output is safe — it is regenerated the next time the video is played.",
+                10,
+                10,
+                min: 0,
+                max: 1000,
+                step: 1),
         };
 
         return definitions

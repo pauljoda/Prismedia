@@ -49,9 +49,20 @@ public static class HlsTranscoderProfiles {
 /// <param name="FfmpegPath">Executable name or absolute path for ffmpeg.</param>
 /// <param name="VaapiDevice">Linux render device used by the VA-API encoder profile.</param>
 /// <param name="FfprobePath">Executable name or absolute path for ffprobe.</param>
+/// <param name="EnableAdaptiveBitrate">
+/// When true the master playlist advertises the full bitrate ladder; when false (default) it
+/// advertises a single rung, matching the reference media server's single-stream default and
+/// preventing a client quality switch from spawning a second concurrent transcode.
+/// </param>
+/// <param name="EncodingThreadCount">
+/// Hard cap on software-encoder threads. 0 (default) resolves to <c>ProcessorCount - 1</c> so a
+/// single transcode leaves a core free for the API, worker, and PostgreSQL.
+/// </param>
 public sealed record HlsAssetServiceOptions(
     string CacheRoot,
     HlsTranscoderProfile TranscoderProfile = HlsTranscoderProfile.Auto,
     string FfmpegPath = "ffmpeg",
     string VaapiDevice = "/dev/dri/renderD128",
-    string FfprobePath = "ffprobe");
+    string FfprobePath = "ffprobe",
+    bool EnableAdaptiveBitrate = false,
+    int EncodingThreadCount = 0);

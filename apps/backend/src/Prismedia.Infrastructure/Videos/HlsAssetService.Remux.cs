@@ -225,6 +225,10 @@ public sealed partial class HlsAssetService {
             "-loglevel",
             "error",
             "-nostats",
+            // A stream copy is I/O- and audio-encode-bound (~1 core); cap threads so it never competes
+            // for the whole box with a concurrent transcode or the API/worker.
+            "-threads",
+            "2",
             // Pace the stream copy instead of writing the whole file to disk as fast as the drive allows.
             // An unthrottled copy of a long 4K source pins every core for the burst it takes to copy the
             // entire timeline up front; Jellyfin avoids this by reading copy-remux input at a bounded rate
@@ -250,17 +254,10 @@ public sealed partial class HlsAssetService {
         };
 
         arguments.AddRange(HevcSampleEntryTagArguments(source));
+        arguments.AddRange(RemuxAudioArguments(source, audioStreamIndex));
 
         arguments.AddRange(
         [
-            "-c:a",
-            "aac",
-            "-ac",
-            "2",
-            "-b:a",
-            "192k",
-            "-ar",
-            "48000",
             "-f",
             "hls",
             "-hls_time",
@@ -282,6 +279,44 @@ public sealed partial class HlsAssetService {
 
         return arguments;
     }
+
+    /// <summary>
+    /// Builds the audio output arguments for a stream-copy remux.
+    /// </summary>
+    /// <remarks>
+    /// AAC source audio is copied (<c>-c:a copy</c>): re-encoding AAC to AAC is pointless work, and a copy
+    /// preserves the original channel layout (5.1/7.1) instead of downmixing to stereo. Every
+    /// fMP4-HLS-capable client decodes AAC, so this is universally safe without inspecting the client's
+    /// audio capabilities. Any other codec is transcoded to stereo AAC — the safe universal baseline —
+    /// because we cannot assume the client can decode it. Honoring the full per-client copy decision for
+    /// AC3/EAC3/etc. is gated on the device-profile audio capability and is tracked separately (see
+    /// docs/hls-streaming-parity-plan.md, Track B / CopyAudio).
+    /// </remarks>
+    internal static IReadOnlyList<string> RemuxAudioArguments(VideoSourceFile source, int? audioStreamIndex) =>
+        IsAacCodec(SelectedAudioStreamCodec(source, audioStreamIndex))
+            ? ["-c:a", "copy"]
+            : ["-c:a", "aac", "-ac", "2", "-b:a", "192k", "-ar", "48000"];
+
+    // Resolves the codec of the audio stream the remux maps, mirroring the -map expression: a null index
+    // maps "0:a:0?" (the first audio stream); an explicit index maps "0:{index}?" (that absolute stream).
+    private static string? SelectedAudioStreamCodec(VideoSourceFile source, int? audioStreamIndex) {
+        var streams = source.Streams;
+        if (streams is not { Count: > 0 }) {
+            return null;
+        }
+
+        if (audioStreamIndex is { } index) {
+            return streams.FirstOrDefault(stream => stream.StreamIndex == index)?.Codec;
+        }
+
+        return streams
+            .Where(stream => stream.Type.Equals("Audio", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(stream => stream.StreamIndex)
+            .FirstOrDefault()?.Codec;
+    }
+
+    private static bool IsAacCodec(string? codec) =>
+        codec is not null && codec.Equals("aac", StringComparison.OrdinalIgnoreCase);
 
     private async Task<bool> WaitForRemuxFileAsync(
         Guid id,
@@ -389,19 +424,21 @@ public sealed partial class HlsAssetService {
     }
 
     /// <summary>
-    /// Replicates ffmpeg's stream-copy HLS boundary rule: it cuts at the first keyframe at or after
-    /// each point on a <em>fixed grid</em> of <see cref="SegmentDurationSeconds" /> multiples
-    /// (<c>6s, 12s, 18s, …</c> from the first keyframe), advancing the target to the next grid line
-    /// strictly past each cut. The final segment runs from the last boundary to the end of the source.
+    /// Replicates ffmpeg's stream-copy HLS boundary rule: it advances a cut threshold by exactly one
+    /// <see cref="SegmentDurationSeconds" /> at a time (<c>6s, 12s, 18s, …</c> from the first keyframe)
+    /// and cuts at the first keyframe at or after the current threshold, then steps the threshold on by
+    /// one. The final segment runs from the last boundary to the end of the source.
     /// </summary>
     /// <remarks>
-    /// The grid is essential: ffmpeg does NOT measure "<see cref="SegmentDurationSeconds" /> past the
-    /// previous cut" (which would drift on irregular, scene-cut keyframes and skip keyframes that land
-    /// just shy of the drifted threshold). A drifted prediction yields fewer, longer segments than
-    /// ffmpeg actually writes, so the VOD playlist we hand the player references the same
-    /// <c>seg_NNNNN</c> filenames as ffmpeg's real output but with mismatched durations — corrupting
-    /// seeking and cutting the buffer short of the true end. Cutting on the absolute grid reproduces
-    /// ffmpeg's segmentation exactly so playlist entries line up with the segments on disk.
+    /// The threshold advances by a single step per cut — it is NOT jumped forward past the keyframe that
+    /// triggered the cut. That distinction only matters when a long GOP carries a keyframe well past the
+    /// threshold: ffmpeg then leaves the threshold one step on, so the very next keyframe (which may be
+    /// only a moment later) is cut immediately, producing a short segment. Verified against
+    /// jellyfin-ffmpeg: keyframes <c>[0,19,20,25]</c> over a 30s source produce <c>[19,1,5,5]</c> (four
+    /// segments). Jumping the threshold past the cut instead skips the keyframe at 20 and yields
+    /// <c>[19,6,5]</c> (three segments) — so the VOD playlist we hand the player would reference the same
+    /// <c>seg_NNNNN</c> filenames as ffmpeg's real output but with mismatched durations, corrupting
+    /// seeking and cutting the buffer short of the true end.
     /// </remarks>
     internal static IReadOnlyList<double> BuildRemuxSegmentDurations(
         IReadOnlyList<double> keyframeTimes,
@@ -417,10 +454,9 @@ public sealed partial class HlsAssetService {
 
             durations.Add(keyframe - segmentStart);
             segmentStart = keyframe;
-            // Advance to the first grid line strictly greater than this cut, skipping any grid lines a
-            // long GOP jumped over so one segment can legitimately span several multiples.
-            var steps = Math.Floor((keyframe - first) / SegmentDurationSeconds) + 1;
-            target = first + steps * SegmentDurationSeconds;
+            // Step the threshold on by one segment from its PREVIOUS value, never past the cut keyframe,
+            // so a keyframe landing just beyond a late cut still triggers the next cut (see remarks).
+            target += SegmentDurationSeconds;
         }
 
         var lastDuration = totalDuration - segmentStart;
