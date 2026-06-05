@@ -287,5 +287,10 @@ describe("extractVideoPlayerProps", () => {
     expect(props.dynamicRangeLabel).toBe("HDR10");
     expect(props.videoCodecLabel).toBe("HEVC");
     expect(props.streamMethod).toBe("transcode");
+    expect(props.qualityRungs.length).toBeGreaterThan(0);
+    expect(props.qualityRungs[0]).toMatchObject({
+      name: "120mbps",
+      url: "/Videos/video-1/hls/120mbps/stream.m3u8",
+    });
   });
 });

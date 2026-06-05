@@ -4,6 +4,8 @@ import type {
   VideoPlayerAudioTrack,
   VideoPlayerMarker,
 } from "$lib/components/VideoPlayer.svelte";
+import type { PlayerQualityRung } from "$lib/components/video-player-types";
+import { qualityRungsForSource } from "$lib/player/quality-ladder";
 import { getCapability } from "$lib/api/capabilities";
 import { jellyfinApiPath, apiPath, assetUrl } from "$lib/api/orval-fetch";
 import type {
@@ -46,6 +48,8 @@ export interface VideoPlayerProps {
   audioFormatLabel: string | null;
   /** The server's negotiated delivery method, before any client-side fallback. */
   streamMethod: StreamMethod;
+  /** Manual quality tiers the viewer can pin (Jellyfin-style), each a ready-to-load variant URL. */
+  qualityRungs: PlayerQualityRung[];
 }
 
 export function extractVideoPlayerProps(
@@ -112,6 +116,14 @@ export function extractVideoPlayerProps(
     videoCodecLabel: videoCodecBadge(videoStream?.Codec ?? technical?.codec),
     audioFormatLabel: audioFormatBadge(defaultAudioStream),
     streamMethod: resolveStreamMethod(mediaSource),
+    qualityRungs: buildQualityRungs(
+      videoId,
+      videoStream?.BitRate ?? positiveNumberValue(technical?.bitRate),
+      videoStream?.Height ?? positiveNumberValue(technical?.height),
+      videoStream?.Codec ?? technical?.codec,
+      defaultAudioStreamIndex,
+      mediaSource?.SupportsTranscoding,
+    ),
     audioTracks: audioStreams.map((stream) => ({
       id: `audio-${stream.Index}`,
       streamIndex: stream.Index,
@@ -138,6 +150,27 @@ function resolveStreamMethod(
   if (mediaSource.SupportsDirectPlay) return "direct";
   if (mediaSource.TranscodingInfo?.IsVideoDirect) return "remux";
   return "transcode";
+}
+
+// Builds the manual quality tiers for the player. Each tier points at the variant playlist the server
+// already produces (/Videos/{id}/hls/{name}/stream.m3u8), carrying the active audio so a quality switch
+// keeps the chosen track. Skipped only when the source explicitly cannot be transcoded.
+function buildQualityRungs(
+  videoId: string,
+  sourceBitrate: number | null,
+  sourceHeight: number | null,
+  codec: string | null | undefined,
+  audioStreamIndex: number | null,
+  supportsTranscoding: boolean | null | undefined,
+): PlayerQualityRung[] {
+  if (supportsTranscoding === false) return [];
+  const audioQuery = audioStreamIndex != null ? `?AudioStreamIndex=${audioStreamIndex}` : "";
+  return qualityRungsForSource(sourceBitrate, sourceHeight, codec).map((rung) => ({
+    name: rung.name,
+    label: rung.label,
+    bitrate: rung.bitrate,
+    url: jellyfinApiPath(`/Videos/${videoId}/hls/${rung.name}/stream.m3u8${audioQuery}`),
+  }));
 }
 
 function colorPipelineLabel(

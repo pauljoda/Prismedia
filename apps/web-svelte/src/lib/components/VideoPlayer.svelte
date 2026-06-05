@@ -60,6 +60,11 @@
   } from "$lib/player/video-player-load";
   import { playbackMethodBadge, resolutionBadge, type StreamMethod } from "$lib/player/media-badges";
   import {
+    readQualityPreference,
+    resolvePreferredRung,
+    writeQualityPreference,
+  } from "$lib/player/quality-preference";
+  import {
     pickPreferredSubtitleTrack,
     readLocalSubtitleAppearance,
     resolveSubtitleAppearance,
@@ -84,6 +89,7 @@
     type CastWindow,
     type HlsStatus,
     type PlaybackMode,
+    type PlayerQualityRung,
     type QualityMode,
     type QualityOption,
     type SettingsView,
@@ -115,6 +121,8 @@
     audioFormatLabel?: string | null;
     /** The server's negotiated delivery method, before any client-side fallback. */
     streamMethod?: StreamMethod;
+    /** Manual quality tiers the viewer can pin (Jellyfin-style), each a ready-to-load variant URL. */
+    qualityRungs?: PlayerQualityRung[];
     poster?: string;
     /** Title of the playing media, published to the OS media controls via the Media Session API. */
     mediaTitle?: string;
@@ -172,6 +180,7 @@
     videoCodecLabel = null,
     audioFormatLabel = null,
     streamMethod = "transcode",
+    qualityRungs = [],
     poster,
     mediaTitle,
     mediaArtist,
@@ -239,6 +248,8 @@
 
   let playbackMode = $state<PlaybackMode>("hls");
   let qualityMode = $state<QualityMode>("auto");
+  // The name of the manually-pinned quality tier, or null for server-chosen ("Auto").
+  let selectedRungName = $state<string | null>(null);
   let currentTime = $state(0);
   let duration = $state(0);
   let playing = $state(false);
@@ -249,7 +260,6 @@
   let playbackRate = $state(1);
   let showControls = $state(true);
   let bufferAhead = $state(0);
-  let qualityOptions = $state<QualityOption[]>([{ value: "auto", label: "Auto" }]);
   let activeQualityLabel = $state<string | null>(null);
   let activeQualityDimensionsLabel = $state<string | null>(null);
   let activeQualityResolutionLabel = $state<string | null>(null);
@@ -292,7 +302,11 @@
     playbackMode === "direct" && directAvailable ? "direct" : "hls",
   );
   // The active HLS URL: a forced-transcode URL (recovery) takes precedence over the negotiated src.
-  const effectiveHlsSrc = $derived(forcedTranscodeSrc ?? src);
+  // A manually-pinned quality tier streams its own variant playlist; otherwise the server-chosen src.
+  const selectedRungUrl = $derived(
+    qualityRungs.find((rung) => rung.name === selectedRungName)?.url ?? null,
+  );
+  const effectiveHlsSrc = $derived(forcedTranscodeSrc ?? selectedRungUrl ?? src);
   const requestedPlayerSrc = $derived(effectiveMode === "direct" ? directSrc : effectiveHlsSrc);
   const playerSrc = $derived(requestedPlayerSrc === hlsReadySrc ? requestedPlayerSrc : undefined);
   const hasFilmStrip = $derived(Boolean(trickplayPlaylist && duration > 0));
@@ -321,12 +335,20 @@
   const appearance = $derived(
     resolveSubtitleAppearance(subtitleDefaults?.appearance ?? null, localAppearance),
   );
+  // Quality menu: Direct (when the original plays as-is) + Auto + each manual tier, highest first.
+  const qualityOptions = $derived<QualityOption[]>([
+    ...(directAvailable ? [{ value: "direct" as const, label: "Direct" }] : []),
+    { value: "auto" as const, label: "Auto" },
+    ...qualityRungs.map((rung) => ({ value: rung.name, label: rung.label })),
+  ]);
+  const pinnedRungLabel = $derived(
+    qualityRungs.find((rung) => rung.name === selectedRungName)?.label ?? null,
+  );
   const selectedQualityLabel = $derived(
     effectiveMode === "direct"
       ? "Direct"
-      : qualityMode === "auto"
-        ? `Auto${activeQualityLabel ? ` · ${activeQualityLabel}` : ""}`
-        : activeQualityLabel ?? "Quality",
+      : pinnedRungLabel ??
+        `Auto${activeQualityResolutionLabel ? ` · ${activeQualityResolutionLabel}` : ""}`,
   );
   const sourceResolutionLabel = $derived(formatDimensions(sourceWidth, sourceHeight));
   // Prefer the negotiated tier, but stay self-sufficient by deriving it from the raw dimensions.
@@ -515,41 +537,21 @@
     return formatDimensions(quality.width, quality.height);
   }
 
+  // Tracks the actually-playing rung's resolution (for the "Transcoding → 1080p" detail and the Auto
+  // label). The selectable tiers themselves are derived from qualityRungs, not from hls.js levels.
   function refreshQualities() {
     if (!player || effectiveMode === "direct") {
-      qualityOptions = [
-        ...(directAvailable ? [{ value: "direct" as const, label: "Direct" }] : []),
-        { value: "auto" as const, label: "Auto" },
-      ];
       activeQualityLabel = null;
       activeQualityDimensionsLabel = null;
       activeQualityResolutionLabel = null;
       return;
     }
     const qualities = player.qualities?.toArray?.() ?? [];
-    const options = qualities
-      .map((quality, index) => ({
-        value: index,
-        label: qualityLabel(quality, index),
-        bitrate: quality.bitrate ?? 0,
-      }))
-      .sort((a, b) => b.bitrate - a.bitrate);
-    qualityOptions = [
-      ...(directAvailable ? [{ value: "direct" as const, label: "Direct" }] : []),
-      { value: "auto" as const, label: "Auto" },
-      ...options.map(({ value, label }) => ({ value, label })),
-    ];
     const selected = qualities.find((quality) => quality.selected);
-    activeQualityLabel = selected
-      ? qualityLabel(selected, qualities.indexOf(selected))
-      : activeQualityLabel;
-    activeQualityDimensionsLabel = selected
-      ? qualityDimensionsLabel(selected)
-      : activeQualityDimensionsLabel;
-    activeQualityResolutionLabel = selected
-      ? resolutionBadge(selected.width, selected.height)
-      : activeQualityResolutionLabel;
-    if (player.qualities?.auto) qualityMode = "auto";
+    if (!selected) return;
+    activeQualityLabel = qualityLabel(selected, qualities.indexOf(selected));
+    activeQualityDimensionsLabel = qualityDimensionsLabel(selected);
+    activeQualityResolutionLabel = resolutionBadge(selected.width, selected.height);
   }
 
   function audioTrackLabel(track: AudioTrack, index: number): string {
@@ -597,32 +599,30 @@
     closeMenus();
   }
 
+  // Quality selection swaps the stream source (Direct, server-chosen Auto, or a pinned tier) while
+  // holding the playback position; handleCanPlay restores pendingSeekTime once the new stream loads.
   function requestPlaybackMode(nextQualityMode: QualityMode) {
     pendingSeekTime = currentTime > 0.25 ? currentTime : null;
     pendingAutoPlay = playing;
+    closeMenus();
     if (nextQualityMode === "direct") {
       playbackMode = "direct";
       qualityMode = "direct";
-      closeMenus();
+      selectedRungName = null;
+      writeQualityPreference("direct");
       return;
     }
     playbackMode = "hls";
     qualityMode = nextQualityMode;
-    closeMenus();
-    if (!player || typeof nextQualityMode === "string") {
-      if (nextQualityMode === "auto") player?.qualities?.autoSelect?.();
+    if (nextQualityMode === "auto") {
+      selectedRungName = null;
+      writeQualityPreference("auto");
       return;
     }
-    const quality = player.qualities?.toArray?.()[nextQualityMode];
-    const remote = (player as unknown as {
-      remoteControl?: { changeQuality?: (index: number, trigger?: Event) => void };
-    }).remoteControl;
-    remote?.changeQuality?.(nextQualityMode);
-    if (quality) quality.selected = true;
-    activeQualityLabel = quality ? qualityLabel(quality, nextQualityMode) : activeQualityLabel;
-    activeQualityDimensionsLabel = quality
-      ? qualityDimensionsLabel(quality)
-      : activeQualityDimensionsLabel;
+    // A specific tier was pinned: stream its variant and remember the cap for future videos.
+    selectedRungName = nextQualityMode;
+    const rung = qualityRungs.find((candidate) => candidate.name === nextQualityMode);
+    writeQualityPreference(rung ? rung.bitrate : "auto");
   }
 
   function selectSubtitle(id: string | null) {
@@ -1108,6 +1108,20 @@
     playRetried = false;
     playbackMode = initialPlaybackMode();
     qualityMode = playbackMode === "direct" ? "direct" : "auto";
+    // Re-apply this device's saved quality choice so a pinned cap follows the viewer across videos.
+    selectedRungName = null;
+    const savedQuality = readQualityPreference();
+    if (savedQuality === "direct" && directAvailable) {
+      playbackMode = "direct";
+      qualityMode = "direct";
+    } else if (typeof savedQuality === "number") {
+      const preferredRung = resolvePreferredRung(savedQuality, qualityRungs);
+      if (preferredRung) {
+        playbackMode = "hls";
+        qualityMode = preferredRung;
+        selectedRungName = preferredRung;
+      }
+    }
     currentTime = 0;
     duration = propDuration ?? 0;
     bufferAhead = 0;
