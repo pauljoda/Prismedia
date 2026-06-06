@@ -2030,27 +2030,42 @@
     align-items: center;
     flex-wrap: wrap;
     gap: 0.15rem 0;
+    min-width: 0;
+    max-width: 100%;
     font-size: 0.82rem;
     color: var(--detail-text-muted);
+    overflow-wrap: anywhere;
   }
 
-  :global(.meta-item) {
-    white-space: nowrap;
+  .meta-row :global(.meta-item) {
+    min-width: 0;
+    max-width: 100%;
+    white-space: normal;
     font-size: 0.82rem;
+    overflow-wrap: anywhere;
+    word-break: normal;
   }
 
-  :global(.meta-item.is-studio) {
+  .meta-row :global(.meta-item *) {
+    min-width: 0;
+    max-width: 100%;
+    white-space: inherit;
+    overflow-wrap: inherit;
+  }
+
+  .meta-row :global(.meta-item.is-studio) {
     color: var(--color-text-accent, #c49a5a);
     text-decoration: none;
     transition: opacity 0.15s;
   }
 
-  :global(.meta-item.is-studio:hover) {
+  .meta-row :global(.meta-item.is-studio:hover) {
     opacity: 0.8;
   }
 
-  :global(.meta-sep) {
+  .meta-row :global(.meta-sep) {
     display: inline-block;
+    flex: 0 0 auto;
     width: 3px;
     height: 3px;
     margin: 0 0.5rem;
