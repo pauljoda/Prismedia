@@ -245,7 +245,11 @@
   });
   const tabs = $derived(buildEntityKindTabs(effectiveCards, { includeNsfw: gridState.includeNsfw }));
   const filterOptions = $derived(buildCapabilityFilterOptions(effectiveCards, entityKind));
-  const visibleCards = $derived(applyEntityGridState(effectiveCards, gridState, filterOptions));
+  const visibleCards = $derived(
+    applyEntityGridState(effectiveCards, gridState, filterOptions, {
+      preserveServerResolvedSorts: Boolean(onRequestChange),
+    }),
+  );
   const selectedCount = $derived(selectedIds.length);
   const selectedCards = $derived(
     selectedCount > 0

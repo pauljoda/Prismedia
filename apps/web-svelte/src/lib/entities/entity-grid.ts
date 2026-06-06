@@ -113,6 +113,14 @@ export interface EntityGridRequest {
   server: EntityGridServerQuery;
 }
 
+export interface ApplyEntityGridStateOptions {
+  /**
+   * When true, server-owned sorts are treated as already ordered by the incoming
+   * card sequence. Disable this for detail-page grids that only have local cards.
+   */
+  preserveServerResolvedSorts?: boolean;
+}
+
 /**
  * Formats a backend entity kind code into the compact plural label shown in
  * EntityGrid tabs and lab surfaces.
@@ -963,6 +971,27 @@ function entityMatchesFilter(capabilities: EntityCapability[], filter: EntityGri
   }
 }
 
+function seededRandom(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state += 0x6D2B79F5;
+    let value = state;
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function seededShuffle<T>(items: T[], seed: number): T[] {
+  const result = [...items];
+  const random = seededRandom(seed || 1);
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
 /**
  * Applies the client-side version of EntityGrid state for lab and optimistic UI
  * paths. Server-backed endpoints own privacy filtering from server-side
@@ -973,6 +1002,7 @@ export function applyEntityGridState(
   cards: EntityThumbnailCard[],
   state: EntityGridState,
   filterOptions = buildCapabilityFilterOptions(cards),
+  options: ApplyEntityGridStateOptions = {},
 ): EntityThumbnailCard[] {
   const query = state.query.trim().toLowerCase();
   // Server-resolved filters (favorite, organized, rating bounds, unrated, and
@@ -992,10 +1022,15 @@ export function applyEntityGridState(
     return filters.every((filter) => entityMatchesFilter(card.entity.capabilities, filter));
   });
 
+  const preserveServerResolvedSorts = options.preserveServerResolvedSorts ?? true;
   // Random, date-added, and reference-count ordering are produced by the server across the whole
-  // result set; preserve the order the cards arrived in rather than reshuffling
-  // the loaded page locally.
-  if (state.sortBy === "random" || state.sortBy === "added" || state.sortBy === "references") {
+  // result set for remote grids; preserve the order the cards arrived in rather than reshuffling
+  // the loaded page locally. Detail-page grids without a remote request handler only have local
+  // cards, so Random needs a deterministic client shuffle keyed by the current randomSeed.
+  if (state.sortBy === "random") {
+    return preserveServerResolvedSorts ? filtered : seededShuffle(filtered, state.randomSeed);
+  }
+  if (state.sortBy === "added" || state.sortBy === "references") {
     return filtered;
   }
 

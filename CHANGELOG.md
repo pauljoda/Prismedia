@@ -70,6 +70,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 - Portrait videos opened in the lightbox now keep their natural shape and use the available screen height instead of being squeezed into a wide landscape frame.
+- Random sorting now reshuffles local detail-page grids such as a gallery's Sub Galleries and Images sections instead of only working on full library grids.
 - Creating dynamic or hybrid collections with rules no longer trips server errors, and malformed rule payloads are now rejected as invalid collection requests.
 - Comics now keep advancing reading progress across chapters, so continuing into chapter 2 or later no longer leaves Resume stuck on chapter 1.
 - The empty-library dashboard action now uses Prismedia's shared primary button styling instead of the older square brass button.

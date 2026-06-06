@@ -448,4 +448,36 @@ describe("server-resolved filters and sorting", () => {
     expect(applyEntityGridState(cards, gridState({ sortBy: "references" })).map((c) => c.entity.id))
       .toEqual(["a", "b"]);
   });
+
+  it("applies seeded random ordering for local-only grids", () => {
+    const cards = [
+      entityCardToThumbnailCard(thumbnailEntity("a", "gallery", "Sub Gallery A")),
+      entityCardToThumbnailCard(thumbnailEntity("b", "gallery", "Sub Gallery B")),
+      entityCardToThumbnailCard(thumbnailEntity("c", "gallery", "Sub Gallery C")),
+      entityCardToThumbnailCard(thumbnailEntity("d", "gallery", "Sub Gallery D")),
+    ];
+
+    const firstShuffle = applyEntityGridState(
+      cards,
+      gridState({ sortBy: "random", randomSeed: 1 }),
+      undefined,
+      { preserveServerResolvedSorts: false },
+    ).map((c) => c.entity.id);
+    const sameShuffle = applyEntityGridState(
+      cards,
+      gridState({ sortBy: "random", randomSeed: 1 }),
+      undefined,
+      { preserveServerResolvedSorts: false },
+    ).map((c) => c.entity.id);
+    const reshuffle = applyEntityGridState(
+      cards,
+      gridState({ sortBy: "random", randomSeed: 2 }),
+      undefined,
+      { preserveServerResolvedSorts: false },
+    ).map((c) => c.entity.id);
+
+    expect(firstShuffle).toEqual(sameShuffle);
+    expect(firstShuffle).not.toEqual(cards.map((c) => c.entity.id));
+    expect(firstShuffle).not.toEqual(reshuffle);
+  });
 });
