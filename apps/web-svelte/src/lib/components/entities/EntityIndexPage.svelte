@@ -31,7 +31,7 @@
     deleteTaxonomyEntity,
     isManageableTaxonomyKind,
   } from "$lib/api/taxonomy";
-  import { fetchImage, type ImageDetail } from "$lib/api/media";
+  import { fetchImage, fetchVideo, type ImageDetail, type VideoDetail } from "$lib/api/media";
   import type { EntityCard } from "$lib/api/entities";
 
   interface Props {
@@ -168,7 +168,7 @@
   $effect(() => {
     if (!enableLightbox || lightboxCards.length === 0) return;
     const currentCard = lightboxCards[lightboxIndex];
-    if (!currentCard || currentCard.entity.kind !== "image") return;
+    if (!currentCard || (currentCard.entity.kind !== "image" && currentCard.entity.kind !== "video")) return;
     if (hydratedLightboxEntities[currentCard.entity.id]) return;
     void hydrateLightboxEntity(currentCard.entity.id);
   });
@@ -253,14 +253,33 @@
     };
   }
 
+  function lightboxEntityFromVideoDetail(video: VideoDetail): UniversalLightboxEntity {
+    const rating = getRatingValue(video.capabilities);
+    return {
+      id: video.id,
+      kind: video.kind,
+      title: video.title,
+      capabilities: video.capabilities,
+      coverUrl: getImagesCapability(video.capabilities)?.coverUrl ?? null,
+      isNsfw: hasNsfwFlag(video.capabilities),
+      rating: rating > 0 ? rating : null,
+    };
+  }
+
   async function hydrateLightboxEntity(entityId: string) {
     if (lightboxHydrationInFlight.includes(entityId)) return;
+    const currentCard = lightboxCards[lightboxIndex];
+    const kind = currentCard?.entity.kind;
+    if (kind !== "image" && kind !== "video") return;
+
     lightboxHydrationInFlight = [...lightboxHydrationInFlight, entityId];
     try {
-      const image = await fetchImage(entityId);
+      const entity = kind === "video"
+        ? lightboxEntityFromVideoDetail(await fetchVideo(entityId))
+        : lightboxEntityFromImageDetail(await fetchImage(entityId));
       hydratedLightboxEntities = {
         ...hydratedLightboxEntities,
-        [entityId]: lightboxEntityFromImageDetail(image),
+        [entityId]: entity,
       };
     } finally {
       lightboxHydrationInFlight = lightboxHydrationInFlight.filter((id) => id !== entityId);

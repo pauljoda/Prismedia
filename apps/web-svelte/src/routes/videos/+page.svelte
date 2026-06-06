@@ -11,4 +11,8 @@
   emptyTitle="No videos"
   emptyMessage="No videos in your library yet. Add a library root and scan to get started."
   errorMessage="Failed to load videos."
+  initialMediaWall
+  enableFeedView
+  enableLightbox
+  lightboxTitle="Videos"
 />

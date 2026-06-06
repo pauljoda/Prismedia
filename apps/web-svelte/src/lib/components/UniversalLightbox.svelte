@@ -556,7 +556,7 @@
             style:transform={isCurrentVideo ? undefined : `translate(${translateX}px, ${translateY}px) scale(${scale})`}
             style:opacity={ready ? 1 : 0}
           >
-            <NsfwBlur isNsfw={current.isNsfw === true}>
+            <NsfwBlur isNsfw={current.isNsfw === true} class="lightbox-media-guard">
               {#if isCurrentVideo && primaryVideoSource}
                 <div
                   class="lightbox-video-shell"
@@ -805,6 +805,14 @@
     align-items: center;
     justify-content: center;
     transform-origin: center center;
+  }
+
+  .media-frame :global(.lightbox-media-guard) {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
   }
 
   .media-frame :global(.prismedia-player-surface) {

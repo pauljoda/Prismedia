@@ -288,6 +288,8 @@ describe("UniversalLightbox", () => {
     expect(shell).not.toHaveClass("has-natural-ratio");
 
     const source = await readFile("src/lib/components/UniversalLightbox.svelte", "utf8");
+    expect(source).toContain('class="lightbox-media-guard"');
+    expect(source).toContain(".media-frame :global(.lightbox-media-guard)");
     expect(source).toContain("--lightbox-video-aspect-ratio: 16 / 9;");
     expect(source).toContain("aspect-ratio: var(--lightbox-video-aspect-ratio);");
     expect(source).toContain("height: auto;");
