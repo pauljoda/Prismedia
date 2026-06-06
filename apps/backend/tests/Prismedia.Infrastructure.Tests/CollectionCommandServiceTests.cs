@@ -40,6 +40,63 @@ public sealed class CollectionCommandServiceTests {
         Assert.Equal(CollectionMode.Hybrid, Assert.Single(db.CollectionDetails).Mode);
     }
 
+    [Theory]
+    [InlineData("dynamic")]
+    [InlineData("hybrid")]
+    public async Task CreateAsyncAcceptsValidRuleCollections(string mode) {
+        await using var db = CreateContext();
+        var matchedId = SeedEntity(db, EntityKindRegistry.Video.Code, "Rule Match");
+        await db.SaveChangesAsync();
+        var refreshPersistence = new FakeCollectionRefreshPersistence();
+        var service = CreateService(
+            db,
+            new FakeCollectionRuleEngine([new CollectionRuleMatch(EntityKind.Video, matchedId)]),
+            refreshPersistence);
+
+        var result = await service.CreateAsync(
+            new CollectionWriteRequest(
+                "Rule Picks",
+                null,
+                mode,
+                """{"type":"group","operator":"and","children":[{"type":"condition","entityTypes":["video"],"field":"title","operator":"contains","value":"Rule"}]}""",
+                "mosaic",
+                null,
+                false),
+            CancellationToken.None);
+
+        Assert.Equal(CollectionCommandStatus.Succeeded, result.Status);
+        var refresh = Assert.Single(refreshPersistence.Refreshes);
+        var refreshedItem = Assert.Single(refresh.ResolvedItems);
+        Assert.Equal(EntityKind.Video, refreshedItem.EntityKind);
+        Assert.Equal(matchedId, refreshedItem.EntityId);
+    }
+
+    [Theory]
+    [InlineData("""{"type":"condition","entityTypes":[],"field":"title","operator":"contains","value":"Rule"}""")]
+    [InlineData("""{"type":"group","operator":"and","children":null}""")]
+    [InlineData("""{"type":"group","operator":"xor","children":[]}""")]
+    [InlineData("""{"type":"group","operator":"and","children":[{"type":"condition","entityTypes":["collection"],"field":"title","operator":"contains","value":"Rule"}]}""")]
+    [InlineData("""{"type":"group","operator":"and","children":[{"type":"condition","entityTypes":[],"field":"unknown","operator":"contains","value":"Rule"}]}""")]
+    [InlineData("""{"type":"group","operator":"and","children":[{"type":"condition","entityTypes":[],"field":"title","operator":"between","value":["only-one"]}]}""")]
+    public async Task CreateAsyncRejectsInvalidRuleTrees(string ruleTreeJson) {
+        await using var db = CreateContext();
+        var service = CreateService(db);
+
+        var result = await service.CreateAsync(
+            new CollectionWriteRequest(
+                "Bad Rules",
+                null,
+                "dynamic",
+                ruleTreeJson,
+                "mosaic",
+                null,
+                false),
+            CancellationToken.None);
+
+        Assert.Equal(CollectionCommandStatus.Invalid, result.Status);
+        Assert.Empty(db.CollectionDetails);
+    }
+
     [Fact]
     public async Task UpdateAsyncReplacesCollectionSpecificSettings() {
         await using var db = CreateContext();
