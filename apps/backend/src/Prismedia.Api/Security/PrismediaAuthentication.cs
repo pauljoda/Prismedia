@@ -1,5 +1,6 @@
 using Prismedia.Api.Jellyfin;
 using Prismedia.Application.Security;
+using Prismedia.Application.Videos;
 using Prismedia.Contracts.Jellyfin;
 using Prismedia.Contracts.System;
 
@@ -45,6 +46,11 @@ internal static class PrismediaAuthentication {
 
             var token = ExtractToken(context.Request);
             if (string.IsNullOrWhiteSpace(token)) {
+                if (IsAuthorizedPlaybackSessionRequest(context)) {
+                    await next();
+                    return;
+                }
+
                 await WriteUnauthorizedAsync(context, "missing_api_key");
                 return;
             }
@@ -203,6 +209,55 @@ internal static class PrismediaAuthentication {
         request.Cookies[CookieName] ??
         request.Query[JellyfinProtocol.QueryKeys.ApiKey].FirstOrDefault() ??
         request.Query[JellyfinProtocol.QueryKeys.ApiKeySnake].FirstOrDefault();
+
+    private static bool IsAuthorizedPlaybackSessionRequest(HttpContext context) {
+        if (!HttpMethods.IsGet(context.Request.Method) && !HttpMethods.IsHead(context.Request.Method)) {
+            return false;
+        }
+
+        if (!TryGetJellyfinVideoItemId(context.Request.Path, out var itemId)) {
+            return false;
+        }
+
+        var playSessionId = PlaySessionIdFromQuery(context.Request);
+        if (string.IsNullOrWhiteSpace(playSessionId)) {
+            return false;
+        }
+
+        var sessions = context.RequestServices.GetService<ITranscodeSessionService>();
+        return sessions?.IsRegisteredForItem(playSessionId, itemId) == true;
+    }
+
+    internal static bool HasAuthorizedPlaybackSession(this HttpContext context, Guid itemId) {
+        var playSessionId = PlaySessionIdFromQuery(context.Request);
+        if (string.IsNullOrWhiteSpace(playSessionId)) {
+            return false;
+        }
+
+        var sessions = context.RequestServices.GetService<ITranscodeSessionService>();
+        return sessions?.IsRegisteredForItem(playSessionId, itemId) == true;
+    }
+
+    private static bool TryGetJellyfinVideoItemId(PathString requestPath, out Guid itemId) {
+        itemId = default;
+        var path = requestPath.Value ?? string.Empty;
+        const string prefix = "/Videos/";
+        if (!path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) {
+            return false;
+        }
+
+        var remainder = path[prefix.Length..];
+        var slash = remainder.IndexOf('/');
+        if (slash <= 0) {
+            return false;
+        }
+
+        return Guid.TryParse(remainder[..slash], out itemId);
+    }
+
+    private static string? PlaySessionIdFromQuery(HttpRequest request) =>
+        request.Query["PlaySessionId"].FirstOrDefault() ??
+        request.Query["playSessionId"].FirstOrDefault();
 
     private static string? TokenFromAuthorizationHeader(string? header) {
         if (string.IsNullOrWhiteSpace(header)) {

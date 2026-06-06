@@ -148,5 +148,6 @@ internal static class JellyfinPlaybackResults {
         IEntityReadService entities,
         HttpContext httpContext,
         CancellationToken cancellationToken) =>
+        httpContext.HasAuthorizedPlaybackSession(itemId) ||
         await entities.GetAsync(itemId, NsfwVisibility.ShouldHide(null, httpContext), cancellationToken) is not null;
 }

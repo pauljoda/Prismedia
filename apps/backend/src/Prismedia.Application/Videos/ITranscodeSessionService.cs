@@ -15,6 +15,15 @@ public interface ITranscodeSessionService {
     void Ping(string playSessionId);
 
     /// <summary>
+    /// Returns true when a play session is currently registered for the given item.
+    /// Jellyfin clients may hand media players a stream URL that carries only this
+    /// session id, so stream endpoints use it as item-scoped playback authorization.
+    /// </summary>
+    /// <param name="playSessionId">Client playback session id.</param>
+    /// <param name="itemId">Media item expected to belong to the session.</param>
+    bool IsRegisteredForItem(string playSessionId, Guid itemId);
+
+    /// <summary>
     /// Cancels one play session and any associated transcoding work.
     /// </summary>
     Task CancelAsync(string playSessionId, CancellationToken cancellationToken);

@@ -31,6 +31,11 @@ public sealed class TranscodeSessionService : ITranscodeSessionService {
             (_, existing) => existing with { LastPingedAt = DateTimeOffset.UtcNow });
     }
 
+    public bool IsRegisteredForItem(string playSessionId, Guid itemId) =>
+        !string.IsNullOrWhiteSpace(playSessionId) &&
+        _sessions.TryGetValue(playSessionId, out var session) &&
+        session.ItemId == itemId;
+
     public Task CancelAsync(string playSessionId, CancellationToken cancellationToken) {
         if (!string.IsNullOrWhiteSpace(playSessionId)) {
             if (_sessions.TryRemove(playSessionId, out var session)) {

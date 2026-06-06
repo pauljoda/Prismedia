@@ -317,11 +317,18 @@ public sealed class JellyfinPlaybackEndpointTests : IDisposable {
     }
 
     private sealed class RecordingTranscodeSessionService : ITranscodeSessionService {
+        private readonly Dictionary<string, Guid> _sessions = new(StringComparer.Ordinal);
+
         public void Register(string playSessionId, Guid itemId) {
+            _sessions[playSessionId] = itemId;
         }
 
         public void Ping(string playSessionId) {
         }
+
+        public bool IsRegisteredForItem(string playSessionId, Guid itemId) =>
+            _sessions.TryGetValue(playSessionId, out var registeredItemId) &&
+            registeredItemId == itemId;
 
         public Task CancelAsync(string playSessionId, CancellationToken cancellationToken) => Task.CompletedTask;
 

@@ -69,6 +69,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Fixed
+- Swiftfin direct video playback now accepts Jellyfin play-session stream URLs that do not carry an API key, so pressing Play can open the raw `/Videos/.../stream` route instead of failing at the media request.
 - Swiftfin video playback now gets more Jellyfin-compatible routing: direct stream URLs with a container suffix (such as `stream.mp4`) are served, and missed Jellyfin image/API probes return JSON 404s instead of the web app shell.
 - Swiftfin now loads actual library contents after sign-in: Jellyfin-style browse requests with repeated item-type filters are handled correctly, and Swiftfin's filter/similar-content probes get JSON responses instead of the web app shell.
 - Swiftfin can now load Prismedia's Jellyfin-compatible login screen and sign in: user policy responses include the provider fields strict Jellyfin clients expect, and the missing splashscreen probe now returns Jellyfin's 404 shape instead of an auth failure.

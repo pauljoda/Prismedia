@@ -85,17 +85,57 @@ public sealed class VideoStreamEndpointTests : IDisposable {
         Assert.Equal("0123456789", body);
     }
 
+    [Fact]
+    public async Task StreamEndpointAcceptsRegisteredPlaySessionWithoutApiKey() {
+        var filePath = Path.Combine(_tempDir, "source.mp4");
+        await File.WriteAllTextAsync(filePath, "0123456789");
+        var sessions = new RecordingTranscodeSessionService();
+        sessions.Register("swiftfin-session", FakeVideoSourceService.VideoId);
+        using var factory = CreateFactory(
+            new FakeVideoSourceService(new VideoSourceFile(FakeVideoSourceService.VideoId, filePath, "video/mp4", true)),
+            sessions);
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync(
+            $"/Videos/{FakeVideoSourceService.VideoId}/stream?static=true&playSessionId=swiftfin-session&mediaSourceId={FakeVideoSourceService.VideoId:N}");
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("video/mp4", response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("0123456789", body);
+    }
+
+    [Fact]
+    public async Task StreamEndpointRejectsUnknownPlaySessionWithoutApiKey() {
+        var filePath = Path.Combine(_tempDir, "source.mp4");
+        await File.WriteAllTextAsync(filePath, "0123456789");
+        using var factory = CreateFactory(new FakeVideoSourceService(
+            new VideoSourceFile(FakeVideoSourceService.VideoId, filePath, "video/mp4", true)));
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync(
+            $"/Videos/{FakeVideoSourceService.VideoId}/stream?PlaySessionId=unknown-session");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
     public void Dispose() {
         if (Directory.Exists(_tempDir)) {
             Directory.Delete(_tempDir, recursive: true);
         }
     }
 
-    private static WebApplicationFactory<Program> CreateFactory(IVideoSourceService sourceService) {
+    private static WebApplicationFactory<Program> CreateFactory(
+        IVideoSourceService sourceService,
+        ITranscodeSessionService? sessions = null) {
         return new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder => {
                 builder.ConfigureServices(services => {
                     services.AddSingleton(sourceService);
+                    if (sessions is not null) {
+                        services.AddSingleton(sessions);
+                    }
+
                     services.AddSingleton<IEntityReadService, TestAuth.VisibleEntityReadService>();
                 });
             })
@@ -113,6 +153,29 @@ public sealed class VideoStreamEndpointTests : IDisposable {
         public Task<VideoSourceFile?> GetSourceAsync(Guid id, CancellationToken cancellationToken) {
             return Task.FromResult(id == VideoId ? _source : null);
         }
+    }
+
+    private sealed class RecordingTranscodeSessionService : ITranscodeSessionService {
+        private readonly Dictionary<string, Guid> _sessions = new(StringComparer.Ordinal);
+
+        public void Register(string playSessionId, Guid itemId) {
+            _sessions[playSessionId] = itemId;
+        }
+
+        public void Ping(string playSessionId) {
+        }
+
+        public bool IsRegisteredForItem(string playSessionId, Guid itemId) =>
+            _sessions.TryGetValue(playSessionId, out var registeredItemId) &&
+            registeredItemId == itemId;
+
+        public Task CancelAsync(string playSessionId, CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task<int> CancelAllAsync(CancellationToken cancellationToken) => Task.FromResult(0);
+
+        public IReadOnlySet<Guid> LiveItemIds(TimeSpan within) => new HashSet<Guid>();
+
+        public int ReapStaleSessions(TimeSpan ttl) => 0;
     }
 
 }

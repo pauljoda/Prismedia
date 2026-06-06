@@ -182,6 +182,7 @@ public sealed class PlaybackSessionServiceTests {
     private sealed class NoOpTranscodeSessionService : ITranscodeSessionService {
         public void Register(string playSessionId, Guid itemId) { }
         public void Ping(string playSessionId) { }
+        public bool IsRegisteredForItem(string playSessionId, Guid itemId) => false;
         public Task CancelAsync(string playSessionId, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task<int> CancelAllAsync(CancellationToken cancellationToken) => Task.FromResult(0);
         public IReadOnlySet<Guid> LiveItemIds(TimeSpan within) => new HashSet<Guid>();
