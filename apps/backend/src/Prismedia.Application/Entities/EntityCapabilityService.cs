@@ -193,10 +193,16 @@ public sealed class EntityCapabilityService {
                 cancellationToken)
             : null;
 
-        if (progress.CompletedAt is not null ||
-            (proposedPosition is not null &&
-             existingPosition is not null &&
-             proposedPosition.Index < existingPosition.Index)) {
+        if (proposedPosition is not null &&
+            existingPosition is not null &&
+            proposedPosition.Index < existingPosition.Index) {
+            return EntityCardProjector.ToCard(entity);
+        }
+
+        if (progress.CompletedAt is not null &&
+            (proposedPosition is null ||
+             existingPosition is null ||
+             proposedPosition.Index <= existingPosition.Index)) {
             return EntityCardProjector.ToCard(entity);
         }
 
