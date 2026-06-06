@@ -85,7 +85,7 @@ public sealed class SettingsEndpointServiceTests {
         var roots = await client.GetFromJsonAsync<IReadOnlyList<LibraryRoot>>("/api/libraries");
         var root = await client.PostAsJsonAsync(
             "/api/libraries",
-            new LibraryRootCreateRequest("/media/videos", "Videos", null, null, null, null, null, null, null));
+            new LibraryRootCreateRequest("/media/series", "Series", false, null, null, null, null, null, null));
 
         Assert.NotNull(config);
         Assert.Single(config.Roots);
