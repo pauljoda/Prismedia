@@ -69,6 +69,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Fixed
+- Comics now keep advancing reading progress across chapters, so continuing into chapter 2 or later no longer leaves Resume stuck on chapter 1.
 - Long metadata subtitles on detail pages now wrap inside the hero area instead of running off screen on narrow layouts.
 - Animated image browsing is responsive again: GIF/APNG files stay on the native image path, source-only animated clips can still play when centered in the feed, and lightbox prewarming no longer pulls full original animated sources in the background.
 - The library toolbar's filter and selection rows no longer flicker in and out while you scroll. Scrolling down tucks them away once, and they stay tucked away — the bars used to spring back the instant you nudged upward, stuttering as your scroll direction wavered. The collapse toggle glows while they're hidden so it's clear how to bring them back, and the thumbnails hold their position the whole time.

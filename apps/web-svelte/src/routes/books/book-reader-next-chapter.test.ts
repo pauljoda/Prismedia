@@ -201,6 +201,13 @@ describe("book reader next chapter navigation", () => {
     expect(mocks.goto).toHaveBeenCalledWith(
       "/books/book-1/reader?kind=chapter&id=chapter-2&returnId=book-1&command=resume&mode=paged",
     );
+    expect(mocks.updateEntityProgress).not.toHaveBeenCalledWith(
+      book.id,
+      expect.objectContaining({
+        currentEntityId: "chapter-1",
+        completed: true,
+      }),
+    );
     expect(maxActiveProgressSaves).toBe(1);
     await findByText("Prismedia Book · Chapter Two");
   });

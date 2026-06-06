@@ -458,7 +458,7 @@
 
   function handleIndexChange(index: number) {
     readerIndex = index;
-    const reachedEnd = readerPages.length > 0 && index >= readerPages.length - 1;
+    const reachedEnd = readerPages.length > 0 && index >= readerPages.length - 1 && !nextChapter;
     void queueProgressSave(index, reachedEnd).catch(() => undefined);
   }
 
@@ -469,7 +469,7 @@
 
   async function handleNextChapter() {
     if (!book || !context || !nextChapter) return;
-    await queueProgressSave(readerIndex, true).catch(() => undefined);
+    await queueProgressSave(readerIndex, false).catch(() => undefined);
     const nextHref = bookReaderHref({
       bookId: book.id,
       kind: "chapter",
@@ -483,7 +483,7 @@
   }
 
   async function closeReader() {
-    const reachedEnd = readerPages.length > 0 && readerIndex >= readerPages.length - 1;
+    const reachedEnd = readerPages.length > 0 && readerIndex >= readerPages.length - 1 && !nextChapter;
     await queueProgressSave(readerIndex, reachedEnd).catch(() => undefined);
     await goto(returnHref);
   }
