@@ -71,6 +71,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ### Fixed
 - Creating dynamic or hybrid collections with rules no longer trips server errors, and malformed rule payloads are now rejected as invalid collection requests.
 - Comics now keep advancing reading progress across chapters, so continuing into chapter 2 or later no longer leaves Resume stuck on chapter 1.
+- The empty-library dashboard action now uses Prismedia's shared primary button styling instead of the older square brass button.
 - Long metadata subtitles on detail pages now wrap inside the hero area instead of running off screen on narrow layouts.
 - Animated image browsing is responsive again: GIF/APNG files stay on the native image path, source-only animated clips can still play when centered in the feed, and lightbox prewarming no longer pulls full original animated sources in the background.
 - The library toolbar's filter and selection rows no longer flicker in and out while you scroll. Scrolling down tucks them away once, and they stay tucked away — the bars used to spring back the instant you nudged upward, stuttering as your scroll direction wavered. The collapse toggle glows while they're hidden so it's clear how to bring them back, and the thumbnails hold their position the whole time.

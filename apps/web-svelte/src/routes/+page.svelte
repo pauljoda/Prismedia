@@ -15,6 +15,7 @@
     PlayCircle,
     History,
   } from "@lucide/svelte";
+  import { buttonVariants, cn } from "@prismedia/ui-svelte";
   import { fetchEntities, type EntityCard } from "$lib/api/entities";
   import { entityCardToThumbnailCard } from "$lib/entities/entity-grid";
   import { resolveEntityHref } from "$lib/entities/entity-routes";
@@ -193,7 +194,10 @@
     </p>
     <a
       href="/settings"
-      class="bg-accent-500 hover:bg-accent-400 text-accent-950 px-6 py-2.5 font-semibold transition-all duration-normal hover:shadow-[0_0_16px_rgba(196,154,90,0.3)]"
+      class={cn(
+        buttonVariants({ variant: "primary", size: "lg" }),
+        "min-h-11 px-6 text-base font-semibold",
+      )}
     >
       Configure library
     </a>
