@@ -69,6 +69,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Fixed
+- Lightbox videos now open at their intended size immediately when aspect-ratio metadata is available, and tall videos leave a small vertical inset instead of reaching the viewport edge.
+- Videos in the feed and lightbox now render and play again instead of loading to a black frame, including animated gallery clips whose generated preview file is missing, while still preserving portrait and landscape aspect ratios.
 - Portrait videos opened in the lightbox now keep their natural shape and use the available screen height instead of being squeezed into a wide landscape frame.
 - Random sorting now reshuffles local detail-page grids such as a gallery's Sub Galleries and Images sections instead of only working on full library grids.
 - Creating dynamic or hybrid collections with rules no longer trips server errors, and malformed rule payloads are now rejected as invalid collection requests.

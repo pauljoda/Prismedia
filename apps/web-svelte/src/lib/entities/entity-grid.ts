@@ -186,7 +186,9 @@ function aspectRatioForEntity(entity: EntityGridSourceEntity): EntityThumbnailCa
   const width = numberValue(technical?.width);
   const height = numberValue(technical?.height);
 
-  if (entity.kind === ENTITY_KIND.image && width && height) return { width, height };
+  if ((entity.kind === ENTITY_KIND.image || entity.kind === ENTITY_KIND.video) && width && height) {
+    return { width, height };
+  }
   return aspectRatioForKind(entity.kind);
 }
 

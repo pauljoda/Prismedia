@@ -4,7 +4,7 @@
   import NsfwBlur from "../nsfw/NsfwBlur.svelte";
   import { getCapability, getImagesCapability, isNsfw as hasNsfwFlag } from "$lib/api/capabilities";
   import { entityFileUrl } from "$lib/api/files";
-  import { fetchImage } from "$lib/api/media";
+  import { fetchImage, fetchVideo } from "$lib/api/media";
   import { CAPABILITY_KIND, ENTITY_FILE_ROLE, ENTITY_KIND } from "$lib/entities/entity-codes";
   import {
     type EntityThumbnailCard,
@@ -96,20 +96,22 @@
   // playable source, so hydrate window items on demand and cache the result.
   async function hydrate(card: EntityThumbnailCard) {
     const id = card.entity.id;
-    if (card.entity.kind !== ENTITY_KIND.image) return;
+    if (card.entity.kind !== ENTITY_KIND.image && card.entity.kind !== ENTITY_KIND.video) return;
     if (hydrated[id] || inFlight.has(id)) return;
     inFlight.add(id);
     try {
-      const image = await fetchImage(id);
+      const entity = card.entity.kind === ENTITY_KIND.video
+        ? await fetchVideo(id)
+        : await fetchImage(id);
       hydrated = {
         ...hydrated,
         [id]: {
-          id: image.id,
-          kind: image.kind,
-          title: image.title,
-          capabilities: image.capabilities,
-          coverUrl: getImagesCapability(image.capabilities)?.coverUrl ?? card.cover?.src ?? null,
-          isNsfw: hasNsfwFlag(image.capabilities),
+          id: entity.id,
+          kind: entity.kind,
+          title: entity.title,
+          capabilities: entity.capabilities,
+          coverUrl: getImagesCapability(entity.capabilities)?.coverUrl ?? card.cover?.src ?? null,
+          isNsfw: hasNsfwFlag(entity.capabilities),
         },
       };
     } catch {
@@ -139,9 +141,15 @@
     const entity = hydrated[card.entity.id];
     if (!entity) return null;
 
-    const preview = buildLightboxVideoSources(entity)[0]?.src ?? null;
-    if (preview || !allowOriginalFallback) return preview;
-    return buildLightboxVideoSources(entity, { preferOriginal: true })[0]?.src ?? null;
+    if (entity.kind === ENTITY_KIND.video) {
+      return buildLightboxVideoSources(entity, { preferOriginal: true })[0]?.src ?? null;
+    }
+
+    if (allowOriginalFallback) {
+      return buildLightboxVideoSources(entity, { preferOriginal: true })[0]?.src ?? null;
+    }
+
+    return buildLightboxVideoSources(entity)[0]?.src ?? null;
   }
 
   // Source URL for an in-window animated image, or null when the item isn't an

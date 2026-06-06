@@ -2,7 +2,7 @@ import type { EntityCapability } from "$lib/api/generated/model";
 import { entityFileUrl } from "$lib/api/files";
 import { getCapability, isNsfw } from "$lib/api/capabilities";
 import { CAPABILITY_KIND, ENTITY_FILE_ROLE, ENTITY_KIND, type EntityFileRoleCode } from "$lib/entities/entity-codes";
-import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
+import type { EntityThumbnailAspectRatio, EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
 
 export interface UniversalLightboxEntity {
   id: string;
@@ -10,6 +10,7 @@ export interface UniversalLightboxEntity {
   title: string;
   capabilities: EntityCapability[];
   coverUrl?: string | null;
+  initialAspectRatio?: { width: number; height: number } | null;
   isNsfw?: boolean;
   rating?: number | string | null;
 }
@@ -98,8 +99,24 @@ export function lightboxEntityFromCard(card: EntityThumbnailCard): UniversalLigh
     title: card.entity.title,
     capabilities: card.entity.capabilities,
     coverUrl: card.cover?.src ?? null,
+    initialAspectRatio: numericAspectRatio(card.aspectRatio),
     isNsfw: isNsfw(card.entity.capabilities),
   };
+}
+
+function numericAspectRatio(
+  aspectRatio: EntityThumbnailAspectRatio,
+): UniversalLightboxEntity["initialAspectRatio"] {
+  if (typeof aspectRatio === "string") return null;
+  if (
+    !Number.isFinite(aspectRatio.width) ||
+    !Number.isFinite(aspectRatio.height) ||
+    aspectRatio.width <= 0 ||
+    aspectRatio.height <= 0
+  ) {
+    return null;
+  }
+  return { width: aspectRatio.width, height: aspectRatio.height };
 }
 
 export function buildLightboxImageSource(entity: UniversalLightboxEntity): UniversalLightboxSource | null {

@@ -76,6 +76,8 @@
   let videoPlayerHandle: VideoPlayerHandle | undefined = $state();
   let videoMuted = $state(true);
   let videoReady = $state(false);
+  let videoIntrinsicW = $state(0);
+  let videoIntrinsicH = $state(0);
   let warmedImages = $state<Record<string, WarmedImageDimensions>>({});
   let stripThumbEls: Array<HTMLButtonElement | undefined> = $state([]);
   let pointerStart: { x: number; y: number; t: number } | null = null;
@@ -105,8 +107,14 @@
   const hasCurrentVideoPlayback = $derived(Boolean(isCurrentVideo && primaryVideoSource));
   const primaryVideoCodec = $derived(primaryVideoSource?.quality === "original" ? currentTechnical?.codec : null);
   const currentVideoFit = $derived.by(() => {
-    const width = positiveNumberValue(currentTechnical?.width);
-    const height = positiveNumberValue(currentTechnical?.height);
+    const width =
+      positiveNumberValue(currentTechnical?.width) ??
+      positiveNumberValue(videoIntrinsicW) ??
+      positiveNumberValue(current?.initialAspectRatio?.width);
+    const height =
+      positiveNumberValue(currentTechnical?.height) ??
+      positiveNumberValue(videoIntrinsicH) ??
+      positiveNumberValue(current?.initialAspectRatio?.height);
     if (!width || !height) return null;
 
     return {
@@ -156,6 +164,8 @@
     fitScale = 1;
     videoMuted = true;
     videoReady = false;
+    videoIntrinsicW = 0;
+    videoIntrinsicH = 0;
     videoPlayerHandle = undefined;
     if (warmed) {
       scheduleFitForCurrentMedia(currentMediaKey);
@@ -266,6 +276,9 @@
   }
 
   function handleVideoCanPlay() {
+    const video = stageEl?.querySelector("video");
+    videoIntrinsicW = video?.videoWidth || videoIntrinsicW;
+    videoIntrinsicH = video?.videoHeight || videoIntrinsicH;
     videoReady = true;
   }
 
@@ -556,7 +569,7 @@
             style:transform={isCurrentVideo ? undefined : `translate(${translateX}px, ${translateY}px) scale(${scale})`}
             style:opacity={ready ? 1 : 0}
           >
-            <NsfwBlur isNsfw={current.isNsfw === true}>
+            <NsfwBlur isNsfw={current.isNsfw === true} class="lightbox-media-guard">
               {#if isCurrentVideo && primaryVideoSource}
                 <div
                   class="lightbox-video-shell"
@@ -807,58 +820,63 @@
     transform-origin: center center;
   }
 
+  .media-frame :global(.lightbox-media-guard) {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+  }
+
   .media-frame :global(.prismedia-player-surface) {
     border: 0;
     background: transparent;
   }
 
   .media-frame :global([data-testid="vidstack-video-player"]) {
+    aspect-ratio: inherit;
     display: flex;
     align-items: center;
     justify-content: center;
     width: 100%;
-    height: 100%;
+    height: auto;
     max-width: 100%;
     max-height: 100%;
   }
 
   .media-frame :global([data-testid="vidstack-video-player"] .prismedia-player-surface) {
     width: 100%;
-    height: 100%;
+    height: auto;
     max-height: 100%;
     aspect-ratio: inherit;
   }
 
   .media-frame :global(.prismedia-media-engine) {
     width: 100%;
-    height: 100%;
+    height: auto;
     max-width: 100%;
     max-height: 100%;
     aspect-ratio: inherit;
   }
 
   .lightbox-video-shell {
+    --lightbox-video-aspect-ratio: 16 / 9;
+    --lightbox-video-max-height: calc((100dvh - 10rem) * 0.98);
+    --lightbox-video-width-ratio: 1.7777777778;
     position: relative;
     display: flex;
-    width: min(98dvw, 100%);
+    width: min(98dvw, 100%, calc(var(--lightbox-video-max-height) * var(--lightbox-video-width-ratio)));
     max-width: min(98dvw, 100%);
     height: auto;
-    max-height: calc(100dvh - 10rem);
+    max-height: min(98%, var(--lightbox-video-max-height));
+    aspect-ratio: var(--lightbox-video-aspect-ratio);
     align-items: center;
     justify-content: center;
     background: #000;
   }
 
   .lightbox-video-shell.has-natural-ratio {
-    width: min(98dvw, 100%, calc((100dvh - 10rem) * var(--lightbox-video-width-ratio)));
-    height: auto;
-    aspect-ratio: var(--lightbox-video-aspect-ratio);
-  }
-
-  .lightbox-video-shell.has-natural-ratio :global([data-testid="vidstack-video-player"]),
-  .lightbox-video-shell.has-natural-ratio :global([data-testid="vidstack-video-player"] .prismedia-player-surface),
-  .lightbox-video-shell.has-natural-ratio :global(.prismedia-media-engine) {
-    aspect-ratio: var(--lightbox-video-aspect-ratio);
+    width: min(98dvw, 100%, calc(var(--lightbox-video-max-height) * var(--lightbox-video-width-ratio)));
   }
 
   .lightbox-video-poster {
@@ -874,7 +892,7 @@
   .lightbox-video-shell :global([data-testid="vidstack-video-player"]) {
     width: 100%;
     max-width: 100%;
-    height: 100%;
+    height: auto;
     opacity: 0;
     transition: opacity 160ms ease;
   }

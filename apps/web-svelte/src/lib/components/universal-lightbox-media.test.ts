@@ -208,9 +208,9 @@ describe("universal-lightbox-media", () => {
     ]);
   });
 
-  it("maps thumbnail cards into lightbox entities without losing cover and flags", () => {
+  it("maps thumbnail cards into lightbox entities without losing cover, ratio, and flags", () => {
     const mapped = lightboxEntityFromCard({
-      aspectRatio: "square",
+      aspectRatio: { width: 1080, height: 1920 },
       cover: { src: "/assets/images/image-1/thumb.jpg", alt: "Photo" },
       entity: {
         id: "image-1",
@@ -232,6 +232,7 @@ describe("universal-lightbox-media", () => {
       kind: "image",
       title: "Photo",
       coverUrl: "/assets/images/image-1/thumb.jpg",
+      initialAspectRatio: { width: 1080, height: 1920 },
       isNsfw: true,
     });
   });

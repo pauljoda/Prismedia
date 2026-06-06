@@ -2,19 +2,22 @@ import { render, waitFor } from "@testing-library/svelte";
 import { tick } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EntityCapability } from "$lib/api/generated/model";
-import { fetchImage } from "$lib/api/media";
+import { fetchImage, fetchVideo } from "$lib/api/media";
 import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
 import EntityFeedHarness from "./EntityFeed.test-harness.svelte";
 
 vi.mock("$lib/api/media", () => ({
   fetchImage: vi.fn(),
+  fetchVideo: vi.fn(),
 }));
 
 const fetchImageMock = vi.mocked(fetchImage);
+const fetchVideoMock = vi.mocked(fetchVideo);
 
 describe("EntityFeed animated playback", () => {
   beforeEach(() => {
     fetchImageMock.mockReset();
+    fetchVideoMock.mockReset();
     vi.stubGlobal("IntersectionObserver", PassiveIntersectionObserver);
   });
 
@@ -43,10 +46,13 @@ describe("EntityFeed animated playback", () => {
     expect(container.querySelector("video.feed-video")).toBeNull();
   });
 
-  it("falls back to the original source for the active clip when no preview exists", async () => {
+  it("uses the original source for the active image clip even when a preview is advertised", async () => {
     mockImages({
       "clip-1": imageDetail("clip-1", "Clip.webm", [
-        filesCapability([{ role: "source", path: "/media/clip.webm", mimeType: "video/webm" }]),
+        filesCapability([
+          { role: "source", path: "/media/clip.webm", mimeType: "video/webm" },
+          { role: "preview", path: "/assets/images/clip-1/preview.mp4", mimeType: "video/mp4" },
+        ]),
       ]),
     });
 
@@ -57,6 +63,31 @@ describe("EntityFeed animated playback", () => {
     await waitFor(() => {
       expect(container.querySelector<HTMLVideoElement>("video.feed-video")?.getAttribute("src")).toBe(
         "/api/entities/clip-1/files/source",
+      );
+    });
+  });
+
+  it("hydrates video cards and mounts their feed playback source", async () => {
+    mockVideos({
+      "video-1": videoDetail("video-1", "Video.mp4", [
+        filesCapability([
+          { role: "preview", path: "/media/video-preview.mp4", mimeType: "video/mp4" },
+          { role: "source", path: "/media/video.mp4", mimeType: "video/mp4" },
+        ]),
+        technicalCapability({ container: "mp4", codec: "h264" }),
+      ]),
+    });
+
+    const { container } = render(EntityFeedHarness, {
+      props: { cards: [card("video-1", "Video.mp4", "video")] },
+    });
+
+    await waitFor(() => {
+      expect(fetchVideoMock).toHaveBeenCalledWith("video-1");
+    });
+    await waitFor(() => {
+      expect(container.querySelector<HTMLVideoElement>("video.feed-video")?.getAttribute("src")).toBe(
+        "/api/entities/video-1/files/source",
       );
     });
   });
@@ -98,12 +129,21 @@ class PassiveIntersectionObserver implements IntersectionObserver {
 }
 
 type FetchImageResult = Awaited<ReturnType<typeof fetchImage>>;
+type FetchVideoResult = Awaited<ReturnType<typeof fetchVideo>>;
 
 function mockImages(images: Record<string, FetchImageResult>): void {
   fetchImageMock.mockImplementation(async (id: string) => {
     const image = images[id];
     if (!image) throw new Error(`Unexpected image request: ${id}`);
     return image;
+  });
+}
+
+function mockVideos(videos: Record<string, FetchVideoResult>): void {
+  fetchVideoMock.mockImplementation(async (id: string) => {
+    const video = videos[id];
+    if (!video) throw new Error(`Unexpected video request: ${id}`);
+    return video;
   });
 }
 
@@ -114,6 +154,15 @@ function imageDetail(id: string, title: string, capabilities: EntityCapability[]
     title,
     capabilities,
   } as FetchImageResult;
+}
+
+function videoDetail(id: string, title: string, capabilities: EntityCapability[]): FetchVideoResult {
+  return {
+    id,
+    kind: "video",
+    title,
+    capabilities,
+  } as FetchVideoResult;
 }
 
 function filesCapability(items: Array<{ role: string; path: string; mimeType: string }>): EntityCapability {
@@ -140,11 +189,11 @@ function technicalCapability(overrides: Partial<Record<string, string | number |
   } as EntityCapability;
 }
 
-function card(id: string, title: string): EntityThumbnailCard {
+function card(id: string, title: string, kind = "image"): EntityThumbnailCard {
   return {
     entity: {
       id,
-      kind: "image",
+      kind,
       title,
       parentEntityId: null,
       sortOrder: null,
