@@ -149,7 +149,7 @@ describe("EntityDetail", () => {
     const source = readFileSync("src/lib/components/entities/EntityDetail.svelte", "utf8");
     const appStyles = readFileSync("src/app.css", "utf8");
 
-    expect(source).toContain(":global(.meta-sep)");
+    expect(source).toContain(".meta-row :global(.meta-sep)");
     expect(source).toContain("margin: 0 0.5rem;");
     expect(source).toContain("align-items: center;");
     expect(source).toContain("@media (max-width: 480px)");
@@ -172,6 +172,25 @@ describe("EntityDetail", () => {
     expect(appStyles).toContain(".entity-action-button-label {");
     expect(appStyles).toContain("width: 1.9rem;");
     expect(source).not.toContain("flex-direction: column;\n      align-items: flex-start;");
+  });
+
+  it("allows long hero metadata to wrap inside the detail header", () => {
+    const source = readFileSync("src/lib/components/entities/EntityDetail.svelte", "utf8");
+    const metaSection = source.slice(source.indexOf("/* ── Meta row"));
+
+    const metaRowBlock = metaSection.match(/\.meta-row\s*\{[\s\S]*?\n  \}/)?.[0] ?? "";
+    const metaItemBlock = metaSection.match(/\.meta-row :global\(\.meta-item\)\s*\{[\s\S]*?\n  \}/)?.[0] ?? "";
+    const metaItemDescendantBlock = metaSection.match(/\.meta-row :global\(\.meta-item \*\)\s*\{[\s\S]*?\n  \}/)?.[0] ?? "";
+
+    expect(metaRowBlock).toContain("flex-wrap: wrap;");
+    expect(metaRowBlock).toContain("min-width: 0;");
+    expect(metaRowBlock).toContain("max-width: 100%;");
+    expect(metaRowBlock).toContain("overflow-wrap: anywhere;");
+    expect(metaItemBlock).toContain("white-space: normal;");
+    expect(metaItemBlock).toContain("overflow-wrap: anywhere;");
+    expect(metaItemBlock).toContain("word-break: normal;");
+    expect(metaItemDescendantBlock).toContain("white-space: inherit;");
+    expect(metaItemDescendantBlock).toContain("overflow-wrap: inherit;");
   });
 
   it("renders detail poster artwork through the shared thumbnail component", () => {
