@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 
@@ -34,6 +35,18 @@ public sealed class StaticSpaFallbackTests : IDisposable {
         var html = await client.GetStringAsync("/videos/11111111-1111-1111-1111-111111111111");
 
         Assert.Contains("Prismedia Static Shell", html);
+    }
+
+    [Fact]
+    public async Task JellyfinRouteMissesReturnJsonNotSpaHtml() {
+        using var client = _factory.CreateAuthenticatedClient();
+
+        using var response = await client.GetAsync("/Items/Images/Primary?maxWidth=600&quality=90");
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal("application/json", response.Content.Headers.ContentType?.MediaType);
+        Assert.Contains("jellyfin_route_not_found", body);
     }
 
     [Fact]

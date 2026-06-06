@@ -2,6 +2,7 @@ using System.Text.Json.Serialization.Metadata;
 using Prismedia.Api;
 using Prismedia.Api.Codegen;
 using Prismedia.Api.Endpoints;
+using Prismedia.Api.Jellyfin;
 using Prismedia.Api.Security;
 using Prismedia.Api.Serialization;
 using Prismedia.Application;
@@ -114,8 +115,12 @@ var staticIndexPath = resolvedStaticWebRoot is not null
     : Path.Combine(app.Environment.WebRootPath ?? string.Empty, "index.html");
 
 if (File.Exists(staticIndexPath)) {
-    app.MapFallback(async () =>
-        Results.Content(await File.ReadAllTextAsync(staticIndexPath), MediaContentTypes.Html));
+    app.MapFallback(async (HttpContext context) =>
+        IsJellyfinRoute(context.Request.Path)
+            ? Results.NotFound(new ApiProblem(
+                "jellyfin_route_not_found",
+                "The requested Jellyfin compatibility route was not found."))
+            : Results.Content(await File.ReadAllTextAsync(staticIndexPath), MediaContentTypes.Html));
 } else {
     app.MapFallback(() => Results.NotFound(new ApiProblem(
         "not_found",
@@ -146,5 +151,11 @@ static string ResolvePath(string path, string basePath) =>
     Path.GetFullPath(Path.IsPathRooted(path)
         ? path
         : Path.Combine(basePath, path));
+
+static bool IsJellyfinRoute(PathString path) =>
+    path.Value is { } value &&
+    JellyfinRoutes.Prefixes.Any(prefix =>
+        value.Equals(prefix, StringComparison.Ordinal) ||
+        value.StartsWith($"{prefix}/", StringComparison.Ordinal));
 
 public partial class Program;

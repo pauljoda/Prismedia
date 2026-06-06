@@ -69,6 +69,22 @@ public sealed class VideoStreamEndpointTests : IDisposable {
         Assert.Equal("0123456789", body);
     }
 
+    [Fact]
+    public async Task StreamEndpointAcceptsJellyfinContainerSuffix() {
+        var filePath = Path.Combine(_tempDir, "source.mp4");
+        await File.WriteAllTextAsync(filePath, "0123456789");
+        using var factory = CreateFactory(new FakeVideoSourceService(
+            new VideoSourceFile(FakeVideoSourceService.VideoId, filePath, "video/mp4", true)));
+        using var client = factory.CreateAuthenticatedClient();
+
+        using var response = await client.GetAsync($"/Videos/{FakeVideoSourceService.VideoId}/stream.mp4");
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("video/mp4", response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("0123456789", body);
+    }
+
     public void Dispose() {
         if (Directory.Exists(_tempDir)) {
             Directory.Delete(_tempDir, recursive: true);
