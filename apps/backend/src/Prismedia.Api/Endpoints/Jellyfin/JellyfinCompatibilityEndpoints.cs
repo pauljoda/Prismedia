@@ -72,6 +72,11 @@ public static partial class JellyfinCompatibilityEndpoints {
             .WithTags("Jellyfin Branding")
             .WithName("GetJellyfinBrandingCssFile");
 
+        routes.MapGet("/Branding/Splashscreen", () => Results.NotFound())
+            .WithTags("Jellyfin Branding")
+            .WithName("GetJellyfinBrandingSplashscreen")
+            .Produces(StatusCodes.Status404NotFound);
+
         // Clients probe this during the connect phase to decide whether to offer QuickConnect login.
         // It must answer with a JSON boolean — falling through to the SPA returns HTML and can wedge
         // a client's init before it ever loads libraries.

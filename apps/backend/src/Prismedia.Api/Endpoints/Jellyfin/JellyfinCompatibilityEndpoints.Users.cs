@@ -11,6 +11,11 @@ namespace Prismedia.Api.Endpoints;
 /// User, session, and system-info DTO mapping for the Jellyfin compatibility endpoints.
 /// </summary>
 public static partial class JellyfinCompatibilityEndpoints {
+    private const string JellyfinDefaultAuthenticationProviderId =
+        "Jellyfin.Server.Implementations.Users.DefaultAuthenticationProvider";
+    private const string JellyfinDefaultPasswordResetProviderId =
+        "Jellyfin.Server.Implementations.Users.DefaultPasswordResetProvider";
+
     private static JellyfinPublicSystemInfo ToPublicSystemInfo(HttpContext httpContext, AppSecurityState state) {
         var version = typeof(Program).Assembly.GetName().Version?.ToString(3) ?? "1.0.0";
         return new JellyfinPublicSystemInfo(
@@ -116,7 +121,9 @@ public static partial class JellyfinCompatibilityEndpoints {
             EnabledFolders: [],
             EnableAllChannels: false,
             BlockedTags: [],
-            EnabledChannels: []);
+            EnabledChannels: [],
+            AuthenticationProviderId: JellyfinDefaultAuthenticationProviderId,
+            PasswordResetProviderId: JellyfinDefaultPasswordResetProviderId);
 
     private static JellyfinUserConfigurationDto UserConfiguration() =>
         new(

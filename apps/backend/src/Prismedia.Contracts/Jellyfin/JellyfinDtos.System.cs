@@ -77,7 +77,9 @@ public sealed record JellyfinUserPolicyDto(
     [property: JsonPropertyName("EnabledFolders")] IReadOnlyList<string> EnabledFolders,
     [property: JsonPropertyName("EnableAllChannels")] bool EnableAllChannels,
     [property: JsonPropertyName("BlockedTags")] IReadOnlyList<string> BlockedTags,
-    [property: JsonPropertyName("EnabledChannels")] IReadOnlyList<string> EnabledChannels);
+    [property: JsonPropertyName("EnabledChannels")] IReadOnlyList<string> EnabledChannels,
+    [property: JsonPropertyName("AuthenticationProviderId")] string AuthenticationProviderId,
+    [property: JsonPropertyName("PasswordResetProviderId")] string PasswordResetProviderId);
 
 /// <summary>Minimal Jellyfin-compatible user configuration.</summary>
 public sealed record JellyfinUserConfigurationDto(
@@ -104,4 +106,3 @@ public sealed record JellyfinBrandingConfiguration(
     [property: JsonPropertyName("LoginDisclaimer")] string LoginDisclaimer,
     [property: JsonPropertyName("CustomCss")] string CustomCss,
     [property: JsonPropertyName("SplashscreenEnabled")] bool SplashscreenEnabled);
-

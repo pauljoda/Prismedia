@@ -125,14 +125,18 @@ public sealed partial class SecurityEndpointTests : IDisposable {
         using var legacyResponse = await client.PostAsync(
             $"/Users/{user.Id:D}/Authenticate?pw={Uri.EscapeDataString(TestAuth.ApiKey)}",
             null);
+        using var splashscreen = await client.GetAsync("/Branding/Splashscreen?");
 
         Assert.Equal(HttpStatusCode.OK, ping.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, splashscreen.StatusCode);
         Assert.NotNull(publicInfo);
         Assert.True(passwordFieldResponse.IsSuccessStatusCode);
         Assert.True(legacyResponse.IsSuccessStatusCode);
+        AssertJellyfinUserPolicyCompatibility(user.Policy);
 
         var auth = await passwordFieldResponse.Content.ReadFromJsonAsync<JellyfinAuthenticationResult>();
         Assert.NotNull(auth);
+        AssertJellyfinUserPolicyCompatibility(auth.User.Policy);
         var groupingOptions = await JellyfinGetFromJsonAsync<IReadOnlyList<JellyfinSpecialViewOptionDto>>(
             client,
             $"/Users/{auth.User.Id:D}/GroupingOptions",
@@ -373,6 +377,15 @@ public sealed partial class SecurityEndpointTests : IDisposable {
         using var response = await client.SendAsync(request);
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<T>();
+    }
+
+    private static void AssertJellyfinUserPolicyCompatibility(JellyfinUserPolicyDto policy) {
+        Assert.Equal(
+            "Jellyfin.Server.Implementations.Users.DefaultAuthenticationProvider",
+            policy.AuthenticationProviderId);
+        Assert.Equal(
+            "Jellyfin.Server.Implementations.Users.DefaultPasswordResetProvider",
+            policy.PasswordResetProviderId);
     }
 
     [GeneratedRegex("^[a-z]{3,5}-[a-z]{3,5}-[a-z]{3,5}$", RegexOptions.CultureInvariant)]

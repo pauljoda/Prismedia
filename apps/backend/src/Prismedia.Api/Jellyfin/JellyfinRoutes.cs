@@ -46,6 +46,9 @@ internal static class JellyfinRoutes {
     /// <summary>Branding CSS endpoint with file extension.</summary>
     public const string BrandingCssFile = "/Branding/Css.css";
 
+    /// <summary>Branding splashscreen endpoint.</summary>
+    public const string BrandingSplashscreen = "/Branding/Splashscreen";
+
     /// <summary>QuickConnect availability probe, called before authentication.</summary>
     public const string QuickConnectEnabled = "/QuickConnect/Enabled";
 

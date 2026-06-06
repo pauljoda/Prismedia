@@ -185,6 +185,7 @@ internal static class PrismediaAuthentication {
             (HttpMethods.IsGet(request.Method) && path.Equals(JellyfinRoutes.BrandingConfiguration, StringComparison.OrdinalIgnoreCase)) ||
             (HttpMethods.IsGet(request.Method) && (path.Equals(JellyfinRoutes.BrandingCss, StringComparison.OrdinalIgnoreCase) ||
                 path.Equals(JellyfinRoutes.BrandingCssFile, StringComparison.OrdinalIgnoreCase))) ||
+            (HttpMethods.IsGet(request.Method) && path.Equals(JellyfinRoutes.BrandingSplashscreen, StringComparison.OrdinalIgnoreCase)) ||
             (HttpMethods.IsGet(request.Method) && path.Equals(JellyfinRoutes.QuickConnectEnabled, StringComparison.OrdinalIgnoreCase)) ||
             (HttpMethods.IsGet(request.Method) && path.Equals(JellyfinRoutes.UsersPublic, StringComparison.OrdinalIgnoreCase)) ||
             (HttpMethods.IsPost(request.Method) && path.Equals(JellyfinRoutes.UsersAuthenticateByName, StringComparison.OrdinalIgnoreCase)) ||
