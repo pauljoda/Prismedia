@@ -104,6 +104,16 @@
   const currentMediaKey = $derived(current ? `${current.id}:${currentImageSource?.src ?? primaryVideoSource?.src ?? ""}` : null);
   const hasCurrentVideoPlayback = $derived(Boolean(isCurrentVideo && primaryVideoSource));
   const primaryVideoCodec = $derived(primaryVideoSource?.quality === "original" ? currentTechnical?.codec : null);
+  const currentVideoFit = $derived.by(() => {
+    const width = positiveNumberValue(currentTechnical?.width);
+    const height = positiveNumberValue(currentTechnical?.height);
+    if (!width || !height) return null;
+
+    return {
+      aspectRatio: `${width} / ${height}`,
+      widthToHeightRatio: width / height,
+    };
+  });
   const fallbackPoster = $derived(current?.coverUrl ?? undefined);
   const preloadSources = $derived(buildLightboxPreloadSources(entities, index, { preferOriginal: true }));
   const preloadImageSources = $derived(
@@ -548,7 +558,14 @@
           >
             <NsfwBlur isNsfw={current.isNsfw === true}>
               {#if isCurrentVideo && primaryVideoSource}
-                <div class="lightbox-video-shell" class:is-ready={videoReady}>
+                <div
+                  class="lightbox-video-shell"
+                  class:has-natural-ratio={Boolean(currentVideoFit)}
+                  class:is-ready={videoReady}
+                  style={currentVideoFit
+                    ? `--lightbox-video-aspect-ratio: ${currentVideoFit.aspectRatio}; --lightbox-video-width-ratio: ${currentVideoFit.widthToHeightRatio};`
+                    : undefined}
+                >
                   {#if fallbackPoster}
                     <img class="lightbox-video-poster" src={fallbackPoster} alt="" aria-hidden="true" />
                   {/if}
@@ -796,37 +813,52 @@
   }
 
   .media-frame :global([data-testid="vidstack-video-player"]) {
-    aspect-ratio: 16 / 9;
     display: flex;
     align-items: center;
     justify-content: center;
-    width: min(98dvw, calc((100dvh - 10rem) * 16 / 9));
-    max-width: min(98dvw, 100%);
-    max-height: calc(100dvh - 10rem);
+    width: 100%;
+    height: 100%;
+    max-width: 100%;
+    max-height: 100%;
   }
 
   .media-frame :global([data-testid="vidstack-video-player"] .prismedia-player-surface) {
     width: 100%;
+    height: 100%;
     max-height: 100%;
-    aspect-ratio: 16 / 9;
+    aspect-ratio: inherit;
   }
 
   .media-frame :global(.prismedia-media-engine) {
     width: 100%;
+    height: 100%;
     max-width: 100%;
     max-height: 100%;
+    aspect-ratio: inherit;
   }
 
   .lightbox-video-shell {
     position: relative;
     display: flex;
-    width: min(98dvw, calc((100dvh - 10rem) * 16 / 9));
+    width: min(98dvw, 100%);
     max-width: min(98dvw, 100%);
+    height: auto;
     max-height: calc(100dvh - 10rem);
-    aspect-ratio: 16 / 9;
     align-items: center;
     justify-content: center;
     background: #000;
+  }
+
+  .lightbox-video-shell.has-natural-ratio {
+    width: min(98dvw, 100%, calc((100dvh - 10rem) * var(--lightbox-video-width-ratio)));
+    height: auto;
+    aspect-ratio: var(--lightbox-video-aspect-ratio);
+  }
+
+  .lightbox-video-shell.has-natural-ratio :global([data-testid="vidstack-video-player"]),
+  .lightbox-video-shell.has-natural-ratio :global([data-testid="vidstack-video-player"] .prismedia-player-surface),
+  .lightbox-video-shell.has-natural-ratio :global(.prismedia-media-engine) {
+    aspect-ratio: var(--lightbox-video-aspect-ratio);
   }
 
   .lightbox-video-poster {
