@@ -13,6 +13,25 @@ public sealed record JellyfinSpecialViewOptionDto(
     [property: JsonPropertyName("Name")] string? Name,
     [property: JsonPropertyName("Id")] string? Id);
 
+/// <summary>Jellyfin-compatible legacy item filter response.</summary>
+public sealed record JellyfinQueryFiltersLegacyDto(
+    [property: JsonPropertyName("Genres")] IReadOnlyList<string> Genres,
+    [property: JsonPropertyName("Tags")] IReadOnlyList<string> Tags,
+    [property: JsonPropertyName("OfficialRatings")] IReadOnlyList<string> OfficialRatings,
+    [property: JsonPropertyName("Years")] IReadOnlyList<int> Years);
+
+/// <summary>Jellyfin-compatible modern item filter response.</summary>
+public sealed record JellyfinQueryFiltersDto(
+    [property: JsonPropertyName("Genres")] IReadOnlyList<JellyfinNameGuidPairDto> Genres,
+    [property: JsonPropertyName("Tags")] IReadOnlyList<string> Tags,
+    [property: JsonPropertyName("AudioLanguages")] IReadOnlyList<JellyfinNameValuePairDto> AudioLanguages,
+    [property: JsonPropertyName("SubtitleLanguages")] IReadOnlyList<JellyfinNameValuePairDto> SubtitleLanguages);
+
+/// <summary>Jellyfin-compatible name/value pair used by filter metadata.</summary>
+public sealed record JellyfinNameValuePairDto(
+    [property: JsonPropertyName("Name")] string Name,
+    [property: JsonPropertyName("Value")] string Value);
+
 /// <summary>Jellyfin-compatible virtual folder information.</summary>
 public sealed record JellyfinVirtualFolderInfoDto(
     [property: JsonPropertyName("Name")] string Name,

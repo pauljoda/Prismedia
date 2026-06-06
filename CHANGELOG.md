@@ -69,6 +69,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Fixed
+- Swiftfin now loads actual library contents after sign-in: Jellyfin-style browse requests with repeated item-type filters are handled correctly, and Swiftfin's filter/similar-content probes get JSON responses instead of the web app shell.
 - Swiftfin can now load Prismedia's Jellyfin-compatible login screen and sign in: user policy responses include the provider fields strict Jellyfin clients expect, and the missing splashscreen probe now returns Jellyfin's 404 shape instead of an auth failure.
 - Portrait videos opened in the lightbox now keep their natural shape and use the available screen height instead of being squeezed into a wide landscape frame.
 - Random sorting now reshuffles local detail-page grids such as a gallery's Sub Galleries and Images sections instead of only working on full library grids.

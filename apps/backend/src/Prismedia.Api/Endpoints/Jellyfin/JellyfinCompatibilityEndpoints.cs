@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Primitives;
 using Prismedia.Api.Security;
 using Prismedia.Application.Jellyfin;
 using Prismedia.Application.Security;
@@ -305,6 +306,21 @@ public static partial class JellyfinCompatibilityEndpoints {
 
         // Extras endpoints Infuse probes on every detail page. Prismedia has no local trailers or
         // bonus features yet, so these return the empty Jellyfin envelope to avoid client 404s.
+        routes.MapGet("/Items/Filters", GetItemFiltersLegacyAsync)
+            .WithTags("Jellyfin Catalog")
+            .WithName("GetJellyfinItemFilters")
+            .Produces<JellyfinQueryFiltersLegacyDto>();
+
+        routes.MapGet("/Items/Filters2", GetItemFiltersAsync)
+            .WithTags("Jellyfin Catalog")
+            .WithName("GetJellyfinItemFilters2")
+            .Produces<JellyfinQueryFiltersDto>();
+
+        routes.MapGet("/Items/{itemId:guid}/Similar", GetSimilarItemsAsync)
+            .WithTags("Jellyfin Catalog")
+            .WithName("GetJellyfinSimilarItems")
+            .Produces<JellyfinQueryResult<JellyfinBaseItemDto>>();
+
         routes.MapGet("/Items/{itemId:guid}/LocalTrailers", EmptyItemListAsync)
             .WithTags("Jellyfin Catalog")
             .WithName("GetJellyfinLocalTrailers")
@@ -320,6 +336,12 @@ public static partial class JellyfinCompatibilityEndpoints {
             .WithName("GetJellyfinLocalTrailersLegacy")
             .ExcludeFromDescription()
             .Produces<IReadOnlyList<JellyfinBaseItemDto>>();
+
+        routes.MapGet("/Users/{userId:guid}/Items/{itemId:guid}/Similar", GetSimilarItemsAsync)
+            .WithTags("Jellyfin Catalog")
+            .WithName("GetJellyfinSimilarItemsLegacy")
+            .ExcludeFromDescription()
+            .Produces<JellyfinQueryResult<JellyfinBaseItemDto>>();
 
         routes.MapGet("/Users/{userId:guid}/Items/{itemId:guid}/SpecialFeatures", EmptyItemListAsync)
             .WithTags("Jellyfin Catalog")
@@ -512,12 +534,12 @@ public static partial class JellyfinCompatibilityEndpoints {
             SplitGuids(request.Query["Ids"].FirstOrDefault()),
             TryBool(request.Query["Recursive"].FirstOrDefault()) ?? false,
             request.Query["SearchTerm"].FirstOrDefault(),
-            SplitCsv(request.Query["IncludeItemTypes"].FirstOrDefault()),
+            SplitCsv(request.Query["IncludeItemTypes"]),
             Math.Max(0, TryInt(request.Query["StartIndex"].FirstOrDefault()) ?? 0),
             TryInt(request.Query["Limit"].FirstOrDefault()),
             request.Query["SortBy"].FirstOrDefault(),
             request.Query["SortOrder"].FirstOrDefault(),
-            TryBool(request.Query["IsFavorite"].FirstOrDefault()),
+            TryBool(request.Query["IsFavorite"].FirstOrDefault()) ?? (HasCsvValue(request.Query["Filters"], "IsFavorite") ? true : null),
             TryBool(request.Query["IsPlayed"].FirstOrDefault()),
             // Infuse drills into a cast member with PersonIds (plural CSV); accept the singular
             // PersonId form too so either client spelling resolves the performer's filmography.
@@ -530,10 +552,18 @@ public static partial class JellyfinCompatibilityEndpoints {
             _ => JellyfinProtocol.CollectionTypes.Movies
         };
 
+    private static IReadOnlyList<string> SplitCsv(StringValues values) =>
+        values
+            .SelectMany(value => SplitCsv(value))
+            .ToArray();
+
     private static IReadOnlyList<string> SplitCsv(string? value) =>
         string.IsNullOrWhiteSpace(value)
             ? []
             : value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+    private static bool HasCsvValue(StringValues values, string expected) =>
+        SplitCsv(values).Any(value => value.Equals(expected, StringComparison.OrdinalIgnoreCase));
 
     private static IReadOnlyList<Guid> SplitGuids(string? value) =>
         SplitCsv(value).Select(TryGuid).Where(id => id is not null).Select(id => id!.Value).ToArray();

@@ -148,6 +148,15 @@ public static partial class JellyfinCompatibilityEndpoints {
     private static IResult EmptyItemListAsync(Guid itemId) =>
         Results.Ok(Array.Empty<JellyfinBaseItemDto>());
 
+    private static IResult GetSimilarItemsAsync(Guid itemId, Guid? userId = null) =>
+        Results.Ok(new JellyfinQueryResult<JellyfinBaseItemDto>([], 0, 0));
+
+    private static IResult GetItemFiltersLegacyAsync() =>
+        Results.Ok(new JellyfinQueryFiltersLegacyDto([], [], [], []));
+
+    private static IResult GetItemFiltersAsync() =>
+        Results.Ok(new JellyfinQueryFiltersDto([], [], [], []));
+
     private static IResult GetMediaSegmentsAsync(Guid itemId) =>
         Results.Ok(new JellyfinQueryResult<JellyfinMediaSegmentDto>([], 0, 0));
 
