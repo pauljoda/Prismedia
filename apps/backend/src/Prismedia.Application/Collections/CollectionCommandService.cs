@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Prismedia.Application.Entities;
 using Prismedia.Application.Jobs.Ports;
@@ -19,6 +20,52 @@ public sealed class CollectionCommandService(
     ICollectionRefreshPersistence refreshPersistence) : ICollectionCommandService {
     private const int PreviewSampleSize = 24;
     private const string EmptyRuleJson = """{"type":"group","operator":"and","children":[]}""";
+    private static readonly HashSet<string> RuleFields = new(StringComparer.Ordinal) {
+        "title",
+        "rating",
+        "date",
+        "organized",
+        "isNsfw",
+        "tags",
+        "performers",
+        "studio",
+        "fileSize",
+        "duration",
+        "height",
+        "width",
+        "codec",
+        "bitRate",
+        "bit_rate",
+        "channels",
+        "sampleRate",
+        "sample_rate",
+        "playCount",
+        "resolution",
+        "videoSeriesId",
+        "galleryType",
+        "imageCount",
+        "format",
+        "createdAt",
+        "interactive",
+    };
+
+    private static readonly HashSet<string> RuleOperators = new(StringComparer.Ordinal) {
+        "equals",
+        "not_equals",
+        "contains",
+        "not_contains",
+        "greater_than",
+        "less_than",
+        "greater_equal",
+        "less_equal",
+        "between",
+        "in",
+        "not_in",
+        "is_null",
+        "is_not_null",
+        "is_true",
+        "is_false",
+    };
 
     /// <inheritdoc />
     public async Task<CollectionWriteResult> CreateAsync(
@@ -141,7 +188,7 @@ public sealed class CollectionCommandService(
         CollectionRulePreviewRequest request,
         bool hideNsfw,
         CancellationToken cancellationToken) {
-        if (!ValidateRuleTree(request.RuleTreeJson, out _)) {
+        if (string.IsNullOrWhiteSpace(request.RuleTreeJson) || !ValidateRuleTree(request.RuleTreeJson, out _)) {
             return null;
         }
 
@@ -297,11 +344,13 @@ public sealed class CollectionCommandService(
 
         try {
             var node = JsonSerializer.Deserialize<CollectionRuleNode>(ruleTreeJson);
-            if (node is CollectionRuleGroup) {
+            if (node is CollectionRuleGroup group && ValidateRuleNode(group, out message)) {
                 return true;
             }
 
-            message = "Collection rule tree must be a group node.";
+            if (string.IsNullOrWhiteSpace(message)) {
+                message = "Collection rule tree must be a group node.";
+            }
             return false;
         } catch (JsonException) {
             message = "Collection rule tree is not valid JSON.";
@@ -310,6 +359,160 @@ public sealed class CollectionCommandService(
             message = "Collection rule tree contains an unsupported node.";
             return false;
         }
+    }
+
+    private static bool ValidateRuleNode(CollectionRuleNode node, out string message) {
+        message = string.Empty;
+        return node switch {
+            CollectionRuleGroup group => ValidateRuleGroup(group, out message),
+            CollectionRuleCondition condition => ValidateRuleCondition(condition, out message),
+            _ => InvalidRule("Collection rule tree contains an unsupported node.", out message)
+        };
+    }
+
+    private static bool ValidateRuleGroup(CollectionRuleGroup group, out string message) {
+        message = string.Empty;
+        if (group.Operator is not ("and" or "or" or "not")) {
+            message = "Collection rule group has an unsupported operator.";
+            return false;
+        }
+
+        if (group.Children is null) {
+            message = "Collection rule group children must be an array.";
+            return false;
+        }
+
+        foreach (var child in group.Children) {
+            if (!ValidateRuleNode(child, out message)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool ValidateRuleCondition(CollectionRuleCondition condition, out string message) {
+        message = string.Empty;
+        if (condition.EntityTypes is null) {
+            message = "Collection rule condition entity types must be an array.";
+            return false;
+        }
+
+        foreach (var entityType in condition.EntityTypes) {
+            if (string.IsNullOrWhiteSpace(entityType) ||
+                !EntityKindRegistry.TryGet(entityType, out var kind) ||
+                !Collection.CanContain(kind)) {
+                message = $"Collection rule condition entity type '{entityType}' is not supported.";
+                return false;
+            }
+        }
+
+        if (!RuleFields.Contains(condition.Field)) {
+            message = $"Collection rule condition field '{condition.Field}' is not supported.";
+            return false;
+        }
+
+        if (!RuleOperators.Contains(condition.Operator)) {
+            message = $"Collection rule condition operator '{condition.Operator}' is not supported.";
+            return false;
+        }
+
+        if (condition.Operator is "is_null" or "is_not_null" or "is_true" or "is_false") {
+            return true;
+        }
+
+        if (!condition.Value.HasValue ||
+            condition.Value.Value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined) {
+            message = "Collection rule condition value is required.";
+            return false;
+        }
+
+        if (condition.Operator is "between") {
+            return ValidateBetweenValue(condition, out message);
+        }
+
+        if (condition.Operator is "in" or "not_in") {
+            return ValidateArrayValue(condition.Value.Value, out message);
+        }
+
+        if (condition.Value.Value.ValueKind is JsonValueKind.Object or JsonValueKind.Array) {
+            message = "Collection rule condition value must be a scalar.";
+            return false;
+        }
+
+        return ValidateTypedScalarValue(condition, out message);
+    }
+
+    private static bool ValidateBetweenValue(CollectionRuleCondition condition, out string message) {
+        message = string.Empty;
+        var value = condition.Value.Value;
+        if (value.ValueKind != JsonValueKind.Array) {
+            message = "Collection rule between value must be an array.";
+            return false;
+        }
+
+        var count = 0;
+        foreach (var item in value.EnumerateArray()) {
+            if (item.ValueKind is JsonValueKind.Object or JsonValueKind.Array or JsonValueKind.Null or JsonValueKind.Undefined) {
+                message = "Collection rule between values must be scalar.";
+                return false;
+            }
+            count++;
+        }
+
+        if (count != 2) {
+            message = "Collection rule between value must contain exactly two values.";
+            return false;
+        }
+
+        return condition.Field switch {
+            "date" => value.EnumerateArray().All(IsDateValue) ||
+                InvalidRule("Collection rule date values must be valid dates.", out message),
+            "createdAt" => value.EnumerateArray().All(IsDateTimeValue) ||
+                InvalidRule("Collection rule added-date values must be valid timestamps.", out message),
+            _ => true
+        };
+    }
+
+    private static bool ValidateArrayValue(JsonElement value, out string message) {
+        message = string.Empty;
+        if (value.ValueKind != JsonValueKind.Array) {
+            message = "Collection rule list value must be an array.";
+            return false;
+        }
+
+        foreach (var item in value.EnumerateArray()) {
+            if (item.ValueKind is JsonValueKind.Object or JsonValueKind.Array or JsonValueKind.Null or JsonValueKind.Undefined) {
+                message = "Collection rule list values must be scalar.";
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool ValidateTypedScalarValue(CollectionRuleCondition condition, out string message) {
+        message = string.Empty;
+        return condition.Field switch {
+            "date" when !IsDateValue(condition.Value.Value) =>
+                InvalidRule("Collection rule date value must be a valid date.", out message),
+            "createdAt" when !IsDateTimeValue(condition.Value.Value) =>
+                InvalidRule("Collection rule added-date value must be a valid timestamp.", out message),
+            _ => true
+        };
+    }
+
+    private static bool IsDateValue(JsonElement value) =>
+        value.ValueKind == JsonValueKind.String &&
+        DateOnly.TryParse(value.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.None, out _);
+
+    private static bool IsDateTimeValue(JsonElement value) =>
+        value.ValueKind == JsonValueKind.String &&
+        DateTimeOffset.TryParse(value.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.None, out _);
+
+    private static bool InvalidRule(string invalidMessage, out string message) {
+        message = invalidMessage;
+        return false;
     }
 
     private static IReadOnlyList<CollectionItemReference> DistinctReferences(

@@ -61,8 +61,7 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
 
         sb.Append("WHERE e.kind_code = ");
         var kindParam = ctx.AddParam(kindCode, NpgsqlDbType.Text);
-        sb.Append(kindParam);
-        sb.AppendLine(" AND e.deleted_at IS NULL");
+        sb.AppendLine(kindParam);
         sb.Append("AND (");
         sb.Append(whereFragment);
         sb.AppendLine(")");
@@ -146,7 +145,7 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
             "galleryType" => TranslateGalleryType(condition, kindCode, ctx),
             "imageCount" => TranslateChildCount(condition, kindCode, ctx),
             "format" => TranslateTechnical("format", condition, ctx),
-            "createdAt" => TranslateScalar("e.created_at", condition.Operator, condition.Value, ctx),
+            "createdAt" => TranslateDateTimeScalar("e.created_at", condition.Operator, condition.Value, ctx),
             "interactive" => TranslateFlag("is_favorite", condition.Operator),
             _ => null
         };
@@ -206,7 +205,7 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
 
     private string? TranslateDateField(CollectionRuleCondition condition, SqlBuildContext ctx) {
         ctx.EnsureJoin("LEFT JOIN entity_dates ed ON ed.entity_id = e.id AND ed.code IN ('release', 'air')");
-        return TranslateScalar("ed.sortable_value", condition.Operator, condition.Value, ctx);
+        return TranslateDateScalar("ed.sortable_value", condition.Operator, condition.Value, ctx);
     }
 
     private string? TranslateFileSize(CollectionRuleCondition condition, SqlBuildContext ctx) {
@@ -343,12 +342,47 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
 
     // ── Helpers ──
 
+    private static string? TranslateDateScalar(string column, string op, JsonElement? value, SqlBuildContext ctx) {
+        return op switch {
+            "equals" => $"{column} = {ctx.AddDateParam(value)}",
+            "not_equals" => $"{column} != {ctx.AddDateParam(value)}",
+            "greater_than" => $"{column} > {ctx.AddDateParam(value)}",
+            "less_than" => $"{column} < {ctx.AddDateParam(value)}",
+            "greater_equal" => $"{column} >= {ctx.AddDateParam(value)}",
+            "less_equal" => $"{column} <= {ctx.AddDateParam(value)}",
+            "between" when value?.ValueKind == JsonValueKind.Array =>
+                $"{column} BETWEEN {ctx.AddDateParam(value?.EnumerateArray().ElementAt(0))} AND {ctx.AddDateParam(value?.EnumerateArray().ElementAt(1))}",
+            "is_null" => $"{column} IS NULL",
+            "is_not_null" => $"{column} IS NOT NULL",
+            _ => null
+        };
+    }
+
+    private static string? TranslateDateTimeScalar(string column, string op, JsonElement? value, SqlBuildContext ctx) {
+        return op switch {
+            "equals" => $"{column} = {ctx.AddDateTimeParam(value)}",
+            "not_equals" => $"{column} != {ctx.AddDateTimeParam(value)}",
+            "greater_than" => $"{column} > {ctx.AddDateTimeParam(value)}",
+            "less_than" => $"{column} < {ctx.AddDateTimeParam(value)}",
+            "greater_equal" => $"{column} >= {ctx.AddDateTimeParam(value)}",
+            "less_equal" => $"{column} <= {ctx.AddDateTimeParam(value)}",
+            "between" when value?.ValueKind == JsonValueKind.Array =>
+                $"{column} BETWEEN {ctx.AddDateTimeParam(value?.EnumerateArray().ElementAt(0))} AND {ctx.AddDateTimeParam(value?.EnumerateArray().ElementAt(1))}",
+            "is_null" => $"{column} IS NULL",
+            "is_not_null" => $"{column} IS NOT NULL",
+            _ => null
+        };
+    }
+
     private static IReadOnlyList<string> GetStringArray(JsonElement? value) {
         if (value is null) return [];
         if (value.Value.ValueKind == JsonValueKind.String)
             return [value.Value.GetString()!];
         if (value.Value.ValueKind == JsonValueKind.Array)
-            return value.Value.EnumerateArray().Select(v => v.GetString()!).ToList();
+            return value.Value.EnumerateArray()
+                .Where(v => v.ValueKind == JsonValueKind.String)
+                .Select(v => v.GetString()!)
+                .ToList();
         return [];
     }
 
@@ -383,6 +417,24 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
                 JsonValueKind.False => AddParam(false, NpgsqlDbType.Boolean),
                 _ => "NULL"
             };
+        }
+
+        public string AddDateParam(JsonElement? value) {
+            if (value?.ValueKind != JsonValueKind.String ||
+                !DateOnly.TryParse(value.Value.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed)) {
+                return "NULL";
+            }
+
+            return AddParam(parsed, NpgsqlDbType.Date);
+        }
+
+        public string AddDateTimeParam(JsonElement? value) {
+            if (value?.ValueKind != JsonValueKind.String ||
+                !DateTimeOffset.TryParse(value.Value.GetString(), CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed)) {
+                return "NULL";
+            }
+
+            return AddParam(parsed, NpgsqlDbType.TimestampTz);
         }
     }
 }

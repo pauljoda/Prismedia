@@ -105,9 +105,9 @@ public sealed class EntityCapabilityServiceProgressTests {
             CancellationToken cancellationToken) =>
             Task.FromResult<BookProgressPosition?>(
                 bookId == BookId && currentEntityId == ChapterOneId
-                    ? new BookProgressPosition(ChapterOneId, index, total: 4)
+                    ? new BookProgressPosition(ChapterOneId, index, Total: 4)
                     : bookId == BookId && currentEntityId == ChapterTwoId
-                        ? new BookProgressPosition(ChapterTwoId, index + 2, total: 4)
+                        ? new BookProgressPosition(ChapterTwoId, index + 2, Total: 4)
                         : null);
 
         public Task SaveAsync(Entity entity, CancellationToken cancellationToken) {

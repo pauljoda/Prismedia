@@ -69,6 +69,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Fixed
+- Creating dynamic or hybrid collections with rules no longer trips server errors, and malformed rule payloads are now rejected as invalid collection requests.
 - Comics now keep advancing reading progress across chapters, so continuing into chapter 2 or later no longer leaves Resume stuck on chapter 1.
 - Long metadata subtitles on detail pages now wrap inside the hero area instead of running off screen on narrow layouts.
 - Animated image browsing is responsive again: GIF/APNG files stay on the native image path, source-only animated clips can still play when centered in the feed, and lightbox prewarming no longer pulls full original animated sources in the background.
