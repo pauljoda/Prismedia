@@ -299,7 +299,10 @@
       canPlayType: video ? video.canPlayType.bind(video) : undefined,
     });
   });
-  const directAvailable = $derived(Boolean(directSrc && directPlayable && failedDirectSrc !== directSrc));
+  const requiresServerAudioSelection = $derived(audioTrackOptions.length > 1);
+  const directAvailable = $derived(Boolean(
+    directSrc && directPlayable && failedDirectSrc !== directSrc && !requiresServerAudioSelection,
+  ));
   const effectiveMode = $derived<PlaybackMode>(
     playbackMode === "direct" && directAvailable ? "direct" : "hls",
   );
