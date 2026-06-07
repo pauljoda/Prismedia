@@ -8,9 +8,11 @@ namespace Prismedia.Infrastructure.Media.Processing;
 public sealed class AssetPathService {
     private readonly string _cacheRoot;
 
-    public AssetPathService(string dataDir) {
+    public AssetPathService(string dataDir, string? cacheDir = null) {
         var resolvedDataDir = Path.GetFullPath(dataDir);
-        _cacheRoot = Path.Combine(resolvedDataDir, "cache");
+        _cacheRoot = cacheDir is null
+            ? Path.Combine(resolvedDataDir, "cache")
+            : Path.GetFullPath(cacheDir);
     }
 
     public string CacheRoot => _cacheRoot;

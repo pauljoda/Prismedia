@@ -71,6 +71,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Fixed
+- Direct-child series shown through Jellyfin-compatible fallback seasons now keep the same season and episode metadata when a client opens an episode detail page, so Infuse does not fall back to the original flat series shape.
+- Jellyfin-compatible episode thumbnails now resolve through the image endpoint when direct-child series use the fallback season shape, so Infuse can load the episode artwork it is told exists.
 - Identify proposal pages now show a full-width Back to Search button near the top on phones, so mobile reviews can be sent back to provider search without switching devices.
 - Jellyfin unwatched movie libraries now use the same watched state Prismedia records for movie playback, including the playable child video behind a movie, and Infuse's user-scoped watched toggles now sync back into Prismedia instead of falling through to the web app.
 - Audio tracks in shared thumbnail rows, including the dashboard's Recently Watched section, now use their album artwork when the track itself has no cover art.
@@ -204,6 +206,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated web app manifest and mobile browser metadata for home-screen installation and browser UI theme colors.
 
 ### Fixed
+- Jellyfin clients like Infuse can now browse shows whose episodes sit directly under the show folder with no season folders. Prismedia now presents a compatibility season named after the show and reports those episodes as belonging to that season.
 - Movies and TV episodes are no longer stranded in the catch-all Videos shelf. Episodes whose number is written in parentheses like `Dragon Ball Super (S1E1)` are now recognized and grouped under their show; movies in their own folder are now detected even when the file is named differently from the folder (release names such as `Pokemon.The.First.Movie.1998…` or `sweeney-todd-1982.ia`); and a stray hidden helper folder (for example a `.thumbs` directory left by another app) sitting next to a movie no longer prevents it from being picked up as a movie. Re-scanning your Movies and Shows libraries moves the affected titles into Movies and Series.
 - Fixed Feed view so a clip now fills its space at the item's real shape instead of being squeezed into a fixed widescreen box — a tall video no longer plays as a small letterboxed strip that didn't match its preview.
 - Fixed the image/gallery lightbox on phones: you can now swipe left and right (or down to dismiss) directly on a video, and the thumbnail strip along the bottom sits clear of the phone's home-indicator area with larger, easier-to-tap thumbnails.
