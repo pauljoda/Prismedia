@@ -306,6 +306,44 @@ public sealed class JellyfinCatalogServiceTests {
     }
 
     [Fact]
+    public async Task DirectEpisodePrimaryImageTagResolvesToServedImageAsset() {
+        var seriesId = Guid.NewGuid();
+        var episodeId = Guid.NewGuid();
+        const string coverPath = "/assets/videos/direct-episode.jpg";
+        var entities = new FakeEntityReadService();
+        var episode = Thumb(episodeId, "video", "Episode 1", coverUrl: coverPath, parentId: seriesId);
+        entities.Cards[seriesId] = Card(
+            seriesId,
+            "video-series",
+            "Direct Show",
+            parentId: null,
+            children: [new EntityGroup("video", "Episodes", [episode])]);
+        entities.Cards[episodeId] = Card(episodeId, "video", "Episode 1", seriesId, children: []);
+        entities.Thumbnails[episodeId] = episode;
+        var catalog = new JellyfinCatalogService(entities, new FakeCollections());
+        var seasons = await catalog.GetItemsAsync(
+            Query(parentId: seriesId, includeItemTypes: [JellyfinProtocol.ItemTypes.Season]),
+            ServerId,
+            hideNsfw: false,
+            CancellationToken.None);
+        var fallbackSeasonId = Assert.Single(seasons.Items).Id;
+
+        var episodes = await catalog.GetItemsAsync(
+            Query(parentId: fallbackSeasonId, includeItemTypes: [JellyfinProtocol.ItemTypes.Episode]),
+            ServerId,
+            hideNsfw: false,
+            CancellationToken.None);
+        var listedEpisode = Assert.Single(episodes.Items);
+        Assert.True(listedEpisode.ImageTags!.TryGetValue("Primary", out var tag));
+
+        var asset = await catalog.GetImageAssetAsync(episodeId, "Primary", null, hideNsfw: false, CancellationToken.None);
+
+        Assert.NotNull(asset);
+        Assert.Equal(coverPath, asset!.Path);
+        Assert.Equal(tag, asset.ImageTag);
+    }
+
+    [Fact]
     public async Task SeriesWithRealSeasonDoesNotReturnFallbackSeason() {
         var seriesId = Guid.NewGuid();
         var seasonId = Guid.NewGuid();
@@ -644,6 +682,7 @@ public sealed class JellyfinCatalogServiceTests {
         public Dictionary<string, IReadOnlyList<EntityThumbnail>> ListByKind { get; } = new();
         public Dictionary<Guid, IReadOnlyList<EntityThumbnail>> ReferencedBy { get; } = new();
         public Dictionary<Guid, EntityCard> Cards { get; } = new();
+        public Dictionary<Guid, EntityThumbnail> Thumbnails { get; } = new();
         public Dictionary<Guid, bool> PlayedById { get; } = new();
         public List<ListCall> ListCalls { get; } = [];
         public List<Guid> DetailCalls { get; } = [];
@@ -699,7 +738,11 @@ public sealed class JellyfinCatalogServiceTests {
             IReadOnlyList<Guid> ids,
             bool hideNsfw,
             CancellationToken cancellationToken) =>
-            Task.FromResult(new EntityThumbnailBatchResponse([]));
+            Task.FromResult(new EntityThumbnailBatchResponse(ids
+                .Select(id => Thumbnails.GetValueOrDefault(id))
+                .Where(item => item is not null && (!hideNsfw || !item.IsNsfw))
+                .Select(item => item!)
+                .ToArray()));
 
         public Task<IEntityCard?> GetDetailAsync(Guid id, string kind, bool hideNsfw, CancellationToken cancellationToken) {
             DetailCalls.Add(id);

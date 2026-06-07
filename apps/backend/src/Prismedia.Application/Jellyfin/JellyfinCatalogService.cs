@@ -464,8 +464,9 @@ public sealed partial class JellyfinCatalogService {
             return [];
         }
 
+        var images = ImageAssets(entity.Capabilities);
         var indexesByType = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        var infos = ImageAssets(entity.Capabilities)
+        var infos = images
             .Select(asset => {
                 var type = JellyfinImageType(asset.Kind);
                 indexesByType.TryGetValue(type, out var index);
@@ -473,6 +474,12 @@ public sealed partial class JellyfinCatalogService {
                 return new JellyfinImageInfo(type, index, EtagFor(id, asset.Path));
             })
             .ToList();
+
+        if (!indexesByType.ContainsKey("Primary") &&
+            await ResolveEntityPrimaryCoverPathAsync(entity, visibility, cancellationToken) is { } primaryPath) {
+            infos.Insert(0, new JellyfinImageInfo("Primary", 0, EtagFor(id, primaryPath)));
+            indexesByType["Primary"] = 1;
+        }
 
         // A collection rarely carries its own poster file; advertise a representative member cover
         // as its Primary image so clients know an image is available to request.
@@ -518,8 +525,19 @@ public sealed partial class JellyfinCatalogService {
         var assets = ImageAssets(entity.Capabilities)
             .Where(asset => JellyfinImageType(asset.Kind).Equals(imageType, StringComparison.OrdinalIgnoreCase))
             .ToArray();
-        var asset = assets.ElementAtOrDefault(Math.Max(imageIndex ?? 0, 0));
+        var index = Math.Max(imageIndex ?? 0, 0);
+        var asset = assets.ElementAtOrDefault(index);
         if (asset is null) {
+            if (index == 0 &&
+                imageType.Equals("Primary", StringComparison.OrdinalIgnoreCase) &&
+                await ResolveEntityPrimaryCoverPathAsync(entity, visibility, cancellationToken) is { } primaryPath) {
+                return new JellyfinImageAsset(
+                    primaryPath,
+                    MimeTypeForPath(primaryPath),
+                    "Primary",
+                    EtagFor(id, primaryPath));
+            }
+
             // Serve a collection's representative member cover as its Primary image when it has no
             // poster of its own — matching the tag advertised by the browse/list projection.
             if (entity.Kind.Equals("collection", StringComparison.OrdinalIgnoreCase) &&
@@ -540,6 +558,20 @@ public sealed partial class JellyfinCatalogService {
             asset.MimeType ?? MimeTypeForPath(asset.Path),
             JellyfinImageType(asset.Kind),
             EtagFor(id, asset.Path));
+    }
+
+    private async Task<string?> ResolveEntityPrimaryCoverPathAsync(
+        IEntityCard entity,
+        JellyfinContentVisibility visibility,
+        CancellationToken cancellationToken) {
+        var imageCapability = entity.Capabilities.OfType<ImagesCapability>().FirstOrDefault();
+        if (PrimaryImageAsset(ImageAssets(entity.Capabilities), imageCapability) is { } primary) {
+            return primary.Path;
+        }
+
+        var thumbnails = await _entities.GetThumbnailsAsync([entity.Id], visibility.HideNsfw, cancellationToken);
+        var thumbnail = thumbnails.Items.FirstOrDefault(item => item.Id == entity.Id);
+        return thumbnail is not null && visibility.Allows(thumbnail) ? thumbnail.CoverUrl : null;
     }
 
     private async Task<string?> ResolveCollectionCoverPathAsync(
