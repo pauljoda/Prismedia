@@ -16,6 +16,7 @@
   import IdentifyReviewChoice from "$lib/components/identify/IdentifyReviewChoice.svelte";
   import IdentifyReviewParent from "$lib/components/identify/IdentifyReviewParent.svelte";
   import IdentifyReviewChild from "$lib/components/identify/IdentifyReviewChild.svelte";
+  import { shouldShowRouteQueueRejectActions } from "$lib/components/identify/identify-route-actions";
   import { useIdentifyStore } from "$lib/components/identify/identify-store.svelte";
   import { useAppChrome } from "$lib/stores/app-chrome.svelte";
 
@@ -41,6 +42,7 @@
   const currentIdentifyStatus = $derived(
     store.identifyingId === current?.entityId ? store.identifyingStatus : null,
   );
+  const isIdentifyingCurrent = $derived(store.identifyingId === current?.entityId);
   const activeReviewChild = $derived(
     store.view.kind === "review-child" && store.view.entity.id === entityId ? store.view : null,
   );
@@ -50,6 +52,13 @@
         (current?.state === "proposal" && current.proposal) ||
           (current?.state === "search" && current.candidates.length > 0),
       ),
+  );
+  const showRouteQueueRejectActions = $derived(
+    shouldShowRouteQueueRejectActions({
+      current,
+      reviewSurfaceHasRejectFooter,
+      isIdentifyingCurrent,
+    }),
   );
 
   onMount(async () => {
@@ -148,7 +157,7 @@
       </div>
     {/if}
 
-    {#if current && !reviewSurfaceHasRejectFooter}
+    {#if current && showRouteQueueRejectActions}
       <IdentifyRejectQueueActions
         entityId={current.entityId}
         showNext={Boolean(nextReviewQueueItem)}
@@ -175,7 +184,7 @@
           Back to Search
         </button>
       {/if}
-      {#if !reviewSurfaceHasRejectFooter}
+      {#if showRouteQueueRejectActions}
         <IdentifyRejectQueueActions
           entityId={current.entityId}
           showNext={Boolean(nextReviewQueueItem)}

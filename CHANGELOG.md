@@ -69,6 +69,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Fixed
+- The Identify page no longer shows the Reject action while plugin search is still loading, so you only see rejection controls once there is a queued item or review result to act on.
 - Adding a new watched library now starts scans only for the media kinds enabled on that library, so audio-only, image-only, and books-only libraries no longer kick off an unnecessary video scan.
 - Changing the audio track on stream-copied videos now keeps that choice through the HLS playlist and segment requests, so multi-audio files no longer drift back to the default language while the UI shows another track selected.
 - Lightbox videos now open at their intended size immediately when aspect-ratio metadata is available, and tall videos leave a small vertical inset instead of reaching the viewport edge.
