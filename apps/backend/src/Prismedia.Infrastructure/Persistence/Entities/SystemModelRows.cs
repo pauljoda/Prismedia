@@ -41,6 +41,7 @@ public sealed class JellyfinProfileRow {
     public string Username { get; set; } = string.Empty;
     public string NormalizedUsername { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
+    public bool AllowSfw { get; set; } = true;
     public bool AllowNsfw { get; set; }
     public bool Enabled { get; set; } = true;
     public DateTimeOffset? LastLoginAt { get; set; }

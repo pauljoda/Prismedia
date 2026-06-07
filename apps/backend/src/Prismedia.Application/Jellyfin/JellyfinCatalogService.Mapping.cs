@@ -262,7 +262,7 @@ public sealed partial class JellyfinCatalogService {
 
     private async Task<ItemContext?> ParentContextForAsync(
         IEntityCard parent,
-        bool hideNsfw,
+        JellyfinContentVisibility visibility,
         CancellationToken cancellationToken) {
         // Albums (audio-library) parent their tracks: carry the album reference plus the album artist
         // resolved from the album's own parent (music-artist), so each track DTO is self-describing.
@@ -270,7 +270,7 @@ public sealed partial class JellyfinCatalogService {
             var albumImages = ImageMetadata(parent.Id, parent.Capabilities);
             IEntityCard? artist = null;
             if (parent.ParentEntityId is { } artistId) {
-                artist = await _entities.GetAsync(artistId, hideNsfw, cancellationToken);
+                artist = await GetVisibleCardAsync(artistId, visibility, cancellationToken);
             }
 
             return new ItemContext(
@@ -316,7 +316,7 @@ public sealed partial class JellyfinCatalogService {
 
         IEntityCard? series = null;
         if (parent.ParentEntityId is { } seriesId) {
-            series = await _entities.GetAsync(seriesId, hideNsfw, cancellationToken);
+            series = await GetVisibleCardAsync(seriesId, visibility, cancellationToken);
         }
 
         // Series supplies the backdrop/logo/primary artwork; the season supplies the thumb

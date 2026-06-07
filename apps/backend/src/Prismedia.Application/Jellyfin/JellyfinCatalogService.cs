@@ -75,17 +75,28 @@ public sealed partial class JellyfinCatalogService {
     public async Task<JellyfinQueryResult<JellyfinBaseItemDto>> GetUserViewsWithArtworkAsync(
         string serverId,
         bool hideNsfw,
+        CancellationToken cancellationToken) =>
+        await GetUserViewsWithArtworkAsync(serverId, JellyfinContentVisibility.FromHideNsfw(hideNsfw), cancellationToken);
+
+    /// <summary>
+    /// Returns the Jellyfin user views with a representative poster on each tile, resolved from the
+    /// most recently added item in that library so clients render real artwork rather than a folder
+    /// icon. Used for the surfaces clients actually display (UserViews, root browse, single view).
+    /// </summary>
+    public async Task<JellyfinQueryResult<JellyfinBaseItemDto>> GetUserViewsWithArtworkAsync(
+        string serverId,
+        JellyfinContentVisibility visibility,
         CancellationToken cancellationToken) {
         var views = new List<JellyfinBaseItemDto>(LibraryViews.Length);
         foreach (var view in LibraryViews) {
-            var cover = await ResolveViewCoverPathAsync(view, hideNsfw, cancellationToken);
+            var cover = await ResolveViewCoverPathAsync(view, visibility, cancellationToken);
             int? childCount = null;
             int? recursiveItemCount = null;
             // Advertise content counts for the Music library so music clients know it is browsable:
             // child count is the artist count, recursive count is the total track count.
             if (view.Id == MusicViewId) {
-                childCount = await CountOfKindAsync("music-artist", hideNsfw, cancellationToken);
-                recursiveItemCount = await CountOfKindAsync("audio-track", hideNsfw, cancellationToken);
+                childCount = await CountOfKindAsync("music-artist", visibility, cancellationToken);
+                recursiveItemCount = await CountOfKindAsync("audio-track", visibility, cancellationToken);
             }
 
             views.Add(VirtualFolder(view.Id, view.Name, view.CollectionType, serverId, cover, childCount, recursiveItemCount));
@@ -101,18 +112,23 @@ public sealed partial class JellyfinCatalogService {
     /// </summary>
     private async Task<string?> ResolveViewCoverPathAsync(
         LibraryViewDefinition view,
-        bool hideNsfw,
+        JellyfinContentVisibility visibility,
         CancellationToken cancellationToken) {
+        if (!visibility.AllowsAny) {
+            return null;
+        }
+
         var response = await _entities.ListAsync(
             view.Kind,
             null,
             null,
-            hideNsfw,
+            visibility.HideNsfw,
             16,
             cancellationToken,
             sort: "added",
             sortDir: "desc",
-            played: view.ForcedPlayed);
+            played: view.ForcedPlayed,
+            nsfw: visibility.NsfwFilter);
         foreach (var thumbnail in response.Items) {
             // The Videos view shows standalone videos only, so prefer a top-level poster for its tile.
             if (view.Kind == "video" && thumbnail.ParentEntityId is not null) {
@@ -124,7 +140,7 @@ public sealed partial class JellyfinCatalogService {
             }
 
             if (view.Kind == "collection" &&
-                await ResolveCollectionCoverPathAsync(thumbnail.Id, hideNsfw, cancellationToken) is { } memberCover) {
+                await ResolveCollectionCoverPathAsync(thumbnail.Id, visibility, cancellationToken) is { } memberCover) {
                 return memberCover;
             }
         }
@@ -152,23 +168,31 @@ public sealed partial class JellyfinCatalogService {
         JellyfinItemQuery query,
         string serverId,
         bool hideNsfw,
+        CancellationToken cancellationToken) =>
+        await GetItemsAsync(query, serverId, JellyfinContentVisibility.FromHideNsfw(hideNsfw), cancellationToken);
+
+    /// <summary>Browses Jellyfin-compatible items.</summary>
+    public async Task<JellyfinQueryResult<JellyfinBaseItemDto>> GetItemsAsync(
+        JellyfinItemQuery query,
+        string serverId,
+        JellyfinContentVisibility visibility,
         CancellationToken cancellationToken) {
         IReadOnlyList<JellyfinBaseItemDto> items;
         if (query.Ids.Count > 0) {
-            items = await ItemsByIdAsync(query.Ids, serverId, hideNsfw, cancellationToken);
+            items = await ItemsByIdAsync(query.Ids, serverId, visibility, cancellationToken);
         } else if (query.PersonIds.Count > 0) {
-            items = await FilmographyAsync(query.PersonIds[0], query, serverId, hideNsfw, cancellationToken);
+            items = await FilmographyAsync(query.PersonIds[0], query, serverId, visibility, cancellationToken);
         } else if (query.Recursive && RequestsMusicTypes(query.IncludeItemTypes) &&
-            await RecursiveMusicItemsAsync(query, serverId, hideNsfw, cancellationToken) is { } musicItems) {
+            await RecursiveMusicItemsAsync(query, serverId, visibility, cancellationToken) is { } musicItems) {
             // Music clients fetch flat library lists with Recursive=true (e.g. all albums or all songs),
             // either globally or scoped to the Music view/an artist. The structural-children browse
             // below only yields a parent's immediate children, so these recursive queries are served
             // by flattening the artist/album/track tree to the requested level.
             items = musicItems;
         } else if (query.ParentId is null || query.ParentId == RootId) {
-            items = (await GetUserViewsWithArtworkAsync(serverId, hideNsfw, cancellationToken)).Items;
+            items = (await GetUserViewsWithArtworkAsync(serverId, visibility, cancellationToken)).Items;
         } else {
-            items = await ChildrenOfAsync(query.ParentId.Value, query, serverId, hideNsfw, cancellationToken);
+            items = await ChildrenOfAsync(query.ParentId.Value, query, serverId, visibility, cancellationToken);
         }
 
         items = ApplyItemTypeFilter(items, query.IncludeItemTypes);
@@ -185,7 +209,7 @@ public sealed partial class JellyfinCatalogService {
         var page = await HydrateFolderContainersAsync(
             items.Skip(start).Take(limit).ToArray(),
             serverId,
-            hideNsfw,
+            visibility,
             cancellationToken);
         return new JellyfinQueryResult<JellyfinBaseItemDto>(page, total, start);
     }
@@ -195,6 +219,14 @@ public sealed partial class JellyfinCatalogService {
         Guid id,
         string serverId,
         bool hideNsfw,
+        CancellationToken cancellationToken) =>
+        await GetItemAsync(id, serverId, JellyfinContentVisibility.FromHideNsfw(hideNsfw), cancellationToken);
+
+    /// <summary>Gets one Jellyfin-compatible item by id.</summary>
+    public async Task<JellyfinBaseItemDto?> GetItemAsync(
+        Guid id,
+        string serverId,
+        JellyfinContentVisibility visibility,
         CancellationToken cancellationToken) {
         if (id == RootId) {
             return GetRoot(serverId);
@@ -202,12 +234,12 @@ public sealed partial class JellyfinCatalogService {
 
         foreach (var view in LibraryViews) {
             if (view.Id == id) {
-                var cover = await ResolveViewCoverPathAsync(view, hideNsfw, cancellationToken);
+                var cover = await ResolveViewCoverPathAsync(view, visibility, cancellationToken);
                 return VirtualFolder(view.Id, view.Name, view.CollectionType, serverId, cover);
             }
         }
 
-        var entity = await GetDetailedCardAsync(id, hideNsfw, cancellationToken);
+        var entity = await GetDetailedCardAsync(id, visibility, cancellationToken);
         if (entity is null) {
             return null;
         }
@@ -216,8 +248,8 @@ public sealed partial class JellyfinCatalogService {
         // resolve its series/season context so the parent artwork (backdrop, logo, series poster)
         // and SeriesId/SeasonId are populated — Infuse renders the episode hero from the parent
         // backdrop, so without this the detail page shows a blank backdrop.
-        var context = await ResolveStandaloneContextAsync(entity, hideNsfw, cancellationToken);
-        return await MapDetailAsync(entity, serverId, context, hideNsfw, cancellationToken);
+        var context = await ResolveStandaloneContextAsync(entity, visibility, cancellationToken);
+        return await MapDetailAsync(entity, serverId, context, visibility, cancellationToken);
     }
 
     /// <summary>
@@ -228,17 +260,17 @@ public sealed partial class JellyfinCatalogService {
         IEntityCard detail,
         string serverId,
         ItemContext? context,
-        bool hideNsfw,
+        JellyfinContentVisibility visibility,
         CancellationToken cancellationToken) {
         if (!detail.Kind.Equals("movie", StringComparison.OrdinalIgnoreCase)) {
             return MapCard(detail, serverId, context);
         }
 
         var childVideoId = detail.ChildrenByKind
-            .SelectMany(group => group.Entities)
+            .SelectMany(group => VisibleEntities(group.Entities, visibility))
             .FirstOrDefault(child => child.Kind.Equals("video", StringComparison.OrdinalIgnoreCase))?.Id;
         var playableChild = childVideoId is { } id
-            ? await GetDetailedCardAsync(id, hideNsfw, cancellationToken)
+            ? await GetDetailedCardAsync(id, visibility, cancellationToken)
             : null;
         return MapCard(detail, serverId, context, playableChild);
     }
@@ -250,7 +282,7 @@ public sealed partial class JellyfinCatalogService {
     /// </summary>
     private async Task<ItemContext?> ResolveStandaloneContextAsync(
         IEntityCard entity,
-        bool hideNsfw,
+        JellyfinContentVisibility visibility,
         CancellationToken cancellationToken) {
         var resolvesParent =
             entity.Kind.Equals("video", StringComparison.OrdinalIgnoreCase) ||
@@ -260,8 +292,8 @@ public sealed partial class JellyfinCatalogService {
             return null;
         }
 
-        var parent = await _entities.GetAsync(parentId, hideNsfw, cancellationToken);
-        return parent is null ? null : await ParentContextForAsync(parent, hideNsfw, cancellationToken);
+        var parent = await GetVisibleCardAsync(parentId, visibility, cancellationToken);
+        return parent is null ? null : await ParentContextForAsync(parent, visibility, cancellationToken);
     }
 
     /// <summary>Returns recently added playable videos.</summary>
@@ -270,23 +302,37 @@ public sealed partial class JellyfinCatalogService {
         int limit,
         string serverId,
         bool hideNsfw,
+        CancellationToken cancellationToken) =>
+        await GetLatestAsync(parentId, limit, serverId, JellyfinContentVisibility.FromHideNsfw(hideNsfw), cancellationToken);
+
+    /// <summary>Returns recently added playable videos.</summary>
+    public async Task<JellyfinQueryResult<JellyfinBaseItemDto>> GetLatestAsync(
+        Guid? parentId,
+        int limit,
+        string serverId,
+        JellyfinContentVisibility visibility,
         CancellationToken cancellationToken) {
+        if (!visibility.AllowsAny) {
+            return new JellyfinQueryResult<JellyfinBaseItemDto>([], 0, 0);
+        }
+
         if (parentId is { } id && ViewById(id) is { } view) {
             var viewResponse = await _entities.ListAsync(
                 view.Kind,
                 null,
                 null,
-                hideNsfw,
+                visibility.HideNsfw,
                 Math.Clamp(limit, 1, 100),
                 cancellationToken,
                 sort: "added",
                 sortDir: "desc",
-                played: view.ForcedPlayed);
+                played: view.ForcedPlayed,
+                nsfw: visibility.NsfwFilter);
             var viewItems = viewResponse.Items;
             if (view.Id == VideosViewId) {
                 viewItems = viewItems.Where(item => item.ParentEntityId is null).ToArray();
             } else if (view.Id == CollectionsViewId) {
-                viewItems = await FillCollectionCoversAsync(viewItems, hideNsfw, cancellationToken);
+                viewItems = await FillCollectionCoversAsync(viewItems, visibility, cancellationToken);
             }
 
             var mapped = viewItems.Select(item => MapThumbnail(item, serverId)).ToArray();
@@ -297,11 +343,12 @@ public sealed partial class JellyfinCatalogService {
             "video",
             null,
             null,
-            hideNsfw,
+            visibility.HideNsfw,
             Math.Clamp(limit, 1, 100),
             cancellationToken,
             sort: "added",
-            sortDir: "desc");
+            sortDir: "desc",
+            nsfw: visibility.NsfwFilter);
         var items = response.Items.Select(item => MapThumbnail(item, serverId)).ToArray();
         return new JellyfinQueryResult<JellyfinBaseItemDto>(items, response.TotalCount, 0);
     }
@@ -312,17 +359,31 @@ public sealed partial class JellyfinCatalogService {
         int limit,
         string serverId,
         bool hideNsfw,
+        CancellationToken cancellationToken) =>
+        await GetResumeAsync(startIndex, limit, serverId, JellyfinContentVisibility.FromHideNsfw(hideNsfw), cancellationToken);
+
+    /// <summary>Returns in-progress videos for Jellyfin resume shelves.</summary>
+    public async Task<JellyfinQueryResult<JellyfinBaseItemDto>> GetResumeAsync(
+        int startIndex,
+        int limit,
+        string serverId,
+        JellyfinContentVisibility visibility,
         CancellationToken cancellationToken) {
+        if (!visibility.AllowsAny) {
+            return new JellyfinQueryResult<JellyfinBaseItemDto>([], 0, 0);
+        }
+
         var response = await _entities.ListAsync(
             "video",
             null,
             null,
-            hideNsfw,
+            visibility.HideNsfw,
             Math.Clamp(startIndex + limit, 1, 500),
             cancellationToken,
             sort: "last-played",
             sortDir: "desc",
-            status: "in-progress");
+            status: "in-progress",
+            nsfw: visibility.NsfwFilter);
         var items = response.Items.Select(item => MapThumbnail(item, serverId)).ToArray();
         var total = items.Length;
         var start = Math.Clamp(startIndex, 0, total);
@@ -339,17 +400,35 @@ public sealed partial class JellyfinCatalogService {
         int limit,
         string serverId,
         bool hideNsfw,
+        CancellationToken cancellationToken) =>
+        await GetNextUpAsync(startIndex, limit, serverId, JellyfinContentVisibility.FromHideNsfw(hideNsfw), cancellationToken);
+
+    /// <summary>
+    /// Returns "Next Up" episodes for Jellyfin show shelves. v1 surfaces in-progress episodes
+    /// (the internal Continue projection scoped to series content); next-unwatched-after-completed
+    /// derivation is a planned enhancement. Movies are excluded — they belong to the resume shelf.
+    /// </summary>
+    public async Task<JellyfinQueryResult<JellyfinBaseItemDto>> GetNextUpAsync(
+        int startIndex,
+        int limit,
+        string serverId,
+        JellyfinContentVisibility visibility,
         CancellationToken cancellationToken) {
+        if (!visibility.AllowsAny) {
+            return new JellyfinQueryResult<JellyfinBaseItemDto>([], 0, 0);
+        }
+
         var response = await _entities.ListAsync(
             "video",
             null,
             null,
-            hideNsfw,
+            visibility.HideNsfw,
             Math.Clamp(startIndex + limit, 1, 500),
             cancellationToken,
             sort: "last-played",
             sortDir: "desc",
-            status: "in-progress");
+            status: "in-progress",
+            nsfw: visibility.NsfwFilter);
         var episodes = response.Items
             .Select(item => MapThumbnail(item, serverId))
             .Where(item => item.Type.Equals(JellyfinProtocol.ItemTypes.Episode, StringComparison.OrdinalIgnoreCase))
@@ -363,16 +442,23 @@ public sealed partial class JellyfinCatalogService {
     public async Task<IReadOnlyList<JellyfinImageInfo>> GetImageInfosAsync(
         Guid id,
         bool hideNsfw,
+        CancellationToken cancellationToken) =>
+        await GetImageInfosAsync(id, JellyfinContentVisibility.FromHideNsfw(hideNsfw), cancellationToken);
+
+    /// <summary>Lists image metadata for one item.</summary>
+    public async Task<IReadOnlyList<JellyfinImageInfo>> GetImageInfosAsync(
+        Guid id,
+        JellyfinContentVisibility visibility,
         CancellationToken cancellationToken) {
         // Library views are synthetic ids with no entity row; advertise their representative poster.
         if (LibraryViews.Any(view => view.Id == id)) {
             return ViewById(id) is { } view &&
-                   await ResolveViewCoverPathAsync(view, hideNsfw, cancellationToken) is { } viewCover
+                   await ResolveViewCoverPathAsync(view, visibility, cancellationToken) is { } viewCover
                 ? [new JellyfinImageInfo("Primary", 0, EtagFor(id, viewCover))]
                 : [];
         }
 
-        var entity = await _entities.GetAsync(id, hideNsfw, cancellationToken);
+        var entity = await GetVisibleCardAsync(id, visibility, cancellationToken);
         if (entity is null) {
             return [];
         }
@@ -391,7 +477,7 @@ public sealed partial class JellyfinCatalogService {
         // as its Primary image so clients know an image is available to request.
         if (!indexesByType.ContainsKey("Primary") &&
             entity.Kind.Equals("collection", StringComparison.OrdinalIgnoreCase) &&
-            await ResolveCollectionCoverPathAsync(id, hideNsfw, cancellationToken) is { } coverPath) {
+            await ResolveCollectionCoverPathAsync(id, visibility, cancellationToken) is { } coverPath) {
             infos.Insert(0, new JellyfinImageInfo("Primary", 0, EtagFor(id, coverPath)));
         }
 
@@ -404,17 +490,26 @@ public sealed partial class JellyfinCatalogService {
         string imageType,
         int? imageIndex,
         bool hideNsfw,
+        CancellationToken cancellationToken) =>
+        await GetImageAssetAsync(id, imageType, imageIndex, JellyfinContentVisibility.FromHideNsfw(hideNsfw), cancellationToken);
+
+    /// <summary>Resolves one item image asset by Jellyfin image type.</summary>
+    public async Task<JellyfinImageAsset?> GetImageAssetAsync(
+        Guid id,
+        string imageType,
+        int? imageIndex,
+        JellyfinContentVisibility visibility,
         CancellationToken cancellationToken) {
         // Library views are synthetic ids with no entity row; serve their representative poster.
         if (LibraryViews.Any(view => view.Id == id)) {
             return imageType.Equals("Primary", StringComparison.OrdinalIgnoreCase) &&
                    ViewById(id) is { } view &&
-                   await ResolveViewCoverPathAsync(view, hideNsfw, cancellationToken) is { } viewCover
+                   await ResolveViewCoverPathAsync(view, visibility, cancellationToken) is { } viewCover
                 ? new JellyfinImageAsset(viewCover, MimeTypeForPath(viewCover), "Primary", EtagFor(id, viewCover))
                 : null;
         }
 
-        var entity = await _entities.GetAsync(id, hideNsfw, cancellationToken);
+        var entity = await GetVisibleCardAsync(id, visibility, cancellationToken);
         if (entity is null) {
             return null;
         }
@@ -428,7 +523,7 @@ public sealed partial class JellyfinCatalogService {
             // poster of its own — matching the tag advertised by the browse/list projection.
             if (entity.Kind.Equals("collection", StringComparison.OrdinalIgnoreCase) &&
                 imageType.Equals("Primary", StringComparison.OrdinalIgnoreCase) &&
-                await ResolveCollectionCoverPathAsync(id, hideNsfw, cancellationToken) is { } coverPath) {
+                await ResolveCollectionCoverPathAsync(id, visibility, cancellationToken) is { } coverPath) {
                 return new JellyfinImageAsset(
                     coverPath,
                     MimeTypeForPath(coverPath),
@@ -448,9 +543,13 @@ public sealed partial class JellyfinCatalogService {
 
     private async Task<string?> ResolveCollectionCoverPathAsync(
         Guid id,
-        bool hideNsfw,
+        JellyfinContentVisibility visibility,
         CancellationToken cancellationToken) {
-        var covers = await _collections.ResolveCoverPathsAsync([id], hideNsfw, cancellationToken);
+        if (!visibility.AllowSfw) {
+            return null;
+        }
+
+        var covers = await _collections.ResolveCoverPathsAsync([id], visibility.HideNsfw, cancellationToken);
         return covers.TryGetValue(id, out var coverPath) ? coverPath : null;
     }
 
@@ -458,25 +557,25 @@ public sealed partial class JellyfinCatalogService {
         Guid parentId,
         JellyfinItemQuery query,
         string serverId,
-        bool hideNsfw,
+        JellyfinContentVisibility visibility,
         CancellationToken cancellationToken) {
         if (ViewById(parentId) is { } view) {
             var thumbnails = await FetchAllThumbnailsAsync(
                 view.Kind,
                 query,
-                hideNsfw,
+                visibility,
                 cancellationToken,
                 view.ForcedPlayed);
             if (view.Id == VideosViewId) {
                 thumbnails = thumbnails.Where(item => item.ParentEntityId is null).ToArray();
             } else if (view.Id == CollectionsViewId) {
-                thumbnails = await FillCollectionCoversAsync(thumbnails, hideNsfw, cancellationToken);
+                thumbnails = await FillCollectionCoversAsync(thumbnails, visibility, cancellationToken);
             }
 
             return thumbnails.Select(item => MapThumbnail(item, serverId)).ToArray();
         }
 
-        var parent = await _entities.GetAsync(parentId, hideNsfw, cancellationToken);
+        var parent = await GetVisibleCardAsync(parentId, visibility, cancellationToken);
         if (parent is null) {
             return [];
         }
@@ -484,21 +583,22 @@ public sealed partial class JellyfinCatalogService {
         // Infuse navigates into a cast member by ParentId; surface that performer's titles rather
         // than the empty structural-children list a person entity would otherwise yield.
         if (parent.Kind.Equals("person", StringComparison.OrdinalIgnoreCase)) {
-            return await FilmographyAsync(parentId, query, serverId, hideNsfw, cancellationToken);
+            return await FilmographyAsync(parentId, query, serverId, visibility, cancellationToken);
         }
 
         if (parent.Kind.Equals("collection", StringComparison.OrdinalIgnoreCase)) {
-            var items = await _collections.ListItemsAsync(parentId, hideNsfw, cancellationToken);
+            var items = await _collections.ListItemsAsync(parentId, visibility.HideNsfw, cancellationToken);
             return items.Items
+                .Where(item => visibility.Allows(item.Entity))
                 .Select(item => MapCollectionItem(item, serverId, parentId))
                 .Where(item => item is not null)
                 .Select(item => item!)
                 .ToArray();
         }
 
-        var context = await ParentContextForAsync(parent, hideNsfw, cancellationToken);
+        var context = await ParentContextForAsync(parent, visibility, cancellationToken);
         var childThumbnails = parent.ChildrenByKind
-            .SelectMany(group => group.Entities)
+            .SelectMany(group => VisibleEntities(group.Entities, visibility))
             .Where(child => query.Recursive || child.ParentEntityId == parentId)
             .ToArray();
 
@@ -510,14 +610,14 @@ public sealed partial class JellyfinCatalogService {
                     continue;
                 }
 
-                var season = await _entities.GetAsync(child.Id, hideNsfw, cancellationToken);
+                var season = await GetVisibleCardAsync(child.Id, visibility, cancellationToken);
                 if (season is null) {
                     continue;
                 }
 
-                var seasonContext = await ParentContextForAsync(season, hideNsfw, cancellationToken);
+                var seasonContext = await ParentContextForAsync(season, visibility, cancellationToken);
                 descendants.AddRange(season.ChildrenByKind
-                    .SelectMany(group => group.Entities)
+                    .SelectMany(group => VisibleEntities(group.Entities, visibility))
                     .Select(grandchild => MapThumbnail(grandchild, serverId, child.Id, seasonContext)));
             }
 
@@ -535,7 +635,7 @@ public sealed partial class JellyfinCatalogService {
     private async Task<IReadOnlyList<JellyfinBaseItemDto>> HydrateFolderContainersAsync(
         IReadOnlyList<JellyfinBaseItemDto> items,
         string serverId,
-        bool hideNsfw,
+        JellyfinContentVisibility visibility,
         CancellationToken cancellationToken) {
         if (!items.Any(ShouldHydrateCatalogItem)) {
             return items;
@@ -548,10 +648,10 @@ public sealed partial class JellyfinCatalogService {
                 continue;
             }
 
-            var detail = await GetDetailedCardAsync(item.Id, hideNsfw, cancellationToken);
+            var detail = await GetDetailedCardAsync(item.Id, visibility, cancellationToken);
             hydrated.Add(detail is null
                 ? item
-                : await MapDetailAsync(detail, serverId, ItemContext.From(item), hideNsfw, cancellationToken));
+                : await MapDetailAsync(detail, serverId, ItemContext.From(item), visibility, cancellationToken));
         }
 
         return hydrated;
@@ -566,24 +666,25 @@ public sealed partial class JellyfinCatalogService {
 
     private async Task<IEntityCard?> GetDetailedCardAsync(
         Guid id,
-        bool hideNsfw,
+        JellyfinContentVisibility visibility,
         CancellationToken cancellationToken) {
-        var card = await _entities.GetAsync(id, hideNsfw, cancellationToken);
+        var card = await GetVisibleCardAsync(id, visibility, cancellationToken);
         if (card is null) {
             return null;
         }
 
-        return await _entities.GetDetailAsync(id, card.Kind, hideNsfw, cancellationToken) ?? card;
+        var detail = await _entities.GetDetailAsync(id, card.Kind, visibility.HideNsfw, cancellationToken);
+        return detail is not null && visibility.Allows(detail) ? detail : card;
     }
 
     private async Task<IReadOnlyList<JellyfinBaseItemDto>> ItemsByIdAsync(
         IReadOnlyList<Guid> ids,
         string serverId,
-        bool hideNsfw,
+        JellyfinContentVisibility visibility,
         CancellationToken cancellationToken) {
         var items = new List<JellyfinBaseItemDto>(ids.Count);
         foreach (var id in ids) {
-            var item = await GetItemAsync(id, serverId, hideNsfw, cancellationToken);
+            var item = await GetItemAsync(id, serverId, visibility, cancellationToken);
             if (item is not null) {
                 items.Add(item);
             }
@@ -608,7 +709,7 @@ public sealed partial class JellyfinCatalogService {
     private async Task<IReadOnlyList<JellyfinBaseItemDto>?> RecursiveMusicItemsAsync(
         JellyfinItemQuery query,
         string serverId,
-        bool hideNsfw,
+        JellyfinContentVisibility visibility,
         CancellationToken cancellationToken) {
         var types = new HashSet<string>(query.IncludeItemTypes, StringComparer.OrdinalIgnoreCase);
         var wantArtists = types.Contains(JellyfinProtocol.ItemTypes.MusicArtist);
@@ -619,7 +720,7 @@ public sealed partial class JellyfinCatalogService {
         Guid? scopeArtist = null;
         Guid? scopeAlbum = null;
         if (query.ParentId is { } parentId && parentId != RootId && LibraryViews.All(view => view.Id != parentId)) {
-            var parent = await _entities.GetAsync(parentId, hideNsfw, cancellationToken);
+            var parent = await GetVisibleCardAsync(parentId, visibility, cancellationToken);
             if (parent is null) {
                 return [];
             }
@@ -634,21 +735,21 @@ public sealed partial class JellyfinCatalogService {
         }
 
         // Lookups (unfiltered by search) so albums/tracks can resolve their album-artist for context.
-        var artistById = (await FetchAllOfKindAsync("music-artist", hideNsfw, cancellationToken))
+        var artistById = (await FetchAllOfKindAsync("music-artist", visibility, cancellationToken))
             .ToDictionary(artist => artist.Id);
-        var albumById = (await FetchAllOfKindAsync("audio-library", hideNsfw, cancellationToken))
+        var albumById = (await FetchAllOfKindAsync("audio-library", visibility, cancellationToken))
             .ToDictionary(album => album.Id);
 
         var items = new List<JellyfinBaseItemDto>();
 
         if (wantArtists && scopeArtist is null && scopeAlbum is null) {
-            foreach (var artist in await FetchAllThumbnailsAsync("music-artist", query, hideNsfw, cancellationToken)) {
+            foreach (var artist in await FetchAllThumbnailsAsync("music-artist", query, visibility, cancellationToken)) {
                 items.Add(MapThumbnail(artist, serverId));
             }
         }
 
         if (wantAlbums && scopeAlbum is null) {
-            foreach (var album in await FetchAllThumbnailsAsync("audio-library", query, hideNsfw, cancellationToken)) {
+            foreach (var album in await FetchAllThumbnailsAsync("audio-library", query, visibility, cancellationToken)) {
                 if (scopeArtist is { } artistScope && album.ParentEntityId != artistScope) {
                     continue;
                 }
@@ -658,7 +759,7 @@ public sealed partial class JellyfinCatalogService {
         }
 
         if (wantSongs) {
-            foreach (var song in await FetchAllThumbnailsAsync("audio-track", query, hideNsfw, cancellationToken)) {
+            foreach (var song in await FetchAllThumbnailsAsync("audio-track", query, visibility, cancellationToken)) {
                 var album = song.ParentEntityId is { } albumId && albumById.TryGetValue(albumId, out var found) ? found : null;
                 if (scopeAlbum is { } albumScope && song.ParentEntityId != albumScope) {
                     continue;
@@ -705,20 +806,28 @@ public sealed partial class JellyfinCatalogService {
     }
 
     /// <summary>Returns the total number of entities of a kind via a minimal list probe.</summary>
-    private async Task<int> CountOfKindAsync(string kind, bool hideNsfw, CancellationToken cancellationToken) {
-        var response = await _entities.ListAsync(kind, null, null, hideNsfw, 1, cancellationToken);
+    private async Task<int> CountOfKindAsync(string kind, JellyfinContentVisibility visibility, CancellationToken cancellationToken) {
+        if (!visibility.AllowsAny) {
+            return 0;
+        }
+
+        var response = await _entities.ListAsync(kind, null, null, visibility.HideNsfw, 1, cancellationToken, nsfw: visibility.NsfwFilter);
         return response.TotalCount;
     }
 
     /// <summary>Lists every entity of a kind (paged internally), unfiltered by the request's search term.</summary>
     private async Task<IReadOnlyList<EntityThumbnail>> FetchAllOfKindAsync(
         string kind,
-        bool hideNsfw,
+        JellyfinContentVisibility visibility,
         CancellationToken cancellationToken) {
+        if (!visibility.AllowsAny) {
+            return [];
+        }
+
         var results = new List<EntityThumbnail>();
         string? cursor = null;
         do {
-            var response = await _entities.ListAsync(kind, null, cursor, hideNsfw, 1000, cancellationToken);
+            var response = await _entities.ListAsync(kind, null, cursor, visibility.HideNsfw, 1000, cancellationToken, nsfw: visibility.NsfwFilter);
             results.AddRange(response.Items);
             cursor = response.NextCursor;
         } while (cursor is not null && results.Count < MaxBrowseItems);
@@ -729,9 +838,13 @@ public sealed partial class JellyfinCatalogService {
     private async Task<IReadOnlyList<EntityThumbnail>> FetchAllThumbnailsAsync(
         string kind,
         JellyfinItemQuery query,
-        bool hideNsfw,
+        JellyfinContentVisibility visibility,
         CancellationToken cancellationToken,
         bool? forcedPlayed = null) {
+        if (!visibility.AllowsAny) {
+            return [];
+        }
+
         var results = new List<EntityThumbnail>();
         string? cursor = null;
         do {
@@ -739,13 +852,14 @@ public sealed partial class JellyfinCatalogService {
                 kind,
                 query.SearchTerm,
                 cursor,
-                hideNsfw,
+                visibility.HideNsfw,
                 1000,
                 cancellationToken,
                 sort: ToPrismediaSort(query.SortBy),
                 sortDir: ToPrismediaSortDir(query.SortOrder),
                 favorite: query.IsFavorite,
-                played: forcedPlayed);
+                played: forcedPlayed,
+                nsfw: visibility.NsfwFilter);
             results.AddRange(response.Items);
             cursor = response.NextCursor;
         } while (cursor is not null && results.Count < MaxBrowseItems);
@@ -763,8 +877,12 @@ public sealed partial class JellyfinCatalogService {
         Guid personId,
         JellyfinItemQuery query,
         string serverId,
-        bool hideNsfw,
+        JellyfinContentVisibility visibility,
         CancellationToken cancellationToken) {
+        if (!visibility.AllowsAny) {
+            return [];
+        }
+
         var results = new List<EntityThumbnail>();
         string? cursor = null;
         do {
@@ -772,12 +890,13 @@ public sealed partial class JellyfinCatalogService {
                 null,
                 query.SearchTerm,
                 cursor,
-                hideNsfw,
+                visibility.HideNsfw,
                 1000,
                 cancellationToken,
                 referencedBy: personId,
                 sort: ToPrismediaSort(query.SortBy),
-                sortDir: ToPrismediaSortDir(query.SortOrder));
+                sortDir: ToPrismediaSortDir(query.SortOrder),
+                nsfw: visibility.NsfwFilter);
             results.AddRange(response.Items);
             cursor = response.NextCursor;
         } while (cursor is not null && results.Count < MaxBrowseItems);
@@ -791,14 +910,18 @@ public sealed partial class JellyfinCatalogService {
     /// </summary>
     private async Task<IReadOnlyList<EntityThumbnail>> FillCollectionCoversAsync(
         IReadOnlyList<EntityThumbnail> thumbnails,
-        bool hideNsfw,
+        JellyfinContentVisibility visibility,
         CancellationToken cancellationToken) {
+        if (!visibility.AllowSfw) {
+            return thumbnails;
+        }
+
         var missing = thumbnails.Where(item => item.CoverUrl is null).Select(item => item.Id).ToArray();
         if (missing.Length == 0) {
             return thumbnails;
         }
 
-        var covers = await _collections.ResolveCoverPathsAsync(missing, hideNsfw, cancellationToken);
+        var covers = await _collections.ResolveCoverPathsAsync(missing, visibility.HideNsfw, cancellationToken);
         if (covers.Count == 0) {
             return thumbnails;
         }
@@ -817,6 +940,23 @@ public sealed partial class JellyfinCatalogService {
 
     private static LibraryViewDefinition? ViewById(Guid id) =>
         LibraryViews.FirstOrDefault(view => view.Id == id);
+
+    private async Task<EntityCard?> GetVisibleCardAsync(
+        Guid id,
+        JellyfinContentVisibility visibility,
+        CancellationToken cancellationToken) {
+        if (!visibility.AllowsAny) {
+            return null;
+        }
+
+        var card = await _entities.GetAsync(id, visibility.HideNsfw, cancellationToken);
+        return card is not null && visibility.Allows(card) ? card : null;
+    }
+
+    private static IReadOnlyList<EntityThumbnail> VisibleEntities(
+        IReadOnlyList<EntityThumbnail> items,
+        JellyfinContentVisibility visibility) =>
+        items.Where(visibility.Allows).ToArray();
 
     private sealed record LibraryViewDefinition(
         Guid Id,

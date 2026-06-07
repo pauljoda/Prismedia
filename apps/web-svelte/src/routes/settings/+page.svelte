@@ -76,6 +76,7 @@
   let jellyfinProfiles = $state<JellyfinProfile[]>([]);
   let profileUsername = $state("");
   let profileDisplayName = $state("");
+  let profileAllowSfw = $state(true);
   let profileAllowNsfw = $state(false);
 
   let savedMetadataStorageDedicated = $state(defaultLibrarySettings.metadataStorageDedicated);
@@ -248,6 +249,7 @@
       const created = await createJellyfinProfile({
         username,
         displayName: profileDisplayName.trim() || null,
+        allowSfw: profileAllowSfw,
         allowNsfw: profileAllowNsfw,
         enabled: true,
       });
@@ -256,6 +258,7 @@
       );
       profileUsername = "";
       profileDisplayName = "";
+      profileAllowSfw = true;
       profileAllowNsfw = false;
       flashMessage("Jellyfin profile created.");
     } catch (err) {
@@ -613,16 +616,27 @@
                 />
               </label>
             </div>
-            <div class="flex items-center justify-between gap-3">
-              <label class="flex cursor-pointer items-center gap-2 text-[0.78rem] text-text-secondary">
-                <Checkbox
-                  checked={profileAllowNsfw}
-                  disabled={profileBusy}
-                  onchange={(event) =>
-                    (profileAllowNsfw = (event.currentTarget as HTMLInputElement).checked)}
-                />
-                Allow NSFW content
-              </label>
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+                <label class="flex cursor-pointer items-center gap-2 text-[0.78rem] text-text-secondary">
+                  <Checkbox
+                    checked={profileAllowSfw}
+                    disabled={profileBusy}
+                    onchange={(event) =>
+                      (profileAllowSfw = (event.currentTarget as HTMLInputElement).checked)}
+                  />
+                  Allow SFW content
+                </label>
+                <label class="flex cursor-pointer items-center gap-2 text-[0.78rem] text-text-secondary">
+                  <Checkbox
+                    checked={profileAllowNsfw}
+                    disabled={profileBusy}
+                    onchange={(event) =>
+                      (profileAllowNsfw = (event.currentTarget as HTMLInputElement).checked)}
+                  />
+                  Allow NSFW content
+                </label>
+              </div>
               <Button
                 type="submit"
                 variant="primary"
@@ -651,8 +665,14 @@
                       <span class="truncate text-[0.82rem] font-medium text-text-primary">
                         {profile.displayName}
                       </span>
-                      {#if profile.allowNsfw}
+                      {#if profile.allowSfw && profile.allowNsfw}
+                        <Badge variant="warning">SFW + NSFW</Badge>
+                      {:else if profile.allowSfw}
+                        <Badge>SFW</Badge>
+                      {:else if profile.allowNsfw}
                         <Badge variant="warning">NSFW</Badge>
+                      {:else}
+                        <Badge variant="error">No content</Badge>
                       {/if}
                     </div>
                     <div class="truncate font-mono text-[0.68rem] text-text-muted">
@@ -661,6 +681,16 @@
                   </div>
                 </div>
 
+                <div class="flex items-center gap-2">
+                  <span class="text-label text-text-muted">SFW</span>
+                  <Toggle
+                    size="sm"
+                    checked={profile.allowSfw}
+                    disabled={profileBusy}
+                    ariaLabel={`Allow SFW for ${profile.username}`}
+                    onchange={(checked) => void patchProfile(profile.id, { allowSfw: checked })}
+                  />
+                </div>
                 <div class="flex items-center gap-2">
                   <span class="text-label text-text-muted">NSFW</span>
                   <Toggle

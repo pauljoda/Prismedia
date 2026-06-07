@@ -9,6 +9,7 @@ export interface JellyfinProfileCreateRequest {
   username: string;
   /** @nullable */
   displayName: string | null;
+  allowSfw?: boolean;
   allowNsfw: boolean;
   enabled?: boolean;
 }
