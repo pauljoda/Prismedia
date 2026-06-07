@@ -316,6 +316,40 @@ describe("VideoPlayer", () => {
     expect(screen.getByRole("button", { name: /^Auto/ })).toBeInTheDocument();
   });
 
+  it("remounts the media engine when server-selected audio changes", async () => {
+    const { rerender } = render(VideoPlayer, {
+      props: {
+        src: "/Videos/video-1/master.m3u8?AudioStreamIndex=2",
+        defaultPlaybackMode: "hls",
+        audioTrackOptions: [
+          { id: "audio-1", streamIndex: 1, label: "Japanese", selected: false },
+          { id: "audio-2", streamIndex: 2, label: "English", selected: true },
+        ],
+      },
+    });
+
+    const firstPlayer = await waitFor(() => {
+      const el = document.querySelector("media-player");
+      expect(el?.getAttribute("src")).toBe("/Videos/video-1/master.m3u8?AudioStreamIndex=2");
+      return el;
+    });
+
+    await rerender({
+      src: "/Videos/video-1/master.m3u8?AudioStreamIndex=1",
+      defaultPlaybackMode: "hls",
+      audioTrackOptions: [
+        { id: "audio-1", streamIndex: 1, label: "Japanese", selected: true },
+        { id: "audio-2", streamIndex: 2, label: "English", selected: false },
+      ],
+    });
+
+    await waitFor(() => {
+      const nextPlayer = document.querySelector("media-player");
+      expect(nextPlayer?.getAttribute("src")).toBe("/Videos/video-1/master.m3u8?AudioStreamIndex=1");
+      expect(nextPlayer).not.toBe(firstPlayer);
+    });
+  });
+
   it("hides cast controls when the library setting disables them", () => {
     render(VideoPlayer, {
       props: {

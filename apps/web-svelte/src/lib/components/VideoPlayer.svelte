@@ -1615,51 +1615,53 @@
     ontouchstart={surfaceControls}
   >
     {#if playerSrc && mediaMounted}
-      <!-- svelte-ignore a11y_click_events_have_key_events -->
-      <media-player
-        class="prismedia-media-engine"
-        title={mediaTitle || "Prismedia video"}
-        artist={mediaArtist || undefined}
-        src={playerSrc}
-        poster={poster}
-        streamType="on-demand"
-        crossOrigin
-        playsInline
-        autoPlay={autoPlay}
-        loop={autoRepeat}
-        muted={initialMuted}
-        bind:this={player}
-        onclick={(event) => {
-          if (!fullChrome) {
-            event.preventDefault();
-            event.stopPropagation();
-            event.stopImmediatePropagation();
-            togglePlay();
-            return;
-          }
-          if (event.target === event.currentTarget || event.target instanceof HTMLVideoElement) {
-            togglePlay();
-          }
-        }}
-      >
-        <media-provider>
-          {#if poster}
-            <media-poster class="vds-poster" src={poster} alt="Video poster"></media-poster>
-          {/if}
-        </media-provider>
-        <VideoTimeline
-          {bufferedProgressPercent}
-          {fullChrome}
-          markersCount={markers.length}
-          onHover={updateTimelineHover}
-          onHoverEnd={() => (timelineHover = null)}
-          {playbackProgressPercent}
-          {showControls}
-          {timelineHover}
-          {timelinePreviewFrame}
-          {timelinePreviewSpriteDims}
-        />
-      </media-player>
+      {#key playerSrc}
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <media-player
+          class="prismedia-media-engine"
+          title={mediaTitle || "Prismedia video"}
+          artist={mediaArtist || undefined}
+          src={playerSrc}
+          poster={poster}
+          streamType="on-demand"
+          crossOrigin
+          playsInline
+          autoPlay={autoPlay}
+          loop={autoRepeat}
+          muted={initialMuted}
+          bind:this={player}
+          onclick={(event) => {
+            if (!fullChrome) {
+              event.preventDefault();
+              event.stopPropagation();
+              event.stopImmediatePropagation();
+              togglePlay();
+              return;
+            }
+            if (event.target === event.currentTarget || event.target instanceof HTMLVideoElement) {
+              togglePlay();
+            }
+          }}
+        >
+          <media-provider>
+            {#if poster}
+              <media-poster class="vds-poster" src={poster} alt="Video poster"></media-poster>
+            {/if}
+          </media-provider>
+          <VideoTimeline
+            {bufferedProgressPercent}
+            {fullChrome}
+            markersCount={markers.length}
+            onHover={updateTimelineHover}
+            onHoverEnd={() => (timelineHover = null)}
+            {playbackProgressPercent}
+            {showControls}
+            {timelineHover}
+            {timelinePreviewFrame}
+            {timelinePreviewSpriteDims}
+          />
+        </media-player>
+      {/key}
     {:else if requestedPlayerSrc}
       <div class="prismedia-media-engine flex items-center justify-center">
         <Loader class="h-5 w-5 animate-spin text-white/40" />
