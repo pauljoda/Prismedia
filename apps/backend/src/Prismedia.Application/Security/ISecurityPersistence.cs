@@ -24,6 +24,7 @@ public interface ISecurityPersistence {
     Task<JellyfinProfile> CreateProfileAsync(
         string username,
         string displayName,
+        bool allowSfw,
         bool allowNsfw,
         bool enabled,
         CancellationToken cancellationToken);
@@ -33,6 +34,7 @@ public interface ISecurityPersistence {
         Guid profileId,
         string? username,
         string? displayName,
+        bool? allowSfw,
         bool? allowNsfw,
         bool? enabled,
         CancellationToken cancellationToken);

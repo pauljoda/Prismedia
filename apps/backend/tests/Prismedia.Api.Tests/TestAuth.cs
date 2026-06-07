@@ -109,11 +109,12 @@ internal static class TestAuth {
         public Task<JellyfinProfile> CreateProfileAsync(
             string username,
             string displayName,
+            bool allowSfw,
             bool allowNsfw,
             bool enabled,
             CancellationToken cancellationToken) {
             var now = DateTimeOffset.UtcNow;
-            _profile = new JellyfinProfile(Guid.NewGuid(), username, displayName, allowNsfw, enabled, null, now, now);
+            _profile = new JellyfinProfile(Guid.NewGuid(), username, displayName, allowSfw, allowNsfw, enabled, null, now, now);
             return Task.FromResult(_profile);
         }
 
@@ -121,6 +122,7 @@ internal static class TestAuth {
             Guid profileId,
             string? username,
             string? displayName,
+            bool? allowSfw,
             bool? allowNsfw,
             bool? enabled,
             CancellationToken cancellationToken) {
@@ -131,6 +133,7 @@ internal static class TestAuth {
             _profile = _profile with {
                 Username = username ?? _profile.Username,
                 DisplayName = displayName ?? _profile.DisplayName,
+                AllowSfw = allowSfw ?? _profile.AllowSfw,
                 AllowNsfw = allowNsfw ?? _profile.AllowNsfw,
                 Enabled = enabled ?? _profile.Enabled,
                 UpdatedAt = DateTimeOffset.UtcNow
@@ -181,6 +184,6 @@ internal static class TestAuth {
         }
 
         private static JellyfinProfile Profile(DateTimeOffset now) =>
-            new(ProfileId, "Prismedia", "Prismedia", false, true, null, now, now);
+            new(ProfileId, "Prismedia", "Prismedia", true, false, true, null, now, now);
     }
 }

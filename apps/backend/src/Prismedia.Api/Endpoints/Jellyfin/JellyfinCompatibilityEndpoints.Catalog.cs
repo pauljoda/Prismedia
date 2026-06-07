@@ -19,7 +19,7 @@ public static partial class JellyfinCompatibilityEndpoints {
         var state = await security.EnsureSecurityAsync(cancellationToken);
         var views = await catalog.GetUserViewsWithArtworkAsync(
             state.ServerId.ToString("N"),
-            NsfwVisibility.ShouldHide(null, httpContext),
+            NsfwVisibility.JellyfinContent(httpContext),
             cancellationToken);
         return Results.Ok(views);
     }
@@ -71,7 +71,7 @@ public static partial class JellyfinCompatibilityEndpoints {
         var result = await catalog.GetItemsAsync(
             ItemQueryFrom(httpContext.Request),
             state.ServerId.ToString("N"),
-            NsfwVisibility.ShouldHide(null, httpContext),
+            NsfwVisibility.JellyfinContent(httpContext),
             cancellationToken);
         return Results.Ok(result);
     }
@@ -86,7 +86,7 @@ public static partial class JellyfinCompatibilityEndpoints {
         var item = await catalog.GetItemAsync(
             itemId,
             state.ServerId.ToString("N"),
-            NsfwVisibility.ShouldHide(null, httpContext),
+            NsfwVisibility.JellyfinContent(httpContext),
             cancellationToken);
         return item is null
             ? Results.NotFound(new ApiProblem("jellyfin_item_not_found", $"Item '{itemId}' was not found."))
@@ -105,7 +105,7 @@ public static partial class JellyfinCompatibilityEndpoints {
             parentId,
             Math.Clamp(limit, 1, 100),
             state.ServerId.ToString("N"),
-            NsfwVisibility.ShouldHide(null, httpContext),
+            NsfwVisibility.JellyfinContent(httpContext),
             cancellationToken);
         return Results.Ok(result.Items);
     }
@@ -122,7 +122,7 @@ public static partial class JellyfinCompatibilityEndpoints {
             Math.Max(0, start),
             Math.Clamp(limit, 1, 100),
             state.ServerId.ToString("N"),
-            NsfwVisibility.ShouldHide(null, httpContext),
+            NsfwVisibility.JellyfinContent(httpContext),
             cancellationToken);
         return Results.Ok(result);
     }
@@ -139,7 +139,7 @@ public static partial class JellyfinCompatibilityEndpoints {
             Math.Max(0, start),
             Math.Clamp(limit, 1, 100),
             state.ServerId.ToString("N"),
-            NsfwVisibility.ShouldHide(null, httpContext),
+            NsfwVisibility.JellyfinContent(httpContext),
             cancellationToken);
         return Results.Ok(result);
     }
@@ -173,7 +173,7 @@ public static partial class JellyfinCompatibilityEndpoints {
         var result = await catalog.GetItemsAsync(
             query,
             state.ServerId.ToString("N"),
-            NsfwVisibility.ShouldHide(null, httpContext),
+            NsfwVisibility.JellyfinContent(httpContext),
             cancellationToken);
         return Results.Ok(result);
     }
@@ -193,7 +193,7 @@ public static partial class JellyfinCompatibilityEndpoints {
         var result = await catalog.GetItemsAsync(
             query,
             state.ServerId.ToString("N"),
-            NsfwVisibility.ShouldHide(null, httpContext),
+            NsfwVisibility.JellyfinContent(httpContext),
             cancellationToken);
         return Results.Ok(result);
     }
@@ -214,7 +214,7 @@ public static partial class JellyfinCompatibilityEndpoints {
         var result = await catalog.GetItemsAsync(
             query,
             state.ServerId.ToString("N"),
-            NsfwVisibility.ShouldHide(null, httpContext),
+            NsfwVisibility.JellyfinContent(httpContext),
             cancellationToken);
         return Results.Ok(result);
     }

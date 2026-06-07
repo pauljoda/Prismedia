@@ -44,6 +44,7 @@ public sealed class EfSecurityPersistence : ISecurityPersistence {
                     Username = DefaultProfileUsername,
                     NormalizedUsername = normalized,
                     DisplayName = DefaultProfileUsername,
+                    AllowSfw = true,
                     AllowNsfw = false,
                     Enabled = true,
                     CreatedAt = now,
@@ -120,6 +121,7 @@ public sealed class EfSecurityPersistence : ISecurityPersistence {
     public async Task<JellyfinProfile> CreateProfileAsync(
         string username,
         string displayName,
+        bool allowSfw,
         bool allowNsfw,
         bool enabled,
         CancellationToken cancellationToken) {
@@ -134,6 +136,7 @@ public sealed class EfSecurityPersistence : ISecurityPersistence {
             Username = username,
             NormalizedUsername = normalized,
             DisplayName = displayName,
+            AllowSfw = allowSfw,
             AllowNsfw = allowNsfw,
             Enabled = enabled,
             CreatedAt = now,
@@ -149,6 +152,7 @@ public sealed class EfSecurityPersistence : ISecurityPersistence {
         Guid profileId,
         string? username,
         string? displayName,
+        bool? allowSfw,
         bool? allowNsfw,
         bool? enabled,
         CancellationToken cancellationToken) {
@@ -172,6 +176,10 @@ public sealed class EfSecurityPersistence : ISecurityPersistence {
 
         if (displayName is not null) {
             row.DisplayName = string.IsNullOrWhiteSpace(displayName) ? row.Username : displayName;
+        }
+
+        if (allowSfw is { } allowSafe) {
+            row.AllowSfw = allowSafe;
         }
 
         if (allowNsfw is { } allow) {
@@ -276,6 +284,7 @@ public sealed class EfSecurityPersistence : ISecurityPersistence {
             row.Id,
             row.Username,
             row.DisplayName,
+            row.AllowSfw,
             row.AllowNsfw,
             row.Enabled,
             row.LastLoginAt,

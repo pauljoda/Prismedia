@@ -16,6 +16,7 @@ using Prismedia.Contracts.Videos;
 namespace Prismedia.Api.Tests;
 
 public sealed partial class SecurityEndpointTests : IDisposable {
+    private static readonly Guid SfwVideoId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid NsfwVideoId = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private readonly string _webRoot = Path.Combine(Path.GetTempPath(), $"prismedia-security-static-{Guid.NewGuid():N}");
 
@@ -156,29 +157,74 @@ public sealed partial class SecurityEndpointTests : IDisposable {
     }
 
     [Fact]
-    public async Task JellyfinProfileControlsNsfwCatalogVisibility() {
+    public async Task JellyfinProfileControlsSfwAndNsfwCatalogVisibility() {
         using var factory = CreateFactory(new CatalogEntityReadService());
         using var client = factory.CreateClient();
 
         var sfwAuth = await AuthenticateAsync(client, "Prismedia", TestAuth.ApiKey);
+        var sfwVisible = await JellyfinGetFromJsonAsync<JellyfinBaseItemDto>(
+            client,
+            $"/Items/{SfwVideoId:D}",
+            sfwAuth.AccessToken);
         using var sfwHidden = await JellyfinGetAsync(client, $"/Items/{NsfwVideoId:D}", sfwAuth.AccessToken);
+        Assert.NotNull(sfwVisible);
         Assert.Equal(HttpStatusCode.NotFound, sfwHidden.StatusCode);
 
         using var appClient = factory.CreateAuthenticatedClient();
         using var adultProfileResponse = await appClient.PostAsJsonAsync(
             "/api/security/jellyfin-profiles",
             new JellyfinProfileCreateRequest("Adult", null, AllowNsfw: true));
-        var adultProfile = await adultProfileResponse.Content.ReadFromJsonAsync<JellyfinProfileResponse>();
-        Assert.NotNull(adultProfile);
+        adultProfileResponse.EnsureSuccessStatusCode();
 
         var adultAuth = await AuthenticateAsync(client, "Adult", TestAuth.ApiKey);
-        var visible = await JellyfinGetFromJsonAsync<JellyfinBaseItemDto>(
+        var bothSfw = await JellyfinGetFromJsonAsync<JellyfinBaseItemDto>(
+            client,
+            $"/Items/{SfwVideoId:D}",
+            adultAuth.AccessToken);
+        var bothNsfw = await JellyfinGetFromJsonAsync<JellyfinBaseItemDto>(
             client,
             $"/Items/{NsfwVideoId:D}",
             adultAuth.AccessToken);
 
-        Assert.NotNull(visible);
-        Assert.Equal("Video", visible.Type);
+        Assert.NotNull(bothSfw);
+        Assert.NotNull(bothNsfw);
+
+        using var nsfwOnlyProfileResponse = await appClient.PostAsJsonAsync(
+            "/api/security/jellyfin-profiles",
+            new JellyfinProfileCreateRequest("AdultOnly", null, AllowSfw: false, AllowNsfw: true));
+        nsfwOnlyProfileResponse.EnsureSuccessStatusCode();
+
+        var nsfwOnlyAuth = await AuthenticateAsync(client, "AdultOnly", TestAuth.ApiKey);
+        using var nsfwOnlySfwHidden = await JellyfinGetAsync(client, $"/Items/{SfwVideoId:D}", nsfwOnlyAuth.AccessToken);
+        var nsfwOnlyNsfwVisible = await JellyfinGetFromJsonAsync<JellyfinBaseItemDto>(
+            client,
+            $"/Items/{NsfwVideoId:D}",
+            nsfwOnlyAuth.AccessToken);
+        var nsfwOnlyBrowse = await JellyfinGetFromJsonAsync<JellyfinQueryResult<JellyfinBaseItemDto>>(
+            client,
+            $"/Items?ParentId={JellyfinCatalogService.VideosViewId:D}",
+            nsfwOnlyAuth.AccessToken);
+
+        Assert.Equal(HttpStatusCode.NotFound, nsfwOnlySfwHidden.StatusCode);
+        Assert.NotNull(nsfwOnlyNsfwVisible);
+        Assert.Equal([NsfwVideoId], nsfwOnlyBrowse!.Items.Select(item => item.Id).ToArray());
+
+        using var emptyProfileResponse = await appClient.PostAsJsonAsync(
+            "/api/security/jellyfin-profiles",
+            new JellyfinProfileCreateRequest("Empty", null, AllowSfw: false, AllowNsfw: false));
+        emptyProfileResponse.EnsureSuccessStatusCode();
+
+        var emptyAuth = await AuthenticateAsync(client, "Empty", TestAuth.ApiKey);
+        using var emptySfwHidden = await JellyfinGetAsync(client, $"/Items/{SfwVideoId:D}", emptyAuth.AccessToken);
+        using var emptyNsfwHidden = await JellyfinGetAsync(client, $"/Items/{NsfwVideoId:D}", emptyAuth.AccessToken);
+        var emptyBrowse = await JellyfinGetFromJsonAsync<JellyfinQueryResult<JellyfinBaseItemDto>>(
+            client,
+            $"/Items?ParentId={JellyfinCatalogService.VideosViewId:D}",
+            emptyAuth.AccessToken);
+
+        Assert.Equal(HttpStatusCode.NotFound, emptySfwHidden.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, emptyNsfwHidden.StatusCode);
+        Assert.Empty(emptyBrowse!.Items);
     }
 
     [Fact]
@@ -408,15 +454,25 @@ public sealed partial class SecurityEndpointTests : IDisposable {
             bool? nsfw = null,
             bool? hasFile = null,
             bool? played = null,
-            bool? orphaned = null) =>
-            Task.FromResult(new EntityListResponse([Thumbnail(NsfwVideoId, isNsfw: true)], null, 1));
+            bool? orphaned = null) {
+            var items = new[] {
+                    Thumbnail(SfwVideoId, "Visible Movie", isNsfw: false),
+                    Thumbnail(NsfwVideoId, "Hidden Movie", isNsfw: true)
+                }
+                .Where(item => hideNsfw != true || !item.IsNsfw)
+                .Where(item => nsfw is null || item.IsNsfw == nsfw)
+                .ToArray();
+            return Task.FromResult(new EntityListResponse(items, null, items.Length));
+        }
 
         public Task<EntityCard?> GetAsync(Guid id, bool hideNsfw, CancellationToken cancellationToken) {
             if (id == NsfwVideoId && hideNsfw) {
                 return Task.FromResult<EntityCard?>(null);
             }
 
-            return Task.FromResult<EntityCard?>(id == NsfwVideoId ? Card(id) : null);
+            return Task.FromResult<EntityCard?>(id == SfwVideoId ? Card(id, "Visible Movie", isNsfw: false) :
+                id == NsfwVideoId ? Card(id, "Hidden Movie", isNsfw: true) :
+                null);
         }
 
         public Task<EntityThumbnailBatchResponse> GetThumbnailsAsync(
@@ -425,26 +481,33 @@ public sealed partial class SecurityEndpointTests : IDisposable {
             CancellationToken cancellationToken) =>
             Task.FromResult(new EntityThumbnailBatchResponse([]));
 
-        public Task<IEntityCard?> GetDetailAsync(Guid id, string kind, bool hideNsfw, CancellationToken cancellationToken) =>
-            Task.FromResult<IEntityCard?>(id == NsfwVideoId && !hideNsfw ? Card(id) with { Kind = kind } : null);
+        public Task<IEntityCard?> GetDetailAsync(Guid id, string kind, bool hideNsfw, CancellationToken cancellationToken) {
+            if (id == NsfwVideoId && hideNsfw) {
+                return Task.FromResult<IEntityCard?>(null);
+            }
 
-        private static EntityCard Card(Guid id) =>
+            return Task.FromResult<IEntityCard?>(id == SfwVideoId ? Card(id, "Visible Movie", isNsfw: false) with { Kind = kind } :
+                id == NsfwVideoId ? Card(id, "Hidden Movie", isNsfw: true) with { Kind = kind } :
+                null);
+        }
+
+        private static EntityCard Card(Guid id, string title, bool isNsfw) =>
             new() {
                 Id = id,
                 Kind = "video",
-                Title = "Hidden Movie",
+                Title = title,
                 ParentEntityId = null,
                 SortOrder = null,
-                Capabilities = [],
+                Capabilities = [new FlagsCapability(IsFavorite: false, IsNsfw: isNsfw, IsOrganized: true)],
                 ChildrenByKind = [],
                 Relationships = []
             };
 
-        private static EntityThumbnail Thumbnail(Guid id, bool isNsfw) =>
+        private static EntityThumbnail Thumbnail(Guid id, string title, bool isNsfw) =>
             new(
                 id,
                 "video",
-                "Hidden Movie",
+                title,
                 null,
                 null,
                 null,

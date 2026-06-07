@@ -106,7 +106,13 @@ public sealed class PrismediaSecurityService {
         CancellationToken cancellationToken) {
         var username = NormalizeUsername(request.Username);
         var displayName = string.IsNullOrWhiteSpace(request.DisplayName) ? username : request.DisplayName.Trim();
-        var profile = await _persistence.CreateProfileAsync(username, displayName, request.AllowNsfw, request.Enabled, cancellationToken);
+        var profile = await _persistence.CreateProfileAsync(
+            username,
+            displayName,
+            request.AllowSfw,
+            request.AllowNsfw,
+            request.Enabled,
+            cancellationToken);
         return ToContract(profile);
     }
 
@@ -119,6 +125,7 @@ public sealed class PrismediaSecurityService {
             profileId,
             request.Username is null ? null : NormalizeUsername(request.Username),
             request.DisplayName?.Trim(),
+            request.AllowSfw,
             request.AllowNsfw,
             request.Enabled,
             cancellationToken);
@@ -165,6 +172,7 @@ public sealed class PrismediaSecurityService {
             profile.Id,
             profile.Username,
             profile.DisplayName,
+            profile.AllowSfw,
             profile.AllowNsfw,
             profile.Enabled,
             profile.LastLoginAt,

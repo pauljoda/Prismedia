@@ -147,6 +147,13 @@ internal static class JellyfinPlaybackResults {
         Guid itemId,
         IEntityReadService entities,
         HttpContext httpContext,
-        CancellationToken cancellationToken) =>
-        await entities.GetAsync(itemId, NsfwVisibility.ShouldHide(null, httpContext), cancellationToken) is not null;
+        CancellationToken cancellationToken) {
+        var visibility = NsfwVisibility.JellyfinContent(httpContext);
+        if (!visibility.AllowsAny) {
+            return false;
+        }
+
+        var item = await entities.GetAsync(itemId, visibility.HideNsfw, cancellationToken);
+        return item is not null && visibility.Allows(item);
+    }
 }
