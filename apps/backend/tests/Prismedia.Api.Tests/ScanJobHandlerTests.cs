@@ -1498,6 +1498,73 @@ public sealed class ScanJobHandlerTests {
     }
 
     [Fact]
+    public async Task AudioScanTreatsSingleLayerFolderAsArtistlessAlbum() {
+        var root = new LibraryRootData(
+            Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            "/media/audio",
+            "Audio",
+            Enabled: true,
+            Recursive: true,
+            ScanVideos: false,
+            ScanImages: false,
+            ScanAudio: true,
+            ScanBooks: false,
+            IsNsfw: false);
+        var persistence = new FakeScanPersistence([root]) {
+            Settings = DisabledGeneratedWorkSettings
+        };
+        var discovery = new RecordingFileDiscovery(
+            directoryGroups: new Dictionary<string, IReadOnlyList<string>>(StringComparer.OrdinalIgnoreCase) {
+                ["/media/audio/The Album"] = [
+                    "/media/audio/The Album/01 First.flac",
+                    "/media/audio/The Album/02 Second.flac"
+                ]
+            });
+        var handler = new ScanAudioJobHandler(
+            NullLogger<ScanAudioJobHandler>.Instance,
+            discovery,
+            persistence,
+            persistence,
+            persistence);
+        var job = new JobRunSnapshot(
+            Guid.NewGuid(),
+            JobType.ScanAudio,
+            JobRunStatus.Running,
+            Progress: 0,
+            Message: null,
+            PayloadJson: $$"""{"libraryRootId":"{{root.Id}}"}""",
+            TargetEntityKind: "library-root",
+            TargetEntityId: root.Id.ToString(),
+            TargetLabel: root.Label,
+            CreatedAt: DateTimeOffset.UtcNow,
+            StartedAt: DateTimeOffset.UtcNow,
+            FinishedAt: null);
+
+        await handler.HandleAsync(new JobContext(job, new RecordingJobQueue()), CancellationToken.None);
+
+        Assert.Empty(persistence.UpsertedMusicArtists);
+        var album = Assert.Single(persistence.UpsertedAudioLibraries);
+        Assert.Equal("/media/audio/The Album", album.FolderPath);
+        Assert.Equal("The Album", album.Title);
+        Assert.Null(album.ParentAudioLibraryEntityId);
+
+        Assert.Collection(
+            persistence.UpsertedAudioTracks.OrderBy(track => track.SortOrder),
+            track => {
+                Assert.Equal("/media/audio/The Album/01 First.flac", track.FilePath);
+                Assert.Equal(album.Id, track.AudioLibraryEntityId);
+                Assert.Null(track.SectionLabel);
+            },
+            track => {
+                Assert.Equal("/media/audio/The Album/02 Second.flac", track.FilePath);
+                Assert.Equal(album.Id, track.AudioLibraryEntityId);
+                Assert.Null(track.SectionLabel);
+            });
+        Assert.Equal(["/media/audio/The Album"], persistence.ValidAudioLibraryPaths);
+        Assert.Empty(persistence.ValidMusicArtistPaths);
+    }
+
+    [Fact]
     public async Task BookScanMaterializesFolderVolumesChaptersAndPages() {
         var tempRoot = Directory.CreateTempSubdirectory("prismedia-book-scan-");
         try {
