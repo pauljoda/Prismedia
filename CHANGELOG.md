@@ -71,6 +71,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Fixed
+- Identified songs now keep their accepted titles after later library scans instead of being renamed back to their filenames.
 - Direct-child series shown through Jellyfin-compatible fallback seasons now keep the same season and episode metadata when a client opens an episode detail page, so Infuse does not fall back to the original flat series shape.
 - Jellyfin-compatible episode thumbnails now resolve through the image endpoint when direct-child series use the fallback season shape, so Infuse can load the episode artwork it is told exists.
 - Identify proposal pages now show a full-width Back to Search button near the top on phones, so mobile reviews can be sent back to provider search without switching devices.

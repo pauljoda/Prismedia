@@ -5,6 +5,7 @@ using Prismedia.Application.Jobs.Ports;
 using Prismedia.Application.Plugins;
 using Prismedia.Contracts.Plugins;
 using Prismedia.Domain.Entities;
+using Prismedia.Infrastructure.Media.Persistence;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 using Prismedia.Infrastructure.Plugins;
@@ -414,6 +415,67 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
     }
 
     [Fact]
+    public async Task ApplyAsyncMarksAcceptedAudioTrackChildrenOrganized() {
+        await using var db = CreateContext();
+        var albumId = Guid.Parse("77777777-7777-7777-7777-777777777777");
+        var trackId = Guid.Parse("88888888-8888-8888-8888-888888888888");
+        const string scannedFilePath = "/media/audio/album/01 scanned file.flac";
+        SeedEntity(db, albumId, EntityKindRegistry.AudioLibrary.Code, "Scanned Album");
+        var track = SeedEntity(db, trackId, EntityKindRegistry.AudioTrack.Code, "01 scanned file");
+        track.ParentEntityId = albumId;
+        track.SortOrder = 1;
+        db.EntityFiles.Add(new EntityFileRow {
+            Id = Guid.NewGuid(),
+            EntityId = trackId,
+            Role = EntityFileRole.Source,
+            Path = scannedFilePath,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        var proposal = AudioAlbumProposal(albumId, trackId);
+        db.IdentifyQueueItems.Add(new IdentifyQueueItemRow {
+            Id = Guid.NewGuid(),
+            EntityId = albumId,
+            State = IdentifyQueueState.Proposal,
+            ProviderCode = "tmdb",
+            Action = "lookup-id",
+            ProposalJson = JsonSerializer.Serialize(proposal, JsonOptions),
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var service = CreateQueueService(db, new ProposalProcessExecutor(), _tempRoot);
+
+        await service.ApplyAsync(
+            albumId,
+            new ApplyIdentifyQueueItemRequest(
+                proposal,
+                ["title"],
+                null),
+            CancellationToken.None);
+
+        var entities = await db.Entities.ToDictionaryAsync(row => row.Id);
+        Assert.Equal("Identified Album", entities[albumId].Title);
+        Assert.True(entities[albumId].IsOrganized);
+        Assert.Equal("Identified Song", entities[trackId].Title);
+        Assert.True(entities[trackId].IsOrganized);
+
+        await new LibraryScanPersistenceService(db).UpsertAudioTrackAsync(
+            scannedFilePath,
+            "01 scanned file",
+            albumId,
+            sortOrder: 1,
+            sectionLabel: null,
+            sectionOrder: 0,
+            isNsfw: false,
+            CancellationToken.None);
+
+        var rescannedTrack = await db.Entities.SingleAsync(row => row.Id == trackId);
+        Assert.Equal("Identified Song", rescannedTrack.Title);
+        Assert.True(rescannedTrack.IsOrganized);
+    }
+
+    [Fact]
     public async Task ListAsyncHidesNsfwItemsWhenRequestedAndMarksVisibleNsfwRows() {
         await using var db = CreateContext();
         var safeId = Guid.Parse("aaaaaaaa-1111-1111-1111-111111111111");
@@ -644,6 +706,34 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             [],
             TargetEntityId: seriesId,
             Relationships: [person, tag]);
+    }
+
+    private static EntityMetadataProposal AudioAlbumProposal(Guid albumId, Guid trackId) {
+        var track = new EntityMetadataProposal(
+            "tmdb:track:1",
+            "tmdb",
+            EntityKindRegistry.AudioTrack.Code,
+            1,
+            "cascade",
+            EmptyPatch("Identified Song"),
+            [],
+            [],
+            [],
+            TargetEntityId: trackId,
+            Relationships: []);
+
+        return new EntityMetadataProposal(
+            "tmdb:album:1",
+            "tmdb",
+            EntityKindRegistry.AudioLibrary.Code,
+            1,
+            "external-id",
+            EmptyPatch("Identified Album"),
+            [],
+            [track],
+            [],
+            TargetEntityId: albumId,
+            Relationships: []);
     }
 
     private static EntityMetadataPatch EmptyPatch(string? title) =>
