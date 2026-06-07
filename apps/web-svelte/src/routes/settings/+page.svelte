@@ -654,16 +654,19 @@
             {#each jellyfinProfiles as profile (profile.id)}
               <div
                 class={cn(
-                  "flex flex-wrap items-center gap-x-5 gap-y-3 py-3 transition-opacity",
+                  "grid gap-3 py-3 transition-opacity",
                   !profile.enabled && "opacity-55",
                 )}
               >
-                <div class="flex min-w-0 flex-1 items-center gap-2.5">
+                <div class="flex min-w-0 items-start gap-2.5">
                   <StatusLed status={profile.enabled ? "active" : "idle"} size="sm" />
-                  <div class="min-w-0">
-                    <div class="flex items-center gap-2">
-                      <span class="truncate text-[0.82rem] font-medium text-text-primary">
-                        {profile.displayName}
+                  <div class="min-w-0 flex-1">
+                    <span class="block truncate text-[0.82rem] font-medium leading-snug text-text-primary">
+                      {profile.displayName}
+                    </span>
+                    <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span class="truncate font-mono text-[0.68rem] text-text-muted">
+                        {profile.username}
                       </span>
                       {#if profile.allowSfw && profile.allowNsfw}
                         <Badge variant="warning">SFW + NSFW</Badge>
@@ -675,54 +678,52 @@
                         <Badge variant="error">No content</Badge>
                       {/if}
                     </div>
-                    <div class="truncate font-mono text-[0.68rem] text-text-muted">
-                      {profile.username}
-                    </div>
                   </div>
                 </div>
 
-                <div class="flex items-center gap-2">
-                  <span class="text-label text-text-muted">SFW</span>
-                  <Toggle
-                    size="sm"
-                    checked={profile.allowSfw}
+                <div class="grid gap-2 sm:grid-cols-2 xl:grid-cols-[repeat(3,minmax(7.5rem,1fr))_2.25rem]">
+                  <div class="flex min-h-9 items-center justify-between gap-3 sm:justify-start">
+                    <span class="text-label text-text-muted">SFW</span>
+                    <Toggle
+                      size="sm"
+                      checked={profile.allowSfw}
+                      disabled={profileBusy}
+                      ariaLabel={`Allow SFW for ${profile.username}`}
+                      onchange={(checked) => void patchProfile(profile.id, { allowSfw: checked })}
+                    />
+                  </div>
+                  <div class="flex min-h-9 items-center justify-between gap-3 sm:justify-start">
+                    <span class="text-label text-text-muted">NSFW</span>
+                    <Toggle
+                      size="sm"
+                      checked={profile.allowNsfw}
+                      disabled={profileBusy}
+                      ariaLabel={`Allow NSFW for ${profile.username}`}
+                      onchange={(checked) => void patchProfile(profile.id, { allowNsfw: checked })}
+                    />
+                  </div>
+                  <div class="flex min-h-9 items-center justify-between gap-3 sm:justify-start">
+                    <span class="text-label text-text-muted">Enabled</span>
+                    <Toggle
+                      size="sm"
+                      checked={profile.enabled}
+                      disabled={profileBusy}
+                      ariaLabel={`Enable ${profile.username}`}
+                      onchange={(checked) => void patchProfile(profile.id, { enabled: checked })}
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
                     disabled={profileBusy}
-                    ariaLabel={`Allow SFW for ${profile.username}`}
-                    onchange={(checked) => void patchProfile(profile.id, { allowSfw: checked })}
-                  />
+                    onclick={() => void removeProfile(profile)}
+                    aria-label={`Delete ${profile.username}`}
+                    class="justify-self-end text-status-error-text hover:bg-error-muted/20 sm:col-span-2 xl:col-span-1"
+                  >
+                    <Trash2 class="h-4 w-4" />
+                  </Button>
                 </div>
-                <div class="flex items-center gap-2">
-                  <span class="text-label text-text-muted">NSFW</span>
-                  <Toggle
-                    size="sm"
-                    checked={profile.allowNsfw}
-                    disabled={profileBusy}
-                    ariaLabel={`Allow NSFW for ${profile.username}`}
-                    onchange={(checked) => void patchProfile(profile.id, { allowNsfw: checked })}
-                  />
-                </div>
-                <div class="flex items-center gap-2">
-                  <span class="text-label text-text-muted">Enabled</span>
-                  <Toggle
-                    size="sm"
-                    checked={profile.enabled}
-                    disabled={profileBusy}
-                    ariaLabel={`Enable ${profile.username}`}
-                    onchange={(checked) => void patchProfile(profile.id, { enabled: checked })}
-                  />
-                </div>
-
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  disabled={profileBusy}
-                  onclick={() => void removeProfile(profile)}
-                  aria-label={`Delete ${profile.username}`}
-                  class="text-status-error-text hover:bg-error-muted/20"
-                >
-                  <Trash2 class="h-4 w-4" />
-                </Button>
               </div>
             {:else}
               <div class="flex flex-col items-center gap-1 py-8 text-center">
