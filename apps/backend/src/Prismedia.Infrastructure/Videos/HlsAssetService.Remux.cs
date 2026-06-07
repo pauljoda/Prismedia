@@ -98,7 +98,7 @@ public sealed partial class HlsAssetService {
         // manifest (full seekable timeline) is computed off the request thread and swapped in once ready.
         // The init/segment files are produced by the background remux and waited on as the player asks.
         if (fileName.Equals("index.m3u8", StringComparison.OrdinalIgnoreCase)) {
-            return await GetRemuxPlaylistAssetAsync(id, source, audioCacheKey, remuxDir, options, cancellationToken);
+            return await GetRemuxPlaylistAssetAsync(id, source, audioCacheKey, audioStreamIndex, remuxDir, options, cancellationToken);
         }
 
         var filePath = Path.Combine(remuxDir, fileName);
@@ -127,12 +127,13 @@ public sealed partial class HlsAssetService {
         Guid id,
         VideoSourceFile source,
         string audioCacheKey,
+        int? audioStreamIndex,
         string remuxDir,
         HlsAssetServiceOptions options,
         CancellationToken cancellationToken) {
         var vodPath = Path.Combine(remuxDir, "index.vod.m3u8");
         if (File.Exists(vodPath) && new FileInfo(vodPath).Length > 0) {
-            return new HlsAsset(vodPath, MediaContentTypes.HlsPlaylist, CacheControlForExtension(".m3u8"));
+            return await WriteRemuxServedPlaylistAsync(vodPath, remuxDir, audioStreamIndex, CacheControlForExtension(".m3u8"), cancellationToken);
         }
 
         // Fast path: get the keyframe times cheaply — from the durable cache, or by reading the
@@ -146,6 +147,7 @@ public sealed partial class HlsAssetService {
             return await WriteRemuxVodAsync(
                 remuxDir,
                 BuildRemuxSegmentDurations(fastKeyframes, source.DurationSeconds.Value),
+                audioStreamIndex,
                 cancellationToken);
         }
 
@@ -154,27 +156,41 @@ public sealed partial class HlsAssetService {
         // persists the durable keyframe cache so the next play is instant) and serve the growing event
         // playlist now, bounded so a stalled ffmpeg can never re-introduce the manifest hang. The full
         // VOD takes over once the build lands.
-        EnsureRemuxVodComputationStarted(id, source, audioCacheKey, remuxDir, options);
+        EnsureRemuxVodComputationStarted(id, source, audioCacheKey, audioStreamIndex, remuxDir, options);
 
         var legacyPath = Path.Combine(remuxDir, "index.m3u8");
         if (!await WaitForRemuxFileAsync(id, audioCacheKey, legacyPath, cancellationToken, EventPlaylistWaitBudget)) {
             return null;
         }
 
-        return new HlsAsset(legacyPath, MediaContentTypes.HlsPlaylist, "no-cache");
+        return await WriteRemuxServedPlaylistAsync(legacyPath, remuxDir, audioStreamIndex, "no-cache", cancellationToken);
     }
 
     /// <summary>Writes the remux VOD playlist atomically and returns it as a cacheable asset.</summary>
     private async Task<HlsAsset> WriteRemuxVodAsync(
         string remuxDir,
         IReadOnlyList<double> durations,
+        int? audioStreamIndex,
         CancellationToken cancellationToken) {
         Directory.CreateDirectory(remuxDir);
         var vodPath = Path.Combine(remuxDir, "index.vod.m3u8");
         var tempPath = vodPath + "." + Path.GetRandomFileName();
-        await File.WriteAllTextAsync(tempPath, BuildRemuxVodPlaylist(durations), cancellationToken);
+        await File.WriteAllTextAsync(tempPath, BuildRemuxVodPlaylist(durations, audioStreamIndex), cancellationToken);
         File.Move(tempPath, vodPath, overwrite: true);
         return new HlsAsset(vodPath, MediaContentTypes.HlsPlaylist, CacheControlForExtension(".m3u8"));
+    }
+
+    private static async Task<HlsAsset> WriteRemuxServedPlaylistAsync(
+        string sourcePath,
+        string remuxDir,
+        int? audioStreamIndex,
+        string cacheControl,
+        CancellationToken cancellationToken) {
+        var servedPath = Path.Combine(remuxDir, "index.served.m3u8");
+        var playlist = await File.ReadAllTextAsync(sourcePath, cancellationToken);
+        var rewritten = RewriteRemuxPlaylistUris(playlist, audioStreamIndex);
+        await File.WriteAllTextAsync(servedPath, rewritten, cancellationToken);
+        return new HlsAsset(servedPath, MediaContentTypes.HlsPlaylist, cacheControl);
     }
 
     /// <summary>
@@ -185,6 +201,7 @@ public sealed partial class HlsAssetService {
         Guid id,
         VideoSourceFile source,
         string audioCacheKey,
+        int? audioStreamIndex,
         string remuxDir,
         HlsAssetServiceOptions options) {
         var key = $"{id}/{audioCacheKey}";
@@ -192,7 +209,7 @@ public sealed partial class HlsAssetService {
             return;
         }
 
-        RemuxVodComputations.GetOrAdd(key, _ => ComputeRemuxVodAsync(id, source, audioCacheKey, remuxDir, options, key));
+        RemuxVodComputations.GetOrAdd(key, _ => ComputeRemuxVodAsync(id, source, audioCacheKey, audioStreamIndex, remuxDir, options, key));
     }
 
     /// <summary>
@@ -203,6 +220,7 @@ public sealed partial class HlsAssetService {
         Guid id,
         VideoSourceFile source,
         string audioCacheKey,
+        int? audioStreamIndex,
         string remuxDir,
         HlsAssetServiceOptions options,
         string key) {
@@ -223,7 +241,7 @@ public sealed partial class HlsAssetService {
                 return;
             }
 
-            await WriteRemuxVodAsync(remuxDir, durations, token);
+            await WriteRemuxVodAsync(remuxDir, durations, audioStreamIndex, token);
         } catch (OperationCanceledException) {
             // Playback stopped; the next play recomputes from scratch.
         } catch (Exception ex) {
@@ -644,7 +662,7 @@ public sealed partial class HlsAssetService {
     /// ffmpeg writes (version, init map, independent segments) but listing every segment up front and
     /// terminating with <c>#EXT-X-ENDLIST</c> so the player treats the whole duration as seekable.
     /// </summary>
-    internal static string BuildRemuxVodPlaylist(IReadOnlyList<double> segmentDurations) {
+    internal static string BuildRemuxVodPlaylist(IReadOnlyList<double> segmentDurations, int? audioStreamIndex = null) {
         var targetDuration = segmentDurations.Count == 0
             ? SegmentDurationSeconds
             : Math.Max(1, (int)Math.Round(segmentDurations.Max(), MidpointRounding.AwayFromZero));
@@ -656,17 +674,54 @@ public sealed partial class HlsAssetService {
             "#EXT-X-MEDIA-SEQUENCE:0",
             "#EXT-X-PLAYLIST-TYPE:VOD",
             "#EXT-X-INDEPENDENT-SEGMENTS",
-            "#EXT-X-MAP:URI=\"init.mp4\"",
+            $"#EXT-X-MAP:URI=\"{AppendAudioStreamQuery("init.mp4", audioStreamIndex)}\"",
         };
 
         for (var index = 0; index < segmentDurations.Count; index++) {
             lines.Add(string.Format(CultureInfo.InvariantCulture, "#EXTINF:{0:0.000000},", segmentDurations[index]));
-            lines.Add($"seg_{index:00000}.m4s");
+            lines.Add(AppendAudioStreamQuery($"seg_{index:00000}.m4s", audioStreamIndex));
         }
 
         lines.Add("#EXT-X-ENDLIST");
         lines.Add(string.Empty);
         return string.Join('\n', lines);
+    }
+
+    internal static string RewriteRemuxPlaylistUris(string playlist, int? audioStreamIndex) {
+        if (audioStreamIndex is null || string.IsNullOrEmpty(playlist)) {
+            return playlist;
+        }
+
+        var index = audioStreamIndex.Value;
+        var lines = playlist.Replace("\r\n", "\n").Split('\n');
+        for (var i = 0; i < lines.Length; i++) {
+            var line = lines[i];
+            if (line.StartsWith("#EXT-X-MAP:", StringComparison.OrdinalIgnoreCase)) {
+                lines[i] = RewriteMapUri(line, index);
+            } else if (line.Length > 0 && !line.StartsWith('#')) {
+                lines[i] = AppendAudioStreamQuery(line, index);
+            }
+        }
+
+        return string.Join('\n', lines);
+    }
+
+    private static string RewriteMapUri(string line, int audioStreamIndex) {
+        const string marker = "URI=\"";
+        var uriStart = line.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (uriStart < 0) {
+            return line;
+        }
+
+        uriStart += marker.Length;
+        var uriEnd = line.IndexOf('"', uriStart);
+        if (uriEnd < 0) {
+            return line;
+        }
+
+        var uri = line[uriStart..uriEnd];
+        var rewritten = AppendAudioStreamQuery(uri, audioStreamIndex);
+        return line[..uriStart] + rewritten + line[uriEnd..];
     }
 
     private static bool IsHevcCodec(string? codec) =>

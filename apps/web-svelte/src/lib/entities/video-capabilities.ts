@@ -86,7 +86,7 @@ export function extractVideoPlayerProps(
     : "";
   const hlsSrc = mediaSource?.TranscodingUrl
     ? jellyfinApiPath(mediaSource.TranscodingUrl)
-    : jellyfinApiPath(`/Videos/${videoId}/master.m3u8`);
+    : jellyfinApiPath(appendAudioStreamIndex(`/Videos/${videoId}/master.m3u8`, defaultAudioStreamIndex));
   const defaultAudioStream =
     audioStreams.find((stream) => stream.Index === defaultAudioStreamIndex) ?? audioStreams[0] ?? null;
 
@@ -164,13 +164,20 @@ function buildQualityRungs(
   supportsTranscoding: boolean | null | undefined,
 ): PlayerQualityRung[] {
   if (supportsTranscoding === false) return [];
-  const audioQuery = audioStreamIndex != null ? `?AudioStreamIndex=${audioStreamIndex}` : "";
   return qualityRungsForSource(sourceBitrate, sourceHeight, codec).map((rung) => ({
     name: rung.name,
     label: rung.label,
     bitrate: rung.bitrate,
-    url: jellyfinApiPath(`/Videos/${videoId}/hls/${rung.name}/stream.m3u8${audioQuery}`),
+    url: jellyfinApiPath(
+      appendAudioStreamIndex(`/Videos/${videoId}/hls/${rung.name}/stream.m3u8`, audioStreamIndex),
+    ),
   }));
+}
+
+function appendAudioStreamIndex(path: string, audioStreamIndex: number | null): string {
+  if (audioStreamIndex == null || /(?:[?&])AudioStreamIndex=/.test(path)) return path;
+  const separator = path.includes("?") ? "&" : "?";
+  return `${path}${separator}AudioStreamIndex=${audioStreamIndex}`;
 }
 
 function colorPipelineLabel(
