@@ -69,6 +69,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Fixed
+- Adding a new watched library now starts scans only for the media kinds enabled on that library, so audio-only, image-only, and books-only libraries no longer kick off an unnecessary video scan.
 - Changing the audio track on stream-copied videos now keeps that choice through the HLS playlist and segment requests, so multi-audio files no longer drift back to the default language while the UI shows another track selected.
 - Lightbox videos now open at their intended size immediately when aspect-ratio metadata is available, and tall videos leave a small vertical inset instead of reaching the viewport edge.
 - Videos in the feed and lightbox now render and play again instead of loading to a black frame, including animated gallery clips whose generated preview file is missing, while still preserving portrait and landscape aspect ratios.

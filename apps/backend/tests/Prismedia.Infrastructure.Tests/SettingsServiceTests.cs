@@ -33,6 +33,34 @@ public sealed class SettingsServiceTests {
         Assert.Equal([JobType.ScanBook], queue.Enqueued.Select(request => request.Type));
     }
 
+    [Theory]
+    [MemberData(nameof(CreateLibraryRootScanKindCases))]
+    public async Task CreateLibraryRootQueuesOnlySelectedScanKinds(
+        bool scanVideos,
+        bool scanImages,
+        bool scanAudio,
+        bool scanBooks,
+        JobType[] expectedTypes) {
+        await using var db = CreateContext();
+        var queue = new RecordingJobQueue();
+        var service = new SettingsService(new EfSettingsPersistence(db), queue);
+
+        await service.CreateLibraryRootAsync(
+            new LibraryRootCreateRequest(
+                Path: "/media/selected",
+                Label: "Selected",
+                Enabled: true,
+                Recursive: true,
+                ScanVideos: scanVideos,
+                ScanImages: scanImages,
+                ScanAudio: scanAudio,
+                ScanBooks: scanBooks,
+                IsNsfw: false),
+            CancellationToken.None);
+
+        Assert.Equal(expectedTypes, queue.Enqueued.Select(request => request.Type));
+    }
+
     [Fact]
     public async Task CreateLibraryRootQueuesAllDefaultKinds() {
         await using var db = CreateContext();
@@ -204,6 +232,13 @@ public sealed class SettingsServiceTests {
 
         return new PrismediaDbContext(options);
     }
+
+    public static TheoryData<bool, bool, bool, bool, JobType[]> CreateLibraryRootScanKindCases() =>
+        new() {
+            { false, true, false, false, [JobType.ScanGallery] },
+            { false, false, true, false, [JobType.ScanAudio] },
+            { false, true, true, true, [JobType.ScanGallery, JobType.ScanAudio, JobType.ScanBook] },
+        };
 
     /// <summary>
     /// Minimal <see cref="IJobQueueService"/> test double that records enqueued requests and
