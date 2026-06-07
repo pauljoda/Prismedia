@@ -622,6 +622,25 @@ public sealed partial class JellyfinCatalogService {
         }
 
         if (query.Recursive && parent.Kind.Equals("video-series", StringComparison.OrdinalIgnoreCase)) {
+            var realSeasons = childThumbnails
+                .Where(child => child.Kind.Equals("video-season", StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            if (realSeasons.Length == 0) {
+                var directEpisodes = DirectSeriesEpisodeThumbnails(parent, childThumbnails);
+                if (directEpisodes.Count > 0) {
+                    var fallbackSeasonId = FallbackSeasonIdFor(parent.Id);
+                    var fallbackContext = FallbackSeasonContextFor(parent);
+                    return directEpisodes
+                        .Select((episode, index) => MapFallbackSeasonEpisodeThumbnail(
+                            episode,
+                            serverId,
+                            fallbackSeasonId,
+                            fallbackContext,
+                            index))
+                        .ToArray();
+                }
+            }
+
             var descendants = new List<JellyfinBaseItemDto>();
             foreach (var child in childThumbnails) {
                 if (!child.Kind.Equals("video-season", StringComparison.OrdinalIgnoreCase)) {
@@ -673,9 +692,22 @@ public sealed partial class JellyfinCatalogService {
         var context = FallbackSeasonContextFor(series);
         var seasonId = FallbackSeasonIdFor(seriesId);
         return episodes
-            .Select(episode => MapThumbnail(episode, serverId, seasonId, context))
+            .Select((episode, index) => MapFallbackSeasonEpisodeThumbnail(episode, serverId, seasonId, context, index))
             .ToArray();
     }
+
+    private static JellyfinBaseItemDto MapFallbackSeasonEpisodeThumbnail(
+        EntityThumbnail episode,
+        string serverId,
+        Guid seasonId,
+        ItemContext context,
+        int index) =>
+        MapThumbnail(episode, serverId, seasonId, context) with {
+            IndexNumber = FallbackEpisodeIndexNumber(episode.SortOrder, index)
+        };
+
+    private static int FallbackEpisodeIndexNumber(int? sortOrder, int index) =>
+        sortOrder is >= 0 ? sortOrder.Value + 1 : index + 1;
 
     private static IReadOnlyList<EntityThumbnail> DirectSeriesEpisodeThumbnails(
         IEntityCard series,
