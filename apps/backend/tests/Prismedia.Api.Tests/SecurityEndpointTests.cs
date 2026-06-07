@@ -19,9 +19,11 @@ public sealed partial class SecurityEndpointTests : IDisposable {
     private static readonly Guid SfwVideoId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid NsfwVideoId = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private readonly string _webRoot = Path.Combine(Path.GetTempPath(), $"prismedia-security-static-{Guid.NewGuid():N}");
+    private readonly string _cacheRoot = Path.Combine(Path.GetTempPath(), $"prismedia-security-cache-{Guid.NewGuid():N}");
 
     public SecurityEndpointTests() {
         Directory.CreateDirectory(_webRoot);
+        Directory.CreateDirectory(_cacheRoot);
         File.WriteAllText(Path.Combine(_webRoot, "index.html"), "<html><body>Prismedia</body></html>");
     }
 
@@ -317,11 +319,12 @@ public sealed partial class SecurityEndpointTests : IDisposable {
 
     [Fact]
     public async Task JellyfinDirectChildEpisodePrimaryImageEndpointServesAdvertisedThumbnail() {
-        var imagePath = Path.Combine(_webRoot, "direct-episode.jpg");
+        var imagePath = Path.Combine(_cacheRoot, "videos", "direct-episode.jpg");
+        Directory.CreateDirectory(Path.GetDirectoryName(imagePath)!);
         File.WriteAllBytes(imagePath, [0xff, 0xd8, 0xff, 0xd9]);
         using var factory = CreateFactory(
             new DirectChildEpisodeArtworkEntityReadService(),
-            new StaticJellyfinImageFileService(imagePath));
+            cacheRoot: _cacheRoot);
         using var client = factory.CreateClient();
         var auth = await AuthenticateAsync(client, "Prismedia", TestAuth.ApiKey);
 
@@ -408,13 +411,22 @@ public sealed partial class SecurityEndpointTests : IDisposable {
         if (Directory.Exists(_webRoot)) {
             Directory.Delete(_webRoot, recursive: true);
         }
+
+        if (Directory.Exists(_cacheRoot)) {
+            Directory.Delete(_cacheRoot, recursive: true);
+        }
     }
 
     private static WebApplicationFactory<Program> CreateFactory(
         IEntityReadService? entityReadService = null,
-        IJellyfinImageFileService? imageFileService = null) =>
+        IJellyfinImageFileService? imageFileService = null,
+        string? cacheRoot = null) =>
         new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder => {
+                if (cacheRoot is not null) {
+                    builder.UseSetting("Prismedia:CacheDir", cacheRoot);
+                }
+
                 builder.ConfigureServices(services => {
                     services.AddSingleton(entityReadService ?? new TestAuth.VisibleEntityReadService());
                     services.AddSingleton<ICollectionItemReadService, EmptyCollectionItemReadService>();

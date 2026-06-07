@@ -180,9 +180,9 @@ public sealed partial class JellyfinCatalogService {
             ChildCount = childCount == 0 ? null : childCount,
             RecursiveItemCount = childCount == 0 ? null : childCount,
             RunTimeTicks = runtimeTicks ?? 0,
-            IndexNumber = isAudio
+            IndexNumber = context?.IndexNumber ?? (isAudio
                 ? TrackNumberFrom(item.SortOrder)
-                : PositionValue(position, "episode") ?? PositionValue(position, "sort") ?? item.SortOrder,
+                : PositionValue(position, "episode") ?? PositionValue(position, "sort") ?? item.SortOrder),
             ParentIndexNumber = PositionValue(position, "season") ?? context?.ParentIndexNumber,
             SeriesId = context?.SeriesId,
             SeriesName = context?.SeriesName,
@@ -291,21 +291,24 @@ public sealed partial class JellyfinCatalogService {
         };
     }
 
-    private static ItemContext FallbackSeasonContextFor(IEntityCard series) {
+    private static ItemContext FallbackSeasonContextFor(IEntityCard series, int? indexNumber = null) {
         var images = ImageMetadata(series.Id, series.Capabilities);
+        var seasonId = FallbackSeasonIdFor(series.Id);
         return new ItemContext(
             series.Id,
             series.Title,
-            FallbackSeasonIdFor(series.Id),
+            seasonId,
             series.Title,
             1,
+            ParentId: seasonId,
             SeriesPrimaryImageTag: ImageTag(images, "Primary"),
             ParentLogoItemId: ImageTag(images, "Logo") is null ? null : series.Id,
             ParentLogoImageTag: ImageTag(images, "Logo"),
             ParentBackdropItemId: images.BackdropImageTags.Count == 0 ? null : series.Id,
             ParentBackdropImageTags: images.BackdropImageTags.Count == 0 ? null : images.BackdropImageTags,
             ParentThumbItemId: ImageTag(images, "Thumb") is null ? null : series.Id,
-            ParentThumbImageTag: ImageTag(images, "Thumb"));
+            ParentThumbImageTag: ImageTag(images, "Thumb"),
+            IndexNumber: indexNumber);
     }
 
     private async Task<ItemContext?> ParentContextForAsync(

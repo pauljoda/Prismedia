@@ -294,7 +294,30 @@ public sealed partial class JellyfinCatalogService {
         }
 
         var parent = await GetVisibleCardAsync(parentId, visibility, cancellationToken);
-        return parent is null ? null : await ParentContextForAsync(parent, visibility, cancellationToken);
+        if (parent is null) {
+            return null;
+        }
+
+        if (entity.Kind.Equals("video", StringComparison.OrdinalIgnoreCase) &&
+            parent.Kind.Equals("video-series", StringComparison.OrdinalIgnoreCase)) {
+            var children = parent.ChildrenByKind
+                .SelectMany(group => VisibleEntities(group.Entities, visibility))
+                .Where(child => child.ParentEntityId == parent.Id)
+                .ToArray();
+            if (!children.Any(child => child.Kind.Equals("video-season", StringComparison.OrdinalIgnoreCase))) {
+                var directEpisodes = DirectSeriesEpisodeThumbnails(parent, children);
+                var episodeIndex = directEpisodes
+                    .Select((episode, index) => (episode, index))
+                    .FirstOrDefault(entry => entry.episode.Id == entity.Id);
+                if (episodeIndex.episode is not null) {
+                    return FallbackSeasonContextFor(
+                        parent,
+                        FallbackEpisodeIndexNumber(episodeIndex.episode.SortOrder, episodeIndex.index));
+                }
+            }
+        }
+
+        return await ParentContextForAsync(parent, visibility, cancellationToken);
     }
 
     /// <summary>Returns recently added playable videos.</summary>

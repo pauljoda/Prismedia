@@ -69,7 +69,7 @@ public static class DependencyInjection {
         }
 
         RegisterPersistence(services, connectionString);
-        RegisterMediaProcessing(services, mediaToolOptions, dataDir);
+        RegisterMediaProcessing(services, mediaToolOptions, dataDir, cacheDir);
         RegisterPluginsAndIdentify(services, configuration, pathBase, cacheDir);
         RegisterLibraryScanning(services, dataDir);
         RegisterEntities(services, cacheDir);
@@ -89,12 +89,13 @@ public static class DependencyInjection {
     private static void RegisterMediaProcessing(
         IServiceCollection services,
         MediaToolOptions mediaToolOptions,
-        string dataDir) {
+        string dataDir,
+        string cacheDir) {
         services.AddSingleton<ProcessExecutor>();
         services.AddSingleton(mediaToolOptions);
         services.AddSingleton<MediaToolService>();
         services.AddSingleton<FileDiscoveryService>();
-        services.AddSingleton(new AssetPathService(dataDir));
+        services.AddSingleton(new AssetPathService(dataDir, cacheDir));
         services.AddSingleton(provider => new MediaProbeService(
             provider.GetRequiredService<ProcessExecutor>(),
             provider.GetRequiredService<MediaToolOptions>()));

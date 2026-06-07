@@ -344,6 +344,41 @@ public sealed class JellyfinCatalogServiceTests {
     }
 
     [Fact]
+    public async Task DirectEpisodeDetailUsesFallbackSeasonContextWhenSeriesHasNoSeasons() {
+        var seriesId = Guid.NewGuid();
+        var episodeId = Guid.NewGuid();
+        var entities = new FakeEntityReadService();
+        var episode = Thumb(episodeId, "video", "Episode 1", parentId: seriesId, sortOrder: 0);
+        entities.Cards[seriesId] = Card(
+            seriesId,
+            "video-series",
+            "Direct Show",
+            parentId: null,
+            children: [new EntityGroup("video", "Episodes", [episode])]);
+        entities.Cards[episodeId] = Card(episodeId, "video", "Episode 1", seriesId, children: []) with {
+            SortOrder = 0
+        };
+        var catalog = new JellyfinCatalogService(entities, new FakeCollections());
+        var seasons = await catalog.GetItemsAsync(
+            Query(parentId: seriesId, includeItemTypes: [JellyfinProtocol.ItemTypes.Season]),
+            ServerId,
+            hideNsfw: false,
+            CancellationToken.None);
+        var fallbackSeasonId = Assert.Single(seasons.Items).Id;
+
+        var detail = await catalog.GetItemAsync(episodeId, ServerId, hideNsfw: false, CancellationToken.None);
+
+        Assert.NotNull(detail);
+        Assert.Equal(fallbackSeasonId, detail!.ParentId);
+        Assert.Equal(seriesId, detail.SeriesId);
+        Assert.Equal("Direct Show", detail.SeriesName);
+        Assert.Equal(fallbackSeasonId, detail.SeasonId);
+        Assert.Equal("Direct Show", detail.SeasonName);
+        Assert.Equal(1, detail.ParentIndexNumber);
+        Assert.Equal(1, detail.IndexNumber);
+    }
+
+    [Fact]
     public async Task SeriesWithRealSeasonDoesNotReturnFallbackSeason() {
         var seriesId = Guid.NewGuid();
         var seasonId = Guid.NewGuid();
