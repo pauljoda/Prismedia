@@ -82,6 +82,13 @@ public sealed partial class EfEntityReadService {
         var playbackByEntity = await _db.Set<EntityPlaybackRow>().AsNoTracking()
             .Where(row => ids.Contains(row.EntityId))
             .ToDictionaryAsync(row => row.EntityId, cancellationToken);
+        var movieIds = rows
+            .Where(row => row.KindCode == EntityKindRegistry.Movie.Code)
+            .Select(row => row.Id)
+            .ToArray();
+        var childPlaybackByMovie = movieIds.Length == 0
+            ? new Dictionary<Guid, EntityPlaybackRow>()
+            : await LoadMovieChildPlaybackAsync(movieIds, cancellationToken);
         var progressByEntity = await _db.Set<EntityProgressRow>().AsNoTracking()
             .Where(row => ids.Contains(row.EntityId))
             .ToDictionaryAsync(row => row.EntityId, cancellationToken);
@@ -109,6 +116,9 @@ public sealed partial class EfEntityReadService {
                     .ToArray());
 
         var baseThumbnails = rows.Select(row => {
+            playbackByEntity.TryGetValue(row.Id, out var ownPlayback);
+            childPlaybackByMovie.TryGetValue(row.Id, out var childPlayback);
+            var playback = ownPlayback ?? childPlayback;
             var hoverUrl = hoverByEntity.GetValueOrDefault(row.Id);
             var hoverImages = hoverImagesByEntity.GetValueOrDefault(row.Id) ?? [];
             var coverUrl = coverByEntity.GetValueOrDefault(row.Id);
@@ -147,10 +157,10 @@ public sealed partial class EfEntityReadService {
                     ? parentKindByEntity.GetValueOrDefault(parentId)
                     : null,
                 CreatedAt = row.CreatedAt,
-                PlayCount = playbackByEntity.GetValueOrDefault(row.Id)?.PlayCount,
+                PlayCount = playback?.PlayCount,
                 Genres = tagsByEntity.GetValueOrDefault(row.Id),
                 Progress = ResolveThumbnailProgress(
-                    playbackByEntity.GetValueOrDefault(row.Id),
+                    playback,
                     progressByEntity.GetValueOrDefault(row.Id),
                     technicalByEntity.GetValueOrDefault(row.Id)?.DurationSeconds)
             };
@@ -177,6 +187,34 @@ public sealed partial class EfEntityReadService {
                 : thumbnail.Meta.Concat(extraMeta).Take(MaxThumbnailMeta).ToArray();
             return thumbnail with { Meta = meta, ReferenceCounts = referenceCounts };
         }).ToArray();
+    }
+
+    private async Task<Dictionary<Guid, EntityPlaybackRow>> LoadMovieChildPlaybackAsync(
+        IReadOnlyCollection<Guid> movieIds,
+        CancellationToken cancellationToken) {
+        var childRows = await _db.Entities.AsNoTracking()
+            .Where(child => child.ParentEntityId != null && movieIds.Contains(child.ParentEntityId.Value))
+            .Select(child => new { child.Id, ParentId = child.ParentEntityId!.Value })
+            .ToArrayAsync(cancellationToken);
+        if (childRows.Length == 0) {
+            return new Dictionary<Guid, EntityPlaybackRow>();
+        }
+
+        var parentByChild = childRows.ToDictionary(child => child.Id, child => child.ParentId);
+        var childIds = parentByChild.Keys.ToArray();
+        var playbackRows = await _db.Set<EntityPlaybackRow>().AsNoTracking()
+            .Where(row => childIds.Contains(row.EntityId))
+            .ToArrayAsync(cancellationToken);
+
+        return playbackRows
+            .GroupBy(row => parentByChild[row.EntityId])
+            .ToDictionary(
+                group => group.Key,
+                group => group
+                    .OrderByDescending(row => row.CompletedAt is not null)
+                    .ThenByDescending(row => row.PlayCount)
+                    .ThenByDescending(row => row.ResumeSeconds)
+                    .First());
     }
 
     /// <summary>

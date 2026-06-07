@@ -56,6 +56,31 @@ public sealed class JellyfinCatalogServiceTests {
     }
 
     [Fact]
+    public async Task LatestUnderUnwatchedMoviesUsesPlayedFilter() {
+        var unwatchedMovieId = Guid.NewGuid();
+        var watchedMovieId = Guid.NewGuid();
+        var entities = new FakeEntityReadService();
+        entities.ListByKind["movie"] = [
+            Thumb(unwatchedMovieId, "movie", "Unwatched Movie"),
+            Thumb(watchedMovieId, "movie", "Watched Movie")
+        ];
+        entities.PlayedById[unwatchedMovieId] = false;
+        entities.PlayedById[watchedMovieId] = true;
+        var catalog = new JellyfinCatalogService(entities, new FakeCollections());
+
+        var result = await catalog.GetLatestAsync(
+            JellyfinCatalogService.UnwatchedMoviesViewId,
+            20,
+            ServerId,
+            hideNsfw: false,
+            CancellationToken.None);
+
+        var item = Assert.Single(result.Items);
+        Assert.Equal(unwatchedMovieId, item.Id);
+        Assert.Contains(entities.ListCalls, call => call.Kind == "movie" && call.Played == false);
+    }
+
+    [Fact]
     public async Task BrowsingUnwatchedSeriesFiltersSeriesRowsNotEpisodes() {
         var unwatchedSeriesId = Guid.NewGuid();
         var watchedSeriesId = Guid.NewGuid();

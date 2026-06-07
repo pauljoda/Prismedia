@@ -100,7 +100,9 @@ public static partial class JellyfinCompatibilityEndpoints {
         CancellationToken cancellationToken) {
         var state = await security.EnsureSecurityAsync(cancellationToken);
         var limit = TryInt(httpContext.Request.Query["Limit"].FirstOrDefault()) ?? 20;
+        var parentId = TryGuid(httpContext.Request.Query["ParentId"].FirstOrDefault());
         var result = await catalog.GetLatestAsync(
+            parentId,
             Math.Clamp(limit, 1, 100),
             state.ServerId.ToString("N"),
             NsfwVisibility.ShouldHide(null, httpContext),

@@ -266,10 +266,33 @@ public sealed partial class JellyfinCatalogService {
 
     /// <summary>Returns recently added playable videos.</summary>
     public async Task<JellyfinQueryResult<JellyfinBaseItemDto>> GetLatestAsync(
+        Guid? parentId,
         int limit,
         string serverId,
         bool hideNsfw,
         CancellationToken cancellationToken) {
+        if (parentId is { } id && ViewById(id) is { } view) {
+            var viewResponse = await _entities.ListAsync(
+                view.Kind,
+                null,
+                null,
+                hideNsfw,
+                Math.Clamp(limit, 1, 100),
+                cancellationToken,
+                sort: "added",
+                sortDir: "desc",
+                played: view.ForcedPlayed);
+            var viewItems = viewResponse.Items;
+            if (view.Id == VideosViewId) {
+                viewItems = viewItems.Where(item => item.ParentEntityId is null).ToArray();
+            } else if (view.Id == CollectionsViewId) {
+                viewItems = await FillCollectionCoversAsync(viewItems, hideNsfw, cancellationToken);
+            }
+
+            var mapped = viewItems.Select(item => MapThumbnail(item, serverId)).ToArray();
+            return new JellyfinQueryResult<JellyfinBaseItemDto>(mapped, viewResponse.TotalCount, 0);
+        }
+
         var response = await _entities.ListAsync(
             "video",
             null,

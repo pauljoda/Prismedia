@@ -1173,6 +1173,40 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
+    public async Task ListAsyncTreatsMovieChildPlaybackAsMovieEngagement() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var watchedMovie = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var watchedVideo = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        var unwatchedMovie = Guid.Parse("33333333-3333-3333-3333-333333333333");
+        var unwatchedVideo = Guid.Parse("44444444-4444-4444-4444-444444444444");
+        db.Entities.AddRange(
+            new EntityRow { Id = watchedMovie, KindCode = EntityKindRegistry.Movie.Code, Title = "Watched Movie", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = watchedVideo, KindCode = EntityKindRegistry.Video.Code, Title = "Watched Movie", ParentEntityId = watchedMovie, CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = unwatchedMovie, KindCode = EntityKindRegistry.Movie.Code, Title = "Fresh Movie", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = unwatchedVideo, KindCode = EntityKindRegistry.Video.Code, Title = "Fresh Movie", ParentEntityId = unwatchedMovie, CreatedAt = now, UpdatedAt = now });
+        db.EntityPlayback.Add(new EntityPlaybackRow {
+            EntityId = watchedVideo,
+            PlayCount = 1,
+            CompletedAt = now,
+            UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+
+        var service = CreateService(db);
+
+        var played = await service.ListAsync(
+            EntityKindRegistry.Movie.Code, null, null, null, null, CancellationToken.None, played: true);
+        var unplayed = await service.ListAsync(
+            EntityKindRegistry.Movie.Code, null, null, null, null, CancellationToken.None, played: false);
+        var watchedThumbnail = Assert.Single(played.Items);
+
+        Assert.Equal(watchedMovie, watchedThumbnail.Id);
+        Assert.Equal(1.0, watchedThumbnail.Progress);
+        Assert.Equal(unwatchedMovie, Assert.Single(unplayed.Items).Id);
+    }
+
+    [Fact]
     public async Task ListAsyncSortsByMostRecentEngagementForLastPlayed() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;

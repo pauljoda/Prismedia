@@ -87,7 +87,7 @@ public sealed partial class JellyfinCatalogService {
             DisplayPreferencesId = item.Id.ToString("N"),
             LocalTrailerCount = isPlayable ? 0 : null,
             SpecialFeatureCount = isPlayable ? 0 : null,
-            UserData = UserDataFor(item.Id, item.IsFavorite, null),
+            UserData = UserDataForThumbnail(item),
             MediaSources = isPlayable
                 ? [CatalogMediaSource(item.Id, item.Title, VirtualItemPath(item.Id), container, null, runtimeTicks, streams ?? [], videoType: isAudio ? null : "VideoFile")]
                 : null,
