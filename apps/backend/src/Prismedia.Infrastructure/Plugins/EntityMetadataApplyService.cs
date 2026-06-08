@@ -3,6 +3,7 @@ using Prismedia.Application.Entities;
 using Prismedia.Application.Plugins;
 using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Plugins;
+using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 
@@ -195,7 +196,7 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
         var now = DateTimeOffset.UtcNow;
         var rootTitle = !string.IsNullOrWhiteSpace(patch.Title) ? patch.Title.Trim() : entity.Title;
         var rootPath = new[] { rootTitle };
-        progress?.ReportEntity(entity.KindCode, rootTitle, rootPath);
+        progress?.ReportEntity(entity.KindCode.DecodeAs<EntityKind>(), rootTitle, rootPath);
 
         if (selected.Contains("title") && !string.IsNullOrWhiteSpace(patch.Title)) {
             entity.Title = patch.Title.Trim();

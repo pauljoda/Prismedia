@@ -85,7 +85,7 @@ public sealed class EfFilesPersistence(PrismediaDbContext db) : IFilesPersistenc
 
         return entities.Select(entity => new FileLinkedEntity(
             entity.Id,
-            entity.KindCode,
+            entity.KindCode.DecodeAs<EntityKind>(),
             entity.Title,
             coverByEntity.GetValueOrDefault(entity.Id))).ToArray();
     }

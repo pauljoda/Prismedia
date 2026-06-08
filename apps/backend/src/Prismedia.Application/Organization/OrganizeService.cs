@@ -195,7 +195,7 @@ public sealed class OrganizeService {
         string? reason) =>
         new(
             entity.Id,
-            entity.KindCode,
+            entity.KindCode.DecodeAs<EntityKind>(),
             entity.Title,
             storageShape.ToCode(),
             sourcePath,

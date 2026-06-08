@@ -467,7 +467,7 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
         new(
             row.Id,
             row.EntityId,
-            entity.KindCode,
+            entity.KindCode.DecodeAs<EntityKind>(),
             entity.Title,
             entity.IsNsfw,
             row.State.ToCode(),

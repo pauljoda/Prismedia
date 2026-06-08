@@ -1,3 +1,4 @@
+import type { EntityKind } from "$lib/api/generated/model";
 import type { EntityMetadataFlagsPatch } from "$lib/api/entity-mutations";
 
 export interface PluginEntitySupport {
@@ -120,7 +121,7 @@ export interface IdentifyApplyProgress {
   state: "running" | "succeeded" | "failed" | string;
   currentIndex: number;
   total: number;
-  currentKind?: string | null;
+  currentKind?: EntityKind | null;
   currentTitle?: string | null;
   currentPath: string[];
   error?: string | null;
@@ -130,7 +131,7 @@ export interface IdentifyApplyProgress {
 export interface IdentifyQueueItem {
   id: string;
   entityId: string;
-  entityKind: string;
+  entityKind: EntityKind;
   title: string;
   isNsfw: boolean;
   state: IdentifyQueueState;

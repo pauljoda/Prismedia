@@ -1,6 +1,7 @@
 using System.Net;
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Contracts.Plugins;
+using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Plugins;
 using Prismedia.Infrastructure.StashCompat;
@@ -250,7 +251,7 @@ public sealed class StashCompatTests {
                 ProtocolVersion: 2,
                 Action: "lookup-url",
                 Auth: new Dictionary<string, string>(),
-                Entity: new IdentifyEntitySnapshot(Guid.NewGuid(), "video", "Local Title"),
+                Entity: new IdentifyEntitySnapshot(Guid.NewGuid(), EntityKind.Video, "Local Title"),
                 Query: new IdentifyQuery(null, "https://site.example/scene/123", null),
                 Hints: new IdentifyMatchHints(new Dictionary<string, string>(), [], null, null));
 
@@ -306,7 +307,7 @@ public sealed class StashCompatTests {
                 ProtocolVersion: 2,
                 Action: "search",
                 Auth: new Dictionary<string, string>(),
-                Entity: new IdentifyEntitySnapshot(Guid.NewGuid(), "video", "Some Scene"),
+                Entity: new IdentifyEntitySnapshot(Guid.NewGuid(), EntityKind.Video, "Some Scene"),
                 Query: new IdentifyQuery("Some Scene", null, null),
                 Hints: new IdentifyMatchHints(new Dictionary<string, string>(), [], null, null));
 
@@ -335,7 +336,7 @@ public sealed class StashCompatTests {
                 ProtocolVersion: 2,
                 Action: "search",
                 Auth: new Dictionary<string, string>(),
-                Entity: new IdentifyEntitySnapshot(Guid.NewGuid(), "video", "Some Scene"),
+                Entity: new IdentifyEntitySnapshot(Guid.NewGuid(), EntityKind.Video, "Some Scene"),
                 Query: new IdentifyQuery(null, null, new Dictionary<string, string> { [manifest.Id] = "https://search.example/s/1" }),
                 Hints: new IdentifyMatchHints(new Dictionary<string, string>(), [], null, null));
 
@@ -580,7 +581,7 @@ public sealed class StashCompatTests {
                 ProtocolVersion: 2,
                 Action: "lookup-url",
                 Auth: new Dictionary<string, string>(),
-                Entity: new IdentifyEntitySnapshot(Guid.NewGuid(), "video", "X"),
+                Entity: new IdentifyEntitySnapshot(Guid.NewGuid(), EntityKind.Video, "X"),
                 Query: new IdentifyQuery(null, "https://script.example/s/1", null),
                 Hints: new IdentifyMatchHints(new Dictionary<string, string>(), [], null, null));
 

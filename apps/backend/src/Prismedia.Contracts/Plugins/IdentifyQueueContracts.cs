@@ -1,3 +1,5 @@
+using Prismedia.Domain.Entities;
+
 namespace Prismedia.Contracts.Plugins;
 
 /// <summary>
@@ -23,7 +25,7 @@ namespace Prismedia.Contracts.Plugins;
 public sealed record IdentifyQueueItem(
     Guid Id,
     Guid EntityId,
-    string EntityKind,
+    EntityKind EntityKind,
     string Title,
     bool IsNsfw,
     string State,
@@ -57,7 +59,7 @@ public sealed record IdentifyApplyProgress(
     string State,
     int CurrentIndex,
     int Total,
-    string? CurrentKind,
+    EntityKind? CurrentKind,
     string? CurrentTitle,
     IReadOnlyList<string> CurrentPath,
     string? Error,

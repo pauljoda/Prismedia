@@ -160,7 +160,7 @@ public sealed class FilesServiceTests : IDisposable {
     public async Task GetDetailSuppressesLinkedEntitiesAndPreviewForExcludedPaths() {
         await File.WriteAllTextAsync(Path.Combine(_tempRoot.FullName, "skip.mkv"), "video");
         Persistence.ExcludedPaths.Add("skip.mkv");
-        Persistence.LinkedEntities.Add(new FileLinkedEntity(Guid.NewGuid(), "video", "Should not render"));
+        Persistence.LinkedEntities.Add(new FileLinkedEntity(Guid.NewGuid(), EntityKind.Video, "Should not render"));
         var service = CreateService();
 
         var detail = await service.GetDetailAsync(

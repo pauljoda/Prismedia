@@ -1,5 +1,4 @@
 import { goto } from "$app/navigation";
-import type { EntityKind } from "$lib/api/generated/model";
 import { createContext } from "$lib/utils/context";
 import {
   addIdentifyQueueItem,
@@ -1117,7 +1116,7 @@ function entityThumbnailFromDetail(detail: EntityDetailCard, fallback?: EntityCa
 function entityCardFromQueueItem(item: ApiIdentifyQueueItem): EntityCard {
   return {
     id: item.entityId,
-    kind: item.entityKind as EntityKind,
+    kind: item.entityKind,
     title: item.title,
     parentEntityId: null,
     sortOrder: null,
@@ -1192,7 +1191,10 @@ function initialApplyProgress(
     state: "running",
     currentIndex: 0,
     total: countApplyProgressSteps(proposal, selectedFields),
-    currentKind: proposal.targetKind || entity.kind,
+    // Optimistic progress is for the root entity being applied, so its real kind
+    // is the entity's own kind. (The proposal target vocabulary can carry
+    // non-entity tokens like "video-episode", which this typed field must not.)
+    currentKind: entity.kind,
     currentTitle: title,
     currentPath: [title],
     error: null,

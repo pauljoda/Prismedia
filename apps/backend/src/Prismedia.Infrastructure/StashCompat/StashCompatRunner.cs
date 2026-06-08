@@ -1,4 +1,5 @@
 using Prismedia.Contracts.Plugins;
+using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Plugins;
 using Prismedia.Infrastructure.StashCompat.Model;
 
@@ -47,11 +48,9 @@ public sealed class StashCompatRunner : IIdentifyRunner {
             return new IdentifyPluginResponse(false, null, "Scraper definition is invalid.");
         }
 
-        var isVideo = request.Entity.Kind.Equals("video", StringComparison.OrdinalIgnoreCase) ||
-            request.Entity.Kind.Equals("movie", StringComparison.OrdinalIgnoreCase) ||
-            request.Entity.Kind.Equals("video-episode", StringComparison.OrdinalIgnoreCase);
+        var isVideo = request.Entity.Kind is EntityKind.Video or EntityKind.Movie;
         if (!isVideo) {
-            return new IdentifyPluginResponse(true, null, $"This scraper cannot identify '{request.Entity.Kind}'.");
+            return new IdentifyPluginResponse(true, null, $"This scraper cannot identify '{request.Entity.Kind.ToCode()}'.");
         }
 
         var input = BuildInput(request, descriptor.Manifest.Id);
@@ -61,7 +60,7 @@ public sealed class StashCompatRunner : IIdentifyRunner {
             // strongest signal: resolve it to a single confident proposal.
             if (!string.IsNullOrWhiteSpace(input.Url)) {
                 foreach (var capability in UrlCapabilitiesFor(request.Entity.Kind).Where(definition.HasCapability)) {
-                    var proposal = await ScrapeProposalAsync(engine, definition, descriptor, capability, input, request.Entity.Kind, cancellationToken);
+                    var proposal = await ScrapeProposalAsync(engine, definition, descriptor, capability, input, request.Entity.Kind.ToCode(), cancellationToken);
                     if (proposal is not null) {
                         return new IdentifyPluginResponse(true, proposal, null);
                     }
@@ -71,7 +70,7 @@ public sealed class StashCompatRunner : IIdentifyRunner {
             // Fragment/query-fragment capabilities template a URL from the title or filename and
             // resolve to a single page, so they also yield a confident proposal.
             foreach (var capability in new[] { "sceneByQueryFragment", "sceneByFragment" }.Where(definition.HasCapability)) {
-                var proposal = await ScrapeProposalAsync(engine, definition, descriptor, capability, input, request.Entity.Kind, cancellationToken);
+                var proposal = await ScrapeProposalAsync(engine, definition, descriptor, capability, input, request.Entity.Kind.ToCode(), cancellationToken);
                 if (proposal is not null) {
                     return new IdentifyPluginResponse(true, proposal, null);
                 }
@@ -219,8 +218,8 @@ public sealed class StashCompatRunner : IIdentifyRunner {
     private static string? FirstNonEmpty(params string?[] values) =>
         values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
 
-    private static IReadOnlyList<string> UrlCapabilitiesFor(string entityKind) =>
-        entityKind.Equals("movie", StringComparison.OrdinalIgnoreCase)
+    private static IReadOnlyList<string> UrlCapabilitiesFor(EntityKind entityKind) =>
+        entityKind == EntityKind.Movie
             ? ["movieByURL", "sceneByURL"]
             : ["sceneByURL"];
 }

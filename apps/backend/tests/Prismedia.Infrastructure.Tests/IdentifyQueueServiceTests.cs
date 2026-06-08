@@ -56,7 +56,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         var item = await service.AddAsync(entityId, CancellationToken.None);
 
         Assert.Equal(entityId, item.EntityId);
-        Assert.Equal("video-series", item.EntityKind);
+        Assert.Equal(EntityKind.VideoSeries, item.EntityKind);
         Assert.Equal("Mystery Show", item.Title);
         Assert.Equal("search", item.State);
         Assert.Null(item.Provider);

@@ -1,16 +1,17 @@
 using System.Collections.Concurrent;
 using Prismedia.Contracts.Plugins;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Plugins;
 
 /// <summary>
 /// Entity-level progress step emitted while a reviewed Identify proposal is being applied.
 /// </summary>
-/// <param name="Kind">Entity kind code for the entity currently being updated.</param>
+/// <param name="Kind">Entity kind for the entity currently being updated.</param>
 /// <param name="Title">Display title for the entity currently being updated.</param>
 /// <param name="Path">Structural path from the accepted root proposal to the current entity.</param>
 public sealed record IdentifyApplyProgressStep(
-    string Kind,
+    EntityKind Kind,
     string Title,
     IReadOnlyList<string> Path);
 
@@ -54,10 +55,10 @@ public sealed class IdentifyApplyProgressReporter {
     /// <summary>
     /// Records the entity currently being updated.
     /// </summary>
-    /// <param name="kind">Entity kind code.</param>
+    /// <param name="kind">Entity kind.</param>
     /// <param name="title">Display title.</param>
     /// <param name="path">Structural path from the root proposal.</param>
-    public void ReportEntity(string kind, string title, IReadOnlyList<string> path) =>
+    public void ReportEntity(EntityKind kind, string title, IReadOnlyList<string> path) =>
         _store.ReportStep(_operationId, new IdentifyApplyProgressStep(kind, title, path));
 }
 

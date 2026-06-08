@@ -301,7 +301,7 @@ public sealed partial class EntityMetadataApplyService {
 
             var title = child.Patch.Title.Trim();
             var path = sourcePath.Count == 0 ? [title] : sourcePath.Concat([title]).ToArray();
-            progress?.ReportEntity(linkedEntity.KindCode, title, path);
+            progress?.ReportEntity(linkedEntity.KindCode.DecodeAs<EntityKind>(), title, path);
 
             await ApplyPatchToEntityAsync(linkedEntity, child.Patch, [], now, cancellationToken);
 

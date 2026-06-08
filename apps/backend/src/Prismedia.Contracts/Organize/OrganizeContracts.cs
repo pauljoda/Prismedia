@@ -1,3 +1,5 @@
+using Prismedia.Domain.Entities;
+
 namespace Prismedia.Contracts.Organize;
 
 /// <summary>
@@ -11,7 +13,7 @@ public sealed record OrganizePlanRequest(Guid? EntityId, Guid? RootId);
 /// One filesystem operation proposed by the entity organizer.
 /// </summary>
 /// <param name="EntityId">Entity that owns the source path.</param>
-/// <param name="Kind">Entity kind code.</param>
+/// <param name="Kind">Entity kind.</param>
 /// <param name="Title">Entity display title used to derive target names.</param>
 /// <param name="StorageShape">Storage shape code that controlled planning.</param>
 /// <param name="SourcePath">Current source file or folder path.</param>
@@ -20,7 +22,7 @@ public sealed record OrganizePlanRequest(Guid? EntityId, Guid? RootId);
 /// <param name="Reason">Optional human-readable reason for skipped or failed items.</param>
 public sealed record OrganizePlanItem(
     Guid EntityId,
-    string Kind,
+    EntityKind Kind,
     string Title,
     string StorageShape,
     string SourcePath,

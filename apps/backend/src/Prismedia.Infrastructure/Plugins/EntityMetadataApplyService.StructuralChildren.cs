@@ -38,7 +38,7 @@ public sealed partial class EntityMetadataApplyService {
 
             var childTitle = !string.IsNullOrWhiteSpace(child.Patch.Title) ? child.Patch.Title.Trim() : childEntity.Title;
             var childPath = parentPath.Count == 0 ? [childTitle] : parentPath.Concat([childTitle]).ToArray();
-            progress?.ReportEntity(childEntity.KindCode, childTitle, childPath);
+            progress?.ReportEntity(childEntity.KindCode.DecodeAs<EntityKind>(), childTitle, childPath);
 
             await ApplyPatchToEntityAsync(childEntity, child.Patch, child.Images, now, cancellationToken);
             var relationshipProposals = EntityMetadataProposalTraversal.Relationships(child);

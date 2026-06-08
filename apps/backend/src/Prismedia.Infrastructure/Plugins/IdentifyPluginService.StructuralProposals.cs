@@ -441,11 +441,11 @@ public sealed partial class IdentifyPluginService {
         EntityRow entity,
         string providerId,
         CancellationToken cancellationToken,
-        string? kindOverride = null) {
+        EntityKind? kindOverride = null) {
         var hints = await _hints.ResolveAsync(entity.Id, providerId, cancellationToken);
         return new IdentifyEntitySnapshot(
             entity.Id,
-            kindOverride ?? entity.KindCode,
+            kindOverride ?? entity.KindCode.DecodeAs<EntityKind>(),
             entity.Title,
             hints.ExternalIds,
             hints.Urls);

@@ -487,7 +487,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             1,
             "lookup-id",
             new Dictionary<string, string> { ["apiKey"] = "secret" },
-            new IdentifyEntitySnapshot(entityId, "video", "Example"),
+            new IdentifyEntitySnapshot(entityId, EntityKind.Video, "Example"),
             new IdentifyQuery(null, null, null),
             new IdentifyMatchHints(
                 new Dictionary<string, string> { ["tmdb"] = "123" },
@@ -531,7 +531,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             1,
             "search",
             new Dictionary<string, string>(),
-            new IdentifyEntitySnapshot(Guid.NewGuid(), "book", "Missing"),
+            new IdentifyEntitySnapshot(Guid.NewGuid(), EntityKind.Book, "Missing"),
             new IdentifyQuery("Missing", null, null),
             new IdentifyMatchHints(new Dictionary<string, string>(), [], "Missing", null));
 
@@ -568,7 +568,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             1,
             "search",
             new Dictionary<string, string>(),
-            new IdentifyEntitySnapshot(Guid.NewGuid(), "video-series", "Abbott Elementary"),
+            new IdentifyEntitySnapshot(Guid.NewGuid(), EntityKind.VideoSeries, "Abbott Elementary"),
             new IdentifyQuery("Abbott Elementary", null, null),
             new IdentifyMatchHints(new Dictionary<string, string>(), [], "Abbott Elementary", null));
 
@@ -677,7 +677,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
         var response = await service.IdentifyAsync(movieId, "tmdb", null, parentExternalIds: null, hideNsfw: false, CancellationToken.None);
 
         Assert.True(response.Ok);
-        Assert.Equal("video", executor.CapturedRequest?.Entity.Kind);
+        Assert.Equal(EntityKind.Video, executor.CapturedRequest?.Entity.Kind);
         Assert.Equal("search", executor.CapturedRequest?.Action);
         Assert.Equal(EntityKindRegistry.Movie.Code, response.Result?.TargetKind);
         Assert.Equal(movieId, response.Result?.TargetEntityId);
@@ -1486,10 +1486,11 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
                 new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
             Requests.Add(request);
 
+            var kindCode = request.Entity.Kind.ToCode();
             var proposal = new EntityMetadataProposal(
-                $"tmdb:{request.Entity.Kind}:{request.Entity.Id}",
+                $"tmdb:{kindCode}:{request.Entity.Id}",
                 "tmdb",
-                request.Entity.Kind,
+                kindCode,
                 request.StructuralContext?.Ancestors.Count > 0 ? 0.9m : 1m,
                 request.StructuralContext?.Ancestors.Count > 0 ? "structural-child" : "title-search",
                 new EntityMetadataPatch(
@@ -1579,7 +1580,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             new(
                 $"tmdb:season:{seasonId}",
                 "tmdb",
-                request.Entity.Kind,
+                request.Entity.Kind.ToCode(),
                 1,
                 "child-context",
                 EmptyPatch() with { Title = "Season From Child Request" },
@@ -1664,10 +1665,11 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
                 new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
             Requests.Add(request);
 
+            var kindCode = request.Entity.Kind.ToCode();
             var proposal = new EntityMetadataProposal(
-                $"echo:{request.Entity.Kind}:{request.Entity.Id}",
-                request.Entity.Kind == "video" ? "tmdb" : "musicbrainz",
-                request.Entity.Kind,
+                $"echo:{kindCode}:{request.Entity.Id}",
+                request.Entity.Kind == EntityKind.Video ? "tmdb" : "musicbrainz",
+                kindCode,
                 0.9m,
                 "external-id",
                 EmptyPatch() with {
