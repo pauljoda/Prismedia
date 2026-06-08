@@ -393,7 +393,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Removed Stash-compatible perceptual hashing (pHash). Prismedia no longer computes video or image pHashes, the "Perceptual hash (pHash)" generation setting is gone, and fingerprint identify/contribution now relies on MD5 and oshash. The MD5 and OpenSubtitles (oshash) fingerprints are unchanged, and Stash-Box identify and fingerprint submission continue to work with them.
 
 ### Docs
-- Added a full design & architecture audit and two execution plans under `docs/audits/` (the design audit, a magic-string elimination & prevention plan, and a shared UI building-block catalog), and codified the resulting "Identifier Discipline" and "UI Composition Discipline" contracts in `AGENTS.md`.
+- Added a full design & architecture audit and execution plans under `docs/audits/` (the design audit, a magic-string elimination & prevention plan, a shared UI building-block catalog, and a 2026-06-08 reconciliation addendum), and codified the resulting "Identifier Discipline" and "UI Composition Discipline" contracts in `AGENTS.md`.
 - Overhauled the documentation site and README for the current app, restructured into Getting Started, Using Prismedia, Library & Scanning, Jellyfin Clients, Deployment & Security, Developers, Plugins, and Advanced.
 - Added a Library & Scanning reference with per-entity-type folder trees and exact supported-extension lists for videos/movies/series, images and galleries, comics and eBooks (`.cbz`/`.zip`, `.epub`, `.pdf`), and audio.
 - Added Jellyfin Compatibility docs covering tested clients (Infuse, Manet, Finamp, Symfonium), creating sign-in profiles, the API key, per-profile NSFW "servers", and client setup.

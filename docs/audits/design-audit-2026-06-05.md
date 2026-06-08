@@ -4,6 +4,8 @@ _Date: 2026-06-05 · Method: 12 specialized finder agents read the real source, 
 
 > **Note:** The automated synthesizer pass was cut off by a session limit; this report is assembled from the verified per-area findings. Per-finding `file:line` granularity beyond what's quoted here lives in the workflow subagent transcripts.
 
+> **Status (updated 2026-06-08):** reconciled against a 54-commit bug-fix sprint — see [audit-addendum-2026-06-08.md](./audit-addendum-2026-06-08.md). The one **Critical** finding below (the `CollectionRuleEngine` `deleted_at` bug) is **RESOLVED** (fully fixed + regression-tested). The magic-string surface grew during the sprint, so the prevention guardrails are now higher priority. All other findings stand.
+
 ---
 
 ## Executive Summary
