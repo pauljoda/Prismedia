@@ -266,8 +266,30 @@ pattern was partially established. Building on it:
   into `JellyfinRoutes.IsJellyfinRequest` (was copied in both `SpaDevProxy` and
   `PrismediaAuthentication`). Full backend suite green (853 tests).
 
-**Next rails (recommended order):** (2) backend constant classes that need no codegen —
-`AssetPaths`, `MediaCodecs`, `MediaContainers`, extend `JellyfinProtocol` for the new sprint
-literals; (3) spin up the dev stack → author the §B `[Code]` enums + `ENUM_EXPORTS`/`CodesManifest`
-wiring → `pnpm api:generate`; (4) the OpenAPI codec-enum→typed-enum transformer; (5) frontend
-`no-magic-codes` lint + `codes.ts` CI parity.
+- **✅ Rail 2 — Jellyfin image types.** `JellyfinProtocol.ImageTypes` (Primary, Backdrop,
+  Logo, Thumb, Banner, Art, Disc, Box) now owns the 42 image-type literals across the
+  `JellyfinCatalogService` partials. Enforced via `ConstantsDriftGuardTests` ownership map
+  (the values are unambiguous — absent elsewhere in the backend). Value-preserving; 199 API
+  tests green.
+
+### What the rails work has surfaced about sequencing
+
+The backend's **unambiguous internal** families are already largely consolidated by prior
+"Phase 1 constants consolidation" work: `AppSettingKeys` (zero inline setting-key leaks),
+`JellyfinProtocol`, `MediaContentTypes`, plus the codec families now run through
+`EntityKindRegistry`/`RelationshipKind` etc. The remaining magic strings fall into two buckets:
+
+1. **External wire vocab** (Jellyfin sort/query/location/media-source/video-type keys; the
+   rest of the §C tables) — cleanly ownable + guardable with the `ConstantsDriftGuardTests`
+   pattern, **no codegen needed**. Cheap, safe, incremental. (Rails 1–2 are this kind.)
+2. **Ambiguous closed sets** (codec/container, image-asset-kind, position-code, sort-key,
+   engagement-status, …) — these legitimately appear in multiple vocabularies (e.g. `"hevc"`
+   is both an ffprobe spelling and a canonical code), so per this repo's own
+   `ConstantsDriftGuardTests` philosophy they must be **`[Code]` enums validated by round-trip
+   tests**, not source-scanned constant classes. That requires the dev-stack codegen rail
+   (author enum → `ENUM_EXPORTS`/`CodesManifest` → `pnpm api:generate`) and pairs with the
+   **OpenAPI codec-enum→typed-enum transformer** (the highest-leverage structural guardrail).
+
+**Recommended next:** the dev-stack codegen rail (bucket 2 + OpenAPI typed enums) is the
+biggest single win but needs running services; the wire-vocab rails (bucket 1) are safe to
+keep grinding offline. Sequence per appetite for the dev-stack setup.
