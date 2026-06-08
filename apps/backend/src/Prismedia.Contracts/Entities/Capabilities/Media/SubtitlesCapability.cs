@@ -1,13 +1,15 @@
+using Prismedia.Domain.Entities;
+
 namespace Prismedia.Contracts.Entities;
 
 /// <summary>API-facing subtitle or caption track attached to a media entity.</summary>
 /// <param name="Id">Stable subtitle track identifier.</param>
 /// <param name="Language">BCP-47 or provider language code for the subtitle text.</param>
 /// <param name="Label">Optional display label shown to the user.</param>
-/// <param name="Format">Served subtitle format, such as vtt.</param>
-/// <param name="Source">Stable discovery or generation source code.</param>
+/// <param name="Format">Served subtitle format, such as vtt. Free text (effectively always vtt; not a closed set).</param>
+/// <param name="Source">How the subtitle was discovered or generated.</param>
 /// <param name="StoragePath">Path to the normalized subtitle file served by Prismedia.</param>
-/// <param name="SourceFormat">Original subtitle format before normalization.</param>
+/// <param name="SourceFormat">Original subtitle format before normalization (external ffprobe codec name, e.g. subrip/ass).</param>
 /// <param name="SourcePath">Optional path to the original subtitle source file.</param>
 /// <param name="IsDefault">Whether this subtitle should be selected by default.</param>
 public sealed record EntitySubtitle(
@@ -15,7 +17,7 @@ public sealed record EntitySubtitle(
     string Language,
     string? Label,
     string Format,
-    string Source,
+    EntitySubtitleSource Source,
     string StoragePath,
     string SourceFormat,
     string? SourcePath,

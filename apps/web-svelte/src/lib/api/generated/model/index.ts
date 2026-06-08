@@ -112,6 +112,7 @@ export * from './entitySearchCandidateExternalIds';
 export * from './entitySource';
 export * from './entityStat';
 export * from './entitySubtitle';
+export * from './entitySubtitleSource';
 export * from './entityThumbnail';
 export * from './entityThumbnailBatchRequest';
 export * from './entityThumbnailBatchResponse';

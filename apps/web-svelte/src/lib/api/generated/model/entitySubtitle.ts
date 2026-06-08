@@ -4,6 +4,7 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { EntitySubtitleSource } from './entitySubtitleSource';
 
 export interface EntitySubtitle {
   id: string;
@@ -11,7 +12,7 @@ export interface EntitySubtitle {
   /** @nullable */
   label: string | null;
   format: string;
-  source: string;
+  source: EntitySubtitleSource;
   storagePath: string;
   sourceFormat: string;
   /** @nullable */

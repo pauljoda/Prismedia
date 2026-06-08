@@ -130,7 +130,7 @@ public static class EntityCardProjector {
                     subtitle.Language,
                     subtitle.Label,
                     subtitle.Format,
-                    subtitle.Source.ToCode(),
+                    subtitle.Source,
                     subtitle.StoragePath,
                     subtitle.SourceFormat,
                     subtitle.SourcePath,

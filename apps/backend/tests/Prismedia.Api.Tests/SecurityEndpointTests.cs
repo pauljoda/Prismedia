@@ -13,6 +13,7 @@ using Prismedia.Contracts.Collections;
 using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Jellyfin;
 using Prismedia.Contracts.Security;
+using EntitySubtitleSource = Prismedia.Domain.Entities.EntitySubtitleSource;
 using RelationshipKind = Prismedia.Domain.Entities.RelationshipKind;
 using Prismedia.Contracts.Videos;
 
@@ -975,7 +976,7 @@ public sealed partial class SecurityEndpointTests : IDisposable {
                 new FilesCapability([new EntityFile("source", "/media/rich-movie.mkv", "video/x-matroska")]),
                 new MarkersCapability([new EntityMarker(Guid.Parse("99999999-9999-9999-9999-999999999999"), "Opening", 12, null)]),
                 new SubtitlesCapability([
-                    new EntitySubtitle(Guid.Parse("12121212-1212-1212-1212-121212121212"), "en", "English SDH", "vtt", "external", "/subs/rich.en.vtt", "srt", "/subs/rich.en.srt", true)
+                    new EntitySubtitle(Guid.Parse("12121212-1212-1212-1212-121212121212"), "en", "English SDH", "vtt", EntitySubtitleSource.Sidecar, "/subs/rich.en.vtt", "srt", "/subs/rich.en.srt", true)
                 ])
             ];
 
