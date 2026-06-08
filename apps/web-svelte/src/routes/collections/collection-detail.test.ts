@@ -71,6 +71,19 @@ describe("collection detail route", () => {
     expect(editorSource.indexOf("Collection Mode")).toBeLessThan(editorSource.indexOf("Rule Editor"));
   });
 
+  it("keeps the collection rule entity selector reachable on narrow screens", async () => {
+    const conditionBuilderSource = await readFile(
+      "src/lib/components/collections/ConditionBuilder.svelte",
+      "utf8",
+    );
+
+    expect(conditionBuilderSource).toContain("Apply to");
+    expect(conditionBuilderSource).toContain("overflow-x-auto");
+    expect(conditionBuilderSource).toContain("[-webkit-overflow-scrolling:touch]");
+    expect(conditionBuilderSource).toContain("inline-flex shrink-0 items-center");
+    expect(conditionBuilderSource).not.toContain('style="padding-left: 3.5rem"');
+  });
+
   it("derives collection hero artwork from member thumbnails when no custom cover exists", async () => {
     const detailSource = await readFile("src/routes/collections/[id]/+page.svelte", "utf8");
 

@@ -71,6 +71,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Fixed
+- The collection rule editor's "Apply to" chips now scroll horizontally on phones, so every media type can be reached and selected without widening the page.
 - Mobile Identify proposal pages no longer show the Back to Search button as a loading action when returning to the existing provider search results.
 - Identified songs now keep their accepted titles after later library scans instead of being renamed back to their filenames.
 - Direct-child series shown through Jellyfin-compatible fallback seasons now keep the same season and episode metadata when a client opens an episode detail page, so Infuse does not fall back to the original flat series shape.
