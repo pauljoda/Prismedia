@@ -320,3 +320,29 @@ transformer. For each enum-shaped DTO field:
 This is a sizable, careful, **per-DTO** effort (~10+ DTOs) with backend + frontend ripple each.
 Highest-value first DTO: **`JobRun`** — it also eliminates the audit's worst frontend
 magic-string offender (the hand-maintained jobs queue/status vocabulary).
+
+- **✅ Enabler — `Prismedia.Contracts` now references `Prismedia.Domain`** (inward dependency on
+  the dependency-free core). This is what lets DTOs carry `[Code]` value objects instead of
+  strings; it unblocks every DTO retype below.
+- **✅ Rail 3 — first DTO proven end-to-end: `JobRun`/`JobQueueCountDto`** (`Type`/`Status` →
+  `JobType`/`JobRunStatus`). The OpenAPI transformer now emits typed enums → orval types
+  `JobRun.type/status` as unions; `JOB_RUN_STATUS` added to `codes.ts`. Wire format unchanged
+  (codec round-trip test); backend + frontend green; non-breaking. Regenerating also fixed
+  **pre-existing client drift on main** (allowNsfw optionality, missing `navLayout*` models) —
+  motivates the **`codes.ts`/generated-client parity CI check** (do next).
+
+### The proven recipe (repeat per DTO)
+1. Retype the contract field `string → <CodecEnum>` (add `using Prismedia.Domain.Entities;`).
+2. Fix the backend mapping/construction site(s) that assign it — usually *delete* a `.ToCode()`
+   (when the source is already typed) or `DecodeAs<T>()` a stored code.
+3. If the enum isn't yet in `codes.ts`, add it to `ENUM_EXPORTS` in `gen-codes.mjs`.
+4. Restart the dev API → `pnpm api:generate` → confirm the generated model is a typed union.
+5. `svelte-check` + unit tests; fix any consumers (many *simplify* — e.g. delete invented vocab).
+
+### Remaining DTO work-list (Prismedia contracts only; Jellyfin DTOs use `JellyfinProtocol`, not codec enums)
+`EntityCard.Kind`/`EntityCardEnvelope.Kind` → `EntityKind` (broadest ripple — the core card
+type); `BookDetail.BookType`/`Format` → `BookType`/`BookFormat`; `EntitySubtitle.Source`/`Format`
+→ `EntitySubtitleSource`/`EntitySubtitleFormat`; `EntityThumbnail.Code` (relationship code) →
+`RelationshipKind`; `CollectionContracts.Mode` → (new `CollectionMode` `[Code]`); credit roles,
+file roles, playback mode, identify states where still stringly-typed. Sequence smallest-ripple
+→ `EntityCard` last (it touches the most frontend).
