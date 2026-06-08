@@ -26,6 +26,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Images and Galleries now have a Feed view alongside Grid and List: a single, full-width column where each item shows at its real shape (tall, wide, or square) with the full title wrapped beneath it. Animated images play inline and keep playing as you scroll — the one on screen plus the next couple above and below — and a tap opens the lightbox, so the feed itself stays purely for browsing. Your filters, sort, and paging all carry over, and the choice is remembered per device.
 
 ### Added
+- Jellyfin-compatible profiles can now independently allow SFW and NSFW content, including NSFW-only or empty-library profiles for client compatibility.
+- Jellyfin-compatible clients now see separate Unwatched Movies and Unwatched Series libraries, so apps like Infuse can browse only titles that have not been watched yet.
 - Multi-grid detail pages now let you collapse child sections such as Sub Galleries, Images, Seasons, Volumes, and Chapters from the section heading. Each section remembers whether you left it open or folded on that device.
 - Settings now has a Transcode Cache card so prepared video never quietly fills your disk. It shows how much space the on-disk transcode/remux cache is using, lets you set a maximum size (10 GB by default; 0 for no limit), and has a one-tap "Clear cache now" button. When the cache passes the limit, the least-recently-played videos are removed automatically — always safe, since they are just re-prepared the next time you play them, and a video you are currently watching is never removed.
 - The Files tab can now upload straight into a folder. The folder's "…" menu (and a watched root's) has a new "Upload files" action that opens a file picker and drops the chosen files into that folder — no need to drag and drop, which is awkward on phones.
@@ -69,7 +71,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Fixed
-- Browser auto-auth now only bootstraps the same-origin API key for local loopback clients, so remote LAN callers cannot get an API cookie just by opening the web UI.
+- Mobile Identify proposal pages no longer show the Back to Search button as a loading action when returning to the existing provider search results.
+- Identified songs now keep their accepted titles after later library scans instead of being renamed back to their filenames.
+- Direct-child series shown through Jellyfin-compatible fallback seasons now keep the same season and episode metadata when a client opens an episode detail page, so Infuse does not fall back to the original flat series shape.
+- Jellyfin-compatible episode thumbnails now resolve through the image endpoint when direct-child series use the fallback season shape, so Infuse can load the episode artwork it is told exists.
+- Identify proposal pages now show a full-width Back to Search button near the top on phones, so mobile reviews can be sent back to provider search without switching devices.
+- Jellyfin unwatched movie libraries now use the same watched state Prismedia records for movie playback, including the playable child video behind a movie, and Infuse's user-scoped watched toggles now sync back into Prismedia instead of falling through to the web app.
+- Audio tracks in shared thumbnail rows, including the dashboard's Recently Watched section, now use their album artwork when the track itself has no cover art.
+- The Identify page no longer shows the Reject action while plugin search is still loading, so you only see rejection controls once there is a queued item or review result to act on.
+- Adding a new watched library now starts scans only for the media kinds enabled on that library, so audio-only, image-only, and books-only libraries no longer kick off an unnecessary video scan.
+- Changing the audio track on stream-copied videos now keeps that choice through the HLS playlist and segment requests, so multi-audio files no longer drift back to the default language while the UI shows another track selected.
 - Lightbox videos now open at their intended size immediately when aspect-ratio metadata is available, and tall videos leave a small vertical inset instead of reaching the viewport edge.
 - Videos in the feed and lightbox now render and play again instead of loading to a black frame, including animated gallery clips whose generated preview file is missing, while still preserving portrait and landscape aspect ratios.
 - Portrait videos opened in the lightbox now keep their natural shape and use the available screen height instead of being squeezed into a wide landscape frame.
@@ -197,6 +208,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated web app manifest and mobile browser metadata for home-screen installation and browser UI theme colors.
 
 ### Fixed
+- Jellyfin clients like Infuse can now browse shows whose episodes sit directly under the show folder with no season folders. Prismedia now presents a compatibility season named after the show and reports those episodes as belonging to that season.
 - Movies and TV episodes are no longer stranded in the catch-all Videos shelf. Episodes whose number is written in parentheses like `Dragon Ball Super (S1E1)` are now recognized and grouped under their show; movies in their own folder are now detected even when the file is named differently from the folder (release names such as `Pokemon.The.First.Movie.1998…` or `sweeney-todd-1982.ia`); and a stray hidden helper folder (for example a `.thumbs` directory left by another app) sitting next to a movie no longer prevents it from being picked up as a movie. Re-scanning your Movies and Shows libraries moves the affected titles into Movies and Series.
 - Fixed Feed view so a clip now fills its space at the item's real shape instead of being squeezed into a fixed widescreen box — a tall video no longer plays as a small letterboxed strip that didn't match its preview.
 - Fixed the image/gallery lightbox on phones: you can now swipe left and right (or down to dismiss) directly on a video, and the thumbnail strip along the bottom sits clear of the phone's home-indicator area with larger, easier-to-tap thumbnails.
