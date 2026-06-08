@@ -339,6 +339,27 @@ magic-string offender (the hand-maintained jobs queue/status vocabulary).
 4. Restart the dev API → `pnpm api:generate` → confirm the generated model is a typed union.
 5. `svelte-check` + unit tests; fix any consumers (many *simplify* — e.g. delete invented vocab).
 
+- **✅ Architecture decision — Contracts may reference Domain.** The enforced boundary
+  (`InfrastructureBoundaryTests`) forbade `Contracts → Domain`, blocking typed DTOs. Resolved
+  by **relaxing the boundary** (user decision): Contracts may carry `[Code]` value objects from
+  the dependency-free Domain core; the tests now assert only that Contracts stays free of
+  Infrastructure/API/EF/ASP.NET (its real "pure data layer" intent). _(The `JobRun` slice had
+  briefly red-lit these tests — a verification gap; now resolved.)_
+- **✅ Batch 1 — `BookDetail`, `CollectionContracts`, `EntityGroup.Code`.** `BookType`/`Format`
+  → `BookType`/`BookFormat`; collection `Mode`/`CoverMode`/`Source` → their enums; `EntityGroup.Code`
+  → `RelationshipKind?`. Mappers simplified (dropped `.ToCode()`); the collection command service
+  no longer hand-parses mode strings; the Jellyfin mapping now compares `RelationshipKind` enums
+  (retiring dead `"genres"`/`"studios"` branches). 853 backend tests + frontend 0 errors.
+
+### Remaining (next session)
+- **Batch 2 — `EntitySubtitle`**: `Source` → `EntitySubtitleSource` (exists); `Format`/`SourceFormat`
+  need a **new `SubtitleFormat` `[Code]` enum** (vtt/srt/ass/ssa) + `ENUM_EXPORTS`.
+- **Batch 3 — the `EntityKind` mega-batch** (highest ripple): `EntityCard`/`EntityDetail`/
+  `EntityGroup.Kind`, `CollectionItemReference`/`CollectionRulePreviewItem`/`CollectionItemDetail.EntityType`,
+  the `ByType` dictionary keys → `EntityKind`. `card.kind` is consumed pervasively on the
+  frontend, so expect a wider svelte-check ripple — do it as its own focused pass.
+- **Guardrail — `codes.ts`/generated-client parity check** (the drift finding motivates it).
+
 ### Remaining DTO work-list (Prismedia contracts only; Jellyfin DTOs use `JellyfinProtocol`, not codec enums)
 `EntityCard.Kind`/`EntityCardEnvelope.Kind` → `EntityKind` (broadest ripple — the core card
 type); `BookDetail.BookType`/`Format` → `BookType`/`BookFormat`; `EntitySubtitle.Source`/`Format`
