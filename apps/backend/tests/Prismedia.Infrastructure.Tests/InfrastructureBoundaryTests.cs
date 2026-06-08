@@ -78,19 +78,24 @@ public sealed class InfrastructureBoundaryTests {
     }
 
     [Fact]
-    public void ContractProjectDoesNotReferenceDomain() {
+    public void ContractProjectStaysDataOnly() {
+        // Contracts may reference the dependency-free Domain core so DTOs can carry [Code]
+        // value objects (typed enums) instead of stringly-typed boundary fields — Domain has no
+        // HTTP/EF/serialization dependencies, so this keeps Contracts a pure data layer. It must
+        // stay free of Infrastructure, API, EF Core, and ASP.NET so it remains transport- and
+        // persistence-agnostic.
         var projectFile = ReadRepoFile("apps/backend/src/Prismedia.Contracts/Prismedia.Contracts.csproj");
-        Assert.DoesNotContain("Prismedia.Domain", projectFile, StringComparison.Ordinal);
+        Assert.DoesNotContain("Prismedia.Infrastructure", projectFile, StringComparison.Ordinal);
+        Assert.DoesNotContain("Prismedia.Api", projectFile, StringComparison.Ordinal);
+        Assert.DoesNotContain("Microsoft.EntityFrameworkCore", projectFile, StringComparison.Ordinal);
+        Assert.DoesNotContain("Microsoft.AspNetCore", projectFile, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void ContractSourceDoesNotUseDomainNamespaces() {
-        var actual = FilesContaining(
-                "apps/backend/src/Prismedia.Contracts",
-                "Prismedia.Domain")
-            .ToArray();
-
-        Assert.Empty(actual);
+    public void ContractSourceStaysFreeOfOuterLayers() {
+        string[] forbidden = ["Prismedia.Infrastructure", "Prismedia.Api", "Microsoft.EntityFrameworkCore"];
+        Assert.All(forbidden, namespacePrefix =>
+            Assert.Empty(FilesContaining("apps/backend/src/Prismedia.Contracts", namespacePrefix)));
     }
 
     [Fact]
