@@ -12,7 +12,7 @@ internal static class JobFailureEndpoints {
             JobService jobs,
             CancellationToken cancellationToken) => {
                 if (!JobRouteValues.TryDecodeJobType(type, out var jobType)) {
-                    return Results.BadRequest(new ApiProblem("unknown_job_type", $"Unknown job type '{type}'."));
+                    return Results.BadRequest(new ApiProblem(ApiProblemCodes.UnknownJobType, $"Unknown job type '{type}'."));
                 }
 
                 return Results.Ok(await jobs.ClearFailuresAsync(jobType, cancellationToken));

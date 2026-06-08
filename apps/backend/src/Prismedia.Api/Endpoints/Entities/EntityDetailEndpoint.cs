@@ -63,11 +63,11 @@ internal static class EntityDetailEndpoint {
         try {
             result = await metadata.ApplyPatchAsync(id, request, expectedKind, cancellationToken);
         } catch (ArgumentException ex) {
-            return Results.BadRequest(new ApiProblem("invalid_entity_metadata_patch", ex.Message));
+            return Results.BadRequest(new ApiProblem(ApiProblemCodes.InvalidEntityMetadataPatch, ex.Message));
         }
 
         if (result is EntityMetadataPatchResult.NotFound or EntityMetadataPatchResult.KindMismatch) {
-            return Results.NotFound(new ApiProblem("entity_not_found", $"Entity '{id}' was not found."));
+            return Results.NotFound(new ApiProblem(ApiProblemCodes.EntityNotFound, $"Entity '{id}' was not found."));
         }
 
         return expectedKind is null

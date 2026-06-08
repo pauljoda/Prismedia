@@ -118,7 +118,7 @@ if (File.Exists(staticIndexPath)) {
         Results.Content(await File.ReadAllTextAsync(staticIndexPath), MediaContentTypes.Html));
 } else {
     app.MapFallback(() => Results.NotFound(new ApiProblem(
-        "not_found",
+        ApiProblemCodes.NotFound,
         "The requested Prismedia route was not found.")));
 }
 

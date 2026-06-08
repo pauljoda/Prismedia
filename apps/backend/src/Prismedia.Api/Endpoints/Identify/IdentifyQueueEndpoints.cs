@@ -27,7 +27,7 @@ internal static class IdentifyQueueEndpoints {
                 try {
                     return Results.Ok(await queue.AddAsync(entityId, cancellationToken));
                 } catch (KeyNotFoundException ex) {
-                    return Results.NotFound(new ApiProblem("entity_not_found", ex.Message));
+                    return Results.NotFound(new ApiProblem(ApiProblemCodes.EntityNotFound, ex.Message));
                 }
             })
             .WithName("AddIdentifyQueueItem")
@@ -41,7 +41,7 @@ internal static class IdentifyQueueEndpoints {
             CancellationToken cancellationToken) => {
                 var item = await queue.GetAsync(entityId, cancellationToken);
                 return item is null
-                    ? Results.NotFound(new ApiProblem("identify_queue_item_not_found", $"Entity '{entityId}' is not in the identify queue."))
+                    ? Results.NotFound(new ApiProblem(ApiProblemCodes.IdentifyQueueItemNotFound, $"Entity '{entityId}' is not in the identify queue."))
                     : Results.Ok(item);
             })
             .WithName("GetIdentifyQueueItem")
@@ -63,7 +63,7 @@ internal static class IdentifyQueueEndpoints {
                         NsfwVisibility.ShouldHide(hideNsfw, httpContext),
                         cancellationToken));
                 } catch (KeyNotFoundException ex) {
-                    return Results.NotFound(new ApiProblem("entity_not_found", ex.Message));
+                    return Results.NotFound(new ApiProblem(ApiProblemCodes.EntityNotFound, ex.Message));
                 }
             })
             .WithName("SearchIdentifyQueueItem")
@@ -79,11 +79,11 @@ internal static class IdentifyQueueEndpoints {
                 try {
                     return Results.Ok(await queue.ApplyAsync(entityId, request, cancellationToken));
                 } catch (InvalidOperationException ex) {
-                    return Results.BadRequest(new ApiProblem("identify_queue_apply_invalid", ex.Message));
+                    return Results.BadRequest(new ApiProblem(ApiProblemCodes.IdentifyQueueApplyInvalid, ex.Message));
                 } catch (ArgumentException ex) {
-                    return Results.BadRequest(new ApiProblem("identify_queue_apply_invalid", ex.Message));
+                    return Results.BadRequest(new ApiProblem(ApiProblemCodes.IdentifyQueueApplyInvalid, ex.Message));
                 } catch (KeyNotFoundException ex) {
-                    return Results.NotFound(new ApiProblem("entity_not_found", ex.Message));
+                    return Results.NotFound(new ApiProblem(ApiProblemCodes.EntityNotFound, ex.Message));
                 }
             })
             .WithName("ApplyIdentifyQueueItem")
@@ -100,9 +100,9 @@ internal static class IdentifyQueueEndpoints {
                 try {
                     return Results.Ok(await queue.SaveProposalAsync(entityId, request.Proposal, cancellationToken));
                 } catch (InvalidOperationException ex) {
-                    return Results.BadRequest(new ApiProblem("identify_queue_proposal_invalid", ex.Message));
+                    return Results.BadRequest(new ApiProblem(ApiProblemCodes.IdentifyQueueProposalInvalid, ex.Message));
                 } catch (KeyNotFoundException ex) {
-                    return Results.NotFound(new ApiProblem("entity_not_found", ex.Message));
+                    return Results.NotFound(new ApiProblem(ApiProblemCodes.EntityNotFound, ex.Message));
                 }
             })
             .WithName("SaveIdentifyQueueProposal")
@@ -117,7 +117,7 @@ internal static class IdentifyQueueEndpoints {
             IIdentifyApplyProgressStore progress) => {
                 var snapshot = progress.Get(progressId);
                 if (snapshot is null || snapshot.EntityId != entityId) {
-                    return Results.NotFound(new ApiProblem("identify_apply_progress_not_found", $"Apply progress '{progressId}' was not found."));
+                    return Results.NotFound(new ApiProblem(ApiProblemCodes.IdentifyApplyProgressNotFound, $"Apply progress '{progressId}' was not found."));
                 }
 
                 return Results.Ok(snapshot);
@@ -134,10 +134,10 @@ internal static class IdentifyQueueEndpoints {
                 try {
                     var item = await queue.DeleteAsync(entityId, cancellationToken);
                     return item is null
-                        ? Results.NotFound(new ApiProblem("identify_queue_item_not_found", $"Entity '{entityId}' is not in the identify queue."))
+                        ? Results.NotFound(new ApiProblem(ApiProblemCodes.IdentifyQueueItemNotFound, $"Entity '{entityId}' is not in the identify queue."))
                         : Results.Ok(item);
                 } catch (KeyNotFoundException ex) {
-                    return Results.NotFound(new ApiProblem("entity_not_found", ex.Message));
+                    return Results.NotFound(new ApiProblem(ApiProblemCodes.EntityNotFound, ex.Message));
                 }
             })
             .WithName("DeleteIdentifyQueueItem")

@@ -40,7 +40,7 @@ public static partial class JellyfinCompatibilityEndpoints {
         CancellationToken cancellationToken) {
         var user = await ResolveUserAsync(httpContext, security, userId, cancellationToken);
         if (user is null) {
-            return Results.NotFound(new ApiProblem("jellyfin_user_not_found", "No Jellyfin user was found."));
+            return Results.NotFound(new ApiProblem(ApiProblemCodes.JellyfinUserNotFound, "No Jellyfin user was found."));
         }
 
         var options = catalog.GetUserViews(user.ServerId)
@@ -89,7 +89,7 @@ public static partial class JellyfinCompatibilityEndpoints {
             NsfwVisibility.JellyfinContent(httpContext),
             cancellationToken);
         return item is null
-            ? Results.NotFound(new ApiProblem("jellyfin_item_not_found", $"Item '{itemId}' was not found."))
+            ? Results.NotFound(new ApiProblem(ApiProblemCodes.JellyfinItemNotFound, $"Item '{itemId}' was not found."))
             : Results.Ok(item);
     }
 

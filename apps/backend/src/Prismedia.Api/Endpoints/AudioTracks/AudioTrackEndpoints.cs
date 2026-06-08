@@ -49,7 +49,7 @@ public static class AudioTrackEndpoints {
         CancellationToken cancellationToken) {
         var stream = await streams.GetStreamAsync(id, cancellationToken);
         if (stream is null) {
-            return Results.NotFound(new ApiProblem("audio_stream_not_found", $"Audio stream '{id}' was not found."));
+            return Results.NotFound(new ApiProblem(ApiProblemCodes.AudioStreamNotFound, $"Audio stream '{id}' was not found."));
         }
 
         if (!stream.DirectPlayable) {

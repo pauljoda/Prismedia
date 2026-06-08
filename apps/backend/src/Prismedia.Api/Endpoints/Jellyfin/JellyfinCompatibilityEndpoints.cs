@@ -104,7 +104,7 @@ public static partial class JellyfinCompatibilityEndpoints {
             CancellationToken cancellationToken) => {
             var user = await ResolveUserAsync(httpContext, security, null, cancellationToken);
             return user is null
-                ? Results.NotFound(new ApiProblem("jellyfin_user_not_found", "No Jellyfin user was found."))
+                ? Results.NotFound(new ApiProblem(ApiProblemCodes.JellyfinUserNotFound, "No Jellyfin user was found."))
                 : Results.Ok(user);
         })
             .WithTags("Jellyfin Users")
@@ -119,7 +119,7 @@ public static partial class JellyfinCompatibilityEndpoints {
             CancellationToken cancellationToken) => {
             var user = await ResolveUserAsync(httpContext, security, userId, cancellationToken);
             return user is null
-                ? Results.NotFound(new ApiProblem("jellyfin_user_not_found", $"User '{userId}' was not found."))
+                ? Results.NotFound(new ApiProblem(ApiProblemCodes.JellyfinUserNotFound, $"User '{userId}' was not found."))
                 : Results.Ok(user);
         })
             .WithTags("Jellyfin Users")
@@ -154,7 +154,7 @@ public static partial class JellyfinCompatibilityEndpoints {
             var profile = (await security.ListProfilesAsync(cancellationToken)).Items
                 .FirstOrDefault(item => item.Id == userId && item.Enabled);
             return profile is null
-                ? Results.NotFound(new ApiProblem("jellyfin_user_not_found", $"User '{userId}' was not found."))
+                ? Results.NotFound(new ApiProblem(ApiProblemCodes.JellyfinUserNotFound, $"User '{userId}' was not found."))
                 : await AuthenticateAsync(profile.Username, pw, httpContext, security, cancellationToken);
         })
             .WithTags("Jellyfin Users")
@@ -451,13 +451,13 @@ public static partial class JellyfinCompatibilityEndpoints {
 
         if (result.IsThrottled) {
             return Results.Json(
-                new ApiProblem("auth_rate_limited", "Too many failed authentication attempts."),
+                new ApiProblem(ApiProblemCodes.AuthRateLimited, "Too many failed authentication attempts."),
                 statusCode: StatusCodes.Status429TooManyRequests);
         }
 
         if (!result.Succeeded || result.Profile is null || result.Session is null || result.AccessToken is null) {
             return Results.Json(
-                new ApiProblem("jellyfin_auth_failed", "Invalid username or API key."),
+                new ApiProblem(ApiProblemCodes.JellyfinAuthFailed, "Invalid username or API key."),
                 statusCode: StatusCodes.Status401Unauthorized);
         }
 
@@ -485,12 +485,12 @@ public static partial class JellyfinCompatibilityEndpoints {
             NsfwVisibility.JellyfinContent(httpContext),
             cancellationToken);
         if (image is null) {
-            return Results.NotFound(new ApiProblem("jellyfin_image_not_found", $"Image '{imageType}' for item '{itemId}' was not found."));
+            return Results.NotFound(new ApiProblem(ApiProblemCodes.JellyfinImageNotFound, $"Image '{imageType}' for item '{itemId}' was not found."));
         }
 
         var file = await files.ResolveAsync(image, cancellationToken);
         if (file is null) {
-            return Results.NotFound(new ApiProblem("jellyfin_image_not_found", $"Image '{imageType}' for item '{itemId}' was not found."));
+            return Results.NotFound(new ApiProblem(ApiProblemCodes.JellyfinImageNotFound, $"Image '{imageType}' for item '{itemId}' was not found."));
         }
 
         if (file.RedirectUrl is not null) {

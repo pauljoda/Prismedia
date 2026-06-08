@@ -82,7 +82,7 @@ internal static class EntityListEndpoint {
             return true;
         }
 
-        error = Results.BadRequest(new ApiProblem("invalid_entity_kind", $"Entity kind '{value}' is not recognized."));
+        error = Results.BadRequest(new ApiProblem(ApiProblemCodes.InvalidEntityKind, $"Entity kind '{value}' is not recognized."));
         return false;
     }
 }

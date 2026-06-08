@@ -50,7 +50,7 @@ internal static class PrismediaAuthentication {
 
             var token = ExtractToken(context.Request);
             if (string.IsNullOrWhiteSpace(token)) {
-                await WriteUnauthorizedAsync(context, "missing_api_key");
+                await WriteUnauthorizedAsync(context, ApiProblemCodes.MissingApiKey);
                 return;
             }
 
@@ -76,7 +76,7 @@ internal static class PrismediaAuthentication {
             }
 
             if (!validation.IsValid) {
-                await WriteUnauthorizedAsync(context, "invalid_api_key");
+                await WriteUnauthorizedAsync(context, ApiProblemCodes.InvalidApiKey);
                 return;
             }
 
@@ -312,6 +312,6 @@ internal static class PrismediaAuthentication {
 
     private static async Task WriteThrottledAsync(HttpContext context) {
         context.Response.StatusCode = StatusCodes.Status429TooManyRequests;
-        await context.Response.WriteAsJsonAsync(new ApiProblem("auth_rate_limited", "Too many failed authentication attempts."), context.RequestAborted);
+        await context.Response.WriteAsJsonAsync(new ApiProblem(ApiProblemCodes.AuthRateLimited, "Too many failed authentication attempts."), context.RequestAborted);
     }
 }

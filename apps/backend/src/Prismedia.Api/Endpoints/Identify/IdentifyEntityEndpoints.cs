@@ -24,7 +24,7 @@ internal static class IdentifyEntityEndpoints {
                     cancellationToken);
                 return response.Ok
                     ? Results.Ok(response.Result)
-                    : Results.BadRequest(new ApiProblem("identify_failed", response.Error ?? "Identify failed."));
+                    : Results.BadRequest(new ApiProblem(ApiProblemCodes.IdentifyFailed, response.Error ?? "Identify failed."));
             })
             .WithName("IdentifyEntity")
             .WithSummary("Runs one transient metadata identify lookup for an entity.")
@@ -49,11 +49,11 @@ internal static class IdentifyEntityEndpoints {
                         expectedKind: null,
                         cancellationToken);
                 } catch (ArgumentException ex) {
-                    return Results.BadRequest(new ApiProblem("invalid_entity_metadata_patch", ex.Message));
+                    return Results.BadRequest(new ApiProblem(ApiProblemCodes.InvalidEntityMetadataPatch, ex.Message));
                 }
 
                 if (result is EntityMetadataPatchResult.NotFound or EntityMetadataPatchResult.KindMismatch) {
-                    return Results.NotFound(new ApiProblem("entity_not_found", $"Entity '{entityId}' was not found."));
+                    return Results.NotFound(new ApiProblem(ApiProblemCodes.EntityNotFound, $"Entity '{entityId}' was not found."));
                 }
 
                 return Results.NoContent();

@@ -22,7 +22,7 @@ internal static class UpdateCheckEndpoints {
             var path = ResolveChangelogPath(configuration, environment.ContentRootPath);
             if (path is null) {
                 return Results.NotFound(new ApiProblem(
-                    "changelog_not_found",
+                    ApiProblemCodes.ChangelogNotFound,
                     "The Prismedia changelog could not be found on this host."));
             }
 

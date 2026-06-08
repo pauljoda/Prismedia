@@ -33,7 +33,7 @@ public static class VideoEndpoints {
         var subtitle = await subtitles.GetSubtitleAsync(id, trackId, cancellationToken);
         if (subtitle is null) {
             return Results.NotFound(new ApiProblem(
-                "video_subtitle_not_found",
+                ApiProblemCodes.VideoSubtitleNotFound,
                 $"Subtitle track '{trackId}' for video '{id}' was not found."));
         }
 
@@ -48,7 +48,7 @@ public static class VideoEndpoints {
         var subtitle = await subtitles.GetSubtitleSourceAsync(id, trackId, cancellationToken);
         if (subtitle is null) {
             return Results.NotFound(new ApiProblem(
-                "video_subtitle_source_not_found",
+                ApiProblemCodes.VideoSubtitleSourceNotFound,
                 $"Subtitle source '{trackId}' for video '{id}' was not found."));
         }
 

@@ -11,12 +11,12 @@ internal static class FilesUploadEndpoint {
             FilesService files,
             CancellationToken cancellationToken) => {
             if (!request.HasFormContentType) {
-                return Results.BadRequest(new ApiProblem("invalid_upload", "Files upload expects multipart form data."));
+                return Results.BadRequest(new ApiProblem(ApiProblemCodes.InvalidUpload, "Files upload expects multipart form data."));
             }
 
             var form = await request.ReadFormAsync(cancellationToken);
             if (!Guid.TryParse(form["rootId"], out var rootId)) {
-                return Results.BadRequest(new ApiProblem("invalid_upload", "Files upload requires a rootId."));
+                return Results.BadRequest(new ApiProblem(ApiProblemCodes.InvalidUpload, "Files upload requires a rootId."));
             }
 
             var targetPath = form["targetPath"].FirstOrDefault();
