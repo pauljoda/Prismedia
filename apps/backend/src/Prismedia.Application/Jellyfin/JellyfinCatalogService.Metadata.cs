@@ -5,6 +5,7 @@ using Prismedia.Application.Entities;
 using Prismedia.Contracts.Collections;
 using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Jellyfin;
+using Prismedia.Domain.Entities;
 using Prismedia.Contracts.Media;
 using Prismedia.Contracts.Series;
 using Prismedia.Contracts.Videos;
@@ -102,14 +103,12 @@ public sealed partial class JellyfinCatalogService {
         RelationshipPairs(item, group =>
             group.Kind.Equals("tag", StringComparison.OrdinalIgnoreCase) ||
             group.Kind.Equals("genre", StringComparison.OrdinalIgnoreCase) ||
-            group.Code?.Equals("tags", StringComparison.OrdinalIgnoreCase) == true ||
-            group.Code?.Equals("genres", StringComparison.OrdinalIgnoreCase) == true);
+            group.Code == RelationshipKind.Tags);
 
     private static IReadOnlyList<JellyfinNameGuidPairDto> StudioItems(IEntityCard item) =>
         RelationshipPairs(item, group =>
             group.Kind.Equals("studio", StringComparison.OrdinalIgnoreCase) ||
-            group.Code?.Equals("studio", StringComparison.OrdinalIgnoreCase) == true ||
-            group.Code?.Equals("studios", StringComparison.OrdinalIgnoreCase) == true);
+            group.Code == RelationshipKind.Studio);
 
     private static IReadOnlyList<JellyfinNameGuidPairDto> RelationshipPairs(
         IEntityCard item,
@@ -165,7 +164,7 @@ public sealed partial class JellyfinCatalogService {
         };
 
     private static string PersonType(string? role, EntityGroup group) {
-        var code = EmptyAsNull(role) ?? EmptyAsNull(group.Code) ?? group.Label;
+        var code = EmptyAsNull(role) ?? group.Code?.ToCode() ?? group.Label;
         return code.Trim().ToLowerInvariant() switch {
             "actor" or "cast" or "performer" or "performers" => "Actor",
             "composer" => "Composer",
@@ -189,10 +188,10 @@ public sealed partial class JellyfinCatalogService {
             return TitleLabel(credit.Role);
         }
 
-        if (!string.IsNullOrWhiteSpace(group.Code) &&
-            !group.Code.Equals("cast", StringComparison.OrdinalIgnoreCase) &&
-            !group.Code.Equals("credits", StringComparison.OrdinalIgnoreCase)) {
-            return TitleLabel(group.Code);
+        if (group.Code is { } relationshipCode &&
+            relationshipCode != RelationshipKind.Cast &&
+            relationshipCode != RelationshipKind.Credits) {
+            return TitleLabel(relationshipCode.ToCode());
         }
 
         return type.Equals("Actor", StringComparison.OrdinalIgnoreCase) ? null : type;
@@ -322,7 +321,7 @@ public sealed partial class JellyfinCatalogService {
         urls.Add(new JellyfinExternalUrlDto(name, value));
     }
 
-    private static bool IsTrailerUrl(EntityUrl url) =>
+    private static bool IsTrailerUrl(Contracts.Entities.EntityUrl url) =>
         url.Label?.Contains("trailer", StringComparison.OrdinalIgnoreCase) == true ||
         url.Value.Contains("trailer", StringComparison.OrdinalIgnoreCase) ||
         url.Value.Contains("youtube.com", StringComparison.OrdinalIgnoreCase) ||

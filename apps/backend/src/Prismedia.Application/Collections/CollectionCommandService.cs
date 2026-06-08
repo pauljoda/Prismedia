@@ -296,19 +296,10 @@ public sealed class CollectionCommandService(
             return false;
         }
 
-        var modeCode = string.IsNullOrWhiteSpace(request.Mode) ? CollectionMode.Manual.ToCode() : request.Mode.Trim();
-        if (!modeCode.TryDecodeAs<CollectionMode>(out var mode)) {
-            message = $"Unknown collection mode '{request.Mode}'.";
-            return false;
-        }
-
-        var coverModeCode = string.IsNullOrWhiteSpace(request.CoverMode)
-            ? CollectionCoverMode.Mosaic.ToCode()
-            : request.CoverMode.Trim();
-        if (!coverModeCode.TryDecodeAs<CollectionCoverMode>(out var coverMode)) {
-            message = $"Unknown collection cover mode '{request.CoverMode}'.";
-            return false;
-        }
+        // Mode/CoverMode are decoded at the deserialization boundary now (the wire still carries
+        // the string code); an unknown value fails request binding rather than reaching here.
+        var mode = request.Mode ?? CollectionMode.Manual;
+        var coverMode = request.CoverMode ?? CollectionCoverMode.Mosaic;
 
         var ruleTreeJson = NormalizeRuleTree(mode, request.RuleTreeJson);
         if (!ValidateRuleTree(ruleTreeJson, out message)) {

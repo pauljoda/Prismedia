@@ -60,7 +60,7 @@ public sealed class CollectionItemReadService(
                     row.CollectionEntityId,
                     row.KindCode,
                     row.ItemEntityId,
-                    row.Source.ToCode(),
+                    row.Source,
                     row.SortOrder,
                     row.AddedAt,
                     thumbnail)

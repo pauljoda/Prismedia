@@ -85,11 +85,11 @@ public sealed class EfEntityReadServiceTests {
         var detail = Assert.IsType<VideoDetail>(
             await service.GetDetailAsync(videoId, EntityKindRegistry.Video.Code, hideNsfw: false, CancellationToken.None));
 
-        var cast = Assert.Single(detail.Relationships, group => group.Code == "cast");
+        var cast = Assert.Single(detail.Relationships, group => group.Code == RelationshipKind.Cast);
         Assert.Equal(EntityKindRegistry.Person.Code, cast.Kind);
         Assert.Equal(personId, Assert.Single(cast.Entities).Id);
-        Assert.Contains(detail.Relationships, group => group.Code == "studio" && group.Kind == EntityKindRegistry.Studio.Code);
-        Assert.Contains(detail.Relationships, group => group.Code == "tags" && group.Kind == EntityKindRegistry.Tag.Code);
+        Assert.Contains(detail.Relationships, group => group.Code == RelationshipKind.Studio && group.Kind == EntityKindRegistry.Studio.Code);
+        Assert.Contains(detail.Relationships, group => group.Code == RelationshipKind.Tags && group.Kind == EntityKindRegistry.Tag.Code);
         var metadata = Assert.Single(detail.CreditMetadata);
         Assert.Equal(personId, metadata.PersonId);
         Assert.Equal("guest", metadata.Role);
@@ -961,7 +961,7 @@ public sealed class EfEntityReadServiceTests {
         var detail = Assert.IsType<VideoDetail>(
             await service.GetDetailAsync(videoId, EntityKindRegistry.Video.Code, hideNsfw: true, CancellationToken.None));
 
-        var cast = Assert.Single(detail.Relationships, group => group.Code == "cast");
+        var cast = Assert.Single(detail.Relationships, group => group.Code == RelationshipKind.Cast);
         Assert.Equal(safePersonId, Assert.Single(cast.Entities).Id);
         Assert.DoesNotContain(detail.CreditMetadata, credit => credit.PersonId == nsfwPersonId);
     }

@@ -5,11 +5,11 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { EntityThumbnail } from './entityThumbnail';
+import type { RelationshipKind } from './relationshipKind';
 
 export interface EntityGroup {
   kind: string;
   label: string;
   entities: EntityThumbnail[];
-  /** @nullable */
-  code?: string | null;
+  code?: null | RelationshipKind;
 }

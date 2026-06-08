@@ -13,6 +13,7 @@ using Prismedia.Contracts.Collections;
 using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Jellyfin;
 using Prismedia.Contracts.Security;
+using RelationshipKind = Prismedia.Domain.Entities.RelationshipKind;
 using Prismedia.Contracts.Videos;
 
 namespace Prismedia.Api.Tests;
@@ -980,13 +981,13 @@ public sealed partial class SecurityEndpointTests : IDisposable {
 
         private static IReadOnlyList<EntityGroup> Relationships() =>
             [
-                new EntityGroup("person", "Cast", [Thumbnail(ActorId, "person", "Actor One", null, null)]) { Code = "cast" },
-                new EntityGroup("person", "Credits", [Thumbnail(DirectorId, "person", "Director One", null, null)]) { Code = "credits" },
-                new EntityGroup("studio", "Studios", [Thumbnail(StudioId, "studio", "Studio One", null, null)]) { Code = "studio" },
+                new EntityGroup("person", "Cast", [Thumbnail(ActorId, "person", "Actor One", null, null)]) { Code = RelationshipKind.Cast },
+                new EntityGroup("person", "Credits", [Thumbnail(DirectorId, "person", "Director One", null, null)]) { Code = RelationshipKind.Credits },
+                new EntityGroup("studio", "Studios", [Thumbnail(StudioId, "studio", "Studio One", null, null)]) { Code = RelationshipKind.Studio },
                 new EntityGroup("tag", "Tags", [
                     Thumbnail(AdventureTagId, "tag", "Adventure", null, null),
                     Thumbnail(CozyTagId, "tag", "Cozy", null, null)
-                ]) { Code = "tags" }
+                ]) { Code = RelationshipKind.Tags }
             ];
 
         private static EntityThumbnail Thumbnail(Guid id, string kind, string title, Guid? parentId, int? sortOrder) =>

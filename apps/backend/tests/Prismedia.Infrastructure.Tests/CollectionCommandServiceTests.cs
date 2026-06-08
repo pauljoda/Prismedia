@@ -21,9 +21,9 @@ public sealed class CollectionCommandServiceTests {
             new CollectionWriteRequest(
                 "Favorites",
                 "Pinned media",
-                "hybrid",
+                CollectionMode.Hybrid,
                 EmptyRuleJson,
-                "mosaic",
+                CollectionCoverMode.Mosaic,
                 null,
                 true),
             CancellationToken.None);
@@ -31,7 +31,7 @@ public sealed class CollectionCommandServiceTests {
         Assert.Equal(CollectionCommandStatus.Succeeded, result.Status);
         Assert.NotNull(result.Collection);
         Assert.Equal("Favorites", result.Collection.Title);
-        Assert.Equal("hybrid", result.Collection.Mode);
+        Assert.Equal(CollectionMode.Hybrid, result.Collection.Mode);
 
         var entity = Assert.Single(db.Entities);
         Assert.Equal(EntityKindRegistry.Collection.Code, entity.KindCode);
@@ -41,9 +41,9 @@ public sealed class CollectionCommandServiceTests {
     }
 
     [Theory]
-    [InlineData("dynamic")]
-    [InlineData("hybrid")]
-    public async Task CreateAsyncAcceptsValidRuleCollections(string mode) {
+    [InlineData(CollectionMode.Dynamic)]
+    [InlineData(CollectionMode.Hybrid)]
+    public async Task CreateAsyncAcceptsValidRuleCollections(CollectionMode mode) {
         await using var db = CreateContext();
         var matchedId = SeedEntity(db, EntityKindRegistry.Video.Code, "Rule Match");
         await db.SaveChangesAsync();
@@ -59,7 +59,7 @@ public sealed class CollectionCommandServiceTests {
                 null,
                 mode,
                 """{"type":"group","operator":"and","children":[{"type":"condition","entityTypes":["video"],"field":"title","operator":"contains","value":"Rule"}]}""",
-                "mosaic",
+                CollectionCoverMode.Mosaic,
                 null,
                 false),
             CancellationToken.None);
@@ -86,9 +86,9 @@ public sealed class CollectionCommandServiceTests {
             new CollectionWriteRequest(
                 "Bad Rules",
                 null,
-                "dynamic",
+                CollectionMode.Dynamic,
                 ruleTreeJson,
-                "mosaic",
+                CollectionCoverMode.Mosaic,
                 null,
                 false),
             CancellationToken.None);
@@ -109,9 +109,9 @@ public sealed class CollectionCommandServiceTests {
             new CollectionWriteRequest(
                 "Rule Picks",
                 null,
-                "dynamic",
+                CollectionMode.Dynamic,
                 EmptyRuleJson,
-                "item",
+                CollectionCoverMode.Item,
                 null,
                 false),
             CancellationToken.None);
@@ -142,9 +142,9 @@ public sealed class CollectionCommandServiceTests {
             new CollectionWriteRequest(
                 "Rule Picks",
                 null,
-                "dynamic",
+                CollectionMode.Dynamic,
                 """{"type":"group","operator":"and","children":[{"type":"condition","entityTypes":[],"field":"title","operator":"contains","value":"Chair"}]}""",
-                "mosaic",
+                CollectionCoverMode.Mosaic,
                 null,
                 false),
             CancellationToken.None);
@@ -415,9 +415,9 @@ public sealed class CollectionCommandServiceTests {
                 Capabilities = [],
                 ChildrenByKind = [],
                 Relationships = [],
-                Mode = detail.Mode.ToCode(),
+                Mode = detail.Mode,
                 RuleTreeJson = detail.RuleTreeJson,
-                CoverMode = detail.CoverMode.ToCode(),
+                CoverMode = detail.CoverMode,
                 CoverItemId = detail.CoverItemEntityId,
                 LastRefreshedAt = detail.LastRefreshedAt,
             };

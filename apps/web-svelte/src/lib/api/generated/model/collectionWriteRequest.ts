@@ -4,17 +4,17 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { CollectionCoverMode } from './collectionCoverMode';
+import type { CollectionMode } from './collectionMode';
 
 export interface CollectionWriteRequest {
   title: string;
   /** @nullable */
   description: string | null;
-  /** @nullable */
-  mode: string | null;
+  mode: null | CollectionMode;
   /** @nullable */
   ruleTreeJson: string | null;
-  /** @nullable */
-  coverMode: string | null;
+  coverMode: null | CollectionCoverMode;
   /** @nullable */
   coverItemId: string | null;
   /** @nullable */

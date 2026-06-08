@@ -54,9 +54,9 @@ internal sealed class CollectionKindMapper(PrismediaDbContext db) : IEntityKindM
                 Capabilities = card.Capabilities,
                 ChildrenByKind = card.ChildrenByKind,
                 Relationships = card.Relationships,
-                Mode = collection.Mode.ToCode(),
+                Mode = collection.Mode,
                 RuleTreeJson = collection.RuleTreeJson,
-                CoverMode = collection.CoverMode.ToCode(),
+                CoverMode = collection.CoverMode,
                 CoverItemId = collection.CoverItemId,
                 LastRefreshedAt = collection.LastRefreshedAt,
             }

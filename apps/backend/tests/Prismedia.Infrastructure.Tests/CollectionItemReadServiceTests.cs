@@ -35,7 +35,7 @@ public sealed class CollectionItemReadServiceTests {
             first => {
                 Assert.Equal(firstId, first.EntityId);
                 Assert.Equal("video", first.EntityType);
-                Assert.Equal("manual", first.Source);
+                Assert.Equal(CollectionItemSource.Manual, first.Source);
                 Assert.Equal("First", first.Entity.Title);
             },
             second => {

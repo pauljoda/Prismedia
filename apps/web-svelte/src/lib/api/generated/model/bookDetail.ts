@@ -4,12 +4,14 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { BookFormat } from './bookFormat';
+import type { BookType } from './bookType';
 import type { EntityCapability } from './entityCapability';
 import type { EntityGroup } from './entityGroup';
 
 export interface BookDetail {
-  bookType: string;
-  format: string;
+  bookType: BookType;
+  format: BookFormat;
   /** @nullable */
   coverPageId: string | null;
   id: string;

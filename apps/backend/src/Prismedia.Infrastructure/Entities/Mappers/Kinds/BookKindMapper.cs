@@ -50,8 +50,8 @@ internal sealed class BookKindMapper(PrismediaDbContext db) : IEntityKindMapper 
                 Capabilities = card.Capabilities,
                 ChildrenByKind = card.ChildrenByKind,
                 Relationships = card.Relationships,
-                BookType = book.BookType.ToCode(),
-                Format = book.Format.ToCode(),
+                BookType = book.BookType,
+                Format = book.Format,
                 CoverPageId = book.CoverPageId,
             }
             : card;

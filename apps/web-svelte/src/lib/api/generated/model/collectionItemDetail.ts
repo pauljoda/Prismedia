@@ -4,6 +4,7 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { CollectionItemSource } from './collectionItemSource';
 import type { EntityThumbnail } from './entityThumbnail';
 
 export interface CollectionItemDetail {
@@ -11,7 +12,7 @@ export interface CollectionItemDetail {
   collectionId: string;
   entityType: string;
   entityId: string;
-  source: string;
+  source: CollectionItemSource;
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
   sortOrder: number | string;
   addedAt: string;

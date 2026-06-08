@@ -1,3 +1,5 @@
+using Prismedia.Domain.Entities;
+
 namespace Prismedia.Contracts.Entities;
 
 /// <summary>Compact metadata chip displayed by generic entity thumbnails.</summary>
@@ -88,7 +90,7 @@ public sealed record EntityGroup(string Kind, string Label, IReadOnlyList<Entity
     /// or <c>tags</c>. Structural child groups leave this unset because their grouping
     /// is already fully described by <see cref="Kind"/>.
     /// </summary>
-    public string? Code { get; init; }
+    public RelationshipKind? Code { get; init; }
 }
 
 /// <summary>Batch thumbnail request body.</summary>

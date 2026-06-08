@@ -1,4 +1,5 @@
 using Prismedia.Contracts.Entities;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Contracts.Collections;
 
@@ -13,9 +14,9 @@ namespace Prismedia.Contracts.Collections;
 public sealed record CollectionWriteRequest(
     string Title,
     string? Description,
-    string? Mode,
+    CollectionMode? Mode,
     string? RuleTreeJson,
-    string? CoverMode,
+    CollectionCoverMode? CoverMode,
     Guid? CoverItemId,
     bool? IsNsfw);
 
@@ -82,7 +83,7 @@ public sealed record CollectionItemDetail(
     Guid CollectionId,
     string EntityType,
     Guid EntityId,
-    string Source,
+    CollectionItemSource Source,
     int SortOrder,
     DateTimeOffset AddedAt,
     EntityThumbnail Entity);
@@ -96,13 +97,13 @@ public sealed record CollectionItemsResponse(IReadOnlyList<CollectionItemDetail>
 /// </summary>
 public sealed record CollectionDetail : EntityDetail {
     /// <summary>Collection membership mode.</summary>
-    public required string? Mode { get; init; }
+    public required CollectionMode? Mode { get; init; }
 
     /// <summary>Dynamic collection rule tree JSON, when present.</summary>
     public required string? RuleTreeJson { get; init; }
 
     /// <summary>Collection cover selection mode.</summary>
-    public required string? CoverMode { get; init; }
+    public required CollectionCoverMode? CoverMode { get; init; }
 
     /// <summary>Entity selected as the collection cover item.</summary>
     public required Guid? CoverItemId { get; init; }

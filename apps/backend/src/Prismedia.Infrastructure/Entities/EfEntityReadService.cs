@@ -645,7 +645,10 @@ public sealed partial class EfEntityReadService : IEntityReadService {
                 group.Key.TargetKindCode,
                 RelationshipLabel(group.Key.RelationshipCode),
                 await ProjectThumbnailsAsync(orderedRows, hideNsfw, cancellationToken)) {
-                Code = group.Key.RelationshipCode
+                Code = group.Key.RelationshipCode is { Length: > 0 } relationshipCode
+                    && relationshipCode.TryDecodeAs<RelationshipKind>(out var relationshipKind)
+                        ? relationshipKind
+                        : null
             });
         }
 
