@@ -1173,6 +1173,40 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
+    public async Task ListAsyncTreatsMovieChildPlaybackAsMovieEngagement() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var watchedMovie = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var watchedVideo = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        var unwatchedMovie = Guid.Parse("33333333-3333-3333-3333-333333333333");
+        var unwatchedVideo = Guid.Parse("44444444-4444-4444-4444-444444444444");
+        db.Entities.AddRange(
+            new EntityRow { Id = watchedMovie, KindCode = EntityKindRegistry.Movie.Code, Title = "Watched Movie", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = watchedVideo, KindCode = EntityKindRegistry.Video.Code, Title = "Watched Movie", ParentEntityId = watchedMovie, CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = unwatchedMovie, KindCode = EntityKindRegistry.Movie.Code, Title = "Fresh Movie", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = unwatchedVideo, KindCode = EntityKindRegistry.Video.Code, Title = "Fresh Movie", ParentEntityId = unwatchedMovie, CreatedAt = now, UpdatedAt = now });
+        db.EntityPlayback.Add(new EntityPlaybackRow {
+            EntityId = watchedVideo,
+            PlayCount = 1,
+            CompletedAt = now,
+            UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+
+        var service = CreateService(db);
+
+        var played = await service.ListAsync(
+            EntityKindRegistry.Movie.Code, null, null, null, null, CancellationToken.None, played: true);
+        var unplayed = await service.ListAsync(
+            EntityKindRegistry.Movie.Code, null, null, null, null, CancellationToken.None, played: false);
+        var watchedThumbnail = Assert.Single(played.Items);
+
+        Assert.Equal(watchedMovie, watchedThumbnail.Id);
+        Assert.Equal(1.0, watchedThumbnail.Progress);
+        Assert.Equal(unwatchedMovie, Assert.Single(unplayed.Items).Id);
+    }
+
+    [Fact]
     public async Task ListAsyncSortsByMostRecentEngagementForLastPlayed() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;
@@ -1441,6 +1475,151 @@ public sealed class EfEntityReadServiceTests {
                 CreatedAt = at,
             };
     }
+
+    [Fact]
+    public async Task GetThumbnailsAsyncUsesAlbumCoverForAudioTrackWithoutOwnCover() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var albumId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000001");
+        var trackId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000002");
+
+        db.Entities.AddRange(
+            new EntityRow {
+                Id = albumId,
+                KindCode = EntityKindRegistry.AudioLibrary.Code,
+                Title = "Album",
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new EntityRow {
+                Id = trackId,
+                KindCode = EntityKindRegistry.AudioTrack.Code,
+                Title = "Track",
+                ParentEntityId = albumId,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+        db.AudioLibraryDetails.Add(new AudioLibraryDetailRow { EntityId = albumId });
+        db.AudioTrackDetails.Add(new AudioTrackDetailRow { EntityId = trackId });
+        db.EntityFiles.Add(File(albumId, EntityFileRole.Cover, "/assets/audio-libraries/album/cover.jpg", now));
+        await db.SaveChangesAsync();
+
+        var response = await CreateService(db).GetThumbnailsAsync([trackId], hideNsfw: false, CancellationToken.None);
+
+        var track = Assert.Single(response.Items);
+        Assert.Equal("/assets/audio-libraries/album/cover.jpg", track.CoverUrl);
+    }
+
+    [Fact]
+    public async Task GetThumbnailsAsyncKeepsAudioTrackOwnCoverBeforeAlbumCover() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var albumId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000011");
+        var trackId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000012");
+
+        db.Entities.AddRange(
+            new EntityRow {
+                Id = albumId,
+                KindCode = EntityKindRegistry.AudioLibrary.Code,
+                Title = "Album",
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new EntityRow {
+                Id = trackId,
+                KindCode = EntityKindRegistry.AudioTrack.Code,
+                Title = "Track",
+                ParentEntityId = albumId,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+        db.AudioLibraryDetails.Add(new AudioLibraryDetailRow { EntityId = albumId });
+        db.AudioTrackDetails.Add(new AudioTrackDetailRow { EntityId = trackId });
+        db.EntityFiles.AddRange(
+            File(albumId, EntityFileRole.Cover, "/assets/audio-libraries/album/cover.jpg", now),
+            File(trackId, EntityFileRole.Cover, "/assets/audio-tracks/track/cover.jpg", now));
+        await db.SaveChangesAsync();
+
+        var response = await CreateService(db).GetThumbnailsAsync([trackId], hideNsfw: false, CancellationToken.None);
+
+        var track = Assert.Single(response.Items);
+        Assert.Equal("/assets/audio-tracks/track/cover.jpg", track.CoverUrl);
+    }
+
+    [Fact]
+    public async Task GetThumbnailsAsyncLeavesAudioTrackWithoutAlbumCoverUncovered() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var albumId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000021");
+        var trackId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000022");
+
+        db.Entities.AddRange(
+            new EntityRow {
+                Id = albumId,
+                KindCode = EntityKindRegistry.AudioLibrary.Code,
+                Title = "Album",
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new EntityRow {
+                Id = trackId,
+                KindCode = EntityKindRegistry.AudioTrack.Code,
+                Title = "Track",
+                ParentEntityId = albumId,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+        db.AudioLibraryDetails.Add(new AudioLibraryDetailRow { EntityId = albumId });
+        db.AudioTrackDetails.Add(new AudioTrackDetailRow { EntityId = trackId });
+        await db.SaveChangesAsync();
+
+        var response = await CreateService(db).GetThumbnailsAsync([trackId], hideNsfw: false, CancellationToken.None);
+
+        var track = Assert.Single(response.Items);
+        Assert.Null(track.CoverUrl);
+    }
+
+    [Fact]
+    public async Task GetThumbnailsAsyncDoesNotInheritParentCoverForNonTrackChildEntities() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var movieId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000031");
+        var videoId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000032");
+
+        db.Entities.AddRange(
+            new EntityRow {
+                Id = movieId,
+                KindCode = EntityKindRegistry.Movie.Code,
+                Title = "Movie",
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new EntityRow {
+                Id = videoId,
+                KindCode = EntityKindRegistry.Video.Code,
+                Title = "Feature",
+                ParentEntityId = movieId,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+        db.EntityFiles.Add(File(movieId, EntityFileRole.Cover, "/assets/movies/movie/cover.jpg", now));
+        await db.SaveChangesAsync();
+
+        var response = await CreateService(db).GetThumbnailsAsync([videoId], hideNsfw: false, CancellationToken.None);
+
+        var video = Assert.Single(response.Items);
+        Assert.Null(video.CoverUrl);
+    }
+
+    private static EntityFileRow File(Guid entityId, EntityFileRole role, string path, DateTimeOffset at) =>
+        new() {
+            Id = Guid.NewGuid(),
+            EntityId = entityId,
+            Role = role,
+            Path = path,
+            CreatedAt = at,
+            UpdatedAt = at
+        };
 
     private static EfEntityReadService CreateService(PrismediaDbContext db) {
         var repository = new EfEntityRepository(db, EntityMappers.Kinds(db), EntityMappers.Capabilities(db));

@@ -1,4 +1,5 @@
 using Prismedia.Api.Security;
+using Prismedia.Application.Jellyfin;
 
 namespace Prismedia.Api.Endpoints;
 
@@ -60,4 +61,10 @@ internal static class NsfwVisibility {
         return !httpContext.Request.Cookies.TryGetValue(CookieName, out var mode) ||
             !string.Equals(mode, "show", StringComparison.OrdinalIgnoreCase);
     }
+
+    /// <summary>Returns the Jellyfin profile's explicit content visibility toggles.</summary>
+    public static JellyfinContentVisibility JellyfinContent(HttpContext httpContext) =>
+        httpContext.GetJellyfinProfile() is { } profile
+            ? new JellyfinContentVisibility(profile.AllowSfw, profile.AllowNsfw)
+            : JellyfinContentVisibility.SfwOnly;
 }

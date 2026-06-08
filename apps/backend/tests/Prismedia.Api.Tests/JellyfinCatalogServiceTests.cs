@@ -16,6 +16,130 @@ public sealed class JellyfinCatalogServiceTests {
     private const string ServerId = "0123456789abcdef0123456789abcdef";
 
     [Fact]
+    public async Task UserViewsIncludeUnwatchedMovieAndSeriesLibraries() {
+        var catalog = new JellyfinCatalogService(new FakeEntityReadService(), new FakeCollections());
+
+        var views = await catalog.GetUserViewsWithArtworkAsync(ServerId, hideNsfw: false, CancellationToken.None);
+
+        Assert.Contains(views.Items, view =>
+            view.Id == JellyfinCatalogService.UnwatchedMoviesViewId &&
+            view.Name == "Unwatched Movies" &&
+            view.CollectionType == JellyfinProtocol.CollectionTypes.Movies);
+        Assert.Contains(views.Items, view =>
+            view.Id == JellyfinCatalogService.UnwatchedSeriesViewId &&
+            view.Name == "Unwatched Series" &&
+            view.CollectionType == JellyfinProtocol.CollectionTypes.Shows);
+    }
+
+    [Fact]
+    public async Task BrowsingUnwatchedMoviesUsesPlayedFilter() {
+        var unwatchedMovieId = Guid.NewGuid();
+        var watchedMovieId = Guid.NewGuid();
+        var entities = new FakeEntityReadService();
+        entities.ListByKind["movie"] = [
+            Thumb(unwatchedMovieId, "movie", "Unwatched Movie"),
+            Thumb(watchedMovieId, "movie", "Watched Movie")
+        ];
+        entities.PlayedById[unwatchedMovieId] = false;
+        entities.PlayedById[watchedMovieId] = true;
+        var catalog = new JellyfinCatalogService(entities, new FakeCollections());
+
+        var result = await catalog.GetItemsAsync(
+            Query(parentId: JellyfinCatalogService.UnwatchedMoviesViewId),
+            ServerId,
+            hideNsfw: false,
+            CancellationToken.None);
+
+        var item = Assert.Single(result.Items);
+        Assert.Equal(unwatchedMovieId, item.Id);
+        Assert.Contains(entities.ListCalls, call => call.Kind == "movie" && call.Played == false);
+    }
+
+    [Fact]
+    public async Task LatestUnderUnwatchedMoviesUsesPlayedFilter() {
+        var unwatchedMovieId = Guid.NewGuid();
+        var watchedMovieId = Guid.NewGuid();
+        var entities = new FakeEntityReadService();
+        entities.ListByKind["movie"] = [
+            Thumb(unwatchedMovieId, "movie", "Unwatched Movie"),
+            Thumb(watchedMovieId, "movie", "Watched Movie")
+        ];
+        entities.PlayedById[unwatchedMovieId] = false;
+        entities.PlayedById[watchedMovieId] = true;
+        var catalog = new JellyfinCatalogService(entities, new FakeCollections());
+
+        var result = await catalog.GetLatestAsync(
+            JellyfinCatalogService.UnwatchedMoviesViewId,
+            20,
+            ServerId,
+            hideNsfw: false,
+            CancellationToken.None);
+
+        var item = Assert.Single(result.Items);
+        Assert.Equal(unwatchedMovieId, item.Id);
+        Assert.Contains(entities.ListCalls, call => call.Kind == "movie" && call.Played == false);
+    }
+
+    [Fact]
+    public async Task BrowsingUnwatchedSeriesFiltersSeriesRowsNotEpisodes() {
+        var unwatchedSeriesId = Guid.NewGuid();
+        var watchedSeriesId = Guid.NewGuid();
+        var entities = new FakeEntityReadService();
+        entities.ListByKind["video-series"] = [
+            Thumb(unwatchedSeriesId, "video-series", "Unwatched Show"),
+            Thumb(watchedSeriesId, "video-series", "Watched Show")
+        ];
+        entities.PlayedById[unwatchedSeriesId] = false;
+        entities.PlayedById[watchedSeriesId] = true;
+        entities.Cards[unwatchedSeriesId] = new EntityCard {
+            Id = unwatchedSeriesId,
+            Kind = "video-series",
+            Title = "Unwatched Show",
+            ParentEntityId = null,
+            SortOrder = null,
+            Capabilities = [],
+            ChildrenByKind = [],
+            Relationships = []
+        };
+        var catalog = new JellyfinCatalogService(entities, new FakeCollections());
+
+        var result = await catalog.GetItemsAsync(
+            Query(parentId: JellyfinCatalogService.UnwatchedSeriesViewId),
+            ServerId,
+            hideNsfw: false,
+            CancellationToken.None);
+
+        var item = Assert.Single(result.Items);
+        Assert.Equal(unwatchedSeriesId, item.Id);
+        Assert.Equal(JellyfinProtocol.ItemTypes.Series, item.Type);
+        Assert.Contains(entities.ListCalls, call => call.Kind == "video-series" && call.Played == false);
+        Assert.DoesNotContain(entities.ListCalls, call => call.Kind == "video");
+    }
+
+    [Fact]
+    public async Task UnwatchedLibraryViewIdsResolveAsCollectionFolders() {
+        var catalog = new JellyfinCatalogService(new FakeEntityReadService(), new FakeCollections());
+
+        var movies = await catalog.GetItemAsync(
+            JellyfinCatalogService.UnwatchedMoviesViewId,
+            ServerId,
+            hideNsfw: false,
+            CancellationToken.None);
+        var series = await catalog.GetItemAsync(
+            JellyfinCatalogService.UnwatchedSeriesViewId,
+            ServerId,
+            hideNsfw: false,
+            CancellationToken.None);
+
+        Assert.NotNull(movies);
+        Assert.Equal("Unwatched Movies", movies!.Name);
+        Assert.Equal(JellyfinProtocol.ItemTypes.CollectionFolder, movies.Type);
+        Assert.NotNull(series);
+        Assert.Equal("Unwatched Series", series!.Name);
+        Assert.Equal(JellyfinProtocol.ItemTypes.CollectionFolder, series.Type);
+    }
+
+    [Fact]
     public async Task BrowsingPlayableListDoesNotHydratePerRowDetail() {
         var movieId = Guid.NewGuid();
         var entities = new FakeEntityReadService();
@@ -63,6 +187,246 @@ public sealed class JellyfinCatalogServiceTests {
         Assert.Equal(JellyfinProtocol.ItemTypes.Series, item.Type);
         Assert.Equal(1, item.ChildCount); // folder containers are still hydrated for their child count
         Assert.Contains(seriesId, entities.DetailCalls);
+    }
+
+    [Fact]
+    public async Task SeriesWithDirectEpisodesAndNoSeasonsReturnsFallbackSeasonNamedForSeries() {
+        var seriesId = Guid.NewGuid();
+        var episodeId = Guid.NewGuid();
+        var entities = new FakeEntityReadService();
+        entities.Cards[seriesId] = Card(
+            seriesId,
+            "video-series",
+            "Direct Show",
+            parentId: null,
+            children: [new EntityGroup("video", "Episodes", [Thumb(episodeId, "video", "Episode 1", parentId: seriesId)])]);
+        var catalog = new JellyfinCatalogService(entities, new FakeCollections());
+
+        var result = await catalog.GetItemsAsync(
+            Query(parentId: seriesId, includeItemTypes: [JellyfinProtocol.ItemTypes.Season]),
+            ServerId,
+            hideNsfw: false,
+            CancellationToken.None);
+
+        var season = Assert.Single(result.Items);
+        Assert.NotEqual(seriesId, season.Id);
+        Assert.Equal("Direct Show", season.Name);
+        Assert.Equal(JellyfinProtocol.ItemTypes.Season, season.Type);
+        Assert.Equal(seriesId, season.ParentId);
+        Assert.Equal(seriesId, season.SeriesId);
+        Assert.Equal("Direct Show", season.SeriesName);
+        Assert.Equal(1, season.ChildCount);
+    }
+
+    [Fact]
+    public async Task FallbackSeasonListsDirectEpisodesWhenRequestedBySeasonId() {
+        var seriesId = Guid.NewGuid();
+        var episodeId = Guid.NewGuid();
+        var entities = new FakeEntityReadService();
+        entities.Cards[seriesId] = Card(
+            seriesId,
+            "video-series",
+            "Direct Show",
+            parentId: null,
+            children: [new EntityGroup("video", "Episodes", [Thumb(episodeId, "video", "Episode 1", parentId: seriesId)])]);
+        var catalog = new JellyfinCatalogService(entities, new FakeCollections());
+        var seasons = await catalog.GetItemsAsync(
+            Query(parentId: seriesId, includeItemTypes: [JellyfinProtocol.ItemTypes.Season]),
+            ServerId,
+            hideNsfw: false,
+            CancellationToken.None);
+        var fallbackSeasonId = Assert.Single(seasons.Items).Id;
+
+        var result = await catalog.GetItemsAsync(
+            Query(parentId: fallbackSeasonId, includeItemTypes: [JellyfinProtocol.ItemTypes.Episode]),
+            ServerId,
+            hideNsfw: false,
+            CancellationToken.None);
+
+        var episode = Assert.Single(result.Items);
+        Assert.Equal(episodeId, episode.Id);
+        Assert.Equal(JellyfinProtocol.ItemTypes.Episode, episode.Type);
+        Assert.Equal(fallbackSeasonId, episode.ParentId);
+        Assert.Equal(seriesId, episode.SeriesId);
+        Assert.Equal("Direct Show", episode.SeriesName);
+        Assert.Equal(fallbackSeasonId, episode.SeasonId);
+        Assert.Equal("Direct Show", episode.SeasonName);
+    }
+
+    [Fact]
+    public async Task RecursiveSeriesEpisodesWithoutSeasonIdUseFallbackSeasonContext() {
+        var seriesId = Guid.NewGuid();
+        var firstEpisodeId = Guid.NewGuid();
+        var secondEpisodeId = Guid.NewGuid();
+        var entities = new FakeEntityReadService();
+        entities.Cards[seriesId] = Card(
+            seriesId,
+            "video-series",
+            "Direct Show",
+            parentId: null,
+            children: [new EntityGroup("video", "Episodes", [
+                Thumb(firstEpisodeId, "video", "Episode 1", parentId: seriesId, sortOrder: 0),
+                Thumb(secondEpisodeId, "video", "Episode 2", parentId: seriesId, sortOrder: 1)
+            ])]);
+        var catalog = new JellyfinCatalogService(entities, new FakeCollections());
+        var seasons = await catalog.GetItemsAsync(
+            Query(parentId: seriesId, includeItemTypes: [JellyfinProtocol.ItemTypes.Season]),
+            ServerId,
+            hideNsfw: false,
+            CancellationToken.None);
+        var fallbackSeasonId = Assert.Single(seasons.Items).Id;
+
+        var result = await catalog.GetItemsAsync(
+            Query(parentId: seriesId, recursive: true, includeItemTypes: [JellyfinProtocol.ItemTypes.Episode]),
+            ServerId,
+            hideNsfw: false,
+            CancellationToken.None);
+
+        Assert.Collection(result.Items,
+            first => {
+                Assert.Equal(firstEpisodeId, first.Id);
+                Assert.Equal(fallbackSeasonId, first.ParentId);
+                Assert.Equal(seriesId, first.SeriesId);
+                Assert.Equal("Direct Show", first.SeriesName);
+                Assert.Equal(fallbackSeasonId, first.SeasonId);
+                Assert.Equal("Direct Show", first.SeasonName);
+                Assert.Equal(1, first.ParentIndexNumber);
+                Assert.Equal(1, first.IndexNumber);
+            },
+            second => {
+                Assert.Equal(secondEpisodeId, second.Id);
+                Assert.Equal(fallbackSeasonId, second.ParentId);
+                Assert.Equal(seriesId, second.SeriesId);
+                Assert.Equal("Direct Show", second.SeriesName);
+                Assert.Equal(fallbackSeasonId, second.SeasonId);
+                Assert.Equal("Direct Show", second.SeasonName);
+                Assert.Equal(1, second.ParentIndexNumber);
+                Assert.Equal(2, second.IndexNumber);
+            });
+    }
+
+    [Fact]
+    public async Task DirectEpisodePrimaryImageTagResolvesToServedImageAsset() {
+        var seriesId = Guid.NewGuid();
+        var episodeId = Guid.NewGuid();
+        const string coverPath = "/assets/videos/direct-episode.jpg";
+        var entities = new FakeEntityReadService();
+        var episode = Thumb(episodeId, "video", "Episode 1", coverUrl: coverPath, parentId: seriesId);
+        entities.Cards[seriesId] = Card(
+            seriesId,
+            "video-series",
+            "Direct Show",
+            parentId: null,
+            children: [new EntityGroup("video", "Episodes", [episode])]);
+        entities.Cards[episodeId] = Card(episodeId, "video", "Episode 1", seriesId, children: []);
+        entities.Thumbnails[episodeId] = episode;
+        var catalog = new JellyfinCatalogService(entities, new FakeCollections());
+        var seasons = await catalog.GetItemsAsync(
+            Query(parentId: seriesId, includeItemTypes: [JellyfinProtocol.ItemTypes.Season]),
+            ServerId,
+            hideNsfw: false,
+            CancellationToken.None);
+        var fallbackSeasonId = Assert.Single(seasons.Items).Id;
+
+        var episodes = await catalog.GetItemsAsync(
+            Query(parentId: fallbackSeasonId, includeItemTypes: [JellyfinProtocol.ItemTypes.Episode]),
+            ServerId,
+            hideNsfw: false,
+            CancellationToken.None);
+        var listedEpisode = Assert.Single(episodes.Items);
+        Assert.True(listedEpisode.ImageTags!.TryGetValue("Primary", out var tag));
+
+        var asset = await catalog.GetImageAssetAsync(episodeId, "Primary", null, hideNsfw: false, CancellationToken.None);
+
+        Assert.NotNull(asset);
+        Assert.Equal(coverPath, asset!.Path);
+        Assert.Equal(tag, asset.ImageTag);
+    }
+
+    [Fact]
+    public async Task DirectEpisodeDetailUsesFallbackSeasonContextWhenSeriesHasNoSeasons() {
+        var seriesId = Guid.NewGuid();
+        var episodeId = Guid.NewGuid();
+        var entities = new FakeEntityReadService();
+        var episode = Thumb(episodeId, "video", "Episode 1", parentId: seriesId, sortOrder: 0);
+        entities.Cards[seriesId] = Card(
+            seriesId,
+            "video-series",
+            "Direct Show",
+            parentId: null,
+            children: [new EntityGroup("video", "Episodes", [episode])]);
+        entities.Cards[episodeId] = Card(episodeId, "video", "Episode 1", seriesId, children: []) with {
+            SortOrder = 0
+        };
+        var catalog = new JellyfinCatalogService(entities, new FakeCollections());
+        var seasons = await catalog.GetItemsAsync(
+            Query(parentId: seriesId, includeItemTypes: [JellyfinProtocol.ItemTypes.Season]),
+            ServerId,
+            hideNsfw: false,
+            CancellationToken.None);
+        var fallbackSeasonId = Assert.Single(seasons.Items).Id;
+
+        var detail = await catalog.GetItemAsync(episodeId, ServerId, hideNsfw: false, CancellationToken.None);
+
+        Assert.NotNull(detail);
+        Assert.Equal(fallbackSeasonId, detail!.ParentId);
+        Assert.Equal(seriesId, detail.SeriesId);
+        Assert.Equal("Direct Show", detail.SeriesName);
+        Assert.Equal(fallbackSeasonId, detail.SeasonId);
+        Assert.Equal("Direct Show", detail.SeasonName);
+        Assert.Equal(1, detail.ParentIndexNumber);
+        Assert.Equal(1, detail.IndexNumber);
+    }
+
+    [Fact]
+    public async Task SeriesWithRealSeasonDoesNotReturnFallbackSeason() {
+        var seriesId = Guid.NewGuid();
+        var seasonId = Guid.NewGuid();
+        var episodeId = Guid.NewGuid();
+        var entities = new FakeEntityReadService();
+        entities.Cards[seriesId] = Card(
+            seriesId,
+            "video-series",
+            "Seasoned Show",
+            parentId: null,
+            children: [
+                new EntityGroup("video-season", "Seasons", [Thumb(seasonId, "video-season", "Season 1", parentId: seriesId)]),
+                new EntityGroup("video", "Episodes", [Thumb(episodeId, "video", "Episode 1", parentId: seriesId)])
+            ]);
+        entities.Cards[seasonId] = Card(seasonId, "video-season", "Season 1", seriesId, children: []);
+        var catalog = new JellyfinCatalogService(entities, new FakeCollections());
+
+        var result = await catalog.GetItemsAsync(
+            Query(parentId: seriesId, includeItemTypes: [JellyfinProtocol.ItemTypes.Season]),
+            ServerId,
+            hideNsfw: false,
+            CancellationToken.None);
+
+        var season = Assert.Single(result.Items);
+        Assert.Equal(seasonId, season.Id);
+        Assert.Equal("Season 1", season.Name);
+    }
+
+    [Fact]
+    public async Task FallbackSeasonIsHiddenWhenDirectEpisodesAreFilteredByProfile() {
+        var seriesId = Guid.NewGuid();
+        var episodeId = Guid.NewGuid();
+        var entities = new FakeEntityReadService();
+        entities.Cards[seriesId] = Card(
+            seriesId,
+            "video-series",
+            "SFW Profile Show",
+            parentId: null,
+            children: [new EntityGroup("video", "Episodes", [Thumb(episodeId, "video", "Hidden Episode", parentId: seriesId, isNsfw: true)])]);
+        var catalog = new JellyfinCatalogService(entities, new FakeCollections());
+
+        var result = await catalog.GetItemsAsync(
+            Query(parentId: seriesId, includeItemTypes: [JellyfinProtocol.ItemTypes.Season]),
+            ServerId,
+            hideNsfw: true,
+            CancellationToken.None);
+
+        Assert.Empty(result.Items);
     }
 
     [Fact]
@@ -262,7 +626,7 @@ public sealed class JellyfinCatalogServiceTests {
         Assert.Null(track.VideoType); // audio is not a video file
     }
 
-    private static EntityCard MusicCard(
+    private static EntityCard Card(
         Guid id,
         string kind,
         string title,
@@ -278,6 +642,14 @@ public sealed class JellyfinCatalogServiceTests {
             ChildrenByKind = children,
             Relationships = []
         };
+
+    private static EntityCard MusicCard(
+        Guid id,
+        string kind,
+        string title,
+        Guid? parentId,
+        IReadOnlyList<EntityGroup> children) =>
+        Card(id, kind, title, parentId, children);
 
     private static EntityThumbnail MusicThumb(Guid id, string kind, string title, Guid parentId, int sortOrder) =>
         new(
@@ -299,13 +671,15 @@ public sealed class JellyfinCatalogServiceTests {
 
     private static JellyfinItemQuery Query(
         Guid? parentId = null,
-        IReadOnlyList<Guid>? personIds = null) =>
+        IReadOnlyList<Guid>? personIds = null,
+        bool recursive = false,
+        IReadOnlyList<string>? includeItemTypes = null) =>
         new(
             parentId,
             [],
-            Recursive: false,
+            Recursive: recursive,
             SearchTerm: null,
-            IncludeItemTypes: [],
+            IncludeItemTypes: includeItemTypes ?? [],
             StartIndex: 0,
             Limit: null,
             SortBy: null,
@@ -314,13 +688,20 @@ public sealed class JellyfinCatalogServiceTests {
             IsPlayed: null,
             PersonIds: personIds ?? []);
 
-    private static EntityThumbnail Thumb(Guid id, string kind, string title, string? coverUrl = "/assets/cover.jpg") =>
+    private static EntityThumbnail Thumb(
+        Guid id,
+        string kind,
+        string title,
+        string? coverUrl = "/assets/cover.jpg",
+        Guid? parentId = null,
+        bool isNsfw = false,
+        int? sortOrder = null) =>
         new(
             id,
             kind,
             title,
-            ParentEntityId: null,
-            SortOrder: null,
+            ParentEntityId: parentId,
+            SortOrder: sortOrder,
             coverUrl,
             CoverThumbUrl: null,
             HoverKind: "none",
@@ -329,13 +710,16 @@ public sealed class JellyfinCatalogServiceTests {
             Meta: [new EntityThumbnailMeta("duration", "01:30")],
             Rating: null,
             IsFavorite: false,
-            IsNsfw: false,
+            IsNsfw: isNsfw,
             IsOrganized: true);
 
     private sealed class FakeEntityReadService : IEntityReadService {
         public Dictionary<string, IReadOnlyList<EntityThumbnail>> ListByKind { get; } = new();
         public Dictionary<Guid, IReadOnlyList<EntityThumbnail>> ReferencedBy { get; } = new();
         public Dictionary<Guid, EntityCard> Cards { get; } = new();
+        public Dictionary<Guid, EntityThumbnail> Thumbnails { get; } = new();
+        public Dictionary<Guid, bool> PlayedById { get; } = new();
+        public List<ListCall> ListCalls { get; } = [];
         public List<Guid> DetailCalls { get; } = [];
         public List<Guid> ReferencedByCalls { get; } = [];
 
@@ -363,12 +747,20 @@ public sealed class JellyfinCatalogServiceTests {
             bool? hasFile = null,
             bool? played = null,
             bool? orphaned = null) {
+            ListCalls.Add(new ListCall(kind, referencedBy, played));
             IReadOnlyList<EntityThumbnail> items;
             if (referencedBy is { } personId) {
                 ReferencedByCalls.Add(personId);
                 items = ReferencedBy.GetValueOrDefault(personId) ?? [];
             } else {
                 items = ListByKind.GetValueOrDefault(kind ?? string.Empty) ?? [];
+            }
+
+            if (played is { } playedFilter) {
+                items = items.Where(item =>
+                    PlayedById.TryGetValue(item.Id, out var isPlayed)
+                        ? isPlayed == playedFilter
+                        : !playedFilter).ToArray();
             }
 
             return Task.FromResult(new EntityListResponse(items, null, items.Count));
@@ -381,12 +773,18 @@ public sealed class JellyfinCatalogServiceTests {
             IReadOnlyList<Guid> ids,
             bool hideNsfw,
             CancellationToken cancellationToken) =>
-            Task.FromResult(new EntityThumbnailBatchResponse([]));
+            Task.FromResult(new EntityThumbnailBatchResponse(ids
+                .Select(id => Thumbnails.GetValueOrDefault(id))
+                .Where(item => item is not null && (!hideNsfw || !item.IsNsfw))
+                .Select(item => item!)
+                .ToArray()));
 
         public Task<IEntityCard?> GetDetailAsync(Guid id, string kind, bool hideNsfw, CancellationToken cancellationToken) {
             DetailCalls.Add(id);
             return Task.FromResult<IEntityCard?>(Cards.GetValueOrDefault(id));
         }
+
+        public sealed record ListCall(string? Kind, Guid? ReferencedBy, bool? Played);
     }
 
     private sealed class FakeCollections : ICollectionItemReadService {

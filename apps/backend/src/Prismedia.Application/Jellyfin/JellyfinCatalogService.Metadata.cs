@@ -433,6 +433,21 @@ public sealed partial class JellyfinCatalogService {
             playback?.LastPlayedAt);
     }
 
+    private static JellyfinUserItemDataDto UserDataForThumbnail(EntityThumbnail item) {
+        var progress = item.Progress is { } value ? Math.Clamp(value, 0, 1) : (double?)null;
+        var playCount = item.PlayCount ?? 0;
+        var played = progress >= 1 || playCount > 0 && progress is null;
+        return new JellyfinUserItemDataDto(
+            PlaybackPositionTicks: 0,
+            PlayCount: playCount,
+            IsFavorite: item.IsFavorite,
+            Played: played,
+            Key: item.Id.ToString("N"),
+            ItemId: item.Id.ToString("N"),
+            PlayedPercentage: played ? 100d : progress is null ? null : progress * 100d,
+            LastPlayedDate: null);
+    }
+
     private static bool IsPlayableVideo(string kind) => kind.Equals("video", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>

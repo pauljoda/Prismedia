@@ -122,6 +122,36 @@ public sealed class HlsAssetServiceTests : IDisposable {
     }
 
     [Fact]
+    public void RemuxVodPlaylistCarriesSelectedAudioStreamIndexOnMediaUris() {
+        var playlist = HlsAssetService.BuildRemuxVodPlaylist([6.006, 4.2], audioStreamIndex: 2);
+
+        Assert.Contains("#EXT-X-MAP:URI=\"init.mp4?AudioStreamIndex=2\"", playlist);
+        Assert.Contains("#EXTINF:6.006000,\nseg_00000.m4s?AudioStreamIndex=2", playlist);
+        Assert.Contains("#EXTINF:4.200000,\nseg_00001.m4s?AudioStreamIndex=2", playlist);
+    }
+
+    [Fact]
+    public void RemuxEventPlaylistCarriesSelectedAudioStreamIndexOnMediaUris() {
+        const string eventPlaylist = """
+            #EXTM3U
+            #EXT-X-VERSION:7
+            #EXT-X-MAP:URI="init.mp4"
+            #EXTINF:6.006000,
+            seg_00000.m4s
+            #EXTINF:6.006000,
+            seg_00001.m4s?AudioStreamIndex=2
+            """;
+
+        var playlist = HlsAssetService.RewriteRemuxPlaylistUris(eventPlaylist, audioStreamIndex: 2);
+
+        Assert.Contains("#EXT-X-MAP:URI=\"init.mp4?AudioStreamIndex=2\"", playlist);
+        Assert.Contains("#EXTINF:6.006000,\nseg_00000.m4s?AudioStreamIndex=2", playlist);
+        Assert.Contains("#EXTINF:6.006000,\nseg_00001.m4s?AudioStreamIndex=2", playlist);
+        Assert.DoesNotContain("AudioStreamIndex=2?AudioStreamIndex=2", playlist);
+        Assert.DoesNotContain("AudioStreamIndex=2&AudioStreamIndex=2", playlist);
+    }
+
+    [Fact]
     public void RemuxCopiesAacAudioPreservingChannelsAndTranscodesOthersToStereoAac() {
         // AAC audio is copied (no pointless AAC->AAC re-encode; 5.1/7.1 is preserved instead of downmixed),
         // which every fMP4-HLS client can decode. Any other codec is transcoded to the safe stereo-AAC
@@ -136,6 +166,52 @@ public sealed class HlsAssetServiceTests : IDisposable {
         Assert.Equal(
             ["-c:a", "copy"],
             HlsAssetService.RemuxAudioArguments(RemuxAudioSource("aac"), audioStreamIndex: 1));
+    }
+
+    [Fact]
+    public async Task RemuxSegmentGenerationMapsRequestedAudioStreamIndex() {
+        var videoId = Guid.Parse("24242424-2424-2424-2424-242424242424");
+        var sourcePath = Path.Combine(_cacheRoot, "multi-audio.mkv");
+        await File.WriteAllTextAsync(sourcePath, "source");
+        var process = new ManifestWritingProcessExecutor();
+        var service = new HlsAssetService(
+            new HlsAssetServiceOptions(_cacheRoot),
+            new FakeVideoSourceService(new VideoSourceFile(
+                videoId,
+                sourcePath,
+                "video/x-matroska",
+                false,
+                DurationSeconds: 60,
+                Width: 1920,
+                Height: 1080,
+                Streams: [
+                    new VideoSourceStream(
+                        StreamIndex: 0, Type: "Video", Codec: "h264", Language: null, Title: null,
+                        Width: 1920, Height: 1080, FrameRate: 24, BitRate: null, SampleRate: null, Channels: null,
+                        IsDefault: true, IsForced: false),
+                    new VideoSourceStream(
+                        StreamIndex: 1, Type: "Audio", Codec: "aac", Language: "ita", Title: "Italian",
+                        Width: null, Height: null, FrameRate: null, BitRate: null, SampleRate: 48000, Channels: 2,
+                        IsDefault: true, IsForced: false),
+                    new VideoSourceStream(
+                        StreamIndex: 2, Type: "Audio", Codec: "aac", Language: "eng", Title: "English",
+                        Width: null, Height: null, FrameRate: null, BitRate: null, SampleRate: 48000, Channels: 2,
+                        IsDefault: false, IsForced: false)
+                ])),
+            process,
+            NullLogger<HlsAssetService>.Instance);
+
+        var segment = await service.GetAssetAsync(videoId, "v/remux/seg_00000.m4s", 2, CancellationToken.None);
+
+        Assert.NotNull(segment);
+        var arguments = Assert.Single(process.ArgumentHistory);
+        var mapIndexes = arguments
+            .Select((argument, index) => (argument, index))
+            .Where(entry => entry.argument == "-map")
+            .Select(entry => entry.index)
+            .ToArray();
+        Assert.Contains(mapIndexes, index => arguments[index + 1] == "0:2?");
+        Assert.DoesNotContain(mapIndexes, index => arguments[index + 1] == "0:1?");
     }
 
     private static VideoSourceFile RemuxAudioSource(string audioCodec) =>

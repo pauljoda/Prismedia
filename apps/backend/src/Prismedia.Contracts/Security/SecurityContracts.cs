@@ -18,6 +18,7 @@ public sealed record JellyfinProfileResponse(
     Guid Id,
     string Username,
     string DisplayName,
+    bool AllowSfw,
     bool AllowNsfw,
     bool Enabled,
     DateTimeOffset? LastLoginAt,
@@ -28,13 +29,15 @@ public sealed record JellyfinProfileResponse(
 public sealed record JellyfinProfileCreateRequest(
     string Username,
     string? DisplayName,
-    bool AllowNsfw,
+    bool AllowSfw = true,
+    bool AllowNsfw = false,
     bool Enabled = true);
 
 /// <summary>Request for updating a Jellyfin-compatible fake user profile.</summary>
 public sealed record JellyfinProfileUpdateRequest(
     string? Username,
     string? DisplayName,
+    bool? AllowSfw,
     bool? AllowNsfw,
     bool? Enabled);
 

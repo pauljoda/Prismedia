@@ -662,7 +662,13 @@ public sealed partial class HlsAssetService : IHlsAssetService {
         return string.Join('\n', lines);
     }
 
-    private static string AppendAudioStreamQuery(string url, int? audioStreamIndex) =>
-        audioStreamIndex is null ? url : $"{url}?AudioStreamIndex={audioStreamIndex.Value}";
+    private static string AppendAudioStreamQuery(string url, int? audioStreamIndex) {
+        if (audioStreamIndex is null || url.Contains("AudioStreamIndex=", StringComparison.OrdinalIgnoreCase)) {
+            return url;
+        }
+
+        var separator = url.Contains('?', StringComparison.Ordinal) ? "&" : "?";
+        return $"{url}{separator}AudioStreamIndex={audioStreamIndex.Value}";
+    }
 
 }

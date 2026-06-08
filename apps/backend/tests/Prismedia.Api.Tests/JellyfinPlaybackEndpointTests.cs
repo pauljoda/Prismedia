@@ -164,6 +164,32 @@ public sealed class JellyfinPlaybackEndpointTests : IDisposable {
         Assert.Equal(TimeSpan.FromSeconds(42).Ticks, sessions.LastProgress.PositionTicks);
     }
 
+    [Fact]
+    public async Task UserScopedPlayedItemEndpointRecordsInfuseWatchedToggle() {
+        var sessions = new RecordingPlaybackSessionService();
+        using var factory = CreateFactory(sessions: sessions);
+        using var client = factory.CreateAuthenticatedClient();
+
+        using var response = await client.PostAsync($"/Users/{Guid.NewGuid():N}/PlayedItems/{VideoId:N}", null);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(VideoId, sessions.LastMarkedPlayed);
+        Assert.Equal("application/json", response.Content.Headers.ContentType?.MediaType);
+    }
+
+    [Fact]
+    public async Task UserScopedPlayedItemDeleteRecordsInfuseUnwatchedToggle() {
+        var sessions = new RecordingPlaybackSessionService();
+        using var factory = CreateFactory(sessions: sessions);
+        using var client = factory.CreateAuthenticatedClient();
+
+        using var response = await client.DeleteAsync($"/Users/{Guid.NewGuid():N}/PlayedItems/{VideoId:N}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(VideoId, sessions.LastMarkedUnplayed);
+        Assert.Equal("application/json", response.Content.Headers.ContentType?.MediaType);
+    }
+
     public void Dispose() {
         if (Directory.Exists(_tempDir)) {
             Directory.Delete(_tempDir, recursive: true);
@@ -286,6 +312,8 @@ public sealed class JellyfinPlaybackEndpointTests : IDisposable {
 
     private sealed class RecordingPlaybackSessionService : IPlaybackSessionService {
         public PlaybackSessionCommand? LastProgress { get; private set; }
+        public Guid? LastMarkedPlayed { get; private set; }
+        public Guid? LastMarkedUnplayed { get; private set; }
 
         public Task StartAsync(PlaybackSessionCommand request, CancellationToken cancellationToken) => Task.CompletedTask;
 
@@ -298,11 +326,15 @@ public sealed class JellyfinPlaybackEndpointTests : IDisposable {
 
         public Task StopAsync(PlaybackSessionCommand request, CancellationToken cancellationToken) => Task.CompletedTask;
 
-        public Task<UserItemDataResult?> MarkPlayedAsync(Guid itemId, CancellationToken cancellationToken) =>
-            Task.FromResult<UserItemDataResult?>(new UserItemDataResult(true));
+        public Task<UserItemDataResult?> MarkPlayedAsync(Guid itemId, CancellationToken cancellationToken) {
+            LastMarkedPlayed = itemId;
+            return Task.FromResult<UserItemDataResult?>(new UserItemDataResult(true));
+        }
 
-        public Task<UserItemDataResult?> MarkUnplayedAsync(Guid itemId, CancellationToken cancellationToken) =>
-            Task.FromResult<UserItemDataResult?>(new UserItemDataResult(false));
+        public Task<UserItemDataResult?> MarkUnplayedAsync(Guid itemId, CancellationToken cancellationToken) {
+            LastMarkedUnplayed = itemId;
+            return Task.FromResult<UserItemDataResult?>(new UserItemDataResult(false));
+        }
     }
 
     private sealed class FakeVideoSourceService : IVideoSourceService {

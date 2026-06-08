@@ -221,6 +221,61 @@ describe("extractVideoPlayerProps", () => {
     expect(props.audioFormatLabel).toBe("AAC Stereo");
   });
 
+  it("carries the selected audio stream into fallback HLS URLs for direct-play sources", () => {
+    const props = extractVideoPlayerProps("video-1", [], {
+      PlaySessionId: "session-1",
+      ErrorCode: null,
+      MediaSources: [
+        {
+          Id: "source-1",
+          Path: "/media/movie.mp4",
+          Protocol: "File",
+          Container: "mp4",
+          Size: null,
+          Name: "movie.mp4",
+          RunTimeTicks: 600_000_000,
+          SupportsDirectPlay: true,
+          SupportsDirectStream: true,
+          SupportsTranscoding: true,
+          TranscodingUrl: null,
+          TranscodingSubProtocol: null,
+          TranscodingContainer: null,
+          MediaStreams: [
+            {
+              Index: 0,
+              Type: "Video",
+              Codec: "h264",
+              DisplayTitle: "Video",
+              IsDefault: true,
+            },
+            {
+              Index: 1,
+              Type: "Audio",
+              Codec: "aac",
+              Language: "ita",
+              DisplayTitle: "Italian",
+              Channels: 2,
+              IsDefault: true,
+            },
+            {
+              Index: 2,
+              Type: "Audio",
+              Codec: "aac",
+              Language: "eng",
+              DisplayTitle: "English",
+              Channels: 2,
+              IsDefault: false,
+            },
+          ],
+        },
+      ],
+    }, 2);
+
+    expect(props.src).toBe("/Videos/video-1/master.m3u8?AudioStreamIndex=2");
+    expect(props.audioTracks.find((track) => track.streamIndex === 2)?.selected).toBe(true);
+    expect(props.qualityRungs[0]?.url).toContain("AudioStreamIndex=2");
+  });
+
   it("trusts playback negotiation when HDR sources must transcode", () => {
     const props = extractVideoPlayerProps("video-1", [
       {
