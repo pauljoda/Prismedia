@@ -89,9 +89,9 @@ public static class SpaDevProxy {
 
     /// <summary>
     /// Returns whether a request should bypass the development Vite proxy and
-    /// stay in the .NET backend route table. Jellyfin-compatible public routes
-    /// are intentionally case-sensitive so lowercase SPA routes like
-    /// <c>/videos</c> can still be refreshed directly in the browser.
+    /// stay in the .NET backend route table. Jellyfin-compatible routes use the
+    /// same casing behavior as API authentication so lowercase client requests
+    /// are challenged by the backend instead of being proxied to the SPA dev server.
     /// </summary>
     public static bool ShouldPassThroughToBackend(PathString requestPath) {
         var path = requestPath.Value ?? "";
@@ -103,12 +103,21 @@ public static class SpaDevProxy {
         }
 
         foreach (var prefix in JellyfinRoutes.Prefixes) {
-            if (path.StartsWith(prefix, StringComparison.Ordinal)) {
+            if (IsJellyfinPrefixMatch(path, prefix)) {
                 return true;
             }
         }
 
         return false;
+    }
+
+    private static bool IsJellyfinPrefixMatch(string path, string prefix) {
+        if (!string.Equals(prefix, JellyfinRoutes.LibraryPrefix, StringComparison.Ordinal)) {
+            return path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
+        }
+
+        return path.StartsWith(prefix, StringComparison.Ordinal) ||
+            path.StartsWith($"{prefix}/", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
