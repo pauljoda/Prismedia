@@ -293,3 +293,30 @@ The backend's **unambiguous internal** families are already largely consolidated
 **Recommended next:** the dev-stack codegen rail (bucket 2 + OpenAPI typed enums) is the
 biggest single win but needs running services; the wire-vocab rails (bucket 1) are safe to
 keep grinding offline. Sequence per appetite for the dev-stack setup.
+
+- **✅ Rail 3 (foundation) — OpenAPI codec-enum→typed-enum transformer.** `CodecEnumSchemaTransformer`
+  (registered in `Program.cs`) emits `enum: [<codes>]` for any DTO property whose CLR type is a
+  codec enum. Verified-correct by schema-walk tracing against the running dev API.
+
+### ⚠️ Major scope finding (2026-06-08): the contracts are stringly-typed at the boundary
+
+The OpenAPI transformer is necessary but **currently a no-op**, because the contract DTOs do
+**not** use the codec enum types — every enum-shaped field (`JobRun.type/status/targetKind`,
+`EntityKindCount.kind`, `EntitySubtitle.source/format`, `BookDetail.bookType`, …) is declared
+`string`. Confirmed: **0** contract properties use a codec enum type today. So the wire format
+is genuinely `string`, and the generated frontend models are `string` by construction — not
+merely by a serialization quirk.
+
+**Therefore the real "typed enums on the frontend" rail is a contract retype**, not just a
+transformer. For each enum-shaped DTO field:
+1. Retype the contract property `string` → the codec enum type (e.g. `JobRun.Type: JobType`).
+   The existing `CodecJsonConverterFactory` keeps the wire value identical (the string code).
+2. Fix the backend mapping/construction site that currently assigns a string (it must now
+   pass the enum — usually a `Parse`/registry lookup, often deleting a hand-rolled string).
+3. The transformer then emits the enum schema automatically → orval generates a typed union.
+4. Fix frontend consumers (some get *simpler* — e.g. the jobs dashboard's invented BullMQ
+   vocabulary in `lib/jobs/*` can be deleted in favor of the now-typed `JOB_TYPE`/`JobRunStatus`).
+
+This is a sizable, careful, **per-DTO** effort (~10+ DTOs) with backend + frontend ripple each.
+Highest-value first DTO: **`JobRun`** — it also eliminates the audit's worst frontend
+magic-string offender (the hand-maintained jobs queue/status vocabulary).
