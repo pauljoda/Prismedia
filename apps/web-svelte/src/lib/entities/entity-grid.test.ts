@@ -276,8 +276,8 @@ describe("entity grid helpers", () => {
     expect(thumbnail.hover).toEqual({
       kind: "image-sequence",
       assets: [
-        { src: "/assets/pages/1.jpg", alt: "Page 1 preview", role: "preview" },
-        { src: "/assets/pages/2.jpg", alt: "Page 2 preview", role: "preview" },
+        { src: "/assets/pages/1.jpg", alt: "Page 1 preview", role: "preview", entityId: "page-1" },
+        { src: "/assets/pages/2.jpg", alt: "Page 2 preview", role: "preview", entityId: "page-2" },
       ],
     });
   });

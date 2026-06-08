@@ -192,11 +192,12 @@ function aspectRatioForEntity(entity: EntityGridSourceEntity): EntityThumbnailCa
   return aspectRatioForKind(entity.kind);
 }
 
-function assetFromPath(path: string, title: string, role?: string): EntityThumbnailAsset {
+function assetFromPath(path: string, title: string, role?: string, entityId?: string): EntityThumbnailAsset {
   return {
     alt: role ? `${title} ${role}` : title,
     role,
     src: path,
+    entityId,
   };
 }
 
@@ -212,7 +213,7 @@ function sampleSpread<T>(items: T[], max: number): T[] {
 
 function thumbnailPreviewAsset(entity: EntityThumbnail): EntityThumbnailAsset | null {
   const path = entity.coverUrl ?? entity.hoverImages?.[0]?.path ?? null;
-  return path ? assetFromPath(path, entity.title, "preview") : null;
+  return path ? assetFromPath(path, entity.title, "preview", entity.id) : null;
 }
 
 function childPreviewAssets(entity: EntityGridSourceEntity): EntityThumbnailAsset[] {
@@ -225,7 +226,7 @@ function childPreviewAssets(entity: EntityGridSourceEntity): EntityThumbnailAsse
 
 function previewAssets(entity: EntityGridSourceEntity, roles: string[]): EntityThumbnailAsset[] {
   if (!isFullEntityCard(entity) && entity.hoverImages?.length > 0) {
-    return entity.hoverImages.map((image) => assetFromPath(image.path, image.title, "preview"));
+    return entity.hoverImages.map((image) => assetFromPath(image.path, image.title, "preview", image.entityId));
   }
 
   const images = getImagesCapability(capabilitiesForEntity(entity));
@@ -418,6 +419,13 @@ export function entityCardToThumbnailCard(
   // Small grid variant paired with the list cover, used for responsive srcset.
   const coverThumbPath = !isFullEntityCard(entity) ? entity.coverThumbUrl ?? null : null;
 
+  // When the cover stands in for a distinct child entity (a gallery's
+  // representative cover image), keep that child's id on the cover asset so the
+  // feed can hydrate and autoplay the underlying media rather than the container.
+  const coverChildEntityId = !isFullEntityCard(entity)
+    ? entity.hoverImages?.find((image) => image.path === coverPath)?.entityId
+    : undefined;
+
   const spriteHover = findSpriteHover(entity);
   const imageSequence = previewAssets(entity, [ENTITY_FILE_ROLE.trickplay, ENTITY_FILE_ROLE.sprite]);
   const childSequence = imageSequence.length > 0 ? [] : childPreviewAssets(entity);
@@ -432,7 +440,10 @@ export function entityCardToThumbnailCard(
   return {
     aspectRatio: aspectRatioForEntity(entity),
     cover: coverPath
-      ? { ...assetFromPath(coverPath, entity.title, ENTITY_FILE_ROLE.cover), thumbSrc: coverThumbPath ?? undefined }
+      ? {
+          ...assetFromPath(coverPath, entity.title, ENTITY_FILE_ROLE.cover, coverChildEntityId),
+          thumbSrc: coverThumbPath ?? undefined,
+        }
       : null,
     custom: customOverlayForEntity(entity),
     entity: {

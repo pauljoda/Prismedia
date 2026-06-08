@@ -71,6 +71,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Fixed
+- The Galleries feed view now plays gallery covers inline, just like the Images feed. When a gallery's cover is an animated image (or a short video clip), it autoplays in place as you scroll instead of sitting as a still poster.
 - The collection rule editor's "Apply to" chips now scroll horizontally on phones, so every media type can be reached and selected without widening the page.
 - Prismedia now restores the UI session cookie correctly when served behind the app reverse proxy, so the web app no longer opens as if the API key is missing.
 - Mobile Identify proposal pages no longer show the Back to Search button as a loading action when returning to the existing provider search results.
