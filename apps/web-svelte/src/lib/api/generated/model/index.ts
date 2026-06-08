@@ -271,6 +271,7 @@ export * from './pluginEntitySupport';
 export * from './pluginProvider';
 export * from './previewCollectionRulesParams';
 export * from './problemDetails';
+export * from './proposalKind';
 export * from './ratingUpdateRequest';
 export * from './relationshipKind';
 export * from './removeFileExclusionParams';

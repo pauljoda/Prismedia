@@ -286,11 +286,12 @@ public sealed partial class EntityMetadataApplyService {
                 continue;
             }
 
-            if (child.TargetKind is not ("person" or "studio" or "tag")) {
+            if (!child.TargetKind.IsRelationship()) {
                 continue;
             }
 
-            var linkedEntity = await FindEntityByKindAndTitleAsync(child.TargetKind, child.Patch.Title.Trim(), cancellationToken);
+            var linkedEntity = await FindEntityByKindAndTitleAsync(
+                child.TargetKind.ToEntityKind().ToCode(), child.Patch.Title.Trim(), cancellationToken);
             if (linkedEntity is null) {
                 continue;
             }
@@ -318,7 +319,7 @@ public sealed partial class EntityMetadataApplyService {
             return;
         }
 
-        if (proposal.TargetKind == "studio") {
+        if (proposal.TargetKind == ProposalKind.Studio) {
             var logo = proposal.Images.FirstOrDefault(image => image.Kind is "logo" or "poster") ?? proposal.Images[0];
             await _artwork.DownloadPluginImageAsync(linkedEntity, logo, EntityFileRole.Logo, now, cancellationToken);
 

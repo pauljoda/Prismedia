@@ -442,7 +442,7 @@ describe("identify review helpers", () => {
 
 function proposal(
   proposalId: string,
-  targetKind: string,
+  targetKind: EntityMetadataProposal["targetKind"],
   options: {
     title?: string;
     imageKind?: string;

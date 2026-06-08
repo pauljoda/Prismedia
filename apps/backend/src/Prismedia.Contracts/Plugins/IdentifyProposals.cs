@@ -1,3 +1,5 @@
+using Prismedia.Domain.Entities;
+
 namespace Prismedia.Contracts.Plugins;
 
 /// <summary>
@@ -70,7 +72,7 @@ public sealed record CreditPatch(string Name, string Role, string? Character, in
 public sealed record EntityMetadataProposal(
     string ProposalId,
     string Provider,
-    string TargetKind,
+    ProposalKind TargetKind,
     decimal? Confidence,
     string? MatchReason,
     EntityMetadataPatch Patch,

@@ -19,6 +19,7 @@ const codesUrl = process.env.PRISMEDIA_CODES_URL ?? new URL("/api/_codegen/codes
 // Backend enum type name -> [exported const name, exported type name].
 const ENUM_EXPORTS = [
   ["EntityKind", "ENTITY_KIND", "EntityKindCode"],
+  ["ProposalKind", "PROPOSAL_KIND", "ProposalKindCode"],
   ["RelationshipKind", "RELATIONSHIP_CODE", "RelationshipCode"],
   ["EntityFileRole", "ENTITY_FILE_ROLE", "EntityFileRoleCode"],
   ["CreditRole", "CREDIT_ROLE", "CreditRoleCode"],

@@ -190,7 +190,7 @@ public sealed class EntityMetadataApplyServiceTests {
         var proposal = new EntityMetadataProposal(
             ProposalId: "tmdb:movie:123",
             Provider: "tmdb",
-            TargetKind: "video",
+            TargetKind: ProposalKind.Video,
             Confidence: 1,
             MatchReason: "external-id",
             Patch: new EntityMetadataPatch(
@@ -253,7 +253,7 @@ public sealed class EntityMetadataApplyServiceTests {
         var proposal = new EntityMetadataProposal(
             ProposalId: "tmdb:movie:7",
             Provider: "tmdb",
-            TargetKind: "video",
+            TargetKind: ProposalKind.Video,
             Confidence: 1,
             MatchReason: "external-id",
             Patch: EmptyPatch() with {
@@ -293,7 +293,7 @@ public sealed class EntityMetadataApplyServiceTests {
         var proposal = new EntityMetadataProposal(
             ProposalId: "musicbrainz:artist:1",
             Provider: "musicbrainz",
-            TargetKind: "music-artist",
+            TargetKind: ProposalKind.MusicArtist,
             Confidence: 1,
             MatchReason: "external-id",
             Patch: EmptyPatch() with {
@@ -355,7 +355,7 @@ public sealed class EntityMetadataApplyServiceTests {
         var proposal = new EntityMetadataProposal(
             ProposalId: "tmdb:tv:12",
             Provider: "tmdb",
-            TargetKind: "video-series",
+            TargetKind: ProposalKind.VideoSeries,
             Confidence: 1,
             MatchReason: "external-id",
             Patch: EmptyPatch(),
@@ -365,7 +365,7 @@ public sealed class EntityMetadataApplyServiceTests {
                 new EntityMetadataProposal(
                     ProposalId: "tmdb:tv:12:season:1",
                     Provider: "tmdb",
-                    TargetKind: "video-season",
+                    TargetKind: ProposalKind.VideoSeason,
                     TargetEntityId: seasonId,
                     Confidence: 0.9m,
                     MatchReason: "cascade",
@@ -380,7 +380,7 @@ public sealed class EntityMetadataApplyServiceTests {
                         new EntityMetadataProposal(
                             ProposalId: "tmdb:tv:12:s1:e1",
                             Provider: "tmdb",
-                            TargetKind: "video-episode",
+                            TargetKind: ProposalKind.VideoEpisode,
                             TargetEntityId: episodeId,
                             Confidence: 0.9m,
                             MatchReason: "cascade",
@@ -435,7 +435,7 @@ public sealed class EntityMetadataApplyServiceTests {
         var proposal = new EntityMetadataProposal(
             ProposalId: "tmdb:tv:12",
             Provider: "tmdb",
-            TargetKind: "video-series",
+            TargetKind: ProposalKind.VideoSeries,
             TargetEntityId: seriesId,
             Confidence: 1,
             MatchReason: "external-id",
@@ -446,7 +446,7 @@ public sealed class EntityMetadataApplyServiceTests {
                 new EntityMetadataProposal(
                     ProposalId: "tmdb:tv:12:season:1",
                     Provider: "tmdb",
-                    TargetKind: "video-season",
+                    TargetKind: ProposalKind.VideoSeason,
                     TargetEntityId: seasonId,
                     Confidence: 0.9m,
                     MatchReason: "cascade",
@@ -479,7 +479,7 @@ public sealed class EntityMetadataApplyServiceTests {
         var proposal = new EntityMetadataProposal(
             ProposalId: "mangadex:manga-id:volume:1",
             Provider: "mangadex",
-            TargetKind: "book-volume",
+            TargetKind: ProposalKind.BookVolume,
             TargetEntityId: entityId,
             Confidence: 1,
             MatchReason: "volume-map",
@@ -525,7 +525,7 @@ public sealed class EntityMetadataApplyServiceTests {
         var proposal = new EntityMetadataProposal(
             ProposalId: "tmdb:tv:12",
             Provider: "tmdb",
-            TargetKind: "video-series",
+            TargetKind: ProposalKind.VideoSeries,
             TargetEntityId: seriesId,
             Confidence: 1,
             MatchReason: "external-id",
@@ -536,7 +536,7 @@ public sealed class EntityMetadataApplyServiceTests {
                 new EntityMetadataProposal(
                     ProposalId: "tmdb:tv:12:season:1",
                     Provider: "tmdb",
-                    TargetKind: "video-season",
+                    TargetKind: ProposalKind.VideoSeason,
                     TargetEntityId: seasonId,
                     Confidence: 0.9m,
                     MatchReason: "cascade",
@@ -572,7 +572,7 @@ public sealed class EntityMetadataApplyServiceTests {
         var proposal = new EntityMetadataProposal(
             ProposalId: "provider:series:1",
             Provider: "provider",
-            TargetKind: "video-series",
+            TargetKind: ProposalKind.VideoSeries,
             TargetEntityId: parentId,
             Confidence: 1,
             MatchReason: "external-id",
@@ -583,7 +583,7 @@ public sealed class EntityMetadataApplyServiceTests {
                 new EntityMetadataProposal(
                     ProposalId: "provider:season:1",
                     Provider: "provider",
-                    TargetKind: "video-season",
+                    TargetKind: ProposalKind.VideoSeason,
                     TargetEntityId: childId,
                     Confidence: 1,
                     MatchReason: "structural-child",
@@ -598,7 +598,7 @@ public sealed class EntityMetadataApplyServiceTests {
                         new EntityMetadataProposal(
                             ProposalId: "provider:episode:1",
                             Provider: "provider",
-                            TargetKind: "video",
+                            TargetKind: ProposalKind.Video,
                             TargetEntityId: grandchildId,
                             Confidence: 1,
                             MatchReason: "structural-child",
@@ -641,7 +641,7 @@ public sealed class EntityMetadataApplyServiceTests {
         var proposal = new EntityMetadataProposal(
             ProposalId: "mangadex:manga-1",
             Provider: "mangadex",
-            TargetKind: "book",
+            TargetKind: ProposalKind.Book,
             Confidence: 1,
             MatchReason: "external-id",
             Patch: EmptyPatch(),
@@ -651,7 +651,7 @@ public sealed class EntityMetadataApplyServiceTests {
                 new EntityMetadataProposal(
                     ProposalId: "mangadex:manga-1:volume:1",
                     Provider: "mangadex",
-                    TargetKind: "book-volume",
+                    TargetKind: ProposalKind.BookVolume,
                     Confidence: 0.8m,
                     MatchReason: "volume-map",
                     Patch: EmptyPatch() with {
@@ -665,7 +665,7 @@ public sealed class EntityMetadataApplyServiceTests {
                         new EntityMetadataProposal(
                             ProposalId: "mangadex:manga-1:chapter:chapter-1",
                             Provider: "mangadex",
-                            TargetKind: "book-chapter",
+                            TargetKind: ProposalKind.BookChapter,
                             Confidence: 0.7m,
                             MatchReason: "chapter-feed",
                             Patch: EmptyPatch() with {
@@ -704,7 +704,7 @@ public sealed class EntityMetadataApplyServiceTests {
         var proposal = new EntityMetadataProposal(
             ProposalId: "mangadex:manga-1",
             Provider: "mangadex",
-            TargetKind: "book",
+            TargetKind: ProposalKind.Book,
             Confidence: 1,
             MatchReason: "external-id",
             Patch: EmptyPatch(),
@@ -714,7 +714,7 @@ public sealed class EntityMetadataApplyServiceTests {
                 new EntityMetadataProposal(
                     ProposalId: "mangadex:manga-1:volume:1",
                     Provider: "mangadex",
-                    TargetKind: "book-volume",
+                    TargetKind: ProposalKind.BookVolume,
                     Confidence: 0.8m,
                     MatchReason: "volume-map",
                     Patch: EmptyPatch() with {
@@ -749,7 +749,7 @@ public sealed class EntityMetadataApplyServiceTests {
         var proposal = new EntityMetadataProposal(
             ProposalId: "mangaplus:manga-1",
             Provider: "mangaplus",
-            TargetKind: "book",
+            TargetKind: ProposalKind.Book,
             Confidence: 1,
             MatchReason: "external-id",
             Patch: EmptyPatch(),
@@ -759,7 +759,7 @@ public sealed class EntityMetadataApplyServiceTests {
                 new EntityMetadataProposal(
                     ProposalId: "mangaplus:manga-1:volume:1",
                     Provider: "mangaplus",
-                    TargetKind: "book-volume",
+                    TargetKind: ProposalKind.BookVolume,
                     Confidence: 0.8m,
                     MatchReason: "volume-map",
                     Patch: EmptyPatch() with {
@@ -772,7 +772,7 @@ public sealed class EntityMetadataApplyServiceTests {
                         new EntityMetadataProposal(
                             ProposalId: "mangaplus:manga-1:chapter:chapter-1",
                             Provider: "mangaplus",
-                            TargetKind: "book-chapter",
+                            TargetKind: ProposalKind.BookChapter,
                             Confidence: 0.7m,
                             MatchReason: "chapter-feed",
                             Patch: EmptyPatch() with {
@@ -816,7 +816,7 @@ public sealed class EntityMetadataApplyServiceTests {
         var proposal = new EntityMetadataProposal(
             ProposalId: "provider:series:positions",
             Provider: "provider",
-            TargetKind: "video-series",
+            TargetKind: ProposalKind.VideoSeries,
             TargetEntityId: seriesId,
             Confidence: 1,
             MatchReason: "external-id",
@@ -827,7 +827,7 @@ public sealed class EntityMetadataApplyServiceTests {
                 new EntityMetadataProposal(
                     ProposalId: "provider:season:3",
                     Provider: "provider",
-                    TargetKind: "video-season",
+                    TargetKind: ProposalKind.VideoSeason,
                     TargetEntityId: seasonId,
                     Confidence: 1,
                     MatchReason: "structural-child",
@@ -841,7 +841,7 @@ public sealed class EntityMetadataApplyServiceTests {
                         new EntityMetadataProposal(
                             ProposalId: "provider:episode:2",
                             Provider: "provider",
-                            TargetKind: "video",
+                            TargetKind: ProposalKind.Video,
                             TargetEntityId: episodeId,
                             Confidence: 1,
                             MatchReason: "structural-child",
@@ -882,7 +882,7 @@ public sealed class EntityMetadataApplyServiceTests {
         var proposal = new EntityMetadataProposal(
             ProposalId: "provider:series:credits",
             Provider: "provider",
-            TargetKind: "video-series",
+            TargetKind: ProposalKind.VideoSeries,
             TargetEntityId: seriesId,
             Confidence: 1,
             MatchReason: "external-id",
@@ -893,7 +893,7 @@ public sealed class EntityMetadataApplyServiceTests {
                 new EntityMetadataProposal(
                     ProposalId: "provider:episode:credits",
                     Provider: "provider",
-                    TargetKind: "video",
+                    TargetKind: ProposalKind.Video,
                     TargetEntityId: episodeId,
                     Confidence: 1,
                     MatchReason: "structural-child",
@@ -942,7 +942,7 @@ public sealed class EntityMetadataApplyServiceTests {
         var duplicatePersonChild = new EntityMetadataProposal(
             ProposalId: "provider:person:actor",
             Provider: "provider",
-            TargetKind: "person",
+            TargetKind: ProposalKind.Person,
             Confidence: 1,
             MatchReason: "credit",
             Patch: EmptyPatch() with { Title = "Returning Actor" },
@@ -952,7 +952,7 @@ public sealed class EntityMetadataApplyServiceTests {
         var proposal = new EntityMetadataProposal(
             ProposalId: "provider:series:artwork",
             Provider: "provider",
-            TargetKind: "video-series",
+            TargetKind: ProposalKind.VideoSeries,
             TargetEntityId: seriesId,
             Confidence: 1,
             MatchReason: "external-id",
@@ -963,7 +963,7 @@ public sealed class EntityMetadataApplyServiceTests {
                 new EntityMetadataProposal(
                     ProposalId: "provider:episode:artwork",
                     Provider: "provider",
-                    TargetKind: "video",
+                    TargetKind: ProposalKind.Video,
                     TargetEntityId: episodeId,
                     Confidence: 1,
                     MatchReason: "structural-child",
@@ -1000,7 +1000,7 @@ public sealed class EntityMetadataApplyServiceTests {
         var personRelationship = new EntityMetadataProposal(
             ProposalId: "tmdb:person:guest",
             Provider: "tmdb",
-            TargetKind: "person",
+            TargetKind: ProposalKind.Person,
             Confidence: 1,
             MatchReason: "credit",
             Patch: EmptyPatch() with { Title = "Guest Actor" },
@@ -1010,7 +1010,7 @@ public sealed class EntityMetadataApplyServiceTests {
         var proposal = new EntityMetadataProposal(
             ProposalId: "tmdb:tv:the-chair-company",
             Provider: "tmdb",
-            TargetKind: "video-series",
+            TargetKind: ProposalKind.VideoSeries,
             TargetEntityId: seriesId,
             Confidence: 1,
             MatchReason: "external-id",
@@ -1021,7 +1021,7 @@ public sealed class EntityMetadataApplyServiceTests {
                 new EntityMetadataProposal(
                     ProposalId: "tmdb:tv:the-chair-company:s1:e1",
                     Provider: "tmdb",
-                    TargetKind: "video",
+                    TargetKind: ProposalKind.Video,
                     TargetEntityId: episodeId,
                     Confidence: 1,
                     MatchReason: "structural-child",
@@ -1062,7 +1062,7 @@ public sealed class EntityMetadataApplyServiceTests {
         var actorRelationship = new EntityMetadataProposal(
             ProposalId: "tmdb:person:lead",
             Provider: "tmdb",
-            TargetKind: "person",
+            TargetKind: ProposalKind.Person,
             Confidence: 1,
             MatchReason: "credit",
             Patch: EmptyPatch() with { Title = "Lead Actor" },
@@ -1072,7 +1072,7 @@ public sealed class EntityMetadataApplyServiceTests {
         var studioRelationship = new EntityMetadataProposal(
             ProposalId: "tmdb:studio:chair-pictures",
             Provider: "tmdb",
-            TargetKind: "studio",
+            TargetKind: ProposalKind.Studio,
             Confidence: 1,
             MatchReason: "studio",
             Patch: EmptyPatch() with { Title = "Chair Pictures" },
@@ -1085,7 +1085,7 @@ public sealed class EntityMetadataApplyServiceTests {
         var proposal = new EntityMetadataProposal(
             ProposalId: "tmdb:movie:chair",
             Provider: "tmdb",
-            TargetKind: "video",
+            TargetKind: ProposalKind.Video,
             Confidence: 1,
             MatchReason: "external-id",
             Patch: EmptyPatch() with {
@@ -1125,7 +1125,7 @@ public sealed class EntityMetadataApplyServiceTests {
         var actorRelationship = new EntityMetadataProposal(
             ProposalId: "tmdb:person:31",
             Provider: "tmdb",
-            TargetKind: "person",
+            TargetKind: ProposalKind.Person,
             Confidence: 1,
             MatchReason: "credit",
             Patch: EmptyPatch() with {
@@ -1141,7 +1141,7 @@ public sealed class EntityMetadataApplyServiceTests {
         var proposal = new EntityMetadataProposal(
             ProposalId: "tmdb:movie:1",
             Provider: "tmdb",
-            TargetKind: "video",
+            TargetKind: ProposalKind.Video,
             Confidence: 1,
             MatchReason: "external-id",
             Patch: EmptyPatch() with {
@@ -1193,7 +1193,7 @@ public sealed class EntityMetadataApplyServiceTests {
         var actorRelationship = new EntityMetadataProposal(
             ProposalId: "tmdb:person:31",
             Provider: "tmdb",
-            TargetKind: "person",
+            TargetKind: ProposalKind.Person,
             Confidence: 1,
             MatchReason: "credit",
             Patch: EmptyPatch() with { Title = "Lead Actor" },
@@ -1203,7 +1203,7 @@ public sealed class EntityMetadataApplyServiceTests {
         var proposal = new EntityMetadataProposal(
             ProposalId: "tmdb:movie:chair",
             Provider: "tmdb",
-            TargetKind: "video",
+            TargetKind: ProposalKind.Video,
             Confidence: 1,
             MatchReason: "external-id",
             Patch: EmptyPatch() with {
@@ -1235,7 +1235,7 @@ public sealed class EntityMetadataApplyServiceTests {
         static EntityMetadataProposal ActorRelationship(string description) => new(
             ProposalId: $"tmdb:person:31:{description}",
             Provider: "tmdb",
-            TargetKind: "person",
+            TargetKind: ProposalKind.Person,
             Confidence: 1,
             MatchReason: "credit",
             Patch: EmptyPatch() with {
@@ -1251,7 +1251,7 @@ public sealed class EntityMetadataApplyServiceTests {
         var proposal = new EntityMetadataProposal(
             ProposalId: "tmdb:movie:1",
             Provider: "tmdb",
-            TargetKind: "video",
+            TargetKind: ProposalKind.Video,
             Confidence: 1,
             MatchReason: "external-id",
             Patch: EmptyPatch() with {
@@ -1287,7 +1287,7 @@ public sealed class EntityMetadataApplyServiceTests {
         var proposal = new EntityMetadataProposal(
             ProposalId: "tmdb:tv:chair:s1:e1",
             Provider: "tmdb",
-            TargetKind: "video",
+            TargetKind: ProposalKind.Video,
             TargetEntityId: episodeId,
             Confidence: 1,
             MatchReason: "external-id",

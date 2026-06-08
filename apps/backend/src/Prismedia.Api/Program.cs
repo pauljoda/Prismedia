@@ -10,6 +10,7 @@ using Prismedia.Contracts.Media;
 using Prismedia.Contracts.System;
 using Prismedia.Infrastructure;
 using Prismedia.Infrastructure.Persistence;
+using Prismedia.Infrastructure.Serialization;
 using Prismedia.Infrastructure.Videos;
 using Microsoft.Extensions.FileProviders;
 

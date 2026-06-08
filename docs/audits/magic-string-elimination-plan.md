@@ -377,24 +377,33 @@ magic-string offender (the hand-maintained jobs queue/status vocabulary).
   for now — see the dedicated follow-up below. Backend 853 tests, frontend 610 + 0 svelte-check
   errors.
 
-### Remaining (scoped follow-up: a `ProposalKind` `[Code]` enum for the identify vocabulary)
-`EntityMetadataProposal.TargetKind` (and the few frontend `as EntityKind` boundary casts it still
-feeds: `identify-review-helpers.ts` ×2, `IdentifyReviewChild.svelte`, `identify-candidate-card.ts`)
-carry the **plugin-proposal kind vocabulary**, which is `EntityKind` plus the `"video-episode"`
-token. Per the magic-string contract ("a new closed set with no home → CREATE a `[Code]` enum"),
-the correct fix is a dedicated `ProposalKind`/`IdentifyTargetKind` `[Code]` enum (all `EntityKind`
-members + `VideoEpisode [Code("video-episode")]`) with one explicit `ProposalKind → EntityKind`
-mapper (`VideoEpisode → Video`) applied at the structural-binding boundary
-(`IdentifyPluginService.StructuralProposals`, `EntityMetadataProposalTraversal`,
-`StashResultMapper`). This adds a parallel kind taxonomy, so it deserves its own pass (and the
-owner's sign-off) rather than being forced onto `EntityKind`. The lone bare `"video-episode"`
-literal also recurs ~8× across `StructuralProposals`/`EntityMetadataApplyService` and would be
-homed by that enum. **Not** entity kinds (separate future families needing their own `[Code]`
-enums): `FileEntry.Kind` (file-entry kind), `ImageCandidate.Kind` / `EntityImageAsset.Kind`
-(image-asset kind), `PluginEntitySupport.EntityKind` (plugin manifest support vocab),
-`StatsCapability.Code` (stat code), `ProgressCapability.Unit`/`Mode`, `EntityThumbnail.HoverKind`.
-The hand-rolled `apps/web-svelte/src/lib/api/identify-types.ts` (a parallel copy of generated
-models) is itself a separate cleanup — fold into generated re-exports.
+- **✅ Batch 5 — the `ProposalKind` `[Code]` enum for the identify vocabulary.**
+  `EntityMetadataProposal.TargetKind` is now `ProposalKind` — a `[Code]` enum mirroring `EntityKind`
+  code-for-code **plus** `VideoEpisode [Code("video-episode")]` (the provider-only leaf-episode
+  token). One mapper, `ProposalKind.ToEntityKind()` (`VideoEpisode → Video`, identity otherwise),
+  collapses it at the structural-binding boundary; `ToProposalKind()`/`IsRelationship()` round it
+  out. Every `"video-episode"`/`AreCompatibleProposalKinds`/`StructuralKindKey`/`IsCompatibleStructuralKind`
+  site now reasons in `ProposalKind`/`EntityKind` (the bare `"video-episode"` literals are gone from
+  the proposal path; the one remaining pair lives in `IsKindCompatible`, the **API patch-boundary**
+  expected-kind vocab — a separate string family that also carries `"video-movie"`). Frontend:
+  `targetKind` is the generated `ProposalKind` union; the `as EntityKind` casts became
+  `proposalKindToEntityKind()` (in `entity-codes.ts`, mapping `video-episode → video`).
+  **Architectural change:** `CodecJsonConverterFactory` moved `Prismedia.Api → Prismedia.Infrastructure`
+  so the plugin-process wire **and** the durable identify-queue JSON columns round-trip codec enums by
+  code (they previously serialized bare `string`s; this also fixed a latent Batch-4 bug where the
+  plugin wire serialized `EntityKind` as a numeric value). Domain test `ProposalKindTests` pins
+  `ProposalKind = EntityKind ∪ {video-episode}` and the round-trip. Backend 864 tests, frontend 610
+  + 0 svelte-check errors.
+
+### Remaining (separate future enum families — NOT entity/proposal kinds)
+`FileEntry.Kind` (file-entry kind), `ImageCandidate.Kind` / `EntityImageAsset.Kind` (image-asset
+kind), `PluginEntitySupport.EntityKind` (plugin manifest support vocab), the API patch-boundary
+expected-kind vocab in `IsKindCompatible` (`video-episode`/`video-movie`), `StatsCapability.Code`
+(stat code), `ProgressCapability.Unit`/`Mode`, `EntityThumbnail.HoverKind`. Each needs its own
+`[Code]` enum or constant home. The hand-rolled `apps/web-svelte/src/lib/api/identify-types.ts`
+(a parallel copy of generated models) is a separate cleanup — fold into generated re-exports;
+`identify-candidate-card.ts` keeps one `as EntityKind` cast on a generic `string` param (test-only
+caller). 
 
 ### Remaining DTO work-list (Prismedia contracts only; Jellyfin DTOs use `JellyfinProtocol`, not codec enums)
 `EntityCard.Kind`/`EntityCardEnvelope.Kind` → `EntityKind` (broadest ripple — the core card

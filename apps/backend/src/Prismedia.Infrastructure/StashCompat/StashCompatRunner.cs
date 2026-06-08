@@ -60,7 +60,7 @@ public sealed class StashCompatRunner : IIdentifyRunner {
             // strongest signal: resolve it to a single confident proposal.
             if (!string.IsNullOrWhiteSpace(input.Url)) {
                 foreach (var capability in UrlCapabilitiesFor(request.Entity.Kind).Where(definition.HasCapability)) {
-                    var proposal = await ScrapeProposalAsync(engine, definition, descriptor, capability, input, request.Entity.Kind.ToCode(), cancellationToken);
+                    var proposal = await ScrapeProposalAsync(engine, definition, descriptor, capability, input, request.Entity.Kind.ToProposalKind(), cancellationToken);
                     if (proposal is not null) {
                         return new IdentifyPluginResponse(true, proposal, null);
                     }
@@ -70,7 +70,7 @@ public sealed class StashCompatRunner : IIdentifyRunner {
             // Fragment/query-fragment capabilities template a URL from the title or filename and
             // resolve to a single page, so they also yield a confident proposal.
             foreach (var capability in new[] { "sceneByQueryFragment", "sceneByFragment" }.Where(definition.HasCapability)) {
-                var proposal = await ScrapeProposalAsync(engine, definition, descriptor, capability, input, request.Entity.Kind.ToCode(), cancellationToken);
+                var proposal = await ScrapeProposalAsync(engine, definition, descriptor, capability, input, request.Entity.Kind.ToProposalKind(), cancellationToken);
                 if (proposal is not null) {
                     return new IdentifyPluginResponse(true, proposal, null);
                 }
@@ -85,7 +85,7 @@ public sealed class StashCompatRunner : IIdentifyRunner {
                     .Select(candidate => candidate!)
                     .ToArray();
                 if (candidates.Length > 0) {
-                    return new IdentifyPluginResponse(true, CandidatesShell(candidates), null);
+                    return new IdentifyPluginResponse(true, CandidatesShell(request.Entity.Kind.ToProposalKind(), candidates), null);
                 }
             }
         } catch (StashScriptActionRequiredException) {
@@ -104,7 +104,7 @@ public sealed class StashCompatRunner : IIdentifyRunner {
         PluginDescriptor descriptor,
         string capability,
         StashScrapeInput input,
-        string targetKind,
+        ProposalKind targetKind,
         CancellationToken cancellationToken) {
         var scene = await engine.ScrapeSceneAsync(definition, descriptor.EntryPath, capability, input, cancellationToken);
         if (scene is not { HasData: true }) {
@@ -175,11 +175,11 @@ public sealed class StashCompatRunner : IIdentifyRunner {
     /// Builds the candidate-only response shell, mirroring the dotnet runner so the identify
     /// pipeline routes it to the disambiguation UI rather than treating it as a confident match.
     /// </summary>
-    private static EntityMetadataProposal CandidatesShell(IReadOnlyList<EntitySearchCandidate> candidates) =>
+    private static EntityMetadataProposal CandidatesShell(ProposalKind targetKind, IReadOnlyList<EntitySearchCandidate> candidates) =>
         new(
             ProposalId: null!,
             Provider: null!,
-            TargetKind: null!,
+            TargetKind: targetKind,
             Confidence: null,
             MatchReason: null,
             Patch: null!,

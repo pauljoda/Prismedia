@@ -91,7 +91,7 @@ function metadataProposal(id: string) {
   return {
     proposalId: id,
     provider: "tmdb",
-    targetKind: "video",
+    targetKind: "video" as const,
     confidence: 1,
     matchReason: null,
     patch: {

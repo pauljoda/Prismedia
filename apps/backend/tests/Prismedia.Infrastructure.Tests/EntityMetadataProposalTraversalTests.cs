@@ -1,4 +1,5 @@
 using Prismedia.Contracts.Plugins;
+using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Plugins;
 
 namespace Prismedia.Infrastructure.Tests;
@@ -48,7 +49,7 @@ public sealed class EntityMetadataProposalTraversalTests {
         new(
             ProposalId: id,
             Provider: "test",
-            TargetKind: targetKind,
+            TargetKind: targetKind.DecodeAs<ProposalKind>(),
             Confidence: null,
             MatchReason: null,
             Patch: new EntityMetadataPatch(

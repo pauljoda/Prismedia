@@ -4,7 +4,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
-using Prismedia.Api.Serialization;
+using Prismedia.Infrastructure.Serialization;
 using Prismedia.Application.Entities;
 using Prismedia.Domain.Capabilities;
 using Prismedia.Domain.Entities;

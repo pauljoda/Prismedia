@@ -44,7 +44,7 @@ public sealed partial class IdentifyPluginService {
         // Builds the root proposal shape from the children resolved so far — used both for the final
         // return and for each partial-root the streaming sink publishes.
         EntityMetadataProposal Root(IReadOnlyList<EntityMetadataProposal> structural) => titledProposal with {
-            TargetKind = entity.KindCode,
+            TargetKind = entity.KindCode.DecodeAs<ProposalKind>(),
             TargetEntityId = entity.Id,
             Children = MergeStructuralChildren(baseChildren, structural),
             Relationships = EntityMetadataProposalTraversal.Relationships(titledProposal)
@@ -159,7 +159,9 @@ public sealed partial class IdentifyPluginService {
             .Where(row => row.ParentEntityId == parentEntityId)
             .Select(row => row.KindCode)
             .ToArrayAsync(cancellationToken);
-        return childKinds.Any(kind => manifest.Supports.Any(support => IsCompatibleStructuralKind(kind, support.EntityKind)));
+        return childKinds.Any(kind => manifest.Supports.Any(support =>
+            support.EntityKind.TryDecodeAs<ProposalKind>(out var supportKind) &&
+            IsCompatibleStructuralKind(kind, supportKind)));
     }
 
     private async Task<bool> HasMissingSupportedStructuralChildrenAsync(
@@ -169,7 +171,9 @@ public sealed partial class IdentifyPluginService {
         CancellationToken cancellationToken) {
         var localChildren = await LoadStructuralChildrenAsync(parentEntityId, cancellationToken);
         return localChildren
-            .Where(child => manifest.Supports.Any(support => IsCompatibleStructuralKind(child.Entity.KindCode, support.EntityKind)))
+            .Where(child => manifest.Supports.Any(support =>
+                support.EntityKind.TryDecodeAs<ProposalKind>(out var supportKind) &&
+                IsCompatibleStructuralKind(child.Entity.KindCode, supportKind)))
             .Any(child => !providerChildren.Any(providerChild =>
                 providerChild.TargetEntityId == child.Entity.Id ||
                 IsSameStructuralChild(child, providerChild)));
@@ -229,19 +233,15 @@ public sealed partial class IdentifyPluginService {
         return $"title:{StructuralKindKey(child.TargetKind)}:{child.Patch.Title?.Trim()}";
     }
 
-    private static int? StructuralSortOrder(EntityMetadataProposal child) {
-        var kind = child.TargetKind.Equals("video-episode", StringComparison.OrdinalIgnoreCase)
-            ? EntityKindRegistry.Video.Code
-            : child.TargetKind;
-        return EntityMetadataPositionRules.SortOrderFor(
-            kind,
+    private static int? StructuralSortOrder(EntityMetadataProposal child) =>
+        EntityMetadataPositionRules.SortOrderFor(
+            child.TargetKind.ToEntityKind().ToCode(),
             EntityMetadataPositionRules.Normalize(child.Patch.Positions));
-    }
 
-    private static string StructuralKindKey(string kind) =>
-        kind.Equals("video-episode", StringComparison.OrdinalIgnoreCase)
-            ? EntityKindRegistry.Video.Code
-            : kind.Trim().ToLowerInvariant();
+    // The structural key collapses a proposal kind to the entity kind it persists as, so a
+    // provider's "video-episode" leaf and a local "video" sort/dedup into the same bucket.
+    private static string StructuralKindKey(ProposalKind kind) =>
+        kind.ToEntityKind().ToCode();
 
     private static bool IsSameStructuralChild(EntityMetadataProposal left, EntityMetadataProposal right) {
         if (!AreCompatibleProposalKinds(left.TargetKind, right.TargetKind)) {
@@ -265,12 +265,10 @@ public sealed partial class IdentifyPluginService {
             left.Patch.Title.Equals(right.Patch.Title, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool AreCompatibleProposalKinds(string leftKind, string rightKind) =>
-        leftKind.Equals(rightKind, StringComparison.OrdinalIgnoreCase) ||
-        leftKind.Equals(EntityKindRegistry.Video.Code, StringComparison.OrdinalIgnoreCase) &&
-        rightKind.Equals("video-episode", StringComparison.OrdinalIgnoreCase) ||
-        leftKind.Equals("video-episode", StringComparison.OrdinalIgnoreCase) &&
-        rightKind.Equals(EntityKindRegistry.Video.Code, StringComparison.OrdinalIgnoreCase);
+    // Two proposal kinds are compatible when they persist as the same entity kind — this is what
+    // makes a provider's "video-episode" leaf match a local "video" (both map to EntityKind.Video).
+    private static bool AreCompatibleProposalKinds(ProposalKind leftKind, ProposalKind rightKind) =>
+        leftKind.ToEntityKind() == rightKind.ToEntityKind();
 
     /// <summary>
     /// Guards against a proposal whose title is just the provider's own identifier. Some providers
@@ -369,10 +367,8 @@ public sealed partial class IdentifyPluginService {
             localChild.Entity.Title.Equals(proposal.Patch.Title, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool IsCompatibleStructuralKind(string localKind, string proposalKind) =>
-        localKind.Equals(proposalKind, StringComparison.OrdinalIgnoreCase) ||
-        localKind.Equals(EntityKindRegistry.Video.Code, StringComparison.OrdinalIgnoreCase) &&
-        proposalKind.Equals("video-episode", StringComparison.OrdinalIgnoreCase);
+    private static bool IsCompatibleStructuralKind(string localKind, ProposalKind proposalKind) =>
+        localKind == proposalKind.ToEntityKind().ToCode();
 
     private static EntityMetadataProposal EnsureStructuralPositions(EntityMetadataProposal proposal, StructuralChild child) {
         if (child.SortOrder is not { } sortOrder || proposal.Patch.Positions.Count > 0) {

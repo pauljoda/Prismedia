@@ -25,6 +25,30 @@ export const ENTITY_KIND = {
 
 export type EntityKindCode = (typeof ENTITY_KIND)[keyof typeof ENTITY_KIND];
 
+export const PROPOSAL_KIND = {
+  audio: "audio",
+  audioLibrary: "audio-library",
+  audioTrack: "audio-track",
+  book: "book",
+  bookVolume: "book-volume",
+  bookChapter: "book-chapter",
+  bookPage: "book-page",
+  collection: "collection",
+  gallery: "gallery",
+  image: "image",
+  musicArtist: "music-artist",
+  person: "person",
+  movie: "movie",
+  studio: "studio",
+  tag: "tag",
+  video: "video",
+  videoSeries: "video-series",
+  videoSeason: "video-season",
+  videoEpisode: "video-episode",
+} as const;
+
+export type ProposalKindCode = (typeof PROPOSAL_KIND)[keyof typeof PROPOSAL_KIND];
+
 export const RELATIONSHIP_CODE = {
   cast: "cast",
   credits: "credits",

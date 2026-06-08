@@ -1,4 +1,5 @@
 using Prismedia.Contracts.Plugins;
+using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.StashCompat.Model;
 
 namespace Prismedia.Infrastructure.StashCompat;
@@ -25,7 +26,7 @@ public static class StashResultMapper {
         StashScrapedScene scene,
         string providerId,
         string providerName,
-        string targetKind,
+        ProposalKind targetKind,
         string? inputUrl,
         string matchReason,
         decimal confidence) {
@@ -133,7 +134,7 @@ public static class StashResultMapper {
             var studioImages = string.IsNullOrWhiteSpace(studio.Image)
                 ? Array.Empty<ImageCandidate>()
                 : [new ImageCandidate("logo", studio.Image.Trim(), providerName, null, null, null, null)];
-            relationships.Add(RelationshipProposal($"{providerId}:studio:{studioName}", providerName, "studio", studioName, null, studioUrls, studioImages));
+            relationships.Add(RelationshipProposal($"{providerId}:studio:{studioName}", providerName, ProposalKind.Studio, studioName, null, studioUrls, studioImages));
         }
 
         return relationships;
@@ -154,13 +155,13 @@ public static class StashResultMapper {
             dates["birth"] = performer!.Birthdate!.Trim();
         }
 
-        return RelationshipProposal($"{providerId}:person:{name}", providerName, "person", name, details, urls, images, dates);
+        return RelationshipProposal($"{providerId}:person:{name}", providerName, ProposalKind.Person, name, details, urls, images, dates);
     }
 
     private static EntityMetadataProposal RelationshipProposal(
         string proposalId,
         string providerName,
-        string targetKind,
+        ProposalKind targetKind,
         string title,
         string? description,
         IReadOnlyList<string> urls,

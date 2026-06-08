@@ -7,11 +7,12 @@
 import type { EntityMetadataPatch } from './entityMetadataPatch';
 import type { EntitySearchCandidate } from './entitySearchCandidate';
 import type { ImageCandidate } from './imageCandidate';
+import type { ProposalKind } from './proposalKind';
 
 export interface EntityMetadataProposal {
   proposalId: string;
   provider: string;
-  targetKind: string;
+  targetKind: ProposalKind;
   /**
      * @nullable
      * @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?$

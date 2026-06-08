@@ -1,4 +1,4 @@
-import type { EntityKind } from "$lib/api/generated/model";
+import type { EntityKind, ProposalKind } from "$lib/api/generated/model";
 import type { EntityMetadataFlagsPatch } from "$lib/api/entity-mutations";
 
 export interface PluginEntitySupport {
@@ -84,7 +84,7 @@ export interface EntityMetadataPatch {
 export interface EntityMetadataProposal {
   proposalId: string;
   provider: string;
-  targetKind: string;
+  targetKind: ProposalKind;
   confidence?: number | null;
   matchReason?: string | null;
   patch: EntityMetadataPatch;
