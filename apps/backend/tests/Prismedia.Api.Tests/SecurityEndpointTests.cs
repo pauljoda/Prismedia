@@ -37,6 +37,20 @@ public sealed partial class SecurityEndpointTests : IDisposable {
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
+    [Theory]
+    [InlineData("/items")]
+    [InlineData("/videos/11111111-1111-1111-1111-111111111111/stream")]
+    [InlineData("/sessions/playing/progress")]
+    [InlineData("/library/mediafolders")]
+    public async Task ProtectedJellyfinRoutesRequireApiKeyForLowercaseUrls(string path) {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync(path);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
     [Fact]
     public async Task BootstrapNavigationSetsHttpOnlyApiKeyCookie() {
         using var factory = new WebApplicationFactory<Program>()
