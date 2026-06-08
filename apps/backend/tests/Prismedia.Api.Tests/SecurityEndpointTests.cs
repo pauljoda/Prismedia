@@ -87,6 +87,61 @@ public sealed partial class SecurityEndpointTests : IDisposable {
     }
 
     [Fact]
+    public void BootstrapNavigationAllowsProxiedUiNavigationFromPrivateProxyNetwork() {
+        var context = new DefaultHttpContext();
+        context.Connection.RemoteIpAddress = IPAddress.Parse("172.22.0.5");
+        context.Request.Method = HttpMethods.Get;
+        context.Request.Path = "/library";
+        context.Request.Host = new HostString("dev-prismedia.pauljoda.com");
+        context.Request.Headers.Accept = "text/html";
+        context.Request.Headers["X-Forwarded-For"] = "203.0.113.8";
+        context.Request.Headers["X-Forwarded-Proto"] = "https";
+        context.Request.Headers["X-Forwarded-Host"] = "dev-prismedia.pauljoda.com";
+
+        var shouldBootstrap = PrismediaAuthentication.ShouldBootstrapCookie(context.Request);
+
+        Assert.True(shouldBootstrap);
+    }
+
+    [Theory]
+    [InlineData("/api/settings")]
+    [InlineData("/assets/videos/thumb.jpg")]
+    [InlineData("/openapi/v1.json")]
+    [InlineData("/Items/11111111-1111-1111-1111-111111111111")]
+    public void BootstrapNavigationRefusesNonUiRoutesBehindProxy(string path) {
+        var context = new DefaultHttpContext();
+        context.Connection.RemoteIpAddress = IPAddress.Parse("172.22.0.5");
+        context.Request.Method = HttpMethods.Get;
+        context.Request.Path = path;
+        context.Request.Host = new HostString("dev-prismedia.pauljoda.com");
+        context.Request.Headers.Accept = "text/html";
+        context.Request.Headers["X-Forwarded-For"] = "203.0.113.8";
+        context.Request.Headers["X-Forwarded-Proto"] = "https";
+        context.Request.Headers["X-Forwarded-Host"] = "dev-prismedia.pauljoda.com";
+
+        var shouldBootstrap = PrismediaAuthentication.ShouldBootstrapCookie(context.Request);
+
+        Assert.False(shouldBootstrap);
+    }
+
+    [Fact]
+    public void BootstrapNavigationRefusesForwardedHeadersFromPublicRemoteClient() {
+        var context = new DefaultHttpContext();
+        context.Connection.RemoteIpAddress = IPAddress.Parse("203.0.113.24");
+        context.Request.Method = HttpMethods.Get;
+        context.Request.Path = "/library";
+        context.Request.Host = new HostString("dev-prismedia.pauljoda.com");
+        context.Request.Headers.Accept = "text/html";
+        context.Request.Headers["X-Forwarded-For"] = "198.51.100.8";
+        context.Request.Headers["X-Forwarded-Proto"] = "https";
+        context.Request.Headers["X-Forwarded-Host"] = "dev-prismedia.pauljoda.com";
+
+        var shouldBootstrap = PrismediaAuthentication.ShouldBootstrapCookie(context.Request);
+
+        Assert.False(shouldBootstrap);
+    }
+
+    [Fact]
     public async Task ApiKeyHeaderAcceptsHumanNormalizedInput() {
         using var factory = CreateFactory();
         using var client = factory.CreateClient();

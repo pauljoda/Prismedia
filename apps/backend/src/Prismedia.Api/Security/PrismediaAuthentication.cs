@@ -19,6 +19,10 @@ internal sealed record PrismediaAuthContext(
 internal static class PrismediaAuthentication {
     internal const string CookieName = "prismedia-api-key";
     private const string AuthContextKey = "PrismediaAuth";
+    private static readonly string[] ForwardedHeaderNames = [
+        "Forwarded",
+        "X-Forwarded-For"
+    ];
 
     internal static IApplicationBuilder UsePrismediaUiApiKeyCookie(this IApplicationBuilder app) =>
         app.Use(async (context, next) => {
@@ -145,7 +149,40 @@ internal static class PrismediaAuthentication {
 
     private static bool IsTrustedUiBootstrapClient(HttpContext context) {
         var remoteAddress = context.Connection.RemoteIpAddress;
-        return remoteAddress is null || IPAddress.IsLoopback(remoteAddress);
+        if (remoteAddress is null || IPAddress.IsLoopback(remoteAddress)) {
+            return true;
+        }
+
+        return IsPrivateNetworkAddress(remoteAddress) &&
+            HasForwardedClient(context.Request) &&
+            HasForwardedOrigin(context.Request);
+    }
+
+    private static bool HasForwardedClient(HttpRequest request) =>
+        ForwardedHeaderNames.Any(name => request.Headers.ContainsKey(name));
+
+    private static bool HasForwardedOrigin(HttpRequest request) =>
+        request.Headers["X-Forwarded-Host"].Any(value =>
+            string.Equals(value, request.Host.Value, StringComparison.OrdinalIgnoreCase)) &&
+        request.Headers["X-Forwarded-Proto"].Any(value =>
+            value is not null &&
+            (value.Equals("http", StringComparison.OrdinalIgnoreCase) ||
+             value.Equals("https", StringComparison.OrdinalIgnoreCase)));
+
+    private static bool IsPrivateNetworkAddress(IPAddress address) {
+        if (address.IsIPv4MappedToIPv6) {
+            address = address.MapToIPv4();
+        }
+
+        if (address.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork) {
+            return address.IsIPv6LinkLocal || address.IsIPv6SiteLocal || address.IsIPv6UniqueLocal;
+        }
+
+        var bytes = address.GetAddressBytes();
+        return bytes[0] == 10 ||
+            (bytes[0] == 172 && bytes[1] is >= 16 and <= 31) ||
+            (bytes[0] == 192 && bytes[1] == 168) ||
+            (bytes[0] == 169 && bytes[1] == 254);
     }
 
     private static bool RequiresAuthentication(HttpRequest request) {
