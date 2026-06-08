@@ -16,6 +16,7 @@
   import IdentifyReviewChoice from "$lib/components/identify/IdentifyReviewChoice.svelte";
   import IdentifyReviewParent from "$lib/components/identify/IdentifyReviewParent.svelte";
   import IdentifyReviewChild from "$lib/components/identify/IdentifyReviewChild.svelte";
+  import { shouldShowRouteQueueRejectActions } from "$lib/components/identify/identify-route-actions";
   import { useIdentifyStore } from "$lib/components/identify/identify-store.svelte";
   import { useAppChrome } from "$lib/stores/app-chrome.svelte";
 
@@ -41,6 +42,8 @@
   const currentIdentifyStatus = $derived(
     store.identifyingId === current?.entityId ? store.identifyingStatus : null,
   );
+  const isIdentifyingCurrent = $derived(store.identifyingId === current?.entityId);
+  const backToSearchDisabled = $derived(isIdentifyingCurrent);
   const activeReviewChild = $derived(
     store.view.kind === "review-child" && store.view.entity.id === entityId ? store.view : null,
   );
@@ -50,6 +53,13 @@
         (current?.state === "proposal" && current.proposal) ||
           (current?.state === "search" && current.candidates.length > 0),
       ),
+  );
+  const showRouteQueueRejectActions = $derived(
+    shouldShowRouteQueueRejectActions({
+      current,
+      reviewSurfaceHasRejectFooter,
+      isIdentifyingCurrent,
+    }),
   );
 
   onMount(async () => {
@@ -87,12 +97,7 @@
 
   async function backToSearch() {
     if (!current || !activeProvider) return;
-    searching = true;
-    try {
-      await store.backToSearch(current.entity, activeProvider.id);
-    } finally {
-      searching = false;
-    }
+    await store.backToSearch(current.entity, activeProvider.id);
   }
 
   function goToQueueItem(item: typeof prevQueueItem) {
@@ -148,7 +153,19 @@
       </div>
     {/if}
 
-    {#if current && !reviewSurfaceHasRejectFooter}
+    {#if current && current.state === "proposal" && activeProvider}
+      <button
+        type="button"
+        class="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-xs border border-border-accent bg-accent-950/30 px-3 text-[0.8rem] font-medium text-text-accent shadow-[0_0_18px_rgba(242,194,106,0.10)] transition-colors hover:bg-accent-950/45 disabled:cursor-not-allowed disabled:opacity-40 md:hidden"
+        disabled={backToSearchDisabled}
+        onclick={backToSearch}
+      >
+        <Search class="h-3.5 w-3.5" />
+        Back to Search
+      </button>
+    {/if}
+
+    {#if current && showRouteQueueRejectActions}
       <IdentifyRejectQueueActions
         entityId={current.entityId}
         showNext={Boolean(nextReviewQueueItem)}
@@ -164,18 +181,14 @@
         <button
           type="button"
           class="hidden h-8 items-center gap-1.5 rounded-xs border border-border-default bg-surface-2 px-2.5 text-[0.76rem] text-text-muted transition-colors hover:border-border-accent hover:text-text-accent disabled:cursor-not-allowed disabled:opacity-40 md:inline-flex"
-          disabled={searching || store.identifyingId === current.entityId}
+          disabled={backToSearchDisabled}
           onclick={backToSearch}
         >
-          {#if searching || store.identifyingId === current.entityId}
-            <Loader2 class="h-3.5 w-3.5 animate-spin" />
-          {:else}
-            <Search class="h-3.5 w-3.5" />
-          {/if}
+          <Search class="h-3.5 w-3.5" />
           Back to Search
         </button>
       {/if}
-      {#if !reviewSurfaceHasRejectFooter}
+      {#if showRouteQueueRejectActions}
         <IdentifyRejectQueueActions
           entityId={current.entityId}
           showNext={Boolean(nextReviewQueueItem)}

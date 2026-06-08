@@ -11,6 +11,8 @@ export interface JellyfinProfileUpdateRequest {
   /** @nullable */
   displayName: string | null;
   /** @nullable */
+  allowSfw: boolean | null;
+  /** @nullable */
   allowNsfw: boolean | null;
   /** @nullable */
   enabled: boolean | null;

@@ -14,6 +14,7 @@ export interface JellyfinProfile {
   id: string;
   username: string;
   displayName: string;
+  allowSfw: boolean;
   allowNsfw: boolean;
   enabled: boolean;
   lastLoginAt: string | null;
@@ -28,6 +29,7 @@ export interface JellyfinProfilesResponse {
 export interface JellyfinProfileCreateRequest {
   username: string;
   displayName?: string | null;
+  allowSfw?: boolean;
   allowNsfw: boolean;
   enabled: boolean;
 }
@@ -35,6 +37,7 @@ export interface JellyfinProfileCreateRequest {
 export interface JellyfinProfileUpdateRequest {
   username?: string | null;
   displayName?: string | null;
+  allowSfw?: boolean | null;
   allowNsfw?: boolean | null;
   enabled?: boolean | null;
 }

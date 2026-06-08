@@ -294,6 +294,28 @@ describe("VideoPlayer", () => {
     expect(onAudioTrackChange).toHaveBeenCalledWith(1);
   });
 
+  it("uses adaptive playback instead of direct playback when backend audio tracks need selection", async () => {
+    render(VideoPlayer, {
+      props: {
+        src: "/Videos/video-1/master.m3u8?AudioStreamIndex=2",
+        directSrc: "/Videos/video-1/stream",
+        codec: "h264",
+        defaultPlaybackMode: "direct",
+        audioTrackOptions: [
+          { id: "audio-1", streamIndex: 1, label: "Italian", selected: false },
+          { id: "audio-2", streamIndex: 2, label: "English", selected: true },
+        ],
+      },
+    });
+
+    const settingsButton = screen.getByRole("button", { name: "Player settings" });
+    await fireEvent.click(settingsButton);
+    await fireEvent.click(screen.getByRole("button", { name: /Quality/ }));
+
+    expect(screen.queryByRole("button", { name: /^Direct$/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Auto/ })).toBeInTheDocument();
+  });
+
   it("hides cast controls when the library setting disables them", () => {
     render(VideoPlayer, {
       props: {

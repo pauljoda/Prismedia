@@ -16,11 +16,14 @@ using Prismedia.Contracts.Videos;
 namespace Prismedia.Api.Tests;
 
 public sealed partial class SecurityEndpointTests : IDisposable {
+    private static readonly Guid SfwVideoId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid NsfwVideoId = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private readonly string _webRoot = Path.Combine(Path.GetTempPath(), $"prismedia-security-static-{Guid.NewGuid():N}");
+    private readonly string _cacheRoot = Path.Combine(Path.GetTempPath(), $"prismedia-security-cache-{Guid.NewGuid():N}");
 
     public SecurityEndpointTests() {
         Directory.CreateDirectory(_webRoot);
+        Directory.CreateDirectory(_cacheRoot);
         File.WriteAllText(Path.Combine(_webRoot, "index.html"), "<html><body>Prismedia</body></html>");
     }
 
@@ -153,7 +156,9 @@ public sealed partial class SecurityEndpointTests : IDisposable {
             auth.AccessToken);
 
         Assert.NotNull(groupingOptions);
-        Assert.Equal(["Collections", "Movies", "Music", "Series", "Videos"], groupingOptions.Select(item => item.Name ?? "").ToArray());
+        Assert.Equal(
+            ["Collections", "Movies", "Music", "Series", "Unwatched Movies", "Unwatched Series", "Videos"],
+            groupingOptions.Select(item => item.Name ?? "").ToArray());
 
         var virtualFolders = await JellyfinGetFromJsonAsync<IReadOnlyList<JellyfinVirtualFolderInfoDto>>(
             client,
@@ -161,34 +166,81 @@ public sealed partial class SecurityEndpointTests : IDisposable {
             auth.AccessToken);
 
         Assert.NotNull(virtualFolders);
-        Assert.Equal(["Movies", "Videos", "Series", "Collections", "Music"], virtualFolders.Select(item => item.Name).ToArray());
+        Assert.Equal(
+            ["Movies", "Unwatched Movies", "Videos", "Series", "Unwatched Series", "Collections", "Music"],
+            virtualFolders.Select(item => item.Name).ToArray());
         Assert.All(virtualFolders, folder => Assert.True(folder.LibraryOptions.Enabled));
     }
 
     [Fact]
-    public async Task JellyfinProfileControlsNsfwCatalogVisibility() {
+    public async Task JellyfinProfileControlsSfwAndNsfwCatalogVisibility() {
         using var factory = CreateFactory(new CatalogEntityReadService());
         using var client = factory.CreateClient();
 
         var sfwAuth = await AuthenticateAsync(client, "Prismedia", TestAuth.ApiKey);
+        var sfwVisible = await JellyfinGetFromJsonAsync<JellyfinBaseItemDto>(
+            client,
+            $"/Items/{SfwVideoId:D}",
+            sfwAuth.AccessToken);
         using var sfwHidden = await JellyfinGetAsync(client, $"/Items/{NsfwVideoId:D}", sfwAuth.AccessToken);
+        Assert.NotNull(sfwVisible);
         Assert.Equal(HttpStatusCode.NotFound, sfwHidden.StatusCode);
 
         using var appClient = factory.CreateAuthenticatedClient();
         using var adultProfileResponse = await appClient.PostAsJsonAsync(
             "/api/security/jellyfin-profiles",
             new JellyfinProfileCreateRequest("Adult", null, AllowNsfw: true));
-        var adultProfile = await adultProfileResponse.Content.ReadFromJsonAsync<JellyfinProfileResponse>();
-        Assert.NotNull(adultProfile);
+        adultProfileResponse.EnsureSuccessStatusCode();
 
         var adultAuth = await AuthenticateAsync(client, "Adult", TestAuth.ApiKey);
-        var visible = await JellyfinGetFromJsonAsync<JellyfinBaseItemDto>(
+        var bothSfw = await JellyfinGetFromJsonAsync<JellyfinBaseItemDto>(
+            client,
+            $"/Items/{SfwVideoId:D}",
+            adultAuth.AccessToken);
+        var bothNsfw = await JellyfinGetFromJsonAsync<JellyfinBaseItemDto>(
             client,
             $"/Items/{NsfwVideoId:D}",
             adultAuth.AccessToken);
 
-        Assert.NotNull(visible);
-        Assert.Equal("Video", visible.Type);
+        Assert.NotNull(bothSfw);
+        Assert.NotNull(bothNsfw);
+
+        using var nsfwOnlyProfileResponse = await appClient.PostAsJsonAsync(
+            "/api/security/jellyfin-profiles",
+            new JellyfinProfileCreateRequest("AdultOnly", null, AllowSfw: false, AllowNsfw: true));
+        nsfwOnlyProfileResponse.EnsureSuccessStatusCode();
+
+        var nsfwOnlyAuth = await AuthenticateAsync(client, "AdultOnly", TestAuth.ApiKey);
+        using var nsfwOnlySfwHidden = await JellyfinGetAsync(client, $"/Items/{SfwVideoId:D}", nsfwOnlyAuth.AccessToken);
+        var nsfwOnlyNsfwVisible = await JellyfinGetFromJsonAsync<JellyfinBaseItemDto>(
+            client,
+            $"/Items/{NsfwVideoId:D}",
+            nsfwOnlyAuth.AccessToken);
+        var nsfwOnlyBrowse = await JellyfinGetFromJsonAsync<JellyfinQueryResult<JellyfinBaseItemDto>>(
+            client,
+            $"/Items?ParentId={JellyfinCatalogService.VideosViewId:D}",
+            nsfwOnlyAuth.AccessToken);
+
+        Assert.Equal(HttpStatusCode.NotFound, nsfwOnlySfwHidden.StatusCode);
+        Assert.NotNull(nsfwOnlyNsfwVisible);
+        Assert.Equal([NsfwVideoId], nsfwOnlyBrowse!.Items.Select(item => item.Id).ToArray());
+
+        using var emptyProfileResponse = await appClient.PostAsJsonAsync(
+            "/api/security/jellyfin-profiles",
+            new JellyfinProfileCreateRequest("Empty", null, AllowSfw: false, AllowNsfw: false));
+        emptyProfileResponse.EnsureSuccessStatusCode();
+
+        var emptyAuth = await AuthenticateAsync(client, "Empty", TestAuth.ApiKey);
+        using var emptySfwHidden = await JellyfinGetAsync(client, $"/Items/{SfwVideoId:D}", emptyAuth.AccessToken);
+        using var emptyNsfwHidden = await JellyfinGetAsync(client, $"/Items/{NsfwVideoId:D}", emptyAuth.AccessToken);
+        var emptyBrowse = await JellyfinGetFromJsonAsync<JellyfinQueryResult<JellyfinBaseItemDto>>(
+            client,
+            $"/Items?ParentId={JellyfinCatalogService.VideosViewId:D}",
+            emptyAuth.AccessToken);
+
+        Assert.Equal(HttpStatusCode.NotFound, emptySfwHidden.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, emptyNsfwHidden.StatusCode);
+        Assert.Empty(emptyBrowse!.Items);
     }
 
     [Fact]
@@ -207,9 +259,11 @@ public sealed partial class SecurityEndpointTests : IDisposable {
             token: null);
 
         Assert.NotNull(views);
-        Assert.Equal(["Movies", "Videos", "Series", "Collections", "Music"], views.Items.Select(item => item.Name).ToArray());
+        Assert.Equal(
+            ["Movies", "Unwatched Movies", "Videos", "Series", "Unwatched Series", "Collections", "Music"],
+            views.Items.Select(item => item.Name).ToArray());
         Assert.NotNull(rootItems);
-        Assert.Equal(5, rootItems.TotalRecordCount);
+        Assert.Equal(7, rootItems.TotalRecordCount);
     }
 
     [Fact]
@@ -278,6 +332,34 @@ public sealed partial class SecurityEndpointTests : IDisposable {
     }
 
     [Fact]
+    public async Task JellyfinDirectChildEpisodePrimaryImageEndpointServesAdvertisedThumbnail() {
+        var imagePath = Path.Combine(_cacheRoot, "videos", "direct-episode.jpg");
+        Directory.CreateDirectory(Path.GetDirectoryName(imagePath)!);
+        File.WriteAllBytes(imagePath, [0xff, 0xd8, 0xff, 0xd9]);
+        using var factory = CreateFactory(
+            new DirectChildEpisodeArtworkEntityReadService(),
+            cacheRoot: _cacheRoot);
+        using var client = factory.CreateClient();
+        var auth = await AuthenticateAsync(client, "Prismedia", TestAuth.ApiKey);
+
+        var episodes = await JellyfinGetFromJsonAsync<JellyfinQueryResult<JellyfinBaseItemDto>>(
+            client,
+            $"/Shows/{DirectChildEpisodeArtworkEntityReadService.SeriesId:D}/Episodes",
+            auth.AccessToken);
+        var episode = Assert.Single(episodes!.Items);
+        Assert.True(episode.ImageTags!.TryGetValue("Primary", out var tag));
+
+        using var image = await JellyfinGetAsync(
+            client,
+            $"/Items/{DirectChildEpisodeArtworkEntityReadService.EpisodeId:D}/Images/Primary",
+            auth.AccessToken);
+
+        image.EnsureSuccessStatusCode();
+        Assert.Equal("image/jpeg", image.Content.Headers.ContentType?.MediaType);
+        Assert.Equal($"\"{tag}\"", image.Headers.ETag?.ToString());
+    }
+
+    [Fact]
     public async Task JellyfinItemDetailExposesPrismediaMetadataFields() {
         using var factory = CreateFactory(new JellyfinMetadataEntityReadService());
         using var client = factory.CreateClient();
@@ -343,14 +425,28 @@ public sealed partial class SecurityEndpointTests : IDisposable {
         if (Directory.Exists(_webRoot)) {
             Directory.Delete(_webRoot, recursive: true);
         }
+
+        if (Directory.Exists(_cacheRoot)) {
+            Directory.Delete(_cacheRoot, recursive: true);
+        }
     }
 
-    private static WebApplicationFactory<Program> CreateFactory(IEntityReadService? entityReadService = null) =>
+    private static WebApplicationFactory<Program> CreateFactory(
+        IEntityReadService? entityReadService = null,
+        IJellyfinImageFileService? imageFileService = null,
+        string? cacheRoot = null) =>
         new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder => {
+                if (cacheRoot is not null) {
+                    builder.UseSetting("Prismedia:CacheDir", cacheRoot);
+                }
+
                 builder.ConfigureServices(services => {
                     services.AddSingleton(entityReadService ?? new TestAuth.VisibleEntityReadService());
                     services.AddSingleton<ICollectionItemReadService, EmptyCollectionItemReadService>();
+                    if (imageFileService is not null) {
+                        services.AddSingleton(imageFileService);
+                    }
                 });
             })
             .WithTestAuth();
@@ -416,15 +512,25 @@ public sealed partial class SecurityEndpointTests : IDisposable {
             bool? nsfw = null,
             bool? hasFile = null,
             bool? played = null,
-            bool? orphaned = null) =>
-            Task.FromResult(new EntityListResponse([Thumbnail(NsfwVideoId, isNsfw: true)], null, 1));
+            bool? orphaned = null) {
+            var items = new[] {
+                    Thumbnail(SfwVideoId, "Visible Movie", isNsfw: false),
+                    Thumbnail(NsfwVideoId, "Hidden Movie", isNsfw: true)
+                }
+                .Where(item => hideNsfw != true || !item.IsNsfw)
+                .Where(item => nsfw is null || item.IsNsfw == nsfw)
+                .ToArray();
+            return Task.FromResult(new EntityListResponse(items, null, items.Length));
+        }
 
         public Task<EntityCard?> GetAsync(Guid id, bool hideNsfw, CancellationToken cancellationToken) {
             if (id == NsfwVideoId && hideNsfw) {
                 return Task.FromResult<EntityCard?>(null);
             }
 
-            return Task.FromResult<EntityCard?>(id == NsfwVideoId ? Card(id) : null);
+            return Task.FromResult<EntityCard?>(id == SfwVideoId ? Card(id, "Visible Movie", isNsfw: false) :
+                id == NsfwVideoId ? Card(id, "Hidden Movie", isNsfw: true) :
+                null);
         }
 
         public Task<EntityThumbnailBatchResponse> GetThumbnailsAsync(
@@ -433,26 +539,33 @@ public sealed partial class SecurityEndpointTests : IDisposable {
             CancellationToken cancellationToken) =>
             Task.FromResult(new EntityThumbnailBatchResponse([]));
 
-        public Task<IEntityCard?> GetDetailAsync(Guid id, string kind, bool hideNsfw, CancellationToken cancellationToken) =>
-            Task.FromResult<IEntityCard?>(id == NsfwVideoId && !hideNsfw ? Card(id) with { Kind = kind } : null);
+        public Task<IEntityCard?> GetDetailAsync(Guid id, string kind, bool hideNsfw, CancellationToken cancellationToken) {
+            if (id == NsfwVideoId && hideNsfw) {
+                return Task.FromResult<IEntityCard?>(null);
+            }
 
-        private static EntityCard Card(Guid id) =>
+            return Task.FromResult<IEntityCard?>(id == SfwVideoId ? Card(id, "Visible Movie", isNsfw: false) with { Kind = kind } :
+                id == NsfwVideoId ? Card(id, "Hidden Movie", isNsfw: true) with { Kind = kind } :
+                null);
+        }
+
+        private static EntityCard Card(Guid id, string title, bool isNsfw) =>
             new() {
                 Id = id,
                 Kind = "video",
-                Title = "Hidden Movie",
+                Title = title,
                 ParentEntityId = null,
                 SortOrder = null,
-                Capabilities = [],
+                Capabilities = [new FlagsCapability(IsFavorite: false, IsNsfw: isNsfw, IsOrganized: true)],
                 ChildrenByKind = [],
                 Relationships = []
             };
 
-        private static EntityThumbnail Thumbnail(Guid id, bool isNsfw) =>
+        private static EntityThumbnail Thumbnail(Guid id, string title, bool isNsfw) =>
             new(
                 id,
                 "video",
-                "Hidden Movie",
+                title,
                 null,
                 null,
                 null,
@@ -479,6 +592,103 @@ public sealed partial class SecurityEndpointTests : IDisposable {
             bool hideNsfw,
             CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyDictionary<Guid, string>>(new Dictionary<Guid, string>());
+    }
+
+    private sealed class StaticJellyfinImageFileService(string filePath) : IJellyfinImageFileService {
+        public Task<JellyfinImageFile?> ResolveAsync(JellyfinImageAsset asset, CancellationToken cancellationToken) =>
+            Task.FromResult<JellyfinImageFile?>(new JellyfinImageFile(
+                filePath,
+                null,
+                asset.ContentType,
+                asset.ImageTag));
+    }
+
+    private sealed class DirectChildEpisodeArtworkEntityReadService : IEntityReadService {
+        public static readonly Guid SeriesId = Guid.Parse("66666666-6666-6666-6666-666666666666");
+        public static readonly Guid EpisodeId = Guid.Parse("77777777-7777-7777-7777-777777777777");
+        private const string CoverPath = "/assets/videos/direct-episode.jpg";
+
+        public Task<EntityListResponse> ListAsync(
+            string? kind,
+            string? query,
+            string? cursor,
+            bool? hideNsfw,
+            int? limit,
+            CancellationToken cancellationToken,
+            Guid? referencedBy = null,
+            string? relationshipCode = null,
+            string? sort = null,
+            string? sortDir = null,
+            int? seed = null,
+            bool? favorite = null,
+            bool? organized = null,
+            int? ratingMin = null,
+            int? ratingMax = null,
+            bool? unrated = null,
+            string? status = null,
+            string? bookType = null,
+            string? bookFormat = null,
+            bool? nsfw = null,
+            bool? hasFile = null,
+            bool? played = null,
+            bool? orphaned = null) =>
+            Task.FromResult(new EntityListResponse([], null, 0));
+
+        public Task<EntityCard?> GetAsync(Guid id, bool hideNsfw, CancellationToken cancellationToken) =>
+            Task.FromResult<EntityCard?>(id == SeriesId ? SeriesCard() :
+                id == EpisodeId ? EpisodeCard() :
+                null);
+
+        public Task<EntityThumbnailBatchResponse> GetThumbnailsAsync(
+            IReadOnlyList<Guid> ids,
+            bool hideNsfw,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new EntityThumbnailBatchResponse(ids.Contains(EpisodeId) ? [EpisodeThumbnail()] : []));
+
+        public Task<IEntityCard?> GetDetailAsync(Guid id, string kind, bool hideNsfw, CancellationToken cancellationToken) =>
+            Task.FromResult<IEntityCard?>(id == EpisodeId ? EpisodeCard() : null);
+
+        private static EntityCard SeriesCard() =>
+            new() {
+                Id = SeriesId,
+                Kind = "video-series",
+                Title = "Direct Show",
+                ParentEntityId = null,
+                SortOrder = null,
+                Capabilities = [],
+                ChildrenByKind = [new EntityGroup("video", "Episodes", [EpisodeThumbnail()])],
+                Relationships = []
+            };
+
+        private static EntityCard EpisodeCard() =>
+            new() {
+                Id = EpisodeId,
+                Kind = "video",
+                Title = "Episode 1",
+                ParentEntityId = SeriesId,
+                SortOrder = 0,
+                Capabilities = [],
+                ChildrenByKind = [],
+                Relationships = []
+            };
+
+        private static EntityThumbnail EpisodeThumbnail() =>
+            new(
+                EpisodeId,
+                "video",
+                "Episode 1",
+                SeriesId,
+                0,
+                CoverPath,
+                null,
+                "none",
+                null,
+                [],
+                [new EntityThumbnailMeta("duration", "42:00")],
+                null,
+                false,
+                false,
+                true);
     }
 
     private sealed class InfuseBrowseEntityReadService : IEntityReadService {

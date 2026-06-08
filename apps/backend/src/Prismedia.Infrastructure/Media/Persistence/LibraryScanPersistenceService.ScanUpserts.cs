@@ -136,7 +136,9 @@ public sealed partial class LibraryScanPersistenceService {
             var updatedAt = DateTimeOffset.UtcNow;
             var tracked = await _db.Entities.FindAsync([existing.Id], cancellationToken);
             if (tracked is not null) {
-                tracked.Title = title;
+                if (!tracked.IsOrganized) {
+                    tracked.Title = title;
+                }
                 tracked.ParentEntityId = audioLibraryId;
                 tracked.SortOrder = audioLibraryId is null ? null : sortOrder;
                 tracked.UpdatedAt = updatedAt;

@@ -16,6 +16,7 @@ public sealed record JellyfinProfile(
     Guid Id,
     string Username,
     string DisplayName,
+    bool AllowSfw,
     bool AllowNsfw,
     bool Enabled,
     DateTimeOffset? LastLoginAt,

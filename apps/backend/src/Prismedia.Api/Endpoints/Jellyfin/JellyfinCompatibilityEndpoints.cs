@@ -336,7 +336,7 @@ public static partial class JellyfinCompatibilityEndpoints {
             HttpContext httpContext,
             JellyfinCatalogService catalog,
             CancellationToken cancellationToken) =>
-            Results.Ok(await catalog.GetImageInfosAsync(itemId, NsfwVisibility.ShouldHide(null, httpContext), cancellationToken)))
+            Results.Ok(await catalog.GetImageInfosAsync(itemId, NsfwVisibility.JellyfinContent(httpContext), cancellationToken)))
             .WithTags("Jellyfin Images")
             .WithName("GetJellyfinItemImages")
             .Produces<IReadOnlyList<JellyfinImageInfo>>();
@@ -387,7 +387,7 @@ public static partial class JellyfinCompatibilityEndpoints {
             var state = await security.EnsureSecurityAsync(cancellationToken);
             var views = await catalog.GetUserViewsWithArtworkAsync(
                 state.ServerId.ToString("N"),
-                NsfwVisibility.ShouldHide(null, httpContext),
+                NsfwVisibility.JellyfinContent(httpContext),
                 cancellationToken);
             return Results.Ok(views);
         })
@@ -482,7 +482,7 @@ public static partial class JellyfinCompatibilityEndpoints {
             itemId,
             imageType,
             imageIndex,
-            NsfwVisibility.ShouldHide(null, httpContext),
+            NsfwVisibility.JellyfinContent(httpContext),
             cancellationToken);
         if (image is null) {
             return Results.NotFound(new ApiProblem("jellyfin_image_not_found", $"Image '{imageType}' for item '{itemId}' was not found."));

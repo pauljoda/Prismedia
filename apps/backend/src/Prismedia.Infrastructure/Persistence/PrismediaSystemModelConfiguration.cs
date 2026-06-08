@@ -90,6 +90,7 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.Username).HasColumnName("username").HasMaxLength(64).IsRequired();
             entity.Property(row => row.NormalizedUsername).HasColumnName("normalized_username").HasMaxLength(64).IsRequired();
             entity.Property(row => row.DisplayName).HasColumnName("display_name").HasMaxLength(128).IsRequired();
+            entity.Property(row => row.AllowSfw).HasColumnName("allow_sfw").HasDefaultValue(true);
             entity.Property(row => row.AllowNsfw).HasColumnName("allow_nsfw");
             entity.Property(row => row.Enabled).HasColumnName("enabled");
             entity.Property(row => row.LastLoginAt).HasColumnName("last_login_at");

@@ -329,17 +329,28 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         if (played is { } wantsPlayed) {
             var playbackRows = _db.Set<EntityPlaybackRow>();
             var progressRows = _db.Set<EntityProgressRow>();
+            var entities = _db.Entities;
             // "Played" means any recorded engagement: a play/resume/completion (videos/audio) or
             // started/completed reading progress (books/comics). Mirrors the unwatched status logic.
+            // Movies also honor direct child playback because a Prismedia movie is browsed as the
+            // movie entity but can stream through its child video entity.
             query = wantsPlayed
                 ? query.Where(entity =>
                     playbackRows.Any(row => row.EntityId == entity.Id &&
                         (row.CompletedAt != null || row.PlayCount > 0 || row.ResumeSeconds > 0)) ||
+                    (entity.KindCode == EntityKindRegistry.Movie.Code &&
+                        entities.Any(child => child.ParentEntityId == entity.Id &&
+                            playbackRows.Any(row => row.EntityId == child.Id &&
+                                (row.CompletedAt != null || row.PlayCount > 0 || row.ResumeSeconds > 0)))) ||
                     progressRows.Any(row => row.EntityId == entity.Id &&
                         (row.CompletedAt != null || row.Index > 0)))
                 : query.Where(entity =>
                     !playbackRows.Any(row => row.EntityId == entity.Id &&
                         (row.CompletedAt != null || row.PlayCount > 0 || row.ResumeSeconds > 0)) &&
+                    !(entity.KindCode == EntityKindRegistry.Movie.Code &&
+                        entities.Any(child => child.ParentEntityId == entity.Id &&
+                            playbackRows.Any(row => row.EntityId == child.Id &&
+                                (row.CompletedAt != null || row.PlayCount > 0 || row.ResumeSeconds > 0)))) &&
                     !progressRows.Any(row => row.EntityId == entity.Id &&
                         (row.CompletedAt != null || row.Index > 0)));
         }
@@ -381,21 +392,33 @@ public sealed partial class EfEntityReadService : IEntityReadService {
 
         var playback = _db.Set<EntityPlaybackRow>();
         var progress = _db.Set<EntityProgressRow>();
+        var entityRows = _db.Entities;
         return normalizedStatus switch {
             "watched" or "read" or "completed" or "finished" =>
                 query.Where(entity =>
                     playback.Any(row => row.EntityId == entity.Id && row.CompletedAt != null) ||
+                    (entity.KindCode == EntityKindRegistry.Movie.Code &&
+                        entityRows.Any(child => child.ParentEntityId == entity.Id &&
+                            playback.Any(row => row.EntityId == child.Id && row.CompletedAt != null))) ||
                     progress.Any(row => row.EntityId == entity.Id && row.CompletedAt != null)),
             "unwatched" or "unread" or "unstarted" or "new" =>
                 query.Where(entity =>
                     !playback.Any(row => row.EntityId == entity.Id &&
                         (row.CompletedAt != null || row.PlayCount > 0 || row.ResumeSeconds > 0)) &&
+                    !(entity.KindCode == EntityKindRegistry.Movie.Code &&
+                        entityRows.Any(child => child.ParentEntityId == entity.Id &&
+                            playback.Any(row => row.EntityId == child.Id &&
+                                (row.CompletedAt != null || row.PlayCount > 0 || row.ResumeSeconds > 0)))) &&
                     !progress.Any(row => row.EntityId == entity.Id &&
                         (row.CompletedAt != null || row.Index > 0))),
             "in-progress" or "inprogress" or "in_progress" or "reading" or "watching" =>
                 query.Where(entity =>
                     playback.Any(row => row.EntityId == entity.Id &&
                         row.CompletedAt == null && row.ResumeSeconds > 0) ||
+                    (entity.KindCode == EntityKindRegistry.Movie.Code &&
+                        entityRows.Any(child => child.ParentEntityId == entity.Id &&
+                            playback.Any(row => row.EntityId == child.Id &&
+                                row.CompletedAt == null && row.ResumeSeconds > 0))) ||
                     progress.Any(row => row.EntityId == entity.Id &&
                         row.CompletedAt == null && row.Index > 0 && row.Index < row.Total)),
             _ => query,

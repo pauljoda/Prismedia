@@ -87,7 +87,7 @@ public sealed partial class JellyfinCatalogService {
             DisplayPreferencesId = item.Id.ToString("N"),
             LocalTrailerCount = isPlayable ? 0 : null,
             SpecialFeatureCount = isPlayable ? 0 : null,
-            UserData = UserDataFor(item.Id, item.IsFavorite, null),
+            UserData = UserDataForThumbnail(item),
             MediaSources = isPlayable
                 ? [CatalogMediaSource(item.Id, item.Title, VirtualItemPath(item.Id), container, null, runtimeTicks, streams ?? [], videoType: isAudio ? null : "VideoFile")]
                 : null,
@@ -180,9 +180,9 @@ public sealed partial class JellyfinCatalogService {
             ChildCount = childCount == 0 ? null : childCount,
             RecursiveItemCount = childCount == 0 ? null : childCount,
             RunTimeTicks = runtimeTicks ?? 0,
-            IndexNumber = isAudio
+            IndexNumber = context?.IndexNumber ?? (isAudio
                 ? TrackNumberFrom(item.SortOrder)
-                : PositionValue(position, "episode") ?? PositionValue(position, "sort") ?? item.SortOrder,
+                : PositionValue(position, "episode") ?? PositionValue(position, "sort") ?? item.SortOrder),
             ParentIndexNumber = PositionValue(position, "season") ?? context?.ParentIndexNumber,
             SeriesId = context?.SeriesId,
             SeriesName = context?.SeriesName,
@@ -260,9 +260,60 @@ public sealed partial class JellyfinCatalogService {
         };
     }
 
+    private static JellyfinBaseItemDto FallbackSeasonFolder(
+        IEntityCard series,
+        string serverId,
+        int episodeCount) {
+        var images = ImageMetadata(series.Id, series.Capabilities);
+        var id = FallbackSeasonIdFor(series.Id);
+        return new() {
+            Id = id,
+            Name = series.Title,
+            ServerId = serverId,
+            SortName = series.Title,
+            Type = JellyfinProtocol.ItemTypes.Season,
+            MediaType = JellyfinProtocol.MediaTypes.Unknown,
+            ParentId = series.Id,
+            IsFolder = true,
+            ChildCount = episodeCount,
+            RecursiveItemCount = episodeCount,
+            RunTimeTicks = 0,
+            IndexNumber = 1,
+            SeriesId = series.Id,
+            SeriesName = series.Title,
+            ImageTags = images.Tags,
+            BackdropImageTags = images.BackdropImageTags,
+            ImageBlurHashes = EmptyBlurHashes,
+            PrimaryImageAspectRatio = images.PrimaryImageAspectRatio,
+            Etag = EtagFor(id, series.Title),
+            UserData = UserDataFor(id, isFavorite: false, playback: null),
+            DisplayPreferencesId = id.ToString("N")
+        };
+    }
+
+    private static ItemContext FallbackSeasonContextFor(IEntityCard series, int? indexNumber = null) {
+        var images = ImageMetadata(series.Id, series.Capabilities);
+        var seasonId = FallbackSeasonIdFor(series.Id);
+        return new ItemContext(
+            series.Id,
+            series.Title,
+            seasonId,
+            series.Title,
+            1,
+            ParentId: seasonId,
+            SeriesPrimaryImageTag: ImageTag(images, "Primary"),
+            ParentLogoItemId: ImageTag(images, "Logo") is null ? null : series.Id,
+            ParentLogoImageTag: ImageTag(images, "Logo"),
+            ParentBackdropItemId: images.BackdropImageTags.Count == 0 ? null : series.Id,
+            ParentBackdropImageTags: images.BackdropImageTags.Count == 0 ? null : images.BackdropImageTags,
+            ParentThumbItemId: ImageTag(images, "Thumb") is null ? null : series.Id,
+            ParentThumbImageTag: ImageTag(images, "Thumb"),
+            IndexNumber: indexNumber);
+    }
+
     private async Task<ItemContext?> ParentContextForAsync(
         IEntityCard parent,
-        bool hideNsfw,
+        JellyfinContentVisibility visibility,
         CancellationToken cancellationToken) {
         // Albums (audio-library) parent their tracks: carry the album reference plus the album artist
         // resolved from the album's own parent (music-artist), so each track DTO is self-describing.
@@ -270,7 +321,7 @@ public sealed partial class JellyfinCatalogService {
             var albumImages = ImageMetadata(parent.Id, parent.Capabilities);
             IEntityCard? artist = null;
             if (parent.ParentEntityId is { } artistId) {
-                artist = await _entities.GetAsync(artistId, hideNsfw, cancellationToken);
+                artist = await GetVisibleCardAsync(artistId, visibility, cancellationToken);
             }
 
             return new ItemContext(
@@ -316,7 +367,7 @@ public sealed partial class JellyfinCatalogService {
 
         IEntityCard? series = null;
         if (parent.ParentEntityId is { } seriesId) {
-            series = await _entities.GetAsync(seriesId, hideNsfw, cancellationToken);
+            series = await GetVisibleCardAsync(seriesId, visibility, cancellationToken);
         }
 
         // Series supplies the backdrop/logo/primary artwork; the season supplies the thumb

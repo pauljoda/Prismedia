@@ -687,6 +687,73 @@ public sealed class LibraryScanPersistenceServiceTests {
     }
 
     [Fact]
+    public async Task UpsertAudioTrackPreservesOrganizedTitleOnRescan() {
+        await using var db = CreateContext();
+        var service = new LibraryScanPersistenceService(db);
+        var trackId = await service.UpsertAudioTrackAsync(
+            "/media/audio/song.flac",
+            "song",
+            audioLibraryId: null,
+            sortOrder: 0,
+            sectionLabel: null,
+            sectionOrder: 0,
+            isNsfw: false,
+            CancellationToken.None);
+        var track = await db.Entities.SingleAsync(entity => entity.Id == trackId);
+        track.Title = "Identified Song Title";
+        track.IsOrganized = true;
+        await db.SaveChangesAsync();
+
+        var rescannedId = await service.UpsertAudioTrackAsync(
+            "/media/audio/song.flac",
+            "song",
+            audioLibraryId: null,
+            sortOrder: 0,
+            sectionLabel: "Disc 1",
+            sectionOrder: 1,
+            isNsfw: true,
+            CancellationToken.None);
+
+        var rescannedTrack = await db.Entities.SingleAsync(entity => entity.Id == trackId);
+        var detail = await db.AudioTrackDetails.SingleAsync(row => row.EntityId == trackId);
+        Assert.Equal(trackId, rescannedId);
+        Assert.Equal("Identified Song Title", rescannedTrack.Title);
+        Assert.True(rescannedTrack.IsOrganized);
+        Assert.True(rescannedTrack.IsNsfw);
+        Assert.Equal("Disc 1", detail.SectionLabel);
+        Assert.Equal(1, detail.SectionOrder);
+    }
+
+    [Fact]
+    public async Task UpsertAudioTrackUpdatesUnorganizedTitleOnRescan() {
+        await using var db = CreateContext();
+        var service = new LibraryScanPersistenceService(db);
+        var trackId = await service.UpsertAudioTrackAsync(
+            "/media/audio/song.flac",
+            "song",
+            audioLibraryId: null,
+            sortOrder: 0,
+            sectionLabel: null,
+            sectionOrder: 0,
+            isNsfw: false,
+            CancellationToken.None);
+
+        await service.UpsertAudioTrackAsync(
+            "/media/audio/song.flac",
+            "Better Tag Title",
+            audioLibraryId: null,
+            sortOrder: 0,
+            sectionLabel: null,
+            sectionOrder: 0,
+            isNsfw: false,
+            CancellationToken.None);
+
+        var track = await db.Entities.SingleAsync(entity => entity.Id == trackId);
+        Assert.Equal("Better Tag Title", track.Title);
+        Assert.False(track.IsOrganized);
+    }
+
+    [Fact]
     public async Task RemoveStaleLooseImagesInRootRemovesOnlyMissingRootLevelImages() {
         await using var db = CreateContext();
         var rootId = Guid.Parse("55555555-5555-5555-5555-555555555555");
