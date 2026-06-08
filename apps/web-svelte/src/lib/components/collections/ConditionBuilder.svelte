@@ -417,33 +417,36 @@
 
           <!-- Entity type toggles -->
           <div
-            class="flex items-center gap-1 border-t border-border-subtle/40 bg-surface-1/30 py-1.5 px-2.5"
-            style="padding-left: 3.5rem"
+            class="flex min-w-0 items-center gap-1 border-t border-border-subtle/40 bg-surface-1/30 py-1.5 pl-2.5 pr-0 md:pl-14"
           >
-            <span class="text-[0.58rem] font-semibold uppercase tracking-[0.14em] text-text-disabled/70 mr-2">
+            <span class="mr-2 shrink-0 text-[0.58rem] font-semibold uppercase tracking-[0.14em] text-text-disabled/70">
               Apply to
             </span>
-            {#each entityKinds as kind (kind.value)}
-              {@const active = condition.entityTypes.length === 0 || condition.entityTypes.includes(kind.value)}
-              {@const KindIcon = kind.icon}
-              <button
-                type="button"
-                {disabled}
-                aria-pressed={active}
-                title={kind.label}
-                onclick={() => toggleEntityType(i, kind.value)}
-                class={cn(
-                  "inline-flex items-center gap-1 rounded-xs px-1.5 py-0.5 text-[0.58rem] font-semibold uppercase tracking-wider border transition-all",
-                  "disabled:cursor-not-allowed disabled:opacity-50",
-                  active
-                    ? "border-border-accent/50 bg-accent-950/30 text-text-accent"
-                    : "border-transparent bg-transparent text-text-disabled/60 hover:text-text-muted hover:border-border-subtle",
-                )}
-              >
-                <KindIcon class="h-2.5 w-2.5" />
-                <span>{kind.label}</span>
-              </button>
-            {/each}
+            <div
+              class="scrollbar-hidden flex min-w-0 flex-1 items-center gap-1 overflow-x-auto pr-2.5 [-webkit-overflow-scrolling:touch]"
+            >
+              {#each entityKinds as kind (kind.value)}
+                {@const active = condition.entityTypes.length === 0 || condition.entityTypes.includes(kind.value)}
+                {@const KindIcon = kind.icon}
+                <button
+                  type="button"
+                  {disabled}
+                  aria-pressed={active}
+                  title={kind.label}
+                  onclick={() => toggleEntityType(i, kind.value)}
+                  class={cn(
+                    "inline-flex shrink-0 items-center gap-1 rounded-xs px-1.5 py-0.5 text-[0.58rem] font-semibold uppercase tracking-wider border transition-all",
+                    "disabled:cursor-not-allowed disabled:opacity-50",
+                    active
+                      ? "border-border-accent/50 bg-accent-950/30 text-text-accent"
+                      : "border-transparent bg-transparent text-text-disabled/60 hover:text-text-muted hover:border-border-subtle",
+                  )}
+                >
+                  <KindIcon class="h-2.5 w-2.5" />
+                  <span>{kind.label}</span>
+                </button>
+              {/each}
+            </div>
           </div>
         </article>
       {/each}
