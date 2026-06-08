@@ -69,6 +69,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Fixed
+- Browser auto-auth now only bootstraps the same-origin API key for local loopback clients, so remote LAN callers cannot get an API cookie just by opening the web UI.
 - Lightbox videos now open at their intended size immediately when aspect-ratio metadata is available, and tall videos leave a small vertical inset instead of reaching the viewport edge.
 - Videos in the feed and lightbox now render and play again instead of loading to a black frame, including animated gallery clips whose generated preview file is missing, while still preserving portrait and landscape aspect ratios.
 - Portrait videos opened in the lightbox now keep their natural shape and use the available screen height instead of being squeezed into a wide landscape frame.
