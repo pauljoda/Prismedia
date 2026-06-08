@@ -13,6 +13,4 @@
   errorMessage="Failed to load videos."
   initialMediaWall
   enableFeedView
-  enableLightbox
-  lightboxTitle="Videos"
 />
