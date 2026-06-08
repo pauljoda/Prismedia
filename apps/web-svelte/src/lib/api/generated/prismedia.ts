@@ -139,6 +139,8 @@ import type {
   MoveFileParams,
   MovieDetail,
   MusicArtistDetail,
+  NavLayoutDocument,
+  NavLayoutResponse,
   OrganizeApplyResponse,
   OrganizePlanRequest,
   OrganizePlanResponse,
@@ -166,6 +168,7 @@ import type {
   StashScraperListing,
   StudioDetail,
   TagDetail,
+  TranscodeCacheStatusResponse,
   UpdateCheckResponse,
   VideoDetail,
   VideoSeasonDetail,
@@ -2572,6 +2575,82 @@ export const getDeleteJellyfinUserPlayedItemUrl = (itemId: string,) => {
 export const deleteJellyfinUserPlayedItem = async (itemId: string, options?: RequestInit): Promise<deleteJellyfinUserPlayedItemResponse> => {
 
   return orvalFetch<deleteJellyfinUserPlayedItemResponse>(getDeleteJellyfinUserPlayedItemUrl(itemId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type postJellyfinUserScopedPlayedItemResponse200 = {
+  data: void
+  status: 200
+}
+
+export type postJellyfinUserScopedPlayedItemResponseSuccess = (postJellyfinUserScopedPlayedItemResponse200) & {
+  headers: Headers;
+};
+;
+
+export type postJellyfinUserScopedPlayedItemResponse = (postJellyfinUserScopedPlayedItemResponseSuccess)
+
+export const getPostJellyfinUserScopedPlayedItemUrl = (userId: string,
+    itemId: string,) => {
+
+
+
+
+  return `/Users/${userId}/PlayedItems/${itemId}`
+}
+
+/**
+ * @summary Post Jellyfin User-Scoped Played Item.
+ */
+export const postJellyfinUserScopedPlayedItem = async (userId: string,
+    itemId: string, options?: RequestInit): Promise<postJellyfinUserScopedPlayedItemResponse> => {
+
+  return orvalFetch<postJellyfinUserScopedPlayedItemResponse>(getPostJellyfinUserScopedPlayedItemUrl(userId,itemId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type deleteJellyfinUserScopedPlayedItemResponse200 = {
+  data: void
+  status: 200
+}
+
+export type deleteJellyfinUserScopedPlayedItemResponseSuccess = (deleteJellyfinUserScopedPlayedItemResponse200) & {
+  headers: Headers;
+};
+;
+
+export type deleteJellyfinUserScopedPlayedItemResponse = (deleteJellyfinUserScopedPlayedItemResponseSuccess)
+
+export const getDeleteJellyfinUserScopedPlayedItemUrl = (userId: string,
+    itemId: string,) => {
+
+
+
+
+  return `/Users/${userId}/PlayedItems/${itemId}`
+}
+
+/**
+ * @summary Delete Jellyfin User-Scoped Played Item.
+ */
+export const deleteJellyfinUserScopedPlayedItem = async (userId: string,
+    itemId: string, options?: RequestInit): Promise<deleteJellyfinUserScopedPlayedItemResponse> => {
+
+  return orvalFetch<deleteJellyfinUserScopedPlayedItemResponse>(getDeleteJellyfinUserScopedPlayedItemUrl(userId,itemId),
   {
     ...options,
     method: 'DELETE'
@@ -6689,6 +6768,78 @@ export const backfillFingerprints = async ( options?: RequestInit): Promise<back
 
 
 
+export type getTranscodeCacheStatusResponse200 = {
+  data: TranscodeCacheStatusResponse
+  status: 200
+}
+
+export type getTranscodeCacheStatusResponseSuccess = (getTranscodeCacheStatusResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getTranscodeCacheStatusResponse = (getTranscodeCacheStatusResponseSuccess)
+
+export const getGetTranscodeCacheStatusUrl = () => {
+
+
+
+
+  return `/api/settings/transcode-cache`
+}
+
+/**
+ * @summary Gets the current transcode cache size and configured limit.
+ */
+export const getTranscodeCacheStatus = async ( options?: RequestInit): Promise<getTranscodeCacheStatusResponse> => {
+
+  return orvalFetch<getTranscodeCacheStatusResponse>(getGetTranscodeCacheStatusUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type clearTranscodeCacheResponse200 = {
+  data: TranscodeCacheStatusResponse
+  status: 200
+}
+
+export type clearTranscodeCacheResponseSuccess = (clearTranscodeCacheResponse200) & {
+  headers: Headers;
+};
+;
+
+export type clearTranscodeCacheResponse = (clearTranscodeCacheResponseSuccess)
+
+export const getClearTranscodeCacheUrl = () => {
+
+
+
+
+  return `/api/settings/transcode-cache/clear`
+}
+
+/**
+ * @summary Clears the on-disk transcode cache.
+ */
+export const clearTranscodeCache = async ( options?: RequestInit): Promise<clearTranscodeCacheResponse> => {
+
+  return orvalFetch<clearTranscodeCacheResponse>(getClearTranscodeCacheUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
 export type getSettingsResponse200 = {
   data: SettingsCatalogResponse
   status: 200
@@ -6984,6 +7135,79 @@ export const resetSetting = async (key: string, options?: RequestInit): Promise<
     method: 'DELETE'
 
 
+  }
+);}
+
+
+
+export type getNavLayoutResponse200 = {
+  data: NavLayoutResponse
+  status: 200
+}
+
+export type getNavLayoutResponseSuccess = (getNavLayoutResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getNavLayoutResponse = (getNavLayoutResponseSuccess)
+
+export const getGetNavLayoutUrl = () => {
+
+
+
+
+  return `/api/nav-layout`
+}
+
+/**
+ * @summary Gets the user's server-persisted navigation layout.
+ */
+export const getNavLayout = async ( options?: RequestInit): Promise<getNavLayoutResponse> => {
+
+  return orvalFetch<getNavLayoutResponse>(getGetNavLayoutUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type updateNavLayoutResponse200 = {
+  data: NavLayoutResponse
+  status: 200
+}
+
+export type updateNavLayoutResponseSuccess = (updateNavLayoutResponse200) & {
+  headers: Headers;
+};
+;
+
+export type updateNavLayoutResponse = (updateNavLayoutResponseSuccess)
+
+export const getUpdateNavLayoutUrl = () => {
+
+
+
+
+  return `/api/nav-layout`
+}
+
+/**
+ * @summary Saves the user's navigation layout, shared across devices.
+ */
+export const updateNavLayout = async (navLayoutDocument: NavLayoutDocument, options?: RequestInit): Promise<updateNavLayoutResponse> => {
+
+  return orvalFetch<updateNavLayoutResponse>(getUpdateNavLayoutUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      navLayoutDocument,)
   }
 );}
 

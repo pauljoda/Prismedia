@@ -4,10 +4,12 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { JobRunStatus } from './jobRunStatus';
+import type { JobType } from './jobType';
 
 export interface JobQueueCountDto {
-  type: string;
-  status: string;
+  type: JobType;
+  status: JobRunStatus;
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
   count: number | string;
 }

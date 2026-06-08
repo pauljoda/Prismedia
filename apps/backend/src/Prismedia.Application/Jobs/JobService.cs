@@ -37,7 +37,7 @@ public sealed class JobService {
     public async Task<JobListResponse> ListAsync(bool hideNsfw, CancellationToken cancellationToken) {
         var items = (await _queue.ListAsync(hideNsfw, cancellationToken)).Select(ToContract).ToArray();
         var counts = (await _queue.GetQueueCountsAsync(hideNsfw, cancellationToken))
-            .Select(c => new JobQueueCountDto(c.TypeCode, c.StatusCode, c.Count))
+            .Select(c => new JobQueueCountDto(c.TypeCode.DecodeAs<JobType>(), c.StatusCode.DecodeAs<JobRunStatus>(), c.Count))
             .ToArray();
         return new JobListResponse(items, counts);
     }
@@ -166,8 +166,8 @@ public sealed class JobService {
     private static JobRun ToContract(JobRunSnapshot job) =>
         new(
             job.Id,
-            job.Type.ToCode(),
-            job.Status.ToCode(),
+            job.Type,
+            job.Status,
             job.Progress,
             job.Message,
             job.TargetEntityKind,

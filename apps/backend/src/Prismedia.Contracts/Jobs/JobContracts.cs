@@ -1,14 +1,16 @@
+using Prismedia.Domain.Entities;
+
 namespace Prismedia.Contracts.Jobs;
 
 /// <summary>
 /// API-facing operation row used by the jobs dashboard.
 /// </summary>
 /// <param name="Id">Job run identifier.</param>
-/// <param name="Type">Queue type code (e.g. "scan-library", "probe-video").</param>
-/// <param name="Status">Current job status code.</param>
+/// <param name="Type">Queue operation type.</param>
+/// <param name="Status">Current job lifecycle status.</param>
 /// <param name="Progress">Progress percentage from 0 through 100.</param>
 /// <param name="Message">Optional status, completion, or failure message.</param>
-/// <param name="TargetKind">Entity kind for display (e.g. "library-root", "video").</param>
+/// <param name="TargetKind">Target kind for display (e.g. "library-root", "video"); not strictly an entity kind, so kept as a free code.</param>
 /// <param name="TargetId">Entity identifier for display.</param>
 /// <param name="TargetLabel">Human-readable label shown on the dashboard.</param>
 /// <param name="CreatedAt">Time the job was created.</param>
@@ -16,8 +18,8 @@ namespace Prismedia.Contracts.Jobs;
 /// <param name="FinishedAt">Time the job finished, when complete or failed.</param>
 public sealed record JobRun(
     Guid Id,
-    string Type,
-    string Status,
+    JobType Type,
+    JobRunStatus Status,
     int Progress,
     string? Message,
     string? TargetKind,
@@ -30,10 +32,10 @@ public sealed record JobRun(
 /// <summary>
 /// Aggregate count of job runs sharing a type and status.
 /// </summary>
-/// <param name="Type">Job type code (e.g. "scan-library").</param>
-/// <param name="Status">Job status code (e.g. "queued", "running").</param>
+/// <param name="Type">Job operation type.</param>
+/// <param name="Status">Job lifecycle status.</param>
 /// <param name="Count">Number of job runs with this type and status.</param>
-public sealed record JobQueueCountDto(string Type, string Status, int Count);
+public sealed record JobQueueCountDto(JobType Type, JobRunStatus Status, int Count);
 
 /// <summary>
 /// API response containing job runs for the operations dashboard.

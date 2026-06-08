@@ -23,6 +23,7 @@ const ENUM_EXPORTS = [
   ["EntityFileRole", "ENTITY_FILE_ROLE", "EntityFileRoleCode"],
   ["CreditRole", "CREDIT_ROLE", "CreditRoleCode"],
   ["JobType", "JOB_TYPE", "JobTypeCode"],
+  ["JobRunStatus", "JOB_RUN_STATUS", "JobRunStatusCode"],
   ["PlaybackMode", "PLAYBACK_MODE", "PlaybackModeCode"],
   ["EntitySubtitleSource", "SUBTITLE_SOURCE", "SubtitleSourceCode"],
   ["SubtitleStyle", "SUBTITLE_STYLE", "SubtitleStyleCode"],

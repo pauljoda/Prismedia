@@ -1,8 +1,10 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Prismedia.Api.Serialization;
 using Prismedia.Application.Jobs;
 using Prismedia.Contracts.Jobs;
 using Prismedia.Domain.Entities;
@@ -10,17 +12,21 @@ using Prismedia.Domain.Entities;
 namespace Prismedia.Api.Tests;
 
 public sealed class JobEndpointServiceTests {
+    // The codec enums serialize as their string code; deserializing the typed DTO client-side
+    // needs the same converter, so this also asserts the wire format round-trips unchanged.
+    private static readonly JsonSerializerOptions CodecJson =
+        new(JsonSerializerDefaults.Web) { Converters = { new CodecJsonConverterFactory() } };
     [Fact]
     public async Task JobsEndpointListsJobsFromQueueService() {
         using var factory = CreateFactory();
         using var client = factory.CreateAuthenticatedClient();
 
-        var response = await client.GetFromJsonAsync<JobListResponse>("/api/jobs");
+        var response = await client.GetFromJsonAsync<JobListResponse>("/api/jobs", CodecJson);
 
         Assert.NotNull(response);
         var job = Assert.Single(response.Items);
-        Assert.Equal("scan-library", job.Type);
-        Assert.Equal("queued", job.Status);
+        Assert.Equal(JobType.ScanLibrary, job.Type);
+        Assert.Equal(JobRunStatus.Queued, job.Status);
     }
 
     [Fact]
@@ -29,13 +35,13 @@ public sealed class JobEndpointServiceTests {
         using var client = factory.CreateAuthenticatedClient();
 
         using var response = await client.PostAsync("/api/jobs/probe-video", null);
-        var payload = await response.Content.ReadFromJsonAsync<JobCreateResponse>();
+        var payload = await response.Content.ReadFromJsonAsync<JobCreateResponse>(CodecJson);
 
         Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
         Assert.Equal("/api/jobs/22222222-2222-2222-2222-222222222222", response.Headers.Location?.OriginalString);
         Assert.NotNull(payload);
-        Assert.Equal("probe-video", payload.Job.Type);
-        Assert.Equal("queued", payload.Job.Status);
+        Assert.Equal(JobType.ProbeVideo, payload.Job.Type);
+        Assert.Equal(JobRunStatus.Queued, payload.Job.Status);
     }
 
     [Fact]

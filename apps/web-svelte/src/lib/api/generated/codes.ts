@@ -95,6 +95,16 @@ export const JOB_TYPE = {
 
 export type JobTypeCode = (typeof JOB_TYPE)[keyof typeof JOB_TYPE];
 
+export const JOB_RUN_STATUS = {
+  queued: "queued",
+  running: "running",
+  completed: "completed",
+  failed: "failed",
+  cancelled: "cancelled",
+} as const;
+
+export type JobRunStatusCode = (typeof JOB_RUN_STATUS)[keyof typeof JOB_RUN_STATUS];
+
 export const PLAYBACK_MODE = {
   direct: "direct",
   hls: "hls",
@@ -195,7 +205,10 @@ export const SETTING_KEYS = {
   generationThumbnailQuality: "generation.thumbnailQuality",
   generationTrickplayIntervalSeconds: "generation.trickplayIntervalSeconds",
   generationTrickplayQuality: "generation.trickplayQuality",
+  hlsEnableAdaptiveBitrate: "hls.enableAdaptiveBitrate",
+  hlsEncodingThreadCount: "hls.encodingThreadCount",
   hlsFfmpegPath: "hls.ffmpegPath",
+  hlsMaxCacheSizeGb: "hls.maxCacheSizeGb",
   hlsTranscoderProfile: "hls.transcoderProfile",
   hlsVaapiDevice: "hls.vaapiDevice",
   jobsBackgroundConcurrency: "jobs.backgroundConcurrency",
@@ -210,6 +223,7 @@ export const SETTING_KEYS = {
   subtitlesPositionPercent: "subtitles.positionPercent",
   subtitlesPreferredLanguages: "subtitles.preferredLanguages",
   subtitlesStyle: "subtitles.style",
+  taxonomyRemoveOrphanTags: "taxonomy.removeOrphanTags",
   visibilityDefaultMode: "visibility.defaultMode",
   visibilityLanAutoEnable: "visibility.lanAutoEnable",
 } as const;

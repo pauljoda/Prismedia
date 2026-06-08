@@ -36,8 +36,8 @@ internal static class IdentifyBulkEndpoints {
                     $"/api/jobs/{job.Id}",
                     new JobCreateResponse(new JobRun(
                         job.Id,
-                        job.Type.ToCode(),
-                        job.Status.ToCode(),
+                        job.Type,
+                        job.Status,
                         job.Progress,
                         job.Message,
                         job.TargetEntityKind,
