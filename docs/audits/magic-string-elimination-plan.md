@@ -258,10 +258,13 @@ pattern was partially established. Building on it:
   literal). Wire values unchanged. _Frontend `PROBLEM_CODES` codegen still TODO — needs the
   manifest + dev API (Phase 0 step 1)._
 
-**Known pre-existing issue (not from this work):** `SpaDevProxyTests.BackendRouteClassifierKeepsLowercaseSpaRoutesOnVite`
-fails on the branch base (from sprint PR #22 "secure lowercase Jellyfin routes") — `/videos`
-and `/videos/<guid>` now classify as backend routes when the test expects them on the SPA/Vite
-path. Needs a product decision (real SPA-routing regression vs. stale test).
+- **✅ Route classifier fix (sprint regression).** `SpaDevProxyTests` failed on the branch
+  base: PR #22's case-insensitive Jellyfin matching swept the app's own lowercase routes
+  (`/videos`, `/audio`, `/artists`) into the backend. Fixed with shape-aware matching
+  (bare page + `/{kind}/{guid}` detail → SPA; PascalCase or sub-resource paths, incl.
+  lowercase Infuse `/videos/{id}/stream`, → backend) and **unified the duplicated classifier**
+  into `JellyfinRoutes.IsJellyfinRequest` (was copied in both `SpaDevProxy` and
+  `PrismediaAuthentication`). Full backend suite green (853 tests).
 
 **Next rails (recommended order):** (2) backend constant classes that need no codegen —
 `AssetPaths`, `MediaCodecs`, `MediaContainers`, extend `JellyfinProtocol` for the new sprint
