@@ -351,14 +351,30 @@ magic-string offender (the hand-maintained jobs queue/status vocabulary).
   no longer hand-parses mode strings; the Jellyfin mapping now compares `RelationshipKind` enums
   (retiring dead `"genres"`/`"studios"` branches). 853 backend tests + frontend 0 errors.
 
-### Remaining (next session)
-- **Batch 2 — `EntitySubtitle`**: `Source` → `EntitySubtitleSource` (exists); `Format`/`SourceFormat`
-  need a **new `SubtitleFormat` `[Code]` enum** (vtt/srt/ass/ssa) + `ENUM_EXPORTS`.
-- **Batch 3 — the `EntityKind` mega-batch** (highest ripple): `EntityCard`/`EntityDetail`/
-  `EntityGroup.Kind`, `CollectionItemReference`/`CollectionRulePreviewItem`/`CollectionItemDetail.EntityType`,
-  the `ByType` dictionary keys → `EntityKind`. `card.kind` is consumed pervasively on the
-  frontend, so expect a wider svelte-check ripple — do it as its own focused pass.
-- **Guardrail — `codes.ts`/generated-client parity check** (the drift finding motivates it).
+### Completed (2026-06-08)
+- **✅ Batch 2 — `EntitySubtitle.Source` → `EntitySubtitleSource`.** Format/SourceFormat kept
+  string (served-format constant + external ffprobe vocab). Caught 2 invalid fixtures.
+- **✅ Batch 3 — the `EntityKind` mega-batch.** `EntityCard`/`EntityDetail`/`EntityGroup.Kind`,
+  `EntityThumbnail.Kind`/`ParentKind`, `EntityKindCount.Kind`, and the collection `EntityType`
+  fields → `EntityKind`. EF projections decode (`DecodeAs<EntityKind>`); mappers drop `.ToCode()`.
+  Forced the **entire Jellyfin catalog service onto `EntityKind` switches/comparisons** (the
+  audit's worst string-ID offender), retiring dozens of literals + dead branches. Backend 853
+  tests, frontend 0 svelte-check errors, 223 unit tests. (`ByType` dict stays string-keyed —
+  enum dict-key serialization is finicky; low value.)
+- **✅ Guardrail — `pnpm api:check`** regenerates the client and fails on drift.
+
+### Remaining (scoped follow-up: the identify/plugin/stash subsystem)
+Retyping the **peripheral entity-kind DTOs** — `FileLinkedEntity.Kind`,
+`EntityMetadataProposal.TargetKind`, `IdentifyEntitySnapshot.Kind`, `OrganizePlanItem.Kind`,
+`ApiIdentifyQueueItem.EntityKind` → `EntityKind` — rippled into ~74 sites across the
+identify / plugin / **stash-compat** layer (proposal traversal, the Stash result mapper,
+queue service). That is a deep, kind-heavy subsystem deserving its own focused pass; it was
+attempted and reverted to keep the branch green. Until then, a handful of frontend boundary
+casts (`as EntityKind`) remain where those still-string DTOs feed typed fields — remove them
+when the subsystem is retyped. **Not** entity kinds (separate future families needing their
+own `[Code]` enums): `FileEntry.Kind` (file-entry kind), `ImageCandidate.Kind` /
+`EntityImageAsset.Kind` (image-asset kind), `StatsCapability.Code` (stat code),
+`ProgressCapability.Unit`/`Mode`, `EntityThumbnail.HoverKind`.
 
 ### Remaining DTO work-list (Prismedia contracts only; Jellyfin DTOs use `JellyfinProtocol`, not codec enums)
 `EntityCard.Kind`/`EntityCardEnvelope.Kind` → `EntityKind` (broadest ripple — the core card
