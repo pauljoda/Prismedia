@@ -113,6 +113,33 @@ public static class JellyfinProtocol {
         public const string Unknown = "Unknown";
     }
 
+    /// <summary>Jellyfin <c>ImageType</c> values used in image tags, info, and asset lookups.</summary>
+    public static class ImageTypes {
+        /// <summary>Primary cover/poster image.</summary>
+        public const string Primary = "Primary";
+
+        /// <summary>Backdrop / fanart image.</summary>
+        public const string Backdrop = "Backdrop";
+
+        /// <summary>Logo image.</summary>
+        public const string Logo = "Logo";
+
+        /// <summary>Thumb (landscape) image.</summary>
+        public const string Thumb = "Thumb";
+
+        /// <summary>Banner image.</summary>
+        public const string Banner = "Banner";
+
+        /// <summary>Art (clear art) image.</summary>
+        public const string Art = "Art";
+
+        /// <summary>Disc image.</summary>
+        public const string Disc = "Disc";
+
+        /// <summary>Box image.</summary>
+        public const string Box = "Box";
+    }
+
     /// <summary>Jellyfin library collection type codes.</summary>
     public static class CollectionTypes {
         /// <summary>Movies library.</summary>

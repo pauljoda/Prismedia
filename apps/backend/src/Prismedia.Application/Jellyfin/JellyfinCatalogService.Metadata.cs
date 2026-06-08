@@ -39,7 +39,7 @@ public sealed partial class JellyfinCatalogService {
         foreach (var asset in images) {
             var type = JellyfinImageType(asset.Kind);
             var tag = EtagFor(id, asset.Path);
-            if (type.Equals("Backdrop", StringComparison.OrdinalIgnoreCase)) {
+            if (type.Equals(JellyfinProtocol.ImageTypes.Backdrop, StringComparison.OrdinalIgnoreCase)) {
                 backdrops.Add(tag);
                 continue;
             }
@@ -50,7 +50,7 @@ public sealed partial class JellyfinCatalogService {
         var imageCapability = capabilities.OfType<ImagesCapability>().FirstOrDefault();
         var primary = PrimaryImageAsset(images, imageCapability);
         if (primary is not null) {
-            tags["Primary"] = EtagFor(id, primary.Path);
+            tags[JellyfinProtocol.ImageTypes.Primary] = EtagFor(id, primary.Path);
         }
 
         return new JellyfinImageMetadata(
@@ -68,7 +68,7 @@ public sealed partial class JellyfinCatalogService {
             image.Kind.Equals("cover", StringComparison.OrdinalIgnoreCase) ||
             image.Kind.Equals("thumbnail", StringComparison.OrdinalIgnoreCase) ||
             image.Kind.Equals("primary", StringComparison.OrdinalIgnoreCase)) ?? images.FirstOrDefault(image =>
-            !JellyfinImageType(image.Kind).Equals("Backdrop", StringComparison.OrdinalIgnoreCase));
+            !JellyfinImageType(image.Kind).Equals(JellyfinProtocol.ImageTypes.Backdrop, StringComparison.OrdinalIgnoreCase));
         if (primary is not null) {
             return primary;
         }
@@ -87,15 +87,15 @@ public sealed partial class JellyfinCatalogService {
 
     private static string JellyfinImageType(string prismediaKind) =>
         prismediaKind.Trim().ToLowerInvariant() switch {
-            "art" => "Art",
-            "backdrop" or "background" or "fanart" => "Backdrop",
-            "banner" => "Banner",
-            "box" => "Box",
-            "disc" or "disc-art" => "Disc",
-            "logo" or "clearlogo" => "Logo",
+            "art" => JellyfinProtocol.ImageTypes.Art,
+            "backdrop" or "background" or "fanart" => JellyfinProtocol.ImageTypes.Backdrop,
+            "banner" => JellyfinProtocol.ImageTypes.Banner,
+            "box" => JellyfinProtocol.ImageTypes.Box,
+            "disc" or "disc-art" => JellyfinProtocol.ImageTypes.Disc,
+            "logo" or "clearlogo" => JellyfinProtocol.ImageTypes.Logo,
             "screenshot" => "Screenshot",
-            "thumb" => "Thumb",
-            _ => "Primary"
+            "thumb" => JellyfinProtocol.ImageTypes.Thumb,
+            _ => JellyfinProtocol.ImageTypes.Primary
         };
 
     private static IReadOnlyList<JellyfinNameGuidPairDto> TagItems(IEntityCard item) =>

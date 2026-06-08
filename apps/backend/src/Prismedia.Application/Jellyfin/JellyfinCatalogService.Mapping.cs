@@ -58,7 +58,7 @@ public sealed partial class JellyfinCatalogService {
             Genres = item.Genres is { Count: > 0 } genreNames ? genreNames.ToArray() : [],
             GenreItems = GenreItemsFrom(item.Genres),
             ImageBlurHashes = EmptyBlurHashes,
-            ImageTags = imageTags.Primary is null ? new Dictionary<string, string>() : new Dictionary<string, string> { ["Primary"] = imageTags.Primary },
+            ImageTags = imageTags.Primary is null ? new Dictionary<string, string>() : new Dictionary<string, string> { [JellyfinProtocol.ImageTypes.Primary] = imageTags.Primary },
             BackdropImageTags = imageTags.Backdrop is null ? [] : [imageTags.Backdrop],
             PrimaryImageAspectRatio = isMusic ? 1.0 : 0.6667,
             IndexNumber = isAudio ? TrackNumberFrom(item.SortOrder) : item.SortOrder,
@@ -254,7 +254,7 @@ public sealed partial class JellyfinCatalogService {
             Etag = EtagFor(id, collectionType),
             ImageTags = primaryTag is null
                 ? new Dictionary<string, string>()
-                : new Dictionary<string, string> { ["Primary"] = primaryTag },
+                : new Dictionary<string, string> { [JellyfinProtocol.ImageTypes.Primary] = primaryTag },
             PrimaryImageAspectRatio = primaryTag is null ? null : 0.6667,
             UserData = UserDataFor(id, isFavorite: false, playback: null)
         };
@@ -301,13 +301,13 @@ public sealed partial class JellyfinCatalogService {
             series.Title,
             1,
             ParentId: seasonId,
-            SeriesPrimaryImageTag: ImageTag(images, "Primary"),
-            ParentLogoItemId: ImageTag(images, "Logo") is null ? null : series.Id,
-            ParentLogoImageTag: ImageTag(images, "Logo"),
+            SeriesPrimaryImageTag: ImageTag(images, JellyfinProtocol.ImageTypes.Primary),
+            ParentLogoItemId: ImageTag(images, JellyfinProtocol.ImageTypes.Logo) is null ? null : series.Id,
+            ParentLogoImageTag: ImageTag(images, JellyfinProtocol.ImageTypes.Logo),
             ParentBackdropItemId: images.BackdropImageTags.Count == 0 ? null : series.Id,
             ParentBackdropImageTags: images.BackdropImageTags.Count == 0 ? null : images.BackdropImageTags,
-            ParentThumbItemId: ImageTag(images, "Thumb") is null ? null : series.Id,
-            ParentThumbImageTag: ImageTag(images, "Thumb"),
+            ParentThumbItemId: ImageTag(images, JellyfinProtocol.ImageTypes.Thumb) is null ? null : series.Id,
+            ParentThumbImageTag: ImageTag(images, JellyfinProtocol.ImageTypes.Thumb),
             IndexNumber: indexNumber);
     }
 
@@ -329,7 +329,7 @@ public sealed partial class JellyfinCatalogService {
                 ParentId: parent.Id,
                 AlbumId: parent.Id,
                 AlbumName: parent.Title,
-                AlbumPrimaryImageTag: ImageTag(albumImages, "Primary"),
+                AlbumPrimaryImageTag: ImageTag(albumImages, JellyfinProtocol.ImageTypes.Primary),
                 AlbumArtistId: artist?.Id,
                 AlbumArtistName: artist?.Title);
         }
@@ -352,13 +352,13 @@ public sealed partial class JellyfinCatalogService {
                 null,
                 null,
                 null,
-                SeriesPrimaryImageTag: ImageTag(seriesImages, "Primary"),
-                ParentLogoItemId: ImageTag(seriesImages, "Logo") is null ? null : parent.Id,
-                ParentLogoImageTag: ImageTag(seriesImages, "Logo"),
+                SeriesPrimaryImageTag: ImageTag(seriesImages, JellyfinProtocol.ImageTypes.Primary),
+                ParentLogoItemId: ImageTag(seriesImages, JellyfinProtocol.ImageTypes.Logo) is null ? null : parent.Id,
+                ParentLogoImageTag: ImageTag(seriesImages, JellyfinProtocol.ImageTypes.Logo),
                 ParentBackdropItemId: seriesImages.BackdropImageTags.Count == 0 ? null : parent.Id,
                 ParentBackdropImageTags: seriesImages.BackdropImageTags.Count == 0 ? null : seriesImages.BackdropImageTags,
-                ParentThumbItemId: ImageTag(seriesImages, "Thumb") is null ? null : parent.Id,
-                ParentThumbImageTag: ImageTag(seriesImages, "Thumb"));
+                ParentThumbItemId: ImageTag(seriesImages, JellyfinProtocol.ImageTypes.Thumb) is null ? null : parent.Id,
+                ParentThumbImageTag: ImageTag(seriesImages, JellyfinProtocol.ImageTypes.Thumb));
         }
 
         if (!parent.Kind.Equals("video-season", StringComparison.OrdinalIgnoreCase)) {
@@ -376,8 +376,8 @@ public sealed partial class JellyfinCatalogService {
             ? null
             : ImageMetadata(series.Id, series.Capabilities);
         var seasonImageMeta = ImageMetadata(parent.Id, parent.Capabilities);
-        var thumbTag = ImageTag(seasonImageMeta, "Thumb") ?? (seriesImageMeta is null ? null : ImageTag(seriesImageMeta, "Thumb"));
-        var thumbItemId = ImageTag(seasonImageMeta, "Thumb") is not null
+        var thumbTag = ImageTag(seasonImageMeta, JellyfinProtocol.ImageTypes.Thumb) ?? (seriesImageMeta is null ? null : ImageTag(seriesImageMeta, JellyfinProtocol.ImageTypes.Thumb));
+        var thumbItemId = ImageTag(seasonImageMeta, JellyfinProtocol.ImageTypes.Thumb) is not null
             ? parent.Id
             : thumbTag is null ? (Guid?)null : series?.Id;
         var backdropTags = seriesImageMeta?.BackdropImageTags ?? [];
@@ -391,9 +391,9 @@ public sealed partial class JellyfinCatalogService {
             parent.Id,
             parent.Title,
             parentIndexNumber,
-            SeriesPrimaryImageTag: seriesImageMeta is null ? null : ImageTag(seriesImageMeta, "Primary"),
-            ParentLogoItemId: seriesImageMeta is not null && ImageTag(seriesImageMeta, "Logo") is not null ? series?.Id : null,
-            ParentLogoImageTag: seriesImageMeta is null ? null : ImageTag(seriesImageMeta, "Logo"),
+            SeriesPrimaryImageTag: seriesImageMeta is null ? null : ImageTag(seriesImageMeta, JellyfinProtocol.ImageTypes.Primary),
+            ParentLogoItemId: seriesImageMeta is not null && ImageTag(seriesImageMeta, JellyfinProtocol.ImageTypes.Logo) is not null ? series?.Id : null,
+            ParentLogoImageTag: seriesImageMeta is null ? null : ImageTag(seriesImageMeta, JellyfinProtocol.ImageTypes.Logo),
             ParentBackdropItemId: backdropTags.Count == 0 ? null : series?.Id,
             ParentBackdropImageTags: backdropTags.Count == 0 ? null : backdropTags,
             ParentThumbItemId: thumbItemId,
