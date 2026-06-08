@@ -1,4 +1,4 @@
-import type { EntityCapability, EntityCard, EntityThumbnail } from "$lib/api/generated/model";
+import type { EntityCapability, EntityCard, EntityThumbnail, EntityKind } from "$lib/api/generated/model";
 import { ENTITY_KIND, resolveEntityHref, type EntityRouteContext } from "./entity-codes";
 
 /** Standard thumbnail shapes used by global entity cards before route-specific layout chooses a size. */
@@ -74,10 +74,10 @@ export interface EntityThumbnailCustomOverlay {
 /** Entity payload consumed by the shared thumbnail surface. */
 export interface EntityThumbnailEntity {
   id: string;
-  kind: string;
+  kind: EntityKind;
   title: string;
   parentEntityId: string | null;
-  parentKind?: string | null;
+  parentKind?: EntityKind | null;
   sortOrder: number | string | null;
   capabilities: EntityCapability[];
   childrenByKind: EntityCard["childrenByKind"];

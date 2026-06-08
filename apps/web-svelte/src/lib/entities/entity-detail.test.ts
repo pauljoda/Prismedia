@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { EntityCard } from "$lib/api/generated/model";
+import type { EntityCard, EntityKind } from "$lib/api/generated/model";
 import { entityCardToDetailCard } from "./entity-detail";
 
 describe("entity detail view model", () => {
@@ -309,7 +309,7 @@ describe("entity detail view model", () => {
   });
 });
 
-function thumbnail(id: string, kind: string, title: string, coverUrl: string, parentEntityId = "gallery-1") {
+function thumbnail(id: string, kind: EntityKind, title: string, coverUrl: string, parentEntityId = "gallery-1") {
   return {
     id,
     kind,

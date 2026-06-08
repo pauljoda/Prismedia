@@ -21,12 +21,12 @@ public sealed record EntityThumbnailHoverImage(Guid EntityId, string Title, stri
 /// </summary>
 /// <param name="Kind">Stable entity kind code of the referencing source entities.</param>
 /// <param name="Count">Distinct source entities of that kind referencing this entity.</param>
-public sealed record EntityKindCount(string Kind, int Count);
+public sealed record EntityKindCount(EntityKind Kind, int Count);
 
 /// <summary>Lightweight entity shape for grids, thumbnail strips, and relationship previews.</summary>
 public sealed record EntityThumbnail(
     Guid Id,
-    string Kind,
+    EntityKind Kind,
     string Title,
     Guid? ParentEntityId,
     int? SortOrder,
@@ -44,7 +44,7 @@ public sealed record EntityThumbnail(
     /// Structural parent entity kind code when the thumbnail has a parent. Used by
     /// clients to route child media through richer parent detail surfaces.
     /// </summary>
-    public string? ParentKind { get; init; }
+    public EntityKind? ParentKind { get; init; }
 
     /// <summary>
     /// When the entity was added to the library. Surfaced so compatibility layers (e.g. the Jellyfin
@@ -84,7 +84,7 @@ public sealed record EntityThumbnail(
 /// <param name="Kind">Entity kind code represented by the group.</param>
 /// <param name="Label">Human-readable group label, such as Episodes, Tags, or Cast.</param>
 /// <param name="Entities">Entities in deterministic display order.</param>
-public sealed record EntityGroup(string Kind, string Label, IReadOnlyList<EntityThumbnail> Entities) {
+public sealed record EntityGroup(EntityKind Kind, string Label, IReadOnlyList<EntityThumbnail> Entities) {
     /// <summary>
     /// Relationship code represented by this group, such as <c>cast</c>, <c>studio</c>,
     /// or <c>tags</c>. Structural child groups leave this unset because their grouping

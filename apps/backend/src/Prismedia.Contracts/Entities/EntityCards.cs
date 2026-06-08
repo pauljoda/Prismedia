@@ -1,3 +1,5 @@
+using Prismedia.Domain.Entities;
+
 namespace Prismedia.Contracts.Entities;
 
 /// <summary>Credit metadata exposed by detail routes that need character or role labels.</summary>
@@ -15,8 +17,8 @@ public interface IEntityCard {
     /// <summary>Global entity identifier.</summary>
     Guid Id { get; }
 
-    /// <summary>Entity kind code.</summary>
-    string Kind { get; }
+    /// <summary>Entity kind.</summary>
+    EntityKind Kind { get; }
 
     /// <summary>Primary display title.</summary>
     string Title { get; }
@@ -47,7 +49,7 @@ public abstract record EntityDetail : IEntityCard {
     public required Guid Id { get; init; }
 
     /// <inheritdoc />
-    public required string Kind { get; init; }
+    public required EntityKind Kind { get; init; }
 
     /// <inheritdoc />
     public required string Title { get; init; }

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { EntityKind } from "$lib/api/generated/model";
   import {
     FileArchive,
     FolderPlus,
@@ -73,7 +74,7 @@
   const heroCard = $derived(
     primaryLinked
       ? entityReferenceToThumbnailCard(
-          { id: primaryLinked.entityId, kind: primaryLinked.kind, title: primaryLinked.title, thumbnailUrl: primaryLinked.coverUrl },
+          { id: primaryLinked.entityId, kind: primaryLinked.kind as EntityKind, title: primaryLinked.title, thumbnailUrl: primaryLinked.coverUrl },
         )
       : null,
   );
@@ -82,7 +83,7 @@
       .filter((linked) => linked.entityId !== primaryLinked?.entityId)
       .map((linked) =>
         entityReferenceToThumbnailCard(
-          { id: linked.entityId, kind: linked.kind, title: linked.title, thumbnailUrl: linked.coverUrl },
+          { id: linked.entityId, kind: linked.kind as EntityKind, title: linked.title, thumbnailUrl: linked.coverUrl },
         ),
       ),
   );

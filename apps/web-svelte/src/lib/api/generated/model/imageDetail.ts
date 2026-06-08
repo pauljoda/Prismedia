@@ -6,10 +6,11 @@
  */
 import type { EntityCapability } from './entityCapability';
 import type { EntityGroup } from './entityGroup';
+import type { EntityKind } from './entityKind';
 
 export interface ImageDetail {
   id: string;
-  kind: string;
+  kind: EntityKind;
   title: string;
   /** @nullable */
   parentEntityId: string | null;

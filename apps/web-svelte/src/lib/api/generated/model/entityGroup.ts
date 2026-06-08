@@ -4,11 +4,12 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { EntityKind } from './entityKind';
 import type { EntityThumbnail } from './entityThumbnail';
 import type { RelationshipKind } from './relationshipKind';
 
 export interface EntityGroup {
-  kind: string;
+  kind: EntityKind;
   label: string;
   entities: EntityThumbnail[];
   code?: null | RelationshipKind;

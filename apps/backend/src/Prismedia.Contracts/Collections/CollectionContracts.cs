@@ -23,7 +23,7 @@ public sealed record CollectionWriteRequest(
 /// <summary>Reference to an entity being added to a collection.</summary>
 /// <param name="EntityType">Entity kind code for the item.</param>
 /// <param name="EntityId">Entity identifier to add.</param>
-public sealed record CollectionItemReference(string EntityType, Guid EntityId);
+public sealed record CollectionItemReference(EntityKind EntityType, Guid EntityId);
 
 /// <summary>Request body for manually adding items to a collection.</summary>
 /// <param name="Items">Entities to add in the order supplied by the user.</param>
@@ -53,7 +53,7 @@ public sealed record CollectionRulePreviewRequest(string RuleTreeJson);
 /// <param name="EntityType">Matched entity kind code.</param>
 /// <param name="EntityId">Matched entity identifier.</param>
 /// <param name="Entity">Thumbnail payload for display.</param>
-public sealed record CollectionRulePreviewItem(string EntityType, Guid EntityId, EntityThumbnail Entity);
+public sealed record CollectionRulePreviewItem(EntityKind EntityType, Guid EntityId, EntityThumbnail Entity);
 
 /// <summary>Response body for a dynamic rule preview.</summary>
 /// <param name="Total">Total visible entities matched by the rule tree.</param>
@@ -81,7 +81,7 @@ public sealed record CollectionRefreshResponse(bool Refreshed, int ItemCount);
 public sealed record CollectionItemDetail(
     Guid Id,
     Guid CollectionId,
-    string EntityType,
+    EntityKind EntityType,
     Guid EntityId,
     CollectionItemSource Source,
     int SortOrder,

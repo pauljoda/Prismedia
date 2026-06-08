@@ -1,4 +1,4 @@
-import type { EntityCapability, EntitySubtitleSource } from "$lib/api/generated/model";
+import type { EntityCapability, EntitySubtitleSource, EntityKind } from "$lib/api/generated/model";
 import type { EntityDetailCardFull } from "./entity-detail";
 import { entityCardToDetailCard } from "./entity-detail";
 import { svgArt, rating, flags, stats, technical, positions, type ArtShape } from "./lab-data-helpers";
@@ -140,7 +140,7 @@ function detailCard(options: {
 }): EntityDetailCardFull {
   return entityCardToDetailCard({
     id: options.id,
-    kind: options.kind,
+    kind: options.kind as EntityKind,
     title: options.title,
     parentEntityId: null,
     sortOrder: null,

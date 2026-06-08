@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { EntityKind } from "$lib/api/generated/model";
 import type { EntityCard } from "$lib/api/entities";
 import { EntityIndexPageState } from "./entity-index-page.svelte.ts";
 
@@ -152,7 +153,7 @@ describe("EntityIndexPageState", () => {
   });
 });
 
-function entity(id: string, kind: string, title: string, overrides: Partial<EntityCard> = {}): EntityCard {
+function entity(id: string, kind: EntityKind, title: string, overrides: Partial<EntityCard> = {}): EntityCard {
   return {
     id,
     kind,

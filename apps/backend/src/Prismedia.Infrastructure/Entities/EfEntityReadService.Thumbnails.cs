@@ -135,7 +135,7 @@ public sealed partial class EfEntityReadService {
 
             return new EntityThumbnail(
                 row.Id,
-                row.KindCode,
+                row.KindCode.DecodeAs<EntityKind>(),
                 row.Title,
                 row.ParentEntityId,
                 row.SortOrder,
@@ -154,8 +154,10 @@ public sealed partial class EfEntityReadService {
                 row.IsNsfw,
                 row.IsOrganized) {
                 ParentKind = row.ParentEntityId is { } parentId
-                    ? parentKindByEntity.GetValueOrDefault(parentId)
-                    : null,
+                    && parentKindByEntity.TryGetValue(parentId, out var parentKindCode)
+                    && parentKindCode.TryDecodeAs<EntityKind>(out var parentKind)
+                        ? parentKind
+                        : null,
                 CreatedAt = row.CreatedAt,
                 PlayCount = playback?.PlayCount,
                 Genres = tagsByEntity.GetValueOrDefault(row.Id),

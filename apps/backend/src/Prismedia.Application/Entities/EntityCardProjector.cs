@@ -38,7 +38,7 @@ public static class EntityCardProjector {
     public static EntityCard ToCard(Entity entity) =>
         new() {
             Id = entity.Id,
-            Kind = EntityKindRegistry.ToCode(entity.Kind),
+            Kind = entity.Kind,
             Title = entity.Title,
             ParentEntityId = entity.ParentEntityId,
             SortOrder = entity.SortOrder,
@@ -222,7 +222,7 @@ public static class EntityCardProjector {
     private static IReadOnlyList<EntityGroup> ToGroups(
         IReadOnlyDictionary<EntityKind, IReadOnlyList<Entity>> map) =>
         map.Select(pair => new EntityGroup(
-                EntityKindRegistry.ToCode(pair.Key),
+                pair.Key,
                 EntityKindRegistry.Describe(pair.Key).GroupLabel,
                 pair.Value
                     .OrderBy(child => child.SortOrder ?? int.MaxValue)
@@ -251,7 +251,7 @@ public static class EntityCardProjector {
 
         return new EntityThumbnail(
             entity.Id,
-            EntityKindRegistry.ToCode(entity.Kind),
+            entity.Kind,
             entity.Title,
             entity.ParentEntityId,
             entity.SortOrder,

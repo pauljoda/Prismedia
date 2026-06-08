@@ -8,6 +8,7 @@ import type { BookFormat } from './bookFormat';
 import type { BookType } from './bookType';
 import type { EntityCapability } from './entityCapability';
 import type { EntityGroup } from './entityGroup';
+import type { EntityKind } from './entityKind';
 
 export interface BookDetail {
   bookType: BookType;
@@ -15,7 +16,7 @@ export interface BookDetail {
   /** @nullable */
   coverPageId: string | null;
   id: string;
-  kind: string;
+  kind: EntityKind;
   title: string;
   /** @nullable */
   parentEntityId: string | null;

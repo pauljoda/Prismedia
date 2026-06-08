@@ -3,6 +3,7 @@ using System.Text;
 using Prismedia.Application.Collections;
 using Prismedia.Application.Entities;
 using Prismedia.Contracts.Collections;
+using Prismedia.Domain.Entities;
 using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Jellyfin;
 using Prismedia.Contracts.Media;
@@ -23,8 +24,8 @@ public sealed partial class JellyfinCatalogService {
         var imageTags = ImageTags(item.Id, item.CoverUrl, null);
         var isPlayable = IsPlayable(item.Kind);
         var isAudio = IsAudio(item.Kind);
-        var isAlbum = item.Kind.Equals("audio-library", StringComparison.OrdinalIgnoreCase);
-        var isMusic = isAudio || isAlbum || item.Kind.Equals("music-artist", StringComparison.OrdinalIgnoreCase);
+        var isAlbum = item.Kind == EntityKind.AudioLibrary;
+        var isMusic = isAudio || isAlbum || item.Kind == EntityKind.MusicArtist;
         // Tracks carry their album reference; tracks and albums both carry the album-artist reference.
         var artistContext = isAudio || isAlbum ? context : null;
         long? runtimeTicks = isPlayable ? RuntimeTicksFrom(item) ?? 0 : null;
@@ -120,8 +121,8 @@ public sealed partial class JellyfinCatalogService {
         var source = SourceFile(media);
         var isPlayable = IsPlayable(item.Kind);
         var isAudio = IsAudio(item.Kind);
-        var isAlbum = item.Kind.Equals("audio-library", StringComparison.OrdinalIgnoreCase);
-        var isMusic = isAudio || isAlbum || item.Kind.Equals("music-artist", StringComparison.OrdinalIgnoreCase);
+        var isAlbum = item.Kind == EntityKind.AudioLibrary;
+        var isMusic = isAudio || isAlbum || item.Kind == EntityKind.MusicArtist;
         var artistContext = isAudio || isAlbum ? context : null;
         long? runtimeTicks = isPlayable ? technical?.Duration?.Ticks ?? 0 : null;
         var container = isAudio
@@ -317,7 +318,7 @@ public sealed partial class JellyfinCatalogService {
         CancellationToken cancellationToken) {
         // Albums (audio-library) parent their tracks: carry the album reference plus the album artist
         // resolved from the album's own parent (music-artist), so each track DTO is self-describing.
-        if (parent.Kind.Equals("audio-library", StringComparison.OrdinalIgnoreCase)) {
+        if (parent.Kind == EntityKind.AudioLibrary) {
             var albumImages = ImageMetadata(parent.Id, parent.Capabilities);
             IEntityCard? artist = null;
             if (parent.ParentEntityId is { } artistId) {
@@ -335,7 +336,7 @@ public sealed partial class JellyfinCatalogService {
         }
 
         // Artists (music-artist) parent their albums: each album DTO carries this artist as its album artist.
-        if (parent.Kind.Equals("music-artist", StringComparison.OrdinalIgnoreCase)) {
+        if (parent.Kind == EntityKind.MusicArtist) {
             return new ItemContext(
                 null, null, null, null, null,
                 ParentId: parent.Id,
@@ -343,7 +344,7 @@ public sealed partial class JellyfinCatalogService {
                 AlbumArtistName: parent.Title);
         }
 
-        if (parent.Kind.Equals("video-series", StringComparison.OrdinalIgnoreCase)) {
+        if (parent.Kind == EntityKind.VideoSeries) {
             // Episodes directly under a series (no season): parent-image fields all come from the series.
             var seriesImages = ImageMetadata(parent.Id, parent.Capabilities);
             return new ItemContext(
@@ -361,7 +362,7 @@ public sealed partial class JellyfinCatalogService {
                 ParentThumbImageTag: ImageTag(seriesImages, JellyfinProtocol.ImageTypes.Thumb));
         }
 
-        if (!parent.Kind.Equals("video-season", StringComparison.OrdinalIgnoreCase)) {
+        if (parent.Kind != EntityKind.VideoSeason) {
             return null;
         }
 

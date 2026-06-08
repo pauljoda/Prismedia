@@ -4,6 +4,7 @@ using Prismedia.Application.Jellyfin;
 using Prismedia.Contracts.Collections;
 using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Jellyfin;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Api.Tests;
 
@@ -37,8 +38,8 @@ public sealed class JellyfinCatalogServiceTests {
         var watchedMovieId = Guid.NewGuid();
         var entities = new FakeEntityReadService();
         entities.ListByKind["movie"] = [
-            Thumb(unwatchedMovieId, "movie", "Unwatched Movie"),
-            Thumb(watchedMovieId, "movie", "Watched Movie")
+            Thumb(unwatchedMovieId, EntityKind.Movie, "Unwatched Movie"),
+            Thumb(watchedMovieId, EntityKind.Movie, "Watched Movie")
         ];
         entities.PlayedById[unwatchedMovieId] = false;
         entities.PlayedById[watchedMovieId] = true;
@@ -61,8 +62,8 @@ public sealed class JellyfinCatalogServiceTests {
         var watchedMovieId = Guid.NewGuid();
         var entities = new FakeEntityReadService();
         entities.ListByKind["movie"] = [
-            Thumb(unwatchedMovieId, "movie", "Unwatched Movie"),
-            Thumb(watchedMovieId, "movie", "Watched Movie")
+            Thumb(unwatchedMovieId, EntityKind.Movie, "Unwatched Movie"),
+            Thumb(watchedMovieId, EntityKind.Movie, "Watched Movie")
         ];
         entities.PlayedById[unwatchedMovieId] = false;
         entities.PlayedById[watchedMovieId] = true;
@@ -86,14 +87,14 @@ public sealed class JellyfinCatalogServiceTests {
         var watchedSeriesId = Guid.NewGuid();
         var entities = new FakeEntityReadService();
         entities.ListByKind["video-series"] = [
-            Thumb(unwatchedSeriesId, "video-series", "Unwatched Show"),
-            Thumb(watchedSeriesId, "video-series", "Watched Show")
+            Thumb(unwatchedSeriesId, EntityKind.VideoSeries, "Unwatched Show"),
+            Thumb(watchedSeriesId, EntityKind.VideoSeries, "Watched Show")
         ];
         entities.PlayedById[unwatchedSeriesId] = false;
         entities.PlayedById[watchedSeriesId] = true;
         entities.Cards[unwatchedSeriesId] = new EntityCard {
             Id = unwatchedSeriesId,
-            Kind = "video-series",
+            Kind = EntityKind.VideoSeries,
             Title = "Unwatched Show",
             ParentEntityId = null,
             SortOrder = null,
@@ -143,7 +144,7 @@ public sealed class JellyfinCatalogServiceTests {
     public async Task BrowsingPlayableListDoesNotHydratePerRowDetail() {
         var movieId = Guid.NewGuid();
         var entities = new FakeEntityReadService();
-        entities.ListByKind["movie"] = [Thumb(movieId, "movie", "Some Movie")];
+        entities.ListByKind["movie"] = [Thumb(movieId, EntityKind.Movie, "Some Movie")];
         var catalog = new JellyfinCatalogService(entities, new FakeCollections());
 
         var result = await catalog.GetItemsAsync(
@@ -164,15 +165,15 @@ public sealed class JellyfinCatalogServiceTests {
         var seriesId = Guid.NewGuid();
         var seasonId = Guid.NewGuid();
         var entities = new FakeEntityReadService();
-        entities.ListByKind["video-series"] = [Thumb(seriesId, "video-series", "A Show")];
+        entities.ListByKind["video-series"] = [Thumb(seriesId, EntityKind.VideoSeries, "A Show")];
         entities.Cards[seriesId] = new EntityCard {
             Id = seriesId,
-            Kind = "video-series",
+            Kind = EntityKind.VideoSeries,
             Title = "A Show",
             ParentEntityId = null,
             SortOrder = null,
             Capabilities = [],
-            ChildrenByKind = [new EntityGroup("video-season", "Seasons", [Thumb(seasonId, "video-season", "Season 1")])],
+            ChildrenByKind = [new EntityGroup(EntityKind.VideoSeason, "Seasons", [Thumb(seasonId, EntityKind.VideoSeason, "Season 1")])],
             Relationships = []
         };
         var catalog = new JellyfinCatalogService(entities, new FakeCollections());
@@ -196,10 +197,10 @@ public sealed class JellyfinCatalogServiceTests {
         var entities = new FakeEntityReadService();
         entities.Cards[seriesId] = Card(
             seriesId,
-            "video-series",
+            EntityKind.VideoSeries,
             "Direct Show",
             parentId: null,
-            children: [new EntityGroup("video", "Episodes", [Thumb(episodeId, "video", "Episode 1", parentId: seriesId)])]);
+            children: [new EntityGroup(EntityKind.Video, "Episodes", [Thumb(episodeId, EntityKind.Video, "Episode 1", parentId: seriesId)])]);
         var catalog = new JellyfinCatalogService(entities, new FakeCollections());
 
         var result = await catalog.GetItemsAsync(
@@ -225,10 +226,10 @@ public sealed class JellyfinCatalogServiceTests {
         var entities = new FakeEntityReadService();
         entities.Cards[seriesId] = Card(
             seriesId,
-            "video-series",
+            EntityKind.VideoSeries,
             "Direct Show",
             parentId: null,
-            children: [new EntityGroup("video", "Episodes", [Thumb(episodeId, "video", "Episode 1", parentId: seriesId)])]);
+            children: [new EntityGroup(EntityKind.Video, "Episodes", [Thumb(episodeId, EntityKind.Video, "Episode 1", parentId: seriesId)])]);
         var catalog = new JellyfinCatalogService(entities, new FakeCollections());
         var seasons = await catalog.GetItemsAsync(
             Query(parentId: seriesId, includeItemTypes: [JellyfinProtocol.ItemTypes.Season]),
@@ -261,12 +262,12 @@ public sealed class JellyfinCatalogServiceTests {
         var entities = new FakeEntityReadService();
         entities.Cards[seriesId] = Card(
             seriesId,
-            "video-series",
+            EntityKind.VideoSeries,
             "Direct Show",
             parentId: null,
-            children: [new EntityGroup("video", "Episodes", [
-                Thumb(firstEpisodeId, "video", "Episode 1", parentId: seriesId, sortOrder: 0),
-                Thumb(secondEpisodeId, "video", "Episode 2", parentId: seriesId, sortOrder: 1)
+            children: [new EntityGroup(EntityKind.Video, "Episodes", [
+                Thumb(firstEpisodeId, EntityKind.Video, "Episode 1", parentId: seriesId, sortOrder: 0),
+                Thumb(secondEpisodeId, EntityKind.Video, "Episode 2", parentId: seriesId, sortOrder: 1)
             ])]);
         var catalog = new JellyfinCatalogService(entities, new FakeCollections());
         var seasons = await catalog.GetItemsAsync(
@@ -311,14 +312,14 @@ public sealed class JellyfinCatalogServiceTests {
         var episodeId = Guid.NewGuid();
         const string coverPath = "/assets/videos/direct-episode.jpg";
         var entities = new FakeEntityReadService();
-        var episode = Thumb(episodeId, "video", "Episode 1", coverUrl: coverPath, parentId: seriesId);
+        var episode = Thumb(episodeId, EntityKind.Video, "Episode 1", coverUrl: coverPath, parentId: seriesId);
         entities.Cards[seriesId] = Card(
             seriesId,
-            "video-series",
+            EntityKind.VideoSeries,
             "Direct Show",
             parentId: null,
-            children: [new EntityGroup("video", "Episodes", [episode])]);
-        entities.Cards[episodeId] = Card(episodeId, "video", "Episode 1", seriesId, children: []);
+            children: [new EntityGroup(EntityKind.Video, "Episodes", [episode])]);
+        entities.Cards[episodeId] = Card(episodeId, EntityKind.Video, "Episode 1", seriesId, children: []);
         entities.Thumbnails[episodeId] = episode;
         var catalog = new JellyfinCatalogService(entities, new FakeCollections());
         var seasons = await catalog.GetItemsAsync(
@@ -348,14 +349,14 @@ public sealed class JellyfinCatalogServiceTests {
         var seriesId = Guid.NewGuid();
         var episodeId = Guid.NewGuid();
         var entities = new FakeEntityReadService();
-        var episode = Thumb(episodeId, "video", "Episode 1", parentId: seriesId, sortOrder: 0);
+        var episode = Thumb(episodeId, EntityKind.Video, "Episode 1", parentId: seriesId, sortOrder: 0);
         entities.Cards[seriesId] = Card(
             seriesId,
-            "video-series",
+            EntityKind.VideoSeries,
             "Direct Show",
             parentId: null,
-            children: [new EntityGroup("video", "Episodes", [episode])]);
-        entities.Cards[episodeId] = Card(episodeId, "video", "Episode 1", seriesId, children: []) with {
+            children: [new EntityGroup(EntityKind.Video, "Episodes", [episode])]);
+        entities.Cards[episodeId] = Card(episodeId, EntityKind.Video, "Episode 1", seriesId, children: []) with {
             SortOrder = 0
         };
         var catalog = new JellyfinCatalogService(entities, new FakeCollections());
@@ -386,14 +387,14 @@ public sealed class JellyfinCatalogServiceTests {
         var entities = new FakeEntityReadService();
         entities.Cards[seriesId] = Card(
             seriesId,
-            "video-series",
+            EntityKind.VideoSeries,
             "Seasoned Show",
             parentId: null,
             children: [
-                new EntityGroup("video-season", "Seasons", [Thumb(seasonId, "video-season", "Season 1", parentId: seriesId)]),
-                new EntityGroup("video", "Episodes", [Thumb(episodeId, "video", "Episode 1", parentId: seriesId)])
+                new EntityGroup(EntityKind.VideoSeason, "Seasons", [Thumb(seasonId, EntityKind.VideoSeason, "Season 1", parentId: seriesId)]),
+                new EntityGroup(EntityKind.Video, "Episodes", [Thumb(episodeId, EntityKind.Video, "Episode 1", parentId: seriesId)])
             ]);
-        entities.Cards[seasonId] = Card(seasonId, "video-season", "Season 1", seriesId, children: []);
+        entities.Cards[seasonId] = Card(seasonId, EntityKind.VideoSeason, "Season 1", seriesId, children: []);
         var catalog = new JellyfinCatalogService(entities, new FakeCollections());
 
         var result = await catalog.GetItemsAsync(
@@ -414,10 +415,10 @@ public sealed class JellyfinCatalogServiceTests {
         var entities = new FakeEntityReadService();
         entities.Cards[seriesId] = Card(
             seriesId,
-            "video-series",
+            EntityKind.VideoSeries,
             "SFW Profile Show",
             parentId: null,
-            children: [new EntityGroup("video", "Episodes", [Thumb(episodeId, "video", "Hidden Episode", parentId: seriesId, isNsfw: true)])]);
+            children: [new EntityGroup(EntityKind.Video, "Episodes", [Thumb(episodeId, EntityKind.Video, "Hidden Episode", parentId: seriesId, isNsfw: true)])]);
         var catalog = new JellyfinCatalogService(entities, new FakeCollections());
 
         var result = await catalog.GetItemsAsync(
@@ -434,10 +435,10 @@ public sealed class JellyfinCatalogServiceTests {
         var collectionId = Guid.NewGuid();
         const string coverPath = "/assets/library/member-poster.jpg";
         var entities = new FakeEntityReadService();
-        entities.ListByKind["collection"] = [Thumb(collectionId, "collection", "Favourites", coverUrl: null)];
+        entities.ListByKind["collection"] = [Thumb(collectionId, EntityKind.Collection, "Favourites", coverUrl: null)];
         entities.Cards[collectionId] = new EntityCard {
             Id = collectionId,
-            Kind = "collection",
+            Kind = EntityKind.Collection,
             Title = "Favourites",
             ParentEntityId = null,
             SortOrder = null,
@@ -469,7 +470,7 @@ public sealed class JellyfinCatalogServiceTests {
         var movieId = Guid.NewGuid();
         const string coverPath = "/assets/library/recent-movie.jpg";
         var entities = new FakeEntityReadService();
-        entities.ListByKind["movie"] = [Thumb(movieId, "movie", "Recent Movie", coverUrl: coverPath)];
+        entities.ListByKind["movie"] = [Thumb(movieId, EntityKind.Movie, "Recent Movie", coverUrl: coverPath)];
         var catalog = new JellyfinCatalogService(entities, new FakeCollections());
 
         var views = await catalog.GetUserViewsWithArtworkAsync(ServerId, hideNsfw: false, CancellationToken.None);
@@ -489,7 +490,7 @@ public sealed class JellyfinCatalogServiceTests {
         var personId = Guid.NewGuid();
         var movieId = Guid.NewGuid();
         var entities = new FakeEntityReadService();
-        entities.ReferencedBy[personId] = [Thumb(movieId, "movie", "Their Movie")];
+        entities.ReferencedBy[personId] = [Thumb(movieId, EntityKind.Movie, "Their Movie")];
         var catalog = new JellyfinCatalogService(entities, new FakeCollections());
 
         var result = await catalog.GetItemsAsync(
@@ -511,7 +512,7 @@ public sealed class JellyfinCatalogServiceTests {
         var entities = new FakeEntityReadService();
         entities.Cards[personId] = new EntityCard {
             Id = personId,
-            Kind = "person",
+            Kind = EntityKind.Person,
             Title = "A Performer",
             ParentEntityId = null,
             SortOrder = null,
@@ -519,7 +520,7 @@ public sealed class JellyfinCatalogServiceTests {
             ChildrenByKind = [],
             Relationships = []
         };
-        entities.ReferencedBy[personId] = [Thumb(seriesId, "video-series", "Their Show")];
+        entities.ReferencedBy[personId] = [Thumb(seriesId, EntityKind.VideoSeries, "Their Show")];
         var catalog = new JellyfinCatalogService(entities, new FakeCollections());
 
         var result = await catalog.GetItemsAsync(
@@ -539,7 +540,7 @@ public sealed class JellyfinCatalogServiceTests {
         var entities = new FakeEntityReadService();
         entities.Cards[personId] = new EntityCard {
             Id = personId,
-            Kind = "person",
+            Kind = EntityKind.Person,
             Title = "A Performer",
             ParentEntityId = null,
             SortOrder = null,
@@ -560,7 +561,7 @@ public sealed class JellyfinCatalogServiceTests {
     public async Task MusicViewListsArtistsAsFolders() {
         var artistId = Guid.NewGuid();
         var entities = new FakeEntityReadService();
-        entities.ListByKind["music-artist"] = [Thumb(artistId, "music-artist", "A Band")];
+        entities.ListByKind["music-artist"] = [Thumb(artistId, EntityKind.MusicArtist, "A Band")];
         var catalog = new JellyfinCatalogService(entities, new FakeCollections());
 
         var result = await catalog.GetItemsAsync(
@@ -580,9 +581,9 @@ public sealed class JellyfinCatalogServiceTests {
         var artistId = Guid.NewGuid();
         var albumId = Guid.NewGuid();
         var entities = new FakeEntityReadService();
-        entities.Cards[artistId] = MusicCard(artistId, "music-artist", "A Band", parentId: null,
-            children: [new EntityGroup("audio-library", "Albums", [MusicThumb(albumId, "audio-library", "First Album", artistId, sortOrder: 0)])]);
-        entities.Cards[albumId] = MusicCard(albumId, "audio-library", "First Album", parentId: artistId, children: []);
+        entities.Cards[artistId] = MusicCard(artistId, EntityKind.MusicArtist, "A Band", parentId: null,
+            children: [new EntityGroup(EntityKind.AudioLibrary, "Albums", [MusicThumb(albumId, EntityKind.AudioLibrary, "First Album", artistId, sortOrder: 0)])]);
+        entities.Cards[albumId] = MusicCard(albumId, EntityKind.AudioLibrary, "First Album", parentId: artistId, children: []);
         var catalog = new JellyfinCatalogService(entities, new FakeCollections());
 
         var result = await catalog.GetItemsAsync(
@@ -604,9 +605,9 @@ public sealed class JellyfinCatalogServiceTests {
         var albumId = Guid.NewGuid();
         var trackId = Guid.NewGuid();
         var entities = new FakeEntityReadService();
-        entities.Cards[artistId] = MusicCard(artistId, "music-artist", "A Band", parentId: null, children: []);
-        entities.Cards[albumId] = MusicCard(albumId, "audio-library", "First Album", parentId: artistId,
-            children: [new EntityGroup("audio-track", "Tracks", [MusicThumb(trackId, "audio-track", "Opening Track", albumId, sortOrder: 0)])]);
+        entities.Cards[artistId] = MusicCard(artistId, EntityKind.MusicArtist, "A Band", parentId: null, children: []);
+        entities.Cards[albumId] = MusicCard(albumId, EntityKind.AudioLibrary, "First Album", parentId: artistId,
+            children: [new EntityGroup(EntityKind.AudioTrack, "Tracks", [MusicThumb(trackId, EntityKind.AudioTrack, "Opening Track", albumId, sortOrder: 0)])]);
         var catalog = new JellyfinCatalogService(entities, new FakeCollections());
 
         var result = await catalog.GetItemsAsync(
@@ -628,7 +629,7 @@ public sealed class JellyfinCatalogServiceTests {
 
     private static EntityCard Card(
         Guid id,
-        string kind,
+        EntityKind kind,
         string title,
         Guid? parentId,
         IReadOnlyList<EntityGroup> children) =>
@@ -645,13 +646,13 @@ public sealed class JellyfinCatalogServiceTests {
 
     private static EntityCard MusicCard(
         Guid id,
-        string kind,
+        EntityKind kind,
         string title,
         Guid? parentId,
         IReadOnlyList<EntityGroup> children) =>
         Card(id, kind, title, parentId, children);
 
-    private static EntityThumbnail MusicThumb(Guid id, string kind, string title, Guid parentId, int sortOrder) =>
+    private static EntityThumbnail MusicThumb(Guid id, EntityKind kind, string title, Guid parentId, int sortOrder) =>
         new(
             id,
             kind,
@@ -690,7 +691,7 @@ public sealed class JellyfinCatalogServiceTests {
 
     private static EntityThumbnail Thumb(
         Guid id,
-        string kind,
+        EntityKind kind,
         string title,
         string? coverUrl = "/assets/cover.jpg",
         Guid? parentId = null,

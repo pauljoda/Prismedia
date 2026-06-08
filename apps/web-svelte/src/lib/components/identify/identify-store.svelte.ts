@@ -1,4 +1,5 @@
 import { goto } from "$app/navigation";
+import type { EntityKind } from "$lib/api/generated/model";
 import { createContext } from "$lib/utils/context";
 import {
   addIdentifyQueueItem,
@@ -1116,7 +1117,7 @@ function entityThumbnailFromDetail(detail: EntityDetailCard, fallback?: EntityCa
 function entityCardFromQueueItem(item: ApiIdentifyQueueItem): EntityCard {
   return {
     id: item.entityId,
-    kind: item.entityKind,
+    kind: item.entityKind as EntityKind,
     title: item.title,
     parentEntityId: null,
     sortOrder: null,

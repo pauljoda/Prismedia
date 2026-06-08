@@ -91,6 +91,7 @@ export * from './entityFingerprint';
 export * from './entityFlagsUpdateRequest';
 export * from './entityGroup';
 export * from './entityImageAsset';
+export * from './entityKind';
 export * from './entityKindCount';
 export * from './entityListResponse';
 export * from './entityMarker';

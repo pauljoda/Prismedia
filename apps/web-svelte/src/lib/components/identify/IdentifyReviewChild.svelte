@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { EntityKind } from "$lib/api/generated/model";
   import {
     Check,
     ChevronLeft,
@@ -118,7 +119,7 @@
   function currentEntityFallback(): EntityCard {
     return {
       id: currentDetailEntityId ?? proposal.targetEntityId ?? proposal.proposalId,
-      kind: proposal.targetKind,
+      kind: proposal.targetKind as EntityKind,
       title: currentDetail?.title ?? "",
       parentEntityId: null,
       sortOrder: null,

@@ -8,6 +8,7 @@ import type { CollectionCoverMode } from './collectionCoverMode';
 import type { CollectionMode } from './collectionMode';
 import type { EntityCapability } from './entityCapability';
 import type { EntityGroup } from './entityGroup';
+import type { EntityKind } from './entityKind';
 
 export interface CollectionDetail {
   mode: null | CollectionMode;
@@ -19,7 +20,7 @@ export interface CollectionDetail {
   /** @nullable */
   lastRefreshedAt: string | null;
   id: string;
-  kind: string;
+  kind: EntityKind;
   title: string;
   /** @nullable */
   parentEntityId: string | null;

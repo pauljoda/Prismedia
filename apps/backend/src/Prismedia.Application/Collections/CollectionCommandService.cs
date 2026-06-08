@@ -124,10 +124,11 @@ public sealed class CollectionCommandService(
 
         var requested = new List<(CollectionItemReference Reference, EntityKind Kind)>();
         foreach (var reference in references) {
-            if (!EntityKindRegistry.TryGet(reference.EntityType, out var kind) || !Collection.CanContain(kind)) {
+            var kind = reference.EntityType;
+            if (!Collection.CanContain(kind)) {
                 return new CollectionCountResult(
                     CollectionCommandStatus.Invalid,
-                    Message: $"Entity type '{reference.EntityType}' cannot be added to a collection.");
+                    Message: $"Entity type '{EntityKindRegistry.ToCode(kind)}' cannot be added to a collection.");
             }
 
             requested.Add((reference, kind));
@@ -203,7 +204,7 @@ public sealed class CollectionCommandService(
         var sample = visible
             .Take(PreviewSampleSize)
             .Select(match => thumbnailById.TryGetValue(match.EntityId, out var thumbnail)
-                ? new CollectionRulePreviewItem(match.EntityType, match.EntityId, thumbnail)
+                ? new CollectionRulePreviewItem(match.EntityType.DecodeAs<EntityKind>(), match.EntityId, thumbnail)
                 : null)
             .Where(item => item is not null)
             .Select(item => item!)
@@ -512,7 +513,6 @@ public sealed class CollectionCommandService(
         return references
             .Where(reference => reference.EntityId != Guid.Empty)
             .Where(reference => seen.Add(reference.EntityId))
-            .Select(reference => reference with { EntityType = reference.EntityType.Trim() })
             .ToArray();
     }
 

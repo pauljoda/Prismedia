@@ -169,9 +169,9 @@ public sealed class CollectionCommandServiceTests {
         var added = await service.AddItemsAsync(
             collectionId,
             new CollectionAddItemsRequest([
-                new CollectionItemReference("video", firstId),
-                new CollectionItemReference("image", secondId),
-                new CollectionItemReference("video", firstId),
+                new CollectionItemReference(EntityKind.Video, firstId),
+                new CollectionItemReference(EntityKind.Image, secondId),
+                new CollectionItemReference(EntityKind.Video, firstId),
             ]),
             CancellationToken.None);
 
@@ -212,7 +212,7 @@ public sealed class CollectionCommandServiceTests {
 
         var added = await service.AddItemsAsync(
             collectionId,
-            new CollectionAddItemsRequest([new CollectionItemReference("video-series", seriesId)]),
+            new CollectionAddItemsRequest([new CollectionItemReference(EntityKind.VideoSeries, seriesId)]),
             CancellationToken.None);
 
         Assert.Equal(CollectionCommandStatus.Succeeded, added.Status);
@@ -220,7 +220,7 @@ public sealed class CollectionCommandServiceTests {
 
         var rejected = await service.AddItemsAsync(
             collectionId,
-            new CollectionAddItemsRequest([new CollectionItemReference("collection", nestedCollectionId)]),
+            new CollectionAddItemsRequest([new CollectionItemReference(EntityKind.Collection, nestedCollectionId)]),
             CancellationToken.None);
 
         Assert.Equal(CollectionCommandStatus.Invalid, rejected.Status);
@@ -237,7 +237,7 @@ public sealed class CollectionCommandServiceTests {
 
         var result = await service.AddItemsAsync(
             collectionId,
-            new CollectionAddItemsRequest([new CollectionItemReference("video", videoId)]),
+            new CollectionAddItemsRequest([new CollectionItemReference(EntityKind.Video, videoId)]),
             CancellationToken.None);
 
         Assert.Equal(CollectionCommandStatus.Invalid, result.Status);
@@ -288,7 +288,7 @@ public sealed class CollectionCommandServiceTests {
         Assert.Equal(1, preview.Total);
         Assert.Equal(1, preview.ByType["video-series"]);
         var item = Assert.Single(preview.Sample);
-        Assert.Equal("video-series", item.EntityType);
+        Assert.Equal(EntityKind.VideoSeries, item.EntityType);
         Assert.Equal(seriesId, item.EntityId);
     }
 
@@ -382,7 +382,7 @@ public sealed class CollectionCommandServiceTests {
                 .Where(row => row is not null)
                 .Select(row => new EntityThumbnail(
                     row!.Id,
-                    row.KindCode,
+                    row.KindCode.DecodeAs<EntityKind>(),
                     row.Title,
                     row.ParentEntityId,
                     row.SortOrder,
@@ -408,7 +408,7 @@ public sealed class CollectionCommandServiceTests {
                 .FirstAsync(row => row.EntityId == id, cancellationToken);
             return new CollectionDetail {
                 Id = entity.Id,
-                Kind = entity.KindCode,
+                Kind = entity.KindCode.DecodeAs<EntityKind>(),
                 Title = entity.Title,
                 ParentEntityId = entity.ParentEntityId,
                 SortOrder = entity.SortOrder,

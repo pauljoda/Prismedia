@@ -101,13 +101,12 @@ public sealed partial class JellyfinCatalogService {
 
     private static IReadOnlyList<JellyfinNameGuidPairDto> TagItems(IEntityCard item) =>
         RelationshipPairs(item, group =>
-            group.Kind.Equals("tag", StringComparison.OrdinalIgnoreCase) ||
-            group.Kind.Equals("genre", StringComparison.OrdinalIgnoreCase) ||
+            group.Kind == EntityKind.Tag ||
             group.Code == RelationshipKind.Tags);
 
     private static IReadOnlyList<JellyfinNameGuidPairDto> StudioItems(IEntityCard item) =>
         RelationshipPairs(item, group =>
-            group.Kind.Equals("studio", StringComparison.OrdinalIgnoreCase) ||
+            group.Kind == EntityKind.Studio ||
             group.Code == RelationshipKind.Studio);
 
     private static IReadOnlyList<JellyfinNameGuidPairDto> RelationshipPairs(
@@ -128,7 +127,7 @@ public sealed partial class JellyfinCatalogService {
 
     private static IReadOnlyList<JellyfinBaseItemPersonDto>? People(IEntityCard item) {
         var groups = item.Relationships
-            .Where(group => group.Kind.Equals("person", StringComparison.OrdinalIgnoreCase))
+            .Where(group => group.Kind == EntityKind.Person)
             .ToArray();
         if (groups.Length == 0) {
             return null;
@@ -447,43 +446,43 @@ public sealed partial class JellyfinCatalogService {
             LastPlayedDate: null);
     }
 
-    private static bool IsPlayableVideo(string kind) => kind.Equals("video", StringComparison.OrdinalIgnoreCase);
+    private static bool IsPlayableVideo(EntityKind kind) => kind == EntityKind.Video;
 
     /// <summary>
     /// Whether a kind is a playable leaf in the Jellyfin projection. Movies and videos both map to
     /// playable items (a movie streams through its single video child, resolved in the source service).
     /// </summary>
-    private static bool IsPlayable(string kind) =>
-        kind.Equals("video", StringComparison.OrdinalIgnoreCase) ||
-        kind.Equals("movie", StringComparison.OrdinalIgnoreCase) ||
+    private static bool IsPlayable(EntityKind kind) =>
+        kind == EntityKind.Video ||
+        kind == EntityKind.Movie ||
         IsAudio(kind);
 
     /// <summary>Whether a kind is a playable audio leaf (music track) in the Jellyfin projection.</summary>
-    private static bool IsAudio(string kind) =>
-        kind.Equals("audio-track", StringComparison.OrdinalIgnoreCase);
+    private static bool IsAudio(EntityKind kind) =>
+        kind == EntityKind.AudioTrack;
 
-    private static bool IsFolder(string kind) =>
-        kind is "video-series" or "video-season" or "collection" or "person"
-            or "music-artist" or "audio-library";
+    private static bool IsFolder(EntityKind kind) =>
+        kind is EntityKind.VideoSeries or EntityKind.VideoSeason or EntityKind.Collection
+            or EntityKind.Person or EntityKind.MusicArtist or EntityKind.AudioLibrary;
 
-    private static string JellyfinType(string kind, Guid? parentId) =>
-        kind.Trim().ToLowerInvariant() switch {
-            "movie" => JellyfinProtocol.ItemTypes.Movie,
-            "video" => parentId is null ? JellyfinProtocol.ItemTypes.Video : JellyfinProtocol.ItemTypes.Episode,
-            "video-series" => JellyfinProtocol.ItemTypes.Series,
-            "video-season" => JellyfinProtocol.ItemTypes.Season,
-            "collection" => JellyfinProtocol.ItemTypes.BoxSet,
-            "person" => JellyfinProtocol.ItemTypes.Person,
-            "music-artist" => JellyfinProtocol.ItemTypes.MusicArtist,
-            "audio-library" => JellyfinProtocol.ItemTypes.MusicAlbum,
-            "audio-track" => JellyfinProtocol.ItemTypes.Audio,
+    private static string JellyfinType(EntityKind kind, Guid? parentId) =>
+        kind switch {
+            EntityKind.Movie => JellyfinProtocol.ItemTypes.Movie,
+            EntityKind.Video => parentId is null ? JellyfinProtocol.ItemTypes.Video : JellyfinProtocol.ItemTypes.Episode,
+            EntityKind.VideoSeries => JellyfinProtocol.ItemTypes.Series,
+            EntityKind.VideoSeason => JellyfinProtocol.ItemTypes.Season,
+            EntityKind.Collection => JellyfinProtocol.ItemTypes.BoxSet,
+            EntityKind.Person => JellyfinProtocol.ItemTypes.Person,
+            EntityKind.MusicArtist => JellyfinProtocol.ItemTypes.MusicArtist,
+            EntityKind.AudioLibrary => JellyfinProtocol.ItemTypes.MusicAlbum,
+            EntityKind.AudioTrack => JellyfinProtocol.ItemTypes.Audio,
             _ => JellyfinProtocol.ItemTypes.Folder
         };
 
-    private static string? CollectionType(string kind) =>
-        kind.Trim().ToLowerInvariant() switch {
-            "video-series" => JellyfinProtocol.CollectionTypes.Shows,
-            "collection" => JellyfinProtocol.CollectionTypes.BoxSets,
+    private static string? CollectionType(EntityKind kind) =>
+        kind switch {
+            EntityKind.VideoSeries => JellyfinProtocol.CollectionTypes.Shows,
+            EntityKind.Collection => JellyfinProtocol.CollectionTypes.BoxSets,
             _ => null
         };
 

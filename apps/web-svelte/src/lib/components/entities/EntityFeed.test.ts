@@ -1,7 +1,7 @@
 import { render, waitFor } from "@testing-library/svelte";
 import { tick } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { EntityCapability } from "$lib/api/generated/model";
+import type { EntityCapability, EntityKind } from "$lib/api/generated/model";
 import { fetchImage, fetchVideo } from "$lib/api/media";
 import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
 import EntityFeedHarness from "./EntityFeed.test-harness.svelte";
@@ -189,7 +189,7 @@ function technicalCapability(overrides: Partial<Record<string, string | number |
   } as EntityCapability;
 }
 
-function card(id: string, title: string, kind = "image"): EntityThumbnailCard {
+function card(id: string, title: string, kind: EntityKind = "image"): EntityThumbnailCard {
   return {
     entity: {
       id,
