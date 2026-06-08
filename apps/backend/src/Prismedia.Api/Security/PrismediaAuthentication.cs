@@ -1,3 +1,4 @@
+using System.Net;
 using Prismedia.Api.Jellyfin;
 using Prismedia.Application.Security;
 using Prismedia.Contracts.Jellyfin;
@@ -117,7 +118,11 @@ internal static class PrismediaAuthentication {
             Secure = context.Request.IsHttps
         };
 
-    private static bool ShouldBootstrapCookie(HttpRequest request) {
+    internal static bool ShouldBootstrapCookie(HttpRequest request) {
+        if (!IsTrustedUiBootstrapClient(request.HttpContext)) {
+            return false;
+        }
+
         if (!HttpMethods.IsGet(request.Method) && !HttpMethods.IsHead(request.Method)) {
             return false;
         }
@@ -136,6 +141,11 @@ internal static class PrismediaAuthentication {
 
         return request.Headers.Accept.Count == 0 ||
             request.Headers.Accept.Any(value => value?.Contains("text/html", StringComparison.OrdinalIgnoreCase) == true);
+    }
+
+    private static bool IsTrustedUiBootstrapClient(HttpContext context) {
+        var remoteAddress = context.Connection.RemoteIpAddress;
+        return remoteAddress is null || IPAddress.IsLoopback(remoteAddress);
     }
 
     private static bool RequiresAuthentication(HttpRequest request) {

@@ -2,8 +2,10 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Prismedia.Api.Security;
 using Prismedia.Application.Collections;
 using Prismedia.Application.Entities;
 using Prismedia.Application.Jellyfin;
@@ -69,6 +71,19 @@ public sealed partial class SecurityEndpointTests : IDisposable {
             value.StartsWith("prismedia-api-key=", StringComparison.Ordinal));
         Assert.Contains("HttpOnly", cookie, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("SameSite=Lax", cookie, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void BootstrapNavigationRefusesNonLoopbackClients() {
+        var context = new DefaultHttpContext();
+        context.Connection.RemoteIpAddress = IPAddress.Parse("192.0.2.24");
+        context.Request.Method = HttpMethods.Get;
+        context.Request.Path = "/library";
+        context.Request.Headers.Accept = "text/html";
+
+        var shouldBootstrap = PrismediaAuthentication.ShouldBootstrapCookie(context.Request);
+
+        Assert.False(shouldBootstrap);
     }
 
     [Fact]
