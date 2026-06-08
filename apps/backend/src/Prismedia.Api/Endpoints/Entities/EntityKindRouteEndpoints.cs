@@ -117,8 +117,8 @@ internal static class EntityKindRouteEndpoints {
                     EntityCommandStatus.Created when result.Id is { } id =>
                         await CreatedKindDetailAsync(id, kind, httpContext, entities, cancellationToken),
                     EntityCommandStatus.Invalid =>
-                        Results.BadRequest(new ApiProblem("invalid_entity", result.Message ?? "Invalid request.")),
-                    _ => Results.BadRequest(new ApiProblem("entity_not_creatable", $"{tag} cannot be created.")),
+                        Results.BadRequest(new ApiProblem(ApiProblemCodes.InvalidEntity, result.Message ?? "Invalid request.")),
+                    _ => Results.BadRequest(new ApiProblem(ApiProblemCodes.EntityNotCreatable, $"{tag} cannot be created.")),
                 };
             })
             .WithName($"Create{baseName}")
@@ -134,8 +134,8 @@ internal static class EntityKindRouteEndpoints {
                 return result.Status switch {
                     EntityCommandStatus.Deleted => Results.NoContent(),
                     EntityCommandStatus.NotFound =>
-                        Results.NotFound(new ApiProblem("entity_not_found", $"Entity '{id}' was not found.")),
-                    _ => Results.BadRequest(new ApiProblem("entity_not_deletable", $"{tag} cannot be deleted.")),
+                        Results.NotFound(new ApiProblem(ApiProblemCodes.EntityNotFound, $"Entity '{id}' was not found.")),
+                    _ => Results.BadRequest(new ApiProblem(ApiProblemCodes.EntityNotDeletable, $"{tag} cannot be deleted.")),
                 };
             })
             .WithName($"Delete{baseName}")
@@ -153,7 +153,7 @@ internal static class EntityKindRouteEndpoints {
         var entity = await entities.GetDetailAsync(
             id, kind, NsfwVisibility.ShouldHide(null, httpContext), cancellationToken);
         return entity is null
-            ? Results.NotFound(new ApiProblem("entity_not_found", $"Entity '{id}' was not found."))
+            ? Results.NotFound(new ApiProblem(ApiProblemCodes.EntityNotFound, $"Entity '{id}' was not found."))
             : Results.Created($"/api/entities/{id}", (object)entity);
     }
 
@@ -165,7 +165,7 @@ internal static class EntityKindRouteEndpoints {
         CancellationToken cancellationToken) {
         var entity = await entities.GetDetailAsync(id, kind, hideNsfw, cancellationToken);
         return entity is null
-            ? Results.NotFound(new ApiProblem("entity_not_found", $"Entity '{id}' was not found."))
+            ? Results.NotFound(new ApiProblem(ApiProblemCodes.EntityNotFound, $"Entity '{id}' was not found."))
             : Results.Ok<object>(entity);
     }
 }

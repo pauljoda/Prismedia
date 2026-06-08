@@ -6,6 +6,7 @@
  */
 import type { EntityCapability } from './entityCapability';
 import type { EntityGroup } from './entityGroup';
+import type { EntityKind } from './entityKind';
 
 export interface AudioTrackDetail {
   /** @nullable */
@@ -13,7 +14,7 @@ export interface AudioTrackDetail {
   /** @nullable */
   embeddedAlbum: string | null;
   id: string;
-  kind: string;
+  kind: EntityKind;
   title: string;
   /** @nullable */
   parentEntityId: string | null;

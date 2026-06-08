@@ -4,8 +4,9 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { EntityKind } from './entityKind';
 
 export interface CollectionItemReference {
-  entityType: string;
+  entityType: EntityKind;
   entityId: string;
 }

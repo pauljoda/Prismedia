@@ -62,4 +62,35 @@ public sealed class CollectionRuleEngineSqlTests {
         Assert.Contains(query.Value.Parameters, parameter => parameter.NpgsqlDbType == NpgsqlDbType.Date);
         Assert.Contains(query.Value.Parameters, parameter => parameter.NpgsqlDbType == NpgsqlDbType.TimestampTz);
     }
+
+    [Fact]
+    public void GeneratedSqlNeverReferencesDroppedDeletedAtColumn() {
+        // The entities.deleted_at column was dropped (migration DropEntityDeletedAt);
+        // Prismedia is hard-delete only, so any deleted_at predicate is invalid SQL.
+        var topLevel = new CollectionRuleGroup {
+            Operator = "and",
+            Children = [
+                new CollectionRuleCondition { EntityTypes = ["video"], Field = "rating", Operator = "is_not_null" }
+            ]
+        };
+        var videoSql = new CollectionRuleEngine(null!).BuildQuery(topLevel, "video");
+        Assert.NotNull(videoSql);
+        Assert.DoesNotContain("deleted_at", videoSql.Value.Sql, StringComparison.Ordinal);
+
+        // imageCount drives the child-count subquery (the second former deleted_at site).
+        var childCount = new CollectionRuleGroup {
+            Operator = "and",
+            Children = [
+                new CollectionRuleCondition {
+                    EntityTypes = ["gallery"],
+                    Field = "imageCount",
+                    Operator = "greater_than",
+                    Value = JsonSerializer.SerializeToElement(5)
+                }
+            ]
+        };
+        var gallerySql = new CollectionRuleEngine(null!).BuildQuery(childCount, "gallery");
+        Assert.NotNull(gallerySql);
+        Assert.DoesNotContain("deleted_at", gallerySql.Value.Sql, StringComparison.Ordinal);
+    }
 }

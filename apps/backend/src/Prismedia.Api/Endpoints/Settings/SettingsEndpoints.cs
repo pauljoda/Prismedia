@@ -130,8 +130,8 @@ public static class SettingsEndpoints {
     }
 
     private static IResult SettingNotFound(SettingNotFoundException ex) =>
-        Results.NotFound(new ApiProblem("setting_not_found", ex.Message));
+        Results.NotFound(new ApiProblem(ApiProblemCodes.SettingNotFound, ex.Message));
 
     private static IResult InvalidSetting(SettingValidationException ex) =>
-        Results.BadRequest(new ApiProblem("setting_invalid", ex.Message));
+        Results.BadRequest(new ApiProblem(ApiProblemCodes.SettingInvalid, ex.Message));
 }

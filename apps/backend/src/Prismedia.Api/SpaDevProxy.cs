@@ -102,22 +102,7 @@ public static class SpaDevProxy {
             }
         }
 
-        foreach (var prefix in JellyfinRoutes.Prefixes) {
-            if (IsJellyfinPrefixMatch(path, prefix)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static bool IsJellyfinPrefixMatch(string path, string prefix) {
-        if (!string.Equals(prefix, JellyfinRoutes.LibraryPrefix, StringComparison.Ordinal)) {
-            return path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
-        }
-
-        return path.StartsWith(prefix, StringComparison.Ordinal) ||
-            path.StartsWith($"{prefix}/", StringComparison.OrdinalIgnoreCase);
+        return JellyfinRoutes.IsJellyfinRequest(path);
     }
 
     /// <summary>

@@ -1,4 +1,5 @@
 using Prismedia.Contracts.Plugins;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Infrastructure.Plugins;
 
@@ -14,6 +15,6 @@ internal static class EntityMetadataProposalTraversal {
             .Select(group => group.First())
             .ToArray();
 
-    public static bool IsRelationshipKind(string kind) =>
-        kind is "person" or "studio" or "tag";
+    public static bool IsRelationshipKind(ProposalKind kind) =>
+        kind.IsRelationship();
 }

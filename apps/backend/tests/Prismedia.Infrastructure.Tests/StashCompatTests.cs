@@ -1,6 +1,7 @@
 using System.Net;
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Contracts.Plugins;
+using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Plugins;
 using Prismedia.Infrastructure.StashCompat;
@@ -153,9 +154,9 @@ public sealed class StashCompatTests {
         };
 
         var proposal = StashResultMapper.ToProposal(
-            scene, "stash-test-site", "Test Site", "video", "https://site.example/scene/123", "Matched by URL", 0.9m);
+            scene, "stash-test-site", "Test Site", ProposalKind.Video, "https://site.example/scene/123", "Matched by URL", 0.9m);
 
-        Assert.Equal("video", proposal.TargetKind);
+        Assert.Equal(ProposalKind.Video, proposal.TargetKind);
         Assert.Equal("Test Scene Title", proposal.Patch.Title);
         Assert.Equal("Some details here.", proposal.Patch.Description);
         Assert.Equal("2023-05-14", proposal.Patch.Dates["release"]);
@@ -171,9 +172,9 @@ public sealed class StashCompatTests {
         // Performers and the studio are also surfaced as relationship proposals (carded in review,
         // enrichable on apply), not only as flat patch fields.
         var relationshipKinds = proposal.Relationships.Select(r => r.TargetKind).ToArray();
-        Assert.Equal(["Alice", "Bob"], proposal.Relationships.Where(r => r.TargetKind == "person").Select(r => r.Patch.Title).ToArray());
-        Assert.Contains("studio", relationshipKinds);
-        Assert.Equal("Cool Studio", proposal.Relationships.Single(r => r.TargetKind == "studio").Patch.Title);
+        Assert.Equal(["Alice", "Bob"], proposal.Relationships.Where(r => r.TargetKind == ProposalKind.Person).Select(r => r.Patch.Title).ToArray());
+        Assert.Contains(ProposalKind.Studio, relationshipKinds);
+        Assert.Equal("Cool Studio", proposal.Relationships.Single(r => r.TargetKind == ProposalKind.Studio).Patch.Title);
     }
 
     [Fact]
@@ -192,9 +193,9 @@ public sealed class StashCompatTests {
             ]
         };
 
-        var proposal = StashResultMapper.ToProposal(scene, "stash-x", "Stash X", "video", null, "Matched by URL", 0.9m);
+        var proposal = StashResultMapper.ToProposal(scene, "stash-x", "Stash X", ProposalKind.Video, null, "Matched by URL", 0.9m);
 
-        var person = proposal.Relationships.Single(r => r.TargetKind == "person");
+        var person = proposal.Relationships.Single(r => r.TargetKind == ProposalKind.Person);
         Assert.Equal("Jane Doe", person.Patch.Title);
         Assert.Equal("poster", person.Images.Single().Kind);
         Assert.Equal("https://site.example/p/jane.jpg", person.Images.Single().Url);
@@ -202,7 +203,7 @@ public sealed class StashCompatTests {
         Assert.Equal("1990-01-02", person.Patch.Dates["birth"]);
         Assert.Contains("https://site.example/p/jane", person.Patch.Urls);
 
-        var studio = proposal.Relationships.Single(r => r.TargetKind == "studio");
+        var studio = proposal.Relationships.Single(r => r.TargetKind == ProposalKind.Studio);
         Assert.Equal("logo", studio.Images.Single().Kind);
         Assert.Contains("https://studio.example", studio.Patch.Urls);
     }
@@ -250,7 +251,7 @@ public sealed class StashCompatTests {
                 ProtocolVersion: 2,
                 Action: "lookup-url",
                 Auth: new Dictionary<string, string>(),
-                Entity: new IdentifyEntitySnapshot(Guid.NewGuid(), "video", "Local Title"),
+                Entity: new IdentifyEntitySnapshot(Guid.NewGuid(), EntityKind.Video, "Local Title"),
                 Query: new IdentifyQuery(null, "https://site.example/scene/123", null),
                 Hints: new IdentifyMatchHints(new Dictionary<string, string>(), [], null, null));
 
@@ -306,7 +307,7 @@ public sealed class StashCompatTests {
                 ProtocolVersion: 2,
                 Action: "search",
                 Auth: new Dictionary<string, string>(),
-                Entity: new IdentifyEntitySnapshot(Guid.NewGuid(), "video", "Some Scene"),
+                Entity: new IdentifyEntitySnapshot(Guid.NewGuid(), EntityKind.Video, "Some Scene"),
                 Query: new IdentifyQuery("Some Scene", null, null),
                 Hints: new IdentifyMatchHints(new Dictionary<string, string>(), [], null, null));
 
@@ -335,7 +336,7 @@ public sealed class StashCompatTests {
                 ProtocolVersion: 2,
                 Action: "search",
                 Auth: new Dictionary<string, string>(),
-                Entity: new IdentifyEntitySnapshot(Guid.NewGuid(), "video", "Some Scene"),
+                Entity: new IdentifyEntitySnapshot(Guid.NewGuid(), EntityKind.Video, "Some Scene"),
                 Query: new IdentifyQuery(null, null, new Dictionary<string, string> { [manifest.Id] = "https://search.example/s/1" }),
                 Hints: new IdentifyMatchHints(new Dictionary<string, string>(), [], null, null));
 
@@ -507,7 +508,7 @@ public sealed class StashCompatTests {
             Flags = new EntityMetadataFlagsPatch(null, true, null)
         };
         var proposal = new EntityMetadataProposal(
-            "stash-x:1", "Stash X", "video", 0.9m, "Matched by URL", patch, [], [], [], entityId, []);
+            "stash-x:1", "Stash X", ProposalKind.Video, 0.9m, "Matched by URL", patch, [], [], [], entityId, []);
 
         var apply = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
         var ok = await apply.ApplyAsync(entityId, proposal, ["title", "credits", "studio", "tags"], null, CancellationToken.None);
@@ -580,7 +581,7 @@ public sealed class StashCompatTests {
                 ProtocolVersion: 2,
                 Action: "lookup-url",
                 Auth: new Dictionary<string, string>(),
-                Entity: new IdentifyEntitySnapshot(Guid.NewGuid(), "video", "X"),
+                Entity: new IdentifyEntitySnapshot(Guid.NewGuid(), EntityKind.Video, "X"),
                 Query: new IdentifyQuery(null, "https://script.example/s/1", null),
                 Hints: new IdentifyMatchHints(new Dictionary<string, string>(), [], null, null));
 

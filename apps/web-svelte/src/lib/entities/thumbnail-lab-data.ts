@@ -1,4 +1,4 @@
-import type { EntityCapability } from "$lib/api/generated/model";
+import type { EntityCapability, EntityKind } from "$lib/api/generated/model";
 import type {
   EntityThumbnailAsset,
   EntityThumbnailCard,
@@ -94,7 +94,7 @@ function card(options: {
   return {
     entity: {
       id: options.id,
-      kind: options.kind,
+      kind: options.kind as EntityKind,
       title: options.title,
       parentEntityId: null,
       sortOrder: null,

@@ -58,9 +58,9 @@ public sealed class CollectionItemReadService(
                 ? new CollectionItemDetail(
                     row.Id,
                     row.CollectionEntityId,
-                    row.KindCode,
+                    row.KindCode.DecodeAs<EntityKind>(),
                     row.ItemEntityId,
-                    row.Source.ToCode(),
+                    row.Source,
                     row.SortOrder,
                     row.AddedAt,
                     thumbnail)

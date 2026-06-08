@@ -4,14 +4,16 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { CollectionItemSource } from './collectionItemSource';
+import type { EntityKind } from './entityKind';
 import type { EntityThumbnail } from './entityThumbnail';
 
 export interface CollectionItemDetail {
   id: string;
   collectionId: string;
-  entityType: string;
+  entityType: EntityKind;
   entityId: string;
-  source: string;
+  source: CollectionItemSource;
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
   sortOrder: number | string;
   addedAt: string;

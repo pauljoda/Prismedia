@@ -496,7 +496,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             ChildrenByKind = await ProjectDirectChildGroupsAsync(id, hideNsfw, cancellationToken),
             Relationships = await ProjectRelationshipGroupsAsync(id, hideNsfw, cancellationToken)
         }, hideNsfw, cancellationToken);
-        if (!card.Kind.Equals(kind, StringComparison.OrdinalIgnoreCase)) {
+        if (!string.Equals(EntityKindRegistry.ToCode(card.Kind), kind, StringComparison.OrdinalIgnoreCase)) {
             return null;
         }
 
@@ -539,7 +539,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         EntityCard card,
         bool hideNsfw,
         CancellationToken cancellationToken) {
-        if (card.Kind != EntityKindRegistry.Book.Code) {
+        if (card.Kind != EntityKind.Book) {
             return card;
         }
 
@@ -601,7 +601,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             }
 
             groups.Add(new EntityGroup(
-                group.Key,
+                childKind,
                 EntityKindRegistry.Describe(childKind).GroupLabel,
                 await ProjectThumbnailsAsync(group.ToArray(), hideNsfw, cancellationToken)));
         }
@@ -642,10 +642,13 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             }
 
             groups.Add(new EntityGroup(
-                group.Key.TargetKindCode,
+                group.Key.TargetKindCode.DecodeAs<EntityKind>(),
                 RelationshipLabel(group.Key.RelationshipCode),
                 await ProjectThumbnailsAsync(orderedRows, hideNsfw, cancellationToken)) {
-                Code = group.Key.RelationshipCode
+                Code = group.Key.RelationshipCode is { Length: > 0 } relationshipCode
+                    && relationshipCode.TryDecodeAs<RelationshipKind>(out var relationshipKind)
+                        ? relationshipKind
+                        : null
             });
         }
 

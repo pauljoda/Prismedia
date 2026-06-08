@@ -45,7 +45,7 @@ public static class SecurityEndpoints {
             try {
                 return Results.Ok(await security.CreateProfileAsync(request, cancellationToken));
             } catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) {
-                return Results.BadRequest(new ApiProblem("jellyfin_profile_invalid", ex.Message));
+                return Results.BadRequest(new ApiProblem(ApiProblemCodes.JellyfinProfileInvalid, ex.Message));
             }
         })
             .WithName("CreateJellyfinProfile")
@@ -61,10 +61,10 @@ public static class SecurityEndpoints {
             try {
                 var profile = await security.UpdateProfileAsync(profileId, request, cancellationToken);
                 return profile is null
-                    ? Results.NotFound(new ApiProblem("jellyfin_profile_not_found", $"Profile '{profileId}' was not found."))
+                    ? Results.NotFound(new ApiProblem(ApiProblemCodes.JellyfinProfileNotFound, $"Profile '{profileId}' was not found."))
                     : Results.Ok(profile);
             } catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) {
-                return Results.BadRequest(new ApiProblem("jellyfin_profile_invalid", ex.Message));
+                return Results.BadRequest(new ApiProblem(ApiProblemCodes.JellyfinProfileInvalid, ex.Message));
             }
         })
             .WithName("UpdateJellyfinProfile")
@@ -79,7 +79,7 @@ public static class SecurityEndpoints {
             CancellationToken cancellationToken) =>
             await security.DeleteProfileAsync(profileId, cancellationToken)
                 ? Results.NoContent()
-                : Results.NotFound(new ApiProblem("jellyfin_profile_not_found", $"Profile '{profileId}' was not found.")))
+                : Results.NotFound(new ApiProblem(ApiProblemCodes.JellyfinProfileNotFound, $"Profile '{profileId}' was not found.")))
             .WithName("DeleteJellyfinProfile")
             .WithSummary("Deletes a Jellyfin-compatible fake user profile.")
             .Produces(StatusCodes.Status204NoContent)

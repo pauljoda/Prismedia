@@ -4,7 +4,7 @@ import { page } from "$app/state";
 import Page from "./[id]/reader/+page.svelte";
 import type { BookDetail } from "$lib/api/media";
 import type { EntityCardFull } from "$lib/api/entities";
-import type { EntityThumbnail } from "$lib/api/generated/model";
+import type { EntityThumbnail, EntityKind } from "$lib/api/generated/model";
 
 const mocks = vi.hoisted(() => ({
   fetchBook: vi.fn(),
@@ -38,7 +38,7 @@ vi.mock("$lib/nsfw/store.svelte", () => ({
   useNsfw: () => ({ mode: "show" }),
 }));
 
-function thumbnail(id: string, kind: string, title: string, sortOrder: number): EntityThumbnail {
+function thumbnail(id: string, kind: EntityKind, title: string, sortOrder: number): EntityThumbnail {
   return {
     id,
     kind,

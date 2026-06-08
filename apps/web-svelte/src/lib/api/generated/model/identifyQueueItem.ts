@@ -4,6 +4,7 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { EntityKind } from './entityKind';
 import type { EntityMetadataProposal } from './entityMetadataProposal';
 import type { EntitySearchCandidate } from './entitySearchCandidate';
 import type { IdentifyQuery } from './identifyQuery';
@@ -11,7 +12,7 @@ import type { IdentifyQuery } from './identifyQuery';
 export interface IdentifyQueueItem {
   id: string;
   entityId: string;
-  entityKind: string;
+  entityKind: EntityKind;
   title: string;
   isNsfw: boolean;
   state: string;

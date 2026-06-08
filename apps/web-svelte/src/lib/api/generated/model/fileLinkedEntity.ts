@@ -4,10 +4,11 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { EntityKind } from './entityKind';
 
 export interface FileLinkedEntity {
   entityId: string;
-  kind: string;
+  kind: EntityKind;
   title: string;
   /** @nullable */
   coverUrl?: string | null;

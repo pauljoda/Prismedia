@@ -1191,7 +1191,10 @@ function initialApplyProgress(
     state: "running",
     currentIndex: 0,
     total: countApplyProgressSteps(proposal, selectedFields),
-    currentKind: proposal.targetKind || entity.kind,
+    // Optimistic progress is for the root entity being applied, so its real kind
+    // is the entity's own kind. (The proposal target vocabulary can carry
+    // non-entity tokens like "video-episode", which this typed field must not.)
+    currentKind: entity.kind,
     currentTitle: title,
     currentPath: [title],
     error: null,

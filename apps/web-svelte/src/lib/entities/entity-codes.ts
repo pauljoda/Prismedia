@@ -3,10 +3,12 @@ import {
   ENTITY_FILE_ROLE,
   ENTITY_KIND,
   ENTITY_KIND_LABELS,
+  PROPOSAL_KIND,
   RELATIONSHIP_CODE,
   type CapabilityKindCode,
   type EntityFileRoleCode,
   type EntityKindCode,
+  type ProposalKindCode,
   type RelationshipCode,
 } from "$lib/api/generated/codes";
 
@@ -18,9 +20,20 @@ export {
   ENTITY_FILE_ROLE,
   ENTITY_KIND,
   ENTITY_KIND_LABELS,
+  PROPOSAL_KIND,
   RELATIONSHIP_CODE,
 };
-export type { CapabilityKindCode, EntityFileRoleCode, EntityKindCode, RelationshipCode };
+export type { CapabilityKindCode, EntityFileRoleCode, EntityKindCode, ProposalKindCode, RelationshipCode };
+
+/**
+ * Maps a plugin-proposal kind to the entity kind Prismedia persists it as. Every proposal kind
+ * shares its code with an entity kind except `video-episode` (a provider-only leaf-episode token),
+ * which Prismedia stores as a `video`. Use this wherever a proposal's `targetKind` feeds an
+ * entity-kind–typed surface such as a thumbnail card.
+ */
+export function proposalKindToEntityKind(kind: ProposalKindCode): EntityKindCode {
+  return kind === PROPOSAL_KIND.videoEpisode ? ENTITY_KIND.video : (kind as EntityKindCode);
+}
 
 export const ENTITY_KINDS = Object.values(ENTITY_KIND) as EntityKindCode[];
 

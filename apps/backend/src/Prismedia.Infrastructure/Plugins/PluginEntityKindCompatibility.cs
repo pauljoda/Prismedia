@@ -9,15 +9,15 @@ internal static class PluginEntityKindCompatibility {
         requestedKind.Equals(EntityKindRegistry.Movie.Code, StringComparison.OrdinalIgnoreCase) &&
         support.EntityKind.Equals(EntityKindRegistry.Video.Code, StringComparison.OrdinalIgnoreCase);
 
-    public static string RequestKindFor(PluginManifest manifest, string requestedKind) {
+    public static EntityKind RequestKindFor(PluginManifest manifest, string requestedKind) {
         if (manifest.Supports.Any(support => support.EntityKind.Equals(requestedKind, StringComparison.OrdinalIgnoreCase))) {
-            return requestedKind;
+            return requestedKind.DecodeAs<EntityKind>();
         }
 
         return requestedKind.Equals(EntityKindRegistry.Movie.Code, StringComparison.OrdinalIgnoreCase) &&
             manifest.Supports.Any(support => support.EntityKind.Equals(EntityKindRegistry.Video.Code, StringComparison.OrdinalIgnoreCase))
-                ? EntityKindRegistry.Video.Code
-                : requestedKind;
+                ? EntityKind.Video
+                : requestedKind.DecodeAs<EntityKind>();
     }
 
     public static IEnumerable<string> ActionsFor(PluginManifest manifest, string requestedKind) =>

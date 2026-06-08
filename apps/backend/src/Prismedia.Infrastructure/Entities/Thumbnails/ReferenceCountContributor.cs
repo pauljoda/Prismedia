@@ -51,7 +51,7 @@ internal sealed class ReferenceCountContributor(PrismediaDbContext db) : IThumbn
             var counts = perTarget
                 .OrderByDescending(row => row.Count)
                 .ThenBy(row => row.KindCode, StringComparer.Ordinal)
-                .Select(row => new EntityKindCount(row.KindCode, row.Count))
+                .Select(row => new EntityKindCount(row.KindCode.DecodeAs<EntityKind>(), row.Count))
                 .ToArray();
             contributions.SetReferenceCounts(perTarget.Key, counts);
 
@@ -59,7 +59,7 @@ internal sealed class ReferenceCountContributor(PrismediaDbContext db) : IThumbn
             // so a card shows one count per glyph rather than several identical icons; the structured
             // counts above stay granular for compatibility layers.
             var chips = counts
-                .GroupBy(count => ChipIcon(count.Kind))
+                .GroupBy(count => ChipIcon(EntityKindRegistry.ToCode(count.Kind)))
                 .Select(group => new { Icon = group.Key, Count = group.Sum(count => count.Count) })
                 .OrderByDescending(chip => chip.Count)
                 .ThenBy(chip => chip.Icon, StringComparer.Ordinal);

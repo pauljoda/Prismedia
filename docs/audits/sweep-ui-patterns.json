@@ -1,0 +1,1639 @@
+[
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "chip",
+    "count": 15,
+    "files": [
+      "apps/web-svelte/src/lib/video-tag-colors.ts",
+      "apps/web-svelte/src/lib/components/TagsSection.svelte:32-39",
+      "apps/web-svelte/src/lib/components/VideoPlayer.svelte:1719",
+      "apps/web-svelte/src/lib/components/entities/EntityFeed.svelte",
+      "apps/web-svelte/src/lib/components/entities/EntityGridFilterDrawer.svelte",
+      "apps/web-svelte/src/lib/components/entities/EntityGridToolbar.svelte:473-478",
+      "apps/web-svelte/src/lib/components/entities/EntityTagChips.svelte:12-23",
+      "apps/web-svelte/src/lib/components/forms/EntityPicker.svelte",
+      "apps/web-svelte/src/lib/components/nsfw/NsfwChip.svelte",
+      "apps/web-svelte/src/lib/components/nsfw/NsfwShowModeChip.svelte"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "text-input",
+    "count": 10,
+    "files": [
+      "apps/web-svelte/src/lib/components/TimeMarkerForm.svelte:134-140",
+      "apps/web-svelte/src/lib/components/Sidebar.svelte:245-253",
+      "apps/web-svelte/src/lib/components/TrackListRow.svelte:150-160",
+      "apps/web-svelte/src/lib/components/VideoTranscriptPanel.svelte:317",
+      "apps/web-svelte/src/lib/components/entities/EntityGridPresetDropdown.svelte",
+      "apps/web-svelte/src/lib/components/identify/IdentifyReviewChoice.svelte",
+      "apps/web-svelte/src/lib/components/nav/RenameSectionDialog.svelte",
+      "apps/web-svelte/src/lib/components/settings/WatchedLibrariesSection.svelte:241-250",
+      "apps/web-svelte/src/routes/identify/[entityId]/+page.svelte:239",
+      "apps/web-svelte/src/routes/plugins/StashBoxEndpointsTab.svelte:185"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "error-notice",
+    "count": 9,
+    "files": [
+      "apps/web-svelte/src/routes/artists/[id]/+page.svelte:232",
+      "apps/web-svelte/src/routes/people/[id]/+page.svelte:155",
+      "apps/web-svelte/src/routes/audio/[id]/+page.svelte:310",
+      "apps/web-svelte/src/routes/audio/tracks/[id]/+page.svelte:175",
+      "apps/web-svelte/src/routes/galleries/[id]/+page.svelte:264",
+      "apps/web-svelte/src/routes/images/[id]/+page.svelte",
+      "apps/web-svelte/src/routes/series/[id]/+page.svelte",
+      "apps/web-svelte/src/routes/series/[id]/seasons/[seasonId]/+page.svelte",
+      "apps/web-svelte/src/routes/videos/[id]/+page.svelte:688-691"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "detail-page-scaffold",
+    "count": 8,
+    "files": [
+      "apps/web-svelte/src/lib/components/ImageLightboxDetails.svelte",
+      "apps/web-svelte/src/lib/components/MetadataPanel.svelte",
+      "apps/web-svelte/src/routes/artists/[id]/+page.svelte",
+      "apps/web-svelte/src/routes/movies/[id]/+page.svelte:735",
+      "apps/web-svelte/src/routes/audio/[id]/+page.svelte:315",
+      "apps/web-svelte/src/routes/galleries/[id]/+page.svelte",
+      "apps/web-svelte/src/routes/series/[id]/+page.svelte",
+      "apps/web-svelte/src/routes/videos/[id]/+page.svelte:790-843"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "search-box",
+    "count": 8,
+    "files": [
+      "apps/web-svelte/src/lib/components/entities/AddToCollectionMenu.svelte:104-112",
+      "apps/web-svelte/src/lib/components/entities/EntityGridToolbar.svelte:237-256",
+      "apps/web-svelte/src/lib/components/files/FileTreePane.svelte:360-365",
+      "apps/web-svelte/src/lib/components/settings/AutoIdentifySection.svelte:234-246",
+      "apps/web-svelte/src/routes/search/+page.svelte:223",
+      "apps/web-svelte/src/routes/plugins/InstalledPluginsTab.svelte:180",
+      "apps/web-svelte/src/routes/plugins/PrismediaCommunityTab.svelte:93",
+      "apps/web-svelte/src/routes/plugins/StashCommunityIndexTab.svelte:49"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "entity-index-page",
+    "count": 8,
+    "files": [
+      "apps/web-svelte/src/routes/artists/+page.svelte",
+      "apps/web-svelte/src/routes/movies/+page.svelte",
+      "apps/web-svelte/src/routes/comics/+page.svelte",
+      "apps/web-svelte/src/routes/ebooks/+page.svelte",
+      "apps/web-svelte/src/routes/books/+page.svelte",
+      "apps/web-svelte/src/routes/galleries/+page.svelte",
+      "apps/web-svelte/src/routes/series/+page.svelte",
+      "apps/web-svelte/src/routes/videos/+page.svelte"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "icon-button",
+    "count": 4,
+    "files": [
+      "apps/web-svelte/src/lib/components/VideoMarkerEditor.svelte:149",
+      "apps/web-svelte/src/lib/components/VideoTranscriptPanel.svelte:382",
+      "apps/web-svelte/src/lib/components/jobs/RunCatalogRow.svelte",
+      "apps/web-svelte/src/routes/design-language/+page.svelte:505"
+    ]
+  },
+  {
+    "type": "should-extract",
+    "pattern": "detail-page-scaffold",
+    "count": 4,
+    "files": [
+      "apps/web-svelte/src/lib/components/collections/CollectionEditor.svelte:289-516",
+      "apps/web-svelte/src/lib/components/entities/EntityDetail.svelte",
+      "apps/web-svelte/src/lib/components/entities/EntityIndexPage.svelte:276-300",
+      "apps/web-svelte/src/lib/components/shared/HierarchyShell.svelte"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "button",
+    "count": 3,
+    "files": [
+      "apps/web-svelte/src/lib/components/UploadDropZone.svelte:133",
+      "apps/web-svelte/src/lib/components/identify/use-identify-detail-action.test-harness.svelte",
+      "apps/web-svelte/src/routes/identify/[entityId]/+page.svelte:248"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "entity-index-page-scaffold",
+    "count": 3,
+    "files": [
+      "apps/web-svelte/src/routes/audio/+page.svelte:6",
+      "apps/web-svelte/src/routes/collections/+page.svelte",
+      "apps/web-svelte/src/routes/images/+page.svelte"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "error-notice (retry banner)",
+    "count": 3,
+    "files": [
+      "apps/web-svelte/src/routes/books/[id]/+page.svelte",
+      "apps/web-svelte/src/routes/books/[id]/chapters/[chapterId]/+page.svelte",
+      "apps/web-svelte/src/routes/books/[id]/volumes/[volumeId]/+page.svelte"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "checkbox",
+    "count": 2,
+    "files": [
+      "apps/web-svelte/src/lib/components/ComicReader.svelte:372-375",
+      "apps/web-svelte/src/lib/components/thumbnails/EntityThumbnail.svelte:629-639"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "star-rating",
+    "count": 2,
+    "files": [
+      "apps/web-svelte/src/lib/components/UniversalLightbox.svelte:384-391",
+      "apps/web-svelte/src/routes/search/+page.svelte:299"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "range-slider",
+    "count": 2,
+    "files": [
+      "apps/web-svelte/src/lib/components/SubtitleSettingsPanel.svelte:100-160",
+      "apps/web-svelte/src/lib/components/settings/QualitySlider.svelte"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "range-input",
+    "count": 2,
+    "files": [
+      "apps/web-svelte/src/lib/components/VideoSettingsMenu.svelte:228",
+      "apps/web-svelte/src/lib/components/VideoPlayer.svelte:1751"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "chip / toggle-chip",
+    "count": 2,
+    "files": [
+      "apps/web-svelte/src/lib/components/collections/ConditionBuilder.svelte:426-446",
+      "apps/web-svelte/src/lib/components/settings/AutoIdentifySection.svelte:198-210"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "detail-skeleton",
+    "count": 2,
+    "files": [
+      "apps/web-svelte/src/lib/components/entities/EntityDetailSkeleton.svelte",
+      "apps/web-svelte/src/routes/videos/[id]/+page.svelte:684-686"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "date-field",
+    "count": 2,
+    "files": [
+      "apps/web-svelte/src/lib/components/entities/EntityGridFilterDrawer.svelte",
+      "apps/web-svelte/src/routes/search/+page.svelte:331"
+    ]
+  },
+  {
+    "type": "should-extract",
+    "pattern": "popover-select",
+    "count": 2,
+    "files": [
+      "apps/web-svelte/src/lib/components/entities/EntityGridPagination.svelte",
+      "apps/web-svelte/src/lib/components/entities/EntityGridToolbar.svelte:258-417"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "popover-select",
+    "count": 2,
+    "files": [
+      "apps/web-svelte/src/lib/components/entities/EntityGridPresetDropdown.svelte",
+      "apps/web-svelte/src/lib/components/files/FileTreePane.svelte:50-134"
+    ]
+  },
+  {
+    "type": "should-extract",
+    "pattern": "segmented-toggle",
+    "count": 2,
+    "files": [
+      "apps/web-svelte/src/lib/components/entities/EntityGridToolbar.svelte:319-354",
+      "apps/web-svelte/src/routes/settings/+page.svelte:463"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "text-input",
+    "count": 2,
+    "files": [
+      "apps/web-svelte/src/lib/components/forms/TextField.svelte",
+      "packages/ui-svelte/src/primitives/TextInput.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "popover-select",
+    "count": 2,
+    "files": [
+      "apps/web-svelte/src/lib/components/forms/SearchSelect.svelte",
+      "packages/ui-svelte/src/primitives/Select.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "card-view-model builder",
+    "count": 2,
+    "files": [
+      "apps/web-svelte/src/lib/components/identify/identify-candidate-card.ts",
+      "apps/web-svelte/src/lib/components/identify/identify-review-helpers.ts"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "card",
+    "count": 2,
+    "files": [
+      "apps/web-svelte/src/lib/components/jobs/FailedJobCard.svelte",
+      "packages/ui-svelte/src/composed/MediaCard.svelte"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "nsfw-visibility-gate",
+    "count": 2,
+    "files": [
+      "apps/web-svelte/src/lib/components/nsfw/NsfwText.svelte",
+      "apps/web-svelte/src/lib/components/nsfw/NsfwTagLabel.svelte"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "action-button",
+    "count": 2,
+    "files": [
+      "apps/web-svelte/src/lib/components/settings/DiagnosticsSection.svelte:60-72,88-100",
+      "apps/web-svelte/src/routes/plugins/InstalledPluginsTab.svelte:292"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "segmented-toggle",
+    "count": 2,
+    "files": [
+      "apps/web-svelte/src/routes/dev/detail-lab/+page.svelte:117",
+      "apps/web-svelte/src/routes/dev/thumbnail-lab/+page.svelte:63"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "hero-meta-separated-list",
+    "count": 2,
+    "files": [
+      "apps/web-svelte/src/routes/audio/[id]/+page.svelte:328",
+      "apps/web-svelte/src/routes/audio/tracks/[id]/+page.svelte:191"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "chip/tag input with autocomplete",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/ChipInput.svelte"
+    ]
+  },
+  {
+    "type": "should-extract",
+    "pattern": "selection action bar",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/BulkActionBar.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "back-navigation link",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/BackLink.svelte"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "range slider (volume)",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/AudioVidStackPlayer.svelte:624-632"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "search-box trigger + popover menu",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/CanvasHeader.svelte:184-238"
+    ]
+  },
+  {
+    "type": "should-extract",
+    "pattern": "markdown block renderer",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/ChangelogDialog.svelte:289-360"
+    ]
+  },
+  {
+    "type": "should-extract",
+    "pattern": "section-grouped list with header row + footer totals",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/AudioTrackList.svelte"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "detail-page-scaffold (reader controls/nav/overlay)",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/BookFileReader.svelte"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "search-box + modal-overlay",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/CommandPalette.svelte"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "modal-dialog (confirm)",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/ConfirmDeleteDialog.svelte"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "modal + filter search-box + list",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/DestinationPicker.svelte"
+    ]
+  },
+  {
+    "type": "should-extract",
+    "pattern": "trickplay-scrubber",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/FilmStrip.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "entity-action-button",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/IdentifyButton.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "test-harness wrapper",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/IdentifyButton.test-harness.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "media-card (feed item)",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/ImageFeedItem.svelte"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "modal + thumbnail-grid + lightbox-nav",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/ImagePickerModal.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "file-upload button",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/ImportButton.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "label-value row",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/InfoRow.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "star-rating (optimistic)",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/InlineRating.svelte"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "searchable popover-select",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/ProviderSelector.svelte"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "search-box (raw input)",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/ProviderSelector.svelte:87-93"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "popover/flyout-panel",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/PlaybackQueueFlyout.svelte"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "media card",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/SearchResultCard.svelte"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "modal dialog scaffold",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/LibraryRootPicker.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "detail metadata card",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/MetadataCard.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "card grid container",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/MetadataCardGrid.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "overflow-ticker text",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/OverflowTicker.svelte"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "search-box (in-document)",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/PdfReader.svelte:742-781"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "slide-over panel + TOC list",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/PdfReader.svelte:784-818"
+    ]
+  },
+  {
+    "type": "should-extract",
+    "pattern": "bottom-sheet scaffold",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/MobileMoreSheet.svelte"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "icon toggle button (action-badge)",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/MediaProgressPanel.svelte:122-134"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "progress meter + entity-action-button",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/MediaProgressPanel.svelte:104-118"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "star-rating",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/StarRatingPicker.svelte"
+    ]
+  },
+  {
+    "type": "should-extract",
+    "pattern": "time-field",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/TimeMarkerForm.svelte:143-205"
+    ]
+  },
+  {
+    "type": "should-extract",
+    "pattern": "actions-menu",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/TrackListRow.svelte:239-300"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "modal-dialog",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/SubtitleSettingsPanel.svelte:34-48"
+    ]
+  },
+  {
+    "type": "should-extract",
+    "pattern": "thumbnail-strip",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/UniversalLightbox.svelte:521-539"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "toast/progress-card",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/UploadDropZone.svelte"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "key-value-row-list",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/VideoFileInfo.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "marker-list",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/VideoMarkerEditor.svelte"
+    ]
+  },
+  {
+    "type": "should-extract",
+    "pattern": "popover-select / settings-drawer",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/VideoSettingsMenu.svelte"
+    ]
+  },
+  {
+    "type": "should-extract",
+    "pattern": "chip / badge",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/VideoStatusBar.svelte"
+    ]
+  },
+  {
+    "type": "should-extract",
+    "pattern": "transcript-cue-list",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/VideoTranscriptPanel.svelte:248"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "timeline-slider",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/VideoTimeline.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "subtitle-overlay",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/VideoSubtitleOverlay.svelte"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "popover-select / raw select",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/collections/ConditionBuilder.svelte:270-398"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "text-input / number-input / date-field",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/collections/ConditionBuilder.svelte:308-397"
+    ]
+  },
+  {
+    "type": "should-extract",
+    "pattern": "segmented-control",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/collections/ConditionBuilder.svelte:206-237"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "card / option-radio",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/collections/CollectionEditor.svelte:368-431"
+    ]
+  },
+  {
+    "type": "should-extract",
+    "pattern": "popover / flyout-menu",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/entities/AddToCollectionMenu.svelte:79-163,165-382"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "transport-controls",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/VideoTransportControls.svelte:43-78"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "breadcrumb-model",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/canvas-header-breadcrumbs.ts:16-40"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "confirm-dialog",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/entities/ConfirmDialog.svelte"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "credit-scroller",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/entities/EntityCastAndCrewSection.svelte"
+    ]
+  },
+  {
+    "type": "should-extract",
+    "pattern": "thumbnail-rail",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/entities/EntityDetailReferenceRail.svelte"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "edit-action-button",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/entities/EntityDetail.svelte"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "edit-confirm-dialog",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/entities/EntityDetail.svelte"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "file-input",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/entities/EntityDetail.svelte"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "card",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/entities/EntityGrid.svelte"
+    ]
+  },
+  {
+    "type": "should-extract",
+    "pattern": "count-tab-strip",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/entities/EntityGridTabs.svelte:15-38"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "modal-dialog",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/entities/NameInputDialog.svelte:64-115"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "toolbar",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/files/FileDetailPane.svelte:204-221"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "date-field",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/forms/DateField.svelte:35-53"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "form-field-wrapper",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/forms/FormField.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "textarea",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/forms/TextAreaField.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "tag-chip-input",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/forms/TagSelect.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "async-entity-picker",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/forms/EntityPicker.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "chip",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/forms/ToggleChip.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "string-list-editor",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/forms/ListEditor.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "key-value-editor",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/forms/KeyValueEditor.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "rich-text-editor",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/forms/MarkdownEditor.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "form-actions-bar",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/forms/FormActions.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "edit-form-scaffold",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/forms/EditFormShell.svelte"
+    ]
+  },
+  {
+    "type": "should-extract",
+    "pattern": "flyout-listbox",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/forms/SearchSelect.svelte"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "popover-select / search-box",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/identify/IdentifyProviderSelect.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "collapsible-panel / detail-section-scaffold",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/identify/IdentifyReviewSection.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "action-button-pair",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/identify/IdentifyRejectQueueActions.svelte"
+    ]
+  },
+  {
+    "type": "should-extract",
+    "pattern": "candidate-card",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/identify/IdentifyReviewChoice.svelte"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "checkbox + chip + table-row",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/identify/IdentifyDashboard.svelte"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "tag-chip + checkbox + artwork-grid",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/identify/IdentifyReviewParent.svelte"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "tag-chip + field-diff-row + artwork-grid",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/identify/IdentifyReviewChild.svelte"
+    ]
+  },
+  {
+    "type": "should-extract",
+    "pattern": "selectable-cover-tile",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/identify/IdentifyChildrenGrid.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "thumbnail-grid + loading/empty states",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/identify/IdentifyTargetPreviewBody.svelte"
+    ]
+  },
+  {
+    "type": "should-extract",
+    "pattern": "list-row card with status + progress meter + kill action",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/jobs/ActiveJobCard.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "list-row with Badge",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/jobs/CompletedJobRow.svelte"
+    ]
+  },
+  {
+    "type": "should-extract",
+    "pattern": "empty-state-card",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/jobs/EmptyPanel.svelte"
+    ]
+  },
+  {
+    "type": "should-extract",
+    "pattern": "stat-tile",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/jobs/OverviewStat.svelte"
+    ]
+  },
+  {
+    "type": "should-extract",
+    "pattern": "dialog-scaffold",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/nav/MoveToSectionDialog.svelte"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "dialog-scaffold",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/nav/RenameSectionDialog.svelte"
+    ]
+  },
+  {
+    "type": "should-extract",
+    "pattern": "nsfw-visibility-gate",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/nsfw/NsfwBlur.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "reader-overlay-scaffold",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/reader/ReaderShell.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "toggle-card",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/settings/ToggleCard.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "descriptor-driven-setting-control",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/settings/SettingsControl.svelte"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "number-stepper",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/settings/NumberStepper.svelte"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "text-input + range-slider",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/settings/SubtitlesSection.svelte:93-103,144-196"
+    ]
+  },
+  {
+    "type": "should-extract",
+    "pattern": "toggle-chip-row",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/settings/WatchedLibrariesSection.svelte:418-514"
+    ]
+  },
+  {
+    "type": "should-extract",
+    "pattern": "folder-browser",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/settings/WatchedLibrariesSection.svelte:187-239"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "stat-card",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/settings/StorageStat.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "section-scaffold",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/shared/HierarchySection.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "breadcrumbs",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/shared/HierarchyBreadcrumbs.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "entity-card / media-card",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/thumbnails/EntityThumbnail.svelte"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "badge",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/components/thumbnails/EntityThumbnail.svelte:642-665"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "entity-picker-search-source",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/entities/entity-detail-search.ts"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "detail-edit-draft-model",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/entities/entity-detail-edit.ts"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "markdown-render-sanitize",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/entities/entity-detail-markdown.ts"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "trickplay-scrub-controller",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/lib/player/trickplay-scrub.svelte.ts"
+    ]
+  },
+  {
+    "type": "should-extract",
+    "pattern": "horizontal-media-shelf",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/+page.svelte:137-163"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "entity-thumbnail-card",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/+page.svelte:158"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "primary-button-link",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/+page.svelte:194-199"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "view-all-link",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/+page.svelte:144-152"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "route-loader",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/+page.svelte:169-183"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "tab-strip",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/identify/+page.svelte:78"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "inline-alert",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/identify/+page.svelte:118"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "error-boundary-fallback",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/identify/+page.svelte:171"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "entity-grid",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/dev/thumbnail-lab/+page.svelte:88"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "master-detail-scaffold",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/files/+page.svelte:441"
+    ]
+  },
+  {
+    "type": "should-extract",
+    "pattern": "status-badge",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/jobs/+page.svelte:303"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "stat-chip",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/jobs/+page.svelte:318"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "toast",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/jobs/+page.svelte:399"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "section-header",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/jobs/+page.svelte:447"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "load-more-button",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/search/+page.svelte:398"
+    ]
+  },
+  {
+    "type": "should-extract",
+    "pattern": "option-card-group",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/settings/+page.svelte:764"
+    ]
+  },
+  {
+    "type": "should-extract",
+    "pattern": "modal-dialog",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/settings/+page.svelte:854"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "secret-reveal-field",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/settings/+page.svelte:530"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "labeled-text-input",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/settings/+page.svelte:593"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "toast-banner",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/settings/+page.svelte:420"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "hero-meta-row",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/people/[id]/+page.svelte:171"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "content-section",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/people/[id]/+page.svelte:196"
+    ]
+  },
+  {
+    "type": "should-extract",
+    "pattern": "resizable-split-pane",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/movies/[id]/+page.svelte:698"
+    ]
+  },
+  {
+    "type": "should-extract",
+    "pattern": "content-section-heading",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/audio/[id]/+page.svelte:362"
+    ]
+  },
+  {
+    "type": "should-extract",
+    "pattern": "entity-detail-scaffold (book/chapter/volume)",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/books/[id]/+page.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "media-progress-panel",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/books/[id]/+page.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "content-section header (icon + title + count chip)",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/books/[id]/+page.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "reader-host (ComicReader/BookFileReader/PdfReader)",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/books/[id]/reader/+page.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "entity-grid (page wall)",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/books/[id]/chapters/[chapterId]/+page.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "entity-grid (chapters list)",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/books/[id]/volumes/[volumeId]/+page.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "collection-editor-scaffold",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/collections/new/+page.svelte"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "error-banner-with-retry",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/collections/[id]/+page.svelte:276-286"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "icon-button / text-button",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/collections/[id]/+page.svelte:279-285,320-324"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "dismissible-alert",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/collections/[id]/+page.svelte:317-328"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "section-header-with-count-chip",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/collections/[id]/+page.svelte:331-347"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "entity-detail + entity-grid composition",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/collections/[id]/+page.svelte:300-313,349-351"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "loading-shell + error-notice-with-retry",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/collections/[id]/edit/+page.svelte:40-49,51-82"
+    ]
+  },
+  {
+    "type": "should-extract",
+    "pattern": "content-section-with-count",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/galleries/[id]/+page.svelte:312"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "lightbox-detail-page-scaffold",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/images/[id]/+page.svelte"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "credit-chip / meta-item",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/images/[id]/+page.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "credential-form",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/plugins/PluginCredentialForm.svelte"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "credential-form",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/plugins/PrismediaCommunityTab.svelte:201"
+    ]
+  },
+  {
+    "type": "should-extract",
+    "pattern": "plugin-card",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/plugins/InstalledPluginsTab.svelte:255"
+    ]
+  },
+  {
+    "type": "should-extract",
+    "pattern": "tab-nav",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/plugins/PluginPageShell.svelte:47"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "alert-banner",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/plugins/PluginPageShell.svelte:83"
+    ]
+  },
+  {
+    "type": "should-extract",
+    "pattern": "child-content-section",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/series/[id]/+page.svelte"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "hero-meta-separator",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/series/[id]/+page.svelte"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "child-content-section",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/series/[id]/seasons/[seasonId]/+page.svelte"
+    ]
+  },
+  {
+    "type": "should-extract",
+    "pattern": "split-pane-resizer",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/videos/[id]/+page.svelte:753-768"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "section-switch",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/videos/[id]/VideoDetailSectionContent.svelte:68-161"
+    ]
+  },
+  {
+    "type": "adhoc-duplicate",
+    "pattern": "inline-notice",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/videos/[id]/VideoDetailSectionContent.svelte:127-134"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "progress-panel",
+    "count": 1,
+    "files": [
+      "apps/web-svelte/src/routes/videos/[id]/VideoPlaybackStatus.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "button",
+    "count": 1,
+    "files": [
+      "packages/ui-svelte/src/primitives/Button.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "badge",
+    "count": 1,
+    "files": [
+      "packages/ui-svelte/src/primitives/Badge.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "checkbox",
+    "count": 1,
+    "files": [
+      "packages/ui-svelte/src/primitives/Checkbox.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "meter",
+    "count": 1,
+    "files": [
+      "packages/ui-svelte/src/composed/Meter.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "status-led",
+    "count": 1,
+    "files": [
+      "packages/ui-svelte/src/composed/StatusLed.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "surface-panel",
+    "count": 1,
+    "files": [
+      "packages/ui-svelte/src/composed/Panel.svelte"
+    ]
+  },
+  {
+    "type": "should-extract",
+    "pattern": "trickplay-scrub-strip",
+    "count": 1,
+    "files": [
+      "packages/ui-svelte/src/composed/MediaCard.svelte"
+    ]
+  },
+  {
+    "type": "existing-reusable",
+    "pattern": "toggle",
+    "count": 1,
+    "files": [
+      "packages/ui-svelte/src/primitives/Toggle.svelte"
+    ]
+  }
+]

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { EntityMetadataProposal } from "$lib/api/identify-types";
-import type { EntityCard as EntityDetailCard } from "$lib/api/generated/model";
+import type { EntityCard as EntityDetailCard, EntityKind } from "$lib/api/generated/model";
 import {
   buildRootReviewApplyPayload,
   buildProposalForApply,
@@ -442,7 +442,7 @@ describe("identify review helpers", () => {
 
 function proposal(
   proposalId: string,
-  targetKind: string,
+  targetKind: EntityMetadataProposal["targetKind"],
   options: {
     title?: string;
     imageKind?: string;
@@ -486,7 +486,7 @@ function expectSingle<T>(items: T[]): T {
   return items[0];
 }
 
-function thumbnail(id: string, kind: string, title: string) {
+function thumbnail(id: string, kind: EntityKind, title: string) {
   return {
     id,
     kind,

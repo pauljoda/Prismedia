@@ -212,7 +212,6 @@ describe("Identify review surfaces", () => {
             {
               kind: "video",
               label: "Episodes",
-              code: "episodes",
               entities: [
                 entity({
                   id: "episode-1",
@@ -252,7 +251,6 @@ describe("Identify review surfaces", () => {
         {
           kind: "video",
           label: "Episodes",
-          code: "episodes",
           entities: [
             entity({
               id: "episode-1",

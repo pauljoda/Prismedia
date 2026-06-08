@@ -10,6 +10,7 @@ using Prismedia.Contracts.Media;
 using Prismedia.Contracts.System;
 using Prismedia.Infrastructure;
 using Prismedia.Infrastructure.Persistence;
+using Prismedia.Infrastructure.Serialization;
 using Prismedia.Infrastructure.Videos;
 using Microsoft.Extensions.FileProviders;
 
@@ -52,6 +53,9 @@ builder.Services.AddOpenApi(options => {
         }
         return Microsoft.AspNetCore.OpenApi.OpenApiOptions.CreateDefaultSchemaReferenceId(type);
     };
+    // Codec enums serialize as their string code, so without this they appear as a bare
+    // `string` and the generated client loses enum typing. Emit them as typed string enums.
+    options.AddSchemaTransformer<CodecEnumSchemaTransformer>();
 });
 builder.Services.AddHealthChecks();
 builder.Services.AddHttpClient(GhcrUpdateCheckService.HttpClientName, client => {
@@ -118,7 +122,7 @@ if (File.Exists(staticIndexPath)) {
         Results.Content(await File.ReadAllTextAsync(staticIndexPath), MediaContentTypes.Html));
 } else {
     app.MapFallback(() => Results.NotFound(new ApiProblem(
-        "not_found",
+        ApiProblemCodes.NotFound,
         "The requested Prismedia route was not found.")));
 }
 

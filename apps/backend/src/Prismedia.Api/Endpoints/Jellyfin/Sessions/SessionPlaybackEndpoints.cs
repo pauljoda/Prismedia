@@ -15,7 +15,7 @@ internal static class SessionPlaybackEndpoints {
             IEntityReadService entities,
             CancellationToken cancellationToken) => {
                 if (!await JellyfinPlaybackResults.IsVisibleAsync(request.ItemId, entities, httpContext, cancellationToken)) {
-                    return Results.NotFound(new ApiProblem("playback_item_not_found", $"Item '{request.ItemId}' was not found."));
+                    return Results.NotFound(new ApiProblem(ApiProblemCodes.PlaybackItemNotFound, $"Item '{request.ItemId}' was not found."));
                 }
 
                 await sessions.StartAsync(request.ToApplication(), cancellationToken);
@@ -32,7 +32,7 @@ internal static class SessionPlaybackEndpoints {
             IEntityReadService entities,
             CancellationToken cancellationToken) => {
                 if (!await JellyfinPlaybackResults.IsVisibleAsync(request.ItemId, entities, httpContext, cancellationToken)) {
-                    return Results.NotFound(new ApiProblem("playback_item_not_found", $"Item '{request.ItemId}' was not found."));
+                    return Results.NotFound(new ApiProblem(ApiProblemCodes.PlaybackItemNotFound, $"Item '{request.ItemId}' was not found."));
                 }
 
                 await sessions.ProgressAsync(request.ToApplication(), cancellationToken);
@@ -49,7 +49,7 @@ internal static class SessionPlaybackEndpoints {
             IEntityReadService entities,
             CancellationToken cancellationToken) => {
                 if (!await JellyfinPlaybackResults.IsVisibleAsync(request.ItemId, entities, httpContext, cancellationToken)) {
-                    return Results.NotFound(new ApiProblem("playback_item_not_found", $"Item '{request.ItemId}' was not found."));
+                    return Results.NotFound(new ApiProblem(ApiProblemCodes.PlaybackItemNotFound, $"Item '{request.ItemId}' was not found."));
                 }
 
                 await sessions.PingAsync(request.ToApplication(), cancellationToken);
@@ -66,7 +66,7 @@ internal static class SessionPlaybackEndpoints {
             IEntityReadService entities,
             CancellationToken cancellationToken) => {
                 if (!await JellyfinPlaybackResults.IsVisibleAsync(request.ItemId, entities, httpContext, cancellationToken)) {
-                    return Results.NotFound(new ApiProblem("playback_item_not_found", $"Item '{request.ItemId}' was not found."));
+                    return Results.NotFound(new ApiProblem(ApiProblemCodes.PlaybackItemNotFound, $"Item '{request.ItemId}' was not found."));
                 }
 
                 await sessions.StopAsync(request.ToApplication(), cancellationToken);

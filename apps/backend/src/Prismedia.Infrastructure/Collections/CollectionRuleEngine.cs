@@ -336,7 +336,7 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
     private string? TranslateChildCount(CollectionRuleCondition condition, string kindCode, SqlBuildContext ctx) {
         if (kindCode is not ("gallery" or "book")) return null;
 
-        var countExpr = "(SELECT COUNT(*) FROM entities child_count WHERE child_count.parent_entity_id = e.id AND child_count.deleted_at IS NULL)";
+        var countExpr = "(SELECT COUNT(*) FROM entities child_count WHERE child_count.parent_entity_id = e.id)";
         return TranslateScalar(countExpr, condition.Operator, condition.Value, ctx);
     }
 

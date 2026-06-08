@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { EntityKind } from "$lib/api/generated/model";
 import type { EntityCard, EntityListResponse } from "$lib/api/entities";
 import { firstSearchResult, flattenSearchResults, searchEntities } from "./entity-search";
 
@@ -74,7 +75,7 @@ describe("searchEntities", () => {
   });
 });
 
-function entity(id: string, kind: string, title: string): EntityCard {
+function entity(id: string, kind: EntityKind, title: string): EntityCard {
   return {
     id,
     kind,

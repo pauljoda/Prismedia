@@ -109,6 +109,75 @@ docs/                  Architecture and design language docs.
 - Normalize external hashes and metadata into Prismedia-owned tables and contracts.
 - Plugin development discovery should include `~/Dev/Prismedia-Plugins` when it exists.
 
+## Identifier Discipline (Magic-String Contract)
+
+Closed-set string identifiers are NEVER written as bare literals. Every kind code,
+relationship/credit/file-role code, job type, capability key, setting key, problem
+code, sort/filter/status/position/progress/date code, playback/stream mode, provider
+or runtime id, image-asset/meta-icon kind, and external wire scalar (Jellyfin, Stash)
+has exactly one source of truth and is referenced from it.
+
+### The source of truth
+- Backend closed sets are `[Code("...")]` enums under
+  `Prismedia.Domain/Entities/Enums/**` resolved via `EnumCodec`/`CodecRegistry`
+  (e.g. `EntityKindRegistry.Video.Code`, `RelationshipKind.Tags.ToCode()`,
+  `CreditRole.Director.ToCode()`, `JobType`, `PlaybackMode`, `EntityFileRole`).
+- Cross-cutting wire/path constants live in dedicated static classes
+  (e.g. `JellyfinProtocol`, `AppSettingKeys`, and — as they are introduced —
+  `ApiProblemCodes`, `AssetPaths`, `MediaCodecs`, `MediaContainers`).
+- The frontend consumes code values ONLY from `src/lib/api/generated/codes.ts`
+  (re-exported via `$lib/entities/entity-codes.ts`): `ENTITY_KIND`,
+  `RELATIONSHIP_CODE`, `CREDIT_ROLE`, `ENTITY_FILE_ROLE`, `JOB_TYPE`,
+  `PLAYBACK_MODE`, `CAPABILITY_KIND`, `SETTING_KEYS`, `EXTERNAL_ID_PROVIDER`, and
+  any future codegen'd families. `codes.ts` is generated — never edit it by hand.
+
+### Rules
+1. Need a closed-set string? Find its `[Code]` enum / constant class and reference it.
+   Do NOT retype the literal. The DECLARATION site (the `[Code]` attribute or the
+   const) is the only place the literal text appears.
+2. New closed set with no home? CREATE a `[Code]` enum (or a constant class for
+   non-domain wire vocab), then surface it to the frontend: add the enum to
+   `ENUM_EXPORTS` in `apps/web-svelte/scripts/gen-codes.mjs` (or a constant group in
+   `Prismedia.Api/Codegen/CodesManifest.cs`), and run `pnpm api:generate` with the
+   dev API up. Never hand-maintain a parallel TS union of codes.
+3. Frontend types for codes come from orval-generated models or `codes.ts` — never a
+   hand-written `"a" | "b"` union that duplicates a backend set.
+4. External wire vocab (Jellyfin, Stash, ffprobe) belongs in its protocol/constant
+   class, referenced — not retyped. External decode-boundary field names may stay
+   inline ONLY at the single parse site, annotated `// prism-vocab: external`.
+5. Problem/error codes: throwers and HTTP mappers both reference the shared
+   `ApiProblemCodes`; the frontend matches generated problem-code consts, never
+   English message text.
+6. NOT identifiers (leave inline): user-facing display text, log/exception messages,
+   CSS/Tailwind classes, ARIA labels, file paths, URLs, format strings, test
+   descriptions, and standard DOM key/MIME tokens.
+
+When in doubt, grep for the literal: if it already lives in a `[Code]` enum or
+`codes.ts`, reference that. If it does not but is a closed set, you are adding the
+canonical home, not another copy. Enforcement (Roslyn analyzer, architecture tests,
+`codes.ts` CI parity, and a frontend `no-magic-codes` lint) is being rolled out per
+`docs/audits/magic-string-elimination-plan.md`; do not bypass it.
+
+## UI Composition Discipline (Shared Building Blocks)
+
+New pages are COMPOSED from shared building blocks, not hand-rolled. Before writing a
+control or layout, find the block that owns the pattern and use it.
+
+- Presentational, domain-free primitives live in `packages/ui-svelte`
+  (`Button`, `TextInput`, `Select`, `Checkbox`, `Toggle`, `Badge`, `Meter`,
+  `MediaCard`, plus shared overlays/inputs as they land). Membership test: no `$lib`,
+  `$app`, or `$lib/api` imports.
+- Domain-aware field wrappers live in `apps/web-svelte/src/lib/components/forms`
+  (`TextField`, `SearchSelect`, `TagSelect`, `EntityPicker`, `DateField`,
+  `ToggleChip`, `FormActions`, `EditFormShell`, …).
+- Entity scaffolds live in `apps/web-svelte/src/lib/components/entities`
+  (`EntityIndexPage`, `EntityGrid`, `EntityThumbnail`, and the config-driven detail
+  scaffolds as they are extracted).
+- Do NOT hand-roll raw `<input>/<select>/<button>`, search boxes, chips/badges,
+  dialogs, popovers, or detail-page scaffolding when a shared block exists or is
+  planned. The canonical catalog and migration map live in
+  `docs/audits/ui-building-block-catalog.md`.
+
 ## Quality Bar
 
 - TypeScript is required in the Svelte frontend and TypeScript packages.

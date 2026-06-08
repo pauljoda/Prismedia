@@ -4,13 +4,14 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { EntityKind } from './entityKind';
 import type { EntityKindCount } from './entityKindCount';
 import type { EntityThumbnailHoverImage } from './entityThumbnailHoverImage';
 import type { EntityThumbnailMeta } from './entityThumbnailMeta';
 
 export interface EntityThumbnail {
   id: string;
-  kind: string;
+  kind: EntityKind;
   title: string;
   /** @nullable */
   parentEntityId: string | null;
@@ -36,8 +37,7 @@ export interface EntityThumbnail {
   isFavorite: boolean;
   isNsfw: boolean;
   isOrganized: boolean;
-  /** @nullable */
-  parentKind?: string | null;
+  parentKind?: null | EntityKind;
   /** @nullable */
   createdAt?: string | null;
   /**

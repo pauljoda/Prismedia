@@ -4,6 +4,7 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { EntityKind } from './entityKind';
 
 export interface IdentifyApplyProgress {
   id: string;
@@ -13,8 +14,7 @@ export interface IdentifyApplyProgress {
   currentIndex: number | string;
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
   total: number | string;
-  /** @nullable */
-  currentKind: string | null;
+  currentKind: null | EntityKind;
   /** @nullable */
   currentTitle: string | null;
   currentPath: string[];

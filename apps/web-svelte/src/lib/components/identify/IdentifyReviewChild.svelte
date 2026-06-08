@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { proposalKindToEntityKind } from "$lib/entities/entity-codes";
   import {
     Check,
     ChevronLeft,
@@ -118,7 +119,7 @@
   function currentEntityFallback(): EntityCard {
     return {
       id: currentDetailEntityId ?? proposal.targetEntityId ?? proposal.proposalId,
-      kind: proposal.targetKind,
+      kind: proposalKindToEntityKind(proposal.targetKind),
       title: currentDetail?.title ?? "",
       parentEntityId: null,
       sortOrder: null,

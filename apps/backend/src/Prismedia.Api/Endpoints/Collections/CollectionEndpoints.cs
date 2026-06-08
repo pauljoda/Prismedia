@@ -25,8 +25,8 @@ public static class CollectionEndpoints {
                     CollectionCommandStatus.Succeeded when result.Collection is not null =>
                         Results.Created($"/api/collections/{result.Collection.Id}", result.Collection),
                     CollectionCommandStatus.Invalid =>
-                        Results.BadRequest(new ApiProblem("invalid_collection", result.Message ?? "Collection request is invalid.")),
-                    _ => Results.NotFound(new ApiProblem("collection_not_found", result.Message ?? "Collection was not found."))
+                        Results.BadRequest(new ApiProblem(ApiProblemCodes.InvalidCollection, result.Message ?? "Collection request is invalid.")),
+                    _ => Results.NotFound(new ApiProblem(ApiProblemCodes.CollectionNotFound, result.Message ?? "Collection was not found."))
                 };
             })
             .WithName("CreateCollection")
@@ -53,7 +53,7 @@ public static class CollectionEndpoints {
                 var result = await collections.DeleteAsync(id, cancellationToken);
                 return result.Status == CollectionCommandStatus.Succeeded
                     ? Results.Ok(new CollectionDeleteResponse(id))
-                    : Results.NotFound(new ApiProblem("collection_not_found", result.Message ?? "Collection was not found."));
+                    : Results.NotFound(new ApiProblem(ApiProblemCodes.CollectionNotFound, result.Message ?? "Collection was not found."));
             })
             .WithName("DeleteCollection")
             .WithSummary("Delete Collection.")
@@ -71,7 +71,7 @@ public static class CollectionEndpoints {
                     NsfwVisibility.ShouldHide(hideNsfw, httpContext),
                     cancellationToken);
                 return response is null
-                    ? Results.BadRequest(new ApiProblem("invalid_collection_rules", "Collection rule tree is invalid."))
+                    ? Results.BadRequest(new ApiProblem(ApiProblemCodes.InvalidCollectionRules, "Collection rule tree is invalid."))
                     : Results.Ok(response);
             })
             .WithName("PreviewCollectionRules")
@@ -137,7 +137,7 @@ public static class CollectionEndpoints {
             CancellationToken cancellationToken) => {
                 var response = await collections.RefreshAsync(id, cancellationToken);
                 return response is null
-                    ? Results.NotFound(new ApiProblem("collection_not_found", "Collection was not found."))
+                    ? Results.NotFound(new ApiProblem(ApiProblemCodes.CollectionNotFound, "Collection was not found."))
                     : Results.Ok(response);
             })
             .WithName("RefreshCollection")
@@ -152,10 +152,10 @@ public static class CollectionEndpoints {
         result.Status switch {
             CollectionCommandStatus.Succeeded when result.Collection is not null => Results.Ok(result.Collection),
             CollectionCommandStatus.Invalid => Results.BadRequest(new ApiProblem(
-                "invalid_collection",
+                ApiProblemCodes.InvalidCollection,
                 result.Message ?? "Collection request is invalid.")),
             _ => Results.NotFound(new ApiProblem(
-                "collection_not_found",
+                ApiProblemCodes.CollectionNotFound,
                 result.Message ?? "Collection was not found."))
         };
 
@@ -163,10 +163,10 @@ public static class CollectionEndpoints {
         result.Status switch {
             CollectionCommandStatus.Succeeded => Results.Ok(new CollectionItemMutationResponse(result.Count)),
             CollectionCommandStatus.Invalid => Results.BadRequest(new ApiProblem(
-                "invalid_collection_items",
+                ApiProblemCodes.InvalidCollectionItems,
                 result.Message ?? "Collection item request is invalid.")),
             _ => Results.NotFound(new ApiProblem(
-                "collection_not_found",
+                ApiProblemCodes.CollectionNotFound,
                 result.Message ?? "Collection was not found."))
         };
 }

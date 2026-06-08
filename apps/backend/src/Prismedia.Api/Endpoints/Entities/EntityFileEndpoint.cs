@@ -27,18 +27,18 @@ internal static class EntityFileEndpoint {
         CancellationToken cancellationToken) {
         var content = await files.GetContentAsync(id, role, cancellationToken);
         if (content is null) {
-            return Results.NotFound(new ApiProblem("entity_file_not_found", $"Entity file '{role}' for '{id}' was not found."));
+            return Results.NotFound(new ApiProblem(ApiProblemCodes.EntityFileNotFound, $"Entity file '{role}' for '{id}' was not found."));
         }
 
         if (TrySplitArchiveEntry(content.Path, out var archivePath, out var memberPath)) {
             var archiveStream = await OpenArchiveEntryAsync(archivePath, memberPath, cancellationToken);
             return archiveStream is null
-                ? Results.NotFound(new ApiProblem("entity_file_not_found", $"Entity file '{role}' for '{id}' was not found."))
+                ? Results.NotFound(new ApiProblem(ApiProblemCodes.EntityFileNotFound, $"Entity file '{role}' for '{id}' was not found."))
                 : Results.File(archiveStream, content.ContentType, enableRangeProcessing: true);
         }
 
         if (!File.Exists(content.Path)) {
-            return Results.NotFound(new ApiProblem("entity_file_not_found", $"Entity file '{role}' for '{id}' was not found."));
+            return Results.NotFound(new ApiProblem(ApiProblemCodes.EntityFileNotFound, $"Entity file '{role}' for '{id}' was not found."));
         }
 
         return Results.File(

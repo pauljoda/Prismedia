@@ -34,13 +34,13 @@ public sealed class CollectionItemReadServiceTests {
         Assert.Collection(result.Items,
             first => {
                 Assert.Equal(firstId, first.EntityId);
-                Assert.Equal("video", first.EntityType);
-                Assert.Equal("manual", first.Source);
+                Assert.Equal(EntityKind.Video, first.EntityType);
+                Assert.Equal(CollectionItemSource.Manual, first.Source);
                 Assert.Equal("First", first.Entity.Title);
             },
             second => {
                 Assert.Equal(secondId, second.EntityId);
-                Assert.Equal("audio-track", second.EntityType);
+                Assert.Equal(EntityKind.AudioTrack, second.EntityType);
                 Assert.Equal("Second", second.Entity.Title);
             });
     }
@@ -119,7 +119,7 @@ public sealed class CollectionItemReadServiceTests {
                 .Where(row => row is not null)
                 .Select(row => new EntityThumbnail(
                     row!.Id,
-                    row.KindCode,
+                    row.KindCode.DecodeAs<EntityKind>(),
                     row.Title,
                     row.ParentEntityId,
                     row.SortOrder,

@@ -16,7 +16,7 @@ internal static class IdentifyBulkEndpoints {
             IJobQueueService queue,
             CancellationToken cancellationToken) => {
                 if (request.EntityIds.Count == 0) {
-                    return Results.BadRequest(new ApiProblem("empty_bulk_identify", "Bulk identify requires at least one entity."));
+                    return Results.BadRequest(new ApiProblem(ApiProblemCodes.EmptyBulkIdentify, "Bulk identify requires at least one entity."));
                 }
 
                 var payload = new BulkIdentifyPayload(
@@ -36,8 +36,8 @@ internal static class IdentifyBulkEndpoints {
                     $"/api/jobs/{job.Id}",
                     new JobCreateResponse(new JobRun(
                         job.Id,
-                        job.Type.ToCode(),
-                        job.Status.ToCode(),
+                        job.Type,
+                        job.Status,
                         job.Progress,
                         job.Message,
                         job.TargetEntityKind,

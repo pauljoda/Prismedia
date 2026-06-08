@@ -1,5 +1,6 @@
 using Prismedia.Application.Jobs;
 using Prismedia.Contracts.Files;
+using Prismedia.Contracts.System;
 
 namespace Prismedia.Application.Files;
 
@@ -96,7 +97,7 @@ public sealed class FilesService(
         foreach (var item in request.Items) {
             var relativeItemPath = NormalizeRelativePath(item.RelativePath);
             if (string.IsNullOrWhiteSpace(relativeItemPath)) {
-                throw new FileOperationException("invalid_path", "Uploaded files must include a relative path.");
+                throw new FileOperationException(ApiProblemCodes.InvalidPath, "Uploaded files must include a relative path.");
             }
 
             var destination = await ResolveAsync(
@@ -149,7 +150,7 @@ public sealed class FilesService(
         bool hideNsfw,
         CancellationToken cancellationToken) {
         if (string.IsNullOrWhiteSpace(request.Path)) {
-            throw new FileOperationException("invalid_path", "Deleting a library root from Files is not supported.");
+            throw new FileOperationException(ApiProblemCodes.InvalidPath, "Deleting a library root from Files is not supported.");
         }
 
         var target = await ResolveAsync(request.RootId, request.Path, hideNsfw, cancellationToken);
@@ -164,7 +165,7 @@ public sealed class FilesService(
         bool hideNsfw,
         CancellationToken cancellationToken) {
         if (string.IsNullOrWhiteSpace(request.Path)) {
-            throw new FileOperationException("invalid_path", "Library roots cannot be excluded from Files.");
+            throw new FileOperationException(ApiProblemCodes.InvalidPath, "Library roots cannot be excluded from Files.");
         }
 
         var target = await ResolveAsync(request.RootId, request.Path, hideNsfw, cancellationToken);
@@ -184,7 +185,7 @@ public sealed class FilesService(
         bool hideNsfw,
         CancellationToken cancellationToken) {
         if (string.IsNullOrWhiteSpace(request.Path)) {
-            throw new FileOperationException("invalid_path", "Library roots cannot have exclusions removed from Files.");
+            throw new FileOperationException(ApiProblemCodes.InvalidPath, "Library roots cannot have exclusions removed from Files.");
         }
 
         var target = await ResolveAsync(request.RootId, request.Path, hideNsfw, cancellationToken);
@@ -222,7 +223,7 @@ public sealed class FilesService(
         var normalizedRoot = Path.GetFullPath(root.Path);
         var normalizedRelative = NormalizeRelativePath(relativePath);
         if (Path.IsPathRooted(normalizedRelative)) {
-            throw new FileOperationException("invalid_path", "Files paths must be relative to a library root.");
+            throw new FileOperationException(ApiProblemCodes.InvalidPath, "Files paths must be relative to a library root.");
         }
 
         var absolute = string.IsNullOrWhiteSpace(normalizedRelative)
@@ -233,7 +234,7 @@ public sealed class FilesService(
         var inside = string.Equals(trimmedRoot, trimmedAbsolute, StringComparison.OrdinalIgnoreCase) ||
             trimmedAbsolute.StartsWith(trimmedRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
         if (!inside) {
-            throw new FileOperationException("invalid_path", "Files paths cannot escape the selected library root.");
+            throw new FileOperationException(ApiProblemCodes.InvalidPath, "Files paths cannot escape the selected library root.");
         }
 
         return new ResolvedFilePath(root, ToRelativePath(normalizedRelative), absolute);
@@ -242,7 +243,7 @@ public sealed class FilesService(
     private async Task<FileLibraryRoot> GetRootAsync(Guid rootId, bool hideNsfw, CancellationToken cancellationToken) {
         var root = await persistence.GetRootAsync(rootId, cancellationToken);
         if (root is null || (hideNsfw && root.IsNsfw)) {
-            throw new FileOperationException("root_not_found", "Library root was not found.");
+            throw new FileOperationException(ApiProblemCodes.RootNotFound, "Library root was not found.");
         }
 
         return root;
@@ -310,7 +311,7 @@ public sealed class FilesService(
 
         var hidden = await persistence.ListHiddenPathsAsync(path.AbsolutePath, [path.AbsolutePath], cancellationToken);
         if (hidden.Contains(path.AbsolutePath)) {
-            throw new FileOperationException("not_found", "File or folder was not found.");
+            throw new FileOperationException(ApiProblemCodes.NotFound, "File or folder was not found.");
         }
     }
 
@@ -347,7 +348,7 @@ public sealed class FilesService(
             trimmed.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 ||
             trimmed.Contains('/') ||
             trimmed.Contains('\\')) {
-            throw new FileOperationException("invalid_path", "File or folder names must be valid path segments.");
+            throw new FileOperationException(ApiProblemCodes.InvalidPath, "File or folder names must be valid path segments.");
         }
 
         return trimmed;

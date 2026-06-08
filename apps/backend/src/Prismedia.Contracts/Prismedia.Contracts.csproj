@@ -6,4 +6,10 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- Inward dependency on the dependency-free core so DTOs can carry domain value
+         objects (the [Code] enums) instead of stringly-typed boundary fields. -->
+    <ProjectReference Include="..\Prismedia.Domain\Prismedia.Domain.csproj" />
+  </ItemGroup>
+
 </Project>

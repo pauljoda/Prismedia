@@ -1,4 +1,4 @@
-import type { EntityCapability } from "$lib/api/generated/model";
+import type { EntityCapability, EntitySubtitleSource, EntityKind } from "$lib/api/generated/model";
 import type { EntityDetailCardFull } from "./entity-detail";
 import { entityCardToDetailCard } from "./entity-detail";
 import { svgArt, rating, flags, stats, technical, positions, type ArtShape } from "./lab-data-helpers";
@@ -94,7 +94,7 @@ function markers(items: Array<{ id: string; title: string; seconds: number; endS
   };
 }
 
-function subtitles(items: Array<{ id: string; language: string; label?: string; format: string; source: string; isDefault?: boolean }>): EntityCapability {
+function subtitles(items: Array<{ id: string; language: string; label?: string; format: string; source: EntitySubtitleSource; isDefault?: boolean }>): EntityCapability {
   return {
     kind: "subtitles",
     items: items.map((s) => ({
@@ -140,7 +140,7 @@ function detailCard(options: {
 }): EntityDetailCardFull {
   return entityCardToDetailCard({
     id: options.id,
-    kind: options.kind,
+    kind: options.kind as EntityKind,
     title: options.title,
     parentEntityId: null,
     sortOrder: null,
@@ -250,8 +250,8 @@ export const detailLabRows: EntityDetailLabRow[] = [
             ]),
             subtitles([
               { id: "sub-en", language: "English", label: "English (CC)", format: "srt", source: "embedded", isDefault: true },
-              { id: "sub-de", language: "German", format: "ass", source: "external" },
-              { id: "sub-ja", language: "Japanese", format: "srt", source: "external" },
+              { id: "sub-de", language: "German", format: "ass", source: "sidecar" },
+              { id: "sub-ja", language: "Japanese", format: "srt", source: "sidecar" },
             ]),
             progress({ index: 340, total: 596, unit: "seconds", mode: "playing" }),
             classification("animation", "content-type"),

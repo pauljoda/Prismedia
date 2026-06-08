@@ -7,6 +7,7 @@
 import type { EntityCapability } from './entityCapability';
 import type { EntityCreditMetadata } from './entityCreditMetadata';
 import type { EntityGroup } from './entityGroup';
+import type { EntityKind } from './entityKind';
 
 export interface GalleryDetail {
   creditMetadata: EntityCreditMetadata[];
@@ -14,7 +15,7 @@ export interface GalleryDetail {
   /** @nullable */
   coverImageId: string | null;
   id: string;
-  kind: string;
+  kind: EntityKind;
   title: string;
   /** @nullable */
   parentEntityId: string | null;

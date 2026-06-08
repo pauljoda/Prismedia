@@ -9,6 +9,7 @@ using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 using Prismedia.Infrastructure.Plugins;
 using Prismedia.Infrastructure.Processes;
+using Prismedia.Infrastructure.Serialization;
 
 namespace Prismedia.Infrastructure.Tests;
 
@@ -487,7 +488,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             1,
             "lookup-id",
             new Dictionary<string, string> { ["apiKey"] = "secret" },
-            new IdentifyEntitySnapshot(entityId, "video", "Example"),
+            new IdentifyEntitySnapshot(entityId, EntityKind.Video, "Example"),
             new IdentifyQuery(null, null, null),
             new IdentifyMatchHints(
                 new Dictionary<string, string> { ["tmdb"] = "123" },
@@ -531,7 +532,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             1,
             "search",
             new Dictionary<string, string>(),
-            new IdentifyEntitySnapshot(Guid.NewGuid(), "book", "Missing"),
+            new IdentifyEntitySnapshot(Guid.NewGuid(), EntityKind.Book, "Missing"),
             new IdentifyQuery("Missing", null, null),
             new IdentifyMatchHints(new Dictionary<string, string>(), [], "Missing", null));
 
@@ -568,7 +569,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             1,
             "search",
             new Dictionary<string, string>(),
-            new IdentifyEntitySnapshot(Guid.NewGuid(), "video-series", "Abbott Elementary"),
+            new IdentifyEntitySnapshot(Guid.NewGuid(), EntityKind.VideoSeries, "Abbott Elementary"),
             new IdentifyQuery("Abbott Elementary", null, null),
             new IdentifyMatchHints(new Dictionary<string, string>(), [], "Abbott Elementary", null));
 
@@ -677,9 +678,9 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
         var response = await service.IdentifyAsync(movieId, "tmdb", null, parentExternalIds: null, hideNsfw: false, CancellationToken.None);
 
         Assert.True(response.Ok);
-        Assert.Equal("video", executor.CapturedRequest?.Entity.Kind);
+        Assert.Equal(EntityKind.Video, executor.CapturedRequest?.Entity.Kind);
         Assert.Equal("search", executor.CapturedRequest?.Action);
-        Assert.Equal(EntityKindRegistry.Movie.Code, response.Result?.TargetKind);
+        Assert.Equal(ProposalKind.Movie, response.Result?.TargetKind);
         Assert.Equal(movieId, response.Result?.TargetEntityId);
     }
 
@@ -752,7 +753,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
         Assert.True(response.Ok);
         var child = Assert.Single(response.Result!.Children);
         Assert.Null(child.TargetEntityId);
-        Assert.Equal("video-season", child.TargetKind);
+        Assert.Equal(ProposalKind.VideoSeason, child.TargetKind);
         Assert.Equal("Season 1", child.Patch.Title);
         Assert.Equal("Generated Studio", Assert.Single(response.Result.Relationships).Patch.Title);
     }
@@ -987,7 +988,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
         await db.SaveChangesAsync();
 
         var providerId = "dd87fb34-57e1-41cb-9c68-3fad83068dd5";
-        var executor = new RawIdTitleProposalProcessExecutor("audio-library", providerId);
+        var executor = new RawIdTitleProposalProcessExecutor(ProposalKind.AudioLibrary, providerId);
         var service = CreateIdentifyService(db, executor, pluginDir);
 
         var response = await service.IdentifyAsync(albumId, "musicbrainz", null, parentExternalIds: null, hideNsfw: false, CancellationToken.None);
@@ -1380,7 +1381,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             var requestJson = await File.ReadAllTextAsync(arguments[1], cancellationToken);
             CapturedRequest = JsonSerializer.Deserialize<IdentifyPluginRequest>(
                 requestJson,
-                new JsonSerializerOptions(JsonSerializerDefaults.Web));
+                WireJson);
             var wireJson = """
                 {
                   "ok": true,
@@ -1483,13 +1484,14 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             var requestJson = await File.ReadAllTextAsync(arguments[1], cancellationToken);
             var request = JsonSerializer.Deserialize<IdentifyPluginRequest>(
                 requestJson,
-                new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+                WireJson)!;
             Requests.Add(request);
 
+            var kindCode = request.Entity.Kind.ToCode();
             var proposal = new EntityMetadataProposal(
-                $"tmdb:{request.Entity.Kind}:{request.Entity.Id}",
+                $"tmdb:{kindCode}:{request.Entity.Id}",
                 "tmdb",
-                request.Entity.Kind,
+                request.Entity.Kind.ToProposalKind(),
                 request.StructuralContext?.Ancestors.Count > 0 ? 0.9m : 1m,
                 request.StructuralContext?.Ancestors.Count > 0 ? "structural-child" : "title-search",
                 new EntityMetadataPatch(
@@ -1523,7 +1525,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             var requestJson = await File.ReadAllTextAsync(arguments[1], cancellationToken);
             var request = JsonSerializer.Deserialize<IdentifyPluginRequest>(
                 requestJson,
-                new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+                WireJson)!;
             Requests.Add(request);
 
             var proposal = request.Entity.Id == seriesId
@@ -1537,7 +1539,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             var studioRelationship = new EntityMetadataProposal(
                 "tmdb:studio:generated",
                 "tmdb",
-                "studio",
+                ProposalKind.Studio,
                 1,
                 "studio",
                 EmptyPatch() with { Title = "Generated Studio" },
@@ -1547,7 +1549,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             var providerStructuralChild = new EntityMetadataProposal(
                 "tmdb:season:provider",
                 "tmdb",
-                "video-season",
+                ProposalKind.VideoSeason,
                 1,
                 "provider-tree",
                 EmptyPatch() with {
@@ -1561,7 +1563,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             return new EntityMetadataProposal(
                 "tmdb:series:42",
                 "tmdb",
-                "video-series",
+                ProposalKind.VideoSeries,
                 1,
                 "search",
                 EmptyPatch() with {
@@ -1579,7 +1581,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             new(
                 $"tmdb:season:{seasonId}",
                 "tmdb",
-                request.Entity.Kind,
+                request.Entity.Kind.ToProposalKind(),
                 1,
                 "child-context",
                 EmptyPatch() with { Title = "Season From Child Request" },
@@ -1599,7 +1601,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             var requestJson = await File.ReadAllTextAsync(arguments[1], cancellationToken);
             var request = JsonSerializer.Deserialize<IdentifyPluginRequest>(
                 requestJson,
-                new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+                WireJson)!;
             Requests.Add(request);
 
             return new ProcessExecutionResult(0, SerializeAsWire(SeasonProposal()), string.Empty);
@@ -1610,7 +1612,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
                 .Select(number => new EntityMetadataProposal(
                     $"tmdb:tv:207:s1:e{number}",
                     "tmdb",
-                    "video-episode",
+                    ProposalKind.VideoEpisode,
                     0.9m,
                     "cascade",
                     EmptyPatch() with {
@@ -1632,7 +1634,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             return new EntityMetadataProposal(
                 $"tmdb:tv:207:season:{seasonId}",
                 "tmdb",
-                "video-season",
+                ProposalKind.VideoSeason,
                 0.9m,
                 "context",
                 EmptyPatch() with {
@@ -1661,13 +1663,14 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             CancellationToken cancellationToken, bool lowPriority = false) {
             var request = JsonSerializer.Deserialize<IdentifyPluginRequest>(
                 await File.ReadAllTextAsync(arguments[1], cancellationToken),
-                new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+                WireJson)!;
             Requests.Add(request);
 
+            var kindCode = request.Entity.Kind.ToCode();
             var proposal = new EntityMetadataProposal(
-                $"echo:{request.Entity.Kind}:{request.Entity.Id}",
-                request.Entity.Kind == "video" ? "tmdb" : "musicbrainz",
-                request.Entity.Kind,
+                $"echo:{kindCode}:{request.Entity.Id}",
+                request.Entity.Kind == EntityKind.Video ? "tmdb" : "musicbrainz",
+                request.Entity.Kind.ToProposalKind(),
                 0.9m,
                 "external-id",
                 EmptyPatch() with {
@@ -1681,7 +1684,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
         }
     }
 
-    private sealed class RawIdTitleProposalProcessExecutor(string kind, string providerId) : ProcessExecutor {
+    private sealed class RawIdTitleProposalProcessExecutor(ProposalKind kind, string providerId) : ProcessExecutor {
         public override async Task<ProcessExecutionResult> RunAsync(
             string fileName,
             IReadOnlyList<string> arguments,
@@ -1707,6 +1710,12 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
         }
     }
 
+    // Mirrors the production plugin wire: codec enums (entity kind, proposal TargetKind) are
+    // carried as their stable string code, so the fake executors round-trip exactly as a real
+    // dotnet-process plugin does.
+    private static readonly JsonSerializerOptions WireJson =
+        new(JsonSerializerDefaults.Web) { Converters = { new CodecJsonConverterFactory() } };
+
     private static string SerializeAsWire(EntityMetadataProposal proposal) {
         var wire = new {
             ok = true,
@@ -1717,7 +1726,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             },
             error = (string?)null
         };
-        return JsonSerializer.Serialize(wire, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        return JsonSerializer.Serialize(wire, WireJson);
     }
 
     private static EntityMetadataPatch EmptyPatch() => new(

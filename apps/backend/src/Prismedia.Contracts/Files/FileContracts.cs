@@ -1,3 +1,5 @@
+using Prismedia.Domain.Entities;
+
 namespace Prismedia.Contracts.Files;
 
 /// <summary>
@@ -62,10 +64,10 @@ public sealed record FileDetailRequest(Guid RootId, string? Path);
 /// Entity currently linked to a filesystem path.
 /// </summary>
 /// <param name="EntityId">Entity identifier.</param>
-/// <param name="Kind">Entity kind code.</param>
+/// <param name="Kind">Entity kind.</param>
 /// <param name="Title">Entity title.</param>
 /// <param name="CoverUrl">Thumbnail or poster artwork path for display; null when the entity has no artwork.</param>
-public sealed record FileLinkedEntity(Guid EntityId, string Kind, string Title, string? CoverUrl = null);
+public sealed record FileLinkedEntity(Guid EntityId, EntityKind Kind, string Title, string? CoverUrl = null);
 
 /// <summary>
 /// Detailed metadata for a watched-root file or directory.

@@ -12,6 +12,14 @@ public sealed class SpaDevProxyTests {
     [InlineData("/library", false)]
     [InlineData("/videos", false)]
     [InlineData("/videos/0d42e2e4-b181-4392-aae8-3c2184422a97", false)]
+    // Lowercase Jellyfin sub-resources (e.g. Infuse direct play) must still reach the backend.
+    [InlineData("/videos/0d42e2e4-b181-4392-aae8-3c2184422a97/stream", true)]
+    [InlineData("/videos/0d42e2e4-b181-4392-aae8-3c2184422a97/master.m3u8", true)]
+    [InlineData("/videos/ActiveEncodings", true)]
+    // Lowercase SPA list + detail routes for the other colliding prefixes stay on the SPA.
+    [InlineData("/audio", false)]
+    [InlineData("/audio/0d42e2e4-b181-4392-aae8-3c2184422a97", false)]
+    [InlineData("/artists", false)]
     public void BackendRouteClassifierKeepsLowercaseSpaRoutesOnVite(string path, bool expected) {
         Assert.Equal(expected, SpaDevProxy.ShouldPassThroughToBackend(new PathString(path)));
     }

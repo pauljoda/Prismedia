@@ -1,7 +1,6 @@
 import { render, waitFor } from "@testing-library/svelte";
-import { tick } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { EntityCapability } from "$lib/api/generated/model";
+import type { EntityCapability, EntityKind } from "$lib/api/generated/model";
 import { fetchImage, fetchVideo } from "$lib/api/media";
 import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
 import EntityFeedHarness from "./EntityFeed.test-harness.svelte";
@@ -44,6 +43,30 @@ describe("EntityFeed animated playback", () => {
       );
     });
     expect(container.querySelector("video.feed-video")).toBeNull();
+  });
+
+  it("plays a gallery's representative cover child image, sourced from the child id", async () => {
+    mockImages({
+      "cover-img-1": imageDetail("cover-img-1", "Cover.gif", [
+        filesCapability([{ role: "source", path: "/media/cover.gif", mimeType: "image/gif" }]),
+        technicalCapability({ duration: "00:00:03", format: "gif" }),
+      ]),
+    });
+
+    const { container } = render(EntityFeedHarness, {
+      props: { cards: [galleryCard("gallery-1", "My Gallery", "cover-img-1")] },
+    });
+
+    await waitFor(() => {
+      expect(fetchImageMock).toHaveBeenCalledWith("cover-img-1");
+    });
+    await waitFor(() => {
+      expect(container.querySelector<HTMLImageElement>(".feed-animated")?.getAttribute("src")).toBe(
+        "/api/entities/cover-img-1/files/source",
+      );
+    });
+    // The gallery container itself is never hydrated as media.
+    expect(fetchImageMock).not.toHaveBeenCalledWith("gallery-1");
   });
 
   it("uses the original source for the active image clip even when a preview is advertised", async () => {
@@ -92,7 +115,7 @@ describe("EntityFeed animated playback", () => {
     });
   });
 
-  it("does not mount original-source video for nearby clips that have no preview", async () => {
+  it("plays in-window video-like clips inline even without a generated preview", async () => {
     mockImages({
       "still-1": imageDetail("still-1", "Still.jpg", [
         filesCapability([{ role: "source", path: "/media/still.jpg", mimeType: "image/jpeg" }]),
@@ -109,9 +132,15 @@ describe("EntityFeed animated playback", () => {
     await waitFor(() => {
       expect(fetchImageMock).toHaveBeenCalledWith("neighbor-1");
     });
-    await tick();
 
-    expect(container.querySelector("video.feed-video")).toBeNull();
+    // The off-center, source-only clip falls back to its original source so it
+    // autoplays in the window; the still JPEG neighbor stays a static poster.
+    await waitFor(() => {
+      expect(container.querySelector<HTMLVideoElement>("video.feed-video")?.getAttribute("src")).toBe(
+        "/api/entities/neighbor-1/files/source",
+      );
+    });
+    expect(container.querySelectorAll("video.feed-video")).toHaveLength(1);
   });
 });
 
@@ -189,7 +218,7 @@ function technicalCapability(overrides: Partial<Record<string, string | number |
   } as EntityCapability;
 }
 
-function card(id: string, title: string, kind = "image"): EntityThumbnailCard {
+function card(id: string, title: string, kind: EntityKind = "image"): EntityThumbnailCard {
   return {
     entity: {
       id,
@@ -209,5 +238,19 @@ function card(id: string, title: string, kind = "image"): EntityThumbnailCard {
     hover: { kind: "none" },
     fit: "cover",
     meta: [],
+  };
+}
+
+// A gallery card whose cover stands in for a distinct child image entity, the
+// shape produced for the /galleries feed.
+function galleryCard(id: string, title: string, coverEntityId: string): EntityThumbnailCard {
+  const base = card(id, title, "gallery");
+  return {
+    ...base,
+    cover: { src: `/covers/${id}.jpg`, alt: title, entityId: coverEntityId },
+    hover: {
+      kind: "image-sequence",
+      assets: [{ src: `/covers/${id}.jpg`, alt: title, role: "preview", entityId: coverEntityId }],
+    },
   };
 }

@@ -3,6 +3,7 @@ using System.Text;
 using Prismedia.Application.Collections;
 using Prismedia.Application.Entities;
 using Prismedia.Contracts.Collections;
+using Prismedia.Domain.Entities;
 using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Jellyfin;
 using Prismedia.Contracts.Media;
@@ -263,13 +264,13 @@ public sealed partial class JellyfinCatalogService {
         ItemContext? context,
         JellyfinContentVisibility visibility,
         CancellationToken cancellationToken) {
-        if (!detail.Kind.Equals("movie", StringComparison.OrdinalIgnoreCase)) {
+        if (detail.Kind != EntityKind.Movie) {
             return MapCard(detail, serverId, context);
         }
 
         var childVideoId = detail.ChildrenByKind
             .SelectMany(group => VisibleEntities(group.Entities, visibility))
-            .FirstOrDefault(child => child.Kind.Equals("video", StringComparison.OrdinalIgnoreCase))?.Id;
+            .FirstOrDefault(child => child.Kind == EntityKind.Video)?.Id;
         var playableChild = childVideoId is { } id
             ? await GetDetailedCardAsync(id, visibility, cancellationToken)
             : null;
@@ -286,9 +287,9 @@ public sealed partial class JellyfinCatalogService {
         JellyfinContentVisibility visibility,
         CancellationToken cancellationToken) {
         var resolvesParent =
-            entity.Kind.Equals("video", StringComparison.OrdinalIgnoreCase) ||
-            entity.Kind.Equals("audio-track", StringComparison.OrdinalIgnoreCase) ||
-            entity.Kind.Equals("audio-library", StringComparison.OrdinalIgnoreCase);
+            entity.Kind == EntityKind.Video ||
+            entity.Kind == EntityKind.AudioTrack ||
+            entity.Kind == EntityKind.AudioLibrary;
         if (!resolvesParent || entity.ParentEntityId is not { } parentId) {
             return null;
         }
@@ -298,13 +299,13 @@ public sealed partial class JellyfinCatalogService {
             return null;
         }
 
-        if (entity.Kind.Equals("video", StringComparison.OrdinalIgnoreCase) &&
-            parent.Kind.Equals("video-series", StringComparison.OrdinalIgnoreCase)) {
+        if (entity.Kind == EntityKind.Video &&
+            parent.Kind == EntityKind.VideoSeries) {
             var children = parent.ChildrenByKind
                 .SelectMany(group => VisibleEntities(group.Entities, visibility))
                 .Where(child => child.ParentEntityId == parent.Id)
                 .ToArray();
-            if (!children.Any(child => child.Kind.Equals("video-season", StringComparison.OrdinalIgnoreCase))) {
+            if (!children.Any(child => child.Kind == EntityKind.VideoSeason)) {
                 var directEpisodes = DirectSeriesEpisodeThumbnails(parent, children);
                 var episodeIndex = directEpisodes
                     .Select((episode, index) => (episode, index))
@@ -478,7 +479,7 @@ public sealed partial class JellyfinCatalogService {
         if (LibraryViews.Any(view => view.Id == id)) {
             return ViewById(id) is { } view &&
                    await ResolveViewCoverPathAsync(view, visibility, cancellationToken) is { } viewCover
-                ? [new JellyfinImageInfo("Primary", 0, EtagFor(id, viewCover))]
+                ? [new JellyfinImageInfo(JellyfinProtocol.ImageTypes.Primary, 0, EtagFor(id, viewCover))]
                 : [];
         }
 
@@ -498,18 +499,18 @@ public sealed partial class JellyfinCatalogService {
             })
             .ToList();
 
-        if (!indexesByType.ContainsKey("Primary") &&
+        if (!indexesByType.ContainsKey(JellyfinProtocol.ImageTypes.Primary) &&
             await ResolveEntityPrimaryCoverPathAsync(entity, visibility, cancellationToken) is { } primaryPath) {
-            infos.Insert(0, new JellyfinImageInfo("Primary", 0, EtagFor(id, primaryPath)));
-            indexesByType["Primary"] = 1;
+            infos.Insert(0, new JellyfinImageInfo(JellyfinProtocol.ImageTypes.Primary, 0, EtagFor(id, primaryPath)));
+            indexesByType[JellyfinProtocol.ImageTypes.Primary] = 1;
         }
 
         // A collection rarely carries its own poster file; advertise a representative member cover
         // as its Primary image so clients know an image is available to request.
-        if (!indexesByType.ContainsKey("Primary") &&
-            entity.Kind.Equals("collection", StringComparison.OrdinalIgnoreCase) &&
+        if (!indexesByType.ContainsKey(JellyfinProtocol.ImageTypes.Primary) &&
+            entity.Kind == EntityKind.Collection &&
             await ResolveCollectionCoverPathAsync(id, visibility, cancellationToken) is { } coverPath) {
-            infos.Insert(0, new JellyfinImageInfo("Primary", 0, EtagFor(id, coverPath)));
+            infos.Insert(0, new JellyfinImageInfo(JellyfinProtocol.ImageTypes.Primary, 0, EtagFor(id, coverPath)));
         }
 
         return infos;
@@ -533,10 +534,10 @@ public sealed partial class JellyfinCatalogService {
         CancellationToken cancellationToken) {
         // Library views are synthetic ids with no entity row; serve their representative poster.
         if (LibraryViews.Any(view => view.Id == id)) {
-            return imageType.Equals("Primary", StringComparison.OrdinalIgnoreCase) &&
+            return imageType.Equals(JellyfinProtocol.ImageTypes.Primary, StringComparison.OrdinalIgnoreCase) &&
                    ViewById(id) is { } view &&
                    await ResolveViewCoverPathAsync(view, visibility, cancellationToken) is { } viewCover
-                ? new JellyfinImageAsset(viewCover, MimeTypeForPath(viewCover), "Primary", EtagFor(id, viewCover))
+                ? new JellyfinImageAsset(viewCover, MimeTypeForPath(viewCover), JellyfinProtocol.ImageTypes.Primary, EtagFor(id, viewCover))
                 : null;
         }
 
@@ -552,24 +553,24 @@ public sealed partial class JellyfinCatalogService {
         var asset = assets.ElementAtOrDefault(index);
         if (asset is null) {
             if (index == 0 &&
-                imageType.Equals("Primary", StringComparison.OrdinalIgnoreCase) &&
+                imageType.Equals(JellyfinProtocol.ImageTypes.Primary, StringComparison.OrdinalIgnoreCase) &&
                 await ResolveEntityPrimaryCoverPathAsync(entity, visibility, cancellationToken) is { } primaryPath) {
                 return new JellyfinImageAsset(
                     primaryPath,
                     MimeTypeForPath(primaryPath),
-                    "Primary",
+                    JellyfinProtocol.ImageTypes.Primary,
                     EtagFor(id, primaryPath));
             }
 
             // Serve a collection's representative member cover as its Primary image when it has no
             // poster of its own — matching the tag advertised by the browse/list projection.
-            if (entity.Kind.Equals("collection", StringComparison.OrdinalIgnoreCase) &&
-                imageType.Equals("Primary", StringComparison.OrdinalIgnoreCase) &&
+            if (entity.Kind == EntityKind.Collection &&
+                imageType.Equals(JellyfinProtocol.ImageTypes.Primary, StringComparison.OrdinalIgnoreCase) &&
                 await ResolveCollectionCoverPathAsync(id, visibility, cancellationToken) is { } coverPath) {
                 return new JellyfinImageAsset(
                     coverPath,
                     MimeTypeForPath(coverPath),
-                    "Primary",
+                    JellyfinProtocol.ImageTypes.Primary,
                     EtagFor(id, coverPath));
             }
 
@@ -642,11 +643,11 @@ public sealed partial class JellyfinCatalogService {
 
         // Infuse navigates into a cast member by ParentId; surface that performer's titles rather
         // than the empty structural-children list a person entity would otherwise yield.
-        if (parent.Kind.Equals("person", StringComparison.OrdinalIgnoreCase)) {
+        if (parent.Kind == EntityKind.Person) {
             return await FilmographyAsync(parentId, query, serverId, visibility, cancellationToken);
         }
 
-        if (parent.Kind.Equals("collection", StringComparison.OrdinalIgnoreCase)) {
+        if (parent.Kind == EntityKind.Collection) {
             var items = await _collections.ListItemsAsync(parentId, visibility.HideNsfw, cancellationToken);
             return items.Items
                 .Where(item => visibility.Allows(item.Entity))
@@ -663,10 +664,10 @@ public sealed partial class JellyfinCatalogService {
             .ToArray();
 
         if (!query.Recursive &&
-            parent.Kind.Equals("video-series", StringComparison.OrdinalIgnoreCase) &&
+            parent.Kind == EntityKind.VideoSeries &&
             RequestsItemType(query.IncludeItemTypes, JellyfinProtocol.ItemTypes.Season)) {
             var realSeasons = childThumbnails
-                .Where(child => child.Kind.Equals("video-season", StringComparison.OrdinalIgnoreCase))
+                .Where(child => child.Kind == EntityKind.VideoSeason)
                 .ToArray();
             if (realSeasons.Length == 0) {
                 var directEpisodes = DirectSeriesEpisodeThumbnails(parent, childThumbnails);
@@ -676,9 +677,9 @@ public sealed partial class JellyfinCatalogService {
             }
         }
 
-        if (query.Recursive && parent.Kind.Equals("video-series", StringComparison.OrdinalIgnoreCase)) {
+        if (query.Recursive && parent.Kind == EntityKind.VideoSeries) {
             var realSeasons = childThumbnails
-                .Where(child => child.Kind.Equals("video-season", StringComparison.OrdinalIgnoreCase))
+                .Where(child => child.Kind == EntityKind.VideoSeason)
                 .ToArray();
             if (realSeasons.Length == 0) {
                 var directEpisodes = DirectSeriesEpisodeThumbnails(parent, childThumbnails);
@@ -698,7 +699,7 @@ public sealed partial class JellyfinCatalogService {
 
             var descendants = new List<JellyfinBaseItemDto>();
             foreach (var child in childThumbnails) {
-                if (!child.Kind.Equals("video-season", StringComparison.OrdinalIgnoreCase)) {
+                if (child.Kind != EntityKind.VideoSeason) {
                     descendants.Add(MapThumbnail(child, serverId, parentId, context));
                     continue;
                 }
@@ -727,7 +728,7 @@ public sealed partial class JellyfinCatalogService {
         JellyfinContentVisibility visibility,
         CancellationToken cancellationToken) {
         var series = await GetVisibleCardAsync(seriesId, visibility, cancellationToken);
-        if (series is null || !series.Kind.Equals("video-series", StringComparison.OrdinalIgnoreCase)) {
+        if (series is null || series.Kind != EntityKind.VideoSeries) {
             return [];
         }
 
@@ -735,7 +736,7 @@ public sealed partial class JellyfinCatalogService {
             .SelectMany(group => VisibleEntities(group.Entities, visibility))
             .Where(child => child.ParentEntityId == seriesId)
             .ToArray();
-        if (children.Any(child => child.Kind.Equals("video-season", StringComparison.OrdinalIgnoreCase))) {
+        if (children.Any(child => child.Kind == EntityKind.VideoSeason)) {
             return [];
         }
 
@@ -770,7 +771,7 @@ public sealed partial class JellyfinCatalogService {
         children
             .Where(child =>
                 child.ParentEntityId == series.Id &&
-                child.Kind.Equals("video", StringComparison.OrdinalIgnoreCase))
+                child.Kind == EntityKind.Video)
             .ToArray();
 
     /// <summary>
@@ -819,7 +820,7 @@ public sealed partial class JellyfinCatalogService {
             return null;
         }
 
-        var detail = await _entities.GetDetailAsync(id, card.Kind, visibility.HideNsfw, cancellationToken);
+        var detail = await _entities.GetDetailAsync(id, EntityKindRegistry.ToCode(card.Kind), visibility.HideNsfw, cancellationToken);
         return detail is not null && visibility.Allows(detail) ? detail : card;
     }
 
@@ -874,9 +875,9 @@ public sealed partial class JellyfinCatalogService {
                 return [];
             }
 
-            if (parent.Kind.Equals("music-artist", StringComparison.OrdinalIgnoreCase)) {
+            if (parent.Kind == EntityKind.MusicArtist) {
                 scopeArtist = parentId;
-            } else if (parent.Kind.Equals("audio-library", StringComparison.OrdinalIgnoreCase)) {
+            } else if (parent.Kind == EntityKind.AudioLibrary) {
                 scopeAlbum = parentId;
             } else {
                 return null; // non-music subtree — let the normal browse path handle it
@@ -1083,7 +1084,7 @@ public sealed partial class JellyfinCatalogService {
     }
 
     private static JellyfinBaseItemDto? MapCollectionItem(CollectionItemDetail item, string serverId, Guid collectionId) =>
-        item.Entity.Kind is "video" or "movie" or "video-series" or "video-season"
+        item.Entity.Kind is EntityKind.Video or EntityKind.Movie or EntityKind.VideoSeries or EntityKind.VideoSeason
             ? MapThumbnail(item.Entity, serverId, collectionId)
             : null;
 

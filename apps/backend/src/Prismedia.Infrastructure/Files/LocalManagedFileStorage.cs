@@ -1,6 +1,7 @@
 using Prismedia.Application.Files;
 using Prismedia.Contracts.Files;
 using Prismedia.Contracts.Media;
+using Prismedia.Contracts.System;
 
 namespace Prismedia.Infrastructure.Files;
 
@@ -17,7 +18,7 @@ public sealed class LocalManagedFileStorage : IManagedFileStorage {
         cancellationToken.ThrowIfCancellationRequested();
         var info = new DirectoryInfo(directory.AbsolutePath);
         if (!info.Exists) {
-            throw new FileOperationException("not_found", "Directory was not found.");
+            throw new FileOperationException(ApiProblemCodes.NotFound, "Directory was not found.");
         }
 
         var entries = new List<FileEntry>();
@@ -82,7 +83,7 @@ public sealed class LocalManagedFileStorage : IManagedFileStorage {
         cancellationToken.ThrowIfCancellationRequested();
         var file = new FileInfo(path.AbsolutePath);
         if (!file.Exists) {
-            throw new FileOperationException("not_found", "File was not found.");
+            throw new FileOperationException(ApiProblemCodes.NotFound, "File was not found.");
         }
 
         return Task.FromResult(new FileContentInfo(
@@ -150,7 +151,7 @@ public sealed class LocalManagedFileStorage : IManagedFileStorage {
             return Task.CompletedTask;
         }
 
-        throw new FileOperationException("not_found", "Source path was not found.");
+        throw new FileOperationException(ApiProblemCodes.NotFound, "Source path was not found.");
     }
 
     /// <inheritdoc />
@@ -167,7 +168,7 @@ public sealed class LocalManagedFileStorage : IManagedFileStorage {
             return Task.CompletedTask;
         }
 
-        throw new FileOperationException("not_found", "Path was not found.");
+        throw new FileOperationException(ApiProblemCodes.NotFound, "Path was not found.");
     }
 
     private static IEnumerable<FileSystemInfo> SafeEnumerate(DirectoryInfo directory) {
@@ -187,7 +188,7 @@ public sealed class LocalManagedFileStorage : IManagedFileStorage {
             return new FileInfo(path);
         }
 
-        throw new FileOperationException("not_found", "Path was not found.");
+        throw new FileOperationException(ApiProblemCodes.NotFound, "Path was not found.");
     }
 
     private static FileEntry ToEntry(Guid rootId, string rootPath, FileSystemInfo info) {
@@ -253,7 +254,7 @@ public sealed class LocalManagedFileStorage : IManagedFileStorage {
 
             if ((Directory.Exists(trimmed) || File.Exists(trimmed)) &&
                 File.GetAttributes(trimmed).HasFlag(FileAttributes.ReparsePoint)) {
-                throw new FileOperationException("invalid_path", "Filesystem operations cannot traverse symlinks.");
+                throw new FileOperationException(ApiProblemCodes.InvalidPath, "Filesystem operations cannot traverse symlinks.");
             }
 
             if (string.Equals(trimmed, root, StringComparison.OrdinalIgnoreCase)) {

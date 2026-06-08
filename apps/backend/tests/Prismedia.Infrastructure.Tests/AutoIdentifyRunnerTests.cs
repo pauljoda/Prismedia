@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Prismedia.Application.Plugins;
 using Prismedia.Application.Settings;
 using Prismedia.Contracts.Plugins;
+using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 using Prismedia.Infrastructure.Plugins;
@@ -83,7 +84,7 @@ public sealed class AutoIdentifyRunnerTests {
                 ["tmdb"] = CandidateShell("tmdb", "271267", "The Chair Company", confidence: 1m),
             },
             ProposalsByExternalId = {
-                ["tmdb:271267"] = Proposal("tmdb", confidence: 1m, title: "The Chair Company", targetKind: "video-series"),
+                ["tmdb:271267"] = Proposal("tmdb", confidence: 1m, title: "The Chair Company", targetKind: ProposalKind.VideoSeries),
             },
         };
         var runner = new AutoIdentifyRunner(settings, identify, db, NullLogger<AutoIdentifyRunner>.Instance);
@@ -107,7 +108,7 @@ public sealed class AutoIdentifyRunnerTests {
                 ["tmdb"] = CandidateShell("tmdb", "271267", "The Chair Company", confidence: 0.5m),
             },
             ProposalsByExternalId = {
-                ["tmdb:271267"] = Proposal("tmdb", confidence: 1m, title: "The Chair Company", targetKind: "video-series"),
+                ["tmdb:271267"] = Proposal("tmdb", confidence: 1m, title: "The Chair Company", targetKind: ProposalKind.VideoSeries),
             },
         };
         var runner = new AutoIdentifyRunner(settings, identify, db, NullLogger<AutoIdentifyRunner>.Instance);
@@ -157,7 +158,7 @@ public sealed class AutoIdentifyRunnerTests {
         var proposal = new EntityMetadataProposal(
             ProposalId: Guid.NewGuid().ToString(),
             Provider: "p1",
-            TargetKind: "video-series",
+            TargetKind: ProposalKind.VideoSeries,
             Confidence: null,
             MatchReason: null,
             Patch: sparsePatch,
@@ -206,7 +207,7 @@ public sealed class AutoIdentifyRunnerTests {
         Assert.Empty(identify.IdentifyCalls);
     }
 
-    private static EntityMetadataProposal Proposal(string provider, decimal? confidence, string title, string targetKind = "video") =>
+    private static EntityMetadataProposal Proposal(string provider, decimal? confidence, string title, ProposalKind targetKind = ProposalKind.Video) =>
         new(
             ProposalId: Guid.NewGuid().ToString(),
             Provider: provider,
@@ -240,7 +241,7 @@ public sealed class AutoIdentifyRunnerTests {
         new(
             ProposalId: null!,
             Provider: provider,
-            TargetKind: "video-series",
+            TargetKind: ProposalKind.VideoSeries,
             Confidence: null,
             MatchReason: null,
             Patch: null!,

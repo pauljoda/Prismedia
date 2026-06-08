@@ -91,21 +91,42 @@
     return Math.abs(index - activeIndex) <= WINDOW;
   }
 
+  // The entity whose media the feed actually plays for a card. Images and videos
+  // play themselves; a gallery plays its representative cover child image, so the
+  // feed hydrates and sources that child entity rather than the container. Other
+  // kinds stay static posters. The hydrated entity is always cached under the
+  // card's own id, so every downstream helper keys off `card.entity.id`.
+  function feedMediaRef(card: EntityThumbnailCard): { id: string; kind: string } | null {
+    const kind = card.entity.kind;
+    if (kind === ENTITY_KIND.image || kind === ENTITY_KIND.video) {
+      return { id: card.entity.id, kind };
+    }
+    if (kind === ENTITY_KIND.gallery) {
+      const coverId =
+        card.cover?.entityId ??
+        (card.hover.kind === "image-sequence" ? card.hover.assets[0]?.entityId : undefined);
+      // A gallery's representative cover is an image child; play it like an image.
+      return coverId ? { id: coverId, kind: ENTITY_KIND.image } : null;
+    }
+    return null;
+  }
+
   // Mirror the lightbox: only the full entity detail carries the files/technical
   // capabilities needed to tell an animated image from a still and to build a
   // playable source, so hydrate window items on demand and cache the result.
   async function hydrate(card: EntityThumbnailCard) {
-    const id = card.entity.id;
-    if (card.entity.kind !== ENTITY_KIND.image && card.entity.kind !== ENTITY_KIND.video) return;
-    if (hydrated[id] || inFlight.has(id)) return;
-    inFlight.add(id);
+    const ref = feedMediaRef(card);
+    if (!ref) return;
+    const key = card.entity.id;
+    if (hydrated[key] || inFlight.has(key)) return;
+    inFlight.add(key);
     try {
-      const entity = card.entity.kind === ENTITY_KIND.video
-        ? await fetchVideo(id)
-        : await fetchImage(id);
+      const entity = ref.kind === ENTITY_KIND.video
+        ? await fetchVideo(ref.id)
+        : await fetchImage(ref.id);
       hydrated = {
         ...hydrated,
-        [id]: {
+        [key]: {
           id: entity.id,
           kind: entity.kind,
           title: entity.title,
@@ -117,7 +138,7 @@
     } catch {
       // Leave the card as a static cover when detail loading fails.
     } finally {
-      inFlight.delete(id);
+      inFlight.delete(key);
     }
   }
 
@@ -141,15 +162,20 @@
     const entity = hydrated[card.entity.id];
     if (!entity) return null;
 
-    if (entity.kind === ENTITY_KIND.video) {
+    // The centered item (and true videos) play the original for best quality.
+    if (entity.kind === ENTITY_KIND.video || allowOriginalFallback) {
       return buildLightboxVideoSources(entity, { preferOriginal: true })[0]?.src ?? null;
     }
 
-    if (allowOriginalFallback) {
-      return buildLightboxVideoSources(entity, { preferOriginal: true })[0]?.src ?? null;
-    }
-
-    return buildLightboxVideoSources(entity)[0]?.src ?? null;
+    // Off-center clips prefer a lightweight generated preview, but still fall back
+    // to the original source so source-only clips (e.g. a short .mp4 stored as an
+    // image in a gallery, with no generated preview) autoplay inline as soon as
+    // they enter the play window instead of sitting as a static poster.
+    return (
+      buildLightboxVideoSources(entity)[0]?.src ??
+      buildLightboxVideoSources(entity, { preferOriginal: true })[0]?.src ??
+      null
+    );
   }
 
   // Source URL for an in-window animated image, or null when the item isn't an
@@ -161,7 +187,9 @@
     const source = getCapability(entity.capabilities, CAPABILITY_KIND.files)?.items.find(
       (file) => file.role === ENTITY_FILE_ROLE.source,
     );
-    return source ? entityFileUrl(card.entity.id, ENTITY_FILE_ROLE.source) : null;
+    // Source from the hydrated media entity's id — for a gallery card this is the
+    // cover child image, not the gallery container.
+    return source ? entityFileUrl(entity.id, ENTITY_FILE_ROLE.source) : null;
   }
 
   function numberOf(value: number | string | null | undefined): number | null {

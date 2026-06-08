@@ -4,10 +4,11 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { EntityKind } from './entityKind';
 import type { EntityThumbnail } from './entityThumbnail';
 
 export interface CollectionRulePreviewItem {
-  entityType: string;
+  entityType: EntityKind;
   entityId: string;
   entity: EntityThumbnail;
 }

@@ -13,6 +13,7 @@ using Prismedia.Contracts.Collections;
 using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Jellyfin;
 using Prismedia.Contracts.Security;
+using Prismedia.Domain.Entities;
 using Prismedia.Contracts.Videos;
 
 namespace Prismedia.Api.Tests;
@@ -614,15 +615,15 @@ public sealed partial class SecurityEndpointTests : IDisposable {
                 return Task.FromResult<IEntityCard?>(null);
             }
 
-            return Task.FromResult<IEntityCard?>(id == SfwVideoId ? Card(id, "Visible Movie", isNsfw: false) with { Kind = kind } :
-                id == NsfwVideoId ? Card(id, "Hidden Movie", isNsfw: true) with { Kind = kind } :
+            return Task.FromResult<IEntityCard?>(id == SfwVideoId ? Card(id, "Visible Movie", isNsfw: false) with { Kind = kind.DecodeAs<EntityKind>() } :
+                id == NsfwVideoId ? Card(id, "Hidden Movie", isNsfw: true) with { Kind = kind.DecodeAs<EntityKind>() } :
                 null);
         }
 
         private static EntityCard Card(Guid id, string title, bool isNsfw) =>
             new() {
                 Id = id,
-                Kind = "video",
+                Kind = EntityKind.Video,
                 Title = title,
                 ParentEntityId = null,
                 SortOrder = null,
@@ -634,7 +635,7 @@ public sealed partial class SecurityEndpointTests : IDisposable {
         private static EntityThumbnail Thumbnail(Guid id, string title, bool isNsfw) =>
             new(
                 id,
-                "video",
+                EntityKind.Video,
                 title,
                 null,
                 null,
@@ -721,19 +722,19 @@ public sealed partial class SecurityEndpointTests : IDisposable {
         private static EntityCard SeriesCard() =>
             new() {
                 Id = SeriesId,
-                Kind = "video-series",
+                Kind = EntityKind.VideoSeries,
                 Title = "Direct Show",
                 ParentEntityId = null,
                 SortOrder = null,
                 Capabilities = [],
-                ChildrenByKind = [new EntityGroup("video", "Episodes", [EpisodeThumbnail()])],
+                ChildrenByKind = [new EntityGroup(EntityKind.Video, "Episodes", [EpisodeThumbnail()])],
                 Relationships = []
             };
 
         private static EntityCard EpisodeCard() =>
             new() {
                 Id = EpisodeId,
-                Kind = "video",
+                Kind = EntityKind.Video,
                 Title = "Episode 1",
                 ParentEntityId = SeriesId,
                 SortOrder = 0,
@@ -745,7 +746,7 @@ public sealed partial class SecurityEndpointTests : IDisposable {
         private static EntityThumbnail EpisodeThumbnail() =>
             new(
                 EpisodeId,
-                "video",
+                EntityKind.Video,
                 "Episode 1",
                 SeriesId,
                 0,
@@ -792,8 +793,8 @@ public sealed partial class SecurityEndpointTests : IDisposable {
             bool? played = null,
             bool? orphaned = null) {
             IReadOnlyList<EntityThumbnail> items = kind switch {
-                "video" => [Thumbnail(StandaloneId, "video", "Standalone Video", null, null), Thumbnail(EpisodeId, "video", "Pilot", SeasonId, 1)],
-                "video-series" => [Thumbnail(SeriesId, "video-series", "The Chair Company", null, null)],
+                "video" => [Thumbnail(StandaloneId, EntityKind.Video, "Standalone Video", null, null), Thumbnail(EpisodeId, EntityKind.Video, "Pilot", SeasonId, 1)],
+                "video-series" => [Thumbnail(SeriesId, EntityKind.VideoSeries, "The Chair Company", null, null)],
                 _ => []
             };
             return Task.FromResult(new EntityListResponse(items, null, items.Count));
@@ -818,44 +819,44 @@ public sealed partial class SecurityEndpointTests : IDisposable {
         private static EntityCard SeriesCard() =>
             new() {
                 Id = SeriesId,
-                Kind = "video-series",
+                Kind = EntityKind.VideoSeries,
                 Title = "The Chair Company",
                 ParentEntityId = null,
                 SortOrder = null,
                 Capabilities = [],
-                ChildrenByKind = [new EntityGroup("video-season", "Seasons", [Thumbnail(SeasonId, "video-season", "Season 1", SeriesId, 1)])],
+                ChildrenByKind = [new EntityGroup(EntityKind.VideoSeason, "Seasons", [Thumbnail(SeasonId, EntityKind.VideoSeason, "Season 1", SeriesId, 1)])],
                 Relationships = []
             };
 
         private static EntityCard SeasonCard() =>
             new() {
                 Id = SeasonId,
-                Kind = "video-season",
+                Kind = EntityKind.VideoSeason,
                 Title = "Season 1",
                 ParentEntityId = SeriesId,
                 SortOrder = 1,
                 Capabilities = [new PositionCapability([new EntityPosition("season", 1)])],
-                ChildrenByKind = [new EntityGroup("video", "Episodes", [Thumbnail(EpisodeId, "video", "Pilot", SeasonId, 1)])],
+                ChildrenByKind = [new EntityGroup(EntityKind.Video, "Episodes", [Thumbnail(EpisodeId, EntityKind.Video, "Pilot", SeasonId, 1)])],
                 Relationships = []
             };
 
         private static EntityCard VideoCard(Guid id, string title, Guid? parentId, int? sortOrder, string path) =>
             new() {
                 Id = id,
-                Kind = "video",
+                Kind = EntityKind.Video,
                 Title = title,
                 ParentEntityId = parentId,
                 SortOrder = sortOrder,
                 Capabilities = [
                     new TechnicalCapability(TimeSpan.FromMinutes(42), 1920, 1080, 23.976, 4_000_000, null, null, "h264", "mkv", "matroska"),
-                    new FilesCapability([new EntityFile("source", path, "video/x-matroska")]),
+                    new FilesCapability([new Contracts.Entities.EntityFile("source", path, "video/x-matroska")]),
                     new PositionCapability(sortOrder is null ? [] : [new EntityPosition("episode", sortOrder.Value)])
                 ],
                 ChildrenByKind = [],
                 Relationships = []
             };
 
-        private static EntityThumbnail Thumbnail(Guid id, string kind, string title, Guid? parentId, int? sortOrder) =>
+        private static EntityThumbnail Thumbnail(Guid id, EntityKind kind, string title, Guid? parentId, int? sortOrder) =>
             new(
                 id,
                 kind,
@@ -906,7 +907,7 @@ public sealed partial class SecurityEndpointTests : IDisposable {
             bool? hasFile = null,
             bool? played = null,
             bool? orphaned = null) =>
-            Task.FromResult(new EntityListResponse([Thumbnail(VideoId, "video", "Rich Movie", null, null)], null, 1));
+            Task.FromResult(new EntityListResponse([Thumbnail(VideoId, EntityKind.Video, "Rich Movie", null, null)], null, 1));
 
         public Task<EntityCard?> GetAsync(Guid id, bool hideNsfw, CancellationToken cancellationToken) =>
             Task.FromResult<EntityCard?>(id == VideoId ? Card() : null);
@@ -923,7 +924,7 @@ public sealed partial class SecurityEndpointTests : IDisposable {
         private static EntityCard Card() =>
             new() {
                 Id = VideoId,
-                Kind = "video",
+                Kind = EntityKind.Video,
                 Title = "Rich Movie",
                 ParentEntityId = null,
                 SortOrder = null,
@@ -935,7 +936,7 @@ public sealed partial class SecurityEndpointTests : IDisposable {
         private static VideoDetail Detail() =>
             new() {
                 Id = VideoId,
-                Kind = "video",
+                Kind = EntityKind.Video,
                 Title = "Rich Movie",
                 ParentEntityId = null,
                 SortOrder = null,
@@ -960,8 +961,8 @@ public sealed partial class SecurityEndpointTests : IDisposable {
                 ]),
                 new ClassificationCapability("R", "mpaa"),
                 new LinksCapability(
-                    [new EntityUrl("https://example.test/rich-movie", "Home")],
-                    [new EntityExternalId("imdb", "tt1234567", "https://www.imdb.com/title/tt1234567/")]),
+                    [new Contracts.Entities.EntityUrl("https://example.test/rich-movie", "Home")],
+                    [new Contracts.Entities.EntityExternalId("imdb", "tt1234567", "https://www.imdb.com/title/tt1234567/")]),
                 new ImagesCapability(
                     ["thumbnail", "poster", "backdrop", "logo"],
                     [
@@ -971,25 +972,25 @@ public sealed partial class SecurityEndpointTests : IDisposable {
                     ],
                     "/assets/poster-thumb.jpg",
                     "/assets/poster.jpg"),
-                new FilesCapability([new EntityFile("source", "/media/rich-movie.mkv", "video/x-matroska")]),
+                new FilesCapability([new Contracts.Entities.EntityFile("source", "/media/rich-movie.mkv", "video/x-matroska")]),
                 new MarkersCapability([new EntityMarker(Guid.Parse("99999999-9999-9999-9999-999999999999"), "Opening", 12, null)]),
                 new SubtitlesCapability([
-                    new EntitySubtitle(Guid.Parse("12121212-1212-1212-1212-121212121212"), "en", "English SDH", "vtt", "external", "/subs/rich.en.vtt", "srt", "/subs/rich.en.srt", true)
+                    new EntitySubtitle(Guid.Parse("12121212-1212-1212-1212-121212121212"), "en", "English SDH", "vtt", EntitySubtitleSource.Sidecar, "/subs/rich.en.vtt", "srt", "/subs/rich.en.srt", true)
                 ])
             ];
 
         private static IReadOnlyList<EntityGroup> Relationships() =>
             [
-                new EntityGroup("person", "Cast", [Thumbnail(ActorId, "person", "Actor One", null, null)]) { Code = "cast" },
-                new EntityGroup("person", "Credits", [Thumbnail(DirectorId, "person", "Director One", null, null)]) { Code = "credits" },
-                new EntityGroup("studio", "Studios", [Thumbnail(StudioId, "studio", "Studio One", null, null)]) { Code = "studio" },
-                new EntityGroup("tag", "Tags", [
-                    Thumbnail(AdventureTagId, "tag", "Adventure", null, null),
-                    Thumbnail(CozyTagId, "tag", "Cozy", null, null)
-                ]) { Code = "tags" }
+                new EntityGroup(EntityKind.Person, "Cast", [Thumbnail(ActorId, EntityKind.Person, "Actor One", null, null)]) { Code = RelationshipKind.Cast },
+                new EntityGroup(EntityKind.Person, "Credits", [Thumbnail(DirectorId, EntityKind.Person, "Director One", null, null)]) { Code = RelationshipKind.Credits },
+                new EntityGroup(EntityKind.Studio, "Studios", [Thumbnail(StudioId, EntityKind.Studio, "Studio One", null, null)]) { Code = RelationshipKind.Studio },
+                new EntityGroup(EntityKind.Tag, "Tags", [
+                    Thumbnail(AdventureTagId, EntityKind.Tag, "Adventure", null, null),
+                    Thumbnail(CozyTagId, EntityKind.Tag, "Cozy", null, null)
+                ]) { Code = RelationshipKind.Tags }
             ];
 
-        private static EntityThumbnail Thumbnail(Guid id, string kind, string title, Guid? parentId, int? sortOrder) =>
+        private static EntityThumbnail Thumbnail(Guid id, EntityKind kind, string title, Guid? parentId, int? sortOrder) =>
             new(
                 id,
                 kind,

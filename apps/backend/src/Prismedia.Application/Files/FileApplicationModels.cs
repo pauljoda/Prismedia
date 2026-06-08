@@ -1,4 +1,5 @@
 using Prismedia.Contracts.Files;
+using Prismedia.Contracts.System;
 
 namespace Prismedia.Application.Files;
 
@@ -138,6 +139,6 @@ public class FileOperationException : Exception {
 /// Filesystem operation failure caused by an existing target path.
 /// </summary>
 public sealed class FileConflictException : FileOperationException {
-    public FileConflictException(string message) : base("file_conflict", message) {
+    public FileConflictException(string message) : base(ApiProblemCodes.FileConflict, message) {
     }
 }

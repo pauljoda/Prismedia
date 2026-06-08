@@ -7,6 +7,7 @@ using Prismedia.Contracts.Plugins;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
+using Prismedia.Infrastructure.Serialization;
 
 namespace Prismedia.Infrastructure.Plugins;
 
@@ -16,7 +17,10 @@ namespace Prismedia.Infrastructure.Plugins;
 public sealed class IdentifyQueueService : IIdentifyQueueService {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) {
         PropertyNameCaseInsensitive = true,
-        WriteIndented = false
+        WriteIndented = false,
+        // Persisted proposal/query JSON carries codec enums (e.g. proposal TargetKind) as their
+        // stable string code, so the stored column matches the HTTP/plugin wire format.
+        Converters = { new CodecJsonConverterFactory() }
     };
 
     private readonly PrismediaDbContext _db;
@@ -334,7 +338,7 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
         if (!string.Equals(proposal.ProposalId, storedProposal.ProposalId, StringComparison.Ordinal)) {
             throw new InvalidOperationException("Only the root identify proposal can be applied to a queue item.");
         }
-        if (!string.Equals(proposal.TargetKind, entity.KindCode, StringComparison.OrdinalIgnoreCase)) {
+        if (proposal.TargetKind.ToEntityKind() != entity.KindCode.DecodeAs<EntityKind>()) {
             throw new InvalidOperationException("Identify proposal kind does not match the queued entity.");
         }
         var acceptedProposal = MarkAcceptedProposalTreeOrganized(proposal);
@@ -467,7 +471,7 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
         new(
             row.Id,
             row.EntityId,
-            entity.KindCode,
+            entity.KindCode.DecodeAs<EntityKind>(),
             entity.Title,
             entity.IsNsfw,
             row.State.ToCode(),

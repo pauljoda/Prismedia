@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Prismedia.Application.Entities;
 using Prismedia.Application.Security;
 using Prismedia.Contracts.Entities;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Api.Tests;
 
@@ -62,12 +63,12 @@ internal static class TestAuth {
             Task.FromResult(new EntityThumbnailBatchResponse([]));
 
         public Task<IEntityCard?> GetDetailAsync(Guid id, string kind, bool hideNsfw, CancellationToken cancellationToken) =>
-            Task.FromResult<IEntityCard?>(Card(id) with { Kind = kind });
+            Task.FromResult<IEntityCard?>(Card(id) with { Kind = kind.DecodeAs<EntityKind>() });
 
         private static EntityCard Card(Guid id) =>
             new() {
                 Id = id,
-                Kind = "video",
+                Kind = EntityKind.Video,
                 Title = "Visible Video",
                 ParentEntityId = null,
                 SortOrder = null,

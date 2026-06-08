@@ -12,12 +12,12 @@ internal static class EntityEndpointResults {
         CancellationToken cancellationToken) {
         var entity = await entities.GetAsync(id, hideNsfw, cancellationToken);
         return entity is null
-            ? Results.NotFound(new ApiProblem("entity_not_found", $"Entity '{id}' was not found."))
+            ? Results.NotFound(new ApiProblem(ApiProblemCodes.EntityNotFound, $"Entity '{id}' was not found."))
             : Results.Ok(entity);
     }
 
     internal static IResult ToResult(Guid id, EntityCard? card) =>
         card is null
-            ? Results.NotFound(new ApiProblem("entity_not_found", $"Entity '{id}' was not found."))
+            ? Results.NotFound(new ApiProblem(ApiProblemCodes.EntityNotFound, $"Entity '{id}' was not found."))
             : Results.Ok(card);
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { EntityCapability, EntityCard, EntityThumbnail } from "$lib/api/generated/model";
+import type { EntityCapability, EntityCard, EntityThumbnail, EntityKind } from "$lib/api/generated/model";
 import {
   ENTITY_GRID_ALL_KINDS,
   applyEntityGridState,
@@ -71,7 +71,7 @@ function position(items: { code: string; value: number; label?: string | null }[
   };
 }
 
-function card(id: string, kind: string, title: string, capabilities: EntityCapability[]): EntityCard {
+function card(id: string, kind: EntityKind, title: string, capabilities: EntityCapability[]): EntityCard {
   return { id, kind, title, parentEntityId: null, sortOrder: null, capabilities, childrenByKind: [], relationships: [] };
 }
 
@@ -276,8 +276,8 @@ describe("entity grid helpers", () => {
     expect(thumbnail.hover).toEqual({
       kind: "image-sequence",
       assets: [
-        { src: "/assets/pages/1.jpg", alt: "Page 1 preview", role: "preview" },
-        { src: "/assets/pages/2.jpg", alt: "Page 2 preview", role: "preview" },
+        { src: "/assets/pages/1.jpg", alt: "Page 1 preview", role: "preview", entityId: "page-1" },
+        { src: "/assets/pages/2.jpg", alt: "Page 2 preview", role: "preview", entityId: "page-2" },
       ],
     });
   });
@@ -299,7 +299,7 @@ describe("entity grid helpers", () => {
 
 function thumbnailEntity(
   id: string,
-  kind: string,
+  kind: EntityKind,
   title: string,
   hoverImages: EntityThumbnail["hoverImages"] = [],
 ): EntityThumbnail {

@@ -664,7 +664,7 @@ function detail(id: string, options: Partial<EntityDetailCard> = {}): EntityDeta
 
 function proposal(
   proposalId: string,
-  options: { targetKind?: string; title?: string } = {},
+  options: { targetKind?: EntityMetadataProposal["targetKind"]; title?: string } = {},
 ): EntityMetadataProposal {
   return {
     proposalId,

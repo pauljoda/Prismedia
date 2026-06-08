@@ -16,7 +16,8 @@
     "api:generate": "orval --config orval.config.ts && node scripts/gen-codes.mjs",
     "api:generate:codes": "node scripts/gen-codes.mjs",
     "test": "pnpm test:unit",
-    "test:unit": "vitest run --config vitest.config.ts"
+    "test:unit": "vitest run --config vitest.config.ts",
+    "api:check": "node scripts/check-generated.mjs"
   },
   "dependencies": {
     "@fontsource/cinzel": "^5.2.8",

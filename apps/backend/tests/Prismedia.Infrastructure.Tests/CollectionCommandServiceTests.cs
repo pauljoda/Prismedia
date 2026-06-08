@@ -21,9 +21,9 @@ public sealed class CollectionCommandServiceTests {
             new CollectionWriteRequest(
                 "Favorites",
                 "Pinned media",
-                "hybrid",
+                CollectionMode.Hybrid,
                 EmptyRuleJson,
-                "mosaic",
+                CollectionCoverMode.Mosaic,
                 null,
                 true),
             CancellationToken.None);
@@ -31,7 +31,7 @@ public sealed class CollectionCommandServiceTests {
         Assert.Equal(CollectionCommandStatus.Succeeded, result.Status);
         Assert.NotNull(result.Collection);
         Assert.Equal("Favorites", result.Collection.Title);
-        Assert.Equal("hybrid", result.Collection.Mode);
+        Assert.Equal(CollectionMode.Hybrid, result.Collection.Mode);
 
         var entity = Assert.Single(db.Entities);
         Assert.Equal(EntityKindRegistry.Collection.Code, entity.KindCode);
@@ -41,9 +41,9 @@ public sealed class CollectionCommandServiceTests {
     }
 
     [Theory]
-    [InlineData("dynamic")]
-    [InlineData("hybrid")]
-    public async Task CreateAsyncAcceptsValidRuleCollections(string mode) {
+    [InlineData(CollectionMode.Dynamic)]
+    [InlineData(CollectionMode.Hybrid)]
+    public async Task CreateAsyncAcceptsValidRuleCollections(CollectionMode mode) {
         await using var db = CreateContext();
         var matchedId = SeedEntity(db, EntityKindRegistry.Video.Code, "Rule Match");
         await db.SaveChangesAsync();
@@ -59,7 +59,7 @@ public sealed class CollectionCommandServiceTests {
                 null,
                 mode,
                 """{"type":"group","operator":"and","children":[{"type":"condition","entityTypes":["video"],"field":"title","operator":"contains","value":"Rule"}]}""",
-                "mosaic",
+                CollectionCoverMode.Mosaic,
                 null,
                 false),
             CancellationToken.None);
@@ -86,9 +86,9 @@ public sealed class CollectionCommandServiceTests {
             new CollectionWriteRequest(
                 "Bad Rules",
                 null,
-                "dynamic",
+                CollectionMode.Dynamic,
                 ruleTreeJson,
-                "mosaic",
+                CollectionCoverMode.Mosaic,
                 null,
                 false),
             CancellationToken.None);
@@ -109,9 +109,9 @@ public sealed class CollectionCommandServiceTests {
             new CollectionWriteRequest(
                 "Rule Picks",
                 null,
-                "dynamic",
+                CollectionMode.Dynamic,
                 EmptyRuleJson,
-                "item",
+                CollectionCoverMode.Item,
                 null,
                 false),
             CancellationToken.None);
@@ -142,9 +142,9 @@ public sealed class CollectionCommandServiceTests {
             new CollectionWriteRequest(
                 "Rule Picks",
                 null,
-                "dynamic",
+                CollectionMode.Dynamic,
                 """{"type":"group","operator":"and","children":[{"type":"condition","entityTypes":[],"field":"title","operator":"contains","value":"Chair"}]}""",
-                "mosaic",
+                CollectionCoverMode.Mosaic,
                 null,
                 false),
             CancellationToken.None);
@@ -169,9 +169,9 @@ public sealed class CollectionCommandServiceTests {
         var added = await service.AddItemsAsync(
             collectionId,
             new CollectionAddItemsRequest([
-                new CollectionItemReference("video", firstId),
-                new CollectionItemReference("image", secondId),
-                new CollectionItemReference("video", firstId),
+                new CollectionItemReference(EntityKind.Video, firstId),
+                new CollectionItemReference(EntityKind.Image, secondId),
+                new CollectionItemReference(EntityKind.Video, firstId),
             ]),
             CancellationToken.None);
 
@@ -212,7 +212,7 @@ public sealed class CollectionCommandServiceTests {
 
         var added = await service.AddItemsAsync(
             collectionId,
-            new CollectionAddItemsRequest([new CollectionItemReference("video-series", seriesId)]),
+            new CollectionAddItemsRequest([new CollectionItemReference(EntityKind.VideoSeries, seriesId)]),
             CancellationToken.None);
 
         Assert.Equal(CollectionCommandStatus.Succeeded, added.Status);
@@ -220,7 +220,7 @@ public sealed class CollectionCommandServiceTests {
 
         var rejected = await service.AddItemsAsync(
             collectionId,
-            new CollectionAddItemsRequest([new CollectionItemReference("collection", nestedCollectionId)]),
+            new CollectionAddItemsRequest([new CollectionItemReference(EntityKind.Collection, nestedCollectionId)]),
             CancellationToken.None);
 
         Assert.Equal(CollectionCommandStatus.Invalid, rejected.Status);
@@ -237,7 +237,7 @@ public sealed class CollectionCommandServiceTests {
 
         var result = await service.AddItemsAsync(
             collectionId,
-            new CollectionAddItemsRequest([new CollectionItemReference("video", videoId)]),
+            new CollectionAddItemsRequest([new CollectionItemReference(EntityKind.Video, videoId)]),
             CancellationToken.None);
 
         Assert.Equal(CollectionCommandStatus.Invalid, result.Status);
@@ -288,7 +288,7 @@ public sealed class CollectionCommandServiceTests {
         Assert.Equal(1, preview.Total);
         Assert.Equal(1, preview.ByType["video-series"]);
         var item = Assert.Single(preview.Sample);
-        Assert.Equal("video-series", item.EntityType);
+        Assert.Equal(EntityKind.VideoSeries, item.EntityType);
         Assert.Equal(seriesId, item.EntityId);
     }
 
@@ -382,7 +382,7 @@ public sealed class CollectionCommandServiceTests {
                 .Where(row => row is not null)
                 .Select(row => new EntityThumbnail(
                     row!.Id,
-                    row.KindCode,
+                    row.KindCode.DecodeAs<EntityKind>(),
                     row.Title,
                     row.ParentEntityId,
                     row.SortOrder,
@@ -408,16 +408,16 @@ public sealed class CollectionCommandServiceTests {
                 .FirstAsync(row => row.EntityId == id, cancellationToken);
             return new CollectionDetail {
                 Id = entity.Id,
-                Kind = entity.KindCode,
+                Kind = entity.KindCode.DecodeAs<EntityKind>(),
                 Title = entity.Title,
                 ParentEntityId = entity.ParentEntityId,
                 SortOrder = entity.SortOrder,
                 Capabilities = [],
                 ChildrenByKind = [],
                 Relationships = [],
-                Mode = detail.Mode.ToCode(),
+                Mode = detail.Mode,
                 RuleTreeJson = detail.RuleTreeJson,
-                CoverMode = detail.CoverMode.ToCode(),
+                CoverMode = detail.CoverMode,
                 CoverItemId = detail.CoverItemEntityId,
                 LastRefreshedAt = detail.LastRefreshedAt,
             };

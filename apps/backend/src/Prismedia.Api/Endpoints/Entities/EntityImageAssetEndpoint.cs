@@ -14,13 +14,13 @@ internal static class EntityImageAssetEndpoint {
             IEntityReadService entities,
             CancellationToken cancellationToken) => {
             if (!request.HasFormContentType) {
-                return Results.BadRequest(new ApiProblem("invalid_entity_image_upload", "Image upload expects multipart form data."));
+                return Results.BadRequest(new ApiProblem(ApiProblemCodes.InvalidEntityImageUpload, "Image upload expects multipart form data."));
             }
 
             var form = await request.ReadFormAsync(cancellationToken);
             var file = form.Files.GetFile("file") ?? form.Files.FirstOrDefault();
             if (file is null || file.Length == 0) {
-                return Results.BadRequest(new ApiProblem("invalid_entity_image_upload", "Image upload requires a non-empty file."));
+                return Results.BadRequest(new ApiProblem(ApiProblemCodes.InvalidEntityImageUpload, "Image upload requires a non-empty file."));
             }
 
             await using var stream = file.OpenReadStream();
@@ -61,12 +61,12 @@ internal static class EntityImageAssetEndpoint {
             EntityImageAssetMutationResult.Updated =>
                 await EntityEndpointResults.GetEntityAsync(id, false, entities, cancellationToken),
             EntityImageAssetMutationResult.NotFound =>
-                Results.NotFound(new ApiProblem("entity_not_found", $"Entity '{id}' was not found.")),
+                Results.NotFound(new ApiProblem(ApiProblemCodes.EntityNotFound, $"Entity '{id}' was not found.")),
             EntityImageAssetMutationResult.InvalidFile =>
-                Results.BadRequest(new ApiProblem("invalid_entity_image_upload", "Only image uploads are supported.")),
+                Results.BadRequest(new ApiProblem(ApiProblemCodes.InvalidEntityImageUpload, "Only image uploads are supported.")),
             EntityImageAssetMutationResult.UnsupportedRole =>
-                Results.BadRequest(new ApiProblem("unsupported_entity_image_role", "That image role cannot be managed manually.")),
+                Results.BadRequest(new ApiProblem(ApiProblemCodes.UnsupportedEntityImageRole, "That image role cannot be managed manually.")),
             _ =>
-                Results.BadRequest(new ApiProblem("invalid_entity_image_upload", "The image asset could not be updated."))
+                Results.BadRequest(new ApiProblem(ApiProblemCodes.InvalidEntityImageUpload, "The image asset could not be updated."))
         };
 }

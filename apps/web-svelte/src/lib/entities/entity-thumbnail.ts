@@ -1,4 +1,4 @@
-import type { EntityCapability, EntityCard, EntityThumbnail } from "$lib/api/generated/model";
+import type { EntityCapability, EntityCard, EntityThumbnail, EntityKind } from "$lib/api/generated/model";
 import { ENTITY_KIND, resolveEntityHref, type EntityRouteContext } from "./entity-codes";
 
 /** Standard thumbnail shapes used by global entity cards before route-specific layout chooses a size. */
@@ -24,6 +24,13 @@ export interface EntityThumbnailAsset {
    * small cards and the full-resolution `src` only at large sizes.
    */
   thumbSrc?: string;
+  /**
+   * Owning entity id when this asset is the cover/preview frame of a distinct
+   * child entity (e.g. a gallery's representative cover image). Carried so the
+   * feed can hydrate and autoplay the child media that the cover stands in for;
+   * absent when the asset belongs to the card's own entity.
+   */
+  entityId?: string;
 }
 
 /** Hover preview behavior supported by the shared thumbnail surface. */
@@ -74,10 +81,10 @@ export interface EntityThumbnailCustomOverlay {
 /** Entity payload consumed by the shared thumbnail surface. */
 export interface EntityThumbnailEntity {
   id: string;
-  kind: string;
+  kind: EntityKind;
   title: string;
   parentEntityId: string | null;
-  parentKind?: string | null;
+  parentKind?: EntityKind | null;
   sortOrder: number | string | null;
   capabilities: EntityCapability[];
   childrenByKind: EntityCard["childrenByKind"];

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { EntityKind } from "$lib/api/generated/model";
   import type { LucideIcon } from "@lucide/svelte";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
   import type { EntityDetailCredit } from "$lib/entities/entity-detail";
@@ -25,7 +26,7 @@
           <EntityThumbnail
             card={entityReferenceToThumbnailCard({
               id: reference.id,
-              kind: reference.kind,
+              kind: reference.kind as EntityKind,
               title: reference.title,
               thumbnailUrl: reference.thumbnail,
             })}

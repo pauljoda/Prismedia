@@ -75,7 +75,7 @@ public sealed class EntityCardProjectorContractTests {
 
         Assert.Equal("poster", Assert.Single(AssertCapability<ImagesCapability>(card).Items).Kind);
         Assert.Equal("Intro", Assert.Single(AssertCapability<MarkersCapability>(card).Items).Title);
-        Assert.Equal("sidecar", Assert.Single(AssertCapability<SubtitlesCapability>(card).Items).Source);
+        Assert.Equal(EntitySubtitleSource.Sidecar, Assert.Single(AssertCapability<SubtitlesCapability>(card).Items).Source);
         Assert.Equal("md5", Assert.Single(AssertCapability<FingerprintsCapability>(card).Items).Algorithm);
         Assert.Equal("chapters", Assert.Single(AssertCapability<StatsCapability>(card).Items).Code);
         Assert.Equal("release", Assert.Single(AssertCapability<DatesCapability>(card).Items).Code);

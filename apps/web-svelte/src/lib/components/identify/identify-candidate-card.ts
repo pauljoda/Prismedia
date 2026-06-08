@@ -1,4 +1,5 @@
 import type { EntityThumbnailCard, EntityThumbnailMetaItem } from "$lib/entities/entity-thumbnail";
+import type { EntityKind } from "$lib/api/generated/model";
 
 const PROVIDER_PRIORITY = ["tmdb", "imdb", "tvdb", "musicbrainz", "stash"] as const;
 
@@ -80,7 +81,7 @@ export function identifyCandidateToThumbnailCard(
     cover: candidate.posterUrl ? { src: candidate.posterUrl, alt: candidate.title } : null,
     entity: {
       id: identifyCandidateKey(candidate, index),
-      kind: entityKind,
+      kind: entityKind as EntityKind,
       title: candidate.title,
       parentEntityId: null,
       sortOrder: null,

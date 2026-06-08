@@ -1,4 +1,5 @@
 using Prismedia.Application.Plugins;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Infrastructure.Tests;
 
@@ -12,7 +13,7 @@ public sealed class IdentifyApplyProgressStoreTests {
         store.Begin(operationId, entityId, total: 4);
         var snapshot = store.ReportStep(
             operationId,
-            new IdentifyApplyProgressStep("video", "Episode 3", ["Series", "Season 1", "Episode 3"]));
+            new IdentifyApplyProgressStep(EntityKind.Video, "Episode 3", ["Series", "Season 1", "Episode 3"]));
 
         Assert.Equal("running", snapshot.State);
         Assert.Equal(entityId, snapshot.EntityId);
@@ -29,7 +30,7 @@ public sealed class IdentifyApplyProgressStoreTests {
         var entityId = Guid.NewGuid();
 
         store.Begin(operationId, entityId, total: 3);
-        store.ReportStep(operationId, new IdentifyApplyProgressStep("video-series", "Series", ["Series"]));
+        store.ReportStep(operationId, new IdentifyApplyProgressStep(EntityKind.VideoSeries, "Series", ["Series"]));
         var snapshot = store.Complete(operationId);
 
         Assert.Equal("succeeded", snapshot.State);

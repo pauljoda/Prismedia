@@ -1,3 +1,5 @@
+using Prismedia.Domain.Entities;
+
 namespace Prismedia.Contracts.Plugins;
 
 /// <summary>
@@ -17,13 +19,13 @@ public sealed record IdentifyMatchHints(
 /// Minimal entity snapshot passed to plugins.
 /// </summary>
 /// <param name="Id">Prismedia entity identifier.</param>
-/// <param name="Kind">Prismedia entity kind code.</param>
+/// <param name="Kind">Prismedia entity kind.</param>
 /// <param name="Title">Current title.</param>
 /// <param name="ExternalIds">Provider-specific identities already attached to the entity.</param>
 /// <param name="Urls">Entity URLs that may carry provider identity.</param>
 public sealed record IdentifyEntitySnapshot(
     Guid Id,
-    string Kind,
+    EntityKind Kind,
     string Title,
     IReadOnlyDictionary<string, string>? ExternalIds = null,
     IReadOnlyList<string>? Urls = null);

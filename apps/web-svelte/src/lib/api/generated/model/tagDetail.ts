@@ -6,11 +6,12 @@
  */
 import type { EntityCapability } from './entityCapability';
 import type { EntityGroup } from './entityGroup';
+import type { EntityKind } from './entityKind';
 
 export interface TagDetail {
   ignoreAutoTag: boolean;
   id: string;
-  kind: string;
+  kind: EntityKind;
   title: string;
   /** @nullable */
   parentEntityId: string | null;

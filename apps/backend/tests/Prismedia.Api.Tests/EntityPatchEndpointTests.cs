@@ -1,8 +1,10 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Prismedia.Infrastructure.Serialization;
 using Prismedia.Application.Entities;
 using Prismedia.Domain.Capabilities;
 using Prismedia.Domain.Entities;
@@ -13,6 +15,11 @@ using Prismedia.Contracts.Plugins;
 namespace Prismedia.Api.Tests;
 
 public sealed class EntityPatchEndpointTests {
+    // Codec enums (e.g. EntityCard.Kind) serialize as their string code; the client needs the
+    // same converter to deserialize the typed DTO.
+    private static readonly JsonSerializerOptions CodecJson =
+        new(JsonSerializerDefaults.Web) { Converters = { new CodecJsonConverterFactory() } };
+
     private static readonly Guid EntityId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid VolumeId = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private static readonly Guid ChapterId = Guid.Parse("33333333-3333-3333-3333-333333333333");
@@ -25,7 +32,7 @@ public sealed class EntityPatchEndpointTests {
         using var response = await client.PatchAsJsonAsync(
             $"/api/entities/video/{EntityId}",
             Request("Updated Title"));
-        var card = await response.Content.ReadFromJsonAsync<EntityCard>();
+        var card = await response.Content.ReadFromJsonAsync<EntityCard>(CodecJson);
         var patcher = factory.Services.GetRequiredService<FakeEntityMetadataPatchService>();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
@@ -286,7 +293,7 @@ public sealed class EntityPatchEndpointTests {
             throw new NotSupportedException();
 
         public Task<EntityCard?> GetAsync(Guid id, bool hideNsfw, CancellationToken cancellationToken) =>
-            Task.FromResult<EntityCard?>(Card(id, "video", "Updated Title"));
+            Task.FromResult<EntityCard?>(Card(id, EntityKind.Video, "Updated Title"));
 
         public Task<EntityThumbnailBatchResponse> GetThumbnailsAsync(
             IReadOnlyList<Guid> ids,
@@ -295,9 +302,9 @@ public sealed class EntityPatchEndpointTests {
             throw new NotSupportedException();
 
         public Task<IEntityCard?> GetDetailAsync(Guid id, string kind, bool hideNsfw, CancellationToken cancellationToken) =>
-            Task.FromResult<IEntityCard?>(Card(id, kind, kind == "video" ? "Video Title" : "Updated Title"));
+            Task.FromResult<IEntityCard?>(Card(id, kind.DecodeAs<EntityKind>(), kind == "video" ? "Video Title" : "Updated Title"));
 
-        private static EntityCard Card(Guid id, string kind, string title) =>
+        private static EntityCard Card(Guid id, EntityKind kind, string title) =>
             new() {
                 Id = id,
                 Kind = kind,

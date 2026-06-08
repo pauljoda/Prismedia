@@ -7,6 +7,18 @@ namespace Prismedia.Api.Jellyfin;
 /// Jellyfin endpoints that must be reachable before a session token exists.
 /// </summary>
 internal static class JellyfinRoutes {
+    /// <summary>Videos prefix; also a lowercase SPA route, so matched shape-aware.</summary>
+    public const string VideosPrefix = "/Videos";
+
+    /// <summary>Audio prefix; also a lowercase SPA route, so matched shape-aware.</summary>
+    public const string AudioPrefix = "/Audio";
+
+    /// <summary>Artists prefix; also a lowercase SPA route, so matched shape-aware.</summary>
+    public const string ArtistsPrefix = "/Artists";
+
+    /// <summary>Library prefix; also a lowercase SPA route, so matched shape-aware.</summary>
+    public const string LibraryPrefix = "/Library";
+
     /// <summary>Path prefixes that identify a request as targeting the Jellyfin surface.</summary>
     public static readonly string[] Prefixes =
     [
@@ -15,21 +27,76 @@ internal static class JellyfinRoutes {
         "/UserViews",
         "/Items",
         "/Shows",
-        "/Artists",
-        "/Videos",
-        "/Audio",
+        ArtistsPrefix,
+        VideosPrefix,
+        AudioPrefix,
         "/Sessions",
         "/UserPlayedItems",
         "/UserItems",
         "/MediaSegments",
-        "/Library",
+        LibraryPrefix,
         "/Branding",
         "/QuickConnect",
         "/DisplayPreferences"
     ];
 
-    /// <summary>Library prefix, matched case-sensitively to avoid colliding with the SPA.</summary>
-    public const string LibraryPrefix = "/Library";
+    /// <summary>
+    /// Jellyfin prefixes that also exist as lowercase SPA routes (<c>/videos</c>, <c>/audio</c>,
+    /// <c>/artists</c>, <c>/library</c>). These are matched shape-aware: the bare page and the
+    /// entity-detail route (<c>/videos/{id}</c>) belong to the SPA, while PascalCase or
+    /// sub-resource paths (<c>/Videos/{id}/stream</c>, <c>/videos/ActiveEncodings</c>) are Jellyfin.
+    /// </summary>
+    private static readonly string[] SpaCollidablePrefixes =
+    [
+        VideosPrefix,
+        AudioPrefix,
+        ArtistsPrefix,
+        LibraryPrefix
+    ];
+
+    /// <summary>
+    /// Classifies a request path as targeting the Jellyfin surface. Shared by the dev proxy
+    /// and authentication so both agree on which lowercase requests belong to the backend
+    /// (Jellyfin clients such as Infuse send lowercase routes) versus the Svelte SPA.
+    /// </summary>
+    public static bool IsJellyfinRequest(string path) =>
+        Prefixes.Any(prefix => MatchesPrefix(path, prefix));
+
+    private static bool MatchesPrefix(string path, string prefix) {
+        // Non-colliding prefixes (e.g. /Items, /Users): match case-insensitively so lowercase
+        // clients still reach the backend.
+        if (Array.IndexOf(SpaCollidablePrefixes, prefix) < 0) {
+            return path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
+        }
+
+        // Colliding prefixes double as SPA routes. PascalCase is always Jellyfin; the lowercase
+        // form is Jellyfin only when it is a sub-resource rather than the bare page or detail route.
+        if (StartsWithSegment(path, prefix, StringComparison.Ordinal)) {
+            return true;
+        }
+
+        if (!StartsWithSegment(path, prefix, StringComparison.OrdinalIgnoreCase)) {
+            return false;
+        }
+
+        return !IsSpaEntityPath(path, prefix);
+    }
+
+    /// <summary>True when <paramref name="path"/> begins with <paramref name="prefix"/> on a path-segment boundary.</summary>
+    private static bool StartsWithSegment(string path, string prefix, StringComparison comparison) =>
+        path.StartsWith(prefix, comparison) &&
+        (path.Length == prefix.Length || path[prefix.Length] == '/');
+
+    /// <summary>True for the SPA list page (<c>/videos</c>) and entity-detail route (<c>/videos/{guid}</c>).</summary>
+    private static bool IsSpaEntityPath(string path, string prefix) {
+        var remainder = path[prefix.Length..].Trim('/');
+        if (remainder.Length == 0) {
+            return true;
+        }
+
+        var segments = remainder.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        return segments.Length == 1 && Guid.TryParse(segments[0], out _);
+    }
 
     /// <summary>Public system info endpoint.</summary>
     public const string SystemInfoPublic = "/System/Info/Public";

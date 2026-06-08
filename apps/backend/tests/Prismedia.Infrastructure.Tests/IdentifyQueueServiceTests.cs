@@ -10,6 +10,7 @@ using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 using Prismedia.Infrastructure.Plugins;
 using Prismedia.Infrastructure.Processes;
+using Prismedia.Infrastructure.Serialization;
 
 namespace Prismedia.Infrastructure.Tests;
 
@@ -56,7 +57,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         var item = await service.AddAsync(entityId, CancellationToken.None);
 
         Assert.Equal(entityId, item.EntityId);
-        Assert.Equal("video-series", item.EntityKind);
+        Assert.Equal(EntityKind.VideoSeries, item.EntityKind);
         Assert.Equal("Mystery Show", item.Title);
         Assert.Equal("search", item.State);
         Assert.Null(item.Provider);
@@ -237,7 +238,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         // The item is mid-review with the seeded parent proposal (no children yet), already owned by the
         // newer cascade B.
         var seed = new EntityMetadataProposal(
-            "tmdb:series:1", "tmdb", "video-series", 1, "external-id",
+            "tmdb:series:1", "tmdb", ProposalKind.VideoSeries, 1, "external-id",
             EmptyPatch("Known Series identified"), [], [], [], TargetEntityId: seriesId, Relationships: []);
         db.IdentifyQueueItems.Add(new IdentifyQueueItemRow {
             Id = Guid.NewGuid(),
@@ -633,7 +634,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         new(
             "tmdb:123",
             "tmdb",
-            "video",
+            ProposalKind.Video,
             1,
             "external-id",
             new EntityMetadataPatch(
@@ -658,7 +659,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         var person = new EntityMetadataProposal(
             "tmdb:person:nsfw",
             "tmdb",
-            "person",
+            ProposalKind.Person,
             1,
             "credit",
             EmptyPatch("NSFW Actor") with { Flags = new EntityMetadataFlagsPatch(null, true, null) },
@@ -669,7 +670,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         var tag = new EntityMetadataProposal(
             "tmdb:tag:nsfw",
             "tmdb",
-            "tag",
+            ProposalKind.Tag,
             1,
             "tag",
             EmptyPatch("NSFW Tag") with { Flags = new EntityMetadataFlagsPatch(null, true, null) },
@@ -680,7 +681,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         var season = new EntityMetadataProposal(
             "tmdb:season:1",
             "tmdb",
-            "video-season",
+            ProposalKind.VideoSeason,
             1,
             "cascade",
             EmptyPatch("Season 1") with { Flags = new EntityMetadataFlagsPatch(null, true, null) },
@@ -693,7 +694,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         return new EntityMetadataProposal(
             "tmdb:series:1",
             "tmdb",
-            "video-series",
+            ProposalKind.VideoSeries,
             1,
             "external-id",
             EmptyPatch("Series") with {
@@ -712,7 +713,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         var track = new EntityMetadataProposal(
             "tmdb:track:1",
             "tmdb",
-            EntityKindRegistry.AudioTrack.Code,
+            ProposalKind.AudioTrack,
             1,
             "cascade",
             EmptyPatch("Identified Song"),
@@ -725,7 +726,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         return new EntityMetadataProposal(
             "tmdb:album:1",
             "tmdb",
-            EntityKindRegistry.AudioLibrary.Code,
+            ProposalKind.AudioLibrary,
             1,
             "external-id",
             EmptyPatch("Identified Album"),
@@ -764,7 +765,9 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             JsonOptions);
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) {
-        PropertyNameCaseInsensitive = true
+        PropertyNameCaseInsensitive = true,
+        // Mirror the plugin wire / stored-proposal format: codec enums round-trip as their code.
+        Converters = { new CodecJsonConverterFactory() }
     };
 
     private sealed class CandidateProcessExecutor : ProcessExecutor {
@@ -821,7 +824,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             var proposal = new EntityMetadataProposal(
                 "tmdb:series:1",
                 "tmdb",
-                "video-series",
+                ProposalKind.VideoSeries,
                 1,
                 "external-id",
                 EmptyPatch("Known Series identified"),
@@ -851,7 +854,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             new(
                 $"tmdb:series:1:episode:{episodeNumber}",
                 "tmdb",
-                "video",
+                ProposalKind.Video,
                 0.9m,
                 "cascade",
                 EmptyPatch($"Episode {episodeNumber}") with {

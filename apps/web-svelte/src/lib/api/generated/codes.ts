@@ -25,6 +25,30 @@ export const ENTITY_KIND = {
 
 export type EntityKindCode = (typeof ENTITY_KIND)[keyof typeof ENTITY_KIND];
 
+export const PROPOSAL_KIND = {
+  audio: "audio",
+  audioLibrary: "audio-library",
+  audioTrack: "audio-track",
+  book: "book",
+  bookVolume: "book-volume",
+  bookChapter: "book-chapter",
+  bookPage: "book-page",
+  collection: "collection",
+  gallery: "gallery",
+  image: "image",
+  musicArtist: "music-artist",
+  person: "person",
+  movie: "movie",
+  studio: "studio",
+  tag: "tag",
+  video: "video",
+  videoSeries: "video-series",
+  videoSeason: "video-season",
+  videoEpisode: "video-episode",
+} as const;
+
+export type ProposalKindCode = (typeof PROPOSAL_KIND)[keyof typeof PROPOSAL_KIND];
+
 export const RELATIONSHIP_CODE = {
   cast: "cast",
   credits: "credits",
@@ -94,6 +118,16 @@ export const JOB_TYPE = {
 } as const;
 
 export type JobTypeCode = (typeof JOB_TYPE)[keyof typeof JOB_TYPE];
+
+export const JOB_RUN_STATUS = {
+  queued: "queued",
+  running: "running",
+  completed: "completed",
+  failed: "failed",
+  cancelled: "cancelled",
+} as const;
+
+export type JobRunStatusCode = (typeof JOB_RUN_STATUS)[keyof typeof JOB_RUN_STATUS];
 
 export const PLAYBACK_MODE = {
   direct: "direct",
@@ -195,7 +229,10 @@ export const SETTING_KEYS = {
   generationThumbnailQuality: "generation.thumbnailQuality",
   generationTrickplayIntervalSeconds: "generation.trickplayIntervalSeconds",
   generationTrickplayQuality: "generation.trickplayQuality",
+  hlsEnableAdaptiveBitrate: "hls.enableAdaptiveBitrate",
+  hlsEncodingThreadCount: "hls.encodingThreadCount",
   hlsFfmpegPath: "hls.ffmpegPath",
+  hlsMaxCacheSizeGb: "hls.maxCacheSizeGb",
   hlsTranscoderProfile: "hls.transcoderProfile",
   hlsVaapiDevice: "hls.vaapiDevice",
   jobsBackgroundConcurrency: "jobs.backgroundConcurrency",
@@ -210,6 +247,7 @@ export const SETTING_KEYS = {
   subtitlesPositionPercent: "subtitles.positionPercent",
   subtitlesPreferredLanguages: "subtitles.preferredLanguages",
   subtitlesStyle: "subtitles.style",
+  taxonomyRemoveOrphanTags: "taxonomy.removeOrphanTags",
   visibilityDefaultMode: "visibility.defaultMode",
   visibilityLanAutoEnable: "visibility.lanAutoEnable",
 } as const;

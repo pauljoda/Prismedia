@@ -85,11 +85,11 @@ public sealed class EfEntityReadServiceTests {
         var detail = Assert.IsType<VideoDetail>(
             await service.GetDetailAsync(videoId, EntityKindRegistry.Video.Code, hideNsfw: false, CancellationToken.None));
 
-        var cast = Assert.Single(detail.Relationships, group => group.Code == "cast");
-        Assert.Equal(EntityKindRegistry.Person.Code, cast.Kind);
+        var cast = Assert.Single(detail.Relationships, group => group.Code == RelationshipKind.Cast);
+        Assert.Equal(EntityKind.Person, cast.Kind);
         Assert.Equal(personId, Assert.Single(cast.Entities).Id);
-        Assert.Contains(detail.Relationships, group => group.Code == "studio" && group.Kind == EntityKindRegistry.Studio.Code);
-        Assert.Contains(detail.Relationships, group => group.Code == "tags" && group.Kind == EntityKindRegistry.Tag.Code);
+        Assert.Contains(detail.Relationships, group => group.Code == RelationshipKind.Studio && group.Kind == EntityKind.Studio);
+        Assert.Contains(detail.Relationships, group => group.Code == RelationshipKind.Tags && group.Kind == EntityKind.Tag);
         var metadata = Assert.Single(detail.CreditMetadata);
         Assert.Equal(personId, metadata.PersonId);
         Assert.Equal("guest", metadata.Role);
@@ -203,7 +203,7 @@ public sealed class EfEntityReadServiceTests {
         var searchResult = await service.ListAsync(null, "Friendship", null, null, null, CancellationToken.None);
         var searchedItem = Assert.Single(searchResult.Items);
         Assert.Equal(movieId, searchedItem.Id);
-        Assert.Equal(EntityKindRegistry.Movie.Code, searchedItem.Kind);
+        Assert.Equal(EntityKind.Movie, searchedItem.Kind);
         Assert.Equal(1, searchResult.TotalCount);
 
         var videoBrowseResult = await service.ListAsync(EntityKindRegistry.Video.Code, null, null, null, null, CancellationToken.None);
@@ -280,7 +280,7 @@ public sealed class EfEntityReadServiceTests {
 
         var item = Assert.Single(result.Items);
         Assert.Equal(movieId, item.Id);
-        Assert.Equal(EntityKindRegistry.Movie.Code, item.Kind);
+        Assert.Equal(EntityKind.Movie, item.Kind);
         Assert.Equal(1, result.TotalCount);
     }
 
@@ -760,10 +760,10 @@ public sealed class EfEntityReadServiceTests {
             await service.GetDetailAsync(bookId, EntityKindRegistry.Book.Code, hideNsfw: false, CancellationToken.None));
 
         var volumes = Assert.Single(detail.ChildrenByKind);
-        Assert.Equal(EntityKindRegistry.BookVolume.Code, volumes.Kind);
+        Assert.Equal(EntityKind.BookVolume, volumes.Kind);
         Assert.Equal(volumeId, Assert.Single(volumes.Entities).Id);
-        Assert.DoesNotContain(detail.ChildrenByKind, group => group.Kind == EntityKindRegistry.BookChapter.Code);
-        Assert.DoesNotContain(detail.ChildrenByKind, group => group.Kind == EntityKindRegistry.BookPage.Code);
+        Assert.DoesNotContain(detail.ChildrenByKind, group => group.Kind == EntityKind.BookChapter);
+        Assert.DoesNotContain(detail.ChildrenByKind, group => group.Kind == EntityKind.BookPage);
     }
 
     [Fact]
@@ -808,9 +808,9 @@ public sealed class EfEntityReadServiceTests {
         var card = Assert.IsType<EntityCard>(await service.GetAsync(volumeId, hideNsfw: false, CancellationToken.None));
 
         var chapters = Assert.Single(card.ChildrenByKind);
-        Assert.Equal(EntityKindRegistry.BookChapter.Code, chapters.Kind);
+        Assert.Equal(EntityKind.BookChapter, chapters.Kind);
         Assert.Equal(chapterId, Assert.Single(chapters.Entities).Id);
-        Assert.DoesNotContain(card.ChildrenByKind, group => group.Kind == EntityKindRegistry.BookPage.Code);
+        Assert.DoesNotContain(card.ChildrenByKind, group => group.Kind == EntityKind.BookPage);
     }
 
     [Fact]
@@ -961,7 +961,7 @@ public sealed class EfEntityReadServiceTests {
         var detail = Assert.IsType<VideoDetail>(
             await service.GetDetailAsync(videoId, EntityKindRegistry.Video.Code, hideNsfw: true, CancellationToken.None));
 
-        var cast = Assert.Single(detail.Relationships, group => group.Code == "cast");
+        var cast = Assert.Single(detail.Relationships, group => group.Code == RelationshipKind.Cast);
         Assert.Equal(safePersonId, Assert.Single(cast.Entities).Id);
         Assert.DoesNotContain(detail.CreditMetadata, credit => credit.PersonId == nsfwPersonId);
     }
@@ -1457,7 +1457,7 @@ public sealed class EfEntityReadServiceTests {
         // Distinct sources per kind, ordered by count descending.
         Assert.NotNull(tag.ReferenceCounts);
         Assert.Equal(
-            new[] { (EntityKindRegistry.Video.Code, 2), (EntityKindRegistry.Gallery.Code, 1) },
+            new[] { (EntityKind.Video, 2), (EntityKind.Gallery, 1) },
             tag.ReferenceCounts!.Select(count => (count.Kind, count.Count)).ToArray());
         // Count chips derive from the same data using kind-mapped icons.
         Assert.Contains(new EntityThumbnailMeta("video", "2"), tag.Meta);

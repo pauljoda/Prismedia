@@ -38,7 +38,7 @@ public sealed partial class EntityMetadataApplyService {
 
             var childTitle = !string.IsNullOrWhiteSpace(child.Patch.Title) ? child.Patch.Title.Trim() : childEntity.Title;
             var childPath = parentPath.Count == 0 ? [childTitle] : parentPath.Concat([childTitle]).ToArray();
-            progress?.ReportEntity(childEntity.KindCode, childTitle, childPath);
+            progress?.ReportEntity(childEntity.KindCode.DecodeAs<EntityKind>(), childTitle, childPath);
 
             await ApplyPatchToEntityAsync(childEntity, child.Patch, child.Images, now, cancellationToken);
             var relationshipProposals = EntityMetadataProposalTraversal.Relationships(child);
@@ -63,23 +63,20 @@ public sealed partial class EntityMetadataApplyService {
         Guid parentEntityId,
         EntityMetadataProposal child,
         CancellationToken cancellationToken) {
-        if (string.IsNullOrWhiteSpace(child.TargetKind) ||
-            !EntityKindRegistry.TryGet(child.TargetKind, out _)) {
-            return null;
-        }
-
         var existing = await FindStructuralChildByExternalIdsAsync(parentEntityId, child, cancellationToken);
         if (existing is not null || string.IsNullOrWhiteSpace(child.Patch.Title)) {
             return existing;
         }
 
-        return await FindStructuralChildByTitleAsync(parentEntityId, child.TargetKind, child.Patch.Title, cancellationToken);
+        return await FindStructuralChildByTitleAsync(
+            parentEntityId, child.TargetKind.ToEntityKind().ToCode(), child.Patch.Title, cancellationToken);
     }
 
     private async Task<EntityRow?> FindStructuralChildByExternalIdsAsync(
         Guid parentEntityId,
         EntityMetadataProposal child,
         CancellationToken cancellationToken) {
+        var kindCode = child.TargetKind.ToEntityKind().ToCode();
         foreach (var (provider, value) in child.Patch.ExternalIds) {
             if (string.IsNullOrWhiteSpace(provider) || string.IsNullOrWhiteSpace(value)) {
                 continue;
@@ -94,7 +91,7 @@ public sealed partial class EntityMetadataApplyService {
                     (_, entity) => entity)
                 .FirstOrDefaultAsync(
                     entity => entity.ParentEntityId == parentEntityId &&
-                        entity.KindCode == child.TargetKind,
+                        entity.KindCode == kindCode,
                     cancellationToken);
             if (entity is not null) {
                 return entity;

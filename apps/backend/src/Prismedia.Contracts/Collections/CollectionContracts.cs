@@ -1,4 +1,5 @@
 using Prismedia.Contracts.Entities;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Contracts.Collections;
 
@@ -13,16 +14,16 @@ namespace Prismedia.Contracts.Collections;
 public sealed record CollectionWriteRequest(
     string Title,
     string? Description,
-    string? Mode,
+    CollectionMode? Mode,
     string? RuleTreeJson,
-    string? CoverMode,
+    CollectionCoverMode? CoverMode,
     Guid? CoverItemId,
     bool? IsNsfw);
 
 /// <summary>Reference to an entity being added to a collection.</summary>
 /// <param name="EntityType">Entity kind code for the item.</param>
 /// <param name="EntityId">Entity identifier to add.</param>
-public sealed record CollectionItemReference(string EntityType, Guid EntityId);
+public sealed record CollectionItemReference(EntityKind EntityType, Guid EntityId);
 
 /// <summary>Request body for manually adding items to a collection.</summary>
 /// <param name="Items">Entities to add in the order supplied by the user.</param>
@@ -52,7 +53,7 @@ public sealed record CollectionRulePreviewRequest(string RuleTreeJson);
 /// <param name="EntityType">Matched entity kind code.</param>
 /// <param name="EntityId">Matched entity identifier.</param>
 /// <param name="Entity">Thumbnail payload for display.</param>
-public sealed record CollectionRulePreviewItem(string EntityType, Guid EntityId, EntityThumbnail Entity);
+public sealed record CollectionRulePreviewItem(EntityKind EntityType, Guid EntityId, EntityThumbnail Entity);
 
 /// <summary>Response body for a dynamic rule preview.</summary>
 /// <param name="Total">Total visible entities matched by the rule tree.</param>
@@ -80,9 +81,9 @@ public sealed record CollectionRefreshResponse(bool Refreshed, int ItemCount);
 public sealed record CollectionItemDetail(
     Guid Id,
     Guid CollectionId,
-    string EntityType,
+    EntityKind EntityType,
     Guid EntityId,
-    string Source,
+    CollectionItemSource Source,
     int SortOrder,
     DateTimeOffset AddedAt,
     EntityThumbnail Entity);
@@ -96,13 +97,13 @@ public sealed record CollectionItemsResponse(IReadOnlyList<CollectionItemDetail>
 /// </summary>
 public sealed record CollectionDetail : EntityDetail {
     /// <summary>Collection membership mode.</summary>
-    public required string? Mode { get; init; }
+    public required CollectionMode? Mode { get; init; }
 
     /// <summary>Dynamic collection rule tree JSON, when present.</summary>
     public required string? RuleTreeJson { get; init; }
 
     /// <summary>Collection cover selection mode.</summary>
-    public required string? CoverMode { get; init; }
+    public required CollectionCoverMode? CoverMode { get; init; }
 
     /// <summary>Entity selected as the collection cover item.</summary>
     public required Guid? CoverItemId { get; init; }

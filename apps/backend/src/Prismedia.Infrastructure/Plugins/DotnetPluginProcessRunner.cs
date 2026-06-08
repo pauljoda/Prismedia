@@ -1,6 +1,8 @@
 using System.Text.Json;
 using Prismedia.Contracts.Plugins;
+using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Processes;
+using Prismedia.Infrastructure.Serialization;
 
 namespace Prismedia.Infrastructure.Plugins;
 
@@ -13,7 +15,10 @@ public sealed class DotnetPluginProcessRunner : IIdentifyRunner {
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) {
         PropertyNameCaseInsensitive = true,
-        WriteIndented = false
+        WriteIndented = false,
+        // Codec enums (e.g. proposal TargetKind) round-trip as their stable string code on the
+        // plugin wire, matching the HTTP contract a plugin author sees.
+        Converters = { new CodecJsonConverterFactory() }
     };
 
     private readonly ProcessExecutor _processes;
@@ -61,7 +66,7 @@ public sealed class DotnetPluginProcessRunner : IIdentifyRunner {
 
             var wire = JsonSerializer.Deserialize<PluginWireResponse>(result.StandardOutput, JsonOptions);
             return wire is not null
-                ? ConvertWireResponse(wire, descriptor.Manifest.Name)
+                ? ConvertWireResponse(wire, descriptor.Manifest.Name, request.Entity.Kind.ToProposalKind())
                 : new IdentifyPluginResponse(false, null, "Plugin returned an empty response.");
         } catch (JsonException ex) {
             return new IdentifyPluginResponse(false, null, $"Plugin returned invalid JSON: {ex.Message}");
@@ -94,7 +99,7 @@ public sealed class DotnetPluginProcessRunner : IIdentifyRunner {
         decimal? Confidence,
         string? MatchReason);
 
-    private static IdentifyPluginResponse ConvertWireResponse(PluginWireResponse wire, string providerName) {
+    private static IdentifyPluginResponse ConvertWireResponse(PluginWireResponse wire, string providerName, ProposalKind targetKind) {
         if (!wire.Ok || wire.Result is null) {
             return new IdentifyPluginResponse(wire.Ok, null, wire.Error);
         }
@@ -116,7 +121,7 @@ public sealed class DotnetPluginProcessRunner : IIdentifyRunner {
             var shell = new EntityMetadataProposal(
                 ProposalId: null!,
                 Provider: null!,
-                TargetKind: null!,
+                TargetKind: targetKind,
                 Confidence: null,
                 MatchReason: null,
                 Patch: null!,

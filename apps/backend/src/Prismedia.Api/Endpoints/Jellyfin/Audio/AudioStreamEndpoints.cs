@@ -55,7 +55,7 @@ internal static class AudioStreamEndpoints {
             return Results.File(File.OpenRead(source.Path), source.ContentType, enableRangeProcessing: true);
         }
 
-        return Results.NotFound(new ApiProblem("jellyfin_item_file_not_found", $"File for item '{itemId}' was not found."));
+        return Results.NotFound(new ApiProblem(ApiProblemCodes.JellyfinItemFileNotFound, $"File for item '{itemId}' was not found."));
     }
 
     private static void Map(IEndpointRouteBuilder routes, string pattern, string name) {
@@ -80,7 +80,7 @@ internal static class AudioStreamEndpoints {
         string? container = null) {
         var stream = await streams.GetStreamAsync(itemId, cancellationToken);
         if (stream is null) {
-            return Results.NotFound(new ApiProblem("jellyfin_audio_not_found", $"Audio stream '{itemId}' was not found."));
+            return Results.NotFound(new ApiProblem(ApiProblemCodes.JellyfinAudioNotFound, $"Audio stream '{itemId}' was not found."));
         }
 
         if (!stream.DirectPlayable) {
