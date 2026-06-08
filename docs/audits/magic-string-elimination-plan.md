@@ -241,3 +241,30 @@ canonical home, not another copy.
 ---
 
 **Key files referenced**: `apps/backend/src/Prismedia.Domain/Entities/Enums/Codec/{EnumCodec,CodeAttribute,CodecRegistry}.cs`; `apps/backend/src/Prismedia.Domain/Entities/Kinds/EntityKindRegistry.cs`; `apps/backend/src/Prismedia.Contracts/Jellyfin/JellyfinProtocol.cs`; `apps/backend/src/Prismedia.Api/Codegen/CodesManifest.cs`; `apps/web-svelte/scripts/gen-codes.mjs`; `apps/web-svelte/src/lib/api/generated/codes.ts`; `apps/backend/src/Prismedia.Application/Settings/AppSettingKeys.cs`; `apps/backend/tests/Prismedia.Domain.Tests/CodecCompletenessTests.cs` (extend); `apps/web-svelte/eslint.config.js` (new rule); new: `Prismedia.Contracts/Api/ApiProblemCodes.cs`, `Prismedia.Infrastructure/Media/AssetPaths.cs`, `$lib/entities/filter-ids.ts`, `apps/backend/tools/Prismedia.Analyzers/`, `apps/web-svelte/scripts/check-codes.mjs`.
+
+---
+
+## Progress Log
+
+Branch `chore/design-audit-rails`. The repo already had a `ConstantsDriftGuardTests`
+("Phase 1 constants consolidation" owning `JellyfinProtocol` headers + `MediaContentTypes`
+MIME types) and `JellyfinProtocol` / `MediaContentTypes` constant classes — the rails
+pattern was partially established. Building on it:
+
+- **✅ Rail 1 — Problem codes (Phase 0 §C / Phase 2 step 9).** `ApiProblemCodes`
+  (`Prismedia.Contracts/System/ApiProblemCodes.cs`) now owns all ~50 codes; 111 bare-literal
+  call sites swapped across endpoints, `FilesService`/`FileOperationException`, and auth.
+  Enforced by `ApiProblemCodeDisciplineTests` (fails on any bare `ApiProblem(`/`FileOperationException(`
+  literal). Wire values unchanged. _Frontend `PROBLEM_CODES` codegen still TODO — needs the
+  manifest + dev API (Phase 0 step 1)._
+
+**Known pre-existing issue (not from this work):** `SpaDevProxyTests.BackendRouteClassifierKeepsLowercaseSpaRoutesOnVite`
+fails on the branch base (from sprint PR #22 "secure lowercase Jellyfin routes") — `/videos`
+and `/videos/<guid>` now classify as backend routes when the test expects them on the SPA/Vite
+path. Needs a product decision (real SPA-routing regression vs. stale test).
+
+**Next rails (recommended order):** (2) backend constant classes that need no codegen —
+`AssetPaths`, `MediaCodecs`, `MediaContainers`, extend `JellyfinProtocol` for the new sprint
+literals; (3) spin up the dev stack → author the §B `[Code]` enums + `ENUM_EXPORTS`/`CodesManifest`
+wiring → `pnpm api:generate`; (4) the OpenAPI codec-enum→typed-enum transformer; (5) frontend
+`no-magic-codes` lint + `codes.ts` CI parity.
