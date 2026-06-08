@@ -1,5 +1,4 @@
 import { render, waitFor } from "@testing-library/svelte";
-import { tick } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EntityCapability, EntityKind } from "$lib/api/generated/model";
 import { fetchImage, fetchVideo } from "$lib/api/media";
@@ -116,7 +115,7 @@ describe("EntityFeed animated playback", () => {
     });
   });
 
-  it("does not mount original-source video for nearby clips that have no preview", async () => {
+  it("plays in-window video-like clips inline even without a generated preview", async () => {
     mockImages({
       "still-1": imageDetail("still-1", "Still.jpg", [
         filesCapability([{ role: "source", path: "/media/still.jpg", mimeType: "image/jpeg" }]),
@@ -133,9 +132,15 @@ describe("EntityFeed animated playback", () => {
     await waitFor(() => {
       expect(fetchImageMock).toHaveBeenCalledWith("neighbor-1");
     });
-    await tick();
 
-    expect(container.querySelector("video.feed-video")).toBeNull();
+    // The off-center, source-only clip falls back to its original source so it
+    // autoplays in the window; the still JPEG neighbor stays a static poster.
+    await waitFor(() => {
+      expect(container.querySelector<HTMLVideoElement>("video.feed-video")?.getAttribute("src")).toBe(
+        "/api/entities/neighbor-1/files/source",
+      );
+    });
+    expect(container.querySelectorAll("video.feed-video")).toHaveLength(1);
   });
 });
 

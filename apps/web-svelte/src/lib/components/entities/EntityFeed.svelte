@@ -162,15 +162,20 @@
     const entity = hydrated[card.entity.id];
     if (!entity) return null;
 
-    if (entity.kind === ENTITY_KIND.video) {
+    // The centered item (and true videos) play the original for best quality.
+    if (entity.kind === ENTITY_KIND.video || allowOriginalFallback) {
       return buildLightboxVideoSources(entity, { preferOriginal: true })[0]?.src ?? null;
     }
 
-    if (allowOriginalFallback) {
-      return buildLightboxVideoSources(entity, { preferOriginal: true })[0]?.src ?? null;
-    }
-
-    return buildLightboxVideoSources(entity)[0]?.src ?? null;
+    // Off-center clips prefer a lightweight generated preview, but still fall back
+    // to the original source so source-only clips (e.g. a short .mp4 stored as an
+    // image in a gallery, with no generated preview) autoplay inline as soon as
+    // they enter the play window instead of sitting as a static poster.
+    return (
+      buildLightboxVideoSources(entity)[0]?.src ??
+      buildLightboxVideoSources(entity, { preferOriginal: true })[0]?.src ??
+      null
+    );
   }
 
   // Source URL for an in-window animated image, or null when the item isn't an
