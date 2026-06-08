@@ -208,19 +208,8 @@ internal static class PrismediaAuthentication {
         return !IsPublicJellyfinRoute(request);
     }
 
-    private static bool IsJellyfinRequest(PathString requestPath) {
-        var path = requestPath.Value ?? string.Empty;
-        return JellyfinRoutes.Prefixes.Any(prefix => IsJellyfinPrefixMatch(path, prefix));
-    }
-
-    private static bool IsJellyfinPrefixMatch(string path, string prefix) {
-        if (!string.Equals(prefix, JellyfinRoutes.LibraryPrefix, StringComparison.Ordinal)) {
-            return path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase);
-        }
-
-        return path.StartsWith(prefix, StringComparison.Ordinal) ||
-            path.StartsWith($"{prefix}/", StringComparison.OrdinalIgnoreCase);
-    }
+    private static bool IsJellyfinRequest(PathString requestPath) =>
+        JellyfinRoutes.IsJellyfinRequest(requestPath.Value ?? string.Empty);
 
     private static bool IsPublicJellyfinRoute(HttpRequest request) {
         var path = request.Path.Value ?? string.Empty;
