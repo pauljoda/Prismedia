@@ -52,6 +52,9 @@ builder.Services.AddOpenApi(options => {
         }
         return Microsoft.AspNetCore.OpenApi.OpenApiOptions.CreateDefaultSchemaReferenceId(type);
     };
+    // Codec enums serialize as their string code, so without this they appear as a bare
+    // `string` and the generated client loses enum typing. Emit them as typed string enums.
+    options.AddSchemaTransformer<CodecEnumSchemaTransformer>();
 });
 builder.Services.AddHealthChecks();
 builder.Services.AddHttpClient(GhcrUpdateCheckService.HttpClientName, client => {
