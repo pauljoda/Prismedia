@@ -85,13 +85,19 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
             await _artwork.DownloadSelectedImagesAsync(entityId, request.SelectedImages, now, cancellationToken);
         }
 
-        if (request.Children is { Count: > 0 }) {
-            await ApplyStructuralChildrenAsync(request.Children, entity.Id, now, [entity.Id], [], null, cancellationToken);
-        }
-
-        if (request.Relationships is { Count: > 0 } &&
-            (fields.Contains("credits") || fields.Contains("studio") || fields.Contains("tags"))) {
-            await ApplyRelationshipProposalsAsync(entityId, request.Relationships, now, [], null, cancellationToken);
+        if (request.Children is { Count: > 0 } || request.Relationships is { Count: > 0 }) {
+            var relationshipFieldsApplied =
+                fields.Contains("credits") || fields.Contains("studio") || fields.Contains("tags");
+            await ApplyChildNodesAsync(
+                entity.Id,
+                request.Children ?? [],
+                request.Relationships ?? [],
+                relationshipFieldsApplied,
+                now,
+                [entity.Id],
+                [],
+                progress: null,
+                cancellationToken);
         }
 
         entity.UpdatedAt = now;
@@ -244,14 +250,16 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
             await UpsertFlagsAsync(entityId, new EntityMetadataFlagsPatch(null, true, null), now, cancellationToken);
         }
 
-        var relationshipProposals = EntityMetadataProposalTraversal.Relationships(proposal);
-        if (relationshipProposals.Count > 0 && (selected.Contains("credits") || selected.Contains("studio") || selected.Contains("tags"))) {
-            await ApplyRelationshipProposalsAsync(entityId, relationshipProposals, now, rootPath, progress, cancellationToken);
-        }
-
-        await ApplyStructuralChildrenAsync(
-            EntityMetadataProposalTraversal.StructuralChildren(proposal),
+        // Walk the root's related entities and structural children through the single recursive node
+        // applier. Relationship proposals only enrich entities the root's credit/studio/tags fields
+        // linked, so gate them on that selection (the scalar fields were applied just above).
+        var rootRelationshipFieldsApplied =
+            selected.Contains("credits") || selected.Contains("studio") || selected.Contains("tags");
+        await ApplyChildNodesAsync(
             entity.Id,
+            EntityMetadataProposalTraversal.StructuralChildren(proposal),
+            EntityMetadataProposalTraversal.Relationships(proposal),
+            rootRelationshipFieldsApplied,
             now,
             [entity.Id],
             rootPath,

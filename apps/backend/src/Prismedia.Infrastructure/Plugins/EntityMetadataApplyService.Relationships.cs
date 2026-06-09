@@ -270,46 +270,6 @@ public sealed partial class EntityMetadataApplyService {
         });
     }
 
-    /// <summary>
-    /// Applies metadata and artwork from relationship proposals into linked Person and Studio entities
-    /// that were created or resolved during credits/studio apply.
-    /// </summary>
-    private async Task ApplyRelationshipProposalsAsync(
-        Guid sourceEntityId,
-        IReadOnlyList<EntityMetadataProposal> relationships,
-        DateTimeOffset now,
-        IReadOnlyList<string> sourcePath,
-        IdentifyApplyProgressReporter? progress,
-        CancellationToken cancellationToken) {
-        foreach (var child in relationships) {
-            if (string.IsNullOrWhiteSpace(child.Patch.Title)) {
-                continue;
-            }
-
-            if (!child.TargetKind.IsRelationship()) {
-                continue;
-            }
-
-            var linkedEntity = await FindEntityByTitleAsync(
-                child.TargetKind.ToEntityKind().ToCode(), child.Patch.Title.Trim(), parentEntityId: null, cancellationToken);
-            if (linkedEntity is null) {
-                continue;
-            }
-
-            if (linkedEntity.Id == sourceEntityId) {
-                continue;
-            }
-
-            var title = child.Patch.Title.Trim();
-            var path = sourcePath.Count == 0 ? [title] : sourcePath.Concat([title]).ToArray();
-            progress?.ReportEntity(linkedEntity.KindCode.DecodeAs<EntityKind>(), title, path);
-
-            await ApplyPatchToEntityAsync(linkedEntity, child.Patch, [], now, cancellationToken);
-
-            await ApplyRelationshipArtworkAsync(linkedEntity, child, now, cancellationToken);
-        }
-    }
-
     private async Task ApplyRelationshipArtworkAsync(
         EntityRow linkedEntity,
         EntityMetadataProposal proposal,
