@@ -181,6 +181,14 @@ export const IDENTIFY_RESULT_STATUS = {
 
 export type IdentifyResultStatusCode = (typeof IDENTIFY_RESULT_STATUS)[keyof typeof IDENTIFY_RESULT_STATUS];
 
+export const IDENTIFY_APPLY_STATE = {
+  running: "running",
+  succeeded: "succeeded",
+  failed: "failed",
+} as const;
+
+export type IdentifyApplyStateCode = (typeof IDENTIFY_APPLY_STATE)[keyof typeof IDENTIFY_APPLY_STATE];
+
 export const FILE_SOURCE_KIND = {
   scan: "scan",
   custom: "custom",

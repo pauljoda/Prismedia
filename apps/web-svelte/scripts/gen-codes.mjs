@@ -31,6 +31,7 @@ const ENUM_EXPORTS = [
   ["IdentifyAction", "IDENTIFY_ACTION", "IdentifyActionCode"],
   ["IdentifyQueueState", "IDENTIFY_QUEUE_STATE", "IdentifyQueueStateCode"],
   ["IdentifyResultStatus", "IDENTIFY_RESULT_STATUS", "IdentifyResultStatusCode"],
+  ["IdentifyApplyState", "IDENTIFY_APPLY_STATE", "IdentifyApplyStateCode"],
   ["FileSourceKind", "FILE_SOURCE_KIND", "FileSourceKindCode"],
 ];
 

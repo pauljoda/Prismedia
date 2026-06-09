@@ -12,6 +12,7 @@ import {
   searchIdentifyQueueItem,
 } from "$lib/api/identify-client";
 import { fetchPluginProviders } from "$lib/api/plugins";
+import { IDENTIFY_APPLY_STATE } from "$lib/api/generated/codes";
 import type {
   EntityMetadataProposal,
   EntitySearchCandidate,
@@ -894,7 +895,7 @@ export class IdentifyStore {
       }
 
       if (!stopped) {
-        timer = setTimeout(tick, this.applyProgress?.state === "running" ? 400 : 800);
+        timer = setTimeout(tick, this.applyProgress?.state === IDENTIFY_APPLY_STATE.running ? 400 : 800);
       }
     };
 
@@ -1190,7 +1191,7 @@ function initialApplyProgress(
   return {
     id,
     entityId: entity.id,
-    state: "running",
+    state: IDENTIFY_APPLY_STATE.running,
     currentIndex: 0,
     total: countApplyProgressSteps(proposal, selectedFields),
     // Optimistic progress is for the root entity being applied, so its real kind

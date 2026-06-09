@@ -1,5 +1,5 @@
 import type { EntityKind, ProposalKind } from "$lib/api/generated/model";
-import type { IdentifyActionCode } from "$lib/api/generated/codes";
+import type { IdentifyActionCode, IdentifyApplyStateCode } from "$lib/api/generated/codes";
 import type { EntityMetadataFlagsPatch } from "$lib/api/entity-mutations";
 
 export interface PluginEntitySupport {
@@ -119,7 +119,7 @@ export type IdentifyQueueState = "search" | "proposal" | "done" | "deleted" | "e
 export interface IdentifyApplyProgress {
   id: string;
   entityId: string;
-  state: "running" | "succeeded" | "failed" | string;
+  state: IdentifyApplyStateCode;
   currentIndex: number;
   total: number;
   currentKind?: EntityKind | null;

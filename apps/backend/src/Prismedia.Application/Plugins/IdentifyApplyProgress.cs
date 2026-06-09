@@ -76,7 +76,7 @@ public sealed class InMemoryIdentifyApplyProgressStore : IIdentifyApplyProgressS
         var snapshot = new IdentifyApplyProgress(
             operationId,
             entityId,
-            "running",
+            IdentifyApplyState.Running.ToCode(),
             0,
             Math.Max(total, 1),
             null,
@@ -95,7 +95,7 @@ public sealed class InMemoryIdentifyApplyProgressStore : IIdentifyApplyProgressS
             _ => new IdentifyApplyProgress(
                 operationId,
                 Guid.Empty,
-                "running",
+                IdentifyApplyState.Running.ToCode(),
                 1,
                 1,
                 step.Kind,
@@ -104,7 +104,7 @@ public sealed class InMemoryIdentifyApplyProgressStore : IIdentifyApplyProgressS
                 null,
                 DateTimeOffset.UtcNow),
             (_, current) => current with {
-                State = "running",
+                State = IdentifyApplyState.Running.ToCode(),
                 CurrentIndex = Math.Min(current.CurrentIndex + 1, current.Total),
                 CurrentKind = step.Kind,
                 CurrentTitle = step.Title,
@@ -117,11 +117,11 @@ public sealed class InMemoryIdentifyApplyProgressStore : IIdentifyApplyProgressS
 
     /// <inheritdoc />
     public IdentifyApplyProgress Complete(Guid operationId) =>
-        UpdateTerminal(operationId, "succeeded", null);
+        UpdateTerminal(operationId, IdentifyApplyState.Succeeded, null);
 
     /// <inheritdoc />
     public IdentifyApplyProgress Fail(Guid operationId, string message) =>
-        UpdateTerminal(operationId, "failed", message);
+        UpdateTerminal(operationId, IdentifyApplyState.Failed, message);
 
     /// <inheritdoc />
     public IdentifyApplyProgress? Get(Guid operationId) {
@@ -137,13 +137,13 @@ public sealed class InMemoryIdentifyApplyProgressStore : IIdentifyApplyProgressS
         return null;
     }
 
-    private IdentifyApplyProgress UpdateTerminal(Guid operationId, string state, string? error) {
+    private IdentifyApplyProgress UpdateTerminal(Guid operationId, IdentifyApplyState state, string? error) {
         var updated = _progress.AddOrUpdate(
             operationId,
             _ => new IdentifyApplyProgress(
                 operationId,
                 Guid.Empty,
-                state,
+                state.ToCode(),
                 1,
                 1,
                 null,
@@ -152,8 +152,8 @@ public sealed class InMemoryIdentifyApplyProgressStore : IIdentifyApplyProgressS
                 error,
                 DateTimeOffset.UtcNow),
             (_, current) => current with {
-                State = state,
-                CurrentIndex = state == "succeeded" ? current.Total : current.CurrentIndex,
+                State = state.ToCode(),
+                CurrentIndex = state == IdentifyApplyState.Succeeded ? current.Total : current.CurrentIndex,
                 Error = error,
                 UpdatedAt = DateTimeOffset.UtcNow
             });
