@@ -1,13 +1,15 @@
+using Prismedia.Domain.Entities;
+
 namespace Prismedia.Contracts.Entities;
 
 /// <summary>API-facing non-time progress capability.</summary>
 [CapabilityKind("progress")]
 public sealed record ProgressCapability(
     Guid? CurrentEntityId,
-    string Unit,
+    ProgressUnit Unit,
     int Index,
     int Total,
-    string? Mode,
+    ReaderMode? Mode,
     DateTimeOffset? CompletedAt,
     DateTimeOffset? UpdatedAt,
     int? WorkIndex = null,

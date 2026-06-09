@@ -19,6 +19,9 @@ public sealed record PluginArtworkServiceOptions(string CacheRoot);
 /// Applies selected plugin metadata proposals into entity capability rows.
 /// </summary>
 public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchService {
+    // Stat codes are an open provider vocabulary (plugins may send any code; rows are
+    // stored and displayed as-is), so this filter matches wire strings rather than a
+    // closed [Code] enum. prism-vocab: external
     private static readonly HashSet<string> IgnoredStatCodes = new(StringComparer.OrdinalIgnoreCase) {
         "popularity"
     };

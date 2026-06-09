@@ -10,5 +10,9 @@ public enum ReaderMode {
 
     /// <summary>Continuous vertical reading for long-strip comics and similar formats.</summary>
     [Code("webtoon")]
-    Webtoon
+    Webtoon,
+
+    /// <summary>Continuous scrolled flow used by the EPUB and PDF reading surfaces.</summary>
+    [Code("scrolled")]
+    Scrolled
 }

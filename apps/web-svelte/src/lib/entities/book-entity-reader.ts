@@ -1,3 +1,4 @@
+import { CAPABILITY_KIND, PROGRESS_UNIT, READER_MODE, type ProgressUnitCode, type ReaderModeCode } from "$lib/api/generated/codes";
 import type { ImageListItemDto } from "@prismedia/contracts";
 import { getCapability } from "$lib/api/capabilities";
 import { numberValue } from "$lib/utils/format";
@@ -26,17 +27,17 @@ export interface BookEntityProgressDisplay {
   workPageLabel: string | null;
   summaryLabel: string;
   detailLabel: string;
-  readerMode: "paged" | "webtoon";
+  readerMode: typeof READER_MODE.paged | typeof READER_MODE.webtoon;
 }
 
 export interface SingleFileBookProgressDisplay {
   percent: number;
   isComplete: boolean;
   positionLabel: string | null;
-  unit: string;
+  unit: ProgressUnitCode;
   index: number;
   total: number;
-  mode: string;
+  mode: ReaderModeCode;
   location: string | null;
 }
 
@@ -54,14 +55,14 @@ export interface SingleFileBookProgressDisplay {
 export function singleFileBookProgressDisplay(
   book: Pick<EntityCard, "capabilities"> | null | undefined,
 ): SingleFileBookProgressDisplay | null {
-  const progress = book ? getCapability(book.capabilities, "progress") : undefined;
+  const progress = book ? getCapability(book.capabilities, CAPABILITY_KIND.progress) : undefined;
   if (!progress?.currentEntityId) return null;
 
   const total = Math.max(0, numberValue(progress.total) ?? 0);
   if (total <= 0) return null;
 
   const index = Math.max(0, numberValue(progress.index) ?? 0);
-  const isPaged = progress.unit === "page";
+  const isPaged = progress.unit === PROGRESS_UNIT.page;
   const rawPercent = isPaged
     ? Math.round(((Math.min(index, total - 1) + 1) / total) * 100)
     : Math.round((Math.min(index, total) / total) * 100);
@@ -81,7 +82,7 @@ export function singleFileBookProgressDisplay(
     unit: progress.unit,
     index,
     total,
-    mode: progress.mode ?? (isPaged ? "scrolled" : "paged"),
+    mode: progress.mode ?? (isPaged ? READER_MODE.scrolled : READER_MODE.paged),
     location: progress.location ?? null,
   };
 }
@@ -128,7 +129,7 @@ export function bookEntityProgressDisplay(
   book: Pick<EntityCard, "capabilities"> | null | undefined,
   chapters: BookReaderChapter[],
 ): BookEntityProgressDisplay | null {
-  const progress = book ? getCapability(book.capabilities, "progress") : undefined;
+  const progress = book ? getCapability(book.capabilities, CAPABILITY_KIND.progress) : undefined;
   if (!progress?.currentEntityId) return null;
 
   const chapter = chapters.find((item) => item.id === progress.currentEntityId);
@@ -168,6 +169,6 @@ export function bookEntityProgressDisplay(
     workPageLabel,
     summaryLabel: isComplete ? `Read ${chapterLabel}` : `Reading ${chapterLabel} - ${pageLabel}`,
     detailLabel: isComplete ? "Read" : `${chapterPageLabel} · ${workPageLabel}`,
-    readerMode: progress.mode === "webtoon" ? "webtoon" : "paged",
+    readerMode: progress.mode === READER_MODE.webtoon ? READER_MODE.webtoon : READER_MODE.paged,
   };
 }

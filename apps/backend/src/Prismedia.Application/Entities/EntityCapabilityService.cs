@@ -133,10 +133,10 @@ public sealed class EntityCapabilityService {
     public async Task<EntityCard?> UpdateProgressAsync(
         Guid id,
         Guid currentEntityId,
-        string unit,
+        ProgressUnit unit,
         int index,
         int total,
-        string? mode,
+        ReaderMode? mode,
         bool? completed,
         bool reset,
         string? location,
@@ -172,14 +172,12 @@ public sealed class EntityCapabilityService {
             : null;
 
         var targetChapterId = proposedPosition?.ChapterId ?? currentEntityId;
-        var normalizedUnit = string.IsNullOrWhiteSpace(unit) ? "item" : unit.Trim();
-        var normalizedMode = string.IsNullOrWhiteSpace(mode) ? null : mode.Trim();
         var normalizedLocation = string.IsNullOrWhiteSpace(location) ? null : location.Trim();
 
         // Explicit "start over": jump to the requested (start) position and clear completion,
         // bypassing the forward-only guard. MoveTo resets the completion flag.
         if (reset) {
-            progress.MoveTo(targetChapterId, normalizedUnit, normalizedIndex, normalizedTotal, normalizedMode, now, normalizedLocation);
+            progress.MoveTo(targetChapterId, unit, normalizedIndex, normalizedTotal, mode, now, normalizedLocation);
             await _entities.SaveAsync(entity, cancellationToken);
             return EntityCardProjector.ToCard(entity);
         }
@@ -206,7 +204,7 @@ public sealed class EntityCapabilityService {
             return EntityCardProjector.ToCard(entity);
         }
 
-        progress.MoveTo(targetChapterId, normalizedUnit, normalizedIndex, normalizedTotal, normalizedMode, now, normalizedLocation);
+        progress.MoveTo(targetChapterId, unit, normalizedIndex, normalizedTotal, mode, now, normalizedLocation);
 
         if (completed == true) {
             progress.MarkCompleted(now);

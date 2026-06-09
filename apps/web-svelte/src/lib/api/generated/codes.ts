@@ -212,6 +212,24 @@ export const THUMBNAIL_HOVER_KIND = {
 
 export type ThumbnailHoverKindCode = (typeof THUMBNAIL_HOVER_KIND)[keyof typeof THUMBNAIL_HOVER_KIND];
 
+export const PROGRESS_UNIT = {
+  item: "item",
+  page: "page",
+  chapter: "chapter",
+  track: "track",
+  cfi: "cfi",
+} as const;
+
+export type ProgressUnitCode = (typeof PROGRESS_UNIT)[keyof typeof PROGRESS_UNIT];
+
+export const READER_MODE = {
+  paged: "paged",
+  webtoon: "webtoon",
+  scrolled: "scrolled",
+} as const;
+
+export type ReaderModeCode = (typeof READER_MODE)[keyof typeof READER_MODE];
+
 export const CAPABILITY_KIND = {
   classification: "classification",
   dates: "dates",

@@ -1,3 +1,4 @@
+import { PROGRESS_UNIT, READER_MODE, type ProgressUnitCode, type ReaderModeCode } from "$lib/api/generated/codes";
 import type { EntityCapability, EntitySubtitleSource, EntityKind } from "$lib/api/generated/model";
 import type { EntityDetailCardFull } from "./entity-detail";
 import { entityCardToDetailCard } from "./entity-detail";
@@ -111,7 +112,7 @@ function subtitles(items: Array<{ id: string; language: string; label?: string; 
   };
 }
 
-function progress(options: { index: number; total: number; unit: string; mode?: string; completed?: boolean }): EntityCapability {
+function progress(options: { index: number; total: number; unit: ProgressUnitCode; mode?: ReaderModeCode; completed?: boolean }): EntityCapability {
   return {
     kind: "progress",
     currentEntityId: null,
@@ -253,7 +254,7 @@ export const detailLabRows: EntityDetailLabRow[] = [
               { id: "sub-de", language: "German", format: "ass", source: "sidecar" },
               { id: "sub-ja", language: "Japanese", format: "srt", source: "sidecar" },
             ]),
-            progress({ index: 340, total: 596, unit: "seconds", mode: "playing" }),
+            progress({ index: 340, total: 596, unit: PROGRESS_UNIT.item }),
             classification("animation", "content-type"),
             source([{ code: "stash-compat", value: "scene-42" }]),
           ],
@@ -310,7 +311,7 @@ export const detailLabRows: EntityDetailLabRow[] = [
             { code: "release", value: "2024-03-15", sortableValue: "2024-03-15" },
             { code: "added", value: "2026-02-01", sortableValue: "2026-02-01" },
           ]),
-          progress({ index: 8, total: 12, unit: "episodes", mode: "watching" }),
+          progress({ index: 8, total: 12, unit: PROGRESS_UNIT.item }),
           classification("series", "content-type"),
         ],
       }),
@@ -406,7 +407,7 @@ export const detailLabRows: EntityDetailLabRow[] = [
             { code: "published", value: "2025-11-01", sortableValue: "2025-11-01" },
             { code: "added", value: "2026-04-20", sortableValue: "2026-04-20" },
           ]),
-          progress({ index: 128, total: 342, unit: "pages", mode: "reading" }),
+          progress({ index: 128, total: 342, unit: PROGRESS_UNIT.page, mode: READER_MODE.paged }),
           classification("anthology", "content-type"),
         ],
       }),
@@ -441,7 +442,7 @@ export const detailLabRows: EntityDetailLabRow[] = [
             { code: "recorded", value: "2025-08 to 2025-12", precision: "month" },
             { code: "added", value: "2026-03-01", sortableValue: "2026-03-01" },
           ]),
-          progress({ index: 12, total: 18, unit: "tracks", mode: "listening" }),
+          progress({ index: 12, total: 18, unit: PROGRESS_UNIT.track }),
         ],
       }),
     ],

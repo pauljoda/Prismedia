@@ -15,10 +15,10 @@ public sealed class EntityCapabilityServiceProgressTests {
         var completedAt = DateTimeOffset.UtcNow.AddMinutes(-5);
         var repository = new FakeEntityWriteRepository(new CapabilityProgress(
             currentEntityId: ChapterOneId,
-            unit: "page",
+            unit: ProgressUnit.Page,
             index: 1,
             total: 2,
-            mode: "paged",
+            mode: ReaderMode.Paged,
             completedAt: completedAt,
             updatedAt: completedAt));
         var service = new EntityCapabilityService(repository);
@@ -26,10 +26,10 @@ public sealed class EntityCapabilityServiceProgressTests {
         await service.UpdateProgressAsync(
             BookId,
             ChapterTwoId,
-            "page",
+            ProgressUnit.Page,
             index: 0,
             total: 2,
-            mode: "paged",
+            mode: ReaderMode.Paged,
             completed: null,
             reset: false,
             location: null,
@@ -47,10 +47,10 @@ public sealed class EntityCapabilityServiceProgressTests {
         var completedAt = DateTimeOffset.UtcNow.AddMinutes(-5);
         var repository = new FakeEntityWriteRepository(new CapabilityProgress(
             currentEntityId: ChapterTwoId,
-            unit: "page",
+            unit: ProgressUnit.Page,
             index: 1,
             total: 2,
-            mode: "paged",
+            mode: ReaderMode.Paged,
             completedAt: completedAt,
             updatedAt: completedAt));
         var service = new EntityCapabilityService(repository);
@@ -58,10 +58,10 @@ public sealed class EntityCapabilityServiceProgressTests {
         await service.UpdateProgressAsync(
             BookId,
             ChapterOneId,
-            "page",
+            ProgressUnit.Page,
             index: 0,
             total: 2,
-            mode: "paged",
+            mode: ReaderMode.Paged,
             completed: null,
             reset: false,
             location: null,

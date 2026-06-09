@@ -15,12 +15,15 @@ internal sealed class ProgressCapabilityMapper(PrismediaDbContext db) : IEntityC
         }
 
         entity.RemoveCapability<CapabilityProgress>();
+        // Tolerant decode: rows written before the typed vocabulary may carry legacy values
+        // (e.g. mode "paginated" from earlier EPUB saves); those hydrate to the safe defaults
+        // instead of failing the whole entity read.
         entity.AddCapability(new CapabilityProgress(
             row.CurrentEntityId,
-            row.Unit,
+            row.Unit.TryDecodeAs<ProgressUnit>(out var unit) ? unit : ProgressUnit.Item,
             row.Index,
             row.Total,
-            row.Mode,
+            row.Mode is not null && row.Mode.TryDecodeAs<ReaderMode>(out var mode) ? mode : null,
             row.CompletedAt,
             row.UpdatedAt,
             row.Location));
@@ -37,10 +40,10 @@ internal sealed class ProgressCapabilityMapper(PrismediaDbContext db) : IEntityC
             db.EntityProgress.Add(new EntityProgressRow {
                 EntityId = entity.Id,
                 CurrentEntityId = progress.CurrentEntityId,
-                Unit = progress.Unit,
+                Unit = progress.Unit.ToCode(),
                 Index = progress.Index,
                 Total = progress.Total,
-                Mode = progress.Mode,
+                Mode = progress.Mode?.ToCode(),
                 Location = progress.Location,
                 CompletedAt = progress.CompletedAt,
                 UpdatedAt = progress.UpdatedAt ?? DateTimeOffset.UtcNow,

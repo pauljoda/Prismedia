@@ -141,7 +141,7 @@ public sealed class EfEntityRepositoryTests {
             Guid.NewGuid(), "en", "English", "srt", EntitySubtitleSource.Embedded, subtitlePath, "srt", null, true)]));
         Set(video, new CapabilityFingerprints([new CapabilityFingerprints.Item(FingerprintAlgorithm.Md5, "deadbeef")]));
         Set(video, new CapabilityClassification("R", "MPAA"));
-        Set(video, new CapabilityProgress(currentEntityId: null, unit: "chapter", index: 4, total: 10, mode: "paged", updatedAt: DateTimeOffset.UtcNow));
+        Set(video, new CapabilityProgress(currentEntityId: null, unit: ProgressUnit.Chapter, index: 4, total: 10, mode: ReaderMode.Paged, updatedAt: DateTimeOffset.UtcNow));
 
         var repository = new EfEntityRepository(db, EntityMappers.Kinds(db), EntityMappers.Capabilities(db));
         await repository.SaveAsync(video, CancellationToken.None);

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { READER_MODE } from "$lib/api/generated/codes";
   import { browser } from "$app/environment";
   import { tick, untrack } from "svelte";
   import {
@@ -22,7 +23,7 @@
     type ComicPageMode,
   } from "./comic-reader";
 
-  type ReaderMode = "paged" | "webtoon";
+  type ReaderMode = typeof READER_MODE.paged | typeof READER_MODE.webtoon;
 
   interface ReaderPointerGesture {
     pointerId: number;
@@ -48,7 +49,7 @@
   let {
     images,
     initialIndex,
-    initialMode = "paged",
+    initialMode = READER_MODE.paged,
     title = "Comic",
     nextChapterLabel = null,
     presentation = "overlay",
@@ -77,7 +78,7 @@
   const chapterEndActionLabel = $derived(hasNextChapter ? "Continue reading" : "Close reader");
   const finalPageIndex = $derived(hasEndAction ? images.length : -1);
   const showingChapterEndPage = $derived(
-    readerMode === "paged" && hasEndAction && index === finalPageIndex,
+    readerMode === READER_MODE.paged && hasEndAction && index === finalPageIndex,
   );
   const spread = $derived(
     showingChapterEndPage
@@ -107,7 +108,7 @@
 
   function setReaderIndex(nextIndex: number) {
     const maxIndex =
-      readerMode === "paged" && hasEndAction ? images.length : Math.max(0, images.length - 1);
+      readerMode === READER_MODE.paged && hasEndAction ? images.length : Math.max(0, images.length - 1);
     const clampedIndex = Math.max(0, Math.min(nextIndex, maxIndex));
     if (clampedIndex === index) return;
     index = clampedIndex;
@@ -121,7 +122,7 @@
   function setReaderMode(mode: ReaderMode) {
     if (mode === readerMode) return;
     readerMode = mode;
-    if (mode === "webtoon" && index >= images.length) {
+    if (mode === READER_MODE.webtoon && index >= images.length) {
       setReaderIndex(lastReadableIndex());
     }
     onModeChange?.(mode);
@@ -179,7 +180,7 @@
       await onNextChapter();
       index = 0;
       shell?.showControls();
-      if (readerMode === "webtoon") {
+      if (readerMode === READER_MODE.webtoon) {
         void scrollWebtoonToIndex(0);
       }
     } finally {
@@ -222,7 +223,7 @@
     };
     // Capture so a paged swipe that drifts off the stage still resolves here.
     // Webtoon mode scrolls natively, so it must not capture the pointer.
-    if (readerMode === "paged" && event.pointerType !== "mouse") {
+    if (readerMode === READER_MODE.paged && event.pointerType !== "mouse") {
       (event.currentTarget as HTMLElement).setPointerCapture?.(event.pointerId);
     }
   }
@@ -261,7 +262,7 @@
       // dismisses the reader — matching the lightbox gestures. Webtoon mode scrolls
       // vertically, so it keeps tap-only navigation.
       if (
-        readerMode === "paged" &&
+        readerMode === READER_MODE.paged &&
         event.pointerType !== "mouse" &&
         Math.max(absX, absY) > READER_SWIPE_THRESHOLD
       ) {
@@ -325,7 +326,7 @@
   }
 
   $effect(() => {
-    if (readerMode !== "webtoon") return;
+    if (readerMode !== READER_MODE.webtoon) return;
     webtoonStage;
     const targetIndex = untrack(() => index);
     void scrollWebtoonToIndex(targetIndex);
@@ -368,8 +369,8 @@
     <div class="flex items-center gap-1">
       <button
         type="button"
-        onclick={() => setReaderMode("paged")}
-        class:active-reader-control={readerMode === "paged"}
+        onclick={() => setReaderMode(READER_MODE.paged)}
+        class:active-reader-control={readerMode === READER_MODE.paged}
         class="reader-mode-button"
         aria-label="Paged reader"
         title="Paged reader"
@@ -379,8 +380,8 @@
       </button>
       <button
         type="button"
-        onclick={() => setReaderMode("webtoon")}
-        class:active-reader-control={readerMode === "webtoon"}
+        onclick={() => setReaderMode(READER_MODE.webtoon)}
+        class:active-reader-control={readerMode === READER_MODE.webtoon}
         class="reader-mode-button"
         aria-label="Webtoon reader"
         title="Webtoon reader"
@@ -390,7 +391,7 @@
       </button>
     </div>
 
-    {#if readerMode === "paged"}
+    {#if readerMode === READER_MODE.paged}
       <div class="hidden items-center gap-1 border-l border-border-subtle pl-2 sm:flex">
         <button
           type="button"
@@ -418,7 +419,7 @@
     {/if}
   {/snippet}
 
-  {#if readerMode === "webtoon"}
+  {#if readerMode === READER_MODE.webtoon}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
       bind:this={webtoonStage}

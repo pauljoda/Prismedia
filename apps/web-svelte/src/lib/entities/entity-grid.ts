@@ -294,6 +294,8 @@ function metaForEntity(entity: EntityGridSourceEntity): EntityThumbnailCard["met
   if (entity.kind === ENTITY_KIND.video && technical?.container) {
     meta.push({ icon: "video", label: technical.container.toUpperCase() });
   }
+  // Stat codes are an open provider vocabulary, so this filters wire strings rather
+  // than a closed code set. prism-vocab: external
   for (const stat of stats.filter((s) => !s.code.includes("bit-rate") && !s.code.includes("bitrate")).slice(0, 2)) {
     meta.push({ icon: statIcon(stat.code), label: statLabel(stat.code, stat.value) });
   }

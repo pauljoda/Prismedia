@@ -4,16 +4,17 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { ProgressUnit } from './progressUnit';
+import type { ReaderMode } from './readerMode';
 
 export interface EntityProgressUpdateRequest {
   currentEntityId: string;
-  unit: string;
+  unit: ProgressUnit;
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
   index: number | string;
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
   total: number | string;
-  /** @nullable */
-  mode: string | null;
+  mode: null | ReaderMode;
   /** @nullable */
   completed: boolean | null;
   reset?: boolean;

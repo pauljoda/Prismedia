@@ -1,3 +1,4 @@
+import type { ProgressUnitCode, ReaderModeCode } from "$lib/api/generated/codes";
 import {
   recordAudioTrackPlay as recordAudioTrackPlayRequest,
   updateEntityPlayback as updateEntityPlaybackRequest,
@@ -178,10 +179,10 @@ export async function updateEntityProgress(
   id: string,
   payload: {
     currentEntityId: string;
-    unit: string;
+    unit: ProgressUnitCode;
     index: number;
     total: number;
-    mode?: string | null;
+    mode?: ReaderModeCode | null;
     completed?: boolean | null;
     reset?: boolean;
     location?: string | null;
