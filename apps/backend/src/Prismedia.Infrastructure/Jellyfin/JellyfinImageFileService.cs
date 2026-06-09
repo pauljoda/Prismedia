@@ -5,6 +5,8 @@ namespace Prismedia.Infrastructure.Jellyfin;
 
 /// <summary>Resolves Jellyfin image asset URLs against Prismedia's generated asset cache.</summary>
 public sealed class JellyfinImageFileService : IJellyfinImageFileService {
+    private const string PrismediaLogoImagePath = "/brand/prismedia-logo.png";
+
     private readonly AssetPathService _assets;
 
     public JellyfinImageFileService(AssetPathService assets) {
@@ -15,6 +17,14 @@ public sealed class JellyfinImageFileService : IJellyfinImageFileService {
     public Task<JellyfinImageFile?> ResolveAsync(JellyfinImageAsset asset, CancellationToken cancellationToken) {
         if (asset.Path.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
             asset.Path.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) {
+            return Task.FromResult<JellyfinImageFile?>(new JellyfinImageFile(
+                null,
+                asset.Path,
+                asset.ContentType,
+                asset.ImageTag));
+        }
+
+        if (asset.Path.Equals(PrismediaLogoImagePath, StringComparison.Ordinal)) {
             return Task.FromResult<JellyfinImageFile?>(new JellyfinImageFile(
                 null,
                 asset.Path,

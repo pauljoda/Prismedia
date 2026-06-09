@@ -116,6 +116,9 @@
       artistName: artist?.title ?? null,
       albumTitle: null,
       coverUrl: artistCoverUrl ?? null,
+      albumCoverUrls: Object.fromEntries(
+        albumCards.map((card) => [card.entity.id, card.cover?.src ?? null]),
+      ),
     };
   }
 

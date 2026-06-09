@@ -71,6 +71,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Fixed
+- The music player and device media controls now prefer album artwork before artist artwork, including shuffled artist queues, and Jellyfin-compatible music artwork falls back from album art to the Prismedia logo instead of artist images.
 - Gallery feed views now autoplay clips inline, like the Images feed. Inside a gallery, short video-like images and animated stills play in place as they scroll into view (not only the single centered one), so a gallery of clips no longer looks like a wall of frozen posters. On the Galleries list, a gallery whose cover is an animated image or clip now autoplays that cover too.
 - The collection rule editor's "Apply to" chips now scroll horizontally on phones, so every media type can be reached and selected without widening the page.
 - Prismedia now restores the UI session cookie correctly when served behind the app reverse proxy, so the web app no longer opens as if the API key is missing.

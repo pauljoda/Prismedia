@@ -461,6 +461,9 @@ public sealed partial class JellyfinCatalogService {
     private static bool IsAudio(EntityKind kind) =>
         kind == EntityKind.AudioTrack;
 
+    private static bool IsMusic(EntityKind kind) =>
+        IsAudio(kind) || kind is EntityKind.AudioLibrary or EntityKind.MusicArtist;
+
     private static bool IsFolder(EntityKind kind) =>
         kind is EntityKind.VideoSeries or EntityKind.VideoSeason or EntityKind.Collection
             or EntityKind.Person or EntityKind.MusicArtist or EntityKind.AudioLibrary;

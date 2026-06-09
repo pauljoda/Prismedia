@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { AudioTrackListItemDto } from "@prismedia/contracts";
-import { AudioPlaybackStore } from "./audio-playback.svelte";
+import {
+  AudioPlaybackStore,
+  PRISMEDIA_AUDIO_ARTWORK_FALLBACK,
+  resolveAudioArtwork,
+} from "./audio-playback.svelte";
 
 function tracks(count: number): AudioTrackListItemDto[] {
   return Array.from({ length: count }, (_, i) => ({
@@ -88,5 +92,26 @@ describe("AudioPlaybackStore", () => {
     expect(store.currentTrack?.id).toBe("t3");
     store.jumpTo(99); // out of range — ignored
     expect(store.currentTrack?.id).toBe("t3");
+  });
+
+  it("resolves current-track album artwork before artist artwork", () => {
+    const [track] = tracks(1);
+    track.libraryId = "album-1";
+
+    expect(resolveAudioArtwork(track, {
+      coverUrl: "/artist.jpg",
+      albumCoverUrls: { "album-1": "/album.jpg" },
+    })).toBe("/album.jpg");
+  });
+
+  it("falls back from missing album artwork to artist artwork and then Prismedia logo", () => {
+    const [track] = tracks(1);
+    track.libraryId = "album-1";
+
+    expect(resolveAudioArtwork(track, {
+      coverUrl: "/artist.jpg",
+      albumCoverUrls: { "album-1": null },
+    })).toBe("/artist.jpg");
+    expect(resolveAudioArtwork(track, null)).toBe(PRISMEDIA_AUDIO_ARTWORK_FALLBACK);
   });
 });

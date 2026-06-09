@@ -627,6 +627,58 @@ public sealed class JellyfinCatalogServiceTests {
         Assert.Null(track.VideoType); // audio is not a video file
     }
 
+    [Fact]
+    public async Task BrowsingAlbumAdvertisesAlbumArtworkForTracksBeforeLogoFallback() {
+        var artistId = Guid.NewGuid();
+        var albumId = Guid.NewGuid();
+        var trackId = Guid.NewGuid();
+        const string albumCover = "/assets/music/album.jpg";
+        var entities = new FakeEntityReadService();
+        entities.Cards[artistId] = MusicCard(artistId, EntityKind.MusicArtist, "A Band", parentId: null, children: []);
+        entities.Cards[albumId] = MusicCard(albumId, EntityKind.AudioLibrary, "First Album", parentId: artistId,
+            children: [new EntityGroup(EntityKind.AudioTrack, "Tracks", [MusicThumb(trackId, EntityKind.AudioTrack, "Opening Track", albumId, sortOrder: 0, coverUrl: null)])]);
+        entities.Thumbnails[albumId] = Thumb(albumId, EntityKind.AudioLibrary, "First Album", coverUrl: albumCover, parentId: artistId);
+        var catalog = new JellyfinCatalogService(entities, new FakeCollections());
+
+        var result = await catalog.GetItemsAsync(
+            Query(parentId: albumId),
+            ServerId,
+            hideNsfw: false,
+            CancellationToken.None);
+
+        var track = Assert.Single(result.Items);
+        Assert.True(track.ImageTags.TryGetValue(JellyfinProtocol.ImageTypes.Primary, out var primaryTag));
+        Assert.Equal(track.AlbumPrimaryImageTag, primaryTag);
+    }
+
+    [Fact]
+    public async Task TrackPrimaryImageEndpointFallsBackToAlbumArtworkThenLogoWithoutArtistArtwork() {
+        var artistId = Guid.NewGuid();
+        var albumId = Guid.NewGuid();
+        var trackId = Guid.NewGuid();
+        const string albumCover = "/assets/music/album.jpg";
+        var entities = new FakeEntityReadService();
+        entities.Cards[trackId] = MusicCard(trackId, EntityKind.AudioTrack, "Opening Track", parentId: albumId, children: []);
+        entities.Cards[albumId] = MusicCard(albumId, EntityKind.AudioLibrary, "First Album", parentId: artistId, children: []);
+        entities.Cards[artistId] = MusicCard(artistId, EntityKind.MusicArtist, "A Band", parentId: null, children: []);
+        entities.Thumbnails[trackId] = Thumb(trackId, EntityKind.AudioTrack, "Opening Track", coverUrl: null, parentId: albumId);
+        entities.Thumbnails[albumId] = Thumb(albumId, EntityKind.AudioLibrary, "First Album", coverUrl: albumCover, parentId: artistId);
+        entities.Thumbnails[artistId] = Thumb(artistId, EntityKind.MusicArtist, "A Band", coverUrl: "/assets/music/artist.jpg");
+        var catalog = new JellyfinCatalogService(entities, new FakeCollections());
+
+        var albumAsset = await catalog.GetImageAssetAsync(trackId, JellyfinProtocol.ImageTypes.Primary, null, hideNsfw: false, CancellationToken.None);
+
+        Assert.NotNull(albumAsset);
+        Assert.Equal(albumCover, albumAsset!.Path);
+
+        entities.Thumbnails[albumId] = Thumb(albumId, EntityKind.AudioLibrary, "First Album", coverUrl: null, parentId: artistId);
+        var logoAsset = await catalog.GetImageAssetAsync(trackId, JellyfinProtocol.ImageTypes.Primary, null, hideNsfw: false, CancellationToken.None);
+
+        Assert.NotNull(logoAsset);
+        Assert.Equal("/brand/prismedia-logo.png", logoAsset!.Path);
+        Assert.NotEqual("/assets/music/artist.jpg", logoAsset.Path);
+    }
+
     private static EntityCard Card(
         Guid id,
         EntityKind kind,
@@ -652,14 +704,14 @@ public sealed class JellyfinCatalogServiceTests {
         IReadOnlyList<EntityGroup> children) =>
         Card(id, kind, title, parentId, children);
 
-    private static EntityThumbnail MusicThumb(Guid id, EntityKind kind, string title, Guid parentId, int sortOrder) =>
+    private static EntityThumbnail MusicThumb(Guid id, EntityKind kind, string title, Guid parentId, int sortOrder, string? coverUrl = "/assets/cover.jpg") =>
         new(
             id,
             kind,
             title,
             ParentEntityId: parentId,
             SortOrder: sortOrder,
-            CoverUrl: "/assets/cover.jpg",
+            CoverUrl: coverUrl,
             CoverThumbUrl: null,
             HoverKind: "none",
             HoverUrl: null,

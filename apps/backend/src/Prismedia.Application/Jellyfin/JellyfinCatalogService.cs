@@ -22,6 +22,7 @@ public sealed partial class JellyfinCatalogService {
     public static readonly Guid MusicViewId = Guid.Parse("10000000-0000-0000-0000-000000000006");
     public static readonly Guid UnwatchedMoviesViewId = Guid.Parse("10000000-0000-0000-0000-000000000007");
     public static readonly Guid UnwatchedSeriesViewId = Guid.Parse("10000000-0000-0000-0000-000000000008");
+    private const string PrismediaLogoImagePath = "/brand/prismedia-logo.png";
     private static readonly Guid FallbackSeasonIdMask = Guid.Parse("9f37a1c4-7211-4c37-9c20-93258a57f001");
 
     /// <summary>The fixed top-level library views, entity kind, and optional forced browse filters.</summary>
@@ -554,12 +555,8 @@ public sealed partial class JellyfinCatalogService {
         if (asset is null) {
             if (index == 0 &&
                 imageType.Equals(JellyfinProtocol.ImageTypes.Primary, StringComparison.OrdinalIgnoreCase) &&
-                await ResolveEntityPrimaryCoverPathAsync(entity, visibility, cancellationToken) is { } primaryPath) {
-                return new JellyfinImageAsset(
-                    primaryPath,
-                    MimeTypeForPath(primaryPath),
-                    JellyfinProtocol.ImageTypes.Primary,
-                    EtagFor(id, primaryPath));
+                await ResolveEntityPrimaryImageAssetAsync(entity, visibility, cancellationToken) is { } primary) {
+                return primary;
             }
 
             // Serve a collection's representative member cover as its Primary image when it has no
@@ -588,14 +585,54 @@ public sealed partial class JellyfinCatalogService {
         IEntityCard entity,
         JellyfinContentVisibility visibility,
         CancellationToken cancellationToken) {
+        var primary = await ResolveEntityPrimaryImageAssetAsync(entity, visibility, cancellationToken);
+        return primary?.Path;
+    }
+
+    private async Task<JellyfinImageAsset?> ResolveEntityPrimaryImageAssetAsync(
+        IEntityCard entity,
+        JellyfinContentVisibility visibility,
+        CancellationToken cancellationToken) {
         var imageCapability = entity.Capabilities.OfType<ImagesCapability>().FirstOrDefault();
         if (PrimaryImageAsset(ImageAssets(entity.Capabilities), imageCapability) is { } primary) {
-            return primary.Path;
+            return new JellyfinImageAsset(
+                primary.Path,
+                primary.MimeType ?? MimeTypeForPath(primary.Path),
+                JellyfinProtocol.ImageTypes.Primary,
+                EtagFor(entity.Id, primary.Path));
         }
 
         var thumbnails = await _entities.GetThumbnailsAsync([entity.Id], visibility.HideNsfw, cancellationToken);
         var thumbnail = thumbnails.Items.FirstOrDefault(item => item.Id == entity.Id);
-        return thumbnail is not null && visibility.Allows(thumbnail) ? thumbnail.CoverUrl : null;
+        if (thumbnail is not null && visibility.Allows(thumbnail) && !string.IsNullOrWhiteSpace(thumbnail.CoverUrl)) {
+            return new JellyfinImageAsset(
+                thumbnail.CoverUrl,
+                MimeTypeForPath(thumbnail.CoverUrl),
+                JellyfinProtocol.ImageTypes.Primary,
+                EtagFor(entity.Id, thumbnail.CoverUrl));
+        }
+
+        if (entity.Kind == EntityKind.AudioTrack && entity.ParentEntityId is { } albumId) {
+            var albumThumbnails = await _entities.GetThumbnailsAsync([albumId], visibility.HideNsfw, cancellationToken);
+            var album = albumThumbnails.Items.FirstOrDefault(item => item.Id == albumId);
+            if (album is not null && visibility.Allows(album) && !string.IsNullOrWhiteSpace(album.CoverUrl)) {
+                return new JellyfinImageAsset(
+                    album.CoverUrl,
+                    MimeTypeForPath(album.CoverUrl),
+                    JellyfinProtocol.ImageTypes.Primary,
+                    EtagFor(album.Id, album.CoverUrl));
+            }
+        }
+
+        if (IsMusic(entity.Kind)) {
+            return new JellyfinImageAsset(
+                PrismediaLogoImagePath,
+                MediaContentTypes.ImagePng,
+                JellyfinProtocol.ImageTypes.Primary,
+                EtagFor(entity.Id, PrismediaLogoImagePath));
+        }
+
+        return null;
     }
 
     private async Task<string?> ResolveCollectionCoverPathAsync(

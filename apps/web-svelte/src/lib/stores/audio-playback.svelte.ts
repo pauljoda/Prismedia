@@ -11,6 +11,8 @@ export interface PlaybackContext {
   artistName?: string | null;
   /** Cover URL for the now-playing artwork when the track has none of its own. */
   coverUrl?: string | null;
+  /** Album artwork by audio library id, used for mixed-album artist queues. */
+  albumCoverUrls?: Record<string, string | null | undefined> | null;
 }
 
 /** Element-level controls the global player registers so any component can drive playback. */
@@ -29,6 +31,16 @@ function shuffleInPlace<T>(items: T[]): T[] {
     [items[i], items[j]] = [items[j], items[i]];
   }
   return items;
+}
+
+export const PRISMEDIA_AUDIO_ARTWORK_FALLBACK = "/brand/prismedia-logo.png";
+
+export function resolveAudioArtwork(
+  track: AudioTrackListItemDto | null | undefined,
+  context: PlaybackContext | null | undefined,
+): string {
+  const albumCover = track?.libraryId ? context?.albumCoverUrls?.[track.libraryId] : null;
+  return albumCover || context?.coverUrl || PRISMEDIA_AUDIO_ARTWORK_FALLBACK;
 }
 
 /**

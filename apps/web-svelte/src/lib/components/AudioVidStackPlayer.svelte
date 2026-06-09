@@ -25,7 +25,7 @@
   import AudioWaveformFilmstrip from "./AudioWaveformFilmstrip.svelte";
   import PlaybackQueueFlyout from "./PlaybackQueueFlyout.svelte";
   import { waveformForDisplay } from "./audio-waveform";
-  import { useAudioPlayback } from "$lib/stores/audio-playback.svelte";
+  import { resolveAudioArtwork, useAudioPlayback } from "$lib/stores/audio-playback.svelte";
   import { useAppChrome } from "$lib/stores/app-chrome.svelte";
   import {
     setMediaSessionHandlers,
@@ -62,7 +62,7 @@
     ctx?.artistName ?? activeTrack?.embeddedArtist ?? activeTrack?.performers?.[0]?.name ?? null,
   );
   const artistHref = $derived(ctx?.artistId ? resolveEntityHref("music-artist", ctx.artistId) : undefined);
-  const coverUrl = $derived(ctx?.coverUrl ?? null);
+  const coverUrl = $derived(resolveAudioArtwork(activeTrack, ctx));
   // Album label: a single-album context wins; otherwise fall back to the track's own album
   // so mixed-album queues (e.g. an artist Play All) still show the right album per track.
   const albumLabel = $derived(ctx?.albumTitle ?? activeTrack?.embeddedAlbum ?? null);
