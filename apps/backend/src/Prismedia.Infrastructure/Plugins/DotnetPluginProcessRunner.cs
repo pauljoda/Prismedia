@@ -122,22 +122,10 @@ public sealed class DotnetPluginProcessRunner : IIdentifyRunner {
                 .Where(candidate => !string.IsNullOrWhiteSpace(candidate.Title))
                 .ToArray();
             if (candidates.Length == 0) {
-                return new IdentifyPluginResponse(true, null, wire.Error ?? $"No {providerName} match was found.");
+                return IdentifyPluginResponse.NoMatch(wire.Error ?? $"No {providerName} match was found.");
             }
 
-            var shell = new EntityMetadataProposal(
-                ProposalId: null!,
-                Provider: null!,
-                TargetKind: targetKind,
-                Confidence: null,
-                MatchReason: null,
-                Patch: null!,
-                Images: [],
-                Children: [],
-                Candidates: candidates,
-                TargetEntityId: null,
-                Relationships: []);
-            return new IdentifyPluginResponse(true, shell, wire.Error);
+            return IdentifyPluginResponse.Candidates(targetKind, candidates, wire.Error);
         }
 
         return new IdentifyPluginResponse(true, null, wire.Error ?? $"No {providerName} match was found.");

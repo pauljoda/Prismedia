@@ -83,9 +83,46 @@ public sealed record EntityMetadataProposal(
     IReadOnlyList<EntityMetadataProposal> Relationships = null!);
 
 /// <summary>
-/// Response envelope written by plugin processes.
+/// Response envelope written by plugin processes. The two-mode contract surfaces as the shape of
+/// <see cref="Result"/>: a confident match carries a hydrated <see cref="EntityMetadataProposal.Patch"/>,
+/// while a search carries <see cref="EntityMetadataProposal.Candidates"/> and no patch. Build either
+/// through the factories rather than hand-constructing a partially-null shell.
 /// </summary>
-public sealed record IdentifyPluginResponse(bool Ok, EntityMetadataProposal? Result, string? Error);
+public sealed record IdentifyPluginResponse(bool Ok, EntityMetadataProposal? Result, string? Error) {
+    /// <summary>A confident match carrying a hydrated proposal.</summary>
+    public static IdentifyPluginResponse Match(EntityMetadataProposal proposal, string? error = null) =>
+        new(true, proposal, error);
+
+    /// <summary>
+    /// A confidence-scored search result: a candidates-only proposal shell for the disambiguation UI,
+    /// carrying no patch. This is the single place the candidate shell is constructed.
+    /// </summary>
+    public static IdentifyPluginResponse Candidates(
+        ProposalKind targetKind,
+        IReadOnlyList<EntitySearchCandidate> candidates,
+        string? error = null) =>
+        new(
+            true,
+            new EntityMetadataProposal(
+                ProposalId: null!,
+                Provider: null!,
+                TargetKind: targetKind,
+                Confidence: null,
+                MatchReason: null,
+                Patch: null!,
+                Images: [],
+                Children: [],
+                Candidates: candidates,
+                TargetEntityId: null,
+                Relationships: []),
+            error);
+
+    /// <summary>A no-match (successful run, nothing found) response carrying an optional message.</summary>
+    public static IdentifyPluginResponse NoMatch(string? message = null) => new(true, null, message);
+
+    /// <summary>A failed run carrying an error message.</summary>
+    public static IdentifyPluginResponse Failure(string error) => new(false, null, error);
+}
 
 /// <summary>
 /// Request body for applying selected fields from a reviewed metadata proposal.

@@ -106,7 +106,7 @@ public sealed class StashCompatRunner : IIdentifyRunner {
                 .Select(candidate => candidate!)
                 .ToArray();
             if (candidates.Length > 0) {
-                return new IdentifyPluginResponse(true, CandidatesShell(targetKind, candidates), null);
+                return IdentifyPluginResponse.Candidates(targetKind, candidates);
             }
         }
 
@@ -228,23 +228,6 @@ public sealed class StashCompatRunner : IIdentifyRunner {
         }
     }
 
-    /// <summary>
-    /// Builds the candidate-only response shell, mirroring the dotnet runner so the identify
-    /// pipeline routes it to the disambiguation UI rather than treating it as a confident match.
-    /// </summary>
-    private static EntityMetadataProposal CandidatesShell(ProposalKind targetKind, IReadOnlyList<EntitySearchCandidate> candidates) =>
-        new(
-            ProposalId: null!,
-            Provider: null!,
-            TargetKind: targetKind,
-            Confidence: null,
-            MatchReason: null,
-            Patch: null!,
-            Images: [],
-            Children: [],
-            Candidates: candidates,
-            TargetEntityId: null,
-            Relationships: []);
 
     private static StashScrapeInput BuildInput(IdentifyPluginRequest request, string providerId) {
         var url = FirstNonEmpty(
