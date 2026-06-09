@@ -191,12 +191,70 @@ public static class StashResultMapper {
             Relationships: []);
 
     /// <summary>
-    /// Builds a candidate from a scraped scene for name-search disambiguation.
+    /// Builds a Person proposal from a scraped performer profile (performer-by-URL/name identify).
+    /// </summary>
+    public static EntityMetadataProposal ToPerformerProposal(
+        StashScrapedPerformer performer,
+        string providerId,
+        string providerName,
+        string? inputUrl,
+        string matchReason,
+        decimal confidence) {
+        var name = performer.Name?.Trim() ?? string.Empty;
+        var urls = new List<string>();
+        if (Uri.TryCreate(performer.Url, UriKind.Absolute, out _)) {
+            urls.Add(performer.Url!.Trim());
+        }
+
+        if (!string.IsNullOrWhiteSpace(inputUrl) && Uri.TryCreate(inputUrl, UriKind.Absolute, out _)) {
+            urls.Add(inputUrl.Trim());
+        }
+
+        var dates = new Dictionary<string, string>();
+        if (!string.IsNullOrWhiteSpace(performer.Birthdate)) {
+            dates["birth"] = performer.Birthdate!.Trim();
+        }
+
+        var images = string.IsNullOrWhiteSpace(performer.Image)
+            ? Array.Empty<ImageCandidate>()
+            : [new ImageCandidate(MediaImageKind.Poster.ToCode(), performer.Image!.Trim(), providerName, null, null, null, null)];
+
+        var patch = new EntityMetadataPatch(
+            string.IsNullOrWhiteSpace(name) ? null : name,
+            string.IsNullOrWhiteSpace(performer.Details) ? null : performer.Details!.Trim(),
+            new Dictionary<string, string>(),
+            urls.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
+            [],
+            null,
+            [],
+            dates,
+            new Dictionary<string, int>(),
+            new Dictionary<string, int>(),
+            null);
+
+        return new EntityMetadataProposal(
+            $"{providerId}:person:{(string.IsNullOrWhiteSpace(performer.Url) ? name : performer.Url!.Trim())}",
+            providerName,
+            ProposalKind.Person,
+            confidence,
+            matchReason,
+            patch,
+            images,
+            [],
+            [],
+            Relationships: []);
+    }
+
+    /// <summary>
+    /// Builds a candidate from a scraped scene for name-search disambiguation. When
+    /// <paramref name="queryTitle"/> is supplied, the candidate carries a title-similarity confidence
+    /// so it ranks and gates like a first-party provider's search result.
     /// </summary>
     /// <param name="scene">The scraped scene.</param>
     /// <param name="providerId">Provider/scraper id used as the external-id key.</param>
+    /// <param name="queryTitle">The searched title, used to score the candidate; null skips scoring.</param>
     /// <returns>A search candidate, or null when the scene has no title or locator.</returns>
-    public static EntitySearchCandidate? ToCandidate(StashScrapedScene scene, string providerId) {
+    public static EntitySearchCandidate? ToCandidate(StashScrapedScene scene, string providerId, string? queryTitle = null) {
         if (string.IsNullOrWhiteSpace(scene.Title)) {
             return null;
         }
@@ -216,12 +274,18 @@ public static class StashResultMapper {
             year = parsedYear;
         }
 
+        var confidence = string.IsNullOrWhiteSpace(queryTitle) ? (decimal?)null : TitleSimilarity.Score(scene.Title, queryTitle);
+
         return new EntitySearchCandidate(
             externalIds,
             scene.Title.Trim(),
             year,
             string.IsNullOrWhiteSpace(scene.Details) ? null : scene.Details.Trim(),
             string.IsNullOrWhiteSpace(scene.Image) ? null : scene.Image.Trim(),
-            null);
+            Popularity: null,
+            CandidateId: null,
+            Source: providerId,
+            Confidence: confidence,
+            MatchReason: confidence is null ? null : "title-search");
     }
 }

@@ -26,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Images and Galleries now have a Feed view alongside Grid and List: a single, full-width column where each item shows at its real shape (tall, wide, or square) with the full title wrapped beneath it. Animated images play inline and keep playing as you scroll — the one on screen plus the next couple above and below — and a tap opens the lightbox, so the feed itself stays purely for browsing. Your filters, sort, and paging all carry over, and the choice is remembered per device.
 
 ### Added
+- Stash community scrapers can now identify performers and image galleries, not just videos and movies. The scraper is routed by the capabilities it actually declares (so a performer or gallery scraper is used for those), and name-search results are now ranked by how closely they match what you searched for.
 - Jellyfin-compatible profiles can now independently allow SFW and NSFW content, including NSFW-only or empty-library profiles for client compatibility.
 - Jellyfin-compatible clients now see separate Unwatched Movies and Unwatched Series libraries, so apps like Infuse can browse only titles that have not been watched yet.
 - Multi-grid detail pages now let you collapse child sections such as Sub Galleries, Images, Seasons, Volumes, and Chapters from the section heading. Each section remembers whether you left it open or folded on that device.

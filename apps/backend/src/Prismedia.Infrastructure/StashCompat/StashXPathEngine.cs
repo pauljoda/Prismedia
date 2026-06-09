@@ -23,6 +23,12 @@ public sealed class StashXPathEngine {
     public StashScrapedScene? EvaluateScene(string html, StashYamlNode scraperBlock) {
         var sceneDef = scraperBlock["scene"];
         if (sceneDef.IsMissing) {
+            // Gallery scrapers map their fields under a `gallery` block with the same field shape
+            // (Title/Date/Details/URL/Image/Studio/Performers/Tags), so reuse the scene evaluator.
+            sceneDef = scraperBlock["gallery"];
+        }
+
+        if (sceneDef.IsMissing) {
             return null;
         }
 
