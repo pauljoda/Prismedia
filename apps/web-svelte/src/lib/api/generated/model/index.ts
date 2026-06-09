@@ -125,6 +125,7 @@ export * from './fileChildrenResponse';
 export * from './fileCreateFolderRequest';
 export * from './fileDetail';
 export * from './fileEntry';
+export * from './fileEntryKind';
 export * from './fileExclusionRequest';
 export * from './fileLinkedEntity';
 export * from './fileMoveRequest';

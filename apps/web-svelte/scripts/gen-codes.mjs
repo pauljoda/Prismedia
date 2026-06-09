@@ -33,6 +33,7 @@ const ENUM_EXPORTS = [
   ["IdentifyResultStatus", "IDENTIFY_RESULT_STATUS", "IdentifyResultStatusCode"],
   ["IdentifyApplyState", "IDENTIFY_APPLY_STATE", "IdentifyApplyStateCode"],
   ["FileSourceKind", "FILE_SOURCE_KIND", "FileSourceKindCode"],
+  ["FileEntryKind", "FILE_ENTRY_KIND", "FileEntryKindCode"],
 ];
 
 const camel = (name) => (name.length === 0 ? name : name[0].toLowerCase() + name.slice(1));

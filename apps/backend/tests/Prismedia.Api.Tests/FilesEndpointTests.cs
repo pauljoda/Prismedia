@@ -132,7 +132,7 @@ public sealed class FilesEndpointTests : IDisposable {
         public Task UpsertExclusionAsync(
             Guid rootId,
             string relativePath,
-            string kind,
+            FileEntryKind kind,
             CancellationToken cancellationToken) =>
             Task.CompletedTask;
 

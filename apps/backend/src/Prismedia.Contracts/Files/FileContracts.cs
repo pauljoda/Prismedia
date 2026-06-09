@@ -17,7 +17,7 @@ public sealed record FileRoot(Guid Id, string Label, string Path, bool Enabled);
 /// <param name="RootId">Owning library root identifier.</param>
 /// <param name="Path">Root-relative path. Empty string represents the root.</param>
 /// <param name="Name">Display basename.</param>
-/// <param name="Kind"><c>directory</c> or <c>file</c>.</param>
+/// <param name="Kind">Whether the entry is a directory or a leaf file.</param>
 /// <param name="SizeBytes">File size when known.</param>
 /// <param name="MimeType">Detected content type for files.</param>
 /// <param name="ModifiedAt">Last modification timestamp when known.</param>
@@ -26,7 +26,7 @@ public sealed record FileEntry(
     Guid RootId,
     string Path,
     string Name,
-    string Kind,
+    FileEntryKind Kind,
     long? SizeBytes,
     string? MimeType,
     DateTimeOffset? ModifiedAt,

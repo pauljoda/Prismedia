@@ -1,5 +1,6 @@
 using Prismedia.Application.Files;
 using Prismedia.Contracts.Files;
+using Prismedia.Domain.Entities;
 using Prismedia.Contracts.Media;
 using Prismedia.Contracts.System;
 
@@ -32,7 +33,7 @@ public sealed class LocalManagedFileStorage : IManagedFileStorage {
         }
 
         return Task.FromResult<IReadOnlyList<FileEntry>>(entries
-            .OrderByDescending(entry => entry.Kind == "directory")
+            .OrderByDescending(entry => entry.Kind == FileEntryKind.Directory)
             .ThenBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase)
             .ToArray());
     }
@@ -71,7 +72,7 @@ public sealed class LocalManagedFileStorage : IManagedFileStorage {
                 ? null
                 : new DateTimeOffset(info.CreationTimeUtc, TimeSpan.Zero),
             linkedEntities,
-            entry.Kind == "file" && IsPreviewable(entry.MimeType),
+            entry.Kind == FileEntryKind.File && IsPreviewable(entry.MimeType),
             dirFileCount,
             dirTotalSize));
     }
@@ -200,7 +201,7 @@ public sealed class LocalManagedFileStorage : IManagedFileStorage {
             rootId,
             path,
             info.Name,
-            isDirectory ? "directory" : "file",
+            isDirectory ? FileEntryKind.Directory : FileEntryKind.File,
             size,
             mime,
             new DateTimeOffset(info.LastWriteTimeUtc, TimeSpan.Zero));

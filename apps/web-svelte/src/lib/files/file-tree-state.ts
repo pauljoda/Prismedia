@@ -1,10 +1,11 @@
 import type { FileEntry, FileRoot } from "$lib/api/generated/model";
+import { FILE_ENTRY_KIND, type FileEntryKindCode } from "$lib/api/generated/codes";
 
 export interface FileTreeNodeMeta {
   rootId: string;
   path: string;
   name: string;
-  kind: string;
+  kind: FileEntryKindCode;
   treePath: string;
   excluded?: boolean;
 }
@@ -35,7 +36,7 @@ export function createFileTreeRegistry(roots: FileRoot[]): Map<string, FileTreeN
       rootId: root.id,
       path: "",
       name: root.label || root.path,
-      kind: "directory",
+      kind: FILE_ENTRY_KIND.directory,
       treePath,
     });
   }
@@ -50,7 +51,7 @@ export function upsertFileTreeEntries(
   const treePaths: string[] = [];
   for (const entry of entries) {
     const basePath = fileTreeEntryPath(rootTreePath, entry);
-    const treePath = entry.kind === "directory" ? `${basePath}/` : basePath;
+    const treePath = entry.kind === FILE_ENTRY_KIND.directory ? `${basePath}/` : basePath;
     registry.set(treePath, {
       rootId: entry.rootId,
       path: entry.path,
@@ -132,7 +133,7 @@ export function unloadedExpandedDirectories(
   return treePaths
     .map((treePath) => registry.get(treePath))
     .filter((meta): meta is FileTreeNodeMeta => Boolean(meta))
-    .filter((meta) => meta.kind === "directory")
+    .filter((meta) => meta.kind === FILE_ENTRY_KIND.directory)
     .filter((meta) => !loadedKeys.has(`${meta.rootId}:${meta.path}`))
     .filter((meta) => isExpandedDirectory(meta.treePath));
 }

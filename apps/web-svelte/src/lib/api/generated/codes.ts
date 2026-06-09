@@ -196,6 +196,13 @@ export const FILE_SOURCE_KIND = {
 
 export type FileSourceKindCode = (typeof FILE_SOURCE_KIND)[keyof typeof FILE_SOURCE_KIND];
 
+export const FILE_ENTRY_KIND = {
+  directory: "directory",
+  file: "file",
+} as const;
+
+export type FileEntryKindCode = (typeof FILE_ENTRY_KIND)[keyof typeof FILE_ENTRY_KIND];
+
 export const CAPABILITY_KIND = {
   classification: "classification",
   dates: "dates",

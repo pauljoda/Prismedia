@@ -163,7 +163,7 @@ public sealed class EfFilesPersistence(PrismediaDbContext db) : IFilesPersistenc
     public async Task UpsertExclusionAsync(
         Guid rootId,
         string relativePath,
-        string kind,
+        FileEntryKind kind,
         CancellationToken cancellationToken) {
         var path = NormalizeRelativePath(relativePath);
         var now = DateTimeOffset.UtcNow;
@@ -172,14 +172,14 @@ public sealed class EfFilesPersistence(PrismediaDbContext db) : IFilesPersistenc
             db.MediaFileIgnores.Add(new MediaFileIgnoreRow {
                 LibraryRootId = rootId,
                 Path = path,
-                Kind = NormalizeKind(kind),
-                Reason = "excluded-from-library",
+                Kind = kind.ToCode(),
+                Reason = MediaFileIgnoreReason.ExcludedFromLibrary.ToCode(),
                 CreatedAt = now,
                 UpdatedAt = now
             });
         } else {
-            row.Kind = NormalizeKind(kind);
-            row.Reason = "excluded-from-library";
+            row.Kind = kind.ToCode();
+            row.Reason = MediaFileIgnoreReason.ExcludedFromLibrary.ToCode();
             row.UpdatedAt = now;
         }
 
@@ -272,9 +272,6 @@ public sealed class EfFilesPersistence(PrismediaDbContext db) : IFilesPersistenc
 
     private static string NormalizeRelativePath(string path) =>
         path.Replace('\\', '/').Trim('/');
-
-    private static string NormalizeKind(string kind) =>
-        string.Equals(kind, "directory", StringComparison.OrdinalIgnoreCase) ? "directory" : "file";
 
     private static bool IsSameOrDescendant(string relativePath, string excludedPath) {
         var path = NormalizeRelativePath(relativePath);

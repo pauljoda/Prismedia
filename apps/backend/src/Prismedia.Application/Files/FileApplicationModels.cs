@@ -1,5 +1,6 @@
 using Prismedia.Contracts.Files;
 using Prismedia.Contracts.System;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Files;
 
@@ -71,7 +72,7 @@ public interface IFilesPersistence {
     Task UpsertExclusionAsync(
         Guid rootId,
         string relativePath,
-        string kind,
+        FileEntryKind kind,
         CancellationToken cancellationToken);
 
     /// <summary>Removes a scan exclusion for one root-relative path.</summary>
