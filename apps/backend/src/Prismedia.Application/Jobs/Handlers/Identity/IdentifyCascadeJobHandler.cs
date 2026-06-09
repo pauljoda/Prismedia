@@ -19,7 +19,7 @@ public sealed class IdentifyCascadeJobHandler(
 
         await context.ReportProgressAsync(10, "Resolving children", cancellationToken);
         try {
-            await runner.RunAsync(payload, context.Job.Id, cancellationToken);
+            await runner.RunAsync(payload, context.Job.Id, context.Job.IsFinalAttempt, cancellationToken);
             await context.ReportProgressAsync(100, "Children resolved", cancellationToken);
         } catch (OperationCanceledException) {
             throw;

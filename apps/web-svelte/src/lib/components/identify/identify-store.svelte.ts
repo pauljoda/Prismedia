@@ -553,7 +553,9 @@ export class IdentifyStore {
    * @returns true when the item had a proposal that was applied, false when it was skipped.
    */
   async acceptQueueProposal(item: IdentifyQueueItem): Promise<boolean> {
-    if (item.state !== "proposal" || !item.proposal) return false;
+    // Skip while the cascade is still streaming children — the proposal is partial until then, and the
+    // backend rejects an apply with a live cascade marker. Mirrors the review screen's Accept gate.
+    if (item.state !== "proposal" || !item.proposal || item.cascadeRunning) return false;
     const payload = buildDefaultApplyPayload(item.proposal);
     const applied = await applyIdentifyQueueItem(
       item.entityId,
@@ -570,7 +572,7 @@ export class IdentifyStore {
    * Items without a ready proposal are ignored so the high-level "accept everything" flow stays safe.
    */
   async acceptQueueProposals(items: IdentifyQueueItem[]) {
-    const acceptable = items.filter((item) => item.state === "proposal" && item.proposal);
+    const acceptable = items.filter((item) => item.state === "proposal" && item.proposal && !item.cascadeRunning);
     if (acceptable.length === 0) return;
     this.bulkAccepting = true;
     this.bulkAcceptDone = 0;

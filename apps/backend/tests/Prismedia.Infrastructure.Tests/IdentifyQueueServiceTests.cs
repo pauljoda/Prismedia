@@ -169,6 +169,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         await service.RunCascadeAsync(
             new IdentifyCascadePayload(seriesId, "tmdb", query, HideNsfw: false),
             cascadeJobId,
+            isFinalAttempt: true,
             CancellationToken.None);
         var resolved = await service.GetAsync(seriesId, CancellationToken.None);
 
@@ -208,6 +209,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         await service.RunCascadeAsync(
             new IdentifyCascadePayload(seriesId, "tmdb", query, HideNsfw: false),
             cascadeJobId,
+            isFinalAttempt: true,
             CancellationToken.None);
 
         var row = await db.IdentifyQueueItems.AsNoTracking().SingleAsync(i => i.EntityId == seriesId);
@@ -259,6 +261,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         await service.RunCascadeAsync(
             new IdentifyCascadePayload(seriesId, "tmdb", query, HideNsfw: false),
             Guid.Parse("66666666-6666-6666-6666-6666666666aa"),
+            isFinalAttempt: true,
             CancellationToken.None);
 
         var resolved = await service.GetAsync(seriesId, CancellationToken.None);
@@ -266,6 +269,116 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         Assert.Empty(resolved!.Proposal!.Children);
         var row = await db.IdentifyQueueItems.AsNoTracking().SingleAsync(i => i.EntityId == seriesId);
         Assert.Equal(supersedingJobId, row.CascadeJobId);
+    }
+
+    [Fact]
+    public async Task RunCascadeKeepsTheCascadeMarkerWhenANonFinalAttemptFailsAndClearsItOnTheFinalAttempt() {
+        // A cascade attempt that throws must NOT clear the queue item's cascade marker while the job still
+        // has retries left, or the review screen would unlock Accept on a half-resolved proposal during the
+        // retry gap. The marker is cleared only once the final attempt has failed, so a permanently-failed
+        // cascade does not leave Accept disabled forever.
+        await using var db = CreateContext();
+        var seriesId = Guid.Parse("77777777-7777-7777-7777-777777777770");
+        var cascadeJobId = Guid.Parse("77777777-7777-7777-7777-7777777777aa");
+        SeedProvider(db);
+        SeedEntity(db, seriesId, "video-series", "Known Series");
+        var seed = new EntityMetadataProposal(
+            "tmdb:series:1", "tmdb", ProposalKind.VideoSeries, 1, "external-id",
+            EmptyPatch("Known Series identified"), [], [], [], TargetEntityId: seriesId, Relationships: []);
+        db.IdentifyQueueItems.Add(new IdentifyQueueItemRow {
+            Id = Guid.NewGuid(),
+            EntityId = seriesId,
+            State = IdentifyQueueState.Proposal,
+            ProviderCode = "tmdb",
+            Action = "lookup-id",
+            ProposalJson = JsonSerializer.Serialize(seed, JsonOptions),
+            CascadeJobId = cascadeJobId,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var service = CreateQueueService(db, new ThrowingProcessExecutor(), _tempRoot);
+        var query = new IdentifyQuery(null, null, new Dictionary<string, string> { ["tmdb"] = "series-1" });
+        var payload = new IdentifyCascadePayload(seriesId, "tmdb", query, HideNsfw: false);
+
+        // A retryable failure: the exception propagates, but the marker stays set (cascadeRunning true).
+        await Assert.ThrowsAnyAsync<Exception>(() =>
+            service.RunCascadeAsync(payload, cascadeJobId, isFinalAttempt: false, CancellationToken.None));
+        var afterRetryable = await db.IdentifyQueueItems.AsNoTracking().SingleAsync(i => i.EntityId == seriesId);
+        Assert.Equal(cascadeJobId, afterRetryable.CascadeJobId);
+
+        // The final attempt fails: the marker is cleared so Accept is no longer gated forever.
+        await Assert.ThrowsAnyAsync<Exception>(() =>
+            service.RunCascadeAsync(payload, cascadeJobId, isFinalAttempt: true, CancellationToken.None));
+        var afterFinal = await db.IdentifyQueueItems.AsNoTracking().SingleAsync(i => i.EntityId == seriesId);
+        Assert.Null(afterFinal.CascadeJobId);
+    }
+
+    [Fact]
+    public async Task ApplyAsyncRejectsReapplyingAnAlreadyDoneItem() {
+        // A Done row keeps its ProposalJson for history; without the terminal-state guard a re-POST or a
+        // bulk-accept loop hitting the same entity twice would re-run the full recursive write.
+        await using var db = CreateContext();
+        var entityId = Guid.Parse("44444444-4444-4444-4444-444444444445");
+        SeedEntity(db, entityId, "video", "Old Title");
+        var proposal = Proposal(entityId, "Reviewed Title");
+        db.IdentifyQueueItems.Add(new IdentifyQueueItemRow {
+            Id = Guid.NewGuid(),
+            EntityId = entityId,
+            State = IdentifyQueueState.Done,
+            ProviderCode = "tmdb",
+            Action = "lookup-id",
+            ProposalJson = JsonSerializer.Serialize(proposal, JsonOptions),
+            CompletedAt = DateTimeOffset.UtcNow,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var service = CreateQueueService(db, new ProposalProcessExecutor(), _tempRoot);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.ApplyAsync(
+                entityId,
+                new ApplyIdentifyQueueItemRequest(proposal, ["title"], null),
+                CancellationToken.None));
+
+        Assert.Contains("already", error.Message);
+        Assert.Equal("Old Title", (await db.Entities.SingleAsync(row => row.Id == entityId)).Title);
+    }
+
+    [Fact]
+    public async Task ApplyAsyncRejectsApplyingWhileTheCascadeIsStillResolvingChildren() {
+        // The stored proposal is only partial until the cascade clears its marker, so applying now would
+        // drop the children that have not streamed in yet. The bulk-accept path does not gate on this, so
+        // the state machine must reject it.
+        await using var db = CreateContext();
+        var seriesId = Guid.Parse("44444444-4444-4444-4444-444444444446");
+        SeedEntity(db, seriesId, "video-series", "Old Title");
+        var proposal = new EntityMetadataProposal(
+            "tmdb:series:1", "tmdb", ProposalKind.VideoSeries, 1, "external-id",
+            EmptyPatch("Reviewed Title"), [], [], [], TargetEntityId: seriesId, Relationships: []);
+        db.IdentifyQueueItems.Add(new IdentifyQueueItemRow {
+            Id = Guid.NewGuid(),
+            EntityId = seriesId,
+            State = IdentifyQueueState.Proposal,
+            ProviderCode = "tmdb",
+            Action = "lookup-id",
+            ProposalJson = JsonSerializer.Serialize(proposal, JsonOptions),
+            CascadeJobId = Guid.Parse("44444444-4444-4444-4444-4444444444cc"),
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var service = CreateQueueService(db, new ProposalProcessExecutor(), _tempRoot);
+
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.ApplyAsync(
+                seriesId,
+                new ApplyIdentifyQueueItemRequest(proposal, ["title"], null),
+                CancellationToken.None));
+
+        Assert.Contains("still resolving", error.Message);
+        Assert.Equal("Old Title", (await db.Entities.SingleAsync(row => row.Id == seriesId)).Title);
     }
 
     [Fact]
@@ -769,6 +882,16 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         // Mirror the plugin wire / stored-proposal format: codec enums round-trip as their code.
         Converters = { new CodecJsonConverterFactory() }
     };
+
+    /// <summary>A plugin process that always crashes, to simulate a cascade attempt throwing mid-walk.</summary>
+    private sealed class ThrowingProcessExecutor : ProcessExecutor {
+        public override Task<ProcessExecutionResult> RunAsync(
+            string fileName,
+            IReadOnlyList<string> arguments,
+            IReadOnlyDictionary<string, string>? environment,
+            CancellationToken cancellationToken, bool lowPriority = false) =>
+            throw new InvalidOperationException("Plugin process crashed.");
+    }
 
     private sealed class CandidateProcessExecutor : ProcessExecutor {
         public override Task<ProcessExecutionResult> RunAsync(

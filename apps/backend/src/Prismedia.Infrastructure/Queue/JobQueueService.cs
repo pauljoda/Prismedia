@@ -460,6 +460,8 @@ public sealed class JobQueueService : IJobQueueService {
             row.TargetLabel,
             row.CreatedAt,
             row.StartedAt,
-            row.FinishedAt);
+            row.FinishedAt,
+            row.Attempts,
+            row.MaxAttempts);
     }
 }

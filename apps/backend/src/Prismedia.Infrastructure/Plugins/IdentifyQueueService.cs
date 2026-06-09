@@ -248,9 +248,11 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
 
     /// <summary>
     /// Runs the background full-tree cascade for a queued entity, streaming the growing proposal onto
-    /// the queue item as each child resolves and clearing the cascade marker when finished.
+    /// the queue item as each child resolves. Clears the item's cascade marker on success or on the
+    /// final failed attempt, but keeps it set across retryable failures so the review screen stays
+    /// gated while the job is still going to retry.
     /// </summary>
-    public async Task RunCascadeAsync(IdentifyCascadePayload payload, Guid cascadeJobId, CancellationToken cancellationToken) {
+    public async Task RunCascadeAsync(IdentifyCascadePayload payload, Guid cascadeJobId, bool isFinalAttempt, CancellationToken cancellationToken) {
         try {
             var sink = new QueueProposalSink(this, payload.EntityId, cascadeJobId);
             var response = await _identify.IdentifyAsync(
@@ -270,8 +272,25 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
                 && await IsCascadeActiveAsync(payload.EntityId, cascadeJobId, cancellationToken)) {
                 await SaveProposalSafelyAsync(payload.EntityId, response.Result, cancellationToken);
             }
-        } finally {
+
+            // The cascade finished (with a tree, or with no further matches): clear the marker so the
+            // review screen's Accept unlocks. Id-guarded, so a superseding search's newer marker survives.
             await ClearCascadeJobAsync(payload.EntityId, cascadeJobId, CancellationToken.None);
+        } catch (OperationCanceledException) {
+            // Superseded/deleted (CancelCascadeAsync already replaced or cleared our marker, so a clear
+            // here would be a no-op) or worker shutdown (the run is recovered and re-attempted later).
+            // Either way, leave the marker untouched and let the supersede/retry path own it.
+            throw;
+        } catch {
+            // A retryable failure must NOT clear the marker: attempts 2..N will re-walk and re-stream the
+            // tree, so cascadeRunning has to stay true or the review screen would unlock Accept on a
+            // half-resolved proposal during the retry gap. Clear only when this final attempt failed, so a
+            // permanently-failed cascade does not leave Accept disabled forever.
+            if (isFinalAttempt) {
+                await ClearCascadeJobAsync(payload.EntityId, cascadeJobId, CancellationToken.None);
+            }
+
+            throw;
         }
     }
 
@@ -330,6 +349,24 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
         var row = await _db.IdentifyQueueItems
             .FirstOrDefaultAsync(item => item.EntityId == entityId, cancellationToken)
             ?? throw new KeyNotFoundException($"Identify queue item for entity '{entityId}' was not found.");
+
+        // Terminal rows are one-way. A Done/Deleted item still carries its ProposalJson (kept for
+        // history), so without this guard a re-POST, double-click, or a bulk-accept loop hitting the same
+        // entity twice would re-run the full recursive write. Reject instead of silently re-applying.
+        if (row.State is IdentifyQueueState.Done or IdentifyQueueState.Deleted) {
+            throw new InvalidOperationException(
+                $"Identify queue item for entity '{entityId}' is already '{row.State.ToCode()}' and cannot be applied again.");
+        }
+
+        // Do not apply while the background cascade is still streaming the child tree: the stored proposal
+        // is only partial until the cascade clears its marker, so applying now would drop the children
+        // that have not streamed in yet. The single-item review disables Accept on this same signal;
+        // enforce it here too so the bulk-accept path cannot apply a half-resolved tree.
+        if (row.CascadeJobId is not null) {
+            throw new InvalidOperationException(
+                $"Identify cascade for entity '{entityId}' is still resolving children; cannot apply yet.");
+        }
+
         var entity = await LoadEntityAsync(entityId, cancellationToken)
             ?? throw new KeyNotFoundException($"Entity '{entityId}' was not found.");
         var storedProposal = Deserialize<EntityMetadataProposal>(row.ProposalJson)
