@@ -183,7 +183,11 @@ internal static partial class PrismediaModelConfiguration {
                 .HasConversion(value => value.ToCode(), value => value.DecodeAs<IdentifyQueueState>())
                 .IsRequired();
             entity.Property(row => row.ProviderCode).HasColumnName("provider_code").HasMaxLength(128);
-            entity.Property(row => row.Action).HasColumnName("action").HasMaxLength(128).IsRequired();
+            entity.Property(row => row.Action)
+                .HasColumnName("action")
+                .HasMaxLength(128)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<IdentifyAction>())
+                .IsRequired();
             entity.Property(row => row.QueryJson).HasColumnName("query_json").HasColumnType("jsonb");
             entity.Property(row => row.CandidatesJson).HasColumnName("candidates_json").HasColumnType("jsonb");
             entity.Property(row => row.ProposalJson).HasColumnName("proposal_json").HasColumnType("jsonb");

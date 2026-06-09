@@ -65,7 +65,7 @@ public sealed record IdentifyQuery(
 /// <param name="IncludeNsfw">Whether plugin lookups may include adult upstream results for this request.</param>
 public sealed record IdentifyPluginRequest(
     int ProtocolVersion,
-    string Action,
+    IdentifyAction Action,
     IReadOnlyDictionary<string, string> Auth,
     IdentifyEntitySnapshot Entity,
     IdentifyQuery Query,

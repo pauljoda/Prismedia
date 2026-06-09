@@ -1,4 +1,5 @@
 import type { EntityKind, ProposalKind } from "$lib/api/generated/model";
+import type { IdentifyActionCode } from "$lib/api/generated/codes";
 import type { EntityMetadataFlagsPatch } from "$lib/api/entity-mutations";
 
 export interface PluginEntitySupport {
@@ -136,7 +137,7 @@ export interface IdentifyQueueItem {
   isNsfw: boolean;
   state: IdentifyQueueState;
   provider?: string | null;
-  action: string;
+  action: IdentifyActionCode;
   query?: IdentifyQuery | null;
   candidates: EntitySearchCandidate[];
   proposal?: EntityMetadataProposal | null;

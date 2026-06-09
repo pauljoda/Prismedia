@@ -249,7 +249,7 @@ public sealed class StashCompatTests {
             var runner = new StashCompatRunner(new HttpClient(new FixedHtmlHandler(SampleHtml)));
             var request = new IdentifyPluginRequest(
                 ProtocolVersion: 2,
-                Action: "lookup-url",
+                Action: IdentifyAction.LookupUrl,
                 Auth: new Dictionary<string, string>(),
                 Entity: new IdentifyEntitySnapshot(Guid.NewGuid(), EntityKind.Video, "Local Title"),
                 Query: new IdentifyQuery(null, "https://site.example/scene/123", null),
@@ -305,7 +305,7 @@ public sealed class StashCompatTests {
             var runner = new StashCompatRunner(new HttpClient(new FixedHtmlHandler(SearchResultsHtml)));
             var request = new IdentifyPluginRequest(
                 ProtocolVersion: 2,
-                Action: "search",
+                Action: IdentifyAction.Search,
                 Auth: new Dictionary<string, string>(),
                 Entity: new IdentifyEntitySnapshot(Guid.NewGuid(), EntityKind.Video, "Some Scene"),
                 Query: new IdentifyQuery("Some Scene", null, null),
@@ -334,7 +334,7 @@ public sealed class StashCompatTests {
             // Mirrors identifyWithCandidate: the chosen candidate's external ids carry the scene URL.
             var request = new IdentifyPluginRequest(
                 ProtocolVersion: 2,
-                Action: "search",
+                Action: IdentifyAction.Search,
                 Auth: new Dictionary<string, string>(),
                 Entity: new IdentifyEntitySnapshot(Guid.NewGuid(), EntityKind.Video, "Some Scene"),
                 Query: new IdentifyQuery(null, null, new Dictionary<string, string> { [manifest.Id] = "https://search.example/s/1" }),
@@ -579,7 +579,7 @@ public sealed class StashCompatTests {
             var runner = new StashCompatRunner(new HttpClient(new FixedHtmlHandler("")));
             var request = new IdentifyPluginRequest(
                 ProtocolVersion: 2,
-                Action: "lookup-url",
+                Action: IdentifyAction.LookupUrl,
                 Auth: new Dictionary<string, string>(),
                 Entity: new IdentifyEntitySnapshot(Guid.NewGuid(), EntityKind.Video, "X"),
                 Query: new IdentifyQuery(null, "https://script.example/s/1", null),

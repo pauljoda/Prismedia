@@ -91,7 +91,7 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
                 Id = Guid.NewGuid(),
                 EntityId = entityId,
                 State = IdentifyQueueState.Search,
-                Action = "search",
+                Action = IdentifyAction.Search,
                 CreatedAt = now,
                 UpdatedAt = now
             };
@@ -513,7 +513,7 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
             entity.IsNsfw,
             row.State.ToCode(),
             row.ProviderCode,
-            row.Action,
+            row.Action.ToCode(),
             Deserialize<IdentifyQuery>(row.QueryJson),
             Deserialize<IReadOnlyList<EntitySearchCandidate>>(row.CandidatesJson) ?? [],
             Deserialize<EntityMetadataProposal>(row.ProposalJson),
@@ -530,7 +530,7 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
     private static void ResetForSearch(IdentifyQueueItemRow row, DateTimeOffset now) {
         row.State = IdentifyQueueState.Search;
         row.ProviderCode = null;
-        row.Action = "search";
+        row.Action = IdentifyAction.Search;
         row.QueryJson = null;
         row.CandidatesJson = null;
         row.ProposalJson = null;
@@ -540,16 +540,16 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
         row.CompletedAt = null;
     }
 
-    private static string GuessAction(IdentifyQuery? query) {
+    private static IdentifyAction GuessAction(IdentifyQuery? query) {
         if (query?.ExternalIds is { Count: > 0 }) {
-            return "lookup-id";
+            return IdentifyAction.LookupId;
         }
 
         if (!string.IsNullOrWhiteSpace(query?.Url)) {
-            return "lookup-url";
+            return IdentifyAction.LookupUrl;
         }
 
-        return "search";
+        return IdentifyAction.Search;
     }
 
     private static IReadOnlyList<EntitySearchCandidate> ChoiceCandidates(EntityMetadataProposal proposal, EntityRow entity) {

@@ -247,7 +247,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             EntityId = seriesId,
             State = IdentifyQueueState.Proposal,
             ProviderCode = "tmdb",
-            Action = "lookup-id",
+            Action = IdentifyAction.LookupId,
             ProposalJson = JsonSerializer.Serialize(seed, JsonOptions),
             CascadeJobId = supersedingJobId,
             CreatedAt = DateTimeOffset.UtcNow,
@@ -290,7 +290,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             EntityId = seriesId,
             State = IdentifyQueueState.Proposal,
             ProviderCode = "tmdb",
-            Action = "lookup-id",
+            Action = IdentifyAction.LookupId,
             ProposalJson = JsonSerializer.Serialize(seed, JsonOptions),
             CascadeJobId = cascadeJobId,
             CreatedAt = DateTimeOffset.UtcNow,
@@ -327,7 +327,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             EntityId = entityId,
             State = IdentifyQueueState.Done,
             ProviderCode = "tmdb",
-            Action = "lookup-id",
+            Action = IdentifyAction.LookupId,
             ProposalJson = JsonSerializer.Serialize(proposal, JsonOptions),
             CompletedAt = DateTimeOffset.UtcNow,
             CreatedAt = DateTimeOffset.UtcNow,
@@ -362,7 +362,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             EntityId = seriesId,
             State = IdentifyQueueState.Proposal,
             ProviderCode = "tmdb",
-            Action = "lookup-id",
+            Action = IdentifyAction.LookupId,
             ProposalJson = JsonSerializer.Serialize(proposal, JsonOptions),
             CascadeJobId = Guid.Parse("44444444-4444-4444-4444-4444444444cc"),
             CreatedAt = DateTimeOffset.UtcNow,
@@ -419,7 +419,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             EntityId = entityId,
             State = IdentifyQueueState.Proposal,
             ProviderCode = "tmdb",
-            Action = "lookup-id",
+            Action = IdentifyAction.LookupId,
             ProposalJson = JsonSerializer.Serialize(proposal, JsonOptions),
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
@@ -457,7 +457,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             EntityId = seriesId,
             State = IdentifyQueueState.Proposal,
             ProviderCode = "tmdb",
-            Action = "lookup-id",
+            Action = IdentifyAction.LookupId,
             ProposalJson = JsonSerializer.Serialize(proposal, JsonOptions),
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
@@ -493,7 +493,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             EntityId = seriesId,
             State = IdentifyQueueState.Proposal,
             ProviderCode = "tmdb",
-            Action = "lookup-id",
+            Action = IdentifyAction.LookupId,
             ProposalJson = JsonSerializer.Serialize(proposal, JsonOptions),
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
@@ -552,7 +552,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             EntityId = albumId,
             State = IdentifyQueueState.Proposal,
             ProviderCode = "tmdb",
-            Action = "lookup-id",
+            Action = IdentifyAction.LookupId,
             ProposalJson = JsonSerializer.Serialize(proposal, JsonOptions),
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
@@ -1033,9 +1033,9 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             CancellationToken cancellationToken, bool lowPriority = false) {
             var requestJson = await File.ReadAllTextAsync(arguments[1], cancellationToken);
             var request = JsonSerializer.Deserialize<IdentifyPluginRequest>(requestJson, JsonOptions)!;
-            Actions.Add(request.Action);
+            Actions.Add(request.Action.ToCode());
 
-            if (request.Action == "search") {
+            if (request.Action == IdentifyAction.Search) {
                 return new ProcessExecutionResult(
                     0,
                     SerializeWireProposal(request.Entity.Id, $"{request.Entity.Title} via search"),
@@ -1059,7 +1059,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             CancellationToken cancellationToken, bool lowPriority = false) {
             var requestJson = await File.ReadAllTextAsync(arguments[1], cancellationToken);
             var request = JsonSerializer.Deserialize<IdentifyPluginRequest>(requestJson, JsonOptions)!;
-            if (request.Action == "lookup-id") {
+            if (request.Action == IdentifyAction.LookupId) {
                 return new ProcessExecutionResult(
                     0,
                     SerializeWireProposal(request.Entity.Id, "Auto-resolved title"),

@@ -154,6 +154,14 @@ export const SUBTITLE_STYLE = {
 
 export type SubtitleStyleCode = (typeof SUBTITLE_STYLE)[keyof typeof SUBTITLE_STYLE];
 
+export const IDENTIFY_ACTION = {
+  search: "search",
+  lookupId: "lookup-id",
+  lookupUrl: "lookup-url",
+} as const;
+
+export type IdentifyActionCode = (typeof IDENTIFY_ACTION)[keyof typeof IDENTIFY_ACTION];
+
 export const IDENTIFY_QUEUE_STATE = {
   search: "search",
   proposal: "proposal",

@@ -28,6 +28,7 @@ const ENUM_EXPORTS = [
   ["PlaybackMode", "PLAYBACK_MODE", "PlaybackModeCode"],
   ["EntitySubtitleSource", "SUBTITLE_SOURCE", "SubtitleSourceCode"],
   ["SubtitleStyle", "SUBTITLE_STYLE", "SubtitleStyleCode"],
+  ["IdentifyAction", "IDENTIFY_ACTION", "IdentifyActionCode"],
   ["IdentifyQueueState", "IDENTIFY_QUEUE_STATE", "IdentifyQueueStateCode"],
   ["IdentifyResultStatus", "IDENTIFY_RESULT_STATUS", "IdentifyResultStatusCode"],
   ["FileSourceKind", "FILE_SOURCE_KIND", "FileSourceKindCode"],

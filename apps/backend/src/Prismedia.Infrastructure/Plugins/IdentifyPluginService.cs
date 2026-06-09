@@ -243,33 +243,47 @@ public sealed partial class IdentifyPluginService : IIdentifyProviderService {
         CancellationToken cancellationToken) =>
         _apply.ApplyAsync(entityId, proposal, selectedFields, selectedImages, progress, cancellationToken);
 
-    private static string ResolveAction(
+    private static IdentifyAction ResolveAction(
         PluginManifest manifest,
         string entityKind,
         IdentifyQuery? query,
         IdentifyMatchHints hints) {
+        // The manifest declares its supported actions as wire-code strings; compare against the
+        // IdentifyAction codes rather than retyping the literals.
         var supports = PluginEntityKindCompatibility.ActionsFor(manifest, entityKind)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        bool Supports(IdentifyAction action) => supports.Contains(action.ToCode());
         var hasQueryTitle = !string.IsNullOrWhiteSpace(query?.Title);
         var hasQueryId = query?.ExternalIds?.ContainsKey(manifest.Id) == true;
         var hasQueryUrl = !string.IsNullOrWhiteSpace(query?.Url);
 
-        if (hasQueryTitle && !hasQueryId && !hasQueryUrl && supports.Contains("search")) {
-            return "search";
+        if (hasQueryTitle && !hasQueryId && !hasQueryUrl && Supports(IdentifyAction.Search)) {
+            return IdentifyAction.Search;
         }
 
         var hasExplicitId = query?.ExternalIds?.ContainsKey(manifest.Id) == true ||
             hints.ExternalIds.ContainsKey(manifest.Id);
 
-        if (hasExplicitId && supports.Contains("lookup-id")) {
-            return "lookup-id";
+        if (hasExplicitId && Supports(IdentifyAction.LookupId)) {
+            return IdentifyAction.LookupId;
         }
 
-        if ((!string.IsNullOrWhiteSpace(query?.Url) || hints.Urls.Count > 0) && supports.Contains("lookup-url")) {
-            return "lookup-url";
+        if ((!string.IsNullOrWhiteSpace(query?.Url) || hints.Urls.Count > 0) && Supports(IdentifyAction.LookupUrl)) {
+            return IdentifyAction.LookupUrl;
         }
 
-        return supports.Contains("search") ? "search" : supports.FirstOrDefault() ?? "search";
+        if (Supports(IdentifyAction.Search)) {
+            return IdentifyAction.Search;
+        }
+
+        // No search support: fall back to the first declared action that maps to a known IdentifyAction.
+        foreach (var action in supports) {
+            if (action.TryDecodeAs<IdentifyAction>(out var decoded)) {
+                return decoded;
+            }
+        }
+
+        return IdentifyAction.Search;
     }
 
     private async Task<IdentifyPluginResponse> IdentifyEntityWithStructuralContextAsync(
@@ -351,24 +365,23 @@ public sealed partial class IdentifyPluginService : IIdentifyProviderService {
         PluginDescriptor descriptor,
         EntityRow entity,
         IdentifyPluginRequest request,
-        string resolvedAction,
+        IdentifyAction resolvedAction,
         IdentifyPluginResponse response,
         CancellationToken cancellationToken) {
-        var lookupRouted = resolvedAction.Equals("lookup-id", StringComparison.OrdinalIgnoreCase) ||
-            resolvedAction.Equals("lookup-url", StringComparison.OrdinalIgnoreCase);
+        var lookupRouted = resolvedAction is IdentifyAction.LookupId or IdentifyAction.LookupUrl;
         if (!lookupRouted || (response.Ok && response.Result?.Patch is not null)) {
             return response;
         }
 
         var supportsSearch = PluginEntityKindCompatibility
             .ActionsFor(descriptor.Manifest, entity.KindCode)
-            .Any(action => action.Equals("search", StringComparison.OrdinalIgnoreCase));
+            .Any(action => action.Equals(IdentifyAction.Search.ToCode(), StringComparison.OrdinalIgnoreCase));
         if (!supportsSearch) {
             return response;
         }
 
         var searchRequest = request with {
-            Action = "search",
+            Action = IdentifyAction.Search,
             Hints = request.Hints with { ExternalIds = new Dictionary<string, string>(), Urls = [] },
             Entity = request.Entity with { ExternalIds = new Dictionary<string, string>(), Urls = [] }
         };

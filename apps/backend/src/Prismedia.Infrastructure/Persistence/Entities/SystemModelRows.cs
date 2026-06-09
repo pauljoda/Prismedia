@@ -102,7 +102,7 @@ public sealed class IdentifyQueueItemRow {
     public Guid EntityId { get; set; }
     public IdentifyQueueState State { get; set; } = IdentifyQueueState.Search;
     public string? ProviderCode { get; set; }
-    public string Action { get; set; } = "search";
+    public IdentifyAction Action { get; set; } = IdentifyAction.Search;
     public string? QueryJson { get; set; }
     public string? CandidatesJson { get; set; }
     public string? ProposalJson { get; set; }
