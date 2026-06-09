@@ -59,64 +59,18 @@ public sealed partial class EntityMetadataApplyService {
         }
     }
 
-    private async Task<EntityRow?> FindStructuralChildAsync(
+    // Resolves the local structural child a proposal targets: external-id-first, then title, scoped to
+    // this parent — the shared FindEntityAsync rule used everywhere in the apply walk.
+    private Task<EntityRow?> FindStructuralChildAsync(
         Guid parentEntityId,
         EntityMetadataProposal child,
-        CancellationToken cancellationToken) {
-        var existing = await FindStructuralChildByExternalIdsAsync(parentEntityId, child, cancellationToken);
-        if (existing is not null || string.IsNullOrWhiteSpace(child.Patch.Title)) {
-            return existing;
-        }
-
-        return await FindStructuralChildByTitleAsync(
-            parentEntityId, child.TargetKind.ToEntityKind().ToCode(), child.Patch.Title, cancellationToken);
-    }
-
-    private async Task<EntityRow?> FindStructuralChildByExternalIdsAsync(
-        Guid parentEntityId,
-        EntityMetadataProposal child,
-        CancellationToken cancellationToken) {
-        var kindCode = child.TargetKind.ToEntityKind().ToCode();
-        foreach (var (provider, value) in child.Patch.ExternalIds) {
-            if (string.IsNullOrWhiteSpace(provider) || string.IsNullOrWhiteSpace(value)) {
-                continue;
-            }
-
-            var entity = await _db.EntityExternalIds
-                .Where(row => row.Provider == provider.Trim() && row.Value == value.Trim())
-                .Join(
-                    _db.Entities,
-                    externalId => externalId.EntityId,
-                    entity => entity.Id,
-                    (_, entity) => entity)
-                .FirstOrDefaultAsync(
-                    entity => entity.ParentEntityId == parentEntityId &&
-                        entity.KindCode == kindCode,
-                    cancellationToken);
-            if (entity is not null) {
-                return entity;
-            }
-        }
-
-        return null;
-    }
-
-    private async Task<EntityRow?> FindStructuralChildByTitleAsync(
-        Guid parentEntityId,
-        string kind,
-        string title,
-        CancellationToken cancellationToken) {
-        var normalizedTitle = title.Trim();
-        return _db.Entities.Local.FirstOrDefault(row =>
-                row.ParentEntityId == parentEntityId &&
-                row.KindCode == kind &&
-                row.Title.Equals(normalizedTitle, StringComparison.OrdinalIgnoreCase))
-            ?? await _db.Entities.FirstOrDefaultAsync(
-                row => row.ParentEntityId == parentEntityId &&
-                    row.KindCode == kind &&
-                    row.Title.ToLower() == normalizedTitle.ToLower(),
-                cancellationToken);
-    }
+        CancellationToken cancellationToken) =>
+        FindEntityAsync(
+            child.TargetKind.ToEntityKind().ToCode(),
+            child.Patch.ExternalIds,
+            child.Patch.Title,
+            parentEntityId,
+            cancellationToken);
 
     private async Task ApplyPatchToEntityAsync(
         EntityRow entity,

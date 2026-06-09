@@ -150,7 +150,7 @@ public sealed partial class EntityMetadataApplyService {
 
         var order = 0;
         foreach (var name in tags.Where(value => !string.IsNullOrWhiteSpace(value)).Select(value => value.Trim()).Distinct(StringComparer.OrdinalIgnoreCase)) {
-            var tag = await FindEntityByKindAndTitleAsync("tag", name, cancellationToken)
+            var tag = await FindEntityByTitleAsync("tag", name, parentEntityId: null, cancellationToken)
                 ?? CreateEntity("tag", name, now);
             MarkNsfwIfRequested(tag, markNsfw, now);
             AddRelationship(entityId, RelationshipKind.Tags.ToCode(), "Tags", tag.Id, tag.KindCode, order++, null, now);
@@ -158,7 +158,7 @@ public sealed partial class EntityMetadataApplyService {
     }
 
     private async Task SetStudioAsync(Guid entityId, string studioName, DateTimeOffset now, bool markNsfw, CancellationToken cancellationToken) {
-        var studio = await FindEntityByKindAndTitleAsync("studio", studioName.Trim(), cancellationToken)
+        var studio = await FindEntityByTitleAsync("studio", studioName.Trim(), parentEntityId: null, cancellationToken)
             ?? CreateEntity("studio", studioName.Trim(), now);
         MarkNsfwIfRequested(studio, markNsfw, now);
         await RemoveRelationshipAsync(entityId, RelationshipKind.Studio.ToCode(), cancellationToken);
@@ -174,7 +174,7 @@ public sealed partial class EntityMetadataApplyService {
         foreach (var credit in credits.Where(credit => !string.IsNullOrWhiteSpace(credit.Name))) {
             var personName = credit.Name.Trim();
             if (!resolvedPeople.TryGetValue(personName, out var person)) {
-                person = await FindEntityByKindAndTitleAsync("person", personName, cancellationToken)
+                person = await FindEntityByTitleAsync("person", personName, parentEntityId: null, cancellationToken)
                     ?? CreateEntity("person", personName, now);
                 MarkNsfwIfRequested(person, markNsfw, now);
                 resolvedPeople[personName] = person;
@@ -290,8 +290,8 @@ public sealed partial class EntityMetadataApplyService {
                 continue;
             }
 
-            var linkedEntity = await FindEntityByKindAndTitleAsync(
-                child.TargetKind.ToEntityKind().ToCode(), child.Patch.Title.Trim(), cancellationToken);
+            var linkedEntity = await FindEntityByTitleAsync(
+                child.TargetKind.ToEntityKind().ToCode(), child.Patch.Title.Trim(), parentEntityId: null, cancellationToken);
             if (linkedEntity is null) {
                 continue;
             }
