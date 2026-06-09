@@ -564,7 +564,7 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
         var title = !string.IsNullOrWhiteSpace(proposal.Patch.Title)
             ? proposal.Patch.Title.Trim()
             : entity.Title;
-        var poster = proposal.Images.FirstOrDefault(image => image.Kind is "poster" or "still")?.Url;
+        var poster = ImageKindRoleResolver.Pick(proposal.Images, MediaImageKind.Poster, MediaImageKind.Still)?.Url;
         return [
             new EntitySearchCandidate(
                 proposal.Patch.ExternalIds,

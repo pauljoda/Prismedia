@@ -164,19 +164,10 @@ public sealed partial class EntityMetadataApplyService {
         }
 
         if (images.Count > 0) {
-            var image = images.FirstOrDefault(i => i.Kind is "still") ??
-                images.FirstOrDefault(i => i.Kind is "poster") ??
-                images.FirstOrDefault(i => i.Kind is "cover") ??
-                images.FirstOrDefault(i => i.Kind is "backdrop") ??
-                images[0];
-            var role = image.Kind switch {
-                "still" => EntityFileRole.Thumbnail,
-                "poster" => EntityFileRole.Poster,
-                "cover" => EntityFileRole.Cover,
-                "backdrop" => EntityFileRole.Backdrop,
-                _ => EntityFileRole.Thumbnail
-            };
-            await _artwork.DownloadPluginImageAsync(entity, image, role, now, cancellationToken);
+            var image = ImageKindRoleResolver.Pick(
+                images, MediaImageKind.Still, MediaImageKind.Poster, MediaImageKind.Cover, MediaImageKind.Backdrop)
+                ?? images[0];
+            await _artwork.DownloadPluginImageAsync(entity, image, ImageKindRoleResolver.RoleFor(image.Kind), now, cancellationToken);
         }
 
         entity.UpdatedAt = now;

@@ -320,10 +320,12 @@ public sealed partial class EntityMetadataApplyService {
         }
 
         if (proposal.TargetKind == ProposalKind.Studio) {
-            var logo = proposal.Images.FirstOrDefault(image => image.Kind is "logo" or "poster") ?? proposal.Images[0];
+            var logo = ImageKindRoleResolver.Pick(proposal.Images, MediaImageKind.Logo, MediaImageKind.Poster)
+                ?? proposal.Images[0];
             await _artwork.DownloadPluginImageAsync(linkedEntity, logo, EntityFileRole.Logo, now, cancellationToken);
 
-            var backdrop = proposal.Images.FirstOrDefault(image => image.Kind is "backdrop" or "banner" or "hero");
+            var backdrop = ImageKindRoleResolver.Pick(
+                proposal.Images, MediaImageKind.Backdrop, MediaImageKind.Banner, MediaImageKind.Hero);
             if (backdrop is not null) {
                 await _artwork.DownloadPluginImageAsync(linkedEntity, backdrop, EntityFileRole.Backdrop, now, cancellationToken);
             }
@@ -331,9 +333,8 @@ public sealed partial class EntityMetadataApplyService {
             return;
         }
 
-        var image = proposal.Images.FirstOrDefault(img => img.Kind is "poster") ??
-            proposal.Images.FirstOrDefault(img => img.Kind is "logo") ??
-            proposal.Images[0];
+        var image = ImageKindRoleResolver.Pick(proposal.Images, MediaImageKind.Poster, MediaImageKind.Logo)
+            ?? proposal.Images[0];
         await _artwork.DownloadPluginImageAsync(linkedEntity, image, EntityFileRole.Poster, now, cancellationToken);
     }
 

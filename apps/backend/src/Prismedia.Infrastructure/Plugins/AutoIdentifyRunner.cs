@@ -4,6 +4,7 @@ using Prismedia.Application.Jobs.Ports;
 using Prismedia.Application.Plugins;
 using Prismedia.Application.Settings;
 using Prismedia.Contracts.Plugins;
+using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
 
 namespace Prismedia.Infrastructure.Plugins;
@@ -225,7 +226,7 @@ public sealed class AutoIdentifyRunner(
 
         var images = new Dictionary<string, string?>(StringComparer.Ordinal);
         foreach (var image in proposal.Images) {
-            if (string.IsNullOrWhiteSpace(image.Url) || string.Equals(image.Kind, "logo", StringComparison.OrdinalIgnoreCase)) {
+            if (string.IsNullOrWhiteSpace(image.Url) || ImageKindRoleResolver.Is(image.Kind, MediaImageKind.Logo)) {
                 continue;
             }
 

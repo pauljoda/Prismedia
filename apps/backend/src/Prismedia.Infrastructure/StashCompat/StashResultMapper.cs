@@ -85,7 +85,7 @@ public static class StashResultMapper {
         // display image) rather than a portrait poster, which is reserved for movies and series.
         var images = new List<ImageCandidate>();
         if (!string.IsNullOrWhiteSpace(scene.Image)) {
-            images.Add(new ImageCandidate("thumbnail", scene.Image.Trim(), providerName, null, null, null, null));
+            images.Add(new ImageCandidate(MediaImageKind.Thumbnail.ToCode(), scene.Image.Trim(), providerName, null, null, null, null));
         }
 
         // Emit credited people and the studio as relationship proposals too — not just flat patch
@@ -133,7 +133,7 @@ public static class StashResultMapper {
             var studioUrls = Uri.TryCreate(studio.Url, UriKind.Absolute, out _) ? new[] { studio.Url!.Trim() } : [];
             var studioImages = string.IsNullOrWhiteSpace(studio.Image)
                 ? Array.Empty<ImageCandidate>()
-                : [new ImageCandidate("logo", studio.Image.Trim(), providerName, null, null, null, null)];
+                : [new ImageCandidate(MediaImageKind.Logo.ToCode(), studio.Image.Trim(), providerName, null, null, null, null)];
             relationships.Add(RelationshipProposal($"{providerId}:studio:{studioName}", providerName, ProposalKind.Studio, studioName, null, studioUrls, studioImages));
         }
 
@@ -148,7 +148,7 @@ public static class StashResultMapper {
         var urls = Uri.TryCreate(performer?.Url, UriKind.Absolute, out _) ? new[] { performer!.Url!.Trim() } : [];
         var images = string.IsNullOrWhiteSpace(performer?.Image)
             ? Array.Empty<ImageCandidate>()
-            : [new ImageCandidate("poster", performer!.Image!.Trim(), providerName, null, null, null, null)];
+            : [new ImageCandidate(MediaImageKind.Poster.ToCode(), performer!.Image!.Trim(), providerName, null, null, null, null)];
         var details = string.IsNullOrWhiteSpace(performer?.Details) ? null : performer!.Details!.Trim();
         var dates = new Dictionary<string, string>();
         if (!string.IsNullOrWhiteSpace(performer?.Birthdate)) {
