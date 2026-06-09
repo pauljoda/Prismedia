@@ -182,12 +182,14 @@ public sealed partial class IdentifyPluginService {
     private static IReadOnlyList<EntityMetadataProposal> MergeStructuralChildren(
         IReadOnlyList<EntityMetadataProposal> providerChildren,
         IReadOnlyList<EntityMetadataProposal> localChildren) {
+        // Single-source lists still normalize: duplicate nodes for the same target entity would
+        // otherwise apply twice and write colliding titles and sort orders.
         if (providerChildren.Count == 0) {
-            return localChildren;
+            return NormalizeStructuralChildren(localChildren);
         }
 
         if (localChildren.Count == 0) {
-            return providerChildren;
+            return NormalizeStructuralChildren(providerChildren);
         }
 
         var merged = new List<EntityMetadataProposal>(providerChildren);

@@ -111,6 +111,106 @@ public sealed class EntityMetadataApplyServiceTests {
     }
 
     [Fact]
+    public async Task ApplyPatchUpdatesResentDateStatAndPositionCodesInsteadOfDeletingThem() {
+        await using var db = CreateContext();
+        var entityId = Guid.Parse("21212121-2121-2121-2121-212121212121");
+        SeedEntity(db, entityId, "video", "Video");
+        db.EntityDates.Add(new EntityDateRow {
+            EntityId = entityId,
+            Code = "released",
+            Value = "2020-01-01",
+            SortableValue = new DateOnly(2020, 1, 1),
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        db.EntityStats.Add(new EntityStatRow {
+            EntityId = entityId,
+            Code = "runtimeMinutes",
+            Value = 90,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        db.EntityPositions.Add(new EntityPositionRow {
+            EntityId = entityId,
+            Code = "episode",
+            Value = 1,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+        var applied = await service.ApplyPatchAsync(
+            entityId,
+            new EntityMetadataUpdateRequest(
+                Fields: ["dates", "stats", "positions"],
+                Patch: EmptyPatch() with {
+                    Dates = new Dictionary<string, string> { ["released"] = "2021-02-03" },
+                    Stats = new Dictionary<string, int> { ["runtimeMinutes"] = 100 },
+                    Positions = new Dictionary<string, int> { ["episode"] = 2 }
+                }),
+            CancellationToken.None);
+
+        Assert.True(applied);
+        Assert.Equal("2021-02-03", (await db.EntityDates.FindAsync([entityId, "released"]))?.Value);
+        Assert.Equal(100, (await db.EntityStats.FindAsync([entityId, "runtimeMinutes"]))?.Value);
+        Assert.Equal(2, (await db.EntityPositions.FindAsync([entityId, "episode"]))?.Value);
+    }
+
+    [Fact]
+    public async Task ApplyStoresPartialAndTimestampDatesWithSortableValueAndPrecision() {
+        await using var db = CreateContext();
+        var entityId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        SeedEntity(db, entityId, "video", "Video");
+        await db.SaveChangesAsync();
+
+        var proposal = new EntityMetadataProposal(
+            ProposalId: "youtube:video:abc",
+            Provider: "youtube",
+            TargetKind: ProposalKind.Video,
+            Confidence: 1,
+            MatchReason: "external-id",
+            Patch: EmptyPatch() with {
+                Dates = new Dictionary<string, string> {
+                    ["released"] = "2025",
+                    ["aired"] = "2024-07",
+                    ["published"] = "2021-05-29T13:00:12-07:00"
+                }
+            },
+            Images: [],
+            Children: [],
+            Candidates: []);
+
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+        await service.ApplyAsync(entityId, proposal, ["dates"], selectedImages: null, CancellationToken.None);
+
+        var released = await db.EntityDates.FindAsync([entityId, "released"]);
+        Assert.Equal("2025", released?.Value);
+        Assert.Equal(new DateOnly(2025, 1, 1), released?.SortableValue);
+        Assert.Equal("year", released?.Precision);
+
+        var aired = await db.EntityDates.FindAsync([entityId, "aired"]);
+        Assert.Equal("2024-07", aired?.Value);
+        Assert.Equal(new DateOnly(2024, 7, 1), aired?.SortableValue);
+        Assert.Equal("month", aired?.Precision);
+
+        var published = await db.EntityDates.FindAsync([entityId, "published"]);
+        Assert.Equal("2021-05-29", published?.Value);
+        Assert.Equal(new DateOnly(2021, 5, 29), published?.SortableValue);
+        Assert.Equal("day", published?.Precision);
+    }
+
+    [Fact]
+    public void PatchValidatorAcceptsPartialAndTimestampDates() {
+        EntityMetadataPatchValidator.Validate(
+            EntityMetadataPatchValidator.NormalizeFieldSet(["dates"]),
+            EmptyPatch() with {
+                Dates = new Dictionary<string, string> {
+                    ["released"] = "2025",
+                    ["aired"] = "2024-07",
+                    ["published"] = "2021-05-29T13:00:12-07:00"
+                }
+            });
+    }
+
+    [Fact]
     public async Task ApplyPatchRejectsInvalidTitleRatingAndUrls() {
         await using var db = CreateContext();
         var entityId = Guid.Parse("20202020-2020-2020-2020-202020202020");

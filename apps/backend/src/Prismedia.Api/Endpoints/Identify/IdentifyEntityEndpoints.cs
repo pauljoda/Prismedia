@@ -1,7 +1,5 @@
 using Prismedia.Contracts.Plugins;
 using Prismedia.Contracts.System;
-using Prismedia.Contracts.Entities;
-using Prismedia.Application.Entities;
 using Prismedia.Application.Plugins;
 
 namespace Prismedia.Api.Endpoints;
@@ -34,34 +32,23 @@ internal static class IdentifyEntityEndpoints {
         group.MapPost("/entities/{entityId:guid}/apply", async (
             Guid entityId,
             ApplyIdentifyProposalRequest request,
-            IEntityMetadataPatchService metadata,
+            IIdentifyProviderService identify,
             CancellationToken cancellationToken) => {
-                EntityMetadataPatchResult result;
-                try {
-                    result = await metadata.ApplyPatchAsync(
-                        entityId,
-                        new EntityMetadataUpdateRequest(
-                            request.SelectedFields,
-                            request.Proposal.Patch,
-                            request.SelectedImages,
-                            request.Proposal.Children,
-                            request.Proposal.Relationships),
-                        expectedKind: null,
-                        cancellationToken);
-                } catch (ArgumentException ex) {
-                    return Results.BadRequest(new ApiProblem(ApiProblemCodes.InvalidEntityMetadataPatch, ex.Message));
-                }
-
-                if (result is EntityMetadataPatchResult.NotFound or EntityMetadataPatchResult.KindMismatch) {
-                    return Results.NotFound(new ApiProblem(ApiProblemCodes.EntityNotFound, $"Entity '{entityId}' was not found."));
-                }
-
-                return Results.NoContent();
+                // Proposal applies share the queue-accept pipeline (upsert semantics, plugin
+                // provenance, NSFW propagation) rather than the manual-edit replace pipeline.
+                var applied = await identify.ApplyAsync(
+                    entityId,
+                    request.Proposal,
+                    request.SelectedFields,
+                    request.SelectedImages,
+                    cancellationToken);
+                return applied
+                    ? Results.NoContent()
+                    : Results.NotFound(new ApiProblem(ApiProblemCodes.EntityNotFound, $"Entity '{entityId}' was not found."));
             })
             .WithName("ApplyIdentifyProposal")
             .WithSummary("Applies selected fields from a transient identify proposal to the entity.")
             .Produces(StatusCodes.Status204NoContent)
-            .Produces<ApiProblem>(StatusCodes.Status400BadRequest)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
         return group;
