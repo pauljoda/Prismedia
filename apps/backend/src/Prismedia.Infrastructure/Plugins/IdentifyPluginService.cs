@@ -253,6 +253,13 @@ public sealed partial class IdentifyPluginService : IIdentifyProviderService {
         var supports = PluginEntityKindCompatibility.ActionsFor(manifest, entityKind)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         bool Supports(IdentifyAction action) => supports.Contains(action.ToCode());
+
+        // A user asking to pick from candidates forces search mode, so a stored id/url does not route
+        // this into a confident lookup whose proposal would only be downgraded back to a candidate.
+        if (query?.RequireChoice == true && Supports(IdentifyAction.Search)) {
+            return IdentifyAction.Search;
+        }
+
         var hasQueryTitle = !string.IsNullOrWhiteSpace(query?.Title);
         var hasQueryId = query?.ExternalIds?.ContainsKey(manifest.Id) == true;
         var hasQueryUrl = !string.IsNullOrWhiteSpace(query?.Url);
