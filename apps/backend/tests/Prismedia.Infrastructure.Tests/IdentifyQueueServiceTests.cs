@@ -409,6 +409,69 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
     }
 
     [Fact]
+    public async Task SearchAsyncManualSearchHidesStoredIdentityFromThePlugin() {
+        await using var db = CreateContext();
+        var entityId = Guid.Parse("33333333-3333-3333-3333-333333333337");
+        SeedProvider(db);
+        SeedEntity(db, entityId, "video", "Stored Movie");
+        db.EntityExternalIds.Add(new EntityExternalIdRow {
+            Id = Guid.NewGuid(),
+            EntityId = entityId,
+            Provider = "tmdb",
+            Value = "123",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var service = CreateQueueService(db, new StoredIdLockingProcessExecutor(), _tempRoot);
+        await service.AddAsync(entityId, CancellationToken.None);
+
+        var item = await service.SearchAsync(
+            entityId,
+            new IdentifyQueueSearchRequest("tmdb", new IdentifyQuery("Different Movie", null, null, RequireChoice: true)),
+            hideNsfw: false,
+            CancellationToken.None);
+
+        Assert.Equal("search", item.State);
+        Assert.Null(item.Proposal);
+        var candidate = Assert.Single(item.Candidates);
+        Assert.Equal("Ambiguous Movie (2005)", candidate.Title);
+    }
+
+    [Fact]
+    public async Task SearchAsyncWithRequireChoiceIsNotOverriddenByParentCascade() {
+        await using var db = CreateContext();
+        var seriesId = Guid.Parse("33333333-3333-3333-3333-333333333335");
+        var episodeId = Guid.Parse("33333333-3333-3333-3333-333333333336");
+        SeedProvider(db);
+        SeedEntity(db, seriesId, "video-series", "Known Series");
+        var episode = SeedEntity(db, episodeId, "video", "Known Episode");
+        episode.ParentEntityId = seriesId;
+        db.EntityExternalIds.Add(new EntityExternalIdRow {
+            Id = Guid.NewGuid(),
+            EntityId = seriesId,
+            Provider = "tmdb",
+            Value = "999",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var service = CreateQueueService(db, new SearchCandidatesElseProposalProcessExecutor(), _tempRoot);
+        await service.AddAsync(episodeId, CancellationToken.None);
+
+        var item = await service.SearchAsync(
+            episodeId,
+            new IdentifyQueueSearchRequest("tmdb", new IdentifyQuery("Manual Term", null, null, RequireChoice: true)),
+            hideNsfw: false,
+            CancellationToken.None);
+
+        Assert.Equal("search", item.State);
+        Assert.Null(item.Proposal);
+        var candidate = Assert.Single(item.Candidates);
+        Assert.Equal("Ambiguous Movie (2005)", candidate.Title);
+    }
+
+    [Fact]
     public async Task ApplyAsyncUsesReviewedProposalAndMarksItemDone() {
         await using var db = CreateContext();
         var entityId = Guid.Parse("44444444-4444-4444-4444-444444444444");
@@ -929,6 +992,91 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             CancellationToken cancellationToken, bool lowPriority = false) {
             var requestJson = await File.ReadAllTextAsync(arguments[1], cancellationToken);
             var request = JsonSerializer.Deserialize<IdentifyPluginRequest>(requestJson, JsonOptions)!;
+            return new ProcessExecutionResult(
+                0,
+                SerializeWireProposal(request.Entity.Id, $"{request.Entity.Title} identified"),
+                string.Empty);
+        }
+    }
+
+    /// <summary>
+    /// Mimics a plugin that reaches for any stored provider id it can see (query, entity
+    /// snapshot, or hints) before honoring the requested action — the lock-in shape that
+    /// hijacks a manual search back to the saved match.
+    /// </summary>
+    private sealed class StoredIdLockingProcessExecutor : ProcessExecutor {
+        public override async Task<ProcessExecutionResult> RunAsync(
+            string fileName,
+            IReadOnlyList<string> arguments,
+            IReadOnlyDictionary<string, string>? environment,
+            CancellationToken cancellationToken, bool lowPriority = false) {
+            var requestJson = await File.ReadAllTextAsync(arguments[1], cancellationToken);
+            var request = JsonSerializer.Deserialize<IdentifyPluginRequest>(requestJson, JsonOptions)!;
+            var storedId = request.Query.ExternalIds?.GetValueOrDefault("tmdb")
+                ?? request.Entity.ExternalIds?.GetValueOrDefault("tmdb")
+                ?? request.Hints.ExternalIds.GetValueOrDefault("tmdb");
+            if (storedId is not null) {
+                return new ProcessExecutionResult(
+                    0,
+                    SerializeWireProposal(request.Entity.Id, $"{request.Entity.Title} identified"),
+                    string.Empty);
+            }
+
+            var wire = new {
+                ok = true,
+                result = new {
+                    type = "candidates",
+                    proposal = (object?)null,
+                    candidates = new[] {
+                        new EntitySearchCandidate(
+                            new Dictionary<string, string> { ["tmdb"] = "2005" },
+                            "Ambiguous Movie (2005)",
+                            2005,
+                            "A search result that still needs user confirmation.",
+                            "https://example.test/poster.jpg",
+                            9.1m)
+                    }
+                },
+                error = (string?)null
+            };
+            return new ProcessExecutionResult(0, JsonSerializer.Serialize(wire, JsonOptions), string.Empty);
+        }
+    }
+
+    /// <summary>
+    /// Returns search candidates for explicit search actions and a confident proposal for
+    /// everything else — the shape that lets a child's manual search collide with its
+    /// parent's stored-id auto match.
+    /// </summary>
+    private sealed class SearchCandidatesElseProposalProcessExecutor : ProcessExecutor {
+        public override async Task<ProcessExecutionResult> RunAsync(
+            string fileName,
+            IReadOnlyList<string> arguments,
+            IReadOnlyDictionary<string, string>? environment,
+            CancellationToken cancellationToken, bool lowPriority = false) {
+            var requestJson = await File.ReadAllTextAsync(arguments[1], cancellationToken);
+            var request = JsonSerializer.Deserialize<IdentifyPluginRequest>(requestJson, JsonOptions)!;
+            if (request.Action == IdentifyAction.Search) {
+                var wire = new {
+                    ok = true,
+                    result = new {
+                        type = "candidates",
+                        proposal = (object?)null,
+                        candidates = new[] {
+                            new EntitySearchCandidate(
+                                new Dictionary<string, string> { ["tmdb"] = "2005" },
+                                "Ambiguous Movie (2005)",
+                                2005,
+                                "A search result that still needs user confirmation.",
+                                "https://example.test/poster.jpg",
+                                9.1m)
+                        }
+                    },
+                    error = (string?)null
+                };
+                return new ProcessExecutionResult(0, JsonSerializer.Serialize(wire, JsonOptions), string.Empty);
+            }
+
             return new ProcessExecutionResult(
                 0,
                 SerializeWireProposal(request.Entity.Id, $"{request.Entity.Title} identified"),

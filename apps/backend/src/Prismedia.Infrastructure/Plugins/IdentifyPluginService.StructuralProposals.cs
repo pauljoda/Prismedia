@@ -387,10 +387,15 @@ public sealed partial class IdentifyPluginService {
         };
     }
 
+    /// <summary>
+    /// True when the caller is steering this identify by hand — a manual title search or an
+    /// explicit pick-from-candidates request — so the entity's stored ids and urls must not
+    /// route the plugin back onto the very match the user is trying to replace.
+    /// </summary>
     private static bool ShouldIgnoreExistingIdentityHints(IdentifyQuery? query) =>
-        !string.IsNullOrWhiteSpace(query?.Title) &&
-        string.IsNullOrWhiteSpace(query.Url) &&
-        query.ExternalIds is not { Count: > 0 };
+        (query?.RequireChoice == true || !string.IsNullOrWhiteSpace(query?.Title)) &&
+        string.IsNullOrWhiteSpace(query?.Url) &&
+        query?.ExternalIds is not { Count: > 0 };
 
     private async Task<IReadOnlyList<IdentifyEntitySnapshot>> LoadAncestorSnapshotsAsync(
         EntityRow entity,

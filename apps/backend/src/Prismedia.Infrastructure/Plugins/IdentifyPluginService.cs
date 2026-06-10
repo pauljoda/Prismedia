@@ -100,7 +100,10 @@ public sealed partial class IdentifyPluginService : IIdentifyProviderService {
             return ApplyNsfwPolicies(directResult, providerIsNsfw);
         }
 
-        if (entity.ParentEntityId is not null) {
+        // A user who explicitly asked to choose from candidates gets their search results back
+        // untouched — the parent's stored-id auto match would discard them and push the user
+        // straight through the very match they are trying to replace.
+        if (entity.ParentEntityId is not null && query?.RequireChoice != true) {
             var cascadeResult = await CascadeFromParentAsync(entity, descriptor, auth, includeNsfw: !hideNsfw, cancellationToken);
             if (cascadeResult is not null) {
                 return ApplyNsfwPolicies(cascadeResult, providerIsNsfw);
@@ -310,7 +313,8 @@ public sealed partial class IdentifyPluginService : IIdentifyProviderService {
         }
 
         var resolvedHints = await _hints.ResolveAsync(entity.Id, descriptor.Manifest.Id, cancellationToken);
-        var hints = ShouldIgnoreExistingIdentityHints(query)
+        var ignoreStoredIdentity = ShouldIgnoreExistingIdentityHints(query);
+        var hints = ignoreStoredIdentity
             ? resolvedHints with {
                 ExternalIds = new Dictionary<string, string>(),
                 Urls = []
@@ -322,11 +326,18 @@ public sealed partial class IdentifyPluginService : IIdentifyProviderService {
             : null;
         var pluginRequestKind = PluginEntityKindCompatibility.RequestKindFor(descriptor.Manifest, entity.KindCode);
         var resolvedAction = ResolveAction(descriptor.Manifest, entity.KindCode, query, hints);
+        var entitySnapshot = await SnapshotAsync(entity, descriptor.Manifest.Id, cancellationToken, pluginRequestKind);
+        if (ignoreStoredIdentity) {
+            // Plugins read stored ids from the entity snapshot as well as the hints; a manual
+            // search must hide both or the plugin re-locks onto the match being replaced.
+            entitySnapshot = entitySnapshot with { ExternalIds = new Dictionary<string, string>(), Urls = [] };
+        }
+
         var request = new IdentifyPluginRequest(
             ProtocolVersion: 2,
             Action: resolvedAction,
             Auth: auth,
-            Entity: await SnapshotAsync(entity, descriptor.Manifest.Id, cancellationToken, pluginRequestKind),
+            Entity: entitySnapshot,
             Query: query ?? new IdentifyQuery(null, null, null),
             Hints: hints,
             StructuralContext: structuralContext,
