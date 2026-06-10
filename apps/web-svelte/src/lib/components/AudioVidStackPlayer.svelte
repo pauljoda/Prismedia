@@ -46,6 +46,7 @@
 
   let timelineDraggingRef = false;
   let currentSrcTrackId: string | null = null;
+  let audioStartedInThisSession = false;
 
   const activeTrack = $derived(playback.currentTrack);
   const ctx = $derived(playback.context);
@@ -207,14 +208,19 @@
     audioEl.load();
   }
 
-  function canAttemptPlayback(): boolean {
-    return typeof document === "undefined" || document.visibilityState === "visible";
+  function canAttemptPlayback(options?: { deferWhenHidden?: boolean }): boolean {
+    return (
+      typeof document === "undefined" ||
+      document.visibilityState === "visible" ||
+      !options?.deferWhenHidden ||
+      audioStartedInThisSession
+    );
   }
 
-  function requestPlay(expectedTrackId = currentSrcTrackId) {
+  function requestPlay(expectedTrackId = currentSrcTrackId, options?: { deferWhenHidden?: boolean }) {
     if (!audioEl || !currentSrcTrackId) return;
     playback.playIntent = true;
-    if (!canAttemptPlayback()) return;
+    if (!canAttemptPlayback(options)) return;
 
     const playPromise = audioEl.play();
     if (playPromise && typeof playPromise.catch === "function") {
@@ -330,9 +336,11 @@
 
     loadTrackSource(track);
     if (playback.playIntent) {
-      // Restored sessions may be blocked by browser autoplay policy; requestPlay will
-      // downgrade the transport state to paused if the browser refuses.
-      requestPlay(track.id);
+      // Restored sessions may be blocked by browser autoplay policy; defer hidden-tab
+      // restore attempts until the page is visible. Once audio has actually played in
+      // this tab, continuing the queue while hidden should still try to start the
+      // next track so background playback does not stall between songs.
+      requestPlay(track.id, { deferWhenHidden: !audioStartedInThisSession });
     }
   });
 
@@ -409,6 +417,7 @@
       setMediaSessionPosition(audio.duration, audio.currentTime);
     };
     const handlePlay = () => {
+      audioStartedInThisSession = true;
       playback.playIntent = true;
       playback.playing = true;
     };
