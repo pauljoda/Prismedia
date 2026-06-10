@@ -135,6 +135,22 @@ export function newStructuralContainerProposals(result: EntityMetadataProposal):
   );
 }
 
+/**
+ * Local entity ids the proposal relocates into new containers — children matched inside a
+ * container that applying will create (a flat-scanned chapter filed into its volume). The
+ * review removes these from the flat children list and shows them inside their container,
+ * so each child visibly "moves" as the cascade resolves it.
+ */
+export function adoptedLocalChildIds(result: EntityMetadataProposal): Set<string> {
+  const adopted = new Set<string>();
+  for (const container of newStructuralContainerProposals(result)) {
+    for (const node of structuralDescendantProposals(container)) {
+      if (node.targetEntityId) adopted.add(node.targetEntityId);
+    }
+  }
+  return adopted;
+}
+
 export function relationshipProposals(result: EntityMetadataProposal): EntityMetadataProposal[] {
   const proposals = [
     ...(result.relationships ?? []),

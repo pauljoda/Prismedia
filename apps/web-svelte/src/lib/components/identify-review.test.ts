@@ -24,6 +24,7 @@ import {
   structuralChildProposals,
   structuralDescendantProposals,
   newStructuralContainerProposals,
+  adoptedLocalChildIds,
 } from "./identify-review";
 
 describe("identify review helpers", () => {
@@ -86,6 +87,27 @@ describe("identify review helpers", () => {
     });
 
     expect(newStructuralContainerProposals(root).map((node) => node.proposalId)).toEqual(["volume-1"]);
+  });
+
+  it("reports children filed into new containers so the review moves them out of the flat list", () => {
+    const root = proposal("book", "book", {
+      children: [
+        proposal("volume-1", "book-volume", {
+          title: "Volume 1",
+          children: [proposal("chapter-1", "book-chapter", { targetEntityId: "local-ch-1" })],
+        }),
+        // Children of an EXISTING (bound) container are not relocations; they stay put.
+        proposal("volume-2", "book-volume", {
+          title: "Volume 2",
+          targetEntityId: "local-vol-2",
+          children: [proposal("chapter-8", "book-chapter", { targetEntityId: "local-ch-8" })],
+        }),
+        // A child resolved at this level (no container) is matched in place, not adopted.
+        proposal("chapter-99", "book-chapter", { targetEntityId: "local-ch-99" }),
+      ],
+    });
+
+    expect([...adoptedLocalChildIds(root)]).toEqual(["local-ch-1"]);
   });
 
   it("de-duplicates review images by url within a kind so the keyed each cannot crash", () => {

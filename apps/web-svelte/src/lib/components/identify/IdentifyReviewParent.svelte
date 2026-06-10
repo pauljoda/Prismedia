@@ -3,6 +3,7 @@
     Check,
     ChevronDown,
     ChevronUp,
+    FolderPlus,
     Images,
     Info,
     Layers,
@@ -16,6 +17,7 @@
   import IdentifyReviewSection from "./IdentifyReviewSection.svelte";
   import IdentifyTargetPreview from "./IdentifyTargetPreview.svelte";
   import IdentifyChildrenGrid from "./IdentifyChildrenGrid.svelte";
+  import IdentifyNewContainersGrid from "./IdentifyNewContainersGrid.svelte";
   import IdentifyRejectQueueActions from "./IdentifyRejectQueueActions.svelte";
   import {
     buildRootReviewApplyPayload,
@@ -31,6 +33,7 @@
     structuralChildProposals,
     structuralDescendantProposals,
     newStructuralContainerProposals,
+    adoptedLocalChildIds,
     entityKindLabel,
     relationshipProposals,
     relationshipTitlesForDetail,
@@ -87,26 +90,30 @@
   );
   const localChildEntities = $derived(structuralChildEntities(entity.kind, detail?.childrenByKind));
   const cascadeRunning = $derived(store.cascadeRunning(entity.id));
-  // Matches live anywhere in the proposal subtree (the cascade nests chapters inside provider
-  // volume nodes), so the meta counts local children bound anywhere in the tree — and calls out
-  // the new containers applying will create.
-  const matchedLocalChildCount = $derived.by(() => {
+  // New containers the provider proposes (volumes, seasons, discs, …) get their own section, and
+  // a child the proposal files inside one moves out of the flat children list — so the review
+  // shows each child migrating into its new home as the cascade resolves it.
+  const newContainers = $derived(newStructuralContainerProposals(proposal));
+  const adoptedIds = $derived(adoptedLocalChildIds(proposal));
+  const remainingChildEntities = $derived(localChildEntities.filter((child) => !adoptedIds.has(child.id)));
+  const newContainersTitle = $derived(`New ${entityKindLabel(newContainers[0]?.targetKind ?? "")}`);
+  const newContainersMeta = $derived.by(() => {
+    const filed = `${adoptedIds.size} of ${localChildEntities.length} filed inside`;
+    return cascadeRunning ? `${filed} · identifying…` : filed;
+  });
+  const matchedRemainingCount = $derived.by(() => {
     const bound = new Set(
       structuralDescendantProposals(proposal)
         .map((node) => node.targetEntityId)
         .filter((id): id is string => Boolean(id)),
     );
-    return localChildEntities.filter((child) => bound.has(child.id)).length;
+    return remainingChildEntities.filter((child) => bound.has(child.id)).length;
   });
-  const newContainerCount = $derived(newStructuralContainerProposals(proposal).length);
-  const newContainerKind = $derived(newStructuralContainerProposals(proposal)[0]?.targetKind ?? "");
-  const childrenMeta = $derived.by(() => {
-    if (cascadeRunning) return "identifying…";
-    const matched = `${matchedLocalChildCount} of ${localChildEntities.length} matched`;
-    return newContainerCount > 0
-      ? `${matched} · ${newContainerCount} new ${entityKindLabel(newContainerKind).toLowerCase()}`
-      : matched;
-  });
+  const childrenMeta = $derived(
+    cascadeRunning
+      ? "identifying…"
+      : `${matchedRemainingCount} of ${remainingChildEntities.length} matched`,
+  );
   const nextQueueItem = $derived(store.nextQueueItem(entity.id));
   const queueIndex = $derived(store.queue.findIndex((item) => item.entityId === entity.id));
   const prevQueueNavItem = $derived(queueIndex > 0 ? store.queue[queueIndex - 1] : null);
@@ -484,8 +491,22 @@
     </IdentifyReviewSection>
   {/if}
 
-  <!-- Children: identified one at a time, popping in as each resolves -->
-  {#if localChildEntities.length > 0}
+  <!-- New structure the provider proposes: children below move in here as they resolve -->
+  {#if newContainers.length > 0}
+    <IdentifyReviewSection
+      panelId={`new-containers-${proposal.proposalId}`}
+      title={newContainersTitle}
+      meta={newContainersMeta}
+    >
+      {#snippet icon()}
+        <FolderPlus class="h-3.5 w-3.5 text-text-accent" />
+      {/snippet}
+      <IdentifyNewContainersGrid containers={newContainers} onWalkChild={walkChild} />
+    </IdentifyReviewSection>
+  {/if}
+
+  <!-- Children: identified one at a time; a child filed into new structure moves up there -->
+  {#if remainingChildEntities.length > 0}
     <IdentifyReviewSection
       panelId={`children-${proposal.proposalId}`}
       title="Children"
@@ -494,7 +515,7 @@
       {#snippet icon()}
         <Layers class="h-3.5 w-3.5 text-text-accent" />
       {/snippet}
-      <IdentifyChildrenGrid {cascadeRunning} childEntities={localChildEntities} {proposal} onWalkChild={walkChild} />
+      <IdentifyChildrenGrid {cascadeRunning} childEntities={remainingChildEntities} {proposal} onWalkChild={walkChild} />
     </IdentifyReviewSection>
   {/if}
 

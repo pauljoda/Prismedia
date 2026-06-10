@@ -1,10 +1,9 @@
 <script lang="ts">
-  import { Check, Clock, Loader2, FolderPlus } from "@lucide/svelte";
+  import { Check, Clock, Loader2 } from "@lucide/svelte";
   import { cn } from "@prismedia/ui-svelte";
   import { assetUrl } from "$lib/api/orval-fetch";
   import type { EntityMetadataProposal } from "$lib/api/identify-types";
   import {
-    newStructuralContainerProposals,
     reviewImagePreviewUrl,
     structuralDescendantProposals,
     type StructuralChildEntity,
@@ -13,6 +12,10 @@
   import { useIdentifyStore } from "./identify-store.svelte";
 
   interface Props {
+    /**
+     * Local children still presented at this level — the parent excludes children the proposal
+     * has filed into a new container, so a resolving child visibly moves out of this grid.
+     */
     childEntities: StructuralChildEntity[];
     proposal: EntityMetadataProposal;
     /** True while the background cascade is still streaming children into this proposal. */
@@ -32,10 +35,6 @@
     new Set(structuralNodes.map((child) => child.targetEntityId).filter((id): id is string => Boolean(id))),
   );
 
-  // Containers the provider proposes that don't exist locally yet (e.g. volumes for a book whose
-  // chapters were scanned flat). Applying creates them and files the matched children inside.
-  const newContainers = $derived(newStructuralContainerProposals(proposal));
-
   // The cascade resolves children serially in this order, flushing each as it matches. So everything
   // up to the last matched child has been processed (matched, or attempted with no match), the next
   // one is what's currently being identified, and the rest are still queued.
@@ -49,15 +48,6 @@
 
   function matchedProposal(childId: string): EntityMetadataProposal | null {
     return structuralNodes.find((child) => child.targetEntityId === childId) ?? null;
-  }
-
-  function containerCover(container: EntityMetadataProposal): string | undefined {
-    const image = container.images?.find((img) => img.kind === "cover" || img.kind === "poster" || img.kind === "thumbnail");
-    return image ? reviewImagePreviewUrl(image, container.targetKind) : undefined;
-  }
-
-  function containerMatchedCount(container: EntityMetadataProposal): number {
-    return structuralDescendantProposals(container).filter((node) => Boolean(node.targetEntityId)).length;
   }
 
   function statusFor(childId: string, index: number): "matched" | "loading" | "queued" | "none" {
@@ -79,30 +69,6 @@
 </script>
 
 <div class="grid grid-cols-2 gap-2 p-3.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-  {#each newContainers as container (container.proposalId)}
-    {@const cover = containerCover(container)}
-    {@const title = container.patch?.title ?? container.targetKind}
-    <div class="child-tile">
-      <div class="child-cover-wrap">
-        <button
-          type="button"
-          class="child-cover"
-          style="aspect-ratio: {toAspectRatioValue(aspectRatioForKind(container.targetKind))};"
-          onclick={() => onWalkChild?.(container)}
-          aria-label={`Review new ${title}`}
-        >
-          {#if cover}
-            <img src={cover} alt={title} loading="lazy" referrerpolicy="no-referrer" />
-          {:else}
-            <div class="child-cover-empty"></div>
-          {/if}
-          <span class="child-new-badge"><FolderPlus class="h-3 w-3" /><span>New</span></span>
-        </button>
-      </div>
-      <div class="child-title" title={title}>{title}</div>
-      <div class="child-subtitle">{containerMatchedCount(container)} matched inside</div>
-    </div>
-  {/each}
   {#each childEntities as child, index (child.id)}
     {@const matched = matchedProposal(child.id)}
     {@const status = statusFor(child.id, index)}
@@ -167,6 +133,4 @@
   .child-select.is-on { background: var(--color-border-accent-strong, #d59a2a); border-color: var(--color-border-accent-strong, #d59a2a); color: #0c0f15; }
   .child-title { font-size: 0.72rem; line-height: 1.2; color: var(--color-text-primary, #f2eed8); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .child-title.is-muted { color: var(--color-text-muted, #8a93a6); }
-  .child-subtitle { font-size: 0.62rem; line-height: 1.2; color: var(--color-text-muted, #8a93a6); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .child-new-badge { position: absolute; left: 0.3rem; bottom: 0.3rem; display: inline-flex; align-items: center; gap: 0.25rem; border-radius: 4px; border: 1px solid var(--color-border-accent-strong, #d59a2a); background: color-mix(in srgb, #060810 65%, transparent); color: var(--color-text-accent, #f2c26a); font-size: 0.58rem; font-family: var(--font-mono, monospace); padding: 0.12rem 0.35rem; }
 </style>
