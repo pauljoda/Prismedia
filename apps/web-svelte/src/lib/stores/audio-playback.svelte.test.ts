@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AudioTrackListItemDto } from "@prismedia/contracts";
+import { MUSIC_PLAYER_MINI_SIDE, MUSIC_PLAYER_REPEAT_MODE } from "$lib/api/generated/codes";
 import {
   AudioPlaybackStore,
   PRISMEDIA_AUDIO_ARTWORK_FALLBACK,
@@ -45,7 +46,7 @@ describe("AudioPlaybackStore", () => {
   it("repeat-all wraps at both ends", () => {
     const store = new AudioPlaybackStore();
     store.play(tracks(3), "t3");
-    store.repeat = "all";
+    store.repeat = MUSIC_PLAYER_REPEAT_MODE.all;
     expect(store.next()).toBe(true);
     expect(store.currentTrack?.id).toBe("t1");
     expect(store.prev()).toBe(true);
@@ -113,5 +114,33 @@ describe("AudioPlaybackStore", () => {
       albumCoverUrls: { "album-1": null },
     })).toBe("/artist.jpg");
     expect(resolveAudioArtwork(track, null)).toBe(PRISMEDIA_AUDIO_ARTWORK_FALLBACK);
+  });
+
+  it("restores a persisted queue, order, transport intent, and player settings", () => {
+    const store = new AudioPlaybackStore();
+    store.restore({
+      queue: tracks(3),
+      order: [2, 0, 1],
+      position: 1,
+      playing: true,
+      shuffle: true,
+      repeat: MUSIC_PLAYER_REPEAT_MODE.one,
+      context: { albumTitle: "Saved album" },
+      volume: 0.42,
+      muted: true,
+      collapsed: true,
+      collapsedSide: MUSIC_PLAYER_MINI_SIDE.right,
+    });
+
+    expect(ids(store)).toEqual(["t3", "t1", "t2"]);
+    expect(store.currentTrack?.id).toBe("t1");
+    expect(store.playing).toBe(true);
+    expect(store.shuffle).toBe(true);
+    expect(store.repeat).toBe(MUSIC_PLAYER_REPEAT_MODE.one);
+    expect(store.context?.albumTitle).toBe("Saved album");
+    expect(store.volume).toBe(0.42);
+    expect(store.muted).toBe(true);
+    expect(store.collapsed).toBe(true);
+    expect(store.collapsedSide).toBe(MUSIC_PLAYER_MINI_SIDE.right);
   });
 });

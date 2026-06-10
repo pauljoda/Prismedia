@@ -20,6 +20,7 @@ using Prismedia.Application.Jobs.Handlers.Scan;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Domain.Entities;
 using Prismedia.Application.Plugins;
+using Prismedia.Application.Playback;
 using Prismedia.Application.Security;
 
 namespace Prismedia.Application;
@@ -37,6 +38,7 @@ public static class DependencyInjection {
         services.AddScoped<SettingsService>();
         services.AddScoped<NavLayoutService>();
         services.AddScoped<PrismediaSecurityService>();
+        services.AddScoped<MusicPlayerStateService>();
         services.AddScoped<JellyfinCatalogService>();
         services.AddScoped<OrganizeService>();
         services.AddScoped<FilesService>();
