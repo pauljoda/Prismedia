@@ -182,6 +182,15 @@ export interface JobRunGroup {
   totalCount: number;
 }
 
+export interface FailedJobGroup {
+  fingerprint: string;
+  representative: JobRun;
+  jobs: JobRun[];
+  count: number;
+  firstFailedAt: string | null;
+  lastFailedAt: string | null;
+}
+
 export interface JobsDashboard {
   queues: QueueSummary[];
   activeJobs: JobRun[];
