@@ -375,10 +375,12 @@ public sealed partial class IdentifyPluginService {
                 // etc.) are dropped — we never invent playable items that have no local media file.
                 if (IsProviderAdvertisedStructuralChild(childProposal) ||
                     IsStructuralContainerKind(childProposal.TargetKind)) {
-                    // The container's own children may exist FLAT under this parent (chapters
-                    // scanned straight into the book): bind them against this parent's local
-                    // children so applying the container can adopt them into the new structure.
-                    children.Add(await BindLocalStructuralTargetsAsync(childProposal, parentEntityId, cancellationToken));
+                    // Deliberately kept with its child shells UNBOUND: a bound child in the
+                    // streamed proposal means "resolved", so pre-binding the shells here would
+                    // show the whole tree as matched while the cascade is still running. The
+                    // root builder swaps each shell for its resolved, bound node as the cascade
+                    // produces it (see AdoptResolvedChildrenIntoContainers).
+                    children.Add(childProposal);
                 }
 
                 continue;
