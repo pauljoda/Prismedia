@@ -19,7 +19,7 @@
     X,
   } from "@lucide/svelte";
   import { cn } from "@prismedia/ui-svelte";
-  import { formatDuration } from "@prismedia/contracts";
+  import { formatDuration, type AudioTrackListItemDto } from "@prismedia/contracts";
   import { apiAssetUrl, assetUrl } from "$lib/api/orval-fetch";
   import { resolveEntityHref } from "$lib/entities/entity-codes";
   import AudioWaveformFilmstrip from "./AudioWaveformFilmstrip.svelte";
@@ -194,12 +194,36 @@
     return Boolean(target.closest("input, textarea, select"));
   }
 
-  function requestPlay() {
+  function loadTrackSource(track: AudioTrackListItemDto) {
     if (!audioEl) return;
+    if (track.id === currentSrcTrackId) return;
+
+    const nextSrc = apiAssetUrl(`/audio-stream/${track.id}`);
+    if (!nextSrc) return;
+
+    currentSrcTrackId = track.id;
+    audioEl.src = nextSrc;
+    resetPlaybackPosition(track.duration ?? 0);
+    audioEl.load();
+  }
+
+  function requestPlay(expectedTrackId = currentSrcTrackId) {
+    if (!audioEl || !currentSrcTrackId) return;
     const playPromise = audioEl.play();
     if (playPromise && typeof playPromise.catch === "function") {
-      void playPromise.catch((error: unknown) => console.error("Audio play failed:", error));
+      void playPromise.catch((error: unknown) => {
+        console.error("Audio play failed:", error);
+        if (expectedTrackId === currentSrcTrackId && audioEl?.paused) {
+          playback.playing = false;
+        }
+      });
     }
+  }
+
+  function playTrackNow(track: AudioTrackListItemDto) {
+    loadTrackSource(track);
+    playback.playing = true;
+    requestPlay(track.id);
   }
 
   function resetPlaybackPosition(nextDuration = 0) {
@@ -227,7 +251,7 @@
   }
 
   function togglePlay() {
-    if (!audioEl) return;
+    if (!audioEl || !activeTrack) return;
     if (audioEl.paused) requestPlay();
     else audioEl.pause();
   }
@@ -293,18 +317,11 @@
       return;
     }
 
-    if (track.id === currentSrcTrackId) return;
-    currentSrcTrackId = track.id;
-
-    const nextSrc = apiAssetUrl(`/audio-stream/${track.id}`);
-    if (!nextSrc) return;
-
-    audioEl.src = nextSrc;
-    resetPlaybackPosition(track.duration ?? 0);
-    audioEl.load();
+    loadTrackSource(track);
     if (playback.playing) {
-      // play() is queued until data arrives; user-initiated queue changes satisfy autoplay.
-      requestPlay();
+      // Restored sessions may be blocked by browser autoplay policy; requestPlay will
+      // downgrade the transport state to paused if the browser refuses.
+      requestPlay(track.id);
     }
   });
 
@@ -400,7 +417,11 @@
     audio.addEventListener("error", handleError);
     audio.volume = playback.volume;
     audio.muted = playback.muted;
-    const detachController = playback.attachController({ toggle: togglePlay, seek: handleSeek });
+    const detachController = playback.attachController({
+      toggle: togglePlay,
+      seek: handleSeek,
+      playTrack: playTrackNow,
+    });
     // Wire OS media controls (lock screen, media keys, Bluetooth) to the play queue.
     // Deliberately omit seekbackward/seekforward: on iOS those skip buttons replace the
     // next/previous-track buttons, which a queue-based player needs. seekto still powers the
@@ -430,9 +451,10 @@
 
   function handleKeydown(event: KeyboardEvent) {
     if (isKeyboardShortcutSuppressed(event.target)) return;
+    if (!activeTrack) return;
 
     const seekBy = (delta: number) => {
-      if (!audioEl || !activeTrack) return;
+      if (!audioEl) return;
       const max =
         duration > 0 && Number.isFinite(duration)
           ? duration
@@ -478,6 +500,7 @@
 <!-- Hidden audio element -->
 <audio bind:this={audioEl} preload="auto"></audio>
 
+{#if activeTrack}
 {#if collapsed}
   <!-- Collapsed: just the artwork with animated notes; tap to expand. -->
   <button
@@ -729,6 +752,7 @@
     </div>
   </div>
 </div>
+{/if}
 {/if}
 
 <style>

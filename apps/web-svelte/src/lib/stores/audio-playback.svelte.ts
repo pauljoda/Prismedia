@@ -26,6 +26,7 @@ export interface PlaybackContext {
 export interface PlaybackController {
   toggle: () => void;
   seek: (seconds: number) => void;
+  playTrack: (track: AudioTrackListItemDto) => void;
 }
 
 export interface PlayOptions {
@@ -132,6 +133,10 @@ export class AudioPlaybackStore {
       this.order = tracks.map((_, index) => index);
       this.position = startIndex >= 0 ? startIndex : 0;
     }
+
+    const currentQueueIndex = this.order[this.position] ?? -1;
+    const currentTrack = this.queue[currentQueueIndex];
+    if (currentTrack) this.#controller?.playTrack(currentTrack);
   }
 
   /**

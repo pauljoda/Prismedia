@@ -30,6 +30,20 @@ describe("AudioPlaybackStore", () => {
     expect(upNextIds(store)).toEqual(["t4"]);
   });
 
+  it("passes a newly-started current track to the mounted controller", () => {
+    const store = new AudioPlaybackStore();
+    const played: string[] = [];
+    store.attachController({
+      toggle: () => {},
+      seek: () => {},
+      playTrack: (track) => played.push(track.id),
+    });
+
+    store.play(tracks(4), "t3");
+
+    expect(played).toEqual(["t3"]);
+  });
+
   it("next and prev walk the order; repeat-off stops at the ends", () => {
     const store = new AudioPlaybackStore();
     store.play(tracks(3), "t1");

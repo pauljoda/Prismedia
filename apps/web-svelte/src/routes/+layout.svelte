@@ -191,7 +191,5 @@
 
   <MobileNav />
   <CommandPalette />
-  {#if playback.currentTrack}
-    <AudioVidStackPlayer />
-  {/if}
+  <AudioVidStackPlayer />
 </div>
