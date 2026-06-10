@@ -31,6 +31,19 @@ public sealed class CapabilityStateTests {
     }
 
     [Fact]
+    public void RecordCompletedPlayIncrementsAlreadyCompletedItems() {
+        var playback = new CapabilityPlayback();
+        var at = DateTimeOffset.Parse("2026-05-19T10:00:00Z");
+
+        playback.RecordCompletedPlay(at);
+        playback.RecordCompletedPlay(at.AddMinutes(4));
+
+        Assert.Equal(2, playback.Value.PlayCount);
+        Assert.Equal(TimeSpan.Zero, playback.Value.ResumeTime);
+        Assert.Equal(at.AddMinutes(4), playback.Value.CompletedAt);
+    }
+
+    [Fact]
     public void RecordStartOverReArmsCompletionForAnotherCount() {
         var playback = new CapabilityPlayback();
         var at = DateTimeOffset.Parse("2026-05-19T10:00:00Z");

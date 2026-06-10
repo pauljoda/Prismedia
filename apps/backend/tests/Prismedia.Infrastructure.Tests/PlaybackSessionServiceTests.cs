@@ -18,6 +18,7 @@ namespace Prismedia.Infrastructure.Tests;
 /// </summary>
 public sealed class PlaybackSessionServiceTests {
     private static readonly Guid VideoId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+    private static readonly Guid AudioTrackId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
 
     [Fact]
     public async Task JellyfinProgressAndNativeUpdateProduceIdenticalState() {
@@ -89,6 +90,21 @@ public sealed class PlaybackSessionServiceTests {
     }
 
     [Fact]
+    public async Task CompletedPlaybackEventsIncrementRepeatedAudioPlays() {
+        var state = await RunAsync(
+            async (_, capabilities) => {
+                await capabilities.RecordCompletedPlaybackAsync(AudioTrackId, CancellationToken.None);
+                await capabilities.RecordCompletedPlaybackAsync(AudioTrackId, CancellationToken.None);
+            },
+            entityId: AudioTrackId,
+            kind: EntityKind.AudioTrack);
+
+        Assert.NotNull(state!.CompletedAt);
+        Assert.Equal(TimeSpan.Zero, state.ResumeTime);
+        Assert.Equal(2, state.PlayCount);
+    }
+
+    [Fact]
     public async Task RepeatedProgressDoesNotInflatePlayCount() {
         var state = await RunAsync(async (sessions, _) => {
             for (var i = 1; i <= 5; i++) {
@@ -146,18 +162,21 @@ public sealed class PlaybackSessionServiceTests {
 
     private static async Task<CapabilityPlayback.State?> RunAsync(
         Func<PlaybackSessionService, EntityCapabilityService, Task> act,
-        double? runtimeSeconds = null) {
+        double? runtimeSeconds = null,
+        Guid? entityId = null,
+        EntityKind kind = EntityKind.Video) {
+        var id = entityId ?? VideoId;
         await using var db = CreateContext();
         db.Entities.Add(new Persistence.Entities.EntityRow {
-            Id = VideoId,
-            KindCode = EntityKindRegistry.ToCode(EntityKind.Video),
-            Title = "Test Video",
+            Id = id,
+            KindCode = EntityKindRegistry.ToCode(kind),
+            Title = "Test Entity",
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
         });
         if (runtimeSeconds is { } seconds) {
             db.EntityTechnical.Add(new Persistence.Entities.EntityTechnicalRow {
-                EntityId = VideoId,
+                EntityId = id,
                 DurationSeconds = seconds,
                 UpdatedAt = DateTimeOffset.UtcNow
             });
@@ -170,8 +189,8 @@ public sealed class PlaybackSessionServiceTests {
 
         await act(sessions, capabilities);
 
-        var video = await repository.FindAsync<Video>(VideoId, CancellationToken.None);
-        return video?.PlaybackCapability?.Value;
+        var entity = await repository.FindAsync(id, CancellationToken.None);
+        return entity?.GetCapability<CapabilityPlayback>()?.Value;
     }
 
     private static PrismediaDbContext CreateContext() =>

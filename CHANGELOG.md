@@ -72,6 +72,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Fixed
+- Audio track play counts now keep increasing on repeated completed plays instead of getting stuck at one.
 - Music queues now keep advancing between tracks while Prismedia is in a background tab, instead of pausing at the track boundary until the tab is focused again.
 - Restored music sessions no longer show the player as actively playing when the browser blocks autoplay; the player stays visible with the saved queue and controls, then switches to playing only once audio actually starts.
 - Job Control now groups repeated failures of the same type into one card with an occurrence count, and suppressing that card hides current and future matching failures from the primary failure totals.

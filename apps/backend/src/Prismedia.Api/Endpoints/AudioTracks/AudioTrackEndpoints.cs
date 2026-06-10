@@ -21,8 +21,7 @@ public static class AudioTrackEndpoints {
             Guid id,
             EntityCapabilityService capabilities,
             CancellationToken cancellationToken) =>
-            EntityEndpointResults.ToResult(id, await capabilities.UpdatePlaybackAsync(
-                id, resumeSeconds: 0, durationSeconds: null, completed: true, cancellationToken)))
+            EntityEndpointResults.ToResult(id, await capabilities.RecordCompletedPlaybackAsync(id, cancellationToken)))
             .WithName("RecordAudioTrackPlay")
             .WithSummary("Record Audio Track Play.")
             .WithTags("Audio")

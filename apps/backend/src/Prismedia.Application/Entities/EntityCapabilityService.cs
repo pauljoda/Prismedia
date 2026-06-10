@@ -128,6 +128,19 @@ public sealed class EntityCapabilityService {
         }, cancellationToken);
 
     /// <summary>
+    /// Records a completed playback event from players that report a single end-of-stream signal
+    /// instead of continuous position progress.
+    /// </summary>
+    /// <param name="id">Entity identifier.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public Task<EntityCard?> RecordCompletedPlaybackAsync(Guid id, CancellationToken cancellationToken) =>
+        MutateAsync(id, entity => {
+            var playback = entity.GetOrAddCapability(() => new CapabilityPlayback());
+            playback.RecordCompletedPlay(DateTimeOffset.UtcNow);
+            return true;
+        }, cancellationToken);
+
+    /// <summary>
     /// Updates a non-time progress cursor such as the current chapter and page for books.
     /// </summary>
     public async Task<EntityCard?> UpdateProgressAsync(
