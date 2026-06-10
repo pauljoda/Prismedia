@@ -207,13 +207,21 @@
     audioEl.load();
   }
 
+  function canAttemptPlayback(): boolean {
+    return typeof document === "undefined" || document.visibilityState === "visible";
+  }
+
   function requestPlay(expectedTrackId = currentSrcTrackId) {
     if (!audioEl || !currentSrcTrackId) return;
+    playback.playIntent = true;
+    if (!canAttemptPlayback()) return;
+
     const playPromise = audioEl.play();
     if (playPromise && typeof playPromise.catch === "function") {
       void playPromise.catch((error: unknown) => {
         console.error("Audio play failed:", error);
         if (expectedTrackId === currentSrcTrackId && audioEl?.paused) {
+          playback.playIntent = false;
           playback.playing = false;
         }
       });
@@ -222,7 +230,6 @@
 
   function playTrackNow(track: AudioTrackListItemDto) {
     loadTrackSource(track);
-    playback.playing = true;
     requestPlay(track.id);
   }
 
@@ -253,7 +260,10 @@
   function togglePlay() {
     if (!audioEl || !activeTrack) return;
     if (audioEl.paused) requestPlay();
-    else audioEl.pause();
+    else {
+      playback.playIntent = false;
+      audioEl.pause();
+    }
   }
 
   function handleNext() {
@@ -283,6 +293,7 @@
       resetPlaybackPosition(playback.currentTrack?.duration ?? 0);
       return;
     }
+    playback.playIntent = false;
     playback.playing = false;
   }
 
@@ -318,7 +329,7 @@
     }
 
     loadTrackSource(track);
-    if (playback.playing) {
+    if (playback.playIntent) {
       // Restored sessions may be blocked by browser autoplay policy; requestPlay will
       // downgrade the transport state to paused if the browser refuses.
       requestPlay(track.id);
@@ -397,15 +408,24 @@
       if (Number.isFinite(audio.duration)) playback.duration = audio.duration;
       setMediaSessionPosition(audio.duration, audio.currentTime);
     };
-    const handlePlay = () => (playback.playing = true);
+    const handlePlay = () => {
+      playback.playIntent = true;
+      playback.playing = true;
+    };
     const handlePause = () => (playback.playing = false);
     const handleEnded = () => {
       if (playback.currentTrack) recordTrackPlay(playback.currentTrack.id);
       handleTrackEnd();
     };
     const handleError = () => {
+      playback.playIntent = false;
       playback.playing = false;
       console.error("Audio element error:", audio.error);
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== "visible") return;
+      if (!playback.playIntent || !playback.currentTrack || !audio.paused) return;
+      requestPlay(currentSrcTrackId);
     };
 
     audio.addEventListener("timeupdate", handleTimeUpdate);
@@ -415,6 +435,7 @@
     audio.addEventListener("pause", handlePause);
     audio.addEventListener("ended", handleEnded);
     audio.addEventListener("error", handleError);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     audio.volume = playback.volume;
     audio.muted = playback.muted;
     const detachController = playback.attachController({
@@ -443,6 +464,7 @@
       audio.removeEventListener("pause", handlePause);
       audio.removeEventListener("ended", handleEnded);
       audio.removeEventListener("error", handleError);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       detachController();
       detachMediaSession();
       setMediaSessionMetadata(null);

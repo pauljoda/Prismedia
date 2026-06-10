@@ -130,7 +130,7 @@ describe("AudioPlaybackStore", () => {
     expect(resolveAudioArtwork(track, null)).toBe(PRISMEDIA_AUDIO_ARTWORK_FALLBACK);
   });
 
-  it("restores a persisted queue, order, transport intent, and player settings", () => {
+  it("restores persisted play intent without reporting active playback before the audio element starts", () => {
     const store = new AudioPlaybackStore();
     store.restore({
       queue: tracks(3),
@@ -148,7 +148,8 @@ describe("AudioPlaybackStore", () => {
 
     expect(ids(store)).toEqual(["t3", "t1", "t2"]);
     expect(store.currentTrack?.id).toBe("t1");
-    expect(store.playing).toBe(true);
+    expect(store.playIntent).toBe(true);
+    expect(store.playing).toBe(false);
     expect(store.shuffle).toBe(true);
     expect(store.repeat).toBe(MUSIC_PLAYER_REPEAT_MODE.one);
     expect(store.context?.albumTitle).toBe("Saved album");
@@ -156,5 +157,14 @@ describe("AudioPlaybackStore", () => {
     expect(store.muted).toBe(true);
     expect(store.collapsed).toBe(true);
     expect(store.collapsedSide).toBe(MUSIC_PLAYER_MINI_SIDE.right);
+  });
+
+  it("records play intent immediately when starting a queue", () => {
+    const store = new AudioPlaybackStore();
+
+    store.play(tracks(2), "t1");
+
+    expect(store.playIntent).toBe(true);
+    expect(store.playing).toBe(false);
   });
 });

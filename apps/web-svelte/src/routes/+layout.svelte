@@ -63,7 +63,7 @@
       queueTrackIds: playback.queue.map((track) => track.id),
       order: playback.order,
       position: playback.position,
-      playing: playback.playing,
+      playing: playback.playIntent,
       shuffle: playback.shuffle,
       repeat: playback.repeat,
       volume: playback.volume,

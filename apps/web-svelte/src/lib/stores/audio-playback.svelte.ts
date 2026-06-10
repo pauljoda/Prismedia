@@ -74,7 +74,9 @@ export class AudioPlaybackStore {
   collapsed = $state(false);
   collapsedSide = $state<MiniPlayerSide>(MUSIC_PLAYER_MINI_SIDE.left);
 
-  // Transport state, mirrored from the global player's <audio> element.
+  // Transport state: playIntent is the user's/restored desired state; playing is
+  // only the actual state mirrored from the global player's <audio> element.
+  playIntent = $state(false);
   playing = $state(false);
   currentTime = $state(0);
   duration = $state(0);
@@ -117,7 +119,8 @@ export class AudioPlaybackStore {
     this.queue = tracks;
     this.context = context ?? null;
     if (options?.shuffle !== undefined) this.shuffle = options.shuffle;
-    this.playing = true;
+    this.playIntent = true;
+    this.playing = false;
 
     const startIndex = startTrackId ? tracks.findIndex((track) => track.id === startTrackId) : -1;
     if (this.shuffle) {
@@ -211,6 +214,7 @@ export class AudioPlaybackStore {
     this.order = [];
     this.position = -1;
     this.context = null;
+    this.playIntent = false;
     this.playing = false;
     this.currentTime = 0;
     this.duration = 0;
@@ -242,7 +246,8 @@ export class AudioPlaybackStore {
     this.order = order.length === queue.length ? order : queue.map((_, index) => index);
     this.position =
       queue.length === 0 ? -1 : Math.max(0, Math.min(state.position, Math.max(0, this.order.length - 1)));
-    this.playing = state.playing && queue.length > 0;
+    this.playIntent = state.playing && queue.length > 0;
+    this.playing = false;
     this.shuffle = state.shuffle;
     this.repeat = state.repeat;
     this.context = state.context ?? null;

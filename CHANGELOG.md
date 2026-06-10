@@ -72,6 +72,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Fixed
+- Restored music sessions no longer show the player as actively playing when the browser blocks autoplay; the player stays visible with the saved queue and controls, then switches to playing only once audio actually starts.
 - Job Control now groups repeated failures of the same type into one card with an occurrence count, and suppressing that card hides current and future matching failures from the primary failure totals.
 - The hidden mobile More button shortcut for toggling SFW/full NSFW now takes a 2-second hold instead of 5 seconds.
 - The music player and device media controls now prefer album artwork before artist artwork, including shuffled artist queues, and Jellyfin-compatible music artwork falls back from album art to the Prismedia logo instead of artist images.
