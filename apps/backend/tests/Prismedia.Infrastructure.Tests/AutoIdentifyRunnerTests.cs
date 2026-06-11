@@ -222,6 +222,42 @@ public sealed class AutoIdentifyRunnerTests {
     }
 
     [Fact]
+    public async Task AppliesArtistParentedAudioAlbumBecauseAlbumIsScanRoot() {
+        await using var db = CreateContext();
+        var artistId = await SeedVideoAsync(
+            db,
+            organized: false,
+            kind: EntityKindRegistry.MusicArtist.Code,
+            title: "The Beatles");
+        var albumId = await SeedVideoAsync(
+            db,
+            organized: false,
+            parentId: artistId,
+            kind: EntityKindRegistry.AudioLibrary.Code,
+            title: "Abbey Road");
+        var settings = await ConfigureAsync(db, enabled: true, providers: ["musicbrainz"], confidencePercent: 90m);
+        var identify = new FakeIdentifyProvider {
+            ProposalsByProvider = {
+                ["musicbrainz"] = Proposal("musicbrainz", confidence: 0.95m, title: "Abbey Road", targetKind: ProposalKind.AudioLibrary),
+            },
+            SupportedKindsByProvider = {
+                ["musicbrainz"] = [
+                    EntityKindRegistry.MusicArtist.Code,
+                    EntityKindRegistry.AudioLibrary.Code,
+                    EntityKindRegistry.AudioTrack.Code,
+                ],
+            },
+        };
+        var runner = new AutoIdentifyRunner(settings, identify, db, NullLogger<AutoIdentifyRunner>.Instance);
+
+        var result = await runner.RunAsync(albumId, CancellationToken.None);
+
+        Assert.True(result.Applied);
+        Assert.Equal("musicbrainz", result.Provider);
+        Assert.Single(identify.ApplyCalls);
+    }
+
+    [Fact]
     public async Task SkipsWhenDisabled() {
         await using var db = CreateContext();
         var entityId = await SeedVideoAsync(db, organized: false);

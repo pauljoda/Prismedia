@@ -37,10 +37,12 @@ public sealed class AutoIdentifyRunner(
             return new AutoIdentifyResult(false, SkipReason: "entity not found");
         }
 
-        // Only identify top-level entities. A child (an episode in a series, an image in a gallery,
+        // Only identify scan roots. A child (an episode in a series, an image in a gallery,
         // a track in an album) is filled by cascading from its identified parent, so identifying it
-        // directly would duplicate and conflict with the parent's work.
-        if (entity.ParentEntityId is not null) {
+        // directly would duplicate and conflict with the parent's work. Audio albums are the exception:
+        // Artist/Album scans intentionally parent albums under a MusicArtist grouping, but the album is
+        // still the metadata root to identify and cascade to tracks.
+        if (entity.ParentEntityId is not null && entity.KindCode != EntityKindRegistry.AudioLibrary.Code) {
             return new AutoIdentifyResult(false, SkipReason: "child entity; its parent is identified instead");
         }
 
