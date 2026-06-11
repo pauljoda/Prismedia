@@ -5,16 +5,19 @@
   import { Badge, Button, Checkbox, Select } from "@prismedia/ui-svelte";
   import { fetchRequestDetail, fetchRequestServices, submitRequest } from "$lib/api/requests";
   import type { RequestMediaKindCode, RequestProviderKindCode } from "$lib/api/generated/codes";
+  import { REQUEST_MEDIA_KIND, REQUEST_PROVIDER_KIND } from "$lib/api/generated/codes";
   import {
     buildRequestSubmitPayload,
     defaultSelectedChildIds,
+    inferRequestSourceForKind,
     numericValue,
+    optionDefaultsForService,
     selectDefaultService,
   } from "$lib/requests/request-helpers";
   import type { RequestDetailResponse, RequestServiceInstanceSummary } from "$lib/requests/request-model";
 
   const params = $derived($page.params as { kind: RequestMediaKindCode; id: string });
-  const source = $derived(($page.url.searchParams.get("source") ?? "") as RequestProviderKindCode);
+  const sourceQuery = $derived($page.url.searchParams.get("source") as RequestProviderKindCode | null);
   const initialServiceId = $derived($page.url.searchParams.get("serviceId"));
 
   let services = $state<RequestServiceInstanceSummary[]>([]);
@@ -38,24 +41,42 @@
   const matchingServices = $derived(
     (() => {
       const current = detail;
-      return current ? services.filter((service) => service.kind === current.source) : [];
+      const activeSource = current?.source ?? sourceQuery ?? inferRequestSourceForKind(params.kind);
+      return activeSource ? services.filter((service) => service.kind === activeSource) : [];
     })(),
+  );
+
+  const serviceOptions = $derived(detail?.serviceOptions ?? {
+    qualityProfiles: [],
+    rootFolders: [],
+    metadataProfiles: [],
+  });
+
+  const submitDisabledReason = $derived(
+    detail?.kind === REQUEST_MEDIA_KIND.album
+      ? "Standalone Lidarr album requests require an artist request; request the artist and select albums there."
+      : null,
   );
 
   onMount(async () => {
     try {
       services = await fetchRequestServices();
-      const fallbackService = source ? selectDefaultService(services, source) : null;
+      const resolvedSource = sourceQuery ?? inferRequestSourceForKind(params.kind);
+      if (!resolvedSource) {
+        throw new Error("This request kind does not map to a configured provider.");
+      }
+
+      const fallbackService = selectDefaultService(services, resolvedSource);
       selectedServiceId = initialServiceId ?? fallbackService?.id ?? "";
       detail = await fetchRequestDetail({
-        source,
+        source: resolvedSource,
         kind: params.kind,
         externalId: params.id,
         serviceId: selectedServiceId,
       });
       selectedChildIds = defaultSelectedChildIds(detail);
       const service = services.find((item) => item.id === selectedServiceId) ?? selectDefaultService(services, detail.source);
-      if (service) applyServiceDefaults(service);
+      if (service) applyServiceDefaults(service, detail.serviceOptions);
     } catch (err) {
       error = err instanceof Error ? err.message : "Failed to load request detail";
     } finally {
@@ -66,7 +87,6 @@
   async function changeService(serviceId: string) {
     selectedServiceId = serviceId;
     const service = services.find((item) => item.id === serviceId);
-    if (service) applyServiceDefaults(service);
     if (!detail) return;
     try {
       detail = await fetchRequestDetail({
@@ -76,15 +96,17 @@
         serviceId,
       });
       selectedChildIds = defaultSelectedChildIds(detail);
+      if (service) applyServiceDefaults(service, detail.serviceOptions);
     } catch (err) {
       error = err instanceof Error ? err.message : "Failed to refresh detail";
     }
   }
 
-  function applyServiceDefaults(service: RequestServiceInstanceSummary) {
-    qualityProfileId = numericValue(service.defaultQualityProfileId);
-    rootFolderPath = service.defaultRootFolderPath;
-    metadataProfileId = numericValue(service.defaultMetadataProfileId);
+  function applyServiceDefaults(service: RequestServiceInstanceSummary, options = serviceOptions) {
+    const defaults = optionDefaultsForService(service, options);
+    qualityProfileId = defaults.qualityProfileId;
+    rootFolderPath = defaults.rootFolderPath;
+    metadataProfileId = defaults.metadataProfileId;
   }
 
   function toggleChild(id: string, checked: boolean) {
@@ -94,7 +116,7 @@
   }
 
   async function handleSubmit() {
-    if (!detail || !selectedService) return;
+    if (!detail || !selectedService || submitDisabledReason) return;
     submitting = true;
     error = null;
     message = null;
@@ -166,7 +188,7 @@
           <p>{detail.credits.join(", ")}</p>
         {/if}
         {#if detail.children.length > 0}
-          <h3>{detail.kind === "series" ? "Seasons" : "Albums"}</h3>
+          <h3>{detail.kind === REQUEST_MEDIA_KIND.series ? "Seasons" : "Albums"}</h3>
           <div class="children">
             {#each detail.children as child}
               <label class="child-row">
@@ -193,16 +215,31 @@
         </label>
         <label>
           <span>Root folder</span>
-          <input bind:value={rootFolderPath} placeholder="/media" />
+          <Select
+            value={rootFolderPath ?? ""}
+            options={serviceOptions.rootFolders.map((option) => ({ value: option.path ?? option.id, label: option.name }))}
+            disabled={serviceOptions.rootFolders.length === 0}
+            onchange={(value) => (rootFolderPath = value)}
+          />
         </label>
         <label>
           <span>Quality profile</span>
-          <input type="number" bind:value={qualityProfileId} />
+          <Select
+            value={qualityProfileId === null ? "" : String(qualityProfileId)}
+            options={serviceOptions.qualityProfiles.map((option) => ({ value: option.id, label: option.name }))}
+            disabled={serviceOptions.qualityProfiles.length === 0}
+            onchange={(value) => (qualityProfileId = numericValue(value))}
+          />
         </label>
-        {#if detail.source === "lidarr"}
+        {#if detail.source === REQUEST_PROVIDER_KIND.lidarr}
           <label>
             <span>Metadata profile</span>
-            <input type="number" bind:value={metadataProfileId} />
+            <Select
+              value={metadataProfileId === null ? "" : String(metadataProfileId)}
+              options={serviceOptions.metadataProfiles.map((option) => ({ value: option.id, label: option.name }))}
+              disabled={serviceOptions.metadataProfiles.length === 0}
+              onchange={(value) => (metadataProfileId = numericValue(value))}
+            />
           </label>
         {/if}
         <label class="toggle-row">
@@ -213,9 +250,10 @@
           <Checkbox checked={searchNow} onchange={(event) => setBoolean("searchNow", event)} />
           <span>Search after request</span>
         </label>
+        {#if submitDisabledReason}<p class="panel-error">{submitDisabledReason}</p>{/if}
         {#if error}<p class="panel-error">{error}</p>{/if}
         {#if message}<p class="panel-message"><Check size={14} /> {message}</p>{/if}
-        <Button onclick={handleSubmit} disabled={!selectedService || submitting}>
+        <Button onclick={handleSubmit} disabled={!selectedService || submitting || !!submitDisabledReason}>
           {submitting ? "Submitting" : "Submit request"}
         </Button>
       </aside>
@@ -319,15 +357,6 @@
     gap: 0.35rem;
     color: var(--color-text-secondary);
     font-size: 0.85rem;
-  }
-
-  .request-panel input {
-    min-height: 2.25rem;
-    border-radius: 4px;
-    border: 1px solid var(--color-border-default);
-    background: var(--color-surface-2);
-    color: var(--color-text-primary);
-    padding: 0 0.65rem;
   }
 
   .toggle-row, .child-row {

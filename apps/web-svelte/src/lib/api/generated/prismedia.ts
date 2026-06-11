@@ -158,10 +158,12 @@ import type {
   RatingUpdateRequest,
   RemoveFileExclusionParams,
   RenameFileParams,
+  RequestConnectionTestResponse,
   RequestDetailResponse,
   RequestSearchResponse,
   RequestServiceInstanceSaveRequest,
   RequestServiceInstanceSummary,
+  RequestServiceOptionsResponse,
   RequestSubmitRequest,
   RequestSubmitResponse,
   RescanFileRootParams,
@@ -9127,6 +9129,92 @@ export const deleteRequestService = async (id: string, options?: RequestInit): P
   {
     ...options,
     method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type getRequestServiceOptionsResponse200 = {
+  data: RequestServiceOptionsResponse
+  status: 200
+}
+
+export type getRequestServiceOptionsResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type getRequestServiceOptionsResponseSuccess = (getRequestServiceOptionsResponse200) & {
+  headers: Headers;
+};
+export type getRequestServiceOptionsResponseError = (getRequestServiceOptionsResponse404) & {
+  headers: Headers;
+};
+
+export type getRequestServiceOptionsResponse = (getRequestServiceOptionsResponseSuccess | getRequestServiceOptionsResponseError)
+
+export const getGetRequestServiceOptionsUrl = (id: string,) => {
+
+
+
+
+  return `/api/requests/services/${id}/options`
+}
+
+/**
+ * @summary Gets selectable quality profile, root folder, and metadata profile options for a request service.
+ */
+export const getRequestServiceOptions = async (id: string, options?: RequestInit): Promise<getRequestServiceOptionsResponse> => {
+
+  return orvalFetch<getRequestServiceOptionsResponse>(getGetRequestServiceOptionsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type testRequestServiceResponse200 = {
+  data: RequestConnectionTestResponse
+  status: 200
+}
+
+export type testRequestServiceResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type testRequestServiceResponseSuccess = (testRequestServiceResponse200) & {
+  headers: Headers;
+};
+export type testRequestServiceResponseError = (testRequestServiceResponse404) & {
+  headers: Headers;
+};
+
+export type testRequestServiceResponse = (testRequestServiceResponseSuccess | testRequestServiceResponseError)
+
+export const getTestRequestServiceUrl = (id: string,) => {
+
+
+
+
+  return `/api/requests/services/${id}/test`
+}
+
+/**
+ * @summary Tests connectivity to a configured request service instance.
+ */
+export const testRequestService = async (id: string, options?: RequestInit): Promise<testRequestServiceResponse> => {
+
+  return orvalFetch<testRequestServiceResponse>(getTestRequestServiceUrl(id),
+  {
+    ...options,
+    method: 'POST'
 
 
   }

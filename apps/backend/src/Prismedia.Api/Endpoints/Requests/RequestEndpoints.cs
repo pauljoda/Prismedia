@@ -49,6 +49,34 @@ public static class RequestEndpoints {
             .Produces(StatusCodes.Status204NoContent)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
+        group.MapGet("/services/{id:guid}/options", async (
+            Guid id,
+            RequestServiceOptionsService options,
+            CancellationToken cancellationToken) => {
+                var response = await options.GetOptionsAsync(id, cancellationToken);
+                return response is null
+                    ? Results.NotFound(new ApiProblem(ApiProblemCodes.NotFound, "Request service instance was not found."))
+                    : Results.Ok(response);
+            })
+            .WithName("GetRequestServiceOptions")
+            .WithSummary("Gets selectable quality profile, root folder, and metadata profile options for a request service.")
+            .Produces<RequestServiceOptionsResponse>()
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+
+        group.MapPost("/services/{id:guid}/test", async (
+            Guid id,
+            RequestServiceOptionsService options,
+            CancellationToken cancellationToken) => {
+                var response = await options.TestAsync(id, cancellationToken);
+                return response is null
+                    ? Results.NotFound(new ApiProblem(ApiProblemCodes.NotFound, "Request service instance was not found."))
+                    : Results.Ok(response);
+            })
+            .WithName("TestRequestService")
+            .WithSummary("Tests connectivity to a configured request service instance.")
+            .Produces<RequestConnectionTestResponse>()
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+
         group.MapGet("/search", (
             string query,
             string[]? kinds,

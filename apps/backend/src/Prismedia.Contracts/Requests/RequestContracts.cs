@@ -95,7 +95,7 @@ public sealed record RequestDetailResponse(
     IReadOnlyList<string> Studios,
     IReadOnlyList<string> Credits,
     IReadOnlyList<RequestChildOption> Children,
-    IReadOnlyList<RequestServiceOption> ServiceOptions);
+    RequestServiceOptionsResponse ServiceOptions);
 
 /// <summary>Selectable child option, such as a season or album.</summary>
 public sealed record RequestChildOption(
@@ -109,6 +109,12 @@ public sealed record RequestChildOption(
 
 /// <summary>Root folder/profile option exposed by a request service instance.</summary>
 public sealed record RequestServiceOption(string Id, string Name, string? Path);
+
+/// <summary>Grouped selectable options exposed by a request service instance.</summary>
+public sealed record RequestServiceOptionsResponse(
+    IReadOnlyList<RequestServiceOption> QualityProfiles,
+    IReadOnlyList<RequestServiceOption> RootFolders,
+    IReadOnlyList<RequestServiceOption> MetadataProfiles);
 
 /// <summary>Request payload for submitting a request to a selected service instance.</summary>
 public sealed record RequestSubmitRequest(

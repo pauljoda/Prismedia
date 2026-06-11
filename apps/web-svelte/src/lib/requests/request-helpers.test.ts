@@ -3,9 +3,11 @@ import { REQUEST_MEDIA_KIND, REQUEST_PROVIDER_KIND } from "$lib/api/generated/co
 import {
   buildRequestSubmitPayload,
   defaultSelectedChildIds,
+  inferRequestSourceForKind,
+  optionDefaultsForService,
   selectDefaultService,
 } from "./request-helpers";
-import type { RequestDetailResponse, RequestServiceInstanceSummary } from "./request-model";
+import type { RequestDetailResponse, RequestServiceInstanceSummary, RequestServiceOptionsResponse } from "./request-model";
 
 describe("request helpers", () => {
   it("selects the default matching service instance", () => {
@@ -47,6 +49,38 @@ describe("request helpers", () => {
       selectedChildIds: ["0"],
     });
   });
+
+  it("infers source for direct detail routes", () => {
+    expect(inferRequestSourceForKind(REQUEST_MEDIA_KIND.movie)).toBe(REQUEST_PROVIDER_KIND.radarr);
+    expect(inferRequestSourceForKind(REQUEST_MEDIA_KIND.series)).toBe(REQUEST_PROVIDER_KIND.sonarr);
+    expect(inferRequestSourceForKind(REQUEST_MEDIA_KIND.artist)).toBe(REQUEST_PROVIDER_KIND.lidarr);
+    expect(inferRequestSourceForKind(REQUEST_MEDIA_KIND.album)).toBe(REQUEST_PROVIDER_KIND.lidarr);
+  });
+
+  it("selects valid defaults from service options before falling back to first option", () => {
+    const defaults = optionDefaultsForService(
+      {
+        ...service("svc", REQUEST_PROVIDER_KIND.lidarr, true),
+        defaultQualityProfileId: 2,
+        defaultMetadataProfileId: 9,
+        defaultRootFolderPath: "/missing",
+      },
+      {
+        qualityProfiles: [
+          { id: "1", name: "Any", path: null },
+          { id: "2", name: "Lossless", path: null },
+        ],
+        rootFolders: [{ id: "/music", name: "/music", path: "/music" }],
+        metadataProfiles: [{ id: "9", name: "Standard", path: null }],
+      },
+    );
+
+    expect(defaults).toEqual({
+      qualityProfileId: 2,
+      rootFolderPath: "/music",
+      metadataProfileId: 9,
+    });
+  });
 });
 
 function service(
@@ -70,6 +104,12 @@ function service(
 }
 
 function detailWithChildren(ids: string[]): RequestDetailResponse {
+  const serviceOptions: RequestServiceOptionsResponse = {
+    qualityProfiles: [],
+    rootFolders: [],
+    metadataProfiles: [],
+  };
+
   return {
     source: REQUEST_PROVIDER_KIND.sonarr,
     kind: REQUEST_MEDIA_KIND.series,
@@ -85,7 +125,7 @@ function detailWithChildren(ids: string[]): RequestDetailResponse {
     tags: [],
     studios: [],
     credits: [],
-    serviceOptions: [],
+    serviceOptions,
     children: ids.map((id) => ({
       id,
       title: id === "0" ? "Specials" : `Season ${id}`,

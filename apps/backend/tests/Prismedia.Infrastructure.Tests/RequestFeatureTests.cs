@@ -110,9 +110,34 @@ public sealed class RequestFeatureTests {
 
     [Fact]
     public async Task SonarrSubmitMarksSelectedSeasonsIncludingSpecials() {
+        var calls = new List<string>();
         var handler = new FakeHttpHandler((request, body) => {
+            calls.Add($"{request.Method} {request.RequestUri!.AbsolutePath}");
+            if (request.Method == HttpMethod.Get) {
+                return Json("""
+                    [
+                      {
+                        "tvdbId": 79169,
+                        "title": "Twin Peaks",
+                        "originalTitle": "Twin Peaks Original",
+                        "titleSlug": "twin-peaks",
+                        "cleanTitle": "twinpeaks",
+                        "status": "ended",
+                        "images": [],
+                        "seasons": [
+                          { "seasonNumber": 0, "statistics": { "episodeCount": 1 } },
+                          { "seasonNumber": 1, "statistics": { "episodeCount": 8 } },
+                          { "seasonNumber": 2, "statistics": { "episodeCount": 22 } }
+                        ]
+                      }
+                    ]
+                    """);
+            }
+
             Assert.Equal(HttpMethod.Post, request.Method);
             using var document = JsonDocument.Parse(body);
+            Assert.Equal("Twin Peaks Original", document.RootElement.GetProperty("originalTitle").GetString());
+            Assert.Equal("twin-peaks", document.RootElement.GetProperty("titleSlug").GetString());
             var seasons = document.RootElement.GetProperty("seasons").EnumerateArray().ToArray();
 
             Assert.Contains(seasons, season => season.TryGetProperty("seasonNumber", out var number) && number.GetInt32() == 0);
@@ -123,27 +148,7 @@ public sealed class RequestFeatureTests {
             return Json("""{ "id": 12 }""");
         });
         var client = new SonarrRequestProviderClient(new HttpClient(handler));
-        var detail = new RequestDetailResponse(
-            RequestProviderKind.Sonarr,
-            RequestMediaKind.Series,
-            "79169",
-            "Twin Peaks",
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            null,
-            [],
-            [],
-            [],
-            [
-                new RequestChildOption("0", "Specials", RequestMediaKind.Series, true, null, null, null),
-                new RequestChildOption("1", "Season 1", RequestMediaKind.Series, true, null, null, null),
-                new RequestChildOption("2", "Season 2", RequestMediaKind.Series, true, null, null, null)
-            ],
-            []);
+        var detail = await client.GetDetailAsync(Instance(RequestProviderKind.Sonarr), RequestMediaKind.Series, "79169", CancellationToken.None);
 
         var response = await client.SubmitAsync(
             Instance(RequestProviderKind.Sonarr),
@@ -152,6 +157,62 @@ public sealed class RequestFeatureTests {
             CancellationToken.None);
 
         Assert.True(response.Submitted);
+        Assert.Contains("GET /api/v3/series/lookup", calls);
+    }
+
+    [Fact]
+    public async Task RadarrSubmitPreservesLookupResourceAndMutatesRequestFields() {
+        var handler = new FakeHttpHandler((request, body) => {
+            if (request.Method == HttpMethod.Get) {
+                return Json("""
+                    [
+                      {
+                        "tmdbId": 424,
+                        "title": "Blade Runner",
+                        "titleSlug": "blade-runner",
+                        "images": [{ "coverType": "poster", "remoteUrl": "https://images.test/poster.jpg" }],
+                        "genres": ["Science Fiction"]
+                      }
+                    ]
+                    """);
+            }
+
+            using var document = JsonDocument.Parse(body);
+            Assert.Equal("blade-runner", document.RootElement.GetProperty("titleSlug").GetString());
+            Assert.Equal("Science Fiction", document.RootElement.GetProperty("genres")[0].GetString());
+            Assert.Equal(7, document.RootElement.GetProperty("qualityProfileId").GetInt32());
+            Assert.Equal("/movies", document.RootElement.GetProperty("rootFolderPath").GetString());
+            Assert.True(document.RootElement.GetProperty("monitored").GetBoolean());
+            Assert.True(document.RootElement.GetProperty("addOptions").GetProperty("searchForMovie").GetBoolean());
+            return Json("""{ "id": 12 }""");
+        });
+        var client = new RadarrRequestProviderClient(new HttpClient(handler));
+        var detail = await client.GetDetailAsync(Instance(RequestProviderKind.Radarr), RequestMediaKind.Movie, "424", CancellationToken.None);
+
+        var response = await client.SubmitAsync(
+            Instance(RequestProviderKind.Radarr),
+            detail,
+            new RequestSubmitRequest(Guid.NewGuid(), RequestProviderKind.Radarr, RequestMediaKind.Movie, "424", "Blade Runner", 7, "/movies", null, true, true, []),
+            CancellationToken.None);
+
+        Assert.True(response.Submitted);
+    }
+
+    [Fact]
+    public async Task ProviderOptionsAreGroupedByUsageAndLidarrIncludesMetadataProfiles() {
+        var handler = new FakeHttpHandler((request, body) => request.RequestUri!.AbsolutePath switch {
+            "/api/v1/qualityprofile" => Json("""[{ "id": 1, "name": "Lossless" }]"""),
+            "/api/v1/metadataprofile" => Json("""[{ "id": 2, "name": "Standard Metadata" }]"""),
+            "/api/v1/rootfolder" => Json("""[{ "path": "/music", "freeSpace": 123 }]"""),
+            _ => throw new InvalidOperationException(request.RequestUri.AbsolutePath)
+        });
+        var client = new LidarrRequestProviderClient(new HttpClient(handler));
+
+        var options = await client.GetOptionsAsync(Instance(RequestProviderKind.Lidarr), CancellationToken.None);
+
+        Assert.Equal("Lossless", Assert.Single(options.QualityProfiles).Name);
+        Assert.Equal("/music", Assert.Single(options.RootFolders).Path);
+        Assert.Equal("Standard Metadata", Assert.Single(options.MetadataProfiles).Name);
     }
 
     [Fact]
@@ -160,6 +221,10 @@ public sealed class RequestFeatureTests {
         var handler = new FakeHttpHandler((request, body) => {
             calls.Add($"{request.Method} {request.RequestUri!.AbsolutePath}");
             if (request.Method == HttpMethod.Get) {
+                if (request.RequestUri!.AbsolutePath.EndsWith("/album/lookup", StringComparison.Ordinal)) {
+                    return Json("[]");
+                }
+
                 return Json("""[{ "foreignArtistId": "mb-artist", "artistName": "Bowie", "overview": "Artist", "images": [] }]""");
             }
 
@@ -179,7 +244,7 @@ public sealed class RequestFeatureTests {
 
         var detail = new RequestDetailResponse(RequestProviderKind.Lidarr, RequestMediaKind.Artist, "mb-artist", "Bowie", null, null, null, null, null, null, null, [], [], [], [
             new RequestChildOption("9", "Low", RequestMediaKind.Album, true, null, null, null)
-        ], []);
+        ], new RequestServiceOptionsResponse([], [], []));
         await client.SubmitAsync(
             Instance(RequestProviderKind.Lidarr),
             detail,
@@ -187,6 +252,43 @@ public sealed class RequestFeatureTests {
             CancellationToken.None);
 
         Assert.Contains("PUT /api/v1/album/monitor", calls);
+    }
+
+    [Fact]
+    public async Task LidarrClientMapsAlbumsButRejectsStandaloneAlbumSubmit() {
+        var handler = new FakeHttpHandler((request, body) => {
+            if (request.RequestUri!.AbsolutePath.EndsWith("/artist/lookup", StringComparison.Ordinal)) {
+                return Json("[]");
+            }
+
+            return Json("""
+                [
+                  {
+                    "id": 9,
+                    "foreignAlbumId": "mb-album",
+                    "title": "Low",
+                    "releaseDate": "1977-01-14",
+                    "overview": "Album",
+                    "images": [{ "coverType": "cover", "remoteUrl": "https://images.test/low.jpg" }]
+                  }
+                ]
+                """);
+        });
+        var client = new LidarrRequestProviderClient(new HttpClient(handler));
+
+        var results = await client.SearchAsync(Instance(RequestProviderKind.Lidarr), "low", CancellationToken.None);
+        var album = Assert.Single(results);
+        var detail = await client.GetDetailAsync(Instance(RequestProviderKind.Lidarr), RequestMediaKind.Album, "mb-album", CancellationToken.None);
+
+        Assert.Equal(RequestMediaKind.Album, album.Kind);
+        Assert.Equal("mb-album", album.ExternalId);
+        Assert.Equal(1977, album.Year);
+        Assert.Equal("https://images.test/low.jpg", detail.PosterUrl);
+        await Assert.ThrowsAsync<NotSupportedException>(() => client.SubmitAsync(
+            Instance(RequestProviderKind.Lidarr),
+            detail,
+            new RequestSubmitRequest(Guid.NewGuid(), RequestProviderKind.Lidarr, RequestMediaKind.Album, "mb-album", "Low", 1, "/music", 2, true, true, []),
+            CancellationToken.None));
     }
 
     private static RequestServiceInstanceDetail Instance(RequestProviderKind kind) =>

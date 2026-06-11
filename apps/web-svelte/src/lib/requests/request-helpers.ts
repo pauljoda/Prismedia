@@ -1,7 +1,9 @@
-import type { RequestProviderKindCode } from "$lib/api/generated/codes";
+import { REQUEST_MEDIA_KIND, REQUEST_PROVIDER_KIND } from "$lib/api/generated/codes";
+import type { RequestMediaKindCode, RequestProviderKindCode } from "$lib/api/generated/codes";
 import type {
   RequestDetailResponse,
   RequestServiceInstanceSummary,
+  RequestServiceOptionsResponse,
   RequestSubmitRequest,
 } from "./request-model";
 
@@ -26,6 +28,33 @@ export function defaultSelectedChildIds(detail: RequestDetailResponse): string[]
   return detail.children
     .filter((child) => child.requestable)
     .map((child) => child.id);
+}
+
+export function inferRequestSourceForKind(kind: RequestMediaKindCode): RequestProviderKindCode | null {
+  if (kind === REQUEST_MEDIA_KIND.movie) return REQUEST_PROVIDER_KIND.radarr;
+  if (kind === REQUEST_MEDIA_KIND.series) return REQUEST_PROVIDER_KIND.sonarr;
+  if (kind === REQUEST_MEDIA_KIND.artist || kind === REQUEST_MEDIA_KIND.album) return REQUEST_PROVIDER_KIND.lidarr;
+  return null;
+}
+
+export function optionDefaultsForService(
+  service: RequestServiceInstanceSummary,
+  options: RequestServiceOptionsResponse,
+): Pick<RequestSubmitFormState, "qualityProfileId" | "rootFolderPath" | "metadataProfileId"> {
+  const defaultQualityProfileId = numericValue(service.defaultQualityProfileId);
+  const defaultMetadataProfileId = numericValue(service.defaultMetadataProfileId);
+  return {
+    qualityProfileId:
+      findNumericOption(options.qualityProfiles, defaultQualityProfileId) ??
+      numericValue(options.qualityProfiles[0]?.id),
+    rootFolderPath:
+      options.rootFolders.find((option) => option.path === service.defaultRootFolderPath)?.path ??
+      options.rootFolders[0]?.path ??
+      service.defaultRootFolderPath,
+    metadataProfileId:
+      findNumericOption(options.metadataProfiles, defaultMetadataProfileId) ??
+      numericValue(options.metadataProfiles[0]?.id),
+  };
 }
 
 export function buildRequestSubmitPayload(
@@ -56,4 +85,12 @@ export function numericValue(value: number | string | null | undefined): number 
   }
 
   return null;
+}
+
+function findNumericOption(
+  options: RequestServiceOptionsResponse["qualityProfiles"],
+  value: number | null,
+): number | null {
+  if (value === null) return null;
+  return options.some((option) => numericValue(option.id) === value) ? value : null;
 }

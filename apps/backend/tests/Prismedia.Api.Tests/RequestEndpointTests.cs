@@ -43,8 +43,10 @@ public sealed class RequestEndpointTests {
         Assert.True(save.IsSuccessStatusCode, saveText);
         var service = System.Text.Json.JsonSerializer.Deserialize<RequestServiceInstanceSummary>(saveText, jsonOptions);
         var services = await client.GetFromJsonAsync<IReadOnlyList<RequestServiceInstanceSummary>>("/api/requests/services", jsonOptions);
+        var options = await client.GetFromJsonAsync<RequestServiceOptionsResponse>($"/api/requests/services/{service!.Id}/options", jsonOptions);
+        var test = await client.PostAsync($"/api/requests/services/{service.Id}/test", null);
         var search = await client.GetFromJsonAsync<RequestSearchResponse>("/api/requests/search?query=blade&kinds=movie&sources=radarr", jsonOptions);
-        var detailResponse = await client.GetAsync($"/api/requests/details/radarr/movie/424?serviceId={service!.Id}");
+        var detailResponse = await client.GetAsync($"/api/requests/details/radarr/movie/424?serviceId={service.Id}");
         var detailText = await detailResponse.Content.ReadAsStringAsync();
         Assert.True(detailResponse.IsSuccessStatusCode, detailText);
         var detail = System.Text.Json.JsonSerializer.Deserialize<RequestDetailResponse>(detailText, jsonOptions);
@@ -66,6 +68,8 @@ public sealed class RequestEndpointTests {
         Assert.NotNull(services);
         Assert.Single(services);
         Assert.Null(services[0].ApiKey);
+        Assert.Equal("HD", Assert.Single(options!.QualityProfiles).Name);
+        Assert.True(test.IsSuccessStatusCode);
         Assert.NotNull(search);
         Assert.Equal("Blade Runner", Assert.Single(search.Results).Title);
         Assert.NotNull(detail);
@@ -125,12 +129,18 @@ public sealed class RequestEndpointTests {
             ]);
 
         public Task<RequestDetailResponse> GetDetailAsync(RequestServiceInstanceDetail instance, RequestMediaKind kind, string externalId, CancellationToken cancellationToken) =>
-            Task.FromResult(new RequestDetailResponse(RequestProviderKind.Radarr, RequestMediaKind.Movie, externalId, "Blade Runner", 1982, null, null, null, null, null, null, [], [], [], [], []));
+            Task.FromResult(new RequestDetailResponse(RequestProviderKind.Radarr, RequestMediaKind.Movie, externalId, "Blade Runner", 1982, null, null, null, null, null, null, [], [], [], [], new RequestServiceOptionsResponse([], [], [])));
 
         public Task<RequestSubmitResponse> SubmitAsync(RequestServiceInstanceDetail instance, RequestDetailResponse detail, RequestSubmitRequest request, CancellationToken cancellationToken) =>
             Task.FromResult(new RequestSubmitResponse(true, "12", null));
 
-        public Task<IReadOnlyList<RequestServiceOption>> GetOptionsAsync(RequestServiceInstanceDetail instance, CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<RequestServiceOption>>([]);
+        public Task<RequestConnectionTestResponse> TestAsync(RequestServiceInstanceDetail instance, CancellationToken cancellationToken) =>
+            Task.FromResult(new RequestConnectionTestResponse(true, "Connected"));
+
+        public Task<RequestServiceOptionsResponse> GetOptionsAsync(RequestServiceInstanceDetail instance, CancellationToken cancellationToken) =>
+            Task.FromResult(new RequestServiceOptionsResponse(
+                [new RequestServiceOption("4", "HD", null)],
+                [new RequestServiceOption("/movies", "/movies", "/movies")],
+                []));
     }
 }

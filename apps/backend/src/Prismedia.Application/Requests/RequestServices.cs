@@ -18,7 +18,8 @@ public interface IRequestProviderClient {
     Task<IReadOnlyList<RequestSearchResult>> SearchAsync(RequestServiceInstanceDetail instance, string query, CancellationToken cancellationToken);
     Task<RequestDetailResponse> GetDetailAsync(RequestServiceInstanceDetail instance, RequestMediaKind kind, string externalId, CancellationToken cancellationToken);
     Task<RequestSubmitResponse> SubmitAsync(RequestServiceInstanceDetail instance, RequestDetailResponse detail, RequestSubmitRequest request, CancellationToken cancellationToken);
-    Task<IReadOnlyList<RequestServiceOption>> GetOptionsAsync(RequestServiceInstanceDetail instance, CancellationToken cancellationToken);
+    Task<RequestConnectionTestResponse> TestAsync(RequestServiceInstanceDetail instance, CancellationToken cancellationToken);
+    Task<RequestServiceOptionsResponse> GetOptionsAsync(RequestServiceInstanceDetail instance, CancellationToken cancellationToken);
 }
 
 /// <summary>Resolves the provider client for a request service kind.</summary>
@@ -64,9 +65,31 @@ public sealed class RequestDetailService(IRequestServiceInstanceStore store, IRe
                 .ThenBy(candidate => candidate.DisplayName, StringComparer.OrdinalIgnoreCase)
                 .FirstOrDefault();
 
+        if (instance is null) {
+            return null;
+        }
+
+        var client = clients.Get(source);
+        var detail = await client.GetDetailAsync(instance, kind, externalId, cancellationToken);
+        var options = await client.GetOptionsAsync(instance, cancellationToken);
+        return detail with { ServiceOptions = options };
+    }
+}
+
+/// <summary>Loads service-level request provider options and health checks.</summary>
+public sealed class RequestServiceOptionsService(IRequestServiceInstanceStore store, IRequestProviderClientFactory clients) {
+    public async Task<RequestServiceOptionsResponse?> GetOptionsAsync(Guid serviceId, CancellationToken cancellationToken) {
+        var instance = await store.GetAsync(serviceId, cancellationToken);
         return instance is null
             ? null
-            : await clients.Get(source).GetDetailAsync(instance, kind, externalId, cancellationToken);
+            : await clients.Get(instance.Kind).GetOptionsAsync(instance, cancellationToken);
+    }
+
+    public async Task<RequestConnectionTestResponse?> TestAsync(Guid serviceId, CancellationToken cancellationToken) {
+        var instance = await store.GetAsync(serviceId, cancellationToken);
+        return instance is null
+            ? null
+            : await clients.Get(instance.Kind).TestAsync(instance, cancellationToken);
     }
 }
 

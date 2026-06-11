@@ -3,7 +3,10 @@ export type {
   RequestDetailResponse,
   RequestSearchResponse,
   RequestSearchResult,
+  RequestConnectionTestResponse,
   RequestServiceInstanceSummary,
+  RequestServiceInstanceSaveRequest,
+  RequestServiceOptionsResponse,
   RequestSubmitRequest,
   RequestSubmitResponse,
 } from "$lib/api/generated/model";

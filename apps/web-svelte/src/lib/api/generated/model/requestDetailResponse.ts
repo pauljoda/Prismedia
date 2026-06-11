@@ -7,7 +7,7 @@
 import type { RequestChildOption } from './requestChildOption';
 import type { RequestMediaKind } from './requestMediaKind';
 import type { RequestProviderKind } from './requestProviderKind';
-import type { RequestServiceOption } from './requestServiceOption';
+import type { RequestServiceOptionsResponse } from './requestServiceOptionsResponse';
 
 export interface RequestDetailResponse {
   source: RequestProviderKind;
@@ -41,5 +41,5 @@ export interface RequestDetailResponse {
   studios: string[];
   credits: string[];
   children: RequestChildOption[];
-  serviceOptions: RequestServiceOption[];
+  serviceOptions: RequestServiceOptionsResponse;
 }

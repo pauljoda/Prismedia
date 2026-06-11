@@ -1,11 +1,22 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { Search } from "@lucide/svelte";
-  import { Badge, Button, TextInput } from "@prismedia/ui-svelte";
+  import { PlugZap, Search, Settings, Trash2 } from "@lucide/svelte";
+  import { Badge, Button, Checkbox, Select, TextInput } from "@prismedia/ui-svelte";
   import { REQUEST_MEDIA_KIND, REQUEST_PROVIDER_KIND } from "$lib/api/generated/codes";
-  import { fetchRequestServices, searchRequests } from "$lib/api/requests";
+  import {
+    deleteRequestServiceInstance,
+    fetchRequestServices,
+    saveRequestServiceInstance,
+    searchRequests,
+    testRequestServiceInstance,
+  } from "$lib/api/requests";
   import type { RequestMediaKindCode, RequestProviderKindCode } from "$lib/api/generated/codes";
-  import type { RequestSearchResult, RequestServiceInstanceSummary } from "$lib/requests/request-model";
+  import type {
+    RequestConnectionTestResponse,
+    RequestSearchResult,
+    RequestServiceInstanceSaveRequest,
+    RequestServiceInstanceSummary,
+  } from "$lib/requests/request-model";
   import { numericValue } from "$lib/requests/request-helpers";
 
   const kindOptions: { label: string; value: RequestMediaKindCode | "all" }[] = [
@@ -22,6 +33,12 @@
   let selectedSource = $state<RequestProviderKindCode | "all">("all");
   let services = $state<RequestServiceInstanceSummary[]>([]);
   let results = $state<RequestSearchResult[]>([]);
+  let configOpen = $state(false);
+  let editingServiceId = $state<string | null>(null);
+  let savingService = $state(false);
+  let serviceMessage = $state<string | null>(null);
+  let serviceTestResults = $state<Record<string, RequestConnectionTestResponse>>({});
+  let serviceForm = $state<RequestServiceInstanceSaveRequest>(emptyServiceForm());
   let loading = $state(false);
   let error = $state<string | null>(null);
 
@@ -67,6 +84,94 @@
     const rating = numericValue(value);
     return rating === null ? null : rating.toFixed(1);
   }
+
+  function emptyServiceForm(): RequestServiceInstanceSaveRequest {
+    return {
+      id: null,
+      kind: REQUEST_PROVIDER_KIND.radarr,
+      displayName: "",
+      baseUrl: "",
+      apiKey: null,
+      defaultRootFolderPath: null,
+      defaultQualityProfileId: null,
+      defaultMetadataProfileId: null,
+      searchOnRequest: true,
+      isDefault: false,
+    };
+  }
+
+  function editService(service: RequestServiceInstanceSummary) {
+    configOpen = true;
+    editingServiceId = service.id;
+    serviceForm = {
+      id: service.id,
+      kind: service.kind,
+      displayName: service.displayName,
+      baseUrl: service.baseUrl,
+      apiKey: null,
+      defaultRootFolderPath: service.defaultRootFolderPath,
+      defaultQualityProfileId: numericValue(service.defaultQualityProfileId),
+      defaultMetadataProfileId: numericValue(service.defaultMetadataProfileId),
+      searchOnRequest: service.searchOnRequest,
+      isDefault: service.isDefault,
+    };
+    serviceMessage = service.hasApiKey ? "API key is saved; enter a new key only to replace it." : null;
+  }
+
+  function newService() {
+    configOpen = true;
+    editingServiceId = null;
+    serviceForm = emptyServiceForm();
+    serviceMessage = null;
+  }
+
+  async function saveService() {
+    savingService = true;
+    error = null;
+    serviceMessage = null;
+    try {
+      const saved = await saveRequestServiceInstance({
+        ...serviceForm,
+        displayName: serviceForm.displayName.trim(),
+        baseUrl: serviceForm.baseUrl.trim(),
+        apiKey: serviceForm.apiKey?.trim() || null,
+        defaultRootFolderPath: serviceForm.defaultRootFolderPath?.trim() || null,
+        defaultQualityProfileId: numericValue(serviceForm.defaultQualityProfileId),
+        defaultMetadataProfileId: numericValue(serviceForm.defaultMetadataProfileId),
+      });
+      services = await fetchRequestServices();
+      editService(saved);
+      serviceMessage = "Service saved. API key is redacted after save.";
+    } catch (err) {
+      error = err instanceof Error ? err.message : "Failed to save service";
+    } finally {
+      savingService = false;
+    }
+  }
+
+  async function deleteService(service: RequestServiceInstanceSummary) {
+    if (!window.confirm(`Delete ${service.displayName}?`)) return;
+    error = null;
+    try {
+      await deleteRequestServiceInstance(service.id);
+      services = await fetchRequestServices();
+      if (editingServiceId === service.id) newService();
+    } catch (err) {
+      error = err instanceof Error ? err.message : "Failed to delete service";
+    }
+  }
+
+  async function testService(service: RequestServiceInstanceSummary) {
+    error = null;
+    try {
+      serviceTestResults = {
+        ...serviceTestResults,
+        [service.id]: await testRequestServiceInstance(service.id),
+      };
+    } catch (err) {
+      error = err instanceof Error ? err.message : "Failed to test service";
+    }
+  }
 </script>
 
 <svelte:head><title>Request · Prismedia</title></svelte:head>
@@ -77,6 +182,10 @@
       <p class="eyebrow">Operate</p>
       <h1>Request</h1>
     </div>
+    <Button variant="secondary" onclick={() => (configOpen = !configOpen)}>
+      <Settings size={16} />
+      Services
+    </Button>
     <form class="search-bar" onsubmit={(event) => { event.preventDefault(); void runSearch(); }}>
       <TextInput
         value={query}
@@ -90,6 +199,96 @@
       </Button>
     </form>
   </section>
+
+  {#if configOpen}
+    <section class="service-config" aria-label="Request service configuration">
+      <div class="service-list">
+        <div class="service-list-header">
+          <h2>Services</h2>
+          <Button size="sm" variant="secondary" onclick={newService}>Add</Button>
+        </div>
+        {#if services.length === 0}
+          <p class="muted">No request services configured.</p>
+        {:else}
+          {#each services as service}
+            <div class="service-row">
+              <button type="button" class:active={editingServiceId === service.id} onclick={() => editService(service)}>
+                <span>{service.displayName}</span>
+                <small>{service.kind}{service.isDefault ? " · default" : ""}{service.hasApiKey ? " · key saved" : ""}</small>
+              </button>
+              <Button size="icon" variant="ghost" aria-label={`Test ${service.displayName}`} onclick={() => testService(service)}>
+                <PlugZap size={15} />
+              </Button>
+              <Button size="icon" variant="danger" aria-label={`Delete ${service.displayName}`} onclick={() => deleteService(service)}>
+                <Trash2 size={15} />
+              </Button>
+              {#if serviceTestResults[service.id]}
+                <p class:ok={serviceTestResults[service.id].connected} class="test-result">
+                  {serviceTestResults[service.id].message ?? (serviceTestResults[service.id].connected ? "Connected" : "Connection failed")}
+                </p>
+              {/if}
+            </div>
+          {/each}
+        {/if}
+      </div>
+
+      <form class="service-form" onsubmit={(event) => { event.preventDefault(); void saveService(); }}>
+        <h2>{editingServiceId ? "Edit service" : "Add service"}</h2>
+        <label>
+          <span>Provider</span>
+          <Select
+            value={serviceForm.kind}
+            options={[
+              { value: REQUEST_PROVIDER_KIND.radarr, label: "Radarr" },
+              { value: REQUEST_PROVIDER_KIND.sonarr, label: "Sonarr" },
+              { value: REQUEST_PROVIDER_KIND.lidarr, label: "Lidarr" },
+            ]}
+            onchange={(value) => (serviceForm = { ...serviceForm, kind: value as RequestProviderKindCode })}
+          />
+        </label>
+        <label>
+          <span>Name</span>
+          <TextInput value={serviceForm.displayName} oninput={(event) => (serviceForm = { ...serviceForm, displayName: event.currentTarget.value })} required />
+        </label>
+        <label>
+          <span>Base URL</span>
+          <TextInput value={serviceForm.baseUrl} oninput={(event) => (serviceForm = { ...serviceForm, baseUrl: event.currentTarget.value })} placeholder="http://radarr:7878" required />
+        </label>
+        <label>
+          <span>API key</span>
+          <TextInput value={serviceForm.apiKey ?? ""} oninput={(event) => (serviceForm = { ...serviceForm, apiKey: event.currentTarget.value })} placeholder={editingServiceId ? "Saved key is redacted" : ""} autocomplete="off" />
+        </label>
+        <div class="form-grid">
+          <label>
+            <span>Default root folder</span>
+            <TextInput value={serviceForm.defaultRootFolderPath ?? ""} oninput={(event) => (serviceForm = { ...serviceForm, defaultRootFolderPath: event.currentTarget.value })} placeholder="/media" />
+          </label>
+          <label>
+            <span>Default quality profile ID</span>
+            <TextInput type="number" value={serviceForm.defaultQualityProfileId ?? ""} oninput={(event) => (serviceForm = { ...serviceForm, defaultQualityProfileId: numericValue(event.currentTarget.value) })} />
+          </label>
+          {#if serviceForm.kind === REQUEST_PROVIDER_KIND.lidarr}
+            <label>
+              <span>Default metadata profile ID</span>
+              <TextInput type="number" value={serviceForm.defaultMetadataProfileId ?? ""} oninput={(event) => (serviceForm = { ...serviceForm, defaultMetadataProfileId: numericValue(event.currentTarget.value) })} />
+            </label>
+          {/if}
+        </div>
+        <label class="toggle-row">
+          <Checkbox checked={serviceForm.searchOnRequest} onchange={(event) => (serviceForm = { ...serviceForm, searchOnRequest: event.currentTarget.checked })} />
+          <span>Search after request by default</span>
+        </label>
+        <label class="toggle-row">
+          <Checkbox checked={serviceForm.isDefault} onchange={(event) => (serviceForm = { ...serviceForm, isDefault: event.currentTarget.checked })} />
+          <span>Default for this provider</span>
+        </label>
+        {#if serviceMessage}<p class="muted">{serviceMessage}</p>{/if}
+        <Button type="submit" disabled={savingService || !serviceForm.displayName.trim() || !serviceForm.baseUrl.trim()}>
+          {savingService ? "Saving" : "Save service"}
+        </Button>
+      </form>
+    </section>
+  {/if}
 
   <section class="filters" aria-label="Request filters">
     <div class="chip-row">
@@ -268,7 +467,7 @@
     }
 
     .request-header {
-      grid-template-columns: minmax(180px, 0.7fr) minmax(360px, 1.3fr);
+    grid-template-columns: minmax(180px, 0.7fr) auto minmax(360px, 1.3fr);
       align-items: end;
     }
 
@@ -278,6 +477,99 @@
 
     .result-row {
       grid-template-columns: 92px 1fr;
+    }
+  }
+
+  h2 {
+    margin: 0;
+    font-size: 1rem;
+  }
+
+  .service-config {
+    display: grid;
+    gap: 1rem;
+    border: 1px solid var(--color-border-subtle);
+    border-radius: 8px;
+    background: var(--color-surface-1);
+    padding: 1rem;
+  }
+
+  .service-list, .service-form {
+    display: grid;
+    gap: 0.75rem;
+    align-content: start;
+  }
+
+  .service-list-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    align-items: center;
+  }
+
+  .service-row {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 0.4rem;
+    align-items: center;
+  }
+
+  .service-row > button:first-child {
+    display: grid;
+    gap: 0.2rem;
+    text-align: left;
+    border: 1px solid var(--color-border-subtle);
+    border-radius: 6px;
+    padding: 0.6rem;
+    background: var(--color-surface-2);
+    color: var(--color-text-primary);
+  }
+
+  .service-row > button:first-child.active {
+    border-color: var(--color-border-accent);
+    box-shadow: var(--shadow-glow-accent);
+  }
+
+  .service-row small, .muted {
+    color: var(--color-text-secondary);
+  }
+
+  .test-result {
+    grid-column: 1 / -1;
+    color: var(--color-error-text);
+    margin: 0;
+    font-size: 0.85rem;
+  }
+
+  .test-result.ok {
+    color: var(--color-success-text);
+  }
+
+  .service-form label {
+    display: grid;
+    gap: 0.35rem;
+    color: var(--color-text-secondary);
+    font-size: 0.85rem;
+  }
+
+  .form-grid {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .toggle-row {
+    display: flex !important;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  @media (min-width: 860px) {
+    .service-config {
+      grid-template-columns: minmax(260px, 0.8fr) minmax(360px, 1.2fr);
+    }
+
+    .form-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 </style>
