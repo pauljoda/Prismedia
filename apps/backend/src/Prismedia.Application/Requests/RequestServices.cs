@@ -38,8 +38,21 @@ public interface IRequestProviderClientFactory {
     IRequestProviderClient Get(RequestProviderKind kind);
 }
 
+/// <summary>
+/// Adult-inclusive movie search used to widen Radarr results when NSFW browsing is enabled.
+/// Radarr's own metadata text search excludes adult titles even though it can resolve and add
+/// them by explicit TMDB id, so NSFW searches enrich results straight from TMDB.
+/// </summary>
+public interface IAdultMovieSearchSource {
+    /// <summary>Adult-flagged movie results for <paramref name="query"/>, attributed to the given Radarr instance. Empty when no TMDB provider is configured or the lookup fails.</summary>
+    Task<IReadOnlyList<RequestSearchResult>> SearchAsync(Guid serviceId, string query, CancellationToken cancellationToken);
+}
+
 /// <summary>Aggregates request searches across configured service instances.</summary>
-public sealed class RequestSearchService(IRequestServiceInstanceStore store, IRequestProviderClientFactory clients) {
+public sealed class RequestSearchService(
+    IRequestServiceInstanceStore store,
+    IRequestProviderClientFactory clients,
+    IAdultMovieSearchSource adultMovies) {
     public async Task<RequestSearchResponse> SearchAsync(RequestSearchRequest request, CancellationToken cancellationToken) {
         if (string.IsNullOrWhiteSpace(request.Query)) {
             return new RequestSearchResponse([], []);
@@ -72,6 +85,10 @@ public sealed class RequestSearchService(IRequestServiceInstanceStore store, IRe
         CancellationToken cancellationToken) {
         try {
             var found = await clients.Get(instance.Kind).SearchAsync(instance, request.Query, cancellationToken);
+            if (!request.HideNsfw && instance.Kind == RequestProviderKind.Radarr) {
+                found = await MergeAdultMoviesAsync(instance, request.Query, found, cancellationToken);
+            }
+
             return (request.Kinds.Count == 0
                 ? found
                 : found.Where(result => request.Kinds.Contains(result.Kind)).ToArray(),
@@ -79,6 +96,21 @@ public sealed class RequestSearchService(IRequestServiceInstanceStore store, IRe
         } catch (Exception ex) when (ex is not OperationCanceledException) {
             return ([], new RequestProviderHealth(instance.Id, instance.Kind, instance.DisplayName, ex.Message));
         }
+    }
+
+    /// <summary>Appends adult-flagged TMDB results Radarr's text search omits, keeping Radarr's own answer for any TMDB id it already returned.</summary>
+    private async Task<IReadOnlyList<RequestSearchResult>> MergeAdultMoviesAsync(
+        RequestServiceInstanceDetail instance,
+        string query,
+        IReadOnlyList<RequestSearchResult> found,
+        CancellationToken cancellationToken) {
+        var adult = await adultMovies.SearchAsync(instance.Id, query, cancellationToken);
+        if (adult.Count == 0) {
+            return found;
+        }
+
+        var seen = found.Select(result => result.ExternalId).ToHashSet(StringComparer.Ordinal);
+        return found.Concat(adult.Where(result => !seen.Contains(result.ExternalId))).ToArray();
     }
 
     /// <summary>Skips upstream calls for providers that can never return the requested media kinds.</summary>

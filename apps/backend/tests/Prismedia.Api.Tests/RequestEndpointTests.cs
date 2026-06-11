@@ -16,6 +16,7 @@ public sealed class RequestEndpointTests {
                 builder.ConfigureServices(services => {
                     services.AddSingleton<IRequestServiceInstanceStore, FakeRequestServiceInstanceStore>();
                     services.AddSingleton<IRequestHistoryStore, FakeRequestHistoryStore>();
+                    services.AddSingleton<IAdultMovieSearchSource, FakeAdultMovieSearchSource>();
                     services.AddSingleton<FakeRequestProviderClient>();
                     services.AddSingleton<IRequestProviderClient>(provider => provider.GetRequiredService<FakeRequestProviderClient>());
                     services.AddSingleton<IRequestProviderClientFactory, FakeRequestProviderClientFactory>();
@@ -92,6 +93,7 @@ public sealed class RequestEndpointTests {
                 builder.ConfigureServices(services => {
                     services.AddSingleton<IRequestServiceInstanceStore, FakeRequestServiceInstanceStore>();
                     services.AddSingleton<IRequestHistoryStore, FakeRequestHistoryStore>();
+                    services.AddSingleton<IAdultMovieSearchSource, FakeAdultMovieSearchSource>();
                     services.AddSingleton<FakeRequestProviderClient>();
                     services.AddSingleton<IRequestProviderClient>(provider => provider.GetRequiredService<FakeRequestProviderClient>());
                     services.AddSingleton<IRequestProviderClientFactory, FakeRequestProviderClientFactory>();
@@ -120,6 +122,7 @@ public sealed class RequestEndpointTests {
                 builder.ConfigureServices(services => {
                     services.AddSingleton<IRequestServiceInstanceStore, FakeRequestServiceInstanceStore>();
                     services.AddSingleton<IRequestHistoryStore, FakeRequestHistoryStore>();
+                    services.AddSingleton<IAdultMovieSearchSource, FakeAdultMovieSearchSource>();
                     services.AddSingleton<FakeRequestProviderClient>();
                     services.AddSingleton<IRequestProviderClient>(provider => provider.GetRequiredService<FakeRequestProviderClient>());
                     services.AddSingleton<IRequestProviderClientFactory, FakeRequestProviderClientFactory>();
@@ -209,6 +212,11 @@ public sealed class RequestEndpointTests {
             new(detail.Id, detail.Kind, detail.DisplayName, detail.BaseUrl, detail.IsDefault, detail.DefaultRootFolderPath,
                 detail.DefaultQualityProfileId, detail.DefaultMetadataProfileId, detail.MinimumAvailability, detail.DefaultTagIds,
                 detail.SearchOnRequest, detail.HasApiKey);
+    }
+
+    private sealed class FakeAdultMovieSearchSource : IAdultMovieSearchSource {
+        public Task<IReadOnlyList<RequestSearchResult>> SearchAsync(Guid serviceId, string query, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<RequestSearchResult>>([]);
     }
 
     private sealed class FakeRequestHistoryStore : IRequestHistoryStore {

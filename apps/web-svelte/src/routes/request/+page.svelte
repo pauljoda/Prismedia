@@ -143,6 +143,9 @@
     loading = true;
     error = null;
     providerWarnings = [];
+    // Clear immediately so toggling NSFW mode (or any new search) never shows
+    // stale results from the previous mode while the request is in flight.
+    results = [];
     try {
       const response = await searchRequests({
         query: value.trim(),
@@ -404,7 +407,12 @@
           </section>
         {/each}
       </div>
-    {:else if hasSearched && !loading}
+    {:else if loading}
+      <div class="flex items-center justify-center gap-2.5 p-10 text-text-muted">
+        <Loader2 class="h-4 w-4 animate-spin" />
+        <span class="text-sm">Searching…</span>
+      </div>
+    {:else if hasSearched}
       <div class="empty-rack-slot p-8 text-center">
         <p class="text-sm text-text-muted">
           {results.length > 0
@@ -412,7 +420,7 @@
             : "No results found. Try a different search."}
         </p>
       </div>
-    {:else if !hasSearched && !loading}
+    {:else if !hasSearched}
       <div class="empty-rack-slot p-8 text-center">
         <p class="text-sm text-text-muted">
           Search across your connected services to find media to request.

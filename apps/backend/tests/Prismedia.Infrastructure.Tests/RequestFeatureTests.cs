@@ -280,6 +280,62 @@ public sealed class RequestFeatureTests {
     }
 
     [Fact]
+    public async Task TmdbAdultSearchMapsOnlyAdultResultsUsingConfiguredProviderKey() {
+        await using var db = CreateContext();
+        var configId = Guid.NewGuid();
+        db.ProviderConfigs.Add(new Persistence.Entities.ProviderConfigRow {
+            Id = configId,
+            ProviderCode = Contracts.Entities.ExternalIdProviders.Tmdb,
+            DisplayName = "The Movie Database",
+            Enabled = true
+        });
+        db.ProviderCredentials.Add(new Persistence.Entities.ProviderCredentialRow {
+            Id = Guid.NewGuid(),
+            ProviderConfigId = configId,
+            CredentialKey = RequestProviderHttp.ApiKeyCredential,
+            EncryptedValue = "tmdb-key"
+        });
+        await db.SaveChangesAsync();
+
+        string? requestedUrl = null;
+        var handler = new FakeHttpHandler((request, body) => {
+            requestedUrl = request.RequestUri!.ToString();
+            return Json("""
+                {
+                  "results": [
+                    { "adult": true, "id": 1045957, "title": "The Grinch XXX Parody", "overview": "An adult parody.", "release_date": "2016-12-21", "poster_path": "/poster.jpg", "vote_average": 4.5 },
+                    { "adult": false, "id": 8871, "title": "How the Grinch Stole Christmas", "release_date": "2000-11-17" }
+                  ]
+                }
+                """);
+        });
+        var source = new TmdbAdultMovieSearchSource(new HttpClient(handler), db);
+        var serviceId = Guid.NewGuid();
+
+        var results = await source.SearchAsync(serviceId, "the grinch", CancellationToken.None);
+
+        Assert.Contains("include_adult=true", requestedUrl);
+        Assert.Contains("api_key=tmdb-key", requestedUrl);
+        var result = Assert.Single(results);
+        Assert.Equal("1045957", result.ExternalId);
+        Assert.Equal(RequestMediaKind.Movie, result.Kind);
+        Assert.Equal(serviceId, result.ServiceId);
+        Assert.Equal(2016, result.Year);
+        Assert.Equal("https://image.tmdb.org/t/p/w342/poster.jpg", result.PosterUrl);
+        Assert.Equal(AdultCertifications.Implied, result.Certification);
+        Assert.True(AdultCertifications.IsAdult(result.Certification));
+    }
+
+    [Fact]
+    public async Task TmdbAdultSearchReturnsEmptyWithoutConfiguredProvider() {
+        await using var db = CreateContext();
+        var handler = new FakeHttpHandler((request, body) => throw new InvalidOperationException("TMDB must not be queried without a key."));
+        var source = new TmdbAdultMovieSearchSource(new HttpClient(handler), db);
+
+        Assert.Empty(await source.SearchAsync(Guid.NewGuid(), "the grinch", CancellationToken.None));
+    }
+
+    [Fact]
     public void AdultCertificationsGateOnlyAdultsOnlyRatings() {
         Assert.True(AdultCertifications.IsAdult("NC-17"));
         Assert.True(AdultCertifications.IsAdult("x"));

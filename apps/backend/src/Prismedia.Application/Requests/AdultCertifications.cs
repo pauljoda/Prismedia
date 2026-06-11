@@ -6,6 +6,12 @@ namespace Prismedia.Application.Requests;
 /// classifications are gated behind the NSFW toggle.
 /// </summary>
 public static class AdultCertifications {
+    /// <summary>
+    /// Certification applied to results whose source flags them adult (e.g. TMDB's
+    /// <c>adult</c> boolean) without providing a concrete rating board code.
+    /// </summary>
+    public const string Implied = "XXX";
+
     private static readonly HashSet<string> Codes = new(StringComparer.OrdinalIgnoreCase) {
         "NC-17",
         "NC17",
