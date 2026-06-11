@@ -27,6 +27,19 @@ describe("request helpers", () => {
     expect(defaultSelectedChildIds(detail)).toEqual(["0", "1", "2"]);
   });
 
+  it("mirrors upstream monitoring for tracked items so updates submit what is shown", () => {
+    const base = detailWithChildren(["0", "1", "2"]);
+    const detail = {
+      ...base,
+      tracked: true,
+      upstreamId: "12",
+      monitored: true,
+      children: base.children.map((child) => ({ ...child, monitored: child.id === "1" })),
+    };
+
+    expect(defaultSelectedChildIds(detail)).toEqual(["1"]);
+  });
+
   it("does not default Lidarr album lookup children into submit selections", () => {
     const detail = {
       ...detailWithChildren(["mb-album"]),
@@ -151,6 +164,9 @@ function detailWithChildren(ids: string[]): RequestDetailResponse {
     studios: [],
     credits: [],
     tracks: [],
+    tracked: false,
+    upstreamId: null,
+    monitored: null,
     serviceOptions,
     children: ids.map((id) => ({
       id,
@@ -162,6 +178,7 @@ function detailWithChildren(ids: string[]): RequestDetailResponse {
       itemCount: null,
       overview: null,
       posterUrl: null,
+      monitored: null,
     })),
   };
 }

@@ -50,5 +50,10 @@ export interface RequestDetailResponse {
   credits: string[];
   children: RequestChildOption[];
   tracks: RequestTrack[];
+  tracked: boolean;
+  /** @nullable */
+  upstreamId: string | null;
+  /** @nullable */
+  monitored: boolean | null;
   serviceOptions: RequestServiceOptionsResponse;
 }

@@ -9,4 +9,5 @@ export type SearchRequestsParams = {
 query: string;
 kinds?: string[];
 sources?: string[];
+hideNsfw?: boolean;
 };

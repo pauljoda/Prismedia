@@ -30,4 +30,6 @@ export interface RequestChildOption {
   overview: string | null;
   /** @nullable */
   posterUrl: string | null;
+  /** @nullable */
+  monitored: boolean | null;
 }

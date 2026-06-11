@@ -272,6 +272,18 @@ export const REQUEST_MINIMUM_AVAILABILITY = {
 
 export type RequestMinimumAvailabilityCode = (typeof REQUEST_MINIMUM_AVAILABILITY)[keyof typeof REQUEST_MINIMUM_AVAILABILITY];
 
+export const REQUEST_HISTORY_STATUS = {
+  submitted: "submitted",
+  pending: "pending",
+  downloading: "downloading",
+  partial: "partial",
+  available: "available",
+  removed: "removed",
+  unknown: "unknown",
+} as const;
+
+export type RequestHistoryStatusCode = (typeof REQUEST_HISTORY_STATUS)[keyof typeof REQUEST_HISTORY_STATUS];
+
 export const CAPABILITY_KIND = {
   classification: "classification",
   dates: "dates",

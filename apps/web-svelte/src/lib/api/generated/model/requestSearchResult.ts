@@ -44,6 +44,10 @@ export interface RequestSearchResult {
      */
   trackCount: number | string | null;
   tags: string[];
-  alreadyAvailable: boolean;
+  tracked: boolean;
+  /** @nullable */
+  upstreamId: string | null;
+  /** @nullable */
+  monitored: boolean | null;
   requestable: boolean;
 }

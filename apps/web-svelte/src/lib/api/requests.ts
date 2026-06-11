@@ -1,7 +1,9 @@
 import type { RequestMediaKindCode, RequestProviderKindCode } from "$lib/api/generated/codes";
 import {
+  deleteRequestHistoryEntry as deleteRequestHistoryEntryRequest,
   deleteRequestService,
   getRequestDetail as getRequestDetailRequest,
+  listRequestHistory,
   listRequestServices,
   saveRequestService,
   searchRequests as searchRequestsRequest,
@@ -11,6 +13,7 @@ import {
 } from "$lib/api/generated/prismedia";
 import type {
   RequestDetailResponse,
+  RequestHistoryResponse,
   RequestSearchResponse,
   RequestServiceInstanceSaveRequest,
   RequestServiceInstanceSummary,
@@ -48,15 +51,25 @@ export async function searchRequests(params: {
   query: string;
   kinds?: RequestMediaKindCode[];
   sources?: RequestProviderKindCode[];
+  hideNsfw?: boolean;
 }): Promise<RequestSearchResponse> {
   return unwrapGenerated(
     await searchRequestsRequest({
       query: params.query,
       kinds: params.kinds,
       sources: params.sources,
+      hideNsfw: params.hideNsfw,
     }),
     "Failed to search request providers",
   );
+}
+
+export async function fetchRequestHistory(): Promise<RequestHistoryResponse> {
+  return unwrapGenerated(await listRequestHistory(), "Failed to load request history");
+}
+
+export async function deleteRequestHistoryEntry(id: string): Promise<void> {
+  unwrapGenerated(await deleteRequestHistoryEntryRequest(id), "Failed to delete request history entry", [204]);
 }
 
 export async function fetchRequestDetail(params: {

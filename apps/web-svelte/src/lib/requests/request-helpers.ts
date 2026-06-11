@@ -16,6 +16,37 @@ export interface RequestSubmitFormState {
   selectedChildIds: string[];
 }
 
+/** Display names for request provider families. */
+export const REQUEST_PROVIDER_LABELS: Record<string, string> = {
+  [REQUEST_PROVIDER_KIND.radarr]: "Radarr",
+  [REQUEST_PROVIDER_KIND.sonarr]: "Sonarr",
+  [REQUEST_PROVIDER_KIND.lidarr]: "Lidarr",
+  [REQUEST_PROVIDER_KIND.plugin]: "Plugin",
+};
+
+/** Singular display names for request media kinds. */
+export const REQUEST_KIND_LABELS: Record<string, string> = {
+  [REQUEST_MEDIA_KIND.movie]: "Movie",
+  [REQUEST_MEDIA_KIND.series]: "Series",
+  [REQUEST_MEDIA_KIND.artist]: "Artist",
+  [REQUEST_MEDIA_KIND.album]: "Album",
+  [REQUEST_MEDIA_KIND.plugin]: "Plugin",
+};
+
+/** Plural display names for request media kinds, used by filters and section headings. */
+export const REQUEST_KIND_LABELS_PLURAL: Record<string, string> = {
+  [REQUEST_MEDIA_KIND.movie]: "Movies",
+  [REQUEST_MEDIA_KIND.series]: "Series",
+  [REQUEST_MEDIA_KIND.artist]: "Artists",
+  [REQUEST_MEDIA_KIND.album]: "Albums",
+  [REQUEST_MEDIA_KIND.plugin]: "Plugins",
+};
+
+/** "In Radarr"-style label for items already tracked by the upstream service. */
+export function trackedLabel(source: RequestProviderKindCode): string {
+  return `In ${REQUEST_PROVIDER_LABELS[source] ?? source}`;
+}
+
 export function selectDefaultService(
   services: RequestServiceInstanceSummary[],
   kind: RequestProviderKindCode,
@@ -26,6 +57,14 @@ export function selectDefaultService(
 
 export function defaultSelectedChildIds(detail: RequestDetailResponse): string[] {
   if (detail.source === REQUEST_PROVIDER_KIND.lidarr) return [];
+
+  // Tracked items mirror the upstream monitoring state so an update submits
+  // exactly what the checkboxes show; new items preselect everything requestable.
+  if (detail.tracked) {
+    return detail.children
+      .filter((child) => child.monitored === true)
+      .map((child) => child.id);
+  }
 
   return detail.children
     .filter((child) => child.requestable)

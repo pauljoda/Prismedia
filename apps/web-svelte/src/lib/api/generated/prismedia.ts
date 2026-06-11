@@ -159,6 +159,7 @@ import type {
   RemoveFileExclusionParams,
   RenameFileParams,
   RequestDetailResponse,
+  RequestHistoryResponse,
   RequestSearchResponse,
   RequestServiceInstanceSaveRequest,
   RequestServiceInstanceSummary,
@@ -9217,7 +9218,7 @@ export const getSearchRequestsUrl = (params: SearchRequestsParams,) => {
 }
 
 /**
- * @summary Searches configured request providers for requestable external media.
+ * @summary Searches configured request providers for requestable external media. Adults-only certifications are filtered out when hideNsfw is set.
  */
 export const searchRequests = async (params: SearchRequestsParams, options?: RequestInit): Promise<searchRequestsResponse> => {
 
@@ -9225,6 +9226,85 @@ export const searchRequests = async (params: SearchRequestsParams, options?: Req
   {
     ...options,
     method: 'GET'
+
+
+  }
+);}
+
+
+
+export type listRequestHistoryResponse200 = {
+  data: RequestHistoryResponse
+  status: 200
+}
+
+export type listRequestHistoryResponseSuccess = (listRequestHistoryResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listRequestHistoryResponse = (listRequestHistoryResponseSuccess)
+
+export const getListRequestHistoryUrl = () => {
+
+
+
+
+  return `/api/requests/history`
+}
+
+/**
+ * @summary Lists submitted request history with statuses refreshed live from each upstream service.
+ */
+export const listRequestHistory = async ( options?: RequestInit): Promise<listRequestHistoryResponse> => {
+
+  return orvalFetch<listRequestHistoryResponse>(getListRequestHistoryUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type deleteRequestHistoryEntryResponse204 = {
+  data: void
+  status: 204
+}
+
+export type deleteRequestHistoryEntryResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type deleteRequestHistoryEntryResponseSuccess = (deleteRequestHistoryEntryResponse204) & {
+  headers: Headers;
+};
+export type deleteRequestHistoryEntryResponseError = (deleteRequestHistoryEntryResponse404) & {
+  headers: Headers;
+};
+
+export type deleteRequestHistoryEntryResponse = (deleteRequestHistoryEntryResponseSuccess | deleteRequestHistoryEntryResponseError)
+
+export const getDeleteRequestHistoryEntryUrl = (id: string,) => {
+
+
+
+
+  return `/api/requests/history/${id}`
+}
+
+/**
+ * @summary Deletes a request history entry.
+ */
+export const deleteRequestHistoryEntry = async (id: string, options?: RequestInit): Promise<deleteRequestHistoryEntryResponse> => {
+
+  return orvalFetch<deleteRequestHistoryEntryResponse>(getDeleteRequestHistoryEntryUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
 
 
   }

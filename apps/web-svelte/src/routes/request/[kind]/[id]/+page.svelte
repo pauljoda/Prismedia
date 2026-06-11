@@ -1,12 +1,15 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { Check, ChevronLeft, Loader2, Send, Settings } from "@lucide/svelte";
-  import { Badge, Button, Checkbox, Select } from "@prismedia/ui-svelte";
+  import { Check, ChevronLeft, Loader2, RefreshCw, Send, Settings } from "@lucide/svelte";
+  import { Badge, Button, Checkbox, Select, TextInput } from "@prismedia/ui-svelte";
   import { goto } from "$app/navigation";
   import { fetchRequestDetail, fetchRequestServices, submitRequest } from "$lib/api/requests";
   import type { RequestMediaKindCode, RequestProviderKindCode } from "$lib/api/generated/codes";
   import { REQUEST_MEDIA_KIND, REQUEST_PROVIDER_KIND } from "$lib/api/generated/codes";
+  import RequestPosterCard from "$lib/components/requests/RequestPosterCard.svelte";
   import {
+    REQUEST_KIND_LABELS,
+    REQUEST_PROVIDER_LABELS,
     buildRequestSubmitPayload,
     defaultSelectedChildIds,
     inferRequestSourceForKind,
@@ -14,27 +17,18 @@
     optionDefaultsForService,
     selectDefaultService,
     thumbnailAspectForKind,
+    trackedLabel,
   } from "$lib/requests/request-helpers";
   import type { RequestDetailResponse, RequestServiceInstanceSummary } from "$lib/requests/request-model";
-
-  const providerLabels: Record<string, string> = {
-    [REQUEST_PROVIDER_KIND.radarr]: "Radarr",
-    [REQUEST_PROVIDER_KIND.sonarr]: "Sonarr",
-    [REQUEST_PROVIDER_KIND.lidarr]: "Lidarr",
-    [REQUEST_PROVIDER_KIND.plugin]: "Plugin",
-  };
-
-  const kindLabels: Record<string, string> = {
-    [REQUEST_MEDIA_KIND.movie]: "Movie",
-    [REQUEST_MEDIA_KIND.series]: "Series",
-    [REQUEST_MEDIA_KIND.artist]: "Artist",
-    [REQUEST_MEDIA_KIND.album]: "Album",
-    [REQUEST_MEDIA_KIND.plugin]: "Plugin",
-  };
 
   const params = $derived(page.params as { kind: RequestMediaKindCode; id: string });
   const sourceQuery = $derived(page.url.searchParams.get("source") as RequestProviderKindCode | null);
   const initialServiceId = $derived(page.url.searchParams.get("serviceId"));
+  /** Query string of the originating search page, chained through detail links so back returns to live results. */
+  const backQuery = $derived(page.url.searchParams.get("back"));
+  /** Artist context when this album was opened from a discography. */
+  const fromId = $derived(page.url.searchParams.get("fromId"));
+  const fromTitle = $derived(page.url.searchParams.get("fromTitle"));
 
   let services = $state<RequestServiceInstanceSummary[]>([]);
   let selectedServiceId = $state<string>("");
@@ -49,6 +43,7 @@
   let submitting = $state(false);
   let message = $state<string | null>(null);
   let error = $state<string | null>(null);
+  let discographyFilter = $state("");
 
   const selectedService = $derived(
     services.find((service) => service.id === selectedServiceId) ?? null,
@@ -67,6 +62,27 @@
 
   const heroBackdrop = $derived(cssUrl(detail?.backdropUrl ?? detail?.posterUrl ?? null));
 
+  const isSeries = $derived(detail?.kind === REQUEST_MEDIA_KIND.series);
+  const isArtist = $derived(detail?.kind === REQUEST_MEDIA_KIND.artist);
+
+  const backHref = $derived(
+    fromId
+      ? artistHref(fromId)
+      : backQuery
+        ? `/request?${backQuery}`
+        : "/request",
+  );
+  const backLabel = $derived(fromId ? `Back to ${fromTitle ?? "artist"}` : "Back to search");
+
+  const filteredChildren = $derived(
+    (() => {
+      const children = detail?.children ?? [];
+      const term = discographyFilter.trim().toLowerCase();
+      if (!term) return children;
+      return children.filter((child) => child.title.toLowerCase().includes(term));
+    })(),
+  );
+
   // Reload whenever the route target changes — discography links navigate between
   // detail pages in place, so onMount alone would leave stale content on screen.
   let loadedKey = $state("");
@@ -83,6 +99,7 @@
     error = null;
     message = null;
     selectedChildIds = [];
+    discographyFilter = "";
     try {
       services = await fetchRequestServices();
       const resolvedSource = sourceQuery ?? inferRequestSourceForKind(params.kind);
@@ -170,11 +187,28 @@
           selectedChildIds,
         }),
       );
-      message = response.message ?? "Request submitted.";
+      message = response.message ?? (detail.tracked ? "Request updated." : "Request submitted.");
+      await refreshDetailAfterSubmit();
     } catch (err) {
       error = err instanceof Error ? err.message : "Request failed";
     } finally {
       submitting = false;
+    }
+  }
+
+  /** A successful submit changes upstream state (newly tracked / new monitoring); re-pull so the page reflects it. */
+  async function refreshDetailAfterSubmit() {
+    if (!detail) return;
+    try {
+      detail = await fetchRequestDetail({
+        source: detail.source,
+        kind: detail.kind,
+        externalId: detail.externalId,
+        serviceId: selectedServiceId || null,
+      });
+      selectedChildIds = defaultSelectedChildIds(detail);
+    } catch {
+      // The submit already succeeded; a failed refresh should not surface as an error.
     }
   }
 
@@ -183,15 +217,22 @@
     return rating === null || rating <= 0 ? null : rating.toFixed(1);
   }
 
-  function childHref(child: RequestDetailResponse["children"][number]) {
-    if (!detail) return "#";
-    const params = new URLSearchParams({ source: detail.source });
-    if (selectedServiceId) params.set("serviceId", selectedServiceId);
-    return `/request/${child.kind}/${encodeURIComponent(child.id)}?${params.toString()}`;
+  function artistHref(artistId: string) {
+    const linkParams = new URLSearchParams({ source: REQUEST_PROVIDER_KIND.lidarr });
+    if (selectedServiceId) linkParams.set("serviceId", selectedServiceId);
+    if (backQuery) linkParams.set("back", backQuery);
+    return `/request/${REQUEST_MEDIA_KIND.artist}/${encodeURIComponent(artistId)}?${linkParams.toString()}`;
   }
 
-  function childMeta(child: RequestDetailResponse["children"][number]) {
-    return [numericValue(child.year), child.overview].filter(Boolean).join(" · ");
+  function childHref(child: RequestDetailResponse["children"][number]) {
+    if (!detail) return "#";
+    const linkParams = new URLSearchParams({ source: detail.source });
+    if (selectedServiceId) linkParams.set("serviceId", selectedServiceId);
+    if (backQuery) linkParams.set("back", backQuery);
+    // Albums opened from a discography carry their artist so the back link returns here.
+    linkParams.set("fromId", detail.externalId);
+    linkParams.set("fromTitle", detail.title);
+    return `/request/${child.kind}/${encodeURIComponent(child.id)}?${linkParams.toString()}`;
   }
 
   function trackDuration(seconds: number | string | null | undefined) {
@@ -199,21 +240,17 @@
     if (total === null || total <= 0) return null;
     return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
   }
-
-  function hideBrokenImage(event: Event) {
-    (event.currentTarget as HTMLElement).style.display = "none";
-  }
 </script>
 
 <svelte:head><title>{detail?.title ?? "Request"} · Prismedia</title></svelte:head>
 
 <div class="space-y-5">
   <a
-    href="/request"
+    href={backHref}
     class="inline-flex items-center gap-1 text-[0.78rem] font-medium text-text-muted transition-colors hover:text-text-primary"
   >
     <ChevronLeft class="h-3.5 w-3.5" />
-    Back to search
+    {backLabel}
   </a>
 
   {#if loading}
@@ -244,8 +281,14 @@
         {/if}
         <div class="min-w-0 space-y-2.5">
           <div class="flex flex-wrap items-center gap-1.5">
-            <Badge variant="accent">{kindLabels[detail.kind] ?? detail.kind}</Badge>
-            <Badge>{providerLabels[detail.source] ?? detail.source}</Badge>
+            <Badge variant="accent">{REQUEST_KIND_LABELS[detail.kind] ?? detail.kind}</Badge>
+            <Badge>{REQUEST_PROVIDER_LABELS[detail.source] ?? detail.source}</Badge>
+            {#if detail.tracked}
+              <Badge variant="accent" class="gap-1">
+                <Check class="h-3 w-3" aria-hidden="true" />
+                {trackedLabel(detail.source)}{detail.monitored === false ? " · Unmonitored" : ""}
+              </Badge>
+            {/if}
             {#if ratingLabel(detail.rating)}
               <Badge>★ {ratingLabel(detail.rating)}</Badge>
             {/if}
@@ -295,14 +338,11 @@
             </p>
           </div>
         {/if}
+
         {#if detail.children.length > 0}
-          <div class="space-y-2">
-            <h3 class="text-label text-text-muted">
-              {detail.kind === REQUEST_MEDIA_KIND.series
-                ? "Seasons"
-                : `Discography (${detail.children.length})`}
-            </h3>
-            {#if detail.kind === REQUEST_MEDIA_KIND.series}
+          {#if isSeries}
+            <div class="space-y-2">
+              <h3 class="text-label text-text-muted">Seasons</h3>
               <div class="surface-well divide-y divide-border-subtle px-3">
                 {#each detail.children as child (child.id)}
                   <label class="flex cursor-pointer items-center justify-between gap-2.5 py-2 text-[0.8rem] text-text-secondary">
@@ -313,6 +353,9 @@
                         onchange={(event) => toggleChild(child.id, event.currentTarget.checked)}
                       />
                       <span>{child.title}</span>
+                      {#if detail.tracked && child.monitored}
+                        <span class="font-mono text-[0.62rem] text-text-accent">monitored</span>
+                      {/if}
                     </span>
                     {#if numericValue(child.itemCount)}
                       <span class="font-mono text-[0.68rem] text-text-muted">
@@ -322,43 +365,55 @@
                   </label>
                 {/each}
               </div>
-            {:else}
-              <div class="grid gap-1.5 sm:grid-cols-2">
-                {#each detail.children as child (child.id)}
-                  <a
-                    href={childHref(child)}
-                    class="surface-card no-lift flex items-center gap-2.5 p-2 transition-colors hover:border-border-accent/50"
-                  >
-                    <div class="h-10 w-10 shrink-0 overflow-hidden rounded-xs bg-surface-1">
-                      {#if child.posterUrl}
-                        <img
-                          src={child.posterUrl}
-                          alt=""
-                          loading="lazy"
-                          class="h-full w-full object-cover"
-                          onerror={hideBrokenImage}
-                        />
-                      {/if}
-                    </div>
-                    <div class="min-w-0">
-                      <p class="truncate text-[0.8rem] font-medium text-text-primary">
-                        {child.title}
-                      </p>
-                      {#if childMeta(child)}
-                        <p class="truncate text-[0.68rem] text-text-muted">{childMeta(child)}</p>
-                      {/if}
-                    </div>
-                  </a>
-                {/each}
+            </div>
+          {:else}
+            <div class="space-y-2.5">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <h3 class="text-label text-text-muted">
+                  Discography
+                  <span class="ml-1 font-mono text-[0.68rem] text-text-muted">
+                    {filteredChildren.length}{discographyFilter ? ` / ${detail.children.length}` : ""}
+                  </span>
+                </h3>
+                {#if detail.children.length > 8}
+                  <div class="w-full sm:w-56">
+                    <TextInput
+                      value={discographyFilter}
+                      oninput={(event) => (discographyFilter = event.currentTarget.value)}
+                      placeholder="Filter albums…"
+                      aria-label="Filter discography"
+                      autocomplete="off"
+                    />
+                  </div>
+                {/if}
               </div>
-              {#if detail.source === REQUEST_PROVIDER_KIND.lidarr}
+              {#if filteredChildren.length > 0}
+                <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5">
+                  {#each filteredChildren as child (child.id)}
+                    <RequestPosterCard
+                      href={childHref(child)}
+                      title={child.title}
+                      imageUrl={child.posterUrl}
+                      aspect="1 / 1"
+                      chips={[
+                        numericValue(child.year) ? String(numericValue(child.year)) : null,
+                        child.overview,
+                      ]}
+                      placeholder="music"
+                    />
+                  {/each}
+                </div>
+              {:else}
+                <p class="text-[0.78rem] text-text-muted">No albums match that filter.</p>
+              {/if}
+              {#if isArtist && detail.source === REQUEST_PROVIDER_KIND.lidarr}
                 <p class="text-[0.72rem] text-text-muted">
                   Open an album to review its tracks and request just that album. Requesting the
                   artist here adds their whole catalog to Lidarr instead.
                 </p>
               {/if}
-            {/if}
-          </div>
+            </div>
+          {/if}
         {/if}
 
         {#if detail.tracks.length > 0}
@@ -385,7 +440,9 @@
 
       <!-- ── Request panel ── -->
       <aside class="surface-panel space-y-3.5 p-5">
-        <h2 class="text-kicker text-text-primary">Send Request</h2>
+        <h2 class="text-kicker text-text-primary">
+          {detail.tracked ? "Update Request" : "Send Request"}
+        </h2>
 
         {#if matchingServices.length === 0}
           <p class="text-[0.78rem] leading-relaxed text-text-muted">
@@ -414,46 +471,55 @@
               onchange={(value) => void changeService(value)}
             />
           </label>
-          <label class="block space-y-1">
-            <span class="text-label text-text-muted">Root folder</span>
-            <Select
-              size="sm"
-              value={rootFolderPath ?? ""}
-              options={serviceOptions.rootFolders.map((option) => ({
-                value: option.path ?? option.id,
-                label: option.name,
-              }))}
-              disabled={serviceOptions.rootFolders.length === 0}
-              onchange={(value) => (rootFolderPath = value)}
-            />
-          </label>
-          <label class="block space-y-1">
-            <span class="text-label text-text-muted">Quality profile</span>
-            <Select
-              size="sm"
-              value={qualityProfileId === null ? "" : String(qualityProfileId)}
-              options={serviceOptions.qualityProfiles.map((option) => ({
-                value: option.id,
-                label: option.name,
-              }))}
-              disabled={serviceOptions.qualityProfiles.length === 0}
-              onchange={(value) => (qualityProfileId = numericValue(value))}
-            />
-          </label>
-          {#if detail.source === REQUEST_PROVIDER_KIND.lidarr}
+
+          {#if detail.tracked}
+            <p class="text-[0.75rem] leading-relaxed text-text-muted">
+              Already in {selectedService?.displayName ?? REQUEST_PROVIDER_LABELS[detail.source]}.
+              Updating changes {isSeries ? "season monitoring" : "monitoring"} and can start a
+              search — quality and folder settings stay as configured in the service.
+            </p>
+          {:else}
             <label class="block space-y-1">
-              <span class="text-label text-text-muted">Metadata profile</span>
+              <span class="text-label text-text-muted">Root folder</span>
               <Select
                 size="sm"
-                value={metadataProfileId === null ? "" : String(metadataProfileId)}
-                options={serviceOptions.metadataProfiles.map((option) => ({
+                value={rootFolderPath ?? ""}
+                options={serviceOptions.rootFolders.map((option) => ({
+                  value: option.path ?? option.id,
+                  label: option.name,
+                }))}
+                disabled={serviceOptions.rootFolders.length === 0}
+                onchange={(value) => (rootFolderPath = value)}
+              />
+            </label>
+            <label class="block space-y-1">
+              <span class="text-label text-text-muted">Quality profile</span>
+              <Select
+                size="sm"
+                value={qualityProfileId === null ? "" : String(qualityProfileId)}
+                options={serviceOptions.qualityProfiles.map((option) => ({
                   value: option.id,
                   label: option.name,
                 }))}
-                disabled={serviceOptions.metadataProfiles.length === 0}
-                onchange={(value) => (metadataProfileId = numericValue(value))}
+                disabled={serviceOptions.qualityProfiles.length === 0}
+                onchange={(value) => (qualityProfileId = numericValue(value))}
               />
             </label>
+            {#if detail.source === REQUEST_PROVIDER_KIND.lidarr}
+              <label class="block space-y-1">
+                <span class="text-label text-text-muted">Metadata profile</span>
+                <Select
+                  size="sm"
+                  value={metadataProfileId === null ? "" : String(metadataProfileId)}
+                  options={serviceOptions.metadataProfiles.map((option) => ({
+                    value: option.id,
+                    label: option.name,
+                  }))}
+                  disabled={serviceOptions.metadataProfiles.length === 0}
+                  onchange={(value) => (metadataProfileId = numericValue(value))}
+                />
+              </label>
+            {/if}
           {/if}
 
           <div class="space-y-2 pt-1">
@@ -462,7 +528,7 @@
                 checked={monitored}
                 onchange={(event) => (monitored = event.currentTarget.checked)}
               />
-              Monitor after adding
+              {detail.tracked ? "Keep monitored" : "Monitor after adding"}
             </label>
             <label class="flex cursor-pointer items-center gap-2 text-[0.78rem] text-text-secondary">
               <Checkbox
@@ -481,6 +547,12 @@
               <Check class="h-3.5 w-3.5" />
               {message}
             </p>
+            <a
+              href="/request/history"
+              class="inline-flex items-center gap-1 text-[0.72rem] font-medium text-text-muted transition-colors hover:text-text-primary"
+            >
+              View request history
+            </a>
           {/if}
 
           <Button
@@ -492,10 +564,12 @@
           >
             {#if submitting}
               <Loader2 class="h-4 w-4 animate-spin" />
+            {:else if detail.tracked}
+              <RefreshCw class="h-4 w-4" />
             {:else}
               <Send class="h-4 w-4" />
             {/if}
-            {submitting ? "Submitting…" : "Submit Request"}
+            {submitting ? "Submitting…" : detail.tracked ? "Update Request" : "Submit Request"}
           </Button>
         {/if}
       </aside>
