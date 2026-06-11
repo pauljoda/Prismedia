@@ -13,6 +13,8 @@ export interface RequestSearchResult {
   kind: RequestMediaKind;
   externalId: string;
   title: string;
+  /** @nullable */
+  subtitle: string | null;
   /**
      * @nullable
      * @pattern ^-?(?:0|[1-9]\d*)$
@@ -36,6 +38,11 @@ export interface RequestSearchResult {
   runtimeMinutes: number | string | null;
   /** @nullable */
   certification: string | null;
+  /**
+     * @nullable
+     * @pattern ^-?(?:0|[1-9]\d*)$
+     */
+  trackCount: number | string | null;
   tags: string[];
   alreadyAvailable: boolean;
   requestable: boolean;

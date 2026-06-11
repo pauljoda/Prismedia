@@ -86,12 +86,15 @@ public sealed record RequestSearchResponse(
 public sealed record RequestProviderHealth(Guid ServiceId, RequestProviderKind Kind, string DisplayName, string Message);
 
 /// <summary>Normalized external search result.</summary>
+/// <param name="Subtitle">Short secondary line for review context: the artist for albums, disambiguation for artists, studio for movies, network for series.</param>
+/// <param name="TrackCount">Track count for albums; null for other kinds.</param>
 public sealed record RequestSearchResult(
     Guid ServiceId,
     RequestProviderKind Source,
     RequestMediaKind Kind,
     string ExternalId,
     string Title,
+    string? Subtitle,
     int? Year,
     string? Overview,
     string? PosterUrl,
@@ -99,16 +102,20 @@ public sealed record RequestSearchResult(
     decimal? Rating,
     int? RuntimeMinutes,
     string? Certification,
+    int? TrackCount,
     IReadOnlyList<string> Tags,
     bool AlreadyAvailable,
     bool Requestable);
 
 /// <summary>Normalized external detail record for a requestable item.</summary>
+/// <param name="Subtitle">Short secondary line for review context: the artist for albums, disambiguation for artists, studio for movies, network for series.</param>
+/// <param name="TrackCount">Track count for albums; null for other kinds.</param>
 public sealed record RequestDetailResponse(
     RequestProviderKind Source,
     RequestMediaKind Kind,
     string ExternalId,
     string Title,
+    string? Subtitle,
     int? Year,
     string? Overview,
     string? PosterUrl,
@@ -116,6 +123,7 @@ public sealed record RequestDetailResponse(
     decimal? Rating,
     int? RuntimeMinutes,
     string? Certification,
+    int? TrackCount,
     IReadOnlyList<string> Tags,
     IReadOnlyList<string> Studios,
     IReadOnlyList<string> Credits,

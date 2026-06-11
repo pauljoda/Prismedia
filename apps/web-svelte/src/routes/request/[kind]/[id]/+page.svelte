@@ -172,7 +172,7 @@
 
   function ratingLabel(value: RequestDetailResponse["rating"]) {
     const rating = numericValue(value);
-    return rating === null ? null : rating.toFixed(1);
+    return rating === null || rating <= 0 ? null : rating.toFixed(1);
   }
 </script>
 
@@ -223,16 +223,25 @@
             {#if detail.certification}<Badge>{detail.certification}</Badge>{/if}
           </div>
           <h1 class="text-[1.6rem] leading-tight md:text-[2.1rem]">{detail.title}</h1>
-          {#if detail.year || detail.runtimeMinutes}
+          {#if detail.subtitle}
+            <p class="text-[0.92rem] font-medium text-text-secondary">{detail.subtitle}</p>
+          {/if}
+          {#if detail.year || detail.runtimeMinutes || detail.trackCount}
             <p class="font-mono text-[0.72rem] text-text-muted">
-              {[detail.year, detail.runtimeMinutes ? `${detail.runtimeMinutes} min` : null]
+              {[
+                detail.year,
+                detail.runtimeMinutes ? `${detail.runtimeMinutes} min` : null,
+                detail.trackCount ? `${detail.trackCount} tracks` : null,
+              ]
                 .filter(Boolean)
                 .join(" · ")}
             </p>
           {/if}
-          <p class="max-w-3xl text-[0.82rem] leading-relaxed text-text-secondary">
-            {detail.overview ?? "No overview available."}
-          </p>
+          {#if detail.overview}
+            <p class="max-w-3xl text-[0.82rem] leading-relaxed text-text-secondary">
+              {detail.overview}
+            </p>
+          {/if}
         </div>
       </div>
     </section>

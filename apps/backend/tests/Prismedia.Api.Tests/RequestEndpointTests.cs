@@ -213,11 +213,11 @@ public sealed class RequestEndpointTests {
 
         public Task<IReadOnlyList<RequestSearchResult>> SearchAsync(RequestServiceInstanceDetail instance, string query, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<RequestSearchResult>>([
-                new(instance.Id, RequestProviderKind.Radarr, RequestMediaKind.Movie, "424", "Blade Runner", 1982, null, null, null, null, null, null, [], false, true)
+                new(instance.Id, RequestProviderKind.Radarr, RequestMediaKind.Movie, "424", "Blade Runner", null, 1982, null, null, null, null, null, null, null, [], false, true)
             ]);
 
         public Task<RequestDetailResponse> GetDetailAsync(RequestServiceInstanceDetail instance, RequestMediaKind kind, string externalId, CancellationToken cancellationToken) =>
-            Task.FromResult(new RequestDetailResponse(RequestProviderKind.Radarr, RequestMediaKind.Movie, externalId, "Blade Runner", 1982, null, null, null, null, null, null, [], [], [], [], new RequestServiceOptionsResponse([], [], [], [])));
+            Task.FromResult(new RequestDetailResponse(RequestProviderKind.Radarr, RequestMediaKind.Movie, externalId, "Blade Runner", null, 1982, null, null, null, null, null, null, null, [], [], [], [], new RequestServiceOptionsResponse([], [], [], [])));
 
         public Task<RequestSubmitResponse> SubmitAsync(RequestServiceInstanceDetail instance, RequestDetailResponse detail, RequestSubmitRequest request, CancellationToken cancellationToken) =>
             Task.FromResult(new RequestSubmitResponse(true, "12", null));

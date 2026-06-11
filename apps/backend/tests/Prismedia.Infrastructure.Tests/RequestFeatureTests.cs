@@ -287,7 +287,7 @@ public sealed class RequestFeatureTests {
         var results = await client.SearchAsync(Instance(RequestProviderKind.Lidarr), "bowie", CancellationToken.None);
         Assert.Equal("mb-artist", Assert.Single(results).ExternalId);
 
-        var detail = new RequestDetailResponse(RequestProviderKind.Lidarr, RequestMediaKind.Artist, "mb-artist", "Bowie", null, null, null, null, null, null, null, [], [], [], [
+        var detail = new RequestDetailResponse(RequestProviderKind.Lidarr, RequestMediaKind.Artist, "mb-artist", "Bowie", null, null, null, null, null, null, null, null, null, [], [], [], [
             new RequestChildOption("9", "Low", RequestMediaKind.Album, true, null, null, null)
         ], new RequestServiceOptionsResponse([], [], [], []));
         await client.SubmitAsync(
@@ -374,8 +374,13 @@ public sealed class RequestFeatureTests {
                   {
                     "foreignAlbumId": "mb-album",
                     "title": "Low",
+                    "albumType": "Album",
+                    "secondaryTypes": [],
+                    "duration": 3029555,
                     "releaseDate": "1977-01-14",
+                    "genres": ["Art Rock"],
                     "artist": { "foreignArtistId": "mb-artist", "artistName": "David Bowie" },
+                    "releases": [{ "trackCount": 11 }, { "trackCount": 25 }],
                     "images": [{ "coverType": "cover", "remoteUrl": "https://images.test/low.jpg" }]
                   }
                 ]
@@ -387,7 +392,11 @@ public sealed class RequestFeatureTests {
 
         Assert.Equal("lidarr:mb-album", lastTerm);
         Assert.Equal("Low", detail.Title);
-        Assert.Contains("David Bowie", detail.Tags);
+        Assert.Equal("David Bowie", detail.Subtitle);
+        Assert.Equal("Album", detail.Certification);
+        Assert.Equal(50, detail.RuntimeMinutes);
+        Assert.Equal(11, detail.TrackCount);
+        Assert.Contains("Art Rock", detail.Tags);
     }
 
     [Fact]

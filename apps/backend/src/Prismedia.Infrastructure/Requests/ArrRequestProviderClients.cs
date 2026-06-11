@@ -15,6 +15,8 @@ public static class ArrJsonFields {
     public const string Certification = "certification";
     public const string CoverType = "coverType";
     public const string Crew = "crew";
+    public const string Disambiguation = "disambiguation";
+    public const string Duration = "duration";
     public const string Fanart = "fanart";
     public const string Genres = "genres";
     public const string Id = "id";
@@ -36,6 +38,7 @@ public static class ArrJsonFields {
     public const string SeasonFolder = "seasonFolder";
     public const string SeasonNumber = "seasonNumber";
     public const string SeriesType = "seriesType";
+    public const string Studio = "studio";
     public const string Studios = "studios";
     public const string Tags = "tags";
     public const string Title = "title";
@@ -58,6 +61,7 @@ public static class RadarrProtocol {
 public static class SonarrProtocol {
     public const string TvdbId = "tvdbId";
     public const string FirstAired = "firstAired";
+    public const string Network = "network";
     public const string SearchForMissingEpisodes = "searchForMissingEpisodes";
     public const string SeriesTypeStandard = "standard";
     public const string SeriesEndpoint = "series";
@@ -71,9 +75,13 @@ public static class LidarrProtocol {
     /// <summary>Lookup term prefix that makes Lidarr resolve a MusicBrainz id instead of text-searching it.</summary>
     public const string MbidSearchPrefix = "lidarr:";
     public const string Artist = "artist";
+    public const string ArtistType = "artistType";
     public const string ForeignAlbumId = "foreignAlbumId";
     public const string ForeignArtistId = "foreignArtistId";
     public const string ArtistName = "artistName";
+    public const string Releases = "releases";
+    public const string SecondaryTypes = "secondaryTypes";
+    public const string TrackCount = "trackCount";
     public const string MetadataProfileId = "metadataProfileId";
     public const string Monitor = "monitor";
     public const string MonitorAll = "all";
@@ -377,36 +385,64 @@ public abstract class ArrRequestProviderClient(HttpClient http, RequestProviderK
 
     protected static RequestSearchResult MapMovie(Guid serviceId, JsonElement item) =>
         new(serviceId, RequestProviderKind.Radarr, RequestMediaKind.Movie, Text(item, RadarrProtocol.TmdbId) ?? string.Empty,
-            Text(item, ArrJsonFields.Title) ?? string.Empty, Int(item, ArrJsonFields.Year), Text(item, ArrJsonFields.Overview), Image(item, ArrImageTypes.Poster),
+            Text(item, ArrJsonFields.Title) ?? string.Empty, Text(item, ArrJsonFields.Studio), Int(item, ArrJsonFields.Year), Text(item, ArrJsonFields.Overview), Image(item, ArrImageTypes.Poster),
             Image(item, ArrImageTypes.Fanart) ?? Image(item, ArrImageTypes.Backdrop), Rating(item), Int(item, ArrJsonFields.Runtime), Text(item, ArrJsonFields.Certification),
-            StringArray(item, ArrJsonFields.Genres), false, true);
+            null, StringArray(item, ArrJsonFields.Genres), false, true);
 
     protected static RequestSearchResult MapSeries(Guid serviceId, JsonElement item) =>
         new(serviceId, RequestProviderKind.Sonarr, RequestMediaKind.Series, Text(item, SonarrProtocol.TvdbId) ?? string.Empty,
-            Text(item, ArrJsonFields.Title) ?? string.Empty, YearFromDate(Text(item, SonarrProtocol.FirstAired)), Text(item, ArrJsonFields.Overview), Image(item, ArrImageTypes.Poster),
+            Text(item, ArrJsonFields.Title) ?? string.Empty, Text(item, SonarrProtocol.Network), YearFromDate(Text(item, SonarrProtocol.FirstAired)), Text(item, ArrJsonFields.Overview), Image(item, ArrImageTypes.Poster),
             Image(item, ArrImageTypes.Fanart) ?? Image(item, ArrImageTypes.Backdrop), Rating(item), RuntimeFromMinutesArray(item), Text(item, ArrJsonFields.Certification),
-            StringArray(item, ArrJsonFields.Genres), false, true);
+            null, StringArray(item, ArrJsonFields.Genres), false, true);
 
-    protected static RequestSearchResult MapArtist(Guid serviceId, JsonElement item) =>
-        new(serviceId, RequestProviderKind.Lidarr, RequestMediaKind.Artist, Text(item, LidarrProtocol.ForeignArtistId) ?? string.Empty,
-            Text(item, LidarrProtocol.ArtistName) ?? Text(item, ArrJsonFields.Name) ?? string.Empty, null, Text(item, ArrJsonFields.Overview), Image(item, ArrImageTypes.Poster),
-            Image(item, ArrImageTypes.Fanart) ?? Image(item, ArrImageTypes.Banner), Rating(item), null, Text(item, LidarrProtocol.Status), StringArray(item, ArrJsonFields.Genres), false, true);
+    protected static RequestSearchResult MapArtist(Guid serviceId, JsonElement item) {
+        var subtitle = Text(item, ArrJsonFields.Disambiguation);
+        return new(serviceId, RequestProviderKind.Lidarr, RequestMediaKind.Artist, Text(item, LidarrProtocol.ForeignArtistId) ?? string.Empty,
+            Text(item, LidarrProtocol.ArtistName) ?? Text(item, ArrJsonFields.Name) ?? string.Empty,
+            string.IsNullOrWhiteSpace(subtitle) ? Text(item, LidarrProtocol.ArtistType) : subtitle,
+            null, Text(item, ArrJsonFields.Overview), Image(item, ArrImageTypes.Poster),
+            Image(item, ArrImageTypes.Fanart) ?? Image(item, ArrImageTypes.Banner), Rating(item), null,
+            Text(item, LidarrProtocol.ArtistType), null, StringArray(item, ArrJsonFields.Genres), false, true);
+    }
 
     protected static RequestSearchResult MapAlbum(Guid serviceId, JsonElement item) {
-        var artistName = Text(Prop(item, LidarrProtocol.Artist), LidarrProtocol.ArtistName);
-        IReadOnlyList<string> tags = artistName is null
-            ? StringArray(item, ArrJsonFields.Genres)
-            : [artistName, .. StringArray(item, ArrJsonFields.Genres)];
+        var albumType = Text(item, ArrJsonFields.AlbumType);
+        var secondaryTypes = StringArray(item, LidarrProtocol.SecondaryTypes);
+        var typeLabel = string.Join(" · ", new[] { albumType }.Concat(secondaryTypes).Where(value => !string.IsNullOrWhiteSpace(value)));
         return new(serviceId, RequestProviderKind.Lidarr, RequestMediaKind.Album, Text(item, LidarrProtocol.ForeignAlbumId) ?? Text(item, ArrJsonFields.Id) ?? string.Empty,
-            Text(item, ArrJsonFields.Title) ?? string.Empty, YearFromDate(Text(item, LidarrProtocol.ReleaseDate)), Text(item, ArrJsonFields.Overview), Image(item, ArrImageTypes.Cover) ?? Image(item, ArrImageTypes.Poster),
-            Image(item, ArrImageTypes.Fanart), Rating(item), null, Text(item, ArrJsonFields.AlbumType), tags, false, true);
+            Text(item, ArrJsonFields.Title) ?? string.Empty,
+            Text(Prop(item, LidarrProtocol.Artist), LidarrProtocol.ArtistName),
+            YearFromDate(Text(item, LidarrProtocol.ReleaseDate)), Text(item, ArrJsonFields.Overview), Image(item, ArrImageTypes.Cover) ?? Image(item, ArrImageTypes.Poster),
+            Image(item, ArrImageTypes.Fanart), Rating(item), AlbumRuntimeMinutes(item),
+            string.IsNullOrWhiteSpace(typeLabel) ? null : typeLabel,
+            AlbumTrackCount(item), StringArray(item, ArrJsonFields.Genres), false, true);
     }
 
     protected static RequestDetailResponse DetailFromSearch(RequestSearchResult result, JsonElement item, IReadOnlyList<RequestChildOption> children) =>
-        new(result.Source, result.Kind, result.ExternalId, result.Title, result.Year, result.Overview, result.PosterUrl,
-            result.BackdropUrl, result.Rating, result.RuntimeMinutes, result.Certification, result.Tags,
+        new(result.Source, result.Kind, result.ExternalId, result.Title, result.Subtitle, result.Year, result.Overview, result.PosterUrl,
+            result.BackdropUrl, result.Rating, result.RuntimeMinutes, result.Certification, result.TrackCount, result.Tags,
             StringArray(item, ArrJsonFields.Studios).Concat(StringArray(item, ArrJsonFields.Networks)).ToArray(),
             Credits(item), children, EmptyOptions);
+
+    /// <summary>Album runtime from Lidarr's millisecond duration field, rounded to whole minutes.</summary>
+    private static int? AlbumRuntimeMinutes(JsonElement item) =>
+        item.ValueKind == JsonValueKind.Object &&
+        item.TryGetProperty(ArrJsonFields.Duration, out var duration) &&
+        duration.TryGetInt64(out var milliseconds) && milliseconds > 0
+            ? (int)Math.Round(milliseconds / 60000d)
+            : null;
+
+    /// <summary>
+    /// Track count estimate for an album: the smallest positive release track count, which is
+    /// usually the standard edition rather than a deluxe or anniversary reissue.
+    /// </summary>
+    private static int? AlbumTrackCount(JsonElement item) {
+        var counts = Array(item, LidarrProtocol.Releases)
+            .Select(release => Int(release, LidarrProtocol.TrackCount) ?? 0)
+            .Where(count => count > 0)
+            .ToArray();
+        return counts.Length > 0 ? counts.Min() : null;
+    }
 
     protected static RequestServiceOptionsResponse EmptyOptions { get; } = new([], [], [], []);
 

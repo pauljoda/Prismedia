@@ -14,6 +14,8 @@ export interface RequestDetailResponse {
   kind: RequestMediaKind;
   externalId: string;
   title: string;
+  /** @nullable */
+  subtitle: string | null;
   /**
      * @nullable
      * @pattern ^-?(?:0|[1-9]\d*)$
@@ -37,6 +39,11 @@ export interface RequestDetailResponse {
   runtimeMinutes: number | string | null;
   /** @nullable */
   certification: string | null;
+  /**
+     * @nullable
+     * @pattern ^-?(?:0|[1-9]\d*)$
+     */
+  trackCount: number | string | null;
   tags: string[];
   studios: string[];
   credits: string[];

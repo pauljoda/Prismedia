@@ -107,7 +107,7 @@
 
   function ratingLabel(value: RequestSearchResult["rating"]) {
     const rating = numericValue(value);
-    return rating === null ? null : rating.toFixed(1);
+    return rating === null || rating <= 0 ? null : rating.toFixed(1);
   }
 </script>
 
@@ -264,15 +264,34 @@
                   <span class="font-mono text-[0.72rem] text-text-muted">{result.year}</span>
                 {/if}
               </div>
-              <p class="line-clamp-2 text-[0.78rem] leading-relaxed text-text-secondary">
-                {result.overview ?? "No overview available."}
-              </p>
+              {#if result.subtitle}
+                <p class="truncate text-[0.78rem] font-medium text-text-secondary">
+                  {result.subtitle}
+                </p>
+              {/if}
+              {#if result.overview}
+                <p class="line-clamp-2 text-[0.78rem] leading-relaxed text-text-secondary">
+                  {result.overview}
+                </p>
+              {/if}
               <div class="flex flex-wrap items-center gap-1.5 pt-0.5">
                 <Badge variant="accent">{kindLabels[result.kind] ?? result.kind}</Badge>
                 <Badge>{sourceName(result)}</Badge>
+                {#if result.certification}
+                  <Badge>{result.certification}</Badge>
+                {/if}
+                {#if result.runtimeMinutes}
+                  <Badge>{result.runtimeMinutes} min</Badge>
+                {/if}
+                {#if result.trackCount}
+                  <Badge>{result.trackCount} tracks</Badge>
+                {/if}
                 {#if ratingLabel(result.rating)}
                   <Badge>★ {ratingLabel(result.rating)}</Badge>
                 {/if}
+                {#each result.tags.slice(0, 2) as tag}
+                  <Badge variant="info">{tag}</Badge>
+                {/each}
                 {#if !result.requestable}
                   <Badge variant="warning">Unavailable</Badge>
                 {/if}
