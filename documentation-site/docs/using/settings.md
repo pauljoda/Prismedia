@@ -1,7 +1,7 @@
 ---
-sidebar_position: 7
+sidebar_position: 8
 title: Settings
-description: Watched libraries, visibility, playback, subtitles, generation, storage, worker, API access, and diagnostics.
+description: Watched libraries, visibility, playback, subtitles, generation, storage, request services, worker, API access, and diagnostics.
 ---
 
 # Settings
@@ -73,6 +73,10 @@ Generation settings control background work such as thumbnails, sprites, trickpl
 ## Generated storage
 
 Generated-storage diagnostics help you understand and refresh cached assets under `/data` — thumbnails, sprites, trickplay tiles, HLS renditions, waveform data, plugin artwork, and extracted subtitles.
+
+## Request services
+
+Connect Radarr, Sonarr, and Lidarr instances for the [Request](./requests.md) workflow. Each service needs its URL and API key, and a **required connection test** verifies it and pulls its root folders, quality/metadata profiles, and tags before defaults can be chosen and the service saved. Per-service defaults cover the root folder, quality profile, search-on-request behavior, Arr tags applied to every request, and (Radarr) minimum availability. Multiple instances of the same type are supported; one per type is the default.
 
 ## Worker
 

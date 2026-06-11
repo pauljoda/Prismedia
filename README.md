@@ -148,6 +148,15 @@ Plugins can be native TypeScript or Python, and Stash community scrapers can be 
   <img src="docs/screenshots/plugins.png" alt="Plugins" width="49%" />
 </p>
 
+### Requests
+
+Connect your **Radarr, Sonarr, and Lidarr** instances and request new media without leaving Prismedia. One search fans out across every connected service and comes back as a poster grid with filters and sort — items you already track carry an "In Radarr/Sonarr/Lidarr" badge, and requesting them becomes an update (monitor more seasons, kick off a search) instead of a re-add. Detail pages show cast, multi-source ratings, season pickers, full artist discographies, and album track lists; with a TMDB provider configured, NSFW mode also surfaces TMDB's adult catalog. A request history page tracks everything you've asked for with live status from each service — pending, downloading, partial, or available.
+
+<p align="center">
+  <img src="docs/screenshots/requests.png" alt="Request search" width="49%" />
+  <img src="docs/screenshots/request-detail.png" alt="Request detail" width="49%" />
+</p>
+
 ### Jellyfin Clients (Experimental)
 
 A Jellyfin-compatible API lets client apps discover Prismedia, sign in, and stream — tested with **Infuse** (video + audio) and music clients like **Manet**, **Finamp**, and **Symfonium**. Create lightweight "fake user" profiles, sign in with the app API key, and give each profile its own NSFW visibility so you can run separate SFW and NSFW "servers" in your client. Resume position and play counts sync both ways. See [Jellyfin Compatibility](https://pauljoda.github.io/Prismedia/docs/jellyfin/overview).
@@ -192,6 +201,7 @@ The design language lives in [docs/design-language.md](docs/design-language.md) 
 - [Your First Library & Scan](https://pauljoda.github.io/Prismedia/docs/getting-started/first-library)
 - [Identify & Enrich Your Media](https://pauljoda.github.io/Prismedia/docs/getting-started/identify-walkthrough)
 - [Library & Scanning](https://pauljoda.github.io/Prismedia/docs/library/overview)
+- [Requests (Radarr / Sonarr / Lidarr)](https://pauljoda.github.io/Prismedia/docs/using/requests)
 - [Jellyfin Compatibility](https://pauljoda.github.io/Prismedia/docs/jellyfin/overview)
 - [Reverse Proxy & Auth Middleware](https://pauljoda.github.io/Prismedia/docs/deployment/reverse-proxy)
 - [Architecture](https://pauljoda.github.io/Prismedia/docs/developers/architecture)

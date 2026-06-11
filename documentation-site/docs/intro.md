@@ -20,6 +20,7 @@ It ships as one Docker image. PostgreSQL 16, ffmpeg, the .NET API, the .NET work
 - Managing files and scan exclusions from the browser when your media mount is writable.
 - Running local background work for scans, probes, thumbnails, sprites, waveforms, HLS, subtitles, identify, and imports.
 - Identifying and enriching metadata through native plugins and wrapped Stash community scrapers, while keeping Prismedia's schema independent.
+- Requesting new movies, series, and music through connected **Radarr, Sonarr, and Lidarr** instances, with request history and live download status.
 - Optionally serving your library to **Jellyfin client apps** (Infuse, Manet, and similar) for video and audio playback.
 
 ## Main workspaces
@@ -30,6 +31,7 @@ It ships as one Docker image. PostgreSQL 16, ffmpeg, the .NET API, the .NET work
 | **Browse** | Movies, Series, Videos, Galleries, Images, Comics, eBooks, Audio, Artists, People, Studios, Tags, and Collections. |
 | **Files** | Watched-root file tree with open, upload, new folder, rename, move, rescan, exclude, and delete actions. |
 | **Identify** | Durable review queue for provider matches and metadata proposals. |
+| **Request** | Search connected Radarr/Sonarr/Lidarr instances and request movies, series, artists, and albums. |
 | **Plugins** | Native plugins and wrapped Stash community scrapers. |
 | **Jobs** | Worker heartbeat, active queues, recent work, failures, and manual queue actions. |
 | **Settings** | Library roots, visibility, playback, subtitles, generation, worker, storage, API access, and diagnostics. |

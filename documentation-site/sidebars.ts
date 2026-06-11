@@ -22,6 +22,7 @@ const sidebars: SidebarsConfig = {
         'using/playback',
         'using/navigation',
         'using/identify',
+        'using/requests',
         'using/collections',
         'using/jobs',
         'using/settings',
