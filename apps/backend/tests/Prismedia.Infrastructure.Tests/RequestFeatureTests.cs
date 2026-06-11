@@ -288,8 +288,8 @@ public sealed class RequestFeatureTests {
         Assert.Equal("mb-artist", Assert.Single(results).ExternalId);
 
         var detail = new RequestDetailResponse(RequestProviderKind.Lidarr, RequestMediaKind.Artist, "mb-artist", "Bowie", null, null, null, null, null, null, null, null, null, [], [], [], [
-            new RequestChildOption("9", "Low", RequestMediaKind.Album, true, null, null, null)
-        ], new RequestServiceOptionsResponse([], [], [], []));
+            new RequestChildOption("9", "Low", RequestMediaKind.Album, true, null, null, null, null, null)
+        ], [], new RequestServiceOptionsResponse([], [], [], []));
         await client.SubmitAsync(
             Instance(RequestProviderKind.Lidarr),
             detail,
@@ -338,17 +338,51 @@ public sealed class RequestFeatureTests {
     }
 
     [Fact]
-    public async Task LidarrDetailLooksUpArtistByMbidPrefixAndFiltersAlbumsByEmbeddedArtist() {
-        var terms = new List<string>();
+    public async Task LidarrArtistDetailListsMusicBrainzDiscographyNewestFirst() {
+        string? lookupTerm = null;
         var handler = new FakeHttpHandler((request, body) => {
-            terms.Add(System.Web.HttpUtility.ParseQueryString(request.RequestUri!.Query)["term"] ?? string.Empty);
-            if (request.RequestUri!.AbsolutePath.EndsWith("/artist/lookup", StringComparison.Ordinal)) {
+            if (request.RequestUri!.Host == "musicbrainz.org") {
+                Assert.Contains("Prismedia", request.Headers.UserAgent.ToString());
+                return Json("""
+                    {
+                      "release-groups": [
+                        { "id": "rg-1", "title": "Low", "primary-type": "Album", "secondary-types": [], "first-release-date": "1977-01-14" },
+                        { "id": "rg-2", "title": "Blackstar", "primary-type": "Album", "secondary-types": [], "first-release-date": "2016-01-08" },
+                        { "id": "rg-3", "title": "Stage", "primary-type": "Album", "secondary-types": ["Live"], "first-release-date": "1978-09-08" }
+                      ]
+                    }
+                    """);
+            }
+
+            lookupTerm = System.Web.HttpUtility.ParseQueryString(request.RequestUri.Query)["term"];
+            return Json("""[{ "foreignArtistId": "mb-artist", "artistName": "Bowie", "overview": "Artist", "images": [] }]""");
+        });
+        var client = new LidarrRequestProviderClient(new HttpClient(handler));
+
+        var detail = await client.GetDetailAsync(Instance(RequestProviderKind.Lidarr), RequestMediaKind.Artist, "mb-artist", CancellationToken.None);
+
+        Assert.Equal("lidarr:mb-artist", lookupTerm);
+        Assert.Equal(3, detail.Children.Count);
+        Assert.Equal(["Blackstar", "Stage", "Low"], detail.Children.Select(child => child.Title).ToArray());
+        Assert.Equal(2016, detail.Children[0].Year);
+        Assert.Equal("Album · Live", detail.Children[1].Overview);
+        Assert.StartsWith("https://coverartarchive.org/release-group/rg-2", detail.Children[0].PosterUrl);
+    }
+
+    [Fact]
+    public async Task LidarrArtistDetailFallsBackToLidarrAlbumSearchWhenMusicBrainzFails() {
+        var handler = new FakeHttpHandler((request, body) => {
+            if (request.RequestUri!.Host == "musicbrainz.org") {
+                return new HttpResponseMessage(HttpStatusCode.ServiceUnavailable);
+            }
+
+            if (request.RequestUri.AbsolutePath.EndsWith("/artist/lookup", StringComparison.Ordinal)) {
                 return Json("""[{ "foreignArtistId": "mb-artist", "artistName": "Bowie", "overview": "Artist", "images": [] }]""");
             }
 
             return Json("""
                 [
-                  { "foreignAlbumId": "mb-album-1", "title": "Low", "artist": { "foreignArtistId": "mb-artist", "artistName": "Bowie" } },
+                  { "foreignAlbumId": "mb-album-1", "title": "Low", "releaseDate": "1977-01-14", "albumType": "Album", "artist": { "foreignArtistId": "mb-artist", "artistName": "Bowie" } },
                   { "foreignAlbumId": "mb-album-2", "title": "Other", "artist": { "foreignArtistId": "mb-other", "artistName": "Other Guy" } }
                 ]
                 """);
@@ -357,18 +391,40 @@ public sealed class RequestFeatureTests {
 
         var detail = await client.GetDetailAsync(Instance(RequestProviderKind.Lidarr), RequestMediaKind.Artist, "mb-artist", CancellationToken.None);
 
-        Assert.Equal("lidarr:mb-artist", terms[0]);
-        Assert.Equal("Bowie", terms[1]);
         var child = Assert.Single(detail.Children);
         Assert.Equal("mb-album-1", child.Id);
         Assert.Equal("Low", child.Title);
+        Assert.Equal(1977, child.Year);
     }
 
     [Fact]
-    public async Task LidarrAlbumDetailLooksUpByMbidPrefixAndSurfacesArtist() {
+    public async Task LidarrAlbumDetailLooksUpByMbidPrefixAndSurfacesArtistAndTracks() {
         string? lastTerm = null;
         var handler = new FakeHttpHandler((request, body) => {
-            lastTerm = System.Web.HttpUtility.ParseQueryString(request.RequestUri!.Query)["term"];
+            if (request.RequestUri!.Host == "musicbrainz.org") {
+                return Json("""
+                    {
+                      "releases": [
+                        {
+                          "id": "rel-deluxe",
+                          "media": [{ "track-count": 25, "tracks": [] }]
+                        },
+                        {
+                          "id": "rel-standard",
+                          "media": [{
+                            "track-count": 2,
+                            "tracks": [
+                              { "position": 1, "title": "Speed of Life", "length": 166000 },
+                              { "position": 2, "title": "Breaking Glass", "length": 112000 }
+                            ]
+                          }]
+                        }
+                      ]
+                    }
+                    """);
+            }
+
+            lastTerm = System.Web.HttpUtility.ParseQueryString(request.RequestUri.Query)["term"];
             return Json("""
                 [
                   {
@@ -395,8 +451,11 @@ public sealed class RequestFeatureTests {
         Assert.Equal("David Bowie", detail.Subtitle);
         Assert.Equal("Album", detail.Certification);
         Assert.Equal(50, detail.RuntimeMinutes);
-        Assert.Equal(11, detail.TrackCount);
         Assert.Contains("Art Rock", detail.Tags);
+        Assert.Equal(2, detail.Tracks.Count);
+        Assert.Equal(2, detail.TrackCount);
+        Assert.Equal(new RequestTrack(1, "Speed of Life", 166), detail.Tracks[0]);
+        Assert.Equal(new RequestTrack(2, "Breaking Glass", 112), detail.Tracks[1]);
     }
 
     [Fact]

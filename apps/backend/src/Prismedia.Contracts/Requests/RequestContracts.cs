@@ -128,17 +128,26 @@ public sealed record RequestDetailResponse(
     IReadOnlyList<string> Studios,
     IReadOnlyList<string> Credits,
     IReadOnlyList<RequestChildOption> Children,
+    IReadOnlyList<RequestTrack> Tracks,
     RequestServiceOptionsResponse ServiceOptions);
 
-/// <summary>Selectable child option, such as a season or album.</summary>
+/// <summary>Selectable or informational child option, such as a season or album.</summary>
+/// <param name="Number">Ordering number where the provider has one (season number).</param>
+/// <param name="Year">Release year for albums; null elsewhere.</param>
+/// <param name="ItemCount">Episode count for seasons; null elsewhere.</param>
 public sealed record RequestChildOption(
     string Id,
     string Title,
     RequestMediaKind Kind,
     bool Requestable,
     int? Number,
+    int? Year,
+    int? ItemCount,
     string? Overview,
     string? PosterUrl);
+
+/// <summary>One track on an album detail, for review before requesting.</summary>
+public sealed record RequestTrack(int Number, string Title, int? DurationSeconds);
 
 /// <summary>Root folder/profile option exposed by a request service instance.</summary>
 public sealed record RequestServiceOption(string Id, string Name, string? Path);

@@ -174,6 +174,27 @@
     const rating = numericValue(value);
     return rating === null || rating <= 0 ? null : rating.toFixed(1);
   }
+
+  function childHref(child: RequestDetailResponse["children"][number]) {
+    if (!detail) return "#";
+    const params = new URLSearchParams({ source: detail.source });
+    if (selectedServiceId) params.set("serviceId", selectedServiceId);
+    return `/request/${child.kind}/${encodeURIComponent(child.id)}?${params.toString()}`;
+  }
+
+  function childMeta(child: RequestDetailResponse["children"][number]) {
+    return [numericValue(child.year), child.overview].filter(Boolean).join(" · ");
+  }
+
+  function trackDuration(seconds: number | string | null | undefined) {
+    const total = numericValue(seconds);
+    if (total === null || total <= 0) return null;
+    return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+  }
+
+  function hideBrokenImage(event: Event) {
+    (event.currentTarget as HTMLElement).style.display = "none";
+  }
 </script>
 
 <svelte:head><title>{detail?.title ?? "Request"} · Prismedia</title></svelte:head>
@@ -269,26 +290,87 @@
         {#if detail.children.length > 0}
           <div class="space-y-2">
             <h3 class="text-label text-text-muted">
-              {detail.kind === REQUEST_MEDIA_KIND.series ? "Seasons" : "Albums"}
+              {detail.kind === REQUEST_MEDIA_KIND.series
+                ? "Seasons"
+                : `Discography (${detail.children.length})`}
             </h3>
+            {#if detail.kind === REQUEST_MEDIA_KIND.series}
+              <div class="surface-well divide-y divide-border-subtle px-3">
+                {#each detail.children as child (child.id)}
+                  <label class="flex cursor-pointer items-center justify-between gap-2.5 py-2 text-[0.8rem] text-text-secondary">
+                    <span class="flex items-center gap-2.5">
+                      <Checkbox
+                        checked={selectedChildIds.includes(child.id)}
+                        disabled={!child.requestable}
+                        onchange={(event) => toggleChild(child.id, event.currentTarget.checked)}
+                      />
+                      <span>{child.title}</span>
+                    </span>
+                    {#if numericValue(child.itemCount)}
+                      <span class="font-mono text-[0.68rem] text-text-muted">
+                        {child.itemCount} episodes
+                      </span>
+                    {/if}
+                  </label>
+                {/each}
+              </div>
+            {:else}
+              <div class="grid gap-1.5 sm:grid-cols-2">
+                {#each detail.children as child (child.id)}
+                  <a
+                    href={childHref(child)}
+                    class="surface-card no-lift flex items-center gap-2.5 p-2 transition-colors hover:border-border-accent/50"
+                  >
+                    <div class="h-10 w-10 shrink-0 overflow-hidden rounded-xs bg-surface-1">
+                      {#if child.posterUrl}
+                        <img
+                          src={child.posterUrl}
+                          alt=""
+                          loading="lazy"
+                          class="h-full w-full object-cover"
+                          onerror={hideBrokenImage}
+                        />
+                      {/if}
+                    </div>
+                    <div class="min-w-0">
+                      <p class="truncate text-[0.8rem] font-medium text-text-primary">
+                        {child.title}
+                      </p>
+                      {#if childMeta(child)}
+                        <p class="truncate text-[0.68rem] text-text-muted">{childMeta(child)}</p>
+                      {/if}
+                    </div>
+                  </a>
+                {/each}
+              </div>
+              {#if detail.source === REQUEST_PROVIDER_KIND.lidarr}
+                <p class="text-[0.72rem] text-text-muted">
+                  Open an album to review its tracks. Requesting the artist adds them to Lidarr,
+                  which monitors releases per its own settings.
+                </p>
+              {/if}
+            {/if}
+          </div>
+        {/if}
+
+        {#if detail.tracks.length > 0}
+          <div class="space-y-2">
+            <h3 class="text-label text-text-muted">Tracks ({detail.tracks.length})</h3>
             <div class="surface-well divide-y divide-border-subtle px-3">
-              {#each detail.children as child (child.id)}
-                <label class="flex cursor-pointer items-center gap-2.5 py-2 text-[0.8rem] text-text-secondary">
-                  <Checkbox
-                    checked={selectedChildIds.includes(child.id)}
-                    disabled={detail.source === REQUEST_PROVIDER_KIND.lidarr || !child.requestable}
-                    onchange={(event) => toggleChild(child.id, event.currentTarget.checked)}
-                  />
-                  <span>{child.title}</span>
-                </label>
+              {#each detail.tracks as track (track.number)}
+                <div class="flex items-center gap-2.5 py-1.5 text-[0.8rem]">
+                  <span class="w-6 shrink-0 text-right font-mono text-[0.68rem] text-text-disabled">
+                    {track.number}
+                  </span>
+                  <span class="min-w-0 flex-1 truncate text-text-secondary">{track.title}</span>
+                  {#if trackDuration(track.durationSeconds)}
+                    <span class="shrink-0 font-mono text-[0.68rem] text-text-muted">
+                      {trackDuration(track.durationSeconds)}
+                    </span>
+                  {/if}
+                </div>
               {/each}
             </div>
-            {#if detail.source === REQUEST_PROVIDER_KIND.lidarr}
-              <p class="text-[0.72rem] text-text-muted">
-                Albums are listed for reference. Requesting the artist monitors new releases via
-                Lidarr's own settings.
-              </p>
-            {/if}
           </div>
         {/if}
       </section>

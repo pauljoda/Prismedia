@@ -217,7 +217,7 @@ public sealed class RequestEndpointTests {
             ]);
 
         public Task<RequestDetailResponse> GetDetailAsync(RequestServiceInstanceDetail instance, RequestMediaKind kind, string externalId, CancellationToken cancellationToken) =>
-            Task.FromResult(new RequestDetailResponse(RequestProviderKind.Radarr, RequestMediaKind.Movie, externalId, "Blade Runner", null, 1982, null, null, null, null, null, null, null, [], [], [], [], new RequestServiceOptionsResponse([], [], [], [])));
+            Task.FromResult(new RequestDetailResponse(RequestProviderKind.Radarr, RequestMediaKind.Movie, externalId, "Blade Runner", null, 1982, null, null, null, null, null, null, null, [], [], [], [], [], new RequestServiceOptionsResponse([], [], [], [])));
 
         public Task<RequestSubmitResponse> SubmitAsync(RequestServiceInstanceDetail instance, RequestDetailResponse detail, RequestSubmitRequest request, CancellationToken cancellationToken) =>
             Task.FromResult(new RequestSubmitResponse(true, "12", null));

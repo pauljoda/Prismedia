@@ -60,8 +60,10 @@ public static class RadarrProtocol {
 
 public static class SonarrProtocol {
     public const string TvdbId = "tvdbId";
+    public const string EpisodeCount = "episodeCount";
     public const string FirstAired = "firstAired";
     public const string Network = "network";
+    public const string Statistics = "statistics";
     public const string SearchForMissingEpisodes = "searchForMissingEpisodes";
     public const string SeriesTypeStandard = "standard";
     public const string SeriesEndpoint = "series";
@@ -89,6 +91,39 @@ public static class LidarrProtocol {
     public const string ReleaseDate = "releaseDate";
     public const string SearchForMissingAlbums = "searchForMissingAlbums";
     public const string Status = "status";
+}
+
+/// <summary>
+/// MusicBrainz / Cover Art Archive wire vocabulary. Lidarr cannot list an artist's albums or an
+/// album's tracks before they are added to its library, so the request detail pages enrich Lidarr
+/// results straight from MusicBrainz using the same MBIDs Lidarr exposes.
+/// </summary>
+public static class MusicBrainzProtocol {
+    public const string ApiBase = "https://musicbrainz.org/ws/2/";
+    public const string CoverArtReleaseGroupBase = "https://coverartarchive.org/release-group/";
+    public const string CoverArtFrontThumb = "/front-250";
+    /// <summary>MusicBrainz requires an identifying User-Agent on every request.</summary>
+    public const string UserAgent = "Prismedia/1.0 (+https://github.com/pauljoda/prismedia)";
+
+    public const string ReleaseGroupEndpoint = "release-group";
+    public const string ReleaseEndpoint = "release";
+    public const string ArtistQuery = "artist";
+    public const string ReleaseGroupQuery = "release-group";
+    public const string TypeQuery = "type";
+    public const string AlbumAndEpTypes = "album|ep";
+    public const string StatusOfficial = "official";
+    public const string IncludeRecordings = "recordings";
+
+    public const string ReleaseGroups = "release-groups";
+    public const string Releases = "releases";
+    public const string PrimaryType = "primary-type";
+    public const string SecondaryTypes = "secondary-types";
+    public const string FirstReleaseDate = "first-release-date";
+    public const string Media = "media";
+    public const string Tracks = "tracks";
+    public const string Position = "position";
+    public const string Length = "length";
+    public const string TrackCount = "track-count";
 }
 
 public static class ArrOptionEndpoints {
@@ -165,6 +200,8 @@ public sealed class SonarrRequestProviderClient(HttpClient http) : ArrRequestPro
                 true,
                 Int(season, ArrJsonFields.SeasonNumber),
                 null,
+                Int(Prop(season, SonarrProtocol.Statistics), SonarrProtocol.EpisodeCount),
+                null,
                 null))
             .Where(child => !string.IsNullOrWhiteSpace(child.Id))
             .OrderBy(child => child.Number)
@@ -225,14 +262,19 @@ public sealed class LidarrRequestProviderClient(HttpClient http) : ArrRequestPro
     public override async Task<RequestDetailResponse> GetDetailAsync(RequestServiceInstanceDetail instance, RequestMediaKind kind, string externalId, CancellationToken cancellationToken) {
         if (kind == RequestMediaKind.Album) {
             var album = await LookupAlbumAsync(instance, externalId, cancellationToken);
-            return DetailFromSearch(MapAlbum(instance.Id, album), album, []);
+            var tracks = await GetAlbumTracksAsync(externalId, cancellationToken);
+            return DetailFromSearch(MapAlbum(instance.Id, album), album, [], tracks);
         }
 
         var item = await LookupArtistAsync(instance, externalId, cancellationToken);
-        var artistName = Text(item, LidarrProtocol.ArtistName) ?? Text(item, ArrJsonFields.Name);
-        var children = string.IsNullOrWhiteSpace(artistName)
-            ? []
-            : await GetArtistAlbumsAsync(instance, externalId, artistName, cancellationToken);
+        var children = await GetArtistDiscographyAsync(externalId, cancellationToken);
+        if (children.Count == 0) {
+            var artistName = Text(item, LidarrProtocol.ArtistName) ?? Text(item, ArrJsonFields.Name);
+            if (!string.IsNullOrWhiteSpace(artistName)) {
+                children = await GetArtistAlbumsAsync(instance, externalId, artistName, cancellationToken);
+            }
+        }
+
         return DetailFromSearch(MapArtist(instance.Id, item), item, children);
     }
 
@@ -269,9 +311,89 @@ public sealed class LidarrRequestProviderClient(HttpClient http) : ArrRequestPro
     }
 
     /// <summary>
-    /// Lists an artist's albums for display. Lidarr has no album listing for artists that are not in its
-    /// library yet, so this text-searches album lookup by artist name and keeps results whose embedded
-    /// artist matches the requested MusicBrainz id. The list is best-effort and capped by Lidarr's lookup.
+    /// Lists an artist's full discography (albums and EPs) from MusicBrainz, newest first, with
+    /// Cover Art Archive thumbnails. Returns an empty list on any failure so callers can fall back.
+    /// </summary>
+    private async Task<IReadOnlyList<RequestChildOption>> GetArtistDiscographyAsync(string artistMbid, CancellationToken cancellationToken) {
+        try {
+            var url = new Uri(
+                $"{MusicBrainzProtocol.ApiBase}{MusicBrainzProtocol.ReleaseGroupEndpoint}" +
+                $"?{MusicBrainzProtocol.ArtistQuery}={Uri.EscapeDataString(artistMbid)}" +
+                $"&{MusicBrainzProtocol.TypeQuery}={Uri.EscapeDataString(MusicBrainzProtocol.AlbumAndEpTypes)}" +
+                "&fmt=json&limit=100");
+            var root = await GetExternalJsonAsync(url, cancellationToken);
+            return Array(root, MusicBrainzProtocol.ReleaseGroups)
+                .Select(group => new RequestChildOption(
+                    Text(group, ArrJsonFields.Id) ?? string.Empty,
+                    Text(group, ArrJsonFields.Title) ?? string.Empty,
+                    RequestMediaKind.Album,
+                    false,
+                    null,
+                    YearFromDate(Text(group, MusicBrainzProtocol.FirstReleaseDate)),
+                    null,
+                    ReleaseGroupTypeLabel(group),
+                    $"{MusicBrainzProtocol.CoverArtReleaseGroupBase}{Text(group, ArrJsonFields.Id)}{MusicBrainzProtocol.CoverArtFrontThumb}"))
+                .Where(child => !string.IsNullOrWhiteSpace(child.Id) && !string.IsNullOrWhiteSpace(child.Title))
+                .OrderByDescending(child => child.Year ?? 0)
+                .ThenBy(child => child.Title, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+        } catch (Exception ex) when (ex is not OperationCanceledException) {
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// Track listing for an album from MusicBrainz: takes the official release with the fewest
+    /// tracks (usually the standard edition) and numbers tracks sequentially across discs.
+    /// Returns an empty list on any failure; tracks are review aids, never load-bearing.
+    /// </summary>
+    private async Task<IReadOnlyList<RequestTrack>> GetAlbumTracksAsync(string albumMbid, CancellationToken cancellationToken) {
+        try {
+            var url = new Uri(
+                $"{MusicBrainzProtocol.ApiBase}{MusicBrainzProtocol.ReleaseEndpoint}" +
+                $"?{MusicBrainzProtocol.ReleaseGroupQuery}={Uri.EscapeDataString(albumMbid)}" +
+                $"&inc={MusicBrainzProtocol.IncludeRecordings}&status={MusicBrainzProtocol.StatusOfficial}&fmt=json&limit=25");
+            var root = await GetExternalJsonAsync(url, cancellationToken);
+            var release = Array(root, MusicBrainzProtocol.Releases)
+                .Select(candidate => (Item: candidate, TrackTotal: Array(candidate, MusicBrainzProtocol.Media).Sum(medium => Int(medium, MusicBrainzProtocol.TrackCount) ?? 0)))
+                .Where(candidate => candidate.TrackTotal > 0)
+                .OrderBy(candidate => candidate.TrackTotal)
+                .Select(candidate => candidate.Item)
+                .FirstOrDefault();
+            if (release.ValueKind != JsonValueKind.Object) {
+                return [];
+            }
+
+            return Array(release, MusicBrainzProtocol.Media)
+                .SelectMany(medium => Array(medium, MusicBrainzProtocol.Tracks))
+                .Select((track, index) => new RequestTrack(
+                    index + 1,
+                    Text(track, ArrJsonFields.Title) ?? string.Empty,
+                    DurationSeconds(track)))
+                .Where(track => !string.IsNullOrWhiteSpace(track.Title))
+                .ToArray();
+        } catch (Exception ex) when (ex is not OperationCanceledException) {
+            return [];
+        }
+    }
+
+    private static string? ReleaseGroupTypeLabel(JsonElement group) {
+        var label = string.Join(" · ", new[] { Text(group, MusicBrainzProtocol.PrimaryType) }
+            .Concat(StringArray(group, MusicBrainzProtocol.SecondaryTypes))
+            .Where(value => !string.IsNullOrWhiteSpace(value)));
+        return string.IsNullOrWhiteSpace(label) ? null : label;
+    }
+
+    private static int? DurationSeconds(JsonElement track) =>
+        track.ValueKind == JsonValueKind.Object &&
+        track.TryGetProperty(MusicBrainzProtocol.Length, out var length) &&
+        length.TryGetInt64(out var milliseconds) && milliseconds > 0
+            ? (int)Math.Round(milliseconds / 1000d)
+            : null;
+
+    /// <summary>
+    /// Fallback album listing via Lidarr's own lookup when MusicBrainz is unreachable: text-searches
+    /// by artist name and keeps results whose embedded artist matches the requested MusicBrainz id.
     /// </summary>
     private async Task<IReadOnlyList<RequestChildOption>> GetArtistAlbumsAsync(RequestServiceInstanceDetail instance, string externalId, string artistName, CancellationToken cancellationToken) {
         var albums = await GetArrayAsync(instance, $"{ApiPath}/{LidarrProtocol.AlbumLookupEndpoint}?term={Uri.EscapeDataString(artistName)}", cancellationToken);
@@ -282,8 +404,10 @@ public sealed class LidarrRequestProviderClient(HttpClient http) : ArrRequestPro
                 Text(album, ArrJsonFields.Title) ?? string.Empty,
                 RequestMediaKind.Album,
                 false,
-                Int(album, ArrJsonFields.Id),
-                Text(album, ArrJsonFields.Overview),
+                null,
+                YearFromDate(Text(album, LidarrProtocol.ReleaseDate)),
+                null,
+                Text(album, ArrJsonFields.AlbumType),
                 Image(album, ArrImageTypes.Cover)))
             .Where(album => !string.IsNullOrWhiteSpace(album.Id) && !string.IsNullOrWhiteSpace(album.Title))
             .ToArray();
@@ -330,6 +454,17 @@ public abstract class ArrRequestProviderClient(HttpClient http, RequestProviderK
             tags.Select(tag => new RequestServiceOption(Text(tag, ArrJsonFields.Id) ?? string.Empty, Text(tag, ArrJsonFields.Label) ?? string.Empty, null))
                 .Where(option => !string.IsNullOrWhiteSpace(option.Id) && !string.IsNullOrWhiteSpace(option.Name))
                 .ToArray());
+    }
+
+    /// <summary>Fetches JSON from an external metadata service (MusicBrainz) with the required User-Agent.</summary>
+    protected async Task<JsonElement> GetExternalJsonAsync(Uri url, CancellationToken cancellationToken) {
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.TryAddWithoutValidation("User-Agent", MusicBrainzProtocol.UserAgent);
+        using var response = await http.SendAsync(request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+        return document.RootElement.Clone();
     }
 
     protected async Task<IReadOnlyList<JsonElement>> GetArrayAsync(RequestServiceInstanceDetail instance, string path, CancellationToken cancellationToken) {
@@ -418,11 +553,11 @@ public abstract class ArrRequestProviderClient(HttpClient http, RequestProviderK
             AlbumTrackCount(item), StringArray(item, ArrJsonFields.Genres), false, true);
     }
 
-    protected static RequestDetailResponse DetailFromSearch(RequestSearchResult result, JsonElement item, IReadOnlyList<RequestChildOption> children) =>
+    protected static RequestDetailResponse DetailFromSearch(RequestSearchResult result, JsonElement item, IReadOnlyList<RequestChildOption> children, IReadOnlyList<RequestTrack>? tracks = null) =>
         new(result.Source, result.Kind, result.ExternalId, result.Title, result.Subtitle, result.Year, result.Overview, result.PosterUrl,
-            result.BackdropUrl, result.Rating, result.RuntimeMinutes, result.Certification, result.TrackCount, result.Tags,
+            result.BackdropUrl, result.Rating, result.RuntimeMinutes, result.Certification, tracks?.Count > 0 ? tracks.Count : result.TrackCount, result.Tags,
             StringArray(item, ArrJsonFields.Studios).Concat(StringArray(item, ArrJsonFields.Networks)).ToArray(),
-            Credits(item), children, EmptyOptions);
+            Credits(item), children, tracks ?? [], EmptyOptions);
 
     /// <summary>Album runtime from Lidarr's millisecond duration field, rounded to whole minutes.</summary>
     private static int? AlbumRuntimeMinutes(JsonElement item) =>
@@ -520,7 +655,7 @@ public abstract class ArrRequestProviderClient(HttpClient http, RequestProviderK
             .Select(image => Text(image, ArrJsonFields.RemoteUrl) ?? Text(image, ArrJsonFields.Url))
             .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
 
-    private static int? YearFromDate(string? value) =>
+    protected static int? YearFromDate(string? value) =>
         DateTimeOffset.TryParse(value, out var date) ? date.Year : null;
 
     private static int? RuntimeFromMinutesArray(JsonElement item) =>

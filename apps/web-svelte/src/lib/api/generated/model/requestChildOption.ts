@@ -16,6 +16,16 @@ export interface RequestChildOption {
      * @pattern ^-?(?:0|[1-9]\d*)$
      */
   number: number | string | null;
+  /**
+     * @nullable
+     * @pattern ^-?(?:0|[1-9]\d*)$
+     */
+  year: number | string | null;
+  /**
+     * @nullable
+     * @pattern ^-?(?:0|[1-9]\d*)$
+     */
+  itemCount: number | string | null;
   /** @nullable */
   overview: string | null;
   /** @nullable */

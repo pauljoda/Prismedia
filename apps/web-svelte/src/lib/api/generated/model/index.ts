@@ -298,6 +298,7 @@ export * from './requestServiceTestRequest';
 export * from './requestServiceTestResponse';
 export * from './requestSubmitRequest';
 export * from './requestSubmitResponse';
+export * from './requestTrack';
 export * from './rescanFileRootParams';
 export * from './saveIdentifyQueueProposalRequest';
 export * from './searchIdentifyQueueItemParams';

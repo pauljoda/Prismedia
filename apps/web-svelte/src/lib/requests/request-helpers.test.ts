@@ -150,6 +150,7 @@ function detailWithChildren(ids: string[]): RequestDetailResponse {
     tags: [],
     studios: [],
     credits: [],
+    tracks: [],
     serviceOptions,
     children: ids.map((id) => ({
       id,
@@ -157,6 +158,8 @@ function detailWithChildren(ids: string[]): RequestDetailResponse {
       kind: REQUEST_MEDIA_KIND.series,
       requestable: true,
       number: Number(id),
+      year: null,
+      itemCount: null,
       overview: null,
       posterUrl: null,
     })),
