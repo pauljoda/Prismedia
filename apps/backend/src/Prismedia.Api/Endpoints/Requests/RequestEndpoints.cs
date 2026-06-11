@@ -89,15 +89,20 @@ public static class RequestEndpoints {
             Guid? serviceId,
             RequestDetailService details,
             CancellationToken cancellationToken) => {
-                var detail = await details.GetAsync(
-                    source.DecodeAs<RequestProviderKind>(),
-                    kind.DecodeAs<RequestMediaKind>(),
-                    externalId,
-                    serviceId,
-                    cancellationToken);
-                return detail is null
-                    ? Results.NotFound(new ApiProblem(ApiProblemCodes.NotFound, "Request detail was not found."))
-                    : Results.Ok(detail);
+                try {
+                    var detail = await details.GetAsync(
+                        source.DecodeAs<RequestProviderKind>(),
+                        kind.DecodeAs<RequestMediaKind>(),
+                        externalId,
+                        serviceId,
+                        cancellationToken);
+                    return detail is null
+                        ? Results.NotFound(new ApiProblem(ApiProblemCodes.NotFound, "Request detail was not found."))
+                        : Results.Ok(detail);
+                } catch (InvalidOperationException ex) {
+                    // Provider lookups throw when the external id resolves to nothing upstream.
+                    return Results.NotFound(new ApiProblem(ApiProblemCodes.NotFound, ex.Message));
+                }
             })
             .WithName("GetRequestDetail")
             .WithSummary("Gets rich detail metadata for a requestable external item.")

@@ -68,6 +68,9 @@ public static class LidarrProtocol {
     public const string ArtistEndpoint = "artist";
     public const string ArtistLookupEndpoint = "artist/lookup";
     public const string AlbumLookupEndpoint = "album/lookup";
+    /// <summary>Lookup term prefix that makes Lidarr resolve a MusicBrainz id instead of text-searching it.</summary>
+    public const string MbidSearchPrefix = "lidarr:";
+    public const string Artist = "artist";
     public const string ForeignAlbumId = "foreignAlbumId";
     public const string ForeignArtistId = "foreignArtistId";
     public const string ArtistName = "artistName";
@@ -217,9 +220,11 @@ public sealed class LidarrRequestProviderClient(HttpClient http) : ArrRequestPro
             return DetailFromSearch(MapAlbum(instance.Id, album), album, []);
         }
 
-        var items = await GetArrayAsync(instance, $"{ApiPath}/{LidarrProtocol.ArtistLookupEndpoint}?term={Uri.EscapeDataString(externalId)}", cancellationToken);
-        var item = SelectDetail(items, candidate => Text(candidate, LidarrProtocol.ForeignArtistId) == externalId, "Lidarr did not return an artist detail.");
-        var children = await GetArtistAlbumsAsync(instance, externalId, cancellationToken);
+        var item = await LookupArtistAsync(instance, externalId, cancellationToken);
+        var artistName = Text(item, LidarrProtocol.ArtistName) ?? Text(item, ArrJsonFields.Name);
+        var children = string.IsNullOrWhiteSpace(artistName)
+            ? []
+            : await GetArtistAlbumsAsync(instance, externalId, artistName, cancellationToken);
         return DetailFromSearch(MapArtist(instance.Id, item), item, children);
     }
 
@@ -228,10 +233,7 @@ public sealed class LidarrRequestProviderClient(HttpClient http) : ArrRequestPro
             throw new NotSupportedException("Lidarr standalone album requests require an existing artist context; submit is disabled unless the request is for an artist with optional album monitoring.");
         }
 
-        var payload = ToObject(SelectDetail(
-            await GetArrayAsync(instance, $"{ApiPath}/{LidarrProtocol.ArtistLookupEndpoint}?term={Uri.EscapeDataString(detail.ExternalId)}", cancellationToken),
-            candidate => Text(candidate, LidarrProtocol.ForeignArtistId) == detail.ExternalId,
-            "Lidarr did not return an artist detail."));
+        var payload = ToObject(await LookupArtistAsync(instance, detail.ExternalId, cancellationToken));
         payload[ArrJsonFields.QualityProfileId] = request.QualityProfileId ?? instance.DefaultQualityProfileId;
         payload[LidarrProtocol.MetadataProfileId] = request.MetadataProfileId ?? instance.DefaultMetadataProfileId;
         payload[ArrJsonFields.RootFolderPath] = request.RootFolderPath ?? instance.DefaultRootFolderPath;
@@ -247,15 +249,28 @@ public sealed class LidarrRequestProviderClient(HttpClient http) : ArrRequestPro
         return new RequestSubmitResponse(true, null, null);
     }
 
+    /// <summary>Resolves an artist by MusicBrainz id using Lidarr's <c>lidarr:</c> lookup prefix; plain text terms never match MBIDs.</summary>
+    private async Task<JsonElement> LookupArtistAsync(RequestServiceInstanceDetail instance, string externalId, CancellationToken cancellationToken) {
+        var items = await GetArrayAsync(instance, $"{ApiPath}/{LidarrProtocol.ArtistLookupEndpoint}?term={Uri.EscapeDataString(LidarrProtocol.MbidSearchPrefix + externalId)}", cancellationToken);
+        return SelectDetail(items, candidate => Text(candidate, LidarrProtocol.ForeignArtistId) == externalId, "Lidarr did not return an artist detail.");
+    }
+
     private async Task<JsonElement> LookupAlbumAsync(RequestServiceInstanceDetail instance, string externalId, CancellationToken cancellationToken) {
-        var items = await GetArrayAsync(instance, $"{ApiPath}/{LidarrProtocol.AlbumLookupEndpoint}?term={Uri.EscapeDataString(externalId)}", cancellationToken);
+        var items = await GetArrayAsync(instance, $"{ApiPath}/{LidarrProtocol.AlbumLookupEndpoint}?term={Uri.EscapeDataString(LidarrProtocol.MbidSearchPrefix + externalId)}", cancellationToken);
         return SelectDetail(items, candidate => Text(candidate, LidarrProtocol.ForeignAlbumId) == externalId || Text(candidate, ArrJsonFields.Id) == externalId, "Lidarr did not return an album detail.");
     }
 
-    private async Task<IReadOnlyList<RequestChildOption>> GetArtistAlbumsAsync(RequestServiceInstanceDetail instance, string externalId, CancellationToken cancellationToken) {
-        var albums = await GetArrayAsync(instance, $"{ApiPath}/{LidarrProtocol.AlbumLookupEndpoint}?term={Uri.EscapeDataString(externalId)}", cancellationToken);
-        return albums.Select(album => new RequestChildOption(
-                Text(album, ArrJsonFields.Id) ?? Text(album, LidarrProtocol.ForeignAlbumId) ?? string.Empty,
+    /// <summary>
+    /// Lists an artist's albums for display. Lidarr has no album listing for artists that are not in its
+    /// library yet, so this text-searches album lookup by artist name and keeps results whose embedded
+    /// artist matches the requested MusicBrainz id. The list is best-effort and capped by Lidarr's lookup.
+    /// </summary>
+    private async Task<IReadOnlyList<RequestChildOption>> GetArtistAlbumsAsync(RequestServiceInstanceDetail instance, string externalId, string artistName, CancellationToken cancellationToken) {
+        var albums = await GetArrayAsync(instance, $"{ApiPath}/{LidarrProtocol.AlbumLookupEndpoint}?term={Uri.EscapeDataString(artistName)}", cancellationToken);
+        return albums
+            .Where(album => Text(Prop(album, LidarrProtocol.Artist), LidarrProtocol.ForeignArtistId) == externalId)
+            .Select(album => new RequestChildOption(
+                Text(album, LidarrProtocol.ForeignAlbumId) ?? Text(album, ArrJsonFields.Id) ?? string.Empty,
                 Text(album, ArrJsonFields.Title) ?? string.Empty,
                 RequestMediaKind.Album,
                 false,
@@ -377,10 +392,15 @@ public abstract class ArrRequestProviderClient(HttpClient http, RequestProviderK
             Text(item, LidarrProtocol.ArtistName) ?? Text(item, ArrJsonFields.Name) ?? string.Empty, null, Text(item, ArrJsonFields.Overview), Image(item, ArrImageTypes.Poster),
             Image(item, ArrImageTypes.Fanart) ?? Image(item, ArrImageTypes.Banner), Rating(item), null, Text(item, LidarrProtocol.Status), StringArray(item, ArrJsonFields.Genres), false, true);
 
-    protected static RequestSearchResult MapAlbum(Guid serviceId, JsonElement item) =>
-        new(serviceId, RequestProviderKind.Lidarr, RequestMediaKind.Album, Text(item, LidarrProtocol.ForeignAlbumId) ?? Text(item, ArrJsonFields.Id) ?? string.Empty,
+    protected static RequestSearchResult MapAlbum(Guid serviceId, JsonElement item) {
+        var artistName = Text(Prop(item, LidarrProtocol.Artist), LidarrProtocol.ArtistName);
+        IReadOnlyList<string> tags = artistName is null
+            ? StringArray(item, ArrJsonFields.Genres)
+            : [artistName, .. StringArray(item, ArrJsonFields.Genres)];
+        return new(serviceId, RequestProviderKind.Lidarr, RequestMediaKind.Album, Text(item, LidarrProtocol.ForeignAlbumId) ?? Text(item, ArrJsonFields.Id) ?? string.Empty,
             Text(item, ArrJsonFields.Title) ?? string.Empty, YearFromDate(Text(item, LidarrProtocol.ReleaseDate)), Text(item, ArrJsonFields.Overview), Image(item, ArrImageTypes.Cover) ?? Image(item, ArrImageTypes.Poster),
-            Image(item, ArrImageTypes.Fanart), Rating(item), null, Text(item, ArrJsonFields.AlbumType), StringArray(item, ArrJsonFields.Genres), false, true);
+            Image(item, ArrImageTypes.Fanart), Rating(item), null, Text(item, ArrJsonFields.AlbumType), tags, false, true);
+    }
 
     protected static RequestDetailResponse DetailFromSearch(RequestSearchResult result, JsonElement item, IReadOnlyList<RequestChildOption> children) =>
         new(result.Source, result.Kind, result.ExternalId, result.Title, result.Year, result.Overview, result.PosterUrl,
@@ -408,9 +428,15 @@ public abstract class ArrRequestProviderClient(HttpClient http, RequestProviderK
     }
 
     protected static IReadOnlyList<JsonElement> Array(JsonElement item, string name) =>
-        item.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Array
+        item.ValueKind == JsonValueKind.Object && item.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Array
             ? value.EnumerateArray().ToArray()
             : [];
+
+    /// <summary>Reads a nested object property, returning an Undefined element when absent.</summary>
+    protected static JsonElement Prop(JsonElement item, string name) =>
+        item.ValueKind == JsonValueKind.Object && item.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Object
+            ? value
+            : default;
 
     protected static IReadOnlyList<string> StringArray(JsonElement item, string name) =>
         Array(item, name).Select(element => element.ValueKind == JsonValueKind.String ? element.GetString() : Text(element, ArrJsonFields.Name))
@@ -422,7 +448,7 @@ public abstract class ArrRequestProviderClient(HttpClient http, RequestProviderK
         StringArray(item, ArrJsonFields.Actors).Concat(StringArray(item, ArrJsonFields.Crew)).Concat(StringArray(item, ArrJsonFields.Members)).ToArray();
 
     protected static string? Text(JsonElement item, string name) {
-        if (!item.TryGetProperty(name, out var value)) {
+        if (item.ValueKind != JsonValueKind.Object || !item.TryGetProperty(name, out var value)) {
             return null;
         }
 
@@ -436,7 +462,7 @@ public abstract class ArrRequestProviderClient(HttpClient http, RequestProviderK
     }
 
     protected static int? Int(JsonElement item, string name) =>
-        item.TryGetProperty(name, out var value) && value.TryGetInt32(out var number) ? number : null;
+        item.ValueKind == JsonValueKind.Object && item.TryGetProperty(name, out var value) && value.TryGetInt32(out var number) ? number : null;
 
     protected static decimal? Rating(JsonElement item) {
         if (!item.TryGetProperty(ArrJsonFields.Ratings, out var ratings)) {

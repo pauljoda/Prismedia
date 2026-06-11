@@ -338,6 +338,59 @@ public sealed class RequestFeatureTests {
     }
 
     [Fact]
+    public async Task LidarrDetailLooksUpArtistByMbidPrefixAndFiltersAlbumsByEmbeddedArtist() {
+        var terms = new List<string>();
+        var handler = new FakeHttpHandler((request, body) => {
+            terms.Add(System.Web.HttpUtility.ParseQueryString(request.RequestUri!.Query)["term"] ?? string.Empty);
+            if (request.RequestUri!.AbsolutePath.EndsWith("/artist/lookup", StringComparison.Ordinal)) {
+                return Json("""[{ "foreignArtistId": "mb-artist", "artistName": "Bowie", "overview": "Artist", "images": [] }]""");
+            }
+
+            return Json("""
+                [
+                  { "foreignAlbumId": "mb-album-1", "title": "Low", "artist": { "foreignArtistId": "mb-artist", "artistName": "Bowie" } },
+                  { "foreignAlbumId": "mb-album-2", "title": "Other", "artist": { "foreignArtistId": "mb-other", "artistName": "Other Guy" } }
+                ]
+                """);
+        });
+        var client = new LidarrRequestProviderClient(new HttpClient(handler));
+
+        var detail = await client.GetDetailAsync(Instance(RequestProviderKind.Lidarr), RequestMediaKind.Artist, "mb-artist", CancellationToken.None);
+
+        Assert.Equal("lidarr:mb-artist", terms[0]);
+        Assert.Equal("Bowie", terms[1]);
+        var child = Assert.Single(detail.Children);
+        Assert.Equal("mb-album-1", child.Id);
+        Assert.Equal("Low", child.Title);
+    }
+
+    [Fact]
+    public async Task LidarrAlbumDetailLooksUpByMbidPrefixAndSurfacesArtist() {
+        string? lastTerm = null;
+        var handler = new FakeHttpHandler((request, body) => {
+            lastTerm = System.Web.HttpUtility.ParseQueryString(request.RequestUri!.Query)["term"];
+            return Json("""
+                [
+                  {
+                    "foreignAlbumId": "mb-album",
+                    "title": "Low",
+                    "releaseDate": "1977-01-14",
+                    "artist": { "foreignArtistId": "mb-artist", "artistName": "David Bowie" },
+                    "images": [{ "coverType": "cover", "remoteUrl": "https://images.test/low.jpg" }]
+                  }
+                ]
+                """);
+        });
+        var client = new LidarrRequestProviderClient(new HttpClient(handler));
+
+        var detail = await client.GetDetailAsync(Instance(RequestProviderKind.Lidarr), RequestMediaKind.Album, "mb-album", CancellationToken.None);
+
+        Assert.Equal("lidarr:mb-album", lastTerm);
+        Assert.Equal("Low", detail.Title);
+        Assert.Contains("David Bowie", detail.Tags);
+    }
+
+    [Fact]
     public async Task TestServiceReusesStoredKeyAndReturnsOptionsOnSuccess() {
         await using var db = CreateContext();
         var store = new EfRequestServiceInstanceStore(db);
