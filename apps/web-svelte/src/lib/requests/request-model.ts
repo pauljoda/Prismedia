@@ -1,6 +1,8 @@
 export type {
+  RequestCastMember,
   RequestChildOption,
   RequestDetailResponse,
+  RequestRatingValue,
   RequestHistoryEntry,
   RequestHistoryResponse,
   RequestSearchResponse,

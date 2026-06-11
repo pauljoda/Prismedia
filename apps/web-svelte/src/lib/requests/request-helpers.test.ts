@@ -163,6 +163,8 @@ function detailWithChildren(ids: string[]): RequestDetailResponse {
     tags: [],
     studios: [],
     credits: [],
+    cast: [],
+    ratings: [],
     tracks: [],
     tracked: false,
     upstreamId: null,

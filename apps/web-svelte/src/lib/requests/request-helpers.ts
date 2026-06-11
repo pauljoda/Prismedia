@@ -1,7 +1,8 @@
-import { REQUEST_MEDIA_KIND, REQUEST_PROVIDER_KIND } from "$lib/api/generated/codes";
+import { REQUEST_MEDIA_KIND, REQUEST_PROVIDER_KIND, REQUEST_RATING_SOURCE } from "$lib/api/generated/codes";
 import type { RequestMediaKindCode, RequestProviderKindCode } from "$lib/api/generated/codes";
 import type {
   RequestDetailResponse,
+  RequestRatingValue,
   RequestServiceInstanceSummary,
   RequestServiceOptionsResponse,
   RequestSubmitRequest,
@@ -41,6 +42,20 @@ export const REQUEST_KIND_LABELS_PLURAL: Record<string, string> = {
   [REQUEST_MEDIA_KIND.album]: "Albums",
   [REQUEST_MEDIA_KIND.plugin]: "Plugins",
 };
+
+/** Display names for request rating sources. */
+export const REQUEST_RATING_SOURCE_LABELS: Record<string, string> = {
+  [REQUEST_RATING_SOURCE.tmdb]: "TMDB",
+  [REQUEST_RATING_SOURCE.imdb]: "IMDb",
+  [REQUEST_RATING_SOURCE.rottenTomatoes]: "RT",
+  [REQUEST_RATING_SOURCE.metacritic]: "MC",
+};
+
+/** Formats a rating in its native scale: percent sources as "60%", ten-point as "6.9". */
+export function requestRatingDisplay(rating: RequestRatingValue): string {
+  const value = numericValue(rating.value) ?? 0;
+  return numericValue(rating.scale) === 100 ? `${Math.round(value)}%` : value.toFixed(1);
+}
 
 /** "In Radarr"-style label for items already tracked by the upstream service. */
 export function trackedLabel(source: RequestProviderKindCode): string {

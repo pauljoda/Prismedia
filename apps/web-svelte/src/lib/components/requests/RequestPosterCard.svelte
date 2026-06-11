@@ -240,14 +240,17 @@
     background: linear-gradient(180deg, rgb(20 22 26 / 0.95) 0%, rgb(13 14 17) 100%);
   }
 
+  /* Titles get up to two lines before truncating — single-line cut too much off. */
   .glass-info h3 {
+    display: -webkit-box;
     margin: 0;
     overflow: hidden;
     font-size: 0.78rem;
     font-weight: 500;
     line-height: 1.25;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
   }
 
   .subtitle {

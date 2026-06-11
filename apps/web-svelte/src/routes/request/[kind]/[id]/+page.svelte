@@ -7,14 +7,17 @@
   import type { RequestMediaKindCode, RequestProviderKindCode } from "$lib/api/generated/codes";
   import { REQUEST_MEDIA_KIND, REQUEST_PROVIDER_KIND } from "$lib/api/generated/codes";
   import RequestPosterCard from "$lib/components/requests/RequestPosterCard.svelte";
+  import RequestCastStrip from "$lib/components/requests/RequestCastStrip.svelte";
   import {
     REQUEST_KIND_LABELS,
     REQUEST_PROVIDER_LABELS,
+    REQUEST_RATING_SOURCE_LABELS,
     buildRequestSubmitPayload,
     defaultSelectedChildIds,
     inferRequestSourceForKind,
     numericValue,
     optionDefaultsForService,
+    requestRatingDisplay,
     selectDefaultService,
     thumbnailAspectForKind,
     trackedLabel,
@@ -59,8 +62,6 @@
   const serviceOptions = $derived(
     detail?.serviceOptions ?? { qualityProfiles: [], rootFolders: [], metadataProfiles: [], tags: [] },
   );
-
-  const heroBackdrop = $derived(cssUrl(detail?.backdropUrl ?? detail?.posterUrl ?? null));
 
   const isSeries = $derived(detail?.kind === REQUEST_MEDIA_KIND.series);
   const isArtist = $derived(detail?.kind === REQUEST_MEDIA_KIND.artist);
@@ -128,11 +129,6 @@
     } finally {
       loading = false;
     }
-  }
-
-  function cssUrl(value: string | null): string | null {
-    if (!value) return null;
-    return `url("${encodeURI(value).replace(/"/g, "%22")}")`;
   }
 
   async function changeService(serviceId: string) {
@@ -264,16 +260,28 @@
     </div>
   {:else if detail}
     <!-- ── Hero ── -->
-    <section
-      class="relative overflow-hidden rounded-sm border border-border-subtle bg-surface-1 bg-cover bg-center"
-      style:background-image={heroBackdrop
-        ? `linear-gradient(90deg, rgba(10,10,12,0.96), rgba(10,10,12,0.78)), ${heroBackdrop}`
-        : undefined}
-    >
-      <div class="grid gap-4 p-4 md:grid-cols-[160px_minmax(0,1fr)] md:items-end md:p-6">
+    <section class="relative overflow-hidden rounded-sm border border-border-subtle bg-surface-1">
+      {#if detail.backdropUrl}
+        <!-- The artwork fills the entire banner; scrims keep the text legible. -->
+        <img
+          src={detail.backdropUrl}
+          alt=""
+          aria-hidden="true"
+          class="absolute inset-0 h-full w-full object-cover"
+        />
+        <div
+          class="absolute inset-0"
+          style:background="linear-gradient(90deg, rgba(7,8,11,0.92) 0%, rgba(7,8,11,0.62) 40%, rgba(7,8,11,0.18) 75%, rgba(7,8,11,0.05) 100%)"
+        ></div>
+        <div
+          class="absolute inset-0"
+          style:background="linear-gradient(180deg, rgba(7,8,11,0.1) 0%, rgba(7,8,11,0.35) 60%, rgba(7,8,11,0.78) 100%)"
+        ></div>
+      {/if}
+      <div class="relative grid gap-4 p-4 md:grid-cols-[160px_minmax(0,1fr)] md:items-end md:p-6">
         {#if detail.posterUrl}
           <div
-            class="w-32 overflow-hidden rounded-xs border border-border-subtle bg-surface-2 md:w-40"
+            class="w-32 overflow-hidden rounded-xs border border-border-subtle bg-surface-2 shadow-[0_10px_30px_rgba(0,0,0,0.55)] md:w-40"
             style:aspect-ratio={thumbnailAspectForKind(detail.kind)}
           >
             <img src={detail.posterUrl} alt="" class="h-full w-full object-cover" />
@@ -289,10 +297,17 @@
                 {trackedLabel(detail.source)}{detail.monitored === false ? " · Unmonitored" : ""}
               </Badge>
             {/if}
-            {#if ratingLabel(detail.rating)}
+            {#if detail.certification}<Badge>{detail.certification}</Badge>{/if}
+            {#if detail.ratings.length > 0}
+              {#each detail.ratings as rating (rating.source)}
+                <Badge class="gap-1 font-mono" title={`${REQUEST_RATING_SOURCE_LABELS[rating.source] ?? rating.source} rating`}>
+                  <span class="text-text-muted">{REQUEST_RATING_SOURCE_LABELS[rating.source] ?? rating.source}</span>
+                  {requestRatingDisplay(rating)}
+                </Badge>
+              {/each}
+            {:else if ratingLabel(detail.rating)}
               <Badge>★ {ratingLabel(detail.rating)}</Badge>
             {/if}
-            {#if detail.certification}<Badge>{detail.certification}</Badge>{/if}
           </div>
           <h1 class="text-[1.6rem] leading-tight md:text-[2.1rem]">{detail.title}</h1>
           {#if detail.subtitle}
@@ -330,9 +345,15 @@
             </div>
           </div>
         {/if}
+        {#if detail.cast.length > 0}
+          <div class="space-y-2">
+            <h3 class="text-label text-text-muted">Cast</h3>
+            <RequestCastStrip cast={detail.cast} />
+          </div>
+        {/if}
         {#if detail.credits.length > 0}
           <div class="space-y-1.5">
-            <h3 class="text-label text-text-muted">Cast & Crew</h3>
+            <h3 class="text-label text-text-muted">{detail.cast.length > 0 ? "Crew" : "Cast & Crew"}</h3>
             <p class="text-[0.78rem] leading-relaxed text-text-secondary">
               {detail.credits.join(", ")}
             </p>
