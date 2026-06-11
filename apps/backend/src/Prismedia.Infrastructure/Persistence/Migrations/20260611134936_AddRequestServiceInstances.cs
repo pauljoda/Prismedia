@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore.Migrations;
+﻿using System;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
@@ -46,7 +47,7 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                 {
                     table.PrimaryKey("PK_request_service_credentials", x => x.id);
                     table.ForeignKey(
-                        name: "FK_request_service_credentials_request_service_instances_servic~",
+                        name: "FK_request_service_credentials_request_service_instances_servi~",
                         column: x => x.service_instance_id,
                         principalTable: "request_service_instances",
                         principalColumn: "id",
@@ -54,7 +55,7 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                 });
 
             migrationBuilder.CreateIndex(
-                name: "IX_request_service_credentials_service_instance_id_credential_key",
+                name: "IX_request_service_credentials_service_instance_id_credential_~",
                 table: "request_service_credentials",
                 columns: new[] { "service_instance_id", "credential_key" },
                 unique: true);
@@ -68,8 +69,11 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropTable(name: "request_service_credentials");
-            migrationBuilder.DropTable(name: "request_service_instances");
+            migrationBuilder.DropTable(
+                name: "request_service_credentials");
+
+            migrationBuilder.DropTable(
+                name: "request_service_instances");
         }
     }
 }
