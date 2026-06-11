@@ -117,6 +117,8 @@ public static class LidarrProtocol {
     public const string Monitor = "monitor";
     public const string MonitorAll = "all";
     public const string MonitorNone = "none";
+    /// <summary>Artist-level auto-monitoring of future albums; lookup resources default it to "all".</summary>
+    public const string MonitorNewItems = "monitorNewItems";
     public const string ReleaseDate = "releaseDate";
     public const string SearchForMissingAlbums = "searchForMissingAlbums";
     public const string Status = "status";
@@ -407,6 +409,7 @@ public sealed class LidarrRequestProviderClient(HttpClient http) : ArrRequestPro
         payload[LidarrProtocol.MetadataProfileId] = request.MetadataProfileId ?? instance.DefaultMetadataProfileId;
         payload[ArrJsonFields.RootFolderPath] = request.RootFolderPath ?? instance.DefaultRootFolderPath;
         payload[ArrJsonFields.Monitored] = request.Monitored;
+        payload[LidarrProtocol.MonitorNewItems] = request.Monitored ? LidarrProtocol.MonitorAll : LidarrProtocol.MonitorNone;
         ApplyDefaultTags(payload, instance);
         payload[ArrJsonFields.AddOptions] = new JsonObject {
             [LidarrProtocol.Monitor] = request.Monitored ? LidarrProtocol.MonitorAll : LidarrProtocol.MonitorNone,
@@ -452,6 +455,9 @@ public sealed class LidarrRequestProviderClient(HttpClient http) : ArrRequestPro
         artist[LidarrProtocol.MetadataProfileId] = request.MetadataProfileId ?? instance.DefaultMetadataProfileId;
         artist[ArrJsonFields.RootFolderPath] = request.RootFolderPath ?? instance.DefaultRootFolderPath;
         artist[ArrJsonFields.Monitored] = false;
+        // Lookup resources default monitorNewItems to "all"; left as-is, Lidarr would monitor the
+        // artist's entire discography after the refresh that follows this add — not just this album.
+        artist[LidarrProtocol.MonitorNewItems] = LidarrProtocol.MonitorNone;
         artist[ArrJsonFields.AddOptions] = new JsonObject {
             [LidarrProtocol.Monitor] = LidarrProtocol.MonitorNone,
             [LidarrProtocol.SearchForMissingAlbums] = false

@@ -522,6 +522,7 @@ public sealed class RequestFeatureTests {
                 Assert.Equal(2, artist.GetProperty("metadataProfileId").GetInt32());
                 Assert.Equal("/music", artist.GetProperty("rootFolderPath").GetString());
                 Assert.False(artist.GetProperty("monitored").GetBoolean());
+                Assert.Equal("none", artist.GetProperty("monitorNewItems").GetString());
                 Assert.Equal("none", artist.GetProperty("addOptions").GetProperty("monitor").GetString());
                 return Json("""{ "id": 77 }""");
             }
