@@ -164,6 +164,13 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.DefaultRootFolderPath).HasColumnName("default_root_folder_path").HasMaxLength(1024);
             entity.Property(row => row.DefaultQualityProfileId).HasColumnName("default_quality_profile_id");
             entity.Property(row => row.DefaultMetadataProfileId).HasColumnName("default_metadata_profile_id");
+            entity.Property(row => row.MinimumAvailability)
+                .HasColumnName("minimum_availability")
+                .HasMaxLength(32)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<RequestMinimumAvailability>())
+                .HasDefaultValue(RequestMinimumAvailability.Released)
+                .IsRequired();
+            entity.Property(row => row.DefaultTagIds).HasColumnName("default_tag_ids");
             entity.Property(row => row.SearchOnRequest).HasColumnName("search_on_request");
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");

@@ -19,6 +19,7 @@ public static class ArrJsonFields {
     public const string Genres = "genres";
     public const string Id = "id";
     public const string Images = "images";
+    public const string Label = "label";
     public const string Members = "members";
     public const string Monitored = "monitored";
     public const string Name = "name";
@@ -36,6 +37,7 @@ public static class ArrJsonFields {
     public const string SeasonNumber = "seasonNumber";
     public const string SeriesType = "seriesType";
     public const string Studios = "studios";
+    public const string Tags = "tags";
     public const string Title = "title";
     public const string Url = "url";
     public const string Value = "value";
@@ -45,7 +47,6 @@ public static class ArrJsonFields {
 public static class RadarrProtocol {
     public const string TmdbId = "tmdbId";
     public const string MinimumAvailability = "minimumAvailability";
-    public const string MinimumAvailabilityReleased = "released";
     public const string Monitor = "monitor";
     public const string MonitorMovieOnly = "movieOnly";
     public const string MonitorNone = "none";
@@ -84,6 +85,7 @@ public static class ArrOptionEndpoints {
     public const string MetadataProfile = "metadataprofile";
     public const string RootFolder = "rootfolder";
     public const string SystemStatus = "system/status";
+    public const string Tag = "tag";
 }
 
 public static class ArrImageTypes {
@@ -119,7 +121,8 @@ public sealed class RadarrRequestProviderClient(HttpClient http) : ArrRequestPro
         payload[ArrJsonFields.QualityProfileId] = request.QualityProfileId ?? instance.DefaultQualityProfileId;
         payload[ArrJsonFields.RootFolderPath] = request.RootFolderPath ?? instance.DefaultRootFolderPath;
         payload[ArrJsonFields.Monitored] = request.Monitored;
-        payload[RadarrProtocol.MinimumAvailability] = RadarrProtocol.MinimumAvailabilityReleased;
+        payload[RadarrProtocol.MinimumAvailability] = instance.MinimumAvailability.ToCode();
+        ApplyDefaultTags(payload, instance);
         payload[ArrJsonFields.AddOptions] = new JsonObject {
             [RadarrProtocol.Monitor] = request.Monitored ? RadarrProtocol.MonitorMovieOnly : RadarrProtocol.MonitorNone,
             [RadarrProtocol.SearchForMovie] = request.SearchNow
@@ -182,6 +185,7 @@ public sealed class SonarrRequestProviderClient(HttpClient http) : ArrRequestPro
         }
         payload[ArrJsonFields.SeasonFolder] = true;
         payload[ArrJsonFields.Seasons] = seasons;
+        ApplyDefaultTags(payload, instance);
         payload[ArrJsonFields.AddOptions] = new JsonObject {
             [SonarrProtocol.SearchForMissingEpisodes] = request.SearchNow
         };
@@ -232,6 +236,7 @@ public sealed class LidarrRequestProviderClient(HttpClient http) : ArrRequestPro
         payload[LidarrProtocol.MetadataProfileId] = request.MetadataProfileId ?? instance.DefaultMetadataProfileId;
         payload[ArrJsonFields.RootFolderPath] = request.RootFolderPath ?? instance.DefaultRootFolderPath;
         payload[ArrJsonFields.Monitored] = request.Monitored;
+        ApplyDefaultTags(payload, instance);
         payload[ArrJsonFields.AddOptions] = new JsonObject {
             [LidarrProtocol.Monitor] = request.Monitored ? LidarrProtocol.MonitorAll : LidarrProtocol.MonitorNone,
             [LidarrProtocol.SearchForMissingAlbums] = request.SearchNow
@@ -285,6 +290,7 @@ public abstract class ArrRequestProviderClient(HttpClient http, RequestProviderK
     public async Task<RequestServiceOptionsResponse> GetOptionsAsync(RequestServiceInstanceDetail instance, CancellationToken cancellationToken) {
         var profiles = await GetArrayAsync(instance, $"{ApiPath}/{ArrOptionEndpoints.QualityProfile}", cancellationToken);
         var roots = await GetArrayAsync(instance, $"{ApiPath}/{ArrOptionEndpoints.RootFolder}", cancellationToken);
+        var tags = await GetArrayAsync(instance, $"{ApiPath}/{ArrOptionEndpoints.Tag}", cancellationToken);
         var metadataProfiles = Kind == RequestProviderKind.Lidarr
             ? await GetArrayAsync(instance, $"{ApiPath}/{ArrOptionEndpoints.MetadataProfile}", cancellationToken)
             : [];
@@ -297,6 +303,9 @@ public abstract class ArrRequestProviderClient(HttpClient http, RequestProviderK
                 .ToArray(),
             metadataProfiles.Select(profile => new RequestServiceOption(Text(profile, ArrJsonFields.Id) ?? string.Empty, Text(profile, ArrJsonFields.Name) ?? string.Empty, null))
                 .Where(option => !string.IsNullOrWhiteSpace(option.Id))
+                .ToArray(),
+            tags.Select(tag => new RequestServiceOption(Text(tag, ArrJsonFields.Id) ?? string.Empty, Text(tag, ArrJsonFields.Label) ?? string.Empty, null))
+                .Where(option => !string.IsNullOrWhiteSpace(option.Id) && !string.IsNullOrWhiteSpace(option.Name))
                 .ToArray());
     }
 
@@ -338,6 +347,19 @@ public abstract class ArrRequestProviderClient(HttpClient http, RequestProviderK
     protected static RequestSubmitResponse Submitted(JsonElement response) =>
         new(true, Text(response, ArrJsonFields.Id), null);
 
+    /// <summary>Applies the service's default Arr tag ids to an add payload, merging with any tags the lookup resource already carries.</summary>
+    protected static void ApplyDefaultTags(JsonObject payload, RequestServiceInstanceDetail instance) {
+        if (instance.DefaultTagIds.Count == 0) {
+            return;
+        }
+
+        var existing = payload[ArrJsonFields.Tags] is JsonArray current
+            ? current.Select(node => node?.GetValue<int>() ?? 0).Where(value => value > 0).ToHashSet()
+            : [];
+        existing.UnionWith(instance.DefaultTagIds);
+        payload[ArrJsonFields.Tags] = new JsonArray(existing.Order().Select(value => (JsonNode)value).ToArray());
+    }
+
     protected static RequestSearchResult MapMovie(Guid serviceId, JsonElement item) =>
         new(serviceId, RequestProviderKind.Radarr, RequestMediaKind.Movie, Text(item, RadarrProtocol.TmdbId) ?? string.Empty,
             Text(item, ArrJsonFields.Title) ?? string.Empty, Int(item, ArrJsonFields.Year), Text(item, ArrJsonFields.Overview), Image(item, ArrImageTypes.Poster),
@@ -366,7 +388,7 @@ public abstract class ArrRequestProviderClient(HttpClient http, RequestProviderK
             StringArray(item, ArrJsonFields.Studios).Concat(StringArray(item, ArrJsonFields.Networks)).ToArray(),
             Credits(item), children, EmptyOptions);
 
-    protected static RequestServiceOptionsResponse EmptyOptions { get; } = new([], [], []);
+    protected static RequestServiceOptionsResponse EmptyOptions { get; } = new([], [], [], []);
 
     protected static JsonObject ToObject(JsonElement item) =>
         JsonNode.Parse(item.GetRawText())?.AsObject() ?? [];

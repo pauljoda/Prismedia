@@ -45,7 +45,7 @@ public static class DependencyInjection {
         services.AddScoped<FilesService>();
         services.AddScoped<RequestSearchService>();
         services.AddScoped<RequestDetailService>();
-        services.AddScoped<RequestServiceOptionsService>();
+        services.AddScoped<RequestServiceTestService>();
         services.AddScoped<RequestSubmitService>();
         services.AddScoped<IAudioStreamService, AudioStreamService>();
         services.AddSingleton<IIdentifyApplyProgressStore, InMemoryIdentifyApplyProgressStore>();

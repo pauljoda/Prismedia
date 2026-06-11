@@ -36,6 +36,8 @@ public sealed class RequestEndpointTests {
             "/movies",
             4,
             null,
+            RequestMinimumAvailability.Released,
+            [],
             true,
             false),
             jsonOptions);
@@ -43,8 +45,10 @@ public sealed class RequestEndpointTests {
         Assert.True(save.IsSuccessStatusCode, saveText);
         var service = System.Text.Json.JsonSerializer.Deserialize<RequestServiceInstanceSummary>(saveText, jsonOptions);
         var services = await client.GetFromJsonAsync<IReadOnlyList<RequestServiceInstanceSummary>>("/api/requests/services", jsonOptions);
-        var options = await client.GetFromJsonAsync<RequestServiceOptionsResponse>($"/api/requests/services/{service!.Id}/options", jsonOptions);
-        var test = await client.PostAsync($"/api/requests/services/{service.Id}/test", null);
+        var test = await client.PostAsJsonAsync("/api/requests/services/test", new RequestServiceTestRequest(
+            service!.Id, RequestProviderKind.Radarr, "http://radarr.test", null), jsonOptions);
+        var testResult = System.Text.Json.JsonSerializer.Deserialize<RequestServiceTestResponse>(
+            await test.Content.ReadAsStringAsync(), jsonOptions);
         var search = await client.GetFromJsonAsync<RequestSearchResponse>("/api/requests/search?query=blade&kinds=movie&sources=radarr", jsonOptions);
         var detailResponse = await client.GetAsync($"/api/requests/details/radarr/movie/424?serviceId={service.Id}");
         var detailText = await detailResponse.Content.ReadAsStringAsync();
@@ -67,9 +71,11 @@ public sealed class RequestEndpointTests {
 
         Assert.NotNull(services);
         Assert.Single(services);
-        Assert.Null(services[0].ApiKey);
-        Assert.Equal("HD", Assert.Single(options!.QualityProfiles).Name);
         Assert.True(test.IsSuccessStatusCode);
+        Assert.NotNull(testResult);
+        Assert.True(testResult.Connected);
+        Assert.Equal("HD", Assert.Single(testResult.Options!.QualityProfiles).Name);
+        Assert.Equal("prismedia", Assert.Single(testResult.Options.Tags).Name);
         Assert.NotNull(search);
         Assert.Equal("Blade Runner", Assert.Single(search.Results).Title);
         Assert.NotNull(detail);
@@ -97,9 +103,9 @@ public sealed class RequestEndpointTests {
         jsonOptions.Converters.Add(new CodecJsonConverterFactory());
 
         var missingName = await client.PostAsJsonAsync("/api/requests/services", new RequestServiceInstanceSaveRequest(
-            null, RequestProviderKind.Radarr, "  ", "http://radarr.test", "secret", null, null, null, true, false), jsonOptions);
+            null, RequestProviderKind.Radarr, "  ", "http://radarr.test", "secret", null, null, null, RequestMinimumAvailability.Released, [], true, false), jsonOptions);
         var relativeUrl = await client.PostAsJsonAsync("/api/requests/services", new RequestServiceInstanceSaveRequest(
-            null, RequestProviderKind.Radarr, "Movies", "radarr:7878", "secret", null, null, null, true, false), jsonOptions);
+            null, RequestProviderKind.Radarr, "Movies", "radarr:7878", "secret", null, null, null, RequestMinimumAvailability.Released, [], true, false), jsonOptions);
 
         Assert.Equal(System.Net.HttpStatusCode.BadRequest, missingName.StatusCode);
         Assert.Equal(System.Net.HttpStatusCode.BadRequest, relativeUrl.StatusCode);
@@ -131,6 +137,8 @@ public sealed class RequestEndpointTests {
             "/movies",
             4,
             null,
+            RequestMinimumAvailability.Released,
+            [],
             true,
             false),
             jsonOptions);
@@ -182,6 +190,8 @@ public sealed class RequestEndpointTests {
                 request.DefaultRootFolderPath,
                 request.DefaultQualityProfileId,
                 request.DefaultMetadataProfileId,
+                request.MinimumAvailability,
+                request.DefaultTagIds,
                 request.SearchOnRequest,
                 !string.IsNullOrWhiteSpace(request.ApiKey),
                 request.ApiKey);
@@ -194,7 +204,8 @@ public sealed class RequestEndpointTests {
 
         private static RequestServiceInstanceSummary ToSummary(RequestServiceInstanceDetail detail) =>
             new(detail.Id, detail.Kind, detail.DisplayName, detail.BaseUrl, detail.IsDefault, detail.DefaultRootFolderPath,
-                detail.DefaultQualityProfileId, detail.DefaultMetadataProfileId, detail.SearchOnRequest, detail.HasApiKey, null);
+                detail.DefaultQualityProfileId, detail.DefaultMetadataProfileId, detail.MinimumAvailability, detail.DefaultTagIds,
+                detail.SearchOnRequest, detail.HasApiKey);
     }
 
     private sealed class FakeRequestProviderClient : IRequestProviderClient {
@@ -206,7 +217,7 @@ public sealed class RequestEndpointTests {
             ]);
 
         public Task<RequestDetailResponse> GetDetailAsync(RequestServiceInstanceDetail instance, RequestMediaKind kind, string externalId, CancellationToken cancellationToken) =>
-            Task.FromResult(new RequestDetailResponse(RequestProviderKind.Radarr, RequestMediaKind.Movie, externalId, "Blade Runner", 1982, null, null, null, null, null, null, [], [], [], [], new RequestServiceOptionsResponse([], [], [])));
+            Task.FromResult(new RequestDetailResponse(RequestProviderKind.Radarr, RequestMediaKind.Movie, externalId, "Blade Runner", 1982, null, null, null, null, null, null, [], [], [], [], new RequestServiceOptionsResponse([], [], [], [])));
 
         public Task<RequestSubmitResponse> SubmitAsync(RequestServiceInstanceDetail instance, RequestDetailResponse detail, RequestSubmitRequest request, CancellationToken cancellationToken) =>
             Task.FromResult(new RequestSubmitResponse(true, "12", null));
@@ -218,6 +229,7 @@ public sealed class RequestEndpointTests {
             Task.FromResult(new RequestServiceOptionsResponse(
                 [new RequestServiceOption("4", "HD", null)],
                 [new RequestServiceOption("/movies", "/movies", "/movies")],
-                []));
+                [],
+                [new RequestServiceOption("1", "prismedia", null)]));
     }
 }

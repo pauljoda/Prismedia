@@ -66,6 +66,8 @@ public sealed class EfRequestServiceInstanceStore(PrismediaDbContext db) : IRequ
         row.DefaultRootFolderPath = string.IsNullOrWhiteSpace(request.DefaultRootFolderPath) ? null : request.DefaultRootFolderPath.Trim();
         row.DefaultQualityProfileId = request.DefaultQualityProfileId;
         row.DefaultMetadataProfileId = request.DefaultMetadataProfileId;
+        row.MinimumAvailability = request.MinimumAvailability;
+        row.DefaultTagIds = request.DefaultTagIds.Distinct().Order().ToArray();
         row.SearchOnRequest = request.SearchOnRequest;
         row.IsDefault = shouldBeDefault;
         row.UpdatedAt = now;
@@ -141,9 +143,11 @@ public sealed class EfRequestServiceInstanceStore(PrismediaDbContext db) : IRequ
 
     private static RequestServiceInstanceSummary ToSummary(RequestServiceInstanceDetail detail) =>
         new(detail.Id, detail.Kind, detail.DisplayName, detail.BaseUrl, detail.IsDefault, detail.DefaultRootFolderPath,
-            detail.DefaultQualityProfileId, detail.DefaultMetadataProfileId, detail.SearchOnRequest, detail.HasApiKey, null);
+            detail.DefaultQualityProfileId, detail.DefaultMetadataProfileId, detail.MinimumAvailability, detail.DefaultTagIds,
+            detail.SearchOnRequest, detail.HasApiKey);
 
     private static RequestServiceInstanceDetail ToDetail(RequestServiceInstanceRow row, string? apiKey) =>
         new(row.Id, row.Kind, row.DisplayName, row.BaseUrl, row.IsDefault, row.DefaultRootFolderPath,
-            row.DefaultQualityProfileId, row.DefaultMetadataProfileId, row.SearchOnRequest, !string.IsNullOrEmpty(apiKey), apiKey);
+            row.DefaultQualityProfileId, row.DefaultMetadataProfileId, row.MinimumAvailability, row.DefaultTagIds,
+            row.SearchOnRequest, !string.IsNullOrEmpty(apiKey), apiKey);
 }

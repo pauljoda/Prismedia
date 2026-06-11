@@ -105,20 +105,46 @@ public sealed class RequestDetailService(IRequestServiceInstanceStore store, IRe
     }
 }
 
-/// <summary>Loads service-level request provider options and health checks.</summary>
-public sealed class RequestServiceOptionsService(IRequestServiceInstanceStore store, IRequestProviderClientFactory clients) {
-    public async Task<RequestServiceOptionsResponse?> GetOptionsAsync(Guid serviceId, CancellationToken cancellationToken) {
-        var instance = await store.GetAsync(serviceId, cancellationToken);
-        return instance is null
-            ? null
-            : await clients.Get(instance.Kind).GetOptionsAsync(instance, cancellationToken);
-    }
+/// <summary>
+/// Tests connectivity for a request service configuration that may not be saved yet and, on
+/// success, pulls the selectable options (root folders, profiles, tags) from the service.
+/// A successful test is the gate for saving a service in the settings flow.
+/// </summary>
+public sealed class RequestServiceTestService(IRequestServiceInstanceStore store, IRequestProviderClientFactory clients) {
+    public async Task<RequestServiceTestResponse> TestAsync(RequestServiceTestRequest request, CancellationToken cancellationToken) {
+        var apiKey = request.ApiKey;
+        if (string.IsNullOrWhiteSpace(apiKey) && request.Id is { } id) {
+            var stored = await store.GetAsync(id, cancellationToken);
+            apiKey = stored?.ApiKey;
+        }
 
-    public async Task<RequestConnectionTestResponse?> TestAsync(Guid serviceId, CancellationToken cancellationToken) {
-        var instance = await store.GetAsync(serviceId, cancellationToken);
-        return instance is null
-            ? null
-            : await clients.Get(instance.Kind).TestAsync(instance, cancellationToken);
+        var instance = new RequestServiceInstanceDetail(
+            request.Id ?? Guid.Empty,
+            request.Kind,
+            string.Empty,
+            request.BaseUrl,
+            false,
+            null,
+            null,
+            null,
+            RequestMinimumAvailability.Released,
+            [],
+            true,
+            !string.IsNullOrWhiteSpace(apiKey),
+            apiKey);
+
+        var client = clients.Get(request.Kind);
+        var connection = await client.TestAsync(instance, cancellationToken);
+        if (!connection.Connected) {
+            return new RequestServiceTestResponse(false, connection.Message, null);
+        }
+
+        try {
+            var options = await client.GetOptionsAsync(instance, cancellationToken);
+            return new RequestServiceTestResponse(true, connection.Message, options);
+        } catch (Exception ex) when (ex is not OperationCanceledException) {
+            return new RequestServiceTestResponse(false, $"Connected, but loading options failed: {ex.Message}", null);
+        }
     }
 }
 

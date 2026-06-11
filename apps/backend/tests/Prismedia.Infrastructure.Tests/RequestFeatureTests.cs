@@ -42,6 +42,8 @@ public sealed class RequestFeatureTests {
             null,
             null,
             null,
+            RequestMinimumAvailability.Released,
+            [],
             true,
             false),
             CancellationToken.None);
@@ -55,6 +57,8 @@ public sealed class RequestFeatureTests {
             null,
             null,
             null,
+            RequestMinimumAvailability.Released,
+            [],
             true,
             true),
             CancellationToken.None);
@@ -65,10 +69,7 @@ public sealed class RequestFeatureTests {
         Assert.True(second.IsDefault);
         Assert.False(services.Single(service => service.Id == first.Id).IsDefault);
         Assert.True(services.Single(service => service.Id == second.Id).IsDefault);
-        Assert.All(services, service => {
-            Assert.True(service.HasApiKey);
-            Assert.Null(service.ApiKey);
-        });
+        Assert.All(services, service => Assert.True(service.HasApiKey));
     }
 
     [Fact]
@@ -84,6 +85,8 @@ public sealed class RequestFeatureTests {
             null,
             null,
             null,
+            RequestMinimumAvailability.Released,
+            [],
             true,
             false),
             CancellationToken.None);
@@ -97,12 +100,13 @@ public sealed class RequestFeatureTests {
             "/movies",
             4,
             null,
+            RequestMinimumAvailability.Released,
+            [],
             true,
             true),
             CancellationToken.None);
 
         Assert.True(edited.HasApiKey);
-        Assert.Null(edited.ApiKey);
     }
 
     [Fact]
@@ -218,6 +222,8 @@ public sealed class RequestFeatureTests {
             Assert.Equal(7, document.RootElement.GetProperty("qualityProfileId").GetInt32());
             Assert.Equal("/movies", document.RootElement.GetProperty("rootFolderPath").GetString());
             Assert.True(document.RootElement.GetProperty("monitored").GetBoolean());
+            Assert.Equal(RequestMinimumAvailability.Released.ToCode(), document.RootElement.GetProperty("minimumAvailability").GetString());
+            Assert.Equal([3, 9], document.RootElement.GetProperty("tags").EnumerateArray().Select(tag => tag.GetInt32()).ToArray());
             Assert.True(document.RootElement.GetProperty("addOptions").GetProperty("searchForMovie").GetBoolean());
             return Json("""{ "id": 12 }""");
         });
@@ -225,7 +231,7 @@ public sealed class RequestFeatureTests {
         var detail = await client.GetDetailAsync(Instance(RequestProviderKind.Radarr), RequestMediaKind.Movie, "424", CancellationToken.None);
 
         var response = await client.SubmitAsync(
-            Instance(RequestProviderKind.Radarr),
+            Instance(RequestProviderKind.Radarr, [9, 3]),
             detail,
             new RequestSubmitRequest(Guid.NewGuid(), RequestProviderKind.Radarr, RequestMediaKind.Movie, "424", "Blade Runner", 7, "/movies", null, true, true, []),
             CancellationToken.None);
@@ -239,6 +245,7 @@ public sealed class RequestFeatureTests {
             "/api/v1/qualityprofile" => Json("""[{ "id": 1, "name": "Lossless" }]"""),
             "/api/v1/metadataprofile" => Json("""[{ "id": 2, "name": "Standard Metadata" }]"""),
             "/api/v1/rootfolder" => Json("""[{ "path": "/music", "freeSpace": 123 }]"""),
+            "/api/v1/tag" => Json("""[{ "id": 7, "label": "prismedia" }]"""),
             _ => throw new InvalidOperationException(request.RequestUri.AbsolutePath)
         });
         var client = new LidarrRequestProviderClient(new HttpClient(handler));
@@ -248,6 +255,7 @@ public sealed class RequestFeatureTests {
         Assert.Equal("Lossless", Assert.Single(options.QualityProfiles).Name);
         Assert.Equal("/music", Assert.Single(options.RootFolders).Path);
         Assert.Equal("Standard Metadata", Assert.Single(options.MetadataProfiles).Name);
+        Assert.Equal("prismedia", Assert.Single(options.Tags).Name);
     }
 
     [Fact]
@@ -281,7 +289,7 @@ public sealed class RequestFeatureTests {
 
         var detail = new RequestDetailResponse(RequestProviderKind.Lidarr, RequestMediaKind.Artist, "mb-artist", "Bowie", null, null, null, null, null, null, null, [], [], [], [
             new RequestChildOption("9", "Low", RequestMediaKind.Album, true, null, null, null)
-        ], new RequestServiceOptionsResponse([], [], []));
+        ], new RequestServiceOptionsResponse([], [], [], []));
         await client.SubmitAsync(
             Instance(RequestProviderKind.Lidarr),
             detail,
@@ -329,8 +337,57 @@ public sealed class RequestFeatureTests {
             CancellationToken.None));
     }
 
-    private static RequestServiceInstanceDetail Instance(RequestProviderKind kind) =>
-        new(Guid.NewGuid(), kind, "Test", "http://arr.test", true, null, null, null, true, true, kind.ToCode() + "-key");
+    [Fact]
+    public async Task TestServiceReusesStoredKeyAndReturnsOptionsOnSuccess() {
+        await using var db = CreateContext();
+        var store = new EfRequestServiceInstanceStore(db);
+        var created = await store.SaveAsync(new RequestServiceInstanceSaveRequest(
+            null, RequestProviderKind.Radarr, "Movies", "http://radarr.test", "stored-key", null, null, null,
+            RequestMinimumAvailability.Released, [], true, false), CancellationToken.None);
+
+        string? seenKey = null;
+        var handler = new FakeHttpHandler((request, body) => {
+            seenKey = request.Headers.TryGetValues(RequestProviderHttp.ApiKeyHeader, out var values) ? values.Single() : null;
+            return request.RequestUri!.AbsolutePath switch {
+                "/api/v3/system/status" => Json("{}"),
+                "/api/v3/qualityprofile" => Json("""[{ "id": 1, "name": "HD" }]"""),
+                "/api/v3/rootfolder" => Json("""[{ "path": "/movies" }]"""),
+                "/api/v3/tag" => Json("[]"),
+                _ => throw new InvalidOperationException(request.RequestUri.AbsolutePath)
+            };
+        });
+        var clients = new RequestProviderClientFactory([new RadarrRequestProviderClient(new HttpClient(handler))]);
+        var tester = new RequestServiceTestService(store, clients);
+
+        var response = await tester.TestAsync(
+            new RequestServiceTestRequest(created.Id, RequestProviderKind.Radarr, "http://radarr.test", null),
+            CancellationToken.None);
+
+        Assert.True(response.Connected);
+        Assert.Equal("stored-key", seenKey);
+        Assert.Equal("HD", Assert.Single(response.Options!.QualityProfiles).Name);
+        Assert.Equal("/movies", Assert.Single(response.Options.RootFolders).Path);
+    }
+
+    [Fact]
+    public async Task TestServiceReportsFailureWhenConnectionFails() {
+        await using var db = CreateContext();
+        var store = new EfRequestServiceInstanceStore(db);
+        var handler = new FakeHttpHandler((request, body) => new HttpResponseMessage(HttpStatusCode.Unauthorized));
+        var clients = new RequestProviderClientFactory([new RadarrRequestProviderClient(new HttpClient(handler))]);
+        var tester = new RequestServiceTestService(store, clients);
+
+        var response = await tester.TestAsync(
+            new RequestServiceTestRequest(null, RequestProviderKind.Radarr, "http://radarr.test", "bad-key"),
+            CancellationToken.None);
+
+        Assert.False(response.Connected);
+        Assert.Null(response.Options);
+    }
+
+    private static RequestServiceInstanceDetail Instance(RequestProviderKind kind, int[]? defaultTagIds = null) =>
+        new(Guid.NewGuid(), kind, "Test", "http://arr.test", true, null, null, null, RequestMinimumAvailability.Released,
+            defaultTagIds ?? [], true, true, kind.ToCode() + "-key");
 
     private static PrismediaDbContext CreateContext() =>
         new(new DbContextOptionsBuilder<PrismediaDbContext>()

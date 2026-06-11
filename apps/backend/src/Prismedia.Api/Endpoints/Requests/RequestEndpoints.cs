@@ -55,33 +55,17 @@ public static class RequestEndpoints {
             .Produces(StatusCodes.Status204NoContent)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
-        group.MapGet("/services/{id:guid}/options", async (
-            Guid id,
-            RequestServiceOptionsService options,
-            CancellationToken cancellationToken) => {
-                var response = await options.GetOptionsAsync(id, cancellationToken);
-                return response is null
-                    ? Results.NotFound(new ApiProblem(ApiProblemCodes.NotFound, "Request service instance was not found."))
-                    : Results.Ok(response);
-            })
-            .WithName("GetRequestServiceOptions")
-            .WithSummary("Gets selectable quality profile, root folder, and metadata profile options for a request service.")
-            .Produces<RequestServiceOptionsResponse>()
-            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
-
-        group.MapPost("/services/{id:guid}/test", async (
-            Guid id,
-            RequestServiceOptionsService options,
-            CancellationToken cancellationToken) => {
-                var response = await options.TestAsync(id, cancellationToken);
-                return response is null
-                    ? Results.NotFound(new ApiProblem(ApiProblemCodes.NotFound, "Request service instance was not found."))
-                    : Results.Ok(response);
-            })
+        group.MapPost("/services/test", async (
+            RequestServiceTestRequest request,
+            RequestServiceTestService tester,
+            CancellationToken cancellationToken) =>
+            ValidateBaseUrl(request.BaseUrl) is { } problem
+                ? Results.BadRequest(problem)
+                : Results.Ok(await tester.TestAsync(request, cancellationToken)))
             .WithName("TestRequestService")
-            .WithSummary("Tests connectivity to a configured request service instance.")
-            .Produces<RequestConnectionTestResponse>()
-            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+            .WithSummary("Tests connectivity for a request service configuration and returns its selectable options on success. A successful test gates saving the service.")
+            .Produces<RequestServiceTestResponse>()
+            .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
 
         group.MapGet("/search", (
             string query,
@@ -142,7 +126,11 @@ public static class RequestEndpoints {
             return new ApiProblem(ApiProblemCodes.RequestServiceInvalid, "A display name is required.");
         }
 
-        if (!Uri.TryCreate(request.BaseUrl, UriKind.Absolute, out var baseUrl) ||
+        return ValidateBaseUrl(request.BaseUrl);
+    }
+
+    private static ApiProblem? ValidateBaseUrl(string value) {
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var baseUrl) ||
             (baseUrl.Scheme != Uri.UriSchemeHttp && baseUrl.Scheme != Uri.UriSchemeHttps)) {
             return new ApiProblem(ApiProblemCodes.RequestServiceInvalid, "The base URL must be an absolute http or https URL.");
         }

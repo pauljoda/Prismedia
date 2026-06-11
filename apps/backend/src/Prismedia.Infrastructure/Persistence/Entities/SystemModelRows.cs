@@ -92,6 +92,8 @@ public sealed class RequestServiceInstanceRow {
     public string? DefaultRootFolderPath { get; set; }
     public int? DefaultQualityProfileId { get; set; }
     public int? DefaultMetadataProfileId { get; set; }
+    public RequestMinimumAvailability MinimumAvailability { get; set; } = RequestMinimumAvailability.Released;
+    public int[] DefaultTagIds { get; set; } = [];
     public bool SearchOnRequest { get; set; } = true;
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }

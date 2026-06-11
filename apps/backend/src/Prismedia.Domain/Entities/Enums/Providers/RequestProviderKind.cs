@@ -22,6 +22,23 @@ public enum RequestProviderKind {
 }
 
 /// <summary>
+/// Closed set of Radarr minimum-availability gates applied when a movie request is added.
+/// </summary>
+public enum RequestMinimumAvailability {
+    /// <summary>Add the movie as soon as it is announced.</summary>
+    [Code("announced")]
+    Announced,
+
+    /// <summary>Add the movie once it is in cinemas.</summary>
+    [Code("inCinemas")]
+    InCinemas,
+
+    /// <summary>Add the movie once it has a physical or digital release.</summary>
+    [Code("released")]
+    Released
+}
+
+/// <summary>
 /// Closed set of media categories exposed by the request workflow.
 /// </summary>
 public enum RequestMediaKind {
