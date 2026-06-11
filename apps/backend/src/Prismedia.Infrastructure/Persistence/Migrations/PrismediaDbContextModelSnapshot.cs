@@ -2143,6 +2143,103 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                     b.ToTable("provider_credentials", (string)null);
                 });
 
+            modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.RequestServiceCredentialRow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CredentialKey")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("credential_key");
+
+                    b.Property<string>("EncryptedValue")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("encrypted_value");
+
+                    b.Property<Guid>("ServiceInstanceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("service_instance_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ServiceInstanceId", "CredentialKey")
+                        .IsUnique();
+
+                    b.ToTable("request_service_credentials", (string)null);
+                });
+
+            modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.RequestServiceInstanceRow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("BaseUrl")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
+                        .HasColumnName("base_url");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<int?>("DefaultMetadataProfileId")
+                        .HasColumnType("integer")
+                        .HasColumnName("default_metadata_profile_id");
+
+                    b.Property<int?>("DefaultQualityProfileId")
+                        .HasColumnType("integer")
+                        .HasColumnName("default_quality_profile_id");
+
+                    b.Property<string>("DefaultRootFolderPath")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
+                        .HasColumnName("default_root_folder_path");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("display_name");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_default");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("kind");
+
+                    b.Property<bool>("SearchOnRequest")
+                        .HasColumnType("boolean")
+                        .HasColumnName("search_on_request");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Kind", "IsDefault");
+
+                    b.ToTable("request_service_instances", (string)null);
+                });
+
             modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.ScannedFileRow", b =>
                 {
                     b.Property<Guid>("LibraryRootId")
@@ -2691,6 +2788,15 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                     b.HasOne("Prismedia.Infrastructure.Persistence.Entities.ProviderConfigRow", null)
                         .WithMany()
                         .HasForeignKey("ProviderConfigId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.RequestServiceCredentialRow", b =>
+                {
+                    b.HasOne("Prismedia.Infrastructure.Persistence.Entities.RequestServiceInstanceRow", null)
+                        .WithMany()
+                        .HasForeignKey("ServiceInstanceId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

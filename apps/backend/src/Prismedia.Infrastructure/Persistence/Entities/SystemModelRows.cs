@@ -83,6 +83,29 @@ public sealed class ProviderCredentialRow {
     public DateTimeOffset UpdatedAt { get; set; }
 }
 
+public sealed class RequestServiceInstanceRow {
+    public Guid Id { get; set; }
+    public RequestProviderKind Kind { get; set; } = RequestProviderKind.Radarr;
+    public string DisplayName { get; set; } = string.Empty;
+    public string BaseUrl { get; set; } = string.Empty;
+    public bool IsDefault { get; set; }
+    public string? DefaultRootFolderPath { get; set; }
+    public int? DefaultQualityProfileId { get; set; }
+    public int? DefaultMetadataProfileId { get; set; }
+    public bool SearchOnRequest { get; set; } = true;
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
+public sealed class RequestServiceCredentialRow {
+    public Guid Id { get; set; }
+    public Guid ServiceInstanceId { get; set; }
+    public string CredentialKey { get; set; } = string.Empty;
+    public string EncryptedValue { get; set; } = string.Empty;
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
 public sealed class IdentifyResultRow {
     public Guid Id { get; set; }
     public Guid EntityId { get; set; }

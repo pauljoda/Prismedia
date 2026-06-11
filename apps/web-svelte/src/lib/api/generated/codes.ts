@@ -195,6 +195,25 @@ export const FILE_SOURCE_KIND = {
 
 export type FileSourceKindCode = (typeof FILE_SOURCE_KIND)[keyof typeof FILE_SOURCE_KIND];
 
+export const REQUEST_PROVIDER_KIND = {
+  radarr: "radarr",
+  sonarr: "sonarr",
+  lidarr: "lidarr",
+  plugin: "plugin",
+} as const;
+
+export type RequestProviderKindCode = (typeof REQUEST_PROVIDER_KIND)[keyof typeof REQUEST_PROVIDER_KIND];
+
+export const REQUEST_MEDIA_KIND = {
+  movie: "movie",
+  series: "series",
+  artist: "artist",
+  album: "album",
+  plugin: "plugin",
+} as const;
+
+export type RequestMediaKindCode = (typeof REQUEST_MEDIA_KIND)[keyof typeof REQUEST_MEDIA_KIND];
+
 export const CAPABILITY_KIND = {
   classification: "classification",
   dates: "dates",

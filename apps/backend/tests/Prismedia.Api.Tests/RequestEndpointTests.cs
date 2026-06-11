@@ -1,0 +1,136 @@
+using System.Net.Http.Json;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
+using Prismedia.Application.Requests;
+using Prismedia.Contracts.Requests;
+using Prismedia.Domain.Entities;
+using Prismedia.Infrastructure.Serialization;
+
+namespace Prismedia.Api.Tests;
+
+public sealed class RequestEndpointTests {
+    [Fact]
+    public async Task RequestEndpointsManageServicesSearchAndSubmit() {
+        using var factory = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(builder => {
+                builder.ConfigureServices(services => {
+                    services.AddSingleton<IRequestServiceInstanceStore, FakeRequestServiceInstanceStore>();
+                    services.AddSingleton<FakeRequestProviderClient>();
+                    services.AddSingleton<IRequestProviderClient>(provider => provider.GetRequiredService<FakeRequestProviderClient>());
+                    services.AddSingleton<IRequestProviderClientFactory, FakeRequestProviderClientFactory>();
+                });
+            })
+            .WithTestAuth();
+        using var client = factory.CreateAuthenticatedClient();
+        var jsonOptions = new System.Text.Json.JsonSerializerOptions {
+            PropertyNameCaseInsensitive = true
+        };
+        jsonOptions.Converters.Add(new CodecJsonConverterFactory());
+
+        var save = await client.PostAsJsonAsync("/api/requests/services", new RequestServiceInstanceSaveRequest(
+            null,
+            RequestProviderKind.Radarr,
+            "Movies",
+            "http://radarr.test",
+            "secret",
+            "/movies",
+            4,
+            null,
+            true,
+            false),
+            jsonOptions);
+        var saveText = await save.Content.ReadAsStringAsync();
+        Assert.True(save.IsSuccessStatusCode, saveText);
+        var service = System.Text.Json.JsonSerializer.Deserialize<RequestServiceInstanceSummary>(saveText, jsonOptions);
+        var services = await client.GetFromJsonAsync<IReadOnlyList<RequestServiceInstanceSummary>>("/api/requests/services", jsonOptions);
+        var search = await client.GetFromJsonAsync<RequestSearchResponse>("/api/requests/search?query=blade&kinds=movie&sources=radarr", jsonOptions);
+        var detailResponse = await client.GetAsync($"/api/requests/details/radarr/movie/424?serviceId={service!.Id}");
+        var detailText = await detailResponse.Content.ReadAsStringAsync();
+        Assert.True(detailResponse.IsSuccessStatusCode, detailText);
+        var detail = System.Text.Json.JsonSerializer.Deserialize<RequestDetailResponse>(detailText, jsonOptions);
+        var submit = await client.PostAsJsonAsync("/api/requests", new RequestSubmitRequest(
+            service.Id,
+            RequestProviderKind.Radarr,
+            RequestMediaKind.Movie,
+            "424",
+            "Blade Runner",
+            4,
+            "/movies",
+            null,
+            true,
+            true,
+            []),
+            jsonOptions);
+        var submitted = await submit.Content.ReadFromJsonAsync<RequestSubmitResponse>(jsonOptions);
+
+        Assert.NotNull(services);
+        Assert.Single(services);
+        Assert.Null(services[0].ApiKey);
+        Assert.NotNull(search);
+        Assert.Equal("Blade Runner", Assert.Single(search.Results).Title);
+        Assert.NotNull(detail);
+        Assert.Equal("Blade Runner", detail.Title);
+        Assert.True(submit.IsSuccessStatusCode);
+        Assert.True(submitted!.Submitted);
+    }
+
+    private sealed class FakeRequestProviderClientFactory(FakeRequestProviderClient client) : IRequestProviderClientFactory {
+        public IRequestProviderClient Get(RequestProviderKind kind) => client;
+    }
+
+    private sealed class FakeRequestServiceInstanceStore : IRequestServiceInstanceStore {
+        private readonly Dictionary<Guid, RequestServiceInstanceDetail> _items = new();
+
+        public Task<IReadOnlyList<RequestServiceInstanceSummary>> ListAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<RequestServiceInstanceSummary>>(_items.Values.Select(ToSummary).ToArray());
+
+        public Task<IReadOnlyList<RequestServiceInstanceDetail>> ListDetailsAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<RequestServiceInstanceDetail>>(_items.Values.ToArray());
+
+        public Task<RequestServiceInstanceDetail?> GetAsync(Guid id, CancellationToken cancellationToken) =>
+            Task.FromResult(_items.GetValueOrDefault(id));
+
+        public Task<RequestServiceInstanceSummary> SaveAsync(RequestServiceInstanceSaveRequest request, CancellationToken cancellationToken) {
+            var id = request.Id ?? Guid.NewGuid();
+            var detail = new RequestServiceInstanceDetail(
+                id,
+                request.Kind,
+                request.DisplayName,
+                request.BaseUrl,
+                true,
+                request.DefaultRootFolderPath,
+                request.DefaultQualityProfileId,
+                request.DefaultMetadataProfileId,
+                request.SearchOnRequest,
+                !string.IsNullOrWhiteSpace(request.ApiKey),
+                request.ApiKey);
+            _items[id] = detail;
+            return Task.FromResult(ToSummary(detail));
+        }
+
+        public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken) =>
+            Task.FromResult(_items.Remove(id));
+
+        private static RequestServiceInstanceSummary ToSummary(RequestServiceInstanceDetail detail) =>
+            new(detail.Id, detail.Kind, detail.DisplayName, detail.BaseUrl, detail.IsDefault, detail.DefaultRootFolderPath,
+                detail.DefaultQualityProfileId, detail.DefaultMetadataProfileId, detail.SearchOnRequest, detail.HasApiKey, null);
+    }
+
+    private sealed class FakeRequestProviderClient : IRequestProviderClient {
+        public RequestProviderKind Kind => RequestProviderKind.Radarr;
+
+        public Task<IReadOnlyList<RequestSearchResult>> SearchAsync(RequestServiceInstanceDetail instance, string query, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<RequestSearchResult>>([
+                new(instance.Id, RequestProviderKind.Radarr, RequestMediaKind.Movie, "424", "Blade Runner", 1982, null, null, null, null, null, null, [], false, true)
+            ]);
+
+        public Task<RequestDetailResponse> GetDetailAsync(RequestServiceInstanceDetail instance, RequestMediaKind kind, string externalId, CancellationToken cancellationToken) =>
+            Task.FromResult(new RequestDetailResponse(RequestProviderKind.Radarr, RequestMediaKind.Movie, externalId, "Blade Runner", 1982, null, null, null, null, null, null, [], [], [], [], []));
+
+        public Task<RequestSubmitResponse> SubmitAsync(RequestServiceInstanceDetail instance, RequestDetailResponse detail, RequestSubmitRequest request, CancellationToken cancellationToken) =>
+            Task.FromResult(new RequestSubmitResponse(true, "12", null));
+
+        public Task<IReadOnlyList<RequestServiceOption>> GetOptionsAsync(RequestServiceInstanceDetail instance, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<RequestServiceOption>>([]);
+    }
+}

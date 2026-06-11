@@ -14,6 +14,7 @@ using Prismedia.Application.Health;
 using Prismedia.Application.Jellyfin;
 using Prismedia.Application.Audio;
 using Prismedia.Application.Plugins;
+using Prismedia.Application.Requests;
 using Prismedia.Application.Security;
 using Prismedia.Application.Videos;
 using Prismedia.Infrastructure.Audio;
@@ -32,6 +33,7 @@ using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Plugins;
 using Prismedia.Infrastructure.Processes;
 using Prismedia.Infrastructure.Queue;
+using Prismedia.Infrastructure.Requests;
 using Prismedia.Infrastructure.Settings;
 using Prismedia.Infrastructure.Security;
 using Prismedia.Infrastructure.StashCompat;
@@ -75,6 +77,7 @@ public static class DependencyInjection {
         RegisterEntities(services, cacheDir);
         RegisterFilesAndOrganization(services);
         RegisterPlayback(services, configuration, cacheDir, mediaToolOptions);
+        RegisterRequests(services);
         RegisterJobsSettingsAndState(services, dataDir);
 
         return services;
@@ -256,6 +259,17 @@ public static class DependencyInjection {
         services.AddScoped<ISettingsPersistence, EfSettingsPersistence>();
         services.AddScoped<ISecurityPersistence, EfSecurityPersistence>();
         services.AddScoped<IJellyfinImageFileService, JellyfinImageFileService>();
+    }
+
+    private static void RegisterRequests(IServiceCollection services) {
+        services.AddScoped<IRequestServiceInstanceStore, EfRequestServiceInstanceStore>();
+        services.AddScoped(_ => new RadarrRequestProviderClient(new HttpClient()));
+        services.AddScoped(_ => new SonarrRequestProviderClient(new HttpClient()));
+        services.AddScoped(_ => new LidarrRequestProviderClient(new HttpClient()));
+        services.AddScoped<IRequestProviderClient>(provider => provider.GetRequiredService<RadarrRequestProviderClient>());
+        services.AddScoped<IRequestProviderClient>(provider => provider.GetRequiredService<SonarrRequestProviderClient>());
+        services.AddScoped<IRequestProviderClient>(provider => provider.GetRequiredService<LidarrRequestProviderClient>());
+        services.AddScoped<IRequestProviderClientFactory, RequestProviderClientFactory>();
     }
 
     private static void RegisterThumbnailContributors(IServiceCollection services) {

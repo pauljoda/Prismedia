@@ -21,6 +21,7 @@ using Prismedia.Application.Jobs.Ports;
 using Prismedia.Domain.Entities;
 using Prismedia.Application.Plugins;
 using Prismedia.Application.Playback;
+using Prismedia.Application.Requests;
 using Prismedia.Application.Security;
 
 namespace Prismedia.Application;
@@ -42,6 +43,9 @@ public static class DependencyInjection {
         services.AddScoped<JellyfinCatalogService>();
         services.AddScoped<OrganizeService>();
         services.AddScoped<FilesService>();
+        services.AddScoped<RequestSearchService>();
+        services.AddScoped<RequestDetailService>();
+        services.AddScoped<RequestSubmitService>();
         services.AddScoped<IAudioStreamService, AudioStreamService>();
         services.AddSingleton<IIdentifyApplyProgressStore, InMemoryIdentifyApplyProgressStore>();
         services.AddSingleton<AuthAttemptThrottle>();
