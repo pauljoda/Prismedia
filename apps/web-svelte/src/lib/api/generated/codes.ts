@@ -245,6 +245,33 @@ export const READER_MODE = {
 
 export type ReaderModeCode = (typeof READER_MODE)[keyof typeof READER_MODE];
 
+export const REQUEST_PROVIDER_KIND = {
+  radarr: "radarr",
+  sonarr: "sonarr",
+  lidarr: "lidarr",
+  plugin: "plugin",
+} as const;
+
+export type RequestProviderKindCode = (typeof REQUEST_PROVIDER_KIND)[keyof typeof REQUEST_PROVIDER_KIND];
+
+export const REQUEST_MEDIA_KIND = {
+  movie: "movie",
+  series: "series",
+  artist: "artist",
+  album: "album",
+  plugin: "plugin",
+} as const;
+
+export type RequestMediaKindCode = (typeof REQUEST_MEDIA_KIND)[keyof typeof REQUEST_MEDIA_KIND];
+
+export const REQUEST_MINIMUM_AVAILABILITY = {
+  announced: "announced",
+  inCinemas: "inCinemas",
+  released: "released",
+} as const;
+
+export type RequestMinimumAvailabilityCode = (typeof REQUEST_MINIMUM_AVAILABILITY)[keyof typeof REQUEST_MINIMUM_AVAILABILITY];
+
 export const CAPABILITY_KIND = {
   classification: "classification",
   dates: "dates",

@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Prismedia.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using Prismedia.Infrastructure.Persistence;
 namespace Prismedia.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(PrismediaDbContext))]
-    partial class PrismediaDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260611134936_AddRequestServiceInstances")]
+    partial class AddRequestServiceInstances
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2209,11 +2212,6 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(1024)")
                         .HasColumnName("default_root_folder_path");
 
-                    b.PrimitiveCollection<int[]>("DefaultTagIds")
-                        .IsRequired()
-                        .HasColumnType("integer[]")
-                        .HasColumnName("default_tag_ids");
-
                     b.Property<string>("DisplayName")
                         .IsRequired()
                         .HasMaxLength(256)
@@ -2229,14 +2227,6 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
                         .HasColumnName("kind");
-
-                    b.Property<string>("MinimumAvailability")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasDefaultValue("released")
-                        .HasColumnName("minimum_availability");
 
                     b.Property<bool>("SearchOnRequest")
                         .HasColumnType("boolean")

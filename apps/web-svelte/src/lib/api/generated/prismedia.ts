@@ -74,6 +74,7 @@ import type {
   GetMusicArtistParams,
   GetOrganizePlanParams,
   GetPersonParams,
+  GetRequestDetailParams,
   GetSettingValuesParams,
   GetStudioParams,
   GetTagParams,
@@ -157,9 +158,18 @@ import type {
   RatingUpdateRequest,
   RemoveFileExclusionParams,
   RenameFileParams,
+  RequestDetailResponse,
+  RequestSearchResponse,
+  RequestServiceInstanceSaveRequest,
+  RequestServiceInstanceSummary,
+  RequestServiceTestRequest,
+  RequestServiceTestResponse,
+  RequestSubmitRequest,
+  RequestSubmitResponse,
   RescanFileRootParams,
   SaveIdentifyQueueProposalRequest,
   SearchIdentifyQueueItemParams,
+  SearchRequestsParams,
   SettingDescriptor,
   SettingUpdateRequest,
   SettingsBatchUpdateRequest,
@@ -8424,11 +8434,6 @@ export type applyIdentifyProposalResponse204 = {
   status: 204
 }
 
-export type applyIdentifyProposalResponse400 = {
-  data: ApiProblem
-  status: 400
-}
-
 export type applyIdentifyProposalResponse404 = {
   data: ApiProblem
   status: 404
@@ -8437,7 +8442,7 @@ export type applyIdentifyProposalResponse404 = {
 export type applyIdentifyProposalResponseSuccess = (applyIdentifyProposalResponse204) & {
   headers: Headers;
 };
-export type applyIdentifyProposalResponseError = (applyIdentifyProposalResponse400 | applyIdentifyProposalResponse404) & {
+export type applyIdentifyProposalResponseError = (applyIdentifyProposalResponse404) & {
   headers: Headers;
 };
 
@@ -8967,6 +8972,361 @@ export const applyOrganizePlan = async (organizePlanRequest: OrganizePlanRequest
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       organizePlanRequest,)
+  }
+);}
+
+
+
+export type listRequestServicesResponse200 = {
+  data: RequestServiceInstanceSummary[]
+  status: 200
+}
+
+export type listRequestServicesResponseSuccess = (listRequestServicesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listRequestServicesResponse = (listRequestServicesResponseSuccess)
+
+export const getListRequestServicesUrl = () => {
+
+
+
+
+  return `/api/requests/services`
+}
+
+/**
+ * @summary Lists configured request service instances with credentials redacted.
+ */
+export const listRequestServices = async ( options?: RequestInit): Promise<listRequestServicesResponse> => {
+
+  return orvalFetch<listRequestServicesResponse>(getListRequestServicesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type saveRequestServiceResponse200 = {
+  data: RequestServiceInstanceSummary
+  status: 200
+}
+
+export type saveRequestServiceResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type saveRequestServiceResponseSuccess = (saveRequestServiceResponse200) & {
+  headers: Headers;
+};
+export type saveRequestServiceResponseError = (saveRequestServiceResponse400) & {
+  headers: Headers;
+};
+
+export type saveRequestServiceResponse = (saveRequestServiceResponseSuccess | saveRequestServiceResponseError)
+
+export const getSaveRequestServiceUrl = () => {
+
+
+
+
+  return `/api/requests/services`
+}
+
+/**
+ * @summary Creates or updates a request service instance.
+ */
+export const saveRequestService = async (requestServiceInstanceSaveRequest: RequestServiceInstanceSaveRequest, options?: RequestInit): Promise<saveRequestServiceResponse> => {
+
+  return orvalFetch<saveRequestServiceResponse>(getSaveRequestServiceUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      requestServiceInstanceSaveRequest,)
+  }
+);}
+
+
+
+export type updateRequestServiceResponse200 = {
+  data: RequestServiceInstanceSummary
+  status: 200
+}
+
+export type updateRequestServiceResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type updateRequestServiceResponseSuccess = (updateRequestServiceResponse200) & {
+  headers: Headers;
+};
+export type updateRequestServiceResponseError = (updateRequestServiceResponse400) & {
+  headers: Headers;
+};
+
+export type updateRequestServiceResponse = (updateRequestServiceResponseSuccess | updateRequestServiceResponseError)
+
+export const getUpdateRequestServiceUrl = (id: string,) => {
+
+
+
+
+  return `/api/requests/services/${id}`
+}
+
+/**
+ * @summary Updates an existing request service instance.
+ */
+export const updateRequestService = async (id: string,
+    requestServiceInstanceSaveRequest: RequestServiceInstanceSaveRequest, options?: RequestInit): Promise<updateRequestServiceResponse> => {
+
+  return orvalFetch<updateRequestServiceResponse>(getUpdateRequestServiceUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      requestServiceInstanceSaveRequest,)
+  }
+);}
+
+
+
+export type deleteRequestServiceResponse204 = {
+  data: void
+  status: 204
+}
+
+export type deleteRequestServiceResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type deleteRequestServiceResponseSuccess = (deleteRequestServiceResponse204) & {
+  headers: Headers;
+};
+export type deleteRequestServiceResponseError = (deleteRequestServiceResponse404) & {
+  headers: Headers;
+};
+
+export type deleteRequestServiceResponse = (deleteRequestServiceResponseSuccess | deleteRequestServiceResponseError)
+
+export const getDeleteRequestServiceUrl = (id: string,) => {
+
+
+
+
+  return `/api/requests/services/${id}`
+}
+
+/**
+ * @summary Deletes a configured request service instance.
+ */
+export const deleteRequestService = async (id: string, options?: RequestInit): Promise<deleteRequestServiceResponse> => {
+
+  return orvalFetch<deleteRequestServiceResponse>(getDeleteRequestServiceUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type testRequestServiceResponse200 = {
+  data: RequestServiceTestResponse
+  status: 200
+}
+
+export type testRequestServiceResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type testRequestServiceResponseSuccess = (testRequestServiceResponse200) & {
+  headers: Headers;
+};
+export type testRequestServiceResponseError = (testRequestServiceResponse400) & {
+  headers: Headers;
+};
+
+export type testRequestServiceResponse = (testRequestServiceResponseSuccess | testRequestServiceResponseError)
+
+export const getTestRequestServiceUrl = () => {
+
+
+
+
+  return `/api/requests/services/test`
+}
+
+/**
+ * @summary Tests connectivity for a request service configuration and returns its selectable options on success. A successful test gates saving the service.
+ */
+export const testRequestService = async (requestServiceTestRequest: RequestServiceTestRequest, options?: RequestInit): Promise<testRequestServiceResponse> => {
+
+  return orvalFetch<testRequestServiceResponse>(getTestRequestServiceUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      requestServiceTestRequest,)
+  }
+);}
+
+
+
+export type searchRequestsResponse200 = {
+  data: RequestSearchResponse
+  status: 200
+}
+
+export type searchRequestsResponseSuccess = (searchRequestsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type searchRequestsResponse = (searchRequestsResponseSuccess)
+
+export const getSearchRequestsUrl = (params: SearchRequestsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/requests/search?${stringifiedParams}` : `/api/requests/search`
+}
+
+/**
+ * @summary Searches configured request providers for requestable external media.
+ */
+export const searchRequests = async (params: SearchRequestsParams, options?: RequestInit): Promise<searchRequestsResponse> => {
+
+  return orvalFetch<searchRequestsResponse>(getSearchRequestsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getRequestDetailResponse200 = {
+  data: RequestDetailResponse
+  status: 200
+}
+
+export type getRequestDetailResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type getRequestDetailResponseSuccess = (getRequestDetailResponse200) & {
+  headers: Headers;
+};
+export type getRequestDetailResponseError = (getRequestDetailResponse404) & {
+  headers: Headers;
+};
+
+export type getRequestDetailResponse = (getRequestDetailResponseSuccess | getRequestDetailResponseError)
+
+export const getGetRequestDetailUrl = (source: string,
+    kind: string,
+    externalId: string,
+    params?: GetRequestDetailParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/requests/details/${source}/${kind}/${externalId}?${stringifiedParams}` : `/api/requests/details/${source}/${kind}/${externalId}`
+}
+
+/**
+ * @summary Gets rich detail metadata for a requestable external item.
+ */
+export const getRequestDetail = async (source: string,
+    kind: string,
+    externalId: string,
+    params?: GetRequestDetailParams, options?: RequestInit): Promise<getRequestDetailResponse> => {
+
+  return orvalFetch<getRequestDetailResponse>(getGetRequestDetailUrl(source,kind,externalId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type submitRequestResponse200 = {
+  data: RequestSubmitResponse
+  status: 200
+}
+
+export type submitRequestResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type submitRequestResponseSuccess = (submitRequestResponse200) & {
+  headers: Headers;
+};
+export type submitRequestResponseError = (submitRequestResponse404) & {
+  headers: Headers;
+};
+
+export type submitRequestResponse = (submitRequestResponseSuccess | submitRequestResponseError)
+
+export const getSubmitRequestUrl = () => {
+
+
+
+
+  return `/api/requests`
+}
+
+/**
+ * @summary Submits a media request to the selected upstream service instance.
+ */
+export const submitRequest = async (requestSubmitRequest: RequestSubmitRequest, options?: RequestInit): Promise<submitRequestResponse> => {
+
+  return orvalFetch<submitRequestResponse>(getSubmitRequestUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      requestSubmitRequest,)
   }
 );}
 

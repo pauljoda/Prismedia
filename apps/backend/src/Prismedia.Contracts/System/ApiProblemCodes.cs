@@ -124,6 +124,9 @@ public static class ApiProblemCodes {
     /// <summary>Problem code <c>plugin_update_not_found</c>.</summary>
     public const string PluginUpdateNotFound = "plugin_update_not_found";
 
+    /// <summary>Problem code <c>request_service_invalid</c>.</summary>
+    public const string RequestServiceInvalid = "request_service_invalid";
+
     /// <summary>Problem code <c>root_not_found</c>.</summary>
     public const string RootNotFound = "root_not_found";
 

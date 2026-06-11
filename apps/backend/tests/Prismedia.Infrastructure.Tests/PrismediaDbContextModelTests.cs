@@ -44,6 +44,8 @@ public sealed class PrismediaDbContextModelTests {
     [InlineData(typeof(UiPreferenceRow), "ui_prefs")]
     [InlineData(typeof(ProviderConfigRow), "provider_configs")]
     [InlineData(typeof(ProviderCredentialRow), "provider_credentials")]
+    [InlineData(typeof(RequestServiceInstanceRow), "request_service_instances")]
+    [InlineData(typeof(RequestServiceCredentialRow), "request_service_credentials")]
     [InlineData(typeof(IdentifyResultRow), "identify_results")]
     [InlineData(typeof(IdentifyQueueItemRow), "identify_queue_items")]
     [InlineData(typeof(FingerprintSubmissionRow), "fingerprint_submissions")]
