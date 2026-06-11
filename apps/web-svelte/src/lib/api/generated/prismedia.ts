@@ -139,6 +139,7 @@ import type {
   MoveFileParams,
   MovieDetail,
   MusicArtistDetail,
+  MusicPlayerStateResponse,
   NavLayoutDocument,
   NavLayoutResponse,
   OrganizeApplyResponse,
@@ -170,6 +171,7 @@ import type {
   TagDetail,
   TranscodeCacheStatusResponse,
   UpdateCheckResponse,
+  UpdateMusicPlayerStateRequest,
   VideoDetail,
   VideoSeasonDetail,
   VideoSeriesDetail,
@@ -6474,6 +6476,115 @@ export const refreshCollection = async (id: string, options?: RequestInit): Prom
   {
     ...options,
     method: 'POST'
+
+
+  }
+);}
+
+
+
+export type getMusicPlayerStateResponse200 = {
+  data: MusicPlayerStateResponse
+  status: 200
+}
+
+export type getMusicPlayerStateResponseSuccess = (getMusicPlayerStateResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getMusicPlayerStateResponse = (getMusicPlayerStateResponseSuccess)
+
+export const getGetMusicPlayerStateUrl = () => {
+
+
+
+
+  return `/api/music-player/state`
+}
+
+/**
+ * @summary Gets the server-persisted music player state.
+ */
+export const getMusicPlayerState = async ( options?: RequestInit): Promise<getMusicPlayerStateResponse> => {
+
+  return orvalFetch<getMusicPlayerStateResponse>(getGetMusicPlayerStateUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type updateMusicPlayerStateResponse200 = {
+  data: MusicPlayerStateResponse
+  status: 200
+}
+
+export type updateMusicPlayerStateResponseSuccess = (updateMusicPlayerStateResponse200) & {
+  headers: Headers;
+};
+;
+
+export type updateMusicPlayerStateResponse = (updateMusicPlayerStateResponseSuccess)
+
+export const getUpdateMusicPlayerStateUrl = () => {
+
+
+
+
+  return `/api/music-player/state`
+}
+
+/**
+ * @summary Saves the server-persisted music player state.
+ */
+export const updateMusicPlayerState = async (updateMusicPlayerStateRequest: UpdateMusicPlayerStateRequest, options?: RequestInit): Promise<updateMusicPlayerStateResponse> => {
+
+  return orvalFetch<updateMusicPlayerStateResponse>(getUpdateMusicPlayerStateUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateMusicPlayerStateRequest,)
+  }
+);}
+
+
+
+export type clearMusicPlayerStateResponse204 = {
+  data: void
+  status: 204
+}
+
+export type clearMusicPlayerStateResponseSuccess = (clearMusicPlayerStateResponse204) & {
+  headers: Headers;
+};
+;
+
+export type clearMusicPlayerStateResponse = (clearMusicPlayerStateResponseSuccess)
+
+export const getClearMusicPlayerStateUrl = () => {
+
+
+
+
+  return `/api/music-player/state`
+}
+
+/**
+ * @summary Clears the server-persisted music player state.
+ */
+export const clearMusicPlayerState = async ( options?: RequestInit): Promise<clearMusicPlayerStateResponse> => {
+
+  return orvalFetch<clearMusicPlayerStateResponse>(getClearMusicPlayerStateUrl(),
+  {
+    ...options,
+    method: 'DELETE'
 
 
   }

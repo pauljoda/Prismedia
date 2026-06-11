@@ -1,7 +1,14 @@
 import type { AudioTrackListItemDto } from "@prismedia/contracts";
+import {
+  MUSIC_PLAYER_MINI_SIDE,
+  MUSIC_PLAYER_REPEAT_MODE,
+  type MusicPlayerMiniSideCode,
+  type MusicPlayerRepeatModeCode,
+} from "$lib/api/generated/codes";
 import { createOptionalContext } from "$lib/utils/context";
 
-export type RepeatMode = "off" | "all" | "one";
+export type RepeatMode = MusicPlayerRepeatModeCode;
+export type MiniPlayerSide = MusicPlayerMiniSideCode;
 
 /** Where the queue was started from, used to label and link the now-playing artist/album. */
 export interface PlaybackContext {
@@ -11,12 +18,15 @@ export interface PlaybackContext {
   artistName?: string | null;
   /** Cover URL for the now-playing artwork when the track has none of its own. */
   coverUrl?: string | null;
+  /** Album artwork by audio library id, used for mixed-album artist queues. */
+  albumCoverUrls?: Record<string, string | null | undefined> | null;
 }
 
 /** Element-level controls the global player registers so any component can drive playback. */
 export interface PlaybackController {
   toggle: () => void;
   seek: (seconds: number) => void;
+  playTrack: (track: AudioTrackListItemDto) => void;
 }
 
 export interface PlayOptions {
@@ -29,6 +39,16 @@ function shuffleInPlace<T>(items: T[]): T[] {
     [items[i], items[j]] = [items[j], items[i]];
   }
   return items;
+}
+
+export const PRISMEDIA_AUDIO_ARTWORK_FALLBACK = "/brand/prismedia-logo.png";
+
+export function resolveAudioArtwork(
+  track: AudioTrackListItemDto | null | undefined,
+  context: PlaybackContext | null | undefined,
+): string {
+  const albumCover = track?.libraryId ? context?.albumCoverUrls?.[track.libraryId] : null;
+  return albumCover || context?.coverUrl || PRISMEDIA_AUDIO_ARTWORK_FALLBACK;
 }
 
 /**
@@ -47,10 +67,16 @@ export class AudioPlaybackStore {
   /** Index into {@link order} of the current track, or -1 when nothing is loaded. */
   position = $state(-1);
   shuffle = $state(false);
-  repeat = $state<RepeatMode>("off");
+  repeat = $state<RepeatMode>(MUSIC_PLAYER_REPEAT_MODE.off);
   context = $state.raw<PlaybackContext | null>(null);
+  volume = $state(1);
+  muted = $state(false);
+  collapsed = $state(false);
+  collapsedSide = $state<MiniPlayerSide>(MUSIC_PLAYER_MINI_SIDE.left);
 
-  // Transport state, mirrored from the global player's <audio> element.
+  // Transport state: playIntent is the user's/restored desired state; playing is
+  // only the actual state mirrored from the global player's <audio> element.
+  playIntent = $state(false);
   playing = $state(false);
   currentTime = $state(0);
   duration = $state(0);
@@ -71,9 +97,9 @@ export class AudioPlaybackStore {
 
   readonly hasNext = $derived(
     this.position >= 0 &&
-      (this.position < this.order.length - 1 || (this.repeat === "all" && this.order.length > 0)),
+      (this.position < this.order.length - 1 || (this.repeat === MUSIC_PLAYER_REPEAT_MODE.all && this.order.length > 0)),
   );
-  readonly hasPrev = $derived(this.position > 0 || (this.repeat === "all" && this.order.length > 1));
+  readonly hasPrev = $derived(this.position > 0 || (this.repeat === MUSIC_PLAYER_REPEAT_MODE.all && this.order.length > 1));
 
   isCurrent(trackId: string): boolean {
     return this.currentTrack?.id === trackId;
@@ -93,6 +119,8 @@ export class AudioPlaybackStore {
     this.queue = tracks;
     this.context = context ?? null;
     if (options?.shuffle !== undefined) this.shuffle = options.shuffle;
+    this.playIntent = true;
+    this.playing = false;
 
     const startIndex = startTrackId ? tracks.findIndex((track) => track.id === startTrackId) : -1;
     if (this.shuffle) {
@@ -108,6 +136,10 @@ export class AudioPlaybackStore {
       this.order = tracks.map((_, index) => index);
       this.position = startIndex >= 0 ? startIndex : 0;
     }
+
+    const currentQueueIndex = this.order[this.position] ?? -1;
+    const currentTrack = this.queue[currentQueueIndex];
+    if (currentTrack) this.#controller?.playTrack(currentTrack);
   }
 
   /**
@@ -134,7 +166,12 @@ export class AudioPlaybackStore {
   }
 
   cycleRepeat() {
-    this.repeat = this.repeat === "off" ? "all" : this.repeat === "all" ? "one" : "off";
+    this.repeat =
+      this.repeat === MUSIC_PLAYER_REPEAT_MODE.off
+        ? MUSIC_PLAYER_REPEAT_MODE.all
+        : this.repeat === MUSIC_PLAYER_REPEAT_MODE.all
+          ? MUSIC_PLAYER_REPEAT_MODE.one
+          : MUSIC_PLAYER_REPEAT_MODE.off;
   }
 
   /** Advances to the next track in order (wrapping when repeat-all). Returns false at the end. */
@@ -144,7 +181,7 @@ export class AudioPlaybackStore {
       this.position++;
       return true;
     }
-    if (this.repeat === "all") {
+    if (this.repeat === MUSIC_PLAYER_REPEAT_MODE.all) {
       this.position = 0;
       return true;
     }
@@ -157,7 +194,7 @@ export class AudioPlaybackStore {
       this.position--;
       return true;
     }
-    if (this.repeat === "all" && this.order.length > 0) {
+    if (this.repeat === MUSIC_PLAYER_REPEAT_MODE.all && this.order.length > 0) {
       this.position = this.order.length - 1;
       return true;
     }
@@ -177,11 +214,49 @@ export class AudioPlaybackStore {
     this.order = [];
     this.position = -1;
     this.context = null;
+    this.playIntent = false;
     this.playing = false;
     this.currentTime = 0;
     this.duration = 0;
     this.shuffle = false;
-    this.repeat = "off";
+    this.repeat = MUSIC_PLAYER_REPEAT_MODE.off;
+    this.volume = 1;
+    this.muted = false;
+    this.collapsed = false;
+    this.collapsedSide = MUSIC_PLAYER_MINI_SIDE.left;
+  }
+
+  /** Restores a persisted queue and player settings after page load. */
+  restore(state: {
+    queue: AudioTrackListItemDto[];
+    order: number[];
+    position: number;
+    playing: boolean;
+    shuffle: boolean;
+    repeat: RepeatMode;
+    context?: PlaybackContext | null;
+    volume: number;
+    muted: boolean;
+    collapsed: boolean;
+    collapsedSide: MiniPlayerSide;
+  }) {
+    const queue = state.queue;
+    const order = state.order.filter((index) => index >= 0 && index < queue.length);
+    this.queue = queue;
+    this.order = order.length === queue.length ? order : queue.map((_, index) => index);
+    this.position =
+      queue.length === 0 ? -1 : Math.max(0, Math.min(state.position, Math.max(0, this.order.length - 1)));
+    this.playIntent = state.playing && queue.length > 0;
+    this.playing = false;
+    this.shuffle = state.shuffle;
+    this.repeat = state.repeat;
+    this.context = state.context ?? null;
+    this.currentTime = 0;
+    this.duration = queue[this.order[this.position] ?? -1]?.duration ?? 0;
+    this.volume = Math.max(0, Math.min(1, state.volume));
+    this.muted = state.muted;
+    this.collapsed = state.collapsed;
+    this.collapsedSide = state.collapsedSide;
   }
 
   /** The global player registers element control here; returns a detach function. */

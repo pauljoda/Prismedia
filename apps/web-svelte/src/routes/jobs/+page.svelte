@@ -34,8 +34,8 @@
   import { RUN_CATALOG } from "$lib/jobs/run-catalog";
   import {
     describeRunResult,
-    errorFingerprint,
     formatRelativeTimeShort,
+    groupFailedJobs,
   } from "$lib/jobs/helpers";
   import {
     describeWorkerHealth,
@@ -235,10 +235,34 @@
     }
   }
 
+  const failedGroups = $derived(groupFailedJobs(dashboard?.failedJobs ?? []));
+  const visibleFailedGroups = $derived(
+    failedGroups.filter((group) => !dismissedErrors.isDismissed(group.fingerprint)),
+  );
+  const suppressedFailedCount = $derived(
+    failedGroups.length - visibleFailedGroups.length,
+  );
+  const actionableFailedByQueue = $derived.by(() => {
+    const counts = new Map<string, number>();
+    for (const group of visibleFailedGroups) {
+      const queueName = group.representative.queueName;
+      counts.set(queueName, (counts.get(queueName) ?? 0) + 1);
+    }
+    return counts;
+  });
   const queueByName = $derived.by(() => {
     const queues = dashboard?.queues ?? [];
     const map = new Map<string, (typeof queues)[number]>();
-    for (const queue of queues) map.set(queue.name, queue);
+    for (const queue of queues) {
+      const failed = actionableFailedByQueue.get(queue.name) ?? 0;
+      const backlog = queue.waiting + queue.delayed;
+      map.set(queue.name, {
+        ...queue,
+        failed,
+        backlog,
+        status: failed > 0 ? "warning" : queue.active + backlog > 0 ? "active" : "idle",
+      });
+    }
     return map;
   });
 
@@ -248,19 +272,12 @@
   const totalQueued = $derived(
     dashboard?.queues.reduce((sum, q) => sum + q.backlog, 0) ?? 0,
   );
-  const trueFailedTotal = $derived(
+  const rawFailedTotal = $derived(
     dashboard?.queues.reduce((sum, q) => sum + q.failed, 0) ?? 0,
   );
-  const visibleFailedJobs = $derived(
-    (dashboard?.failedJobs ?? []).filter(
-      (job) => !dismissedErrors.isDismissed(errorFingerprint(job)),
-    ),
-  );
-  const suppressedFailedCount = $derived(
-    (dashboard?.failedJobs ?? []).length - visibleFailedJobs.length,
-  );
+  const actionableFailedTotal = $derived(visibleFailedGroups.length);
   const canAcknowledgeFailures = $derived(
-    trueFailedTotal > 0 || (dashboard?.queues ?? []).some((q) => q.failed > 0),
+    actionableFailedTotal > 0,
   );
 
   const runningJobs = $derived(
@@ -279,7 +296,7 @@
 
   const allQuiet = $derived(
     !loading &&
-      visibleFailedJobs.length === 0 &&
+      visibleFailedGroups.length === 0 &&
       suppressedFailedCount === 0 &&
       totalActive === 0 &&
       totalQueued === 0 &&
@@ -343,14 +360,14 @@
         <span
           class={cn(
             "flex items-center gap-1.5",
-            trueFailedTotal > 0 ? "text-status-error-text" : "text-text-disabled",
+            actionableFailedTotal > 0 ? "text-status-error-text" : "text-text-disabled",
           )}
         >
           <StatusLed
-            status={trueFailedTotal > 0 ? "error" : "idle"}
+            status={actionableFailedTotal > 0 ? "error" : "idle"}
             size="sm"
           />
-          {trueFailedTotal} failed
+          {actionableFailedTotal} failed
         </span>
         <span class="text-text-disabled">
           <Clock class="inline-block h-3 w-3" />
@@ -556,14 +573,14 @@
   {/if}
 
   <!-- Failures -->
-  {#if visibleFailedJobs.length > 0 || suppressedFailedCount > 0}
+  {#if visibleFailedGroups.length > 0 || suppressedFailedCount > 0}
     <section class="space-y-2">
       <div class="flex items-center justify-between px-1">
         <div class="flex items-center gap-2">
           <AlertTriangle class="h-4 w-4 text-status-error-text" />
           <h2 class="text-kicker text-status-error-text">Needs attention</h2>
           <span class="text-mono-sm text-text-disabled">
-            {visibleFailedJobs.length} shown{#if trueFailedTotal > visibleFailedJobs.length} · {trueFailedTotal} total{/if}
+            {visibleFailedGroups.length} shown{#if rawFailedTotal > visibleFailedGroups.length} · {rawFailedTotal} total{/if}
           </span>
         </div>
         {#if suppressedFailedCount > 0}
@@ -577,14 +594,16 @@
           </button>
         {/if}
       </div>
-      {#each visibleFailedJobs as job (job.id)}
+      {#each visibleFailedGroups as group (group.fingerprint)}
         <FailedJobCard
-          {job}
+          job={group.representative}
           nsfwMode={nsfw.mode}
+          occurrenceCount={group.count}
+          fingerprint={group.fingerprint}
           onDismiss={(fp) => dismissedErrors.dismiss(fp)}
         />
       {/each}
-      {#if visibleFailedJobs.length === 0 && suppressedFailedCount > 0}
+      {#if visibleFailedGroups.length === 0 && suppressedFailedCount > 0}
         <div class="surface-card no-lift px-3 py-4 text-center text-[0.72rem] text-text-disabled">
           All current failures are suppressed. Use <span class="text-text-muted">Show {suppressedFailedCount} suppressed</span> to review them.
         </div>

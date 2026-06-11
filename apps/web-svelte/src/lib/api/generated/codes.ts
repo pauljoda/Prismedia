@@ -136,6 +136,21 @@ export const PLAYBACK_MODE = {
 
 export type PlaybackModeCode = (typeof PLAYBACK_MODE)[keyof typeof PLAYBACK_MODE];
 
+export const MUSIC_PLAYER_REPEAT_MODE = {
+  off: "off",
+  all: "all",
+  one: "one",
+} as const;
+
+export type MusicPlayerRepeatModeCode = (typeof MUSIC_PLAYER_REPEAT_MODE)[keyof typeof MUSIC_PLAYER_REPEAT_MODE];
+
+export const MUSIC_PLAYER_MINI_SIDE = {
+  left: "left",
+  right: "right",
+} as const;
+
+export type MusicPlayerMiniSideCode = (typeof MUSIC_PLAYER_MINI_SIDE)[keyof typeof MUSIC_PLAYER_MINI_SIDE];
+
 export const SUBTITLE_SOURCE = {
   manual: "manual",
   embedded: "embedded",

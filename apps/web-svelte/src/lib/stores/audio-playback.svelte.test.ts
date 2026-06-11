@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { AudioTrackListItemDto } from "@prismedia/contracts";
-import { AudioPlaybackStore } from "./audio-playback.svelte";
+import { MUSIC_PLAYER_MINI_SIDE, MUSIC_PLAYER_REPEAT_MODE } from "$lib/api/generated/codes";
+import {
+  AudioPlaybackStore,
+  PRISMEDIA_AUDIO_ARTWORK_FALLBACK,
+  resolveAudioArtwork,
+} from "./audio-playback.svelte";
 
 function tracks(count: number): AudioTrackListItemDto[] {
   return Array.from({ length: count }, (_, i) => ({
@@ -25,6 +30,20 @@ describe("AudioPlaybackStore", () => {
     expect(upNextIds(store)).toEqual(["t4"]);
   });
 
+  it("passes a newly-started current track to the mounted controller", () => {
+    const store = new AudioPlaybackStore();
+    const played: string[] = [];
+    store.attachController({
+      toggle: () => {},
+      seek: () => {},
+      playTrack: (track) => played.push(track.id),
+    });
+
+    store.play(tracks(4), "t3");
+
+    expect(played).toEqual(["t3"]);
+  });
+
   it("next and prev walk the order; repeat-off stops at the ends", () => {
     const store = new AudioPlaybackStore();
     store.play(tracks(3), "t1");
@@ -41,7 +60,7 @@ describe("AudioPlaybackStore", () => {
   it("repeat-all wraps at both ends", () => {
     const store = new AudioPlaybackStore();
     store.play(tracks(3), "t3");
-    store.repeat = "all";
+    store.repeat = MUSIC_PLAYER_REPEAT_MODE.all;
     expect(store.next()).toBe(true);
     expect(store.currentTrack?.id).toBe("t1");
     expect(store.prev()).toBe(true);
@@ -88,5 +107,64 @@ describe("AudioPlaybackStore", () => {
     expect(store.currentTrack?.id).toBe("t3");
     store.jumpTo(99); // out of range — ignored
     expect(store.currentTrack?.id).toBe("t3");
+  });
+
+  it("resolves current-track album artwork before artist artwork", () => {
+    const [track] = tracks(1);
+    track.libraryId = "album-1";
+
+    expect(resolveAudioArtwork(track, {
+      coverUrl: "/artist.jpg",
+      albumCoverUrls: { "album-1": "/album.jpg" },
+    })).toBe("/album.jpg");
+  });
+
+  it("falls back from missing album artwork to artist artwork and then Prismedia logo", () => {
+    const [track] = tracks(1);
+    track.libraryId = "album-1";
+
+    expect(resolveAudioArtwork(track, {
+      coverUrl: "/artist.jpg",
+      albumCoverUrls: { "album-1": null },
+    })).toBe("/artist.jpg");
+    expect(resolveAudioArtwork(track, null)).toBe(PRISMEDIA_AUDIO_ARTWORK_FALLBACK);
+  });
+
+  it("restores persisted play intent without reporting active playback before the audio element starts", () => {
+    const store = new AudioPlaybackStore();
+    store.restore({
+      queue: tracks(3),
+      order: [2, 0, 1],
+      position: 1,
+      playing: true,
+      shuffle: true,
+      repeat: MUSIC_PLAYER_REPEAT_MODE.one,
+      context: { albumTitle: "Saved album" },
+      volume: 0.42,
+      muted: true,
+      collapsed: true,
+      collapsedSide: MUSIC_PLAYER_MINI_SIDE.right,
+    });
+
+    expect(ids(store)).toEqual(["t3", "t1", "t2"]);
+    expect(store.currentTrack?.id).toBe("t1");
+    expect(store.playIntent).toBe(true);
+    expect(store.playing).toBe(false);
+    expect(store.shuffle).toBe(true);
+    expect(store.repeat).toBe(MUSIC_PLAYER_REPEAT_MODE.one);
+    expect(store.context?.albumTitle).toBe("Saved album");
+    expect(store.volume).toBe(0.42);
+    expect(store.muted).toBe(true);
+    expect(store.collapsed).toBe(true);
+    expect(store.collapsedSide).toBe(MUSIC_PLAYER_MINI_SIDE.right);
+  });
+
+  it("records play intent immediately when starting a queue", () => {
+    const store = new AudioPlaybackStore();
+
+    store.play(tracks(2), "t1");
+
+    expect(store.playIntent).toBe(true);
+    expect(store.playing).toBe(false);
   });
 });

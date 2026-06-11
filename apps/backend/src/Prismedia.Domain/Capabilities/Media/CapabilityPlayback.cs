@@ -91,6 +91,21 @@ public sealed class CapabilityPlayback : EntityCapability {
     }
 
     /// <summary>
+    /// Records a discrete completed playback event from a player that only reports once at end of
+    /// stream. Unlike threshold progress, each call represents a completed session and advances the
+    /// play count even when the entity was already marked completed.
+    /// </summary>
+    /// <param name="at">Timestamp of the completed play event.</param>
+    public void RecordCompletedPlay(DateTimeOffset at) {
+        Value = Value with {
+            PlayCount = Value.PlayCount + 1,
+            ResumeTime = TimeSpan.Zero,
+            CompletedAt = at,
+            LastPlayedAt = at
+        };
+    }
+
+    /// <summary>
     /// Explicitly marks the entity watched without disturbing the resume position. Increments the
     /// play count only on the transition from not-watched to watched. This is the manual
     /// watched-toggle path, kept independent of playback position by design.

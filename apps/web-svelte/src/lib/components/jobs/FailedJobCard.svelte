@@ -16,16 +16,24 @@
   interface Props {
     job: JobRun;
     nsfwMode: string;
+    occurrenceCount?: number;
+    fingerprint?: string;
     onDismiss: (fingerprint: string) => void;
   }
 
-  let { job, nsfwMode, onDismiss }: Props = $props();
+  let {
+    job,
+    nsfwMode,
+    occurrenceCount = 1,
+    fingerprint = errorFingerprint(job),
+    onDismiss,
+  }: Props = $props();
 
   let open = $state(true);
 
   function handleDismiss(e: MouseEvent) {
     e.stopPropagation();
-    onDismiss(errorFingerprint(job));
+    onDismiss(fingerprint);
   }
 </script>
 
@@ -41,6 +49,11 @@
         <span class="text-[0.62rem] font-semibold uppercase tracking-[0.12em] text-status-error-text">
           failed
         </span>
+        {#if occurrenceCount > 1}
+          <span class="rounded-xs border border-status-error/25 bg-status-error/[0.07] px-1.5 py-0.5 text-[0.56rem] font-semibold uppercase tracking-[0.12em] text-status-error-text">
+            {occurrenceCount} occurrences
+          </span>
+        {/if}
       </div>
       <h3 class="mt-2 text-[0.95rem] font-medium text-text-primary">
         {displayJobHeading(job, nsfwMode)}

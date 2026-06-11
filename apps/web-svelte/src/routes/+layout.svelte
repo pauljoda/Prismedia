@@ -20,6 +20,7 @@
   import { providePageSnapshots, type AppPageSnapshot } from "$lib/stores/page-snapshots.svelte";
   import { provideSearch } from "$lib/stores/search.svelte";
   import { provideAudioPlayback } from "$lib/stores/audio-playback.svelte";
+  import { fetchMusicPlayerState, saveMusicPlayerState } from "$lib/api/music-player-state";
 
   function readNsfwCookie(): NsfwMode | null {
     if (!browser) return null;
@@ -54,6 +55,24 @@
   provideSearch();
   const playback = provideAudioPlayback();
   let mainScroller = $state<HTMLElement | null>(null);
+  let musicPlayerPersistenceReady = $state(false);
+  let lastMusicPlayerSnapshot = "";
+
+  function musicPlayerSnapshot(): string {
+    return JSON.stringify({
+      queueTrackIds: playback.queue.map((track) => track.id),
+      order: playback.order,
+      position: playback.position,
+      playing: playback.playIntent,
+      shuffle: playback.shuffle,
+      repeat: playback.repeat,
+      volume: playback.volume,
+      muted: playback.muted,
+      collapsed: playback.collapsed,
+      collapsedSide: playback.collapsedSide,
+      context: playback.context,
+    });
+  }
 
   function scrollMainToTop() {
     void tick().then(() => {
@@ -69,9 +88,32 @@
 
   onMount(() => {
     window.addEventListener(MAIN_SCROLL_TOP_EVENT, scrollMainToTop);
+    const controller = new AbortController();
+    void fetchMusicPlayerState(controller.signal)
+      .then((state) => playback.restore(state))
+      .catch(() => {})
+      .finally(() => {
+        lastMusicPlayerSnapshot = musicPlayerSnapshot();
+        musicPlayerPersistenceReady = true;
+      });
+
     return () => {
+      controller.abort();
       window.removeEventListener(MAIN_SCROLL_TOP_EVENT, scrollMainToTop);
     };
+  });
+
+  $effect(() => {
+    if (!musicPlayerPersistenceReady) return;
+    const snapshot = musicPlayerSnapshot();
+    if (snapshot === lastMusicPlayerSnapshot) return;
+
+    const timeout = window.setTimeout(() => {
+      lastMusicPlayerSnapshot = snapshot;
+      void saveMusicPlayerState(JSON.parse(snapshot)).catch(() => {});
+    }, 350);
+
+    return () => window.clearTimeout(timeout);
   });
 
   function restoreMainScroller(snapshot: { top: number; left: number }) {
@@ -149,7 +191,5 @@
 
   <MobileNav />
   <CommandPalette />
-  {#if playback.currentTrack}
-    <AudioVidStackPlayer />
-  {/if}
+  <AudioVidStackPlayer />
 </div>

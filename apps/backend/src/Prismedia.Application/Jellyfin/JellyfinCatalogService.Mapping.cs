@@ -21,11 +21,12 @@ public sealed partial class JellyfinCatalogService {
         string serverId,
         Guid? parentOverride = null,
         ItemContext? context = null) {
-        var imageTags = ImageTags(item.Id, item.CoverUrl, null);
         var isPlayable = IsPlayable(item.Kind);
         var isAudio = IsAudio(item.Kind);
         var isAlbum = item.Kind == EntityKind.AudioLibrary;
-        var isMusic = isAudio || isAlbum || item.Kind == EntityKind.MusicArtist;
+        var isMusic = IsMusic(item.Kind);
+        var imageTags = ImageTags(item.Id, item.CoverUrl, null);
+        var primaryImageTag = MusicAwarePrimaryImageTag(item.Id, imageTags.Primary, isMusic, isAudio ? context?.AlbumPrimaryImageTag : null);
         // Tracks carry their album reference; tracks and albums both carry the album-artist reference.
         var artistContext = isAudio || isAlbum ? context : null;
         long? runtimeTicks = isPlayable ? RuntimeTicksFrom(item) ?? 0 : null;
@@ -59,7 +60,7 @@ public sealed partial class JellyfinCatalogService {
             Genres = item.Genres is { Count: > 0 } genreNames ? genreNames.ToArray() : [],
             GenreItems = GenreItemsFrom(item.Genres),
             ImageBlurHashes = EmptyBlurHashes,
-            ImageTags = imageTags.Primary is null ? new Dictionary<string, string>() : new Dictionary<string, string> { [JellyfinProtocol.ImageTypes.Primary] = imageTags.Primary },
+            ImageTags = primaryImageTag is null ? new Dictionary<string, string>() : new Dictionary<string, string> { [JellyfinProtocol.ImageTypes.Primary] = primaryImageTag },
             BackdropImageTags = imageTags.Backdrop is null ? [] : [imageTags.Backdrop],
             PrimaryImageAspectRatio = isMusic ? 1.0 : 0.6667,
             IndexNumber = isAudio ? TrackNumberFrom(item.SortOrder) : item.SortOrder,
@@ -122,7 +123,7 @@ public sealed partial class JellyfinCatalogService {
         var isPlayable = IsPlayable(item.Kind);
         var isAudio = IsAudio(item.Kind);
         var isAlbum = item.Kind == EntityKind.AudioLibrary;
-        var isMusic = isAudio || isAlbum || item.Kind == EntityKind.MusicArtist;
+        var isMusic = IsMusic(item.Kind);
         var artistContext = isAudio || isAlbum ? context : null;
         long? runtimeTicks = isPlayable ? technical?.Duration?.Ticks ?? 0 : null;
         var container = isAudio
@@ -209,7 +210,7 @@ public sealed partial class JellyfinCatalogService {
             DisplayPreferencesId = item.Id.ToString("N"),
             LocalTrailerCount = isPlayable ? 0 : null,
             SpecialFeatureCount = isPlayable ? 0 : null,
-            ImageTags = image.Tags,
+            ImageTags = MusicAwareImageTags(item.Id, image.Tags, isMusic, isAudio ? context?.AlbumPrimaryImageTag : null),
             BackdropImageTags = image.BackdropImageTags,
             ImageBlurHashes = EmptyBlurHashes,
             PrimaryImageAspectRatio = isMusic ? image.PrimaryImageAspectRatio ?? 1.0 : image.PrimaryImageAspectRatio,
@@ -320,6 +321,9 @@ public sealed partial class JellyfinCatalogService {
         // resolved from the album's own parent (music-artist), so each track DTO is self-describing.
         if (parent.Kind == EntityKind.AudioLibrary) {
             var albumImages = ImageMetadata(parent.Id, parent.Capabilities);
+            var albumPrimaryImageTag =
+                ImageTag(albumImages, JellyfinProtocol.ImageTypes.Primary) ??
+                (await ResolveEntityPrimaryImageAssetAsync(parent, visibility, cancellationToken))?.ImageTag;
             IEntityCard? artist = null;
             if (parent.ParentEntityId is { } artistId) {
                 artist = await GetVisibleCardAsync(artistId, visibility, cancellationToken);
@@ -330,7 +334,7 @@ public sealed partial class JellyfinCatalogService {
                 ParentId: parent.Id,
                 AlbumId: parent.Id,
                 AlbumName: parent.Title,
-                AlbumPrimaryImageTag: ImageTag(albumImages, JellyfinProtocol.ImageTypes.Primary),
+                AlbumPrimaryImageTag: albumPrimaryImageTag,
                 AlbumArtistId: artist?.Id,
                 AlbumArtistName: artist?.Title);
         }
@@ -403,6 +407,28 @@ public sealed partial class JellyfinCatalogService {
 
     private static string? ImageTag(JellyfinImageMetadata images, string type) =>
         images.Tags.TryGetValue(type, out var tag) ? tag : null;
+
+    private static IReadOnlyDictionary<string, string> MusicAwareImageTags(
+        Guid id,
+        IReadOnlyDictionary<string, string> tags,
+        bool isMusic,
+        string? albumPrimaryImageTag = null) {
+        if (!isMusic || tags.ContainsKey(JellyfinProtocol.ImageTypes.Primary)) {
+            return tags;
+        }
+
+        var next = new Dictionary<string, string>(tags, StringComparer.OrdinalIgnoreCase) {
+            [JellyfinProtocol.ImageTypes.Primary] = MusicAwarePrimaryImageTag(id, null, isMusic, albumPrimaryImageTag)!
+        };
+        return next;
+    }
+
+    private static string? MusicAwarePrimaryImageTag(
+        Guid id,
+        string? primaryImageTag,
+        bool isMusic,
+        string? albumPrimaryImageTag = null) =>
+        primaryImageTag ?? albumPrimaryImageTag ?? (isMusic ? EtagFor(id, PrismediaLogoImagePath) : null);
 
     /// <summary>Empty blurhash map matching real Jellyfin's always-present <c>ImageBlurHashes</c> object.</summary>
     private static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> EmptyBlurHashes =

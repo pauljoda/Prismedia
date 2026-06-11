@@ -1,5 +1,5 @@
 import type { LedStatus, BadgeVariant } from "@prismedia/ui-svelte";
-import type { JobRun, QueueSummary } from "./models";
+import type { FailedJobGroup, JobRun, QueueSummary } from "./models";
 import { formatRelativeTime } from "$lib/utils/format";
 import {
   Cpu,
@@ -157,6 +157,65 @@ export function formatRelativeTimeShort(value: string | null): string {
 
 export function errorFingerprint(job: Pick<JobRun, "queueName" | "error">): string {
   return `${job.queueName}:${(job.error ?? "").trim().slice(0, 200)}`;
+}
+
+function failedAt(job: Pick<JobRun, "finishedAt" | "updatedAt">): string | null {
+  return job.finishedAt ?? job.updatedAt ?? null;
+}
+
+function failedAtTime(job: Pick<JobRun, "finishedAt" | "updatedAt">): number {
+  const value = failedAt(job);
+  if (!value) return 0;
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
+export function groupFailedJobs(jobs: JobRun[]): FailedJobGroup[] {
+  const groups = new Map<string, FailedJobGroup>();
+
+  for (const job of jobs) {
+    const fingerprint = errorFingerprint(job);
+    const existing = groups.get(fingerprint);
+    if (!existing) {
+      const failed = failedAt(job);
+      groups.set(fingerprint, {
+        fingerprint,
+        representative: job,
+        jobs: [job],
+        count: 1,
+        firstFailedAt: failed,
+        lastFailedAt: failed,
+      });
+      continue;
+    }
+
+    existing.jobs.push(job);
+    existing.count += 1;
+
+    if (failedAtTime(job) > failedAtTime(existing.representative)) {
+      existing.representative = job;
+    }
+
+    const currentFailedAt = failedAt(job);
+    if (
+      currentFailedAt &&
+      (!existing.firstFailedAt ||
+        new Date(currentFailedAt).getTime() < new Date(existing.firstFailedAt).getTime())
+    ) {
+      existing.firstFailedAt = currentFailedAt;
+    }
+    if (
+      currentFailedAt &&
+      (!existing.lastFailedAt ||
+        new Date(currentFailedAt).getTime() > new Date(existing.lastFailedAt).getTime())
+    ) {
+      existing.lastFailedAt = currentFailedAt;
+    }
+  }
+
+  return [...groups.values()].sort(
+    (a, b) => failedAtTime(b.representative) - failedAtTime(a.representative),
+  );
 }
 
 export function describeRunResult(

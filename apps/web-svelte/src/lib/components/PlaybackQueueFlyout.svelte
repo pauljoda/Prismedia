@@ -2,7 +2,7 @@
   import { ListMusic, Music, Repeat, Repeat1, Shuffle, X } from "@lucide/svelte";
   import { cn } from "@prismedia/ui-svelte";
   import { keepFlyoutOnScreen } from "$lib/actions/keep-flyout-on-screen";
-  import { useAudioPlayback } from "$lib/stores/audio-playback.svelte";
+  import { resolveAudioArtwork, useAudioPlayback } from "$lib/stores/audio-playback.svelte";
 
   interface Props {
     onClose: () => void;
@@ -15,7 +15,7 @@
 
   const current = $derived(playback.currentTrack);
   const upNext = $derived(playback.upNext);
-  const cover = $derived(playback.context?.coverUrl ?? null);
+  const cover = $derived(resolveAudioArtwork(current, playback.context));
 
   function onWindowPointerDown(event: PointerEvent) {
     // Guard against the toggle button: it lives in the flyout's anchor wrapper, so checking the

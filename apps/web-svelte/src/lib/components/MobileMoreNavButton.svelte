@@ -13,7 +13,7 @@
 
   const nsfw = useNsfw();
 
-  const LONG_PRESS_MS = 5000;
+  const LONG_PRESS_MS = 2000;
   const MOVE_CANCEL_PX = 14;
 
   let timer: ReturnType<typeof setTimeout> | null = null;
@@ -83,7 +83,7 @@
     isMoreActive ? "text-text-accent" : "text-text-disabled hover:text-text-muted",
   )}
   style="-webkit-touch-callout:none"
-  aria-label="More navigation. Press and hold five seconds to toggle SFW and full NSFW."
+  aria-label="More navigation. Press and hold two seconds to toggle SFW and full NSFW."
   aria-expanded={sheetOpen}
   onclick={handleClick}
   onpointerdown={handlePointerDown}

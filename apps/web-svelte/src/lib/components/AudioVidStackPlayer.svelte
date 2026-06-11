@@ -19,14 +19,15 @@
     X,
   } from "@lucide/svelte";
   import { cn } from "@prismedia/ui-svelte";
-  import { formatDuration } from "@prismedia/contracts";
+  import { formatDuration, type AudioTrackListItemDto } from "@prismedia/contracts";
   import { apiAssetUrl, assetUrl } from "$lib/api/orval-fetch";
   import { resolveEntityHref } from "$lib/entities/entity-codes";
   import AudioWaveformFilmstrip from "./AudioWaveformFilmstrip.svelte";
   import PlaybackQueueFlyout from "./PlaybackQueueFlyout.svelte";
   import { waveformForDisplay } from "./audio-waveform";
-  import { useAudioPlayback } from "$lib/stores/audio-playback.svelte";
+  import { resolveAudioArtwork, useAudioPlayback } from "$lib/stores/audio-playback.svelte";
   import { useAppChrome } from "$lib/stores/app-chrome.svelte";
+  import { MUSIC_PLAYER_MINI_SIDE, MUSIC_PLAYER_REPEAT_MODE } from "$lib/api/generated/codes";
   import {
     setMediaSessionHandlers,
     setMediaSessionMetadata,
@@ -39,21 +40,22 @@
 
   let audioEl: HTMLAudioElement | null = $state(null);
   let rootEl: HTMLElement | null = $state(null);
-  let volume = $state(1);
-  let muted = $state(false);
   let waveformData = $state<number[] | null>(null);
   let timelineDragging = $state(false);
   let queueOpen = $state(false);
-  let collapsed = $state(false);
 
   let timelineDraggingRef = false;
   let currentSrcTrackId: string | null = null;
+  let audioStartedInThisSession = false;
 
   const activeTrack = $derived(playback.currentTrack);
   const ctx = $derived(playback.context);
   const currentTime = $derived(playback.currentTime);
   const duration = $derived(playback.duration);
   const playing = $derived(playback.playing);
+  const volume = $derived(playback.volume);
+  const muted = $derived(playback.muted);
+  const collapsed = $derived(playback.collapsed);
   const progress = $derived(
     duration > 0 ? Math.max(0, Math.min(100, (currentTime / duration) * 100)) : 0,
   );
@@ -62,7 +64,7 @@
     ctx?.artistName ?? activeTrack?.embeddedArtist ?? activeTrack?.performers?.[0]?.name ?? null,
   );
   const artistHref = $derived(ctx?.artistId ? resolveEntityHref("music-artist", ctx.artistId) : undefined);
-  const coverUrl = $derived(ctx?.coverUrl ?? null);
+  const coverUrl = $derived(resolveAudioArtwork(activeTrack, ctx));
   // Album label: a single-album context wins; otherwise fall back to the track's own album
   // so mixed-album queues (e.g. an artist Play All) still show the right album per track.
   const albumLabel = $derived(ctx?.albumTitle ?? activeTrack?.embeddedAlbum ?? null);
@@ -88,7 +90,7 @@
   });
 
   function collapse() {
-    collapsed = true;
+    playback.collapsed = true;
     queueOpen = false;
   }
 
@@ -99,7 +101,6 @@
 
   // --- Collapsed mini-player drag (fling left/right, snap with momentum) --------
   const MINI_WIDTH = 56; // h-14 / w-14
-  let collapsedSide = $state<"left" | "right">("left");
   let dragX = $state<number | null>(null); // live translateX while dragging / null = at rest
   let dragging = $state(false);
   let maxTravel = $state(0);
@@ -114,7 +115,7 @@
   let velocity = 0; // px/ms, signed
   let suppressBubbleClick = false;
 
-  const restTranslate = $derived(collapsedSide === "right" ? maxTravel : 0);
+  const restTranslate = $derived(playback.collapsedSide === MUSIC_PLAYER_MINI_SIDE.right ? maxTravel : 0);
   const appliedTranslate = $derived(dragX ?? restTranslate);
 
   function computeMaxTravel(): number {
@@ -162,7 +163,7 @@
       const goRight = Math.abs(velocity) > 0.35 ? velocity > 0 : projected > maxTravel / 2;
       // Snappier when thrown hard, gentler when nudged — both ease into place.
       snapDuration = Math.min(0.5, Math.max(0.2, 0.46 - Math.abs(velocity) * 0.22));
-      collapsedSide = goRight ? "right" : "left";
+      playback.collapsedSide = goRight ? MUSIC_PLAYER_MINI_SIDE.right : MUSIC_PLAYER_MINI_SIDE.left;
       suppressBubbleClick = true;
       setTimeout(() => (suppressBubbleClick = false), 360);
     }
@@ -175,7 +176,7 @@
       suppressBubbleClick = false;
       return;
     }
-    collapsed = false;
+    playback.collapsed = false;
   }
 
   // Keep the docked position correct across viewport changes.
@@ -194,12 +195,48 @@
     return Boolean(target.closest("input, textarea, select"));
   }
 
-  function requestPlay() {
+  function loadTrackSource(track: AudioTrackListItemDto) {
     if (!audioEl) return;
+    if (track.id === currentSrcTrackId) return;
+
+    const nextSrc = apiAssetUrl(`/audio-stream/${track.id}`);
+    if (!nextSrc) return;
+
+    currentSrcTrackId = track.id;
+    audioEl.src = nextSrc;
+    resetPlaybackPosition(track.duration ?? 0);
+    audioEl.load();
+  }
+
+  function canAttemptPlayback(options?: { deferWhenHidden?: boolean }): boolean {
+    return (
+      typeof document === "undefined" ||
+      document.visibilityState === "visible" ||
+      !options?.deferWhenHidden ||
+      audioStartedInThisSession
+    );
+  }
+
+  function requestPlay(expectedTrackId = currentSrcTrackId, options?: { deferWhenHidden?: boolean }) {
+    if (!audioEl || !currentSrcTrackId) return;
+    playback.playIntent = true;
+    if (!canAttemptPlayback(options)) return;
+
     const playPromise = audioEl.play();
     if (playPromise && typeof playPromise.catch === "function") {
-      void playPromise.catch((error: unknown) => console.error("Audio play failed:", error));
+      void playPromise.catch((error: unknown) => {
+        console.error("Audio play failed:", error);
+        if (expectedTrackId === currentSrcTrackId && audioEl?.paused) {
+          playback.playIntent = false;
+          playback.playing = false;
+        }
+      });
     }
+  }
+
+  function playTrackNow(track: AudioTrackListItemDto) {
+    loadTrackSource(track);
+    requestPlay(track.id);
   }
 
   function resetPlaybackPosition(nextDuration = 0) {
@@ -223,13 +260,16 @@
   function toggleMute() {
     if (!audioEl) return;
     audioEl.muted = !audioEl.muted;
-    muted = audioEl.muted;
+    playback.muted = audioEl.muted;
   }
 
   function togglePlay() {
-    if (!audioEl) return;
+    if (!audioEl || !activeTrack) return;
     if (audioEl.paused) requestPlay();
-    else audioEl.pause();
+    else {
+      playback.playIntent = false;
+      audioEl.pause();
+    }
   }
 
   function handleNext() {
@@ -250,7 +290,7 @@
   }
 
   function handleTrackEnd() {
-    if (playback.repeat === "one") {
+    if (playback.repeat === MUSIC_PLAYER_REPEAT_MODE.one) {
       resetPlaybackPosition(duration);
       requestPlay();
       return;
@@ -259,6 +299,7 @@
       resetPlaybackPosition(playback.currentTrack?.duration ?? 0);
       return;
     }
+    playback.playIntent = false;
     playback.playing = false;
   }
 
@@ -266,10 +307,10 @@
     if (!audioEl) return;
     const nextVolume = Number((event.currentTarget as HTMLInputElement).value);
     audioEl.volume = nextVolume;
-    volume = nextVolume;
+    playback.volume = nextVolume;
     if (nextVolume > 0 && audioEl.muted) {
       audioEl.muted = false;
-      muted = false;
+      playback.muted = false;
     }
   }
 
@@ -293,17 +334,21 @@
       return;
     }
 
-    if (track.id === currentSrcTrackId) return;
-    currentSrcTrackId = track.id;
+    loadTrackSource(track);
+    if (playback.playIntent) {
+      // Restored sessions may be blocked by browser autoplay policy; defer hidden-tab
+      // restore attempts until the page is visible. Once audio has actually played in
+      // this tab, continuing the queue while hidden should still try to start the
+      // next track so background playback does not stall between songs.
+      requestPlay(track.id, { deferWhenHidden: !audioStartedInThisSession });
+    }
+  });
 
-    const nextSrc = apiAssetUrl(`/audio-stream/${track.id}`);
-    if (!nextSrc) return;
-
-    audioEl.src = nextSrc;
-    resetPlaybackPosition(track.duration ?? 0);
-    audioEl.load();
-    // play() is queued until data arrives; the user gesture that changed the track satisfies autoplay.
-    requestPlay();
+  // Keep the element's audio settings in sync with persisted player preferences.
+  $effect(() => {
+    if (!audioEl) return;
+    audioEl.volume = volume;
+    audioEl.muted = muted;
   });
 
   // Load waveform data for the current track.
@@ -371,15 +416,25 @@
       if (Number.isFinite(audio.duration)) playback.duration = audio.duration;
       setMediaSessionPosition(audio.duration, audio.currentTime);
     };
-    const handlePlay = () => (playback.playing = true);
+    const handlePlay = () => {
+      audioStartedInThisSession = true;
+      playback.playIntent = true;
+      playback.playing = true;
+    };
     const handlePause = () => (playback.playing = false);
     const handleEnded = () => {
       if (playback.currentTrack) recordTrackPlay(playback.currentTrack.id);
       handleTrackEnd();
     };
     const handleError = () => {
+      playback.playIntent = false;
       playback.playing = false;
       console.error("Audio element error:", audio.error);
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== "visible") return;
+      if (!playback.playIntent || !playback.currentTrack || !audio.paused) return;
+      requestPlay(currentSrcTrackId);
     };
 
     audio.addEventListener("timeupdate", handleTimeUpdate);
@@ -389,7 +444,14 @@
     audio.addEventListener("pause", handlePause);
     audio.addEventListener("ended", handleEnded);
     audio.addEventListener("error", handleError);
-    const detachController = playback.attachController({ toggle: togglePlay, seek: handleSeek });
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    audio.volume = playback.volume;
+    audio.muted = playback.muted;
+    const detachController = playback.attachController({
+      toggle: togglePlay,
+      seek: handleSeek,
+      playTrack: playTrackNow,
+    });
     // Wire OS media controls (lock screen, media keys, Bluetooth) to the play queue.
     // Deliberately omit seekbackward/seekforward: on iOS those skip buttons replace the
     // next/previous-track buttons, which a queue-based player needs. seekto still powers the
@@ -411,6 +473,7 @@
       audio.removeEventListener("pause", handlePause);
       audio.removeEventListener("ended", handleEnded);
       audio.removeEventListener("error", handleError);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
       detachController();
       detachMediaSession();
       setMediaSessionMetadata(null);
@@ -419,9 +482,10 @@
 
   function handleKeydown(event: KeyboardEvent) {
     if (isKeyboardShortcutSuppressed(event.target)) return;
+    if (!activeTrack) return;
 
     const seekBy = (delta: number) => {
-      if (!audioEl || !activeTrack) return;
+      if (!audioEl) return;
       const max =
         duration > 0 && Number.isFinite(duration)
           ? duration
@@ -467,6 +531,7 @@
 <!-- Hidden audio element -->
 <audio bind:this={audioEl} preload="auto"></audio>
 
+{#if activeTrack}
 {#if collapsed}
   <!-- Collapsed: just the artwork with animated notes; tap to expand. -->
   <button
@@ -681,10 +746,10 @@
       <button
         type="button"
         onclick={() => playback.cycleRepeat()}
-        title={playback.repeat === "off" ? "Repeat: off" : playback.repeat === "all" ? "Repeat: all" : "Repeat: one"}
-        class={cn("p-1.5 transition-colors", playback.repeat !== "off" ? "text-accent-500" : "text-text-disabled hover:text-text-muted")}
+        title={playback.repeat === MUSIC_PLAYER_REPEAT_MODE.off ? "Repeat: off" : playback.repeat === MUSIC_PLAYER_REPEAT_MODE.all ? "Repeat: all" : "Repeat: one"}
+        class={cn("p-1.5 transition-colors", playback.repeat !== MUSIC_PLAYER_REPEAT_MODE.off ? "text-accent-500" : "text-text-disabled hover:text-text-muted")}
       >
-        {#if playback.repeat === "one"}
+        {#if playback.repeat === MUSIC_PLAYER_REPEAT_MODE.one}
           <Repeat1 class="h-3 w-3" />
         {:else}
           <Repeat class="h-3 w-3" />
@@ -718,6 +783,7 @@
     </div>
   </div>
 </div>
+{/if}
 {/if}
 
 <style>
