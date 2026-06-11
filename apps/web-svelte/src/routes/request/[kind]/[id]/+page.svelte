@@ -587,7 +587,13 @@
     display: grid;
     gap: 1.25rem;
     align-items: start;
-    padding: 0 1.5rem 1.5rem;
+    padding: 1.25rem 1.5rem 1.5rem;
+  }
+
+  /* When the description/tags body renders above, its bottom padding already
+     provides the separation — don't double it up. */
+  :global(.detail-body) + .request-detail-body {
+    padding-top: 0;
   }
 
   @media (min-width: 64rem) {
