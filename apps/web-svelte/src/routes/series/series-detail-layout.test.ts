@@ -66,7 +66,8 @@ describe("series detail layout", () => {
   it("shows labeled aired date, season count, and episode count in the series hero", () => {
     const source = readLocalSource("./[id]/+page.svelte");
 
-    expect(source).toContain("Date Aired:");
+    expect(source).toContain("{airedDate.label}");
+    expect(source).toContain("{airedDate.display}");
     expect(source).toContain("Seasons:");
     expect(source).toContain("Episodes:");
     expect(source).toContain("loadSeasonEpisodeCounts");

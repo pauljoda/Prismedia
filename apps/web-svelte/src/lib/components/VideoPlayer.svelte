@@ -235,7 +235,7 @@
   let muteTouched = false;
   let lastNonZeroVolume = 1;
   let pendingSeekTime: number | null = null;
-  let pendingAutoPlay = false;
+  let pendingAutoPlay = $state(false);
   let markerChaptersTrack: TextTrack | null = null;
   let hlsReadySrc: string | undefined = $state();
   let failedDirectSrc = $state<string | null>(null);
@@ -1625,6 +1625,8 @@
         streamType="on-demand"
         crossOrigin
         playsInline
+        load={autoPlay || pendingAutoPlay || playing ? "eager" : "play"}
+        posterLoad="eager"
         autoPlay={autoPlay}
         loop={autoRepeat}
         muted={initialMuted}
