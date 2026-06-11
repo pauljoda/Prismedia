@@ -138,6 +138,12 @@
     posterSize?: EntityDetailPosterSize;
     ratingBusy?: boolean;
     showHero?: boolean;
+    /**
+     * Renders the favorite/NSFW/organized badge cluster in the hero. Off for
+     * surfaces presenting external (non-library) items where those library
+     * flags have no meaning, e.g. request details.
+     */
+    showFlagActions?: boolean;
     tabs?: EntityDetailTab[];
     /** Built-in lower metadata sections used when this route does not provide tabs. */
     standaloneMetadataSectionIds?: string[];
@@ -169,6 +175,7 @@
     posterSize = "medium",
     ratingBusy = false,
     showHero = true,
+    showFlagActions = true,
     tabs = [],
     standaloneMetadataSectionIds = DEFAULT_STANDALONE_METADATA_SECTION_IDS,
     onMetadataSave,
@@ -1240,35 +1247,37 @@
 
           <div class="action-row">
             <div class="action-badges">
-              <button
-                type="button"
-                class="action-badge favorite"
-                class:active={isFavorite}
-                class:animating={favoriteAnimating}
-                disabled={!onFavoriteToggle}
-                aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
-                onclick={(e: MouseEvent) => handleFavoriteClick(e)}
-              >
-                <Heart class="h-4 w-4" />
-              </button>
+              {#if showFlagActions}
+                <button
+                  type="button"
+                  class="action-badge favorite"
+                  class:active={isFavorite}
+                  class:animating={favoriteAnimating}
+                  disabled={!onFavoriteToggle}
+                  aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
+                  onclick={(e: MouseEvent) => handleFavoriteClick(e)}
+                >
+                  <Heart class="h-4 w-4" />
+                </button>
 
-              {#if isNsfw}
-                <span class="action-badge nsfw active" aria-label="NSFW">
-                  <Flame class="h-4 w-4" />
-                </span>
+                {#if isNsfw}
+                  <span class="action-badge nsfw active" aria-label="NSFW">
+                    <Flame class="h-4 w-4" />
+                  </span>
+                {/if}
+
+                <button
+                  type="button"
+                  class="action-badge organized"
+                  class:active={isOrganized}
+                  class:animating={organizedAnimating}
+                  disabled={!onOrganizedToggle}
+                  aria-label={isOrganized ? "Mark as unorganized" : "Mark as organized"}
+                  onclick={(e: MouseEvent) => handleOrganizedClick(e)}
+                >
+                  <CheckCircle class="h-4 w-4" />
+                </button>
               {/if}
-
-              <button
-                type="button"
-                class="action-badge organized"
-                class:active={isOrganized}
-                class:animating={organizedAnimating}
-                disabled={!onOrganizedToggle}
-                aria-label={isOrganized ? "Mark as unorganized" : "Mark as organized"}
-                onclick={(e: MouseEvent) => handleOrganizedClick(e)}
-              >
-                <CheckCircle class="h-4 w-4" />
-              </button>
             </div>
 
             {#if canEdit || visibleActionButtons.length > 0}

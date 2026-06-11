@@ -8,6 +8,9 @@
   import { REQUEST_MEDIA_KIND, REQUEST_PROVIDER_KIND } from "$lib/api/generated/codes";
   import RequestPosterCard from "$lib/components/requests/RequestPosterCard.svelte";
   import RequestCastStrip from "$lib/components/requests/RequestCastStrip.svelte";
+  import EntityDetail from "$lib/components/entities/EntityDetail.svelte";
+  import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
+  import { requestDetailToEntityCard } from "$lib/requests/request-entity-card";
   import {
     REQUEST_KIND_LABELS,
     REQUEST_PROVIDER_LABELS,
@@ -19,7 +22,6 @@
     optionDefaultsForService,
     requestRatingDisplay,
     selectDefaultService,
-    thumbnailAspectForKind,
     trackedLabel,
   } from "$lib/requests/request-helpers";
   import type { RequestDetailResponse, RequestServiceInstanceSummary } from "$lib/requests/request-model";
@@ -62,6 +64,8 @@
   const serviceOptions = $derived(
     detail?.serviceOptions ?? { qualityProfiles: [], rootFolders: [], metadataProfiles: [], tags: [] },
   );
+
+  const requestCard = $derived(detail ? requestDetailToEntityCard(detail) : null);
 
   const isSeries = $derived(detail?.kind === REQUEST_MEDIA_KIND.series);
   const isArtist = $derived(detail?.kind === REQUEST_MEDIA_KIND.artist);
@@ -250,122 +254,99 @@
   </a>
 
   {#if loading}
-    <div class="flex items-center gap-2.5 p-6 text-text-muted">
-      <Loader2 class="h-4 w-4 animate-spin" />
-      <span class="text-sm">Loading request detail…</span>
-    </div>
+    <EntityDetailSkeleton posterSize="large" />
   {:else if error && !detail}
     <div class="surface-panel border-l-2 border-error px-4 py-2.5 text-sm text-error-text">
       {error}
     </div>
-  {:else if detail}
-    <!-- ── Hero ── -->
-    <section class="relative overflow-hidden rounded-sm border border-border-subtle bg-surface-1">
-      {#if detail.backdropUrl}
-        <!-- The artwork fills the entire banner; scrims keep the text legible. -->
-        <img
-          src={detail.backdropUrl}
-          alt=""
-          aria-hidden="true"
-          class="absolute inset-0 h-full w-full object-cover"
-        />
-        <div
-          class="absolute inset-0"
-          style:background="linear-gradient(90deg, rgba(7,8,11,0.92) 0%, rgba(7,8,11,0.62) 40%, rgba(7,8,11,0.18) 75%, rgba(7,8,11,0.05) 100%)"
-        ></div>
-        <div
-          class="absolute inset-0"
-          style:background="linear-gradient(180deg, rgba(7,8,11,0.1) 0%, rgba(7,8,11,0.35) 60%, rgba(7,8,11,0.78) 100%)"
-        ></div>
-      {/if}
-      <div class="relative grid gap-4 p-4 md:grid-cols-[160px_minmax(0,1fr)] md:items-end md:p-6">
-        {#if detail.posterUrl}
-          <div
-            class="w-32 overflow-hidden rounded-xs border border-border-subtle bg-surface-2 shadow-[0_10px_30px_rgba(0,0,0,0.55)] md:w-40"
-            style:aspect-ratio={thumbnailAspectForKind(detail.kind)}
-          >
-            <img src={detail.posterUrl} alt="" class="h-full w-full object-cover" />
-          </div>
-        {/if}
-        <div class="min-w-0 space-y-2.5">
-          <div class="flex flex-wrap items-center gap-1.5">
-            <Badge variant="accent">{REQUEST_KIND_LABELS[detail.kind] ?? detail.kind}</Badge>
-            <Badge>{REQUEST_PROVIDER_LABELS[detail.source] ?? detail.source}</Badge>
-            {#if detail.tracked}
-              <Badge variant="accent" class="gap-1">
-                <Check class="h-3 w-3" aria-hidden="true" />
-                {trackedLabel(detail.source)}{detail.monitored === false ? " · Unmonitored" : ""}
-              </Badge>
-            {/if}
-            {#if detail.certification}<Badge>{detail.certification}</Badge>{/if}
-            {#if detail.ratings.length > 0}
-              {#each detail.ratings as rating (rating.source)}
-                <Badge class="gap-1 font-mono" title={`${REQUEST_RATING_SOURCE_LABELS[rating.source] ?? rating.source} rating`}>
-                  <span class="text-text-muted">{REQUEST_RATING_SOURCE_LABELS[rating.source] ?? rating.source}</span>
-                  {requestRatingDisplay(rating)}
-                </Badge>
-              {/each}
-            {:else if ratingLabel(detail.rating)}
-              <Badge>★ {ratingLabel(detail.rating)}</Badge>
-            {/if}
-          </div>
-          <h1 class="text-[1.6rem] leading-tight md:text-[2.1rem]">{detail.title}</h1>
-          {#if detail.subtitle}
-            <p class="text-[0.92rem] font-medium text-text-secondary">{detail.subtitle}</p>
-          {/if}
-          {#if detail.year || detail.runtimeMinutes || detail.trackCount}
-            <p class="font-mono text-[0.72rem] text-text-muted">
-              {[
-                detail.year,
-                detail.runtimeMinutes ? `${detail.runtimeMinutes} min` : null,
-                detail.trackCount ? `${detail.trackCount} tracks` : null,
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-            </p>
-          {/if}
-          {#if detail.overview}
-            <p class="max-w-3xl text-[0.82rem] leading-relaxed text-text-secondary">
-              {detail.overview}
-            </p>
-          {/if}
-        </div>
-      </div>
-    </section>
-
+  {:else if detail && requestCard}
+    {@const d = detail}
     <div class="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
-      <!-- ── Metadata ── -->
-      <section class="surface-panel space-y-4 p-5">
-        {#if detail.tags.length > 0 || detail.studios.length > 0}
-          <div class="space-y-2">
-            <h2 class="text-kicker text-text-primary">Details</h2>
-            <div class="flex flex-wrap gap-1.5">
-              {#each detail.tags as tag}<Badge>{tag}</Badge>{/each}
-              {#each detail.studios as studio}<Badge variant="info">{studio}</Badge>{/each}
-            </div>
-          </div>
-        {/if}
-        {#if detail.cast.length > 0}
-          <div class="space-y-2">
-            <h3 class="text-label text-text-muted">Cast</h3>
-            <RequestCastStrip cast={detail.cast} />
-          </div>
-        {/if}
-        {#if detail.credits.length > 0}
-          <div class="space-y-1.5">
-            <h3 class="text-label text-text-muted">{detail.cast.length > 0 ? "Crew" : "Cast & Crew"}</h3>
-            <p class="text-[0.78rem] leading-relaxed text-text-secondary">
-              {detail.credits.join(", ")}
-            </p>
-          </div>
-        {/if}
+      <!-- The shared EntityDetail surface renders the hero (banner + reflection +
+           poster) and description for a synthetic card; request-only concepts
+           (ratings, cast, children, tracks) layer in through snippets. -->
+      <EntityDetail card={requestCard} posterSize="large" showFlagActions={false}>
+        {#snippet heroMeta()}
+          {#if d.subtitle}
+            <span class="meta-item">{d.subtitle}</span>
+          {/if}
+          {#if d.year}
+            {#if d.subtitle}<span class="meta-sep"></span>{/if}
+            <span class="meta-item">{d.year}</span>
+          {/if}
+          {#if d.runtimeMinutes}
+            {#if d.subtitle || d.year}<span class="meta-sep"></span>{/if}
+            <span class="meta-item">{d.runtimeMinutes} min</span>
+          {/if}
+          {#if d.trackCount}
+            {#if d.subtitle || d.year || d.runtimeMinutes}<span class="meta-sep"></span>{/if}
+            <span class="meta-item">{d.trackCount} tracks</span>
+          {/if}
+        {/snippet}
 
-        {#if detail.children.length > 0}
+        {#snippet heroBadges()}
+          <Badge variant="accent">{REQUEST_KIND_LABELS[d.kind] ?? d.kind}</Badge>
+          <Badge>{REQUEST_PROVIDER_LABELS[d.source] ?? d.source}</Badge>
+          {#if d.tracked}
+            <Badge variant="accent" class="gap-1">
+              <Check class="h-3 w-3" aria-hidden="true" />
+              {trackedLabel(d.source)}{d.monitored === false ? " · Unmonitored" : ""}
+            </Badge>
+          {/if}
+          {#if d.certification}<Badge>{d.certification}</Badge>{/if}
+          {#if d.ratings.length > 0}
+            {#each d.ratings as rating (rating.source)}
+              <Badge class="gap-1 font-mono" title={`${REQUEST_RATING_SOURCE_LABELS[rating.source] ?? rating.source} rating`}>
+                <span class="text-text-muted">{REQUEST_RATING_SOURCE_LABELS[rating.source] ?? rating.source}</span>
+                {requestRatingDisplay(rating)}
+              </Badge>
+            {/each}
+          {:else if ratingLabel(d.rating)}
+            <Badge>★ {ratingLabel(d.rating)}</Badge>
+          {/if}
+        {/snippet}
+
+        {#snippet afterBody()}
+          {@render requestSections(d)}
+        {/snippet}
+      </EntityDetail>
+
+      {@render requestPanel(d)}
+    </div>
+  {/if}
+</div>
+
+{#snippet requestSections(d: RequestDetailResponse)}
+    <div class="space-y-4">
+      {#if d.studios.length > 0}
+        <div class="space-y-2">
+          <h3 class="text-label text-text-muted">{isSeries ? "Networks" : "Studios"}</h3>
+          <div class="flex flex-wrap gap-1.5">
+            {#each d.studios as studio}<Badge variant="info">{studio}</Badge>{/each}
+          </div>
+        </div>
+      {/if}
+      {#if d.cast.length > 0}
+        <div class="space-y-2">
+          <h3 class="text-label text-text-muted">Cast</h3>
+          <RequestCastStrip cast={d.cast} />
+        </div>
+      {/if}
+      {#if d.credits.length > 0}
+        <div class="space-y-1.5">
+          <h3 class="text-label text-text-muted">{d.cast.length > 0 ? "Crew" : "Cast & Crew"}</h3>
+          <p class="text-[0.78rem] leading-relaxed text-text-secondary">
+            {d.credits.join(", ")}
+          </p>
+        </div>
+      {/if}
+
+      {#if d.children.length > 0}
           {#if isSeries}
             <div class="space-y-2">
               <h3 class="text-label text-text-muted">Seasons</h3>
               <div class="surface-well divide-y divide-border-subtle px-3">
-                {#each detail.children as child (child.id)}
+                {#each d.children as child (child.id)}
                   <label class="flex cursor-pointer items-center justify-between gap-2.5 py-2 text-[0.8rem] text-text-secondary">
                     <span class="flex items-center gap-2.5">
                       <Checkbox
@@ -374,7 +355,7 @@
                         onchange={(event) => toggleChild(child.id, event.currentTarget.checked)}
                       />
                       <span>{child.title}</span>
-                      {#if detail.tracked && child.monitored}
+                      {#if d.tracked && child.monitored}
                         <span class="font-mono text-[0.62rem] text-text-accent">monitored</span>
                       {/if}
                     </span>
@@ -393,10 +374,10 @@
                 <h3 class="text-label text-text-muted">
                   Discography
                   <span class="ml-1 font-mono text-[0.68rem] text-text-muted">
-                    {filteredChildren.length}{discographyFilter ? ` / ${detail.children.length}` : ""}
+                    {filteredChildren.length}{discographyFilter ? ` / ${d.children.length}` : ""}
                   </span>
                 </h3>
-                {#if detail.children.length > 8}
+                {#if d.children.length > 8}
                   <div class="w-full sm:w-56">
                     <TextInput
                       value={discographyFilter}
@@ -427,7 +408,7 @@
               {:else}
                 <p class="text-[0.78rem] text-text-muted">No albums match that filter.</p>
               {/if}
-              {#if isArtist && detail.source === REQUEST_PROVIDER_KIND.lidarr}
+              {#if isArtist && d.source === REQUEST_PROVIDER_KIND.lidarr}
                 <p class="text-[0.72rem] text-text-muted">
                   Open an album to review its tracks and request just that album. Requesting the
                   artist here adds their whole catalog to Lidarr instead.
@@ -437,11 +418,11 @@
           {/if}
         {/if}
 
-        {#if detail.tracks.length > 0}
+        {#if d.tracks.length > 0}
           <div class="space-y-2">
-            <h3 class="text-label text-text-muted">Tracks ({detail.tracks.length})</h3>
+            <h3 class="text-label text-text-muted">Tracks ({d.tracks.length})</h3>
             <div class="surface-well divide-y divide-border-subtle px-3">
-              {#each detail.tracks as track (track.number)}
+              {#each d.tracks as track (track.number)}
                 <div class="flex items-center gap-2.5 py-1.5 text-[0.8rem]">
                   <span class="w-6 shrink-0 text-right font-mono text-[0.68rem] text-text-disabled">
                     {track.number}
@@ -457,12 +438,14 @@
             </div>
           </div>
         {/if}
-      </section>
+    </div>
+{/snippet}
 
-      <!-- ── Request panel ── -->
+<!-- ── Request panel ── -->
+{#snippet requestPanel(d: RequestDetailResponse)}
       <aside class="surface-panel space-y-3.5 p-5">
         <h2 class="text-kicker text-text-primary">
-          {detail.tracked ? "Update Request" : "Send Request"}
+          {d.tracked ? "Update Request" : "Send Request"}
         </h2>
 
         {#if matchingServices.length === 0}
@@ -493,9 +476,9 @@
             />
           </label>
 
-          {#if detail.tracked}
+          {#if d.tracked}
             <p class="text-[0.75rem] leading-relaxed text-text-muted">
-              Already in {selectedService?.displayName ?? REQUEST_PROVIDER_LABELS[detail.source]}.
+              Already in {selectedService?.displayName ?? REQUEST_PROVIDER_LABELS[d.source]}.
               Updating changes {isSeries ? "season monitoring" : "monitoring"} and can start a
               search — quality and folder settings stay as configured in the service.
             </p>
@@ -526,7 +509,7 @@
                 onchange={(value) => (qualityProfileId = numericValue(value))}
               />
             </label>
-            {#if detail.source === REQUEST_PROVIDER_KIND.lidarr}
+            {#if d.source === REQUEST_PROVIDER_KIND.lidarr}
               <label class="block space-y-1">
                 <span class="text-label text-text-muted">Metadata profile</span>
                 <Select
@@ -549,7 +532,7 @@
                 checked={monitored}
                 onchange={(event) => (monitored = event.currentTarget.checked)}
               />
-              {detail.tracked ? "Keep monitored" : "Monitor after adding"}
+              {d.tracked ? "Keep monitored" : "Monitor after adding"}
             </label>
             <label class="flex cursor-pointer items-center gap-2 text-[0.78rem] text-text-secondary">
               <Checkbox
@@ -585,15 +568,13 @@
           >
             {#if submitting}
               <Loader2 class="h-4 w-4 animate-spin" />
-            {:else if detail.tracked}
+            {:else if d.tracked}
               <RefreshCw class="h-4 w-4" />
             {:else}
               <Send class="h-4 w-4" />
             {/if}
-            {submitting ? "Submitting…" : detail.tracked ? "Update Request" : "Submit Request"}
+            {submitting ? "Submitting…" : d.tracked ? "Update Request" : "Submit Request"}
           </Button>
         {/if}
       </aside>
-    </div>
-  {/if}
-</div>
+{/snippet}
