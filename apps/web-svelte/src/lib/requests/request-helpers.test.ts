@@ -26,6 +26,16 @@ describe("request helpers", () => {
     expect(defaultSelectedChildIds(detail)).toEqual(["0", "1", "2"]);
   });
 
+  it("does not default Lidarr album lookup children into submit selections", () => {
+    const detail = {
+      ...detailWithChildren(["mb-album"]),
+      source: REQUEST_PROVIDER_KIND.lidarr,
+      kind: REQUEST_MEDIA_KIND.artist,
+    };
+
+    expect(defaultSelectedChildIds(detail)).toEqual([]);
+  });
+
   it("builds submit payload from detail and selected service options", () => {
     const payload = buildRequestSubmitPayload(
       detailWithChildren(["0", "1"]),
@@ -57,13 +67,14 @@ describe("request helpers", () => {
     expect(inferRequestSourceForKind(REQUEST_MEDIA_KIND.album)).toBe(REQUEST_PROVIDER_KIND.lidarr);
   });
 
-  it("selects valid defaults from service options before falling back to first option", () => {
+  it("selects valid defaults and search setting from service options before falling back to first option", () => {
     const defaults = optionDefaultsForService(
       {
         ...service("svc", REQUEST_PROVIDER_KIND.lidarr, true),
         defaultQualityProfileId: 2,
         defaultMetadataProfileId: 9,
         defaultRootFolderPath: "/missing",
+        searchOnRequest: false,
       },
       {
         qualityProfiles: [
@@ -79,6 +90,7 @@ describe("request helpers", () => {
       qualityProfileId: 2,
       rootFolderPath: "/music",
       metadataProfileId: 9,
+      searchNow: false,
     });
   });
 });

@@ -68,6 +68,9 @@ public sealed class RequestDetailService(IRequestServiceInstanceStore store, IRe
         if (instance is null) {
             return null;
         }
+        if (instance.Kind != source) {
+            return null;
+        }
 
         var client = clients.Get(source);
         var detail = await client.GetDetailAsync(instance, kind, externalId, cancellationToken);
@@ -98,6 +101,9 @@ public sealed class RequestSubmitService(IRequestServiceInstanceStore store, IRe
     public async Task<RequestSubmitResponse?> SubmitAsync(RequestSubmitRequest request, CancellationToken cancellationToken) {
         var instance = await store.GetAsync(request.ServiceId, cancellationToken);
         if (instance is null) {
+            return null;
+        }
+        if (instance.Kind != request.Source) {
             return null;
         }
 

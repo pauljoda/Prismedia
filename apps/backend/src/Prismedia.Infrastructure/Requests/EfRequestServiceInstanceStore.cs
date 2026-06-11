@@ -104,7 +104,14 @@ public sealed class EfRequestServiceInstanceStore(PrismediaDbContext db) : IRequ
             await db.SaveChangesAsync(cancellationToken);
         }
 
-        return ToSummary(ToDetail(row, request.ApiKey));
+        var savedApiKey = !string.IsNullOrWhiteSpace(request.ApiKey)
+            ? request.ApiKey
+            : await db.RequestServiceCredentials
+                .AsNoTracking()
+                .Where(credential => credential.ServiceInstanceId == row.Id && credential.CredentialKey == RequestProviderHttp.ApiKeyCredential)
+                .Select(credential => credential.EncryptedValue)
+                .FirstOrDefaultAsync(cancellationToken);
+        return ToSummary(ToDetail(row, savedApiKey));
     }
 
     public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken) {

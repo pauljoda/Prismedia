@@ -5,6 +5,7 @@
   import { REQUEST_MEDIA_KIND, REQUEST_PROVIDER_KIND } from "$lib/api/generated/codes";
   import {
     deleteRequestServiceInstance,
+    fetchRequestServiceOptions,
     fetchRequestServices,
     saveRequestServiceInstance,
     searchRequests,
@@ -16,6 +17,7 @@
     RequestSearchResult,
     RequestServiceInstanceSaveRequest,
     RequestServiceInstanceSummary,
+    RequestServiceOptionsResponse,
   } from "$lib/requests/request-model";
   import { numericValue } from "$lib/requests/request-helpers";
 
@@ -38,6 +40,8 @@
   let savingService = $state(false);
   let serviceMessage = $state<string | null>(null);
   let serviceTestResults = $state<Record<string, RequestConnectionTestResponse>>({});
+  let serviceOptions = $state<RequestServiceOptionsResponse | null>(null);
+  let loadingServiceOptions = $state(false);
   let serviceForm = $state<RequestServiceInstanceSaveRequest>(emptyServiceForm());
   let loading = $state(false);
   let error = $state<string | null>(null);
@@ -116,6 +120,7 @@
       isDefault: service.isDefault,
     };
     serviceMessage = service.hasApiKey ? "API key is saved; enter a new key only to replace it." : null;
+    serviceOptions = null;
   }
 
   function newService() {
@@ -123,6 +128,7 @@
     editingServiceId = null;
     serviceForm = emptyServiceForm();
     serviceMessage = null;
+    serviceOptions = null;
   }
 
   async function saveService() {
@@ -141,6 +147,7 @@
       });
       services = await fetchRequestServices();
       editService(saved);
+      await loadServiceOptions(saved.id);
       serviceMessage = "Service saved. API key is redacted after save.";
     } catch (err) {
       error = err instanceof Error ? err.message : "Failed to save service";
@@ -170,6 +177,34 @@
       };
     } catch (err) {
       error = err instanceof Error ? err.message : "Failed to test service";
+    }
+  }
+
+  async function loadServiceOptions(serviceId = editingServiceId) {
+    if (!serviceId) {
+      serviceMessage = "Save the service before loading Arr options.";
+      return;
+    }
+
+    loadingServiceOptions = true;
+    error = null;
+    try {
+      const options = await fetchRequestServiceOptions(serviceId);
+      serviceOptions = options;
+      const rootFolder = options.rootFolders.find((option) => option.path === serviceForm.defaultRootFolderPath) ?? options.rootFolders[0];
+      const qualityProfile = options.qualityProfiles.find((option) => numericValue(option.id) === numericValue(serviceForm.defaultQualityProfileId)) ?? options.qualityProfiles[0];
+      const metadataProfile = options.metadataProfiles.find((option) => numericValue(option.id) === numericValue(serviceForm.defaultMetadataProfileId)) ?? options.metadataProfiles[0];
+      serviceForm = {
+        ...serviceForm,
+        defaultRootFolderPath: rootFolder?.path ?? rootFolder?.id ?? serviceForm.defaultRootFolderPath,
+        defaultQualityProfileId: numericValue(qualityProfile?.id) ?? numericValue(serviceForm.defaultQualityProfileId),
+        defaultMetadataProfileId: numericValue(metadataProfile?.id) ?? numericValue(serviceForm.defaultMetadataProfileId),
+      };
+      serviceMessage = "Loaded Arr options.";
+    } catch (err) {
+      error = err instanceof Error ? err.message : "Failed to load service options";
+    } finally {
+      loadingServiceOptions = false;
     }
   }
 </script>
@@ -261,19 +296,46 @@
         <div class="form-grid">
           <label>
             <span>Default root folder</span>
-            <TextInput value={serviceForm.defaultRootFolderPath ?? ""} oninput={(event) => (serviceForm = { ...serviceForm, defaultRootFolderPath: event.currentTarget.value })} placeholder="/media" />
+            {#if serviceOptions?.rootFolders.length}
+              <Select
+                value={serviceForm.defaultRootFolderPath ?? ""}
+                options={serviceOptions.rootFolders.map((option) => ({ value: option.path ?? option.id, label: option.name }))}
+                onchange={(value) => (serviceForm = { ...serviceForm, defaultRootFolderPath: value })}
+              />
+            {:else}
+              <TextInput value={serviceForm.defaultRootFolderPath ?? ""} oninput={(event) => (serviceForm = { ...serviceForm, defaultRootFolderPath: event.currentTarget.value })} placeholder="/media" />
+            {/if}
           </label>
           <label>
             <span>Default quality profile ID</span>
-            <TextInput type="number" value={serviceForm.defaultQualityProfileId ?? ""} oninput={(event) => (serviceForm = { ...serviceForm, defaultQualityProfileId: numericValue(event.currentTarget.value) })} />
+            {#if serviceOptions?.qualityProfiles.length}
+              <Select
+                value={serviceForm.defaultQualityProfileId === null ? "" : String(serviceForm.defaultQualityProfileId)}
+                options={serviceOptions.qualityProfiles.map((option) => ({ value: option.id, label: option.name }))}
+                onchange={(value) => (serviceForm = { ...serviceForm, defaultQualityProfileId: numericValue(value) })}
+              />
+            {:else}
+              <TextInput type="number" value={serviceForm.defaultQualityProfileId ?? ""} oninput={(event) => (serviceForm = { ...serviceForm, defaultQualityProfileId: numericValue(event.currentTarget.value) })} />
+            {/if}
           </label>
           {#if serviceForm.kind === REQUEST_PROVIDER_KIND.lidarr}
             <label>
               <span>Default metadata profile ID</span>
-              <TextInput type="number" value={serviceForm.defaultMetadataProfileId ?? ""} oninput={(event) => (serviceForm = { ...serviceForm, defaultMetadataProfileId: numericValue(event.currentTarget.value) })} />
+              {#if serviceOptions?.metadataProfiles.length}
+                <Select
+                  value={serviceForm.defaultMetadataProfileId === null ? "" : String(serviceForm.defaultMetadataProfileId)}
+                  options={serviceOptions.metadataProfiles.map((option) => ({ value: option.id, label: option.name }))}
+                  onchange={(value) => (serviceForm = { ...serviceForm, defaultMetadataProfileId: numericValue(value) })}
+                />
+              {:else}
+                <TextInput type="number" value={serviceForm.defaultMetadataProfileId ?? ""} oninput={(event) => (serviceForm = { ...serviceForm, defaultMetadataProfileId: numericValue(event.currentTarget.value) })} />
+              {/if}
             </label>
           {/if}
         </div>
+        <Button type="button" variant="secondary" disabled={loadingServiceOptions || !editingServiceId} onclick={() => loadServiceOptions()}>
+          {loadingServiceOptions ? "Loading options" : "Load Arr options"}
+        </Button>
         <label class="toggle-row">
           <Checkbox checked={serviceForm.searchOnRequest} onchange={(event) => (serviceForm = { ...serviceForm, searchOnRequest: event.currentTarget.checked })} />
           <span>Search after request by default</span>

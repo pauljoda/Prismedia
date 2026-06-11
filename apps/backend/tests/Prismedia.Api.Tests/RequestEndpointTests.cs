@@ -78,6 +78,56 @@ public sealed class RequestEndpointTests {
         Assert.True(submitted!.Submitted);
     }
 
+    [Fact]
+    public async Task RequestDetailReturnsNotFoundWhenServiceDoesNotMatchRequestedSource() {
+        using var factory = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(builder => {
+                builder.ConfigureServices(services => {
+                    services.AddSingleton<IRequestServiceInstanceStore, FakeRequestServiceInstanceStore>();
+                    services.AddSingleton<FakeRequestProviderClient>();
+                    services.AddSingleton<IRequestProviderClient>(provider => provider.GetRequiredService<FakeRequestProviderClient>());
+                    services.AddSingleton<IRequestProviderClientFactory, FakeRequestProviderClientFactory>();
+                });
+            })
+            .WithTestAuth();
+        using var client = factory.CreateAuthenticatedClient();
+        var jsonOptions = new System.Text.Json.JsonSerializerOptions {
+            PropertyNameCaseInsensitive = true
+        };
+        jsonOptions.Converters.Add(new CodecJsonConverterFactory());
+        var save = await client.PostAsJsonAsync("/api/requests/services", new RequestServiceInstanceSaveRequest(
+            null,
+            RequestProviderKind.Radarr,
+            "Movies",
+            "http://radarr.test",
+            "secret",
+            "/movies",
+            4,
+            null,
+            true,
+            false),
+            jsonOptions);
+        var service = await save.Content.ReadFromJsonAsync<RequestServiceInstanceSummary>(jsonOptions);
+
+        var detail = await client.GetAsync($"/api/requests/details/sonarr/series/79169?serviceId={service!.Id}");
+        var submit = await client.PostAsJsonAsync("/api/requests", new RequestSubmitRequest(
+            service.Id,
+            RequestProviderKind.Sonarr,
+            RequestMediaKind.Series,
+            "79169",
+            "Twin Peaks",
+            4,
+            "/series",
+            null,
+            true,
+            true,
+            []),
+            jsonOptions);
+
+        Assert.Equal(System.Net.HttpStatusCode.NotFound, detail.StatusCode);
+        Assert.Equal(System.Net.HttpStatusCode.NotFound, submit.StatusCode);
+    }
+
     private sealed class FakeRequestProviderClientFactory(FakeRequestProviderClient client) : IRequestProviderClientFactory {
         public IRequestProviderClient Get(RequestProviderKind kind) => client;
     }

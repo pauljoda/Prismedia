@@ -73,6 +73,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Fixed
+- Request service setup now loads root folder, quality profile, and Lidarr metadata profile choices from Arr instead of requiring copied IDs, keeps saved API keys redacted while editing, and avoids unsafe Lidarr album monitoring from lookup-only album IDs.
 - Audio track play counts now keep increasing on repeated completed plays instead of getting stuck at one.
 - Music queues now keep advancing between tracks while Prismedia is in a background tab, instead of pausing at the track boundary until the tab is focused again.
 - Restored music sessions no longer show the player as actively playing when the browser blocks autoplay; the player stays visible with the saved queue and controls, then switches to playing only once audio actually starts.

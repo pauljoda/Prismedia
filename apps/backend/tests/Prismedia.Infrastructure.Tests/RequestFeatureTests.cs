@@ -72,6 +72,40 @@ public sealed class RequestFeatureTests {
     }
 
     [Fact]
+    public async Task ServiceStoreReportsExistingApiKeyWhenEditingWithoutReplacement() {
+        await using var db = CreateContext();
+        var store = new EfRequestServiceInstanceStore(db);
+        var created = await store.SaveAsync(new RequestServiceInstanceSaveRequest(
+            null,
+            RequestProviderKind.Radarr,
+            "Movies",
+            "http://radarr.test",
+            "secret-key",
+            null,
+            null,
+            null,
+            true,
+            false),
+            CancellationToken.None);
+
+        var edited = await store.SaveAsync(new RequestServiceInstanceSaveRequest(
+            created.Id,
+            RequestProviderKind.Radarr,
+            "Movies",
+            "http://radarr.test",
+            null,
+            "/movies",
+            4,
+            null,
+            true,
+            true),
+            CancellationToken.None);
+
+        Assert.True(edited.HasApiKey);
+        Assert.Null(edited.ApiKey);
+    }
+
+    [Fact]
     public async Task RadarrClientMapsSearchAndSendsApiKey() {
         var handler = new FakeHttpHandler((request, body) => {
             Assert.Equal("radarr-key", request.Headers.GetValues(RequestProviderHttp.ApiKeyHeader).Single());
@@ -216,7 +250,7 @@ public sealed class RequestFeatureTests {
     }
 
     [Fact]
-    public async Task LidarrClientCanSearchArtistsAndMonitorSelectedAlbums() {
+    public async Task LidarrClientCanSearchArtistsWithoutPostingLookupAlbumIdsToMonitor() {
         var calls = new List<string>();
         var handler = new FakeHttpHandler((request, body) => {
             calls.Add($"{request.Method} {request.RequestUri!.AbsolutePath}");
@@ -251,7 +285,8 @@ public sealed class RequestFeatureTests {
             new RequestSubmitRequest(Guid.NewGuid(), RequestProviderKind.Lidarr, RequestMediaKind.Artist, "mb-artist", "Bowie", 1, "/music", null, true, true, ["9"]),
             CancellationToken.None);
 
-        Assert.Contains("PUT /api/v1/album/monitor", calls);
+        Assert.DoesNotContain("PUT /api/v1/album/monitor", calls);
+        Assert.Contains("POST /api/v1/artist", calls);
     }
 
     [Fact]

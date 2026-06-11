@@ -25,6 +25,8 @@ export function selectDefaultService(
 }
 
 export function defaultSelectedChildIds(detail: RequestDetailResponse): string[] {
+  if (detail.source === REQUEST_PROVIDER_KIND.lidarr) return [];
+
   return detail.children
     .filter((child) => child.requestable)
     .map((child) => child.id);
@@ -40,7 +42,7 @@ export function inferRequestSourceForKind(kind: RequestMediaKindCode): RequestPr
 export function optionDefaultsForService(
   service: RequestServiceInstanceSummary,
   options: RequestServiceOptionsResponse,
-): Pick<RequestSubmitFormState, "qualityProfileId" | "rootFolderPath" | "metadataProfileId"> {
+): Pick<RequestSubmitFormState, "qualityProfileId" | "rootFolderPath" | "metadataProfileId" | "searchNow"> {
   const defaultQualityProfileId = numericValue(service.defaultQualityProfileId);
   const defaultMetadataProfileId = numericValue(service.defaultMetadataProfileId);
   return {
@@ -54,6 +56,7 @@ export function optionDefaultsForService(
     metadataProfileId:
       findNumericOption(options.metadataProfiles, defaultMetadataProfileId) ??
       numericValue(options.metadataProfiles[0]?.id),
+    searchNow: service.searchOnRequest,
   };
 }
 

@@ -7,6 +7,89 @@ using Prismedia.Domain.Entities;
 
 namespace Prismedia.Infrastructure.Requests;
 
+public static class ArrJsonFields {
+    public const string Actors = "actors";
+    public const string AddOptions = "addOptions";
+    public const string AlbumIds = "albumIds";
+    public const string AlbumType = "albumType";
+    public const string Certification = "certification";
+    public const string CoverType = "coverType";
+    public const string Crew = "crew";
+    public const string Fanart = "fanart";
+    public const string Genres = "genres";
+    public const string Id = "id";
+    public const string Images = "images";
+    public const string Members = "members";
+    public const string Monitored = "monitored";
+    public const string Name = "name";
+    public const string Networks = "networks";
+    public const string Overview = "overview";
+    public const string Path = "path";
+    public const string Poster = "poster";
+    public const string QualityProfileId = "qualityProfileId";
+    public const string Ratings = "ratings";
+    public const string RemoteUrl = "remoteUrl";
+    public const string RootFolderPath = "rootFolderPath";
+    public const string Runtime = "runtime";
+    public const string Seasons = "seasons";
+    public const string SeasonNumber = "seasonNumber";
+    public const string SeriesType = "seriesType";
+    public const string Studios = "studios";
+    public const string Title = "title";
+    public const string Url = "url";
+    public const string Value = "value";
+    public const string Year = "year";
+}
+
+public static class RadarrProtocol {
+    public const string TmdbId = "tmdbId";
+    public const string MinimumAvailability = "minimumAvailability";
+    public const string MinimumAvailabilityReleased = "released";
+    public const string Monitor = "monitor";
+    public const string MonitorMovieOnly = "movieOnly";
+    public const string MonitorNone = "none";
+    public const string SearchForMovie = "searchForMovie";
+    public const string MovieEndpoint = "movie";
+    public const string MovieLookupEndpoint = "movie/lookup";
+}
+
+public static class SonarrProtocol {
+    public const string TvdbId = "tvdbId";
+    public const string FirstAired = "firstAired";
+    public const string SearchForMissingEpisodes = "searchForMissingEpisodes";
+    public const string SeriesTypeStandard = "standard";
+    public const string SeriesEndpoint = "series";
+    public const string SeriesLookupEndpoint = "series/lookup";
+}
+
+public static class LidarrProtocol {
+    public const string ArtistEndpoint = "artist";
+    public const string ArtistLookupEndpoint = "artist/lookup";
+    public const string AlbumLookupEndpoint = "album/lookup";
+    public const string ForeignAlbumId = "foreignAlbumId";
+    public const string ForeignArtistId = "foreignArtistId";
+    public const string ArtistName = "artistName";
+    public const string MetadataProfileId = "metadataProfileId";
+    public const string ReleaseDate = "releaseDate";
+    public const string SearchForMissingAlbums = "searchForMissingAlbums";
+    public const string Status = "status";
+}
+
+public static class ArrOptionEndpoints {
+    public const string QualityProfile = "qualityprofile";
+    public const string MetadataProfile = "metadataprofile";
+    public const string RootFolder = "rootfolder";
+    public const string SystemStatus = "system/status";
+}
+
+public static class ArrImageTypes {
+    public const string Backdrop = "backdrop";
+    public const string Banner = "banner";
+    public const string Cover = "cover";
+    public const string Fanart = "fanart";
+    public const string Poster = "poster";
+}
+
 public sealed class RequestProviderClientFactory(IEnumerable<IRequestProviderClient> clients) : IRequestProviderClientFactory {
     private readonly Dictionary<RequestProviderKind, IRequestProviderClient> _clients = clients.ToDictionary(client => client.Kind);
 
@@ -18,7 +101,7 @@ public sealed class RequestProviderClientFactory(IEnumerable<IRequestProviderCli
 
 public sealed class RadarrRequestProviderClient(HttpClient http) : ArrRequestProviderClient(http, RequestProviderKind.Radarr, RequestProviderHttp.RadarrApiPath) {
     public override async Task<IReadOnlyList<RequestSearchResult>> SearchAsync(RequestServiceInstanceDetail instance, string query, CancellationToken cancellationToken) {
-        var items = await GetArrayAsync(instance, $"{ApiPath}/movie/lookup?term={Uri.EscapeDataString(query)}", cancellationToken);
+        var items = await GetArrayAsync(instance, $"{ApiPath}/{RadarrProtocol.MovieLookupEndpoint}?term={Uri.EscapeDataString(query)}", cancellationToken);
         return items.Select(item => MapMovie(instance.Id, item)).ToArray();
     }
 
@@ -29,40 +112,40 @@ public sealed class RadarrRequestProviderClient(HttpClient http) : ArrRequestPro
 
     public override async Task<RequestSubmitResponse> SubmitAsync(RequestServiceInstanceDetail instance, RequestDetailResponse detail, RequestSubmitRequest request, CancellationToken cancellationToken) {
         var payload = ToObject(await LookupMovieAsync(instance, detail.ExternalId, cancellationToken));
-        payload["qualityProfileId"] = request.QualityProfileId ?? instance.DefaultQualityProfileId;
-        payload["rootFolderPath"] = request.RootFolderPath ?? instance.DefaultRootFolderPath;
-        payload["monitored"] = request.Monitored;
-        payload["minimumAvailability"] = "released";
-        payload["addOptions"] = new JsonObject {
-            ["monitor"] = request.Monitored ? "movieOnly" : "none",
-            ["searchForMovie"] = request.SearchNow
+        payload[ArrJsonFields.QualityProfileId] = request.QualityProfileId ?? instance.DefaultQualityProfileId;
+        payload[ArrJsonFields.RootFolderPath] = request.RootFolderPath ?? instance.DefaultRootFolderPath;
+        payload[ArrJsonFields.Monitored] = request.Monitored;
+        payload[RadarrProtocol.MinimumAvailability] = RadarrProtocol.MinimumAvailabilityReleased;
+        payload[ArrJsonFields.AddOptions] = new JsonObject {
+            [RadarrProtocol.Monitor] = request.Monitored ? RadarrProtocol.MonitorMovieOnly : RadarrProtocol.MonitorNone,
+            [RadarrProtocol.SearchForMovie] = request.SearchNow
         };
 
-        var response = await SendJsonAsync(instance, HttpMethod.Post, $"{ApiPath}/movie", payload, cancellationToken);
+        var response = await SendJsonAsync(instance, HttpMethod.Post, $"{ApiPath}/{RadarrProtocol.MovieEndpoint}", payload, cancellationToken);
         return Submitted(response);
     }
 
     private async Task<JsonElement> LookupMovieAsync(RequestServiceInstanceDetail instance, string externalId, CancellationToken cancellationToken) {
-        var items = await GetArrayAsync(instance, $"{ApiPath}/movie/lookup?term=tmdb:{Uri.EscapeDataString(externalId)}", cancellationToken);
-        return SelectDetail(items, candidate => Text(candidate, "tmdbId") == externalId, "Radarr did not return a movie detail.");
+        var items = await GetArrayAsync(instance, $"{ApiPath}/{RadarrProtocol.MovieLookupEndpoint}?term=tmdb:{Uri.EscapeDataString(externalId)}", cancellationToken);
+        return SelectDetail(items, candidate => Text(candidate, RadarrProtocol.TmdbId) == externalId, "Radarr did not return a movie detail.");
     }
 }
 
 public sealed class SonarrRequestProviderClient(HttpClient http) : ArrRequestProviderClient(http, RequestProviderKind.Sonarr, RequestProviderHttp.SonarrApiPath) {
     public override async Task<IReadOnlyList<RequestSearchResult>> SearchAsync(RequestServiceInstanceDetail instance, string query, CancellationToken cancellationToken) {
-        var items = await GetArrayAsync(instance, $"{ApiPath}/series/lookup?term={Uri.EscapeDataString(query)}", cancellationToken);
+        var items = await GetArrayAsync(instance, $"{ApiPath}/{SonarrProtocol.SeriesLookupEndpoint}?term={Uri.EscapeDataString(query)}", cancellationToken);
         return items.Select(item => MapSeries(instance.Id, item)).ToArray();
     }
 
     public override async Task<RequestDetailResponse> GetDetailAsync(RequestServiceInstanceDetail instance, RequestMediaKind kind, string externalId, CancellationToken cancellationToken) {
         var item = await LookupSeriesAsync(instance, externalId, cancellationToken);
-        var children = Array(item, "seasons")
+        var children = Array(item, ArrJsonFields.Seasons)
             .Select(season => new RequestChildOption(
-                Text(season, "seasonNumber") ?? string.Empty,
-                SeasonTitle(Int(season, "seasonNumber")),
+                Text(season, ArrJsonFields.SeasonNumber) ?? string.Empty,
+                SeasonTitle(Int(season, ArrJsonFields.SeasonNumber)),
                 RequestMediaKind.Series,
                 true,
-                Int(season, "seasonNumber"),
+                Int(season, ArrJsonFields.SeasonNumber),
                 null,
                 null))
             .Where(child => !string.IsNullOrWhiteSpace(child.Id))
@@ -82,38 +165,38 @@ public sealed class SonarrRequestProviderClient(HttpClient http) : ArrRequestPro
             }
 
             seasons.Add(new JsonObject {
-                ["seasonNumber"] = seasonNumber.Value,
-                ["monitored"] = selected.Contains(child.Id)
+                [ArrJsonFields.SeasonNumber] = seasonNumber.Value,
+                [ArrJsonFields.Monitored] = selected.Contains(child.Id)
             });
         }
 
-        payload["qualityProfileId"] = request.QualityProfileId ?? instance.DefaultQualityProfileId;
-        payload["rootFolderPath"] = request.RootFolderPath ?? instance.DefaultRootFolderPath;
-        payload["monitored"] = request.Monitored;
-        if (!payload.ContainsKey("seriesType")) {
-            payload["seriesType"] = "standard";
+        payload[ArrJsonFields.QualityProfileId] = request.QualityProfileId ?? instance.DefaultQualityProfileId;
+        payload[ArrJsonFields.RootFolderPath] = request.RootFolderPath ?? instance.DefaultRootFolderPath;
+        payload[ArrJsonFields.Monitored] = request.Monitored;
+        if (!payload.ContainsKey(ArrJsonFields.SeriesType)) {
+            payload[ArrJsonFields.SeriesType] = SonarrProtocol.SeriesTypeStandard;
         }
-        payload["seasons"] = seasons;
-        payload["addOptions"] = new JsonObject {
-            ["searchForMissingEpisodes"] = request.SearchNow
+        payload[ArrJsonFields.Seasons] = seasons;
+        payload[ArrJsonFields.AddOptions] = new JsonObject {
+            [SonarrProtocol.SearchForMissingEpisodes] = request.SearchNow
         };
 
-        var response = await SendJsonAsync(instance, HttpMethod.Post, $"{ApiPath}/series", payload, cancellationToken);
+        var response = await SendJsonAsync(instance, HttpMethod.Post, $"{ApiPath}/{SonarrProtocol.SeriesEndpoint}", payload, cancellationToken);
         return Submitted(response);
     }
 
     private static string SeasonTitle(int? number) => number == 0 ? "Specials" : $"Season {number}";
 
     private async Task<JsonElement> LookupSeriesAsync(RequestServiceInstanceDetail instance, string externalId, CancellationToken cancellationToken) {
-        var items = await GetArrayAsync(instance, $"{ApiPath}/series/lookup?term=tvdb:{Uri.EscapeDataString(externalId)}", cancellationToken);
-        return SelectDetail(items, candidate => Text(candidate, "tvdbId") == externalId, "Sonarr did not return a series detail.");
+        var items = await GetArrayAsync(instance, $"{ApiPath}/{SonarrProtocol.SeriesLookupEndpoint}?term=tvdb:{Uri.EscapeDataString(externalId)}", cancellationToken);
+        return SelectDetail(items, candidate => Text(candidate, SonarrProtocol.TvdbId) == externalId, "Sonarr did not return a series detail.");
     }
 }
 
 public sealed class LidarrRequestProviderClient(HttpClient http) : ArrRequestProviderClient(http, RequestProviderKind.Lidarr, RequestProviderHttp.LidarrApiPath) {
     public override async Task<IReadOnlyList<RequestSearchResult>> SearchAsync(RequestServiceInstanceDetail instance, string query, CancellationToken cancellationToken) {
-        var artists = await GetArrayAsync(instance, $"{ApiPath}/artist/lookup?term={Uri.EscapeDataString(query)}", cancellationToken);
-        var albums = await GetArrayAsync(instance, $"{ApiPath}/album/lookup?term={Uri.EscapeDataString(query)}", cancellationToken);
+        var artists = await GetArrayAsync(instance, $"{ApiPath}/{LidarrProtocol.ArtistLookupEndpoint}?term={Uri.EscapeDataString(query)}", cancellationToken);
+        var albums = await GetArrayAsync(instance, $"{ApiPath}/{LidarrProtocol.AlbumLookupEndpoint}?term={Uri.EscapeDataString(query)}", cancellationToken);
         return artists.Select(item => MapArtist(instance.Id, item))
             .Concat(albums.Select(item => MapAlbum(instance.Id, item)))
             .ToArray();
@@ -125,8 +208,8 @@ public sealed class LidarrRequestProviderClient(HttpClient http) : ArrRequestPro
             return DetailFromSearch(MapAlbum(instance.Id, album), album, []);
         }
 
-        var items = await GetArrayAsync(instance, $"{ApiPath}/artist/lookup?term={Uri.EscapeDataString(externalId)}", cancellationToken);
-        var item = SelectDetail(items, candidate => Text(candidate, "foreignArtistId") == externalId, "Lidarr did not return an artist detail.");
+        var items = await GetArrayAsync(instance, $"{ApiPath}/{LidarrProtocol.ArtistLookupEndpoint}?term={Uri.EscapeDataString(externalId)}", cancellationToken);
+        var item = SelectDetail(items, candidate => Text(candidate, LidarrProtocol.ForeignArtistId) == externalId, "Lidarr did not return an artist detail.");
         var children = await GetArtistAlbumsAsync(instance, externalId, cancellationToken);
         return DetailFromSearch(MapArtist(instance.Id, item), item, children);
     }
@@ -137,49 +220,37 @@ public sealed class LidarrRequestProviderClient(HttpClient http) : ArrRequestPro
         }
 
         var payload = ToObject(SelectDetail(
-            await GetArrayAsync(instance, $"{ApiPath}/artist/lookup?term={Uri.EscapeDataString(detail.ExternalId)}", cancellationToken),
-            candidate => Text(candidate, "foreignArtistId") == detail.ExternalId,
+            await GetArrayAsync(instance, $"{ApiPath}/{LidarrProtocol.ArtistLookupEndpoint}?term={Uri.EscapeDataString(detail.ExternalId)}", cancellationToken),
+            candidate => Text(candidate, LidarrProtocol.ForeignArtistId) == detail.ExternalId,
             "Lidarr did not return an artist detail."));
-        payload["qualityProfileId"] = request.QualityProfileId ?? instance.DefaultQualityProfileId;
-        payload["metadataProfileId"] = request.MetadataProfileId ?? instance.DefaultMetadataProfileId;
-        payload["rootFolderPath"] = request.RootFolderPath ?? instance.DefaultRootFolderPath;
-        payload["monitored"] = request.Monitored;
-        payload["addOptions"] = new JsonObject {
-            ["searchForMissingAlbums"] = request.SearchNow
+        payload[ArrJsonFields.QualityProfileId] = request.QualityProfileId ?? instance.DefaultQualityProfileId;
+        payload[LidarrProtocol.MetadataProfileId] = request.MetadataProfileId ?? instance.DefaultMetadataProfileId;
+        payload[ArrJsonFields.RootFolderPath] = request.RootFolderPath ?? instance.DefaultRootFolderPath;
+        payload[ArrJsonFields.Monitored] = request.Monitored;
+        payload[ArrJsonFields.AddOptions] = new JsonObject {
+            [LidarrProtocol.SearchForMissingAlbums] = request.SearchNow
         };
 
-        await SendJsonAsync(instance, HttpMethod.Post, $"{ApiPath}/artist", payload, cancellationToken);
-
-        var albumIds = request.SelectedChildIds
-            .Select(id => int.TryParse(id, out var albumId) ? albumId : (int?)null)
-            .Where(id => id is not null)
-            .Select(id => id!.Value)
-            .ToArray();
-        if (albumIds.Length > 0) {
-            await SendJsonAsync(instance, HttpMethod.Put, $"{ApiPath}/album/monitor", new JsonObject {
-                ["albumIds"] = new JsonArray(albumIds.Select(id => (JsonNode)id).ToArray()),
-                ["monitored"] = true
-            }, cancellationToken);
-        }
+        await SendJsonAsync(instance, HttpMethod.Post, $"{ApiPath}/{LidarrProtocol.ArtistEndpoint}", payload, cancellationToken);
 
         return new RequestSubmitResponse(true, null, null);
     }
 
     private async Task<JsonElement> LookupAlbumAsync(RequestServiceInstanceDetail instance, string externalId, CancellationToken cancellationToken) {
-        var items = await GetArrayAsync(instance, $"{ApiPath}/album/lookup?term={Uri.EscapeDataString(externalId)}", cancellationToken);
-        return SelectDetail(items, candidate => Text(candidate, "foreignAlbumId") == externalId || Text(candidate, "id") == externalId, "Lidarr did not return an album detail.");
+        var items = await GetArrayAsync(instance, $"{ApiPath}/{LidarrProtocol.AlbumLookupEndpoint}?term={Uri.EscapeDataString(externalId)}", cancellationToken);
+        return SelectDetail(items, candidate => Text(candidate, LidarrProtocol.ForeignAlbumId) == externalId || Text(candidate, ArrJsonFields.Id) == externalId, "Lidarr did not return an album detail.");
     }
 
     private async Task<IReadOnlyList<RequestChildOption>> GetArtistAlbumsAsync(RequestServiceInstanceDetail instance, string externalId, CancellationToken cancellationToken) {
-        var albums = await GetArrayAsync(instance, $"{ApiPath}/album/lookup?term={Uri.EscapeDataString(externalId)}", cancellationToken);
+        var albums = await GetArrayAsync(instance, $"{ApiPath}/{LidarrProtocol.AlbumLookupEndpoint}?term={Uri.EscapeDataString(externalId)}", cancellationToken);
         return albums.Select(album => new RequestChildOption(
-                Text(album, "id") ?? Text(album, "foreignAlbumId") ?? string.Empty,
-                Text(album, "title") ?? string.Empty,
+                Text(album, ArrJsonFields.Id) ?? Text(album, LidarrProtocol.ForeignAlbumId) ?? string.Empty,
+                Text(album, ArrJsonFields.Title) ?? string.Empty,
                 RequestMediaKind.Album,
-                true,
-                Int(album, "id"),
-                Text(album, "overview"),
-                Image(album, "cover")))
+                false,
+                Int(album, ArrJsonFields.Id),
+                Text(album, ArrJsonFields.Overview),
+                Image(album, ArrImageTypes.Cover)))
             .Where(album => !string.IsNullOrWhiteSpace(album.Id) && !string.IsNullOrWhiteSpace(album.Title))
             .ToArray();
     }
@@ -195,7 +266,7 @@ public abstract class ArrRequestProviderClient(HttpClient http, RequestProviderK
 
     public async Task<RequestConnectionTestResponse> TestAsync(RequestServiceInstanceDetail instance, CancellationToken cancellationToken) {
         try {
-            using var request = BuildRequest(instance, HttpMethod.Get, $"{ApiPath}/system/status", null);
+            using var request = BuildRequest(instance, HttpMethod.Get, $"{ApiPath}/{ArrOptionEndpoints.SystemStatus}", null);
             using var response = await http.SendAsync(request, cancellationToken);
             return response.IsSuccessStatusCode
                 ? new RequestConnectionTestResponse(true, "Connected")
@@ -206,19 +277,19 @@ public abstract class ArrRequestProviderClient(HttpClient http, RequestProviderK
     }
 
     public async Task<RequestServiceOptionsResponse> GetOptionsAsync(RequestServiceInstanceDetail instance, CancellationToken cancellationToken) {
-        var profiles = await GetArrayAsync(instance, $"{ApiPath}/qualityprofile", cancellationToken);
-        var roots = await GetArrayAsync(instance, $"{ApiPath}/rootfolder", cancellationToken);
+        var profiles = await GetArrayAsync(instance, $"{ApiPath}/{ArrOptionEndpoints.QualityProfile}", cancellationToken);
+        var roots = await GetArrayAsync(instance, $"{ApiPath}/{ArrOptionEndpoints.RootFolder}", cancellationToken);
         var metadataProfiles = Kind == RequestProviderKind.Lidarr
-            ? await GetArrayAsync(instance, $"{ApiPath}/metadataprofile", cancellationToken)
+            ? await GetArrayAsync(instance, $"{ApiPath}/{ArrOptionEndpoints.MetadataProfile}", cancellationToken)
             : [];
         return new RequestServiceOptionsResponse(
-            profiles.Select(profile => new RequestServiceOption(Text(profile, "id") ?? string.Empty, Text(profile, "name") ?? string.Empty, null))
+            profiles.Select(profile => new RequestServiceOption(Text(profile, ArrJsonFields.Id) ?? string.Empty, Text(profile, ArrJsonFields.Name) ?? string.Empty, null))
                 .Where(option => !string.IsNullOrWhiteSpace(option.Id))
                 .ToArray(),
-            roots.Select(root => new RequestServiceOption(Text(root, "path") ?? string.Empty, Text(root, "path") ?? string.Empty, Text(root, "path")))
+            roots.Select(root => new RequestServiceOption(Text(root, ArrJsonFields.Path) ?? string.Empty, Text(root, ArrJsonFields.Path) ?? string.Empty, Text(root, ArrJsonFields.Path)))
                 .Where(option => !string.IsNullOrWhiteSpace(option.Id))
                 .ToArray(),
-            metadataProfiles.Select(profile => new RequestServiceOption(Text(profile, "id") ?? string.Empty, Text(profile, "name") ?? string.Empty, null))
+            metadataProfiles.Select(profile => new RequestServiceOption(Text(profile, ArrJsonFields.Id) ?? string.Empty, Text(profile, ArrJsonFields.Name) ?? string.Empty, null))
                 .Where(option => !string.IsNullOrWhiteSpace(option.Id))
                 .ToArray());
     }
@@ -259,34 +330,34 @@ public abstract class ArrRequestProviderClient(HttpClient http, RequestProviderK
     }
 
     protected static RequestSubmitResponse Submitted(JsonElement response) =>
-        new(true, Text(response, "id"), null);
+        new(true, Text(response, ArrJsonFields.Id), null);
 
     protected static RequestSearchResult MapMovie(Guid serviceId, JsonElement item) =>
-        new(serviceId, RequestProviderKind.Radarr, RequestMediaKind.Movie, Text(item, "tmdbId") ?? string.Empty,
-            Text(item, "title") ?? string.Empty, Int(item, "year"), Text(item, "overview"), Image(item, "poster"),
-            Image(item, "fanart") ?? Image(item, "backdrop"), Rating(item), Int(item, "runtime"), Text(item, "certification"),
-            StringArray(item, "genres"), false, true);
+        new(serviceId, RequestProviderKind.Radarr, RequestMediaKind.Movie, Text(item, RadarrProtocol.TmdbId) ?? string.Empty,
+            Text(item, ArrJsonFields.Title) ?? string.Empty, Int(item, ArrJsonFields.Year), Text(item, ArrJsonFields.Overview), Image(item, ArrImageTypes.Poster),
+            Image(item, ArrImageTypes.Fanart) ?? Image(item, ArrImageTypes.Backdrop), Rating(item), Int(item, ArrJsonFields.Runtime), Text(item, ArrJsonFields.Certification),
+            StringArray(item, ArrJsonFields.Genres), false, true);
 
     protected static RequestSearchResult MapSeries(Guid serviceId, JsonElement item) =>
-        new(serviceId, RequestProviderKind.Sonarr, RequestMediaKind.Series, Text(item, "tvdbId") ?? string.Empty,
-            Text(item, "title") ?? string.Empty, YearFromDate(Text(item, "firstAired")), Text(item, "overview"), Image(item, "poster"),
-            Image(item, "fanart") ?? Image(item, "backdrop"), Rating(item), RuntimeFromMinutesArray(item), Text(item, "certification"),
-            StringArray(item, "genres"), false, true);
+        new(serviceId, RequestProviderKind.Sonarr, RequestMediaKind.Series, Text(item, SonarrProtocol.TvdbId) ?? string.Empty,
+            Text(item, ArrJsonFields.Title) ?? string.Empty, YearFromDate(Text(item, SonarrProtocol.FirstAired)), Text(item, ArrJsonFields.Overview), Image(item, ArrImageTypes.Poster),
+            Image(item, ArrImageTypes.Fanart) ?? Image(item, ArrImageTypes.Backdrop), Rating(item), RuntimeFromMinutesArray(item), Text(item, ArrJsonFields.Certification),
+            StringArray(item, ArrJsonFields.Genres), false, true);
 
     protected static RequestSearchResult MapArtist(Guid serviceId, JsonElement item) =>
-        new(serviceId, RequestProviderKind.Lidarr, RequestMediaKind.Artist, Text(item, "foreignArtistId") ?? string.Empty,
-            Text(item, "artistName") ?? Text(item, "name") ?? string.Empty, null, Text(item, "overview"), Image(item, "poster"),
-            Image(item, "fanart") ?? Image(item, "banner"), Rating(item), null, Text(item, "status"), StringArray(item, "genres"), false, true);
+        new(serviceId, RequestProviderKind.Lidarr, RequestMediaKind.Artist, Text(item, LidarrProtocol.ForeignArtistId) ?? string.Empty,
+            Text(item, LidarrProtocol.ArtistName) ?? Text(item, ArrJsonFields.Name) ?? string.Empty, null, Text(item, ArrJsonFields.Overview), Image(item, ArrImageTypes.Poster),
+            Image(item, ArrImageTypes.Fanart) ?? Image(item, ArrImageTypes.Banner), Rating(item), null, Text(item, LidarrProtocol.Status), StringArray(item, ArrJsonFields.Genres), false, true);
 
     protected static RequestSearchResult MapAlbum(Guid serviceId, JsonElement item) =>
-        new(serviceId, RequestProviderKind.Lidarr, RequestMediaKind.Album, Text(item, "foreignAlbumId") ?? Text(item, "id") ?? string.Empty,
-            Text(item, "title") ?? string.Empty, YearFromDate(Text(item, "releaseDate")), Text(item, "overview"), Image(item, "cover") ?? Image(item, "poster"),
-            Image(item, "fanart"), Rating(item), null, Text(item, "albumType"), StringArray(item, "genres"), false, true);
+        new(serviceId, RequestProviderKind.Lidarr, RequestMediaKind.Album, Text(item, LidarrProtocol.ForeignAlbumId) ?? Text(item, ArrJsonFields.Id) ?? string.Empty,
+            Text(item, ArrJsonFields.Title) ?? string.Empty, YearFromDate(Text(item, LidarrProtocol.ReleaseDate)), Text(item, ArrJsonFields.Overview), Image(item, ArrImageTypes.Cover) ?? Image(item, ArrImageTypes.Poster),
+            Image(item, ArrImageTypes.Fanart), Rating(item), null, Text(item, ArrJsonFields.AlbumType), StringArray(item, ArrJsonFields.Genres), false, true);
 
     protected static RequestDetailResponse DetailFromSearch(RequestSearchResult result, JsonElement item, IReadOnlyList<RequestChildOption> children) =>
         new(result.Source, result.Kind, result.ExternalId, result.Title, result.Year, result.Overview, result.PosterUrl,
             result.BackdropUrl, result.Rating, result.RuntimeMinutes, result.Certification, result.Tags,
-            StringArray(item, "studios").Concat(StringArray(item, "networks")).ToArray(),
+            StringArray(item, ArrJsonFields.Studios).Concat(StringArray(item, ArrJsonFields.Networks)).ToArray(),
             Credits(item), children, EmptyOptions);
 
     protected static RequestServiceOptionsResponse EmptyOptions { get; } = new([], [], []);
@@ -314,13 +385,13 @@ public abstract class ArrRequestProviderClient(HttpClient http, RequestProviderK
             : [];
 
     protected static IReadOnlyList<string> StringArray(JsonElement item, string name) =>
-        Array(item, name).Select(element => element.ValueKind == JsonValueKind.String ? element.GetString() : Text(element, "name"))
+        Array(item, name).Select(element => element.ValueKind == JsonValueKind.String ? element.GetString() : Text(element, ArrJsonFields.Name))
             .Where(value => !string.IsNullOrWhiteSpace(value))
             .Select(value => value!)
             .ToArray();
 
     protected static IReadOnlyList<string> Credits(JsonElement item) =>
-        StringArray(item, "actors").Concat(StringArray(item, "crew")).Concat(StringArray(item, "members")).ToArray();
+        StringArray(item, ArrJsonFields.Actors).Concat(StringArray(item, ArrJsonFields.Crew)).Concat(StringArray(item, ArrJsonFields.Members)).ToArray();
 
     protected static string? Text(JsonElement item, string name) {
         if (!item.TryGetProperty(name, out var value)) {
@@ -340,12 +411,12 @@ public abstract class ArrRequestProviderClient(HttpClient http, RequestProviderK
         item.TryGetProperty(name, out var value) && value.TryGetInt32(out var number) ? number : null;
 
     protected static decimal? Rating(JsonElement item) {
-        if (!item.TryGetProperty("ratings", out var ratings)) {
+        if (!item.TryGetProperty(ArrJsonFields.Ratings, out var ratings)) {
             return null;
         }
 
         if (ratings.ValueKind == JsonValueKind.Object &&
-            ratings.TryGetProperty("value", out var value) &&
+            ratings.TryGetProperty(ArrJsonFields.Value, out var value) &&
             value.TryGetDecimal(out var rating)) {
             return rating;
         }
@@ -354,16 +425,16 @@ public abstract class ArrRequestProviderClient(HttpClient http, RequestProviderK
     }
 
     protected static string? Image(JsonElement item, string coverType) =>
-        Array(item, "images")
-            .Where(image => string.Equals(Text(image, "coverType"), coverType, StringComparison.OrdinalIgnoreCase))
-            .Select(image => Text(image, "remoteUrl") ?? Text(image, "url"))
+        Array(item, ArrJsonFields.Images)
+            .Where(image => string.Equals(Text(image, ArrJsonFields.CoverType), coverType, StringComparison.OrdinalIgnoreCase))
+            .Select(image => Text(image, ArrJsonFields.RemoteUrl) ?? Text(image, ArrJsonFields.Url))
             .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
 
     private static int? YearFromDate(string? value) =>
         DateTimeOffset.TryParse(value, out var date) ? date.Year : null;
 
     private static int? RuntimeFromMinutesArray(JsonElement item) =>
-        Array(item, "runtime").Select(runtime => runtime.TryGetInt32(out var minutes) ? minutes : 0).FirstOrDefault() is var value && value > 0
+        Array(item, ArrJsonFields.Runtime).Select(runtime => runtime.TryGetInt32(out var minutes) ? minutes : 0).FirstOrDefault() is var value && value > 0
             ? value
             : null;
 }

@@ -107,6 +107,7 @@
     qualityProfileId = defaults.qualityProfileId;
     rootFolderPath = defaults.rootFolderPath;
     metadataProfileId = defaults.metadataProfileId;
+    searchNow = defaults.searchNow;
   }
 
   function toggleChild(id: string, checked: boolean) {
@@ -194,12 +195,16 @@
               <label class="child-row">
                 <Checkbox
                   checked={selectedChildIds.includes(child.id)}
+                  disabled={detail.source === REQUEST_PROVIDER_KIND.lidarr || !child.requestable}
                   onchange={(event) => toggleChild(child.id, event.currentTarget.checked)}
                 />
                 <span>{child.title}</span>
               </label>
             {/each}
           </div>
+          {#if detail.source === REQUEST_PROVIDER_KIND.lidarr}
+            <p class="panel-error">Album details are read-only until Lidarr album monitoring can use persisted album IDs safely.</p>
+          {/if}
         {/if}
       </div>
 
