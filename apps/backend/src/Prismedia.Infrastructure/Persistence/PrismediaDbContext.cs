@@ -108,6 +108,8 @@ public sealed class PrismediaDbContext : DbContext {
 
     public DbSet<RequestServiceCredentialRow> RequestServiceCredentials => Set<RequestServiceCredentialRow>();
 
+    public DbSet<RequestHistoryRow> RequestHistory => Set<RequestHistoryRow>();
+
     public DbSet<IdentifyResultRow> IdentifyResults => Set<IdentifyResultRow>();
 
     public DbSet<IdentifyQueueItemRow> IdentifyQueueItems => Set<IdentifyQueueItemRow>();

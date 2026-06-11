@@ -108,6 +108,26 @@ public sealed class RequestServiceCredentialRow {
     public DateTimeOffset UpdatedAt { get; set; }
 }
 
+public sealed class RequestHistoryRow {
+    public Guid Id { get; set; }
+    public Guid? ServiceInstanceId { get; set; }
+    public string ServiceName { get; set; } = string.Empty;
+    public RequestProviderKind Source { get; set; } = RequestProviderKind.Radarr;
+    public RequestMediaKind Kind { get; set; } = RequestMediaKind.Movie;
+    public string ExternalId { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public string? Subtitle { get; set; }
+    public int? Year { get; set; }
+    public string? PosterUrl { get; set; }
+    public string? UpstreamId { get; set; }
+    public bool Monitored { get; set; } = true;
+    public string[] SelectedChildIds { get; set; } = [];
+    public RequestHistoryStatus Status { get; set; } = RequestHistoryStatus.Submitted;
+    public string? StatusMessage { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
 public sealed class IdentifyResultRow {
     public Guid Id { get; set; }
     public Guid EntityId { get; set; }

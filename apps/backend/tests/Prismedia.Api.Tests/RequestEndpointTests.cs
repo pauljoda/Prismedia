@@ -15,6 +15,7 @@ public sealed class RequestEndpointTests {
             .WithWebHostBuilder(builder => {
                 builder.ConfigureServices(services => {
                     services.AddSingleton<IRequestServiceInstanceStore, FakeRequestServiceInstanceStore>();
+                    services.AddSingleton<IRequestHistoryStore, FakeRequestHistoryStore>();
                     services.AddSingleton<FakeRequestProviderClient>();
                     services.AddSingleton<IRequestProviderClient>(provider => provider.GetRequiredService<FakeRequestProviderClient>());
                     services.AddSingleton<IRequestProviderClientFactory, FakeRequestProviderClientFactory>();
@@ -90,6 +91,7 @@ public sealed class RequestEndpointTests {
             .WithWebHostBuilder(builder => {
                 builder.ConfigureServices(services => {
                     services.AddSingleton<IRequestServiceInstanceStore, FakeRequestServiceInstanceStore>();
+                    services.AddSingleton<IRequestHistoryStore, FakeRequestHistoryStore>();
                     services.AddSingleton<FakeRequestProviderClient>();
                     services.AddSingleton<IRequestProviderClient>(provider => provider.GetRequiredService<FakeRequestProviderClient>());
                     services.AddSingleton<IRequestProviderClientFactory, FakeRequestProviderClientFactory>();
@@ -117,6 +119,7 @@ public sealed class RequestEndpointTests {
             .WithWebHostBuilder(builder => {
                 builder.ConfigureServices(services => {
                     services.AddSingleton<IRequestServiceInstanceStore, FakeRequestServiceInstanceStore>();
+                    services.AddSingleton<IRequestHistoryStore, FakeRequestHistoryStore>();
                     services.AddSingleton<FakeRequestProviderClient>();
                     services.AddSingleton<IRequestProviderClient>(provider => provider.GetRequiredService<FakeRequestProviderClient>());
                     services.AddSingleton<IRequestProviderClientFactory, FakeRequestProviderClientFactory>();
@@ -208,19 +211,44 @@ public sealed class RequestEndpointTests {
                 detail.SearchOnRequest, detail.HasApiKey);
     }
 
+    private sealed class FakeRequestHistoryStore : IRequestHistoryStore {
+        private readonly List<RequestHistoryEntry> _entries = [];
+
+        public Task AddAsync(RequestHistoryAddRequest request, CancellationToken cancellationToken) {
+            var now = DateTimeOffset.UtcNow;
+            _entries.Add(new RequestHistoryEntry(Guid.NewGuid(), request.ServiceInstanceId, request.ServiceName, request.Source,
+                request.Kind, request.ExternalId, request.Title, request.Subtitle, request.Year, request.PosterUrl,
+                request.UpstreamId, request.Monitored, request.SelectedChildIds.Count, RequestHistoryStatus.Submitted, null, now, now));
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<RequestHistoryEntry>> ListAsync(int limit, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<RequestHistoryEntry>>(_entries.Take(limit).ToArray());
+
+        public Task UpdateStatusesAsync(IReadOnlyList<RequestHistoryStatusUpdate> updates, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken) =>
+            Task.FromResult(_entries.RemoveAll(entry => entry.Id == id) > 0);
+    }
+
     private sealed class FakeRequestProviderClient : IRequestProviderClient {
         public RequestProviderKind Kind => RequestProviderKind.Radarr;
 
         public Task<IReadOnlyList<RequestSearchResult>> SearchAsync(RequestServiceInstanceDetail instance, string query, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<RequestSearchResult>>([
-                new(instance.Id, RequestProviderKind.Radarr, RequestMediaKind.Movie, "424", "Blade Runner", null, 1982, null, null, null, null, null, null, null, [], false, true)
+                new(instance.Id, RequestProviderKind.Radarr, RequestMediaKind.Movie, "424", "Blade Runner", null, 1982, null, null, null, null, null, null, null, [], false, null, null, true)
             ]);
 
         public Task<RequestDetailResponse> GetDetailAsync(RequestServiceInstanceDetail instance, RequestMediaKind kind, string externalId, CancellationToken cancellationToken) =>
-            Task.FromResult(new RequestDetailResponse(RequestProviderKind.Radarr, RequestMediaKind.Movie, externalId, "Blade Runner", null, 1982, null, null, null, null, null, null, null, [], [], [], [], [], new RequestServiceOptionsResponse([], [], [], [])));
+            Task.FromResult(new RequestDetailResponse(RequestProviderKind.Radarr, RequestMediaKind.Movie, externalId, "Blade Runner", null, 1982, null, null, null, null, null, null, null, [], [], [], [], [], false, null, null, new RequestServiceOptionsResponse([], [], [], [])));
 
         public Task<RequestSubmitResponse> SubmitAsync(RequestServiceInstanceDetail instance, RequestDetailResponse detail, RequestSubmitRequest request, CancellationToken cancellationToken) =>
             Task.FromResult(new RequestSubmitResponse(true, "12", null));
+
+        public Task<IReadOnlyList<RequestStatusResult>> GetStatusesAsync(RequestServiceInstanceDetail instance, IReadOnlyList<RequestStatusProbe> probes, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<RequestStatusResult>>(
+                probes.Select(probe => new RequestStatusResult(probe.HistoryId, RequestHistoryStatus.Available, null, probe.UpstreamId)).ToArray());
 
         public Task<RequestConnectionTestResponse> TestAsync(RequestServiceInstanceDetail instance, CancellationToken cancellationToken) =>
             Task.FromResult(new RequestConnectionTestResponse(true, "Connected"));

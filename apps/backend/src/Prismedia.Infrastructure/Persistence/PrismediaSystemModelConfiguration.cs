@@ -190,6 +190,44 @@ internal static partial class PrismediaModelConfiguration {
             entity.HasOne<RequestServiceInstanceRow>().WithMany().HasForeignKey(row => row.ServiceInstanceId).OnDelete(DeleteBehavior.Cascade);
         });
 
+        modelBuilder.Entity<RequestHistoryRow>(entity => {
+            entity.ToTable("request_history");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(row => row.ServiceInstanceId).HasColumnName("service_instance_id");
+            entity.Property(row => row.ServiceName).HasColumnName("service_name").HasMaxLength(256).IsRequired();
+            entity.Property(row => row.Source)
+                .HasColumnName("source")
+                .HasMaxLength(64)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<RequestProviderKind>())
+                .IsRequired();
+            entity.Property(row => row.Kind)
+                .HasColumnName("kind")
+                .HasMaxLength(64)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<RequestMediaKind>())
+                .IsRequired();
+            entity.Property(row => row.ExternalId).HasColumnName("external_id").HasMaxLength(256).IsRequired();
+            entity.Property(row => row.Title).HasColumnName("title").HasMaxLength(1024).IsRequired();
+            entity.Property(row => row.Subtitle).HasColumnName("subtitle").HasMaxLength(1024);
+            entity.Property(row => row.Year).HasColumnName("year");
+            entity.Property(row => row.PosterUrl).HasColumnName("poster_url").HasMaxLength(2048);
+            entity.Property(row => row.UpstreamId).HasColumnName("upstream_id").HasMaxLength(128);
+            entity.Property(row => row.Monitored).HasColumnName("monitored");
+            entity.Property(row => row.SelectedChildIds).HasColumnName("selected_child_ids");
+            entity.Property(row => row.Status)
+                .HasColumnName("status")
+                .HasMaxLength(32)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<RequestHistoryStatus>())
+                .HasDefaultValue(RequestHistoryStatus.Submitted)
+                .IsRequired();
+            entity.Property(row => row.StatusMessage).HasColumnName("status_message").HasMaxLength(2048);
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            entity.HasIndex(row => row.CreatedAt);
+            entity.HasIndex(row => new { row.Source, row.Kind, row.ExternalId });
+            entity.HasOne<RequestServiceInstanceRow>().WithMany().HasForeignKey(row => row.ServiceInstanceId).OnDelete(DeleteBehavior.SetNull);
+        });
+
         modelBuilder.Entity<IdentifyResultRow>(entity => {
             entity.ToTable("identify_results");
             entity.HasKey(row => row.Id);

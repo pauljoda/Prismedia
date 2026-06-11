@@ -19,7 +19,8 @@ public sealed class RequestFeatureTests {
         var json = JsonSerializer.Serialize(new RequestSearchRequest(
             "blade",
             [RequestMediaKind.Movie],
-            [RequestProviderKind.Radarr]),
+            [RequestProviderKind.Radarr],
+            false),
             options);
 
         Assert.Contains("\"movie\"", json);
@@ -144,6 +145,201 @@ public sealed class RequestFeatureTests {
         Assert.Equal("https://images.test/poster.jpg", result.PosterUrl);
         Assert.Contains(result.Tags, tag => tag == "Science Fiction");
         Assert.Equal(8.1m, result.Rating);
+    }
+
+    [Fact]
+    public async Task LookupRecordsWithPositiveIdsAreReportedAsTracked() {
+        var handler = new FakeHttpHandler((request, body) => Json("""
+            [
+              {
+                "id": 31,
+                "tmdbId": 424,
+                "title": "Blade Runner",
+                "monitored": true,
+                "images": [
+                  { "coverType": "poster", "url": "/MediaCover/31/poster.jpg", "remoteUrl": "https://images.test/poster.jpg" }
+                ]
+              },
+              {
+                "tmdbId": 9999,
+                "title": "Untracked Movie",
+                "images": [{ "coverType": "poster", "url": "/MediaCover/raw.jpg" }]
+              }
+            ]
+            """));
+        var client = new RadarrRequestProviderClient(new HttpClient(handler));
+
+        var results = await client.SearchAsync(Instance(RequestProviderKind.Radarr), "blade", CancellationToken.None);
+
+        var tracked = results.Single(result => result.ExternalId == "424");
+        Assert.True(tracked.Tracked);
+        Assert.Equal("31", tracked.UpstreamId);
+        Assert.True(tracked.Monitored);
+        var untracked = results.Single(result => result.ExternalId == "9999");
+        Assert.False(untracked.Tracked);
+        Assert.Null(untracked.UpstreamId);
+        // Relative /MediaCover paths only resolve inside the *arr instance; they must not surface as artwork.
+        Assert.Null(untracked.PosterUrl);
+        Assert.Equal("https://images.test/poster.jpg", tracked.PosterUrl);
+    }
+
+    [Fact]
+    public async Task RadarrSubmitUpdatesMonitoringAndSearchesWhenMovieAlreadyTracked() {
+        var calls = new List<string>();
+        var handler = new FakeHttpHandler((request, body) => {
+            calls.Add($"{request.Method} {request.RequestUri!.AbsolutePath}");
+            if (request.Method == HttpMethod.Get) {
+                return Json("""[{ "id": 31, "tmdbId": 424, "title": "Blade Runner", "monitored": false, "qualityProfileId": 2, "images": [] }]""");
+            }
+
+            if (request.RequestUri.AbsolutePath.EndsWith("/command", StringComparison.Ordinal)) {
+                using var commandDocument = JsonDocument.Parse(body);
+                Assert.Equal("MoviesSearch", commandDocument.RootElement.GetProperty("name").GetString());
+                Assert.Equal([31], commandDocument.RootElement.GetProperty("movieIds").EnumerateArray().Select(id => id.GetInt32()).ToArray());
+                return Json("""{}""");
+            }
+
+            Assert.Equal(HttpMethod.Put, request.Method);
+            using var document = JsonDocument.Parse(body);
+            Assert.True(document.RootElement.GetProperty("monitored").GetBoolean());
+            // Update keeps the upstream quality profile untouched.
+            Assert.Equal(2, document.RootElement.GetProperty("qualityProfileId").GetInt32());
+            return Json("""{ "id": 31 }""");
+        });
+        var client = new RadarrRequestProviderClient(new HttpClient(handler));
+        var detail = await client.GetDetailAsync(Instance(RequestProviderKind.Radarr), RequestMediaKind.Movie, "424", CancellationToken.None);
+
+        var response = await client.SubmitAsync(
+            Instance(RequestProviderKind.Radarr),
+            detail,
+            new RequestSubmitRequest(Guid.NewGuid(), RequestProviderKind.Radarr, RequestMediaKind.Movie, "424", "Blade Runner", 7, "/movies", null, true, true, []),
+            CancellationToken.None);
+
+        Assert.True(response.Submitted);
+        Assert.True(detail.Tracked);
+        Assert.Equal("31", response.UpstreamId);
+        Assert.Contains("PUT /api/v3/movie/31", calls);
+        Assert.Contains("POST /api/v3/command", calls);
+        Assert.DoesNotContain("POST /api/v3/movie", calls);
+    }
+
+    [Fact]
+    public async Task SonarrSubmitUpdatesSeasonMonitoringWhenSeriesAlreadyTracked() {
+        var calls = new List<string>();
+        var handler = new FakeHttpHandler((request, body) => {
+            calls.Add($"{request.Method} {request.RequestUri!.AbsolutePath}");
+            if (request.Method == HttpMethod.Get) {
+                return Json("""
+                    [
+                      {
+                        "id": 12,
+                        "tvdbId": 79169,
+                        "title": "Twin Peaks",
+                        "monitored": true,
+                        "images": [],
+                        "seasons": [
+                          { "seasonNumber": 1, "monitored": true, "statistics": { "episodeCount": 8 } },
+                          { "seasonNumber": 2, "monitored": false, "statistics": { "episodeCount": 22 } }
+                        ]
+                      }
+                    ]
+                    """);
+            }
+
+            if (request.RequestUri.AbsolutePath.EndsWith("/command", StringComparison.Ordinal)) {
+                using var commandDocument = JsonDocument.Parse(body);
+                Assert.Equal("MissingEpisodeSearch", commandDocument.RootElement.GetProperty("name").GetString());
+                Assert.Equal(12, commandDocument.RootElement.GetProperty("seriesId").GetInt32());
+                return Json("""{}""");
+            }
+
+            Assert.Equal(HttpMethod.Put, request.Method);
+            using var document = JsonDocument.Parse(body);
+            var seasons = document.RootElement.GetProperty("seasons").EnumerateArray().ToArray();
+            Assert.True(seasons.Single(season => season.GetProperty("seasonNumber").GetInt32() == 1).GetProperty("monitored").GetBoolean());
+            Assert.True(seasons.Single(season => season.GetProperty("seasonNumber").GetInt32() == 2).GetProperty("monitored").GetBoolean());
+            return Json("""{ "id": 12 }""");
+        });
+        var client = new SonarrRequestProviderClient(new HttpClient(handler));
+        var detail = await client.GetDetailAsync(Instance(RequestProviderKind.Sonarr), RequestMediaKind.Series, "79169", CancellationToken.None);
+
+        Assert.True(detail.Tracked);
+        Assert.True(detail.Children.Single(child => child.Id == "1").Monitored);
+        Assert.False(detail.Children.Single(child => child.Id == "2").Monitored);
+
+        var response = await client.SubmitAsync(
+            Instance(RequestProviderKind.Sonarr),
+            detail,
+            new RequestSubmitRequest(Guid.NewGuid(), RequestProviderKind.Sonarr, RequestMediaKind.Series, "79169", "Twin Peaks", 7, "/tv", null, true, true, ["1", "2"]),
+            CancellationToken.None);
+
+        Assert.True(response.Submitted);
+        Assert.Contains("PUT /api/v3/series/12", calls);
+        Assert.Contains("POST /api/v3/command", calls);
+        Assert.DoesNotContain("POST /api/v3/series", calls);
+    }
+
+    [Fact]
+    public void AdultCertificationsGateOnlyAdultsOnlyRatings() {
+        Assert.True(AdultCertifications.IsAdult("NC-17"));
+        Assert.True(AdultCertifications.IsAdult("x"));
+        Assert.True(AdultCertifications.IsAdult("XXX"));
+        Assert.True(AdultCertifications.IsAdult("R18+"));
+        Assert.False(AdultCertifications.IsAdult("R"));
+        Assert.False(AdultCertifications.IsAdult("TV-MA"));
+        Assert.False(AdultCertifications.IsAdult("18"));
+        Assert.False(AdultCertifications.IsAdult(null));
+    }
+
+    [Fact]
+    public async Task RequestHistoryStoreRecordsAndRefreshesStatuses() {
+        await using var db = CreateContext();
+        var store = new EfRequestHistoryStore(db);
+
+        await store.AddAsync(new RequestHistoryAddRequest(
+            Guid.NewGuid(), "Movies", RequestProviderKind.Radarr, RequestMediaKind.Movie, "424", "Blade Runner",
+            null, 1982, "https://images.test/poster.jpg", "31", true, ["1", "2"]), CancellationToken.None);
+
+        var entries = await store.ListAsync(50, CancellationToken.None);
+        var entry = Assert.Single(entries);
+        Assert.Equal(RequestHistoryStatus.Submitted, entry.Status);
+        Assert.Equal(2, entry.SelectedChildCount);
+
+        await store.UpdateStatusesAsync([new RequestHistoryStatusUpdate(entry.Id, RequestHistoryStatus.Downloading, null, "31")], CancellationToken.None);
+        var refreshed = Assert.Single(await store.ListAsync(50, CancellationToken.None));
+        Assert.Equal(RequestHistoryStatus.Downloading, refreshed.Status);
+
+        Assert.True(await store.DeleteAsync(entry.Id, CancellationToken.None));
+        Assert.Empty(await store.ListAsync(50, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task RadarrStatusesResolveQueueFilesAndRemovals() {
+        var handler = new FakeHttpHandler((request, body) => request.RequestUri!.AbsolutePath switch {
+            "/api/v3/movie" => Json("""
+                [
+                  { "id": 1, "tmdbId": 100, "title": "Done", "hasFile": true, "monitored": true },
+                  { "id": 2, "tmdbId": 200, "title": "Queued", "hasFile": false, "monitored": true },
+                  { "id": 3, "tmdbId": 300, "title": "Waiting", "hasFile": false, "monitored": true }
+                ]
+                """),
+            "/api/v3/queue" => Json("""{ "records": [{ "movieId": 2 }] }"""),
+            _ => throw new InvalidOperationException(request.RequestUri.AbsolutePath)
+        });
+        var client = new RadarrRequestProviderClient(new HttpClient(handler));
+        var ids = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+
+        var statuses = await client.GetStatusesAsync(Instance(RequestProviderKind.Radarr), [
+            new RequestStatusProbe(ids.Item1, RequestMediaKind.Movie, "100", "1"),
+            new RequestStatusProbe(ids.Item2, RequestMediaKind.Movie, "200", "2"),
+            new RequestStatusProbe(ids.Item3, RequestMediaKind.Movie, "300", "3"),
+            new RequestStatusProbe(ids.Item4, RequestMediaKind.Movie, "999", "4")
+        ], CancellationToken.None);
+
+        Assert.Equal(RequestHistoryStatus.Available, statuses.Single(status => status.HistoryId == ids.Item1).Status);
+        Assert.Equal(RequestHistoryStatus.Downloading, statuses.Single(status => status.HistoryId == ids.Item2).Status);
+        Assert.Equal(RequestHistoryStatus.Pending, statuses.Single(status => status.HistoryId == ids.Item3).Status);
+        Assert.Equal(RequestHistoryStatus.Removed, statuses.Single(status => status.HistoryId == ids.Item4).Status);
     }
 
     [Fact]
@@ -288,8 +484,8 @@ public sealed class RequestFeatureTests {
         Assert.Equal("mb-artist", Assert.Single(results).ExternalId);
 
         var detail = new RequestDetailResponse(RequestProviderKind.Lidarr, RequestMediaKind.Artist, "mb-artist", "Bowie", null, null, null, null, null, null, null, null, null, [], [], [], [
-            new RequestChildOption("9", "Low", RequestMediaKind.Album, true, null, null, null, null, null)
-        ], [], new RequestServiceOptionsResponse([], [], [], []));
+            new RequestChildOption("9", "Low", RequestMediaKind.Album, true, null, null, null, null, null, null)
+        ], [], false, null, null, new RequestServiceOptionsResponse([], [], [], []));
         await client.SubmitAsync(
             Instance(RequestProviderKind.Lidarr),
             detail,
@@ -389,7 +585,7 @@ public sealed class RequestFeatureTests {
             return Json("""{}""");
         });
         var client = new LidarrRequestProviderClient(new HttpClient(handler));
-        var detail = new RequestDetailResponse(RequestProviderKind.Lidarr, RequestMediaKind.Album, "mb-album", "Low", null, null, null, null, null, null, null, null, null, [], [], [], [], [], new RequestServiceOptionsResponse([], [], [], []));
+        var detail = new RequestDetailResponse(RequestProviderKind.Lidarr, RequestMediaKind.Album, "mb-album", "Low", null, null, null, null, null, null, null, null, null, [], [], [], [], [], false, null, null, new RequestServiceOptionsResponse([], [], [], []));
 
         var response = await client.SubmitAsync(
             Instance(RequestProviderKind.Lidarr),

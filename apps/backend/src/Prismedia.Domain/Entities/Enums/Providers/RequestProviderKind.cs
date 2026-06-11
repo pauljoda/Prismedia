@@ -39,6 +39,40 @@ public enum RequestMinimumAvailability {
 }
 
 /// <summary>
+/// Closed set of lifecycle states for a submitted media request. The stored value is a cache of
+/// the last observed upstream state; viewing request history refreshes it live from the service.
+/// </summary>
+public enum RequestHistoryStatus {
+    /// <summary>Accepted by the upstream service; no further status observed yet.</summary>
+    [Code("submitted")]
+    Submitted,
+
+    /// <summary>Tracked and monitored upstream, but nothing has been downloaded yet.</summary>
+    [Code("pending")]
+    Pending,
+
+    /// <summary>A related download is currently active in the upstream queue.</summary>
+    [Code("downloading")]
+    Downloading,
+
+    /// <summary>Some, but not all, of the requested content has been downloaded.</summary>
+    [Code("partial")]
+    Partial,
+
+    /// <summary>All requested content has been downloaded by the upstream service.</summary>
+    [Code("available")]
+    Available,
+
+    /// <summary>The item is no longer present in the upstream service's library.</summary>
+    [Code("removed")]
+    Removed,
+
+    /// <summary>The upstream service could not be reached to refresh the status.</summary>
+    [Code("unknown")]
+    Unknown
+}
+
+/// <summary>
 /// Closed set of media categories exposed by the request workflow.
 /// </summary>
 public enum RequestMediaKind {

@@ -47,6 +47,7 @@ public static class DependencyInjection {
         services.AddScoped<RequestDetailService>();
         services.AddScoped<RequestServiceTestService>();
         services.AddScoped<RequestSubmitService>();
+        services.AddScoped<RequestHistoryService>();
         services.AddScoped<IAudioStreamService, AudioStreamService>();
         services.AddSingleton<IIdentifyApplyProgressStore, InMemoryIdentifyApplyProgressStore>();
         services.AddSingleton<AuthAttemptThrottle>();

@@ -20,7 +20,18 @@ public interface IRequestProviderClient {
     Task<RequestSubmitResponse> SubmitAsync(RequestServiceInstanceDetail instance, RequestDetailResponse detail, RequestSubmitRequest request, CancellationToken cancellationToken);
     Task<RequestConnectionTestResponse> TestAsync(RequestServiceInstanceDetail instance, CancellationToken cancellationToken);
     Task<RequestServiceOptionsResponse> GetOptionsAsync(RequestServiceInstanceDetail instance, CancellationToken cancellationToken);
+
+    /// <summary>Resolves the current upstream status for previously submitted requests in one batched pass.</summary>
+    Task<IReadOnlyList<RequestStatusResult>> GetStatusesAsync(RequestServiceInstanceDetail instance, IReadOnlyList<RequestStatusProbe> probes, CancellationToken cancellationToken);
 }
+
+/// <summary>One history entry to refresh against an upstream service.</summary>
+/// <param name="HistoryId">The request history row this probe belongs to.</param>
+/// <param name="UpstreamId">Upstream library id captured at submit time, when known.</param>
+public sealed record RequestStatusProbe(Guid HistoryId, RequestMediaKind Kind, string ExternalId, string? UpstreamId);
+
+/// <summary>Live upstream status resolved for a single probe.</summary>
+public sealed record RequestStatusResult(Guid HistoryId, RequestHistoryStatus Status, string? Message, string? UpstreamId);
 
 /// <summary>Resolves the provider client for a request service kind.</summary>
 public interface IRequestProviderClientFactory {
@@ -46,7 +57,7 @@ public sealed class RequestSearchService(IRequestServiceInstanceStore store, IRe
         var results = new List<RequestSearchResult>();
         var errors = new List<RequestProviderHealth>();
         foreach (var (found, error) in searches) {
-            results.AddRange(found);
+            results.AddRange(request.HideNsfw ? found.Where(result => !AdultCertifications.IsAdult(result.Certification)) : found);
             if (error is not null) {
                 errors.Add(error);
             }
@@ -148,8 +159,8 @@ public sealed class RequestServiceTestService(IRequestServiceInstanceStore store
     }
 }
 
-/// <summary>Submits selected request options to the chosen upstream service instance.</summary>
-public sealed class RequestSubmitService(IRequestServiceInstanceStore store, IRequestProviderClientFactory clients) {
+/// <summary>Submits selected request options to the chosen upstream service instance and records the request in history.</summary>
+public sealed class RequestSubmitService(IRequestServiceInstanceStore store, IRequestProviderClientFactory clients, IRequestHistoryStore history) {
     public async Task<RequestSubmitResponse?> SubmitAsync(RequestSubmitRequest request, CancellationToken cancellationToken) {
         var instance = await store.GetAsync(request.ServiceId, cancellationToken);
         if (instance is null) {
@@ -161,6 +172,23 @@ public sealed class RequestSubmitService(IRequestServiceInstanceStore store, IRe
 
         var client = clients.Get(instance.Kind);
         var detail = await client.GetDetailAsync(instance, request.Kind, request.ExternalId, cancellationToken);
-        return await client.SubmitAsync(instance, detail, request, cancellationToken);
+        var response = await client.SubmitAsync(instance, detail, request, cancellationToken);
+        if (response.Submitted) {
+            await history.AddAsync(new RequestHistoryAddRequest(
+                instance.Id,
+                instance.DisplayName,
+                request.Source,
+                request.Kind,
+                request.ExternalId,
+                detail.Title,
+                detail.Subtitle,
+                detail.Year,
+                detail.PosterUrl,
+                response.UpstreamId,
+                request.Monitored,
+                request.SelectedChildIds), cancellationToken);
+        }
+
+        return response;
     }
 }

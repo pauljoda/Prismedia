@@ -19,9 +19,11 @@ public static class ArrJsonFields {
     public const string Duration = "duration";
     public const string Fanart = "fanart";
     public const string Genres = "genres";
+    public const string HasFile = "hasFile";
     public const string Id = "id";
     public const string Images = "images";
     public const string Label = "label";
+    public const string Statistics = "statistics";
     public const string Members = "members";
     public const string Monitored = "monitored";
     public const string Name = "name";
@@ -56,6 +58,9 @@ public static class RadarrProtocol {
     public const string SearchForMovie = "searchForMovie";
     public const string MovieEndpoint = "movie";
     public const string MovieLookupEndpoint = "movie/lookup";
+    public const string MoviesSearchCommand = "MoviesSearch";
+    public const string MovieIds = "movieIds";
+    public const string MovieId = "movieId";
 }
 
 public static class SonarrProtocol {
@@ -63,11 +68,26 @@ public static class SonarrProtocol {
     public const string EpisodeCount = "episodeCount";
     public const string FirstAired = "firstAired";
     public const string Network = "network";
-    public const string Statistics = "statistics";
     public const string SearchForMissingEpisodes = "searchForMissingEpisodes";
     public const string SeriesTypeStandard = "standard";
     public const string SeriesEndpoint = "series";
     public const string SeriesLookupEndpoint = "series/lookup";
+    public const string MissingEpisodeSearchCommand = "MissingEpisodeSearch";
+    public const string SeriesId = "seriesId";
+    public const string PercentOfEpisodes = "percentOfEpisodes";
+}
+
+/// <summary>Shared *arr command-queue wire vocabulary; every *arr exposes the same POST /command shape.</summary>
+public static class ArrCommandProtocol {
+    public const string Endpoint = "command";
+    public const string Name = "name";
+}
+
+/// <summary>Shared *arr download-queue wire vocabulary used for live request status refreshes.</summary>
+public static class ArrQueueProtocol {
+    public const string Endpoint = "queue";
+    public const string Records = "records";
+    public const string PageQuery = "page=1&pageSize=1000";
 }
 
 public static class LidarrProtocol {
@@ -76,9 +96,11 @@ public static class LidarrProtocol {
     public const string AlbumEndpoint = "album";
     public const string AlbumLookupEndpoint = "album/lookup";
     public const string AlbumMonitorEndpoint = "album/monitor";
-    public const string CommandEndpoint = "command";
-    public const string CommandName = "name";
     public const string AlbumSearchCommand = "AlbumSearch";
+    public const string ArtistSearchCommand = "ArtistSearch";
+    public const string ArtistId = "artistId";
+    public const string AlbumId = "albumId";
+    public const string PercentOfTracks = "percentOfTracks";
     public const string ForeignAlbumIdQuery = "foreignAlbumId";
     public const string SearchForNewAlbum = "searchForNewAlbum";
     /// <summary>Lookup term prefix that makes Lidarr resolve a MusicBrainz id instead of text-searching it.</summary>
@@ -170,7 +192,24 @@ public sealed class RadarrRequestProviderClient(HttpClient http) : ArrRequestPro
     }
 
     public override async Task<RequestSubmitResponse> SubmitAsync(RequestServiceInstanceDetail instance, RequestDetailResponse detail, RequestSubmitRequest request, CancellationToken cancellationToken) {
-        var payload = ToObject(await LookupMovieAsync(instance, detail.ExternalId, cancellationToken));
+        var item = await LookupMovieAsync(instance, detail.ExternalId, cancellationToken);
+        var payload = ToObject(item);
+
+        // Already in Radarr: update monitoring only (profiles/folders stay as configured upstream)
+        // and optionally kick off a search, instead of re-adding the movie.
+        if (Int(item, ArrJsonFields.Id) is { } upstreamId && upstreamId > 0) {
+            payload[ArrJsonFields.Monitored] = request.Monitored;
+            await SendJsonAsync(instance, HttpMethod.Put, $"{ApiPath}/{RadarrProtocol.MovieEndpoint}/{upstreamId}", payload, cancellationToken);
+            if (request.SearchNow) {
+                await SendJsonAsync(instance, HttpMethod.Post, $"{ApiPath}/{ArrCommandProtocol.Endpoint}", new JsonObject {
+                    [ArrCommandProtocol.Name] = RadarrProtocol.MoviesSearchCommand,
+                    [RadarrProtocol.MovieIds] = new JsonArray(upstreamId)
+                }, cancellationToken);
+            }
+
+            return new RequestSubmitResponse(true, upstreamId.ToString(), "Movie was already in Radarr; its monitoring was updated.");
+        }
+
         payload[ArrJsonFields.QualityProfileId] = request.QualityProfileId ?? instance.DefaultQualityProfileId;
         payload[ArrJsonFields.RootFolderPath] = request.RootFolderPath ?? instance.DefaultRootFolderPath;
         payload[ArrJsonFields.Monitored] = request.Monitored;
@@ -183,6 +222,26 @@ public sealed class RadarrRequestProviderClient(HttpClient http) : ArrRequestPro
 
         var response = await SendJsonAsync(instance, HttpMethod.Post, $"{ApiPath}/{RadarrProtocol.MovieEndpoint}", payload, cancellationToken);
         return Submitted(response);
+    }
+
+    public override async Task<IReadOnlyList<RequestStatusResult>> GetStatusesAsync(RequestServiceInstanceDetail instance, IReadOnlyList<RequestStatusProbe> probes, CancellationToken cancellationToken) {
+        var movies = await GetArrayAsync(instance, $"{ApiPath}/{RadarrProtocol.MovieEndpoint}", cancellationToken);
+        var byTmdbId = IndexByExternalId(movies, item => Text(item, RadarrProtocol.TmdbId));
+        var queueIds = await GetQueueIdsAsync(instance, RadarrProtocol.MovieId, cancellationToken);
+
+        return probes.Select(probe => {
+            if (!byTmdbId.TryGetValue(probe.ExternalId, out var movie)) {
+                return new RequestStatusResult(probe.HistoryId, RequestHistoryStatus.Removed, null, probe.UpstreamId);
+            }
+
+            var upstreamId = Int(movie, ArrJsonFields.Id);
+            var percent = Bool(movie, ArrJsonFields.HasFile) == true ? 100m : 0m;
+            return new RequestStatusResult(
+                probe.HistoryId,
+                StatusFromProgress(upstreamId is { } id && queueIds.Contains(id), percent),
+                null,
+                upstreamId?.ToString() ?? probe.UpstreamId);
+        }).ToArray();
     }
 
     private async Task<JsonElement> LookupMovieAsync(RequestServiceInstanceDetail instance, string externalId, CancellationToken cancellationToken) {
@@ -207,9 +266,10 @@ public sealed class SonarrRequestProviderClient(HttpClient http) : ArrRequestPro
                 true,
                 Int(season, ArrJsonFields.SeasonNumber),
                 null,
-                Int(Prop(season, SonarrProtocol.Statistics), SonarrProtocol.EpisodeCount),
+                Int(Prop(season, ArrJsonFields.Statistics), SonarrProtocol.EpisodeCount),
                 null,
-                null))
+                null,
+                Bool(season, ArrJsonFields.Monitored)))
             .Where(child => !string.IsNullOrWhiteSpace(child.Id))
             .OrderBy(child => child.Number)
             .ToArray();
@@ -217,7 +277,8 @@ public sealed class SonarrRequestProviderClient(HttpClient http) : ArrRequestPro
     }
 
     public override async Task<RequestSubmitResponse> SubmitAsync(RequestServiceInstanceDetail instance, RequestDetailResponse detail, RequestSubmitRequest request, CancellationToken cancellationToken) {
-        var payload = ToObject(await LookupSeriesAsync(instance, detail.ExternalId, cancellationToken));
+        var item = await LookupSeriesAsync(instance, detail.ExternalId, cancellationToken);
+        var payload = ToObject(item);
         var selected = request.SelectedChildIds.ToHashSet(StringComparer.Ordinal);
         var seasons = new JsonArray();
         foreach (var child in detail.Children) {
@@ -232,14 +293,29 @@ public sealed class SonarrRequestProviderClient(HttpClient http) : ArrRequestPro
             });
         }
 
+        payload[ArrJsonFields.Monitored] = request.Monitored;
+        payload[ArrJsonFields.Seasons] = seasons;
+
+        // Already in Sonarr: apply the selected season monitoring exactly as shown in the UI
+        // (profiles/folders stay as configured upstream) and optionally search for missing episodes.
+        if (Int(item, ArrJsonFields.Id) is { } upstreamId && upstreamId > 0) {
+            await SendJsonAsync(instance, HttpMethod.Put, $"{ApiPath}/{SonarrProtocol.SeriesEndpoint}/{upstreamId}", payload, cancellationToken);
+            if (request.SearchNow) {
+                await SendJsonAsync(instance, HttpMethod.Post, $"{ApiPath}/{ArrCommandProtocol.Endpoint}", new JsonObject {
+                    [ArrCommandProtocol.Name] = SonarrProtocol.MissingEpisodeSearchCommand,
+                    [SonarrProtocol.SeriesId] = upstreamId
+                }, cancellationToken);
+            }
+
+            return new RequestSubmitResponse(true, upstreamId.ToString(), "Series was already in Sonarr; its season monitoring was updated.");
+        }
+
         payload[ArrJsonFields.QualityProfileId] = request.QualityProfileId ?? instance.DefaultQualityProfileId;
         payload[ArrJsonFields.RootFolderPath] = request.RootFolderPath ?? instance.DefaultRootFolderPath;
-        payload[ArrJsonFields.Monitored] = request.Monitored;
         if (!payload.ContainsKey(ArrJsonFields.SeriesType)) {
             payload[ArrJsonFields.SeriesType] = SonarrProtocol.SeriesTypeStandard;
         }
         payload[ArrJsonFields.SeasonFolder] = true;
-        payload[ArrJsonFields.Seasons] = seasons;
         ApplyDefaultTags(payload, instance);
         payload[ArrJsonFields.AddOptions] = new JsonObject {
             [SonarrProtocol.SearchForMissingEpisodes] = request.SearchNow
@@ -247,6 +323,26 @@ public sealed class SonarrRequestProviderClient(HttpClient http) : ArrRequestPro
 
         var response = await SendJsonAsync(instance, HttpMethod.Post, $"{ApiPath}/{SonarrProtocol.SeriesEndpoint}", payload, cancellationToken);
         return Submitted(response);
+    }
+
+    public override async Task<IReadOnlyList<RequestStatusResult>> GetStatusesAsync(RequestServiceInstanceDetail instance, IReadOnlyList<RequestStatusProbe> probes, CancellationToken cancellationToken) {
+        var series = await GetArrayAsync(instance, $"{ApiPath}/{SonarrProtocol.SeriesEndpoint}", cancellationToken);
+        var byTvdbId = IndexByExternalId(series, item => Text(item, SonarrProtocol.TvdbId));
+        var queueIds = await GetQueueIdsAsync(instance, SonarrProtocol.SeriesId, cancellationToken);
+
+        return probes.Select(probe => {
+            if (!byTvdbId.TryGetValue(probe.ExternalId, out var item)) {
+                return new RequestStatusResult(probe.HistoryId, RequestHistoryStatus.Removed, null, probe.UpstreamId);
+            }
+
+            var upstreamId = Int(item, ArrJsonFields.Id);
+            var percent = Dec(Prop(item, ArrJsonFields.Statistics), SonarrProtocol.PercentOfEpisodes) ?? 0m;
+            return new RequestStatusResult(
+                probe.HistoryId,
+                StatusFromProgress(upstreamId is { } id && queueIds.Contains(id), percent),
+                null,
+                upstreamId?.ToString() ?? probe.UpstreamId);
+        }).ToArray();
     }
 
     private static string SeasonTitle(int? number) => number == 0 ? "Specials" : $"Season {number}";
@@ -290,7 +386,23 @@ public sealed class LidarrRequestProviderClient(HttpClient http) : ArrRequestPro
             return await SubmitAlbumAsync(instance, request, cancellationToken);
         }
 
-        var payload = ToObject(await LookupArtistAsync(instance, detail.ExternalId, cancellationToken));
+        var item = await LookupArtistAsync(instance, detail.ExternalId, cancellationToken);
+        var payload = ToObject(item);
+
+        // Already in Lidarr: update monitoring only and optionally search, instead of re-adding.
+        if (Int(item, ArrJsonFields.Id) is { } upstreamId && upstreamId > 0) {
+            payload[ArrJsonFields.Monitored] = request.Monitored;
+            await SendJsonAsync(instance, HttpMethod.Put, $"{ApiPath}/{LidarrProtocol.ArtistEndpoint}/{upstreamId}", payload, cancellationToken);
+            if (request.SearchNow) {
+                await SendJsonAsync(instance, HttpMethod.Post, $"{ApiPath}/{ArrCommandProtocol.Endpoint}", new JsonObject {
+                    [ArrCommandProtocol.Name] = LidarrProtocol.ArtistSearchCommand,
+                    [LidarrProtocol.ArtistId] = upstreamId
+                }, cancellationToken);
+            }
+
+            return new RequestSubmitResponse(true, upstreamId.ToString(), "Artist was already in Lidarr; their monitoring was updated.");
+        }
+
         payload[ArrJsonFields.QualityProfileId] = request.QualityProfileId ?? instance.DefaultQualityProfileId;
         payload[LidarrProtocol.MetadataProfileId] = request.MetadataProfileId ?? instance.DefaultMetadataProfileId;
         payload[ArrJsonFields.RootFolderPath] = request.RootFolderPath ?? instance.DefaultRootFolderPath;
@@ -320,8 +432,8 @@ public sealed class LidarrRequestProviderClient(HttpClient http) : ArrRequestPro
                 [ArrJsonFields.Monitored] = true
             }, cancellationToken);
             if (request.SearchNow) {
-                await SendJsonAsync(instance, HttpMethod.Post, $"{ApiPath}/{LidarrProtocol.CommandEndpoint}", new JsonObject {
-                    [LidarrProtocol.CommandName] = LidarrProtocol.AlbumSearchCommand,
+                await SendJsonAsync(instance, HttpMethod.Post, $"{ApiPath}/{ArrCommandProtocol.Endpoint}", new JsonObject {
+                    [ArrCommandProtocol.Name] = LidarrProtocol.AlbumSearchCommand,
                     [ArrJsonFields.AlbumIds] = new JsonArray(albumId)
                 }, cancellationToken);
             }
@@ -351,6 +463,43 @@ public sealed class LidarrRequestProviderClient(HttpClient http) : ArrRequestPro
 
         var response = await SendJsonAsync(instance, HttpMethod.Post, $"{ApiPath}/{LidarrProtocol.AlbumEndpoint}", payload, cancellationToken);
         return Submitted(response);
+    }
+
+    public override async Task<IReadOnlyList<RequestStatusResult>> GetStatusesAsync(RequestServiceInstanceDetail instance, IReadOnlyList<RequestStatusProbe> probes, CancellationToken cancellationToken) {
+        var queueRecords = await GetQueueRecordsAsync(instance, cancellationToken);
+        var artistQueueIds = QueueIds(queueRecords, LidarrProtocol.ArtistId);
+        var albumQueueIds = QueueIds(queueRecords, LidarrProtocol.AlbumId);
+        var results = new List<RequestStatusResult>(probes.Count);
+
+        var artistProbes = probes.Where(probe => probe.Kind == RequestMediaKind.Artist).ToArray();
+        if (artistProbes.Length > 0) {
+            var artists = await GetArrayAsync(instance, $"{ApiPath}/{LidarrProtocol.ArtistEndpoint}", cancellationToken);
+            var byMbid = IndexByExternalId(artists, item => Text(item, LidarrProtocol.ForeignArtistId));
+            results.AddRange(artistProbes.Select(probe =>
+                ResolveTrackedStatus(probe, byMbid.TryGetValue(probe.ExternalId, out var artist) ? artist : null, artistQueueIds)));
+        }
+
+        foreach (var probe in probes.Where(probe => probe.Kind == RequestMediaKind.Album)) {
+            var matches = await GetArrayAsync(instance, $"{ApiPath}/{LidarrProtocol.AlbumEndpoint}?{LidarrProtocol.ForeignAlbumIdQuery}={Uri.EscapeDataString(probe.ExternalId)}", cancellationToken);
+            results.Add(ResolveTrackedStatus(probe, matches.Count > 0 ? matches[0] : null, albumQueueIds));
+        }
+
+        return results;
+    }
+
+    /// <summary>Status for one tracked Lidarr item from its library record's track statistics and queue presence.</summary>
+    private static RequestStatusResult ResolveTrackedStatus(RequestStatusProbe probe, JsonElement? item, HashSet<int> queueIds) {
+        if (item is null) {
+            return new RequestStatusResult(probe.HistoryId, RequestHistoryStatus.Removed, null, probe.UpstreamId);
+        }
+
+        var upstreamId = Int(item.Value, ArrJsonFields.Id);
+        var percent = Dec(Prop(item.Value, ArrJsonFields.Statistics), LidarrProtocol.PercentOfTracks) ?? 0m;
+        return new RequestStatusResult(
+            probe.HistoryId,
+            StatusFromProgress(upstreamId is { } id && queueIds.Contains(id), percent),
+            null,
+            upstreamId?.ToString() ?? probe.UpstreamId);
     }
 
     /// <summary>Resolves an artist by MusicBrainz id using Lidarr's <c>lidarr:</c> lookup prefix; plain text terms never match MBIDs.</summary>
@@ -386,7 +535,8 @@ public sealed class LidarrRequestProviderClient(HttpClient http) : ArrRequestPro
                     YearFromDate(Text(group, MusicBrainzProtocol.FirstReleaseDate)),
                     null,
                     ReleaseGroupTypeLabel(group),
-                    $"{MusicBrainzProtocol.CoverArtReleaseGroupBase}{Text(group, ArrJsonFields.Id)}{MusicBrainzProtocol.CoverArtFrontThumb}"))
+                    $"{MusicBrainzProtocol.CoverArtReleaseGroupBase}{Text(group, ArrJsonFields.Id)}{MusicBrainzProtocol.CoverArtFrontThumb}",
+                    null))
                 .Where(child => !string.IsNullOrWhiteSpace(child.Id) && !string.IsNullOrWhiteSpace(child.Title))
                 .OrderByDescending(child => child.Year ?? 0)
                 .ThenBy(child => child.Title, StringComparer.OrdinalIgnoreCase)
@@ -462,7 +612,8 @@ public sealed class LidarrRequestProviderClient(HttpClient http) : ArrRequestPro
                 YearFromDate(Text(album, LidarrProtocol.ReleaseDate)),
                 null,
                 Text(album, ArrJsonFields.AlbumType),
-                Image(album, ArrImageTypes.Cover)))
+                Image(album, ArrImageTypes.Cover),
+                null))
             .Where(album => !string.IsNullOrWhiteSpace(album.Id) && !string.IsNullOrWhiteSpace(album.Title))
             .ToArray();
     }
@@ -475,6 +626,7 @@ public abstract class ArrRequestProviderClient(HttpClient http, RequestProviderK
     public abstract Task<IReadOnlyList<RequestSearchResult>> SearchAsync(RequestServiceInstanceDetail instance, string query, CancellationToken cancellationToken);
     public abstract Task<RequestDetailResponse> GetDetailAsync(RequestServiceInstanceDetail instance, RequestMediaKind kind, string externalId, CancellationToken cancellationToken);
     public abstract Task<RequestSubmitResponse> SubmitAsync(RequestServiceInstanceDetail instance, RequestDetailResponse detail, RequestSubmitRequest request, CancellationToken cancellationToken);
+    public abstract Task<IReadOnlyList<RequestStatusResult>> GetStatusesAsync(RequestServiceInstanceDetail instance, IReadOnlyList<RequestStatusProbe> probes, CancellationToken cancellationToken);
 
     public async Task<RequestConnectionTestResponse> TestAsync(RequestServiceInstanceDetail instance, CancellationToken cancellationToken) {
         try {
@@ -509,6 +661,46 @@ public abstract class ArrRequestProviderClient(HttpClient http, RequestProviderK
                 .Where(option => !string.IsNullOrWhiteSpace(option.Id) && !string.IsNullOrWhiteSpace(option.Name))
                 .ToArray());
     }
+
+    /// <summary>Fetches the upstream download queue records used to resolve live request statuses.</summary>
+    protected async Task<IReadOnlyList<JsonElement>> GetQueueRecordsAsync(RequestServiceInstanceDetail instance, CancellationToken cancellationToken) {
+        using var request = BuildRequest(instance, HttpMethod.Get, $"{ApiPath}/{ArrQueueProtocol.Endpoint}?{ArrQueueProtocol.PageQuery}", null);
+        using var response = await http.SendAsync(request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+        return Array(document.RootElement, ArrQueueProtocol.Records).Select(item => item.Clone()).ToArray();
+    }
+
+    /// <summary>Collects the distinct positive ids carried by <paramref name="idField"/> across queue records.</summary>
+    protected static HashSet<int> QueueIds(IReadOnlyList<JsonElement> records, string idField) =>
+        records.Select(record => Int(record, idField) ?? 0).Where(id => id > 0).ToHashSet();
+
+    protected async Task<HashSet<int>> GetQueueIdsAsync(RequestServiceInstanceDetail instance, string idField, CancellationToken cancellationToken) =>
+        QueueIds(await GetQueueRecordsAsync(instance, cancellationToken), idField);
+
+    /// <summary>Indexes library records by their external id, keeping the first record per id.</summary>
+    protected static Dictionary<string, JsonElement> IndexByExternalId(IReadOnlyList<JsonElement> items, Func<JsonElement, string?> externalId) {
+        var index = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+        foreach (var item in items) {
+            var id = externalId(item);
+            if (!string.IsNullOrWhiteSpace(id) && !index.ContainsKey(id)) {
+                index[id] = item;
+            }
+        }
+
+        return index;
+    }
+
+    /// <summary>Maps queue presence and download completion onto a request history status.</summary>
+    protected static RequestHistoryStatus StatusFromProgress(bool inQueue, decimal percentComplete) =>
+        inQueue
+            ? RequestHistoryStatus.Downloading
+            : percentComplete >= 100m
+                ? RequestHistoryStatus.Available
+                : percentComplete > 0m
+                    ? RequestHistoryStatus.Partial
+                    : RequestHistoryStatus.Pending;
 
     /// <summary>Fetches JSON from an external metadata service (MusicBrainz) with the required User-Agent.</summary>
     protected async Task<JsonElement> GetExternalJsonAsync(Uri url, CancellationToken cancellationToken) {
@@ -572,46 +764,58 @@ public abstract class ArrRequestProviderClient(HttpClient http, RequestProviderK
         payload[ArrJsonFields.Tags] = new JsonArray(existing.Order().Select(value => (JsonNode)value).ToArray());
     }
 
-    protected static RequestSearchResult MapMovie(Guid serviceId, JsonElement item) =>
-        new(serviceId, RequestProviderKind.Radarr, RequestMediaKind.Movie, Text(item, RadarrProtocol.TmdbId) ?? string.Empty,
+    protected static RequestSearchResult MapMovie(Guid serviceId, JsonElement item) {
+        var (tracked, upstreamId, monitored) = TrackedInfo(item);
+        return new(serviceId, RequestProviderKind.Radarr, RequestMediaKind.Movie, Text(item, RadarrProtocol.TmdbId) ?? string.Empty,
             Text(item, ArrJsonFields.Title) ?? string.Empty, Text(item, ArrJsonFields.Studio), Int(item, ArrJsonFields.Year), Text(item, ArrJsonFields.Overview), Image(item, ArrImageTypes.Poster),
             Image(item, ArrImageTypes.Fanart) ?? Image(item, ArrImageTypes.Backdrop), Rating(item), Int(item, ArrJsonFields.Runtime), Text(item, ArrJsonFields.Certification),
-            null, StringArray(item, ArrJsonFields.Genres), false, true);
+            null, StringArray(item, ArrJsonFields.Genres), tracked, upstreamId, monitored, true);
+    }
 
-    protected static RequestSearchResult MapSeries(Guid serviceId, JsonElement item) =>
-        new(serviceId, RequestProviderKind.Sonarr, RequestMediaKind.Series, Text(item, SonarrProtocol.TvdbId) ?? string.Empty,
+    protected static RequestSearchResult MapSeries(Guid serviceId, JsonElement item) {
+        var (tracked, upstreamId, monitored) = TrackedInfo(item);
+        return new(serviceId, RequestProviderKind.Sonarr, RequestMediaKind.Series, Text(item, SonarrProtocol.TvdbId) ?? string.Empty,
             Text(item, ArrJsonFields.Title) ?? string.Empty, Text(item, SonarrProtocol.Network), YearFromDate(Text(item, SonarrProtocol.FirstAired)), Text(item, ArrJsonFields.Overview), Image(item, ArrImageTypes.Poster),
             Image(item, ArrImageTypes.Fanart) ?? Image(item, ArrImageTypes.Backdrop), Rating(item), RuntimeFromMinutesArray(item), Text(item, ArrJsonFields.Certification),
-            null, StringArray(item, ArrJsonFields.Genres), false, true);
+            null, StringArray(item, ArrJsonFields.Genres), tracked, upstreamId, monitored, true);
+    }
 
     protected static RequestSearchResult MapArtist(Guid serviceId, JsonElement item) {
         var subtitle = Text(item, ArrJsonFields.Disambiguation);
+        var (tracked, upstreamId, monitored) = TrackedInfo(item);
         return new(serviceId, RequestProviderKind.Lidarr, RequestMediaKind.Artist, Text(item, LidarrProtocol.ForeignArtistId) ?? string.Empty,
             Text(item, LidarrProtocol.ArtistName) ?? Text(item, ArrJsonFields.Name) ?? string.Empty,
             string.IsNullOrWhiteSpace(subtitle) ? Text(item, LidarrProtocol.ArtistType) : subtitle,
             null, Text(item, ArrJsonFields.Overview), Image(item, ArrImageTypes.Poster),
             Image(item, ArrImageTypes.Fanart) ?? Image(item, ArrImageTypes.Banner), Rating(item), null,
-            Text(item, LidarrProtocol.ArtistType), null, StringArray(item, ArrJsonFields.Genres), false, true);
+            Text(item, LidarrProtocol.ArtistType), null, StringArray(item, ArrJsonFields.Genres), tracked, upstreamId, monitored, true);
     }
 
     protected static RequestSearchResult MapAlbum(Guid serviceId, JsonElement item) {
         var albumType = Text(item, ArrJsonFields.AlbumType);
         var secondaryTypes = StringArray(item, LidarrProtocol.SecondaryTypes);
         var typeLabel = string.Join(" · ", new[] { albumType }.Concat(secondaryTypes).Where(value => !string.IsNullOrWhiteSpace(value)));
+        var (tracked, upstreamId, monitored) = TrackedInfo(item);
         return new(serviceId, RequestProviderKind.Lidarr, RequestMediaKind.Album, Text(item, LidarrProtocol.ForeignAlbumId) ?? Text(item, ArrJsonFields.Id) ?? string.Empty,
             Text(item, ArrJsonFields.Title) ?? string.Empty,
             Text(Prop(item, LidarrProtocol.Artist), LidarrProtocol.ArtistName),
             YearFromDate(Text(item, LidarrProtocol.ReleaseDate)), Text(item, ArrJsonFields.Overview), Image(item, ArrImageTypes.Cover) ?? Image(item, ArrImageTypes.Poster),
             Image(item, ArrImageTypes.Fanart), Rating(item), AlbumRuntimeMinutes(item),
             string.IsNullOrWhiteSpace(typeLabel) ? null : typeLabel,
-            AlbumTrackCount(item), StringArray(item, ArrJsonFields.Genres), false, true);
+            AlbumTrackCount(item), StringArray(item, ArrJsonFields.Genres), tracked, upstreamId, monitored, true);
     }
+
+    /// <summary>Upstream tracking info from a lookup record: items already in the service's library carry a positive id.</summary>
+    protected static (bool Tracked, string? UpstreamId, bool? Monitored) TrackedInfo(JsonElement item) =>
+        Int(item, ArrJsonFields.Id) is { } id && id > 0
+            ? (true, id.ToString(), Bool(item, ArrJsonFields.Monitored))
+            : (false, null, null);
 
     protected static RequestDetailResponse DetailFromSearch(RequestSearchResult result, JsonElement item, IReadOnlyList<RequestChildOption> children, IReadOnlyList<RequestTrack>? tracks = null) =>
         new(result.Source, result.Kind, result.ExternalId, result.Title, result.Subtitle, result.Year, result.Overview, result.PosterUrl,
             result.BackdropUrl, result.Rating, result.RuntimeMinutes, result.Certification, tracks?.Count > 0 ? tracks.Count : result.TrackCount, result.Tags,
             StringArray(item, ArrJsonFields.Studios).Concat(StringArray(item, ArrJsonFields.Networks)).ToArray(),
-            Credits(item), children, tracks ?? [], EmptyOptions);
+            Credits(item), children, tracks ?? [], result.Tracked, result.UpstreamId, result.Monitored, EmptyOptions);
 
     /// <summary>Album runtime from Lidarr's millisecond duration field, rounded to whole minutes.</summary>
     private static int? AlbumRuntimeMinutes(JsonElement item) =>
@@ -689,6 +893,18 @@ public abstract class ArrRequestProviderClient(HttpClient http, RequestProviderK
     protected static int? Int(JsonElement item, string name) =>
         item.ValueKind == JsonValueKind.Object && item.TryGetProperty(name, out var value) && value.TryGetInt32(out var number) ? number : null;
 
+    protected static bool? Bool(JsonElement item, string name) =>
+        item.ValueKind == JsonValueKind.Object && item.TryGetProperty(name, out var value)
+            ? value.ValueKind switch {
+                JsonValueKind.True => true,
+                JsonValueKind.False => false,
+                _ => null
+            }
+            : null;
+
+    protected static decimal? Dec(JsonElement item, string name) =>
+        item.ValueKind == JsonValueKind.Object && item.TryGetProperty(name, out var value) && value.TryGetDecimal(out var number) ? number : null;
+
     protected static decimal? Rating(JsonElement item) {
         if (!item.TryGetProperty(ArrJsonFields.Ratings, out var ratings)) {
             return null;
@@ -703,11 +919,20 @@ public abstract class ArrRequestProviderClient(HttpClient http, RequestProviderK
         return null;
     }
 
+    /// <summary>
+    /// First usable artwork URL of the given cover type. Only absolute http(s) URLs qualify:
+    /// records for items already in the service's library carry relative /MediaCover paths that
+    /// would render as broken images outside that service.
+    /// </summary>
     protected static string? Image(JsonElement item, string coverType) =>
         Array(item, ArrJsonFields.Images)
             .Where(image => string.Equals(Text(image, ArrJsonFields.CoverType), coverType, StringComparison.OrdinalIgnoreCase))
-            .Select(image => Text(image, ArrJsonFields.RemoteUrl) ?? Text(image, ArrJsonFields.Url))
-            .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
+            .SelectMany(image => new[] { Text(image, ArrJsonFields.RemoteUrl), Text(image, ArrJsonFields.Url) })
+            .FirstOrDefault(IsAbsoluteHttpUrl);
+
+    private static bool IsAbsoluteHttpUrl(string? value) =>
+        Uri.TryCreate(value, UriKind.Absolute, out var url) &&
+        (url.Scheme == Uri.UriSchemeHttp || url.Scheme == Uri.UriSchemeHttps);
 
     protected static int? YearFromDate(string? value) =>
         DateTimeOffset.TryParse(value, out var date) ? date.Year : null;

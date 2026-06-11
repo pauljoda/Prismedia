@@ -71,16 +71,38 @@ public static class RequestEndpoints {
             string query,
             string[]? kinds,
             string[]? sources,
+            bool? hideNsfw,
             RequestSearchService search,
             CancellationToken cancellationToken) =>
             search.SearchAsync(new RequestSearchRequest(
                 query,
                 DecodeMany<RequestMediaKind>(kinds),
-                DecodeMany<RequestProviderKind>(sources)),
+                DecodeMany<RequestProviderKind>(sources),
+                hideNsfw ?? false),
                 cancellationToken))
             .WithName("SearchRequests")
-            .WithSummary("Searches configured request providers for requestable external media.")
+            .WithSummary("Searches configured request providers for requestable external media. Adults-only certifications are filtered out when hideNsfw is set.")
             .Produces<RequestSearchResponse>();
+
+        group.MapGet("/history", (
+            RequestHistoryService history,
+            CancellationToken cancellationToken) =>
+            history.ListAsync(cancellationToken))
+            .WithName("ListRequestHistory")
+            .WithSummary("Lists submitted request history with statuses refreshed live from each upstream service.")
+            .Produces<RequestHistoryResponse>();
+
+        group.MapDelete("/history/{id:guid}", async (
+            Guid id,
+            RequestHistoryService history,
+            CancellationToken cancellationToken) =>
+            await history.DeleteAsync(id, cancellationToken)
+                ? Results.NoContent()
+                : Results.NotFound(new ApiProblem(ApiProblemCodes.NotFound, "Request history entry was not found.")))
+            .WithName("DeleteRequestHistoryEntry")
+            .WithSummary("Deletes a request history entry.")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
         group.MapGet("/details/{source}/{kind}/{externalId}", async (
             string source,
