@@ -1245,6 +1245,7 @@
             </div>
           {/if}
 
+          {#if showFlagActions || canEdit || visibleActionButtons.length > 0}
           <div class="action-row">
             <div class="action-badges">
               {#if showFlagActions}
@@ -1364,6 +1365,7 @@
               </div>
             {/if}
           </div>
+          {/if}
         </div>
       </div>
     {/snippet}

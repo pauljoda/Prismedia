@@ -261,11 +261,11 @@
     </div>
   {:else if detail && requestCard}
     {@const d = detail}
-    <div class="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_340px]">
-      <!-- The shared EntityDetail surface renders the hero (banner + reflection +
-           poster) and description for a synthetic card; request-only concepts
-           (ratings, cast, children, tracks) layer in through snippets. -->
-      <EntityDetail card={requestCard} posterSize="large" showFlagActions={false}>
+    <!-- The shared EntityDetail surface renders the hero (banner + reflection +
+         poster) and description for a synthetic card; request-only concepts
+         (ratings, cast, children, tracks, the request panel) layer in through
+         snippets so they live inside the same detail card. -->
+    <EntityDetail card={requestCard} posterSize="large" showFlagActions={false}>
         {#snippet heroMeta()}
           {#if d.subtitle}
             <span class="meta-item">{d.subtitle}</span>
@@ -306,18 +306,18 @@
           {/if}
         {/snippet}
 
-        {#snippet afterBody()}
+      {#snippet afterBody()}
+        <div class="request-detail-body">
           {@render requestSections(d)}
-        {/snippet}
-      </EntityDetail>
-
-      {@render requestPanel(d)}
-    </div>
+          {@render requestPanel(d)}
+        </div>
+      {/snippet}
+    </EntityDetail>
   {/if}
 </div>
 
 {#snippet requestSections(d: RequestDetailResponse)}
-    <div class="space-y-4">
+    <div class="min-w-0 space-y-4">
       {#if d.studios.length > 0}
         <div class="space-y-2">
           <h3 class="text-label text-text-muted">{isSeries ? "Networks" : "Studios"}</h3>
@@ -441,9 +441,9 @@
     </div>
 {/snippet}
 
-<!-- ── Request panel ── -->
+<!-- ── Request panel, embedded in the detail body ── -->
 {#snippet requestPanel(d: RequestDetailResponse)}
-      <aside class="surface-panel space-y-3.5 p-5">
+      <aside class="request-panel space-y-3.5">
         <h2 class="text-kicker text-text-primary">
           {d.tracked ? "Update Request" : "Send Request"}
         </h2>
@@ -578,3 +578,34 @@
         {/if}
       </aside>
 {/snippet}
+
+<style>
+  /* Aligns the request sections with EntityDetail's .detail-body padding so the
+     afterBody content doesn't sit on the card edge, and embeds the request
+     panel as an inline well beside the sections on wide screens. */
+  .request-detail-body {
+    display: grid;
+    gap: 1.25rem;
+    align-items: start;
+    padding: 0 1.5rem 1.5rem;
+  }
+
+  @media (min-width: 64rem) {
+    .request-detail-body {
+      grid-template-columns: minmax(0, 1fr) 320px;
+    }
+
+    /* Long discographies scroll while the request controls stay reachable. */
+    .request-panel {
+      position: sticky;
+      top: 1rem;
+    }
+  }
+
+  .request-panel {
+    border: 1px solid var(--color-border-default, rgba(164, 172, 185, 0.12));
+    border-radius: var(--radius-md, 10px);
+    background: var(--color-surface-1, #0b0e12);
+    padding: 1rem 1.1rem 1.1rem;
+  }
+</style>
