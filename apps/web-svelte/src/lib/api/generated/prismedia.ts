@@ -158,12 +158,12 @@ import type {
   RatingUpdateRequest,
   RemoveFileExclusionParams,
   RenameFileParams,
-  RequestConnectionTestResponse,
   RequestDetailResponse,
   RequestSearchResponse,
   RequestServiceInstanceSaveRequest,
   RequestServiceInstanceSummary,
-  RequestServiceOptionsResponse,
+  RequestServiceTestRequest,
+  RequestServiceTestResponse,
   RequestSubmitRequest,
   RequestSubmitResponse,
   RescanFileRootParams,
@@ -9023,12 +9023,19 @@ export type saveRequestServiceResponse200 = {
   status: 200
 }
 
+export type saveRequestServiceResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
 export type saveRequestServiceResponseSuccess = (saveRequestServiceResponse200) & {
   headers: Headers;
 };
-;
+export type saveRequestServiceResponseError = (saveRequestServiceResponse400) & {
+  headers: Headers;
+};
 
-export type saveRequestServiceResponse = (saveRequestServiceResponseSuccess)
+export type saveRequestServiceResponse = (saveRequestServiceResponseSuccess | saveRequestServiceResponseError)
 
 export const getSaveRequestServiceUrl = () => {
 
@@ -9060,12 +9067,19 @@ export type updateRequestServiceResponse200 = {
   status: 200
 }
 
+export type updateRequestServiceResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
 export type updateRequestServiceResponseSuccess = (updateRequestServiceResponse200) & {
   headers: Headers;
 };
-;
+export type updateRequestServiceResponseError = (updateRequestServiceResponse400) & {
+  headers: Headers;
+};
 
-export type updateRequestServiceResponse = (updateRequestServiceResponseSuccess)
+export type updateRequestServiceResponse = (updateRequestServiceResponseSuccess | updateRequestServiceResponseError)
 
 export const getUpdateRequestServiceUrl = (id: string,) => {
 
@@ -9136,87 +9150,45 @@ export const deleteRequestService = async (id: string, options?: RequestInit): P
 
 
 
-export type getRequestServiceOptionsResponse200 = {
-  data: RequestServiceOptionsResponse
-  status: 200
-}
-
-export type getRequestServiceOptionsResponse404 = {
-  data: ApiProblem
-  status: 404
-}
-
-export type getRequestServiceOptionsResponseSuccess = (getRequestServiceOptionsResponse200) & {
-  headers: Headers;
-};
-export type getRequestServiceOptionsResponseError = (getRequestServiceOptionsResponse404) & {
-  headers: Headers;
-};
-
-export type getRequestServiceOptionsResponse = (getRequestServiceOptionsResponseSuccess | getRequestServiceOptionsResponseError)
-
-export const getGetRequestServiceOptionsUrl = (id: string,) => {
-
-
-
-
-  return `/api/requests/services/${id}/options`
-}
-
-/**
- * @summary Gets selectable quality profile, root folder, and metadata profile options for a request service.
- */
-export const getRequestServiceOptions = async (id: string, options?: RequestInit): Promise<getRequestServiceOptionsResponse> => {
-
-  return orvalFetch<getRequestServiceOptionsResponse>(getGetRequestServiceOptionsUrl(id),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
 export type testRequestServiceResponse200 = {
-  data: RequestConnectionTestResponse
+  data: RequestServiceTestResponse
   status: 200
 }
 
-export type testRequestServiceResponse404 = {
+export type testRequestServiceResponse400 = {
   data: ApiProblem
-  status: 404
+  status: 400
 }
 
 export type testRequestServiceResponseSuccess = (testRequestServiceResponse200) & {
   headers: Headers;
 };
-export type testRequestServiceResponseError = (testRequestServiceResponse404) & {
+export type testRequestServiceResponseError = (testRequestServiceResponse400) & {
   headers: Headers;
 };
 
 export type testRequestServiceResponse = (testRequestServiceResponseSuccess | testRequestServiceResponseError)
 
-export const getTestRequestServiceUrl = (id: string,) => {
+export const getTestRequestServiceUrl = () => {
 
 
 
 
-  return `/api/requests/services/${id}/test`
+  return `/api/requests/services/test`
 }
 
 /**
- * @summary Tests connectivity to a configured request service instance.
+ * @summary Tests connectivity for a request service configuration and returns its selectable options on success. A successful test gates saving the service.
  */
-export const testRequestService = async (id: string, options?: RequestInit): Promise<testRequestServiceResponse> => {
+export const testRequestService = async (requestServiceTestRequest: RequestServiceTestRequest, options?: RequestInit): Promise<testRequestServiceResponse> => {
 
-  return orvalFetch<testRequestServiceResponse>(getTestRequestServiceUrl(id),
+  return orvalFetch<testRequestServiceResponse>(getTestRequestServiceUrl(),
   {
     ...options,
-    method: 'POST'
-
-
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      requestServiceTestRequest,)
   }
 );}
 

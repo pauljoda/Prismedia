@@ -4,6 +4,7 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { RequestMinimumAvailability } from './requestMinimumAvailability';
 import type { RequestProviderKind } from './requestProviderKind';
 
 export interface RequestServiceInstanceSummary {
@@ -24,8 +25,8 @@ export interface RequestServiceInstanceSummary {
      * @pattern ^-?(?:0|[1-9]\d*)$
      */
   defaultMetadataProfileId: number | string | null;
+  minimumAvailability: RequestMinimumAvailability;
+  defaultTagIds: (number | string)[];
   searchOnRequest: boolean;
   hasApiKey: boolean;
-  /** @nullable */
-  apiKey: string | null;
 }

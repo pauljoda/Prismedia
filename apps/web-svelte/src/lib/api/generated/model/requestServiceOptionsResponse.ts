@@ -10,4 +10,5 @@ export interface RequestServiceOptionsResponse {
   qualityProfiles: RequestServiceOption[];
   rootFolders: RequestServiceOption[];
   metadataProfiles: RequestServiceOption[];
+  tags: RequestServiceOption[];
 }

@@ -2,7 +2,6 @@ import type { RequestMediaKindCode, RequestProviderKindCode } from "$lib/api/gen
 import {
   deleteRequestService,
   getRequestDetail as getRequestDetailRequest,
-  getRequestServiceOptions,
   listRequestServices,
   saveRequestService,
   searchRequests as searchRequestsRequest,
@@ -11,12 +10,12 @@ import {
   updateRequestService,
 } from "$lib/api/generated/prismedia";
 import type {
-  RequestConnectionTestResponse,
   RequestDetailResponse,
   RequestSearchResponse,
   RequestServiceInstanceSaveRequest,
   RequestServiceInstanceSummary,
-  RequestServiceOptionsResponse,
+  RequestServiceTestRequest,
+  RequestServiceTestResponse,
   RequestSubmitRequest,
   RequestSubmitResponse,
 } from "$lib/requests/request-model";
@@ -39,12 +38,10 @@ export async function deleteRequestServiceInstance(id: string): Promise<void> {
   unwrapGenerated(await deleteRequestService(id), "Failed to delete request service", [204]);
 }
 
-export async function fetchRequestServiceOptions(id: string): Promise<RequestServiceOptionsResponse> {
-  return unwrapGenerated(await getRequestServiceOptions(id), "Failed to load request service options");
-}
-
-export async function testRequestServiceInstance(id: string): Promise<RequestConnectionTestResponse> {
-  return unwrapGenerated(await testRequestService(id), "Failed to test request service");
+export async function testRequestServiceConnection(
+  payload: RequestServiceTestRequest,
+): Promise<RequestServiceTestResponse> {
+  return unwrapGenerated(await testRequestService(payload), "Failed to test request service");
 }
 
 export async function searchRequests(params: {

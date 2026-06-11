@@ -4,9 +4,11 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { RequestServiceOptionsResponse } from './requestServiceOptionsResponse';
 
-export interface RequestConnectionTestResponse {
+export interface RequestServiceTestResponse {
   connected: boolean;
   /** @nullable */
   message: string | null;
+  options: null | RequestServiceOptionsResponse;
 }

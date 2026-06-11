@@ -1,21 +1,20 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { CloudDownload, Loader2, Pencil, Plus, PlugZap, RefreshCw, Trash2 } from "@lucide/svelte";
-  import { Badge, Button, Checkbox, Panel, Select, StatusLed, TextInput } from "@prismedia/ui-svelte";
-  import { REQUEST_PROVIDER_KIND } from "$lib/api/generated/codes";
-  import type { RequestProviderKindCode } from "$lib/api/generated/codes";
+  import { CloudDownload, Loader2, Pencil, PlugZap, Plus, Trash2 } from "@lucide/svelte";
+  import { Badge, Button, Checkbox, Panel, Select, StatusLed, TextInput, cn } from "@prismedia/ui-svelte";
+  import { REQUEST_MINIMUM_AVAILABILITY, REQUEST_PROVIDER_KIND } from "$lib/api/generated/codes";
+  import type { RequestMinimumAvailabilityCode, RequestProviderKindCode } from "$lib/api/generated/codes";
   import {
     deleteRequestServiceInstance,
-    fetchRequestServiceOptions,
     fetchRequestServices,
     saveRequestServiceInstance,
-    testRequestServiceInstance,
+    testRequestServiceConnection,
   } from "$lib/api/requests";
   import type {
-    RequestConnectionTestResponse,
     RequestServiceInstanceSaveRequest,
     RequestServiceInstanceSummary,
     RequestServiceOptionsResponse,
+    RequestServiceTestResponse,
   } from "$lib/requests/request-model";
   import { numericValue } from "$lib/requests/request-helpers";
 
@@ -39,17 +38,29 @@
     [REQUEST_PROVIDER_KIND.plugin]: "Plugin",
   };
 
+  const availabilityOptions: { value: RequestMinimumAvailabilityCode; label: string }[] = [
+    { value: REQUEST_MINIMUM_AVAILABILITY.announced, label: "Announced" },
+    { value: REQUEST_MINIMUM_AVAILABILITY.inCinemas, label: "In Cinemas" },
+    { value: REQUEST_MINIMUM_AVAILABILITY.released, label: "Released" },
+  ];
+
   let services = $state<RequestServiceInstanceSummary[]>([]);
   let formOpen = $state(false);
   let editingServiceId = $state<string | null>(null);
   let saving = $state(false);
-  let testingServiceId = $state<string | null>(null);
-  let testResults = $state<Record<string, RequestConnectionTestResponse>>({});
-  let serviceOptions = $state<RequestServiceOptionsResponse | null>(null);
-  let loadingOptions = $state(false);
+  let testing = $state(false);
+  let testMessage = $state<string | null>(null);
+  let rowTestingId = $state<string | null>(null);
+  let rowTestResults = $state<Record<string, { connected: boolean; message: string | null }>>({});
+  // Options pulled from the service by the last successful test. Non-null means the
+  // connection is verified and defaults + Save are unlocked.
+  let verifiedOptions = $state<RequestServiceOptionsResponse | null>(null);
   let form = $state<RequestServiceInstanceSaveRequest>(emptyForm());
 
   const isLidarr = $derived(form.kind === REQUEST_PROVIDER_KIND.lidarr);
+  const isRadarr = $derived(form.kind === REQUEST_PROVIDER_KIND.radarr);
+  const connectionFilled = $derived(!!form.baseUrl.trim() && (!!form.apiKey?.trim() || !!editingServiceId));
+  const canSave = $derived(!!verifiedOptions && !!form.displayName.trim() && !!form.baseUrl.trim());
 
   onMount(async () => {
     try {
@@ -69,6 +80,8 @@
       defaultRootFolderPath: null,
       defaultQualityProfileId: null,
       defaultMetadataProfileId: null,
+      minimumAvailability: REQUEST_MINIMUM_AVAILABILITY.released,
+      defaultTagIds: [],
       searchOnRequest: true,
       isDefault: false,
     };
@@ -78,7 +91,7 @@
     formOpen = true;
     editingServiceId = null;
     form = emptyForm();
-    serviceOptions = null;
+    invalidateTest();
   }
 
   function openEditForm(service: RequestServiceInstanceSummary) {
@@ -93,21 +106,102 @@
       defaultRootFolderPath: service.defaultRootFolderPath,
       defaultQualityProfileId: numericValue(service.defaultQualityProfileId),
       defaultMetadataProfileId: numericValue(service.defaultMetadataProfileId),
+      minimumAvailability: service.minimumAvailability,
+      defaultTagIds: service.defaultTagIds.map(numericValue).filter((id): id is number => id !== null),
       searchOnRequest: service.searchOnRequest,
       isDefault: service.isDefault,
     };
-    serviceOptions = null;
-    void loadOptions(service.id, { quiet: true });
+    invalidateTest();
   }
 
   function closeForm() {
     formOpen = false;
     editingServiceId = null;
     form = emptyForm();
-    serviceOptions = null;
+    invalidateTest();
+  }
+
+  /** Connection fields changed — the previous test no longer vouches for this config. */
+  function invalidateTest() {
+    verifiedOptions = null;
+    testMessage = null;
+  }
+
+  function setConnectionField(patch: Partial<RequestServiceInstanceSaveRequest>) {
+    form = { ...form, ...patch };
+    invalidateTest();
+  }
+
+  async function testConnection() {
+    testing = true;
+    testMessage = null;
+    try {
+      const response = await testRequestServiceConnection({
+        id: editingServiceId,
+        kind: form.kind,
+        baseUrl: form.baseUrl.trim(),
+        apiKey: form.apiKey?.trim() || null,
+      });
+      if (response.connected && response.options) {
+        verifiedOptions = response.options;
+        seedDefaults(response.options);
+        testMessage = response.message ?? "Connected";
+      } else {
+        verifiedOptions = null;
+        testMessage = response.message ?? "Connection failed";
+      }
+    } catch (err) {
+      verifiedOptions = null;
+      testMessage = err instanceof Error ? err.message : "Failed to test connection";
+    } finally {
+      testing = false;
+    }
+  }
+
+  /** Keeps saved defaults when the service still offers them, otherwise falls back to the first option. */
+  function seedDefaults(options: RequestServiceOptionsResponse) {
+    const rootFolder =
+      options.rootFolders.find((option) => option.path === form.defaultRootFolderPath) ??
+      options.rootFolders[0];
+    const qualityProfile =
+      options.qualityProfiles.find(
+        (option) => numericValue(option.id) === numericValue(form.defaultQualityProfileId),
+      ) ?? options.qualityProfiles[0];
+    const metadataProfile =
+      options.metadataProfiles.find(
+        (option) => numericValue(option.id) === numericValue(form.defaultMetadataProfileId),
+      ) ?? options.metadataProfiles[0];
+    const availableTagIds = new Set(
+      options.tags.map((option) => numericValue(option.id)).filter((id) => id !== null),
+    );
+    form = {
+      ...form,
+      defaultRootFolderPath: rootFolder?.path ?? null,
+      defaultQualityProfileId: numericValue(qualityProfile?.id),
+      defaultMetadataProfileId: numericValue(metadataProfile?.id),
+      defaultTagIds: form.defaultTagIds
+        .map(numericValue)
+        .filter((id): id is number => id !== null && availableTagIds.has(id)),
+    };
+  }
+
+  function toggleTag(id: number) {
+    const current = form.defaultTagIds.map(numericValue).filter((tag): tag is number => tag !== null);
+    form = {
+      ...form,
+      defaultTagIds: current.includes(id)
+        ? current.filter((tag) => tag !== id)
+        : [...current, id],
+    };
+  }
+
+  function tagSelected(id: string | number) {
+    const numeric = numericValue(id);
+    return numeric !== null && form.defaultTagIds.map(numericValue).includes(numeric);
   }
 
   async function saveService() {
+    if (!canSave) return;
     saving = true;
     try {
       const saved = await saveRequestServiceInstance({
@@ -118,10 +212,11 @@
         defaultRootFolderPath: form.defaultRootFolderPath?.trim() || null,
         defaultQualityProfileId: numericValue(form.defaultQualityProfileId),
         defaultMetadataProfileId: numericValue(form.defaultMetadataProfileId),
+        defaultTagIds: form.defaultTagIds.map(numericValue).filter((id): id is number => id !== null),
       });
       services = await fetchRequestServices();
       onMessage(`${saved.displayName} saved.`);
-      openEditForm(saved);
+      closeForm();
     } catch (err) {
       onError(err instanceof Error ? err.message : "Failed to save request service");
     } finally {
@@ -141,52 +236,26 @@
     }
   }
 
-  async function testService(service: RequestServiceInstanceSummary) {
-    testingServiceId = service.id;
+  async function testServiceRow(service: RequestServiceInstanceSummary) {
+    rowTestingId = service.id;
     try {
-      testResults = {
-        ...testResults,
-        [service.id]: await testRequestServiceInstance(service.id),
+      const response: RequestServiceTestResponse = await testRequestServiceConnection({
+        id: service.id,
+        kind: service.kind,
+        baseUrl: service.baseUrl,
+        apiKey: null,
+      });
+      rowTestResults = {
+        ...rowTestResults,
+        [service.id]: {
+          connected: response.connected,
+          message: response.message ?? (response.connected ? "Connected" : "Connection failed"),
+        },
       };
     } catch (err) {
       onError(err instanceof Error ? err.message : "Failed to test request service");
     } finally {
-      testingServiceId = null;
-    }
-  }
-
-  async function loadOptions(serviceId = editingServiceId, { quiet = false } = {}) {
-    if (!serviceId) return;
-    loadingOptions = true;
-    try {
-      const options = await fetchRequestServiceOptions(serviceId);
-      serviceOptions = options;
-      const rootFolder =
-        options.rootFolders.find((option) => option.path === form.defaultRootFolderPath) ??
-        options.rootFolders[0];
-      const qualityProfile =
-        options.qualityProfiles.find(
-          (option) => numericValue(option.id) === numericValue(form.defaultQualityProfileId),
-        ) ?? options.qualityProfiles[0];
-      const metadataProfile =
-        options.metadataProfiles.find(
-          (option) => numericValue(option.id) === numericValue(form.defaultMetadataProfileId),
-        ) ?? options.metadataProfiles[0];
-      form = {
-        ...form,
-        defaultRootFolderPath: rootFolder?.path ?? form.defaultRootFolderPath,
-        defaultQualityProfileId:
-          numericValue(qualityProfile?.id) ?? numericValue(form.defaultQualityProfileId),
-        defaultMetadataProfileId:
-          numericValue(metadataProfile?.id) ?? numericValue(form.defaultMetadataProfileId),
-      };
-      if (!quiet) onMessage("Loaded options from the service.");
-    } catch (err) {
-      if (!quiet) {
-        onError(err instanceof Error ? err.message : "Failed to load service options");
-      }
-    } finally {
-      loadingOptions = false;
+      rowTestingId = null;
     }
   }
 </script>
@@ -217,200 +286,222 @@
 
     {#if formOpen}
       <form
-        class="surface-well space-y-3 p-4"
+        class="surface-well space-y-4 p-4"
         onsubmit={(event) => {
           event.preventDefault();
           void saveService();
         }}
       >
-        <div class="grid gap-3 sm:grid-cols-2">
-          <label class="space-y-1">
-            <span class="text-label text-text-muted">Provider</span>
-            <Select
-              size="sm"
-              value={form.kind}
-              options={providerOptions}
-              disabled={!!editingServiceId}
-              onchange={(value) => (form = { ...form, kind: value as RequestProviderKindCode })}
-            />
-          </label>
-          <label class="space-y-1">
-            <span class="text-label text-text-muted">Name</span>
-            <TextInput
-              size="sm"
-              value={form.displayName}
-              oninput={(event) => (form = { ...form, displayName: event.currentTarget.value })}
-              placeholder="Movies"
-              autocomplete="off"
-              required
-            />
-          </label>
-          <label class="space-y-1">
-            <span class="text-label text-text-muted">Base URL</span>
-            <TextInput
-              size="sm"
-              value={form.baseUrl}
-              oninput={(event) => (form = { ...form, baseUrl: event.currentTarget.value })}
-              placeholder="http://radarr:7878"
-              autocomplete="off"
-              required
-            />
-          </label>
-          <label class="space-y-1">
-            <span class="text-label text-text-muted">API key</span>
-            <TextInput
-              size="sm"
-              type="password"
-              value={form.apiKey ?? ""}
-              oninput={(event) => (form = { ...form, apiKey: event.currentTarget.value })}
-              placeholder={editingServiceId ? "Saved key kept unless replaced" : ""}
-              autocomplete="new-password"
-            />
-          </label>
-        </div>
+        <!-- ── Step 1: connection ── -->
+        <div class="space-y-3">
+          <div class="text-label text-text-muted">Connection</div>
+          <div class="grid gap-3 sm:grid-cols-2">
+            <label class="space-y-1">
+              <span class="text-label text-text-muted">Provider</span>
+              <Select
+                size="sm"
+                value={form.kind}
+                options={providerOptions}
+                disabled={!!editingServiceId}
+                onchange={(value) => setConnectionField({ kind: value as RequestProviderKindCode })}
+              />
+            </label>
+            <label class="space-y-1">
+              <span class="text-label text-text-muted">Name</span>
+              <TextInput
+                size="sm"
+                value={form.displayName}
+                oninput={(event) => (form = { ...form, displayName: event.currentTarget.value })}
+                placeholder="Movies"
+                autocomplete="off"
+                required
+              />
+            </label>
+            <label class="space-y-1">
+              <span class="text-label text-text-muted">Base URL</span>
+              <TextInput
+                size="sm"
+                value={form.baseUrl}
+                oninput={(event) => setConnectionField({ baseUrl: event.currentTarget.value })}
+                placeholder="http://radarr:7878"
+                autocomplete="off"
+                required
+              />
+            </label>
+            <label class="space-y-1">
+              <span class="text-label text-text-muted">API key</span>
+              <TextInput
+                size="sm"
+                type="password"
+                value={form.apiKey ?? ""}
+                oninput={(event) => setConnectionField({ apiKey: event.currentTarget.value })}
+                placeholder={editingServiceId ? "Saved key kept unless replaced" : ""}
+                autocomplete="new-password"
+              />
+            </label>
+          </div>
 
-        <div class="space-y-2">
-          <div class="flex flex-wrap items-center justify-between gap-2">
-            <span class="text-label text-text-muted">Request defaults</span>
+          <div class="flex flex-wrap items-center gap-3">
             <Button
               type="button"
-              variant="ghost"
+              variant={verifiedOptions ? "secondary" : "primary"}
               size="sm"
-              disabled={loadingOptions || !editingServiceId}
-              onclick={() => void loadOptions()}
-              class="gap-1.5 px-2.5 py-1 text-xs"
-              title={editingServiceId
-                ? "Fetch root folders and profiles from the service"
-                : "Save the service first, then load its options"}
+              disabled={testing || !connectionFilled}
+              onclick={() => void testConnection()}
+              class="gap-1.5 px-3 py-1.5 text-xs"
             >
-              {#if loadingOptions}
+              {#if testing}
                 <Loader2 class="h-3.5 w-3.5 animate-spin" />
               {:else}
-                <RefreshCw class="h-3.5 w-3.5" />
+                <PlugZap class="h-3.5 w-3.5" />
               {/if}
-              Load from service
+              {testing ? "Testing…" : "Test Connection"}
             </Button>
+            {#if testMessage}
+              <span
+                class={cn(
+                  "flex items-center gap-1.5 text-[0.75rem]",
+                  verifiedOptions ? "text-success-text" : "text-error-text",
+                )}
+              >
+                <StatusLed status={verifiedOptions ? "active" : "error"} size="sm" />
+                {testMessage}
+              </span>
+            {:else}
+              <span class="text-[0.72rem] text-text-muted">
+                Test the connection to load folders and profiles before saving.
+              </span>
+            {/if}
           </div>
-          <div class="grid gap-3 sm:grid-cols-2 {isLidarr ? 'lg:grid-cols-3' : ''}">
-            <label class="space-y-1">
-              <span class="text-label text-text-muted">Root folder</span>
-              {#if serviceOptions?.rootFolders.length}
+        </div>
+
+        <!-- ── Step 2: defaults (unlocked by a successful test) ── -->
+        {#if verifiedOptions}
+          <div class="space-y-3 border-t border-border-subtle pt-4">
+            <div class="text-label text-text-muted">Request defaults</div>
+            <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <label class="space-y-1">
+                <span class="text-label text-text-muted">Root folder</span>
                 <Select
                   size="sm"
                   value={form.defaultRootFolderPath ?? ""}
-                  options={serviceOptions.rootFolders.map((option) => ({
+                  options={verifiedOptions.rootFolders.map((option) => ({
                     value: option.path ?? option.id,
                     label: option.name,
                   }))}
+                  disabled={verifiedOptions.rootFolders.length === 0}
                   onchange={(value) => (form = { ...form, defaultRootFolderPath: value })}
                 />
-              {:else}
-                <TextInput
-                  size="sm"
-                  value={form.defaultRootFolderPath ?? ""}
-                  oninput={(event) =>
-                    (form = { ...form, defaultRootFolderPath: event.currentTarget.value })}
-                  placeholder="/media/movies"
-                />
-              {/if}
-            </label>
-            <label class="space-y-1">
-              <span class="text-label text-text-muted">Quality profile</span>
-              {#if serviceOptions?.qualityProfiles.length}
+              </label>
+              <label class="space-y-1">
+                <span class="text-label text-text-muted">Quality profile</span>
                 <Select
                   size="sm"
                   value={form.defaultQualityProfileId === null
                     ? ""
                     : String(form.defaultQualityProfileId)}
-                  options={serviceOptions.qualityProfiles.map((option) => ({
-                    value: option.id,
+                  options={verifiedOptions.qualityProfiles.map((option) => ({
+                    value: String(option.id),
                     label: option.name,
                   }))}
+                  disabled={verifiedOptions.qualityProfiles.length === 0}
                   onchange={(value) => (form = { ...form, defaultQualityProfileId: numericValue(value) })}
                 />
-              {:else}
-                <TextInput
-                  size="sm"
-                  type="number"
-                  value={form.defaultQualityProfileId ?? ""}
-                  oninput={(event) =>
-                    (form = {
-                      ...form,
-                      defaultQualityProfileId: numericValue(event.currentTarget.value),
-                    })}
-                  placeholder="Profile ID"
-                />
-              {/if}
-            </label>
-            {#if isLidarr}
-              <label class="space-y-1">
-                <span class="text-label text-text-muted">Metadata profile</span>
-                {#if serviceOptions?.metadataProfiles.length}
+              </label>
+              {#if isLidarr}
+                <label class="space-y-1">
+                  <span class="text-label text-text-muted">Metadata profile</span>
                   <Select
                     size="sm"
                     value={form.defaultMetadataProfileId === null
                       ? ""
                       : String(form.defaultMetadataProfileId)}
-                    options={serviceOptions.metadataProfiles.map((option) => ({
-                      value: option.id,
+                    options={verifiedOptions.metadataProfiles.map((option) => ({
+                      value: String(option.id),
                       label: option.name,
                     }))}
+                    disabled={verifiedOptions.metadataProfiles.length === 0}
                     onchange={(value) =>
                       (form = { ...form, defaultMetadataProfileId: numericValue(value) })}
                   />
-                {:else}
-                  <TextInput
-                    size="sm"
-                    type="number"
-                    value={form.defaultMetadataProfileId ?? ""}
-                    oninput={(event) =>
-                      (form = {
-                        ...form,
-                        defaultMetadataProfileId: numericValue(event.currentTarget.value),
-                      })}
-                    placeholder="Profile ID"
-                  />
-                {/if}
-              </label>
-            {/if}
-          </div>
-        </div>
-
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
-            <label class="flex cursor-pointer items-center gap-2 text-[0.78rem] text-text-secondary">
-              <Checkbox
-                checked={form.searchOnRequest}
-                onchange={(event) =>
-                  (form = { ...form, searchOnRequest: event.currentTarget.checked })}
-              />
-              Search after request
-            </label>
-            <label class="flex cursor-pointer items-center gap-2 text-[0.78rem] text-text-secondary">
-              <Checkbox
-                checked={form.isDefault}
-                onchange={(event) => (form = { ...form, isDefault: event.currentTarget.checked })}
-              />
-              Default for this provider
-            </label>
-          </div>
-          <div class="flex items-center gap-2">
-            <Button type="button" variant="ghost" size="sm" onclick={closeForm} class="px-3 py-1.5 text-xs">
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              size="sm"
-              disabled={saving || !form.displayName.trim() || !form.baseUrl.trim()}
-              class="gap-1.5 px-3 py-1.5 text-xs"
-            >
-              {#if saving}
-                <Loader2 class="h-3.5 w-3.5 animate-spin" />
+                </label>
               {/if}
-              {editingServiceId ? "Save Changes" : "Add Service"}
-            </Button>
+              {#if isRadarr}
+                <label class="space-y-1">
+                  <span class="text-label text-text-muted">Minimum availability</span>
+                  <Select
+                    size="sm"
+                    value={form.minimumAvailability}
+                    options={availabilityOptions}
+                    onchange={(value) =>
+                      (form = { ...form, minimumAvailability: value as RequestMinimumAvailabilityCode })}
+                  />
+                </label>
+              {/if}
+            </div>
+
+            {#if verifiedOptions.tags.length > 0}
+              <div class="space-y-1.5">
+                <span class="text-label text-text-muted">Tags applied to requests</span>
+                <div class="flex flex-wrap gap-1.5">
+                  {#each verifiedOptions.tags as tag (tag.id)}
+                    <button
+                      type="button"
+                      onclick={() => {
+                        const id = numericValue(tag.id);
+                        if (id !== null) toggleTag(id);
+                      }}
+                      class={cn(
+                        "rounded-xs border px-2 py-1 text-[0.7rem] font-medium transition-all duration-fast",
+                        tagSelected(tag.id)
+                          ? "bg-accent-950/30 border-border-accent text-text-accent shadow-[var(--shadow-glow-accent)]"
+                          : "bg-surface-1 border-border-subtle text-text-muted hover:border-border-default hover:text-text-primary",
+                      )}
+                    >
+                      {tag.name}
+                    </button>
+                  {/each}
+                </div>
+              </div>
+            {/if}
+
+            <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <label class="flex cursor-pointer items-center gap-2 text-[0.78rem] text-text-secondary">
+                <Checkbox
+                  checked={form.searchOnRequest}
+                  onchange={(event) =>
+                    (form = { ...form, searchOnRequest: event.currentTarget.checked })}
+                />
+                Search after request
+              </label>
+              <label class="flex cursor-pointer items-center gap-2 text-[0.78rem] text-text-secondary">
+                <Checkbox
+                  checked={form.isDefault}
+                  onchange={(event) => (form = { ...form, isDefault: event.currentTarget.checked })}
+                />
+                Default for this provider
+              </label>
+            </div>
           </div>
+        {/if}
+
+        <div class="flex items-center justify-end gap-2 border-t border-border-subtle pt-3">
+          <Button type="button" variant="ghost" size="sm" onclick={closeForm} class="px-3 py-1.5 text-xs">
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            variant="primary"
+            size="sm"
+            disabled={saving || !canSave}
+            title={verifiedOptions ? undefined : "Run a successful connection test before saving"}
+            class="gap-1.5 px-3 py-1.5 text-xs"
+          >
+            {#if saving}
+              <Loader2 class="h-3.5 w-3.5 animate-spin" />
+            {/if}
+            {editingServiceId ? "Save Changes" : "Add Service"}
+          </Button>
         </div>
       </form>
     {/if}
@@ -421,8 +512,8 @@
           <div class="flex flex-wrap items-start justify-between gap-3">
             <div class="flex min-w-0 items-start gap-3">
               <StatusLed
-                status={testResults[service.id]
-                  ? testResults[service.id].connected
+                status={rowTestResults[service.id]
+                  ? rowTestResults[service.id].connected
                     ? "active"
                     : "error"
                   : "idle"}
@@ -445,11 +536,11 @@
                 type="button"
                 variant="ghost"
                 size="icon"
-                disabled={testingServiceId === service.id}
-                onclick={() => void testService(service)}
+                disabled={rowTestingId === service.id}
+                onclick={() => void testServiceRow(service)}
                 aria-label={`Test connection to ${service.displayName}`}
               >
-                {#if testingServiceId === service.id}
+                {#if rowTestingId === service.id}
                   <Loader2 class="h-4 w-4 animate-spin" />
                 {:else}
                   <PlugZap class="h-4 w-4" />
@@ -476,14 +567,13 @@
               </Button>
             </div>
           </div>
-          {#if testResults[service.id]}
+          {#if rowTestResults[service.id]}
             <p
-              class="text-[0.72rem] {testResults[service.id].connected
+              class="text-[0.72rem] {rowTestResults[service.id].connected
                 ? 'text-success-text'
                 : 'text-error-text'}"
             >
-              {testResults[service.id].message ??
-                (testResults[service.id].connected ? "Connected" : "Connection failed")}
+              {rowTestResults[service.id].message}
             </p>
           {/if}
         </div>

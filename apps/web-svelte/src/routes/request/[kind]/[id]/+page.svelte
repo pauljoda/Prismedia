@@ -62,7 +62,7 @@
   );
 
   const serviceOptions = $derived(
-    detail?.serviceOptions ?? { qualityProfiles: [], rootFolders: [], metadataProfiles: [] },
+    detail?.serviceOptions ?? { qualityProfiles: [], rootFolders: [], metadataProfiles: [], tags: [] },
   );
 
   const submitDisabledReason = $derived(

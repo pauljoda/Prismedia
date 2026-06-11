@@ -214,6 +214,14 @@ export const REQUEST_MEDIA_KIND = {
 
 export type RequestMediaKindCode = (typeof REQUEST_MEDIA_KIND)[keyof typeof REQUEST_MEDIA_KIND];
 
+export const REQUEST_MINIMUM_AVAILABILITY = {
+  announced: "announced",
+  inCinemas: "inCinemas",
+  released: "released",
+} as const;
+
+export type RequestMinimumAvailabilityCode = (typeof REQUEST_MINIMUM_AVAILABILITY)[keyof typeof REQUEST_MINIMUM_AVAILABILITY];
+
 export const CAPABILITY_KIND = {
   classification: "classification",
   dates: "dates",

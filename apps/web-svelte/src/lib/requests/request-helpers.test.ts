@@ -83,6 +83,7 @@ describe("request helpers", () => {
         ],
         rootFolders: [{ id: "/music", name: "/music", path: "/music" }],
         metadataProfiles: [{ id: "9", name: "Standard", path: null }],
+        tags: [],
       },
     );
 
@@ -109,9 +110,10 @@ function service(
     defaultRootFolderPath: null,
     defaultQualityProfileId: null,
     defaultMetadataProfileId: null,
+    minimumAvailability: "released",
+    defaultTagIds: [],
     searchOnRequest: true,
     hasApiKey: true,
-    apiKey: null,
   };
 }
 
@@ -120,6 +122,7 @@ function detailWithChildren(ids: string[]): RequestDetailResponse {
     qualityProfiles: [],
     rootFolders: [],
     metadataProfiles: [],
+    tags: [],
   };
 
   return {
