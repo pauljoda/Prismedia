@@ -194,6 +194,34 @@ public sealed class AutoIdentifyRunnerTests {
     }
 
     [Fact]
+    public async Task MatchesProviderCapabilityByConcreteKindSoAlbumsAutoIdentify() {
+        await using var db = CreateContext();
+        var albumId = await SeedVideoAsync(db, organized: false, kind: EntityKindRegistry.AudioLibrary.Code, title: "Abbey Road");
+        var settings = await ConfigureAsync(db, enabled: true, providers: ["musicbrainz"], confidencePercent: 90m);
+        var identify = new FakeIdentifyProvider {
+            ProposalsByProvider = {
+                ["musicbrainz"] = Proposal("musicbrainz", confidence: 0.95m, title: "Abbey Road", targetKind: ProposalKind.AudioLibrary),
+            },
+            // Mirrors the MusicBrainz manifest: concrete kinds only, no generic "audio" kind, so a
+            // capability lookup by the settings selector kind would wrongly exclude the provider.
+            SupportedKindsByProvider = {
+                ["musicbrainz"] = [
+                    EntityKindRegistry.MusicArtist.Code,
+                    EntityKindRegistry.AudioLibrary.Code,
+                    EntityKindRegistry.AudioTrack.Code,
+                ],
+            },
+        };
+        var runner = new AutoIdentifyRunner(settings, identify, db, NullLogger<AutoIdentifyRunner>.Instance);
+
+        var result = await runner.RunAsync(albumId, CancellationToken.None);
+
+        Assert.True(result.Applied);
+        Assert.Equal("musicbrainz", result.Provider);
+        Assert.Single(identify.ApplyCalls);
+    }
+
+    [Fact]
     public async Task SkipsWhenDisabled() {
         await using var db = CreateContext();
         var entityId = await SeedVideoAsync(db, organized: false);
@@ -308,11 +336,16 @@ public sealed class AutoIdentifyRunnerTests {
     private sealed class FakeIdentifyProvider : IIdentifyProviderService {
         public Dictionary<string, EntityMetadataProposal> ProposalsByProvider { get; } = new(StringComparer.Ordinal);
         public Dictionary<string, EntityMetadataProposal> ProposalsByExternalId { get; } = new(StringComparer.Ordinal);
+        /// <summary>Optional manifest-style declared kinds per provider; providers absent here match any kind.</summary>
+        public Dictionary<string, string[]> SupportedKindsByProvider { get; } = new(StringComparer.Ordinal);
         public List<(Guid EntityId, string Provider, IdentifyQuery? Query)> IdentifyCalls { get; } = [];
         public List<(IReadOnlyCollection<string> Fields, IReadOnlyDictionary<string, string?>? SelectedImages)> ApplyCalls { get; } = [];
 
         public Task<IReadOnlyList<PluginProvider>> ListProvidersAsync(string? entityKind, CancellationToken cancellationToken) {
             IReadOnlyList<PluginProvider> result = ProposalsByProvider.Keys
+                .Where(id => entityKind is null ||
+                    !SupportedKindsByProvider.TryGetValue(id, out var kinds) ||
+                    kinds.Contains(entityKind, StringComparer.OrdinalIgnoreCase))
                 .Select(id => new PluginProvider(
                     Id: id,
                     Name: id,

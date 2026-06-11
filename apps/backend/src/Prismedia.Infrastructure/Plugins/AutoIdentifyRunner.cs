@@ -58,8 +58,10 @@ public sealed class AutoIdentifyRunner(
         }
 
         // Restrict to user-selected providers that are installed, enabled, and capable of this kind,
-        // preserving the user's configured priority order.
-        var capable = (await identify.ListProvidersAsync(selectorKind, cancellationToken))
+        // preserving the user's configured priority order. Capability is checked against the entity's
+        // concrete kind code (e.g. audio-library), not the settings selector (e.g. audio) — provider
+        // manifests declare concrete kinds, and the identify call itself gates on the concrete kind.
+        var capable = (await identify.ListProvidersAsync(entity.KindCode, cancellationToken))
             .Where(provider => provider.Installed && provider.Enabled)
             .Select(provider => provider.Id)
             .ToHashSet(StringComparer.Ordinal);
