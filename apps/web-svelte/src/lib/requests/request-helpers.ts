@@ -32,6 +32,14 @@ export function defaultSelectedChildIds(detail: RequestDetailResponse): string[]
     .map((child) => child.id);
 }
 
+/**
+ * CSS aspect-ratio for a request result's artwork. Music kinds use square cover art;
+ * everything else uses the standard 2:3 poster shape.
+ */
+export function thumbnailAspectForKind(kind: RequestMediaKindCode): string {
+  return kind === REQUEST_MEDIA_KIND.artist || kind === REQUEST_MEDIA_KIND.album ? "1 / 1" : "2 / 3";
+}
+
 export function inferRequestSourceForKind(kind: RequestMediaKindCode): RequestProviderKindCode | null {
   if (kind === REQUEST_MEDIA_KIND.movie) return REQUEST_PROVIDER_KIND.radarr;
   if (kind === REQUEST_MEDIA_KIND.series) return REQUEST_PROVIDER_KIND.sonarr;

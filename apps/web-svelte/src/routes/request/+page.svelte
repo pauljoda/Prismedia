@@ -7,7 +7,7 @@
   import type { RequestMediaKindCode, RequestProviderKindCode } from "$lib/api/generated/codes";
   import { fetchRequestServices, searchRequests } from "$lib/api/requests";
   import type { RequestSearchResult, RequestServiceInstanceSummary } from "$lib/requests/request-model";
-  import { numericValue } from "$lib/requests/request-helpers";
+  import { numericValue, thumbnailAspectForKind } from "$lib/requests/request-helpers";
 
   const providerLabels: Record<string, string> = {
     [REQUEST_PROVIDER_KIND.radarr]: "Radarr",
@@ -242,7 +242,10 @@
             class="surface-card no-lift flex gap-3.5 p-3 hover:border-border-accent/50 transition-colors"
             href={detailHref(result)}
           >
-            <div class="w-16 shrink-0 overflow-hidden rounded-xs bg-surface-1 md:w-[88px]" style:aspect-ratio="2 / 3">
+            <div
+              class="w-16 shrink-0 self-start overflow-hidden rounded-xs bg-surface-1 md:w-[88px]"
+              style:aspect-ratio={thumbnailAspectForKind(result.kind)}
+            >
               {#if result.posterUrl}
                 <img
                   src={result.posterUrl}

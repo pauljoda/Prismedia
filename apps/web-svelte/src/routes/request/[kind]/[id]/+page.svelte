@@ -14,6 +14,7 @@
     numericValue,
     optionDefaultsForService,
     selectDefaultService,
+    thumbnailAspectForKind,
   } from "$lib/requests/request-helpers";
   import type { RequestDetailResponse, RequestServiceInstanceSummary } from "$lib/requests/request-model";
 
@@ -205,7 +206,10 @@
     >
       <div class="grid gap-4 p-4 md:grid-cols-[160px_minmax(0,1fr)] md:items-end md:p-6">
         {#if detail.posterUrl}
-          <div class="w-32 overflow-hidden rounded-xs border border-border-subtle bg-surface-2 md:w-40" style:aspect-ratio="2 / 3">
+          <div
+            class="w-32 overflow-hidden rounded-xs border border-border-subtle bg-surface-2 md:w-40"
+            style:aspect-ratio={thumbnailAspectForKind(detail.kind)}
+          >
             <img src={detail.posterUrl} alt="" class="h-full w-full object-cover" />
           </div>
         {/if}

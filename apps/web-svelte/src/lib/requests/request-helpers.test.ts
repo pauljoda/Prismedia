@@ -6,6 +6,7 @@ import {
   inferRequestSourceForKind,
   optionDefaultsForService,
   selectDefaultService,
+  thumbnailAspectForKind,
 } from "./request-helpers";
 import type { RequestDetailResponse, RequestServiceInstanceSummary, RequestServiceOptionsResponse } from "./request-model";
 
@@ -58,6 +59,13 @@ describe("request helpers", () => {
       title: "Twin Peaks",
       selectedChildIds: ["0"],
     });
+  });
+
+  it("uses square artwork for music kinds and posters elsewhere", () => {
+    expect(thumbnailAspectForKind(REQUEST_MEDIA_KIND.artist)).toBe("1 / 1");
+    expect(thumbnailAspectForKind(REQUEST_MEDIA_KIND.album)).toBe("1 / 1");
+    expect(thumbnailAspectForKind(REQUEST_MEDIA_KIND.movie)).toBe("2 / 3");
+    expect(thumbnailAspectForKind(REQUEST_MEDIA_KIND.series)).toBe("2 / 3");
   });
 
   it("infers source for direct detail routes", () => {
