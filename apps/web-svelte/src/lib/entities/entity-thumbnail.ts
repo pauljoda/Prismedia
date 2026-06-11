@@ -1,3 +1,4 @@
+import { THUMBNAIL_HOVER_KIND } from "$lib/api/generated/codes";
 import type { EntityCapability, EntityCard, EntityThumbnail, EntityKind } from "$lib/api/generated/model";
 import { ENTITY_KIND, resolveEntityHref, type EntityRouteContext } from "./entity-codes";
 
@@ -36,14 +37,14 @@ export interface EntityThumbnailAsset {
 /** Hover preview behavior supported by the shared thumbnail surface. */
 export type EntityThumbnailHoverPreview =
   | {
-      kind: "none";
+      kind: typeof THUMBNAIL_HOVER_KIND.none;
     }
   | {
-      kind: "trickplay" | "image-sequence";
+      kind: typeof THUMBNAIL_HOVER_KIND.trickplay | typeof THUMBNAIL_HOVER_KIND.imageSequence;
       assets: EntityThumbnailAsset[];
     }
   | {
-      kind: "sprite";
+      kind: typeof THUMBNAIL_HOVER_KIND.sprite;
       spriteUrl?: string;
       vttUrl: string;
     };
@@ -199,7 +200,7 @@ export function entityReferenceToThumbnailCard(
       relationships: [],
     },
     fit: options.fit ?? "cover",
-    hover: options.hover ?? { kind: "none" },
+    hover: options.hover ?? { kind: THUMBNAIL_HOVER_KIND.none },
     href: options.href,
     meta: options.meta,
     routeContext: options.routeContext,
@@ -223,14 +224,14 @@ export function thumbnailToEntityShell(entity: EntityThumbnail): EntityThumbnail
 
 /** Returns whether a card has enough preview assets to respond to hover or focus. */
 export function hasHoverPreview(card: EntityThumbnailCard): boolean {
-  if (card.hover.kind === "none") return false;
-  if (card.hover.kind === "sprite") return true;
+  if (card.hover.kind === THUMBNAIL_HOVER_KIND.none) return false;
+  if (card.hover.kind === THUMBNAIL_HOVER_KIND.sprite) return true;
   return card.hover.assets.length > 0;
 }
 
 /** Selects the hover frame nearest the current pointer position across the thumbnail. */
 export function pickHoverAsset(card: EntityThumbnailCard, pointerRatio: number): EntityThumbnailAsset | null {
-  if (card.hover.kind === "none" || card.hover.kind === "sprite") return null;
+  if (card.hover.kind === THUMBNAIL_HOVER_KIND.none || card.hover.kind === THUMBNAIL_HOVER_KIND.sprite) return null;
   if (card.hover.assets.length === 0) return null;
   const boundedRatio = Math.min(Math.max(pointerRatio, 0), 1);
   const index = Math.min(card.hover.assets.length - 1, Math.floor(boundedRatio * card.hover.assets.length));

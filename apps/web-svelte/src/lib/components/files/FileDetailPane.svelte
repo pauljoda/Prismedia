@@ -12,6 +12,7 @@
     Undo2,
   } from "@lucide/svelte";
   import { Info } from "@lucide/svelte";
+  import { FILE_ENTRY_KIND } from "$lib/api/generated/codes";
   import type { FileDetail } from "$lib/api/files";
   import { fileContentUrl } from "$lib/api/files";
   import type { FileActionId } from "$lib/files/file-actions";
@@ -52,7 +53,7 @@
   let previewError = $state<string | null>(null);
 
   const entry = $derived(detail?.entry ?? null);
-  const isDirectory = $derived(entry?.kind === "directory");
+  const isDirectory = $derived(entry?.kind === FILE_ENTRY_KIND.directory);
   const isRoot = $derived(isDirectory && (!entry?.path || entry.path === "."));
   const isExcluded = $derived(Boolean(entry?.excluded));
   const contentUrl = $derived(entry ? fileContentUrl(entry.rootId, entry.path) : "");

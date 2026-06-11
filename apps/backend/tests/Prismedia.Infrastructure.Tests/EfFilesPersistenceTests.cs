@@ -61,8 +61,8 @@ public sealed class EfFilesPersistenceTests {
         SeedLibraryRoot(db, otherRootId, "/media/other");
         var persistence = new EfFilesPersistence(db);
 
-        await persistence.UpsertExclusionAsync(RootId, "Skip", "directory", CancellationToken.None);
-        await persistence.UpsertExclusionAsync(otherRootId, "Skip", "directory", CancellationToken.None);
+        await persistence.UpsertExclusionAsync(RootId, "Skip", FileEntryKind.Directory, CancellationToken.None);
+        await persistence.UpsertExclusionAsync(otherRootId, "Skip", FileEntryKind.Directory, CancellationToken.None);
 
         var excluded = await persistence.ListExcludedRelativePathsAsync(
             RootId,

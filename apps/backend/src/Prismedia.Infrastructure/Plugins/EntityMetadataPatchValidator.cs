@@ -1,4 +1,5 @@
 using Prismedia.Contracts.Plugins;
+using Prismedia.Domain.Capabilities;
 
 namespace Prismedia.Infrastructure.Plugins;
 
@@ -42,8 +43,8 @@ public static class EntityMetadataPatchValidator {
             foreach (var (code, value) in patch.Dates) {
                 if (string.IsNullOrWhiteSpace(code) || string.IsNullOrWhiteSpace(value)) {
                     errors.Add("date codes and values cannot be empty");
-                } else if (!DateOnly.TryParse(value, out _)) {
-                    errors.Add($"date '{code}' must be parseable as a date");
+                } else if (EntityDateParser.Parse(value) is null) {
+                    errors.Add($"date '{code}' must be a date, timestamp, year-month, or year");
                 }
             }
         }

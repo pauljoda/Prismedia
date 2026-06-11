@@ -9,114 +9,172 @@ namespace Prismedia.Infrastructure.Plugins;
 
 public sealed partial class EntityMetadataApplyService {
     /// <summary>
-    /// Applies cascade metadata patch fields to an existing child entity.
+    /// Walks every descendant of an applied node uniformly: its related entities (people, studios,
+    /// tags) first, then its structural children, each through the single recursive
+    /// <see cref="ApplyNodeAsync"/>. This is the one recursive apply routine — a structural child and a
+    /// related entity are the same proposal shape and follow the same path, so a related entity can
+    /// carry (and recurse into) its own structure exactly like a child.
     /// </summary>
-    private async Task ApplyStructuralChildrenAsync(
-        IReadOnlyList<EntityMetadataProposal> children,
+    /// <param name="relationshipFieldsApplied">
+    /// Whether the parent's scalar relationship fields (credits/studio/tags) were applied. Relationship
+    /// proposals only enrich the entities those fields linked, so they are skipped when the fields were
+    /// not applied (e.g. the user unticked credits, or a cascade child carried none).
+    /// </param>
+    private async Task ApplyChildNodesAsync(
         Guid parentEntityId,
+        IReadOnlyList<EntityMetadataProposal> structuralChildren,
+        IReadOnlyList<EntityMetadataProposal> relationshipProposals,
+        bool relationshipFieldsApplied,
         DateTimeOffset now,
         HashSet<Guid> visited,
         IReadOnlyList<string> parentPath,
         IdentifyApplyProgressReporter? progress,
         CancellationToken cancellationToken) {
-        foreach (var child in children) {
+        if (relationshipFieldsApplied) {
+            foreach (var relation in relationshipProposals) {
+                if (!relation.TargetKind.IsRelationship() || string.IsNullOrWhiteSpace(relation.Patch.Title)) {
+                    continue;
+                }
+
+                var linked = await FindEntityByTitleAsync(
+                    relation.TargetKind.ToEntityKind().ToCode(), relation.Patch.Title.Trim(), parentEntityId: null, cancellationToken);
+                if (linked is null || linked.Id == parentEntityId || !visited.Add(linked.Id)) {
+                    continue;
+                }
+
+                await ApplyNodeAsync(linked, relation, isRelationship: true, now, visited, parentPath, progress, cancellationToken);
+                visited.Remove(linked.Id);
+            }
+        }
+
+        foreach (var child in structuralChildren) {
             if (EntityMetadataProposalTraversal.IsRelationshipKind(child.TargetKind)) {
                 continue;
             }
 
             var childEntity = child.TargetEntityId is { } existingId
                 ? await _db.Entities.FirstOrDefaultAsync(row => row.Id == existingId, cancellationToken)
-                : await FindStructuralChildAsync(parentEntityId, child, cancellationToken);
-
-            if (childEntity is null) {
+                : await FindStructuralChildAsync(parentEntityId, child, cancellationToken)
+                    ?? MaterializeStructuralContainer(parentEntityId, child, now);
+            if (childEntity is null || !visited.Add(childEntity.Id)) {
                 continue;
             }
 
-            if (!visited.Add(childEntity.Id)) {
-                continue;
-            }
-
-            var childTitle = !string.IsNullOrWhiteSpace(child.Patch.Title) ? child.Patch.Title.Trim() : childEntity.Title;
-            var childPath = parentPath.Count == 0 ? [childTitle] : parentPath.Concat([childTitle]).ToArray();
-            progress?.ReportEntity(childEntity.KindCode.DecodeAs<EntityKind>(), childTitle, childPath);
-
-            await ApplyPatchToEntityAsync(childEntity, child.Patch, child.Images, now, cancellationToken);
-            var relationshipProposals = EntityMetadataProposalTraversal.Relationships(child);
-            if (relationshipProposals.Count > 0 &&
-                (child.Patch.Credits.Count > 0 || !string.IsNullOrWhiteSpace(child.Patch.Studio) || child.Patch.Tags.Count > 0)) {
-                await ApplyRelationshipProposalsAsync(childEntity.Id, relationshipProposals, now, childPath, progress, cancellationToken);
-            }
-
-            await ApplyStructuralChildrenAsync(
-                EntityMetadataProposalTraversal.StructuralChildren(child),
-                childEntity.Id,
-                now,
-                visited,
-                childPath,
-                progress,
-                cancellationToken);
+            await AdoptUnderParentAsync(childEntity, parentEntityId, now, cancellationToken);
+            await ApplyNodeAsync(childEntity, child, isRelationship: false, now, visited, parentPath, progress, cancellationToken);
             visited.Remove(childEntity.Id);
         }
     }
 
-    private async Task<EntityRow?> FindStructuralChildAsync(
-        Guid parentEntityId,
-        EntityMetadataProposal child,
-        CancellationToken cancellationToken) {
-        var existing = await FindStructuralChildByExternalIdsAsync(parentEntityId, child, cancellationToken);
-        if (existing is not null || string.IsNullOrWhiteSpace(child.Patch.Title)) {
-            return existing;
-        }
-
-        return await FindStructuralChildByTitleAsync(
-            parentEntityId, child.TargetKind.ToEntityKind().ToCode(), child.Patch.Title, cancellationToken);
-    }
-
-    private async Task<EntityRow?> FindStructuralChildByExternalIdsAsync(
-        Guid parentEntityId,
-        EntityMetadataProposal child,
-        CancellationToken cancellationToken) {
+    /// <summary>
+    /// Creates the entity for provider-advertised structure the library has not scanned — a
+    /// volume for a book whose chapters sit flat in its folder, an unscanned season. Only an
+    /// identify-container kind that adopts at least one bound local descendant is created:
+    /// playable leaves and empty containers are never invented, so media files on disk remain
+    /// the sole source of playable items.
+    /// </summary>
+    private EntityRow? MaterializeStructuralContainer(Guid parentEntityId, EntityMetadataProposal child, DateTimeOffset now) {
         var kindCode = child.TargetKind.ToEntityKind().ToCode();
-        foreach (var (provider, value) in child.Patch.ExternalIds) {
-            if (string.IsNullOrWhiteSpace(provider) || string.IsNullOrWhiteSpace(value)) {
-                continue;
-            }
-
-            var entity = await _db.EntityExternalIds
-                .Where(row => row.Provider == provider.Trim() && row.Value == value.Trim())
-                .Join(
-                    _db.Entities,
-                    externalId => externalId.EntityId,
-                    entity => entity.Id,
-                    (_, entity) => entity)
-                .FirstOrDefaultAsync(
-                    entity => entity.ParentEntityId == parentEntityId &&
-                        entity.KindCode == kindCode,
-                    cancellationToken);
-            if (entity is not null) {
-                return entity;
-            }
+        if (!EntityKindRegistry.EnumeratesIdentifyChildren(kindCode) ||
+            string.IsNullOrWhiteSpace(child.Patch.Title) ||
+            !HasBoundStructuralDescendant(child)) {
+            return null;
         }
 
-        return null;
+        var entity = CreateEntity(kindCode, child.Patch.Title.Trim(), now);
+        entity.ParentEntityId = parentEntityId;
+        return entity;
     }
 
-    private async Task<EntityRow?> FindStructuralChildByTitleAsync(
-        Guid parentEntityId,
-        string kind,
-        string title,
-        CancellationToken cancellationToken) {
-        var normalizedTitle = title.Trim();
-        return _db.Entities.Local.FirstOrDefault(row =>
-                row.ParentEntityId == parentEntityId &&
-                row.KindCode == kind &&
-                row.Title.Equals(normalizedTitle, StringComparison.OrdinalIgnoreCase))
-            ?? await _db.Entities.FirstOrDefaultAsync(
-                row => row.ParentEntityId == parentEntityId &&
-                    row.KindCode == kind &&
-                    row.Title.ToLower() == normalizedTitle.ToLower(),
-                cancellationToken);
+    private static bool HasBoundStructuralDescendant(EntityMetadataProposal node) =>
+        (node.Children ?? []).Any(child =>
+            !EntityMetadataProposalTraversal.IsRelationshipKind(child.TargetKind) &&
+            (child.TargetEntityId is not null || HasBoundStructuralDescendant(child)));
+
+    /// <summary>
+    /// Moves an applied child under the parent the proposal nests it beneath. Applying structure
+    /// asserts the provider's hierarchy — a flat-scanned chapter adopted by its newly created
+    /// volume moves into it — but only when the child's current parent is an ancestor of the new
+    /// one, so structure only ever refines downward inside its own tree and a title collision can
+    /// never steal an entity across trees.
+    /// </summary>
+    private async Task AdoptUnderParentAsync(EntityRow child, Guid parentEntityId, DateTimeOffset now, CancellationToken cancellationToken) {
+        if (child.Id == parentEntityId || child.ParentEntityId == parentEntityId || child.ParentEntityId is not { } currentParent) {
+            return;
+        }
+
+        var cursor = parentEntityId;
+        for (var hops = 0; hops < 32; hops++) {
+            if (cursor == child.Id) {
+                return;
+            }
+
+            if (cursor == currentParent) {
+                child.ParentEntityId = parentEntityId;
+                child.UpdatedAt = now;
+                return;
+            }
+
+            var node = await _db.Entities.FindAsync([cursor], cancellationToken);
+            if (node?.ParentEntityId is not { } next) {
+                return;
+            }
+
+            cursor = next;
+        }
     }
+
+    /// <summary>
+    /// Applies one proposal node to its resolved entity, then recurses into the node's own related
+    /// entities and structural children. Descendants apply every present patch field (the cascade
+    /// policy — only the accepted root honors the user's field/image selection); relationship nodes
+    /// take their artwork from the relationship-aware path, structural children from their own images.
+    /// </summary>
+    private async Task ApplyNodeAsync(
+        EntityRow entity,
+        EntityMetadataProposal node,
+        bool isRelationship,
+        DateTimeOffset now,
+        HashSet<Guid> visited,
+        IReadOnlyList<string> parentPath,
+        IdentifyApplyProgressReporter? progress,
+        CancellationToken cancellationToken) {
+        var title = !string.IsNullOrWhiteSpace(node.Patch.Title) ? node.Patch.Title.Trim() : entity.Title;
+        var path = parentPath.Count == 0 ? [title] : parentPath.Concat([title]).ToArray();
+        progress?.ReportEntity(entity.KindCode.DecodeAs<EntityKind>(), title, path);
+
+        await ApplyPatchToEntityAsync(entity, node.Patch, isRelationship ? [] : node.Images, now, cancellationToken);
+        if (isRelationship) {
+            await ApplyRelationshipArtworkAsync(entity, node, now, cancellationToken);
+        }
+
+        var hasRelationshipFields = node.Patch.Credits.Count > 0
+            || !string.IsNullOrWhiteSpace(node.Patch.Studio)
+            || node.Patch.Tags.Count > 0;
+        await ApplyChildNodesAsync(
+            entity.Id,
+            EntityMetadataProposalTraversal.StructuralChildren(node),
+            EntityMetadataProposalTraversal.Relationships(node),
+            hasRelationshipFields,
+            now,
+            visited,
+            path,
+            progress,
+            cancellationToken);
+    }
+
+    // Resolves the local structural child a proposal targets: external-id-first, then title, scoped to
+    // this parent — the shared FindEntityAsync rule used everywhere in the apply walk.
+    private Task<EntityRow?> FindStructuralChildAsync(
+        Guid parentEntityId,
+        EntityMetadataProposal child,
+        CancellationToken cancellationToken) =>
+        FindEntityAsync(
+            child.TargetKind.ToEntityKind().ToCode(),
+            child.Patch.ExternalIds,
+            child.Patch.Title,
+            parentEntityId,
+            cancellationToken);
 
     private async Task ApplyPatchToEntityAsync(
         EntityRow entity,
@@ -164,19 +222,10 @@ public sealed partial class EntityMetadataApplyService {
         }
 
         if (images.Count > 0) {
-            var image = images.FirstOrDefault(i => i.Kind is "still") ??
-                images.FirstOrDefault(i => i.Kind is "poster") ??
-                images.FirstOrDefault(i => i.Kind is "cover") ??
-                images.FirstOrDefault(i => i.Kind is "backdrop") ??
-                images[0];
-            var role = image.Kind switch {
-                "still" => EntityFileRole.Thumbnail,
-                "poster" => EntityFileRole.Poster,
-                "cover" => EntityFileRole.Cover,
-                "backdrop" => EntityFileRole.Backdrop,
-                _ => EntityFileRole.Thumbnail
-            };
-            await _artwork.DownloadPluginImageAsync(entity, image, role, now, cancellationToken);
+            var image = ImageKindRoleResolver.Pick(
+                images, MediaImageKind.Still, MediaImageKind.Poster, MediaImageKind.Cover, MediaImageKind.Backdrop)
+                ?? images[0];
+            await _artwork.DownloadPluginImageAsync(entity, image, ImageKindRoleResolver.RoleFor(image.Kind), now, cancellationToken);
         }
 
         entity.UpdatedAt = now;

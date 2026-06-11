@@ -5,18 +5,19 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { EntityCapabilityProgressCapabilityKind } from './entityCapabilityProgressCapabilityKind';
+import type { ProgressUnit } from './progressUnit';
+import type { ReaderMode } from './readerMode';
 
 export interface EntityCapabilityProgressCapability {
   kind: EntityCapabilityProgressCapabilityKind;
   /** @nullable */
   currentEntityId: string | null;
-  unit: string;
+  unit: ProgressUnit;
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
   index: number | string;
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
   total: number | string;
-  /** @nullable */
-  mode: string | null;
+  mode: null | ReaderMode;
   /** @nullable */
   completedAt: string | null;
   /** @nullable */

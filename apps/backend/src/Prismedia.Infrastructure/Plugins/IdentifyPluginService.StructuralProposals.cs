@@ -42,13 +42,19 @@ public sealed partial class IdentifyPluginService {
             .ToArray();
 
         // Builds the root proposal shape from the children resolved so far — used both for the final
-        // return and for each partial-root the streaming sink publishes.
-        EntityMetadataProposal Root(IReadOnlyList<EntityMetadataProposal> structural) => titledProposal with {
-            TargetKind = entity.KindCode.DecodeAs<ProposalKind>(),
-            TargetEntityId = entity.Id,
-            Children = MergeStructuralChildren(baseChildren, structural),
-            Relationships = EntityMetadataProposalTraversal.Relationships(titledProposal)
-        };
+        // return and for each partial-root the streaming sink publishes. Resolved children that an
+        // unbound provider container carries as shells (a volume's chapters when the book was
+        // scanned flat) are swapped into the container as they resolve, so the reviewed tree shows
+        // the provider's structure with the local matches nested where they belong.
+        EntityMetadataProposal Root(IReadOnlyList<EntityMetadataProposal> structural) {
+            var (containers, remaining) = AdoptResolvedChildrenIntoContainers(baseChildren, structural);
+            return titledProposal with {
+                TargetKind = entity.KindCode.DecodeAs<ProposalKind>(),
+                TargetEntityId = entity.Id,
+                Children = MergeStructuralChildren(containers, remaining),
+                Relationships = EntityMetadataProposalTraversal.Relationships(titledProposal)
+            };
+        }
 
         // Seed the sink with the parent (no local children yet) so the queue item shows it immediately
         // with a stable ProposalId; children stream in one at a time as the cascade resolves each.
@@ -179,15 +185,65 @@ public sealed partial class IdentifyPluginService {
                 IsSameStructuralChild(child, providerChild)));
     }
 
+    /// <summary>
+    /// Swaps an unbound container's child shells for their resolved versions as the cascade
+    /// produces them. An unbound provider container (e.g. a MangaDex volume for a flat-scanned
+    /// book) carries shells of the same children the cascade resolves at the parent level; the
+    /// resolved node replaces its shell inside the container and stays out of the top level so
+    /// each local entity appears exactly once, nested under the structure the provider proposes.
+    /// </summary>
+    private static (IReadOnlyList<EntityMetadataProposal> Containers, IReadOnlyList<EntityMetadataProposal> Remaining) AdoptResolvedChildrenIntoContainers(
+        IReadOnlyList<EntityMetadataProposal> baseChildren,
+        IReadOnlyList<EntityMetadataProposal> resolved) {
+        if (baseChildren.Count == 0 || resolved.Count == 0) {
+            return (baseChildren, resolved);
+        }
+
+        var adopted = new HashSet<Guid>();
+        var containers = baseChildren
+            .Select(container => {
+                if (container.TargetEntityId is not null ||
+                    EntityMetadataProposalTraversal.IsRelationshipKind(container.TargetKind) ||
+                    container.Children.Count == 0) {
+                    return container;
+                }
+
+                var swapped = container.Children
+                    .Select(shell => {
+                        var match = resolved.FirstOrDefault(candidate => IsSameAdoptableNode(shell, candidate));
+                        if (match?.TargetEntityId is not { } targetId) {
+                            return shell;
+                        }
+
+                        adopted.Add(targetId);
+                        return match;
+                    })
+                    .ToArray();
+                return container with { Children = swapped };
+            })
+            .ToArray();
+        var remaining = resolved
+            .Where(child => child.TargetEntityId is not { } targetId || !adopted.Contains(targetId))
+            .ToArray();
+        return (containers, remaining);
+    }
+
+    private static bool IsSameAdoptableNode(EntityMetadataProposal shell, EntityMetadataProposal resolved) =>
+        (!string.IsNullOrWhiteSpace(shell.ProposalId) && shell.ProposalId == resolved.ProposalId) ||
+        (shell.TargetEntityId is { } target && target == resolved.TargetEntityId) ||
+        IsSameStructuralChild(shell, resolved);
+
     private static IReadOnlyList<EntityMetadataProposal> MergeStructuralChildren(
         IReadOnlyList<EntityMetadataProposal> providerChildren,
         IReadOnlyList<EntityMetadataProposal> localChildren) {
+        // Single-source lists still normalize: duplicate nodes for the same target entity would
+        // otherwise apply twice and write colliding titles and sort orders.
         if (providerChildren.Count == 0) {
-            return localChildren;
+            return NormalizeStructuralChildren(localChildren);
         }
 
         if (localChildren.Count == 0) {
-            return providerChildren;
+            return NormalizeStructuralChildren(providerChildren);
         }
 
         var merged = new List<EntityMetadataProposal>(providerChildren);
@@ -314,10 +370,16 @@ public sealed partial class IdentifyPluginService {
             if (localChild is null) {
                 // No local entity matches this provider child. Preserve it unbound only when the
                 // provider advertised it as a structural container (e.g. a season the library has
-                // not scanned yet) so it can be proposed as a new child. Leaf children the provider
-                // cascaded (episodes, etc.) are dropped — we never invent playable items that have
-                // no local media file.
-                if (IsProviderAdvertisedStructuralChild(childProposal)) {
+                // not scanned yet, or a volume for a book scanned without volume folders) so it can
+                // be materialized as a new child. Leaf children the provider cascaded (episodes,
+                // etc.) are dropped — we never invent playable items that have no local media file.
+                if (IsProviderAdvertisedStructuralChild(childProposal) ||
+                    IsStructuralContainerKind(childProposal.TargetKind)) {
+                    // Deliberately kept with its child shells UNBOUND: a bound child in the
+                    // streamed proposal means "resolved", so pre-binding the shells here would
+                    // show the whole tree as matched while the cascade is still running. The
+                    // root builder swaps each shell for its resolved, bound node as the cascade
+                    // produces it (see AdoptResolvedChildrenIntoContainers).
                     children.Add(childProposal);
                 }
 
@@ -347,6 +409,14 @@ public sealed partial class IdentifyPluginService {
             proposal.MatchReason,
             ProviderAdvertisedStructuralMatchReason,
             StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Whether a proposal kind persists as an identify-container entity kind (volume, season,
+    /// album, …) — structure a provider may legitimately introduce around existing local media,
+    /// as opposed to a playable leaf that must come from a scanned file.
+    /// </summary>
+    private static bool IsStructuralContainerKind(ProposalKind kind) =>
+        EntityKindRegistry.EnumeratesIdentifyChildren(kind.ToEntityKind().ToCode());
 
     private static bool IsSameStructuralChild(StructuralChild localChild, EntityMetadataProposal proposal) {
         if (!IsCompatibleStructuralKind(localChild.Entity.KindCode, proposal.TargetKind)) {
@@ -385,10 +455,15 @@ public sealed partial class IdentifyPluginService {
         };
     }
 
+    /// <summary>
+    /// True when the caller is steering this identify by hand — a manual title search or an
+    /// explicit pick-from-candidates request — so the entity's stored ids and urls must not
+    /// route the plugin back onto the very match the user is trying to replace.
+    /// </summary>
     private static bool ShouldIgnoreExistingIdentityHints(IdentifyQuery? query) =>
-        !string.IsNullOrWhiteSpace(query?.Title) &&
-        string.IsNullOrWhiteSpace(query.Url) &&
-        query.ExternalIds is not { Count: > 0 };
+        (query?.RequireChoice == true || !string.IsNullOrWhiteSpace(query?.Title)) &&
+        string.IsNullOrWhiteSpace(query?.Url) &&
+        query?.ExternalIds is not { Count: > 0 };
 
     private async Task<IReadOnlyList<IdentifyEntitySnapshot>> LoadAncestorSnapshotsAsync(
         EntityRow entity,

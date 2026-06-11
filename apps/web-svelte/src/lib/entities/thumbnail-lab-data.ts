@@ -1,3 +1,4 @@
+import { THUMBNAIL_HOVER_KIND } from "$lib/api/generated/codes";
 import type { EntityCapability, EntityKind } from "$lib/api/generated/model";
 import type {
   EntityThumbnailAsset,
@@ -85,9 +86,9 @@ function card(options: {
   custom?: EntityThumbnailCard["custom"];
   meta?: EntityThumbnailMetaItem[];
 }): EntityThumbnailCard {
-  const hover = options.hover ?? { kind: "none" };
-  const hoverAssets = hover.kind === "none" || hover.kind === "sprite" ? [] : hover.assets;
-  const hoverRole = hover.kind === "trickplay" ? "trickplay" : "preview";
+  const hover = options.hover ?? { kind: THUMBNAIL_HOVER_KIND.none };
+  const hoverAssets = hover.kind === THUMBNAIL_HOVER_KIND.none || hover.kind === THUMBNAIL_HOVER_KIND.sprite ? [] : hover.assets;
+  const hoverRole = hover.kind === THUMBNAIL_HOVER_KIND.trickplay ? "trickplay" : "preview";
   const supportedImageKinds =
     options.supportedImageKinds ??
     Array.from(new Set(["cover", ...(hoverAssets.length > 0 ? [hoverRole] : [])]));
@@ -150,7 +151,7 @@ const thumbnailLabSeedRows: EntityThumbnailRow[] = [
         title: "Big Buck Bunny Sample",
         aspectRatio: "video",
         cover: asset("Big Buck Bunny", forest, graphite, brass, "video"),
-        hover: { kind: "trickplay", assets: sequence("Trickplay", [forest, ember, indigo], 6, "video") },
+        hover: { kind: THUMBNAIL_HOVER_KIND.trickplay, assets: sequence("Trickplay", [forest, ember, indigo], 6, "video") },
         capabilities: [
           rating(4),
           technical({ duration: "00:09:56", width: 1920, height: 1080, codec: "h264" }),
@@ -171,7 +172,7 @@ const thumbnailLabSeedRows: EntityThumbnailRow[] = [
         title: "Flagged Video Sample",
         aspectRatio: "video",
         cover: asset("Flagged Video", burgundy, graphite, brass, "video"),
-        hover: { kind: "trickplay", assets: sequence("Flagged", [burgundy, ember, graphite], 6, "video") },
+        hover: { kind: THUMBNAIL_HOVER_KIND.trickplay, assets: sequence("Flagged", [burgundy, ember, graphite], 6, "video") },
         flagOptions: { isNsfw: true },
         capabilities: [rating(3), technical({ duration: "00:12:18", width: 1920, height: 1080, codec: "h265" })],
         meta: [
@@ -222,7 +223,7 @@ const thumbnailLabSeedRows: EntityThumbnailRow[] = [
         title: "Fixture Landscapes",
         aspectRatio: "square",
         cover: asset("Gallery Cover", ember, graphite, brass, "square"),
-        hover: { kind: "image-sequence", assets: sequence("Gallery", [ember, forest, indigo], 5, "portrait") },
+        hover: { kind: THUMBNAIL_HOVER_KIND.imageSequence, assets: sequence("Gallery", [ember, forest, indigo], 5, "portrait") },
         capabilities: [stats([{ code: "images", value: 42 }])],
         meta: [{ icon: "gallery", label: "42 images" }],
       }),
@@ -232,7 +233,7 @@ const thumbnailLabSeedRows: EntityThumbnailRow[] = [
         title: "Flagged Gallery",
         aspectRatio: "square",
         cover: asset("Flagged Gallery", burgundy, ember, brass, "square"),
-        hover: { kind: "image-sequence", assets: sequence("Flagged Gallery", [burgundy, forest, graphite], 5, "portrait") },
+        hover: { kind: THUMBNAIL_HOVER_KIND.imageSequence, assets: sequence("Flagged Gallery", [burgundy, forest, graphite], 5, "portrait") },
         flagOptions: { isNsfw: true },
         capabilities: [rating(2), stats([{ code: "images", value: 18 }])],
         meta: [{ icon: "gallery", label: "18 images" }],
@@ -264,7 +265,7 @@ const thumbnailLabSeedRows: EntityThumbnailRow[] = [
         title: "Public Domain Reader",
         aspectRatio: "poster",
         cover: asset("Book Cover", burgundy, ember, brass, "poster"),
-        hover: { kind: "image-sequence", assets: sequence("Pages", [burgundy, graphite, forest], 4, "poster") },
+        hover: { kind: THUMBNAIL_HOVER_KIND.imageSequence, assets: sequence("Pages", [burgundy, graphite, forest], 4, "poster") },
         capabilities: [stats([{ code: "pages", value: 128 }, { code: "chapters", value: 9 }])],
         meta: [
           { icon: "book", label: "128 pages" },
@@ -298,7 +299,7 @@ const thumbnailLabSeedRows: EntityThumbnailRow[] = [
         title: "Chapter 01",
         aspectRatio: "poster",
         cover: asset("Chapter 01", forest, burgundy, brass, "poster"),
-        hover: { kind: "image-sequence", assets: sequence("Chapter", [forest, graphite, ember], 5, "poster") },
+        hover: { kind: THUMBNAIL_HOVER_KIND.imageSequence, assets: sequence("Chapter", [forest, graphite, ember], 5, "poster") },
         capabilities: [position("chapter", 1, "Chapter 1"), stats([{ code: "pages", value: 24 }])],
         meta: [{ icon: "book", label: "24 pages" }],
       }),
@@ -406,7 +407,7 @@ const thumbnailLabSeedRows: EntityThumbnailRow[] = [
         title: "Safe Samples",
         aspectRatio: "video",
         cover: asset("Collection", forest, ember, brass, "video"),
-        hover: { kind: "image-sequence", assets: sequence("Collection", [forest, burgundy, indigo], 4, "square") },
+        hover: { kind: THUMBNAIL_HOVER_KIND.imageSequence, assets: sequence("Collection", [forest, burgundy, indigo], 4, "square") },
         capabilities: [stats([{ code: "items", value: 15 }])],
         meta: [{ icon: "collection", label: "15 items" }],
       }),

@@ -388,7 +388,7 @@ public sealed class CollectionCommandServiceTests {
                     row.SortOrder,
                     null,
                     null,
-                    "none",
+                    ThumbnailHoverKind.None,
                     null,
                     [],
                     [],

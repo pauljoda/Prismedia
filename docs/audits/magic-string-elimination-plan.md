@@ -395,20 +395,53 @@ magic-string offender (the hand-maintained jobs queue/status vocabulary).
   `ProposalKind = EntityKind ∪ {video-episode}` and the round-trip. Backend 864 tests, frontend 610
   + 0 svelte-check errors.
 
-### Remaining (separate future enum families — NOT entity/proposal kinds)
-`FileEntry.Kind` (file-entry kind), `ImageCandidate.Kind` / `EntityImageAsset.Kind` (image-asset
-kind), `PluginEntitySupport.EntityKind` (plugin manifest support vocab), the API patch-boundary
-expected-kind vocab in `IsKindCompatible` (`video-episode`/`video-movie`), `StatsCapability.Code`
-(stat code), `ProgressCapability.Unit`/`Mode`, `EntityThumbnail.HoverKind`. Each needs its own
-`[Code]` enum or constant home. The hand-rolled `apps/web-svelte/src/lib/api/identify-types.ts`
+### Completed (2026-06-09) — the "Remaining future enum families" sweep
+- **✅ `FileEntry.Kind` → `FileEntryKind` `[Code]` enum** (directory/file), plus
+  `MediaFileIgnoreReason` for the scan-ignore row's reason codes. Contract, exclusion
+  persistence API, storage adapters, and FE (`FILE_ENTRY_KIND`) all reference codes.
+- **✅ `EntityThumbnail.HoverKind` → `ThumbnailHoverKind` `[Code]` enum** (none/sprite/
+  image-sequence/trickplay). The FE hover discriminated union and every construction/
+  comparison site reference `THUMBNAIL_HOVER_KIND` — the wire emits none/sprite; the
+  client-derived image-sequence/trickplay modes share the same generated vocabulary.
+- **✅ `ProgressCapability.Unit`/`Mode` → `ProgressUnit` + `ReaderMode?`** end-to-end
+  (domain capability, EF mapper, contract, update request, service, Book domain, FE
+  reader surfaces). `ReaderMode` gained `Scrolled`; the EPUB save path normalizes its
+  internal paginated flow to the paged code; hydration decodes legacy stored values
+  tolerantly (`TryDecodeAs`, e.g. old `"paginated"` rows). Killed the three hand-rolled
+  `"paged" | "webtoon"` TS unions (ComicReader, reader route, book-entity-reader).
+- **✅ Patch-boundary expected-kind vocab**: `IsKindCompatible` references
+  `ProposalKind.VideoEpisode.ToCode()`; the producer-less legacy `"video-movie"` alias is
+  a documented `LegacyMovieExpectedKind` const (`prism-vocab: external`).
+- **✅ (finding, corrects the plan) `StatsCapability.Code` is an OPEN provider vocabulary,
+  not a closed set** — there are zero internal writers; stat codes come exclusively from
+  plugin metadata patches, are stored as-is, and the FE renders whatever arrives. Do NOT
+  enum-ize (`StatCode` is dropped from §B); the two filter sites
+  (`IgnoredStatCodes`, the FE bit-rate meta filter) are annotated `prism-vocab: external`.
+- **✅ (verified, no change needed) `PluginEntitySupport.EntityKind`** is external manifest
+  wire vocab decoded tolerantly at `PluginEntityKindCompatibility`, which already references
+  `EntityKindRegistry` codes and `DecodeAs<EntityKind>` — the correct boundary pattern.
+  Same reasoning keeps `ImageCandidate.Kind` a wire string decoded via `ImageKindRoleResolver`
+  (`MediaImageKind` is the canonical home; the resolver is the single decode boundary).
+
+### Remaining
+The hand-rolled `apps/web-svelte/src/lib/api/identify-types.ts`
 (a parallel copy of generated models) is a separate cleanup — fold into generated re-exports;
 `identify-candidate-card.ts` keeps one `as EntityKind` cast on a generic `string` param (test-only
 caller). 
 
-### Remaining DTO work-list (Prismedia contracts only; Jellyfin DTOs use `JellyfinProtocol`, not codec enums)
-`EntityCard.Kind`/`EntityCardEnvelope.Kind` → `EntityKind` (broadest ripple — the core card
-type); `BookDetail.BookType`/`Format` → `BookType`/`BookFormat`; `EntitySubtitle.Source`/`Format`
-→ `EntitySubtitleSource`/`EntitySubtitleFormat`; `EntityThumbnail.Code` (relationship code) →
-`RelationshipKind`; `CollectionContracts.Mode` → (new `CollectionMode` `[Code]`); credit roles,
-file roles, playback mode, identify states where still stringly-typed. Sequence smallest-ripple
-→ `EntityCard` last (it touches the most frontend).
+### Remaining DTO work-list (re-verified 2026-06-09 against the actual contracts)
+Earlier entries (`EntityCard.Kind`, `BookDetail`, `EntitySubtitle.Source`, collection modes)
+landed in Batches 1–3. Still stringly-typed today, by likely difficulty:
+- `IdentifyQueueContracts.State` (×2) → `IdentifyQueueState` (enum exists; pure swap).
+- `EntityFile.Role` (FilesCapability) → `EntityFileRole` (enum exists).
+- `EntityImageAsset.Kind` (ImagesCapability) → `EntityFileRole` — the FE already compares
+  these items against `ENTITY_FILE_ROLE` codes; it is the file-role vocabulary, NOT
+  `MediaImageKind` (which is the provider artwork-classification vocabulary).
+- `OrganizeContracts.Status`, `UpdateCheckResponse.Status` → small `[Code]` enums (§B).
+- `EntityPosition.Code` / `EntityDate.Code` / `EntitySource.Code` / `CreditPatch.Role` —
+  capability codes fed partly by plugin patches; audit each for open-vs-closed before
+  enum-izing (the stat-code finding above shows the plan's assumption can be wrong).
+- `EntitySubtitle.Format`/`SourceFormat` — deliberately kept string (Batch 2 decision:
+  served-format constant + external ffprobe vocab).
+- `ApiProblem.Code` — stays string by design; the closed set lives in `ApiProblemCodes`.
+- `HealthResponse`/`WorkerHealthResponse.Status` — trivial liveness strings; low value.

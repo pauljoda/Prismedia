@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { PROGRESS_UNIT, READER_MODE } from "$lib/api/generated/codes";
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
@@ -31,7 +32,7 @@
   type ReaderFlow = "paginated" | "scrolled";
 
   type LoadState = "loading" | "ready" | "error";
-  type ReaderMode = "paged" | "webtoon";
+  type ReaderMode = typeof READER_MODE.paged | typeof READER_MODE.webtoon;
 
   interface ReaderChapter {
     detail: EntityCardFull;
@@ -47,7 +48,7 @@
   let readerChapters = $state.raw<ReaderChapter[]>([]);
   let nextChapter = $state.raw<BookReaderChapter | null>(null);
   let readerIndex = $state(0);
-  let readerMode: ReaderMode = $state("paged");
+  let readerMode: ReaderMode = $state(READER_MODE.paged);
   let readerTitle = $state("Reader");
   let returnHref = $state("/books");
   let errorMessage: string | null = $state(null);
@@ -127,7 +128,7 @@
     singleFileSource = `/entities/${nextBook.id}/files/source`;
     singleFileContentType = nextBook.format === "pdf" ? "application/pdf" : "application/epub+zip";
     singleFileLocation = resume ? progress?.location ?? null : null;
-    singleFileFlow = progress?.mode === "scrolled" ? "scrolled" : "paginated";
+    singleFileFlow = progress?.mode === READER_MODE.scrolled ? "scrolled" : "paginated";
     singleFileFlowMode = singleFileFlow;
     singleFileSaveLocation = singleFileLocation;
     singleFileSaveFraction = resume ? Number(progress?.index ?? 0) / 10000 : 0;
@@ -154,10 +155,12 @@
     const percent = Math.max(0, Math.min(10000, Math.round(singleFileSaveFraction * 10000)));
     await updateEntityProgress(book.id, {
       currentEntityId: book.id,
-      unit: "cfi",
+      unit: PROGRESS_UNIT.cfi,
       index: percent,
       total: 10000,
-      mode: singleFileFlowMode,
+      // The EPUB surface tracks a paginated/scrolled flow; only "scrolled" is a persisted
+      // reader-mode code, the paginated flow stores as the paged layout.
+      mode: singleFileFlowMode === "scrolled" ? READER_MODE.scrolled : READER_MODE.paged,
       location: singleFileSaveLocation,
       completed: completed ? true : null,
     });
@@ -198,10 +201,10 @@
     if (!book || count === 0) return;
     await updateEntityProgress(book.id, {
       currentEntityId: book.id,
-      unit: "page",
+      unit: PROGRESS_UNIT.page,
       index: clampIndex(page, count),
       total: count,
-      mode: "scrolled",
+      mode: READER_MODE.scrolled,
       completed: completed ? true : null,
     });
   }
@@ -248,7 +251,7 @@
       chapters: [readerChapter(chapter, pages, chapterIndex >= 0 ? chapterIndex : 0)],
       nextChapter: chapterIndex >= 0 ? summaries[chapterIndex + 1] ?? null : null,
       initialIndex,
-      readerMode: progress?.readerMode ?? "paged",
+      readerMode: progress?.readerMode ?? READER_MODE.paged,
       pageCount: pages.length,
     };
   }
@@ -272,7 +275,7 @@
       chapters,
       nextChapter: null,
       initialIndex,
-      readerMode: progress?.readerMode ?? "paged",
+      readerMode: progress?.readerMode ?? READER_MODE.paged,
       pageCount: chapters.reduce((total, chapter) => total + chapter.pages.length, 0),
     };
   }
@@ -310,7 +313,7 @@
       chapters: selectedChapter ? [readerChapter(selectedChapter, pages, selectedIndex >= 0 ? selectedIndex : 0)] : [],
       nextChapter: selectedIndex >= 0 ? summaries[selectedIndex + 1] ?? null : null,
       initialIndex,
-      readerMode: progress?.readerMode ?? "paged",
+      readerMode: progress?.readerMode ?? READER_MODE.paged,
       pageCount: pages.length,
     };
   }
@@ -438,7 +441,7 @@
     if (!position.chapter) return;
     await updateEntityProgress(book.id, {
       currentEntityId: position.chapter.detail.id,
-      unit: "page",
+      unit: PROGRESS_UNIT.page,
       index: Math.max(0, Math.min(position.pageIndex, Math.max(0, position.pageCount - 1))),
       total: position.pageCount,
       mode: readerMode,

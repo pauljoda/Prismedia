@@ -111,6 +111,106 @@ public sealed class EntityMetadataApplyServiceTests {
     }
 
     [Fact]
+    public async Task ApplyPatchUpdatesResentDateStatAndPositionCodesInsteadOfDeletingThem() {
+        await using var db = CreateContext();
+        var entityId = Guid.Parse("21212121-2121-2121-2121-212121212121");
+        SeedEntity(db, entityId, "video", "Video");
+        db.EntityDates.Add(new EntityDateRow {
+            EntityId = entityId,
+            Code = "released",
+            Value = "2020-01-01",
+            SortableValue = new DateOnly(2020, 1, 1),
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        db.EntityStats.Add(new EntityStatRow {
+            EntityId = entityId,
+            Code = "runtimeMinutes",
+            Value = 90,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        db.EntityPositions.Add(new EntityPositionRow {
+            EntityId = entityId,
+            Code = "episode",
+            Value = 1,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+        var applied = await service.ApplyPatchAsync(
+            entityId,
+            new EntityMetadataUpdateRequest(
+                Fields: ["dates", "stats", "positions"],
+                Patch: EmptyPatch() with {
+                    Dates = new Dictionary<string, string> { ["released"] = "2021-02-03" },
+                    Stats = new Dictionary<string, int> { ["runtimeMinutes"] = 100 },
+                    Positions = new Dictionary<string, int> { ["episode"] = 2 }
+                }),
+            CancellationToken.None);
+
+        Assert.True(applied);
+        Assert.Equal("2021-02-03", (await db.EntityDates.FindAsync([entityId, "released"]))?.Value);
+        Assert.Equal(100, (await db.EntityStats.FindAsync([entityId, "runtimeMinutes"]))?.Value);
+        Assert.Equal(2, (await db.EntityPositions.FindAsync([entityId, "episode"]))?.Value);
+    }
+
+    [Fact]
+    public async Task ApplyStoresPartialAndTimestampDatesWithSortableValueAndPrecision() {
+        await using var db = CreateContext();
+        var entityId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        SeedEntity(db, entityId, "video", "Video");
+        await db.SaveChangesAsync();
+
+        var proposal = new EntityMetadataProposal(
+            ProposalId: "youtube:video:abc",
+            Provider: "youtube",
+            TargetKind: ProposalKind.Video,
+            Confidence: 1,
+            MatchReason: "external-id",
+            Patch: EmptyPatch() with {
+                Dates = new Dictionary<string, string> {
+                    ["released"] = "2025",
+                    ["aired"] = "2024-07",
+                    ["published"] = "2021-05-29T13:00:12-07:00"
+                }
+            },
+            Images: [],
+            Children: [],
+            Candidates: []);
+
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+        await service.ApplyAsync(entityId, proposal, ["dates"], selectedImages: null, CancellationToken.None);
+
+        var released = await db.EntityDates.FindAsync([entityId, "released"]);
+        Assert.Equal("2025", released?.Value);
+        Assert.Equal(new DateOnly(2025, 1, 1), released?.SortableValue);
+        Assert.Equal("year", released?.Precision);
+
+        var aired = await db.EntityDates.FindAsync([entityId, "aired"]);
+        Assert.Equal("2024-07", aired?.Value);
+        Assert.Equal(new DateOnly(2024, 7, 1), aired?.SortableValue);
+        Assert.Equal("month", aired?.Precision);
+
+        var published = await db.EntityDates.FindAsync([entityId, "published"]);
+        Assert.Equal("2021-05-29", published?.Value);
+        Assert.Equal(new DateOnly(2021, 5, 29), published?.SortableValue);
+        Assert.Equal("day", published?.Precision);
+    }
+
+    [Fact]
+    public void PatchValidatorAcceptsPartialAndTimestampDates() {
+        EntityMetadataPatchValidator.Validate(
+            EntityMetadataPatchValidator.NormalizeFieldSet(["dates"]),
+            EmptyPatch() with {
+                Dates = new Dictionary<string, string> {
+                    ["released"] = "2025",
+                    ["aired"] = "2024-07",
+                    ["published"] = "2021-05-29T13:00:12-07:00"
+                }
+            });
+    }
+
+    [Fact]
     public async Task ApplyPatchRejectsInvalidTitleRatingAndUrls() {
         await using var db = CreateContext();
         var entityId = Guid.Parse("20202020-2020-2020-2020-202020202020");
@@ -178,6 +278,147 @@ public sealed class EntityMetadataApplyServiceTests {
 
         Assert.Equal(EntityMetadataPatchResult.KindMismatch, result);
         Assert.Equal("Original Title", (await db.Entities.FindAsync([entityId]))?.Title);
+    }
+
+    [Fact]
+    public async Task ApplyMaterializesProviderContainerAndAdoptsFlatChildren() {
+        await using var db = CreateContext();
+        var bookId = Guid.Parse("23232323-2323-2323-2323-232323232321");
+        var chapterOneId = Guid.Parse("23232323-2323-2323-2323-232323232322");
+        var chapterTwoId = Guid.Parse("23232323-2323-2323-2323-232323232323");
+        SeedEntity(db, bookId, "book", "Flat Book");
+        SeedEntity(db, chapterOneId, "book-chapter", "Flat Book Ch.1", parentEntityId: bookId, sortOrder: 0);
+        SeedEntity(db, chapterTwoId, "book-chapter", "Flat Book Ch.2", parentEntityId: bookId, sortOrder: 1);
+        await db.SaveChangesAsync();
+
+        EntityMetadataProposal Chapter(Guid target, int number) => new(
+            ProposalId: $"mangadex:m1:chapter:{number}",
+            Provider: "mangadex",
+            TargetKind: ProposalKind.BookChapter,
+            Confidence: 0.8m,
+            MatchReason: "chapter-feed",
+            Patch: EmptyPatch() with {
+                Title = $"Chapter {number}",
+                ExternalIds = new Dictionary<string, string> { ["mangadexChapter"] = $"ch-{number}" },
+                Positions = new Dictionary<string, int> { ["sortOrder"] = number - 1 }
+            },
+            Images: [],
+            Children: [],
+            Candidates: [],
+            TargetEntityId: target);
+
+        var volume = new EntityMetadataProposal(
+            ProposalId: "mangadex:m1:volume:1",
+            Provider: "mangadex",
+            TargetKind: ProposalKind.BookVolume,
+            Confidence: 0.8m,
+            MatchReason: "volume-map",
+            Patch: EmptyPatch() with {
+                Title = "Volume 1",
+                ExternalIds = new Dictionary<string, string> { ["mangadex"] = "m1", ["volume"] = "1" },
+                Positions = new Dictionary<string, int> { ["volumeNumber"] = 1 }
+            },
+            Images: [],
+            Children: [Chapter(chapterOneId, 1), Chapter(chapterTwoId, 2)],
+            Candidates: []);
+
+        var proposal = new EntityMetadataProposal(
+            ProposalId: "mangadex:m1",
+            Provider: "mangadex",
+            TargetKind: ProposalKind.Book,
+            Confidence: 0.9m,
+            MatchReason: "external-id",
+            Patch: EmptyPatch() with { Title = "Flat Book" },
+            Images: [],
+            Children: [volume],
+            Candidates: [],
+            TargetEntityId: bookId);
+
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+        await service.ApplyAsync(bookId, proposal, ["title"], selectedImages: null, CancellationToken.None);
+
+        var volumeRow = await db.Entities.SingleAsync(row => row.KindCode == "book-volume");
+        Assert.Equal("Volume 1", volumeRow.Title);
+        Assert.Equal(bookId, volumeRow.ParentEntityId);
+        Assert.Equal("1", (await db.EntityExternalIds.SingleAsync(row => row.EntityId == volumeRow.Id && row.Provider == "volume")).Value);
+        Assert.Equal(volumeRow.Id, (await db.Entities.SingleAsync(row => row.Id == chapterOneId)).ParentEntityId);
+        Assert.Equal(volumeRow.Id, (await db.Entities.SingleAsync(row => row.Id == chapterTwoId)).ParentEntityId);
+        Assert.Equal("ch-1", (await db.EntityExternalIds.SingleAsync(row => row.EntityId == chapterOneId && row.Provider == "mangadexChapter")).Value);
+    }
+
+    [Fact]
+    public async Task ApplyDoesNotMaterializeContainersWithoutBoundDescendants() {
+        await using var db = CreateContext();
+        var bookId = Guid.Parse("24242424-2424-2424-2424-242424242421");
+        SeedEntity(db, bookId, "book", "Sparse Book");
+        await db.SaveChangesAsync();
+
+        var emptyVolume = new EntityMetadataProposal(
+            ProposalId: "mangadex:m2:volume:9",
+            Provider: "mangadex",
+            TargetKind: ProposalKind.BookVolume,
+            Confidence: 0.8m,
+            MatchReason: "volume-map",
+            Patch: EmptyPatch() with { Title = "Volume 9" },
+            Images: [],
+            Children: [new EntityMetadataProposal(
+                "mangadex:m2:chapter:90", "mangadex", ProposalKind.BookChapter, 0.7m, "chapter-feed",
+                EmptyPatch() with { Title = "Chapter 90" }, [], [], [])],
+            Candidates: []);
+
+        var proposal = new EntityMetadataProposal(
+            ProposalId: "mangadex:m2",
+            Provider: "mangadex",
+            TargetKind: ProposalKind.Book,
+            Confidence: 0.9m,
+            MatchReason: "external-id",
+            Patch: EmptyPatch() with { Title = "Sparse Book" },
+            Images: [],
+            Children: [emptyVolume],
+            Candidates: [],
+            TargetEntityId: bookId);
+
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+        await service.ApplyAsync(bookId, proposal, ["title"], selectedImages: null, CancellationToken.None);
+
+        Assert.False(await db.Entities.AnyAsync(row => row.KindCode == "book-volume"));
+        Assert.False(await db.Entities.AnyAsync(row => row.KindCode == "book-chapter"));
+    }
+
+    [Fact]
+    public async Task ApplyNeverReparentsAcrossTrees() {
+        await using var db = CreateContext();
+        var bookId = Guid.Parse("25252525-2525-2525-2525-252525252521");
+        var otherBookId = Guid.Parse("25252525-2525-2525-2525-252525252522");
+        var foreignChapterId = Guid.Parse("25252525-2525-2525-2525-252525252523");
+        var localChapterId = Guid.Parse("25252525-2525-2525-2525-252525252524");
+        SeedEntity(db, bookId, "book", "Main Book");
+        SeedEntity(db, otherBookId, "book", "Other Book");
+        SeedEntity(db, foreignChapterId, "book-chapter", "Foreign Chapter", parentEntityId: otherBookId);
+        SeedEntity(db, localChapterId, "book-chapter", "Local Chapter", parentEntityId: bookId);
+        await db.SaveChangesAsync();
+
+        EntityMetadataProposal Chapter(Guid target, string title) => new(
+            $"mangadex:m3:chapter:{target:N}", "mangadex", ProposalKind.BookChapter, 0.8m, "chapter-feed",
+            EmptyPatch() with { Title = title }, [], [], [], TargetEntityId: target);
+
+        var volume = new EntityMetadataProposal(
+            "mangadex:m3:volume:1", "mangadex", ProposalKind.BookVolume, 0.8m, "volume-map",
+            EmptyPatch() with { Title = "Volume 1" }, [],
+            [Chapter(foreignChapterId, "Foreign Chapter"), Chapter(localChapterId, "Local Chapter")],
+            []);
+
+        var proposal = new EntityMetadataProposal(
+            "mangadex:m3", "mangadex", ProposalKind.Book, 0.9m, "external-id",
+            EmptyPatch() with { Title = "Main Book" }, [], [volume], [], TargetEntityId: bookId);
+
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+        await service.ApplyAsync(bookId, proposal, ["title"], selectedImages: null, CancellationToken.None);
+
+        var volumeRow = await db.Entities.SingleAsync(row => row.KindCode == "book-volume");
+        // The in-tree chapter moves under the new volume; the foreign book's chapter stays put.
+        Assert.Equal(volumeRow.Id, (await db.Entities.SingleAsync(row => row.Id == localChapterId)).ParentEntityId);
+        Assert.Equal(otherBookId, (await db.Entities.SingleAsync(row => row.Id == foreignChapterId)).ParentEntityId);
     }
 
     [Fact]

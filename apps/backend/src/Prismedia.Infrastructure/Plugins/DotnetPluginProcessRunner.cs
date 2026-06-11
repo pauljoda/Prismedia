@@ -78,6 +78,11 @@ public sealed class DotnetPluginProcessRunner : IIdentifyRunner {
     /// <summary>
     /// Wire format matching the plugin's IdentifyPluginResult nested inside its response envelope.
     /// </summary>
+    /// <param name="Type">
+    /// Plugin-authored result discriminator decoded against <see cref="IdentifyResultKind"/>. Kept as a
+    /// raw string at this external decode boundary so an unknown/forward-compatible value falls through
+    /// to the no-match path rather than throwing. // prism-vocab: external
+    /// </param>
     private sealed record PluginWireResult(
         string? Type,
         EntityMetadataProposal? Proposal,
@@ -105,32 +110,22 @@ public sealed class DotnetPluginProcessRunner : IIdentifyRunner {
         }
 
         var result = wire.Result;
-        if (result.Type == "proposal" && result.Proposal is not null) {
+        if (string.Equals(result.Type, IdentifyResultKind.Proposal.ToCode(), StringComparison.OrdinalIgnoreCase)
+            && result.Proposal is not null) {
             return new IdentifyPluginResponse(true, result.Proposal, wire.Error);
         }
 
-        if (result.Type == "candidates" && result.Candidates is { Count: > 0 }) {
+        if (string.Equals(result.Type, IdentifyResultKind.Candidates.ToCode(), StringComparison.OrdinalIgnoreCase)
+            && result.Candidates is { Count: > 0 }) {
             var candidates = result.Candidates
                 .Select(NormalizeSearchCandidate)
                 .Where(candidate => !string.IsNullOrWhiteSpace(candidate.Title))
                 .ToArray();
             if (candidates.Length == 0) {
-                return new IdentifyPluginResponse(true, null, wire.Error ?? $"No {providerName} match was found.");
+                return IdentifyPluginResponse.NoMatch(wire.Error ?? $"No {providerName} match was found.");
             }
 
-            var shell = new EntityMetadataProposal(
-                ProposalId: null!,
-                Provider: null!,
-                TargetKind: targetKind,
-                Confidence: null,
-                MatchReason: null,
-                Patch: null!,
-                Images: [],
-                Children: [],
-                Candidates: candidates,
-                TargetEntityId: null,
-                Relationships: []);
-            return new IdentifyPluginResponse(true, shell, wire.Error);
+            return IdentifyPluginResponse.Candidates(targetKind, candidates, wire.Error);
         }
 
         return new IdentifyPluginResponse(true, null, wire.Error ?? $"No {providerName} match was found.");

@@ -1,3 +1,5 @@
+import { FILE_ENTRY_KIND, type FileEntryKindCode } from "$lib/api/generated/codes";
+
 export type FileActionId = "open" | "new-folder" | "upload" | "rename" | "move" | "rescan" | "exclude" | "remove-exclusion" | "delete";
 
 export interface FileAction {
@@ -34,9 +36,9 @@ const fileActions: FileAction[] = [
 
 const removeExclusionAction: FileAction = { id: "remove-exclusion", label: "Remove exclusion" };
 
-export function fileContextActions(kind: string, isRoot?: boolean, excluded?: boolean): FileAction[] {
+export function fileContextActions(kind: FileEntryKindCode, isRoot?: boolean, excluded?: boolean): FileAction[] {
   if (isRoot) return rootActions;
-  const actions = kind === "directory" ? directoryActions : fileActions;
+  const actions = kind === FILE_ENTRY_KIND.directory ? directoryActions : fileActions;
   return excluded
     ? actions.map((action) => action.id === "exclude" ? removeExclusionAction : action)
     : actions;

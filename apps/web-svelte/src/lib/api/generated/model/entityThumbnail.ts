@@ -8,6 +8,7 @@ import type { EntityKind } from './entityKind';
 import type { EntityKindCount } from './entityKindCount';
 import type { EntityThumbnailHoverImage } from './entityThumbnailHoverImage';
 import type { EntityThumbnailMeta } from './entityThumbnailMeta';
+import type { ThumbnailHoverKind } from './thumbnailHoverKind';
 
 export interface EntityThumbnail {
   id: string;
@@ -24,7 +25,7 @@ export interface EntityThumbnail {
   coverUrl: string | null;
   /** @nullable */
   coverThumbUrl: string | null;
-  hoverKind: string;
+  hoverKind: ThumbnailHoverKind;
   /** @nullable */
   hoverUrl: string | null;
   hoverImages: EntityThumbnailHoverImage[];

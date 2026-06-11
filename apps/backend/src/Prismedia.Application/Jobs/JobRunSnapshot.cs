@@ -17,6 +17,8 @@ namespace Prismedia.Application.Jobs;
 /// <param name="CreatedAt">Time the job was created.</param>
 /// <param name="StartedAt">Time the job started, when claimed.</param>
 /// <param name="FinishedAt">Time the job finished, when complete or failed.</param>
+/// <param name="Attempts">Number of times this run has been claimed, including the current attempt.</param>
+/// <param name="MaxAttempts">Maximum attempts before the run is failed terminally rather than retried.</param>
 public sealed record JobRunSnapshot(
     Guid Id,
     JobType Type,
@@ -29,4 +31,12 @@ public sealed record JobRunSnapshot(
     string? TargetLabel,
     DateTimeOffset CreatedAt,
     DateTimeOffset? StartedAt,
-    DateTimeOffset? FinishedAt);
+    DateTimeOffset? FinishedAt,
+    int Attempts = 0,
+    int MaxAttempts = 0) {
+    /// <summary>
+    /// True when the current attempt is the last the queue will run; a failure now is terminal
+    /// (the run is failed, not requeued) rather than retried.
+    /// </summary>
+    public bool IsFinalAttempt => Attempts >= MaxAttempts;
+}

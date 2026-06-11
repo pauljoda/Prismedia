@@ -322,7 +322,7 @@ public sealed class EfEntityReadServiceTests {
         var result = await service.ListAsync(EntityKindRegistry.Video.Code, null, null, null, null, CancellationToken.None);
         var item = Assert.Single(result.Items);
 
-        Assert.Equal("sprite", item.HoverKind);
+        Assert.Equal(ThumbnailHoverKind.Sprite, item.HoverKind);
         Assert.Equal("/Videos/44444444-4444-4444-4444-444444444444/Trickplay/320/tiles.m3u8", item.HoverUrl);
     }
 

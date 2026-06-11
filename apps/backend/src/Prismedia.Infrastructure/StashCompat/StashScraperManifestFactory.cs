@@ -1,4 +1,5 @@
 using Prismedia.Contracts.Plugins;
+using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.StashCompat.Model;
 
 namespace Prismedia.Infrastructure.StashCompat;
@@ -16,14 +17,14 @@ public static class StashScraperManifestFactory {
     /// </summary>
     private static readonly IReadOnlyDictionary<string, (string Kind, string Action)> CapabilityMap =
         new Dictionary<string, (string, string)>(StringComparer.OrdinalIgnoreCase) {
-            ["sceneByURL"] = ("video", "lookup-url"),
-            ["sceneByName"] = ("video", "search"),
-            ["sceneByFragment"] = ("video", "search"),
-            ["sceneByQueryFragment"] = ("video", "search"),
-            ["movieByURL"] = ("movie", "lookup-url"),
-            ["performerByURL"] = ("person", "lookup-url"),
-            ["performerByName"] = ("person", "search"),
-            ["galleryByURL"] = ("gallery", "lookup-url")
+            ["sceneByURL"] = ("video", IdentifyAction.LookupUrl.ToCode()),
+            ["sceneByName"] = ("video", IdentifyAction.Search.ToCode()),
+            ["sceneByFragment"] = ("video", IdentifyAction.Search.ToCode()),
+            ["sceneByQueryFragment"] = ("video", IdentifyAction.Search.ToCode()),
+            ["movieByURL"] = ("movie", IdentifyAction.LookupUrl.ToCode()),
+            ["performerByURL"] = ("person", IdentifyAction.LookupUrl.ToCode()),
+            ["performerByName"] = ("person", IdentifyAction.Search.ToCode()),
+            ["galleryByURL"] = ("gallery", IdentifyAction.LookupUrl.ToCode())
         };
 
     /// <summary>

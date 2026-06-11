@@ -32,7 +32,7 @@ public sealed record EntityThumbnail(
     int? SortOrder,
     string? CoverUrl,
     string? CoverThumbUrl,
-    string HoverKind,
+    ThumbnailHoverKind HoverKind,
     string? HoverUrl,
     IReadOnlyList<EntityThumbnailHoverImage> HoverImages,
     IReadOnlyList<EntityThumbnailMeta> Meta,

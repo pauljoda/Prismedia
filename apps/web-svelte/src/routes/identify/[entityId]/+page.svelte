@@ -87,8 +87,11 @@
     if (!current || !activeProvider) return;
     searching = true;
     try {
+      // Manual searches always come back as candidates: a stored external id must not
+      // re-lock the entity onto the match the user is here to change.
       await store.identifyEntity(current.entity, activeProvider.id, {
         title: manualTitle.trim() || null,
+        requireChoice: true,
       });
     } finally {
       searching = false;

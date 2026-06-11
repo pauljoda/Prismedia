@@ -318,7 +318,7 @@ function thumbnail(id: string, kind: EntityKind, title: string, coverUrl: string
     sortOrder: null,
     coverUrl,
     coverThumbUrl: null,
-    hoverKind: "none",
+    hoverKind: "none" as const,
     hoverUrl: null,
     hoverImages: [],
     meta: [],

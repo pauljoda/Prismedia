@@ -15,8 +15,13 @@ public interface IIdentifyCascadeRunner {
     /// Id of this cascade's own job run. The cascade only streams onto the queue item while the item is
     /// still queued and still marked with this id, so a removed or superseded item is left untouched.
     /// </param>
+    /// <param name="isFinalAttempt">
+    /// True when this is the cascade job's last attempt, so a failure now is terminal. The cascade keeps
+    /// the queue item's cascade marker set across retryable failures (so the review screen stays gated)
+    /// and clears it only on success or on this final failed attempt.
+    /// </param>
     /// <param name="cancellationToken">Cancellation token for the running cascade.</param>
-    Task RunAsync(IdentifyCascadePayload payload, Guid cascadeJobId, CancellationToken cancellationToken);
+    Task RunAsync(IdentifyCascadePayload payload, Guid cascadeJobId, bool isFinalAttempt, CancellationToken cancellationToken);
 }
 
 /// <summary>

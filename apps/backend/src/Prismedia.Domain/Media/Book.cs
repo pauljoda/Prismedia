@@ -43,10 +43,10 @@ public sealed class Book : Entity {
 
         progress.MoveTo(
             chapterId,
-            "page",
+            ProgressUnit.Page,
             normalizedPageIndex,
             normalizedPageCount,
-            readerMode.ToCode(),
+            readerMode,
             DateTimeOffset.UtcNow);
     }
 

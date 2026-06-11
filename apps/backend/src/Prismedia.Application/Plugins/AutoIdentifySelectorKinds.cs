@@ -1,3 +1,5 @@
+using Prismedia.Domain.Entities;
+
 namespace Prismedia.Application.Plugins;
 
 /// <summary>
@@ -10,14 +12,14 @@ namespace Prismedia.Application.Plugins;
 public static class AutoIdentifySelectorKinds {
     private static readonly IReadOnlyDictionary<string, string> ByEntityKind =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) {
-            ["video"] = "video",
-            ["movie"] = "video",
-            ["video-series"] = "video",
-            ["gallery"] = "gallery",
-            ["image"] = "image",
-            ["audio-track"] = "audio",
-            ["audio-library"] = "audio",
-            ["book"] = "book",
+            [EntityKindRegistry.Video.Code] = "video",
+            [EntityKindRegistry.Movie.Code] = "video",
+            [EntityKindRegistry.VideoSeries.Code] = "video",
+            [EntityKindRegistry.Gallery.Code] = "gallery",
+            [EntityKindRegistry.Image.Code] = "image",
+            [EntityKindRegistry.AudioTrack.Code] = "audio",
+            [EntityKindRegistry.AudioLibrary.Code] = "audio",
+            [EntityKindRegistry.Book.Code] = "book",
         };
 
     /// <summary>

@@ -31,7 +31,7 @@ internal static partial class PrismediaModelConfiguration {
             entity.HasKey(row => new { row.LibraryRootId, row.Path });
             entity.Property(row => row.LibraryRootId).HasColumnName("library_root_id");
             entity.Property(row => row.Path).HasColumnName("path");
-            entity.Property(row => row.Kind).HasColumnName("kind").HasMaxLength(32).HasDefaultValue("file").IsRequired();
+            entity.Property(row => row.Kind).HasColumnName("kind").HasMaxLength(32).HasDefaultValue(FileEntryKind.File.ToCode()).IsRequired();
             entity.Property(row => row.EntityKindCode).HasColumnName("entity_kind_code").HasMaxLength(64);
             entity.Property(row => row.Reason).HasColumnName("reason").HasMaxLength(128);
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");
@@ -224,7 +224,11 @@ internal static partial class PrismediaModelConfiguration {
                 .HasConversion(value => value.ToCode(), value => value.DecodeAs<IdentifyQueueState>())
                 .IsRequired();
             entity.Property(row => row.ProviderCode).HasColumnName("provider_code").HasMaxLength(128);
-            entity.Property(row => row.Action).HasColumnName("action").HasMaxLength(128).IsRequired();
+            entity.Property(row => row.Action)
+                .HasColumnName("action")
+                .HasMaxLength(128)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<IdentifyAction>())
+                .IsRequired();
             entity.Property(row => row.QueryJson).HasColumnName("query_json").HasColumnType("jsonb");
             entity.Property(row => row.CandidatesJson).HasColumnName("candidates_json").HasColumnType("jsonb");
             entity.Property(row => row.ProposalJson).HasColumnName("proposal_json").HasColumnType("jsonb");

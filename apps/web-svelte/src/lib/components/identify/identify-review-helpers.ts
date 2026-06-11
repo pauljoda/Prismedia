@@ -1,3 +1,4 @@
+import { THUMBNAIL_HOVER_KIND } from "$lib/api/generated/codes";
 import type {
   CreditPatch,
   EntityMetadataProposal,
@@ -146,7 +147,7 @@ export function relationshipCard(
     entity: { id: result.proposalId, kind: proposalKindToEntityKind(result.targetKind), title, parentEntityId: null, sortOrder: null, capabilities: [], childrenByKind: [], relationships: [] },
     aspectRatio: result.targetKind === "studio" ? "wide" : result.targetKind === "person" ? { width: 4, height: 5 } : "square",
     cover: image ? { src: reviewImagePreviewUrl(image, result.targetKind), alt: title } : null,
-    hover: { kind: "none" },
+    hover: { kind: THUMBNAIL_HOVER_KIND.none },
     subtitle: relationshipKindLabel(result.targetKind),
     custom: proposalStatusCustom(result, existingTitles),
     meta: [{ icon: relationshipIcon(result.targetKind), label: relationshipKindLabel(result.targetKind) }],
@@ -195,7 +196,7 @@ export function creditCard(
     entity: { id: credit.proposalId, kind: "person", title: credit.patch?.title ?? "", parentEntityId: null, sortOrder: null, capabilities: [], childrenByKind: [], relationships: [] },
     aspectRatio: { width: 4, height: 5 },
     cover: image ? { src: reviewImagePreviewUrl(image, credit.targetKind), alt: credit.patch?.title ?? "" } : null,
-    hover: { kind: "none" } as const,
+    hover: { kind: THUMBNAIL_HOVER_KIND.none } as const,
     subtitle: scopedCredit?.character ? `as ${scopedCredit.character}` : roleLabel(scopedCredit),
     custom: proposalStatusCustom(credit, existingTitles),
     meta: [{ icon: "person" as const, label: roleLabel(scopedCredit) }],
@@ -220,7 +221,7 @@ export function childCard(
     cover: childImage
       ? { src: reviewImagePreviewUrl(childImage, child.targetKind), alt: child.patch?.title ?? "" }
       : localCover ? { src: localCover, alt: localChild.title } : null,
-    hover: { kind: "none" } as const,
+    hover: { kind: THUMBNAIL_HOVER_KIND.none } as const,
     custom: childStatusCustom(child),
     meta: childMeta(child),
   };

@@ -22,6 +22,9 @@ import {
   relationshipTitlesFromEntityThumbnails,
   scopedCreditForProposal,
   structuralChildProposals,
+  structuralDescendantProposals,
+  newStructuralContainerProposals,
+  adoptedLocalChildIds,
 } from "./identify-review";
 
 describe("identify review helpers", () => {
@@ -40,6 +43,71 @@ describe("identify review helpers", () => {
     expect(relationshipProposals(root).map((child) => child.proposalId)).toEqual(["actor-1", "studio-1"]);
     expect(reviewChildProposals(root).map((child) => child.proposalId)).toEqual(["season-1", "actor-1", "studio-1"]);
     expect(findRelationshipImage(root, "person", "Series Actor")).toBe("https://example.test/actor.jpg");
+  });
+
+  it("walks the whole subtree for structural descendants", () => {
+    const root = proposal("book", "book", {
+      children: [
+        proposal("volume-1", "book-volume", {
+          children: [
+            proposal("chapter-1", "book-chapter", { targetEntityId: "local-ch-1" }),
+            proposal("chapter-2", "book-chapter", { targetEntityId: "local-ch-2" }),
+          ],
+        }),
+      ],
+      relationships: [proposal("tag-1", "tag", { title: "Drama" })],
+    });
+
+    expect(structuralDescendantProposals(root).map((node) => node.proposalId)).toEqual([
+      "volume-1",
+      "chapter-1",
+      "chapter-2",
+    ]);
+  });
+
+  it("surfaces unbound containers that adopt matched children as new structure", () => {
+    const root = proposal("book", "book", {
+      children: [
+        proposal("volume-1", "book-volume", {
+          title: "Volume 1",
+          children: [proposal("chapter-1", "book-chapter", { targetEntityId: "local-ch-1" })],
+        }),
+        // No matched descendants: the backend never creates this, so it is not surfaced.
+        proposal("volume-9", "book-volume", {
+          title: "Volume 9",
+          children: [proposal("chapter-90", "book-chapter")],
+        }),
+        // Bound containers are existing entities, not new structure.
+        proposal("volume-2", "book-volume", {
+          title: "Volume 2",
+          targetEntityId: "local-vol-2",
+          children: [proposal("chapter-8", "book-chapter", { targetEntityId: "local-ch-8" })],
+        }),
+      ],
+    });
+
+    expect(newStructuralContainerProposals(root).map((node) => node.proposalId)).toEqual(["volume-1"]);
+  });
+
+  it("reports children filed into new containers so the review moves them out of the flat list", () => {
+    const root = proposal("book", "book", {
+      children: [
+        proposal("volume-1", "book-volume", {
+          title: "Volume 1",
+          children: [proposal("chapter-1", "book-chapter", { targetEntityId: "local-ch-1" })],
+        }),
+        // Children of an EXISTING (bound) container are not relocations; they stay put.
+        proposal("volume-2", "book-volume", {
+          title: "Volume 2",
+          targetEntityId: "local-vol-2",
+          children: [proposal("chapter-8", "book-chapter", { targetEntityId: "local-ch-8" })],
+        }),
+        // A child resolved at this level (no container) is matched in place, not adopted.
+        proposal("chapter-99", "book-chapter", { targetEntityId: "local-ch-99" }),
+      ],
+    });
+
+    expect([...adoptedLocalChildIds(root)]).toEqual(["local-ch-1"]);
   });
 
   it("de-duplicates review images by url within a kind so the keyed each cannot crash", () => {
@@ -452,6 +520,7 @@ function proposal(
     credits?: EntityMetadataProposal["patch"]["credits"];
     children?: EntityMetadataProposal[];
     relationships?: EntityMetadataProposal[];
+    targetEntityId?: string;
   } = {},
 ): EntityMetadataProposal {
   return {
@@ -477,7 +546,7 @@ function proposal(
     children: options.children ?? [],
     relationships: options.relationships ?? [],
     candidates: [],
-    targetEntityId: null,
+    targetEntityId: options.targetEntityId ?? null,
   };
 }
 
@@ -495,7 +564,7 @@ function thumbnail(id: string, kind: EntityKind, title: string) {
     sortOrder: null,
     coverUrl: null,
     coverThumbUrl: null,
-    hoverKind: "none",
+    hoverKind: "none" as const,
     hoverUrl: null,
     hoverImages: [],
     meta: [],

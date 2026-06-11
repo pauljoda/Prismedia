@@ -1,3 +1,4 @@
+import { THUMBNAIL_HOVER_KIND } from "$lib/api/generated/codes";
 import {
   getCapability,
   getImagesCapability,
@@ -244,7 +245,7 @@ function previewAssets(entity: EntityGridSourceEntity, roles: string[]): EntityT
 
 /** Finds a VTT sprite map or Jellyfin image playlist from entity image assets. */
 function findSpriteHover(entity: EntityGridSourceEntity): { spriteUrl?: string; vttUrl: string } | null {
-  if (!isFullEntityCard(entity) && entity.hoverKind === "sprite" && entity.hoverUrl) {
+  if (!isFullEntityCard(entity) && entity.hoverKind === THUMBNAIL_HOVER_KIND.sprite && entity.hoverUrl) {
     return { vttUrl: entity.hoverUrl };
   }
 
@@ -293,6 +294,8 @@ function metaForEntity(entity: EntityGridSourceEntity): EntityThumbnailCard["met
   if (entity.kind === ENTITY_KIND.video && technical?.container) {
     meta.push({ icon: "video", label: technical.container.toUpperCase() });
   }
+  // Stat codes are an open provider vocabulary, so this filters wire strings rather
+  // than a closed code set. prism-vocab: external
   for (const stat of stats.filter((s) => !s.code.includes("bit-rate") && !s.code.includes("bitrate")).slice(0, 2)) {
     meta.push({ icon: statIcon(stat.code), label: statLabel(stat.code, stat.value) });
   }
@@ -430,12 +433,12 @@ export function entityCardToThumbnailCard(
   const imageSequence = previewAssets(entity, [ENTITY_FILE_ROLE.trickplay, ENTITY_FILE_ROLE.sprite]);
   const childSequence = imageSequence.length > 0 ? [] : childPreviewAssets(entity);
   const hover: EntityThumbnailCard["hover"] = spriteHover
-    ? { kind: "sprite", spriteUrl: spriteHover.spriteUrl, vttUrl: spriteHover.vttUrl }
+    ? { kind: THUMBNAIL_HOVER_KIND.sprite, spriteUrl: spriteHover.spriteUrl, vttUrl: spriteHover.vttUrl }
     : imageSequence.length > 0
-      ? { kind: "image-sequence", assets: imageSequence }
+      ? { kind: THUMBNAIL_HOVER_KIND.imageSequence, assets: imageSequence }
       : childSequence.length > 0
-        ? { kind: "image-sequence", assets: childSequence }
-      : { kind: "none" };
+        ? { kind: THUMBNAIL_HOVER_KIND.imageSequence, assets: childSequence }
+      : { kind: THUMBNAIL_HOVER_KIND.none };
 
   return {
     aspectRatio: aspectRatioForEntity(entity),

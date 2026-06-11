@@ -1,3 +1,5 @@
+using Prismedia.Domain.Entities;
+
 namespace Prismedia.Contracts.Entities;
 
 /// <summary>
@@ -42,10 +44,10 @@ public sealed record PlaybackUpdateRequest(
 /// <param name="Location">Optional format-specific resume locator (e.g. an EPUB CFI) stored alongside the index.</param>
 public sealed record EntityProgressUpdateRequest(
     Guid CurrentEntityId,
-    string Unit,
+    ProgressUnit Unit,
     int Index,
     int Total,
-    string? Mode,
+    ReaderMode? Mode,
     bool? Completed,
     bool Reset = false,
     string? Location = null);

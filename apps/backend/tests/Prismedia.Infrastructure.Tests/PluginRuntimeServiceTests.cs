@@ -486,7 +486,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
         var entityId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
         var request = new IdentifyPluginRequest(
             1,
-            "lookup-id",
+            IdentifyAction.LookupId,
             new Dictionary<string, string> { ["apiKey"] = "secret" },
             new IdentifyEntitySnapshot(entityId, EntityKind.Video, "Example"),
             new IdentifyQuery(null, null, null),
@@ -503,7 +503,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
         Assert.Equal("dotnet", executor.FileName);
         Assert.Equal(descriptor.EntryPath, executor.Arguments[0]);
         Assert.Equal(entityId, executor.CapturedRequest?.Entity.Id);
-        Assert.Equal("lookup-id", executor.CapturedRequest?.Action);
+        Assert.Equal(IdentifyAction.LookupId, executor.CapturedRequest?.Action);
     }
 
     [Fact]
@@ -530,7 +530,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             EntryPath: Path.Combine(_tempRoot, "mangadex.dll"));
         var request = new IdentifyPluginRequest(
             1,
-            "search",
+            IdentifyAction.Search,
             new Dictionary<string, string>(),
             new IdentifyEntitySnapshot(Guid.NewGuid(), EntityKind.Book, "Missing"),
             new IdentifyQuery("Missing", null, null),
@@ -567,7 +567,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             EntryPath: Path.Combine(_tempRoot, "tmdb.dll"));
         var request = new IdentifyPluginRequest(
             1,
-            "search",
+            IdentifyAction.Search,
             new Dictionary<string, string>(),
             new IdentifyEntitySnapshot(Guid.NewGuid(), EntityKind.VideoSeries, "Abbott Elementary"),
             new IdentifyQuery("Abbott Elementary", null, null),
@@ -679,7 +679,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
 
         Assert.True(response.Ok);
         Assert.Equal(EntityKind.Video, executor.CapturedRequest?.Entity.Kind);
-        Assert.Equal("search", executor.CapturedRequest?.Action);
+        Assert.Equal(IdentifyAction.Search, executor.CapturedRequest?.Action);
         Assert.Equal(ProposalKind.Movie, response.Result?.TargetKind);
         Assert.Equal(movieId, response.Result?.TargetEntityId);
     }
@@ -1163,7 +1163,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
         var response = await service.IdentifyAsync(seriesId, "tmdb", null, parentExternalIds: null, hideNsfw: false, CancellationToken.None);
 
         Assert.True(response.Ok);
-        Assert.Equal("search", Assert.Single(executor.Requests).Action);
+        Assert.Equal(IdentifyAction.Search, Assert.Single(executor.Requests).Action);
     }
 
     [Fact]
@@ -1242,7 +1242,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
 
         Assert.True(response.Ok);
         var request = Assert.Single(executor.Requests);
-        Assert.Equal("search", request.Action);
+        Assert.Equal(IdentifyAction.Search, request.Action);
         Assert.Empty(request.Hints.ExternalIds);
         Assert.True(request.IncludeNsfw);
     }

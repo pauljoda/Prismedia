@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { THUMBNAIL_HOVER_KIND } from "$lib/api/generated/codes";
   import { onDestroy, type Snippet } from "svelte";
   import {
     Album,
@@ -110,9 +111,9 @@
   let spriteFrames = $state<TrickplayFrame[] | null>(null);
   let spriteError = $state(false);
 
-  const isSpriteHover = $derived(card.hover.kind === "sprite");
-  const isImageSequenceHover = $derived(card.hover.kind === "image-sequence");
-  const sequenceAssets = $derived(card.hover.kind === "image-sequence" ? card.hover.assets : []);
+  const isSpriteHover = $derived(card.hover.kind === THUMBNAIL_HOVER_KIND.sprite);
+  const isImageSequenceHover = $derived(card.hover.kind === THUMBNAIL_HOVER_KIND.imageSequence);
+  const sequenceAssets = $derived(card.hover.kind === THUMBNAIL_HOVER_KIND.imageSequence ? card.hover.assets : []);
   const asset = $derived(getThumbnailAsset(card, hoverBroken || isSpriteHover ? null : pointerRatio));
   const aspectRatio = $derived(toAspectRatioValue(card.aspectRatio));
   const imageOnly = $derived(mediaOnly);
@@ -159,7 +160,7 @@
 
   async function ensureSpriteLoaded() {
     if (!isSpriteHover || spriteFrames || spriteError) return;
-    const hover = card.hover as { kind: "sprite"; spriteUrl?: string; vttUrl: string };
+    const hover = card.hover as { kind: typeof THUMBNAIL_HOVER_KIND.sprite; spriteUrl?: string; vttUrl: string };
     try {
       if (hover.spriteUrl && typeof globalThis.Image !== "undefined") {
         const img = new globalThis.Image();
@@ -607,7 +608,7 @@
       <div class="image-loading-skeleton" aria-hidden="true"></div>
     {/if}
 
-    {#if activeSpriteFrame && card.hover.kind === "sprite" && spriteDims.width > 0}
+    {#if activeSpriteFrame && card.hover.kind === THUMBNAIL_HOVER_KIND.sprite && spriteDims.width > 0}
       <div class="sprite-overlay" aria-hidden="true"
         style:background-image="url({card.hover.spriteUrl ?? activeSpriteFrame.url})"
         style:background-size="{(spriteDims.width / activeSpriteFrame.width) * 100}% {(spriteDims.height / activeSpriteFrame.height) * 100}%"

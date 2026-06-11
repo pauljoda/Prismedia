@@ -1,3 +1,4 @@
+import { THUMBNAIL_HOVER_KIND } from "$lib/api/generated/codes";
 import { goto } from "$app/navigation";
 import { createContext } from "$lib/utils/context";
 import {
@@ -12,6 +13,7 @@ import {
   searchIdentifyQueueItem,
 } from "$lib/api/identify-client";
 import { fetchPluginProviders } from "$lib/api/plugins";
+import { IDENTIFY_APPLY_STATE } from "$lib/api/generated/codes";
 import type {
   EntityMetadataProposal,
   EntitySearchCandidate,
@@ -553,7 +555,9 @@ export class IdentifyStore {
    * @returns true when the item had a proposal that was applied, false when it was skipped.
    */
   async acceptQueueProposal(item: IdentifyQueueItem): Promise<boolean> {
-    if (item.state !== "proposal" || !item.proposal) return false;
+    // Skip while the cascade is still streaming children — the proposal is partial until then, and the
+    // backend rejects an apply with a live cascade marker. Mirrors the review screen's Accept gate.
+    if (item.state !== "proposal" || !item.proposal || item.cascadeRunning) return false;
     const payload = buildDefaultApplyPayload(item.proposal);
     const applied = await applyIdentifyQueueItem(
       item.entityId,
@@ -570,7 +574,7 @@ export class IdentifyStore {
    * Items without a ready proposal are ignored so the high-level "accept everything" flow stays safe.
    */
   async acceptQueueProposals(items: IdentifyQueueItem[]) {
-    const acceptable = items.filter((item) => item.state === "proposal" && item.proposal);
+    const acceptable = items.filter((item) => item.state === "proposal" && item.proposal && !item.cascadeRunning);
     if (acceptable.length === 0) return;
     this.bulkAccepting = true;
     this.bulkAcceptDone = 0;
@@ -892,7 +896,7 @@ export class IdentifyStore {
       }
 
       if (!stopped) {
-        timer = setTimeout(tick, this.applyProgress?.state === "running" ? 400 : 800);
+        timer = setTimeout(tick, this.applyProgress?.state === IDENTIFY_APPLY_STATE.running ? 400 : 800);
       }
     };
 
@@ -1102,7 +1106,7 @@ function entityThumbnailFromDetail(detail: EntityDetailCard, fallback?: EntityCa
     sortOrder: detail.sortOrder,
     coverUrl: card.cover?.src ?? fallback?.coverUrl ?? null,
     coverThumbUrl: null,
-    hoverKind: fallback?.hoverKind ?? "none",
+    hoverKind: fallback?.hoverKind ?? THUMBNAIL_HOVER_KIND.none,
     hoverUrl: fallback?.hoverUrl ?? null,
     hoverImages: fallback?.hoverImages ?? [],
     meta: card.meta ?? fallback?.meta ?? [],
@@ -1122,7 +1126,7 @@ function entityCardFromQueueItem(item: ApiIdentifyQueueItem): EntityCard {
     sortOrder: null,
     coverUrl: null,
     coverThumbUrl: null,
-    hoverKind: "none",
+    hoverKind: THUMBNAIL_HOVER_KIND.none,
     hoverUrl: null,
     hoverImages: [],
     meta: [],
@@ -1188,7 +1192,7 @@ function initialApplyProgress(
   return {
     id,
     entityId: entity.id,
-    state: "running",
+    state: IDENTIFY_APPLY_STATE.running,
     currentIndex: 0,
     total: countApplyProgressSteps(proposal, selectedFields),
     // Optimistic progress is for the root entity being applied, so its real kind

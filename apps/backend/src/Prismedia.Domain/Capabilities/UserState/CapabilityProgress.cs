@@ -1,3 +1,5 @@
+using Prismedia.Domain.Entities;
+
 namespace Prismedia.Domain.Capabilities;
 
 /// <summary>
@@ -9,10 +11,10 @@ public sealed class CapabilityProgress : EntityCapability {
     /// </summary>
     public CapabilityProgress(
         Guid? currentEntityId = null,
-        string unit = "item",
+        ProgressUnit unit = ProgressUnit.Item,
         int index = 0,
         int total = 0,
-        string? mode = null,
+        ReaderMode? mode = null,
         DateTimeOffset? completedAt = null,
         DateTimeOffset? updatedAt = null,
         string? location = null) {
@@ -29,10 +31,10 @@ public sealed class CapabilityProgress : EntityCapability {
     /// <inheritdoc />
 
     public Guid? CurrentEntityId { get; private set; }
-    public string Unit { get; private set; }
+    public ProgressUnit Unit { get; private set; }
     public int Index { get; private set; }
     public int Total { get; private set; }
-    public string? Mode { get; private set; }
+    public ReaderMode? Mode { get; private set; }
     public DateTimeOffset? CompletedAt { get; private set; }
     public DateTimeOffset? UpdatedAt { get; private set; }
 
@@ -43,7 +45,7 @@ public sealed class CapabilityProgress : EntityCapability {
     public string? Location { get; private set; }
 
     /// <summary>Moves the progress cursor to a specific entity and index.</summary>
-    public void MoveTo(Guid currentEntityId, string unit, int index, int total, string? mode, DateTimeOffset updatedAt, string? location = null) {
+    public void MoveTo(Guid currentEntityId, ProgressUnit unit, int index, int total, ReaderMode? mode, DateTimeOffset updatedAt, string? location = null) {
         CurrentEntityId = currentEntityId;
         Unit = unit;
         Index = index;

@@ -1,4 +1,5 @@
 import type { EntityKind, ProposalKind } from "$lib/api/generated/model";
+import type { IdentifyActionCode, IdentifyApplyStateCode } from "$lib/api/generated/codes";
 import type { EntityMetadataFlagsPatch } from "$lib/api/entity-mutations";
 
 export interface PluginEntitySupport {
@@ -118,7 +119,7 @@ export type IdentifyQueueState = "search" | "proposal" | "done" | "deleted" | "e
 export interface IdentifyApplyProgress {
   id: string;
   entityId: string;
-  state: "running" | "succeeded" | "failed" | string;
+  state: IdentifyApplyStateCode;
   currentIndex: number;
   total: number;
   currentKind?: EntityKind | null;
@@ -136,7 +137,7 @@ export interface IdentifyQueueItem {
   isNsfw: boolean;
   state: IdentifyQueueState;
   provider?: string | null;
-  action: string;
+  action: IdentifyActionCode;
   query?: IdentifyQuery | null;
   candidates: EntitySearchCandidate[];
   proposal?: EntityMetadataProposal | null;

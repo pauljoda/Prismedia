@@ -1,3 +1,4 @@
+import { THUMBNAIL_HOVER_KIND } from "$lib/api/generated/codes";
 import type { EntityThumbnailCard, EntityThumbnailMetaItem } from "$lib/entities/entity-thumbnail";
 import type { EntityKind } from "$lib/api/generated/model";
 
@@ -89,7 +90,7 @@ export function identifyCandidateToThumbnailCard(
       childrenByKind: [],
       relationships: [],
     },
-    hover: { kind: "none" },
+    hover: { kind: THUMBNAIL_HOVER_KIND.none },
     meta,
     subtitle: candidate.year ? String(candidate.year) : providerEntries[0]?.[0] ?? "Search result",
   };

@@ -100,7 +100,7 @@ public sealed class FilesVisibilityTests {
         public Task UpsertExclusionAsync(
             Guid rootId,
             string relativePath,
-            string kind,
+            FileEntryKind kind,
             CancellationToken cancellationToken) =>
             Task.CompletedTask;
 
@@ -122,8 +122,8 @@ public sealed class FilesVisibilityTests {
             ResolvedFilePath directory,
             CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<FileEntry>>([
-                new(directory.Root.Id, "visible", "visible", "directory", null, null, null),
-                new(directory.Root.Id, "hidden", "hidden", "directory", null, null, null),
+                new(directory.Root.Id, "visible", "visible", FileEntryKind.Directory, null, null, null),
+                new(directory.Root.Id, "hidden", "hidden", FileEntryKind.Directory, null, null, null),
             ]);
 
         public Task<FileDetail> GetDetailAsync(
@@ -131,7 +131,7 @@ public sealed class FilesVisibilityTests {
             IReadOnlyList<FileLinkedEntity> linkedEntities,
             CancellationToken cancellationToken) =>
             Task.FromResult(new FileDetail(
-                new FileEntry(path.Root.Id, path.RelativePath, Path.GetFileName(path.RelativePath), "file", null, "video/mp4", null),
+                new FileEntry(path.Root.Id, path.RelativePath, Path.GetFileName(path.RelativePath), FileEntryKind.File, null, "video/mp4", null),
                 path.AbsolutePath,
                 null,
                 linkedEntities,

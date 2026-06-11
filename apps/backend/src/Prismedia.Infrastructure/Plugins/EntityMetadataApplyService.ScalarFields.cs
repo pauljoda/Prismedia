@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Plugins;
+using Prismedia.Domain.Capabilities;
+using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence.Entities;
 
 namespace Prismedia.Infrastructure.Plugins;
@@ -137,28 +139,44 @@ public sealed partial class EntityMetadataApplyService {
 
     private async Task UpsertDatesAsync(Guid entityId, IReadOnlyDictionary<string, string> dates, DateTimeOffset now, CancellationToken cancellationToken) {
         foreach (var (code, value) in dates.Where(pair => !string.IsNullOrWhiteSpace(pair.Key) && !string.IsNullOrWhiteSpace(pair.Value))) {
-            var existing = await _db.EntityDates.FindAsync([entityId, code], cancellationToken);
+            var parsed = EntityDateParser.Parse(value);
+            var existing = ReviveIfDeleted(await _db.EntityDates.FindAsync([entityId, code], cancellationToken));
             if (existing is null) {
-                _db.EntityDates.Add(new EntityDateRow { EntityId = entityId, Code = code, Value = value, SortableValue = ParseDateOnly(value), UpdatedAt = now });
+                _db.EntityDates.Add(new EntityDateRow {
+                    EntityId = entityId,
+                    Code = code,
+                    Value = parsed?.NormalizedValue ?? value.Trim(),
+                    SortableValue = parsed?.SortableValue,
+                    Precision = parsed?.Precision.ToCode(),
+                    UpdatedAt = now
+                });
             } else {
-                existing.Value = value;
-                existing.SortableValue = ParseDateOnly(value);
+                existing.Value = parsed?.NormalizedValue ?? value.Trim();
+                existing.SortableValue = parsed?.SortableValue;
+                existing.Precision = parsed?.Precision.ToCode();
                 existing.UpdatedAt = now;
             }
         }
     }
 
     private async Task ReplaceDatesAsync(Guid entityId, IReadOnlyDictionary<string, string> dates, DateTimeOffset now, CancellationToken cancellationToken) {
+        var incoming = dates
+            .Where(pair => !string.IsNullOrWhiteSpace(pair.Key) && !string.IsNullOrWhiteSpace(pair.Value))
+            .Select(pair => pair.Key)
+            .ToHashSet(StringComparer.Ordinal);
         var existing = await _db.EntityDates
             .Where(row => row.EntityId == entityId)
             .ToArrayAsync(cancellationToken);
-        _db.EntityDates.RemoveRange(existing);
+        // Re-sent codes are updated in place rather than removed and re-added: a removed row
+        // stays Deleted in the change tracker, so the upsert's FindAsync would hand back a
+        // doomed instance and the "update" would silently become a delete.
+        _db.EntityDates.RemoveRange(existing.Where(row => !incoming.Contains(row.Code)));
         await UpsertDatesAsync(entityId, dates, now, cancellationToken);
     }
 
     private async Task UpsertStatsAsync(Guid entityId, IReadOnlyDictionary<string, int> stats, DateTimeOffset now, CancellationToken cancellationToken) {
         foreach (var (code, value) in FilterStats(stats)) {
-            var existing = await _db.EntityStats.FindAsync([entityId, code], cancellationToken);
+            var existing = ReviveIfDeleted(await _db.EntityStats.FindAsync([entityId, code], cancellationToken));
             if (existing is null) {
                 _db.EntityStats.Add(new EntityStatRow { EntityId = entityId, Code = code, Value = value, UpdatedAt = now });
             } else {
@@ -169,10 +187,12 @@ public sealed partial class EntityMetadataApplyService {
     }
 
     private async Task ReplaceStatsAsync(Guid entityId, IReadOnlyDictionary<string, int> stats, DateTimeOffset now, CancellationToken cancellationToken) {
+        var incoming = FilterStats(stats).Keys.ToHashSet(StringComparer.Ordinal);
         var existing = await _db.EntityStats
             .Where(row => row.EntityId == entityId)
             .ToArrayAsync(cancellationToken);
-        _db.EntityStats.RemoveRange(existing);
+        // See ReplaceDatesAsync: re-sent codes must update in place, not delete-and-re-add.
+        _db.EntityStats.RemoveRange(existing.Where(row => !incoming.Contains(row.Code)));
         await UpsertStatsAsync(entityId, stats, now, cancellationToken);
     }
 
@@ -183,7 +203,7 @@ public sealed partial class EntityMetadataApplyService {
 
     private async Task UpsertPositionsAsync(EntityRow entity, IReadOnlyDictionary<string, int> positions, DateTimeOffset now, CancellationToken cancellationToken) {
         foreach (var (code, value) in positions) {
-            var existing = await _db.EntityPositions.FindAsync([entity.Id, code], cancellationToken);
+            var existing = ReviveIfDeleted(await _db.EntityPositions.FindAsync([entity.Id, code], cancellationToken));
             if (existing is null) {
                 _db.EntityPositions.Add(new EntityPositionRow { EntityId = entity.Id, Code = code, Value = value, UpdatedAt = now });
             } else {
@@ -196,10 +216,12 @@ public sealed partial class EntityMetadataApplyService {
     }
 
     private async Task ReplacePositionsAsync(EntityRow entity, IReadOnlyDictionary<string, int> positions, DateTimeOffset now, CancellationToken cancellationToken) {
+        var incoming = positions.Keys.ToHashSet(StringComparer.Ordinal);
         var existing = await _db.EntityPositions
             .Where(row => row.EntityId == entity.Id)
             .ToArrayAsync(cancellationToken);
-        _db.EntityPositions.RemoveRange(existing);
+        // See ReplaceDatesAsync: re-sent codes must update in place, not delete-and-re-add.
+        _db.EntityPositions.RemoveRange(existing.Where(row => !incoming.Contains(row.Code)));
         await UpsertPositionsAsync(entity, positions, now, cancellationToken);
     }
 
@@ -263,6 +285,16 @@ public sealed partial class EntityMetadataApplyService {
         row.UpdatedAt = now;
     }
 
-    private static DateOnly? ParseDateOnly(string value) =>
-        DateOnly.TryParse(value, out var parsed) ? parsed : null;
+    /// <summary>
+    /// Returns the tracked row in an updatable state. A row removed earlier in the same unit of
+    /// work is still in the change tracker as Deleted; mutating it would silently keep the delete,
+    /// so it is revived to Modified before the caller writes to it.
+    /// </summary>
+    private TRow? ReviveIfDeleted<TRow>(TRow? row) where TRow : class {
+        if (row is not null && _db.Entry(row).State == EntityState.Deleted) {
+            _db.Entry(row).State = EntityState.Modified;
+        }
+
+        return row;
+    }
 }

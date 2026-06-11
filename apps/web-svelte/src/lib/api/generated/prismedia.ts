@@ -8434,11 +8434,6 @@ export type applyIdentifyProposalResponse204 = {
   status: 204
 }
 
-export type applyIdentifyProposalResponse400 = {
-  data: ApiProblem
-  status: 400
-}
-
 export type applyIdentifyProposalResponse404 = {
   data: ApiProblem
   status: 404
@@ -8447,7 +8442,7 @@ export type applyIdentifyProposalResponse404 = {
 export type applyIdentifyProposalResponseSuccess = (applyIdentifyProposalResponse204) & {
   headers: Headers;
 };
-export type applyIdentifyProposalResponseError = (applyIdentifyProposalResponse400 | applyIdentifyProposalResponse404) & {
+export type applyIdentifyProposalResponseError = (applyIdentifyProposalResponse404) & {
   headers: Headers;
 };
 

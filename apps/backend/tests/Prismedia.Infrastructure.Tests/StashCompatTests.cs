@@ -249,7 +249,7 @@ public sealed class StashCompatTests {
             var runner = new StashCompatRunner(new HttpClient(new FixedHtmlHandler(SampleHtml)));
             var request = new IdentifyPluginRequest(
                 ProtocolVersion: 2,
-                Action: "lookup-url",
+                Action: IdentifyAction.LookupUrl,
                 Auth: new Dictionary<string, string>(),
                 Entity: new IdentifyEntitySnapshot(Guid.NewGuid(), EntityKind.Video, "Local Title"),
                 Query: new IdentifyQuery(null, "https://site.example/scene/123", null),
@@ -305,7 +305,7 @@ public sealed class StashCompatTests {
             var runner = new StashCompatRunner(new HttpClient(new FixedHtmlHandler(SearchResultsHtml)));
             var request = new IdentifyPluginRequest(
                 ProtocolVersion: 2,
-                Action: "search",
+                Action: IdentifyAction.Search,
                 Auth: new Dictionary<string, string>(),
                 Entity: new IdentifyEntitySnapshot(Guid.NewGuid(), EntityKind.Video, "Some Scene"),
                 Query: new IdentifyQuery("Some Scene", null, null),
@@ -318,6 +318,10 @@ public sealed class StashCompatTests {
             Assert.Equal(2, response.Result.Candidates.Count);
             Assert.Equal("First Hit", response.Result.Candidates[0].Title);
             Assert.Equal("https://search.example/s/1", response.Result.Candidates[0].ExternalIds[manifest.Id]);
+            // Name-search candidates now carry a title-similarity confidence so they rank and gate like
+            // a first-party provider's, instead of being unscored (and excluded from auto-identify).
+            Assert.NotNull(response.Result.Candidates[0].Confidence);
+            Assert.Equal("title-search", response.Result.Candidates[0].MatchReason);
         } finally {
             File.Delete(yamlPath);
         }
@@ -331,10 +335,11 @@ public sealed class StashCompatTests {
             var manifest = StashScraperManifestFactory.TryCreate(SearchYaml, yamlPath)!;
             var descriptor = new PluginDescriptor(manifest, yamlPath, Path.GetDirectoryName(yamlPath)!, yamlPath);
             var runner = new StashCompatRunner(new HttpClient(new FixedHtmlHandler("<html><body><h1>Resolved Scene</h1></body></html>")));
-            // Mirrors identifyWithCandidate: the chosen candidate's external ids carry the scene URL.
+            // Mirrors identifyWithCandidate: the chosen candidate's external ids carry the scene URL, and
+            // the orchestrator resolves a request carrying a provider id to a lookup action.
             var request = new IdentifyPluginRequest(
                 ProtocolVersion: 2,
-                Action: "search",
+                Action: IdentifyAction.LookupId,
                 Auth: new Dictionary<string, string>(),
                 Entity: new IdentifyEntitySnapshot(Guid.NewGuid(), EntityKind.Video, "Some Scene"),
                 Query: new IdentifyQuery(null, null, new Dictionary<string, string> { [manifest.Id] = "https://search.example/s/1" }),
@@ -345,6 +350,104 @@ public sealed class StashCompatTests {
             Assert.True(response.Ok);
             Assert.NotNull(response.Result?.Patch);
             Assert.Equal("Resolved Scene", response.Result!.Patch.Title);
+        } finally {
+            File.Delete(yamlPath);
+        }
+    }
+
+    private const string GalleryYaml = """
+        name: Gallery Site
+        galleryByURL:
+          - action: scrapeXPath
+            url:
+              - gallery.example
+            scraper: galleryScraper
+        xPathScrapers:
+          galleryScraper:
+            gallery:
+              Title: //h1/text()
+              Studio:
+                Name: //span[@class="studio"]/text()
+        """;
+
+    private const string GalleryHtml = """
+        <html><body><h1>My Gallery</h1><span class="studio">Gallery Studio</span></body></html>
+        """;
+
+    [Fact]
+    public async Task RunnerIdentifiesGalleryByUrlFromGalleryBlock() {
+        var yamlPath = Path.Combine(Path.GetTempPath(), $"stash-gallery-{Guid.NewGuid():N}.yml");
+        await File.WriteAllTextAsync(yamlPath, GalleryYaml);
+        try {
+            var manifest = StashScraperManifestFactory.TryCreate(GalleryYaml, yamlPath)!;
+            // The scraper advertises gallery support, so the runner routes a gallery entity to it
+            // instead of the old hard Video/Movie gate.
+            Assert.Contains(manifest.Supports, support => support.EntityKind == EntityKindRegistry.Gallery.Code);
+            var descriptor = new PluginDescriptor(manifest, yamlPath, Path.GetDirectoryName(yamlPath)!, yamlPath);
+            var runner = new StashCompatRunner(new HttpClient(new FixedHtmlHandler(GalleryHtml)));
+            var request = new IdentifyPluginRequest(
+                ProtocolVersion: 2,
+                Action: IdentifyAction.LookupUrl,
+                Auth: new Dictionary<string, string>(),
+                Entity: new IdentifyEntitySnapshot(Guid.NewGuid(), EntityKind.Gallery, "Local Gallery"),
+                Query: new IdentifyQuery(null, "https://gallery.example/g/1", null),
+                Hints: new IdentifyMatchHints(new Dictionary<string, string>(), [], null, null));
+
+            var response = await runner.IdentifyAsync(descriptor, request, CancellationToken.None);
+
+            Assert.True(response.Ok);
+            Assert.NotNull(response.Result?.Patch);
+            Assert.Equal(ProposalKind.Gallery, response.Result!.TargetKind);
+            Assert.Equal("My Gallery", response.Result.Patch.Title);
+            Assert.Equal("Gallery Studio", response.Result.Patch.Studio);
+        } finally {
+            File.Delete(yamlPath);
+        }
+    }
+
+    private const string PerformerYaml = """
+        name: Performer Site
+        performerByURL:
+          - action: scrapeXPath
+            url:
+              - performer.example
+            scraper: performerScraper
+        xPathScrapers:
+          performerScraper:
+            performer:
+              Name: //h1/text()
+              Details: //div[@class="bio"]/text()
+              Image: //img[@class="avatar"]/@src
+        """;
+
+    private const string PerformerHtml = """
+        <html><body><h1>Jane Doe</h1><div class="bio">An actor.</div><img class="avatar" src="https://img.example/jane.jpg"/></body></html>
+        """;
+
+    [Fact]
+    public async Task RunnerIdentifiesPersonByUrl() {
+        var yamlPath = Path.Combine(Path.GetTempPath(), $"stash-performer-{Guid.NewGuid():N}.yml");
+        await File.WriteAllTextAsync(yamlPath, PerformerYaml);
+        try {
+            var manifest = StashScraperManifestFactory.TryCreate(PerformerYaml, yamlPath)!;
+            Assert.Contains(manifest.Supports, support => support.EntityKind == EntityKindRegistry.Person.Code);
+            var descriptor = new PluginDescriptor(manifest, yamlPath, Path.GetDirectoryName(yamlPath)!, yamlPath);
+            var runner = new StashCompatRunner(new HttpClient(new FixedHtmlHandler(PerformerHtml)));
+            var request = new IdentifyPluginRequest(
+                ProtocolVersion: 2,
+                Action: IdentifyAction.LookupUrl,
+                Auth: new Dictionary<string, string>(),
+                Entity: new IdentifyEntitySnapshot(Guid.NewGuid(), EntityKind.Person, "Jane Doe"),
+                Query: new IdentifyQuery(null, "https://performer.example/p/1", null),
+                Hints: new IdentifyMatchHints(new Dictionary<string, string>(), [], null, null));
+
+            var response = await runner.IdentifyAsync(descriptor, request, CancellationToken.None);
+
+            Assert.True(response.Ok);
+            Assert.NotNull(response.Result?.Patch);
+            Assert.Equal(ProposalKind.Person, response.Result!.TargetKind);
+            Assert.Equal("Jane Doe", response.Result.Patch.Title);
+            Assert.Equal("An actor.", response.Result.Patch.Description);
         } finally {
             File.Delete(yamlPath);
         }
@@ -579,7 +682,7 @@ public sealed class StashCompatTests {
             var runner = new StashCompatRunner(new HttpClient(new FixedHtmlHandler("")));
             var request = new IdentifyPluginRequest(
                 ProtocolVersion: 2,
-                Action: "lookup-url",
+                Action: IdentifyAction.LookupUrl,
                 Auth: new Dictionary<string, string>(),
                 Entity: new IdentifyEntitySnapshot(Guid.NewGuid(), EntityKind.Video, "X"),
                 Query: new IdentifyQuery(null, "https://script.example/s/1", null),

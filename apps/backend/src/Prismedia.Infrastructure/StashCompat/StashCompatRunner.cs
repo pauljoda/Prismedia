@@ -48,55 +48,112 @@ public sealed class StashCompatRunner : IIdentifyRunner {
             return new IdentifyPluginResponse(false, null, "Scraper definition is invalid.");
         }
 
-        var isVideo = request.Entity.Kind is EntityKind.Video or EntityKind.Movie;
-        if (!isVideo) {
+        // Kind eligibility comes from the synthesized manifest's declared Supports, not a hardcoded
+        // EntityKind fork — so a scraper advertising performer/gallery capabilities is actually routed
+        // to them, and the dotnet and stash runtimes both derive support from the manifest.
+        if (!SupportsKind(descriptor.Manifest, request.Entity.Kind.ToCode())) {
             return new IdentifyPluginResponse(true, null, $"This scraper cannot identify '{request.Entity.Kind.ToCode()}'.");
         }
 
         var input = BuildInput(request, descriptor.Manifest.Id);
         var engine = new StashScraperEngine(_http, _scripts);
         try {
-            // A URL (direct, from a hint, or carried by a chosen search candidate) is the
-            // strongest signal: resolve it to a single confident proposal.
-            if (!string.IsNullOrWhiteSpace(input.Url)) {
-                foreach (var capability in UrlCapabilitiesFor(request.Entity.Kind).Where(definition.HasCapability)) {
-                    var proposal = await ScrapeProposalAsync(engine, definition, descriptor, capability, input, request.Entity.Kind.ToProposalKind(), cancellationToken);
-                    if (proposal is not null) {
-                        return new IdentifyPluginResponse(true, proposal, null);
-                    }
-                }
-            }
-
-            // Fragment/query-fragment capabilities template a URL from the title or filename and
-            // resolve to a single page, so they also yield a confident proposal.
-            foreach (var capability in new[] { "sceneByQueryFragment", "sceneByFragment" }.Where(definition.HasCapability)) {
-                var proposal = await ScrapeProposalAsync(engine, definition, descriptor, capability, input, request.Entity.Kind.ToProposalKind(), cancellationToken);
-                if (proposal is not null) {
-                    return new IdentifyPluginResponse(true, proposal, null);
-                }
-            }
-
-            // Name search returns multiple candidates for the user to disambiguate.
-            if (!string.IsNullOrWhiteSpace(input.Title) && definition.HasCapability("sceneByName")) {
-                var scenes = await engine.SearchScenesAsync(definition, descriptor.EntryPath, "sceneByName", input, cancellationToken);
-                var candidates = scenes
-                    .Select(scene => StashResultMapper.ToCandidate(scene, descriptor.Manifest.Id))
-                    .Where(candidate => candidate is not null)
-                    .Select(candidate => candidate!)
-                    .ToArray();
-                if (candidates.Length > 0) {
-                    return new IdentifyPluginResponse(true, CandidatesShell(request.Entity.Kind.ToProposalKind(), candidates), null);
-                }
-            }
+            return request.Entity.Kind == EntityKind.Person
+                ? await IdentifyPersonAsync(engine, definition, descriptor, request, input, cancellationToken)
+                : await IdentifySceneShapedAsync(engine, definition, descriptor, request, input, cancellationToken);
         } catch (StashScriptActionRequiredException) {
             return new IdentifyPluginResponse(
                 false,
                 null,
                 $"Scraper '{definition.Name}' requires python script execution, which is not available yet.");
         }
+    }
+
+    /// <summary>Whether the synthesized manifest advertises support for the requested entity kind.</summary>
+    private static bool SupportsKind(PluginManifest manifest, string kindCode) =>
+        manifest.Supports.Any(support => PluginEntityKindCompatibility.SupportsKind(support, kindCode));
+
+    /// <summary>
+    /// Identifies a scene-shaped entity (video, movie, or gallery — all map to the common scene scrape
+    /// shape). Honors the resolved action: a Lookup routes to the kind's by-URL capabilities; a Search
+    /// routes to name search returning ranked candidates. Fragment capabilities (which template a URL
+    /// from the title/filename and resolve to a single page) are tried as a confident fallback in both.
+    /// </summary>
+    private async Task<IdentifyPluginResponse> IdentifySceneShapedAsync(
+        StashScraperEngine engine,
+        StashScraperDefinition definition,
+        PluginDescriptor descriptor,
+        IdentifyPluginRequest request,
+        StashScrapeInput input,
+        CancellationToken cancellationToken) {
+        var targetKind = request.Entity.Kind.ToProposalKind();
+        var isLookup = request.Action is IdentifyAction.LookupUrl or IdentifyAction.LookupId;
+
+        if (isLookup && !string.IsNullOrWhiteSpace(input.Url)) {
+            foreach (var capability in UrlCapabilitiesFor(request.Entity.Kind).Where(definition.HasCapability)) {
+                var proposal = await ScrapeProposalAsync(engine, definition, descriptor, capability, input, targetKind, cancellationToken);
+                if (proposal is not null) {
+                    return new IdentifyPluginResponse(true, proposal, null);
+                }
+            }
+        }
+
+        if (!isLookup && !string.IsNullOrWhiteSpace(input.Title) && definition.HasCapability("sceneByName")) {
+            var scenes = await engine.SearchScenesAsync(definition, descriptor.EntryPath, "sceneByName", input, cancellationToken);
+            var candidates = scenes
+                .Select(scene => StashResultMapper.ToCandidate(scene, descriptor.Manifest.Id, input.Title))
+                .Where(candidate => candidate is not null)
+                .Select(candidate => candidate!)
+                .ToArray();
+            if (candidates.Length > 0) {
+                return IdentifyPluginResponse.Candidates(targetKind, candidates);
+            }
+        }
+
+        // Fragment/query-fragment capabilities template a URL from the title or filename and resolve to
+        // a single confident page — a deterministic fallback usable under either action.
+        foreach (var capability in FragmentCapabilities.Where(definition.HasCapability)) {
+            var proposal = await ScrapeProposalAsync(engine, definition, descriptor, capability, input, targetKind, cancellationToken);
+            if (proposal is not null) {
+                return new IdentifyPluginResponse(true, proposal, null);
+            }
+        }
 
         return new IdentifyPluginResponse(true, null, $"No {definition.Name} match was found.");
     }
+
+    /// <summary>
+    /// Identifies a performer: resolves the profile by URL (or, for python scrapers, by name) through
+    /// the engine's performer path and maps it to a Person proposal.
+    /// </summary>
+    private async Task<IdentifyPluginResponse> IdentifyPersonAsync(
+        StashScraperEngine engine,
+        StashScraperDefinition definition,
+        PluginDescriptor descriptor,
+        IdentifyPluginRequest request,
+        StashScrapeInput input,
+        CancellationToken cancellationToken) {
+        var performer = await engine.ResolvePerformerAsync(
+            definition,
+            descriptor.EntryPath,
+            new StashScrapedPerformer { Name = input.Title, Url = input.Url },
+            cancellationToken);
+        if (performer is not { HasData: true }) {
+            return new IdentifyPluginResponse(true, null, $"No {definition.Name} match was found.");
+        }
+
+        var byUrl = !string.IsNullOrWhiteSpace(input.Url);
+        var proposal = StashResultMapper.ToPerformerProposal(
+            performer,
+            descriptor.Manifest.Id,
+            descriptor.Manifest.Name,
+            input.Url,
+            byUrl ? "Matched by URL" : "Matched by name",
+            byUrl ? 0.9m : 0.7m);
+        return new IdentifyPluginResponse(true, proposal, null);
+    }
+
+    private static readonly string[] FragmentCapabilities = ["sceneByQueryFragment", "sceneByFragment"];
 
     private static async Task<EntityMetadataProposal?> ScrapeProposalAsync(
         StashScraperEngine engine,
@@ -171,23 +228,6 @@ public sealed class StashCompatRunner : IIdentifyRunner {
         }
     }
 
-    /// <summary>
-    /// Builds the candidate-only response shell, mirroring the dotnet runner so the identify
-    /// pipeline routes it to the disambiguation UI rather than treating it as a confident match.
-    /// </summary>
-    private static EntityMetadataProposal CandidatesShell(ProposalKind targetKind, IReadOnlyList<EntitySearchCandidate> candidates) =>
-        new(
-            ProposalId: null!,
-            Provider: null!,
-            TargetKind: targetKind,
-            Confidence: null,
-            MatchReason: null,
-            Patch: null!,
-            Images: [],
-            Children: [],
-            Candidates: candidates,
-            TargetEntityId: null,
-            Relationships: []);
 
     private static StashScrapeInput BuildInput(IdentifyPluginRequest request, string providerId) {
         var url = FirstNonEmpty(
@@ -218,8 +258,9 @@ public sealed class StashCompatRunner : IIdentifyRunner {
     private static string? FirstNonEmpty(params string?[] values) =>
         values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
 
-    private static IReadOnlyList<string> UrlCapabilitiesFor(EntityKind entityKind) =>
-        entityKind == EntityKind.Movie
-            ? ["movieByURL", "sceneByURL"]
-            : ["sceneByURL"];
+    private static IReadOnlyList<string> UrlCapabilitiesFor(EntityKind entityKind) => entityKind switch {
+        EntityKind.Movie => ["movieByURL", "sceneByURL"],
+        EntityKind.Gallery => ["galleryByURL"],
+        _ => ["sceneByURL"]
+    };
 }

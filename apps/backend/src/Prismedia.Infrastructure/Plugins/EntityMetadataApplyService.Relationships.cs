@@ -150,7 +150,7 @@ public sealed partial class EntityMetadataApplyService {
 
         var order = 0;
         foreach (var name in tags.Where(value => !string.IsNullOrWhiteSpace(value)).Select(value => value.Trim()).Distinct(StringComparer.OrdinalIgnoreCase)) {
-            var tag = await FindEntityByKindAndTitleAsync("tag", name, cancellationToken)
+            var tag = await FindEntityByTitleAsync("tag", name, parentEntityId: null, cancellationToken)
                 ?? CreateEntity("tag", name, now);
             MarkNsfwIfRequested(tag, markNsfw, now);
             AddRelationship(entityId, RelationshipKind.Tags.ToCode(), "Tags", tag.Id, tag.KindCode, order++, null, now);
@@ -158,7 +158,7 @@ public sealed partial class EntityMetadataApplyService {
     }
 
     private async Task SetStudioAsync(Guid entityId, string studioName, DateTimeOffset now, bool markNsfw, CancellationToken cancellationToken) {
-        var studio = await FindEntityByKindAndTitleAsync("studio", studioName.Trim(), cancellationToken)
+        var studio = await FindEntityByTitleAsync("studio", studioName.Trim(), parentEntityId: null, cancellationToken)
             ?? CreateEntity("studio", studioName.Trim(), now);
         MarkNsfwIfRequested(studio, markNsfw, now);
         await RemoveRelationshipAsync(entityId, RelationshipKind.Studio.ToCode(), cancellationToken);
@@ -174,7 +174,7 @@ public sealed partial class EntityMetadataApplyService {
         foreach (var credit in credits.Where(credit => !string.IsNullOrWhiteSpace(credit.Name))) {
             var personName = credit.Name.Trim();
             if (!resolvedPeople.TryGetValue(personName, out var person)) {
-                person = await FindEntityByKindAndTitleAsync("person", personName, cancellationToken)
+                person = await FindEntityByTitleAsync("person", personName, parentEntityId: null, cancellationToken)
                     ?? CreateEntity("person", personName, now);
                 MarkNsfwIfRequested(person, markNsfw, now);
                 resolvedPeople[personName] = person;
@@ -270,46 +270,6 @@ public sealed partial class EntityMetadataApplyService {
         });
     }
 
-    /// <summary>
-    /// Applies metadata and artwork from relationship proposals into linked Person and Studio entities
-    /// that were created or resolved during credits/studio apply.
-    /// </summary>
-    private async Task ApplyRelationshipProposalsAsync(
-        Guid sourceEntityId,
-        IReadOnlyList<EntityMetadataProposal> relationships,
-        DateTimeOffset now,
-        IReadOnlyList<string> sourcePath,
-        IdentifyApplyProgressReporter? progress,
-        CancellationToken cancellationToken) {
-        foreach (var child in relationships) {
-            if (string.IsNullOrWhiteSpace(child.Patch.Title)) {
-                continue;
-            }
-
-            if (!child.TargetKind.IsRelationship()) {
-                continue;
-            }
-
-            var linkedEntity = await FindEntityByKindAndTitleAsync(
-                child.TargetKind.ToEntityKind().ToCode(), child.Patch.Title.Trim(), cancellationToken);
-            if (linkedEntity is null) {
-                continue;
-            }
-
-            if (linkedEntity.Id == sourceEntityId) {
-                continue;
-            }
-
-            var title = child.Patch.Title.Trim();
-            var path = sourcePath.Count == 0 ? [title] : sourcePath.Concat([title]).ToArray();
-            progress?.ReportEntity(linkedEntity.KindCode.DecodeAs<EntityKind>(), title, path);
-
-            await ApplyPatchToEntityAsync(linkedEntity, child.Patch, [], now, cancellationToken);
-
-            await ApplyRelationshipArtworkAsync(linkedEntity, child, now, cancellationToken);
-        }
-    }
-
     private async Task ApplyRelationshipArtworkAsync(
         EntityRow linkedEntity,
         EntityMetadataProposal proposal,
@@ -320,10 +280,12 @@ public sealed partial class EntityMetadataApplyService {
         }
 
         if (proposal.TargetKind == ProposalKind.Studio) {
-            var logo = proposal.Images.FirstOrDefault(image => image.Kind is "logo" or "poster") ?? proposal.Images[0];
+            var logo = ImageKindRoleResolver.Pick(proposal.Images, MediaImageKind.Logo, MediaImageKind.Poster)
+                ?? proposal.Images[0];
             await _artwork.DownloadPluginImageAsync(linkedEntity, logo, EntityFileRole.Logo, now, cancellationToken);
 
-            var backdrop = proposal.Images.FirstOrDefault(image => image.Kind is "backdrop" or "banner" or "hero");
+            var backdrop = ImageKindRoleResolver.Pick(
+                proposal.Images, MediaImageKind.Backdrop, MediaImageKind.Banner, MediaImageKind.Hero);
             if (backdrop is not null) {
                 await _artwork.DownloadPluginImageAsync(linkedEntity, backdrop, EntityFileRole.Backdrop, now, cancellationToken);
             }
@@ -331,9 +293,8 @@ public sealed partial class EntityMetadataApplyService {
             return;
         }
 
-        var image = proposal.Images.FirstOrDefault(img => img.Kind is "poster") ??
-            proposal.Images.FirstOrDefault(img => img.Kind is "logo") ??
-            proposal.Images[0];
+        var image = ImageKindRoleResolver.Pick(proposal.Images, MediaImageKind.Poster, MediaImageKind.Logo)
+            ?? proposal.Images[0];
         await _artwork.DownloadPluginImageAsync(linkedEntity, image, EntityFileRole.Poster, now, cancellationToken);
     }
 

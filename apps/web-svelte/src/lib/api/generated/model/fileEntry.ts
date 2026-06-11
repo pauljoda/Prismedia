@@ -4,12 +4,13 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { FileEntryKind } from './fileEntryKind';
 
 export interface FileEntry {
   rootId: string;
   path: string;
   name: string;
-  kind: string;
+  kind: FileEntryKind;
   /**
      * @nullable
      * @pattern ^-?(?:0|[1-9]\d*)$

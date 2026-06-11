@@ -32,7 +32,7 @@ describe("getPlaybackState", () => {
         unit: "page",
         index: 8,
         total: 24,
-        mode: "book",
+        mode: "paged",
         completedAt: null,
         updatedAt: null,
       },

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { PROGRESS_UNIT } from "$lib/api/generated/codes";
   import { onMount } from "svelte";
   import { afterNavigate, goto } from "$app/navigation";
   import { page } from "$app/state";
@@ -404,7 +405,7 @@
     try {
       await updateEntityProgress(book.id, {
         currentEntityId: progressDisplay.chapterId,
-        unit: "page",
+        unit: PROGRESS_UNIT.page,
         index: Math.max(0, progressDisplay.currentPage - 1),
         total: progressDisplay.pageCount,
         mode: progressDisplay.readerMode,
@@ -426,7 +427,7 @@
     try {
       await updateEntityProgress(book.id, {
         currentEntityId: firstChapter.id,
-        unit: "page",
+        unit: PROGRESS_UNIT.page,
         index: 0,
         total: firstChapter.pageCount,
         mode: progressDisplay?.readerMode ?? "paged",

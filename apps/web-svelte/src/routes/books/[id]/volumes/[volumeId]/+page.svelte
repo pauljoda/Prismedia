@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { PROGRESS_UNIT } from "$lib/api/generated/codes";
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
@@ -206,7 +207,7 @@
     if (!position.chapter) return;
     await updateEntityProgress(book.id, {
       currentEntityId: position.chapter.id,
-      unit: "page",
+      unit: PROGRESS_UNIT.page,
       index: position.pageIndex,
       total: position.pageCount,
       mode: volumeProgress?.readerMode ?? "paged",

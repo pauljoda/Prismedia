@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { THUMBNAIL_HOVER_KIND } from "$lib/api/generated/codes";
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
@@ -197,7 +198,7 @@
     if (collection?.coverMode === "item") {
       return {
         ...primaryItem,
-        hover: { kind: "none" },
+        hover: { kind: THUMBNAIL_HOVER_KIND.none },
         href: undefined,
       };
     }
@@ -212,8 +213,8 @@
       cover: primaryItem.cover,
       fit: "cover",
       hover: mosaicAssets.length > 1
-        ? { kind: "image-sequence", assets: mosaicAssets }
-        : { kind: "none" },
+        ? { kind: THUMBNAIL_HOVER_KIND.imageSequence, assets: mosaicAssets }
+        : { kind: THUMBNAIL_HOVER_KIND.none },
       href: undefined,
     };
   }

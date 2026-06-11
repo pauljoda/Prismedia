@@ -125,7 +125,7 @@ public sealed class CollectionItemReadServiceTests {
                     row.SortOrder,
                     null,
                     null,
-                    "none",
+                    ThumbnailHoverKind.None,
                     null,
                     [],
                     [],

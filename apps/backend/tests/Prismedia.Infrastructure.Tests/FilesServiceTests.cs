@@ -28,12 +28,12 @@ public sealed class FilesServiceTests : IDisposable {
             response.Entries,
             folder => {
                 Assert.Equal("Movies", folder.Name);
-                Assert.Equal("directory", folder.Kind);
+                Assert.Equal(FileEntryKind.Directory, folder.Kind);
                 Assert.Equal("Movies", folder.Path);
             },
             file => {
                 Assert.Equal("loose.mp4", file.Name);
-                Assert.Equal("file", file.Kind);
+                Assert.Equal(FileEntryKind.File, file.Kind);
                 Assert.Equal("loose.mp4", file.Path);
             });
     }
@@ -119,7 +119,7 @@ public sealed class FilesServiceTests : IDisposable {
             CancellationToken.None);
 
         Assert.Equal(2, response.ScansQueued);
-        Assert.Equal(("skip.mkv", "file"), Persistence.Exclusions.Single());
+        Assert.Equal(("skip.mkv", FileEntryKind.File), Persistence.Exclusions.Single());
         Assert.Contains(JobType.ScanLibrary, Queue.Enqueued.Select(job => job.Type));
         Assert.Contains(JobType.ScanGallery, Queue.Enqueued.Select(job => job.Type));
     }
@@ -226,7 +226,7 @@ public sealed class FilesServiceTests : IDisposable {
         public Dictionary<Guid, FileLibraryRoot> Roots { get; } = new();
         public List<(string SourcePath, string TargetPath)> Rewrites { get; } = [];
         public HashSet<string> ExcludedPaths { get; } = new(StringComparer.OrdinalIgnoreCase);
-        public List<(string Path, string Kind)> Exclusions { get; } = [];
+        public List<(string Path, FileEntryKind Kind)> Exclusions { get; } = [];
         public List<FileLinkedEntity> LinkedEntities { get; } = [];
         public int LinkedEntityCalls { get; private set; }
 
@@ -270,7 +270,7 @@ public sealed class FilesServiceTests : IDisposable {
         public Task UpsertExclusionAsync(
             Guid rootId,
             string relativePath,
-            string kind,
+            FileEntryKind kind,
             CancellationToken cancellationToken) {
             ExcludedPaths.Add(relativePath);
             Exclusions.Add((relativePath, kind));

@@ -3,11 +3,19 @@
   import { cn } from "@prismedia/ui-svelte";
   import { assetUrl } from "$lib/api/orval-fetch";
   import type { EntityMetadataProposal } from "$lib/api/identify-types";
-  import { reviewImagePreviewUrl, type StructuralChildEntity } from "$lib/components/identify-review";
+  import {
+    reviewImagePreviewUrl,
+    structuralDescendantProposals,
+    type StructuralChildEntity,
+  } from "$lib/components/identify-review";
   import { aspectRatioForKind, toAspectRatioValue } from "$lib/entities/entity-thumbnail";
   import { useIdentifyStore } from "./identify-store.svelte";
 
   interface Props {
+    /**
+     * Local children still presented at this level — the parent excludes children the proposal
+     * has filed into a new container, so a resolving child visibly moves out of this grid.
+     */
     childEntities: StructuralChildEntity[];
     proposal: EntityMetadataProposal;
     /** True while the background cascade is still streaming children into this proposal. */
@@ -20,8 +28,11 @@
 
   const store = useIdentifyStore();
 
+  // Resolved children can sit nested inside provider containers (a flat-scanned book's chapters
+  // arrive inside the proposed volume nodes), so matching walks the whole proposal subtree.
+  const structuralNodes = $derived(structuralDescendantProposals(proposal));
   const matchedIds = $derived(
-    new Set((proposal.children ?? []).map((child) => child.targetEntityId).filter((id): id is string => Boolean(id))),
+    new Set(structuralNodes.map((child) => child.targetEntityId).filter((id): id is string => Boolean(id))),
   );
 
   // The cascade resolves children serially in this order, flushing each as it matches. So everything
@@ -36,7 +47,7 @@
   });
 
   function matchedProposal(childId: string): EntityMetadataProposal | null {
-    return (proposal.children ?? []).find((child) => child.targetEntityId === childId) ?? null;
+    return structuralNodes.find((child) => child.targetEntityId === childId) ?? null;
   }
 
   function statusFor(childId: string, index: number): "matched" | "loading" | "queued" | "none" {

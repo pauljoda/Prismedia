@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { THUMBNAIL_HOVER_KIND } from "$lib/api/generated/codes";
   import type { Snippet } from "svelte";
   import { goto } from "$app/navigation";
   import {
@@ -487,14 +488,14 @@
       return {
         ...(card.posterCard ?? entityReferenceToThumbnailCard(card.entity)),
         cover: { src: poster.src, alt: poster.alt, role: ENTITY_FILE_ROLE.poster },
-        hover: { kind: "none" },
+        hover: { kind: THUMBNAIL_HOVER_KIND.none },
       };
     }
 
     if (!isEditingActiveTab) return card.posterCard ?? null;
     return {
       ...entityReferenceToThumbnailCard(card.entity, { cover: null }),
-      hover: { kind: "none" },
+      hover: { kind: THUMBNAIL_HOVER_KIND.none },
     };
   }
 

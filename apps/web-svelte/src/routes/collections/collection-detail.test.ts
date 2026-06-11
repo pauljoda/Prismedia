@@ -91,6 +91,6 @@ describe("collection detail route", () => {
     expect(detailSource).toContain("detailCard.posterCard?.cover");
     expect(detailSource).toContain("cardsWithCovers");
     expect(detailSource).toContain('collection?.coverMode === "item"');
-    expect(detailSource).toContain('kind: "image-sequence"');
+    expect(detailSource).toContain("kind: THUMBNAIL_HOVER_KIND.imageSequence");
   });
 });

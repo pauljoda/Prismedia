@@ -257,7 +257,7 @@ public static class EntityCardProjector {
             entity.SortOrder,
             cover,
             gridThumb,
-            "none",
+            ThumbnailHoverKind.None,
             null,
             [],
             [],

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { FILE_ENTRY_KIND } from "$lib/api/generated/codes";
   import type { ContextMenuItem, ContextMenuOpenContext, FileTree, FileTreeDirectoryHandle } from "@pierre/trees";
   import type { FileActionId } from "$lib/files/file-actions";
   import { fileContextActions } from "$lib/files/file-actions";
@@ -318,7 +319,7 @@
       // branches, or the roots, back open.
       const expandedPaths = paths.filter((path) => {
         const meta = registry.get(path);
-        if (!meta || meta.kind !== "directory") return false;
+        if (!meta || meta.kind !== FILE_ENTRY_KIND.directory) return false;
         const item = tree?.getItem(path);
         return Boolean(item?.isDirectory() && (item as FileTreeDirectoryHandle).isExpanded());
       });

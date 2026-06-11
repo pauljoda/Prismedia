@@ -5,9 +5,9 @@ namespace Prismedia.Infrastructure.Persistence.Entities;
 public sealed class MediaFileIgnoreRow {
     public Guid LibraryRootId { get; set; }
     public string Path { get; set; } = string.Empty;
-    public string Kind { get; set; } = "file";
+    public string Kind { get; set; } = FileEntryKind.File.ToCode();
     public string EntityKindCode { get; set; } = string.Empty;
-    public string Reason { get; set; } = "deleted-from-library";
+    public string Reason { get; set; } = MediaFileIgnoreReason.DeletedFromLibrary.ToCode();
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }
@@ -127,7 +127,7 @@ public sealed class IdentifyQueueItemRow {
     public Guid EntityId { get; set; }
     public IdentifyQueueState State { get; set; } = IdentifyQueueState.Search;
     public string? ProviderCode { get; set; }
-    public string Action { get; set; } = "search";
+    public IdentifyAction Action { get; set; } = IdentifyAction.Search;
     public string? QueryJson { get; set; }
     public string? CandidatesJson { get; set; }
     public string? ProposalJson { get; set; }

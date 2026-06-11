@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { THUMBNAIL_HOVER_KIND } from "$lib/api/generated/codes";
   import { onDestroy } from "svelte";
   import { browser } from "$app/environment";
   import NsfwBlur from "../nsfw/NsfwBlur.svelte";
@@ -104,7 +105,7 @@
     if (kind === ENTITY_KIND.gallery) {
       const coverId =
         card.cover?.entityId ??
-        (card.hover.kind === "image-sequence" ? card.hover.assets[0]?.entityId : undefined);
+        (card.hover.kind === THUMBNAIL_HOVER_KIND.imageSequence ? card.hover.assets[0]?.entityId : undefined);
       // A gallery's representative cover is an image child; play it like an image.
       return coverId ? { id: coverId, kind: ENTITY_KIND.image } : null;
     }

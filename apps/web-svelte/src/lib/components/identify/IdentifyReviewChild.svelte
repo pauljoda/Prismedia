@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { THUMBNAIL_HOVER_KIND } from "$lib/api/generated/codes";
   import { proposalKindToEntityKind } from "$lib/entities/entity-codes";
   import {
     Check,
@@ -125,7 +126,7 @@
       sortOrder: null,
       coverUrl: null,
       coverThumbUrl: null,
-      hoverKind: "none",
+      hoverKind: THUMBNAIL_HOVER_KIND.none,
       hoverUrl: null,
       hoverImages: [],
       meta: [],

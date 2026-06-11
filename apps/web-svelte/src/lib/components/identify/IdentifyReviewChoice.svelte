@@ -99,8 +99,11 @@
     searching = true;
     store.error = null;
     try {
+      // Manual searches always come back as candidates: a stored external id must not
+      // re-lock the entity onto the match the user is here to change.
       const result = await store.identifyEntity(entity, activeProvider.id, {
         title: searchTitle.trim() || undefined,
+        requireChoice: true,
       });
       if (result?.state === "search") {
         searchedCandidates = result.candidates;

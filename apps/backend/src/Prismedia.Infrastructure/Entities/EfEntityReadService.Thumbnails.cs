@@ -141,7 +141,7 @@ public sealed partial class EfEntityReadService {
                 row.SortOrder,
                 coverUrl,
                 gridThumbByEntity.GetValueOrDefault(row.Id),
-                hoverUrl is null ? "none" : "sprite",
+                hoverUrl is null ? ThumbnailHoverKind.None : ThumbnailHoverKind.Sprite,
                 hoverUrl,
                 hoverImages,
                 ProjectThumbnailMeta(

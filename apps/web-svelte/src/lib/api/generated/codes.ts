@@ -169,6 +169,14 @@ export const SUBTITLE_STYLE = {
 
 export type SubtitleStyleCode = (typeof SUBTITLE_STYLE)[keyof typeof SUBTITLE_STYLE];
 
+export const IDENTIFY_ACTION = {
+  search: "search",
+  lookupId: "lookup-id",
+  lookupUrl: "lookup-url",
+} as const;
+
+export type IdentifyActionCode = (typeof IDENTIFY_ACTION)[keyof typeof IDENTIFY_ACTION];
+
 export const IDENTIFY_QUEUE_STATE = {
   search: "search",
   proposal: "proposal",
@@ -188,12 +196,54 @@ export const IDENTIFY_RESULT_STATUS = {
 
 export type IdentifyResultStatusCode = (typeof IDENTIFY_RESULT_STATUS)[keyof typeof IDENTIFY_RESULT_STATUS];
 
+export const IDENTIFY_APPLY_STATE = {
+  running: "running",
+  succeeded: "succeeded",
+  failed: "failed",
+} as const;
+
+export type IdentifyApplyStateCode = (typeof IDENTIFY_APPLY_STATE)[keyof typeof IDENTIFY_APPLY_STATE];
+
 export const FILE_SOURCE_KIND = {
   scan: "scan",
   custom: "custom",
 } as const;
 
 export type FileSourceKindCode = (typeof FILE_SOURCE_KIND)[keyof typeof FILE_SOURCE_KIND];
+
+export const FILE_ENTRY_KIND = {
+  directory: "directory",
+  file: "file",
+} as const;
+
+export type FileEntryKindCode = (typeof FILE_ENTRY_KIND)[keyof typeof FILE_ENTRY_KIND];
+
+export const THUMBNAIL_HOVER_KIND = {
+  none: "none",
+  sprite: "sprite",
+  imageSequence: "image-sequence",
+  trickplay: "trickplay",
+} as const;
+
+export type ThumbnailHoverKindCode = (typeof THUMBNAIL_HOVER_KIND)[keyof typeof THUMBNAIL_HOVER_KIND];
+
+export const PROGRESS_UNIT = {
+  item: "item",
+  page: "page",
+  chapter: "chapter",
+  track: "track",
+  cfi: "cfi",
+} as const;
+
+export type ProgressUnitCode = (typeof PROGRESS_UNIT)[keyof typeof PROGRESS_UNIT];
+
+export const READER_MODE = {
+  paged: "paged",
+  webtoon: "webtoon",
+  scrolled: "scrolled",
+} as const;
+
+export type ReaderModeCode = (typeof READER_MODE)[keyof typeof READER_MODE];
 
 export const REQUEST_PROVIDER_KIND = {
   radarr: "radarr",
