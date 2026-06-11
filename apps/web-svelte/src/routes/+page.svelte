@@ -50,7 +50,7 @@
     { kind: "image", label: "Images", icon: ImageIcon, href: "/images", display: "shelf" },
     { kind: "audio-library", label: "Audio", icon: Music, href: "/audio", display: "shelf" },
     { kind: "person", label: "People", icon: Users, href: "/people", display: "shelf" },
-    { kind: "studio", label: "Studios", icon: Building2, href: "/studios", display: "chips" },
+    { kind: "studio", label: "Studios", icon: Building2, href: "/studios", display: "shelf" },
     { kind: "tag", label: "Tags", icon: Tag, href: "/tags", display: "chips" },
   ];
 
@@ -317,25 +317,16 @@
           style:height="clamp(280px, 38vh, 420px)"
         >
           {#if heroCard.cover?.src}
-            <!-- Backdrop: the asset itself, blurred and dimmed (static asset treatment). -->
+            <!-- The artwork fills the entire banner; scrims keep the text legible. -->
             <img
               src={heroCard.cover.src}
               alt=""
-              aria-hidden="true"
-              class="absolute inset-0 h-full w-full scale-110 object-cover opacity-50 blur-2xl"
+              class="absolute inset-0 h-full w-full object-cover"
             />
-            <!-- Sharp media frame on wider screens. -->
-            <div class="absolute inset-y-0 right-0 hidden w-[52%] md:block">
-              <img
-                src={heroCard.cover.src}
-                alt=""
-                class="h-full w-full object-cover"
-              />
-              <div
-                class="absolute inset-0"
-                style:background="linear-gradient(90deg, #07080b 0%, rgba(7,8,11,0.45) 28%, rgba(7,8,11,0) 70%)"
-              ></div>
-            </div>
+            <div
+              class="absolute inset-0"
+              style:background="linear-gradient(90deg, rgba(7,8,11,0.88) 0%, rgba(7,8,11,0.55) 35%, rgba(7,8,11,0.05) 70%)"
+            ></div>
           {:else}
             <!-- No artwork: material gradient backdrop with a dim kind mark. -->
             {@const HeroIcon = heroFallbackIcon}
