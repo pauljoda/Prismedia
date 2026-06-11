@@ -174,6 +174,7 @@ public sealed class RequestFeatureTests {
             Assert.Equal("twin-peaks", document.RootElement.GetProperty("titleSlug").GetString());
             var seasons = document.RootElement.GetProperty("seasons").EnumerateArray().ToArray();
 
+            Assert.True(document.RootElement.GetProperty("seasonFolder").GetBoolean());
             Assert.Contains(seasons, season => season.TryGetProperty("seasonNumber", out var number) && number.GetInt32() == 0);
             Assert.True(seasons.Single(season => season.GetProperty("seasonNumber").GetInt32() == 0).GetProperty("monitored").GetBoolean());
             Assert.True(seasons.Single(season => season.GetProperty("seasonNumber").GetInt32() == 1).GetProperty("monitored").GetBoolean());
@@ -263,6 +264,8 @@ public sealed class RequestFeatureTests {
             }
 
             if (request.RequestUri!.AbsolutePath.EndsWith("/artist", StringComparison.Ordinal)) {
+                using var artistDocument = JsonDocument.Parse(body);
+                Assert.Equal("all", artistDocument.RootElement.GetProperty("addOptions").GetProperty("monitor").GetString());
                 return Json("""{ "id": 42 }""");
             }
 

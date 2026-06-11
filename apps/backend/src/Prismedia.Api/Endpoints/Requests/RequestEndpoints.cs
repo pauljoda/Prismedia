@@ -18,24 +18,30 @@ public static class RequestEndpoints {
             .WithSummary("Lists configured request service instances with credentials redacted.")
             .Produces<IReadOnlyList<RequestServiceInstanceSummary>>();
 
-        group.MapPost("/services", (
+        group.MapPost("/services", async (
             RequestServiceInstanceSaveRequest request,
             IRequestServiceInstanceStore store,
             CancellationToken cancellationToken) =>
-            store.SaveAsync(request, cancellationToken))
+            ValidateSaveRequest(request) is { } problem
+                ? Results.BadRequest(problem)
+                : Results.Ok(await store.SaveAsync(request, cancellationToken)))
             .WithName("SaveRequestService")
             .WithSummary("Creates or updates a request service instance.")
-            .Produces<RequestServiceInstanceSummary>();
+            .Produces<RequestServiceInstanceSummary>()
+            .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
 
-        group.MapPut("/services/{id:guid}", (
+        group.MapPut("/services/{id:guid}", async (
             Guid id,
             RequestServiceInstanceSaveRequest request,
             IRequestServiceInstanceStore store,
             CancellationToken cancellationToken) =>
-            store.SaveAsync(request with { Id = id }, cancellationToken))
+            ValidateSaveRequest(request) is { } problem
+                ? Results.BadRequest(problem)
+                : Results.Ok(await store.SaveAsync(request with { Id = id }, cancellationToken)))
             .WithName("UpdateRequestService")
             .WithSummary("Updates an existing request service instance.")
-            .Produces<RequestServiceInstanceSummary>();
+            .Produces<RequestServiceInstanceSummary>()
+            .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
 
         group.MapDelete("/services/{id:guid}", async (
             Guid id,
@@ -129,6 +135,19 @@ public static class RequestEndpoints {
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
         return group;
+    }
+
+    private static ApiProblem? ValidateSaveRequest(RequestServiceInstanceSaveRequest request) {
+        if (string.IsNullOrWhiteSpace(request.DisplayName)) {
+            return new ApiProblem(ApiProblemCodes.RequestServiceInvalid, "A display name is required.");
+        }
+
+        if (!Uri.TryCreate(request.BaseUrl, UriKind.Absolute, out var baseUrl) ||
+            (baseUrl.Scheme != Uri.UriSchemeHttp && baseUrl.Scheme != Uri.UriSchemeHttps)) {
+            return new ApiProblem(ApiProblemCodes.RequestServiceInvalid, "The base URL must be an absolute http or https URL.");
+        }
+
+        return null;
     }
 
     private static IReadOnlyList<TEnum> DecodeMany<TEnum>(IReadOnlyList<string>? values)

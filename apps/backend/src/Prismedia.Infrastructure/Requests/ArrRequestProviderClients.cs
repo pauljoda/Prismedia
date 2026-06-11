@@ -32,6 +32,7 @@ public static class ArrJsonFields {
     public const string RootFolderPath = "rootFolderPath";
     public const string Runtime = "runtime";
     public const string Seasons = "seasons";
+    public const string SeasonFolder = "seasonFolder";
     public const string SeasonNumber = "seasonNumber";
     public const string SeriesType = "seriesType";
     public const string Studios = "studios";
@@ -70,6 +71,9 @@ public static class LidarrProtocol {
     public const string ForeignArtistId = "foreignArtistId";
     public const string ArtistName = "artistName";
     public const string MetadataProfileId = "metadataProfileId";
+    public const string Monitor = "monitor";
+    public const string MonitorAll = "all";
+    public const string MonitorNone = "none";
     public const string ReleaseDate = "releaseDate";
     public const string SearchForMissingAlbums = "searchForMissingAlbums";
     public const string Status = "status";
@@ -176,6 +180,7 @@ public sealed class SonarrRequestProviderClient(HttpClient http) : ArrRequestPro
         if (!payload.ContainsKey(ArrJsonFields.SeriesType)) {
             payload[ArrJsonFields.SeriesType] = SonarrProtocol.SeriesTypeStandard;
         }
+        payload[ArrJsonFields.SeasonFolder] = true;
         payload[ArrJsonFields.Seasons] = seasons;
         payload[ArrJsonFields.AddOptions] = new JsonObject {
             [SonarrProtocol.SearchForMissingEpisodes] = request.SearchNow
@@ -228,6 +233,7 @@ public sealed class LidarrRequestProviderClient(HttpClient http) : ArrRequestPro
         payload[ArrJsonFields.RootFolderPath] = request.RootFolderPath ?? instance.DefaultRootFolderPath;
         payload[ArrJsonFields.Monitored] = request.Monitored;
         payload[ArrJsonFields.AddOptions] = new JsonObject {
+            [LidarrProtocol.Monitor] = request.Monitored ? LidarrProtocol.MonitorAll : LidarrProtocol.MonitorNone,
             [LidarrProtocol.SearchForMissingAlbums] = request.SearchNow
         };
 
@@ -309,12 +315,12 @@ public abstract class ArrRequestProviderClient(HttpClient http, RequestProviderK
         using var request = BuildRequest(instance, method, path, JsonContent.Create(payload));
         using var response = await http.SendAsync(request, cancellationToken);
         response.EnsureSuccessStatusCode();
-        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        if (stream.Length == 0) {
+        var content = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (string.IsNullOrWhiteSpace(content)) {
             return default;
         }
 
-        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+        using var document = JsonDocument.Parse(content);
         return document.RootElement.Clone();
     }
 

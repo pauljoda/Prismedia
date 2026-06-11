@@ -36,22 +36,48 @@ public sealed class RequestSearchService(IRequestServiceInstanceStore store, IRe
 
         var instances = await store.ListDetailsAsync(cancellationToken);
         var sourceFilter = request.Sources.Count == 0 ? null : request.Sources.ToHashSet();
+        var targets = instances
+            .Where(instance => sourceFilter is null || sourceFilter.Contains(instance.Kind))
+            .Where(instance => CanServeRequestedKinds(instance.Kind, request.Kinds))
+            .ToArray();
+
+        var searches = await Task.WhenAll(targets.Select(instance => SearchInstanceAsync(instance, request, cancellationToken)));
+
         var results = new List<RequestSearchResult>();
         var errors = new List<RequestProviderHealth>();
-
-        foreach (var instance in instances.Where(instance => sourceFilter is null || sourceFilter.Contains(instance.Kind))) {
-            try {
-                var found = await clients.Get(instance.Kind).SearchAsync(instance, request.Query, cancellationToken);
-                results.AddRange(request.Kinds.Count == 0
-                    ? found
-                    : found.Where(result => request.Kinds.Contains(result.Kind)));
-            } catch (Exception ex) when (ex is not OperationCanceledException) {
-                errors.Add(new RequestProviderHealth(instance.Id, instance.Kind, instance.DisplayName, ex.Message));
+        foreach (var (found, error) in searches) {
+            results.AddRange(found);
+            if (error is not null) {
+                errors.Add(error);
             }
         }
 
         return new RequestSearchResponse(results, errors);
     }
+
+    private async Task<(IReadOnlyList<RequestSearchResult> Results, RequestProviderHealth? Error)> SearchInstanceAsync(
+        RequestServiceInstanceDetail instance,
+        RequestSearchRequest request,
+        CancellationToken cancellationToken) {
+        try {
+            var found = await clients.Get(instance.Kind).SearchAsync(instance, request.Query, cancellationToken);
+            return (request.Kinds.Count == 0
+                ? found
+                : found.Where(result => request.Kinds.Contains(result.Kind)).ToArray(),
+                null);
+        } catch (Exception ex) when (ex is not OperationCanceledException) {
+            return ([], new RequestProviderHealth(instance.Id, instance.Kind, instance.DisplayName, ex.Message));
+        }
+    }
+
+    /// <summary>Skips upstream calls for providers that can never return the requested media kinds.</summary>
+    private static bool CanServeRequestedKinds(RequestProviderKind provider, IReadOnlyList<RequestMediaKind> kinds) =>
+        kinds.Count == 0 || kinds.Any(kind => provider switch {
+            RequestProviderKind.Radarr => kind == RequestMediaKind.Movie,
+            RequestProviderKind.Sonarr => kind == RequestMediaKind.Series,
+            RequestProviderKind.Lidarr => kind is RequestMediaKind.Artist or RequestMediaKind.Album,
+            _ => true
+        });
 }
 
 /// <summary>Loads normalized detail metadata for an external request result.</summary>

@@ -79,6 +79,33 @@ public sealed class RequestEndpointTests {
     }
 
     [Fact]
+    public async Task SaveRequestServiceRejectsMissingNameAndRelativeBaseUrl() {
+        using var factory = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(builder => {
+                builder.ConfigureServices(services => {
+                    services.AddSingleton<IRequestServiceInstanceStore, FakeRequestServiceInstanceStore>();
+                    services.AddSingleton<FakeRequestProviderClient>();
+                    services.AddSingleton<IRequestProviderClient>(provider => provider.GetRequiredService<FakeRequestProviderClient>());
+                    services.AddSingleton<IRequestProviderClientFactory, FakeRequestProviderClientFactory>();
+                });
+            })
+            .WithTestAuth();
+        using var client = factory.CreateAuthenticatedClient();
+        var jsonOptions = new System.Text.Json.JsonSerializerOptions {
+            PropertyNameCaseInsensitive = true
+        };
+        jsonOptions.Converters.Add(new CodecJsonConverterFactory());
+
+        var missingName = await client.PostAsJsonAsync("/api/requests/services", new RequestServiceInstanceSaveRequest(
+            null, RequestProviderKind.Radarr, "  ", "http://radarr.test", "secret", null, null, null, true, false), jsonOptions);
+        var relativeUrl = await client.PostAsJsonAsync("/api/requests/services", new RequestServiceInstanceSaveRequest(
+            null, RequestProviderKind.Radarr, "Movies", "radarr:7878", "secret", null, null, null, true, false), jsonOptions);
+
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, missingName.StatusCode);
+        Assert.Equal(System.Net.HttpStatusCode.BadRequest, relativeUrl.StatusCode);
+    }
+
+    [Fact]
     public async Task RequestDetailReturnsNotFoundWhenServiceDoesNotMatchRequestedSource() {
         using var factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder => {
