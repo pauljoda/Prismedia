@@ -84,13 +84,11 @@
     loadState = "loading";
     errorMessage = null;
 
-    const nextContext = bookReaderContextFromUrl(url);
-    if (!nextContext) {
-      context = null;
-      errorMessage = "Reader link is missing a valid context.";
-      loadState = "error";
-      return;
-    }
+    // A bare /books/[id]/reader URL (bookmark, refresh, shared link) carries no
+    // context params; fall back to resuming the book itself, which lands on the
+    // in-progress chapter or the first chapter.
+    const nextContext: BookReaderRouteContext =
+      bookReaderContextFromUrl(url) ?? { kind: "book", id: bookId, command: "resume" };
 
     try {
       const nextBook = await fetchBook(bookId);
