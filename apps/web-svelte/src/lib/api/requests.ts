@@ -70,7 +70,7 @@ export async function fetchRequestDetail(params: {
 }): Promise<RequestDetailResponse> {
   return unwrapGenerated(
     await getRequestDetailRequest(params.source, params.kind, params.externalId, {
-      serviceId: params.serviceId ?? undefined,
+      serviceId: params.serviceId || undefined,
     }),
     "Failed to load request detail",
   );
