@@ -73,7 +73,14 @@ public static class SonarrProtocol {
 public static class LidarrProtocol {
     public const string ArtistEndpoint = "artist";
     public const string ArtistLookupEndpoint = "artist/lookup";
+    public const string AlbumEndpoint = "album";
     public const string AlbumLookupEndpoint = "album/lookup";
+    public const string AlbumMonitorEndpoint = "album/monitor";
+    public const string CommandEndpoint = "command";
+    public const string CommandName = "name";
+    public const string AlbumSearchCommand = "AlbumSearch";
+    public const string ForeignAlbumIdQuery = "foreignAlbumId";
+    public const string SearchForNewAlbum = "searchForNewAlbum";
     /// <summary>Lookup term prefix that makes Lidarr resolve a MusicBrainz id instead of text-searching it.</summary>
     public const string MbidSearchPrefix = "lidarr:";
     public const string Artist = "artist";
@@ -279,8 +286,8 @@ public sealed class LidarrRequestProviderClient(HttpClient http) : ArrRequestPro
     }
 
     public override async Task<RequestSubmitResponse> SubmitAsync(RequestServiceInstanceDetail instance, RequestDetailResponse detail, RequestSubmitRequest request, CancellationToken cancellationToken) {
-        if (request.Kind != RequestMediaKind.Artist) {
-            throw new NotSupportedException("Lidarr standalone album requests require an existing artist context; submit is disabled unless the request is for an artist with optional album monitoring.");
+        if (request.Kind == RequestMediaKind.Album) {
+            return await SubmitAlbumAsync(instance, request, cancellationToken);
         }
 
         var payload = ToObject(await LookupArtistAsync(instance, detail.ExternalId, cancellationToken));
@@ -297,6 +304,53 @@ public sealed class LidarrRequestProviderClient(HttpClient http) : ArrRequestPro
         await SendJsonAsync(instance, HttpMethod.Post, $"{ApiPath}/{LidarrProtocol.ArtistEndpoint}", payload, cancellationToken);
 
         return new RequestSubmitResponse(true, null, null);
+    }
+
+    /// <summary>
+    /// Requests a single album. When the album's artist is already in the Lidarr library the album
+    /// row exists too, so it is monitored (plus an optional search command); otherwise the album is
+    /// added via POST /album with its artist embedded unmonitored, so only this album is fetched.
+    /// </summary>
+    private async Task<RequestSubmitResponse> SubmitAlbumAsync(RequestServiceInstanceDetail instance, RequestSubmitRequest request, CancellationToken cancellationToken) {
+        var existing = await GetArrayAsync(instance, $"{ApiPath}/{LidarrProtocol.AlbumEndpoint}?{LidarrProtocol.ForeignAlbumIdQuery}={Uri.EscapeDataString(request.ExternalId)}", cancellationToken);
+        var libraryAlbumId = existing.Select(album => Int(album, ArrJsonFields.Id)).FirstOrDefault(id => id > 0);
+        if (libraryAlbumId is { } albumId) {
+            await SendJsonAsync(instance, HttpMethod.Put, $"{ApiPath}/{LidarrProtocol.AlbumMonitorEndpoint}", new JsonObject {
+                [ArrJsonFields.AlbumIds] = new JsonArray(albumId),
+                [ArrJsonFields.Monitored] = true
+            }, cancellationToken);
+            if (request.SearchNow) {
+                await SendJsonAsync(instance, HttpMethod.Post, $"{ApiPath}/{LidarrProtocol.CommandEndpoint}", new JsonObject {
+                    [LidarrProtocol.CommandName] = LidarrProtocol.AlbumSearchCommand,
+                    [ArrJsonFields.AlbumIds] = new JsonArray(albumId)
+                }, cancellationToken);
+            }
+
+            return new RequestSubmitResponse(true, albumId.ToString(), "Album was already in Lidarr; it is now monitored.");
+        }
+
+        var payload = ToObject(await LookupAlbumAsync(instance, request.ExternalId, cancellationToken));
+        payload[ArrJsonFields.Monitored] = true;
+        var artist = payload[LidarrProtocol.Artist] as JsonObject;
+        if (artist is null) {
+            artist = [];
+            payload[LidarrProtocol.Artist] = artist;
+        }
+        artist[ArrJsonFields.QualityProfileId] = request.QualityProfileId ?? instance.DefaultQualityProfileId;
+        artist[LidarrProtocol.MetadataProfileId] = request.MetadataProfileId ?? instance.DefaultMetadataProfileId;
+        artist[ArrJsonFields.RootFolderPath] = request.RootFolderPath ?? instance.DefaultRootFolderPath;
+        artist[ArrJsonFields.Monitored] = false;
+        artist[ArrJsonFields.AddOptions] = new JsonObject {
+            [LidarrProtocol.Monitor] = LidarrProtocol.MonitorNone,
+            [LidarrProtocol.SearchForMissingAlbums] = false
+        };
+        ApplyDefaultTags(artist, instance);
+        payload[ArrJsonFields.AddOptions] = new JsonObject {
+            [LidarrProtocol.SearchForNewAlbum] = request.SearchNow
+        };
+
+        var response = await SendJsonAsync(instance, HttpMethod.Post, $"{ApiPath}/{LidarrProtocol.AlbumEndpoint}", payload, cancellationToken);
+        return Submitted(response);
     }
 
     /// <summary>Resolves an artist by MusicBrainz id using Lidarr's <c>lidarr:</c> lookup prefix; plain text terms never match MBIDs.</summary>

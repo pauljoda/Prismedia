@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from "svelte";
   import { page } from "$app/state";
   import { Check, ChevronLeft, Loader2, Send, Settings } from "@lucide/svelte";
   import { Badge, Button, Checkbox, Select } from "@prismedia/ui-svelte";
@@ -66,15 +65,24 @@
     detail?.serviceOptions ?? { qualityProfiles: [], rootFolders: [], metadataProfiles: [], tags: [] },
   );
 
-  const submitDisabledReason = $derived(
-    detail?.kind === REQUEST_MEDIA_KIND.album
-      ? "Standalone album requests are not supported yet — request the artist instead."
-      : null,
-  );
-
   const heroBackdrop = $derived(cssUrl(detail?.backdropUrl ?? detail?.posterUrl ?? null));
 
-  onMount(async () => {
+  // Reload whenever the route target changes — discography links navigate between
+  // detail pages in place, so onMount alone would leave stale content on screen.
+  let loadedKey = $state("");
+  $effect(() => {
+    const key = `${params.kind}:${params.id}:${sourceQuery ?? ""}:${initialServiceId ?? ""}`;
+    if (key === loadedKey) return;
+    loadedKey = key;
+    void initialize();
+  });
+
+  async function initialize() {
+    loading = true;
+    detail = null;
+    error = null;
+    message = null;
+    selectedChildIds = [];
     try {
       services = await fetchRequestServices();
       const resolvedSource = sourceQuery ?? inferRequestSourceForKind(params.kind);
@@ -103,7 +111,7 @@
     } finally {
       loading = false;
     }
-  });
+  }
 
   function cssUrl(value: string | null): string | null {
     if (!value) return null;
@@ -147,7 +155,7 @@
   }
 
   async function handleSubmit() {
-    if (!detail || !selectedService || submitDisabledReason) return;
+    if (!detail || !selectedService) return;
     submitting = true;
     error = null;
     message = null;
@@ -345,8 +353,8 @@
               </div>
               {#if detail.source === REQUEST_PROVIDER_KIND.lidarr}
                 <p class="text-[0.72rem] text-text-muted">
-                  Open an album to review its tracks. Requesting the artist adds them to Lidarr,
-                  which monitors releases per its own settings.
+                  Open an album to review its tracks and request just that album. Requesting the
+                  artist here adds their whole catalog to Lidarr instead.
                 </p>
               {/if}
             {/if}
@@ -465,9 +473,6 @@
             </label>
           </div>
 
-          {#if submitDisabledReason}
-            <p class="text-[0.75rem] leading-relaxed text-warning-text">{submitDisabledReason}</p>
-          {/if}
           {#if error}
             <p class="text-[0.75rem] leading-relaxed text-error-text">{error}</p>
           {/if}
@@ -481,7 +486,7 @@
           <Button
             type="button"
             variant="primary"
-            disabled={!selectedService || submitting || !!submitDisabledReason}
+            disabled={!selectedService || submitting}
             onclick={() => void handleSubmit()}
             class="w-full gap-2"
           >

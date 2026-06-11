@@ -301,10 +301,33 @@ public sealed class RequestFeatureTests {
     }
 
     [Fact]
-    public async Task LidarrClientMapsAlbumsButRejectsStandaloneAlbumSubmit() {
+    public async Task LidarrClientMapsAlbumsAndSubmitsStandaloneAlbumWithUnmonitoredArtist() {
+        var calls = new List<string>();
         var handler = new FakeHttpHandler((request, body) => {
-            if (request.RequestUri!.AbsolutePath.EndsWith("/artist/lookup", StringComparison.Ordinal)) {
+            calls.Add($"{request.Method} {request.RequestUri!.AbsolutePath}");
+            if (request.RequestUri.Host == "musicbrainz.org") {
+                return Json("""{ "releases": [] }""");
+            }
+
+            if (request.RequestUri.AbsolutePath.EndsWith("/artist/lookup", StringComparison.Ordinal)) {
                 return Json("[]");
+            }
+
+            if (request.RequestUri.AbsolutePath.EndsWith("/api/v1/album", StringComparison.Ordinal) && request.Method == HttpMethod.Get) {
+                return Json("[]");
+            }
+
+            if (request.RequestUri.AbsolutePath.EndsWith("/api/v1/album", StringComparison.Ordinal) && request.Method == HttpMethod.Post) {
+                using var document = JsonDocument.Parse(body);
+                Assert.True(document.RootElement.GetProperty("monitored").GetBoolean());
+                Assert.True(document.RootElement.GetProperty("addOptions").GetProperty("searchForNewAlbum").GetBoolean());
+                var artist = document.RootElement.GetProperty("artist");
+                Assert.Equal(1, artist.GetProperty("qualityProfileId").GetInt32());
+                Assert.Equal(2, artist.GetProperty("metadataProfileId").GetInt32());
+                Assert.Equal("/music", artist.GetProperty("rootFolderPath").GetString());
+                Assert.False(artist.GetProperty("monitored").GetBoolean());
+                Assert.Equal("none", artist.GetProperty("addOptions").GetProperty("monitor").GetString());
+                return Json("""{ "id": 77 }""");
             }
 
             return Json("""
@@ -315,6 +338,7 @@ public sealed class RequestFeatureTests {
                     "title": "Low",
                     "releaseDate": "1977-01-14",
                     "overview": "Album",
+                    "artist": { "foreignArtistId": "mb-artist", "artistName": "David Bowie" },
                     "images": [{ "coverType": "cover", "remoteUrl": "https://images.test/low.jpg" }]
                   }
                 ]
@@ -330,11 +354,53 @@ public sealed class RequestFeatureTests {
         Assert.Equal("mb-album", album.ExternalId);
         Assert.Equal(1977, album.Year);
         Assert.Equal("https://images.test/low.jpg", detail.PosterUrl);
-        await Assert.ThrowsAsync<NotSupportedException>(() => client.SubmitAsync(
+
+        var response = await client.SubmitAsync(
             Instance(RequestProviderKind.Lidarr),
             detail,
             new RequestSubmitRequest(Guid.NewGuid(), RequestProviderKind.Lidarr, RequestMediaKind.Album, "mb-album", "Low", 1, "/music", 2, true, true, []),
-            CancellationToken.None));
+            CancellationToken.None);
+
+        Assert.True(response.Submitted);
+        Assert.Equal("77", response.UpstreamId);
+        Assert.Contains("POST /api/v1/album", calls);
+    }
+
+    [Fact]
+    public async Task LidarrAlbumSubmitMonitorsAlbumAlreadyInLibrary() {
+        var calls = new List<string>();
+        var handler = new FakeHttpHandler((request, body) => {
+            calls.Add($"{request.Method} {request.RequestUri!.AbsolutePath}");
+            if (request.RequestUri.AbsolutePath.EndsWith("/api/v1/album", StringComparison.Ordinal) && request.Method == HttpMethod.Get) {
+                return Json("""[{ "id": 42, "foreignAlbumId": "mb-album", "monitored": false }]""");
+            }
+
+            if (request.RequestUri.AbsolutePath.EndsWith("/album/monitor", StringComparison.Ordinal)) {
+                using var monitorDocument = JsonDocument.Parse(body);
+                Assert.Equal([42], monitorDocument.RootElement.GetProperty("albumIds").EnumerateArray().Select(id => id.GetInt32()).ToArray());
+                Assert.True(monitorDocument.RootElement.GetProperty("monitored").GetBoolean());
+                return Json("""{}""");
+            }
+
+            Assert.EndsWith("/command", request.RequestUri.AbsolutePath);
+            using var commandDocument = JsonDocument.Parse(body);
+            Assert.Equal("AlbumSearch", commandDocument.RootElement.GetProperty("name").GetString());
+            Assert.Equal([42], commandDocument.RootElement.GetProperty("albumIds").EnumerateArray().Select(id => id.GetInt32()).ToArray());
+            return Json("""{}""");
+        });
+        var client = new LidarrRequestProviderClient(new HttpClient(handler));
+        var detail = new RequestDetailResponse(RequestProviderKind.Lidarr, RequestMediaKind.Album, "mb-album", "Low", null, null, null, null, null, null, null, null, null, [], [], [], [], [], new RequestServiceOptionsResponse([], [], [], []));
+
+        var response = await client.SubmitAsync(
+            Instance(RequestProviderKind.Lidarr),
+            detail,
+            new RequestSubmitRequest(Guid.NewGuid(), RequestProviderKind.Lidarr, RequestMediaKind.Album, "mb-album", "Low", 1, "/music", 2, true, true, []),
+            CancellationToken.None);
+
+        Assert.True(response.Submitted);
+        Assert.Equal("42", response.UpstreamId);
+        Assert.Contains("PUT /api/v1/album/monitor", calls);
+        Assert.Contains("POST /api/v1/command", calls);
     }
 
     [Fact]
