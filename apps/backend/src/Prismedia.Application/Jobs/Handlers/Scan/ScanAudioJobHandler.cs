@@ -49,16 +49,18 @@ public sealed class ScanAudioJobHandler(
         logger.LogInformation("ScanAudio: resolved {ArtistCount} artists and {AlbumCount} albums in {Label}",
             layout.Artists.Count, layout.Albums.Count, root.Label);
 
-        // Albums and loose tracks are auto-identify candidates; the artist grouping is identified
-        // on demand, so it is excluded from the scan cascade.
+        // Albums, loose tracks, and artist groupings are all auto-identify candidates. The artist
+        // identifies for its own metadata/artwork only; each album stays its own auto-identify root.
         var autoIdentifyIds = new List<Guid>();
 
         // 1. Artist groupings.
         var artistSortOrders = SiblingSortOrders(layout.Artists.Select(artist => artist.Path).ToList());
         var artistIdsByPath = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
         foreach (var artist in layout.Artists) {
-            artistIdsByPath[artist.Path] = await audio.UpsertMusicArtistAsync(
+            var artistId = await audio.UpsertMusicArtistAsync(
                 artist.Path, artist.Title, root.Id, artistSortOrders[artist.Path], root.IsNsfw, cancellationToken);
+            artistIdsByPath[artist.Path] = artistId;
+            autoIdentifyIds.Add(artistId);
         }
 
         // 2. Albums, parented to their artist when one exists.

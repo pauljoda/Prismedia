@@ -260,6 +260,39 @@ public sealed class AutoIdentifyRunnerTests {
     }
 
     [Fact]
+    public async Task AppliesMusicArtistWithoutCascadingIntoItsAlbumRoots() {
+        await using var db = CreateContext();
+        var artistId = await SeedVideoAsync(
+            db,
+            organized: false,
+            kind: EntityKindRegistry.MusicArtist.Code,
+            title: "The Beatles");
+        var settings = await ConfigureAsync(db, enabled: true, providers: ["musicbrainz"], confidencePercent: 90m);
+        var identify = new FakeIdentifyProvider {
+            ProposalsByProvider = {
+                ["musicbrainz"] = Proposal("musicbrainz", confidence: 0.95m, title: "The Beatles", targetKind: ProposalKind.MusicArtist),
+            },
+            SupportedKindsByProvider = {
+                ["musicbrainz"] = [
+                    EntityKindRegistry.MusicArtist.Code,
+                    EntityKindRegistry.AudioLibrary.Code,
+                    EntityKindRegistry.AudioTrack.Code,
+                ],
+            },
+        };
+        var runner = new AutoIdentifyRunner(settings, identify, db, NullLogger<AutoIdentifyRunner>.Instance);
+
+        var result = await runner.RunAsync(artistId, CancellationToken.None);
+
+        Assert.True(result.Applied);
+        Assert.Equal("musicbrainz", result.Provider);
+        Assert.Single(identify.ApplyCalls);
+        // Albums under the artist are independent auto-identify roots; the artist identify must
+        // not re-enumerate them as cascading children.
+        Assert.All(identify.CascadeChildrenCalls, cascade => Assert.False(cascade));
+    }
+
+    [Fact]
     public async Task MarksAppliedProposalTreeOrganizedBeforeAutoApply() {
         await using var db = CreateContext();
         var albumId = await SeedVideoAsync(db, organized: false, kind: EntityKindRegistry.AudioLibrary.Code, title: "What You Want (2020)");
@@ -485,6 +518,7 @@ public sealed class AutoIdentifyRunnerTests {
         /// <summary>Optional manifest-style declared kinds per provider; providers absent here match any kind.</summary>
         public Dictionary<string, string[]> SupportedKindsByProvider { get; } = new(StringComparer.Ordinal);
         public List<(Guid EntityId, string Provider, IdentifyQuery? Query)> IdentifyCalls { get; } = [];
+        public List<bool> CascadeChildrenCalls { get; } = [];
         public List<(IReadOnlyCollection<string> Fields, IReadOnlyDictionary<string, string?>? SelectedImages)> ApplyCalls { get; } = [];
         public List<EntityMetadataProposal> AppliedProposals { get; } = [];
 
@@ -514,6 +548,7 @@ public sealed class AutoIdentifyRunnerTests {
             IReadOnlyDictionary<string, string>? parentExternalIds, bool hideNsfw, CancellationToken cancellationToken,
             bool cascadeChildren = true, IIdentifyCascadeSink? sink = null) {
             IdentifyCalls.Add((entityId, providerId, query));
+            CascadeChildrenCalls.Add(cascadeChildren);
             if (ErrorsByProvider.TryGetValue(providerId, out var error)) {
                 return Task.FromResult(new IdentifyPluginResponse(false, null, error));
             }

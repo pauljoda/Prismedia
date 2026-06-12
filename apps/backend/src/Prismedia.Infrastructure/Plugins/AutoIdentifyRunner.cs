@@ -73,6 +73,11 @@ public sealed class AutoIdentifyRunner(
             .Select(provider => provider.Id)
             .ToHashSet(StringComparer.Ordinal);
 
+        // An artist grouping identifies for its own metadata and artwork only. Its albums are
+        // independent auto-identify roots, so cascading the artist into them would duplicate and
+        // race that per-album work.
+        var cascadeChildren = entity.KindCode != EntityKindRegistry.MusicArtist.Code;
+
         var queriedProvider = false;
         foreach (var providerId in config.Providers) {
             cancellationToken.ThrowIfCancellationRequested();
@@ -83,7 +88,7 @@ public sealed class AutoIdentifyRunner(
             queriedProvider = true;
             IdentifyPluginResponse response;
             try {
-                response = await identify.IdentifyAsync(entityId, providerId, query: null, parentExternalIds: null, hideNsfw: false, cancellationToken);
+                response = await identify.IdentifyAsync(entityId, providerId, query: null, parentExternalIds: null, hideNsfw: false, cancellationToken, cascadeChildren);
             } catch (Exception ex) {
                 logger.LogWarning(ex, "AutoIdentify: provider {Provider} failed for entity {EntityId}", providerId, entityId);
                 continue;
@@ -113,7 +118,8 @@ public sealed class AutoIdentifyRunner(
                         new IdentifyQuery(Title: null, Url: null, ExternalIds: candidate.ExternalIds),
                         parentExternalIds: null,
                         hideNsfw: false,
-                        cancellationToken);
+                        cancellationToken,
+                        cascadeChildren);
                 } catch (Exception ex) {
                     logger.LogWarning(ex, "AutoIdentify: provider {Provider} failed to hydrate candidate for entity {EntityId}", providerId, entityId);
                     continue;

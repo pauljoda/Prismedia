@@ -6,8 +6,10 @@ namespace Prismedia.Application.Plugins;
 /// Maps stored entity kind codes to the high-level media selector kinds exposed in the Auto Identify
 /// settings (video, gallery, image, audio, book). Container roots such as a video series or audio
 /// library map to the same selector as their media, so a top-level series is covered by the "video"
-/// selection. Kinds absent from this map (intermediate seasons/volumes, taxonomy entities, etc.) are
-/// never auto-identified directly — they are reached by cascading from their identified root.
+/// selection. A music artist grouping is also "audio": the artist identifies for its own metadata
+/// and artwork while its albums stay independent auto-identify roots. Kinds absent from this map
+/// (intermediate seasons/volumes, taxonomy entities, etc.) are never auto-identified directly —
+/// they are reached by cascading from their identified root.
 /// </summary>
 public static class AutoIdentifySelectorKinds {
     private static readonly IReadOnlyDictionary<string, string> ByEntityKind =
@@ -19,6 +21,7 @@ public static class AutoIdentifySelectorKinds {
             [EntityKindRegistry.Image.Code] = "image",
             [EntityKindRegistry.AudioTrack.Code] = "audio",
             [EntityKindRegistry.AudioLibrary.Code] = "audio",
+            [EntityKindRegistry.MusicArtist.Code] = "audio",
             [EntityKindRegistry.Book.Code] = "book",
         };
 
