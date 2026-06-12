@@ -224,8 +224,12 @@ internal static class StructuralChildMatcher {
         token.Equals("local", StringComparison.OrdinalIgnoreCase) ||
         token.Equals("episode", StringComparison.OrdinalIgnoreCase) ||
         token.Equals("ep", StringComparison.OrdinalIgnoreCase) ||
+        token.Equals("season", StringComparison.OrdinalIgnoreCase) ||
+        token.Equals("series", StringComparison.OrdinalIgnoreCase) ||
         token.Equals("track", StringComparison.OrdinalIgnoreCase) ||
         token.Equals("song", StringComparison.OrdinalIgnoreCase) ||
+        token.Equals("volume", StringComparison.OrdinalIgnoreCase) ||
+        token.Equals("vol", StringComparison.OrdinalIgnoreCase) ||
         token.Equals("chapter", StringComparison.OrdinalIgnoreCase) ||
         token.Equals("page", StringComparison.OrdinalIgnoreCase) ||
         token.Equals("part", StringComparison.OrdinalIgnoreCase);

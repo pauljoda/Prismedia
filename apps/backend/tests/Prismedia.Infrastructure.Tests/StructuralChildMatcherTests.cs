@@ -51,6 +51,20 @@ public sealed class StructuralChildMatcherTests {
     }
 
     [Fact]
+    public void CountMismatchStillBindsGenericSeasonSeriesTitleByNumber() {
+        var localSeason = Local(EntityKindRegistry.VideoSeason.Code, "Season 3", 3);
+        var providerSeason = Proposal(ProposalKind.VideoSeason, "Series 3", ("seasonNumber", 3));
+
+        var match = StructuralChildMatcher.FindProviderChild(
+            localSeason,
+            [providerSeason],
+            new HashSet<int>(),
+            cautious: true);
+
+        Assert.Same(providerSeason, match);
+    }
+
+    [Fact]
     public void CountMismatchDoesNotBindAlbumTrackWhenNumberMatchesButTitleConflicts() {
         var localTrack = Local(EntityKindRegistry.AudioTrack.Code, "Local Hidden Track", 7);
         var providerTrack = Proposal(ProposalKind.AudioTrack, "Provider Bonus Track", ("trackNumber", 7));
