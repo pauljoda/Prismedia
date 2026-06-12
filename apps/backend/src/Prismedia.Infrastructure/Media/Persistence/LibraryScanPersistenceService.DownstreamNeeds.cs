@@ -161,17 +161,17 @@ public sealed partial class LibraryScanPersistenceService {
 
         // Load the scanned entities plus their ancestor chain in waves (libraries are only a few
         // levels deep), then walk each scanned entity up to its top-level ancestor.
-        var info = new Dictionary<Guid, (string KindCode, string Title, Guid? ParentId)>();
+        var info = new Dictionary<Guid, (string KindCode, string Title, Guid? ParentId, int AutoIdentifyAttempts)>();
         var toLoad = new HashSet<Guid>(entityIds);
         while (toLoad.Count > 0) {
             var batch = toLoad.ToList();
             toLoad.Clear();
             var rows = await _db.Entities.AsNoTracking()
                 .Where(entity => batch.Contains(entity.Id))
-                .Select(entity => new { entity.Id, entity.KindCode, entity.Title, entity.ParentEntityId })
+                .Select(entity => new { entity.Id, entity.KindCode, entity.Title, entity.ParentEntityId, entity.AutoIdentifyAttempts })
                 .ToListAsync(cancellationToken);
             foreach (var row in rows) {
-                info[row.Id] = (row.KindCode, row.Title, row.ParentEntityId);
+                info[row.Id] = (row.KindCode, row.Title, row.ParentEntityId, row.AutoIdentifyAttempts);
                 if (row.ParentEntityId is { } parentId && !info.ContainsKey(parentId)) {
                     toLoad.Add(parentId);
                 }
@@ -193,7 +193,8 @@ public sealed partial class LibraryScanPersistenceService {
                 current = parent;
             }
 
-            if (!roots.ContainsKey(current) && info.TryGetValue(current, out var rootInfo)) {
+            if (!roots.ContainsKey(current) && info.TryGetValue(current, out var rootInfo) &&
+                rootInfo.AutoIdentifyAttempts < AutoIdentifyPolicy.MaxAttemptsPerEntity) {
                 roots[current] = new AutoIdentifyRootTarget(current, rootInfo.KindCode, rootInfo.Title);
             }
         }

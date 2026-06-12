@@ -60,6 +60,10 @@ public sealed class AutoIdentifyRunner(
             return new AutoIdentifyResult(false, SkipReason: "already organized");
         }
 
+        if (entity.AutoIdentifyAttempts >= AutoIdentifyPolicy.MaxAttemptsPerEntity) {
+            return new AutoIdentifyResult(false, SkipReason: "auto identify attempts exhausted; identify manually");
+        }
+
         // Restrict to user-selected providers that are installed, enabled, and capable of this kind,
         // preserving the user's configured priority order. Capability is checked against the entity's
         // concrete kind code (e.g. audio-library), not the settings selector (e.g. audio) — provider
@@ -69,12 +73,14 @@ public sealed class AutoIdentifyRunner(
             .Select(provider => provider.Id)
             .ToHashSet(StringComparer.Ordinal);
 
+        var queriedProvider = false;
         foreach (var providerId in config.Providers) {
             cancellationToken.ThrowIfCancellationRequested();
             if (!capable.Contains(providerId)) {
                 continue;
             }
 
+            queriedProvider = true;
             IdentifyPluginResponse response;
             try {
                 response = await identify.IdentifyAsync(entityId, providerId, query: null, parentExternalIds: null, hideNsfw: false, cancellationToken);
@@ -142,7 +148,21 @@ public sealed class AutoIdentifyRunner(
             return new AutoIdentifyResult(true, providerId, proposal.Confidence);
         }
 
-        return new AutoIdentifyResult(false, SkipReason: "no confident match");
+        if (!queriedProvider) {
+            return new AutoIdentifyResult(false, SkipReason: "no capable provider");
+        }
+
+        // A completed run that queried providers and applied nothing consumes one of the entity's
+        // attempts; at the policy maximum the entity is left for manual identify. Transient
+        // provider outages retry the job via JobRetryLaterException and never reach this point.
+        entity.AutoIdentifyAttempts += 1;
+        entity.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+
+        var remaining = AutoIdentifyPolicy.MaxAttemptsPerEntity - entity.AutoIdentifyAttempts;
+        return new AutoIdentifyResult(false, SkipReason: remaining > 0
+            ? $"no confident match ({remaining} auto attempt{(remaining == 1 ? "" : "s")} left)"
+            : "no confident match; auto identify attempts exhausted, identify manually");
     }
 
     /// <summary>

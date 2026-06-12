@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Prismedia.Application.Jobs;
+using Prismedia.Application.Jobs.Ports;
 using Prismedia.Application.Plugins;
 using Prismedia.Application.Settings;
 using Prismedia.Contracts.Plugins;
@@ -313,6 +314,57 @@ public sealed class AutoIdentifyRunnerTests {
     }
 
     [Fact]
+    public async Task ConsumesOneAttemptWhenProvidersWereQueriedWithoutAConfidentMatch() {
+        await using var db = CreateContext();
+        var entityId = await SeedVideoAsync(db, organized: false);
+        var settings = await ConfigureAsync(db, enabled: true, providers: ["p1"], confidencePercent: 90m);
+        var identify = new FakeIdentifyProvider {
+            ProposalsByProvider = {
+                ["p1"] = Proposal("p1", confidence: 0.5m, title: "Maybe Match"),
+            },
+        };
+        var runner = new AutoIdentifyRunner(settings, identify, db, NullLogger<AutoIdentifyRunner>.Instance);
+
+        var result = await runner.RunAsync(entityId, CancellationToken.None);
+
+        Assert.False(result.Applied);
+        Assert.Equal(1, (await db.Entities.SingleAsync()).AutoIdentifyAttempts);
+        Assert.Contains("no confident match", result.SkipReason);
+    }
+
+    [Fact]
+    public async Task SkipsEntityWithoutQueryingProvidersOnceAttemptsAreExhausted() {
+        await using var db = CreateContext();
+        var entityId = await SeedVideoAsync(db, organized: false, autoIdentifyAttempts: AutoIdentifyPolicy.MaxAttemptsPerEntity);
+        var settings = await ConfigureAsync(db, enabled: true, providers: ["p1"], confidencePercent: 90m);
+        var identify = new FakeIdentifyProvider {
+            ProposalsByProvider = { ["p1"] = Proposal("p1", confidence: 0.99m, title: "Anything") },
+        };
+        var runner = new AutoIdentifyRunner(settings, identify, db, NullLogger<AutoIdentifyRunner>.Instance);
+
+        var result = await runner.RunAsync(entityId, CancellationToken.None);
+
+        Assert.False(result.Applied);
+        Assert.Equal("auto identify attempts exhausted; identify manually", result.SkipReason);
+        Assert.Empty(identify.IdentifyCalls);
+    }
+
+    [Fact]
+    public async Task DoesNotConsumeAnAttemptWhenNoProviderIsCapable() {
+        await using var db = CreateContext();
+        var entityId = await SeedVideoAsync(db, organized: false);
+        var settings = await ConfigureAsync(db, enabled: true, providers: ["p1"], confidencePercent: 90m);
+        var identify = new FakeIdentifyProvider();
+        var runner = new AutoIdentifyRunner(settings, identify, db, NullLogger<AutoIdentifyRunner>.Instance);
+
+        var result = await runner.RunAsync(entityId, CancellationToken.None);
+
+        Assert.False(result.Applied);
+        Assert.Equal("no capable provider", result.SkipReason);
+        Assert.Equal(0, (await db.Entities.SingleAsync()).AutoIdentifyAttempts);
+    }
+
+    [Fact]
     public async Task SkipsWhenDisabled() {
         await using var db = CreateContext();
         var entityId = await SeedVideoAsync(db, organized: false);
@@ -386,7 +438,8 @@ public sealed class AutoIdentifyRunnerTests {
         bool organized,
         Guid? parentId = null,
         string kind = "video",
-        string title = "video.mkv") {
+        string title = "video.mkv",
+        int autoIdentifyAttempts = 0) {
         var id = Guid.NewGuid();
         db.Entities.Add(new EntityRow {
             Id = id,
@@ -394,6 +447,7 @@ public sealed class AutoIdentifyRunnerTests {
             Title = title,
             IsOrganized = organized,
             ParentEntityId = parentId,
+            AutoIdentifyAttempts = autoIdentifyAttempts,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow,
         });

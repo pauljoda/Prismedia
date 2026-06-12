@@ -26,6 +26,13 @@ public sealed class EntityRow {
 
     public bool IsOrganized { get; set; }
 
+    /// <summary>
+    /// Count of completed auto-identify runs that ended without a confident match. Once this
+    /// reaches the policy maximum the entity is skipped by auto identify and must be identified
+    /// manually.
+    /// </summary>
+    public int AutoIdentifyAttempts { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 
     public DateTimeOffset UpdatedAt { get; set; }
