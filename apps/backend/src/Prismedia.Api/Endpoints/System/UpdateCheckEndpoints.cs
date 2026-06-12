@@ -89,11 +89,15 @@ internal interface IUpdateCheckService {
 /// </summary>
 /// <remarks>
 /// Versioned channels (alpha/beta/release) are compared by the newest <c>{channel}-X.Y.Z</c> tag;
-/// the <c>dev</c> channel keeps a single version per cycle, so it is compared by image digest
-/// instead. Local builds without a baked commit short-circuit to a non-networked development status.
+/// the <c>dev</c> channel publishes only the moving <c>dev</c> tag, so it is compared by the
+/// build commit baked into the published image's config (<c>PRISMEDIA_COMMIT</c>). Local builds
+/// without a baked commit short-circuit to a non-networked development status.
 /// </remarks>
 internal sealed class GhcrUpdateCheckService : IUpdateCheckService {
     internal const string HttpClientName = "PrismediaUpdateCheck";
+
+    /// <summary>Environment variable carrying the short build commit, baked into every published image.</summary>
+    private const string CommitEnvName = "PRISMEDIA_COMMIT";
 
     private const string ManifestAcceptHeader =
         "application/vnd.oci.image.index.v1+json," +
@@ -164,7 +168,7 @@ internal sealed class GhcrUpdateCheckService : IUpdateCheckService {
             }
 
             return channel == "dev"
-                ? await CheckDevByDigestAsync(client, host, repository, channel, localVersion, commit, token, pageUrl, checkedAt, cancellationToken)
+                ? await CheckDevByCommitAsync(client, host, repository, channel, localVersion, commit, token, pageUrl, checkedAt, cancellationToken)
                 : await CheckVersionedChannelAsync(client, host, repository, channel, localVersion, token, pageUrl, checkedAt, cancellationToken);
         } catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) {
             return Unknown(channel, localVersion, checkedAt, "The container registry update check timed out.");
@@ -223,7 +227,13 @@ internal sealed class GhcrUpdateCheckService : IUpdateCheckService {
             channel, localVersion, latestVersion, pageUrl, updateAvailable, checkedAt, false, null);
     }
 
-    private async Task<UpdateCheckResponse> CheckDevByDigestAsync(
+    /// <summary>
+    /// Compares the running build's baked commit against the commit recorded in the published
+    /// <c>dev</c> image config. Dev pushes only the moving <c>dev</c> tag, so there is no
+    /// per-build tag to compare digests with — the image config is the only self-describing record
+    /// of which commit the published image was built from.
+    /// </summary>
+    private async Task<UpdateCheckResponse> CheckDevByCommitAsync(
         HttpClient client,
         string host,
         string repository,
@@ -234,16 +244,125 @@ internal sealed class GhcrUpdateCheckService : IUpdateCheckService {
         string pageUrl,
         DateTimeOffset checkedAt,
         CancellationToken cancellationToken) {
-        var channelDigest = await GetManifestDigestAsync(client, host, repository, channel, token, cancellationToken);
-        var selfDigest = await GetManifestDigestAsync(client, host, repository, $"{localVersion}-{commit}", token, cancellationToken);
-        if (channelDigest is null || selfDigest is null) {
-            return Unknown(channel, localVersion, checkedAt, "Could not resolve the current dev image digest.");
+        var publishedCommit = await GetImageCommitAsync(client, host, repository, channel, token, cancellationToken);
+        if (publishedCommit is null) {
+            return Unknown(channel, localVersion, checkedAt, "Could not resolve the published dev image build.");
         }
 
-        var updateAvailable = !string.Equals(channelDigest, selfDigest, StringComparison.Ordinal);
+        var updateAvailable = !string.Equals(publishedCommit, commit, StringComparison.OrdinalIgnoreCase);
         return new UpdateCheckResponse(
             updateAvailable ? "available" : "current",
             channel, localVersion, null, updateAvailable ? pageUrl : null, updateAvailable, checkedAt, false, null);
+    }
+
+    /// <summary>
+    /// Resolves the <c>PRISMEDIA_COMMIT</c> environment value baked into a published image:
+    /// tag manifest (following a multi-arch/provenance index to its first real platform entry)
+    /// → image config blob → <c>Env</c>. Returns null when any hop fails.
+    /// </summary>
+    private static async Task<string?> GetImageCommitAsync(
+        HttpClient client,
+        string host,
+        string repository,
+        string tag,
+        string token,
+        CancellationToken cancellationToken) {
+        var manifest = await GetJsonAsync(
+            client, $"https://{host}/v2/{repository}/manifests/{tag}", token, ManifestAcceptHeader, cancellationToken);
+        if (manifest is null) {
+            return null;
+        }
+
+        using (manifest) {
+            // Buildx publishes an OCI index even for single-platform pushes; attestation entries
+            // report an "unknown" architecture, so follow the first real platform manifest.
+            if (!manifest.RootElement.TryGetProperty("config", out _) &&
+                manifest.RootElement.TryGetProperty("manifests", out var entries) &&
+                entries.ValueKind == JsonValueKind.Array) {
+                var platformDigest = SelectPlatformManifestDigest(entries);
+                if (platformDigest is null) {
+                    return null;
+                }
+
+                using var platformManifest = await GetJsonAsync(
+                    client, $"https://{host}/v2/{repository}/manifests/{platformDigest}", token, ManifestAcceptHeader, cancellationToken);
+                return await ReadConfigCommitAsync(client, host, repository, platformManifest, token, cancellationToken);
+            }
+
+            return await ReadConfigCommitAsync(client, host, repository, manifest, token, cancellationToken);
+        }
+    }
+
+    private static string? SelectPlatformManifestDigest(JsonElement manifestEntries) {
+        foreach (var entry in manifestEntries.EnumerateArray()) {
+            if (entry.TryGetProperty("platform", out var platform) &&
+                platform.TryGetProperty("architecture", out var architecture) &&
+                string.Equals(architecture.GetString(), "unknown", StringComparison.OrdinalIgnoreCase)) {
+                continue;
+            }
+
+            if (entry.TryGetProperty("digest", out var digest)) {
+                return digest.GetString();
+            }
+        }
+
+        return null;
+    }
+
+    private static async Task<string?> ReadConfigCommitAsync(
+        HttpClient client,
+        string host,
+        string repository,
+        JsonDocument? imageManifest,
+        string token,
+        CancellationToken cancellationToken) {
+        if (imageManifest is null ||
+            !imageManifest.RootElement.TryGetProperty("config", out var config) ||
+            !config.TryGetProperty("digest", out var configDigest) ||
+            configDigest.GetString() is not { Length: > 0 } digest) {
+            return null;
+        }
+
+        using var configBlob = await GetJsonAsync(
+            client, $"https://{host}/v2/{repository}/blobs/{digest}", token, accept: null, cancellationToken);
+        if (configBlob is null ||
+            !configBlob.RootElement.TryGetProperty("config", out var imageConfig) ||
+            !imageConfig.TryGetProperty("Env", out var env) ||
+            env.ValueKind != JsonValueKind.Array) {
+            return null;
+        }
+
+        var prefix = CommitEnvName + "=";
+        foreach (var entry in env.EnumerateArray()) {
+            var value = entry.GetString();
+            if (value is not null && value.StartsWith(prefix, StringComparison.Ordinal)) {
+                var commit = value[prefix.Length..].Trim();
+                return commit.Length > 0 ? commit : null;
+            }
+        }
+
+        return null;
+    }
+
+    private static async Task<JsonDocument?> GetJsonAsync(
+        HttpClient client,
+        string uri,
+        string token,
+        string? accept,
+        CancellationToken cancellationToken) {
+        using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+        if (accept is not null) {
+            request.Headers.TryAddWithoutValidation("Accept", accept);
+        }
+
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+        using var response = await client.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode) {
+            return null;
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        return await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
     }
 
     private static async Task<string?> GetPullTokenAsync(
@@ -260,27 +379,6 @@ internal sealed class GhcrUpdateCheckService : IUpdateCheckService {
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
         return document.RootElement.TryGetProperty("token", out var token) ? token.GetString() : null;
-    }
-
-    private static async Task<string?> GetManifestDigestAsync(
-        HttpClient client,
-        string host,
-        string repository,
-        string tag,
-        string token,
-        CancellationToken cancellationToken) {
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"https://{host}/v2/{repository}/manifests/{tag}");
-        request.Headers.TryAddWithoutValidation("Accept", ManifestAcceptHeader);
-        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
-
-        using var response = await client.SendAsync(request, cancellationToken);
-        if (!response.IsSuccessStatusCode) {
-            return null;
-        }
-
-        return response.Headers.TryGetValues("Docker-Content-Digest", out var values)
-            ? values.FirstOrDefault()
-            : null;
     }
 
     private static async Task<IReadOnlyList<string>> ListTagsAsync(
@@ -365,7 +463,7 @@ internal sealed class GhcrUpdateCheckService : IUpdateCheckService {
     }
 
     private static string? ResolveCommit(IConfiguration configuration) =>
-        configuration["PRISMEDIA_COMMIT"] ?? configuration["Prismedia:Commit"];
+        configuration[CommitEnvName] ?? configuration["Prismedia:Commit"];
 
     private static string ResolveRegistryHost(IConfiguration configuration) =>
         configuration["PRISMEDIA_GHCR_HOST"] ??

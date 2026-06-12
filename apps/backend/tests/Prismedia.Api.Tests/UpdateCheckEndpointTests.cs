@@ -156,14 +156,9 @@ public sealed class UpdateCheckEndpointTests : IClassFixture<WebApplicationFacto
     }
 
     [Fact]
-    public async Task DevChannelReportsAvailableWhenChannelDigestDiffersFromLocal() {
-        using var handler = new StubHttpMessageHandler(request => {
-            var uri = request.RequestUri?.AbsoluteUri ?? string.Empty;
-            if (uri.StartsWith("https://ghcr.io/token", StringComparison.Ordinal)) return TokenResponse();
-            if (uri.EndsWith("/manifests/dev", StringComparison.Ordinal)) return ManifestResponse("sha256:newbuild");
-            if (uri.EndsWith("/manifests/1.0.0-abc1234", StringComparison.Ordinal)) return ManifestResponse("sha256:oldbuild");
-            throw new InvalidOperationException($"Unexpected request: {uri}");
-        });
+    public async Task DevChannelReportsAvailableWhenPublishedCommitDiffersFromLocal() {
+        using var handler = new StubHttpMessageHandler(request =>
+            DevImageResponder(request, publishedCommit: "new1234"));
         var service = CreateGhcrService(handler, new Dictionary<string, string?> {
             ["PRISMEDIA_CHANNEL"] = "dev",
             ["PRISMEDIA_VERSION"] = "1.0.0",
@@ -180,14 +175,9 @@ public sealed class UpdateCheckEndpointTests : IClassFixture<WebApplicationFacto
     }
 
     [Fact]
-    public async Task DevChannelReportsCurrentWhenChannelDigestMatchesLocal() {
-        using var handler = new StubHttpMessageHandler(request => {
-            var uri = request.RequestUri?.AbsoluteUri ?? string.Empty;
-            if (uri.StartsWith("https://ghcr.io/token", StringComparison.Ordinal)) return TokenResponse();
-            if (uri.EndsWith("/manifests/dev", StringComparison.Ordinal)) return ManifestResponse("sha256:samebuild");
-            if (uri.EndsWith("/manifests/1.0.0-abc1234", StringComparison.Ordinal)) return ManifestResponse("sha256:samebuild");
-            throw new InvalidOperationException($"Unexpected request: {uri}");
-        });
+    public async Task DevChannelReportsCurrentWhenPublishedCommitMatchesLocal() {
+        using var handler = new StubHttpMessageHandler(request =>
+            DevImageResponder(request, publishedCommit: "abc1234"));
         var service = CreateGhcrService(handler, new Dictionary<string, string?> {
             ["PRISMEDIA_CHANNEL"] = "dev",
             ["PRISMEDIA_VERSION"] = "1.0.0",
@@ -198,6 +188,23 @@ public sealed class UpdateCheckEndpointTests : IClassFixture<WebApplicationFacto
 
         Assert.Equal("current", result.Status);
         Assert.False(result.UpdateAvailable);
+    }
+
+    [Fact]
+    public async Task DevChannelReportsUnknownWhenPublishedImageHasNoCommit() {
+        using var handler = new StubHttpMessageHandler(request =>
+            DevImageResponder(request, publishedCommit: null));
+        var service = CreateGhcrService(handler, new Dictionary<string, string?> {
+            ["PRISMEDIA_CHANNEL"] = "dev",
+            ["PRISMEDIA_VERSION"] = "1.0.0",
+            ["PRISMEDIA_COMMIT"] = "abc1234",
+        });
+
+        var result = await service.CheckAsync(force: false, CancellationToken.None);
+
+        Assert.Equal("unknown", result.Status);
+        Assert.False(result.UpdateAvailable);
+        Assert.NotNull(result.Error);
     }
 
     [Fact]
@@ -297,12 +304,39 @@ public sealed class UpdateCheckEndpointTests : IClassFixture<WebApplicationFacto
         return JsonResponse($$"""{"name":"pauljoda/prismedia","tags":[{{quoted}}]}""");
     }
 
-    private static HttpResponseMessage ManifestResponse(string digest) {
-        var response = new HttpResponseMessage(HttpStatusCode.OK) {
-            Content = new StringContent("{}", Encoding.UTF8, "application/vnd.oci.image.index.v1+json"),
-        };
-        response.Headers.TryAddWithoutValidation("Docker-Content-Digest", digest);
-        return response;
+    /// <summary>
+    /// Stubs the GHCR hops the dev check walks, mirroring a buildx push: the <c>dev</c> tag is an
+    /// OCI index whose first entry is an attestation manifest (architecture "unknown") and whose
+    /// platform entry leads to an image manifest, then a config blob carrying the build commit env.
+    /// </summary>
+    private static HttpResponseMessage DevImageResponder(HttpRequestMessage request, string? publishedCommit) {
+        var uri = request.RequestUri?.AbsoluteUri ?? string.Empty;
+        if (uri.StartsWith("https://ghcr.io/token", StringComparison.Ordinal)) return TokenResponse();
+        if (uri.EndsWith("/manifests/dev", StringComparison.Ordinal)) {
+            return JsonResponse("""
+                {
+                  "schemaVersion": 2,
+                  "mediaType": "application/vnd.oci.image.index.v1+json",
+                  "manifests": [
+                    {"digest": "sha256:attestation", "platform": {"architecture": "unknown", "os": "unknown"}},
+                    {"digest": "sha256:platform", "platform": {"architecture": "amd64", "os": "linux"}}
+                  ]
+                }
+                """);
+        }
+
+        if (uri.EndsWith("/manifests/sha256:platform", StringComparison.Ordinal)) {
+            return JsonResponse("""{"schemaVersion": 2, "config": {"digest": "sha256:config"}}""");
+        }
+
+        if (uri.EndsWith("/blobs/sha256:config", StringComparison.Ordinal)) {
+            var env = publishedCommit is null
+                ? """["PRISMEDIA_CHANNEL=dev"]"""
+                : $$"""["PRISMEDIA_CHANNEL=dev", "PRISMEDIA_COMMIT={{publishedCommit}}"]""";
+            return JsonResponse($$"""{"config": {"Env": {{env}} } }""");
+        }
+
+        throw new InvalidOperationException($"Unexpected request: {uri}");
     }
 
     private static HttpResponseMessage JsonResponse(string content) =>
