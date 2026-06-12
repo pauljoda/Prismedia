@@ -64,9 +64,9 @@ internal static class NsfwVisibility {
             !string.Equals(mode, "show", StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>Returns the Jellyfin profile's explicit content visibility toggles.</summary>
+    /// <summary>Returns the Jellyfin profile's explicit content visibility toggles, or the web portal cookie mode for app-key requests.</summary>
     public static JellyfinContentVisibility JellyfinContent(HttpContext httpContext) =>
         httpContext.GetJellyfinProfile() is { } profile
             ? new JellyfinContentVisibility(profile.AllowSfw, profile.AllowNsfw)
-            : JellyfinContentVisibility.SfwOnly;
+            : JellyfinContentVisibility.FromHideNsfw(ShouldHide(null, httpContext));
 }
