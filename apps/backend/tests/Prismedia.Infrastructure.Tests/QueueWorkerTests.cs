@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -41,6 +40,46 @@ public sealed class QueueWorkerTests {
 
             await handler.WaitForMaxActiveAsync(3, timeout.Token);
             Assert.True(queue.Claims >= 3);
+        } finally {
+            handler.ReleaseAll();
+            await worker.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task QueueWorkerClaimsInteractiveJobThroughReservedLaneWhenSaturated() {
+        var queue = new RecordingJobQueueService([CreateJob()]);
+        var settings = new MutableSettingsPersistence { BackgroundConcurrency = 1 };
+        var handler = new BlockingJobHandler();
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IJobQueueService>(queue);
+        services.AddSingleton<ISettingsPersistence>(settings);
+        services.AddScoped<SettingsService>();
+        services.AddSingleton<IJobHandler>(handler);
+        await using var provider = services.BuildServiceProvider();
+
+        var worker = new QueueWorker(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            new WorkerRuntimeIdentity(),
+            NullLogger<QueueWorker>.Instance,
+            TimeSpan.FromMilliseconds(25));
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await worker.StartAsync(CancellationToken.None);
+        try {
+            // The lone background slot fills with a long-running job.
+            await handler.WaitForMaxActiveAsync(1, timeout.Token);
+
+            // A queued background job must NOT enter the reserved lane...
+            queue.Add(CreateJob(), priority: 0);
+            await Task.Delay(150, timeout.Token);
+            Assert.Equal(1, handler.MaxActive);
+
+            // ...but a user-triggered identify job is claimed immediately through it.
+            queue.Add(CreateJob(), JobPriorities.InteractiveIdentify);
+            await handler.WaitForMaxActiveAsync(2, timeout.Token);
+            Assert.Equal(2, handler.MaxActive);
         } finally {
             handler.ReleaseAll();
             await worker.StopAsync(CancellationToken.None);
@@ -133,18 +172,43 @@ public sealed class QueueWorkerTests {
     }
 
     private sealed class RecordingJobQueueService : IJobQueueService {
-        private readonly ConcurrentQueue<JobRunSnapshot> _jobs;
+        private readonly object _lock = new();
+        private readonly List<(int Priority, JobRunSnapshot Job)> _jobs;
         private int _claims;
 
         public RecordingJobQueueService(IEnumerable<JobRunSnapshot> jobs) {
-            _jobs = new ConcurrentQueue<JobRunSnapshot>(jobs);
+            _jobs = jobs.Select(job => (0, job)).ToList();
         }
 
         public int Claims => Volatile.Read(ref _claims);
 
-        public Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken) {
+        public void Add(JobRunSnapshot job, int priority) {
+            lock (_lock) {
+                _jobs.Add((priority, job));
+            }
+        }
+
+        public Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken, int? minPriority = null) {
             Interlocked.Increment(ref _claims);
-            return Task.FromResult(_jobs.TryDequeue(out var job) ? job : null);
+            lock (_lock) {
+                var floor = minPriority ?? int.MinValue;
+                var bestIndex = -1;
+                var bestPriority = int.MinValue;
+                for (var i = 0; i < _jobs.Count; i++) {
+                    if (_jobs[i].Priority >= floor && _jobs[i].Priority > bestPriority) {
+                        bestPriority = _jobs[i].Priority;
+                        bestIndex = i;
+                    }
+                }
+
+                if (bestIndex < 0) {
+                    return Task.FromResult<JobRunSnapshot?>(null);
+                }
+
+                var job = _jobs[bestIndex].Job;
+                _jobs.RemoveAt(bestIndex);
+                return Task.FromResult<JobRunSnapshot?>(job);
+            }
         }
 
         public Task CompleteAsync(Guid id, string? message, CancellationToken cancellationToken) =>

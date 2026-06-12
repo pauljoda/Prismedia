@@ -240,13 +240,15 @@ public sealed class JobQueueService : IJobQueueService {
     }
 
     /// <summary>
-    /// Claims the next available job. Uses atomic FOR UPDATE SKIP LOCKED on PostgreSQL
+    /// Claims the next available job, optionally restricted to a minimum priority (the worker's
+    /// reserved interactive lane). Uses atomic FOR UPDATE SKIP LOCKED on PostgreSQL
     /// for safe concurrent access, with an EF Core fallback for test providers.
     /// </summary>
-    public async Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken) {
+    public async Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken, int? minPriority = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(workerId);
 
         var now = DateTimeOffset.UtcNow;
+        var priorityFloor = minPriority ?? int.MinValue;
 
         if (_db.Database.IsRelational()) {
             var claimed = await _db.Database.SqlQueryRaw<Guid>(
@@ -259,14 +261,14 @@ public sealed class JobQueueService : IJobQueueService {
                     attempts = attempts + 1
                 WHERE id = (
                     SELECT id FROM job_runs
-                    WHERE status = 'queued' AND available_at <= {0}
+                    WHERE status = 'queued' AND available_at <= {0} AND priority >= {2}
                     ORDER BY priority DESC, available_at, created_at
                     LIMIT 1
                     FOR UPDATE SKIP LOCKED
                 )
                 RETURNING id
                 """,
-                now, workerId).ToListAsync(cancellationToken);
+                now, workerId, priorityFloor).ToListAsync(cancellationToken);
 
             if (claimed.Count == 0) {
                 return null;
@@ -277,7 +279,7 @@ public sealed class JobQueueService : IJobQueueService {
         }
 
         var row = await _db.JobRuns
-            .Where(job => job.Status == JobRunStatus.Queued && job.AvailableAt <= now)
+            .Where(job => job.Status == JobRunStatus.Queued && job.AvailableAt <= now && job.Priority >= priorityFloor)
             .OrderByDescending(job => job.Priority)
             .ThenBy(job => job.AvailableAt)
             .ThenBy(job => job.CreatedAt)

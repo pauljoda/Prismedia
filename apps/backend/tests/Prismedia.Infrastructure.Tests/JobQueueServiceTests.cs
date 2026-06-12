@@ -206,6 +206,38 @@ public sealed class JobQueueServiceTests {
     }
 
     [Fact]
+    public async Task ClaimNextWithMinPriorityIgnoresLowerPriorityBacklog() {
+        await using var db = CreateContext();
+        var service = new JobQueueService(db);
+        var now = DateTimeOffset.UtcNow;
+        var autoIdentify = NewJobRun(
+            JobType.AutoIdentify,
+            JobRunStatus.Queued,
+            now.AddMinutes(-10),
+            priority: JobPriorities.AutoIdentify);
+        db.JobRuns.Add(autoIdentify);
+        await db.SaveChangesAsync();
+
+        var laneClaim = await service.ClaimNextAsync(
+            "worker-1", CancellationToken.None, JobPriorities.InteractiveIdentify);
+        Assert.Null(laneClaim);
+
+        var manualBulkIdentify = NewJobRun(
+            JobType.BulkIdentify,
+            JobRunStatus.Queued,
+            now,
+            priority: JobPriorities.InteractiveIdentify);
+        db.JobRuns.Add(manualBulkIdentify);
+        await db.SaveChangesAsync();
+
+        var claimed = await service.ClaimNextAsync(
+            "worker-1", CancellationToken.None, JobPriorities.InteractiveIdentify);
+
+        Assert.NotNull(claimed);
+        Assert.Equal(manualBulkIdentify.Id, claimed.Id);
+    }
+
+    [Fact]
     public async Task FailedClaimRetriesUntilMaxAttempts() {
         await using var db = CreateContext();
         var service = new JobQueueService(db);

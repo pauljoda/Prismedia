@@ -49,9 +49,12 @@ public interface IJobQueueService {
     Task<int> ClearFailuresAsync(JobType? type, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Claims the next available queued job for one worker using atomic row locking.
+    /// Claims the next available queued job for one worker using atomic row locking. When
+    /// <paramref name="minPriority"/> is set, only jobs at or above that priority are eligible —
+    /// used by the worker's reserved interactive lane so user-triggered work is claimed even
+    /// while long-running background jobs hold every regular slot.
     /// </summary>
-    Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken);
+    Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken, int? minPriority = null);
 
     /// <summary>
     /// Requeues running jobs whose worker lease is stale and not owned by the current worker process.
