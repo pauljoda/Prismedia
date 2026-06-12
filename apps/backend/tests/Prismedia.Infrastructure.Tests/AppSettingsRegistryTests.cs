@@ -39,15 +39,15 @@ public sealed class AppSettingsRegistryTests {
             CancellationToken.None);
 
         Assert.Equal("off", defaults.Values[AppSettingKeys.VisibilityDefaultMode].GetString());
-        Assert.Equal(1, defaults.Values[AppSettingKeys.JobsBackgroundConcurrency].GetInt32());
+        Assert.Equal(4, defaults.Values[AppSettingKeys.JobsBackgroundConcurrency].GetInt32());
         Assert.Empty(await db.AppSettings.ToArrayAsync());
 
         var updated = await service.UpdateSettingAsync(
             AppSettingKeys.JobsBackgroundConcurrency,
-            JsonSerializer.SerializeToElement(4),
+            JsonSerializer.SerializeToElement(8),
             CancellationToken.None);
 
-        Assert.Equal(4, updated.Value.GetInt32());
+        Assert.Equal(8, updated.Value.GetInt32());
         Assert.False(updated.IsDefault);
         Assert.Single(await db.AppSettings.ToArrayAsync());
     }

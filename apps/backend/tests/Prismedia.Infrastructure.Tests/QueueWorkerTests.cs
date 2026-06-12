@@ -100,11 +100,9 @@ public sealed class QueueWorkerTests {
         public int BackgroundConcurrency { get; set; } = 1;
 
         public Task<IReadOnlyDictionary<string, string>> LoadSettingOverridesAsync(CancellationToken cancellationToken) {
-            IReadOnlyDictionary<string, string> overrides = BackgroundConcurrency == 1
-                ? new Dictionary<string, string>()
-                : new Dictionary<string, string> {
-                    [AppSettingKeys.JobsBackgroundConcurrency] = JsonSerializer.Serialize(BackgroundConcurrency),
-                };
+            IReadOnlyDictionary<string, string> overrides = new Dictionary<string, string> {
+                [AppSettingKeys.JobsBackgroundConcurrency] = JsonSerializer.Serialize(BackgroundConcurrency),
+            };
 
             return Task.FromResult(overrides);
         }

@@ -32,7 +32,7 @@ export const defaultLibrarySettings: LibrarySettings = {
   previewClipDurationSeconds: 8,
   thumbnailQuality: "2",
   trickplayQuality: "2",
-  backgroundWorkerConcurrency: 1,
+  backgroundWorkerConcurrency: 4,
   defaultPlaybackMode: "direct",
   showCastControls: true,
   audioPreferredLanguages: "en,eng,en-US",

@@ -18,7 +18,7 @@ public sealed class SettingsEndpointServiceTests {
         var catalog = await client.GetFromJsonAsync<SettingsCatalogResponse>("/api/settings");
         var updatedResponse = await client.PatchAsJsonAsync(
             $"/api/settings/{AppSettingKeys.JobsBackgroundConcurrency}",
-            new SettingUpdateRequest(JsonSerializer.SerializeToElement(4)));
+            new SettingUpdateRequest(JsonSerializer.SerializeToElement(6)));
         var updated = await updatedResponse.Content.ReadFromJsonAsync<SettingDescriptor>();
         var values = await client.GetFromJsonAsync<SettingsValuesResponse>(
             $"/api/settings/values?keys={Uri.EscapeDataString(AppSettingKeys.JobsBackgroundConcurrency)}");
@@ -30,10 +30,10 @@ public sealed class SettingsEndpointServiceTests {
             setting.IsDefault);
         Assert.True(updatedResponse.IsSuccessStatusCode);
         Assert.NotNull(updated);
-        Assert.Equal(4, updated.Value.GetInt32());
+        Assert.Equal(6, updated.Value.GetInt32());
         Assert.False(updated.IsDefault);
         Assert.NotNull(values);
-        Assert.Equal(4, values.Values[AppSettingKeys.JobsBackgroundConcurrency].GetInt32());
+        Assert.Equal(6, values.Values[AppSettingKeys.JobsBackgroundConcurrency].GetInt32());
     }
 
     [Fact]
