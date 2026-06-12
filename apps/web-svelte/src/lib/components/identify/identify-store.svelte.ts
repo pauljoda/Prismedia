@@ -101,6 +101,7 @@ export const useIdentifyStore = identifyStoreContext.use;
 const MIN_APPLY_PROGRESS_VISIBLE_MS = 650;
 const BULK_IDENTIFY_POLL_INITIAL_MS = 300;
 const BULK_IDENTIFY_POLL_INTERVAL_MS = 1_000;
+const SEARCH_REQUEST_TIMEOUT_MS = 120_000;
 
 export class IdentifyStore {
   #getHideNsfw: () => boolean;
@@ -254,13 +255,17 @@ export class IdentifyStore {
     this.loading = true;
     this.error = null;
     try {
-      const [providers, item, detail] = await Promise.all([
+      const [providers, item, detail, jobs] = await Promise.all([
         fetchPluginProviders(),
         options.openExistingOnly
           ? fetchIdentifyQueueItem(entityId).catch(async () => addIdentifyQueueItem(entityId))
           : addIdentifyQueueItem(entityId),
         fetchEntityDetail(entityId),
+        fetchJobs().catch(() => null),
       ]);
+      // Surface a running bulk identify job so this page polls while the server-side
+      // search streams results onto the opened item.
+      this.#setActiveBulkIdentifyJob(activeBulkIdentifyJobFromList(jobs?.items ?? []));
       const hideNsfw = this.#getHideNsfw();
       const queue = await fetchIdentifyQueue(false, hideNsfw);
       this.providers = providers;
@@ -994,6 +999,14 @@ export class IdentifyStore {
       return item;
     }
 
+    // Only a never-searched item starts a client-side search. A provider recorded on the
+    // server item means a search already ran (its result is the proposal/candidates/error
+    // shown for review), and a running bulk identify job owns searching queued items —
+    // kicking off a duplicate search here would just stack provider calls.
+    if (!providerId && (item.provider || this.activeBulkIdentifyJob)) {
+      return item;
+    }
+
     const selectedProvider = providerId ?? item.provider;
     return selectedProvider
       ? await this.identifyEntity(item.entity, selectedProvider, undefined, options)
@@ -1051,7 +1064,19 @@ export class IdentifyStore {
     query?: { title?: string | null; url?: string | null; externalIds?: Record<string, string> | null; requireChoice?: boolean | null },
     options: IdentifyResolveOptions = {},
   ) {
-    const item = await searchIdentifyQueueItem(entity.id, providerId, query);
+    // Last-resort client bound so a hung request can never strand the "Searching with ..."
+    // state; the server bounds each provider call well below this.
+    let item: ApiIdentifyQueueItem;
+    try {
+      item = await searchIdentifyQueueItem(entity.id, providerId, query, {
+        signal: AbortSignal.timeout(SEARCH_REQUEST_TIMEOUT_MS),
+      });
+    } catch (err) {
+      if (err instanceof Error && err.name === "TimeoutError") {
+        throw new Error(`Identify search timed out after ${SEARCH_REQUEST_TIMEOUT_MS / 1000} seconds.`);
+      }
+      throw err;
+    }
     const detail = this.queue.find((queued) => queued.entityId === entity.id)?.detail ?? await fetchEntityDetail(entity.id);
     const mapped = queueItemFromApi(item, entity, detail);
     this.#upsertQueueItem(mapped);

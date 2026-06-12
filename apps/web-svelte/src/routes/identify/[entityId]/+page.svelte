@@ -280,6 +280,11 @@
               <Loader2 class="h-3.5 w-3.5 animate-spin text-text-accent" />
               <span>{currentIdentifyStatus}</span>
             </div>
+          {:else if store.activeBulkIdentifyJob && current.state === "search" && current.candidates.length === 0}
+            <div class="flex items-center gap-2 rounded-xs border border-border-subtle bg-surface-1 px-3 py-2 font-mono text-[0.72rem] text-text-muted">
+              <Loader2 class="h-3.5 w-3.5 animate-spin text-text-accent" />
+              <span>Waiting on the running bulk identify — its result will appear here, or search now.</span>
+            </div>
           {/if}
         {:else}
           <div class="rounded-xs border border-warning/30 bg-warning-muted px-3 py-2.5 text-[0.82rem] text-warning-text">

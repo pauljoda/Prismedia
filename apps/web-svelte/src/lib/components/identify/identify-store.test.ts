@@ -226,7 +226,7 @@ describe("IdentifyStore", () => {
     const queued = await store.queueEntity(movie, "tmdb");
 
     expect(addIdentifyQueueItem).toHaveBeenCalledWith("video-1");
-    expect(searchIdentifyQueueItem).toHaveBeenCalledWith("video-1", "tmdb", undefined);
+    expect(searchIdentifyQueueItem).toHaveBeenCalledWith("video-1", "tmdb", undefined, expect.anything());
     expect(queued?.state).toBe("proposal");
     expect(store.view.kind).toBe("review-parent");
   });
@@ -259,9 +259,9 @@ describe("IdentifyStore", () => {
 
     const queued = await store.queueEntity(movie);
 
-    expect(searchIdentifyQueueItem).toHaveBeenNthCalledWith(1, "video-1", "anilist", undefined);
-    expect(searchIdentifyQueueItem).toHaveBeenNthCalledWith(2, "video-1", "anilist", { title: "Friendship" });
-    expect(searchIdentifyQueueItem).toHaveBeenNthCalledWith(3, "video-1", "tmdb", undefined);
+    expect(searchIdentifyQueueItem).toHaveBeenNthCalledWith(1, "video-1", "anilist", undefined, expect.anything());
+    expect(searchIdentifyQueueItem).toHaveBeenNthCalledWith(2, "video-1", "anilist", { title: "Friendship" }, expect.anything());
+    expect(searchIdentifyQueueItem).toHaveBeenNthCalledWith(3, "video-1", "tmdb", undefined, expect.anything());
     expect(queued?.provider).toBe("tmdb");
     expect(store.view.kind).toBe("review-parent");
   });
@@ -336,6 +336,47 @@ describe("IdentifyStore", () => {
     expect(store.view.kind).toBe("review-parent");
   });
 
+  it("does not re-search a queue item that a provider search already ran for", async () => {
+    const store = new IdentifyStore();
+    fetchPluginProviders.mockResolvedValue([provider("tmdb", "The Movie Database")]);
+    addIdentifyQueueItem.mockResolvedValue(queueItem("video-1", { state: "search", provider: "tmdb" }));
+    fetchIdentifyEntity.mockResolvedValue(detail("video-1", { kind: "video", title: "Friendship" }));
+
+    const queued = await store.seedEntity("video-1", null);
+
+    expect(searchIdentifyQueueItem).not.toHaveBeenCalled();
+    expect(queued?.provider).toBe("tmdb");
+  });
+
+  it("leaves searching to a running bulk identify job instead of duplicating it", async () => {
+    const store = new IdentifyStore();
+    fetchPluginProviders.mockResolvedValue([provider("tmdb", "The Movie Database")]);
+    addIdentifyQueueItem.mockResolvedValue(queueItem("video-1", { state: "search" }));
+    fetchIdentifyEntity.mockResolvedValue(detail("video-1", { kind: "video", title: "Friendship" }));
+    fetchJobs.mockResolvedValue({
+      items: [{
+        id: "bulk-job-1",
+        type: "bulk-identify",
+        status: "running",
+        progress: 25,
+        message: "Identified 1/4",
+        targetKind: null,
+        targetId: null,
+        targetLabel: "Bulk identify 4 entities",
+        createdAt: "2026-05-25T00:00:00Z",
+        startedAt: "2026-05-25T00:00:01Z",
+        finishedAt: null,
+      }],
+    });
+
+    const queued = await store.seedEntity("video-1", null);
+
+    expect(searchIdentifyQueueItem).not.toHaveBeenCalled();
+    expect(store.activeBulkIdentifyJob?.id).toBe("bulk-job-1");
+    expect(queued?.state).toBe("search");
+    store.destroy();
+  });
+
   it("falls back to a title search when an exact identify attempt misses", async () => {
     const store = new IdentifyStore();
     const movie = entity("video-1", { kind: "video", title: "Friendship" });
@@ -367,8 +408,8 @@ describe("IdentifyStore", () => {
 
     const resolved = await store.identifyEntity(movie, "tmdb");
 
-    expect(searchIdentifyQueueItem).toHaveBeenNthCalledWith(1, "video-1", "tmdb", undefined);
-    expect(searchIdentifyQueueItem).toHaveBeenNthCalledWith(2, "video-1", "tmdb", { title: "Friendship" });
+    expect(searchIdentifyQueueItem).toHaveBeenNthCalledWith(1, "video-1", "tmdb", undefined, expect.anything());
+    expect(searchIdentifyQueueItem).toHaveBeenNthCalledWith(2, "video-1", "tmdb", { title: "Friendship" }, expect.anything());
     expect(resolved?.state).toBe("search");
     expect(store.view.kind).toBe("review-choice");
   });
@@ -405,7 +446,7 @@ describe("IdentifyStore", () => {
     expect(searchIdentifyQueueItem).toHaveBeenCalledWith("video-1", "tmdb", {
       title: "Friendship",
       requireChoice: true,
-    });
+    }, expect.anything());
     expect(store.view.kind).toBe("review-choice");
   });
 
@@ -515,7 +556,7 @@ describe("IdentifyStore", () => {
     // The search runs once and the result is left for the user to choose from —
     // no follow-up call is made to pick a candidate on their behalf.
     expect(searchIdentifyQueueItem).toHaveBeenCalledTimes(1);
-    expect(searchIdentifyQueueItem).toHaveBeenCalledWith("video-1", "tmdb", undefined);
+    expect(searchIdentifyQueueItem).toHaveBeenCalledWith("video-1", "tmdb", undefined, expect.anything());
     expect(queued?.state).toBe("search");
     expect(queued?.candidates).toHaveLength(2);
     expect(store.view.kind).toBe("review-choice");
