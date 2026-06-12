@@ -15,6 +15,8 @@ const deleteIdentifyQueueItem = vi.fn();
 const fetchIdentifyApplyProgress = vi.fn();
 const identifyEntityTransient = vi.fn();
 const saveIdentifyQueueProposal = vi.fn();
+const startBulkIdentify = vi.fn();
+const fetchJobs = vi.fn();
 
 vi.mock("$lib/api/plugins", async (importOriginal) => {
   const actual = await importOriginal<typeof import("$lib/api/plugins")>();
@@ -38,6 +40,15 @@ vi.mock("$lib/api/identify-client", async (importOriginal) => {
     fetchIdentifyApplyProgress: (...args: unknown[]) => fetchIdentifyApplyProgress(...args),
     identifyEntityTransient: (...args: unknown[]) => identifyEntityTransient(...args),
     saveIdentifyQueueProposal: (...args: unknown[]) => saveIdentifyQueueProposal(...args),
+    startBulkIdentify: (...args: unknown[]) => startBulkIdentify(...args),
+  };
+});
+
+vi.mock("$lib/api/jobs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("$lib/api/jobs")>();
+  return {
+    ...actual,
+    fetchJobs: (...args: unknown[]) => fetchJobs(...args),
   };
 });
 
@@ -62,10 +73,28 @@ describe("IdentifyStore", () => {
     deleteIdentifyQueueItem.mockResolvedValue(queueItem("video-1", { state: "deleted" }));
     identifyEntityTransient.mockReset();
     saveIdentifyQueueProposal.mockReset();
+    startBulkIdentify.mockReset();
+    fetchJobs.mockReset();
     // Keep child lookups pending so children stay in their initial loading/queued state for the
     // duration of a test rather than resolving and mutating the proposal mid-assertion.
     identifyEntityTransient.mockReturnValue(new Promise(() => {}));
     saveIdentifyQueueProposal.mockResolvedValue(queueItem("video-1"));
+    startBulkIdentify.mockResolvedValue({
+      job: {
+        id: "bulk-job-1",
+        type: "bulk-identify",
+        status: "queued",
+        progress: 0,
+        message: "Queued",
+        targetKind: null,
+        targetId: null,
+        targetLabel: "Bulk identify test",
+        createdAt: "2026-05-25T00:00:00Z",
+        startedAt: null,
+        finishedAt: null,
+      },
+    });
+    fetchJobs.mockResolvedValue({ items: [] });
     fetchIdentifyApplyProgress.mockResolvedValue({
       id: "apply-1",
       entityId: "video-1",
@@ -522,13 +551,15 @@ describe("IdentifyStore", () => {
 
     await store.startBulk("tmdb", [first, second]);
 
-    // Both entities are added before any search runs, and the user lands on the
+    // Both entities are added before the durable backend job starts, and the user lands on the
     // dashboard rather than inside a per-item review.
     expect(addIdentifyQueueItem).toHaveBeenCalledTimes(2);
+    expect(startBulkIdentify).toHaveBeenCalledWith("tmdb", ["video-1", "video-2"], null, false);
+    expect(searchIdentifyQueueItem).not.toHaveBeenCalled();
+    expect(store.activeBulkIdentifyJob?.id).toBe("bulk-job-1");
     expect(store.view.kind).toBe("dashboard");
     expect(store.queue.map((item) => item.entityId)).toEqual(["video-1", "video-2"]);
-    expect(store.queue.find((item) => item.entityId === "video-1")?.state).toBe("proposal");
-    expect(store.queue.find((item) => item.entityId === "video-2")?.state).toBe("search");
+    expect(store.queue.every((item) => item.state === "search")).toBe(true);
     expect(store.bulkSearching).toBe(false);
   });
 

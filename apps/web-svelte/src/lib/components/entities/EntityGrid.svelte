@@ -93,6 +93,10 @@
     scrollBottomPadding?: number;
     scrollMaxHeight?: string | null | undefined;
     scrollMinHeight?: number;
+    /** Start with selection mode enabled so a plain card click toggles selection. */
+    initialSelectionActive?: boolean;
+    /** When false, cards render as non-link surfaces unless an explicit activation handler is provided. */
+    cardLinks?: boolean;
   }
 
   let {
@@ -129,6 +133,8 @@
     scrollBottomPadding = 24,
     scrollMaxHeight = undefined,
     scrollMinHeight = 320,
+    initialSelectionActive = false,
+    cardLinks = true,
   }: Props = $props();
 
   function presetStorageKey(): string | null {
@@ -190,9 +196,11 @@
   // svelte-ignore state_referenced_locally
   let mediaWall = $state(persistedPrefs?.mediaWall ?? initialMediaWall);
   let selectedIds = $state<string[]>([]);
-  // Selection is explicit: until the user turns it on, cards behave as plain links/activators
-  // (a single tap navigates). Turning it on reveals the checkboxes and routes taps to selection.
-  let selectionActive = $state(false);
+  // Selection is explicit by default: until the user turns it on, cards behave as plain links/activators
+  // (a single tap navigates). Some focused flows, such as Identify's batch picker, start in selection
+  // mode and turn the whole card surface into the checkbox.
+  // svelte-ignore state_referenced_locally
+  let selectionActive = $state(initialSelectionActive);
   let viewportEl: HTMLDivElement | undefined = $state();
   let sectionEl: HTMLElement | undefined = $state();
   let measuredScrollMaxHeight = $state<string | null>(null);
@@ -798,7 +806,7 @@
     imageFetchPriority="auto"
     imageLoading="lazy"
     layout={viewMode === "feed" ? "grid" : viewMode}
-    linkable={!onCardActivate}
+    linkable={cardLinks && !onCardActivate}
     mediaOnly={mediaWall}
     onActivate={onCardActivate ? (activatedCard) => onCardActivate(activatedCard, pagedCards) : undefined}
     hoverPreviewSuppressed={areHoverPreviewsSuppressed}

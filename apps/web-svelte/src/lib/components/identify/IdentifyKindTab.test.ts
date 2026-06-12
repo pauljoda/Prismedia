@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/svelte";
+import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import IdentifyKindTab from "./IdentifyKindTab.svelte";
 import type { EntityThumbnail as EntityCard } from "$lib/api/generated/model";
@@ -74,6 +74,24 @@ describe("IdentifyKindTab", () => {
     await waitFor(() => expect(fetchIdentifyEntities).toHaveBeenLastCalledWith("video-season"));
     expect(await screen.findByText("Season 1")).toBeInTheDocument();
     expect(screen.queryByText("A24")).not.toBeInTheDocument();
+  });
+
+  it("selects thumbnail clicks for bulk queueing instead of starting identify immediately", async () => {
+    fetchIdentifyEntities.mockResolvedValue({
+      items: [entity("studio-1", { kind: "studio", title: "A24" })],
+    });
+
+    const { container } = render(IdentifyKindTab, { entityKind: "studio" });
+
+    expect(await screen.findByText("A24")).toBeInTheDocument();
+    const card = container.querySelector<HTMLElement>(".entity-thumbnail");
+    expect(card).not.toBeNull();
+
+    await fireEvent.click(card!);
+
+    expect(store.queueEntity).not.toHaveBeenCalled();
+    expect(goto).not.toHaveBeenCalledWith("/identify/studio-1");
+    expect(await screen.findByRole("button", { name: /Queue 1/i })).toBeInTheDocument();
   });
 });
 

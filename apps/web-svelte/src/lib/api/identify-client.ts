@@ -10,12 +10,15 @@ import {
   listIdentifyProviders,
   listIdentifyQueue,
   searchIdentifyQueueItem as searchIdentifyQueueItemRequest,
+  startBulkIdentify as startBulkIdentifyRequest,
 } from "$lib/api/generated/prismedia";
 import type {
   ApplyIdentifyProposalRequest,
   ApplyIdentifyQueueItemRequest,
   IdentifyEntityRequest,
+  IdentifyBulkStartRequest,
   IdentifyQueueSearchRequest,
+  JobCreateResponse,
   ListIdentifyQueueParams,
   SaveIdentifyQueueProposalRequest,
 } from "$lib/api/generated/model";
@@ -197,6 +200,22 @@ export function fetchIdentifyEntities(
   options?: RequestOptions,
 ): Promise<EntityListResponse> {
   return fetchEntities({ kind, query: search }, options);
+}
+
+export function startBulkIdentify(
+  provider: string,
+  entityIds: string[],
+  query?: IdentifyQuery | null,
+  hideNsfw?: boolean,
+  options?: RequestOptions,
+): Promise<JobCreateResponse> {
+  return startBulkIdentifyRequest({
+    provider,
+    entityIds,
+    query: query ?? null,
+  } as IdentifyBulkStartRequest, { hideNsfw }, requestInit(options)).then((response) =>
+    unwrapGenerated(response, "Failed to start bulk identify", [202]) as JobCreateResponse,
+  );
 }
 
 export function closeBulkIdentifySession(_sessionId: string): Promise<void> {

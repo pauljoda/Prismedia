@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { goto } from "$app/navigation";
   import {
     Loader2,
     Sparkles,
@@ -9,7 +8,6 @@
   import { entityCardToThumbnailCard } from "$lib/entities/entity-grid";
   import { fetchIdentifyEntities } from "$lib/api/identify-client";
   import type { EntityCard } from "$lib/api/entities";
-  import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
   import IdentifyProviderSelect from "./IdentifyProviderSelect.svelte";
   import { useIdentifyStore } from "./identify-store.svelte";
   import { entityKindIcon } from "./identify-icons";
@@ -68,12 +66,6 @@
     } finally {
       if (requestId === loadRequestId) loading = false;
     }
-  }
-
-  function handleCardActivate(card: EntityThumbnailCard) {
-    const entity = filteredEntities.find((e) => e.id === card.entity.id);
-    if (!entity) return;
-    void store.queueEntity(entity, activeProvider?.id).then(() => goto(`/identify/${entity.id}`));
   }
 
   async function handleBulkQueue() {
@@ -164,8 +156,9 @@
       emptyMessage={showAll
         ? `No ${kindLabel.toLowerCase()} found in your library.`
         : `All ${kindLabel.toLowerCase()} have been organized. Toggle "Show all" to see everything.`}
-      onCardActivate={handleCardActivate}
       onSelectionChange={(ids) => (selectedIds = ids)}
+      initialSelectionActive
+      cardLinks={false}
       bulkActions={activeProvider
         ? [
             {

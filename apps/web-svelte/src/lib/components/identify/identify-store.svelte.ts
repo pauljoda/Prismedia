@@ -11,9 +11,11 @@ import {
   fetchIdentifyQueue,
   fetchIdentifyQueueItem,
   searchIdentifyQueueItem,
+  startBulkIdentify,
 } from "$lib/api/identify-client";
+import { fetchJobs, type JobRun } from "$lib/api/jobs";
 import { fetchPluginProviders } from "$lib/api/plugins";
-import { IDENTIFY_APPLY_STATE } from "$lib/api/generated/codes";
+import { IDENTIFY_APPLY_STATE, JOB_RUN_STATUS, JOB_TYPE } from "$lib/api/generated/codes";
 import type {
   EntityMetadataProposal,
   EntitySearchCandidate,
@@ -121,6 +123,7 @@ export class IdentifyStore {
   bulkSearching = $state(false);
   bulkSearchDone = $state(0);
   bulkSearchTotal = $state(0);
+  activeBulkIdentifyJob = $state<JobRun | null>(null);
   bulkAccepting = $state(false);
   bulkAcceptDone = $state(0);
   bulkAcceptTotal = $state(0);
@@ -207,12 +210,14 @@ export class IdentifyStore {
     this.loading = true;
     this.error = null;
     try {
-      const [providers, queue] = await Promise.all([
+      const [providers, queue, jobs] = await Promise.all([
         fetchPluginProviders(),
         fetchIdentifyQueue(false, this.#getHideNsfw()),
+        fetchJobs().catch(() => null),
       ]);
       this.providers = providers;
       this.queue = queue.map((item) => queueItemFromApi(item));
+      this.activeBulkIdentifyJob = activeBulkIdentifyJobFromList(jobs?.items ?? []);
       this.#queueHideNsfw = this.#getHideNsfw();
     } catch (err) {
       this.error = readError(err);
@@ -490,9 +495,17 @@ export class IdentifyStore {
     }
 
     // Hand the user back to the dashboard now that everything is queued, then
-    // run the searches there so the queue fills in without pinning the tab.
+    // let the server-side bulk-identify job do the provider searches. Keeping
+    // that work in the durable job queue means progress survives refreshes and
+    // the worker's retry/timeout recovery handles slow or rate-limited providers.
     this.navigateToDashboard();
-    await this.#processQueueSearches(pending, providerId);
+    if (pending.length === 0 || !providerId) return;
+    try {
+      const started = await startBulkIdentify(providerId, pending.map((item) => item.entityId), null, this.#getHideNsfw());
+      this.activeBulkIdentifyJob = started.job;
+    } catch (err) {
+      this.error = readError(err);
+    }
   }
 
   /**
@@ -507,45 +520,6 @@ export class IdentifyStore {
     mapped.provider = item.provider ?? providerId ?? null;
     this.#upsertQueueItem(mapped);
     return mapped;
-  }
-
-  /**
-   * Runs the provider search for each freshly queued item in turn, leaving the
-   * result in whatever state the provider returned (proposal or candidate
-   * search). Items that were already resolved or removed are skipped.
-   */
-  async #processQueueSearches(items: IdentifyQueueItem[], providerId?: string | null) {
-    const searchable = items.filter((item) => item.state === "search" && item.candidates.length === 0);
-    if (searchable.length === 0) return;
-    this.bulkSearching = true;
-    this.bulkSearchDone = 0;
-    this.bulkSearchTotal = searchable.length;
-    this.error = null;
-    try {
-      for (const item of searchable) {
-        const current = this.queue.find((queued) => queued.entityId === item.entityId);
-        if (!current || current.state !== "search" || current.candidates.length > 0) {
-          this.bulkSearchDone++;
-          continue;
-        }
-        try {
-          await this.#runQueueSearch(current, providerId);
-        } catch (err) {
-          this.error = readError(err);
-        }
-        this.bulkSearchDone++;
-      }
-    } finally {
-      this.bulkSearching = false;
-    }
-  }
-
-  /** Searches a queued item without navigating, leaving ambiguous results in `search` for review. */
-  async #runQueueSearch(item: IdentifyQueueItem, providerId?: string | null) {
-    const selectedProvider = providerId ?? item.provider;
-    return selectedProvider
-      ? await this.identifyEntity(item.entity, selectedProvider, undefined, { navigate: false })
-      : await this.#identifyEntityWithAvailableProviders(item, { navigate: false });
   }
 
   /**
@@ -1300,6 +1274,13 @@ function readError(err: unknown): string {
   } catch {
     return err.message;
   }
+}
+
+function activeBulkIdentifyJobFromList(jobs: JobRun[]): JobRun | null {
+  return jobs.find((job) =>
+    job.type === JOB_TYPE.bulkIdentify &&
+    (job.status === JOB_RUN_STATUS.queued || job.status === JOB_RUN_STATUS.running)
+  ) ?? null;
 }
 
 function entityKindLabel(kind: string): string {

@@ -11,7 +11,12 @@ namespace Prismedia.Application.Jobs.Handlers;
 /// </summary>
 public sealed class BulkIdentifyJobHandler(
     IBulkIdentifyProvider provider,
-    ILogger<BulkIdentifyJobHandler> logger) : IJobHandler {
+    AutoIdentifyConcurrencyGate gate,
+    ILogger<BulkIdentifyJobHandler> logger,
+    TimeSpan? identifyTimeout = null) : IJobHandler {
+    private static readonly TimeSpan DefaultIdentifyTimeout = TimeSpan.FromSeconds(90);
+    private readonly TimeSpan _identifyTimeout = identifyTimeout ?? DefaultIdentifyTimeout;
+
     public JobType Type => JobType.BulkIdentify;
 
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
@@ -19,12 +24,21 @@ public sealed class BulkIdentifyJobHandler(
         var count = payload.EntityIds.Count;
         logger.LogInformation("BulkIdentify: starting {Count} entities with provider {Provider}", count, payload.Provider);
 
+        using var lease = gate.TryEnter()
+            ?? throw new JobRetryLaterException("Bulk identify provider slot busy.", TimeSpan.FromSeconds(5));
+
         for (var i = 0; i < count; i++) {
             cancellationToken.ThrowIfCancellationRequested();
             var entityId = payload.EntityIds[i];
 
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(_identifyTimeout);
             try {
-                await provider.SearchAndQueueAsync(entityId, payload.Provider, payload.Query, payload.HideNsfw, cancellationToken);
+                await provider.SearchAndQueueAsync(entityId, payload.Provider, payload.Query, payload.HideNsfw, timeout.Token);
+            } catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) {
+                throw new JobRetryLaterException(
+                    $"Bulk identify timed out after {_identifyTimeout.TotalSeconds:0} seconds.",
+                    TimeSpan.FromMinutes(1));
             } catch (Exception ex) {
                 logger.LogWarning(ex, "BulkIdentify: failed to identify entity {EntityId}", entityId);
             }

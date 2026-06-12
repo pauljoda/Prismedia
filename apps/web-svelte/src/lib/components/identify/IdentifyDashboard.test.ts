@@ -15,6 +15,13 @@ const store = vi.hoisted(() => ({
     auth: unknown[];
     missingAuthKeys: string[];
   }>,
+  activeBulkIdentifyJob: null as unknown,
+  bulkSearching: false,
+  bulkSearchDone: 0,
+  bulkSearchTotal: 0,
+  bulkAccepting: false,
+  bulkAcceptDone: 0,
+  bulkAcceptTotal: 0,
   queue: [] as unknown[],
   supportedKinds: [] as Array<{
     kind: string;
@@ -38,6 +45,13 @@ describe("IdentifyDashboard", () => {
   beforeEach(() => {
     store.loading = false;
     store.providers = [provider()];
+    store.activeBulkIdentifyJob = null;
+    store.bulkSearching = false;
+    store.bulkSearchDone = 0;
+    store.bulkSearchTotal = 0;
+    store.bulkAccepting = false;
+    store.bulkAcceptDone = 0;
+    store.bulkAcceptTotal = 0;
     store.queue = [];
     store.supportedKinds = [
       {

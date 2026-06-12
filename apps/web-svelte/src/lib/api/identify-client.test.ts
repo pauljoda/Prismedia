@@ -4,6 +4,7 @@ import {
   fetchIdentifyQueue,
   fetchOptionalIdentifyQueueItem,
   searchIdentifyQueueItem,
+  startBulkIdentify,
 } from "./identify-client";
 
 describe("identify client", () => {
@@ -51,6 +52,20 @@ describe("identify client", () => {
     );
   });
 
+  it("starts durable bulk identify jobs through the generated endpoint", async () => {
+    const fetchMock = mockFetch(jobCreateResponse("job-1"), 202);
+
+    await startBulkIdentify("tmdb", ["video-1", "video-2"], null, true);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/identify/bulk?hideNsfw=true",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ provider: "tmdb", entityIds: ["video-1", "video-2"], query: null }),
+      }),
+    );
+  });
+
   it("returns null for optional queue items that are not found", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response("", { status: 404 })));
 
@@ -58,10 +73,10 @@ describe("identify client", () => {
   });
 });
 
-function mockFetch(data: unknown) {
+function mockFetch(data: unknown, status = 200) {
   const fetchMock = vi.fn(async () => new Response(JSON.stringify(data), {
     headers: { "Content-Type": "application/json" },
-    status: 200,
+    status,
   }));
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
@@ -84,6 +99,24 @@ function queueItem(id: string, options: { state?: string } = {}) {
     createdAt: "2026-05-27T00:00:00Z",
     updatedAt: "2026-05-27T00:00:00Z",
     completedAt: null,
+  };
+}
+
+function jobCreateResponse(id: string) {
+  return {
+    job: {
+      id,
+      type: "bulk-identify",
+      status: "queued",
+      progress: 0,
+      message: "Queued",
+      targetKind: null,
+      targetId: null,
+      targetLabel: "Bulk identify 2 entities",
+      createdAt: "2026-05-27T00:00:00Z",
+      startedAt: null,
+      finishedAt: null,
+    },
   };
 }
 
