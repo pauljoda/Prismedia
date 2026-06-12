@@ -99,6 +99,8 @@ const identifyStoreContext = createContext<IdentifyStore>("IdentifyStore");
 export const setIdentifyStore = identifyStoreContext.provide;
 export const useIdentifyStore = identifyStoreContext.use;
 const MIN_APPLY_PROGRESS_VISIBLE_MS = 650;
+const BULK_IDENTIFY_POLL_INITIAL_MS = 300;
+const BULK_IDENTIFY_POLL_INTERVAL_MS = 1_000;
 
 export class IdentifyStore {
   #getHideNsfw: () => boolean;
@@ -138,6 +140,7 @@ export class IdentifyStore {
   #stopApplyProgressPolling: (() => void) | null = null;
   #cascadePollEntityId: string | null = null;
   #stopCascadePoll: (() => void) | null = null;
+  #stopBulkIdentifyPolling: (() => void) | null = null;
 
   constructor(getHideNsfw: () => boolean = () => false) {
     this.#getHideNsfw = getHideNsfw;
@@ -217,7 +220,7 @@ export class IdentifyStore {
       ]);
       this.providers = providers;
       this.queue = queue.map((item) => queueItemFromApi(item));
-      this.activeBulkIdentifyJob = activeBulkIdentifyJobFromList(jobs?.items ?? []);
+      this.#setActiveBulkIdentifyJob(activeBulkIdentifyJobFromList(jobs?.items ?? []));
       this.#queueHideNsfw = this.#getHideNsfw();
     } catch (err) {
       this.error = readError(err);
@@ -234,12 +237,7 @@ export class IdentifyStore {
 
   async refreshQueueForVisibility(hideNsfw = this.#getHideNsfw()) {
     const queue = await fetchIdentifyQueue(false, hideNsfw);
-    this.queue = queue.map((item) => {
-      const existing = this.queue.find((queued) => queued.entityId === item.entityId);
-      return queueItemFromApi(item, existing?.entity, existing?.detail);
-    });
-    this.#queueHideNsfw = hideNsfw;
-    this.#leaveHiddenReviewIfNeeded();
+    this.#mergeQueueFromApi(queue, hideNsfw);
   }
 
   async enterDashboardRoute() {
@@ -502,7 +500,7 @@ export class IdentifyStore {
     if (pending.length === 0 || !providerId) return;
     try {
       const started = await startBulkIdentify(providerId, pending.map((item) => item.entityId), null, this.#getHideNsfw());
-      this.activeBulkIdentifyJob = started.job;
+      this.#setActiveBulkIdentifyJob(started.job);
     } catch (err) {
       this.error = readError(err);
     }
@@ -882,10 +880,81 @@ export class IdentifyStore {
     };
   }
 
+  #setActiveBulkIdentifyJob(job: JobRun | null) {
+    this.activeBulkIdentifyJob = job;
+    if (job) {
+      this.#ensureBulkIdentifyPolling();
+    } else {
+      this.#stopBulkIdentifyPolling?.();
+      this.#stopBulkIdentifyPolling = null;
+    }
+  }
+
+  #ensureBulkIdentifyPolling() {
+    if (this.#stopBulkIdentifyPolling) return;
+    this.#stopBulkIdentifyPolling = this.#pollBulkIdentify();
+  }
+
+  #pollBulkIdentify(): () => void {
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const controller = new AbortController();
+
+    const schedule = (delay: number) => {
+      if (!stopped) {
+        timer = setTimeout(tick, delay);
+      }
+    };
+
+    const tick = async () => {
+      if (stopped) return;
+      try {
+        const hideNsfw = this.#getHideNsfw();
+        const [jobs, queue] = await Promise.all([
+          fetchJobs({ signal: controller.signal }),
+          fetchIdentifyQueue(false, hideNsfw, { signal: controller.signal }),
+        ]);
+        if (stopped) return;
+
+        this.#mergeQueueFromApi(queue, hideNsfw);
+        const activeJob = activeBulkIdentifyJobFromList(jobs.items);
+        this.activeBulkIdentifyJob = activeJob;
+
+        if (!activeJob) {
+          this.#stopBulkIdentifyPolling = null;
+          stopped = true;
+          return;
+        }
+      } catch (err) {
+        if (stopped || (err instanceof Error && err.name === "AbortError")) return;
+      }
+
+      schedule(BULK_IDENTIFY_POLL_INTERVAL_MS);
+    };
+
+    schedule(BULK_IDENTIFY_POLL_INITIAL_MS);
+    return () => {
+      stopped = true;
+      controller.abort();
+      if (timer) clearTimeout(timer);
+    };
+  }
+
   destroy() {
     this.#stopApplyProgressPolling?.();
     this.#stopApplyProgressPolling = null;
     this.stopCascadePoll();
+    this.#stopBulkIdentifyPolling?.();
+    this.#stopBulkIdentifyPolling = null;
+  }
+
+  #mergeQueueFromApi(queue: ApiIdentifyQueueItem[], hideNsfw = this.#getHideNsfw()) {
+    this.queue = queue.map((item) => {
+      const existing = this.queue.find((queued) => queued.entityId === item.entityId);
+      return queueItemFromApi(item, existing?.entity, existing?.detail);
+    });
+    this.#queueHideNsfw = hideNsfw;
+    this.#leaveHiddenReviewIfNeeded();
   }
 
   #upsertQueueItem(item: IdentifyQueueItem) {
