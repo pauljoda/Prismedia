@@ -112,6 +112,7 @@ export const JOB_TYPE = {
   refreshCollection: "refresh-collection",
   libraryMaintenance: "library-maintenance",
   refreshEntity: "refresh-entity",
+  identifySearch: "identify-search",
   bulkIdentify: "bulk-identify",
   autoIdentify: "auto-identify",
   identifyCascade: "identify-cascade",
@@ -179,6 +180,8 @@ export type IdentifyActionCode = (typeof IDENTIFY_ACTION)[keyof typeof IDENTIFY_
 
 export const IDENTIFY_QUEUE_STATE = {
   search: "search",
+  queued: "queued",
+  searching: "searching",
   proposal: "proposal",
   done: "done",
   deleted: "deleted",

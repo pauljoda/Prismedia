@@ -7,6 +7,7 @@
 import type { IdentifyQuery } from './identifyQuery';
 
 export interface IdentifyQueueSearchRequest {
-  provider: string;
+  /** @nullable */
+  provider: string | null;
   query: null | IdentifyQuery;
 }

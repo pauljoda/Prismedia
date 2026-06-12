@@ -7,7 +7,8 @@
 import type { IdentifyQuery } from './identifyQuery';
 
 export interface IdentifyBulkStartRequest {
-  provider: string;
+  /** @nullable */
+  provider: string | null;
   entityIds: string[];
   query: null | IdentifyQuery;
 }

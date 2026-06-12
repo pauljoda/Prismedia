@@ -13,7 +13,13 @@ vi.mock("vidstack", () => ({
 
 const store = vi.hoisted(() => ({
   error: null as string | null,
-  identifyingId: null as string | null,
+  busyEntityId: null as string | null,
+  isItemBusy(entityId: string) {
+    return this.busyEntityId === entityId;
+  },
+  itemSearchStatus(_entityId: string) {
+    return null as string | null;
+  },
   providers: [] as PluginProvider[],
   providersForKind: vi.fn(),
   identifyWithCandidate: vi.fn(),
@@ -38,7 +44,7 @@ describe("IdentifyReviewChoice", () => {
       unobserve() {}
     };
     store.error = null;
-    store.identifyingId = null;
+    store.busyEntityId = null;
     store.providers = [];
     store.providersForKind.mockReset();
     store.providersForKind.mockReturnValue([provider()]);

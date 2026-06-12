@@ -85,6 +85,7 @@ import type {
   HeadFileContentParams,
   HealthResponse,
   IdentifyApplyProgress,
+  IdentifyBulkAcceptedResponse,
   IdentifyBulkStartRequest,
   IdentifyEntityParams,
   IdentifyEntityRequest,
@@ -8683,7 +8684,7 @@ export const getSearchIdentifyQueueItemUrl = (entityId: string,
 }
 
 /**
- * @summary Runs a provider search and stores candidates or a proposal on the queue item.
+ * @summary Requests a provider search; a background identify-search job runs it and the item reports progress through its state.
  */
 export const searchIdentifyQueueItem = async (entityId: string,
     identifyQueueSearchRequest: IdentifyQueueSearchRequest,
@@ -8847,7 +8848,7 @@ export const getIdentifyApplyProgress = async (entityId: string,
 
 
 export type startBulkIdentifyResponse202 = {
-  data: JobCreateResponse
+  data: IdentifyBulkAcceptedResponse
   status: 202
 }
 
@@ -8881,7 +8882,7 @@ export const getStartBulkIdentifyUrl = (params?: StartBulkIdentifyParams,) => {
 }
 
 /**
- * @summary Enqueues a bulk identify job that searches a provider for each entity.
+ * @summary Requests identify searches for a batch of entities, one identify-search job per entity.
  */
 export const startBulkIdentify = async (identifyBulkStartRequest: IdentifyBulkStartRequest,
     params?: StartBulkIdentifyParams, options?: RequestInit): Promise<startBulkIdentifyResponse> => {

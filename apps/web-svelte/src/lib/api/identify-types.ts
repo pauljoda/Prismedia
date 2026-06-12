@@ -1,5 +1,5 @@
 import type { EntityKind, ProposalKind } from "$lib/api/generated/model";
-import type { IdentifyActionCode, IdentifyApplyStateCode } from "$lib/api/generated/codes";
+import type { IdentifyActionCode, IdentifyApplyStateCode, IdentifyQueueStateCode } from "$lib/api/generated/codes";
 import type { EntityMetadataFlagsPatch } from "$lib/api/entity-mutations";
 
 export interface PluginEntitySupport {
@@ -96,25 +96,7 @@ export interface EntityMetadataProposal {
   targetEntityId?: string | null;
 }
 
-export interface IdentifyBulkResult {
-  entityId: string;
-  response: {
-    ok: boolean;
-    result?: EntityMetadataProposal | null;
-    error?: string | null;
-  };
-}
-
-export interface IdentifyBulkSession {
-  id: string;
-  provider: string;
-  entityIds: string[];
-  results: IdentifyBulkResult[];
-  status: "running" | "completed" | string;
-  createdAt: string;
-}
-
-export type IdentifyQueueState = "search" | "proposal" | "done" | "deleted" | "error";
+export type IdentifyQueueState = IdentifyQueueStateCode;
 
 export interface IdentifyApplyProgress {
   id: string;

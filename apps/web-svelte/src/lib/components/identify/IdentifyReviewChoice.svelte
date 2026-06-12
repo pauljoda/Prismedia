@@ -117,7 +117,7 @@
   }
 
   async function pickCandidate(candidate: EntitySearchCandidate, candidateKey: string) {
-    if (!candidateProvider || store.identifyingId !== null) return;
+    if (!candidateProvider || store.isItemBusy(entity.id)) return;
     checkingCandidateKey = candidateKey;
     checkingCandidateTitle = candidate.title;
     try {
@@ -284,12 +284,12 @@
           class={cn(
             "identify-candidate-card relative grid cursor-pointer items-center gap-3 rounded-sm border border-border-subtle bg-surface-1 p-2.5 text-left shadow-well transition-all hover:border-border-accent hover:bg-surface-2 hover:shadow-[0_0_20px_rgba(242,194,106,0.08)] focus-visible:border-border-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent-500/60",
             "grid-cols-[3.5rem_minmax(0,1fr)_auto] sm:grid-cols-[4rem_minmax(0,1fr)_auto]",
-            store.identifyingId !== null && "cursor-wait opacity-60",
+            store.isItemBusy(entity.id) && "cursor-wait opacity-60",
           )}
           role="button"
-          tabindex={store.identifyingId !== null ? -1 : 0}
+          tabindex={store.isItemBusy(entity.id) ? -1 : 0}
           aria-label={candidateActionLabel(candidate)}
-          aria-disabled={store.identifyingId !== null}
+          aria-disabled={store.isItemBusy(entity.id)}
           onclick={() => void pickCandidate(candidate, candidateKey)}
           onkeydown={(event) => handleCandidateKeydown(event, candidate, candidateKey)}
         >
@@ -368,7 +368,7 @@
     <IdentifyRejectQueueActions
       entityId={entity.id}
       showNext={Boolean(nextQueueItem)}
-      disabled={store.identifyingId !== null}
+      disabled={store.isItemBusy(entity.id)}
     />
   </div>
 

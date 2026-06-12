@@ -6,8 +6,6 @@ export type {
   EntityMetadataProposal,
   IdentifyApplyProgress,
   EntitySearchCandidate,
-  IdentifyBulkResult,
-  IdentifyBulkSession,
   IdentifyQueueItem,
   IdentifyQueueState,
   IdentifyQuery,

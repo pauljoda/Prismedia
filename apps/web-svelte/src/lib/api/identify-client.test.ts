@@ -3,7 +3,7 @@ import {
   applyIdentifyQueueItem,
   fetchIdentifyQueue,
   fetchOptionalIdentifyQueueItem,
-  searchIdentifyQueueItem,
+  requestIdentifySearch,
   startBulkIdentify,
 } from "./identify-client";
 
@@ -19,13 +19,13 @@ describe("identify client", () => {
     );
   });
 
-  it("posts queue search requests through the generated endpoint", async () => {
+  it("posts search requests through the generated endpoint", async () => {
     const fetchMock = mockFetch(queueItem("video-1"));
 
-    await searchIdentifyQueueItem("video-1", "tmdb", { title: "Friendship" });
+    await requestIdentifySearch("video-1", "tmdb", { title: "Friendship" });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/identify/queue/entities/video-1/search",
+      expect.stringContaining("/api/identify/queue/entities/video-1/search"),
       expect.objectContaining({
         method: "POST",
         body: JSON.stringify({ provider: "tmdb", query: { title: "Friendship" } }),

@@ -122,15 +122,10 @@
           <ScanSearch class="h-3.5 w-3.5 text-text-accent" />
           <span class="text-kicker text-text-accent">Review queue</span>
           <span class="font-mono text-[0.7rem] text-text-muted">{store.queue.length} items</span>
-          {#if store.activeBulkIdentifyJob}
+          {#if store.queuedCount > 0 || store.searchingCount > 0}
             <span class="inline-flex items-center gap-1.5 font-mono text-[0.7rem] text-text-accent">
               <Loader2 class="h-3 w-3 animate-spin" />
-              Searching {store.activeBulkIdentifyJob.progress}%{store.activeBulkIdentifyJob.message ? ` · ${store.activeBulkIdentifyJob.message}` : ""}
-            </span>
-          {:else if store.bulkSearching}
-            <span class="inline-flex items-center gap-1.5 font-mono text-[0.7rem] text-text-accent">
-              <Loader2 class="h-3 w-3 animate-spin" />
-              Searching {store.bulkSearchDone}/{store.bulkSearchTotal}
+              {store.searchingCount} searching · {store.queuedCount} queued · {store.reviewableCount} to review
             </span>
           {/if}
           {#if store.bulkAccepting}
@@ -216,7 +211,7 @@
       </div>
 
       {#each store.queue as item, i (item.entityId)}
-        {@const stateLabel = { proposal: "REVIEW", search: "SEARCH", done: "DONE", deleted: "DELETED", error: "ERROR" }[item.state]}
+        {@const stateLabel = { proposal: "REVIEW", search: "CHOOSE", queued: "QUEUED", searching: "SEARCHING", done: "DONE", deleted: "DELETED", error: "ERROR" }[item.state]}
         {@const isSelected = selectedQueueIds.has(item.entityId)}
         <div
           class={cn(
@@ -240,12 +235,20 @@
                 "font-mono text-[0.66rem] font-semibold",
                 item.state === "proposal" && "text-text-accent",
                 item.state === "search" && "text-warning-text",
+                (item.state === "queued" || item.state === "searching") && "text-text-muted",
                 item.state === "done" && "text-success-text",
                 item.state === "error" && "text-error-text",
                 item.state === "deleted" && "text-text-disabled",
               )}
             >
-              {stateLabel}
+              {#if item.state === "searching" || item.state === "queued"}
+                <span class="inline-flex items-center gap-1">
+                  <Loader2 class="h-3 w-3 animate-spin" />
+                  {stateLabel}
+                </span>
+              {:else}
+                {stateLabel}
+              {/if}
             </span>
           </div>
 

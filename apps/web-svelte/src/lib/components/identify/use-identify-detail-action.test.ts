@@ -6,6 +6,7 @@ import UseIdentifyDetailActionHarness from "./use-identify-detail-action.test-ha
 const goto = vi.fn();
 const fetchIdentifyProviders = vi.fn();
 const fetchOptionalIdentifyQueueItem = vi.fn();
+const requestIdentifySearch = vi.fn();
 
 vi.mock("$app/navigation", () => ({
   goto: (...args: unknown[]) => goto(...args),
@@ -17,6 +18,7 @@ vi.mock("$lib/api/identify-client", async (importOriginal) => {
     ...actual,
     fetchIdentifyProviders: (...args: unknown[]) => fetchIdentifyProviders(...args),
     fetchOptionalIdentifyQueueItem: (...args: unknown[]) => fetchOptionalIdentifyQueueItem(...args),
+    requestIdentifySearch: (...args: unknown[]) => requestIdentifySearch(...args),
   };
 });
 
@@ -25,8 +27,10 @@ describe("useIdentifyDetailAction", () => {
     goto.mockReset();
     fetchIdentifyProviders.mockReset();
     fetchOptionalIdentifyQueueItem.mockReset();
+    requestIdentifySearch.mockReset();
     fetchIdentifyProviders.mockResolvedValue([provider("person")]);
     fetchOptionalIdentifyQueueItem.mockResolvedValue(null);
+    requestIdentifySearch.mockResolvedValue(queueItem("person-1", { state: "queued" }));
   });
 
   it("opens an existing queue review instead of starting a new identify flow", async () => {
@@ -43,7 +47,8 @@ describe("useIdentifyDetailAction", () => {
     await fireEvent.click(button);
 
     expect(fetchIdentifyProviders).toHaveBeenCalledWith("person");
-    expect(goto).toHaveBeenCalledWith("/identify/person-1?returnId=person-1&queued=1");
+    expect(requestIdentifySearch).not.toHaveBeenCalled();
+    expect(goto).toHaveBeenCalledWith("/identify/person-1?returnId=person-1");
   });
 
   it("keeps the action visible but unavailable when no ready provider supports the entity kind", async () => {
@@ -75,7 +80,10 @@ describe("useIdentifyDetailAction", () => {
     const button = await screen.findByRole("button", { name: "Identify" });
     await fireEvent.click(button);
 
-    expect(goto).toHaveBeenCalledWith("/identify/person-1?returnId=person-1");
+    await waitFor(() => {
+      expect(goto).toHaveBeenCalledWith("/identify/person-1?returnId=person-1");
+    });
+    expect(requestIdentifySearch).toHaveBeenCalledWith("person-1", null);
   });
 
   it("loads provider state after the detail entity is populated asynchronously", async () => {

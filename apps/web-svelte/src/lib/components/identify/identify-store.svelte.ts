@@ -4,23 +4,20 @@ import { createContext } from "$lib/utils/context";
 import {
   addIdentifyQueueItem,
   applyIdentifyQueueItem,
-  closeBulkIdentifySession,
   deleteIdentifyQueueItem,
   fetchIdentifyEntity,
   fetchIdentifyApplyProgress,
   fetchIdentifyQueue,
   fetchIdentifyQueueItem,
-  searchIdentifyQueueItem,
+  requestIdentifySearch,
   startBulkIdentify,
 } from "$lib/api/identify-client";
-import { fetchJobs, type JobRun } from "$lib/api/jobs";
 import { fetchPluginProviders } from "$lib/api/plugins";
-import { IDENTIFY_APPLY_STATE, JOB_RUN_STATUS, JOB_TYPE } from "$lib/api/generated/codes";
+import { IDENTIFY_APPLY_STATE, IDENTIFY_QUEUE_STATE } from "$lib/api/generated/codes";
 import type {
   EntityMetadataProposal,
   EntitySearchCandidate,
   IdentifyApplyProgress,
-  IdentifyBulkSession,
   IdentifyQueueItem as ApiIdentifyQueueItem,
   IdentifyQueueState,
   PluginProvider,
@@ -42,12 +39,6 @@ import {
  * a match for it.
  */
 export type ChildIdentifyStatus = "matched" | "loading" | "none";
-
-/** Options shared by the auto-identify path that controls whether resolving a queue item also navigates the review view. */
-interface IdentifyResolveOptions {
-  /** When false, the resolved item is upserted into the queue without navigating to its review view. Defaults to true. */
-  navigate?: boolean;
-}
 
 interface IdentifyRejectOptions {
   /** When true, move directly to the next reviewable queue item after rejecting this one. */
@@ -99,9 +90,8 @@ const identifyStoreContext = createContext<IdentifyStore>("IdentifyStore");
 export const setIdentifyStore = identifyStoreContext.provide;
 export const useIdentifyStore = identifyStoreContext.use;
 const MIN_APPLY_PROGRESS_VISIBLE_MS = 650;
-const BULK_IDENTIFY_POLL_INITIAL_MS = 300;
-const BULK_IDENTIFY_POLL_INTERVAL_MS = 1_000;
-const SEARCH_REQUEST_TIMEOUT_MS = 120_000;
+const QUEUE_POLL_INITIAL_MS = 300;
+const QUEUE_POLL_INTERVAL_MS = 1_000;
 
 export class IdentifyStore {
   #getHideNsfw: () => boolean;
@@ -113,20 +103,9 @@ export class IdentifyStore {
   loading = $state(true);
   error = $state<string | null>(null);
   message = $state<string | null>(null);
-  identifyingId = $state<string | null>(null);
-  identifyingProviderId = $state<string | null>(null);
-  identifyingProviderName = $state<string | null>(null);
-  identifyingProviderIndex = $state<number | null>(null);
-  identifyingProviderTotal = $state<number | null>(null);
-  identifyingPhase = $state<"searching" | "matched">("searching");
   applying = $state(false);
   applyProgress = $state<IdentifyApplyProgress | null>(null);
-  bulkSession = $state<IdentifyBulkSession | null>(null);
   bulkStarting = $state(false);
-  bulkSearching = $state(false);
-  bulkSearchDone = $state(0);
-  bulkSearchTotal = $state(0);
-  activeBulkIdentifyJob = $state<JobRun | null>(null);
   bulkAccepting = $state(false);
   bulkAcceptDone = $state(0);
   bulkAcceptTotal = $state(0);
@@ -139,9 +118,7 @@ export class IdentifyStore {
   reviewDetailsByEntityId = $state<Record<string, EntityDetailCard | null>>({});
   reviewDetailLoadingByEntityId = $state<Record<string, boolean>>({});
   #stopApplyProgressPolling: (() => void) | null = null;
-  #cascadePollEntityId: string | null = null;
-  #stopCascadePoll: (() => void) | null = null;
-  #stopBulkIdentifyPolling: (() => void) | null = null;
+  #stopQueuePolling: (() => void) | null = null;
 
   constructor(getHideNsfw: () => boolean = () => false) {
     this.#getHideNsfw = getHideNsfw;
@@ -178,23 +155,33 @@ export class IdentifyStore {
     return null;
   });
 
-  identifyingStatus = $derived.by((): string | null => {
-    if (!this.identifyingId) return null;
-    const providerName = this.identifyingProviderName ?? this.identifyingProviderId;
-    if (this.identifyingPhase === "matched") {
-      return "Match found. Identifying related items; this may take a while.";
+  /** Items waiting for their requested search job to start. */
+  queuedCount = $derived(this.queue.filter((item) => item.state === IDENTIFY_QUEUE_STATE.queued).length);
+
+  /** Items whose search job is actively querying a provider. */
+  searchingCount = $derived(this.queue.filter((item) => item.state === IDENTIFY_QUEUE_STATE.searching).length);
+
+  /** Items holding a result (candidates or proposal) waiting for the user. */
+  reviewableCount = $derived(this.queue.filter((item) =>
+    (item.state === IDENTIFY_QUEUE_STATE.proposal && Boolean(item.proposal)) ||
+    (item.state === IDENTIFY_QUEUE_STATE.search && item.candidates.length > 0)).length);
+
+  /** Whether the entity's queue item is waiting on or running a requested search. */
+  isItemBusy(entityId: string): boolean {
+    const item = this.queue.find((queued) => queued.entityId === entityId);
+    return item?.state === IDENTIFY_QUEUE_STATE.queued || item?.state === IDENTIFY_QUEUE_STATE.searching;
+  }
+
+  /** Short status line for an item's in-flight search, or null when none is running. */
+  itemSearchStatus(entityId: string): string | null {
+    const item = this.queue.find((queued) => queued.entityId === entityId);
+    if (item?.state === IDENTIFY_QUEUE_STATE.queued) return "Queued for search";
+    if (item?.state === IDENTIFY_QUEUE_STATE.searching) {
+      const provider = this.providers.find((candidate) => candidate.id === item.provider);
+      return `Searching with ${provider?.name ?? item.provider ?? "providers"}`;
     }
-    if (!providerName) return "Searching identify providers";
-    const pluginLabel = providerName.toLowerCase().includes("plugin")
-      ? providerName
-      : `${providerName} Plugin`;
-    const progress = this.identifyingProviderIndex !== null &&
-      this.identifyingProviderTotal !== null &&
-      this.identifyingProviderTotal > 1
-        ? ` (${this.identifyingProviderIndex + 1}/${this.identifyingProviderTotal})`
-        : "";
-    return `Searching with ${pluginLabel}${progress}`;
-  });
+    return null;
+  }
 
   providersForKind(kind: string): PluginProvider[] {
     // Hide NSFW providers (including every Stash scraper) while browsing in SFW mode so they are
@@ -214,15 +201,14 @@ export class IdentifyStore {
     this.loading = true;
     this.error = null;
     try {
-      const [providers, queue, jobs] = await Promise.all([
+      const [providers, queue] = await Promise.all([
         fetchPluginProviders(),
         fetchIdentifyQueue(false, this.#getHideNsfw()),
-        fetchJobs().catch(() => null),
       ]);
       this.providers = providers;
       this.queue = queue.map((item) => queueItemFromApi(item));
-      this.#setActiveBulkIdentifyJob(activeBulkIdentifyJobFromList(jobs?.items ?? []));
       this.#queueHideNsfw = this.#getHideNsfw();
+      this.ensureQueuePolling();
     } catch (err) {
       this.error = readError(err);
     } finally {
@@ -246,26 +232,18 @@ export class IdentifyStore {
     await this.loadInitial();
   }
 
-  async seedEntity(
-    entityId: string,
-    returnEntityId: string | null,
-    options: { openExistingOnly?: boolean } = {},
-  ) {
+  async seedEntity(entityId: string, returnEntityId: string | null) {
     this.returnEntityId = returnEntityId;
     this.loading = true;
     this.error = null;
     try {
-      const [providers, item, detail, jobs] = await Promise.all([
+      // Opening an item never starts a search; it renders whatever state the server holds.
+      // Searches are requested explicitly (identify button, candidate pick, manual query).
+      const [providers, item, detail] = await Promise.all([
         fetchPluginProviders(),
-        options.openExistingOnly
-          ? fetchIdentifyQueueItem(entityId).catch(async () => addIdentifyQueueItem(entityId))
-          : addIdentifyQueueItem(entityId),
+        fetchIdentifyQueueItem(entityId).catch(async () => addIdentifyQueueItem(entityId)),
         fetchEntityDetail(entityId),
-        fetchJobs().catch(() => null),
       ]);
-      // Surface a running bulk identify job so this page polls while the server-side
-      // search streams results onto the opened item.
-      this.#setActiveBulkIdentifyJob(activeBulkIdentifyJobFromList(jobs?.items ?? []));
       const hideNsfw = this.#getHideNsfw();
       const queue = await fetchIdentifyQueue(false, hideNsfw);
       this.providers = providers;
@@ -277,11 +255,11 @@ export class IdentifyStore {
       }
       const mapped = queueItemFromApi(item, undefined, detail);
       this.#upsertQueueItem(mapped);
-      if (options.openExistingOnly && isActiveQueueState(mapped.state)) {
+      if (isActiveQueueState(mapped.state)) {
         this.reviewResolvedQueueItem(mapped);
-        return mapped;
       }
-      return await this.#autoIdentifyQueueItem(mapped) ?? mapped;
+      this.ensureQueuePolling();
+      return mapped;
     } catch (err) {
       this.error = readError(err);
       return null;
@@ -316,33 +294,29 @@ export class IdentifyStore {
     this.navigateTo({ kind: "kind-tab", entityKind });
   }
 
-  async queueEntity(entity: EntityCard, providerId?: string | null, options: IdentifyResolveOptions = {}) {
-    const [item, detail] = await Promise.all([
-      addIdentifyQueueItem(entity.id),
-      fetchEntityDetail(entity.id),
-    ]);
-    const mapped = queueItemFromApi(item, entity, detail);
-    this.#upsertQueueItem(mapped);
-    return await this.#autoIdentifyQueueItem(mapped, providerId, options) ?? mapped;
-  }
-
+  /**
+   * Requests a provider search for the entity. The search runs as a background job on the
+   * server; the returned item is already in the queued state and this store's polling renders
+   * its progress (queued → searching → candidates/proposal/error).
+   */
   async identifyEntity(
     entity: EntityCard,
-    providerId: string,
+    providerId: string | null,
     query?: { title?: string | null; url?: string | null; externalIds?: Record<string, string> | null; requireChoice?: boolean | null },
-    options: IdentifyResolveOptions = {},
   ) {
-    this.identifyingId = entity.id;
     this.error = null;
-    this.#setIdentifyingProvider(providerId, 0, 1, identifyQueryHasMatch(query) ? "matched" : "searching");
     try {
-      return await this.#searchWithTitleFallback(entity, providerId, query, options);
+      const item = await requestIdentifySearch(entity.id, providerId, query, this.#getHideNsfw());
+      const existing = this.queue.find((queued) => queued.entityId === entity.id);
+      const detail = existing?.detail ?? await fetchEntityDetail(entity.id);
+      const mapped = queueItemFromApi(item, entity, detail);
+      this.#upsertQueueItem(mapped);
+      this.ensureQueuePolling();
+      return mapped;
     } catch (err) {
       this.error = readError(err);
       this.#markQueueError(entity.id, readError(err));
       return null;
-    } finally {
-      this.#clearIdentifyingStatus();
     }
   }
 
@@ -350,9 +324,8 @@ export class IdentifyStore {
     entity: EntityCard,
     providerId: string,
     candidate: EntitySearchCandidate,
-    options: IdentifyResolveOptions = {},
   ) {
-    return this.identifyEntity(entity, providerId, { externalIds: candidate.externalIds }, options);
+    return this.identifyEntity(entity, providerId, { externalIds: candidate.externalIds });
   }
 
   async backToSearch(entity: EntityCard, providerId?: string | null) {
@@ -363,9 +336,8 @@ export class IdentifyStore {
       return null;
     }
 
-    // Returning to search abandons the current proposal, so drop any in-progress child
-    // identification: stop polling the abandoned cascade so re-picking starts cleanly.
-    this.stopCascadePoll();
+    // Returning to search abandons the current proposal; the server cancels the abandoned
+    // cascade when it stamps the new search request.
     return this.identifyEntity(entity, selectedProvider, { title: entity.title, requireChoice: true });
   }
 
@@ -433,9 +405,6 @@ export class IdentifyStore {
     try {
       const item = await deleteIdentifyQueueItem(entityId);
       this.#removeActiveQueueItem(item.entityId);
-      if (this.#cascadePollEntityId === item.entityId) {
-        this.stopCascadePoll();
-      }
 
       if (options.navigateNext) {
         const next = this.nextQueueItem(item.entityId);
@@ -471,58 +440,29 @@ export class IdentifyStore {
   }
 
   /**
-   * Queues a batch for identify in two phases so the originating tab is never
-   * held open while matches resolve:
-   *
-   * 1. Every selected entity is added to the queue up front (a fast insert with
-   *    no provider lookup), each surfacing in the queue as it lands, and the
-   *    user is dropped back on the dashboard immediately.
-   * 2. The queued items are then searched one at a time on the dashboard. Items
-   *    with a confident match become reviewable proposals; anything ambiguous
-   *    stays in `search` for the user to pick a candidate — nothing is
-   *    auto-selected on their behalf.
+   * Requests identify searches for a batch in one call: the server creates each item in the
+   * queued state and enqueues one identify-search job per entity, so progress is durable and
+   * one slow provider call can never stall the rest of the batch. Local rows are shown
+   * optimistically and replaced by the server's queue on the next refresh.
    */
-  async startBulk(providerId: string, entities: EntityCard[]) {
+  async startBulk(providerId: string | null, entities: EntityCard[]) {
     this.bulkStarting = true;
     this.error = null;
-    const pending: IdentifyQueueItem[] = [];
     try {
       for (const entity of entities) {
-        const queued = await this.#addEntityToQueue(entity, providerId);
-        if (queued) pending.push(queued);
+        this.addToQueue(entity, IDENTIFY_QUEUE_STATE.queued, providerId ?? undefined);
       }
+
+      await startBulkIdentify(providerId, entities.map((entity) => entity.id), null, this.#getHideNsfw());
+      await this.refreshQueueForVisibility();
+      this.ensureQueuePolling();
     } catch (err) {
       this.error = readError(err);
     } finally {
       this.bulkStarting = false;
     }
 
-    // Hand the user back to the dashboard now that everything is queued, then
-    // let the server-side bulk-identify job do the provider searches. Keeping
-    // that work in the durable job queue means progress survives refreshes and
-    // the worker's retry/timeout recovery handles slow or rate-limited providers.
     this.navigateToDashboard();
-    if (pending.length === 0 || !providerId) return;
-    try {
-      const started = await startBulkIdentify(providerId, pending.map((item) => item.entityId), null, this.#getHideNsfw());
-      this.#setActiveBulkIdentifyJob(started.job);
-    } catch (err) {
-      this.error = readError(err);
-    }
-  }
-
-  /**
-   * Adds a single entity to the queue without running a provider search. The
-   * passed card is reused for the queue row so the dashboard can render it
-   * immediately, and the chosen provider is recorded as a hint for the later
-   * search pass.
-   */
-  async #addEntityToQueue(entity: EntityCard, providerId?: string | null): Promise<IdentifyQueueItem | null> {
-    const item = await addIdentifyQueueItem(entity.id);
-    const mapped = queueItemFromApi(item, entity);
-    mapped.provider = item.provider ?? providerId ?? null;
-    this.#upsertQueueItem(mapped);
-    return mapped;
   }
 
   /**
@@ -569,13 +509,6 @@ export class IdentifyStore {
     } finally {
       this.bulkAccepting = false;
     }
-  }
-
-  async closeBulk() {
-    if (!this.bulkSession) return;
-    const id = this.bulkSession.id;
-    this.bulkSession = null;
-    await closeBulkIdentifySession(id).catch(() => undefined);
   }
 
   addToQueue(
@@ -649,32 +582,31 @@ export class IdentifyStore {
     };
   }
 
-  // ── Streamed child identify ─────────────────────────────────────────────
-  // Child identification runs as a backend cascade job (enqueued when a candidate is picked). It
-  // streams the growing proposal onto the queue item; the review polls the item so children fill in.
-  // The grid derives each child's status from the proposal + whether the cascade is still running.
+  // ── Live queue polling ──────────────────────────────────────────────────
+  // One loop renders every server-side transition: requested searches moving through
+  // queued → searching → result, and cascades streaming children onto an open review.
+  // It runs only while something is actually in flight and stops itself when idle.
 
   /** Whether the entity's background cascade is still resolving its child tree. */
   cascadeRunning(entityId: string): boolean {
     return this.queue.find((item) => item.entityId === entityId)?.cascadeRunning ?? false;
   }
 
-  /** Starts polling the entity's queue item while its cascade streams children in. Idempotent. */
-  ensureCascadePoll(entityId: string) {
-    if (this.#cascadePollEntityId === entityId) return;
-    if (!this.cascadeRunning(entityId)) return;
-    this.stopCascadePoll();
-    this.#cascadePollEntityId = entityId;
-    this.#stopCascadePoll = this.#pollCascade(entityId);
+  /** Starts the live queue poll if anything is in flight. Idempotent; the loop stops itself when idle. */
+  ensureQueuePolling() {
+    if (this.#stopQueuePolling) return;
+    if (!this.#queueHasLiveWork()) return;
+    this.#stopQueuePolling = this.#pollQueue();
   }
 
-  stopCascadePoll() {
-    this.#stopCascadePoll?.();
-    this.#stopCascadePoll = null;
-    this.#cascadePollEntityId = null;
+  #queueHasLiveWork(): boolean {
+    return this.queue.some((item) =>
+      item.state === IDENTIFY_QUEUE_STATE.queued ||
+      item.state === IDENTIFY_QUEUE_STATE.searching ||
+      item.cascadeRunning);
   }
 
-  #pollCascade(entityId: string): () => void {
+  #pollQueue(): () => void {
     let stopped = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const controller = new AbortController();
@@ -682,20 +614,15 @@ export class IdentifyStore {
     const tick = async () => {
       if (stopped) return;
       try {
-        const apiItem = await fetchIdentifyQueueItem(entityId, { signal: controller.signal });
+        const hideNsfw = this.#getHideNsfw();
+        const queue = await fetchIdentifyQueue(false, hideNsfw, { signal: controller.signal });
         if (stopped) return;
-        const existing = this.queue.find((queued) => queued.entityId === entityId);
-        const merged = queueItemFromApi(apiItem, existing?.entity, existing?.detail);
-        this.#upsertQueueItem(merged);
+        this.#mergeQueueFromApi(queue, hideNsfw);
+        this.#syncLiveReviewProposal();
 
-        // Keep the live parent review in sync as children stream in.
-        const view = this.view;
-        if (view.kind === "review-parent" && view.entity.id === entityId && merged.proposal) {
-          this.view = { ...view, proposal: merged.proposal };
-        }
-
-        if (!merged.cascadeRunning) {
-          this.stopCascadePoll();
+        if (!this.#queueHasLiveWork()) {
+          this.#stopQueuePolling = null;
+          stopped = true;
           return;
         }
       } catch (err) {
@@ -703,16 +630,26 @@ export class IdentifyStore {
       }
 
       if (!stopped) {
-        timer = setTimeout(tick, 700);
+        timer = setTimeout(tick, QUEUE_POLL_INTERVAL_MS);
       }
     };
 
-    timer = setTimeout(tick, 300);
+    timer = setTimeout(tick, QUEUE_POLL_INITIAL_MS);
     return () => {
       stopped = true;
       controller.abort();
       if (timer) clearTimeout(timer);
     };
+  }
+
+  /** Keeps an open parent review in sync as its cascade streams children onto the proposal. */
+  #syncLiveReviewProposal() {
+    const view = this.view;
+    if (view.kind !== "review-parent") return;
+    const item = this.queue.find((queued) => queued.entityId === view.entity.id);
+    if (item?.proposal) {
+      this.view = { ...view, proposal: item.proposal };
+    }
   }
 
   /** Returns the currently-persisted identify proposal for an entity (used to reopen a live review). */
@@ -885,72 +822,11 @@ export class IdentifyStore {
     };
   }
 
-  #setActiveBulkIdentifyJob(job: JobRun | null) {
-    this.activeBulkIdentifyJob = job;
-    if (job) {
-      this.#ensureBulkIdentifyPolling();
-    } else {
-      this.#stopBulkIdentifyPolling?.();
-      this.#stopBulkIdentifyPolling = null;
-    }
-  }
-
-  #ensureBulkIdentifyPolling() {
-    if (this.#stopBulkIdentifyPolling) return;
-    this.#stopBulkIdentifyPolling = this.#pollBulkIdentify();
-  }
-
-  #pollBulkIdentify(): () => void {
-    let stopped = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const controller = new AbortController();
-
-    const schedule = (delay: number) => {
-      if (!stopped) {
-        timer = setTimeout(tick, delay);
-      }
-    };
-
-    const tick = async () => {
-      if (stopped) return;
-      try {
-        const hideNsfw = this.#getHideNsfw();
-        const [jobs, queue] = await Promise.all([
-          fetchJobs({ signal: controller.signal }),
-          fetchIdentifyQueue(false, hideNsfw, { signal: controller.signal }),
-        ]);
-        if (stopped) return;
-
-        this.#mergeQueueFromApi(queue, hideNsfw);
-        const activeJob = activeBulkIdentifyJobFromList(jobs.items);
-        this.activeBulkIdentifyJob = activeJob;
-
-        if (!activeJob) {
-          this.#stopBulkIdentifyPolling = null;
-          stopped = true;
-          return;
-        }
-      } catch (err) {
-        if (stopped || (err instanceof Error && err.name === "AbortError")) return;
-      }
-
-      schedule(BULK_IDENTIFY_POLL_INTERVAL_MS);
-    };
-
-    schedule(BULK_IDENTIFY_POLL_INITIAL_MS);
-    return () => {
-      stopped = true;
-      controller.abort();
-      if (timer) clearTimeout(timer);
-    };
-  }
-
   destroy() {
     this.#stopApplyProgressPolling?.();
     this.#stopApplyProgressPolling = null;
-    this.stopCascadePoll();
-    this.#stopBulkIdentifyPolling?.();
-    this.#stopBulkIdentifyPolling = null;
+    this.#stopQueuePolling?.();
+    this.#stopQueuePolling = null;
   }
 
   #mergeQueueFromApi(queue: ApiIdentifyQueueItem[], hideNsfw = this.#getHideNsfw()) {
@@ -982,129 +858,6 @@ export class IdentifyStore {
       item.state = "error";
       item.errorMessage = message;
     }
-  }
-
-  /**
-   * Runs the provider search for a freshly queued item, leaving the result in
-   * whatever state the provider returned. A confident match becomes a reviewable
-   * proposal; an ambiguous result stays in `search` so the user picks the
-   * candidate themselves rather than having one chosen for them.
-   */
-  async #autoIdentifyQueueItem(
-    item: IdentifyQueueItem,
-    providerId?: string | null,
-    options: IdentifyResolveOptions = {},
-  ) {
-    if (item.state !== "search" || item.candidates.length > 0) {
-      return item;
-    }
-
-    // Only a never-searched item starts a client-side search. A provider recorded on the
-    // server item means a search already ran (its result is the proposal/candidates/error
-    // shown for review), and a running bulk identify job owns searching queued items —
-    // kicking off a duplicate search here would just stack provider calls.
-    if (!providerId && (item.provider || this.activeBulkIdentifyJob)) {
-      return item;
-    }
-
-    const selectedProvider = providerId ?? item.provider;
-    return selectedProvider
-      ? await this.identifyEntity(item.entity, selectedProvider, undefined, options)
-      : await this.#identifyEntityWithAvailableProviders(item, options);
-  }
-
-  async #identifyEntityWithAvailableProviders(item: IdentifyQueueItem, options: IdentifyResolveOptions = {}) {
-    const providers = this.providersForKind(item.entityKind);
-    if (providers.length === 0) return item;
-
-    this.identifyingId = item.entity.id;
-    this.error = null;
-    let lastResult: IdentifyQueueItem | null = null;
-    let lastError: string | null = null;
-    try {
-      for (const [index, provider] of providers.entries()) {
-        this.#setIdentifyingProvider(provider.id, index, providers.length);
-        try {
-          const result = await this.#searchWithTitleFallback(item.entity, provider.id, undefined, options);
-          lastResult = result;
-          if (isResolvedIdentifyResult(result)) return result;
-        } catch (err) {
-          lastError = readError(err);
-        }
-      }
-
-      if (lastResult) return lastResult;
-      if (lastError) {
-        this.error = lastError;
-        this.#markQueueError(item.entity.id, lastError);
-      }
-      return item;
-    } finally {
-      this.#clearIdentifyingStatus();
-    }
-  }
-
-  async #searchWithTitleFallback(
-    entity: EntityCard,
-    providerId: string,
-    query?: { title?: string | null; url?: string | null; externalIds?: Record<string, string> | null; requireChoice?: boolean | null },
-    options: IdentifyResolveOptions = {},
-  ) {
-    const mapped = await this.#searchAndResolve(entity, providerId, query, options);
-    if (shouldFallbackToTitleSearch(entity, query, mapped)) {
-      return await this.#searchAndResolve(entity, providerId, { title: entity.title }, options);
-    }
-
-    return mapped;
-  }
-
-  async #searchAndResolve(
-    entity: EntityCard,
-    providerId: string,
-    query?: { title?: string | null; url?: string | null; externalIds?: Record<string, string> | null; requireChoice?: boolean | null },
-    options: IdentifyResolveOptions = {},
-  ) {
-    // Last-resort client bound so a hung request can never strand the "Searching with ..."
-    // state; the server bounds each provider call well below this.
-    let item: ApiIdentifyQueueItem;
-    try {
-      item = await searchIdentifyQueueItem(entity.id, providerId, query, {
-        signal: AbortSignal.timeout(SEARCH_REQUEST_TIMEOUT_MS),
-      });
-    } catch (err) {
-      if (err instanceof Error && err.name === "TimeoutError") {
-        throw new Error(`Identify search timed out after ${SEARCH_REQUEST_TIMEOUT_MS / 1000} seconds.`);
-      }
-      throw err;
-    }
-    const detail = this.queue.find((queued) => queued.entityId === entity.id)?.detail ?? await fetchEntityDetail(entity.id);
-    const mapped = queueItemFromApi(item, entity, detail);
-    this.#upsertQueueItem(mapped);
-    if (options.navigate !== false) this.reviewResolvedQueueItem(mapped);
-    return mapped;
-  }
-
-  #setIdentifyingProvider(
-    providerId: string,
-    index: number,
-    total: number,
-    phase: "searching" | "matched" = "searching",
-  ) {
-    const provider = this.providers.find((candidate) => candidate.id === providerId);
-    this.identifyingProviderId = providerId;
-    this.identifyingProviderName = provider?.name ?? providerId;
-    this.identifyingProviderIndex = index;
-    this.identifyingProviderTotal = total;
-    this.identifyingPhase = phase;
-  }
-
-  #clearIdentifyingStatus() {
-    this.identifyingId = null;
-    this.identifyingProviderId = null;
-    this.identifyingProviderName = null;
-    this.identifyingProviderIndex = null;
-    this.identifyingProviderTotal = null;
-    this.identifyingPhase = "searching";
   }
 
   #leaveHiddenReviewIfNeeded() {
@@ -1211,28 +964,6 @@ function shouldResetScrollForView(view: IdentifyView): boolean {
 
 function isActiveQueueState(state: IdentifyQueueState): boolean {
   return state !== "done" && state !== "deleted";
-}
-
-function shouldFallbackToTitleSearch(
-  entity: EntityCard,
-  query: { title?: string | null; url?: string | null; externalIds?: Record<string, string> | null; requireChoice?: boolean | null } | undefined,
-  item: IdentifyQueueItem,
-): boolean {
-  if (item.state !== "error") return false;
-  if (!entity.title.trim()) return false;
-  if (query?.title || query?.url || query?.externalIds || query?.requireChoice) return false;
-  return true;
-}
-
-function identifyQueryHasMatch(
-  query: { title?: string | null; url?: string | null; externalIds?: Record<string, string> | null; requireChoice?: boolean | null } | undefined,
-): boolean {
-  return Boolean(query?.url || query?.externalIds && Object.keys(query.externalIds).length > 0);
-}
-
-function isResolvedIdentifyResult(item: IdentifyQueueItem): boolean {
-  return (item.state === "proposal" && Boolean(item.proposal)) ||
-    (item.state === "search" && item.candidates.length > 0);
 }
 
 function createOperationId(): string {
@@ -1368,13 +1099,6 @@ function readError(err: unknown): string {
   } catch {
     return err.message;
   }
-}
-
-function activeBulkIdentifyJobFromList(jobs: JobRun[]): JobRun | null {
-  return jobs.find((job) =>
-    job.type === JOB_TYPE.bulkIdentify &&
-    (job.status === JOB_RUN_STATUS.queued || job.status === JOB_RUN_STATUS.running)
-  ) ?? null;
 }
 
 function entityKindLabel(kind: string): string {

@@ -18,7 +18,7 @@ import type {
   IdentifyEntityRequest,
   IdentifyBulkStartRequest,
   IdentifyQueueSearchRequest,
-  JobCreateResponse,
+  IdentifyBulkAcceptedResponse,
   ListIdentifyQueueParams,
   SaveIdentifyQueueProposalRequest,
 } from "$lib/api/generated/model";
@@ -104,17 +104,23 @@ export async function fetchOptionalIdentifyQueueItem(
   return (await response.json()) as IdentifyQueueItem;
 }
 
-export function searchIdentifyQueueItem(
+/**
+ * Requests a provider search for a queue item. The search runs as a background identify-search
+ * job on the server; the returned item is already in the queued state and reports progress
+ * through its state code. Pass a null provider to let the server walk enabled providers.
+ */
+export function requestIdentifySearch(
   entityId: string,
-  provider: string,
+  provider: string | null,
   identifyQuery?: IdentifyQuery,
+  hideNsfw?: boolean,
   options?: RequestOptions,
 ): Promise<IdentifyQueueItem> {
   return searchIdentifyQueueItemRequest(entityId, {
     provider,
     query: identifyQuery ?? null,
-  } as IdentifyQueueSearchRequest, undefined, requestInit(options)).then((response) =>
-    unwrapGenerated(response, "Failed to search identify provider") as IdentifyQueueItem,
+  } as IdentifyQueueSearchRequest, { hideNsfw }, requestInit(options)).then((response) =>
+    unwrapGenerated(response, "Failed to request identify search") as IdentifyQueueItem,
   );
 }
 
@@ -203,21 +209,18 @@ export function fetchIdentifyEntities(
 }
 
 export function startBulkIdentify(
-  provider: string,
+  provider: string | null,
   entityIds: string[],
   query?: IdentifyQuery | null,
   hideNsfw?: boolean,
   options?: RequestOptions,
-): Promise<JobCreateResponse> {
+): Promise<IdentifyBulkAcceptedResponse> {
   return startBulkIdentifyRequest({
     provider,
     entityIds,
     query: query ?? null,
   } as IdentifyBulkStartRequest, { hideNsfw }, requestInit(options)).then((response) =>
-    unwrapGenerated(response, "Failed to start bulk identify", [202]) as JobCreateResponse,
+    unwrapGenerated(response, "Failed to start bulk identify", [202]) as IdentifyBulkAcceptedResponse,
   );
 }
 
-export function closeBulkIdentifySession(_sessionId: string): Promise<void> {
-  return Promise.resolve();
-}

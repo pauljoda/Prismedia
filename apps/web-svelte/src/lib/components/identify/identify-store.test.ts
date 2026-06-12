@@ -9,14 +9,13 @@ const fetchIdentifyQueue = vi.fn();
 const fetchIdentifyEntity = vi.fn();
 const fetchIdentifyQueueItem = vi.fn();
 const addIdentifyQueueItem = vi.fn();
-const searchIdentifyQueueItem = vi.fn();
+const requestIdentifySearch = vi.fn();
 const applyIdentifyQueueItem = vi.fn();
 const deleteIdentifyQueueItem = vi.fn();
 const fetchIdentifyApplyProgress = vi.fn();
 const identifyEntityTransient = vi.fn();
 const saveIdentifyQueueProposal = vi.fn();
 const startBulkIdentify = vi.fn();
-const fetchJobs = vi.fn();
 
 vi.mock("$lib/api/plugins", async (importOriginal) => {
   const actual = await importOriginal<typeof import("$lib/api/plugins")>();
@@ -34,21 +33,13 @@ vi.mock("$lib/api/identify-client", async (importOriginal) => {
     fetchIdentifyEntity: (...args: unknown[]) => fetchIdentifyEntity(...args),
     fetchIdentifyQueueItem: (...args: unknown[]) => fetchIdentifyQueueItem(...args),
     addIdentifyQueueItem: (...args: unknown[]) => addIdentifyQueueItem(...args),
-    searchIdentifyQueueItem: (...args: unknown[]) => searchIdentifyQueueItem(...args),
+    requestIdentifySearch: (...args: unknown[]) => requestIdentifySearch(...args),
     applyIdentifyQueueItem: (...args: unknown[]) => applyIdentifyQueueItem(...args),
     deleteIdentifyQueueItem: (...args: unknown[]) => deleteIdentifyQueueItem(...args),
     fetchIdentifyApplyProgress: (...args: unknown[]) => fetchIdentifyApplyProgress(...args),
     identifyEntityTransient: (...args: unknown[]) => identifyEntityTransient(...args),
     saveIdentifyQueueProposal: (...args: unknown[]) => saveIdentifyQueueProposal(...args),
     startBulkIdentify: (...args: unknown[]) => startBulkIdentify(...args),
-  };
-});
-
-vi.mock("$lib/api/jobs", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("$lib/api/jobs")>();
-  return {
-    ...actual,
-    fetchJobs: (...args: unknown[]) => fetchJobs(...args),
   };
 });
 
@@ -59,7 +50,7 @@ describe("IdentifyStore", () => {
     fetchIdentifyEntity.mockReset();
     fetchIdentifyQueueItem.mockReset();
     addIdentifyQueueItem.mockReset();
-    searchIdentifyQueueItem.mockReset();
+    requestIdentifySearch.mockReset();
     applyIdentifyQueueItem.mockReset();
     deleteIdentifyQueueItem.mockReset();
     fetchIdentifyApplyProgress.mockReset();
@@ -68,13 +59,12 @@ describe("IdentifyStore", () => {
     fetchIdentifyEntity.mockResolvedValue(null);
     fetchIdentifyQueueItem.mockResolvedValue(queueItem("video-1"));
     addIdentifyQueueItem.mockResolvedValue(queueItem("video-1"));
-    searchIdentifyQueueItem.mockResolvedValue(queueItem("video-1", { state: "search" }));
+    requestIdentifySearch.mockResolvedValue(queueItem("video-1", { state: "queued" }));
     applyIdentifyQueueItem.mockResolvedValue(queueItem("video-1", { state: "done" }));
     deleteIdentifyQueueItem.mockResolvedValue(queueItem("video-1", { state: "deleted" }));
     identifyEntityTransient.mockReset();
     saveIdentifyQueueProposal.mockReset();
     startBulkIdentify.mockReset();
-    fetchJobs.mockReset();
     // Keep child lookups pending so children stay in their initial loading/queued state for the
     // duration of a test rather than resolving and mutating the proposal mid-assertion.
     identifyEntityTransient.mockReturnValue(new Promise(() => {}));
@@ -94,7 +84,6 @@ describe("IdentifyStore", () => {
         finishedAt: null,
       },
     });
-    fetchJobs.mockResolvedValue({ items: [] });
     fetchIdentifyApplyProgress.mockResolvedValue({
       id: "apply-1",
       entityId: "video-1",
@@ -212,109 +201,34 @@ describe("IdentifyStore", () => {
     expect(dispatchEvent.mock.calls.some(([event]) => event.type === MAIN_SCROLL_TOP_EVENT)).toBe(true);
   });
 
-  it("auto-identifies a queued entity with the selected provider", async () => {
+  it("requests a search and upserts the returned queued item", async () => {
     const store = new IdentifyStore();
     const movie = entity("video-1", { kind: "video", title: "Friendship" });
-    addIdentifyQueueItem.mockResolvedValue(queueItem("video-1", { title: "Friendship" }));
     fetchIdentifyEntity.mockResolvedValue(detail("video-1", { kind: "video", title: "Friendship" }));
-    searchIdentifyQueueItem.mockResolvedValue(queueItem("video-1", {
-      state: "proposal",
-      provider: "tmdb",
-      proposal: proposal("tmdb:movie:123", { targetKind: "video", title: "Friendship" }),
-    }));
+    requestIdentifySearch.mockResolvedValue(queueItem("video-1", { state: "queued", provider: "tmdb" }));
 
-    const queued = await store.queueEntity(movie, "tmdb");
+    const queued = await store.identifyEntity(movie, "tmdb");
 
-    expect(addIdentifyQueueItem).toHaveBeenCalledWith("video-1");
-    expect(searchIdentifyQueueItem).toHaveBeenCalledWith("video-1", "tmdb", undefined, expect.anything());
-    expect(queued?.state).toBe("proposal");
-    expect(store.view.kind).toBe("review-parent");
+    expect(requestIdentifySearch).toHaveBeenCalledWith("video-1", "tmdb", undefined, false);
+    expect(queued?.state).toBe("queued");
+    expect(store.queue.find((item) => item.entityId === "video-1")?.state).toBe("queued");
   });
 
-  it("auto-identifies a queued entity by trying each enabled provider for that entity kind", async () => {
+  it("describes an item's in-flight search from its server state", () => {
     const store = new IdentifyStore();
-    const movie = entity("video-1", { kind: "video", title: "Friendship" });
-    store.providers = [
-      provider("anilist", "AniList"),
-      provider("tmdb", "The Movie Database"),
+    store.providers = [provider("tmdb", "The Movie Database")];
+    store.queue = [
+      { ...queueItem("video-1", { state: "queued" }), entity: entity("video-1") },
+      { ...queueItem("video-2", { state: "searching", provider: "tmdb" }), entity: entity("video-2") },
+      { ...queueItem("video-3", { state: "search" }), entity: entity("video-3") },
     ];
-    addIdentifyQueueItem.mockResolvedValue(queueItem("video-1", { title: "Friendship" }));
-    fetchIdentifyEntity.mockResolvedValue(detail("video-1", { kind: "video", title: "Friendship" }));
-    searchIdentifyQueueItem
-      .mockResolvedValueOnce(queueItem("video-1", {
-        state: "error",
-        provider: "anilist",
-        error: "No exact match",
-      }))
-      .mockResolvedValueOnce(queueItem("video-1", {
-        state: "error",
-        provider: "anilist",
-        error: "No title match",
-      }))
-      .mockResolvedValueOnce(queueItem("video-1", {
-        state: "proposal",
-        provider: "tmdb",
-        proposal: proposal("tmdb:movie:123", { targetKind: "video", title: "Friendship" }),
-      }));
 
-    const queued = await store.queueEntity(movie);
-
-    expect(searchIdentifyQueueItem).toHaveBeenNthCalledWith(1, "video-1", "anilist", undefined, expect.anything());
-    expect(searchIdentifyQueueItem).toHaveBeenNthCalledWith(2, "video-1", "anilist", { title: "Friendship" }, expect.anything());
-    expect(searchIdentifyQueueItem).toHaveBeenNthCalledWith(3, "video-1", "tmdb", undefined, expect.anything());
-    expect(queued?.provider).toBe("tmdb");
-    expect(store.view.kind).toBe("review-parent");
-  });
-
-  it("describes the provider currently being searched", async () => {
-    const store = new IdentifyStore();
-    const movie = entity("video-1", { kind: "video", title: "Friendship" });
-    store.providers = [provider("tmdb", "The Movie Database")];
-    store.queue = [{
-      ...queueItem("video-1"),
-      entity: movie,
-      detail: detail("video-1", { kind: "video", title: "Friendship" }),
-    }];
-    let resolveSearch: (item: ReturnType<typeof queueItem>) => void = () => undefined;
-    searchIdentifyQueueItem.mockReturnValue(new Promise((resolve) => {
-      resolveSearch = resolve;
-    }));
-
-    const search = store.identifyEntity(movie, "tmdb");
-    expect(store.identifyingStatus).toBe("Searching with The Movie Database Plugin");
-
-    resolveSearch(queueItem("video-1", { state: "search", provider: "tmdb" }));
-    await search;
-    expect(store.identifyingStatus).toBeNull();
-  });
-
-  it("describes related-item work after a candidate match is selected", async () => {
-    const store = new IdentifyStore();
-    const movie = entity("video-1", { kind: "video", title: "Friendship" });
-    store.providers = [provider("tmdb", "The Movie Database")];
-    store.queue = [{
-      ...queueItem("video-1"),
-      entity: movie,
-      detail: detail("video-1", { kind: "video", title: "Friendship" }),
-    }];
-    let resolveSearch: (item: ReturnType<typeof queueItem>) => void = () => undefined;
-    searchIdentifyQueueItem.mockReturnValue(new Promise((resolve) => {
-      resolveSearch = resolve;
-    }));
-
-    const search = store.identifyWithCandidate(movie, "tmdb", {
-      externalIds: { tmdb: "123" },
-      title: "Friendship",
-      year: 2025,
-      overview: null,
-      posterUrl: null,
-      popularity: null,
-    });
-    expect(store.identifyingStatus).toBe("Match found. Identifying related items; this may take a while.");
-
-    resolveSearch(queueItem("video-1", { state: "proposal", provider: "tmdb", proposal: proposal("tmdb:movie:123") }));
-    await search;
-    expect(store.identifyingStatus).toBeNull();
+    expect(store.itemSearchStatus("video-1")).toBe("Queued for search");
+    expect(store.itemSearchStatus("video-2")).toBe("Searching with The Movie Database");
+    expect(store.itemSearchStatus("video-3")).toBeNull();
+    expect(store.isItemBusy("video-1")).toBe(true);
+    expect(store.isItemBusy("video-2")).toBe(true);
+    expect(store.isItemBusy("video-3")).toBe(false);
   });
 
   it("opens an existing queued item without enqueueing or searching again", async () => {
@@ -327,91 +241,25 @@ describe("IdentifyStore", () => {
     fetchIdentifyEntity.mockResolvedValue(detail("video-1", { kind: "video", title: "Friendship" }));
     fetchIdentifyQueue.mockResolvedValue([]);
 
-    const queued = await store.seedEntity("video-1", "video-1", { openExistingOnly: true });
+    const queued = await store.seedEntity("video-1", "video-1");
 
     expect(fetchIdentifyQueueItem).toHaveBeenCalledWith("video-1");
     expect(addIdentifyQueueItem).not.toHaveBeenCalled();
-    expect(searchIdentifyQueueItem).not.toHaveBeenCalled();
+    expect(requestIdentifySearch).not.toHaveBeenCalled();
     expect(queued?.state).toBe("proposal");
     expect(store.view.kind).toBe("review-parent");
   });
 
-  it("does not re-search a queue item that a provider search already ran for", async () => {
+  it("opening an item never triggers a search regardless of its state", async () => {
     const store = new IdentifyStore();
     fetchPluginProviders.mockResolvedValue([provider("tmdb", "The Movie Database")]);
-    addIdentifyQueueItem.mockResolvedValue(queueItem("video-1", { state: "search", provider: "tmdb" }));
+    fetchIdentifyQueueItem.mockResolvedValue(queueItem("video-1", { state: "search", provider: "tmdb" }));
     fetchIdentifyEntity.mockResolvedValue(detail("video-1", { kind: "video", title: "Friendship" }));
 
     const queued = await store.seedEntity("video-1", null);
 
-    expect(searchIdentifyQueueItem).not.toHaveBeenCalled();
+    expect(requestIdentifySearch).not.toHaveBeenCalled();
     expect(queued?.provider).toBe("tmdb");
-  });
-
-  it("leaves searching to a running bulk identify job instead of duplicating it", async () => {
-    const store = new IdentifyStore();
-    fetchPluginProviders.mockResolvedValue([provider("tmdb", "The Movie Database")]);
-    addIdentifyQueueItem.mockResolvedValue(queueItem("video-1", { state: "search" }));
-    fetchIdentifyEntity.mockResolvedValue(detail("video-1", { kind: "video", title: "Friendship" }));
-    fetchJobs.mockResolvedValue({
-      items: [{
-        id: "bulk-job-1",
-        type: "bulk-identify",
-        status: "running",
-        progress: 25,
-        message: "Identified 1/4",
-        targetKind: null,
-        targetId: null,
-        targetLabel: "Bulk identify 4 entities",
-        createdAt: "2026-05-25T00:00:00Z",
-        startedAt: "2026-05-25T00:00:01Z",
-        finishedAt: null,
-      }],
-    });
-
-    const queued = await store.seedEntity("video-1", null);
-
-    expect(searchIdentifyQueueItem).not.toHaveBeenCalled();
-    expect(store.activeBulkIdentifyJob?.id).toBe("bulk-job-1");
-    expect(queued?.state).toBe("search");
-    store.destroy();
-  });
-
-  it("falls back to a title search when an exact identify attempt misses", async () => {
-    const store = new IdentifyStore();
-    const movie = entity("video-1", { kind: "video", title: "Friendship" });
-    store.queue = [{
-      ...queueItem("video-1"),
-      entity: movie,
-      detail: detail("video-1", { kind: "video", title: "Friendship" }),
-    }];
-    searchIdentifyQueueItem
-      .mockResolvedValueOnce(queueItem("video-1", {
-        state: "error",
-        provider: "tmdb",
-        error: "No exact match",
-      }))
-      .mockResolvedValueOnce(queueItem("video-1", {
-        state: "search",
-        provider: "tmdb",
-        candidates: [
-          {
-            externalIds: { tmdb: "123" },
-            title: "Friendship",
-            year: 2025,
-            overview: null,
-            posterUrl: null,
-            popularity: null,
-          },
-        ],
-      }));
-
-    const resolved = await store.identifyEntity(movie, "tmdb");
-
-    expect(searchIdentifyQueueItem).toHaveBeenNthCalledWith(1, "video-1", "tmdb", undefined, expect.anything());
-    expect(searchIdentifyQueueItem).toHaveBeenNthCalledWith(2, "video-1", "tmdb", { title: "Friendship" }, expect.anything());
-    expect(resolved?.state).toBe("search");
-    expect(store.view.kind).toBe("review-choice");
   });
 
   it("requires a candidate pick when returning from a proposal to search", async () => {
@@ -426,28 +274,15 @@ describe("IdentifyStore", () => {
       entity: movie,
       detail: detail("video-1", { kind: "video", title: "Friendship" }),
     }];
-    searchIdentifyQueueItem.mockResolvedValue(queueItem("video-1", {
-      state: "search",
-      provider: "tmdb",
-      candidates: [
-        {
-          externalIds: { tmdb: "456" },
-          title: "Friendship!",
-          year: 2010,
-          overview: null,
-          posterUrl: null,
-          popularity: null,
-        },
-      ],
-    }));
+    requestIdentifySearch.mockResolvedValue(queueItem("video-1", { state: "queued", provider: "tmdb" }));
 
     await store.backToSearch(movie, "tmdb");
 
-    expect(searchIdentifyQueueItem).toHaveBeenCalledWith("video-1", "tmdb", {
+    expect(requestIdentifySearch).toHaveBeenCalledWith("video-1", "tmdb", {
       title: "Friendship",
       requireChoice: true,
-    }, expect.anything());
-    expect(store.view.kind).toBe("review-choice");
+    }, false);
+    expect(store.queue.find((item) => item.entityId === "video-1")?.state).toBe("queued");
   });
 
   it("polls the queue item while a cascade streams children and stops when it completes", async () => {
@@ -472,9 +307,9 @@ describe("IdentifyStore", () => {
           cascadeRunning: false,
         }),
       };
-      fetchIdentifyQueueItem.mockResolvedValue(completed);
+      fetchIdentifyQueue.mockResolvedValue([completed]);
 
-      store.ensureCascadePoll("artist-1");
+      store.ensureQueuePolling();
       await vi.advanceTimersByTimeAsync(400);
 
       const item = store.queue.find((q) => q.entityId === "artist-1");
@@ -484,30 +319,6 @@ describe("IdentifyStore", () => {
     } finally {
       vi.useRealTimers();
     }
-  });
-
-  it("stops cascade polling when returning to search", async () => {
-    const store = new IdentifyStore();
-    const artist = entity("artist-1", { kind: "music-artist", title: "Imagine Dragons" });
-    const seed = proposal("musicbrainz:artist:1", { targetKind: "music-artist", title: "Imagine Dragons" });
-    store.queue = [{
-      ...queueItem("artist-1", { state: "proposal", provider: "musicbrainz", proposal: seed, cascadeRunning: true }),
-      entity: artist,
-      detail: detail("artist-1", { kind: "music-artist", title: "Imagine Dragons" }),
-    }];
-
-    fetchIdentifyQueueItem.mockResolvedValue(queueItem("artist-1", { state: "proposal", proposal: seed, cascadeRunning: true }));
-    store.ensureCascadePoll("artist-1");
-
-    searchIdentifyQueueItem.mockResolvedValue(queueItem("artist-1", {
-      state: "search",
-      provider: "musicbrainz",
-      candidates: [{ externalIds: { musicbrainz: "1" }, title: "Imagine Dragons" }],
-    }));
-    await store.backToSearch(artist, "musicbrainz");
-
-    expect(store.view.kind).toBe("review-choice");
-    expect(store.cascadeRunning("artist-1")).toBe(false);
   });
 
   it("keeps apply progress visible briefly before navigating away", async () => {
@@ -537,93 +348,37 @@ describe("IdentifyStore", () => {
     }
   });
 
-  it("leaves an ambiguous queued search on the candidate picker without auto-selecting", async () => {
-    const store = new IdentifyStore();
-    const movie = entity("video-1", { kind: "video", title: "Friendship" });
-    addIdentifyQueueItem.mockResolvedValue(queueItem("video-1", { title: "Friendship" }));
-    fetchIdentifyEntity.mockResolvedValue(detail("video-1", { kind: "video", title: "Friendship" }));
-    searchIdentifyQueueItem.mockResolvedValue(queueItem("video-1", {
-      state: "search",
-      provider: "tmdb",
-      candidates: [
-        { externalIds: { tmdb: "123" }, title: "Friendship", year: 2025, overview: null, posterUrl: null, popularity: null },
-        { externalIds: { tmdb: "456" }, title: "Old Friendship", year: 1998, overview: null, posterUrl: null, popularity: null },
-      ],
-    }));
-
-    const queued = await store.queueEntity(movie, "tmdb");
-
-    // The search runs once and the result is left for the user to choose from —
-    // no follow-up call is made to pick a candidate on their behalf.
-    expect(searchIdentifyQueueItem).toHaveBeenCalledTimes(1);
-    expect(searchIdentifyQueueItem).toHaveBeenCalledWith("video-1", "tmdb", undefined, expect.anything());
-    expect(queued?.state).toBe("search");
-    expect(queued?.candidates).toHaveLength(2);
-    expect(store.view.kind).toBe("review-choice");
-  });
-
-  it("queues every batch entity up front, then searches them on the dashboard", async () => {
+  it("starts a bulk batch with one request and shows the queued rows immediately", async () => {
     const store = new IdentifyStore();
     const first = entity("video-1", { kind: "video", title: "First" });
     const second = entity("video-2", { kind: "video", title: "Second" });
-    addIdentifyQueueItem
-      .mockResolvedValueOnce(queueItem("video-1", { title: "First" }))
-      .mockResolvedValueOnce(queueItem("video-2", { title: "Second" }));
-    fetchIdentifyEntity.mockResolvedValue(null);
-    // The first lands a confident proposal; the second is ambiguous and must
-    // stay in `search` for the user rather than being auto-resolved.
-    searchIdentifyQueueItem.mockImplementation((entityId: string) =>
-      Promise.resolve(
-        entityId === "video-1"
-          ? queueItem("video-1", {
-              state: "proposal",
-              provider: "tmdb",
-              proposal: proposal("tmdb:video-1", { targetKind: "video" }),
-            })
-          : queueItem("video-2", {
-              state: "search",
-              provider: "tmdb",
-              candidates: [
-                { externalIds: { tmdb: "9" }, title: "Second", year: 2024, overview: null, posterUrl: null, popularity: null },
-              ],
-            }),
-      ),
-    );
+    startBulkIdentify.mockResolvedValue({ requested: 2, enqueued: 2 });
+    fetchIdentifyQueue.mockResolvedValue([
+      queueItem("video-1", { state: "queued", provider: "tmdb" }),
+      queueItem("video-2", { state: "queued", provider: "tmdb" }),
+    ]);
 
     await store.startBulk("tmdb", [first, second]);
 
-    // Both entities are added before the durable backend job starts, and the user lands on the
-    // dashboard rather than inside a per-item review.
-    expect(addIdentifyQueueItem).toHaveBeenCalledTimes(2);
+    // One POST creates every row and per-entity search job server-side; no per-item
+    // add or client-side search runs, and the user lands on the dashboard.
     expect(startBulkIdentify).toHaveBeenCalledWith("tmdb", ["video-1", "video-2"], null, false);
-    expect(searchIdentifyQueueItem).not.toHaveBeenCalled();
-    expect(store.activeBulkIdentifyJob?.id).toBe("bulk-job-1");
+    expect(addIdentifyQueueItem).not.toHaveBeenCalled();
+    expect(requestIdentifySearch).not.toHaveBeenCalled();
     expect(store.view.kind).toBe("dashboard");
     expect(store.queue.map((item) => item.entityId)).toEqual(["video-1", "video-2"]);
-    expect(store.queue.every((item) => item.state === "search")).toBe(true);
-    expect(store.bulkSearching).toBe(false);
+    expect(store.queue.every((item) => item.state === "queued")).toBe(true);
+    store.destroy();
   });
 
-  it("polls active bulk identify jobs so dashboard progress and proposals update without refresh", async () => {
+  it("polls the queue while searches are in flight and stops when everything settles", async () => {
     vi.useFakeTimers();
     try {
       const store = new IdentifyStore();
-      const first = entity("video-1", { kind: "video", title: "First" });
-      addIdentifyQueueItem.mockResolvedValue(queueItem("video-1", { title: "First" }));
-      const runningJob = {
-        id: "bulk-job-1",
-        type: "bulk-identify",
-        status: "running",
-        progress: 50,
-        message: "Identified 1 of 2",
-        targetKind: null,
-        targetId: null,
-        targetLabel: "Bulk identify test",
-        createdAt: "2026-05-25T00:00:00Z",
-        startedAt: "2026-05-25T00:00:01Z",
-        finishedAt: null,
-      };
-      fetchJobs.mockResolvedValue({ items: [runningJob] });
+      store.queue = [{
+        ...queueItem("video-1", { state: "searching", provider: "tmdb" }),
+        entity: entity("video-1", { kind: "video", title: "First" }),
+      }];
       fetchIdentifyQueue.mockResolvedValue([
         queueItem("video-1", {
           state: "proposal",
@@ -632,13 +387,16 @@ describe("IdentifyStore", () => {
         }),
       ]);
 
-      await store.startBulk("tmdb", [first]);
-      await vi.advanceTimersByTimeAsync(1300);
+      store.ensureQueuePolling();
+      await vi.advanceTimersByTimeAsync(400);
 
-      expect(fetchJobs).toHaveBeenCalled();
       expect(fetchIdentifyQueue).toHaveBeenCalledWith(false, false, { signal: expect.any(AbortSignal) });
-      expect(store.activeBulkIdentifyJob?.progress).toBe(50);
       expect(store.queue[0]?.state).toBe("proposal");
+
+      // Nothing is live anymore, so the loop stops itself: no further fetches fire.
+      const calls = fetchIdentifyQueue.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(fetchIdentifyQueue.mock.calls.length).toBe(calls);
     } finally {
       vi.useRealTimers();
     }
@@ -703,7 +461,7 @@ function queueItem(
   id: string,
   options: {
     isNsfw?: boolean;
-    state?: "search" | "proposal" | "done" | "deleted" | "error";
+    state?: "search" | "queued" | "searching" | "proposal" | "done" | "deleted" | "error";
     provider?: string | null;
     title?: string;
     candidates?: Array<{

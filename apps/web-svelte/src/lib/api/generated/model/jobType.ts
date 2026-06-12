@@ -30,6 +30,7 @@ export const JobType = {
   'refresh-collection': 'refresh-collection',
   'library-maintenance': 'library-maintenance',
   'refresh-entity': 'refresh-entity',
+  'identify-search': 'identify-search',
   'bulk-identify': 'bulk-identify',
   'auto-identify': 'auto-identify',
   'identify-cascade': 'identify-cascade',

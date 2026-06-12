@@ -163,8 +163,9 @@
   // while the cascade runs so children fill in; the poll stops itself when the cascade completes.
   $effect(() => {
     if (!cascadeRunning) return;
-    store.ensureCascadePoll(entity.id);
-    return () => store.stopCascadePoll();
+    // The shared queue poll streams cascade children onto the open review and stops
+    // itself once nothing is in flight, so there is no per-view cleanup to do.
+    store.ensureQueuePolling();
   });
 
   function setRelationshipSelected(result: EntityMetadataProposal, selected: boolean) {

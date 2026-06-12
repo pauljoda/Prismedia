@@ -168,6 +168,7 @@ export * from './getVideoSeriesParams';
 export * from './headFileContentParams';
 export * from './healthResponse';
 export * from './identifyApplyProgress';
+export * from './identifyBulkAcceptedResponse';
 export * from './identifyBulkStartRequest';
 export * from './identifyEntityParams';
 export * from './identifyEntityRequest';

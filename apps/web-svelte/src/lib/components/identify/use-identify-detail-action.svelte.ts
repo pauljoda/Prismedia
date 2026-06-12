@@ -4,6 +4,7 @@ import {
   fetchIdentifyProviders,
   fetchOptionalIdentifyQueueItem,
   providerCanIdentifyKind,
+  requestIdentifySearch,
 } from "$lib/api/identify-client";
 import type { IdentifyQueueItem } from "$lib/api/identify-types";
 import type { EntityDetailActionButton } from "$lib/components/entities/EntityDetail.svelte";
@@ -109,7 +110,7 @@ export function useIdentifyDetailAction(
       title,
       ariaLabel: label,
       active: isQueued,
-      onClick: () => navigate(id),
+      onClick: () => void navigate(id),
     };
   });
 
@@ -133,10 +134,15 @@ export function useIdentifyDetailAction(
     if (showLoading) loading = false;
   }
 
-  function navigate(id: string) {
+  async function navigate(id: string) {
     if (!isQueued && !hasReadyProvider) return;
+    // A fresh identify requests the search up front (the server walks enabled providers);
+    // the review page then just renders the item's queued → searching → result states.
+    if (!isQueued) {
+      await requestIdentifySearch(id, null).catch(() => undefined);
+    }
+
     const params = new URLSearchParams({ returnId: id });
-    if (isQueued) params.set("queued", "1");
     void goto(`/identify/${id}?${params.toString()}`);
   }
 

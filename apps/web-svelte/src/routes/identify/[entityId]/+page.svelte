@@ -40,10 +40,8 @@
   const activeProvider = $derived(
     providers.find((provider) => provider.id === activeProviderId) ?? null,
   );
-  const currentIdentifyStatus = $derived(
-    store.identifyingId === current?.entityId ? store.identifyingStatus : null,
-  );
-  const isIdentifyingCurrent = $derived(store.identifyingId === current?.entityId);
+  const currentIdentifyStatus = $derived(current ? store.itemSearchStatus(current.entityId) : null);
+  const isIdentifyingCurrent = $derived(current ? store.isItemBusy(current.entityId) : false);
   const backToSearchDisabled = $derived(isIdentifyingCurrent);
   const activeReviewChild = $derived(
     store.view.kind === "review-child" && store.view.entity.id === entityId ? store.view : null,
@@ -65,15 +63,9 @@
 
   onMount(async () => {
     const returnId = page.url.searchParams.get("returnId") ?? page.url.searchParams.get("quid");
-    const item = await store.seedEntity(entityId, returnId, {
-      openExistingOnly: page.url.searchParams.get("queued") === "1",
-    });
+    const item = await store.seedEntity(entityId, returnId);
     if (item?.provider) {
       selectedProviderId = item.provider;
-    }
-    const queued = store.queue.find((candidate) => candidate.entityId === entityId);
-    if (queued) {
-      store.reviewResolvedQueueItem(queued);
     }
   });
 
@@ -216,7 +208,7 @@
       <Loader2 class="h-6 w-6 animate-spin text-text-accent" />
       <div class="space-y-1">
         <p class="font-heading text-[0.86rem] font-semibold text-text-primary">
-          {store.identifyingStatus ?? "Preparing identify review"}
+          {currentIdentifyStatus ?? "Preparing identify review"}
         </p>
         <p class="font-mono text-[0.7rem] text-text-muted">
           Plugin searches can take a moment when a provider checks related metadata.
@@ -268,10 +260,10 @@
             <button
               type="button"
               class="inline-flex h-9 items-center gap-1.5 rounded-xs border border-border-accent-strong bg-accent-950/40 px-3 text-[0.78rem] text-text-accent transition-colors hover:bg-accent-950/60 disabled:cursor-not-allowed disabled:opacity-40"
-              disabled={searching || !activeProvider}
+              disabled={searching || isIdentifyingCurrent || !activeProvider}
               onclick={runSearch}
             >
-              {#if searching || store.identifyingId === current.entityId}
+              {#if searching || isIdentifyingCurrent}
                 <Loader2 class="h-4 w-4 animate-spin" />
               {:else}
                 <Search class="h-4 w-4" />
@@ -283,11 +275,6 @@
             <div class="flex items-center gap-2 rounded-xs border border-border-subtle bg-surface-1 px-3 py-2 font-mono text-[0.72rem] text-text-muted">
               <Loader2 class="h-3.5 w-3.5 animate-spin text-text-accent" />
               <span>{currentIdentifyStatus}</span>
-            </div>
-          {:else if store.activeBulkIdentifyJob && current.state === "search" && current.candidates.length === 0}
-            <div class="flex items-center gap-2 rounded-xs border border-border-subtle bg-surface-1 px-3 py-2 font-mono text-[0.72rem] text-text-muted">
-              <Loader2 class="h-3.5 w-3.5 animate-spin text-text-accent" />
-              <span>Waiting on the running bulk identify — its result will appear here, or search now.</span>
             </div>
           {/if}
         {:else}
