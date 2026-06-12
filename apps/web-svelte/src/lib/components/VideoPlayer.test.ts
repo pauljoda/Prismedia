@@ -568,6 +568,19 @@ describe("VideoPlayer", () => {
     expect(source).toContain("aria-label={`Seek to ${marker.title}`}");
   });
 
+  it("keeps the player overlay hidden when filmstrip scrubbing ends", async () => {
+    const source = await readFile("src/lib/components/VideoPlayer.svelte", "utf8");
+
+    expect(source).toContain(`function handleFilmStripInteraction(active: boolean) {
+    if (active) {
+      clearControlsTimer();
+      showControls = false;
+      closeMenus();
+    }
+  }`);
+    expect(source).toContain("onStripInteractionChange={handleFilmStripInteraction}");
+  });
+
   it("keeps mobile settings top-level and desktop settings inside the video drawer", async () => {
     const source = await readFile("src/lib/components/VideoSettingsMenu.svelte", "utf8");
 

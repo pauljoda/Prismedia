@@ -1068,8 +1068,6 @@
       clearControlsTimer();
       showControls = false;
       closeMenus();
-    } else {
-      surfaceControls();
     }
   }
 

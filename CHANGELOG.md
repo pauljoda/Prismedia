@@ -82,6 +82,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Fixed
+- Scrubbing the video filmstrip no longer brings the main playback controls and detail chips back over the video when the scrub ends.
 - Identify no longer lets provider episode or track numbers override clear title conflicts when a season or album has missing or extra children, so files like a 50-episode local season against a 49-episode provider season stay attached to the right metadata or remain unmatched instead of being mislabeled.
 - Auto Identify now keeps provider-backed scans moving when a plugin is slow or rate-limited. Only one automatic identify call can hold the provider slot at a time; extra jobs wait in the queue instead of occupying every worker thread, and rate-limit/timeout responses are retried later instead of being treated as permanent no-match results.
 - Auto Identify now works for music albums. Providers like MusicBrainz that declare album support were wrongly filtered out before identification was attempted, so scanned albums never auto-identified even though manual identify found them fine.
