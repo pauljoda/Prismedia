@@ -26,7 +26,7 @@ public sealed class AutoIdentifyJobHandler(
             return;
         }
 
-        using var lease = gate.TryEnter()
+        using var lease = gate.TryEnterBackground()
             ?? throw new JobRetryLaterException("Auto identify provider slot busy.", TimeSpan.FromSeconds(5));
 
         await context.ReportProgressAsync(10, "Identifying", cancellationToken);

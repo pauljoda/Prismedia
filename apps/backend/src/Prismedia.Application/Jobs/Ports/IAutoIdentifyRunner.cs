@@ -17,6 +17,18 @@ public interface IAutoIdentifyRunner {
 }
 
 /// <summary>
+/// Shared auto-identify policy constants used by the runner and the scan enqueue path.
+/// </summary>
+public static class AutoIdentifyPolicy {
+    /// <summary>
+    /// How many completed auto-identify runs may end without a confident match before the entity
+    /// is excluded from auto identify and left for manual identification. Runs that never reach a
+    /// provider (disabled, wrong kind, no capable provider) do not consume an attempt.
+    /// </summary>
+    public const int MaxAttemptsPerEntity = 3;
+}
+
+/// <summary>
 /// Outcome of an auto-identify attempt for a single entity.
 /// </summary>
 /// <param name="Applied">True when a provider proposal was applied to the entity.</param>

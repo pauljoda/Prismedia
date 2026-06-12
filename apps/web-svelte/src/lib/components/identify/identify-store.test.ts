@@ -563,6 +563,46 @@ describe("IdentifyStore", () => {
     expect(store.bulkSearching).toBe(false);
   });
 
+  it("polls active bulk identify jobs so dashboard progress and proposals update without refresh", async () => {
+    vi.useFakeTimers();
+    try {
+      const store = new IdentifyStore();
+      const first = entity("video-1", { kind: "video", title: "First" });
+      addIdentifyQueueItem.mockResolvedValue(queueItem("video-1", { title: "First" }));
+      const runningJob = {
+        id: "bulk-job-1",
+        type: "bulk-identify",
+        status: "running",
+        progress: 50,
+        message: "Identified 1 of 2",
+        targetKind: null,
+        targetId: null,
+        targetLabel: "Bulk identify test",
+        createdAt: "2026-05-25T00:00:00Z",
+        startedAt: "2026-05-25T00:00:01Z",
+        finishedAt: null,
+      };
+      fetchJobs.mockResolvedValue({ items: [runningJob] });
+      fetchIdentifyQueue.mockResolvedValue([
+        queueItem("video-1", {
+          state: "proposal",
+          provider: "tmdb",
+          proposal: proposal("tmdb:video-1", { targetKind: "video", title: "First" }),
+        }),
+      ]);
+
+      await store.startBulk("tmdb", [first]);
+      await vi.advanceTimersByTimeAsync(1300);
+
+      expect(fetchJobs).toHaveBeenCalled();
+      expect(fetchIdentifyQueue).toHaveBeenCalledWith(false, false, { signal: expect.any(AbortSignal) });
+      expect(store.activeBulkIdentifyJob?.progress).toBe(50);
+      expect(store.queue[0]?.state).toBe("proposal");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("accepts selected queued proposals and clears them from the queue", async () => {
     const store = new IdentifyStore();
     const ready = {

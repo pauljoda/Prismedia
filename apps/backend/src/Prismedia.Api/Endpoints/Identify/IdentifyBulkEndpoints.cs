@@ -29,7 +29,8 @@ internal static class IdentifyBulkEndpoints {
                     new EnqueueJobRequest(
                         Type: JobType.BulkIdentify,
                         PayloadJson: payload.ToJson(),
-                        TargetLabel: $"Bulk identify {request.EntityIds.Count} entities"),
+                        TargetLabel: $"Bulk identify {request.EntityIds.Count} entities",
+                        Priority: JobPriorities.InteractiveIdentify),
                     cancellationToken);
 
                 return Results.Accepted(

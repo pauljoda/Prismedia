@@ -270,7 +270,7 @@ public static class AppSettingsRegistry {
                 40,
                 "Background job concurrency",
                 "Parallel jobs per queue in the worker.",
-                1,
+                4,
                 10,
                 min: 1,
                 max: 32,
