@@ -82,6 +82,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Fixed
+- Manual Bulk Identify now takes the next identify provider slot ahead of background Auto Identify work, so user-started batches no longer sit behind scan-created provider retries.
 - Bulk Identify now behaves like a picker: clicking a thumbnail selects it for the batch instead of immediately kicking it into search, and Queue starts the selected set together. Those searches now run through the durable server job queue, so progress survives refreshes and slow or rate-limited providers use the worker retry/timeout recovery instead of sticking on one item forever.
 - Scrubbing the video filmstrip no longer brings the main playback controls and detail chips back over the video when the scrub ends.
 - Identify no longer lets provider episode or track numbers override clear title conflicts when a season or album has missing or extra children, so files like a 50-episode local season against a 49-episode provider season stay attached to the right metadata or remain unmatched instead of being mislabeled.

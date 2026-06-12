@@ -182,6 +182,30 @@ public sealed class JobQueueServiceTests {
     }
 
     [Fact]
+    public async Task ClaimNextPrefersInteractiveIdentifyOverAutoIdentifyBacklog() {
+        await using var db = CreateContext();
+        var service = new JobQueueService(db);
+        var now = DateTimeOffset.UtcNow;
+        var autoIdentify = NewJobRun(
+            JobType.AutoIdentify,
+            JobRunStatus.Queued,
+            now.AddMinutes(-10),
+            priority: JobPriorities.AutoIdentify);
+        var manualBulkIdentify = NewJobRun(
+            JobType.BulkIdentify,
+            JobRunStatus.Queued,
+            now,
+            priority: JobPriorities.InteractiveIdentify);
+        db.JobRuns.AddRange(autoIdentify, manualBulkIdentify);
+        await db.SaveChangesAsync();
+
+        var claimed = await service.ClaimNextAsync("worker-1", CancellationToken.None);
+
+        Assert.NotNull(claimed);
+        Assert.Equal(manualBulkIdentify.Id, claimed.Id);
+    }
+
+    [Fact]
     public async Task FailedClaimRetriesUntilMaxAttempts() {
         await using var db = CreateContext();
         var service = new JobQueueService(db);
@@ -199,6 +223,30 @@ public sealed class JobQueueServiceTests {
         Assert.Equal(JobRunStatus.Failed, failed.Status);
         Assert.Equal(3, failed.Attempts);
         Assert.NotNull(failed.FinishedAt);
+    }
+
+    [Fact]
+    public async Task DeferKeepsPriorityWhenProviderSlotIsBusy() {
+        await using var db = CreateContext();
+        var service = new JobQueueService(db);
+
+        var created = await service.EnqueueAsync(new EnqueueJobRequest(
+            JobType.BulkIdentify,
+            Priority: JobPriorities.InteractiveIdentify), CancellationToken.None);
+        await service.ClaimNextAsync("worker-1", CancellationToken.None);
+
+        await service.DeferAsync(
+            created.Id,
+            "Bulk identify waiting for provider slot; retrying soon.",
+            TimeSpan.Zero,
+            CancellationToken.None);
+
+        var deferred = await db.JobRuns.FindAsync(created.Id);
+        Assert.NotNull(deferred);
+        Assert.Equal(JobRunStatus.Queued, deferred.Status);
+        Assert.Equal(JobPriorities.InteractiveIdentify, deferred.Priority);
+        Assert.Equal(0, deferred.Attempts);
+        Assert.Equal("Bulk identify waiting for provider slot; retrying soon.", deferred.Message);
     }
 
     [Fact]
@@ -287,12 +335,14 @@ public sealed class JobQueueServiceTests {
         JobRunStatus status,
         DateTimeOffset createdAt,
         string? targetEntityId = null,
-        string? targetEntityKind = null) =>
+        string? targetEntityKind = null,
+        int priority = 0) =>
         new() {
             Id = Guid.NewGuid(),
             Type = type,
             Status = status,
             PayloadJson = "{}",
+            Priority = priority,
             Attempts = status == JobRunStatus.Running ? 1 : 0,
             MaxAttempts = 3,
             Progress = status == JobRunStatus.Running ? 50 : 0,
