@@ -24,7 +24,7 @@ public sealed class BulkIdentifyJobHandler(
         var count = payload.EntityIds.Count;
         logger.LogInformation("BulkIdentify: starting {Count} entities with provider {Provider}", count, payload.Provider);
 
-        using var lease = gate.TryEnter()
+        using var lease = gate.TryEnterInteractive()
             ?? throw new JobRetryLaterException("Bulk identify provider slot busy.", TimeSpan.FromSeconds(5));
 
         for (var i = 0; i < count; i++) {
