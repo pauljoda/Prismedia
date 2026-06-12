@@ -16,6 +16,12 @@ public sealed class AutoIdentifyConcurrencyGate {
         return new Lease(_semaphore);
     }
 
+    /// <summary>
+    /// Attempts to reserve the auto identify slot without blocking a worker thread.
+    /// </summary>
+    /// <returns>A lease when the slot was acquired; otherwise <see langword="null"/>.</returns>
+    public IDisposable? TryEnter() => _semaphore.Wait(0) ? new Lease(_semaphore) : null;
+
     private sealed class Lease(SemaphoreSlim semaphore) : IDisposable {
         private int _disposed;
 

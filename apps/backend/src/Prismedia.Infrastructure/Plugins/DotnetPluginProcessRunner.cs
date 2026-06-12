@@ -21,12 +21,15 @@ public sealed class DotnetPluginProcessRunner : IIdentifyRunner {
         Converters = { new CodecJsonConverterFactory() }
     };
 
+    private static readonly TimeSpan DefaultIdentifyTimeout = TimeSpan.FromSeconds(60);
     private readonly ProcessExecutor _processes;
     private readonly PluginCatalogOptions _options;
+    private readonly TimeSpan _identifyTimeout;
 
-    public DotnetPluginProcessRunner(ProcessExecutor processes, PluginCatalogOptions options) {
+    public DotnetPluginProcessRunner(ProcessExecutor processes, PluginCatalogOptions options, TimeSpan? identifyTimeout = null) {
         _processes = processes;
         _options = options;
+        _identifyTimeout = identifyTimeout ?? DefaultIdentifyTimeout;
     }
 
     /// <inheritdoc />
@@ -49,11 +52,13 @@ public sealed class DotnetPluginProcessRunner : IIdentifyRunner {
             cancellationToken);
 
         try {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(_identifyTimeout);
             var result = await _processes.RunAsync(
                 "dotnet",
                 [descriptor.EntryPath, requestPath],
                 environment: null,
-                cancellationToken);
+                timeout.Token);
 
             if (result.ExitCode != 0) {
                 return new IdentifyPluginResponse(
@@ -68,6 +73,8 @@ public sealed class DotnetPluginProcessRunner : IIdentifyRunner {
             return wire is not null
                 ? ConvertWireResponse(wire, descriptor.Manifest.Name, request.Entity.Kind.ToProposalKind())
                 : new IdentifyPluginResponse(false, null, "Plugin returned an empty response.");
+        } catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) {
+            return new IdentifyPluginResponse(false, null, $"Plugin timed out after {_identifyTimeout.TotalSeconds:0} seconds.");
         } catch (JsonException ex) {
             return new IdentifyPluginResponse(false, null, $"Plugin returned invalid JSON: {ex.Message}");
         } finally {

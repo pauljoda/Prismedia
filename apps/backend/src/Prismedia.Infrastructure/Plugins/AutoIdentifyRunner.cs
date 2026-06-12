@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Prismedia.Application.Jobs;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Application.Plugins;
 using Prismedia.Application.Settings;
@@ -83,6 +84,12 @@ public sealed class AutoIdentifyRunner(
             }
 
             if (!response.Ok || response.Result is null) {
+                if (IsRetryableProviderError(response.Error)) {
+                    throw new JobRetryLaterException(
+                        $"Auto identify provider {providerId} is temporarily unavailable: {response.Error}",
+                        TimeSpan.FromMinutes(1));
+                }
+
                 continue;
             }
 
@@ -107,6 +114,12 @@ public sealed class AutoIdentifyRunner(
                 }
 
                 if (!response.Ok || response.Result?.Patch is null) {
+                    if (IsRetryableProviderError(response.Error)) {
+                        throw new JobRetryLaterException(
+                            $"Auto identify provider {providerId} is temporarily unavailable: {response.Error}",
+                            TimeSpan.FromMinutes(1));
+                    }
+
                     continue;
                 }
 
@@ -187,6 +200,21 @@ public sealed class AutoIdentifyRunner(
         // Confidence is a 0-1 fraction by contract; tolerate providers that report a 0-100 percentage.
         var normalized = (double)confidence;
         return normalized > 1d ? normalized / 100d : normalized;
+    }
+
+    private static bool IsRetryableProviderError(string? error) {
+        if (string.IsNullOrWhiteSpace(error)) {
+            return false;
+        }
+
+        return error.Contains("429", StringComparison.OrdinalIgnoreCase) ||
+               error.Contains("rate limit", StringComparison.OrdinalIgnoreCase) ||
+               error.Contains("too many requests", StringComparison.OrdinalIgnoreCase) ||
+               error.Contains("timed out", StringComparison.OrdinalIgnoreCase) ||
+               error.Contains("timeout", StringComparison.OrdinalIgnoreCase) ||
+               error.Contains("temporarily", StringComparison.OrdinalIgnoreCase) ||
+               error.Contains("503", StringComparison.OrdinalIgnoreCase) ||
+               error.Contains("service unavailable", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

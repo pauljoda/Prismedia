@@ -356,6 +356,28 @@ public sealed class JobQueueService : IJobQueueService {
             return true;
         }, cancellationToken);
 
+    public Task DeferAsync(
+        Guid id,
+        string message,
+        TimeSpan retryDelay,
+        CancellationToken cancellationToken) =>
+        MutateRunAsync(id, row => {
+            if (row.Status != JobRunStatus.Running) {
+                return false;
+            }
+
+            row.Status = JobRunStatus.Queued;
+            row.Progress = 0;
+            row.Message = message;
+            row.Attempts = Math.Max(0, row.Attempts - 1);
+            row.LockedAt = null;
+            row.LockedBy = null;
+            row.AvailableAt = DateTimeOffset.UtcNow.Add(retryDelay);
+            row.StartedAt = null;
+            row.FinishedAt = null;
+            return true;
+        }, cancellationToken);
+
     /// <summary>
     /// Loads a single job run, applies a mutation, and saves it, retrying on optimistic-concurrency
     /// conflicts. job_runs is written by both background workers and API endpoints; the xmin token

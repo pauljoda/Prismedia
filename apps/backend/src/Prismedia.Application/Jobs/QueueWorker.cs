@@ -157,6 +157,13 @@ public sealed class QueueWorker(
                 job.Type.ToCode(), job.TargetLabel ?? job.Id.ToString(), report.ToLogString());
         } catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) {
             logger.LogInformation("Job {JobId} cancelled due to worker shutdown.", job.Id);
+        } catch (JobRetryLaterException ex) {
+            var report = timer.Finish();
+            logger.LogDebug(
+                "[METRICS] {JobType} {Label} deferred after {Elapsed:F2}s — {Timing}: {Message}",
+                job.Type.ToCode(), job.TargetLabel ?? job.Id.ToString(),
+                report.Total.TotalSeconds, report.ToLogString(), ex.Message);
+            await queue.DeferAsync(job.Id, ex.Message, ex.RetryDelay, stoppingToken);
         } catch (Exception ex) {
             var report = timer.Finish();
             logger.LogError(ex,

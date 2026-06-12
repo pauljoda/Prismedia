@@ -8,7 +8,7 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class AutoIdentifyJobHandlerTests {
     [Fact]
-    public async Task HandleAsyncRunsOnlyOneAutoIdentifyAtATime() {
+    public async Task HandleAsyncRequeuesImmediatelyWhenAutoIdentifySlotIsBusy() {
         var runner = new BlockingAutoIdentifyRunner();
         var handler = new AutoIdentifyJobHandler(
             runner,
@@ -19,20 +19,33 @@ public sealed class AutoIdentifyJobHandlerTests {
         var first = handler.HandleAsync(new JobContext(CreateJob(Guid.NewGuid()), new NoopJobQueue()), timeout.Token);
         await runner.WaitForStartedCallsAsync(1, timeout.Token);
 
-        var second = handler.HandleAsync(new JobContext(CreateJob(Guid.NewGuid()), new NoopJobQueue()), timeout.Token);
-        await Task.Delay(100, timeout.Token);
+        var busy = await Assert.ThrowsAsync<JobRetryLaterException>(() =>
+            handler.HandleAsync(new JobContext(CreateJob(Guid.NewGuid()), new NoopJobQueue()), timeout.Token));
 
+        Assert.Equal("Auto identify provider slot busy.", busy.Message);
+        Assert.Equal(TimeSpan.FromSeconds(5), busy.RetryDelay);
         Assert.Equal(1, runner.MaxActive);
         Assert.Equal(1, runner.StartedCalls);
 
         runner.ReleaseNext();
         await first;
-        await runner.WaitForStartedCallsAsync(2, timeout.Token);
+    }
 
-        Assert.Equal(1, runner.MaxActive);
+    [Fact]
+    public async Task HandleAsyncRequeuesWhenIdentifyExceedsTotalTimeout() {
+        var runner = new BlockingAutoIdentifyRunner();
+        var handler = new AutoIdentifyJobHandler(
+            runner,
+            new AutoIdentifyConcurrencyGate(),
+            NullLogger<AutoIdentifyJobHandler>.Instance,
+            TimeSpan.FromMilliseconds(25));
 
-        runner.ReleaseNext();
-        await second;
+        var retry = await Assert.ThrowsAsync<JobRetryLaterException>(() =>
+            handler.HandleAsync(new JobContext(CreateJob(Guid.NewGuid()), new NoopJobQueue()), CancellationToken.None));
+
+        Assert.Equal("Auto identify timed out after 0 seconds.", retry.Message);
+        Assert.Equal(TimeSpan.FromMinutes(1), retry.RetryDelay);
+        Assert.Equal(1, runner.StartedCalls);
     }
 
     private static JobRunSnapshot CreateJob(Guid entityId) =>
@@ -128,6 +141,9 @@ public sealed class AutoIdentifyJobHandlerTests {
             Task.CompletedTask;
 
         public Task FailAsync(Guid id, string message, TimeSpan retryDelay, CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
+        public Task DeferAsync(Guid id, string message, TimeSpan retryDelay, CancellationToken cancellationToken) =>
             Task.CompletedTask;
 
         public Task<IReadOnlyList<JobQueueCount>> GetQueueCountsAsync(bool hideNsfw, CancellationToken cancellationToken) =>

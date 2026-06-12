@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Prismedia.Application.Jobs;
 using Prismedia.Application.Plugins;
 using Prismedia.Application.Settings;
 using Prismedia.Contracts.Plugins;
@@ -258,6 +259,29 @@ public sealed class AutoIdentifyRunnerTests {
     }
 
     [Fact]
+    public async Task ThrowsRetryLaterWhenProviderReportsRateLimit() {
+        await using var db = CreateContext();
+        var albumId = await SeedVideoAsync(db, organized: false, kind: EntityKindRegistry.AudioLibrary.Code, title: "Abbey Road");
+        var settings = await ConfigureAsync(db, enabled: true, providers: ["musicbrainz"], confidencePercent: 90m);
+        var identify = new FakeIdentifyProvider {
+            ErrorsByProvider = {
+                ["musicbrainz"] = "429 Too Many Requests"
+            },
+            SupportedKindsByProvider = {
+                ["musicbrainz"] = [EntityKindRegistry.AudioLibrary.Code],
+            },
+        };
+        var runner = new AutoIdentifyRunner(settings, identify, db, NullLogger<AutoIdentifyRunner>.Instance);
+
+        var retry = await Assert.ThrowsAsync<JobRetryLaterException>(() => runner.RunAsync(albumId, CancellationToken.None));
+
+        Assert.Equal("Auto identify provider musicbrainz is temporarily unavailable: 429 Too Many Requests", retry.Message);
+        Assert.Equal(TimeSpan.FromMinutes(1), retry.RetryDelay);
+        Assert.Empty(identify.ApplyCalls);
+        Assert.False((await db.Entities.SingleAsync()).IsOrganized);
+    }
+
+    [Fact]
     public async Task SkipsWhenDisabled() {
         await using var db = CreateContext();
         var entityId = await SeedVideoAsync(db, organized: false);
@@ -371,6 +395,7 @@ public sealed class AutoIdentifyRunnerTests {
 
     private sealed class FakeIdentifyProvider : IIdentifyProviderService {
         public Dictionary<string, EntityMetadataProposal> ProposalsByProvider { get; } = new(StringComparer.Ordinal);
+        public Dictionary<string, string> ErrorsByProvider { get; } = new(StringComparer.Ordinal);
         public Dictionary<string, EntityMetadataProposal> ProposalsByExternalId { get; } = new(StringComparer.Ordinal);
         /// <summary>Optional manifest-style declared kinds per provider; providers absent here match any kind.</summary>
         public Dictionary<string, string[]> SupportedKindsByProvider { get; } = new(StringComparer.Ordinal);
@@ -379,6 +404,8 @@ public sealed class AutoIdentifyRunnerTests {
 
         public Task<IReadOnlyList<PluginProvider>> ListProvidersAsync(string? entityKind, CancellationToken cancellationToken) {
             IReadOnlyList<PluginProvider> result = ProposalsByProvider.Keys
+                .Concat(ErrorsByProvider.Keys)
+                .Distinct(StringComparer.Ordinal)
                 .Where(id => entityKind is null ||
                     !SupportedKindsByProvider.TryGetValue(id, out var kinds) ||
                     kinds.Contains(entityKind, StringComparer.OrdinalIgnoreCase))
@@ -401,6 +428,10 @@ public sealed class AutoIdentifyRunnerTests {
             IReadOnlyDictionary<string, string>? parentExternalIds, bool hideNsfw, CancellationToken cancellationToken,
             bool cascadeChildren = true, IIdentifyCascadeSink? sink = null) {
             IdentifyCalls.Add((entityId, providerId, query));
+            if (ErrorsByProvider.TryGetValue(providerId, out var error)) {
+                return Task.FromResult(new IdentifyPluginResponse(false, null, error));
+            }
+
             if (query?.ExternalIds is not null &&
                 query.ExternalIds.TryGetValue(providerId, out var externalId) &&
                 ProposalsByExternalId.TryGetValue($"{providerId}:{externalId}", out var lookupProposal)) {

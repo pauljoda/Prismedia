@@ -74,6 +74,13 @@ public interface IJobQueueService {
     Task FailAsync(Guid id, string message, TimeSpan retryDelay, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Returns a claimed job to the queue without consuming the claim as a failed attempt.
+    /// Use for local capacity throttles such as provider slots, not for work that actually ran.
+    /// </summary>
+    Task DeferAsync(Guid id, string message, TimeSpan retryDelay, CancellationToken cancellationToken) =>
+        FailAsync(id, message, retryDelay, cancellationToken);
+
+    /// <summary>
     /// Returns aggregate counts of job runs grouped by type code and status code,
     /// so the dashboard can display accurate totals without fetching all rows.
     /// </summary>

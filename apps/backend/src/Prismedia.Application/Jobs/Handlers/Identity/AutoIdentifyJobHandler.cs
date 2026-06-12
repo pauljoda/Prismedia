@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Prismedia.Application.Jobs;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Domain.Entities;
 
@@ -12,7 +13,11 @@ namespace Prismedia.Application.Jobs.Handlers;
 public sealed class AutoIdentifyJobHandler(
     IAutoIdentifyRunner runner,
     AutoIdentifyConcurrencyGate gate,
-    ILogger<AutoIdentifyJobHandler> logger) : IJobHandler {
+    ILogger<AutoIdentifyJobHandler> logger,
+    TimeSpan? identifyTimeout = null) : IJobHandler {
+    private static readonly TimeSpan DefaultIdentifyTimeout = TimeSpan.FromSeconds(90);
+    private readonly TimeSpan _identifyTimeout = identifyTimeout ?? DefaultIdentifyTimeout;
+
     public JobType Type => JobType.AutoIdentify;
 
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
@@ -21,9 +26,20 @@ public sealed class AutoIdentifyJobHandler(
             return;
         }
 
+        using var lease = gate.TryEnter()
+            ?? throw new JobRetryLaterException("Auto identify provider slot busy.", TimeSpan.FromSeconds(5));
+
         await context.ReportProgressAsync(10, "Identifying", cancellationToken);
-        using var lease = await gate.EnterAsync(cancellationToken);
-        var result = await runner.RunAsync(entityId, cancellationToken);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(_identifyTimeout);
+        AutoIdentifyResult result;
+        try {
+            result = await runner.RunAsync(entityId, timeout.Token);
+        } catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) {
+            throw new JobRetryLaterException(
+                $"Auto identify timed out after {_identifyTimeout.TotalSeconds:0} seconds.",
+                TimeSpan.FromMinutes(1));
+        }
 
         if (result.Applied) {
             logger.LogInformation(
