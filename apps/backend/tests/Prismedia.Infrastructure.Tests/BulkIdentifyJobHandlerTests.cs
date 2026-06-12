@@ -49,6 +49,26 @@ public sealed class BulkIdentifyJobHandlerTests {
         Assert.Equal(1, provider.StartedCalls);
     }
 
+    [Fact]
+    public async Task HandleAsyncResumesPastEntitiesResolvedByEarlierAttempts() {
+        var provider = new BlockingBulkIdentifyProvider();
+        var alreadyDone = Guid.NewGuid();
+        var pending = Guid.NewGuid();
+        provider.ResolvedEntityIds.Add(alreadyDone);
+        var handler = new BulkIdentifyJobHandler(
+            provider,
+            new AutoIdentifyConcurrencyGate(),
+            NullLogger<BulkIdentifyJobHandler>.Instance);
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var run = handler.HandleAsync(new JobContext(CreateJob([alreadyDone, pending]), new NoopJobQueue()), timeout.Token);
+        await provider.WaitForStartedCallsAsync(1, timeout.Token);
+        provider.ReleaseNext();
+        await run;
+
+        Assert.Equal([pending], provider.SearchedEntityIds);
+    }
+
     private static JobRunSnapshot CreateJob(IReadOnlyList<Guid> entityIds) =>
         new(
             Guid.NewGuid(),
@@ -73,6 +93,11 @@ public sealed class BulkIdentifyJobHandlerTests {
         public int MaxActive => Volatile.Read(ref _maxActive);
         public int StartedCalls => Volatile.Read(ref _startedCalls);
 
+        /// <summary>Entities a prior attempt already resolved; the handler should skip these.</summary>
+        public HashSet<Guid> ResolvedEntityIds { get; } = [];
+
+        public List<Guid> SearchedEntityIds { get; } = [];
+
         public async Task SearchAndQueueAsync(
             Guid entityId,
             string provider,
@@ -82,6 +107,9 @@ public sealed class BulkIdentifyJobHandlerTests {
             var active = Interlocked.Increment(ref _active);
             TrackMaxActive(active);
             Interlocked.Increment(ref _startedCalls);
+            lock (SearchedEntityIds) {
+                SearchedEntityIds.Add(entityId);
+            }
 
             try {
                 await _release.WaitAsync(cancellationToken);
@@ -89,6 +117,13 @@ public sealed class BulkIdentifyJobHandlerTests {
                 Interlocked.Decrement(ref _active);
             }
         }
+
+        public Task<bool> HasResultSinceAsync(
+            Guid entityId,
+            string provider,
+            DateTimeOffset since,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(ResolvedEntityIds.Contains(entityId));
 
         public void ReleaseNext() => _release.Release();
 
@@ -133,7 +168,7 @@ public sealed class BulkIdentifyJobHandlerTests {
         public Task<int> ClearFailuresAsync(JobType? type, CancellationToken cancellationToken) =>
             Task.FromResult(0);
 
-        public Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken) =>
+        public Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken, int? minPriority = null) =>
             Task.FromResult<JobRunSnapshot?>(null);
 
         public Task<int> RecoverStaleRunningAsync(string currentWorkerId, TimeSpan staleAfter, CancellationToken cancellationToken) =>

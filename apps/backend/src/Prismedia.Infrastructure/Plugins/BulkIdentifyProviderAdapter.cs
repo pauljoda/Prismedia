@@ -20,4 +20,11 @@ internal sealed class BulkIdentifyProviderAdapter(IdentifyQueueService queueServ
             hideNsfw,
             cancellationToken);
     }
+
+    public Task<bool> HasResultSinceAsync(
+        Guid entityId,
+        string provider,
+        DateTimeOffset since,
+        CancellationToken cancellationToken) =>
+        queueService.HasResultSinceAsync(entityId, provider, since, cancellationToken);
 }

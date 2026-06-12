@@ -31,6 +31,14 @@ public sealed class BulkIdentifyJobHandler(
             cancellationToken.ThrowIfCancellationRequested();
             var entityId = payload.EntityIds[i];
 
+            // A deferred batch re-runs from the top, so resume past entities that already resolved
+            // (result stored, accepted, or rejected) since the batch was created instead of
+            // re-searching the whole list on every retry.
+            if (await provider.HasResultSinceAsync(entityId, payload.Provider, context.Job.CreatedAt, cancellationToken)) {
+                await context.ReportProgressAsync((i + 1) * 100 / count, $"Identified {i + 1}/{count}", cancellationToken);
+                continue;
+            }
+
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(_identifyTimeout);
             try {

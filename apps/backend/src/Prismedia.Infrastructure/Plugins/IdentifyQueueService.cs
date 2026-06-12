@@ -77,6 +77,27 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
     }
 
     /// <summary>
+    /// Whether the entity's queue item was resolved at or after the given instant: the user accepted
+    /// or rejected it, or a search by this provider stored a proposal, candidates, or an error.
+    /// Used by retried bulk identify jobs to resume past entities finished on earlier attempts.
+    /// </summary>
+    public Task<bool> HasResultSinceAsync(
+        Guid entityId,
+        string provider,
+        DateTimeOffset since,
+        CancellationToken cancellationToken) =>
+        _db.IdentifyQueueItems.AsNoTracking().AnyAsync(row =>
+            row.EntityId == entityId &&
+            row.UpdatedAt >= since &&
+            (row.State == IdentifyQueueState.Done ||
+             row.State == IdentifyQueueState.Deleted ||
+             (row.ProviderCode == provider &&
+              (row.State == IdentifyQueueState.Proposal ||
+               row.State == IdentifyQueueState.Error ||
+               (row.State == IdentifyQueueState.Search && row.CandidatesJson != null)))),
+            cancellationToken);
+
+    /// <summary>
     /// Adds an entity to the identify queue, preserving active work and resetting terminal items.
     /// </summary>
     public async Task<IdentifyQueueItem> AddAsync(Guid entityId, CancellationToken cancellationToken) {
