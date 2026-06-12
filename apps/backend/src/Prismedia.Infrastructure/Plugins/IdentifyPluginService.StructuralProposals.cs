@@ -98,7 +98,7 @@ public sealed partial class IdentifyPluginService {
                     structuralChildren.Add(await HydrateMatchedProviderChildAsync(
                         child, providerChild, descriptor, auth, ancestorPath, includeNsfw, visited, cancellationToken));
                 } else if (cautiousStructuralMatching) {
-                    continue;
+                    structuralChildren.Add(UnmatchedLocalStructuralChild(child, descriptor.Manifest.Name));
                 } else {
                     var childResponse = await IdentifyEntityWithStructuralContextAsync(
                         child.Entity, descriptor, auth, query: null, ancestors: ancestorPath,
@@ -433,6 +433,31 @@ public sealed partial class IdentifyPluginService {
             }
         };
     }
+
+    private static EntityMetadataProposal UnmatchedLocalStructuralChild(StructuralChild child, string provider) =>
+        new(
+            ProposalId: $"local-unmatched:{child.Entity.Id}",
+            Provider: provider,
+            TargetKind: child.Entity.KindCode.DecodeAs<EntityKind>().ToProposalKind(),
+            Confidence: null,
+            MatchReason: "local-unmatched",
+            Patch: new EntityMetadataPatch(
+                child.Entity.Title,
+                Description: null,
+                ExternalIds: new Dictionary<string, string>(),
+                Urls: [],
+                Tags: [],
+                Studio: null,
+                Credits: [],
+                Dates: new Dictionary<string, string>(),
+                Stats: new Dictionary<string, int>(),
+                Positions: new Dictionary<string, int>(),
+                Classification: null),
+            Images: [],
+            Children: [],
+            Candidates: [],
+            TargetEntityId: child.Entity.Id,
+            Relationships: []);
 
     /// <summary>
     /// True when the caller is steering this identify by hand — a manual title search or an
