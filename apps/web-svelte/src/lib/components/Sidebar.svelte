@@ -50,7 +50,7 @@
     return channel;
   });
   const pathname = $derived(page.url.pathname);
-  const docsHref = "https://pauljoda.github.io/Prismedia/docs/users/quick-start";
+  const docsHref = "https://pauljoda.github.io/Prismedia/";
 
   // Normal-mode rendering: drop hidden items and empty sections.
   const visibleSections = $derived(
