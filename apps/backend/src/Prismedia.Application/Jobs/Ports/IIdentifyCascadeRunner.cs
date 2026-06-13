@@ -32,11 +32,13 @@ public interface IIdentifyCascadeRunner {
 /// <param name="Provider">Provider code used to seed the root proposal.</param>
 /// <param name="Query">Query (typically the picked candidate's external id) used to seed the root.</param>
 /// <param name="HideNsfw">NSFW visibility carried from the originating request.</param>
+/// <param name="IsForeground">True when this cascade belongs to a direct manual identify search.</param>
 public sealed record IdentifyCascadePayload(
     Guid EntityId,
     string Provider,
     IdentifyQuery? Query,
-    bool HideNsfw) {
+    bool HideNsfw,
+    bool IsForeground = false) {
     public string ToJson() => JsonSerializer.Serialize(this);
 
     public static IdentifyCascadePayload Parse(string payloadJson) =>

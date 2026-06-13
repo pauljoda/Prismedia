@@ -11,10 +11,12 @@ namespace Prismedia.Application.Jobs;
 /// <param name="TargetEntityId">Optional entity identifier for display and deduplication.</param>
 /// <param name="TargetLabel">Optional human-readable label shown on the dashboard.</param>
 /// <param name="Priority">Higher values are claimed first. Defaults to zero.</param>
+/// <param name="Lane">Optional queue lane for work that needs dedicated foreground worker selection.</param>
 public sealed record EnqueueJobRequest(
     JobType Type,
     string? PayloadJson = null,
     string? TargetEntityKind = null,
     string? TargetEntityId = null,
     string? TargetLabel = null,
-    int Priority = 0);
+    int Priority = 0,
+    JobRunLane? Lane = null);

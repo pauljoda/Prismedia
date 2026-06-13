@@ -34,11 +34,13 @@ public interface IIdentifySearchRunner {
 /// </param>
 /// <param name="Query">Optional title, URL, or external ID override (e.g. a picked candidate).</param>
 /// <param name="HideNsfw">NSFW visibility carried from the originating request.</param>
+/// <param name="IsForeground">True when this search came from a direct single-entity manual identify request.</param>
 public sealed record IdentifySearchPayload(
     Guid EntityId,
     string? Provider,
     IdentifyQuery? Query,
-    bool HideNsfw) {
+    bool HideNsfw,
+    bool IsForeground = false) {
     public string ToJson() => JsonSerializer.Serialize(this);
 
     public static IdentifySearchPayload Parse(string payloadJson) =>

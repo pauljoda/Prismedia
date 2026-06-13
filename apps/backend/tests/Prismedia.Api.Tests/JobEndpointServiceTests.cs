@@ -121,7 +121,7 @@ public sealed class JobEndpointServiceTests {
         public Task<int> ClearFailuresAsync(JobType? type, CancellationToken cancellationToken) =>
             Task.FromResult(type == JobType.ImportMetadata ? 2 : 0);
 
-        public Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken, int? minPriority = null) =>
+        public Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken, JobRunLane? lane = null) =>
             throw new NotSupportedException();
 
         public Task<int> RecoverStaleRunningAsync(string currentWorkerId, TimeSpan staleAfter, CancellationToken cancellationToken) =>

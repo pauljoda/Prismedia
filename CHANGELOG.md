@@ -87,6 +87,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Fixed
+- Manual identify searches now use their own foreground job lane, so a direct search from an item jumps ahead of older bulk/background identify work while still preserving provider rate-limit safety.
 - The Docs button now opens the live Prismedia documentation landing page instead of a missing quick-start URL.
 - The dev-channel update check works again. Dev builds stopped publishing per-build registry tags a while back, which left the updater unable to find its own image and showing "Update status unavailable"; it now reads the build commit baked into the published dev image itself, so "Update available" vs "Up to date" is accurate without any extra registry tags.
 - Auto Identify now covers music artists. Scanning an Artist/Album library queues the artist grouping for identification alongside its albums, so trusted providers fill in artist metadata and artwork automatically — each album still identifies independently, exactly as before.

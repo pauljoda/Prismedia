@@ -19,6 +19,7 @@ namespace Prismedia.Application.Jobs;
 /// <param name="FinishedAt">Time the job finished, when complete or failed.</param>
 /// <param name="Attempts">Number of times this run has been claimed, including the current attempt.</param>
 /// <param name="MaxAttempts">Maximum attempts before the run is failed terminally rather than retried.</param>
+/// <param name="Lane">Optional queue lane used for foreground worker selection.</param>
 public sealed record JobRunSnapshot(
     Guid Id,
     JobType Type,
@@ -33,7 +34,8 @@ public sealed record JobRunSnapshot(
     DateTimeOffset? StartedAt,
     DateTimeOffset? FinishedAt,
     int Attempts = 0,
-    int MaxAttempts = 0) {
+    int MaxAttempts = 0,
+    JobRunLane? Lane = null) {
     /// <summary>
     /// True when the current attempt is the last the queue will run; a failure now is terminal
     /// (the run is failed, not requeued) rather than retried.

@@ -163,7 +163,7 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
         var entity = await LoadEntityAsync(entityId, cancellationToken)
             ?? throw new KeyNotFoundException($"Entity '{entityId}' was not found.");
 
-        await StampQueuedSearchAsync(row, entity, request, hideNsfw, cancellationToken);
+        await StampQueuedSearchAsync(row, entity, request, hideNsfw, isForeground: true, cancellationToken);
         await _db.SaveChangesAsync(cancellationToken);
         return MapRow(row, entity);
     }
@@ -183,7 +183,12 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
         var enqueued = 0;
         foreach (var entityId in entityIds.Distinct()) {
             try {
-                await RequestSearchAsync(entityId, request, hideNsfw, cancellationToken);
+                var row = await EnsureMutableRowAsync(entityId, cancellationToken);
+                var entity = await LoadEntityAsync(entityId, cancellationToken)
+                    ?? throw new KeyNotFoundException($"Entity '{entityId}' was not found.");
+
+                await StampQueuedSearchAsync(row, entity, request, hideNsfw, isForeground: false, cancellationToken);
+                await _db.SaveChangesAsync(cancellationToken);
                 enqueued++;
             } catch (KeyNotFoundException) {
                 // The entity was removed since the user selected it; skip it.
@@ -203,6 +208,7 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
         EntityRow entity,
         IdentifyQueueSearchRequest request,
         bool hideNsfw,
+        bool isForeground,
         CancellationToken cancellationToken) {
         await CancelCascadeAsync(row, cancellationToken);
         await CancelSearchJobAsync(row, cancellationToken);
@@ -217,7 +223,7 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
         row.UpdatedAt = DateTimeOffset.UtcNow;
         row.CompletedAt = null;
 
-        var payload = new IdentifySearchPayload(entity.Id, row.ProviderCode, request.Query, hideNsfw);
+        var payload = new IdentifySearchPayload(entity.Id, row.ProviderCode, request.Query, hideNsfw, isForeground);
         var job = await _jobs.EnqueueAsync(
             new EnqueueJobRequest(
                 JobType.IdentifySearch,
@@ -225,7 +231,8 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
                 TargetEntityKind: entity.KindCode,
                 TargetEntityId: entity.Id.ToString(),
                 TargetLabel: entity.Title,
-                Priority: JobPriorities.InteractiveIdentify),
+                Priority: JobPriorities.InteractiveIdentify,
+                Lane: isForeground ? JobRunLane.ForegroundIdentify : null),
             cancellationToken);
         row.SearchJobId = job.Id;
     }
@@ -278,7 +285,7 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
                 await _db.SaveChangesAsync(cancellationToken);
 
                 var resolved = await SearchProviderWithTitleFallbackAsync(
-                    row, entity, provider, payload.Query, payload.HideNsfw, cancellationToken);
+                    row, entity, provider, payload.Query, payload.HideNsfw, payload.IsForeground, cancellationToken);
 
                 if (row.State == IdentifyQueueState.Error && ProviderTransientErrors.IsRetryable(row.Error)) {
                     // Rate limited or temporarily down: defer the whole job instead of hammering the
@@ -335,8 +342,9 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
         string provider,
         IdentifyQuery? query,
         bool hideNsfw,
+        bool isForeground,
         CancellationToken cancellationToken) {
-        await RunProviderSearchAsync(row, entity, provider, query, hideNsfw, cancellationToken);
+        await RunProviderSearchAsync(row, entity, provider, query, hideNsfw, isForeground, cancellationToken);
 
         if (row.State == IdentifyQueueState.Error &&
             !ProviderTransientErrors.IsRetryable(row.Error) &&
@@ -345,7 +353,7 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
             await RunProviderSearchAsync(
                 row, entity, provider,
                 new IdentifyQuery(entity.Title, Url: null, ExternalIds: null),
-                hideNsfw, cancellationToken);
+                hideNsfw, isForeground, cancellationToken);
         }
 
         return IsResolvedSearchOutcome(row);
@@ -363,6 +371,7 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
         string provider,
         IdentifyQuery? query,
         bool hideNsfw,
+        bool isForeground,
         CancellationToken cancellationToken) {
         var now = DateTimeOffset.UtcNow;
         row.ProviderCode = provider;
@@ -414,7 +423,8 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
             row.Error = null;
             row.CandidatesJson = null;
             row.ProposalJson = JsonSerializer.Serialize(response.Result, JsonOptions);
-            await EnqueueCascadeIfNeededAsync(row, entity, provider, query, hideNsfw, cancellationToken);
+            await EnqueueCascadeIfNeededAsync(
+                row, entity, provider, query, hideNsfw, isForeground, cancellationToken);
         } else if (response.Result?.Candidates is { Count: > 0 } candidates) {
             row.State = IdentifyQueueState.Search;
             row.Error = null;
@@ -553,6 +563,7 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
         string provider,
         IdentifyQuery? query,
         bool hideNsfw,
+        bool isForeground,
         CancellationToken cancellationToken) {
         if (!EntityKindRegistry.EnumeratesIdentifyChildren(entity.KindCode)) {
             return;
@@ -565,7 +576,7 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
             return;
         }
 
-        var payload = new IdentifyCascadePayload(entity.Id, provider, query, hideNsfw);
+        var payload = new IdentifyCascadePayload(entity.Id, provider, query, hideNsfw, isForeground);
         var job = await _jobs.EnqueueAsync(
             new EnqueueJobRequest(
                 JobType.IdentifyCascade,
@@ -573,7 +584,8 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
                 TargetEntityKind: entity.KindCode,
                 TargetEntityId: entity.Id.ToString(),
                 TargetLabel: entity.Title,
-                Priority: JobPriorities.InteractiveIdentify),
+                Priority: JobPriorities.InteractiveIdentify,
+                Lane: isForeground ? JobRunLane.ForegroundIdentify : null),
             cancellationToken);
         row.CascadeJobId = job.Id;
     }

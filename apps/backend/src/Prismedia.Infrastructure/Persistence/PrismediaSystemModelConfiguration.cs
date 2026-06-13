@@ -332,6 +332,12 @@ internal static partial class PrismediaModelConfiguration {
                 .IsRequired();
             entity.Property(row => row.PayloadJson).HasColumnName("payload_json").HasColumnType("jsonb").IsRequired();
             entity.Property(row => row.Priority).HasColumnName("priority");
+            entity.Property(row => row.Lane)
+                .HasColumnName("lane")
+                .HasMaxLength(64)
+                .HasConversion(
+                    value => value == null ? null : value.Value.ToCode(),
+                    value => value == null ? null : value.DecodeAs<JobRunLane>());
             entity.Property(row => row.Attempts).HasColumnName("attempts");
             entity.Property(row => row.MaxAttempts).HasColumnName("max_attempts");
             entity.Property(row => row.Progress).HasColumnName("progress");
@@ -345,7 +351,7 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");
             entity.Property(row => row.StartedAt).HasColumnName("started_at");
             entity.Property(row => row.FinishedAt).HasColumnName("finished_at");
-            entity.HasIndex(row => new { row.Status, row.AvailableAt, row.Priority });
+            entity.HasIndex(row => new { row.Status, row.Lane, row.AvailableAt, row.Priority });
             entity.HasIndex(row => new { row.Type, row.TargetEntityId, row.Status })
                 .HasDatabaseName("ix_job_runs_dedup");
             entity.HasIndex(row => new { row.Type, row.TargetEntityId })

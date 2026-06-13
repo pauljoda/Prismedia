@@ -20,11 +20,11 @@ public sealed class QueueWorker(
     private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(30);
 
     /// <summary>
-    /// Extra worker slots reserved for interactive (user-triggered) jobs. Priority only orders
-    /// claims, so a long-running scan occupying every regular slot would still make a manual
-    /// identify wait for it to finish; the lane lets interactive work start immediately instead.
+    /// Extra worker slots reserved for direct foreground identify jobs. Priority only orders claims,
+    /// so a long-running scan occupying every regular slot would still make a manual identify wait
+    /// for it to finish; the lane lets direct manual identify work start immediately instead.
     /// </summary>
-    private const int InteractiveLaneSlots = 1;
+    private const int ForegroundLaneSlots = 1;
     private static readonly TimeSpan StaleLeaseTimeout = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan StaleLeaseRecoveryInterval = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan DefaultConcurrencyRefreshInterval = TimeSpan.FromSeconds(15);
@@ -62,14 +62,14 @@ public sealed class QueueWorker(
                 nextConcurrencyRefreshAt = now.Add(_concurrencyRefreshInterval);
             }
 
-            if (runningJobs.Count >= concurrency + InteractiveLaneSlots) {
+            if (runningJobs.Count >= concurrency + ForegroundLaneSlots) {
                 await WaitForCapacityOrRefreshAsync(runningJobs, nextConcurrencyRefreshAt, stoppingToken);
                 continue;
             }
 
-            // With every regular slot busy, only the reserved interactive lane remains: claim
-            // exclusively user-triggered identify work so background jobs cannot fill it.
-            var interactiveOnly = runningJobs.Count >= concurrency;
+            // With every regular slot busy, only the reserved foreground lane remains: claim
+            // exclusively direct manual identify work so bulk/background jobs cannot fill it.
+            var foregroundIdentifyOnly = runningJobs.Count >= concurrency;
 
             JobRunSnapshot? job;
             try {
@@ -88,7 +88,7 @@ public sealed class QueueWorker(
                 job = await queue.ClaimNextAsync(
                     _workerId,
                     stoppingToken,
-                    interactiveOnly ? JobPriorities.InteractiveIdentify : null);
+                    foregroundIdentifyOnly ? JobRunLane.ForegroundIdentify : null);
             } catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) {
                 throw;
             } catch (Exception ex) {

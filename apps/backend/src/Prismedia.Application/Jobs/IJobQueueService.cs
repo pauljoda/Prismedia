@@ -50,11 +50,9 @@ public interface IJobQueueService {
 
     /// <summary>
     /// Claims the next available queued job for one worker using atomic row locking. When
-    /// <paramref name="minPriority"/> is set, only jobs at or above that priority are eligible —
-    /// used by the worker's reserved interactive lane so user-triggered work is claimed even
-    /// while long-running background jobs hold every regular slot.
+    /// <paramref name="lane"/> is set, only jobs explicitly assigned to that queue lane are eligible.
     /// </summary>
-    Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken, int? minPriority = null);
+    Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken, JobRunLane? lane = null);
 
     /// <summary>
     /// Requeues running jobs whose worker lease is stale and not owned by the current worker process.
