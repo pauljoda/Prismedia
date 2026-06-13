@@ -7,6 +7,7 @@ node_modules/
 coverage/
 playwright-report/
 test-results/
+.tmp/
 
 apps/web-svelte/.svelte-kit/
 apps/web-svelte/build/
