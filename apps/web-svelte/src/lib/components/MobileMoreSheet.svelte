@@ -48,7 +48,7 @@
 
   // Mirror the desktop sidebar footer: surface the changelog (with update LED), the running
   // build's version/channel, and the docs link so they are reachable from mobile too.
-  const docsHref = "https://pauljoda.github.io/Prismedia/docs/users/quick-start";
+  const docsHref = "https://pauljoda.github.io/Prismedia/";
   let releaseStatus = $state<ReleaseUpdateStatus | null>(null);
   const updateAvailable = $derived(releaseStatus?.updateAvailable === true);
   const channelLabel = $derived.by(() => {
