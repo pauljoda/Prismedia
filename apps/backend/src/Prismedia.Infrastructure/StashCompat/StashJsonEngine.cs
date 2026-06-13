@@ -54,7 +54,7 @@ public sealed class StashJsonEngine {
                         scene.Code = EvaluateString(document.RootElement, selectorDef, common);
                         break;
                     case "tags":
-                        scene.Tags = EvaluateArray(document.RootElement, selectorDef, common);
+                        scene.Tags = EvaluateTagArray(document.RootElement, selectorDef, common);
                         break;
                     case "performers":
                         scene.Performers = EvaluateArray(document.RootElement, selectorDef, common)
@@ -62,11 +62,7 @@ public sealed class StashJsonEngine {
                             .ToArray();
                         break;
                     case "studio":
-                        var name = EvaluateString(document.RootElement, selectorDef["Name"], common);
-                        if (!string.IsNullOrWhiteSpace(name)) {
-                            scene.Studio = new StashScrapedStudio { Name = name };
-                        }
-
+                        scene.Studio = EvaluateStudioObject(document.RootElement, selectorDef, common);
                         break;
                 }
             }
@@ -76,6 +72,10 @@ public sealed class StashJsonEngine {
     }
 
     private static string? EvaluateString(JsonElement root, StashYamlNode fieldDef, StashYamlNode common) {
+        if (FixedValue(fieldDef) is { } fixedValue) {
+            return fixedValue;
+        }
+
         var (path, postProcess) = ParseFieldDef(fieldDef, common);
         if (string.IsNullOrWhiteSpace(path)) {
             return null;
@@ -90,13 +90,24 @@ public sealed class StashJsonEngine {
         return string.IsNullOrWhiteSpace(processed) ? null : processed;
     }
 
-    private static IReadOnlyList<string> EvaluateArray(JsonElement root, StashYamlNode subObject, StashYamlNode common) {
-        var nameField = subObject.HasKey("Name") ? subObject["Name"] : subObject["name"];
-        if (nameField.IsMissing) {
+    private static IReadOnlyList<string> EvaluateArray(JsonElement root, StashYamlNode subObject, StashYamlNode common) =>
+        EvaluateFieldArray(root, subObject, common, "Name", "name");
+
+    private static IReadOnlyList<string> EvaluateFieldArray(
+        JsonElement root,
+        StashYamlNode subObject,
+        StashYamlNode common,
+        params string[] fieldNames) {
+        var field = FieldByName(subObject, fieldNames);
+        if (field.IsMissing) {
             return [];
         }
 
-        var (path, postProcess) = ParseFieldDef(nameField, common);
+        if (FixedValue(field) is { } fixedValue) {
+            return [fixedValue];
+        }
+
+        var (path, postProcess) = ParseFieldDef(field, common);
         if (string.IsNullOrWhiteSpace(path)) {
             return [];
         }
@@ -110,6 +121,202 @@ public sealed class StashJsonEngine {
         }
 
         return results;
+    }
+
+    /// <summary>
+    /// Evaluates the <c>tag</c> definition of a JSON scraper block against a JSON body.
+    /// </summary>
+    /// <param name="json">Raw JSON document text.</param>
+    /// <param name="scraperBlock">The resolved <c>jsonScrapers</c> entry.</param>
+    /// <returns>The scraped tag, or null when nothing usable was extracted.</returns>
+    public StashScrapedTag? EvaluateTag(string json, StashYamlNode scraperBlock) {
+        var tagDef = scraperBlock["tag"];
+        if (tagDef.IsMissing) {
+            return null;
+        }
+
+        JsonDocument document;
+        try {
+            document = JsonDocument.Parse(json);
+        } catch (JsonException) {
+            return null;
+        }
+
+        using (document) {
+            var common = scraperBlock["common"];
+            var tag = new StashScrapedTag {
+                Name = EvaluateNamedField(document.RootElement, tagDef, common, "Name", "name"),
+                Url = EvaluateNamedField(document.RootElement, tagDef, common, "URL", "URLs", "url", "urls"),
+                Image = EvaluateNamedField(document.RootElement, tagDef, common, "Image", "image"),
+                Description = EvaluateNamedField(document.RootElement, tagDef, common, "Details", "Description", "details", "description"),
+                Aliases = EvaluateNamedField(document.RootElement, tagDef, common, "Aliases", "aliases")
+            };
+            return tag.HasData ? tag : null;
+        }
+    }
+
+    /// <summary>
+    /// Evaluates a tag search-results block by zipping repeated Name/URL/Image fields into candidates.
+    /// </summary>
+    public IReadOnlyList<StashScrapedTag> EvaluateTagList(string json, StashYamlNode scraperBlock) {
+        var tagDef = scraperBlock["tag"];
+        if (tagDef.IsMissing) {
+            return [];
+        }
+
+        JsonDocument document;
+        try {
+            document = JsonDocument.Parse(json);
+        } catch (JsonException) {
+            return [];
+        }
+
+        using (document) {
+            var common = scraperBlock["common"];
+            var names = EvaluateFieldArray(document.RootElement, tagDef, common, "Name", "name");
+            var urls = EvaluateFieldArray(document.RootElement, tagDef, common, "URL", "URLs", "url", "urls");
+            var images = EvaluateFieldArray(document.RootElement, tagDef, common, "Image", "image");
+            var descriptions = EvaluateFieldArray(document.RootElement, tagDef, common, "Details", "Description", "details", "description");
+            var aliases = EvaluateFieldArray(document.RootElement, tagDef, common, "Aliases", "aliases");
+            var count = new[] { names.Count, urls.Count, images.Count, descriptions.Count, aliases.Count }.Max();
+            var tags = new List<StashScrapedTag>(count);
+            for (var index = 0; index < count; index++) {
+                var tag = new StashScrapedTag {
+                    Name = At(names, index),
+                    Url = At(urls, index),
+                    Image = At(images, index),
+                    Description = At(descriptions, index),
+                    Aliases = At(aliases, index)
+                };
+                if (tag.HasData) {
+                    tags.Add(tag);
+                }
+            }
+
+            return tags;
+        }
+    }
+
+    /// <summary>
+    /// Evaluates the <c>studio</c> definition of a JSON scraper block against a JSON body.
+    /// </summary>
+    /// <param name="json">Raw JSON document text.</param>
+    /// <param name="scraperBlock">The resolved <c>jsonScrapers</c> entry.</param>
+    /// <returns>The scraped studio, or null when nothing usable was extracted.</returns>
+    public StashScrapedStudio? EvaluateStudio(string json, StashYamlNode scraperBlock) {
+        var studioDef = scraperBlock["studio"];
+        if (studioDef.IsMissing) {
+            return null;
+        }
+
+        JsonDocument document;
+        try {
+            document = JsonDocument.Parse(json);
+        } catch (JsonException) {
+            return null;
+        }
+
+        using (document) {
+            return EvaluateStudioObject(document.RootElement, studioDef, scraperBlock["common"]);
+        }
+    }
+
+    /// <summary>
+    /// Evaluates a studio search-results block by zipping repeated Name/URL/Image fields into candidates.
+    /// </summary>
+    public IReadOnlyList<StashScrapedStudio> EvaluateStudioList(string json, StashYamlNode scraperBlock) {
+        var studioDef = scraperBlock["studio"];
+        if (studioDef.IsMissing) {
+            return [];
+        }
+
+        JsonDocument document;
+        try {
+            document = JsonDocument.Parse(json);
+        } catch (JsonException) {
+            return [];
+        }
+
+        using (document) {
+            var common = scraperBlock["common"];
+            var names = EvaluateFieldArray(document.RootElement, studioDef, common, "Name", "name");
+            var urls = EvaluateFieldArray(document.RootElement, studioDef, common, "URL", "URLs", "url", "urls");
+            var images = EvaluateFieldArray(document.RootElement, studioDef, common, "Image", "image");
+            var descriptions = EvaluateFieldArray(document.RootElement, studioDef, common, "Details", "Description", "details", "description");
+            var count = new[] { names.Count, urls.Count, images.Count, descriptions.Count }.Max();
+            var studios = new List<StashScrapedStudio>(count);
+            for (var index = 0; index < count; index++) {
+                var studio = new StashScrapedStudio {
+                    Name = At(names, index),
+                    Url = At(urls, index),
+                    Image = At(images, index),
+                    Description = At(descriptions, index)
+                };
+                if (studio.HasData) {
+                    studios.Add(studio);
+                }
+            }
+
+            return studios;
+        }
+    }
+
+    private static IReadOnlyList<StashScrapedTag> EvaluateTagArray(JsonElement root, StashYamlNode subObject, StashYamlNode common) {
+        var names = EvaluateArray(root, subObject, common);
+        var urls = EvaluateFieldArray(root, subObject, common, "URL", "URLs", "url", "urls");
+        var images = EvaluateFieldArray(root, subObject, common, "Image", "image");
+        var descriptions = EvaluateFieldArray(root, subObject, common, "Details", "Description", "details", "description");
+        var aliases = EvaluateFieldArray(root, subObject, common, "Aliases", "aliases");
+        var tags = new List<StashScrapedTag>(names.Count);
+        for (var index = 0; index < names.Count; index++) {
+            tags.Add(new StashScrapedTag {
+                Name = names[index],
+                Url = index < urls.Count ? urls[index] : null,
+                Image = index < images.Count ? images[index] : null,
+                Description = index < descriptions.Count ? descriptions[index] : null,
+                Aliases = index < aliases.Count ? aliases[index] : null
+            });
+        }
+
+        return tags;
+    }
+
+    private static StashScrapedStudio? EvaluateStudioObject(JsonElement root, StashYamlNode studioDef, StashYamlNode common) {
+        var studio = new StashScrapedStudio {
+            Name = EvaluateNamedField(root, studioDef, common, "Name", "name"),
+            Url = EvaluateNamedField(root, studioDef, common, "URL", "URLs", "url", "urls"),
+            Image = EvaluateNamedField(root, studioDef, common, "Image", "image"),
+            Description = EvaluateNamedField(root, studioDef, common, "Details", "Description", "details", "description")
+        };
+        return studio.HasData ? studio : null;
+    }
+
+    private static string? EvaluateNamedField(JsonElement root, StashYamlNode subObject, StashYamlNode common, params string[] fieldNames) {
+        var field = FieldByName(subObject, fieldNames);
+        return field.IsMissing ? null : EvaluateString(root, field, common);
+    }
+
+    private static StashYamlNode FieldByName(StashYamlNode subObject, params string[] names) {
+        foreach (var name in names) {
+            if (subObject.HasKey(name)) {
+                return subObject[name];
+            }
+        }
+
+        return StashYamlNode.Parse(string.Empty);
+    }
+
+    private static string? At(IReadOnlyList<string> values, int index) =>
+        index < values.Count ? values[index] : null;
+
+    private static string? FixedValue(StashYamlNode fieldDef) {
+        var fixedValue = fieldDef.StringAt("fixed");
+        if (string.IsNullOrWhiteSpace(fixedValue)) {
+            return null;
+        }
+
+        var processed = StashSelector.ApplyPostProcess(fixedValue, fieldDef["postProcess"]);
+        return string.IsNullOrWhiteSpace(processed) ? null : processed;
     }
 
     private static (string Path, StashYamlNode PostProcess) ParseFieldDef(StashYamlNode fieldDef, StashYamlNode common) {

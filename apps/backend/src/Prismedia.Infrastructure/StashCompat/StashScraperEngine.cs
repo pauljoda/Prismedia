@@ -71,11 +71,16 @@ public sealed class StashScraperEngine {
             return null;
         }
 
-        return action.Kind switch {
+        var scene = action.Kind switch {
             StashActionKind.ScrapeXPath => _xpath.EvaluateScene(body, definition.XPathScraper(action.ScraperKey)),
             StashActionKind.ScrapeJson => _json.EvaluateScene(body, definition.JsonScraper(action.ScraperKey)),
             _ => null
         };
+        if (scene is not null && string.IsNullOrWhiteSpace(scene.Url)) {
+            scene.Url = fetchUrl;
+        }
+
+        return scene;
     }
 
     /// <summary>
@@ -144,15 +149,15 @@ public sealed class StashScraperEngine {
         string scraperPath,
         StashScrapedPerformer credit,
         CancellationToken cancellationToken) {
-        if (!string.IsNullOrWhiteSpace(credit.Url) && definition.HasCapability("performerByURL")) {
+        if (!string.IsNullOrWhiteSpace(credit.Url) && definition.HasCapability(StashScraperDefinition.PerformerByUrl)) {
             var byUrl = await ScrapePerformerPageAsync(
-                definition, scraperPath, "performerByURL", new StashScrapeInput(Url: credit.Url), cancellationToken);
+                definition, scraperPath, StashScraperDefinition.PerformerByUrl, new StashScrapeInput(Url: credit.Url), cancellationToken);
             if (byUrl is { HasData: true }) {
                 return byUrl;
             }
         }
 
-        if (!string.IsNullOrWhiteSpace(credit.Name) && definition.HasCapability("performerByName")) {
+        if (!string.IsNullOrWhiteSpace(credit.Name) && definition.HasCapability(StashScraperDefinition.PerformerByName)) {
             var matches = await SearchPerformersByNameAsync(definition, scraperPath, credit.Name!, cancellationToken);
             var match = matches.FirstOrDefault(candidate =>
                 !string.IsNullOrWhiteSpace(candidate.Name) &&
@@ -163,6 +168,162 @@ public sealed class StashScraperEngine {
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Resolves a tag's full metadata. Tries a direct <c>tagByURL</c> when the tag carries a URL,
+    /// then falls back to a <c>tagByName</c> search accepting only an exact name match.
+    /// </summary>
+    public async Task<StashScrapedTag?> ResolveTagAsync(
+        StashScraperDefinition definition,
+        string scraperPath,
+        StashScrapedTag tag,
+        CancellationToken cancellationToken) {
+        if (!string.IsNullOrWhiteSpace(tag.Url) && definition.HasCapability(StashScraperDefinition.TagByUrl)) {
+            var byUrl = await ScrapeTagPageAsync(
+                definition, scraperPath, StashScraperDefinition.TagByUrl, new StashScrapeInput(Url: tag.Url), cancellationToken);
+            if (byUrl is { HasData: true }) {
+                return byUrl;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(tag.Name) && definition.HasCapability(StashScraperDefinition.TagByName)) {
+            var matches = await SearchTagsAsync(
+                definition, scraperPath, StashScraperDefinition.TagByName, new StashScrapeInput(Title: tag.Name), cancellationToken);
+            var match = matches.FirstOrDefault(candidate =>
+                !string.IsNullOrWhiteSpace(candidate.Name) &&
+                candidate.Name.Trim().Equals(tag.Name!.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (match is { HasData: true }) {
+                return match;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Resolves a studio's full metadata. Tries a direct <c>studioByURL</c> when the studio carries
+    /// a URL, then falls back to a <c>studioByName</c> search accepting only an exact name match.
+    /// </summary>
+    public async Task<StashScrapedStudio?> ResolveStudioAsync(
+        StashScraperDefinition definition,
+        string scraperPath,
+        StashScrapedStudio studio,
+        CancellationToken cancellationToken) {
+        if (!string.IsNullOrWhiteSpace(studio.Url) && definition.HasCapability(StashScraperDefinition.StudioByUrl)) {
+            var byUrl = await ScrapeStudioPageAsync(
+                definition, scraperPath, StashScraperDefinition.StudioByUrl, new StashScrapeInput(Url: studio.Url), cancellationToken);
+            if (byUrl is { HasData: true }) {
+                return byUrl;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(studio.Name) && definition.HasCapability(StashScraperDefinition.StudioByName)) {
+            var matches = await SearchStudiosAsync(
+                definition, scraperPath, StashScraperDefinition.StudioByName, new StashScrapeInput(Title: studio.Name), cancellationToken);
+            var match = matches.FirstOrDefault(candidate =>
+                !string.IsNullOrWhiteSpace(candidate.Name) &&
+                candidate.Name.Trim().Equals(studio.Name!.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (match is { HasData: true }) {
+                return match;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Runs a tag search capability, returning candidates for name-search disambiguation.
+    /// </summary>
+    public async Task<IReadOnlyList<StashScrapedTag>> SearchTagsAsync(
+        StashScraperDefinition definition,
+        string scraperPath,
+        string capability,
+        StashScrapeInput input,
+        CancellationToken cancellationToken) {
+        var action = definition.ResolveAction(capability, inputUrl: null);
+        if (action is null) {
+            return [];
+        }
+
+        if (action.Kind == StashActionKind.Script) {
+            if (_scripts is null) {
+                throw new StashScriptActionRequiredException(definition.Name, capability, action);
+            }
+
+            try {
+                return await _scripts.SearchTagsByNameAsync(scraperPath, action, input.Title ?? string.Empty, cancellationToken);
+            } catch (StashPythonUnavailableException) {
+                throw new StashScriptActionRequiredException(definition.Name, capability, action);
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(action.QueryUrl) || string.IsNullOrWhiteSpace(action.ScraperKey)) {
+            return [];
+        }
+
+        var fetchUrl = StashQueryUrl.Build(action.QueryUrl, action.QueryUrlReplace, input);
+        if (string.IsNullOrWhiteSpace(fetchUrl)) {
+            return [];
+        }
+
+        var body = await FetchAsync(definition, fetchUrl, cancellationToken);
+        if (body is null) {
+            return [];
+        }
+
+        return action.Kind switch {
+            StashActionKind.ScrapeXPath => _xpath.EvaluateTagList(body, definition.XPathScraper(action.ScraperKey)),
+            StashActionKind.ScrapeJson => _json.EvaluateTagList(body, definition.JsonScraper(action.ScraperKey)),
+            _ => []
+        };
+    }
+
+    /// <summary>
+    /// Runs a studio search capability, returning candidates for name-search disambiguation.
+    /// </summary>
+    public async Task<IReadOnlyList<StashScrapedStudio>> SearchStudiosAsync(
+        StashScraperDefinition definition,
+        string scraperPath,
+        string capability,
+        StashScrapeInput input,
+        CancellationToken cancellationToken) {
+        var action = definition.ResolveAction(capability, inputUrl: null);
+        if (action is null) {
+            return [];
+        }
+
+        if (action.Kind == StashActionKind.Script) {
+            if (_scripts is null) {
+                throw new StashScriptActionRequiredException(definition.Name, capability, action);
+            }
+
+            try {
+                return await _scripts.SearchStudiosByNameAsync(scraperPath, action, input.Title ?? string.Empty, cancellationToken);
+            } catch (StashPythonUnavailableException) {
+                throw new StashScriptActionRequiredException(definition.Name, capability, action);
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(action.QueryUrl) || string.IsNullOrWhiteSpace(action.ScraperKey)) {
+            return [];
+        }
+
+        var fetchUrl = StashQueryUrl.Build(action.QueryUrl, action.QueryUrlReplace, input);
+        if (string.IsNullOrWhiteSpace(fetchUrl)) {
+            return [];
+        }
+
+        var body = await FetchAsync(definition, fetchUrl, cancellationToken);
+        if (body is null) {
+            return [];
+        }
+
+        return action.Kind switch {
+            StashActionKind.ScrapeXPath => _xpath.EvaluateStudioList(body, definition.XPathScraper(action.ScraperKey)),
+            StashActionKind.ScrapeJson => _json.EvaluateStudioList(body, definition.JsonScraper(action.ScraperKey)),
+            _ => []
+        };
     }
 
     private async Task<StashScrapedPerformer?> ScrapePerformerPageAsync(
@@ -186,9 +347,112 @@ public sealed class StashScraperEngine {
             return null;
         }
 
-        return action.Kind == StashActionKind.ScrapeXPath
+        var performer = action.Kind == StashActionKind.ScrapeXPath
             ? _xpath.EvaluatePerformer(body, definition.XPathScraper(action.ScraperKey))
             : null;
+        if (performer is not null && string.IsNullOrWhiteSpace(performer.Url)) {
+            performer.Url = fetchUrl;
+        }
+
+        return performer;
+    }
+
+    private async Task<StashScrapedTag?> ScrapeTagPageAsync(
+        StashScraperDefinition definition,
+        string scraperPath,
+        string capability,
+        StashScrapeInput input,
+        CancellationToken cancellationToken) {
+        var action = definition.ResolveAction(capability, input.Url);
+        if (action is null) {
+            return null;
+        }
+
+        if (action.Kind == StashActionKind.Script) {
+            if (_scripts is null) {
+                throw new StashScriptActionRequiredException(definition.Name, capability, action);
+            }
+
+            try {
+                return await _scripts.ScrapeTagAsync(scraperPath, action, input, cancellationToken);
+            } catch (StashPythonUnavailableException) {
+                throw new StashScriptActionRequiredException(definition.Name, capability, action);
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(action.ScraperKey)) {
+            return null;
+        }
+
+        var fetchUrl = ResolveFetchUrl(capability, action, input);
+        if (string.IsNullOrWhiteSpace(fetchUrl)) {
+            return null;
+        }
+
+        var body = await FetchAsync(definition, fetchUrl, cancellationToken);
+        if (body is null) {
+            return null;
+        }
+
+        var tag = action.Kind switch {
+            StashActionKind.ScrapeXPath => _xpath.EvaluateTag(body, definition.XPathScraper(action.ScraperKey)),
+            StashActionKind.ScrapeJson => _json.EvaluateTag(body, definition.JsonScraper(action.ScraperKey)),
+            _ => null
+        };
+        if (tag is not null && string.IsNullOrWhiteSpace(tag.Url)) {
+            tag.Url = fetchUrl;
+        }
+
+        return tag;
+    }
+
+    private async Task<StashScrapedStudio?> ScrapeStudioPageAsync(
+        StashScraperDefinition definition,
+        string scraperPath,
+        string capability,
+        StashScrapeInput input,
+        CancellationToken cancellationToken) {
+        var action = definition.ResolveAction(capability, input.Url);
+        if (action is null) {
+            return null;
+        }
+
+        if (action.Kind == StashActionKind.Script) {
+            if (_scripts is null) {
+                throw new StashScriptActionRequiredException(definition.Name, capability, action);
+            }
+
+            try {
+                return await _scripts.ScrapeStudioAsync(scraperPath, action, input, cancellationToken);
+            } catch (StashPythonUnavailableException) {
+                throw new StashScriptActionRequiredException(definition.Name, capability, action);
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(action.ScraperKey)) {
+            return null;
+        }
+
+        var fetchUrl = ResolveFetchUrl(capability, action, input);
+        if (string.IsNullOrWhiteSpace(fetchUrl)) {
+            return null;
+        }
+
+        var body = await FetchAsync(definition, fetchUrl, cancellationToken);
+        if (body is null) {
+            return null;
+        }
+
+        var studio = action.Kind switch {
+            StashActionKind.ScrapeXPath => _xpath.EvaluateStudio(body, definition.XPathScraper(action.ScraperKey)),
+            StashActionKind.ScrapeJson => _json.EvaluateStudio(body, definition.JsonScraper(action.ScraperKey)),
+            _ => null
+        };
+        if (studio is not null && string.IsNullOrWhiteSpace(studio.Url)) {
+            studio.Url = fetchUrl;
+        }
+
+        return studio;
     }
 
     private async Task<IReadOnlyList<StashScrapedPerformer>> SearchPerformersByNameAsync(
@@ -196,7 +460,7 @@ public sealed class StashScraperEngine {
         string scraperPath,
         string name,
         CancellationToken cancellationToken) {
-        var action = definition.ResolveAction("performerByName", inputUrl: null);
+        var action = definition.ResolveAction(StashScraperDefinition.PerformerByName, inputUrl: null);
         if (action is null) {
             return [];
         }

@@ -133,8 +133,29 @@ public sealed class StashCompatTests {
         Assert.Equal("https://site.example/scene/123", scene.Url);
         Assert.Equal("https://img.example/cover.jpg", scene.Image);
         Assert.Equal("Cool Studio", scene.Studio?.Name);
-        Assert.Equal(["Alice", "Bob"], scene.Performers.Select(p => p.Name).ToArray());
-        Assert.Equal(["Tag1", "Tag2"], scene.Tags);
+        Assert.Equal(["Alice", "Bob"], scene.Performers.Select(p => p.Name!).ToArray());
+        Assert.Equal(["Tag1", "Tag2"], scene.Tags.Select(tag => tag.Name!).ToArray());
+    }
+
+    [Fact]
+    public void XPathEngineExtractsFixedFields() {
+        var definition = StashScraperDefinition.TryParse("""
+            name: Fixed Site
+            sceneByURL:
+              action: scrapeXPath
+              scraper: sceneScraper
+            xPathScrapers:
+              sceneScraper:
+                scene:
+                  Title: //h1/text()
+                  Studio:
+                    Name:
+                      fixed: Fixed Studio
+            """)!;
+        var scene = new StashXPathEngine().EvaluateScene("<html><body><h1>Fixed Scene</h1></body></html>", definition.XPathScraper("sceneScraper"));
+
+        Assert.NotNull(scene);
+        Assert.Equal("Fixed Studio", scene!.Studio?.Name);
     }
 
     // ── result mapping ────────────────────────────────────────────────
@@ -150,7 +171,7 @@ public sealed class StashCompatTests {
             Code = "ABC-123",
             Studio = new StashScrapedStudio { Name = "Cool Studio" },
             Performers = [new StashScrapedPerformer { Name = "Alice" }, new StashScrapedPerformer { Name = "Bob" }],
-            Tags = ["Tag1", "Tag2"]
+            Tags = [new StashScrapedTag { Name = "Tag1" }, new StashScrapedTag { Name = "Tag2", Url = "https://site.example/t/tag2" }]
         };
 
         var proposal = StashResultMapper.ToProposal(
@@ -172,9 +193,11 @@ public sealed class StashCompatTests {
         // Performers and the studio are also surfaced as relationship proposals (carded in review,
         // enrichable on apply), not only as flat patch fields.
         var relationshipKinds = proposal.Relationships.Select(r => r.TargetKind).ToArray();
-        Assert.Equal(["Alice", "Bob"], proposal.Relationships.Where(r => r.TargetKind == ProposalKind.Person).Select(r => r.Patch.Title).ToArray());
+        Assert.Equal(["Alice", "Bob"], proposal.Relationships.Where(r => r.TargetKind == ProposalKind.Person).Select(r => r.Patch.Title!).ToArray());
         Assert.Contains(ProposalKind.Studio, relationshipKinds);
         Assert.Equal("Cool Studio", proposal.Relationships.Single(r => r.TargetKind == ProposalKind.Studio).Patch.Title);
+        Assert.Equal(["Tag1", "Tag2"], proposal.Relationships.Where(r => r.TargetKind == ProposalKind.Tag).Select(r => r.Patch.Title!).ToArray());
+        Assert.Contains("https://site.example/t/tag2", proposal.Relationships.Single(r => r.Patch.Title == "Tag2").Patch.Urls);
     }
 
     [Fact]
@@ -219,6 +242,16 @@ public sealed class StashCompatTests {
         Assert.Equal("X1", candidate.ExternalIds["stash-test-site"]);
     }
 
+    [Fact]
+    public void QueryUrlBuildsImplicitSearchPlaceholderFromTitle() {
+        var url = StashQueryUrl.Build(
+            "https://search.example/find?q={}",
+            StashYamlNode.Parse(string.Empty),
+            new StashScrapeInput(Title: "Two Words"));
+
+        Assert.Equal("https://search.example/find?q=Two%20Words", url);
+    }
+
     // ── manifest synthesis ────────────────────────────────────────────
 
     [Fact]
@@ -235,6 +268,142 @@ public sealed class StashCompatTests {
         Assert.Contains("search", video.Actions);
         var person = manifest.Supports.Single(support => support.EntityKind == "person");
         Assert.Contains("lookup-url", person.Actions);
+    }
+
+    private const string TagYaml = """
+        name: Tag Site
+        tagByURL:
+          - action: scrapeXPath
+            url:
+              - tag.example
+            scraper: tagScraper
+        tagByName:
+          action: scrapeXPath
+          queryURL: https://tag.example/search?q={}
+          scraper: tagSearchScraper
+        xPathScrapers:
+          tagScraper:
+            tag:
+              Name: //h1/text()
+              Details: //meta[@name="description"]/@content
+              URL: //link[@rel="canonical"]/@href
+          tagSearchScraper:
+            tag:
+              Name: //a[@class="tag-result"]/text()
+              URL: //a[@class="tag-result"]/@href
+        """;
+
+    private const string TagHtml = """
+        <html><head><meta name="description" content="Tag details"><link rel="canonical" href="https://tag.example/t/noir"/></head>
+        <body><h1>Noir</h1></body></html>
+        """;
+
+    [Fact]
+    public void ManifestFactoryDerivesTagSupportsFromCapabilities() {
+        var manifest = StashScraperManifestFactory.TryCreate(TagYaml, "/tmp/Tag Site.yml");
+
+        Assert.NotNull(manifest);
+        var tag = manifest!.Supports.Single(support => support.EntityKind == EntityKindRegistry.Tag.Code);
+        Assert.Contains(IdentifyAction.LookupUrl.ToCode(), tag.Actions);
+        Assert.Contains(IdentifyAction.Search.ToCode(), tag.Actions);
+    }
+
+    [Fact]
+    public async Task RunnerIdentifiesTagByUrl() {
+        var yamlPath = Path.Combine(Path.GetTempPath(), $"stash-tag-{Guid.NewGuid():N}.yml");
+        await File.WriteAllTextAsync(yamlPath, TagYaml);
+        try {
+            var manifest = StashScraperManifestFactory.TryCreate(TagYaml, yamlPath)!;
+            var descriptor = new PluginDescriptor(manifest, yamlPath, Path.GetDirectoryName(yamlPath)!, yamlPath);
+            var runner = new StashCompatRunner(new HttpClient(new FixedHtmlHandler(TagHtml)));
+            var request = new IdentifyPluginRequest(
+                ProtocolVersion: 2,
+                Action: IdentifyAction.LookupUrl,
+                Auth: new Dictionary<string, string>(),
+                Entity: new IdentifyEntitySnapshot(Guid.NewGuid(), EntityKind.Tag, "Local Tag"),
+                Query: new IdentifyQuery(null, "https://tag.example/t/noir", null),
+                Hints: new IdentifyMatchHints(new Dictionary<string, string>(), [], null, null));
+
+            var response = await runner.IdentifyAsync(descriptor, request, CancellationToken.None);
+
+            Assert.True(response.Ok);
+            Assert.NotNull(response.Result?.Patch);
+            Assert.Equal(ProposalKind.Tag, response.Result!.TargetKind);
+            Assert.Equal("Noir", response.Result.Patch.Title);
+            Assert.Equal("Tag details", response.Result.Patch.Description);
+            Assert.Contains("https://tag.example/t/noir", response.Result.Patch.Urls);
+        } finally {
+            File.Delete(yamlPath);
+        }
+    }
+
+    private const string StudioYaml = """
+        name: Studio Site
+        studioByURL:
+          - action: scrapeXPath
+            url:
+              - studio.example
+            scraper: studioScraper
+        studioByName:
+          action: scrapeXPath
+          queryURL: https://studio.example/search?q={}
+          scraper: studioSearchScraper
+        xPathScrapers:
+          studioScraper:
+            studio:
+              Name: //h1/text()
+              Details: //meta[@name="description"]/@content
+              URL: //link[@rel="canonical"]/@href
+              Image: //img[@class="logo"]/@src
+          studioSearchScraper:
+            studio:
+              Name: //a[@class="studio-result"]/text()
+              URL: //a[@class="studio-result"]/@href
+        """;
+
+    private const string StudioHtml = """
+        <html><head><meta name="description" content="Studio details"><link rel="canonical" href="https://studio.example/s/noir"/></head>
+        <body><h1>Noir Studio</h1><img class="logo" src="https://studio.example/logo.jpg"/></body></html>
+        """;
+
+    [Fact]
+    public void ManifestFactoryDerivesStudioSupportsFromCapabilities() {
+        var manifest = StashScraperManifestFactory.TryCreate(StudioYaml, "/tmp/Studio Site.yml");
+
+        Assert.NotNull(manifest);
+        var studio = manifest!.Supports.Single(support => support.EntityKind == EntityKindRegistry.Studio.Code);
+        Assert.Contains(IdentifyAction.LookupUrl.ToCode(), studio.Actions);
+        Assert.Contains(IdentifyAction.Search.ToCode(), studio.Actions);
+    }
+
+    [Fact]
+    public async Task RunnerIdentifiesStudioByUrl() {
+        var yamlPath = Path.Combine(Path.GetTempPath(), $"stash-studio-{Guid.NewGuid():N}.yml");
+        await File.WriteAllTextAsync(yamlPath, StudioYaml);
+        try {
+            var manifest = StashScraperManifestFactory.TryCreate(StudioYaml, yamlPath)!;
+            var descriptor = new PluginDescriptor(manifest, yamlPath, Path.GetDirectoryName(yamlPath)!, yamlPath);
+            var runner = new StashCompatRunner(new HttpClient(new FixedHtmlHandler(StudioHtml)));
+            var request = new IdentifyPluginRequest(
+                ProtocolVersion: 2,
+                Action: IdentifyAction.LookupUrl,
+                Auth: new Dictionary<string, string>(),
+                Entity: new IdentifyEntitySnapshot(Guid.NewGuid(), EntityKind.Studio, "Local Studio"),
+                Query: new IdentifyQuery(null, "https://studio.example/s/noir", null),
+                Hints: new IdentifyMatchHints(new Dictionary<string, string>(), [], null, null));
+
+            var response = await runner.IdentifyAsync(descriptor, request, CancellationToken.None);
+
+            Assert.True(response.Ok);
+            Assert.NotNull(response.Result?.Patch);
+            Assert.Equal(ProposalKind.Studio, response.Result!.TargetKind);
+            Assert.Equal("Noir Studio", response.Result.Patch.Title);
+            Assert.Equal("Studio details", response.Result.Patch.Description);
+            Assert.Contains("https://studio.example/s/noir", response.Result.Patch.Urls);
+            Assert.Equal("logo", response.Result.Images.Single().Kind);
+        } finally {
+            File.Delete(yamlPath);
+        }
     }
 
     // ── runner end-to-end ─────────────────────────────────────────────
@@ -322,6 +491,67 @@ public sealed class StashCompatTests {
             // a first-party provider's, instead of being unscored (and excluded from auto-identify).
             Assert.NotNull(response.Result.Candidates[0].Confidence);
             Assert.Equal("title-search", response.Result.Candidates[0].MatchReason);
+        } finally {
+            File.Delete(yamlPath);
+        }
+    }
+
+    [Fact]
+    public async Task RunnerPrefersFragmentLookupBeforeNameSearchCandidates() {
+        const string yaml = """
+            name: Fragment First Site
+            sceneByName:
+              action: scrapeXPath
+              queryURL: https://fragment.example/search?q={}
+              scraper: searchScraper
+            sceneByFragment:
+              action: scrapeXPath
+              queryURL: https://fragment.example/video/{filename}
+              queryURLReplace:
+                filename:
+                  - regex: '.*\[([a-z0-9]+)\]\..+'
+                    with: "$1"
+              scraper: sceneScraper
+            xPathScrapers:
+              searchScraper:
+                scene:
+                  Title: //div[@class="result"]/a/text()
+                  URL: //div[@class="result"]/a/@href
+              sceneScraper:
+                scene:
+                  Title: //h1/text()
+            """;
+        const string html = """
+            <html><body>
+              <h1>Fragment Match</h1>
+              <div class="result"><a href="https://fragment.example/video/wrong">Name Candidate</a></div>
+            </body></html>
+            """;
+        var yamlPath = Path.Combine(Path.GetTempPath(), $"stash-fragment-first-{Guid.NewGuid():N}.yml");
+        await File.WriteAllTextAsync(yamlPath, yaml);
+        try {
+            var manifest = StashScraperManifestFactory.TryCreate(yaml, yamlPath)!;
+            var descriptor = new PluginDescriptor(manifest, yamlPath, Path.GetDirectoryName(yamlPath)!, yamlPath);
+            var runner = new StashCompatRunner(new HttpClient(new FixedHtmlHandler(html)));
+            var request = new IdentifyPluginRequest(
+                ProtocolVersion: 2,
+                Action: IdentifyAction.Search,
+                Auth: new Dictionary<string, string>(),
+                Entity: new IdentifyEntitySnapshot(Guid.NewGuid(), EntityKind.Video, "Local Candidate [abc123]"),
+                Query: new IdentifyQuery(null, null, null),
+                Hints: new IdentifyMatchHints(
+                    new Dictionary<string, string>(),
+                    [],
+                    "Local Candidate [abc123]",
+                    "/tmp/Local Candidate [abc123].mp4"));
+
+            var response = await runner.IdentifyAsync(descriptor, request, CancellationToken.None);
+
+            Assert.True(response.Ok);
+            Assert.NotNull(response.Result?.Patch);
+            Assert.Equal("Fragment Match", response.Result!.Patch.Title);
+            Assert.Contains("https://fragment.example/video/abc123", response.Result.Patch.Urls);
+            Assert.Empty(response.Result.Candidates);
         } finally {
             File.Delete(yamlPath);
         }
@@ -650,7 +880,7 @@ public sealed class StashCompatTests {
         Assert.NotNull(scene);
         Assert.Equal("Scripted Scene", scene!.Title);
         Assert.Equal("Py Studio", scene.Studio?.Name);
-        Assert.Equal(["Carol", "Dave"], scene.Performers.Select(p => p.Name).ToArray());
+        Assert.Equal(["Carol", "Dave"], scene.Performers.Select(p => p.Name!).ToArray());
     }
 
     [Fact]

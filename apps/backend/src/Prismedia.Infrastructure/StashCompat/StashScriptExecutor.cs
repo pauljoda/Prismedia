@@ -119,6 +119,108 @@ public sealed class StashScriptExecutor {
         }
     }
 
+    /// <summary>
+    /// Runs a single-result tag script action.
+    /// </summary>
+    public async Task<StashScrapedTag?> ScrapeTagAsync(
+        string scraperPath,
+        StashAction action,
+        StashScrapeInput input,
+        CancellationToken cancellationToken) {
+        var output = await RunAsync(scraperPath, action, input, cancellationToken);
+        if (string.IsNullOrEmpty(output)) {
+            return null;
+        }
+
+        try {
+            using var document = JsonDocument.Parse(output);
+            return ParseTag(document.RootElement);
+        } catch (JsonException) {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Runs a <c>tagByName</c> script action, returning candidate tags parsed from stdout.
+    /// </summary>
+    public async Task<IReadOnlyList<StashScrapedTag>> SearchTagsByNameAsync(
+        string scraperPath,
+        StashAction action,
+        string name,
+        CancellationToken cancellationToken) {
+        var output = await RunRawAsync(scraperPath, action, SerializeNameFragment(name), cancellationToken);
+        if (string.IsNullOrEmpty(output)) {
+            return [];
+        }
+
+        try {
+            using var document = JsonDocument.Parse(output);
+            if (document.RootElement.ValueKind == JsonValueKind.Array) {
+                return document.RootElement.EnumerateArray()
+                    .Select(ParseTag)
+                    .Where(tag => tag is { HasData: true })
+                    .Select(tag => tag!)
+                    .ToArray();
+            }
+
+            var single = ParseTag(document.RootElement);
+            return single is { HasData: true } ? [single] : [];
+        } catch (JsonException) {
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// Runs a single-result studio script action.
+    /// </summary>
+    public async Task<StashScrapedStudio?> ScrapeStudioAsync(
+        string scraperPath,
+        StashAction action,
+        StashScrapeInput input,
+        CancellationToken cancellationToken) {
+        var output = await RunAsync(scraperPath, action, input, cancellationToken);
+        if (string.IsNullOrEmpty(output)) {
+            return null;
+        }
+
+        try {
+            using var document = JsonDocument.Parse(output);
+            return ParseStudio(document.RootElement);
+        } catch (JsonException) {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Runs a <c>studioByName</c> script action, returning candidate studios parsed from stdout.
+    /// </summary>
+    public async Task<IReadOnlyList<StashScrapedStudio>> SearchStudiosByNameAsync(
+        string scraperPath,
+        StashAction action,
+        string name,
+        CancellationToken cancellationToken) {
+        var output = await RunRawAsync(scraperPath, action, SerializeNameFragment(name), cancellationToken);
+        if (string.IsNullOrEmpty(output)) {
+            return [];
+        }
+
+        try {
+            using var document = JsonDocument.Parse(output);
+            if (document.RootElement.ValueKind == JsonValueKind.Array) {
+                return document.RootElement.EnumerateArray()
+                    .Select(ParseStudio)
+                    .Where(studio => studio is { HasData: true })
+                    .Select(studio => studio!)
+                    .ToArray();
+            }
+
+            var single = ParseStudio(document.RootElement);
+            return single is { HasData: true } ? [single] : [];
+        } catch (JsonException) {
+            return [];
+        }
+    }
+
     private async Task<string?> RunAsync(
         string scraperPath,
         StashAction action,
@@ -221,21 +323,53 @@ public sealed class StashScriptExecutor {
             Image = StringField(element, "image"),
             Url = StringField(element, "url") ?? FirstString(element, "urls"),
             Performers = PerformerArray(element, "performers"),
-            Tags = NameArray(element, "tags")
+            Tags = TagArray(element, "tags")
         };
 
         if (element.TryGetProperty("studio", out var studio) && studio.ValueKind == JsonValueKind.Object) {
-            var name = StringField(studio, "name");
-            if (!string.IsNullOrWhiteSpace(name)) {
-                scene.Studio = new StashScrapedStudio {
-                    Name = name,
-                    Url = StringField(studio, "url"),
-                    Image = StringField(studio, "image")
-                };
-            }
+            scene.Studio = ParseStudio(studio);
         }
 
         return scene;
+    }
+
+    private static StashScrapedStudio? ParseStudio(JsonElement element) {
+        if (element.ValueKind == JsonValueKind.String) {
+            var value = element.GetString();
+            return string.IsNullOrWhiteSpace(value) ? null : new StashScrapedStudio { Name = value.Trim() };
+        }
+
+        if (element.ValueKind != JsonValueKind.Object) {
+            return null;
+        }
+
+        var studio = new StashScrapedStudio {
+            Name = StringField(element, "name"),
+            Url = StringField(element, "url") ?? FirstString(element, "urls"),
+            Image = StringField(element, "image") ?? FirstString(element, "images"),
+            Description = StringField(element, "description") ?? StringField(element, "details")
+        };
+        return studio.HasData ? studio : null;
+    }
+
+    private static StashScrapedTag? ParseTag(JsonElement element) {
+        if (element.ValueKind == JsonValueKind.String) {
+            var value = element.GetString();
+            return string.IsNullOrWhiteSpace(value) ? null : new StashScrapedTag { Name = value.Trim() };
+        }
+
+        if (element.ValueKind != JsonValueKind.Object) {
+            return null;
+        }
+
+        var tag = new StashScrapedTag {
+            Name = StringField(element, "name"),
+            Url = StringField(element, "url") ?? FirstString(element, "urls"),
+            Image = StringField(element, "image") ?? FirstString(element, "images"),
+            Description = StringField(element, "description") ?? StringField(element, "details"),
+            Aliases = StringField(element, "aliases") ?? JoinedStrings(element, "aliases")
+        };
+        return tag.HasData ? tag : null;
     }
 
     private static IReadOnlyList<StashScrapedPerformer> PerformerArray(JsonElement element, string name) {
@@ -279,22 +413,34 @@ public sealed class StashScriptExecutor {
             ? value.EnumerateArray().FirstOrDefault(item => item.ValueKind == JsonValueKind.String).GetString()
             : null;
 
-    private static IReadOnlyList<string> NameArray(JsonElement element, string name) {
+    private static IReadOnlyList<StashScrapedTag> TagArray(JsonElement element, string name) {
         if (!element.TryGetProperty(name, out var array) || array.ValueKind != JsonValueKind.Array) {
             return [];
         }
 
-        var results = new List<string>();
+        var results = new List<StashScrapedTag>();
         foreach (var item in array.EnumerateArray()) {
-            var value = item.ValueKind == JsonValueKind.String
-                ? item.GetString()
-                : item.ValueKind == JsonValueKind.Object ? StringField(item, "name") : null;
-            if (!string.IsNullOrWhiteSpace(value)) {
-                results.Add(value!.Trim());
+            var tag = ParseTag(item);
+            if (tag is { HasData: true }) {
+                results.Add(tag);
             }
         }
 
         return results;
+    }
+
+    private static string? JoinedStrings(JsonElement element, string name) {
+        if (!element.TryGetProperty(name, out var value) || value.ValueKind != JsonValueKind.Array) {
+            return null;
+        }
+
+        var values = value.EnumerateArray()
+            .Where(item => item.ValueKind == JsonValueKind.String)
+            .Select(item => item.GetString())
+            .Where(item => !string.IsNullOrWhiteSpace(item))
+            .Select(item => item!.Trim())
+            .ToArray();
+        return values.Length == 0 ? null : string.Join(", ", values);
     }
 }
 

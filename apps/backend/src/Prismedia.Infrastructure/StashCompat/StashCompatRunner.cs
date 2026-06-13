@@ -58,9 +58,12 @@ public sealed class StashCompatRunner : IIdentifyRunner {
         var input = BuildInput(request, descriptor.Manifest.Id);
         var engine = new StashScraperEngine(_http, _scripts);
         try {
-            return request.Entity.Kind == EntityKind.Person
-                ? await IdentifyPersonAsync(engine, definition, descriptor, request, input, cancellationToken)
-                : await IdentifySceneShapedAsync(engine, definition, descriptor, request, input, cancellationToken);
+            return request.Entity.Kind switch {
+                EntityKind.Person => await IdentifyPersonAsync(engine, definition, descriptor, request, input, cancellationToken),
+                EntityKind.Studio => await IdentifyStudioAsync(engine, definition, descriptor, request, input, cancellationToken),
+                EntityKind.Tag => await IdentifyTagAsync(engine, definition, descriptor, request, input, cancellationToken),
+                _ => await IdentifySceneShapedAsync(engine, definition, descriptor, request, input, cancellationToken)
+            };
         } catch (StashScriptActionRequiredException) {
             return new IdentifyPluginResponse(
                 false,
@@ -102,8 +105,17 @@ public sealed class StashCompatRunner : IIdentifyRunner {
             }
         }
 
-        if (!isLookup && !string.IsNullOrWhiteSpace(input.Title) && definition.HasCapability("sceneByName")) {
-            var scenes = await engine.SearchScenesAsync(definition, descriptor.EntryPath, "sceneByName", input, cancellationToken);
+        // Fragment/query-fragment capabilities template a URL from the title or filename and resolve to
+        // a single confident page — a deterministic fallback usable under either action.
+        foreach (var capability in FragmentCapabilities.Where(definition.HasCapability)) {
+            var proposal = await ScrapeProposalAsync(engine, definition, descriptor, capability, input, targetKind, cancellationToken);
+            if (proposal is not null) {
+                return new IdentifyPluginResponse(true, proposal, null);
+            }
+        }
+
+        if (!isLookup && !string.IsNullOrWhiteSpace(input.Title) && definition.HasCapability(StashScraperDefinition.SceneByName)) {
+            var scenes = await engine.SearchScenesAsync(definition, descriptor.EntryPath, StashScraperDefinition.SceneByName, input, cancellationToken);
             var candidates = scenes
                 .Select(scene => StashResultMapper.ToCandidate(scene, descriptor.Manifest.Id, input.Title))
                 .Where(candidate => candidate is not null)
@@ -111,15 +123,6 @@ public sealed class StashCompatRunner : IIdentifyRunner {
                 .ToArray();
             if (candidates.Length > 0) {
                 return IdentifyPluginResponse.Candidates(targetKind, candidates);
-            }
-        }
-
-        // Fragment/query-fragment capabilities template a URL from the title or filename and resolve to
-        // a single confident page — a deterministic fallback usable under either action.
-        foreach (var capability in FragmentCapabilities.Where(definition.HasCapability)) {
-            var proposal = await ScrapeProposalAsync(engine, definition, descriptor, capability, input, targetKind, cancellationToken);
-            if (proposal is not null) {
-                return new IdentifyPluginResponse(true, proposal, null);
             }
         }
 
@@ -157,7 +160,102 @@ public sealed class StashCompatRunner : IIdentifyRunner {
         return new IdentifyPluginResponse(true, proposal, null);
     }
 
-    private static readonly string[] FragmentCapabilities = ["sceneByQueryFragment", "sceneByFragment"];
+    /// <summary>
+    /// Identifies a studio by URL or by name through Stash studio capabilities.
+    /// </summary>
+    private async Task<IdentifyPluginResponse> IdentifyStudioAsync(
+        StashScraperEngine engine,
+        StashScraperDefinition definition,
+        PluginDescriptor descriptor,
+        IdentifyPluginRequest request,
+        StashScrapeInput input,
+        CancellationToken cancellationToken) {
+        var isLookup = request.Action is IdentifyAction.LookupUrl or IdentifyAction.LookupId;
+        if (isLookup && !string.IsNullOrWhiteSpace(input.Url) && definition.HasCapability(StashScraperDefinition.StudioByUrl)) {
+            var studio = await engine.ResolveStudioAsync(
+                definition,
+                descriptor.EntryPath,
+                new StashScrapedStudio { Name = input.Title, Url = input.Url },
+                cancellationToken);
+            if (studio is { HasData: true }) {
+                return new IdentifyPluginResponse(
+                    true,
+                    StashResultMapper.ToStudioProposal(
+                        studio,
+                        descriptor.Manifest.Id,
+                        descriptor.Manifest.Name,
+                        input.Url,
+                        "Matched by URL",
+                        0.9m),
+                    null);
+            }
+        }
+
+        if (!isLookup && !string.IsNullOrWhiteSpace(input.Title) && definition.HasCapability(StashScraperDefinition.StudioByName)) {
+            var studios = await engine.SearchStudiosAsync(definition, descriptor.EntryPath, StashScraperDefinition.StudioByName, input, cancellationToken);
+            var candidates = studios
+                .Select(studio => StashResultMapper.ToStudioCandidate(studio, descriptor.Manifest.Id, input.Title))
+                .Where(candidate => candidate is not null)
+                .Select(candidate => candidate!)
+                .ToArray();
+            if (candidates.Length > 0) {
+                return IdentifyPluginResponse.Candidates(ProposalKind.Studio, candidates);
+            }
+        }
+
+        return new IdentifyPluginResponse(true, null, $"No {definition.Name} match was found.");
+    }
+
+    /// <summary>
+    /// Identifies a tag by URL or by name through Stash tag capabilities.
+    /// </summary>
+    private async Task<IdentifyPluginResponse> IdentifyTagAsync(
+        StashScraperEngine engine,
+        StashScraperDefinition definition,
+        PluginDescriptor descriptor,
+        IdentifyPluginRequest request,
+        StashScrapeInput input,
+        CancellationToken cancellationToken) {
+        var isLookup = request.Action is IdentifyAction.LookupUrl or IdentifyAction.LookupId;
+        if (isLookup && !string.IsNullOrWhiteSpace(input.Url) && definition.HasCapability(StashScraperDefinition.TagByUrl)) {
+            var tag = await engine.ResolveTagAsync(
+                definition,
+                descriptor.EntryPath,
+                new StashScrapedTag { Name = input.Title, Url = input.Url },
+                cancellationToken);
+            if (tag is { HasData: true }) {
+                return new IdentifyPluginResponse(
+                    true,
+                    StashResultMapper.ToTagProposal(
+                        tag,
+                        descriptor.Manifest.Id,
+                        descriptor.Manifest.Name,
+                        input.Url,
+                        "Matched by URL",
+                        0.9m),
+                    null);
+            }
+        }
+
+        if (!isLookup && !string.IsNullOrWhiteSpace(input.Title) && definition.HasCapability(StashScraperDefinition.TagByName)) {
+            var tags = await engine.SearchTagsAsync(definition, descriptor.EntryPath, StashScraperDefinition.TagByName, input, cancellationToken);
+            var candidates = tags
+                .Select(tag => StashResultMapper.ToTagCandidate(tag, descriptor.Manifest.Id, input.Title))
+                .Where(candidate => candidate is not null)
+                .Select(candidate => candidate!)
+                .ToArray();
+            if (candidates.Length > 0) {
+                return IdentifyPluginResponse.Candidates(ProposalKind.Tag, candidates);
+            }
+        }
+
+        return new IdentifyPluginResponse(true, null, $"No {definition.Name} match was found.");
+    }
+
+    private static readonly string[] FragmentCapabilities = [
+        StashScraperDefinition.SceneByQueryFragment,
+        StashScraperDefinition.SceneByFragment
+    ];
 
     private static async Task<EntityMetadataProposal?> ScrapeProposalAsync(
         StashScraperEngine engine,
@@ -173,6 +271,8 @@ public sealed class StashCompatRunner : IIdentifyRunner {
         }
 
         await EnrichPerformersAsync(engine, definition, descriptor.EntryPath, scene, cancellationToken);
+        await EnrichStudioAsync(engine, definition, descriptor.EntryPath, scene, cancellationToken);
+        await EnrichTagsAsync(engine, definition, descriptor.EntryPath, scene, cancellationToken);
 
         var byUrl = capability.EndsWith("ByURL", StringComparison.OrdinalIgnoreCase);
         return StashResultMapper.ToProposal(
@@ -191,6 +291,11 @@ public sealed class StashCompatRunner : IIdentifyRunner {
     private const int MaxEnrichedPerformers = 12;
 
     /// <summary>
+    /// Maximum tags enriched per scene, bounding the extra network/script calls.
+    /// </summary>
+    private const int MaxEnrichedTags = 24;
+
+    /// <summary>
     /// Fills in performer artwork and bio by resolving each credited performer's profile through
     /// the scraper's performer capabilities. Best-effort: a scene without performer URLs/lookups,
     /// or a failed lookup, simply leaves the credit with just its name.
@@ -201,7 +306,7 @@ public sealed class StashCompatRunner : IIdentifyRunner {
         string scraperPath,
         StashScrapedScene scene,
         CancellationToken cancellationToken) {
-        if (!definition.HasCapability("performerByURL") && !definition.HasCapability("performerByName")) {
+        if (!definition.HasCapability(StashScraperDefinition.PerformerByUrl) && !definition.HasCapability(StashScraperDefinition.PerformerByName)) {
             return;
         }
 
@@ -229,6 +334,85 @@ public sealed class StashCompatRunner : IIdentifyRunner {
             performer.Gender ??= resolved.Gender;
             performer.Birthdate ??= resolved.Birthdate;
             performer.Country ??= resolved.Country;
+        }
+    }
+
+    /// <summary>
+    /// Fills in studio URL, logo, and details through studio capabilities when a scraper provides them.
+    /// Best-effort: a scene without studio lookup support simply keeps the scraped studio fields.
+    /// </summary>
+    private static async Task EnrichStudioAsync(
+        StashScraperEngine engine,
+        StashScraperDefinition definition,
+        string scraperPath,
+        StashScrapedScene scene,
+        CancellationToken cancellationToken) {
+        if (scene.Studio is null ||
+            (!definition.HasCapability(StashScraperDefinition.StudioByUrl) && !definition.HasCapability(StashScraperDefinition.StudioByName))) {
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(scene.Studio.Description) && !string.IsNullOrWhiteSpace(scene.Studio.Image)) {
+            return;
+        }
+
+        StashScrapedStudio? resolved;
+        try {
+            resolved = await engine.ResolveStudioAsync(definition, scraperPath, scene.Studio, cancellationToken);
+        } catch (StashScriptActionRequiredException) {
+            return;
+        } catch (Exception) when (!cancellationToken.IsCancellationRequested) {
+            return;
+        }
+
+        if (resolved is null) {
+            return;
+        }
+
+        scene.Studio.Name ??= resolved.Name;
+        scene.Studio.Url ??= resolved.Url;
+        scene.Studio.Image ??= resolved.Image;
+        scene.Studio.Description ??= resolved.Description;
+    }
+
+    /// <summary>
+    /// Fills in tag URL, image, aliases, and details by resolving scraped tags through tag
+    /// capabilities when a scraper provides them. Best-effort: a scene without tag lookups simply
+    /// keeps the scraped tag names.
+    /// </summary>
+    private static async Task EnrichTagsAsync(
+        StashScraperEngine engine,
+        StashScraperDefinition definition,
+        string scraperPath,
+        StashScrapedScene scene,
+        CancellationToken cancellationToken) {
+        if (!definition.HasCapability(StashScraperDefinition.TagByUrl) && !definition.HasCapability(StashScraperDefinition.TagByName)) {
+            return;
+        }
+
+        foreach (var tag in scene.Tags.Take(MaxEnrichedTags)) {
+            if (!string.IsNullOrWhiteSpace(tag.Description) && !string.IsNullOrWhiteSpace(tag.Image)) {
+                continue;
+            }
+
+            StashScrapedTag? resolved;
+            try {
+                resolved = await engine.ResolveTagAsync(definition, scraperPath, tag, cancellationToken);
+            } catch (StashScriptActionRequiredException) {
+                return;
+            } catch (Exception) when (!cancellationToken.IsCancellationRequested) {
+                continue;
+            }
+
+            if (resolved is null) {
+                continue;
+            }
+
+            tag.Name ??= resolved.Name;
+            tag.Url ??= resolved.Url;
+            tag.Image ??= resolved.Image;
+            tag.Description ??= resolved.Description;
+            tag.Aliases ??= resolved.Aliases;
         }
     }
 
@@ -263,8 +447,8 @@ public sealed class StashCompatRunner : IIdentifyRunner {
         values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
 
     private static IReadOnlyList<string> UrlCapabilitiesFor(EntityKind entityKind) => entityKind switch {
-        EntityKind.Movie => ["movieByURL", "sceneByURL"],
-        EntityKind.Gallery => ["galleryByURL"],
-        _ => ["sceneByURL"]
+        EntityKind.Movie => [StashScraperDefinition.MovieByUrl, StashScraperDefinition.SceneByUrl],
+        EntityKind.Gallery => [StashScraperDefinition.GalleryByUrl],
+        _ => [StashScraperDefinition.SceneByUrl]
     };
 }

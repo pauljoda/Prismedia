@@ -17,14 +17,18 @@ public static class StashScraperManifestFactory {
     /// </summary>
     private static readonly IReadOnlyDictionary<string, (string Kind, string Action)> CapabilityMap =
         new Dictionary<string, (string, string)>(StringComparer.OrdinalIgnoreCase) {
-            ["sceneByURL"] = ("video", IdentifyAction.LookupUrl.ToCode()),
-            ["sceneByName"] = ("video", IdentifyAction.Search.ToCode()),
-            ["sceneByFragment"] = ("video", IdentifyAction.Search.ToCode()),
-            ["sceneByQueryFragment"] = ("video", IdentifyAction.Search.ToCode()),
-            ["movieByURL"] = ("movie", IdentifyAction.LookupUrl.ToCode()),
-            ["performerByURL"] = ("person", IdentifyAction.LookupUrl.ToCode()),
-            ["performerByName"] = ("person", IdentifyAction.Search.ToCode()),
-            ["galleryByURL"] = ("gallery", IdentifyAction.LookupUrl.ToCode())
+            [StashScraperDefinition.SceneByUrl] = (EntityKindRegistry.Video.Code, IdentifyAction.LookupUrl.ToCode()),
+            [StashScraperDefinition.SceneByName] = (EntityKindRegistry.Video.Code, IdentifyAction.Search.ToCode()),
+            [StashScraperDefinition.SceneByFragment] = (EntityKindRegistry.Video.Code, IdentifyAction.Search.ToCode()),
+            [StashScraperDefinition.SceneByQueryFragment] = (EntityKindRegistry.Video.Code, IdentifyAction.Search.ToCode()),
+            [StashScraperDefinition.MovieByUrl] = (EntityKindRegistry.Movie.Code, IdentifyAction.LookupUrl.ToCode()),
+            [StashScraperDefinition.PerformerByUrl] = (EntityKindRegistry.Person.Code, IdentifyAction.LookupUrl.ToCode()),
+            [StashScraperDefinition.PerformerByName] = (EntityKindRegistry.Person.Code, IdentifyAction.Search.ToCode()),
+            [StashScraperDefinition.StudioByUrl] = (EntityKindRegistry.Studio.Code, IdentifyAction.LookupUrl.ToCode()),
+            [StashScraperDefinition.StudioByName] = (EntityKindRegistry.Studio.Code, IdentifyAction.Search.ToCode()),
+            [StashScraperDefinition.GalleryByUrl] = (EntityKindRegistry.Gallery.Code, IdentifyAction.LookupUrl.ToCode()),
+            [StashScraperDefinition.TagByUrl] = (EntityKindRegistry.Tag.Code, IdentifyAction.LookupUrl.ToCode()),
+            [StashScraperDefinition.TagByName] = (EntityKindRegistry.Tag.Code, IdentifyAction.Search.ToCode())
         };
 
     /// <summary>

@@ -7,19 +7,39 @@ namespace Prismedia.Infrastructure.StashCompat.Model;
 /// definitions, named XPath/JSON scraper blocks, and driver cookies.
 /// </summary>
 public sealed class StashScraperDefinition {
+    internal const string SceneByUrl = "sceneByURL";
+    internal const string SceneByName = "sceneByName";
+    internal const string SceneByFragment = "sceneByFragment";
+    internal const string SceneByQueryFragment = "sceneByQueryFragment";
+    internal const string PerformerByUrl = "performerByURL";
+    internal const string PerformerByName = "performerByName";
+    internal const string PerformerByFragment = "performerByFragment";
+    internal const string StudioByUrl = "studioByURL";
+    internal const string StudioByName = "studioByName";
+    internal const string GalleryByUrl = "galleryByURL";
+    internal const string GalleryByFragment = "galleryByFragment";
+    internal const string MovieByUrl = "movieByURL";
+    internal const string GroupByUrl = "groupByURL";
+    internal const string TagByUrl = "tagByURL";
+    internal const string TagByName = "tagByName";
+
     /// <summary>All Stash capability keys recognized by Prismedia.</summary>
     public static readonly IReadOnlyList<string> CapabilityKeys = [
-        "sceneByURL",
-        "sceneByName",
-        "sceneByFragment",
-        "sceneByQueryFragment",
-        "performerByURL",
-        "performerByName",
-        "performerByFragment",
-        "galleryByURL",
-        "galleryByFragment",
-        "movieByURL",
-        "groupByURL"
+        SceneByUrl,
+        SceneByName,
+        SceneByFragment,
+        SceneByQueryFragment,
+        PerformerByUrl,
+        PerformerByName,
+        PerformerByFragment,
+        StudioByUrl,
+        StudioByName,
+        GalleryByUrl,
+        GalleryByFragment,
+        MovieByUrl,
+        GroupByUrl,
+        TagByUrl,
+        TagByName
     ];
 
     private readonly StashYamlNode _root;

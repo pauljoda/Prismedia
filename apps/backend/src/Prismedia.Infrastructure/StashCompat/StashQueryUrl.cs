@@ -36,6 +36,15 @@ public static class StashQueryUrl {
             url = url.Replace($"{{{placeholder}}}", value, StringComparison.Ordinal);
         }
 
+        if (url.Contains("{}", StringComparison.Ordinal)) {
+            var query = FirstNonEmpty(input.Title, input.Url, input.FilePath);
+            if (string.IsNullOrWhiteSpace(query)) {
+                return null;
+            }
+
+            url = url.Replace("{}", Uri.EscapeDataString(query), StringComparison.Ordinal);
+        }
+
         return url;
     }
 
@@ -56,6 +65,9 @@ public static class StashQueryUrl {
             "oshash" => input.Oshash,
             _ => null
         };
+
+    private static string? FirstNonEmpty(params string?[] values) =>
+        values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
 
     private static string ApplyReplacements(string value, StashYamlNode rules) {
         foreach (var rule in rules.Items()) {

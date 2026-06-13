@@ -10,6 +10,16 @@ public sealed class StashScrapedStudio {
 
     /// <summary>Studio logo/image URL.</summary>
     public string? Image { get; set; }
+
+    /// <summary>Long-form studio description.</summary>
+    public string? Description { get; set; }
+
+    /// <summary>True when any usable field was extracted.</summary>
+    public bool HasData =>
+        !string.IsNullOrWhiteSpace(Name) ||
+        !string.IsNullOrWhiteSpace(Url) ||
+        !string.IsNullOrWhiteSpace(Image) ||
+        !string.IsNullOrWhiteSpace(Description);
 }
 
 /// <summary>A performer scraped from a Stash scraper definition (scene credit or performer page).</summary>
@@ -42,6 +52,32 @@ public sealed class StashScrapedPerformer {
         !string.IsNullOrWhiteSpace(Details);
 }
 
+/// <summary>A tag scraped from a Stash scraper definition.</summary>
+public sealed class StashScrapedTag {
+    /// <summary>Tag display name.</summary>
+    public string? Name { get; set; }
+
+    /// <summary>Tag page URL.</summary>
+    public string? Url { get; set; }
+
+    /// <summary>Tag image URL, when an upstream source exposes one.</summary>
+    public string? Image { get; set; }
+
+    /// <summary>Long-form tag description.</summary>
+    public string? Description { get; set; }
+
+    /// <summary>Comma- or newline-separated aliases from the upstream source.</summary>
+    public string? Aliases { get; set; }
+
+    /// <summary>True when any usable field was extracted.</summary>
+    public bool HasData =>
+        !string.IsNullOrWhiteSpace(Name) ||
+        !string.IsNullOrWhiteSpace(Url) ||
+        !string.IsNullOrWhiteSpace(Description) ||
+        !string.IsNullOrWhiteSpace(Aliases) ||
+        !string.IsNullOrWhiteSpace(Image);
+}
+
 /// <summary>A scene scraped from a Stash scraper definition (the common scene shape).</summary>
 public sealed class StashScrapedScene {
     /// <summary>Scene title.</summary>
@@ -71,8 +107,8 @@ public sealed class StashScrapedScene {
     /// <summary>Performers credited on the scene (name plus any URL/image the scraper exposes).</summary>
     public IReadOnlyList<StashScrapedPerformer> Performers { get; set; } = [];
 
-    /// <summary>Tag names attached to the scene.</summary>
-    public IReadOnlyList<string> Tags { get; set; } = [];
+    /// <summary>Tags attached to the scene.</summary>
+    public IReadOnlyList<StashScrapedTag> Tags { get; set; } = [];
 
     /// <summary>True when the scrape produced any usable field.</summary>
     public bool HasData =>

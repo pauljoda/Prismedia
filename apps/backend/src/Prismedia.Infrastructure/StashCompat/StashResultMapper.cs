@@ -61,9 +61,7 @@ public static class StashResultMapper {
             credits.Add(new CreditPatch(scene.Director.Trim(), "director", null, credits.Count));
         }
 
-        var tags = scene.Tags
-            .Where(name => !string.IsNullOrWhiteSpace(name))
-            .Select(name => name.Trim())
+        var tags = TagNames(scene.Tags)
             .ToArray();
 
         var studioName = string.IsNullOrWhiteSpace(scene.Studio?.Name) ? null : scene.Studio!.Name!.Trim();
@@ -91,7 +89,7 @@ public static class StashResultMapper {
         // Emit credited people and the studio as relationship proposals too — not just flat patch
         // strings — so the review UI surfaces them as cards and the apply pipeline can enrich the
         // resulting Person/Studio entities (matching how first-party providers shape their output).
-        var relationships = BuildRelationships(performers, scene.Director, scene.Studio, providerId, providerName);
+        var relationships = BuildRelationships(performers, scene.Director, scene.Studio, scene.Tags, providerId, providerName);
 
         return new EntityMetadataProposal(
             $"{providerId}:{inputUrl ?? scene.Url ?? scene.Title}",
@@ -110,6 +108,7 @@ public static class StashResultMapper {
         IReadOnlyList<StashScrapedPerformer> performers,
         string? director,
         StashScrapedStudio? studio,
+        IReadOnlyList<StashScrapedTag> tags,
         string providerId,
         string providerName) {
         var relationships = new List<EntityMetadataProposal>();
@@ -134,10 +133,137 @@ public static class StashResultMapper {
             var studioImages = string.IsNullOrWhiteSpace(studio.Image)
                 ? Array.Empty<ImageCandidate>()
                 : [new ImageCandidate(MediaImageKind.Logo.ToCode(), studio.Image.Trim(), providerName, null, null, null, null)];
-            relationships.Add(RelationshipProposal($"{providerId}:studio:{studioName}", providerName, ProposalKind.Studio, studioName, null, studioUrls, studioImages));
+            relationships.Add(RelationshipProposal(
+                $"{providerId}:studio:{studioName}",
+                providerName,
+                ProposalKind.Studio,
+                studioName,
+                string.IsNullOrWhiteSpace(studio.Description) ? null : studio.Description!.Trim(),
+                studioUrls,
+                studioImages));
+        }
+
+        foreach (var tag in tags.Where(tag => !string.IsNullOrWhiteSpace(tag.Name))) {
+            var name = tag.Name!.Trim();
+            if (!seen.Add($"tag:{name}")) {
+                continue;
+            }
+
+            var urls = Uri.TryCreate(tag.Url, UriKind.Absolute, out _) ? new[] { tag.Url!.Trim() } : [];
+            var images = string.IsNullOrWhiteSpace(tag.Image)
+                ? Array.Empty<ImageCandidate>()
+                : [new ImageCandidate(MediaImageKind.Thumbnail.ToCode(), tag.Image!.Trim(), providerName, null, null, null, null)];
+            relationships.Add(RelationshipProposal(
+                $"{providerId}:tag:{name}",
+                providerName,
+                ProposalKind.Tag,
+                name,
+                string.IsNullOrWhiteSpace(tag.Description) ? null : tag.Description!.Trim(),
+                urls,
+                images));
         }
 
         return relationships;
+    }
+
+    /// <summary>
+    /// Builds a Tag proposal from a scraped tag page.
+    /// </summary>
+    public static EntityMetadataProposal ToTagProposal(
+        StashScrapedTag tag,
+        string providerId,
+        string providerName,
+        string? inputUrl,
+        string matchReason,
+        decimal confidence) {
+        var name = tag.Name?.Trim() ?? string.Empty;
+        var urls = new List<string>();
+        if (Uri.TryCreate(tag.Url, UriKind.Absolute, out _)) {
+            urls.Add(tag.Url!.Trim());
+        }
+
+        if (!string.IsNullOrWhiteSpace(inputUrl) && Uri.TryCreate(inputUrl, UriKind.Absolute, out _)) {
+            urls.Add(inputUrl.Trim());
+        }
+
+        var images = string.IsNullOrWhiteSpace(tag.Image)
+            ? Array.Empty<ImageCandidate>()
+            : [new ImageCandidate(MediaImageKind.Thumbnail.ToCode(), tag.Image!.Trim(), providerName, null, null, null, null)];
+
+        var patch = new EntityMetadataPatch(
+            string.IsNullOrWhiteSpace(name) ? null : name,
+            string.IsNullOrWhiteSpace(tag.Description) ? null : tag.Description!.Trim(),
+            new Dictionary<string, string>(),
+            urls.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
+            [],
+            null,
+            [],
+            new Dictionary<string, string>(),
+            new Dictionary<string, int>(),
+            new Dictionary<string, int>(),
+            null);
+
+        return new EntityMetadataProposal(
+            $"{providerId}:tag:{(string.IsNullOrWhiteSpace(tag.Url) ? name : tag.Url!.Trim())}",
+            providerName,
+            ProposalKind.Tag,
+            confidence,
+            matchReason,
+            patch,
+            images,
+            [],
+            [],
+            Relationships: []);
+    }
+
+    /// <summary>
+    /// Builds a Studio proposal from a scraped studio page.
+    /// </summary>
+    public static EntityMetadataProposal ToStudioProposal(
+        StashScrapedStudio studio,
+        string providerId,
+        string providerName,
+        string? inputUrl,
+        string matchReason,
+        decimal confidence) {
+        var name = studio.Name?.Trim() ?? string.Empty;
+        var urls = new List<string>();
+        if (Uri.TryCreate(studio.Url, UriKind.Absolute, out _)) {
+            urls.Add(studio.Url!.Trim());
+        }
+
+        if (!string.IsNullOrWhiteSpace(inputUrl) && Uri.TryCreate(inputUrl, UriKind.Absolute, out _)) {
+            urls.Add(inputUrl.Trim());
+        }
+
+        var images = string.IsNullOrWhiteSpace(studio.Image)
+            ? Array.Empty<ImageCandidate>()
+            : [new ImageCandidate(MediaImageKind.Logo.ToCode(), studio.Image!.Trim(), providerName, null, null, null, null)];
+
+        var patch = new EntityMetadataPatch(
+            string.IsNullOrWhiteSpace(name) ? null : name,
+            string.IsNullOrWhiteSpace(studio.Description) ? null : studio.Description!.Trim(),
+            new Dictionary<string, string>(),
+            urls.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
+            [],
+            null,
+            [],
+            new Dictionary<string, string>(),
+            new Dictionary<string, int>(),
+            new Dictionary<string, int>(),
+            null);
+
+        return new EntityMetadataProposal(
+            $"{providerId}:studio:{(string.IsNullOrWhiteSpace(studio.Url) ? name : studio.Url!.Trim())}",
+            providerName,
+            ProposalKind.Studio,
+            confidence,
+            matchReason,
+            patch,
+            images,
+            [],
+            [],
+            Relationships: []);
     }
 
     private static EntityMetadataProposal PersonProposal(
@@ -288,4 +414,64 @@ public static class StashResultMapper {
             Confidence: confidence,
             MatchReason: confidence is null ? null : "title-search");
     }
+
+    /// <summary>
+    /// Builds a candidate from a scraped tag for name-search disambiguation.
+    /// </summary>
+    public static EntitySearchCandidate? ToTagCandidate(StashScrapedTag tag, string providerId, string? queryTitle = null) {
+        if (string.IsNullOrWhiteSpace(tag.Name)) {
+            return null;
+        }
+
+        var externalIds = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (Uri.TryCreate(tag.Url, UriKind.Absolute, out _)) {
+            externalIds[providerId] = tag.Url!.Trim();
+        }
+
+        var confidence = string.IsNullOrWhiteSpace(queryTitle) ? (decimal?)null : TitleSimilarity.Score(tag.Name, queryTitle);
+        return new EntitySearchCandidate(
+            externalIds,
+            tag.Name.Trim(),
+            Year: null,
+            string.IsNullOrWhiteSpace(tag.Description) ? null : tag.Description.Trim(),
+            string.IsNullOrWhiteSpace(tag.Image) ? null : tag.Image.Trim(),
+            Popularity: null,
+            CandidateId: null,
+            Source: providerId,
+            Confidence: confidence,
+            MatchReason: confidence is null ? null : "title-search");
+    }
+
+    /// <summary>
+    /// Builds a candidate from a scraped studio for name-search disambiguation.
+    /// </summary>
+    public static EntitySearchCandidate? ToStudioCandidate(StashScrapedStudio studio, string providerId, string? queryTitle = null) {
+        if (string.IsNullOrWhiteSpace(studio.Name)) {
+            return null;
+        }
+
+        var externalIds = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (Uri.TryCreate(studio.Url, UriKind.Absolute, out _)) {
+            externalIds[providerId] = studio.Url!.Trim();
+        }
+
+        var confidence = string.IsNullOrWhiteSpace(queryTitle) ? (decimal?)null : TitleSimilarity.Score(studio.Name, queryTitle);
+        return new EntitySearchCandidate(
+            externalIds,
+            studio.Name.Trim(),
+            Year: null,
+            string.IsNullOrWhiteSpace(studio.Description) ? null : studio.Description.Trim(),
+            string.IsNullOrWhiteSpace(studio.Image) ? null : studio.Image.Trim(),
+            Popularity: null,
+            CandidateId: null,
+            Source: providerId,
+            Confidence: confidence,
+            MatchReason: confidence is null ? null : "title-search");
+    }
+
+    private static IEnumerable<string> TagNames(IEnumerable<StashScrapedTag> tags) =>
+        tags
+            .Select(tag => tag.Name)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Select(name => name!.Trim());
 }
