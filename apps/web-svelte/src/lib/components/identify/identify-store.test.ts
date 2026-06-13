@@ -402,6 +402,37 @@ describe("IdentifyStore", () => {
     }
   });
 
+  it("waits for a specific provider search to settle and merges the result", async () => {
+    vi.useFakeTimers();
+    try {
+      const store = new IdentifyStore();
+      store.queue = [{
+        ...queueItem("video-1", { state: "queued", provider: "tmdb" }),
+        entity: entity("video-1", { kind: "video", title: "Friendship" }),
+      }];
+      fetchIdentifyQueue
+        .mockResolvedValueOnce([
+          queueItem("video-1", { state: "searching", provider: "tmdb" }),
+        ])
+        .mockResolvedValueOnce([
+          queueItem("video-1", {
+            state: "proposal",
+            provider: "tmdb",
+            proposal: proposal("tmdb:video-1", { targetKind: "video", title: "Friendship" }),
+          }),
+        ]);
+
+      const result = store.waitForIdentifyResult("video-1", "tmdb", { pollMs: 20, timeoutMs: 1_000 });
+      await vi.advanceTimersByTimeAsync(20);
+      await vi.advanceTimersByTimeAsync(20);
+
+      await expect(result).resolves.toMatchObject({ state: "proposal", provider: "tmdb" });
+      expect(store.queue[0]?.state).toBe("proposal");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("accepts selected queued proposals and clears them from the queue", async () => {
     const store = new IdentifyStore();
     const ready = {

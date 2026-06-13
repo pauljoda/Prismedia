@@ -45,6 +45,13 @@ interface IdentifyRejectOptions {
   navigateNext?: boolean;
 }
 
+interface IdentifyResultWaitOptions {
+  /** How long to wait between queue refreshes while one provider search is running. */
+  pollMs?: number;
+  /** Maximum time to wait for one provider search before returning the latest item, if any. */
+  timeoutMs?: number;
+}
+
 export type IdentifyView =
   | { kind: "dashboard" }
   | { kind: "kind-tab"; entityKind: string }
@@ -92,6 +99,8 @@ export const useIdentifyStore = identifyStoreContext.use;
 const MIN_APPLY_PROGRESS_VISIBLE_MS = 650;
 const QUEUE_POLL_INITIAL_MS = 300;
 const QUEUE_POLL_INTERVAL_MS = 1_000;
+const SEARCH_RESULT_POLL_MS = 750;
+const SEARCH_RESULT_TIMEOUT_MS = 120_000;
 
 export class IdentifyStore {
   #getHideNsfw: () => boolean;
@@ -318,6 +327,31 @@ export class IdentifyStore {
       this.#markQueueError(entity.id, readError(err));
       return null;
     }
+  }
+
+  async waitForIdentifyResult(
+    entityId: string,
+    providerId: string,
+    options: IdentifyResultWaitOptions = {},
+  ): Promise<IdentifyQueueItem | null> {
+    const pollMs = options.pollMs ?? SEARCH_RESULT_POLL_MS;
+    const timeoutMs = options.timeoutMs ?? SEARCH_RESULT_TIMEOUT_MS;
+    const deadline = Date.now() + timeoutMs;
+
+    while (Date.now() <= deadline) {
+      const current = this.queue.find((item) => item.entityId === entityId && item.provider === providerId);
+      if (current && isIdentifyResultItem(current)) {
+        return current;
+      }
+
+      await wait(pollMs);
+      const hideNsfw = this.#getHideNsfw();
+      const queue = await fetchIdentifyQueue(false, hideNsfw);
+      this.#mergeQueueFromApi(queue, hideNsfw);
+      this.#syncLiveReviewProposal();
+    }
+
+    return this.queue.find((item) => item.entityId === entityId && item.provider === providerId) ?? null;
   }
 
   async identifyWithCandidate(
@@ -962,6 +996,12 @@ function shouldResetScrollForView(view: IdentifyView): boolean {
   return view.kind === "review-parent" || view.kind === "review-child";
 }
 
+function isIdentifyResultItem(item: IdentifyQueueItem): boolean {
+  if (item.state === IDENTIFY_QUEUE_STATE.proposal && item.proposal) return true;
+  if (item.state === IDENTIFY_QUEUE_STATE.search && item.candidates.length > 0) return true;
+  return item.state === IDENTIFY_QUEUE_STATE.error;
+}
+
 function isActiveQueueState(state: IdentifyQueueState): boolean {
   return state !== "done" && state !== "deleted";
 }
@@ -977,8 +1017,12 @@ function nowMs(): number {
 async function waitForMinimumApplyProgress(startedAt: number): Promise<void> {
   const remaining = MIN_APPLY_PROGRESS_VISIBLE_MS - (nowMs() - startedAt);
   if (remaining > 0) {
-    await new Promise<void>((resolve) => setTimeout(resolve, remaining));
+    await wait(remaining);
   }
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function initialApplyProgress(

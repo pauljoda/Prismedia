@@ -26,6 +26,9 @@ const store = vi.hoisted(() => ({
   nextQueueItem: vi.fn(),
   rejectQueueItem: vi.fn(),
   navigateToDashboard: vi.fn(),
+  identifyEntity: vi.fn(),
+  waitForIdentifyResult: vi.fn(),
+  reviewResolvedQueueItem: vi.fn(),
 }));
 
 vi.mock("./identify-store.svelte", () => ({
@@ -53,6 +56,11 @@ describe("IdentifyReviewChoice", () => {
     store.nextQueueItem.mockReturnValue(null);
     store.rejectQueueItem.mockReset();
     store.navigateToDashboard.mockReset();
+    store.identifyEntity.mockReset();
+    store.identifyEntity.mockResolvedValue({ state: "queued" });
+    store.waitForIdentifyResult.mockReset();
+    store.waitForIdentifyResult.mockResolvedValue(null);
+    store.reviewResolvedQueueItem.mockReset();
   });
 
   afterEach(() => {
@@ -164,6 +172,62 @@ describe("IdentifyReviewChoice", () => {
     await fireEvent.mouseDown(screen.getByRole("option", { name: "AniList anilist" }));
 
     expect(screen.getByRole("button", { name: "Provider: AniList" })).toBeInTheDocument();
+  });
+
+  it("uses stacked labeled fields for the review query form", () => {
+    const { container } = render(IdentifyReviewChoice, {
+      props: {
+        entity: entity(),
+        candidates: [searchCandidate()],
+      },
+    });
+
+    const form = container.querySelector<HTMLElement>(".identify-query-form");
+    const fields = container.querySelectorAll(".identify-query-field");
+
+    expect(form).not.toBeNull();
+    expect(form).toHaveClass("flex-col");
+    expect(fields).toHaveLength(3);
+    expect(fields[0]).toHaveTextContent("Provider");
+    expect(fields[1]).toHaveTextContent("Query");
+    expect(fields[2]).toHaveTextContent("Year");
+    expect(screen.getByRole("button", { name: "Seek" })).toHaveClass("w-full");
+    expect(screen.getByRole("button", { name: "Seek" })).toHaveClass("sm:w-24");
+    expect(screen.getByPlaceholderText("Search titles...")).toHaveClass("w-full");
+    expect(screen.getByPlaceholderText("Optional")).toHaveClass("w-full");
+  });
+
+  it("seeks through review query providers until candidates are found", async () => {
+    store.providers = [
+      provider("tmdb", "The Movie Database"),
+      provider("anilist", "AniList"),
+      provider("xvideos", "Xvideos"),
+    ];
+    store.providersForKind.mockReturnValue(store.providers);
+    store.identifyEntity.mockResolvedValue({ state: "queued" });
+    store.waitForIdentifyResult
+      .mockResolvedValueOnce({ state: "error", provider: "anilist", candidates: [], proposal: null })
+      .mockResolvedValueOnce({
+        state: "search",
+        provider: "xvideos",
+        candidates: [searchCandidate({ externalIds: { xvideos: "1" }, title: "Provider Match" })],
+        proposal: null,
+      });
+
+    render(IdentifyReviewChoice, {
+      props: {
+        entity: entity(),
+        candidates: [searchCandidate()],
+        providerId: "tmdb",
+      },
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Seek" }));
+
+    await waitFor(() => expect(screen.getByText("Provider Match")).toBeInTheDocument());
+    expect(store.identifyEntity).toHaveBeenNthCalledWith(1, entity(), "anilist", { title: "The Chair Company" });
+    expect(store.identifyEntity).toHaveBeenNthCalledWith(2, entity(), "xvideos", { title: "The Chair Company" });
+    expect(store.reviewResolvedQueueItem).not.toHaveBeenCalled();
   });
 
   it("shows the target preview and comic type label for book-kind comics", () => {
