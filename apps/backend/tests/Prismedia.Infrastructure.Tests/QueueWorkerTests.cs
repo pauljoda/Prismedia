@@ -47,7 +47,7 @@ public sealed class QueueWorkerTests {
     }
 
     [Fact]
-    public async Task QueueWorkerClaimsInteractiveJobThroughReservedLaneWhenSaturated() {
+    public async Task QueueWorkerClaimsForegroundIdentifyJobThroughReservedLaneWhenSaturated() {
         var queue = new RecordingJobQueueService([CreateJob()]);
         var settings = new MutableSettingsPersistence { BackgroundConcurrency = 1 };
         var handler = new BlockingJobHandler();
@@ -76,8 +76,13 @@ public sealed class QueueWorkerTests {
             await Task.Delay(150, timeout.Token);
             Assert.Equal(1, handler.MaxActive);
 
-            // ...but a user-triggered identify job is claimed immediately through it.
+            // A broad priority-70 identify job without the foreground lane cannot steal it either.
             queue.Add(CreateJob(), JobPriorities.InteractiveIdentify);
+            await Task.Delay(150, timeout.Token);
+            Assert.Equal(1, handler.MaxActive);
+
+            // ...but a direct manual identify job is claimed immediately through it.
+            queue.Add(CreateJob(JobRunLane.ForegroundIdentify), JobPriorities.InteractiveIdentify);
             await handler.WaitForMaxActiveAsync(2, timeout.Token);
             Assert.Equal(2, handler.MaxActive);
         } finally {
@@ -86,7 +91,7 @@ public sealed class QueueWorkerTests {
         }
     }
 
-    private static JobRunSnapshot CreateJob() =>
+    private static JobRunSnapshot CreateJob(JobRunLane? lane = null) =>
         new(
             Guid.NewGuid(),
             JobType.Noop,
@@ -99,7 +104,8 @@ public sealed class QueueWorkerTests {
             "Worker test",
             DateTimeOffset.UtcNow,
             DateTimeOffset.UtcNow,
-            null);
+            null,
+            Lane: lane);
 
     private sealed class BlockingJobHandler : IJobHandler {
         private readonly TaskCompletionSource _release = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -188,14 +194,17 @@ public sealed class QueueWorkerTests {
             }
         }
 
-        public Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken, int? minPriority = null) {
+        public Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken, JobRunLane? lane = null) {
             Interlocked.Increment(ref _claims);
             lock (_lock) {
-                var floor = minPriority ?? int.MinValue;
                 var bestIndex = -1;
                 var bestPriority = int.MinValue;
                 for (var i = 0; i < _jobs.Count; i++) {
-                    if (_jobs[i].Priority >= floor && _jobs[i].Priority > bestPriority) {
+                    if (lane is not null && _jobs[i].Job.Lane != lane) {
+                        continue;
+                    }
+
+                    if (_jobs[i].Priority > bestPriority) {
                         bestPriority = _jobs[i].Priority;
                         bestIndex = i;
                     }

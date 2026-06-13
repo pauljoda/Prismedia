@@ -204,6 +204,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         var request = Assert.Single(queue.Enqueued, enqueued => enqueued.Type == JobType.IdentifyCascade);
         Assert.Equal(JobType.IdentifyCascade, request.Type);
         Assert.Equal(JobPriorities.InteractiveIdentify, request.Priority);
+        Assert.Equal(JobRunLane.ForegroundIdentify, request.Lane);
         Assert.True(request.Priority > JobPriorities.Scan);
     }
 
@@ -731,7 +732,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             .AsNoTracking()
             .FirstAsync(item => item.EntityId == entityId, cancellationToken);
         await service.RunSearchAsync(
-            new IdentifySearchPayload(entityId, request.Provider, request.Query, hideNsfw),
+            new IdentifySearchPayload(entityId, request.Provider, request.Query, hideNsfw, IsForeground: true),
             row.SearchJobId!.Value,
             isFinalAttempt: true,
             cancellationToken);
@@ -761,9 +762,42 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         Assert.Equal(JobType.IdentifySearch, job.Type);
         Assert.Equal(entityId.ToString(), job.TargetEntityId);
         Assert.Equal(JobPriorities.InteractiveIdentify, job.Priority);
+        Assert.Equal(JobRunLane.ForegroundIdentify, job.Lane);
+        Assert.True(IdentifySearchPayload.Parse(job.PayloadJson!).IsForeground);
         var row = await db.IdentifyQueueItems.AsNoTracking().SingleAsync();
         Assert.Equal(IdentifyQueueState.Queued, row.State);
         Assert.NotNull(row.SearchJobId);
+    }
+
+    [Fact]
+    public async Task RequestSearchBatchAsyncDoesNotUseForegroundIdentifyLane() {
+        await using var db = CreateContext();
+        var firstId = Guid.Parse("66666666-6666-6666-6666-6666666666a1");
+        var secondId = Guid.Parse("66666666-6666-6666-6666-6666666666a2");
+        SeedProvider(db);
+        SeedEntity(db, firstId, "video", "Batch Movie 1");
+        SeedEntity(db, secondId, "video", "Batch Movie 2");
+        await db.SaveChangesAsync();
+        var queue = new RecordingJobQueue();
+        var service = new IdentifyQueueService(
+            db,
+            CreateIdentifyService(db, new ProposalProcessExecutor(), _tempRoot),
+            new InMemoryIdentifyApplyProgressStore(),
+            queue);
+
+        var response = await service.RequestSearchBatchAsync(
+            [firstId, secondId],
+            new IdentifyQueueSearchRequest("tmdb", null),
+            hideNsfw: false,
+            CancellationToken.None);
+
+        Assert.Equal(2, response.Enqueued);
+        Assert.All(queue.Enqueued, job => {
+            Assert.Equal(JobType.IdentifySearch, job.Type);
+            Assert.Equal(JobPriorities.InteractiveIdentify, job.Priority);
+            Assert.Null(job.Lane);
+            Assert.False(IdentifySearchPayload.Parse(job.PayloadJson!).IsForeground);
+        });
     }
 
     [Fact]
@@ -990,7 +1024,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             return Task.FromResult(true);
         }
         public Task<int> ClearFailuresAsync(JobType? type, CancellationToken cancellationToken) => Task.FromResult(0);
-        public Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken, int? minPriority = null) => Task.FromResult<JobRunSnapshot?>(null);
+        public Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken, JobRunLane? lane = null) => Task.FromResult<JobRunSnapshot?>(null);
         public Task<int> RecoverStaleRunningAsync(string currentWorkerId, TimeSpan staleAfter, CancellationToken cancellationToken) => Task.FromResult(0);
         public Task UpdateProgressAsync(Guid id, int progress, string? message, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task CompleteAsync(Guid id, string? message, CancellationToken cancellationToken) => Task.CompletedTask;

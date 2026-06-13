@@ -87,6 +87,7 @@ public sealed class JobQueueService : IJobQueueService {
             Status = JobRunStatus.Queued,
             PayloadJson = request.PayloadJson ?? "{}",
             Priority = request.Priority,
+            Lane = request.Lane,
             Attempts = 0,
             MaxAttempts = 3,
             Progress = 0,
@@ -156,6 +157,7 @@ public sealed class JobQueueService : IJobQueueService {
                 Status = JobRunStatus.Queued,
                 PayloadJson = request.PayloadJson ?? "{}",
                 Priority = request.Priority,
+                Lane = request.Lane,
                 Attempts = 0,
                 MaxAttempts = 3,
                 Progress = 0,
@@ -240,35 +242,56 @@ public sealed class JobQueueService : IJobQueueService {
     }
 
     /// <summary>
-    /// Claims the next available job, optionally restricted to a minimum priority (the worker's
-    /// reserved interactive lane). Uses atomic FOR UPDATE SKIP LOCKED on PostgreSQL
-    /// for safe concurrent access, with an EF Core fallback for test providers.
+    /// Claims the next available job, optionally restricted to one foreground lane. Uses atomic
+    /// FOR UPDATE SKIP LOCKED on PostgreSQL for safe concurrent access, with an EF Core fallback for
+    /// test providers.
     /// </summary>
-    public async Task<JobRunSnapshot?> ClaimNextAsync(string workerId, CancellationToken cancellationToken, int? minPriority = null) {
+    public async Task<JobRunSnapshot?> ClaimNextAsync(
+        string workerId,
+        CancellationToken cancellationToken,
+        JobRunLane? lane = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(workerId);
 
         var now = DateTimeOffset.UtcNow;
-        var priorityFloor = minPriority ?? int.MinValue;
 
         if (_db.Database.IsRelational()) {
-            var claimed = await _db.Database.SqlQueryRaw<Guid>(
-                """
-                UPDATE job_runs
-                SET status = 'running',
-                    locked_at = {0},
-                    locked_by = {1},
-                    started_at = COALESCE(started_at, {0}),
-                    attempts = attempts + 1
-                WHERE id = (
-                    SELECT id FROM job_runs
-                    WHERE status = 'queued' AND available_at <= {0} AND priority >= {2}
-                    ORDER BY priority DESC, available_at, created_at
-                    LIMIT 1
-                    FOR UPDATE SKIP LOCKED
-                )
-                RETURNING id
-                """,
-                now, workerId, priorityFloor).ToListAsync(cancellationToken);
+            var claimed = lane is null
+                ? await _db.Database.SqlQueryRaw<Guid>(
+                    """
+                    UPDATE job_runs
+                    SET status = 'running',
+                        locked_at = {0},
+                        locked_by = {1},
+                        started_at = COALESCE(started_at, {0}),
+                        attempts = attempts + 1
+                    WHERE id = (
+                        SELECT id FROM job_runs
+                        WHERE status = 'queued' AND available_at <= {0}
+                        ORDER BY priority DESC, CASE WHEN lane = {2} THEN 1 ELSE 0 END DESC, available_at, created_at
+                        LIMIT 1
+                        FOR UPDATE SKIP LOCKED
+                    )
+                    RETURNING id
+                    """,
+                    now, workerId, JobRunLane.ForegroundIdentify.ToCode()).ToListAsync(cancellationToken)
+                : await _db.Database.SqlQueryRaw<Guid>(
+                    """
+                    UPDATE job_runs
+                    SET status = 'running',
+                        locked_at = {0},
+                        locked_by = {1},
+                        started_at = COALESCE(started_at, {0}),
+                        attempts = attempts + 1
+                    WHERE id = (
+                        SELECT id FROM job_runs
+                        WHERE status = 'queued' AND available_at <= {0} AND lane = {2}
+                        ORDER BY priority DESC, available_at, created_at
+                        LIMIT 1
+                        FOR UPDATE SKIP LOCKED
+                    )
+                    RETURNING id
+                    """,
+                    now, workerId, lane.Value.ToCode()).ToListAsync(cancellationToken);
 
             if (claimed.Count == 0) {
                 return null;
@@ -278,9 +301,15 @@ public sealed class JobQueueService : IJobQueueService {
             return claimedRow is null ? null : ToSnapshot(claimedRow);
         }
 
-        var row = await _db.JobRuns
-            .Where(job => job.Status == JobRunStatus.Queued && job.AvailableAt <= now && job.Priority >= priorityFloor)
+        var query = _db.JobRuns
+            .Where(job => job.Status == JobRunStatus.Queued && job.AvailableAt <= now);
+        if (lane is not null) {
+            query = query.Where(job => job.Lane == lane);
+        }
+
+        var row = await query
             .OrderByDescending(job => job.Priority)
+            .ThenByDescending(job => job.Lane == JobRunLane.ForegroundIdentify)
             .ThenBy(job => job.AvailableAt)
             .ThenBy(job => job.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);
@@ -513,6 +542,7 @@ public sealed class JobQueueService : IJobQueueService {
             row.StartedAt,
             row.FinishedAt,
             row.Attempts,
-            row.MaxAttempts);
+            row.MaxAttempts,
+            row.Lane);
     }
 }

@@ -182,6 +182,31 @@ public sealed class JobQueueServiceTests {
     }
 
     [Fact]
+    public async Task ClaimNextPrefersForegroundIdentifyOverSamePriorityBacklog() {
+        await using var db = CreateContext();
+        var service = new JobQueueService(db);
+        var now = DateTimeOffset.UtcNow;
+        var oldBulkSearch = NewJobRun(
+            JobType.IdentifySearch,
+            JobRunStatus.Queued,
+            now.AddMinutes(-10),
+            priority: JobPriorities.InteractiveIdentify);
+        var foregroundSearch = NewJobRun(
+            JobType.IdentifySearch,
+            JobRunStatus.Queued,
+            now,
+            priority: JobPriorities.InteractiveIdentify,
+            lane: JobRunLane.ForegroundIdentify);
+        db.JobRuns.AddRange(oldBulkSearch, foregroundSearch);
+        await db.SaveChangesAsync();
+
+        var claimed = await service.ClaimNextAsync("worker-1", CancellationToken.None);
+
+        Assert.NotNull(claimed);
+        Assert.Equal(foregroundSearch.Id, claimed.Id);
+    }
+
+    [Fact]
     public async Task ClaimNextPrefersInteractiveIdentifyOverAutoIdentifyBacklog() {
         await using var db = CreateContext();
         var service = new JobQueueService(db);
@@ -191,22 +216,23 @@ public sealed class JobQueueServiceTests {
             JobRunStatus.Queued,
             now.AddMinutes(-10),
             priority: JobPriorities.AutoIdentify);
-        var manualBulkIdentify = NewJobRun(
-            JobType.BulkIdentify,
+        var foregroundSearch = NewJobRun(
+            JobType.IdentifySearch,
             JobRunStatus.Queued,
             now,
-            priority: JobPriorities.InteractiveIdentify);
-        db.JobRuns.AddRange(autoIdentify, manualBulkIdentify);
+            priority: JobPriorities.InteractiveIdentify,
+            lane: JobRunLane.ForegroundIdentify);
+        db.JobRuns.AddRange(autoIdentify, foregroundSearch);
         await db.SaveChangesAsync();
 
         var claimed = await service.ClaimNextAsync("worker-1", CancellationToken.None);
 
         Assert.NotNull(claimed);
-        Assert.Equal(manualBulkIdentify.Id, claimed.Id);
+        Assert.Equal(foregroundSearch.Id, claimed.Id);
     }
 
     [Fact]
-    public async Task ClaimNextWithMinPriorityIgnoresLowerPriorityBacklog() {
+    public async Task ClaimNextWithForegroundLaneIgnoresNonForegroundBacklog() {
         await using var db = CreateContext();
         var service = new JobQueueService(db);
         var now = DateTimeOffset.UtcNow;
@@ -219,7 +245,7 @@ public sealed class JobQueueServiceTests {
         await db.SaveChangesAsync();
 
         var laneClaim = await service.ClaimNextAsync(
-            "worker-1", CancellationToken.None, JobPriorities.InteractiveIdentify);
+            "worker-1", CancellationToken.None, JobRunLane.ForegroundIdentify);
         Assert.Null(laneClaim);
 
         var manualBulkIdentify = NewJobRun(
@@ -230,11 +256,24 @@ public sealed class JobQueueServiceTests {
         db.JobRuns.Add(manualBulkIdentify);
         await db.SaveChangesAsync();
 
+        var stolen = await service.ClaimNextAsync(
+            "worker-1", CancellationToken.None, JobRunLane.ForegroundIdentify);
+        Assert.Null(stolen);
+
+        var foregroundSearch = NewJobRun(
+            JobType.IdentifySearch,
+            JobRunStatus.Queued,
+            now.AddSeconds(-1),
+            priority: JobPriorities.InteractiveIdentify,
+            lane: JobRunLane.ForegroundIdentify);
+        db.JobRuns.Add(foregroundSearch);
+        await db.SaveChangesAsync();
+
         var claimed = await service.ClaimNextAsync(
-            "worker-1", CancellationToken.None, JobPriorities.InteractiveIdentify);
+            "worker-1", CancellationToken.None, JobRunLane.ForegroundIdentify);
 
         Assert.NotNull(claimed);
-        Assert.Equal(manualBulkIdentify.Id, claimed.Id);
+        Assert.Equal(foregroundSearch.Id, claimed.Id);
     }
 
     [Fact]
@@ -258,13 +297,14 @@ public sealed class JobQueueServiceTests {
     }
 
     [Fact]
-    public async Task DeferKeepsPriorityWhenProviderSlotIsBusy() {
+    public async Task DeferKeepsPriorityAndLaneWhenProviderSlotIsBusy() {
         await using var db = CreateContext();
         var service = new JobQueueService(db);
 
         var created = await service.EnqueueAsync(new EnqueueJobRequest(
             JobType.BulkIdentify,
-            Priority: JobPriorities.InteractiveIdentify), CancellationToken.None);
+            Priority: JobPriorities.InteractiveIdentify,
+            Lane: JobRunLane.ForegroundIdentify), CancellationToken.None);
         await service.ClaimNextAsync("worker-1", CancellationToken.None);
 
         await service.DeferAsync(
@@ -277,6 +317,7 @@ public sealed class JobQueueServiceTests {
         Assert.NotNull(deferred);
         Assert.Equal(JobRunStatus.Queued, deferred.Status);
         Assert.Equal(JobPriorities.InteractiveIdentify, deferred.Priority);
+        Assert.Equal(JobRunLane.ForegroundIdentify, deferred.Lane);
         Assert.Equal(0, deferred.Attempts);
         Assert.Equal("Bulk identify waiting for provider slot; retrying soon.", deferred.Message);
     }
@@ -368,13 +409,15 @@ public sealed class JobQueueServiceTests {
         DateTimeOffset createdAt,
         string? targetEntityId = null,
         string? targetEntityKind = null,
-        int priority = 0) =>
+        int priority = 0,
+        JobRunLane? lane = null) =>
         new() {
             Id = Guid.NewGuid(),
             Type = type,
             Status = status,
             PayloadJson = "{}",
             Priority = priority,
+            Lane = lane,
             Attempts = status == JobRunStatus.Running ? 1 : 0,
             MaxAttempts = 3,
             Progress = status == JobRunStatus.Running ? 50 : 0,
