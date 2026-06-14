@@ -355,6 +355,7 @@ public sealed partial class EfEntityReadService {
         var rootIds = rows.Select(row => row.Id).ToArray();
         var directChildQuery = _db.Entities.AsNoTracking()
             .Where(row => row.ParentEntityId != null && rootIds.Contains(row.ParentEntityId.Value));
+        directChildQuery = ApplyEnabledLibraryVisibility(directChildQuery);
         directChildQuery = ApplyNsfwVisibility(directChildQuery, hideNsfw);
         var directChildren = await directChildQuery
             .OrderBy(row => row.ParentEntityId)
@@ -397,6 +398,7 @@ public sealed partial class EfEntityReadService {
             var parentIds = frontier.Values.Select(row => row.Id).ToArray();
             var childQuery = _db.Entities.AsNoTracking()
                 .Where(row => row.ParentEntityId != null && parentIds.Contains(row.ParentEntityId.Value));
+            childQuery = ApplyEnabledLibraryVisibility(childQuery);
             childQuery = ApplyNsfwVisibility(childQuery, hideNsfw);
             var children = await childQuery
                 .OrderBy(row => row.ParentEntityId)
