@@ -92,6 +92,57 @@ describe("IdentifyReviewChoice", () => {
     expect(store.identifyWithCandidate).toHaveBeenCalledWith(entity(), "tmdb", candidate);
   });
 
+  it("waits for a selected candidate to resolve and opens the proposal review", async () => {
+    const candidate = searchCandidate();
+    const resolved = resolvedProposalQueueItem();
+    store.identifyWithCandidate.mockResolvedValue({
+      state: "queued",
+      provider: "tmdb",
+      candidates: [],
+      proposal: null,
+    });
+    store.waitForIdentifyResult.mockResolvedValue(resolved);
+
+    render(IdentifyReviewChoice, {
+      props: {
+        entity: entity(),
+        candidates: [candidate],
+      },
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Use The Chair Company (2025)" }));
+
+    expect(store.identifyWithCandidate).toHaveBeenCalledWith(entity(), "tmdb", candidate);
+    await waitFor(() => expect(store.waitForIdentifyResult).toHaveBeenCalledWith("series-1", "tmdb"));
+    expect(store.reviewResolvedQueueItem).toHaveBeenCalledWith(resolved);
+    expect(store.navigateToDashboard).not.toHaveBeenCalled();
+  });
+
+  it("clears the selected candidate progress and surfaces wait errors without leaving the item", async () => {
+    const candidate = searchCandidate();
+    store.identifyWithCandidate.mockResolvedValue({
+      state: "queued",
+      provider: "tmdb",
+      candidates: [],
+      proposal: null,
+    });
+    store.waitForIdentifyResult.mockRejectedValue(new Error("Provider failed"));
+
+    const { container } = render(IdentifyReviewChoice, {
+      props: {
+        entity: entity(),
+        candidates: [candidate],
+      },
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Use The Chair Company (2025)" }));
+
+    await waitFor(() => expect(store.error).toBe("Provider failed"));
+    expect(container.querySelector(".animate-spin")).toBeNull();
+    expect(store.reviewResolvedQueueItem).not.toHaveBeenCalled();
+    expect(store.navigateToDashboard).not.toHaveBeenCalled();
+  });
+
   it("opens candidate artwork from the eye preview without selecting the match", async () => {
     const candidate = searchCandidate();
     render(IdentifyReviewChoice, {
@@ -291,5 +342,49 @@ function searchCandidate(overrides: Partial<EntitySearchCandidate> = {}): Entity
     title: "The Chair Company",
     year: 2025,
     ...overrides,
+  };
+}
+
+function resolvedProposalQueueItem() {
+  return {
+    id: "queue-series-1",
+    entityId: "series-1",
+    entityKind: "video-series",
+    title: "The Chair Company",
+    isNsfw: false,
+    state: "proposal",
+    provider: "tmdb",
+    action: "search",
+    candidates: [],
+    proposal: {
+      proposalId: "tmdb:series:271267",
+      provider: "tmdb",
+      targetKind: "video-series",
+      confidence: 1,
+      matchReason: "test",
+      patch: {
+        title: "The Chair Company",
+        description: null,
+        externalIds: { tmdb: "271267" },
+        urls: [],
+        tags: [],
+        studio: null,
+        credits: [],
+        dates: {},
+        stats: {},
+        positions: {},
+        classification: null,
+      },
+      images: [],
+      children: [],
+      relationships: [],
+      candidates: [],
+      targetEntityId: null,
+    },
+    errorMessage: null,
+    cascadeRunning: false,
+    entity: entity(),
+    detail: null,
+    completedAt: null,
   };
 }

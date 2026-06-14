@@ -88,6 +88,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 - Removing a library root now clears media that was scanned from that root, so stale videos, galleries, books, audio entries, and empty video containers disappear from the app immediately after the root is deleted.
+- Selecting a result from Identify search now uses the chosen provider ID directly, keeps the search results visible, and opens the proposal review without bouncing back through queued search or the dashboard.
 - Library scans and Identify no longer apply provider or sidecar ratings to your personal star ratings.
 - Disabling a library now immediately hides that library's existing media from browsing, search, detail views, related sections, and thumbnail lookups without deleting it; re-enabling the library brings the same media back.
 - Job Control's Kill all action now stops running work instead of only marking rows cancelled, and cancelled scans can no longer keep spawning follow-up jobs after you stop them.

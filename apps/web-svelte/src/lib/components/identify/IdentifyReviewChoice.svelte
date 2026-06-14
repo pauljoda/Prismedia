@@ -159,6 +159,14 @@
   }
 
   function isSeekResult(item: IdentifyQueueItem): boolean {
+    return isReviewableIdentifyResult(item);
+  }
+
+  function isIdentifyResult(item: IdentifyQueueItem): boolean {
+    return isReviewableIdentifyResult(item) || item.state === IDENTIFY_QUEUE_STATE.error;
+  }
+
+  function isReviewableIdentifyResult(item: IdentifyQueueItem): boolean {
     return (
       (item.state === IDENTIFY_QUEUE_STATE.proposal && Boolean(item.proposal)) ||
       (item.state === IDENTIFY_QUEUE_STATE.search && item.candidates.length > 0)
@@ -167,10 +175,23 @@
 
   async function pickCandidate(candidate: EntitySearchCandidate, candidateKey: string) {
     if (!candidateProvider || store.isItemBusy(entity.id)) return;
+    const providerId = candidateProvider.id;
     checkingCandidateKey = candidateKey;
     checkingCandidateTitle = candidate.title;
+    store.error = null;
     try {
-      await store.identifyWithCandidate(entity, candidateProvider.id, candidate);
+      const queued = await store.identifyWithCandidate(entity, providerId, candidate);
+      if (!queued) return;
+
+      const result = isIdentifyResult(queued)
+        ? queued
+        : await store.waitForIdentifyResult(entity.id, providerId);
+
+      if (result && isReviewableIdentifyResult(result)) {
+        store.reviewResolvedQueueItem(result);
+      }
+    } catch (err) {
+      store.error = err instanceof Error ? err.message : "Candidate identify failed";
     } finally {
       if (checkingCandidateKey === candidateKey) {
         checkingCandidateKey = null;
