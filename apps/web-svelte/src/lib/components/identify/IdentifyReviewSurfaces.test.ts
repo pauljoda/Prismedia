@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/svelte";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { EntityMetadataPatch, EntityMetadataProposal } from "$lib/api/identify-types";
 import type { EntityCard as EntityDetailCard, EntityThumbnail as EntityCard } from "$lib/api/generated/model";
+import { ENTITY_KIND, PROPOSAL_KIND } from "$lib/entities/entity-codes";
 import IdentifyReviewChild from "./IdentifyReviewChild.svelte";
 import IdentifyReviewParent from "./IdentifyReviewParent.svelte";
 
@@ -114,6 +115,41 @@ describe("Identify review surfaces", () => {
     const thumbnails = container.querySelectorAll(".entity-thumbnail");
     expect(thumbnails.length).toBeGreaterThan(0);
     expect(container.querySelector(".entity-thumbnail.is-list")).toBeNull();
+  });
+
+  it("keeps the To Identify preview on audio parent and child proposal pages", () => {
+    const audioEntity = entity({
+      kind: ENTITY_KIND.audioLibrary,
+      title: "Endgame",
+    });
+    const parentProposal = proposal("album-proposal", {
+      targetKind: PROPOSAL_KIND.audioLibrary,
+      title: "Endgame",
+    });
+
+    const parentSurface = render(IdentifyReviewParent, {
+      props: {
+        entity: audioEntity,
+        proposal: parentProposal,
+      },
+    });
+
+    expect(screen.getByRole("button", { name: /To Identify/ })).toBeInTheDocument();
+
+    parentSurface.unmount();
+
+    render(IdentifyReviewChild, {
+      props: {
+        entity: audioEntity,
+        parentProposal,
+        proposal: proposal("track-proposal", {
+          targetKind: PROPOSAL_KIND.audioTrack,
+          title: "Track One",
+        }),
+      },
+    });
+
+    expect(screen.getByRole("button", { name: /To Identify/ })).toBeInTheDocument();
   });
 
   it("renders poster and backdrop artwork as enlarged review groups", () => {

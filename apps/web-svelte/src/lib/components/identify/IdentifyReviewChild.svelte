@@ -16,6 +16,7 @@
   import { cn } from "@prismedia/ui-svelte";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
   import IdentifyReviewSection from "./IdentifyReviewSection.svelte";
+  import IdentifyTargetPreview from "./IdentifyTargetPreview.svelte";
   import {
     currentFieldValueForReview,
     defaultImageSelectionForReview,
@@ -191,6 +192,8 @@
 </script>
 
 <div class="flex flex-col gap-4">
+  <IdentifyTargetPreview {entity} />
+
   <!-- Nav -->
   <div class="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
     <button

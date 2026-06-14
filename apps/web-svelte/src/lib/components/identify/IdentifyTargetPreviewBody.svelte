@@ -65,7 +65,7 @@
       return getChildIds(season, ENTITY_KIND.video);
     }
 
-    // video, movie, image, gallery, book — the item's own thumbnail.
+    // Other entity kinds preview through their own shared thumbnail shell.
     return [entity.id];
   }
 
