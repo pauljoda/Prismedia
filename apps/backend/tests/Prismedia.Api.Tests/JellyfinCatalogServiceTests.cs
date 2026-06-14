@@ -33,6 +33,63 @@ public sealed class JellyfinCatalogServiceTests {
     }
 
     [Fact]
+    public async Task UserViewsReturnCollectionsAsRootBoxSetsWithoutSyntheticCollectionsFolder() {
+        var collectionId = Guid.NewGuid();
+        const string coverPath = "/assets/library/collection-member.jpg";
+        var entities = new FakeEntityReadService();
+        entities.ListByKind["collection"] = [Thumb(collectionId, EntityKind.Collection, "Favorites", coverUrl: null)];
+        var collections = new FakeCollections();
+        collections.Covers[collectionId] = coverPath;
+        var catalog = new JellyfinCatalogService(entities, collections);
+
+        var views = await catalog.GetUserViewsWithArtworkAsync(ServerId, hideNsfw: false, CancellationToken.None);
+
+        Assert.DoesNotContain(views.Items, view =>
+            view.Id == JellyfinCatalogService.CollectionsViewId &&
+            view.Type == JellyfinProtocol.ItemTypes.CollectionFolder);
+        var collection = Assert.Single(views.Items, view => view.Id == collectionId);
+        Assert.Equal(JellyfinProtocol.ItemTypes.BoxSet, collection.Type);
+        Assert.Equal(JellyfinProtocol.CollectionTypes.BoxSets, collection.CollectionType);
+        Assert.True(collection.ImageTags.TryGetValue(JellyfinProtocol.ImageTypes.Primary, out _));
+    }
+
+    [Fact]
+    public async Task UserViewsReturnNoCollectionRowsWhenThereAreNoVisibleCollections() {
+        var hiddenCollectionId = Guid.NewGuid();
+        var entities = new FakeEntityReadService();
+        entities.ListByKind["collection"] = [Thumb(hiddenCollectionId, EntityKind.Collection, "Hidden Favorites", isNsfw: true)];
+        var catalog = new JellyfinCatalogService(entities, new FakeCollections());
+
+        var views = await catalog.GetUserViewsWithArtworkAsync(ServerId, hideNsfw: true, CancellationToken.None);
+
+        Assert.DoesNotContain(views.Items, view =>
+            view.Id == JellyfinCatalogService.CollectionsViewId ||
+            view.Type == JellyfinProtocol.ItemTypes.BoxSet);
+    }
+
+    [Fact]
+    public async Task RootBrowseReturnsCollectionRowsAlongsideStaticLibraries() {
+        var collectionId = Guid.NewGuid();
+        var entities = new FakeEntityReadService();
+        entities.ListByKind["collection"] = [Thumb(collectionId, EntityKind.Collection, "Favorites")];
+        var catalog = new JellyfinCatalogService(entities, new FakeCollections());
+
+        var result = await catalog.GetItemsAsync(
+            Query(parentId: null),
+            ServerId,
+            hideNsfw: false,
+            CancellationToken.None);
+
+        Assert.Contains(result.Items, item =>
+            item.Id == JellyfinCatalogService.MoviesViewId &&
+            item.Type == JellyfinProtocol.ItemTypes.CollectionFolder);
+        Assert.Contains(result.Items, item =>
+            item.Id == collectionId &&
+            item.Type == JellyfinProtocol.ItemTypes.BoxSet);
+        Assert.DoesNotContain(result.Items, item => item.Id == JellyfinCatalogService.CollectionsViewId);
+    }
+
+    [Fact]
     public async Task BrowsingUnwatchedMoviesUsesPlayedFilter() {
         var unwatchedMovieId = Guid.NewGuid();
         var watchedMovieId = Guid.NewGuid();
@@ -807,6 +864,14 @@ public sealed class JellyfinCatalogServiceTests {
                 items = ReferencedBy.GetValueOrDefault(personId) ?? [];
             } else {
                 items = ListByKind.GetValueOrDefault(kind ?? string.Empty) ?? [];
+            }
+
+            if (hideNsfw == true) {
+                items = items.Where(item => !item.IsNsfw).ToArray();
+            }
+
+            if (nsfw is { } nsfwFilter) {
+                items = items.Where(item => item.IsNsfw == nsfwFilter).ToArray();
             }
 
             if (played is { } playedFilter) {

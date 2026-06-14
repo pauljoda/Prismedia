@@ -87,6 +87,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Fixed
+- Jellyfin-compatible clients now show collections directly at the root next to Movies and Series, and skip collection rows entirely when the profile has no visible collections.
 - Jellyfin-compatible video details now prioritize Prismedia descriptions for clients like Infuse and omit tag-derived taxonomy fields that could appear as pseudo-descriptions.
 - Manual identify searches now use their own foreground job lane, so a direct search from an item jumps ahead of older bulk/background identify work while still preserving provider rate-limit safety.
 - The Docs button now opens the live Prismedia documentation landing page instead of a missing quick-start URL.

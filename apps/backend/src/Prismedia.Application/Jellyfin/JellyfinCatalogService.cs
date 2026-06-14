@@ -26,16 +26,17 @@ public sealed partial class JellyfinCatalogService {
     private static readonly Guid FallbackSeasonIdMask = Guid.Parse("9f37a1c4-7211-4c37-9c20-93258a57f001");
 
     /// <summary>The fixed top-level library views, entity kind, and optional forced browse filters.</summary>
-    private static readonly LibraryViewDefinition[] LibraryViews =
+    private static readonly LibraryViewDefinition[] RootLibraryViews =
     [
         new(MoviesViewId, "Movies", JellyfinProtocol.CollectionTypes.Movies, "movie", null),
         new(UnwatchedMoviesViewId, "Unwatched Movies", JellyfinProtocol.CollectionTypes.Movies, "movie", false),
         new(VideosViewId, "Videos", JellyfinProtocol.CollectionTypes.HomeVideos, "video", null),
         new(SeriesViewId, "Series", JellyfinProtocol.CollectionTypes.Shows, "video-series", null),
         new(UnwatchedSeriesViewId, "Unwatched Series", JellyfinProtocol.CollectionTypes.Shows, "video-series", false),
-        new(CollectionsViewId, "Collections", JellyfinProtocol.CollectionTypes.BoxSets, "collection", null),
         new(MusicViewId, "Music", JellyfinProtocol.CollectionTypes.Music, "music-artist", null)
     ];
+    private static readonly LibraryViewDefinition CollectionsLibraryView =
+        new(CollectionsViewId, "Collections", JellyfinProtocol.CollectionTypes.BoxSets, "collection", null);
 
     private const int MaxBrowseItems = 5000;
     private static readonly string[] PremiereDatePriority = [
@@ -64,7 +65,7 @@ public sealed partial class JellyfinCatalogService {
     /// Used where only the view names/ids are needed (e.g. grouping options).
     /// </summary>
     public JellyfinQueryResult<JellyfinBaseItemDto> GetUserViews(string serverId) {
-        var views = LibraryViews
+        var views = RootLibraryViews
             .Select(view => VirtualFolder(view.Id, view.Name, view.CollectionType, serverId))
             .ToArray();
         return new JellyfinQueryResult<JellyfinBaseItemDto>(views, views.Length, 0);
@@ -90,8 +91,8 @@ public sealed partial class JellyfinCatalogService {
         string serverId,
         JellyfinContentVisibility visibility,
         CancellationToken cancellationToken) {
-        var views = new List<JellyfinBaseItemDto>(LibraryViews.Length);
-        foreach (var view in LibraryViews) {
+        var views = new List<JellyfinBaseItemDto>(RootLibraryViews.Length);
+        foreach (var view in RootLibraryViews) {
             var cover = await ResolveViewCoverPathAsync(view, visibility, cancellationToken);
             int? childCount = null;
             int? recursiveItemCount = null;
@@ -105,7 +106,18 @@ public sealed partial class JellyfinCatalogService {
             views.Add(VirtualFolder(view.Id, view.Name, view.CollectionType, serverId, cover, childCount, recursiveItemCount));
         }
 
+        views.AddRange(await RootCollectionsAsync(serverId, visibility, cancellationToken));
         return new JellyfinQueryResult<JellyfinBaseItemDto>(views, views.Count, 0);
+    }
+
+    /// <summary>Returns visible collection entities as root-level Jellyfin box sets.</summary>
+    private async Task<IReadOnlyList<JellyfinBaseItemDto>> RootCollectionsAsync(
+        string serverId,
+        JellyfinContentVisibility visibility,
+        CancellationToken cancellationToken) {
+        var collections = await FetchAllOfKindAsync(CollectionsLibraryView.Kind, visibility, cancellationToken);
+        collections = await FillCollectionCoversAsync(collections, visibility, cancellationToken);
+        return collections.Select(item => MapThumbnail(item, serverId)).ToArray();
     }
 
     /// <summary>
@@ -160,8 +172,8 @@ public sealed partial class JellyfinCatalogService {
             Type = "AggregateFolder",
             CollectionType = "root",
             IsFolder = true,
-            ChildCount = LibraryViews.Length,
-            RecursiveItemCount = LibraryViews.Length,
+            ChildCount = RootLibraryViews.Length,
+            RecursiveItemCount = RootLibraryViews.Length,
             Etag = EtagFor(RootId, "root"),
             UserData = UserDataFor(RootId, isFavorite: false, playback: null)
         };
@@ -235,7 +247,7 @@ public sealed partial class JellyfinCatalogService {
             return GetRoot(serverId);
         }
 
-        foreach (var view in LibraryViews) {
+        foreach (var view in AllLibraryViews) {
             if (view.Id == id) {
                 var cover = await ResolveViewCoverPathAsync(view, visibility, cancellationToken);
                 return VirtualFolder(view.Id, view.Name, view.CollectionType, serverId, cover);
@@ -477,7 +489,7 @@ public sealed partial class JellyfinCatalogService {
         JellyfinContentVisibility visibility,
         CancellationToken cancellationToken) {
         // Library views are synthetic ids with no entity row; advertise their representative poster.
-        if (LibraryViews.Any(view => view.Id == id)) {
+        if (AllLibraryViews.Any(view => view.Id == id)) {
             return ViewById(id) is { } view &&
                    await ResolveViewCoverPathAsync(view, visibility, cancellationToken) is { } viewCover
                 ? [new JellyfinImageInfo(JellyfinProtocol.ImageTypes.Primary, 0, EtagFor(id, viewCover))]
@@ -534,7 +546,7 @@ public sealed partial class JellyfinCatalogService {
         JellyfinContentVisibility visibility,
         CancellationToken cancellationToken) {
         // Library views are synthetic ids with no entity row; serve their representative poster.
-        if (LibraryViews.Any(view => view.Id == id)) {
+        if (AllLibraryViews.Any(view => view.Id == id)) {
             return imageType.Equals(JellyfinProtocol.ImageTypes.Primary, StringComparison.OrdinalIgnoreCase) &&
                    ViewById(id) is { } view &&
                    await ResolveViewCoverPathAsync(view, visibility, cancellationToken) is { } viewCover
@@ -906,7 +918,7 @@ public sealed partial class JellyfinCatalogService {
         // Resolve scope: global for null/root/library-view parents, else the music entity's subtree.
         Guid? scopeArtist = null;
         Guid? scopeAlbum = null;
-        if (query.ParentId is { } parentId && parentId != RootId && LibraryViews.All(view => view.Id != parentId)) {
+        if (query.ParentId is { } parentId && parentId != RootId && AllLibraryViews.All(view => view.Id != parentId)) {
             var parent = await GetVisibleCardAsync(parentId, visibility, cancellationToken);
             if (parent is null) {
                 return [];
@@ -1125,8 +1137,11 @@ public sealed partial class JellyfinCatalogService {
             ? MapThumbnail(item.Entity, serverId, collectionId)
             : null;
 
+    private static IEnumerable<LibraryViewDefinition> AllLibraryViews =>
+        RootLibraryViews.Append(CollectionsLibraryView);
+
     private static LibraryViewDefinition? ViewById(Guid id) =>
-        LibraryViews.FirstOrDefault(view => view.Id == id);
+        AllLibraryViews.FirstOrDefault(view => view.Id == id);
 
     private static Guid FallbackSeasonIdFor(Guid seriesId) =>
         XorGuids(seriesId, FallbackSeasonIdMask);

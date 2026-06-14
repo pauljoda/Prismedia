@@ -228,7 +228,7 @@ public sealed partial class SecurityEndpointTests : IDisposable {
 
         Assert.NotNull(groupingOptions);
         Assert.Equal(
-            ["Collections", "Movies", "Music", "Series", "Unwatched Movies", "Unwatched Series", "Videos"],
+            ["Movies", "Music", "Series", "Unwatched Movies", "Unwatched Series", "Videos"],
             groupingOptions.Select(item => item.Name ?? "").ToArray());
 
         var virtualFolders = await JellyfinGetFromJsonAsync<IReadOnlyList<JellyfinVirtualFolderInfoDto>>(
@@ -238,7 +238,7 @@ public sealed partial class SecurityEndpointTests : IDisposable {
 
         Assert.NotNull(virtualFolders);
         Assert.Equal(
-            ["Movies", "Unwatched Movies", "Videos", "Series", "Unwatched Series", "Collections", "Music"],
+            ["Movies", "Unwatched Movies", "Videos", "Series", "Unwatched Series", "Music"],
             virtualFolders.Select(item => item.Name).ToArray());
         Assert.All(virtualFolders, folder => Assert.True(folder.LibraryOptions.Enabled));
     }
@@ -331,10 +331,10 @@ public sealed partial class SecurityEndpointTests : IDisposable {
 
         Assert.NotNull(views);
         Assert.Equal(
-            ["Movies", "Unwatched Movies", "Videos", "Series", "Unwatched Series", "Collections", "Music"],
+            ["Movies", "Unwatched Movies", "Videos", "Series", "Unwatched Series", "Music"],
             views.Items.Select(item => item.Name).ToArray());
         Assert.NotNull(rootItems);
-        Assert.Equal(7, rootItems.TotalRecordCount);
+        Assert.Equal(6, rootItems.TotalRecordCount);
     }
 
     [Fact]
