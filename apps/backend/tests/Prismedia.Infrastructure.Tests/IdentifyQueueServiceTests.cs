@@ -584,6 +584,86 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
     }
 
     [Fact]
+    public async Task SearchAsyncWithoutRequireChoiceDoesNotWalkParentChildrenAfterDirectCandidateSearch() {
+        await using var db = CreateContext();
+        var seriesId = Guid.Parse("33333333-3333-3333-3333-33333333333c");
+        var episodeId = Guid.Parse("33333333-3333-3333-3333-33333333333d");
+        SeedProvider(db);
+        SeedEntity(db, seriesId, "video-series", "Known Series");
+        var episode = SeedEntity(db, episodeId, "video", "Known Episode");
+        episode.ParentEntityId = seriesId;
+        db.EntityExternalIds.Add(new EntityExternalIdRow {
+            Id = Guid.NewGuid(),
+            EntityId = seriesId,
+            Provider = "tmdb",
+            Value = "series-999",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var executor = new ParentFallbackProcessExecutor(includeMatchingChildInParentCatalog: false);
+        var service = CreateQueueService(db, executor, _tempRoot);
+        await service.AddAsync(episodeId, CancellationToken.None);
+
+        var item = await SearchToCompletionAsync(service, db,
+            episodeId,
+            new IdentifyQueueSearchRequest("tmdb", new IdentifyQuery("Known Episode", null, null)),
+            hideNsfw: false,
+            CancellationToken.None);
+
+        Assert.Equal("search", item.State);
+        Assert.Null(item.Proposal);
+        var candidate = Assert.Single(item.Candidates);
+        Assert.Equal("Direct candidate", candidate.Title);
+        Assert.DoesNotContain(executor.Requests, request =>
+            request.Entity.Id == episodeId &&
+            string.IsNullOrWhiteSpace(request.Query.Title) &&
+            request.StructuralContext?.Ancestors.Any(ancestor => ancestor.Id == seriesId) == true);
+    }
+
+    [Fact]
+    public async Task SearchAsyncCanResolveFromBoundedParentCatalogFallbackWithoutChildLookups() {
+        await using var db = CreateContext();
+        var seriesId = Guid.Parse("33333333-3333-3333-3333-33333333333e");
+        var episodeId = Guid.Parse("33333333-3333-3333-3333-33333333333f");
+        SeedProvider(db);
+        SeedEntity(db, seriesId, "video-series", "Known Series");
+        var episode = SeedEntity(db, episodeId, "video", "Known Episode");
+        episode.ParentEntityId = seriesId;
+        episode.SortOrder = 2;
+        db.EntityExternalIds.Add(new EntityExternalIdRow {
+            Id = Guid.NewGuid(),
+            EntityId = seriesId,
+            Provider = "tmdb",
+            Value = "series-999",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var executor = new ParentFallbackProcessExecutor(includeMatchingChildInParentCatalog: true);
+        var service = CreateQueueService(db, executor, _tempRoot);
+        await service.AddAsync(episodeId, CancellationToken.None);
+
+        var item = await SearchToCompletionAsync(service, db,
+            episodeId,
+            new IdentifyQueueSearchRequest("tmdb", new IdentifyQuery("Missing Direct Match", null, null)),
+            hideNsfw: false,
+            CancellationToken.None);
+
+        Assert.Equal("proposal", item.State);
+        Assert.NotNull(item.Proposal);
+        Assert.Equal(episodeId, item.Proposal.TargetEntityId);
+        Assert.Equal("Known Episode from parent catalog", item.Proposal.Patch.Title);
+        Assert.DoesNotContain(executor.Requests, request =>
+            request.Entity.Id == episodeId &&
+            string.IsNullOrWhiteSpace(request.Query.Title) &&
+            request.StructuralContext?.Ancestors.Any(ancestor => ancestor.Id == seriesId) == true);
+        Assert.Equal(
+            [episodeId, seriesId],
+            executor.Requests.Select(request => request.Entity.Id).ToArray());
+    }
+
+    [Fact]
     public async Task ApplyAsyncUsesReviewedProposalAndMarksItemDone() {
         await using var db = CreateContext();
         var entityId = Guid.Parse("44444444-4444-4444-4444-444444444444");
@@ -1474,6 +1554,101 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
                 0,
                 SerializeWireProposal(request.Entity.Id, $"{request.Entity.Title} identified"),
                 string.Empty);
+        }
+    }
+
+    private sealed class ParentFallbackProcessExecutor(bool includeMatchingChildInParentCatalog) : ProcessExecutor {
+        public List<IdentifyPluginRequest> Requests { get; } = [];
+
+        public override async Task<ProcessExecutionResult> RunAsync(
+            string fileName,
+            IReadOnlyList<string> arguments,
+            IReadOnlyDictionary<string, string>? environment,
+            CancellationToken cancellationToken, bool lowPriority = false) {
+            var requestJson = await File.ReadAllTextAsync(arguments[1], cancellationToken);
+            var request = JsonSerializer.Deserialize<IdentifyPluginRequest>(requestJson, JsonOptions)!;
+            Requests.Add(request);
+
+            if (request.Entity.Kind == EntityKind.VideoSeries) {
+                var children = includeMatchingChildInParentCatalog
+                    ? new[] {
+                        new EntityMetadataProposal(
+                            "tmdb:series-999:episode:2",
+                            "tmdb",
+                            ProposalKind.Video,
+                            0.98m,
+                            "parent-catalog",
+                            EmptyPatch("Known Episode from parent catalog") with {
+                                ExternalIds = new Dictionary<string, string> { ["tmdb"] = "episode-2" },
+                                Positions = new Dictionary<string, int> { ["sortOrder"] = 2 }
+                            },
+                            [],
+                            [],
+                            [],
+                            Relationships: [])
+                    }
+                    : [];
+                return ProposalResponse(new EntityMetadataProposal(
+                    "tmdb:series-999",
+                    "tmdb",
+                    ProposalKind.VideoSeries,
+                    1m,
+                    "external-id",
+                    EmptyPatch("Known Series identified") with {
+                        ExternalIds = new Dictionary<string, string> { ["tmdb"] = "series-999" }
+                    },
+                    [],
+                    children,
+                    [],
+                    TargetEntityId: request.Entity.Id,
+                    Relationships: []));
+            }
+
+            if (request.Query.Title == "Missing Direct Match") {
+                var none = new {
+                    ok = true,
+                    result = new { type = "none", proposal = (object?)null, candidates = Array.Empty<object>() },
+                    error = (string?)null
+                };
+                return new ProcessExecutionResult(0, JsonSerializer.Serialize(none, JsonOptions), string.Empty);
+            }
+
+            if (string.IsNullOrWhiteSpace(request.Query.Title) &&
+                request.StructuralContext?.Ancestors.Any() == true) {
+                return ProposalResponse(Proposal(request.Entity.Id, "Unexpected child lookup"));
+            }
+
+            var wire = new {
+                ok = true,
+                result = new {
+                    type = "candidates",
+                    proposal = (object?)null,
+                    candidates = new[] {
+                        new EntitySearchCandidate(
+                            new Dictionary<string, string> { ["tmdb"] = "direct-1" },
+                            "Direct candidate",
+                            2026,
+                            "Direct search candidate; the host must not override it by walking siblings.",
+                            null,
+                            0.5m)
+                    }
+                },
+                error = (string?)null
+            };
+            return new ProcessExecutionResult(0, JsonSerializer.Serialize(wire, JsonOptions), string.Empty);
+        }
+
+        private static ProcessExecutionResult ProposalResponse(EntityMetadataProposal proposal) {
+            var wire = new {
+                ok = true,
+                result = new {
+                    type = "proposal",
+                    proposal,
+                    candidates = Array.Empty<object>()
+                },
+                error = (string?)null
+            };
+            return new ProcessExecutionResult(0, JsonSerializer.Serialize(wire, JsonOptions), string.Empty);
         }
     }
 

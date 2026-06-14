@@ -171,8 +171,10 @@ public sealed partial class IdentifyPluginService : IIdentifyProviderService {
         };
 
     /// <summary>
-    /// Walks up the parent chain looking for an ancestor the provider can identify,
-    /// then extracts the target entity's proposal from the ancestor's structural children.
+    /// Walks up the parent chain looking for an ancestor the provider can identify, then extracts the
+    /// target entity from the ancestor catalog returned by that single provider call. This deliberately
+    /// does not run the full structural cascade for the parent: a child search may use parent context as
+    /// a bounded fallback, but it must not resolve every sibling before returning to the UI.
     /// </summary>
     private async Task<IdentifyPluginResponse?> CascadeFromParentAsync(
         EntityRow entity,
@@ -192,17 +194,14 @@ public sealed partial class IdentifyPluginService : IIdentifyProviderService {
                 continue;
             }
 
-            var parentAncestors = await LoadAncestorSnapshotsAsync(parent, descriptor.Manifest.Id, cancellationToken);
-            var parentResult = await IdentifyEntityWithStructuralContextAsync(
-                parent, descriptor, auth, query: null, parentAncestors,
-                parentSortOrder: parent.SortOrder, includeNsfw, visited: [], cancellationToken);
-
+            var parentResult = await IdentifyParentCatalogAsync(parent, descriptor, auth, includeNsfw, cancellationToken);
             if (!parentResult.Ok || parentResult.Result?.Patch is null) {
                 current = parent;
                 continue;
             }
 
-            var childProposal = FindEntityInProposalTree(entity.Id, parentResult.Result);
+            var boundCatalog = await BindLocalStructuralTargetsAsync(parentResult.Result, parent.Id, cancellationToken);
+            var childProposal = FindEntityInProposalTree(entity.Id, boundCatalog);
             if (childProposal is not null) {
                 return new IdentifyPluginResponse(true, childProposal, null);
             }
@@ -211,6 +210,35 @@ public sealed partial class IdentifyPluginService : IIdentifyProviderService {
         }
 
         return null;
+    }
+
+    private async Task<IdentifyPluginResponse> IdentifyParentCatalogAsync(
+        EntityRow parent,
+        PluginDescriptor descriptor,
+        IReadOnlyDictionary<string, string> auth,
+        bool includeNsfw,
+        CancellationToken cancellationToken) {
+        var resolvedHints = await _hints.ResolveAsync(parent.Id, descriptor.Manifest.Id, cancellationToken);
+        var ancestors = await LoadAncestorSnapshotsAsync(parent, descriptor.Manifest.Id, cancellationToken);
+        var positions = await ResolveStructuralPositionsAsync(parent.Id, parent.SortOrder, cancellationToken);
+        var structuralContext = ancestors.Count > 0 || positions.Count > 0
+            ? new IdentifyStructuralContext(ancestors, positions)
+            : null;
+        var pluginRequestKind = PluginEntityKindCompatibility.RequestKindFor(descriptor.Manifest, parent.KindCode);
+        var query = new IdentifyQuery(null, null, null);
+        var resolvedAction = ResolveAction(descriptor.Manifest, parent.KindCode, query, resolvedHints);
+        var request = new IdentifyPluginRequest(
+            ProtocolVersion: 2,
+            Action: resolvedAction,
+            Auth: auth,
+            Entity: await SnapshotAsync(parent, descriptor.Manifest.Id, cancellationToken, pluginRequestKind),
+            Query: query,
+            Hints: resolvedHints,
+            StructuralContext: structuralContext,
+            IncludeNsfw: includeNsfw);
+
+        var response = await _runners.Resolve(descriptor).IdentifyAsync(descriptor, request, cancellationToken);
+        return await FallBackToSearchAsync(descriptor, parent, request, resolvedAction, response, cancellationToken);
     }
 
     private static EntityMetadataProposal? FindEntityInProposalTree(Guid entityId, EntityMetadataProposal proposal) {
