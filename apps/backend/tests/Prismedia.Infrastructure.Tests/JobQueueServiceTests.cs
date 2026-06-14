@@ -163,6 +163,82 @@ public sealed class JobQueueServiceTests {
     }
 
     [Fact]
+    public async Task CancelAllCancelsNsfwHiddenTargetsWhenDashboardIsHidden() {
+        await using var db = CreateContext();
+        var service = new JobQueueService(db);
+        var now = DateTimeOffset.UtcNow;
+        var safeEntityId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var nsfwEntityId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+
+        db.Entities.AddRange(
+            new EntityRow {
+                Id = safeEntityId,
+                KindCode = EntityKindRegistry.Video.Code,
+                Title = "Safe",
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new EntityRow {
+                Id = nsfwEntityId,
+                KindCode = EntityKindRegistry.Video.Code,
+                Title = "Hidden",
+                IsNsfw = true,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+
+        var safeQueued = NewJobRun(
+            JobType.GeneratePreview,
+            JobRunStatus.Queued,
+            now,
+            safeEntityId.ToString(),
+            EntityKindRegistry.Video.Code);
+        var hiddenQueued = NewJobRun(
+            JobType.GeneratePreview,
+            JobRunStatus.Queued,
+            now.AddMinutes(1),
+            nsfwEntityId.ToString(),
+            EntityKindRegistry.Video.Code);
+        var hiddenRunning = NewJobRun(
+            JobType.FingerprintVideo,
+            JobRunStatus.Running,
+            now.AddMinutes(2),
+            nsfwEntityId.ToString(),
+            EntityKindRegistry.Video.Code);
+        hiddenRunning.LockedAt = now.AddMinutes(3);
+        hiddenRunning.LockedBy = "worker-1";
+        var hiddenCompleted = NewJobRun(
+            JobType.ImportMetadata,
+            JobRunStatus.Completed,
+            now.AddMinutes(4),
+            nsfwEntityId.ToString(),
+            EntityKindRegistry.Video.Code);
+
+        db.JobRuns.AddRange(safeQueued, hiddenQueued, hiddenRunning, hiddenCompleted);
+        await db.SaveChangesAsync();
+
+        var sfwJobs = await service.ListAsync(hideNsfw: true, CancellationToken.None);
+        var sfwCounts = await service.GetQueueCountsAsync(hideNsfw: true, CancellationToken.None);
+        var cancelled = await service.CancelAsync(null, CancellationToken.None);
+        var rows = await db.JobRuns.AsNoTracking().ToDictionaryAsync(row => row.Id);
+
+        Assert.Contains(sfwJobs, job => job.Id == safeQueued.Id);
+        Assert.DoesNotContain(sfwJobs, job => job.Id == hiddenQueued.Id);
+        Assert.DoesNotContain(sfwJobs, job => job.Id == hiddenRunning.Id);
+        Assert.Equal(1, Assert.Single(sfwCounts, count =>
+            count.TypeCode == JobType.GeneratePreview.ToCode() &&
+            count.StatusCode == JobRunStatus.Queued.ToCode()).Count);
+
+        Assert.Equal(3, cancelled);
+        Assert.Equal(JobRunStatus.Cancelled, rows[safeQueued.Id].Status);
+        Assert.Equal(JobRunStatus.Cancelled, rows[hiddenQueued.Id].Status);
+        Assert.Equal(JobRunStatus.Cancelled, rows[hiddenRunning.Id].Status);
+        Assert.Null(rows[hiddenRunning.Id].LockedAt);
+        Assert.Null(rows[hiddenRunning.Id].LockedBy);
+        Assert.Equal(JobRunStatus.Completed, rows[hiddenCompleted.Id].Status);
+    }
+
+    [Fact]
     public async Task ClaimCompleteAndFailAdvanceJobLifecycle() {
         await using var db = CreateContext();
         var service = new JobQueueService(db);
