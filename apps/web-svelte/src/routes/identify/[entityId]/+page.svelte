@@ -18,6 +18,7 @@
   import IdentifyReviewParent from "$lib/components/identify/IdentifyReviewParent.svelte";
   import IdentifyReviewChild from "$lib/components/identify/IdentifyReviewChild.svelte";
   import { IDENTIFY_QUEUE_STATE } from "$lib/api/generated/codes";
+  import { supportedProviderId } from "$lib/components/identify/identify-provider-selection";
   import { providerSeekOrder } from "$lib/components/identify/identify-provider-seek";
   import { shouldShowRouteQueueRejectActions } from "$lib/components/identify/identify-route-actions";
   import { useIdentifyStore } from "$lib/components/identify/identify-store.svelte";
@@ -40,7 +41,7 @@
   let searching = $state(false);
   let seeking = $state(false);
 
-  const activeProviderId = $derived(selectedProviderId || current?.provider || providers[0]?.id || "");
+  const activeProviderId = $derived(supportedProviderId(providers, selectedProviderId, current?.provider));
   const activeProvider = $derived(
     providers.find((provider) => provider.id === activeProviderId) ?? null,
   );

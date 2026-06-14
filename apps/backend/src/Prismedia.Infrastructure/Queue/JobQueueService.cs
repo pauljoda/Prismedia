@@ -225,6 +225,16 @@ public sealed class JobQueueService : IJobQueueService {
             return true;
         }, cancellationToken);
 
+    public async Task<bool> IsRunCancelledAsync(Guid id, CancellationToken cancellationToken) {
+        var status = await _db.JobRuns
+            .AsNoTracking()
+            .Where(job => job.Id == id)
+            .Select(job => (JobRunStatus?)job.Status)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        return status == JobRunStatus.Cancelled;
+    }
+
     public async Task<int> ClearFailuresAsync(JobType? type, CancellationToken cancellationToken) {
         var query = _db.JobRuns.Where(job => job.Status == JobRunStatus.Failed);
         if (type is not null) {

@@ -66,6 +66,17 @@ public sealed class JobEndpointServiceTests {
     }
 
     [Fact]
+    public async Task CancelJobsEndpointCancelsAllWhenTypeIsOmitted() {
+        using var factory = CreateFactory();
+        using var client = factory.CreateAuthenticatedClient();
+
+        var response = await client.DeleteFromJsonAsync<JobCancelResponse>("/api/jobs");
+
+        Assert.NotNull(response);
+        Assert.Equal(3, response.Cancelled);
+    }
+
+    [Fact]
     public async Task ClearFailuresEndpointClearsByOptionalType() {
         using var factory = CreateFactory();
         using var client = factory.CreateAuthenticatedClient();
@@ -113,7 +124,7 @@ public sealed class JobEndpointServiceTests {
             Task.FromResult(requests.Count);
 
         public Task<int> CancelAsync(JobType? type, CancellationToken cancellationToken) =>
-            Task.FromResult(type == JobType.ScanLibrary ? 1 : 0);
+            Task.FromResult(type is null ? 3 : type == JobType.ScanLibrary ? 1 : 0);
 
         public Task<bool> CancelRunAsync(Guid id, CancellationToken cancellationToken) =>
             Task.FromResult(id == ExistingJobId);

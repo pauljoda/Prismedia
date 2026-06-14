@@ -20,6 +20,7 @@
   import type { EntityCard } from "$lib/api/entities";
   import type { UniversalLightboxEntity } from "$lib/components/universal-lightbox-media";
   import { identifyCandidateKey } from "./identify-candidate-card";
+  import { supportedProviderId } from "./identify-provider-selection";
   import { providerSeekOrder } from "./identify-provider-seek";
   import { entityKindIcon } from "./identify-icons";
   import { aspectRatioForKind, toAspectRatioValue } from "$lib/entities/entity-thumbnail";
@@ -52,7 +53,7 @@
   let searchedCandidates = $state<EntitySearchCandidate[] | null>(null);
 
   const providerOptions = $derived(store.providersForKind(entity.kind));
-  const activeProviderId = $derived(selectedProviderId ?? providerId ?? providerOptions[0]?.id ?? "");
+  const activeProviderId = $derived(supportedProviderId(providerOptions, selectedProviderId, providerId));
   const activeProvider = $derived(
     providerOptions.find((provider) => provider.id === activeProviderId) ?? null,
   );

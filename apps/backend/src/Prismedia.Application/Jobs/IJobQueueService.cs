@@ -44,6 +44,12 @@ public interface IJobQueueService {
     Task<bool> CancelRunAsync(Guid id, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Checks whether a claimed job run has been cancelled by an operator while a handler is still running.
+    /// </summary>
+    Task<bool> IsRunCancelledAsync(Guid id, CancellationToken cancellationToken) =>
+        Task.FromResult(false);
+
+    /// <summary>
     /// Clears failed jobs from the active failure list, optionally scoped to one typed operation.
     /// </summary>
     Task<int> ClearFailuresAsync(JobType? type, CancellationToken cancellationToken);

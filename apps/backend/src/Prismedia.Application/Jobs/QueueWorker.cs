@@ -27,6 +27,7 @@ public sealed class QueueWorker(
     private const int ForegroundLaneSlots = 1;
     private static readonly TimeSpan StaleLeaseTimeout = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan StaleLeaseRecoveryInterval = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan JobCancellationPollInterval = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan DefaultConcurrencyRefreshInterval = TimeSpan.FromSeconds(15);
     private readonly TimeSpan _concurrencyRefreshInterval =
         concurrencyRefreshInterval ?? DefaultConcurrencyRefreshInterval;
@@ -160,9 +161,13 @@ public sealed class QueueWorker(
         }
 
         var timer = new JobPhaseTimer();
+        using var jobCancellation = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+        using var monitorCancellation = new CancellationTokenSource();
+        var cancellationMonitor = MonitorJobCancellationAsync(job.Id, jobCancellation, monitorCancellation.Token);
         try {
             var context = new JobContext(job, queue);
-            await handler.HandleAsync(context, stoppingToken);
+            await handler.HandleAsync(context, jobCancellation.Token);
+            jobCancellation.Token.ThrowIfCancellationRequested();
             await queue.CompleteAsync(job.Id, "Completed", stoppingToken);
 
             var report = timer.Finish();
@@ -171,6 +176,8 @@ public sealed class QueueWorker(
                 job.Type.ToCode(), job.TargetLabel ?? job.Id.ToString(), report.ToLogString());
         } catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) {
             logger.LogInformation("Job {JobId} cancelled due to worker shutdown.", job.Id);
+        } catch (OperationCanceledException) when (jobCancellation.IsCancellationRequested) {
+            logger.LogInformation("Job {JobId} cancelled by operator request.", job.Id);
         } catch (JobRetryLaterException ex) {
             var report = timer.Finish();
             logger.LogDebug(
@@ -185,6 +192,42 @@ public sealed class QueueWorker(
                 job.Type.ToCode(), job.TargetLabel ?? job.Id.ToString(),
                 report.Total.TotalSeconds, report.ToLogString());
             await queue.FailAsync(job.Id, ex.Message, RetryDelay, stoppingToken);
+        } finally {
+            await StopJobCancellationMonitorAsync(monitorCancellation, cancellationMonitor);
+        }
+    }
+
+    private async Task MonitorJobCancellationAsync(
+        Guid jobId,
+        CancellationTokenSource jobCancellation,
+        CancellationToken cancellationToken) {
+        while (!cancellationToken.IsCancellationRequested && !jobCancellation.IsCancellationRequested) {
+            try {
+                await using var scope = scopeFactory.CreateAsyncScope();
+                var queue = scope.ServiceProvider.GetRequiredService<IJobQueueService>();
+                if (await queue.IsRunCancelledAsync(jobId, cancellationToken)) {
+                    jobCancellation.Cancel();
+                    return;
+                }
+
+                await Task.Delay(JobCancellationPollInterval, cancellationToken);
+            } catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) {
+                return;
+            } catch (Exception ex) {
+                logger.LogWarning(ex, "Could not check cancellation state for job {JobId}.", jobId);
+                await Task.Delay(JobCancellationPollInterval, cancellationToken);
+            }
+        }
+    }
+
+    private static async Task StopJobCancellationMonitorAsync(
+        CancellationTokenSource monitorCancellation,
+        Task cancellationMonitor) {
+        await monitorCancellation.CancelAsync();
+        try {
+            await cancellationMonitor;
+        } catch (OperationCanceledException) {
+            // Expected when the job finished before the next cancellation poll.
         }
     }
 

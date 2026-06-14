@@ -91,6 +91,53 @@ public sealed class QueueWorkerTests {
         }
     }
 
+    [Fact]
+    public async Task QueueWorkerStopsRunningHandlerWhenJobRunIsCancelled() {
+        var job = CreateJob();
+        var queue = new RecordingJobQueueService([job]);
+        var settings = new MutableSettingsPersistence { BackgroundConcurrency = 1 };
+        var handler = new CancellableJobHandler();
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IJobQueueService>(queue);
+        services.AddSingleton<ISettingsPersistence>(settings);
+        services.AddScoped<SettingsService>();
+        services.AddSingleton<IJobHandler>(handler);
+        await using var provider = services.BuildServiceProvider();
+
+        var worker = new QueueWorker(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            new WorkerRuntimeIdentity(),
+            NullLogger<QueueWorker>.Instance,
+            TimeSpan.FromMilliseconds(25));
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await worker.StartAsync(CancellationToken.None);
+        try {
+            await handler.WaitForStartedAsync(timeout.Token);
+            queue.Cancel(job.Id);
+
+            await handler.WaitForCancelledAsync(timeout.Token);
+
+            Assert.DoesNotContain(job.Id, queue.CompletedJobIds);
+        } finally {
+            await worker.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public async Task JobContextDoesNotEnqueueDownstreamWorkAfterCancellation() {
+        var job = CreateJob();
+        var queue = new RecordingJobQueueService([]);
+        var context = new JobContext(job, queue);
+        queue.Cancel(job.Id);
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() =>
+            context.EnqueueAsync(new EnqueueJobRequest(JobType.Noop), CancellationToken.None));
+
+        Assert.Equal(0, queue.EnqueuedCount);
+    }
+
     private static JobRunSnapshot CreateJob(JobRunLane? lane = null) =>
         new(
             Guid.NewGuid(),
@@ -141,6 +188,29 @@ public sealed class QueueWorkerTests {
         }
     }
 
+    private sealed class CancellableJobHandler : IJobHandler {
+        private readonly TaskCompletionSource _started = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _cancelled = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public JobType Type => JobType.Noop;
+
+        public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
+            _started.TrySetResult();
+            try {
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            } catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) {
+                _cancelled.TrySetResult();
+                throw;
+            }
+        }
+
+        public Task WaitForStartedAsync(CancellationToken cancellationToken) =>
+            _started.Task.WaitAsync(cancellationToken);
+
+        public Task WaitForCancelledAsync(CancellationToken cancellationToken) =>
+            _cancelled.Task.WaitAsync(cancellationToken);
+    }
+
     private sealed class MutableSettingsPersistence : ISettingsPersistence {
         public int BackgroundConcurrency { get; set; } = 1;
 
@@ -180,7 +250,10 @@ public sealed class QueueWorkerTests {
     private sealed class RecordingJobQueueService : IJobQueueService {
         private readonly object _lock = new();
         private readonly List<(int Priority, JobRunSnapshot Job)> _jobs;
+        private readonly HashSet<Guid> _cancelled = [];
+        private readonly List<Guid> _completedJobIds = [];
         private int _claims;
+        private int _enqueuedCount;
 
         public RecordingJobQueueService(IEnumerable<JobRunSnapshot> jobs) {
             _jobs = jobs.Select(job => (0, job)).ToList();
@@ -188,9 +261,25 @@ public sealed class QueueWorkerTests {
 
         public int Claims => Volatile.Read(ref _claims);
 
+        public int EnqueuedCount => Volatile.Read(ref _enqueuedCount);
+
+        public IReadOnlyList<Guid> CompletedJobIds {
+            get {
+                lock (_lock) {
+                    return _completedJobIds.ToArray();
+                }
+            }
+        }
+
         public void Add(JobRunSnapshot job, int priority) {
             lock (_lock) {
                 _jobs.Add((priority, job));
+            }
+        }
+
+        public void Cancel(Guid jobId) {
+            lock (_lock) {
+                _cancelled.Add(jobId);
             }
         }
 
@@ -220,8 +309,13 @@ public sealed class QueueWorkerTests {
             }
         }
 
-        public Task CompleteAsync(Guid id, string? message, CancellationToken cancellationToken) =>
-            Task.CompletedTask;
+        public Task CompleteAsync(Guid id, string? message, CancellationToken cancellationToken) {
+            lock (_lock) {
+                _completedJobIds.Add(id);
+            }
+
+            return Task.CompletedTask;
+        }
 
         public Task<int> RecoverStaleRunningAsync(string currentWorkerId, TimeSpan staleAfter, CancellationToken cancellationToken) =>
             Task.FromResult(0);
@@ -230,22 +324,34 @@ public sealed class QueueWorkerTests {
             Task.FromResult<IReadOnlyList<JobRunSnapshot>>([]);
 
         public Task<JobRunSnapshot> EnqueueAsync(JobType type, CancellationToken cancellationToken) =>
-            Task.FromResult(CreateJob());
+            EnqueueAsync(new EnqueueJobRequest(type), cancellationToken);
 
-        public Task<JobRunSnapshot> EnqueueAsync(EnqueueJobRequest request, CancellationToken cancellationToken) =>
-            Task.FromResult(CreateJob());
+        public Task<JobRunSnapshot> EnqueueAsync(EnqueueJobRequest request, CancellationToken cancellationToken) {
+            Interlocked.Increment(ref _enqueuedCount);
+            return Task.FromResult(CreateJob());
+        }
 
         public Task<bool> HasPendingAsync(JobType type, string? targetEntityId, CancellationToken cancellationToken) =>
             Task.FromResult(false);
 
-        public Task<int> EnqueueBatchAsync(IReadOnlyList<EnqueueJobRequest> requests, CancellationToken cancellationToken) =>
-            Task.FromResult(0);
+        public Task<int> EnqueueBatchAsync(IReadOnlyList<EnqueueJobRequest> requests, CancellationToken cancellationToken) {
+            Interlocked.Add(ref _enqueuedCount, requests.Count);
+            return Task.FromResult(requests.Count);
+        }
 
         public Task<int> CancelAsync(JobType? type, CancellationToken cancellationToken) =>
             Task.FromResult(0);
 
-        public Task<bool> CancelRunAsync(Guid id, CancellationToken cancellationToken) =>
-            Task.FromResult(false);
+        public Task<bool> CancelRunAsync(Guid id, CancellationToken cancellationToken) {
+            Cancel(id);
+            return Task.FromResult(true);
+        }
+
+        public Task<bool> IsRunCancelledAsync(Guid id, CancellationToken cancellationToken) {
+            lock (_lock) {
+                return Task.FromResult(_cancelled.Contains(id));
+            }
+        }
 
         public Task<int> ClearFailuresAsync(JobType? type, CancellationToken cancellationToken) =>
             Task.FromResult(0);
