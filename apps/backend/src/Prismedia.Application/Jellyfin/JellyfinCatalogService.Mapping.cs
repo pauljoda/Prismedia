@@ -54,11 +54,14 @@ public sealed partial class JellyfinCatalogService {
             CollectionType = CollectionType(item.Kind),
             ParentId = parentOverride ?? item.ParentEntityId,
             IsFolder = IsFolder(item.Kind),
-            // Real Jellyfin always emits these non-null (RunTimeTicks 0, empty Genres/blurhashes);
+            // Real Jellyfin always emits RunTimeTicks and blurhash containers non-null;
             // Manet's typed models treat them as required and drop any item where they are null.
             RunTimeTicks = runtimeTicks ?? 0,
-            Genres = item.Genres is { Count: > 0 } genreNames ? genreNames.ToArray() : [],
-            GenreItems = GenreItemsFrom(item.Genres),
+            // Prismedia video tags are broad keywords, not Jellyfin genres. Infuse can surface these
+            // arrays as description-like text, so expose tag-derived genre fields only for music where
+            // clients use them as expected taxonomy.
+            Genres = isMusic && item.Genres is { Count: > 0 } genreNames ? genreNames.ToArray() : null,
+            GenreItems = isMusic ? GenreItemsFrom(item.Genres) : null,
             ImageBlurHashes = EmptyBlurHashes,
             ImageTags = primaryImageTag is null ? new Dictionary<string, string>() : new Dictionary<string, string> { [JellyfinProtocol.ImageTypes.Primary] = primaryImageTag },
             BackdropImageTags = imageTags.Backdrop is null ? [] : [imageTags.Backdrop],
@@ -153,11 +156,11 @@ public sealed partial class JellyfinCatalogService {
             OfficialRating = EmptyAsNull(classification?.Value),
             CustomRating = EmptyAsNull(classification?.Value),
             CommunityRating = communityRating,
-            Genres = tags.Count == 0 ? [] : tags.Select(tag => tag.Name).ToArray(),
-            GenreItems = tags.Count == 0 ? [] : tags,
-            // Infuse and other Jellyfin clients can surface Tags as pseudo-description text when
-            // Overview is present separately. Keep Prismedia taxonomy in the genre fields and omit
-            // the Jellyfin Tags payload for detail responses so descriptions remain description-first.
+            Genres = isMusic && tags.Count > 0 ? tags.Select(tag => tag.Name).ToArray() : null,
+            GenreItems = isMusic && tags.Count > 0 ? tags : null,
+            // Infuse and other Jellyfin clients can surface tag/genre arrays as pseudo-description text.
+            // Keep video descriptions description-first by omitting Prismedia tag-derived taxonomy from
+            // Jellyfin video details; music keeps its taxonomy above where clients expect it.
             Tags = null,
             People = People(item),
             Studios = studios.Count == 0 ? null : studios,

@@ -87,7 +87,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Fixed
-- Jellyfin-compatible video details now prioritize Prismedia descriptions for clients like Infuse instead of exposing tag lists that could appear as pseudo-descriptions.
+- Jellyfin-compatible video details now prioritize Prismedia descriptions for clients like Infuse and omit tag-derived taxonomy fields that could appear as pseudo-descriptions.
 - Manual identify searches now use their own foreground job lane, so a direct search from an item jumps ahead of older bulk/background identify work while still preserving provider rate-limit safety.
 - The Docs button now opens the live Prismedia documentation landing page instead of a missing quick-start URL.
 - The dev-channel update check works again. Dev builds stopped publishing per-build registry tags a while back, which left the updater unable to find its own image and showing "Update status unavailable"; it now reads the build commit baked into the published dev image itself, so "Update available" vs "Up to date" is accurate without any extra registry tags.
