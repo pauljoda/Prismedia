@@ -17,6 +17,7 @@ public sealed partial class EfEntityReadService {
     private async Task<IReadOnlyList<EntityThumbnail>> ProjectThumbnailsAsync(
         IReadOnlyList<EntityRow> rows,
         bool hideNsfw,
+        bool enforceLibraryVisibility,
         CancellationToken cancellationToken) {
         if (rows.Count == 0) {
             return [];
@@ -60,7 +61,7 @@ public sealed partial class EfEntityReadService {
         var hoverByEntity = hoverFiles
             .GroupBy(file => file.EntityId)
             .ToDictionary(group => group.Key, group => group.First().Path);
-        var hoverImagesByEntity = await ProjectHoverImagesAsync(rows, hideNsfw, cancellationToken);
+        var hoverImagesByEntity = await ProjectHoverImagesAsync(rows, hideNsfw, enforceLibraryVisibility, cancellationToken);
         var technicalByEntity = await _db.EntityTechnical.AsNoTracking()
             .Where(technical => ids.Contains(technical.EntityId))
             .ToDictionaryAsync(technical => technical.EntityId, cancellationToken);
@@ -347,6 +348,7 @@ public sealed partial class EfEntityReadService {
     private async Task<IReadOnlyDictionary<Guid, IReadOnlyList<EntityThumbnailHoverImage>>> ProjectHoverImagesAsync(
         IReadOnlyList<EntityRow> rows,
         bool hideNsfw,
+        bool enforceLibraryVisibility,
         CancellationToken cancellationToken) {
         if (rows.Count == 0) {
             return new Dictionary<Guid, IReadOnlyList<EntityThumbnailHoverImage>>();
@@ -355,7 +357,9 @@ public sealed partial class EfEntityReadService {
         var rootIds = rows.Select(row => row.Id).ToArray();
         var directChildQuery = _db.Entities.AsNoTracking()
             .Where(row => row.ParentEntityId != null && rootIds.Contains(row.ParentEntityId.Value));
-        directChildQuery = ApplyEnabledLibraryVisibility(directChildQuery);
+        if (enforceLibraryVisibility) {
+            directChildQuery = ApplyEnabledLibraryVisibility(directChildQuery);
+        }
         directChildQuery = ApplyNsfwVisibility(directChildQuery, hideNsfw);
         var directChildren = await directChildQuery
             .OrderBy(row => row.ParentEntityId)
@@ -371,7 +375,7 @@ public sealed partial class EfEntityReadService {
             .GroupBy(row => row.ParentEntityId!.Value)
             .ToDictionary(group => group.Key, group => PickSpread(group.ToArray(), MaxHoverImages));
         var sampledChildren = sampledByRoot.Values.SelectMany(children => children).ToArray();
-        var representatives = await ResolveRepresentativeHoverImagesAsync(sampledChildren, hideNsfw, cancellationToken);
+        var representatives = await ResolveRepresentativeHoverImagesAsync(sampledChildren, hideNsfw, enforceLibraryVisibility, cancellationToken);
 
         return sampledByRoot.ToDictionary(
             pair => pair.Key,
@@ -385,6 +389,7 @@ public sealed partial class EfEntityReadService {
     private async Task<IReadOnlyDictionary<Guid, EntityThumbnailHoverImage>> ResolveRepresentativeHoverImagesAsync(
         IReadOnlyList<EntityRow> candidates,
         bool hideNsfw,
+        bool enforceLibraryVisibility,
         CancellationToken cancellationToken) {
         if (candidates.Count == 0) {
             return new Dictionary<Guid, EntityThumbnailHoverImage>();
@@ -398,7 +403,9 @@ public sealed partial class EfEntityReadService {
             var parentIds = frontier.Values.Select(row => row.Id).ToArray();
             var childQuery = _db.Entities.AsNoTracking()
                 .Where(row => row.ParentEntityId != null && parentIds.Contains(row.ParentEntityId.Value));
-            childQuery = ApplyEnabledLibraryVisibility(childQuery);
+            if (enforceLibraryVisibility) {
+                childQuery = ApplyEnabledLibraryVisibility(childQuery);
+            }
             childQuery = ApplyNsfwVisibility(childQuery, hideNsfw);
             var children = await childQuery
                 .OrderBy(row => row.ParentEntityId)
