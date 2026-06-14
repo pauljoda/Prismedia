@@ -155,7 +155,10 @@ public sealed partial class JellyfinCatalogService {
             CommunityRating = communityRating,
             Genres = tags.Count == 0 ? [] : tags.Select(tag => tag.Name).ToArray(),
             GenreItems = tags.Count == 0 ? [] : tags,
-            Tags = tags.Count == 0 ? null : tags.Select(tag => tag.Name).ToArray(),
+            // Infuse and other Jellyfin clients can surface Tags as pseudo-description text when
+            // Overview is present separately. Keep Prismedia taxonomy in the genre fields and omit
+            // the Jellyfin Tags payload for detail responses so descriptions remain description-first.
+            Tags = null,
             People = People(item),
             Studios = studios.Count == 0 ? null : studios,
             ProviderIds = ProviderIds(links),
