@@ -95,7 +95,10 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             entityQuery = SuppressMovieChildVideos(entityQuery);
         }
 
-        entityQuery = ApplyEnabledLibraryVisibility(entityQuery);
+        var enforceLibraryVisibility = await HasDisabledLibraryRootsAsync(cancellationToken);
+        if (enforceLibraryVisibility) {
+            entityQuery = ApplyEnabledLibraryVisibility(entityQuery, kind);
+        }
         entityQuery = ApplyNsfwVisibility(entityQuery, hideNsfw == true);
         entityQuery = ApplyListFilters(entityQuery, favorite, organized, ratingMin, ratingMax, unrated, status, bookType, bookFormat, nsfw, hasFile, played, orphaned);
 
@@ -147,7 +150,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         }
 
         var page = rows.Take(pageSize).ToArray();
-        var thumbnails = await ProjectThumbnailsAsync(page, hideNsfw == true, cancellationToken);
+        var thumbnails = await ProjectThumbnailsAsync(page, hideNsfw == true, enforceLibraryVisibility, cancellationToken);
         var nextCursor = rows.Length > pageSize ? EncodeOffsetCursor(offset + pageSize) : null;
         return new EntityListResponse(thumbnails, nextCursor, totalCount);
     }
@@ -453,7 +456,8 @@ public sealed partial class EfEntityReadService : IEntityReadService {
     }
 
     public async Task<EntityCard?> GetAsync(Guid id, bool hideNsfw, CancellationToken cancellationToken) {
-        if (!await IsEntityVisibleInEnabledLibraryAsync(id, cancellationToken) ||
+        var enforceLibraryVisibility = await HasDisabledLibraryRootsAsync(cancellationToken);
+        if ((enforceLibraryVisibility && !await IsEntityVisibleInEnabledLibraryAsync(id, cancellationToken)) ||
             hideNsfw && await IsEntityHiddenAsync(id, cancellationToken)) {
             return null;
         }
@@ -464,8 +468,8 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         }
 
         var card = EntityCardProjector.ToCard(entity) with {
-            ChildrenByKind = await ProjectDirectChildGroupsAsync(id, hideNsfw, cancellationToken),
-            Relationships = await ProjectRelationshipGroupsAsync(id, hideNsfw, cancellationToken)
+            ChildrenByKind = await ProjectDirectChildGroupsAsync(id, hideNsfw, enforceLibraryVisibility, cancellationToken),
+            Relationships = await ProjectRelationshipGroupsAsync(id, hideNsfw, enforceLibraryVisibility, cancellationToken)
         };
         return await EnrichBookProgressAsync(card, hideNsfw, cancellationToken);
     }
@@ -476,17 +480,21 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         CancellationToken cancellationToken) {
         var query = _db.Entities.AsNoTracking()
             .Where(entity => ids.Contains(entity.Id));
-        query = ApplyEnabledLibraryVisibility(query);
+        var enforceLibraryVisibility = await HasDisabledLibraryRootsAsync(cancellationToken);
+        if (enforceLibraryVisibility) {
+            query = ApplyEnabledLibraryVisibility(query);
+        }
         query = ApplyNsfwVisibility(query, hideNsfw);
         var rows = await query
             .ToArrayAsync(cancellationToken);
-        var thumbnails = await ProjectThumbnailsAsync(rows, hideNsfw, cancellationToken);
+        var thumbnails = await ProjectThumbnailsAsync(rows, hideNsfw, enforceLibraryVisibility, cancellationToken);
         var byId = thumbnails.ToDictionary(item => item.Id);
         return new EntityThumbnailBatchResponse(ids.Where(byId.ContainsKey).Select(id => byId[id]).ToArray());
     }
 
     public async Task<IEntityCard?> GetDetailAsync(Guid id, string kind, bool hideNsfw, CancellationToken cancellationToken) {
-        if (!await IsEntityVisibleInEnabledLibraryAsync(id, cancellationToken) ||
+        var enforceLibraryVisibility = await HasDisabledLibraryRootsAsync(cancellationToken);
+        if ((enforceLibraryVisibility && !await IsEntityVisibleInEnabledLibraryAsync(id, cancellationToken)) ||
             hideNsfw && await IsEntityHiddenAsync(id, cancellationToken)) {
             return null;
         }
@@ -497,8 +505,8 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         }
 
         var card = await EnrichBookProgressAsync(EntityCardProjector.ToCard(entity) with {
-            ChildrenByKind = await ProjectDirectChildGroupsAsync(id, hideNsfw, cancellationToken),
-            Relationships = await ProjectRelationshipGroupsAsync(id, hideNsfw, cancellationToken)
+            ChildrenByKind = await ProjectDirectChildGroupsAsync(id, hideNsfw, enforceLibraryVisibility, cancellationToken),
+            Relationships = await ProjectRelationshipGroupsAsync(id, hideNsfw, enforceLibraryVisibility, cancellationToken)
         }, hideNsfw, cancellationToken);
         if (!string.Equals(EntityKindRegistry.ToCode(card.Kind), kind, StringComparison.OrdinalIgnoreCase)) {
             return null;
@@ -515,12 +523,15 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             ? query.Where(entity => !entity.IsNsfw)
             : query;
 
-    private IQueryable<EntityRow> ApplyEnabledLibraryVisibility(IQueryable<EntityRow> query) {
-        var entities = _db.Entities;
+    private async Task<bool> HasDisabledLibraryRootsAsync(CancellationToken cancellationToken) =>
+        await _db.LibraryRoots.AsNoTracking().AnyAsync(root => !root.Enabled, cancellationToken);
+
+    private IQueryable<Guid> DisabledRootedEntityIds() {
         var disabledRootIds = _db.LibraryRoots
             .Where(root => !root.Enabled)
             .Select(root => root.Id);
-        var disabledRootedEntityIds = _db.VideoDetails
+
+        return _db.VideoDetails
             .Where(detail => detail.LibraryRootId != null && disabledRootIds.Contains(detail.LibraryRootId.Value))
             .Select(detail => detail.EntityId)
             .Concat(_db.GalleryDetails
@@ -535,6 +546,57 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             .Concat(_db.AudioLibraryDetails
                 .Where(detail => detail.LibraryRootId != null && disabledRootIds.Contains(detail.LibraryRootId.Value))
                 .Select(detail => detail.EntityId));
+    }
+
+    private IQueryable<EntityRow> ApplyEnabledLibraryVisibility(IQueryable<EntityRow> query, string? knownKindCode = null) {
+        var entities = _db.Entities;
+        var disabledRootedEntityIds = DisabledRootedEntityIds();
+
+        if (KnownKindHasDirectLibraryRoot(knownKindCode)) {
+            return query.Where(entity => !disabledRootedEntityIds.Contains(entity.Id));
+        }
+
+        if (KnownKindInheritsLibraryRoot(knownKindCode)) {
+            return ApplyInheritedEnabledLibraryVisibility(query, entities, disabledRootedEntityIds);
+        }
+
+        if (KindEquals(knownKindCode, EntityKindRegistry.Movie.Code)) {
+            return query.Where(entity =>
+                !disabledRootedEntityIds.Contains(entity.Id) &&
+                (!entities.Any(child =>
+                     child.ParentEntityId == entity.Id &&
+                     child.KindCode == EntityKindRegistry.Video.Code) ||
+                 entities.Any(child =>
+                     child.ParentEntityId == entity.Id &&
+                     child.KindCode == EntityKindRegistry.Video.Code &&
+                     !disabledRootedEntityIds.Contains(child.Id))));
+        }
+
+        if (KindEquals(knownKindCode, EntityKindRegistry.VideoSeason.Code)) {
+            return query.Where(entity =>
+                !disabledRootedEntityIds.Contains(entity.Id) &&
+                (!entities.Any(child =>
+                     child.ParentEntityId == entity.Id &&
+                     child.KindCode == EntityKindRegistry.Video.Code) ||
+                 entities.Any(child =>
+                     child.ParentEntityId == entity.Id &&
+                     child.KindCode == EntityKindRegistry.Video.Code &&
+                     !disabledRootedEntityIds.Contains(child.Id))));
+        }
+
+        if (KindEquals(knownKindCode, EntityKindRegistry.VideoSeries.Code)) {
+            return query.Where(entity =>
+                !disabledRootedEntityIds.Contains(entity.Id) &&
+                (!entities.Any(candidate =>
+                     candidate.KindCode == EntityKindRegistry.Video.Code &&
+                     (candidate.ParentEntityId == entity.Id ||
+                      entities.Any(parent => parent.Id == candidate.ParentEntityId && parent.ParentEntityId == entity.Id))) ||
+                 entities.Any(candidate =>
+                     candidate.KindCode == EntityKindRegistry.Video.Code &&
+                     (candidate.ParentEntityId == entity.Id ||
+                      entities.Any(parent => parent.Id == candidate.ParentEntityId && parent.ParentEntityId == entity.Id)) &&
+                     !disabledRootedEntityIds.Contains(candidate.Id))));
+        }
 
         return query.Where(entity =>
             !disabledRootedEntityIds.Contains(entity.Id) &&
@@ -580,6 +642,45 @@ public sealed partial class EfEntityReadService : IEntityReadService {
                      entities.Any(parent => parent.Id == candidate.ParentEntityId && parent.ParentEntityId == entity.Id)) &&
                     !disabledRootedEntityIds.Contains(candidate.Id))));
     }
+
+    private static bool KnownKindHasDirectLibraryRoot(string? kind) =>
+        kind is not null && (
+            kind.Equals(EntityKindRegistry.Video.Code, StringComparison.OrdinalIgnoreCase) ||
+            kind.Equals(EntityKindRegistry.Gallery.Code, StringComparison.OrdinalIgnoreCase) ||
+            kind.Equals(EntityKindRegistry.Book.Code, StringComparison.OrdinalIgnoreCase) ||
+            kind.Equals(EntityKindRegistry.MusicArtist.Code, StringComparison.OrdinalIgnoreCase) ||
+            kind.Equals(EntityKindRegistry.AudioLibrary.Code, StringComparison.OrdinalIgnoreCase));
+
+    private static bool KnownKindInheritsLibraryRoot(string? kind) =>
+        kind is not null && (
+            kind.Equals(EntityKindRegistry.Image.Code, StringComparison.OrdinalIgnoreCase) ||
+            kind.Equals(EntityKindRegistry.BookChapter.Code, StringComparison.OrdinalIgnoreCase) ||
+            kind.Equals(EntityKindRegistry.AudioTrack.Code, StringComparison.OrdinalIgnoreCase));
+
+    private static bool KindEquals(string? actual, string expected) =>
+        actual is not null && actual.Equals(expected, StringComparison.OrdinalIgnoreCase);
+
+    private static IQueryable<EntityRow> ApplyInheritedEnabledLibraryVisibility(
+        IQueryable<EntityRow> query,
+        IQueryable<EntityRow> entities,
+        IQueryable<Guid> disabledRootedEntityIds) =>
+        query.Where(entity =>
+            !disabledRootedEntityIds.Contains(entity.Id) &&
+            !entities.Any(parent =>
+                parent.Id == entity.ParentEntityId &&
+                disabledRootedEntityIds.Contains(parent.Id)) &&
+            !entities.Any(parent =>
+                parent.Id == entity.ParentEntityId &&
+                entities.Any(grandparent =>
+                    grandparent.Id == parent.ParentEntityId &&
+                    disabledRootedEntityIds.Contains(grandparent.Id))) &&
+            !entities.Any(parent =>
+                parent.Id == entity.ParentEntityId &&
+                entities.Any(grandparent =>
+                    grandparent.Id == parent.ParentEntityId &&
+                    entities.Any(rootParent =>
+                        rootParent.Id == grandparent.ParentEntityId &&
+                        disabledRootedEntityIds.Contains(rootParent.Id)))));
 
     // Audio libraries (albums) are intentionally excluded: an album's only parent is now its
     // artist grouping (a different kind), so every album is a browsable top-level item in the
@@ -654,10 +755,13 @@ public sealed partial class EfEntityReadService : IEntityReadService {
     private async Task<IReadOnlyList<EntityGroup>> ProjectDirectChildGroupsAsync(
         Guid entityId,
         bool hideNsfw,
+        bool enforceLibraryVisibility,
         CancellationToken cancellationToken) {
         var query = _db.Entities.AsNoTracking()
             .Where(row => row.ParentEntityId == entityId);
-        query = ApplyEnabledLibraryVisibility(query);
+        if (enforceLibraryVisibility) {
+            query = ApplyEnabledLibraryVisibility(query);
+        }
         query = ApplyNsfwVisibility(query, hideNsfw);
         var childRows = await query
             .OrderBy(row => row.KindCode)
@@ -678,7 +782,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             groups.Add(new EntityGroup(
                 childKind,
                 EntityKindRegistry.Describe(childKind).GroupLabel,
-                await ProjectThumbnailsAsync(group.ToArray(), hideNsfw, cancellationToken)));
+                await ProjectThumbnailsAsync(group.ToArray(), hideNsfw, enforceLibraryVisibility, cancellationToken)));
         }
 
         return groups;
@@ -687,6 +791,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
     private async Task<IReadOnlyList<EntityGroup>> ProjectRelationshipGroupsAsync(
         Guid entityId,
         bool hideNsfw,
+        bool enforceLibraryVisibility,
         CancellationToken cancellationToken) {
         var links = await _db.EntityRelationshipLinks.AsNoTracking()
             .Where(link => link.EntityId == entityId)
@@ -701,7 +806,9 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         var targetIds = links.Select(link => link.TargetEntityId).Distinct().ToArray();
         var targetQuery = _db.Entities.AsNoTracking()
             .Where(entity => targetIds.Contains(entity.Id));
-        targetQuery = ApplyEnabledLibraryVisibility(targetQuery);
+        if (enforceLibraryVisibility) {
+            targetQuery = ApplyEnabledLibraryVisibility(targetQuery);
+        }
         targetQuery = ApplyNsfwVisibility(targetQuery, hideNsfw);
         var targetRows = await targetQuery
             .ToDictionaryAsync(entity => entity.Id, cancellationToken);
@@ -720,7 +827,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             groups.Add(new EntityGroup(
                 group.Key.TargetKindCode.DecodeAs<EntityKind>(),
                 RelationshipLabel(group.Key.RelationshipCode),
-                await ProjectThumbnailsAsync(orderedRows, hideNsfw, cancellationToken)) {
+                await ProjectThumbnailsAsync(orderedRows, hideNsfw, enforceLibraryVisibility, cancellationToken)) {
                 Code = group.Key.RelationshipCode is { Length: > 0 } relationshipCode
                     && relationshipCode.TryDecodeAs<RelationshipKind>(out var relationshipKind)
                         ? relationshipKind
