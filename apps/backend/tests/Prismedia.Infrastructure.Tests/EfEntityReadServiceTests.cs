@@ -967,6 +967,142 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
+    public async Task DisabledLibraryRootHidesDirectRootMediaFromListsDetailsAndThumbnails() {
+        await using var db = CreateContext();
+        var enabledRootId = Guid.Parse("11111111-0000-0000-0000-000000000001");
+        var disabledRootId = Guid.Parse("11111111-0000-0000-0000-000000000002");
+        var visibleVideoId = Guid.Parse("11111111-0000-0000-0000-000000000003");
+        var hiddenVideoId = Guid.Parse("11111111-0000-0000-0000-000000000004");
+        var rootlessTagId = Guid.Parse("11111111-0000-0000-0000-000000000005");
+        var now = DateTimeOffset.UtcNow;
+        db.LibraryRoots.AddRange(
+            Root(enabledRootId, enabled: true, now),
+            Root(disabledRootId, enabled: false, now));
+        db.Entities.AddRange(
+            new EntityRow { Id = visibleVideoId, KindCode = EntityKindRegistry.Video.Code, Title = "Shared Title", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = hiddenVideoId, KindCode = EntityKindRegistry.Video.Code, Title = "Shared Title Hidden", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = rootlessTagId, KindCode = EntityKindRegistry.Tag.Code, Title = "Rootless Tag", CreatedAt = now, UpdatedAt = now });
+        db.VideoDetails.AddRange(
+            new VideoDetailRow { EntityId = visibleVideoId, LibraryRootId = enabledRootId },
+            new VideoDetailRow { EntityId = hiddenVideoId, LibraryRootId = disabledRootId });
+        await db.SaveChangesAsync();
+
+        var service = CreateService(db);
+
+        var videos = await service.ListAsync(EntityKindRegistry.Video.Code, null, null, null, null, CancellationToken.None);
+        var search = await service.ListAsync(null, "Shared Title", null, null, null, CancellationToken.None);
+        var hiddenCard = await service.GetAsync(hiddenVideoId, hideNsfw: false, CancellationToken.None);
+        var hiddenDetail = await service.GetDetailAsync(hiddenVideoId, EntityKindRegistry.Video.Code, hideNsfw: false, CancellationToken.None);
+        var thumbnails = await service.GetThumbnailsAsync([visibleVideoId, hiddenVideoId, rootlessTagId], hideNsfw: false, CancellationToken.None);
+
+        Assert.Equal(1, videos.TotalCount);
+        Assert.Equal(visibleVideoId, Assert.Single(videos.Items).Id);
+        Assert.Equal(1, search.TotalCount);
+        Assert.Equal(visibleVideoId, Assert.Single(search.Items).Id);
+        Assert.Null(hiddenCard);
+        Assert.Null(hiddenDetail);
+        Assert.Equal([visibleVideoId, rootlessTagId], thumbnails.Items.Select(item => item.Id).ToArray());
+
+        db.LibraryRoots.Single(root => root.Id == disabledRootId).Enabled = true;
+        await db.SaveChangesAsync();
+
+        var reenabled = await service.ListAsync(EntityKindRegistry.Video.Code, null, null, null, null, CancellationToken.None);
+
+        Assert.Equal(2, reenabled.TotalCount);
+        Assert.Equal([visibleVideoId, hiddenVideoId], reenabled.Items.Select(item => item.Id).Order().ToArray());
+    }
+
+    [Fact]
+    public async Task DisabledLibraryRootHidesInheritedAudioTrackAndDirectChildren() {
+        await using var db = CreateContext();
+        var enabledRootId = Guid.Parse("22222222-0000-0000-0000-000000000001");
+        var disabledRootId = Guid.Parse("22222222-0000-0000-0000-000000000002");
+        var artistId = Guid.Parse("22222222-0000-0000-0000-000000000003");
+        var visibleAlbumId = Guid.Parse("22222222-0000-0000-0000-000000000004");
+        var hiddenAlbumId = Guid.Parse("22222222-0000-0000-0000-000000000005");
+        var visibleTrackId = Guid.Parse("22222222-0000-0000-0000-000000000006");
+        var hiddenTrackId = Guid.Parse("22222222-0000-0000-0000-000000000007");
+        var now = DateTimeOffset.UtcNow;
+        db.LibraryRoots.AddRange(
+            Root(enabledRootId, enabled: true, now),
+            Root(disabledRootId, enabled: false, now));
+        db.Entities.AddRange(
+            new EntityRow { Id = artistId, KindCode = EntityKindRegistry.MusicArtist.Code, Title = "Artist", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = visibleAlbumId, KindCode = EntityKindRegistry.AudioLibrary.Code, Title = "Visible Album", ParentEntityId = artistId, SortOrder = 0, CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = hiddenAlbumId, KindCode = EntityKindRegistry.AudioLibrary.Code, Title = "Hidden Album", ParentEntityId = artistId, SortOrder = 1, CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = visibleTrackId, KindCode = EntityKindRegistry.AudioTrack.Code, Title = "Visible Track", ParentEntityId = visibleAlbumId, SortOrder = 0, CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = hiddenTrackId, KindCode = EntityKindRegistry.AudioTrack.Code, Title = "Hidden Track", ParentEntityId = hiddenAlbumId, SortOrder = 0, CreatedAt = now, UpdatedAt = now });
+        db.MusicArtistDetails.Add(new MusicArtistDetailRow { EntityId = artistId, LibraryRootId = enabledRootId });
+        db.AudioLibraryDetails.AddRange(
+            new AudioLibraryDetailRow { EntityId = visibleAlbumId, LibraryRootId = enabledRootId },
+            new AudioLibraryDetailRow { EntityId = hiddenAlbumId, LibraryRootId = disabledRootId });
+        db.AudioTrackDetails.AddRange(
+            new AudioTrackDetailRow { EntityId = visibleTrackId },
+            new AudioTrackDetailRow { EntityId = hiddenTrackId });
+        await db.SaveChangesAsync();
+
+        var service = CreateService(db);
+
+        var tracks = await service.ListAsync(EntityKindRegistry.AudioTrack.Code, null, null, null, null, CancellationToken.None);
+        var artist = Assert.IsType<EntityCard>(await service.GetAsync(artistId, hideNsfw: false, CancellationToken.None));
+
+        Assert.Equal(1, tracks.TotalCount);
+        Assert.Equal(visibleTrackId, Assert.Single(tracks.Items).Id);
+        var albums = Assert.Single(artist.ChildrenByKind);
+        Assert.Equal(EntityKind.AudioLibrary, albums.Kind);
+        Assert.Equal(visibleAlbumId, Assert.Single(albums.Entities).Id);
+    }
+
+    [Fact]
+    public async Task DisabledLibraryRootHidesRelationshipTargetsAndMovieContainers() {
+        await using var db = CreateContext();
+        var enabledRootId = Guid.Parse("33333333-0000-0000-0000-000000000001");
+        var disabledRootId = Guid.Parse("33333333-0000-0000-0000-000000000002");
+        var sourceVideoId = Guid.Parse("33333333-0000-0000-0000-000000000003");
+        var relatedVisibleVideoId = Guid.Parse("33333333-0000-0000-0000-000000000004");
+        var hiddenMovieId = Guid.Parse("33333333-0000-0000-0000-000000000005");
+        var hiddenMovieVideoId = Guid.Parse("33333333-0000-0000-0000-000000000006");
+        var now = DateTimeOffset.UtcNow;
+        db.LibraryRoots.AddRange(
+            Root(enabledRootId, enabled: true, now),
+            Root(disabledRootId, enabled: false, now));
+        db.Entities.AddRange(
+            new EntityRow { Id = sourceVideoId, KindCode = EntityKindRegistry.Video.Code, Title = "Source", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = relatedVisibleVideoId, KindCode = EntityKindRegistry.Video.Code, Title = "Visible Related", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = hiddenMovieId, KindCode = EntityKindRegistry.Movie.Code, Title = "Hidden Movie", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = hiddenMovieVideoId, KindCode = EntityKindRegistry.Video.Code, Title = "Hidden Feature", ParentEntityId = hiddenMovieId, CreatedAt = now, UpdatedAt = now });
+        db.VideoDetails.AddRange(
+            new VideoDetailRow { EntityId = sourceVideoId, LibraryRootId = enabledRootId },
+            new VideoDetailRow { EntityId = relatedVisibleVideoId, LibraryRootId = enabledRootId },
+            new VideoDetailRow { EntityId = hiddenMovieVideoId, LibraryRootId = disabledRootId });
+        db.EntityRelationshipLinks.AddRange(
+            Link(sourceVideoId, relatedVisibleVideoId, now),
+            Link(sourceVideoId, hiddenMovieVideoId, now));
+        await db.SaveChangesAsync();
+
+        var service = CreateService(db);
+
+        var source = Assert.IsType<VideoDetail>(
+            await service.GetDetailAsync(sourceVideoId, EntityKindRegistry.Video.Code, hideNsfw: false, CancellationToken.None));
+        var movies = await service.ListAsync(EntityKindRegistry.Movie.Code, null, null, null, null, CancellationToken.None);
+
+        var related = Assert.Single(source.Relationships, group => group.Code == RelationshipKind.Related);
+        Assert.Equal(relatedVisibleVideoId, Assert.Single(related.Entities).Id);
+        Assert.Empty(movies.Items);
+        Assert.Equal(0, movies.TotalCount);
+
+        static EntityRelationshipLinkRow Link(Guid source, Guid target, DateTimeOffset at) =>
+            new() {
+                EntityId = source,
+                RelationshipCode = RelationshipKind.Related.ToCode(),
+                Label = "Related",
+                TargetEntityId = target,
+                TargetKindCode = EntityKindRegistry.Video.Code,
+                CreatedAt = at,
+            };
+    }
+
+    [Fact]
     public async Task ListAsyncReturnsUnboundedTotalCountForFilteredEntities() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;
@@ -1617,6 +1753,16 @@ public sealed class EfEntityReadServiceTests {
             EntityId = entityId,
             Role = role,
             Path = path,
+            CreatedAt = at,
+            UpdatedAt = at
+        };
+
+    private static LibraryRootRow Root(Guid id, bool enabled, DateTimeOffset at) =>
+        new() {
+            Id = id,
+            Path = $"/media/{id}",
+            Label = id.ToString(),
+            Enabled = enabled,
             CreatedAt = at,
             UpdatedAt = at
         };

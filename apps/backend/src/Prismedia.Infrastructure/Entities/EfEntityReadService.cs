@@ -95,6 +95,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             entityQuery = SuppressMovieChildVideos(entityQuery);
         }
 
+        entityQuery = ApplyEnabledLibraryVisibility(entityQuery);
         entityQuery = ApplyNsfwVisibility(entityQuery, hideNsfw == true);
         entityQuery = ApplyListFilters(entityQuery, favorite, organized, ratingMin, ratingMax, unrated, status, bookType, bookFormat, nsfw, hasFile, played, orphaned);
 
@@ -452,7 +453,8 @@ public sealed partial class EfEntityReadService : IEntityReadService {
     }
 
     public async Task<EntityCard?> GetAsync(Guid id, bool hideNsfw, CancellationToken cancellationToken) {
-        if (hideNsfw && await IsEntityHiddenAsync(id, cancellationToken)) {
+        if (!await IsEntityVisibleInEnabledLibraryAsync(id, cancellationToken) ||
+            hideNsfw && await IsEntityHiddenAsync(id, cancellationToken)) {
             return null;
         }
 
@@ -474,6 +476,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         CancellationToken cancellationToken) {
         var query = _db.Entities.AsNoTracking()
             .Where(entity => ids.Contains(entity.Id));
+        query = ApplyEnabledLibraryVisibility(query);
         query = ApplyNsfwVisibility(query, hideNsfw);
         var rows = await query
             .ToArrayAsync(cancellationToken);
@@ -483,7 +486,8 @@ public sealed partial class EfEntityReadService : IEntityReadService {
     }
 
     public async Task<IEntityCard?> GetDetailAsync(Guid id, string kind, bool hideNsfw, CancellationToken cancellationToken) {
-        if (hideNsfw && await IsEntityHiddenAsync(id, cancellationToken)) {
+        if (!await IsEntityVisibleInEnabledLibraryAsync(id, cancellationToken) ||
+            hideNsfw && await IsEntityHiddenAsync(id, cancellationToken)) {
             return null;
         }
 
@@ -511,6 +515,72 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             ? query.Where(entity => !entity.IsNsfw)
             : query;
 
+    private IQueryable<EntityRow> ApplyEnabledLibraryVisibility(IQueryable<EntityRow> query) {
+        var entities = _db.Entities;
+        var disabledRootIds = _db.LibraryRoots
+            .Where(root => !root.Enabled)
+            .Select(root => root.Id);
+        var disabledRootedEntityIds = _db.VideoDetails
+            .Where(detail => detail.LibraryRootId != null && disabledRootIds.Contains(detail.LibraryRootId.Value))
+            .Select(detail => detail.EntityId)
+            .Concat(_db.GalleryDetails
+                .Where(detail => detail.LibraryRootId != null && disabledRootIds.Contains(detail.LibraryRootId.Value))
+                .Select(detail => detail.EntityId))
+            .Concat(_db.BookDetails
+                .Where(detail => detail.LibraryRootId != null && disabledRootIds.Contains(detail.LibraryRootId.Value))
+                .Select(detail => detail.EntityId))
+            .Concat(_db.MusicArtistDetails
+                .Where(detail => detail.LibraryRootId != null && disabledRootIds.Contains(detail.LibraryRootId.Value))
+                .Select(detail => detail.EntityId))
+            .Concat(_db.AudioLibraryDetails
+                .Where(detail => detail.LibraryRootId != null && disabledRootIds.Contains(detail.LibraryRootId.Value))
+                .Select(detail => detail.EntityId));
+
+        return query.Where(entity =>
+            !disabledRootedEntityIds.Contains(entity.Id) &&
+            !entities.Any(parent =>
+                parent.Id == entity.ParentEntityId &&
+                disabledRootedEntityIds.Contains(parent.Id)) &&
+            !entities.Any(parent =>
+                parent.Id == entity.ParentEntityId &&
+                entities.Any(grandparent =>
+                    grandparent.Id == parent.ParentEntityId &&
+                    disabledRootedEntityIds.Contains(grandparent.Id))) &&
+            !entities.Any(parent =>
+                parent.Id == entity.ParentEntityId &&
+                entities.Any(grandparent =>
+                    grandparent.Id == parent.ParentEntityId &&
+                    entities.Any(rootParent =>
+                        rootParent.Id == grandparent.ParentEntityId &&
+                        disabledRootedEntityIds.Contains(rootParent.Id)))) &&
+            (entity.KindCode != EntityKindRegistry.Movie.Code ||
+                !entities.Any(child =>
+                    child.ParentEntityId == entity.Id &&
+                    child.KindCode == EntityKindRegistry.Video.Code) ||
+                entities.Any(child =>
+                    child.ParentEntityId == entity.Id &&
+                    child.KindCode == EntityKindRegistry.Video.Code &&
+                    !disabledRootedEntityIds.Contains(child.Id))) &&
+            (entity.KindCode != EntityKindRegistry.VideoSeason.Code ||
+                !entities.Any(child =>
+                    child.ParentEntityId == entity.Id &&
+                    child.KindCode == EntityKindRegistry.Video.Code) ||
+                entities.Any(child =>
+                    child.ParentEntityId == entity.Id &&
+                    child.KindCode == EntityKindRegistry.Video.Code &&
+                    !disabledRootedEntityIds.Contains(child.Id))) &&
+            (entity.KindCode != EntityKindRegistry.VideoSeries.Code ||
+                !entities.Any(candidate =>
+                    candidate.KindCode == EntityKindRegistry.Video.Code &&
+                    (candidate.ParentEntityId == entity.Id ||
+                     entities.Any(parent => parent.Id == candidate.ParentEntityId && parent.ParentEntityId == entity.Id))) ||
+                entities.Any(candidate =>
+                    candidate.KindCode == EntityKindRegistry.Video.Code &&
+                    (candidate.ParentEntityId == entity.Id ||
+                     entities.Any(parent => parent.Id == candidate.ParentEntityId && parent.ParentEntityId == entity.Id)) &&
+                    !disabledRootedEntityIds.Contains(candidate.Id))));
+    }
+
     // Audio libraries (albums) are intentionally excluded: an album's only parent is now its
     // artist grouping (a different kind), so every album is a browsable top-level item in the
     // Audio view — filtering to ParentEntityId == null would hide every album that has an artist.
@@ -534,6 +604,10 @@ public sealed partial class EfEntityReadService : IEntityReadService {
     private async Task<bool> IsEntityHiddenAsync(Guid id, CancellationToken cancellationToken) =>
         await _db.Entities.AsNoTracking()
             .AnyAsync(entity => entity.Id == id && entity.IsNsfw, cancellationToken);
+
+    private async Task<bool> IsEntityVisibleInEnabledLibraryAsync(Guid id, CancellationToken cancellationToken) =>
+        await ApplyEnabledLibraryVisibility(_db.Entities.AsNoTracking())
+            .AnyAsync(entity => entity.Id == id, cancellationToken);
 
     private async Task<EntityCard> EnrichBookProgressAsync(
         EntityCard card,
@@ -583,6 +657,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         CancellationToken cancellationToken) {
         var query = _db.Entities.AsNoTracking()
             .Where(row => row.ParentEntityId == entityId);
+        query = ApplyEnabledLibraryVisibility(query);
         query = ApplyNsfwVisibility(query, hideNsfw);
         var childRows = await query
             .OrderBy(row => row.KindCode)
@@ -626,6 +701,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         var targetIds = links.Select(link => link.TargetEntityId).Distinct().ToArray();
         var targetQuery = _db.Entities.AsNoTracking()
             .Where(entity => targetIds.Contains(entity.Id));
+        targetQuery = ApplyEnabledLibraryVisibility(targetQuery);
         targetQuery = ApplyNsfwVisibility(targetQuery, hideNsfw);
         var targetRows = await targetQuery
             .ToDictionaryAsync(entity => entity.Id, cancellationToken);
