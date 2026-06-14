@@ -268,13 +268,6 @@ public sealed partial class EntityMetadataApplyService {
         }
     }
 
-    private async Task UpsertRatingAsync(Guid entityId, int? value, DateTimeOffset now, CancellationToken cancellationToken) {
-        var row = await _db.Entities.FindAsync([entityId], cancellationToken);
-        if (row is null) return;
-        row.RatingValue = value;
-        row.UpdatedAt = now;
-    }
-
     private async Task UpsertFlagsAsync(Guid entityId, EntityMetadataFlagsPatch? patch, DateTimeOffset now, CancellationToken cancellationToken) {
         if (patch is null) return;
         var row = await _db.Entities.FindAsync([entityId], cancellationToken);

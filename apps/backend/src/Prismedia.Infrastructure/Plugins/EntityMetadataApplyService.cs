@@ -148,10 +148,6 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
             await ReplaceClassificationAsync(entity.Id, patch.Classification, now, cancellationToken);
         }
 
-        if (fields.Contains("rating")) {
-            await UpsertRatingAsync(entity.Id, patch.Rating, now, cancellationToken);
-        }
-
         if (fields.Contains("flags")) {
             await UpsertFlagsAsync(entity.Id, patch.Flags, now, cancellationToken);
         }

@@ -46,7 +46,7 @@ public sealed record EntityMetadataPatch(
     IReadOnlyDictionary<string, int> Stats,
     IReadOnlyDictionary<string, int> Positions,
     string? Classification) {
-    /// <summary>Optional user rating value from 0 through 5.</summary>
+    /// <summary>Deprecated provider rating value. Ignored by Prismedia metadata application.</summary>
     public int? Rating { get; init; }
 
     /// <summary>Optional shared user-state flags.</summary>

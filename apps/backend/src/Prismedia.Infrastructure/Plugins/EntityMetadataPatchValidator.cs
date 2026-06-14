@@ -26,10 +26,6 @@ public static class EntityMetadataPatchValidator {
             errors.Add("title is required");
         }
 
-        if (fields.Contains("rating") && patch.Rating is not null and (< 0 or > 5)) {
-            errors.Add("rating must be from 0 through 5");
-        }
-
         if (fields.Contains("urls")) {
             foreach (var url in patch.Urls.Where(value => !string.IsNullOrWhiteSpace(value))) {
                 if (!Uri.TryCreate(url, UriKind.Absolute, out var parsed) ||

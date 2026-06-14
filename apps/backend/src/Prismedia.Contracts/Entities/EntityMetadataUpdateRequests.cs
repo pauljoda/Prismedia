@@ -7,7 +7,7 @@ namespace Prismedia.Contracts.Entities;
 /// Only fields listed in <paramref name="Fields" /> are applied, which lets callers clear
 /// included nullable or collection fields while leaving omitted sections unchanged.
 /// </summary>
-/// <param name="Fields">Patch field keys to apply, such as title, description, urls, dates, rating, or flags.</param>
+/// <param name="Fields">Patch field keys to apply, such as title, description, urls, dates, or flags. Rating fields are ignored.</param>
 /// <param name="Patch">Capability-shaped metadata values for the selected fields.</param>
 /// <param name="SelectedImages">Optional selected artwork URLs keyed by image role for plugin-driven updates.</param>
 /// <param name="Children">Optional structural child proposals for plugin-driven cascade updates.</param>

@@ -33,12 +33,11 @@ public sealed class EntityMetadataApplyServiceTests {
         var applied = await service.ApplyPatchAsync(
             entityId,
             new EntityMetadataUpdateRequest(
-                Fields: ["title", "description", "urls", "rating", "flags"],
+                Fields: ["title", "description", "urls", "flags"],
                 Patch: EmptyPatch() with {
                     Title = "New Title",
                     Description = null,
                     Urls = ["https://new.example.test"],
-                    Rating = 4,
                     Flags = new EntityMetadataFlagsPatch(IsFavorite: true, IsNsfw: false, IsOrganized: true)
                 }),
             CancellationToken.None);
@@ -48,10 +47,71 @@ public sealed class EntityMetadataApplyServiceTests {
         Assert.Null(await db.EntityDescriptions.FindAsync([entityId]));
         Assert.Equal("https://new.example.test", await db.EntityUrls.Where(row => row.EntityId == entityId).Select(row => row.Url).SingleAsync());
         var entityRow = await db.Entities.FindAsync([entityId]);
-        Assert.Equal(4, entityRow?.RatingValue);
+        Assert.Null(entityRow?.RatingValue);
         Assert.True(entityRow?.IsFavorite);
         Assert.False(entityRow?.IsNsfw);
         Assert.True(entityRow?.IsOrganized);
+    }
+
+    [Fact]
+    public async Task ApplyPatchIgnoresRatingFieldAndPreservesUserRating() {
+        await using var db = CreateContext();
+        var ratedId = Guid.Parse("41414141-4141-4141-4141-414141414141");
+        var unratedId = Guid.Parse("42424242-4242-4242-4242-424242424242");
+        SeedEntity(db, ratedId, "video", "Rated");
+        SeedEntity(db, unratedId, "video", "Unrated");
+        (await db.Entities.FindAsync([ratedId]))!.RatingValue = 3;
+        await db.SaveChangesAsync();
+
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+
+        Assert.True(await service.ApplyPatchAsync(
+            ratedId,
+            new EntityMetadataUpdateRequest(
+                Fields: ["rating"],
+                Patch: EmptyPatch() with { Rating = 99 }),
+            CancellationToken.None));
+        Assert.True(await service.ApplyPatchAsync(
+            unratedId,
+            new EntityMetadataUpdateRequest(
+                Fields: ["rating"],
+                Patch: EmptyPatch() with { Rating = 4 }),
+            CancellationToken.None));
+
+        Assert.Equal(3, (await db.Entities.FindAsync([ratedId]))?.RatingValue);
+        Assert.Null((await db.Entities.FindAsync([unratedId]))?.RatingValue);
+    }
+
+    [Fact]
+    public async Task ApplyProposalIgnoresSelectedRatingFieldAndPreservesUserRating() {
+        await using var db = CreateContext();
+        var entityId = Guid.Parse("43434343-4343-4343-4343-434343434343");
+        SeedEntity(db, entityId, "movie", "Movie");
+        (await db.Entities.FindAsync([entityId]))!.RatingValue = 2;
+        await db.SaveChangesAsync();
+
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+        var applied = await service.ApplyAsync(
+            entityId,
+            new EntityMetadataProposal(
+                ProposalId: "proposal",
+                Provider: "test",
+                TargetKind: ProposalKind.Movie,
+                Confidence: 1,
+                MatchReason: "exact",
+                Patch: EmptyPatch() with { Title = "Provider Title", Rating = 5 },
+                Images: [],
+                Children: [],
+                Candidates: [],
+                Relationships: []),
+            selectedFields: ["title", "rating"],
+            selectedImages: null,
+            CancellationToken.None);
+
+        var entity = await db.Entities.FindAsync([entityId]);
+        Assert.True(applied);
+        Assert.Equal("Provider Title", entity?.Title);
+        Assert.Equal(2, entity?.RatingValue);
     }
 
     [Fact]

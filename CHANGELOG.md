@@ -87,6 +87,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Fixed
+- Library scans and Identify no longer apply provider or sidecar ratings to your personal star ratings.
 - Disabling a library now immediately hides that library's existing media from browsing, search, detail views, related sections, and thumbnail lookups without deleting it; re-enabling the library brings the same media back.
 - Job Control's Kill all action now stops running work instead of only marking rows cancelled, and cancelled scans can no longer keep spawning follow-up jobs after you stop them.
 - Identify Seek and manual search now stay within providers that support the item being matched, so a stale provider from another media kind can no longer drive the search while the picker shows a different provider.

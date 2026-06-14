@@ -1344,6 +1344,7 @@ public sealed class LibraryScanPersistenceServiceTests {
         SeedVideo(db, videoId, "/media/movie.mkv");
         var video = await db.Entities.FindAsync([videoId]);
         video!.Title = "movie";
+        video.RatingValue = 4;
         db.EntityDescriptions.Add(new EntityDescriptionRow {
             EntityId = videoId,
             Value = "User description",
@@ -1368,7 +1369,7 @@ public sealed class LibraryScanPersistenceServiceTests {
             CancellationToken.None);
 
         Assert.Equal("Sidecar Title", video.Title);
-        Assert.Null(video.RatingValue);
+        Assert.Equal(4, video.RatingValue);
         Assert.Equal("User description", (await db.EntityDescriptions.FindAsync([videoId]))?.Value);
         var release = await db.EntityDates.FindAsync([videoId, "release"]);
         Assert.Equal("2026-05-01", release?.Value);
