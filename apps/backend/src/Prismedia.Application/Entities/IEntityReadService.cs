@@ -80,6 +80,35 @@ public interface IEntityReadService {
         bool? orphaned = null);
 
     /// <summary>
+    /// Lists active entities using the generated query contract shared by the API and frontend.
+    /// </summary>
+    Task<EntityListResponse> ListAsync(EntityListQuery query, CancellationToken cancellationToken) =>
+        ListAsync(
+            query.Kind,
+            query.Query,
+            query.Cursor,
+            query.HideNsfw,
+            query.Limit,
+            cancellationToken,
+            query.ReferencedBy,
+            query.RelationshipCode,
+            query.Sort,
+            query.SortDir,
+            query.Seed,
+            query.Favorite,
+            query.Organized,
+            query.RatingMin,
+            query.RatingMax,
+            query.Unrated,
+            query.Status,
+            query.BookType,
+            query.BookFormat,
+            query.Nsfw,
+            query.HasFile,
+            query.Played,
+            query.Orphaned);
+
+    /// <summary>
     /// Gets one active entity as the shared entity card read model.
     /// </summary>
     Task<EntityCard?> GetAsync(Guid id, bool hideNsfw, CancellationToken cancellationToken);

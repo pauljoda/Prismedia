@@ -8,59 +8,20 @@ namespace Prismedia.Api.Endpoints;
 internal static class EntityListEndpoint {
     internal static RouteGroupBuilder MapEntityListEndpoint(this RouteGroupBuilder group) {
         group.MapGet("/", async (
-            string? kind,
-            string? query,
-            string? cursor,
-            bool? hideNsfw,
-            int? limit,
-            Guid? referencedBy,
-            string? relationshipCode,
-            string? sort,
-            string? sortDir,
-            int? seed,
-            bool? favorite,
-            bool? organized,
-            int? ratingMin,
-            int? ratingMax,
-            bool? unrated,
-            string? status,
-            string? bookType,
-            string? bookFormat,
-            bool? nsfw,
-            bool? hasFile,
-            bool? played,
-            bool? orphaned,
+            [AsParameters] EntityListQuery request,
             HttpContext httpContext,
             IEntityReadService entities,
             CancellationToken cancellationToken) => {
-                if (!TryGetKind(kind, out var resolvedKind, out var error)) {
+                if (!TryGetKind(request.Kind, out var resolvedKind, out var error)) {
                     return error;
                 }
 
                 return Results.Ok(await entities.ListAsync(
-                    resolvedKind,
-                    query,
-                    cursor,
-                    NsfwVisibility.ShouldHide(hideNsfw, httpContext),
-                    limit,
-                    cancellationToken,
-                    referencedBy,
-                    relationshipCode,
-                    sort,
-                    sortDir,
-                    seed,
-                    favorite,
-                    organized,
-                    ratingMin,
-                    ratingMax,
-                    unrated,
-                    status,
-                    bookType,
-                    bookFormat,
-                    nsfw,
-                    hasFile,
-                    played,
-                    orphaned));
+                    request with {
+                        Kind = resolvedKind,
+                        HideNsfw = NsfwVisibility.ShouldHide(request.HideNsfw, httpContext),
+                    },
+                    cancellationToken));
             })
             .WithName("ListEntities")
             .WithSummary("List Entities.")
