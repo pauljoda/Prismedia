@@ -77,6 +77,21 @@ public sealed class JobEndpointServiceTests {
     }
 
     [Fact]
+    public async Task CancelJobsEndpointCancelsAllWhenSfwVisibilityIsActive() {
+        using var factory = CreateFactory();
+        using var client = factory.CreateAuthenticatedClient();
+        using var request = new HttpRequestMessage(HttpMethod.Delete, "/api/jobs?hideNsfw=true");
+        request.Headers.Add("Cookie", "prismedia-nsfw-mode=off");
+
+        using var response = await client.SendAsync(request);
+        var payload = await response.Content.ReadFromJsonAsync<JobCancelResponse>(CodecJson);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(payload);
+        Assert.Equal(3, payload.Cancelled);
+    }
+
+    [Fact]
     public async Task ClearFailuresEndpointClearsByOptionalType() {
         using var factory = CreateFactory();
         using var client = factory.CreateAuthenticatedClient();

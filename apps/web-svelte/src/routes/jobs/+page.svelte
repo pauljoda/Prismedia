@@ -279,6 +279,9 @@
   const canAcknowledgeFailures = $derived(
     actionableFailedTotal > 0,
   );
+  const canShowCancelAllJobs = $derived(
+    nsfw.mode !== "show" || totalActive + totalQueued > 0,
+  );
 
   const runningJobs = $derived(
     (dashboard?.activeJobs ?? []).filter((j) => j.status === "active"),
@@ -390,11 +393,11 @@
           {acknowledging === "all" ? "Clearing…" : "Clear all failures"}
         </button>
       {/if}
-      {#if totalActive + totalQueued > 0}
+      {#if canShowCancelAllJobs}
         <button
           type="button"
           onclick={() => void handleCancelAllJobs()}
-          disabled={cancellingAllJobs}
+          disabled={cancellingAllJobs || loading}
           class="flex items-center gap-1.5 rounded-xs px-2.5 py-1.5 text-xs text-text-muted transition-colors hover:bg-status-error/10 hover:text-status-error-text disabled:opacity-40"
         >
           <Square class="h-3.5 w-3.5" />

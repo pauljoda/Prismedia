@@ -198,6 +198,17 @@ public sealed class JobQueueService : IJobQueueService {
             query = query.Where(job => job.Type == type.Value);
         }
 
+        if (_db.Database.IsRelational()) {
+            return await query.ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(job => job.Status, JobRunStatus.Cancelled)
+                    .SetProperty(job => job.Message, "Cancelled")
+                    .SetProperty(job => job.LockedAt, (DateTimeOffset?)null)
+                    .SetProperty(job => job.LockedBy, (string?)null)
+                    .SetProperty(job => job.FinishedAt, now),
+                cancellationToken);
+        }
+
         var rows = await query.ToListAsync(cancellationToken);
         foreach (var row in rows) {
             row.Status = JobRunStatus.Cancelled;

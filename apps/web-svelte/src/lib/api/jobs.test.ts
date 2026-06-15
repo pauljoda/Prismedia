@@ -39,6 +39,15 @@ describe("jobs API", () => {
     expect(response.cancelled).toBe(2);
   });
 
+  it("omits the type query parameter for cancel all", async () => {
+    const fetchMock = mockFetch({ cancelled: 3 });
+
+    const response = await cancelJobs();
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/jobs", expect.anything());
+    expect(response.cancelled).toBe(3);
+  });
+
   it("normalizes maintenance job counts", async () => {
     mockFetch({ enqueued: "7", skipped: "3" });
 
