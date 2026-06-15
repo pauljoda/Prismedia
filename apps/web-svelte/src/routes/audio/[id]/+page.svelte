@@ -11,7 +11,6 @@
     updateEntityMetadata,
   } from "$lib/api/entity-mutations";
   import { assetUrl } from "$lib/api/orval-fetch";
-  import type { AudioTrackListItemDto } from "@prismedia/contracts";
   import { getCapability } from "$lib/api/capabilities";
   import {
     toggleOptimisticEntityFlag,
@@ -20,6 +19,7 @@
   import { entityCardToDetailCard, type EntityDetailCardFull, type EntityDetailCredit, type EntityDetailTag } from "$lib/entities/entity-detail";
   import { CREDIT_ROLE } from "$lib/entities/entity-codes";
   import { resolveEntityHref } from "$lib/entities/entity-routes";
+  import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
   import {
     fetchOrderedEntityThumbnails,
     hydrateStandardRelationshipCards,

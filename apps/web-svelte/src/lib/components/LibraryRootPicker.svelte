@@ -1,6 +1,6 @@
 <script lang="ts">
   import { FolderOpen } from "@lucide/svelte";
-  import type { LibraryRootSummaryDto } from "@prismedia/contracts";
+  import type { LibraryRootSummaryDto } from "$lib/entities/media-view-models";
 
   interface Props {
     open: boolean;

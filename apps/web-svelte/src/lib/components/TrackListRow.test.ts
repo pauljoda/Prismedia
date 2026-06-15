@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { describe, expect, it, vi } from "vitest";
-import type { AudioTrackListItemDto } from "@prismedia/contracts";
 import TrackListRow from "./TrackListRow.svelte";
+import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
 
 describe("TrackListRow", () => {
   it("displays zero-based structural track order as one-based numbers", () => {

@@ -1,6 +1,6 @@
 import { CAPABILITY_KIND, PROGRESS_UNIT, READER_MODE, type ProgressUnitCode, type ReaderModeCode } from "$lib/api/generated/codes";
-import type { ImageListItemDto } from "@prismedia/contracts";
 import { getCapability } from "$lib/api/capabilities";
+import type { ImageListItemDto } from "$lib/entities/media-view-models";
 import { numberValue } from "$lib/utils/format";
 import type { EntityCard, EntityThumbnail } from "$lib/api/generated/model";
 

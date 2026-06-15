@@ -10,8 +10,8 @@
     ChevronRight,
     Image as ImageIcon,
   } from "@lucide/svelte";
-  import type { ImageListItemDto } from "@prismedia/contracts";
   import { apiAssetUrl as toApiUrl } from "$lib/api/orval-fetch";
+  import type { ImageListItemDto } from "$lib/entities/media-view-models";
   import ReaderShell from "$lib/components/reader/ReaderShell.svelte";
   import NsfwBlur from "./nsfw/NsfwBlur.svelte";
   import {

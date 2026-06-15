@@ -2,7 +2,7 @@ import { invalidateAll } from "$app/navigation";
 import type {
   AudioLibraryListItemDto,
   LibraryRootSummaryDto,
-} from "@prismedia/contracts";
+} from "$lib/entities/media-view-models";
 import { fetchApi as fetchApi, uploadFile as uploadFile } from "$lib/api/orval-fetch";
 import type { UploadFileProgress, UploadTarget } from "./upload-types";
 

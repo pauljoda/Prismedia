@@ -1,10 +1,10 @@
-import type { AudioTrackListItemDto } from "@prismedia/contracts";
 import {
   MUSIC_PLAYER_MINI_SIDE,
   MUSIC_PLAYER_REPEAT_MODE,
   type MusicPlayerMiniSideCode,
   type MusicPlayerRepeatModeCode,
 } from "$lib/api/generated/codes";
+import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
 import { createOptionalContext } from "$lib/utils/context";
 
 export type RepeatMode = MusicPlayerRepeatModeCode;

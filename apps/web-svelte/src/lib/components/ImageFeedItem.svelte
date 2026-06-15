@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Image as ImageIcon, Video as VideoIcon } from "@lucide/svelte";
-  import type { ImageListItemDto } from "@prismedia/contracts";
   import { apiAssetUrl as toApiUrl } from "$lib/api/orval-fetch";
+  import type { ImageListItemDto } from "$lib/entities/media-view-models";
   import { elementInView } from "$lib/hooks/element-in-view.svelte";
   import NsfwBlur from "$lib/components/nsfw/NsfwBlur.svelte";
 

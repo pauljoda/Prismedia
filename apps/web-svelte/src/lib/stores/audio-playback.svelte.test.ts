@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { AudioTrackListItemDto } from "@prismedia/contracts";
+import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
 import { MUSIC_PLAYER_MINI_SIDE, MUSIC_PLAYER_REPEAT_MODE } from "$lib/api/generated/codes";
 import {
   AudioPlaybackStore,

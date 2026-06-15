@@ -1,6 +1,6 @@
-import type { AudioTrackListItemDto } from "@prismedia/contracts";
 import type { AudioTrackDetail, EntityThumbnail } from "$lib/api/generated/model";
 import { getCapability } from "$lib/api/capabilities";
+import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
 
 function parseDurationString(value: string | null | undefined): number | null {
   if (!value) return null;

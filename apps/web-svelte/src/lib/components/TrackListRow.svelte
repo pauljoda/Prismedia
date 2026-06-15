@@ -8,8 +8,8 @@
     X,
   } from "@lucide/svelte";
   import { cn } from "@prismedia/ui-svelte";
-  import type { AudioTrackListItemDto } from "@prismedia/contracts";
   import { keepFlyoutOnScreen } from "$lib/actions/keep-flyout-on-screen";
+  import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
   import StarRatingPicker from "./StarRatingPicker.svelte";
 
   interface Props {
