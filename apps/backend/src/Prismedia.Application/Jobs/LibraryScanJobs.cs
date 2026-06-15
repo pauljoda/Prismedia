@@ -11,7 +11,7 @@ namespace Prismedia.Application.Jobs;
 /// </summary>
 public static class LibraryScanJobs {
     /// <summary>Target entity kind recorded on root-scoped scan jobs for dashboard display and deduplication.</summary>
-    public const string TargetKind = "library-root";
+    public const string TargetKind = JobTargetKinds.LibraryRoot;
 
     /// <summary>
     /// Yields the scan job type that covers each media kind enabled on a library root.

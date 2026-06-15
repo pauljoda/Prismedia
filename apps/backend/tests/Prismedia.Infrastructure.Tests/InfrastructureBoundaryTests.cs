@@ -78,6 +78,26 @@ public sealed class InfrastructureBoundaryTests {
     }
 
     [Fact]
+    public void ProductionQueueRequestsDoNotRetypeTargetKindLiterals() {
+        var sourceFiles = Directory.GetFiles(
+            RepoPath("apps/backend/src"),
+            "*.cs",
+            SearchOption.AllDirectories);
+        var offenders = sourceFiles
+            .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}Migrations{Path.DirectorySeparatorChar}"))
+            .Where(file => {
+                var source = File.ReadAllText(file);
+                return source.Contains("TargetEntityKind: \"", StringComparison.Ordinal) ||
+                    source.Contains("TargetEntityKind = \"", StringComparison.Ordinal);
+            })
+            .Select(file => Path.GetRelativePath(Path.GetDirectoryName(RepoPath("package.json"))!, file).Replace('\\', '/'))
+            .OrderBy(path => path, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Empty(offenders);
+    }
+
+    [Fact]
     public void ContractProjectStaysDataOnly() {
         // Contracts may reference the dependency-free Domain core so DTOs can carry [Code]
         // value objects (typed enums) instead of stringly-typed boundary fields — Domain has no

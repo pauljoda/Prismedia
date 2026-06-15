@@ -114,15 +114,25 @@ public sealed class ScanGalleryJobHandler(
                 var imageId = await images.UpsertImageAsync(filePath, title, galleryId, size, sortOrder, root.IsNsfw, cancellationToken);
 
                 if (settings.AutoGeneratePreview && await NeedsPreviewAsync(imageId, filePath, cancellationToken)) {
-                    await context.EnqueueIfNeededAsync(new EnqueueJobRequest(
-                        JobType.GenerateImageThumbnail, TargetEntityKind: "image",
-                        TargetEntityId: imageId.ToString(), TargetLabel: title, Priority: JobPriorities.Thumbnail), cancellationToken);
+                    await context.EnqueueIfNeededAsync(
+                        EnqueueJobRequest.ForEntity(
+                            JobType.GenerateImageThumbnail,
+                            EntityKind.Image,
+                            imageId.ToString(),
+                            title,
+                            JobPriorities.Thumbnail),
+                        cancellationToken);
                 }
 
                 if (await FingerprintGating.ShouldFingerprintAsync(downstreamNeeds, settings, imageId, cancellationToken)) {
-                    await context.EnqueueIfNeededAsync(new EnqueueJobRequest(
-                        JobType.FingerprintImage, TargetEntityKind: "image",
-                        TargetEntityId: imageId.ToString(), TargetLabel: title, Priority: JobPriorities.Fingerprint), cancellationToken);
+                    await context.EnqueueIfNeededAsync(
+                        EnqueueJobRequest.ForEntity(
+                            JobType.FingerprintImage,
+                            EntityKind.Image,
+                            imageId.ToString(),
+                            title,
+                            JobPriorities.Fingerprint),
+                        cancellationToken);
                 }
 
                 // Loose images (no owning gallery) are their own auto-identify roots; images inside a

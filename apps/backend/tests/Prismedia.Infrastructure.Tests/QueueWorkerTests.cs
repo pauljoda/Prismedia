@@ -228,6 +228,12 @@ public sealed class QueueWorkerTests {
         public Task SaveSettingOverridesAsync(IReadOnlyDictionary<string, string> values, CancellationToken cancellationToken) =>
             Task.CompletedTask;
 
+        public Task ReplaceSettingOverridesAsync(
+            IReadOnlyDictionary<string, string> upserts,
+            IReadOnlyCollection<string> deletes,
+            CancellationToken cancellationToken) =>
+            Task.CompletedTask;
+
         public Task DeleteSettingOverrideAsync(string key, CancellationToken cancellationToken) =>
             Task.CompletedTask;
 

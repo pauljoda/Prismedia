@@ -34,7 +34,7 @@ public sealed class RequestFeatureTests {
         await using var db = CreateContext();
         var store = new EfRequestServiceInstanceStore(db);
 
-        var first = await store.SaveAsync(new RequestServiceInstanceSaveRequest(
+        var first = await store.SaveAsync(new RequestServiceInstanceSaveCommand(
             null,
             RequestProviderKind.Radarr,
             "Movies",
@@ -49,7 +49,7 @@ public sealed class RequestFeatureTests {
             false),
             CancellationToken.None);
 
-        var second = await store.SaveAsync(new RequestServiceInstanceSaveRequest(
+        var second = await store.SaveAsync(new RequestServiceInstanceSaveCommand(
             null,
             RequestProviderKind.Radarr,
             "4K Movies",
@@ -77,7 +77,7 @@ public sealed class RequestFeatureTests {
     public async Task ServiceStoreReportsExistingApiKeyWhenEditingWithoutReplacement() {
         await using var db = CreateContext();
         var store = new EfRequestServiceInstanceStore(db);
-        var created = await store.SaveAsync(new RequestServiceInstanceSaveRequest(
+        var created = await store.SaveAsync(new RequestServiceInstanceSaveCommand(
             null,
             RequestProviderKind.Radarr,
             "Movies",
@@ -92,7 +92,7 @@ public sealed class RequestFeatureTests {
             false),
             CancellationToken.None);
 
-        var edited = await store.SaveAsync(new RequestServiceInstanceSaveRequest(
+        var edited = await store.SaveAsync(new RequestServiceInstanceSaveCommand(
             created.Id,
             RequestProviderKind.Radarr,
             "Movies",
@@ -108,6 +108,48 @@ public sealed class RequestFeatureTests {
             CancellationToken.None);
 
         Assert.True(edited.HasApiKey);
+    }
+
+    [Fact]
+    public async Task ServiceStorePromotesReplacementDefaultWhenDeletingDefaultInstance() {
+        await using var db = CreateContext();
+        var store = new EfRequestServiceInstanceStore(db);
+        var first = await store.SaveAsync(new RequestServiceInstanceSaveCommand(
+            null,
+            RequestProviderKind.Radarr,
+            "Movies",
+            "http://radarr.test",
+            "secret-key",
+            null,
+            null,
+            null,
+            RequestMinimumAvailability.Released,
+            [],
+            true,
+            false),
+            CancellationToken.None);
+        var second = await store.SaveAsync(new RequestServiceInstanceSaveCommand(
+            null,
+            RequestProviderKind.Radarr,
+            "4K Movies",
+            "http://radarr-4k.test",
+            "another-key",
+            null,
+            null,
+            null,
+            RequestMinimumAvailability.Released,
+            [],
+            true,
+            true),
+            CancellationToken.None);
+
+        var deleted = await store.DeleteAsync(second.Id, CancellationToken.None);
+        var services = await store.ListAsync(CancellationToken.None);
+
+        Assert.True(deleted);
+        var remaining = Assert.Single(services);
+        Assert.Equal(first.Id, remaining.Id);
+        Assert.True(remaining.IsDefault);
     }
 
     [Fact]
@@ -948,7 +990,7 @@ public sealed class RequestFeatureTests {
     public async Task TestServiceReusesStoredKeyAndReturnsOptionsOnSuccess() {
         await using var db = CreateContext();
         var store = new EfRequestServiceInstanceStore(db);
-        var created = await store.SaveAsync(new RequestServiceInstanceSaveRequest(
+        var created = await store.SaveAsync(new RequestServiceInstanceSaveCommand(
             null, RequestProviderKind.Radarr, "Movies", "http://radarr.test", "stored-key", null, null, null,
             RequestMinimumAvailability.Released, [], true, false), CancellationToken.None);
 

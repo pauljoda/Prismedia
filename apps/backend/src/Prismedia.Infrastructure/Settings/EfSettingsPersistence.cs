@@ -46,17 +46,33 @@ public sealed class EfSettingsPersistence : ISettingsPersistence {
     public async Task SaveSettingOverridesAsync(
         IReadOnlyDictionary<string, string> values,
         CancellationToken cancellationToken) {
-        if (values.Count == 0) {
+        await ReplaceSettingOverridesAsync(values, [], cancellationToken);
+    }
+
+    public async Task ReplaceSettingOverridesAsync(
+        IReadOnlyDictionary<string, string> upserts,
+        IReadOnlyCollection<string> deletes,
+        CancellationToken cancellationToken) {
+        var deleteKeys = deletes
+            .Where(key => !string.IsNullOrWhiteSpace(key))
+            .ToHashSet(StringComparer.Ordinal);
+        var keys = upserts.Keys.Concat(deleteKeys).Distinct(StringComparer.Ordinal).ToArray();
+        if (keys.Length == 0) {
             return;
         }
 
-        var keys = values.Keys.ToArray();
         var existing = await _db.AppSettings
             .Where(row => keys.Contains(row.Key))
             .ToDictionaryAsync(row => row.Key, StringComparer.Ordinal, cancellationToken);
         var now = DateTimeOffset.UtcNow;
 
-        foreach (var (key, valueJson) in values) {
+        foreach (var key in deleteKeys.Where(key => !upserts.ContainsKey(key))) {
+            if (existing.TryGetValue(key, out var row)) {
+                _db.AppSettings.Remove(row);
+            }
+        }
+
+        foreach (var (key, valueJson) in upserts) {
             if (existing.TryGetValue(key, out var row)) {
                 row.ValueJson = valueJson;
                 row.UpdatedAt = now;
@@ -142,6 +158,17 @@ public sealed class EfSettingsPersistence : ISettingsPersistence {
     }
 
     public async Task<bool> DeleteLibraryRootAsync(Guid id, CancellationToken cancellationToken) {
+        if (!_db.Database.IsRelational() || _db.Database.CurrentTransaction is not null) {
+            return await DeleteLibraryRootCoreAsync(id, cancellationToken);
+        }
+
+        await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+        var deleted = await DeleteLibraryRootCoreAsync(id, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return deleted;
+    }
+
+    private async Task<bool> DeleteLibraryRootCoreAsync(Guid id, CancellationToken cancellationToken) {
         var row = await _db.LibraryRoots.FindAsync([id], cancellationToken);
         if (row is null) {
             return false;

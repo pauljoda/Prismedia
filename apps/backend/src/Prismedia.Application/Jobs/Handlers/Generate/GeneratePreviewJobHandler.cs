@@ -28,12 +28,12 @@ public sealed class GeneratePreviewJobHandler(
 
         if (settings.GenerateTrickplay && duration is null or <= 0) {
             await context.EnqueueIfNeededAsync(
-                new EnqueueJobRequest(
+                EnqueueJobRequest.ForEntity(
                     JobType.ProbeVideo,
-                    TargetEntityKind: "video",
-                    TargetEntityId: entityId.ToString(),
-                    TargetLabel: context.Job.TargetLabel,
-                    Priority: JobPriorities.Probe),
+                    EntityKind.Video,
+                    entityId.ToString(),
+                    context.Job.TargetLabel,
+                    JobPriorities.Probe),
                 cancellationToken);
             throw new InvalidOperationException($"Cannot generate trickplay for {entityId} until video probe metadata is available.");
         }

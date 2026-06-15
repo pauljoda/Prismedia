@@ -135,6 +135,21 @@ public sealed class MusicPlayerStateServiceTests {
             return Task.CompletedTask;
         }
 
+        public Task ReplaceSettingOverridesAsync(
+            IReadOnlyDictionary<string, string> upserts,
+            IReadOnlyCollection<string> deletes,
+            CancellationToken cancellationToken) {
+            foreach (var key in deletes) {
+                Values.Remove(key);
+            }
+
+            foreach (var (key, value) in upserts) {
+                Values[key] = value;
+            }
+
+            return Task.CompletedTask;
+        }
+
         public Task DeleteSettingOverrideAsync(string key, CancellationToken cancellationToken) {
             Values.Remove(key);
             return Task.CompletedTask;

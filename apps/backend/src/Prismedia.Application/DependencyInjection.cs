@@ -43,6 +43,7 @@ public static class DependencyInjection {
         services.AddScoped<JellyfinCatalogService>();
         services.AddScoped<OrganizeService>();
         services.AddScoped<FilesService>();
+        services.AddScoped<RequestServiceInstanceCommandService>();
         services.AddScoped<RequestSearchService>();
         services.AddScoped<RequestDetailService>();
         services.AddScoped<RequestServiceTestService>();

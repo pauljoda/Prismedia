@@ -87,6 +87,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Fixed
+- Settings and Request Services now save multi-step changes as one coherent update, so a failed save or delete is much less likely to leave half-applied defaults, roots, or service selections behind.
 - Job Control's Kill all action now works in SFW mode and cancels hidden queued or running jobs without exposing them in the dashboard.
 - Removing a library root now clears media that was scanned from that root, and scans also clean up media stranded by older root deletions, so stale videos, galleries, books, audio entries, and empty video containers disappear from the app.
 - Selecting a result from Identify search now uses that chosen provider ID directly, keeps the current results visible while Prismedia resolves it, and opens the proposal review on the same item instead of starting a fresh search or bouncing back through the dashboard.

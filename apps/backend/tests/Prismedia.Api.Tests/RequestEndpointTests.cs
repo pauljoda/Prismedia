@@ -185,22 +185,22 @@ public sealed class RequestEndpointTests {
         public Task<RequestServiceInstanceDetail?> GetAsync(Guid id, CancellationToken cancellationToken) =>
             Task.FromResult(_items.GetValueOrDefault(id));
 
-        public Task<RequestServiceInstanceSummary> SaveAsync(RequestServiceInstanceSaveRequest request, CancellationToken cancellationToken) {
-            var id = request.Id ?? Guid.NewGuid();
+        public Task<RequestServiceInstanceSummary> SaveAsync(RequestServiceInstanceSaveCommand command, CancellationToken cancellationToken) {
+            var id = command.Id ?? Guid.NewGuid();
             var detail = new RequestServiceInstanceDetail(
                 id,
-                request.Kind,
-                request.DisplayName,
-                request.BaseUrl,
+                command.Kind,
+                command.DisplayName,
+                command.BaseUrl,
                 true,
-                request.DefaultRootFolderPath,
-                request.DefaultQualityProfileId,
-                request.DefaultMetadataProfileId,
-                request.MinimumAvailability,
-                request.DefaultTagIds,
-                request.SearchOnRequest,
-                !string.IsNullOrWhiteSpace(request.ApiKey),
-                request.ApiKey);
+                command.DefaultRootFolderPath,
+                command.DefaultQualityProfileId,
+                command.DefaultMetadataProfileId,
+                command.MinimumAvailability,
+                command.DefaultTagIds,
+                command.SearchOnRequest,
+                !string.IsNullOrWhiteSpace(command.ApiKey),
+                command.ApiKey);
             _items[id] = detail;
             return Task.FromResult(ToSummary(detail));
         }

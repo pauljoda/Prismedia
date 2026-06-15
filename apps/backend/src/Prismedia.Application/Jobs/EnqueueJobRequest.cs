@@ -19,4 +19,24 @@ public sealed record EnqueueJobRequest(
     string? TargetEntityId = null,
     string? TargetLabel = null,
     int Priority = 0,
-    JobRunLane? Lane = null);
+    JobRunLane? Lane = null) {
+    /// <summary>
+    /// Creates a queue request for a Prismedia entity target using the canonical entity-kind code.
+    /// </summary>
+    public static EnqueueJobRequest ForEntity(
+        JobType type,
+        EntityKind kind,
+        string entityId,
+        string? label,
+        int priority = 0,
+        string? payloadJson = null,
+        JobRunLane? lane = null) =>
+        new(
+            type,
+            payloadJson,
+            kind.ToCode(),
+            entityId,
+            label,
+            priority,
+            lane);
+}

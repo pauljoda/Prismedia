@@ -120,22 +120,22 @@ public sealed class ScanLibraryJobHandler(
                     // then the quick grid thumbnail, then subtitle sidecars, leaving the heavy
                     // preview/trickplay generation last so it never delays newer media.
                     if (settings.AutoGenerateMetadata && entityNeeds.NeedsProbe)
-                        jobRequests.Add(new EnqueueJobRequest(JobType.ProbeVideo, TargetEntityKind: "video", TargetEntityId: entityIdStr, TargetLabel: label, Priority: JobPriorities.Probe));
+                        jobRequests.Add(EnqueueJobRequest.ForEntity(JobType.ProbeVideo, EntityKind.Video, entityIdStr, label, JobPriorities.Probe));
 
                     if (FingerprintGating.ShouldFingerprint(settings, entityNeeds))
-                        jobRequests.Add(new EnqueueJobRequest(JobType.FingerprintVideo, TargetEntityKind: "video", TargetEntityId: entityIdStr, TargetLabel: label, Priority: JobPriorities.Fingerprint));
+                        jobRequests.Add(EnqueueJobRequest.ForEntity(JobType.FingerprintVideo, EntityKind.Video, entityIdStr, label, JobPriorities.Fingerprint));
 
                     if (entityNeeds.NeedsSubtitleExtraction)
-                        jobRequests.Add(new EnqueueJobRequest(JobType.ExtractSubtitles, TargetEntityKind: "video", TargetEntityId: entityIdStr, TargetLabel: label, Priority: JobPriorities.Sidecar));
+                        jobRequests.Add(EnqueueJobRequest.ForEntity(JobType.ExtractSubtitles, EntityKind.Video, entityIdStr, label, JobPriorities.Sidecar));
 
                     var shouldGeneratePreview = settings.AutoGeneratePreview && entityNeeds.NeedsPreview;
                     var shouldGenerateTrickplay = settings.GenerateTrickplay && entityNeeds.NeedsTrickplay;
                     if (shouldGeneratePreview || shouldGenerateTrickplay)
-                        jobRequests.Add(new EnqueueJobRequest(JobType.GeneratePreview, TargetEntityKind: "video", TargetEntityId: entityIdStr, TargetLabel: label, Priority: JobPriorities.Preview));
+                        jobRequests.Add(EnqueueJobRequest.ForEntity(JobType.GeneratePreview, EntityKind.Video, entityIdStr, label, JobPriorities.Preview));
                     else if (entityNeeds.NeedsGridThumbnail)
                         // Backfill the small grid variant for an existing cover (GeneratePreview, which
                         // also generates it, isn't running because a thumbnail already exists).
-                        jobRequests.Add(new EnqueueJobRequest(JobType.GenerateGridThumbnail, TargetEntityKind: "video", TargetEntityId: entityIdStr, TargetLabel: label, Priority: JobPriorities.Thumbnail));
+                        jobRequests.Add(EnqueueJobRequest.ForEntity(JobType.GenerateGridThumbnail, EntityKind.Video, entityIdStr, label, JobPriorities.Thumbnail));
                 }
 
                 if (jobRequests.Count > 0) {

@@ -42,46 +42,46 @@ public sealed class EfRequestServiceInstanceStore(PrismediaDbContext db) : IRequ
         return ToDetail(row, apiKey);
     }
 
-    public async Task<RequestServiceInstanceSummary> SaveAsync(RequestServiceInstanceSaveRequest request, CancellationToken cancellationToken) {
+    public async Task<RequestServiceInstanceSummary> SaveAsync(RequestServiceInstanceSaveCommand command, CancellationToken cancellationToken) {
         var now = DateTimeOffset.UtcNow;
-        var row = request.Id is { } id
+        var row = command.Id is { } id
             ? await db.RequestServiceInstances.FirstOrDefaultAsync(candidate => candidate.Id == id, cancellationToken)
             : null;
 
         if (row is null) {
             row = new RequestServiceInstanceRow {
-                Id = request.Id ?? Guid.NewGuid(),
+                Id = command.Id ?? Guid.NewGuid(),
                 CreatedAt = now
             };
             db.RequestServiceInstances.Add(row);
         }
 
         var hasAnyOfKind = await db.RequestServiceInstances.AnyAsync(candidate =>
-            candidate.Kind == request.Kind && candidate.Id != row.Id, cancellationToken);
-        var shouldBeDefault = request.IsDefault || !hasAnyOfKind;
+            candidate.Kind == command.Kind && candidate.Id != row.Id, cancellationToken);
+        var shouldBeDefault = command.IsDefault || !hasAnyOfKind;
 
-        row.Kind = request.Kind;
-        row.DisplayName = request.DisplayName.Trim();
-        row.BaseUrl = request.BaseUrl.Trim().TrimEnd('/');
-        row.DefaultRootFolderPath = string.IsNullOrWhiteSpace(request.DefaultRootFolderPath) ? null : request.DefaultRootFolderPath.Trim();
-        row.DefaultQualityProfileId = request.DefaultQualityProfileId;
-        row.DefaultMetadataProfileId = request.DefaultMetadataProfileId;
-        row.MinimumAvailability = request.MinimumAvailability;
-        row.DefaultTagIds = request.DefaultTagIds.Distinct().Order().ToArray();
-        row.SearchOnRequest = request.SearchOnRequest;
+        row.Kind = command.Kind;
+        row.DisplayName = command.DisplayName;
+        row.BaseUrl = command.BaseUrl;
+        row.DefaultRootFolderPath = command.DefaultRootFolderPath;
+        row.DefaultQualityProfileId = command.DefaultQualityProfileId;
+        row.DefaultMetadataProfileId = command.DefaultMetadataProfileId;
+        row.MinimumAvailability = command.MinimumAvailability;
+        row.DefaultTagIds = command.DefaultTagIds.ToArray();
+        row.SearchOnRequest = command.SearchOnRequest;
         row.IsDefault = shouldBeDefault;
         row.UpdatedAt = now;
 
         if (shouldBeDefault) {
             var priorDefaults = await db.RequestServiceInstances
-                .Where(candidate => candidate.Kind == request.Kind && candidate.Id != row.Id)
+                .Where(candidate => candidate.Kind == command.Kind && candidate.Id != row.Id)
                 .ToArrayAsync(cancellationToken);
             foreach (var priorDefault in priorDefaults) {
                 priorDefault.IsDefault = false;
             }
         }
 
-        if (!string.IsNullOrWhiteSpace(request.ApiKey)) {
+        if (!string.IsNullOrWhiteSpace(command.ApiKey)) {
             var credential = await db.RequestServiceCredentials.FirstOrDefaultAsync(candidate =>
                 candidate.ServiceInstanceId == row.Id && candidate.CredentialKey == RequestProviderHttp.ApiKeyCredential,
                 cancellationToken);
@@ -95,19 +95,14 @@ public sealed class EfRequestServiceInstanceStore(PrismediaDbContext db) : IRequ
                 db.RequestServiceCredentials.Add(credential);
             }
 
-            credential.EncryptedValue = request.ApiKey;
+            credential.EncryptedValue = command.ApiKey;
             credential.UpdatedAt = now;
         }
 
         await db.SaveChangesAsync(cancellationToken);
 
-        if (await db.RequestServiceInstances.CountAsync(candidate => candidate.Kind == request.Kind, cancellationToken) == 1 && !row.IsDefault) {
-            row.IsDefault = true;
-            await db.SaveChangesAsync(cancellationToken);
-        }
-
-        var savedApiKey = !string.IsNullOrWhiteSpace(request.ApiKey)
-            ? request.ApiKey
+        var savedApiKey = !string.IsNullOrWhiteSpace(command.ApiKey)
+            ? command.ApiKey
             : await db.RequestServiceCredentials
                 .AsNoTracking()
                 .Where(credential => credential.ServiceInstanceId == row.Id && credential.CredentialKey == RequestProviderHttp.ApiKeyCredential)
@@ -124,19 +119,19 @@ public sealed class EfRequestServiceInstanceStore(PrismediaDbContext db) : IRequ
 
         var kind = row.Kind;
         var wasDefault = row.IsDefault;
+        var replacement = wasDefault
+            ? await db.RequestServiceInstances
+                .Where(candidate => candidate.Kind == kind && candidate.Id != id)
+                .OrderBy(candidate => candidate.CreatedAt)
+                .FirstOrDefaultAsync(cancellationToken)
+            : null;
+
+        if (replacement is not null) {
+            replacement.IsDefault = true;
+        }
+
         db.RequestServiceInstances.Remove(row);
         await db.SaveChangesAsync(cancellationToken);
-
-        if (wasDefault) {
-            var replacement = await db.RequestServiceInstances
-                .Where(candidate => candidate.Kind == kind)
-                .OrderBy(candidate => candidate.CreatedAt)
-                .FirstOrDefaultAsync(cancellationToken);
-            if (replacement is not null) {
-                replacement.IsDefault = true;
-                await db.SaveChangesAsync(cancellationToken);
-            }
-        }
 
         return true;
     }

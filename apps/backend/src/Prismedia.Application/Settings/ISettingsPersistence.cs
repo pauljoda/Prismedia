@@ -24,6 +24,14 @@ public interface ISettingsPersistence {
     Task SaveSettingOverridesAsync(IReadOnlyDictionary<string, string> values, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Applies a normalized batch of setting override upserts and deletions in one persistence operation.
+    /// </summary>
+    Task ReplaceSettingOverridesAsync(
+        IReadOnlyDictionary<string, string> upserts,
+        IReadOnlyCollection<string> deletes,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Deletes one persisted setting override. Missing overrides are ignored.
     /// </summary>
     Task DeleteSettingOverrideAsync(string key, CancellationToken cancellationToken);

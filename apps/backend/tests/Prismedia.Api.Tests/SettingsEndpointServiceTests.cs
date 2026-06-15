@@ -126,6 +126,21 @@ public sealed class SettingsEndpointServiceTests {
             return Task.CompletedTask;
         }
 
+        public Task ReplaceSettingOverridesAsync(
+            IReadOnlyDictionary<string, string> upserts,
+            IReadOnlyCollection<string> deletes,
+            CancellationToken cancellationToken) {
+            foreach (var key in deletes) {
+                _settings.Remove(key);
+            }
+
+            foreach (var (key, valueJson) in upserts) {
+                _settings[key] = valueJson;
+            }
+
+            return Task.CompletedTask;
+        }
+
         public Task DeleteSettingOverrideAsync(string key, CancellationToken cancellationToken) {
             _settings.Remove(key);
             return Task.CompletedTask;

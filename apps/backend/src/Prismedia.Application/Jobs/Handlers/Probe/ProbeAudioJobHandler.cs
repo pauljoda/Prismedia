@@ -39,9 +39,13 @@ public sealed class ProbeAudioJobHandler(
 
         var settings = await roots.GetSettingsAsync(cancellationToken);
         if (settings.AutoGeneratePreview && !await downstreamNeeds.HasEntityFileAsync(entityId, EntityFileRole.Waveform, cancellationToken)) {
-            await context.EnqueueIfNeededAsync(new EnqueueJobRequest(
-                JobType.GenerateAudioWaveform, TargetEntityKind: "audio-track",
-                TargetEntityId: entityId.ToString(), TargetLabel: context.Job.TargetLabel), cancellationToken);
+            await context.EnqueueIfNeededAsync(
+                EnqueueJobRequest.ForEntity(
+                    JobType.GenerateAudioWaveform,
+                    EntityKind.AudioTrack,
+                    entityId.ToString(),
+                    context.Job.TargetLabel),
+                cancellationToken);
         }
 
         logger.LogInformation("ProbeAudio: {Label} — {Duration:F1}s {Codec} {SampleRate}Hz",

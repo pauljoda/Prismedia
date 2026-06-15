@@ -69,4 +69,14 @@ internal static class AutoIdentifyScanEnqueue {
             TargetLabel: label,
             Priority: AutoIdentifyPriority);
     }
+
+    /// <summary>
+    /// Builds an auto-identify enqueue request for one typed entity kind.
+    /// </summary>
+    public static EnqueueJobRequest? RequestFor(
+        LibrarySettingsData settings,
+        EntityKind entityKind,
+        string entityId,
+        string label) =>
+        RequestFor(settings, entityKind.ToCode(), entityId, label);
 }
