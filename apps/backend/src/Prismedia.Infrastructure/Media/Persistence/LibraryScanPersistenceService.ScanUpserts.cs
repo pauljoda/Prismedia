@@ -43,6 +43,29 @@ public sealed partial class LibraryScanPersistenceService {
     }
 
     public async Task<Guid> UpsertImageAsync(string filePath, string title, Guid? galleryEntityId, long? sizeBytes, int sortOrder, bool isNsfw, CancellationToken cancellationToken) {
+        var id = await UpsertImageCoreAsync(
+            new ImageUpsertItem(filePath, title, galleryEntityId, sizeBytes, sortOrder, isNsfw),
+            cancellationToken);
+        await _db.SaveChangesAsync(cancellationToken);
+        return id;
+    }
+
+    public async Task<IReadOnlyList<Guid>> UpsertImagesBatchAsync(
+        IReadOnlyList<ImageUpsertItem> items, CancellationToken cancellationToken) {
+        if (items.Count == 0) return [];
+
+        var ids = new List<Guid>(items.Count);
+        foreach (var item in items) {
+            ids.Add(await UpsertImageCoreAsync(item, cancellationToken));
+        }
+
+        await _db.SaveChangesAsync(cancellationToken);
+        return ids;
+    }
+
+    private async Task<Guid> UpsertImageCoreAsync(
+        ImageUpsertItem item, CancellationToken cancellationToken) {
+        var (filePath, title, galleryEntityId, sizeBytes, sortOrder, isNsfw) = item;
         var existing = await FindEntityBySourcePath(EntityKindRegistry.Image.Code, filePath, cancellationToken);
         if (existing is not null) {
             var updatedAt = DateTimeOffset.UtcNow;
@@ -79,10 +102,9 @@ public sealed partial class LibraryScanPersistenceService {
                 id,
                 sortOrder,
                 now,
-                cancellationToken);
+                    cancellationToken);
         }
 
-        await _db.SaveChangesAsync(cancellationToken);
         return id;
     }
 
@@ -94,6 +116,29 @@ public sealed partial class LibraryScanPersistenceService {
         int sortOrder,
         bool isNsfw,
         CancellationToken cancellationToken) {
+        var id = await UpsertGalleryCoreAsync(
+            new GalleryUpsertItem(folderPath, title, libraryRootId, parentGalleryEntityId, sortOrder, isNsfw),
+            cancellationToken);
+        await _db.SaveChangesAsync(cancellationToken);
+        return id;
+    }
+
+    public async Task<IReadOnlyList<Guid>> UpsertGalleriesBatchAsync(
+        IReadOnlyList<GalleryUpsertItem> items, CancellationToken cancellationToken) {
+        if (items.Count == 0) return [];
+
+        var ids = new List<Guid>(items.Count);
+        foreach (var item in items) {
+            ids.Add(await UpsertGalleryCoreAsync(item, cancellationToken));
+        }
+
+        await _db.SaveChangesAsync(cancellationToken);
+        return ids;
+    }
+
+    private async Task<Guid> UpsertGalleryCoreAsync(
+        GalleryUpsertItem item, CancellationToken cancellationToken) {
+        var (folderPath, title, libraryRootId, parentGalleryEntityId, sortOrder, isNsfw) = item;
         var existing = await FindEntityBySourcePath(EntityKindRegistry.Gallery.Code, folderPath, cancellationToken);
         if (existing is not null) {
             var tracked = await _db.Entities.FindAsync([existing.Id], cancellationToken);
@@ -108,7 +153,6 @@ public sealed partial class LibraryScanPersistenceService {
             var detail = await _db.GalleryDetails.FindAsync([existing.Id], cancellationToken);
             if (detail is not null) detail.LibraryRootId = libraryRootId;
             else _db.GalleryDetails.Add(new GalleryDetailRow { EntityId = existing.Id, GalleryType = GalleryType.Folder, LibraryRootId = libraryRootId });
-            await _db.SaveChangesAsync(cancellationToken);
             return existing.Id;
         }
 
@@ -126,11 +170,33 @@ public sealed partial class LibraryScanPersistenceService {
             UpdatedAt = now
         });
 
-        await _db.SaveChangesAsync(cancellationToken);
         return id;
     }
 
     public async Task<Guid> UpsertAudioTrackAsync(string filePath, string title, Guid? audioLibraryId, int sortOrder, string? sectionLabel, int sectionOrder, bool isNsfw, CancellationToken cancellationToken) {
+        var id = await UpsertAudioTrackCoreAsync(
+            new AudioTrackUpsertItem(filePath, title, audioLibraryId, sortOrder, sectionLabel, sectionOrder, isNsfw),
+            cancellationToken);
+        await _db.SaveChangesAsync(cancellationToken);
+        return id;
+    }
+
+    public async Task<IReadOnlyList<Guid>> UpsertAudioTracksBatchAsync(
+        IReadOnlyList<AudioTrackUpsertItem> items, CancellationToken cancellationToken) {
+        if (items.Count == 0) return [];
+
+        var ids = new List<Guid>(items.Count);
+        foreach (var item in items) {
+            ids.Add(await UpsertAudioTrackCoreAsync(item, cancellationToken));
+        }
+
+        await _db.SaveChangesAsync(cancellationToken);
+        return ids;
+    }
+
+    private async Task<Guid> UpsertAudioTrackCoreAsync(
+        AudioTrackUpsertItem item, CancellationToken cancellationToken) {
+        var (filePath, title, audioLibraryId, sortOrder, sectionLabel, sectionOrder, isNsfw) = item;
         var existing = await FindEntityBySourcePath(EntityKindRegistry.AudioTrack.Code, filePath, cancellationToken);
         if (existing is not null) {
             var updatedAt = DateTimeOffset.UtcNow;
@@ -146,7 +212,6 @@ public sealed partial class LibraryScanPersistenceService {
             }
 
             await EnsureAudioTrackDetailAsync(existing.Id, sectionLabel, sectionOrder, cancellationToken);
-            await _db.SaveChangesAsync(cancellationToken);
             return existing.Id;
         }
 
@@ -165,7 +230,6 @@ public sealed partial class LibraryScanPersistenceService {
             UpdatedAt = now
         });
 
-        await _db.SaveChangesAsync(cancellationToken);
         return id;
     }
 
@@ -177,6 +241,29 @@ public sealed partial class LibraryScanPersistenceService {
         int sortOrder,
         bool isNsfw,
         CancellationToken cancellationToken) {
+        var id = await UpsertAudioLibraryCoreAsync(
+            new AudioLibraryUpsertItem(folderPath, title, libraryRootId, parentEntityId, sortOrder, isNsfw),
+            cancellationToken);
+        await _db.SaveChangesAsync(cancellationToken);
+        return id;
+    }
+
+    public async Task<IReadOnlyList<Guid>> UpsertAudioLibrariesBatchAsync(
+        IReadOnlyList<AudioLibraryUpsertItem> items, CancellationToken cancellationToken) {
+        if (items.Count == 0) return [];
+
+        var ids = new List<Guid>(items.Count);
+        foreach (var item in items) {
+            ids.Add(await UpsertAudioLibraryCoreAsync(item, cancellationToken));
+        }
+
+        await _db.SaveChangesAsync(cancellationToken);
+        return ids;
+    }
+
+    private async Task<Guid> UpsertAudioLibraryCoreAsync(
+        AudioLibraryUpsertItem item, CancellationToken cancellationToken) {
+        var (folderPath, title, libraryRootId, parentEntityId, sortOrder, isNsfw) = item;
         var existing = await FindEntityBySourcePath(EntityKindRegistry.AudioLibrary.Code, folderPath, cancellationToken);
         if (existing is not null) {
             var tracked = await _db.Entities.FindAsync([existing.Id], cancellationToken);
@@ -193,7 +280,6 @@ public sealed partial class LibraryScanPersistenceService {
             var detail = await _db.AudioLibraryDetails.FindAsync([existing.Id], cancellationToken);
             if (detail is not null) detail.LibraryRootId = libraryRootId;
             else _db.AudioLibraryDetails.Add(new AudioLibraryDetailRow { EntityId = existing.Id, LibraryRootId = libraryRootId });
-            await _db.SaveChangesAsync(cancellationToken);
             return existing.Id;
         }
 
@@ -211,7 +297,6 @@ public sealed partial class LibraryScanPersistenceService {
             UpdatedAt = now
         });
 
-        await _db.SaveChangesAsync(cancellationToken);
         return id;
     }
 
@@ -222,6 +307,29 @@ public sealed partial class LibraryScanPersistenceService {
         int sortOrder,
         bool isNsfw,
         CancellationToken cancellationToken) {
+        var id = await UpsertMusicArtistCoreAsync(
+            new MusicArtistUpsertItem(folderPath, title, libraryRootId, sortOrder, isNsfw),
+            cancellationToken);
+        await _db.SaveChangesAsync(cancellationToken);
+        return id;
+    }
+
+    public async Task<IReadOnlyList<Guid>> UpsertMusicArtistsBatchAsync(
+        IReadOnlyList<MusicArtistUpsertItem> items, CancellationToken cancellationToken) {
+        if (items.Count == 0) return [];
+
+        var ids = new List<Guid>(items.Count);
+        foreach (var item in items) {
+            ids.Add(await UpsertMusicArtistCoreAsync(item, cancellationToken));
+        }
+
+        await _db.SaveChangesAsync(cancellationToken);
+        return ids;
+    }
+
+    private async Task<Guid> UpsertMusicArtistCoreAsync(
+        MusicArtistUpsertItem item, CancellationToken cancellationToken) {
+        var (folderPath, title, libraryRootId, sortOrder, isNsfw) = item;
         var existing = await FindEntityBySourcePath(EntityKindRegistry.MusicArtist.Code, folderPath, cancellationToken);
         if (existing is not null) {
             var tracked = await _db.Entities.FindAsync([existing.Id], cancellationToken);
@@ -236,7 +344,6 @@ public sealed partial class LibraryScanPersistenceService {
             var detail = await _db.MusicArtistDetails.FindAsync([existing.Id], cancellationToken);
             if (detail is not null) detail.LibraryRootId = libraryRootId;
             else _db.MusicArtistDetails.Add(new MusicArtistDetailRow { EntityId = existing.Id, LibraryRootId = libraryRootId });
-            await _db.SaveChangesAsync(cancellationToken);
             return existing.Id;
         }
 
@@ -254,7 +361,6 @@ public sealed partial class LibraryScanPersistenceService {
             UpdatedAt = now
         });
 
-        await _db.SaveChangesAsync(cancellationToken);
         return id;
     }
 
@@ -529,6 +635,29 @@ public sealed partial class LibraryScanPersistenceService {
     }
 
     public async Task<Guid> UpsertBookPageAsync(string filePath, string title, Guid bookEntityId, Guid chapterEntityId, int sortOrder, bool isNsfw, CancellationToken cancellationToken) {
+        var id = await UpsertBookPageCoreAsync(
+            new BookPageUpsertItem(filePath, title, bookEntityId, chapterEntityId, sortOrder, isNsfw),
+            cancellationToken);
+        await _db.SaveChangesAsync(cancellationToken);
+        return id;
+    }
+
+    public async Task<IReadOnlyList<Guid>> UpsertBookPagesBatchAsync(
+        IReadOnlyList<BookPageUpsertItem> items, CancellationToken cancellationToken) {
+        if (items.Count == 0) return [];
+
+        var ids = new List<Guid>(items.Count);
+        foreach (var item in items) {
+            ids.Add(await UpsertBookPageCoreAsync(item, cancellationToken));
+        }
+
+        await _db.SaveChangesAsync(cancellationToken);
+        return ids;
+    }
+
+    private async Task<Guid> UpsertBookPageCoreAsync(
+        BookPageUpsertItem item, CancellationToken cancellationToken) {
+        var (filePath, title, bookEntityId, chapterEntityId, sortOrder, isNsfw) = item;
         var existing = await FindEntityBySourcePath(EntityKindRegistry.BookPage.Code, filePath, cancellationToken);
         if (existing is not null) {
             existing.UpdatedAt = DateTimeOffset.UtcNow;
@@ -538,7 +667,6 @@ public sealed partial class LibraryScanPersistenceService {
                 sortOrder,
                 DateTimeOffset.UtcNow,
                 cancellationToken);
-            await _db.SaveChangesAsync(cancellationToken);
             return existing.Id;
         }
 
@@ -561,7 +689,6 @@ public sealed partial class LibraryScanPersistenceService {
             now,
             cancellationToken);
 
-        await _db.SaveChangesAsync(cancellationToken);
         return id;
     }
 

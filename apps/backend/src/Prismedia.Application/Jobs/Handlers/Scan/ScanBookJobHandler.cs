@@ -328,12 +328,25 @@ public sealed class ScanBookJobHandler(
             isNsfw || item.MarksNsfw,
             cancellationToken);
 
+        var pageItems = new List<BookPageUpsertItem>(item.PageMembers.Count);
         for (var i = 0; i < item.PageMembers.Count; i++) {
             var memberPath = item.PageMembers[i];
             var pagePath = $"{item.ArchivePath}::{memberPath}";
             var pageTitle = Path.GetFileNameWithoutExtension(memberPath);
 
-            var pageId = await books.UpsertBookPageAsync(pagePath, pageTitle, bookId, chapterId, i, isNsfw || item.MarksNsfw, cancellationToken);
+            pageItems.Add(new BookPageUpsertItem(
+                pagePath,
+                pageTitle,
+                bookId,
+                chapterId,
+                i,
+                isNsfw || item.MarksNsfw));
+        }
+
+        var pageIds = await books.UpsertBookPagesBatchAsync(pageItems, cancellationToken);
+        for (var i = 0; i < pageItems.Count && i < pageIds.Count; i++) {
+            var pageItem = pageItems[i];
+            var pageId = pageIds[i];
 
             if (settings.AutoGeneratePreview && !await downstreamNeeds.HasEntityFileAsync(pageId, EntityFileRole.Thumbnail, cancellationToken)) {
                 await context.EnqueueIfNeededAsync(
@@ -341,7 +354,7 @@ public sealed class ScanBookJobHandler(
                         JobType.GenerateBookPageThumbnail,
                         EntityKind.BookPage,
                         pageId.ToString(),
-                        pageTitle,
+                        pageItem.Title,
                         JobPriorities.Thumbnail),
                     cancellationToken);
             }
