@@ -126,11 +126,11 @@ public sealed partial class SettingsService {
         var overrides = normalized
             .Where(pair => !SameJson(pair.Value, pair.Key.DefaultValue))
             .ToDictionary(pair => pair.Key.Key, pair => pair.Value.GetRawText(), StringComparer.Ordinal);
-        await _persistence.SaveSettingOverridesAsync(overrides, cancellationToken);
-
-        foreach (var (definition, value) in normalized.Where(pair => SameJson(pair.Value, pair.Key.DefaultValue))) {
-            await _persistence.DeleteSettingOverrideAsync(definition.Key, cancellationToken);
-        }
+        var defaults = normalized
+            .Where(pair => SameJson(pair.Value, pair.Key.DefaultValue))
+            .Select(pair => pair.Key.Key)
+            .ToArray();
+        await _persistence.ReplaceSettingOverridesAsync(overrides, defaults, cancellationToken);
 
         return await GetCatalogAsync(cancellationToken);
     }

@@ -11,20 +11,18 @@ public static class RequestEndpoints {
             .WithTags("Requests");
 
         group.MapGet("/services", (
-            IRequestServiceInstanceStore store,
+            RequestServiceInstanceCommandService services,
             CancellationToken cancellationToken) =>
-            store.ListAsync(cancellationToken))
+            services.ListAsync(cancellationToken))
             .WithName("ListRequestServices")
             .WithSummary("Lists configured request service instances with credentials redacted.")
             .Produces<IReadOnlyList<RequestServiceInstanceSummary>>();
 
         group.MapPost("/services", async (
             RequestServiceInstanceSaveRequest request,
-            IRequestServiceInstanceStore store,
+            RequestServiceInstanceCommandService services,
             CancellationToken cancellationToken) =>
-            ValidateSaveRequest(request) is { } problem
-                ? Results.BadRequest(problem)
-                : Results.Ok(await store.SaveAsync(request, cancellationToken)))
+            await SaveRequestServiceAsync(request, services, cancellationToken))
             .WithName("SaveRequestService")
             .WithSummary("Creates or updates a request service instance.")
             .Produces<RequestServiceInstanceSummary>()
@@ -33,11 +31,9 @@ public static class RequestEndpoints {
         group.MapPut("/services/{id:guid}", async (
             Guid id,
             RequestServiceInstanceSaveRequest request,
-            IRequestServiceInstanceStore store,
+            RequestServiceInstanceCommandService services,
             CancellationToken cancellationToken) =>
-            ValidateSaveRequest(request) is { } problem
-                ? Results.BadRequest(problem)
-                : Results.Ok(await store.SaveAsync(request with { Id = id }, cancellationToken)))
+            await SaveRequestServiceAsync(request with { Id = id }, services, cancellationToken))
             .WithName("UpdateRequestService")
             .WithSummary("Updates an existing request service instance.")
             .Produces<RequestServiceInstanceSummary>()
@@ -45,9 +41,9 @@ public static class RequestEndpoints {
 
         group.MapDelete("/services/{id:guid}", async (
             Guid id,
-            IRequestServiceInstanceStore store,
+            RequestServiceInstanceCommandService services,
             CancellationToken cancellationToken) =>
-            await store.DeleteAsync(id, cancellationToken)
+            await services.DeleteAsync(id, cancellationToken)
                 ? Results.NoContent()
                 : Results.NotFound(new ApiProblem(ApiProblemCodes.NotFound, "Request service instance was not found.")))
             .WithName("DeleteRequestService")
@@ -148,12 +144,15 @@ public static class RequestEndpoints {
         return group;
     }
 
-    private static ApiProblem? ValidateSaveRequest(RequestServiceInstanceSaveRequest request) {
-        if (string.IsNullOrWhiteSpace(request.DisplayName)) {
-            return new ApiProblem(ApiProblemCodes.RequestServiceInvalid, "A display name is required.");
+    private static async Task<IResult> SaveRequestServiceAsync(
+        RequestServiceInstanceSaveRequest request,
+        RequestServiceInstanceCommandService services,
+        CancellationToken cancellationToken) {
+        try {
+            return Results.Ok(await services.SaveAsync(request, cancellationToken));
+        } catch (RequestServiceConfigurationException ex) {
+            return Results.BadRequest(new ApiProblem(ex.Code, ex.Message));
         }
-
-        return ValidateBaseUrl(request.BaseUrl);
     }
 
     private static ApiProblem? ValidateBaseUrl(string value) {

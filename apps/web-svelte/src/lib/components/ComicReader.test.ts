@@ -2,7 +2,7 @@ import { fireEvent, render } from "@testing-library/svelte";
 import { tick } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ComicReader from "./ComicReader.svelte";
-import type { ImageListItemDto } from "@prismedia/contracts";
+import type { ImageListItemDto } from "$lib/entities/media-view-models";
 
 vi.mock("$lib/nsfw/store.svelte", () => ({
   useNsfw: () => ({ mode: "show" }),

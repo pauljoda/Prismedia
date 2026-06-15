@@ -232,6 +232,12 @@ public sealed class PlaybackInfoServiceTests {
         public Task SaveSettingOverridesAsync(IReadOnlyDictionary<string, string> values, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
+        public Task ReplaceSettingOverridesAsync(
+            IReadOnlyDictionary<string, string> upserts,
+            IReadOnlyCollection<string> deletes,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
         public Task DeleteSettingOverrideAsync(string key, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 

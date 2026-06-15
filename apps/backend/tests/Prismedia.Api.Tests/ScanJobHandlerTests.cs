@@ -1267,6 +1267,8 @@ public sealed class ScanJobHandlerTests {
         Assert.Equal(["/media/images/Gallery", "/media/images/Gallery/A secondGallery"], persistence.ValidGalleryPaths);
         Assert.Equal(["/media/images/Gallery/a.png", "/media/images/Gallery/a2.png"], persistence.ValidImagePathsByGalleryId[gallery.Id]);
         Assert.Equal(["/media/images/Gallery/A secondGallery/b.png", "/media/images/Gallery/A secondGallery/b2.png"], persistence.ValidImagePathsByGalleryId[nestedGallery.Id]);
+        Assert.Equal(2, persistence.GalleryBatchCalls);
+        Assert.Equal(1, persistence.ImageBatchCalls);
         Assert.Equal([root.Id], persistence.LastScannedRootIds);
     }
 
@@ -1494,6 +1496,8 @@ public sealed class ScanJobHandlerTests {
         Assert.Equal(
             ["/media/audio/Album/Disc 2/two.flac", "/media/audio/Album/one.flac"],
             persistence.ValidAudioTrackPathsByLibraryId[album.Id].OrderBy(path => path, StringComparer.OrdinalIgnoreCase));
+        Assert.Equal(1, persistence.AudioLibraryBatchCalls);
+        Assert.Equal(1, persistence.AudioTrackBatchCalls);
         Assert.Equal([root.Id], persistence.LastScannedRootIds);
     }
 
@@ -1656,6 +1660,7 @@ public sealed class ScanJobHandlerTests {
                 ],
                 persistence.UpsertedBookPages.Select(page => page.SourcePath).ToArray());
             Assert.All(persistence.UpsertedBookPages, page => Assert.Equal(book.Id, page.BookEntityId));
+            Assert.Equal(2, persistence.BookPageBatchCalls);
             Assert.Equal([Path.Combine(rootPath, "Promised Neverland")], persistence.ValidBookPaths);
             Assert.Equal([volumePath], persistence.ValidBookVolumePaths);
             Assert.Equal([chapterOnePath, chapterTwoPath], persistence.ValidBookChapterPaths);
@@ -2064,6 +2069,12 @@ public sealed class ScanJobHandlerTests {
         public List<BookVolumeRecord> UpsertedBookVolumes { get; } = [];
         public List<BookChapterRecord> UpsertedBookChapters { get; } = [];
         public List<BookPageRecord> UpsertedBookPages { get; } = [];
+        public int GalleryBatchCalls { get; private set; }
+        public int ImageBatchCalls { get; private set; }
+        public int MusicArtistBatchCalls { get; private set; }
+        public int AudioLibraryBatchCalls { get; private set; }
+        public int AudioTrackBatchCalls { get; private set; }
+        public int BookPageBatchCalls { get; private set; }
         public IReadOnlyList<string> ValidLooseImagePaths { get; private set; } = [];
         public IReadOnlyList<string> ValidMoviePaths { get; private set; } = [];
         public Dictionary<Guid, IReadOnlyList<string>> ValidImagePathsByGalleryId { get; } = [];
@@ -2125,10 +2136,44 @@ public sealed class ScanJobHandlerTests {
             return Task.FromResult(id);
         }
 
+        public async Task<IReadOnlyList<Guid>> UpsertGalleriesBatchAsync(IReadOnlyList<GalleryUpsertItem> items, CancellationToken cancellationToken) {
+            GalleryBatchCalls++;
+            var ids = new List<Guid>(items.Count);
+            foreach (var item in items) {
+                ids.Add(await UpsertGalleryAsync(
+                    item.FolderPath,
+                    item.Title,
+                    item.LibraryRootId,
+                    item.ParentGalleryEntityId,
+                    item.SortOrder,
+                    item.IsNsfw,
+                    cancellationToken));
+            }
+
+            return ids;
+        }
+
         public Task<Guid> UpsertAudioTrackAsync(string filePath, string title, Guid? audioLibraryId, int sortOrder, string? sectionLabel, int sectionOrder, bool isNsfw, CancellationToken cancellationToken) {
             var id = IdFor($"audio-track:{filePath}");
             UpsertedAudioTracks.Add(new AudioTrackRecord(id, filePath, title, audioLibraryId, sortOrder, sectionLabel, sectionOrder));
             return Task.FromResult(id);
+        }
+
+        public async Task<IReadOnlyList<Guid>> UpsertImagesBatchAsync(IReadOnlyList<ImageUpsertItem> items, CancellationToken cancellationToken) {
+            ImageBatchCalls++;
+            var ids = new List<Guid>(items.Count);
+            foreach (var item in items) {
+                ids.Add(await UpsertImageAsync(
+                    item.FilePath,
+                    item.Title,
+                    item.GalleryEntityId,
+                    item.SizeBytes,
+                    item.SortOrder,
+                    item.IsNsfw,
+                    cancellationToken));
+            }
+
+            return ids;
         }
 
         public Task<Guid> UpsertAudioLibraryAsync(string folderPath, string title, Guid libraryRootId, Guid? parentEntityId, int sortOrder, bool isNsfw, CancellationToken cancellationToken) {
@@ -2137,10 +2182,61 @@ public sealed class ScanJobHandlerTests {
             return Task.FromResult(id);
         }
 
+        public async Task<IReadOnlyList<Guid>> UpsertAudioTracksBatchAsync(IReadOnlyList<AudioTrackUpsertItem> items, CancellationToken cancellationToken) {
+            AudioTrackBatchCalls++;
+            var ids = new List<Guid>(items.Count);
+            foreach (var item in items) {
+                ids.Add(await UpsertAudioTrackAsync(
+                    item.FilePath,
+                    item.Title,
+                    item.AudioLibraryId,
+                    item.SortOrder,
+                    item.SectionLabel,
+                    item.SectionOrder,
+                    item.IsNsfw,
+                    cancellationToken));
+            }
+
+            return ids;
+        }
+
+        public async Task<IReadOnlyList<Guid>> UpsertAudioLibrariesBatchAsync(IReadOnlyList<AudioLibraryUpsertItem> items, CancellationToken cancellationToken) {
+            AudioLibraryBatchCalls++;
+            var ids = new List<Guid>(items.Count);
+            foreach (var item in items) {
+                ids.Add(await UpsertAudioLibraryAsync(
+                    item.FolderPath,
+                    item.Title,
+                    item.LibraryRootId,
+                    item.ParentEntityId,
+                    item.SortOrder,
+                    item.IsNsfw,
+                    cancellationToken));
+            }
+
+            return ids;
+        }
+
         public Task<Guid> UpsertMusicArtistAsync(string folderPath, string title, Guid libraryRootId, int sortOrder, bool isNsfw, CancellationToken cancellationToken) {
             var id = IdFor($"music-artist:{folderPath}");
             UpsertedMusicArtists.Add(new MusicArtistRecord(id, folderPath, title, libraryRootId, sortOrder));
             return Task.FromResult(id);
+        }
+
+        public async Task<IReadOnlyList<Guid>> UpsertMusicArtistsBatchAsync(IReadOnlyList<MusicArtistUpsertItem> items, CancellationToken cancellationToken) {
+            MusicArtistBatchCalls++;
+            var ids = new List<Guid>(items.Count);
+            foreach (var item in items) {
+                ids.Add(await UpsertMusicArtistAsync(
+                    item.FolderPath,
+                    item.Title,
+                    item.LibraryRootId,
+                    item.SortOrder,
+                    item.IsNsfw,
+                    cancellationToken));
+            }
+
+            return ids;
         }
 
         public Task<Guid> UpsertBookAsync(string sourcePath, string title, Guid libraryRootId, bool isNsfw, CancellationToken cancellationToken) {
@@ -2187,6 +2283,23 @@ public sealed class ScanJobHandlerTests {
             var id = IdFor($"book-page:{filePath}");
             UpsertedBookPages.Add(new BookPageRecord(id, filePath, title, bookEntityId, chapterEntityId, sortOrder));
             return Task.FromResult(id);
+        }
+
+        public async Task<IReadOnlyList<Guid>> UpsertBookPagesBatchAsync(IReadOnlyList<BookPageUpsertItem> items, CancellationToken cancellationToken) {
+            BookPageBatchCalls++;
+            var ids = new List<Guid>(items.Count);
+            foreach (var item in items) {
+                ids.Add(await UpsertBookPageAsync(
+                    item.FilePath,
+                    item.Title,
+                    item.BookEntityId,
+                    item.ChapterEntityId,
+                    item.SortOrder,
+                    item.IsNsfw,
+                    cancellationToken));
+            }
+
+            return ids;
         }
 
         public Task<int> RemoveStaleVideosByRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) =>

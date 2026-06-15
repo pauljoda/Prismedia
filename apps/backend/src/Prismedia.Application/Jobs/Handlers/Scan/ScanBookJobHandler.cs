@@ -83,7 +83,7 @@ public sealed class ScanBookJobHandler(
 
             // A book is the top-level root of its volumes/chapters/pages, so identify it directly.
             var bookAutoIdentify = AutoIdentifyScanEnqueue.RequestFor(
-                settings, "book", bookId.ToString(), first.BookTitle);
+                settings, EntityKind.Book, bookId.ToString(), first.BookTitle);
             if (bookAutoIdentify is not null)
                 await context.EnqueueIfNeededAsync(bookAutoIdentify, cancellationToken);
 
@@ -277,12 +277,17 @@ public sealed class ScanBookJobHandler(
 
         if (settings.AutoGeneratePreview &&
             !await downstreamNeeds.HasEntityFileAsync(bookId, EntityFileRole.Thumbnail, cancellationToken)) {
-            await context.EnqueueIfNeededAsync(new EnqueueJobRequest(
-                JobType.GenerateBookCoverThumbnail, TargetEntityKind: "book",
-                TargetEntityId: bookId.ToString(), TargetLabel: item.Title, Priority: JobPriorities.Thumbnail), cancellationToken);
+            await context.EnqueueIfNeededAsync(
+                EnqueueJobRequest.ForEntity(
+                    JobType.GenerateBookCoverThumbnail,
+                    EntityKind.Book,
+                    bookId.ToString(),
+                    item.Title,
+                    JobPriorities.Thumbnail),
+                cancellationToken);
         }
 
-        var autoIdentify = AutoIdentifyScanEnqueue.RequestFor(settings, "book", bookId.ToString(), item.Title);
+        var autoIdentify = AutoIdentifyScanEnqueue.RequestFor(settings, EntityKind.Book, bookId.ToString(), item.Title);
         if (autoIdentify is not null) {
             await context.EnqueueIfNeededAsync(autoIdentify, cancellationToken);
         }
@@ -323,17 +328,35 @@ public sealed class ScanBookJobHandler(
             isNsfw || item.MarksNsfw,
             cancellationToken);
 
+        var pageItems = new List<BookPageUpsertItem>(item.PageMembers.Count);
         for (var i = 0; i < item.PageMembers.Count; i++) {
             var memberPath = item.PageMembers[i];
             var pagePath = $"{item.ArchivePath}::{memberPath}";
             var pageTitle = Path.GetFileNameWithoutExtension(memberPath);
 
-            var pageId = await books.UpsertBookPageAsync(pagePath, pageTitle, bookId, chapterId, i, isNsfw || item.MarksNsfw, cancellationToken);
+            pageItems.Add(new BookPageUpsertItem(
+                pagePath,
+                pageTitle,
+                bookId,
+                chapterId,
+                i,
+                isNsfw || item.MarksNsfw));
+        }
+
+        var pageIds = await books.UpsertBookPagesBatchAsync(pageItems, cancellationToken);
+        for (var i = 0; i < pageItems.Count && i < pageIds.Count; i++) {
+            var pageItem = pageItems[i];
+            var pageId = pageIds[i];
 
             if (settings.AutoGeneratePreview && !await downstreamNeeds.HasEntityFileAsync(pageId, EntityFileRole.Thumbnail, cancellationToken)) {
-                await context.EnqueueIfNeededAsync(new EnqueueJobRequest(
-                    JobType.GenerateBookPageThumbnail, TargetEntityKind: "book-page",
-                    TargetEntityId: pageId.ToString(), TargetLabel: pageTitle, Priority: JobPriorities.Thumbnail), cancellationToken);
+                await context.EnqueueIfNeededAsync(
+                    EnqueueJobRequest.ForEntity(
+                        JobType.GenerateBookPageThumbnail,
+                        EntityKind.BookPage,
+                        pageId.ToString(),
+                        pageItem.Title,
+                        JobPriorities.Thumbnail),
+                    cancellationToken);
             }
         }
     }

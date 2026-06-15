@@ -91,6 +91,34 @@ public abstract record EntityDetail : IEntityCard {
 public sealed record EntityCard : EntityDetail;
 
 /// <summary>
+/// Query parameters for the shared entity list endpoint.
+/// </summary>
+public sealed record EntityListQuery {
+    public string? Kind { get; init; }
+    public string? Query { get; init; }
+    public string? Cursor { get; init; }
+    public bool? HideNsfw { get; init; }
+    public int? Limit { get; init; }
+    public Guid? ReferencedBy { get; init; }
+    public string? RelationshipCode { get; init; }
+    public string? Sort { get; init; }
+    public string? SortDir { get; init; }
+    public int? Seed { get; init; }
+    public bool? Favorite { get; init; }
+    public bool? Organized { get; init; }
+    public int? RatingMin { get; init; }
+    public int? RatingMax { get; init; }
+    public bool? Unrated { get; init; }
+    public string? Status { get; init; }
+    public string? BookType { get; init; }
+    public string? BookFormat { get; init; }
+    public bool? Nsfw { get; init; }
+    public bool? HasFile { get; init; }
+    public bool? Played { get; init; }
+    public bool? Orphaned { get; init; }
+}
+
+/// <summary>
 /// Cursor-paged entity list response.
 /// </summary>
 /// <param name="Items">Current page of entity cards.</param>

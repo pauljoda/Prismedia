@@ -1,7 +1,7 @@
 <script lang="ts">
   import { cn } from "@prismedia/ui-svelte";
-  import type { AudioTrackListItemDto } from "@prismedia/contracts";
   import { resolveEntityHref } from "$lib/entities/entity-routes";
+  import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
   import TrackListRow from "./TrackListRow.svelte";
 
   interface Props {

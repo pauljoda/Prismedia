@@ -89,6 +89,7 @@ import type {
   IdentifyBulkStartRequest,
   IdentifyEntityParams,
   IdentifyEntityRequest,
+  IdentifyQueueCandidateRequest,
   IdentifyQueueItem,
   IdentifyQueueSearchRequest,
   ImageDetail,
@@ -169,6 +170,7 @@ import type {
   RequestSubmitRequest,
   RequestSubmitResponse,
   RescanFileRootParams,
+  ResolveIdentifyQueueCandidateParams,
   SaveIdentifyQueueProposalRequest,
   SearchIdentifyQueueItemParams,
   SearchRequestsParams,
@@ -8697,6 +8699,65 @@ export const searchIdentifyQueueItem = async (entityId: string,
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       identifyQueueSearchRequest,)
+  }
+);}
+
+
+
+export type resolveIdentifyQueueCandidateResponse200 = {
+  data: IdentifyQueueItem
+  status: 200
+}
+
+export type resolveIdentifyQueueCandidateResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type resolveIdentifyQueueCandidateResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type resolveIdentifyQueueCandidateResponseSuccess = (resolveIdentifyQueueCandidateResponse200) & {
+  headers: Headers;
+};
+export type resolveIdentifyQueueCandidateResponseError = (resolveIdentifyQueueCandidateResponse400 | resolveIdentifyQueueCandidateResponse404) & {
+  headers: Headers;
+};
+
+export type resolveIdentifyQueueCandidateResponse = (resolveIdentifyQueueCandidateResponseSuccess | resolveIdentifyQueueCandidateResponseError)
+
+export const getResolveIdentifyQueueCandidateUrl = (entityId: string,
+    params?: ResolveIdentifyQueueCandidateParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/identify/queue/entities/${entityId}/candidate?${stringifiedParams}` : `/api/identify/queue/entities/${entityId}/candidate`
+}
+
+/**
+ * @summary Resolves one selected search candidate into the queue item's proposal without enqueueing a new search.
+ */
+export const resolveIdentifyQueueCandidate = async (entityId: string,
+    identifyQueueCandidateRequest: IdentifyQueueCandidateRequest,
+    params?: ResolveIdentifyQueueCandidateParams, options?: RequestInit): Promise<resolveIdentifyQueueCandidateResponse> => {
+
+  return orvalFetch<resolveIdentifyQueueCandidateResponse>(getResolveIdentifyQueueCandidateUrl(entityId,params),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      identifyQueueCandidateRequest,)
   }
 );}
 

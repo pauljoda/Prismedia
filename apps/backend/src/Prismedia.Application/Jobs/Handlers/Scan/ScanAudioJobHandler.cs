@@ -56,22 +56,39 @@ public sealed class ScanAudioJobHandler(
         // 1. Artist groupings.
         var artistSortOrders = SiblingSortOrders(layout.Artists.Select(artist => artist.Path).ToList());
         var artistIdsByPath = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
-        foreach (var artist in layout.Artists) {
-            var artistId = await audio.UpsertMusicArtistAsync(
-                artist.Path, artist.Title, root.Id, artistSortOrders[artist.Path], root.IsNsfw, cancellationToken);
-            artistIdsByPath[artist.Path] = artistId;
-            autoIdentifyIds.Add(artistId);
+        var artistItems = layout.Artists
+            .Select(artist => new MusicArtistUpsertItem(
+                artist.Path,
+                artist.Title,
+                root.Id,
+                artistSortOrders[artist.Path],
+                root.IsNsfw))
+            .ToArray();
+        var artistIds = await audio.UpsertMusicArtistsBatchAsync(artistItems, cancellationToken);
+        for (var i = 0; i < artistItems.Length && i < artistIds.Count; i++) {
+            artistIdsByPath[artistItems[i].FolderPath] = artistIds[i];
+            autoIdentifyIds.Add(artistIds[i]);
         }
 
         // 2. Albums, parented to their artist when one exists.
         var albumSortOrders = SiblingSortOrders(layout.Albums.Select(album => album.Path).ToList());
         var albumIdsByPath = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
-        foreach (var album in layout.Albums) {
-            Guid? parentArtistId = album.ArtistPath is not null ? artistIdsByPath[album.ArtistPath] : null;
-            var albumId = await audio.UpsertAudioLibraryAsync(
-                album.Path, album.Title, root.Id, parentArtistId, albumSortOrders[album.Path], root.IsNsfw, cancellationToken);
-            albumIdsByPath[album.Path] = albumId;
-            autoIdentifyIds.Add(albumId);
+        var albumItems = layout.Albums
+            .Select(album => {
+                Guid? parentArtistId = album.ArtistPath is not null ? artistIdsByPath[album.ArtistPath] : null;
+                return new AudioLibraryUpsertItem(
+                    album.Path,
+                    album.Title,
+                    root.Id,
+                    parentArtistId,
+                    albumSortOrders[album.Path],
+                    root.IsNsfw);
+            })
+            .ToArray();
+        var albumIds = await audio.UpsertAudioLibrariesBatchAsync(albumItems, cancellationToken);
+        for (var i = 0; i < albumItems.Length && i < albumIds.Count; i++) {
+            albumIdsByPath[albumItems[i].FolderPath] = albumIds[i];
+            autoIdentifyIds.Add(albumIds[i]);
         }
 
         // 3. Tracks, ordered album-global across sections, carrying their section label/order.
@@ -81,6 +98,7 @@ public sealed class ScanAudioJobHandler(
             StringComparer.OrdinalIgnoreCase);
         var processed = 0;
         var total = Math.Max(1, layout.Albums.Count + 1);
+        var trackItems = new List<PreparedAudioTrack>();
 
         foreach (var album in layout.Albums) {
             var albumId = albumIdsByPath[album.Path];
@@ -96,10 +114,16 @@ public sealed class ScanAudioJobHandler(
                     var title = Path.GetFileNameWithoutExtension(filePath);
                     validTrackPaths.Add(filePath);
 
-                    var trackId = await audio.UpsertAudioTrackAsync(
-                        filePath, title, albumId, globalIndex++, section.Label, section.Order, root.IsNsfw, cancellationToken);
-
-                    await ChainTrackJobsAsync(context, settings, trackId, title, cancellationToken);
+                    trackItems.Add(new PreparedAudioTrack(
+                        new AudioTrackUpsertItem(
+                            filePath,
+                            title,
+                            albumId,
+                            globalIndex++,
+                            section.Label,
+                            section.Order,
+                            root.IsNsfw),
+                        IsLoose: false));
                 }
             }
 
@@ -118,10 +142,28 @@ public sealed class ScanAudioJobHandler(
                 var title = Path.GetFileNameWithoutExtension(filePath);
                 validLooseTrackPaths.Add(filePath);
 
-                var trackId = await audio.UpsertAudioTrackAsync(
-                    filePath, title, audioLibraryId: null, index++, sectionLabel: null, sectionOrder: 0, root.IsNsfw, cancellationToken);
+                trackItems.Add(new PreparedAudioTrack(
+                    new AudioTrackUpsertItem(
+                        filePath,
+                        title,
+                        AudioLibraryId: null,
+                        SortOrder: index++,
+                        SectionLabel: null,
+                        SectionOrder: 0,
+                        IsNsfw: root.IsNsfw),
+                    IsLoose: true));
+            }
+        }
 
-                await ChainTrackJobsAsync(context, settings, trackId, title, cancellationToken);
+        var trackIds = await audio.UpsertAudioTracksBatchAsync(
+            trackItems.Select(item => item.Item).ToArray(),
+            cancellationToken);
+        for (var i = 0; i < trackItems.Count && i < trackIds.Count; i++) {
+            var track = trackItems[i];
+            var trackId = trackIds[i];
+
+            await ChainTrackJobsAsync(context, settings, trackId, track.Item.Title, cancellationToken);
+            if (track.IsLoose) {
                 autoIdentifyIds.Add(trackId);
             }
         }
@@ -151,15 +193,25 @@ public sealed class ScanAudioJobHandler(
         string title,
         CancellationToken cancellationToken) {
         if (settings.AutoGenerateMetadata && !await downstreamNeeds.HasEntityTechnicalAsync(trackId, cancellationToken)) {
-            await context.EnqueueIfNeededAsync(new EnqueueJobRequest(
-                JobType.ProbeAudio, TargetEntityKind: "audio-track",
-                TargetEntityId: trackId.ToString(), TargetLabel: title, Priority: JobPriorities.Probe), cancellationToken);
+            await context.EnqueueIfNeededAsync(
+                EnqueueJobRequest.ForEntity(
+                    JobType.ProbeAudio,
+                    EntityKind.AudioTrack,
+                    trackId.ToString(),
+                    title,
+                    JobPriorities.Probe),
+                cancellationToken);
         }
 
         if (await FingerprintGating.ShouldFingerprintAsync(downstreamNeeds, settings, trackId, cancellationToken)) {
-            await context.EnqueueIfNeededAsync(new EnqueueJobRequest(
-                JobType.FingerprintAudio, TargetEntityKind: "audio-track",
-                TargetEntityId: trackId.ToString(), TargetLabel: title, Priority: JobPriorities.Fingerprint), cancellationToken);
+            await context.EnqueueIfNeededAsync(
+                EnqueueJobRequest.ForEntity(
+                    JobType.FingerprintAudio,
+                    EntityKind.AudioTrack,
+                    trackId.ToString(),
+                    title,
+                    JobPriorities.Fingerprint),
+                cancellationToken);
         }
     }
 
@@ -185,4 +237,6 @@ public sealed class ScanAudioJobHandler(
 
         return sortOrders;
     }
+
+    private sealed record PreparedAudioTrack(AudioTrackUpsertItem Item, bool IsLoose);
 }

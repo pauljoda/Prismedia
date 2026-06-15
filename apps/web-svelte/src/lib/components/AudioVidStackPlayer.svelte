@@ -19,9 +19,10 @@
     X,
   } from "@lucide/svelte";
   import { cn } from "@prismedia/ui-svelte";
-  import { formatDuration, type AudioTrackListItemDto } from "@prismedia/contracts";
+  import { formatDuration } from "@prismedia/contracts";
   import { apiAssetUrl, assetUrl } from "$lib/api/orval-fetch";
   import { resolveEntityHref } from "$lib/entities/entity-codes";
+  import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
   import AudioWaveformFilmstrip from "./AudioWaveformFilmstrip.svelte";
   import PlaybackQueueFlyout from "./PlaybackQueueFlyout.svelte";
   import { waveformForDisplay } from "./audio-waveform";

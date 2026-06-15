@@ -2,7 +2,7 @@ import type {
   AudioLibraryListItemDto,
   GalleryListItemDto,
   LibraryRootSummaryDto,
-} from "@prismedia/contracts";
+} from "$lib/entities/media-view-models";
 
 export type UploadTarget =
   | { kind: "video"; libraryRootId?: string; videoSeriesId?: string; seasonNumber?: number | null }

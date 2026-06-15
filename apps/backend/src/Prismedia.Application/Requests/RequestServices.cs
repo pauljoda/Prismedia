@@ -1,15 +1,84 @@
 using Prismedia.Contracts.Requests;
+using Prismedia.Contracts.System;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Requests;
+
+/// <summary>Application command for creating or updating a request service instance.</summary>
+public sealed record RequestServiceInstanceSaveCommand(
+    Guid? Id,
+    RequestProviderKind Kind,
+    string DisplayName,
+    string BaseUrl,
+    string? ApiKey,
+    string? DefaultRootFolderPath,
+    int? DefaultQualityProfileId,
+    int? DefaultMetadataProfileId,
+    RequestMinimumAvailability MinimumAvailability,
+    IReadOnlyList<int> DefaultTagIds,
+    bool SearchOnRequest,
+    bool IsDefault);
+
+/// <summary>Validation failure raised by request-service configuration use cases.</summary>
+public sealed class RequestServiceConfigurationException : Exception {
+    public RequestServiceConfigurationException(string code, string message)
+        : base(message) {
+        Code = code;
+    }
+
+    public string Code { get; }
+}
 
 /// <summary>Persistence port for configured request service instances.</summary>
 public interface IRequestServiceInstanceStore {
     Task<IReadOnlyList<RequestServiceInstanceSummary>> ListAsync(CancellationToken cancellationToken);
     Task<IReadOnlyList<RequestServiceInstanceDetail>> ListDetailsAsync(CancellationToken cancellationToken);
     Task<RequestServiceInstanceDetail?> GetAsync(Guid id, CancellationToken cancellationToken);
-    Task<RequestServiceInstanceSummary> SaveAsync(RequestServiceInstanceSaveRequest request, CancellationToken cancellationToken);
+    Task<RequestServiceInstanceSummary> SaveAsync(RequestServiceInstanceSaveCommand command, CancellationToken cancellationToken);
     Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken);
+}
+
+/// <summary>Application use case for listing, saving, and deleting request service configuration.</summary>
+public sealed class RequestServiceInstanceCommandService(IRequestServiceInstanceStore store) {
+    public Task<IReadOnlyList<RequestServiceInstanceSummary>> ListAsync(CancellationToken cancellationToken) =>
+        store.ListAsync(cancellationToken);
+
+    public Task<RequestServiceInstanceSummary> SaveAsync(
+        RequestServiceInstanceSaveRequest request,
+        CancellationToken cancellationToken) =>
+        store.SaveAsync(ToCommand(request), cancellationToken);
+
+    public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken) =>
+        store.DeleteAsync(id, cancellationToken);
+
+    private static RequestServiceInstanceSaveCommand ToCommand(RequestServiceInstanceSaveRequest request) {
+        if (string.IsNullOrWhiteSpace(request.DisplayName)) {
+            throw new RequestServiceConfigurationException(
+                ApiProblemCodes.RequestServiceInvalid,
+                "A display name is required.");
+        }
+
+        if (!Uri.TryCreate(request.BaseUrl, UriKind.Absolute, out var baseUrl) ||
+            (baseUrl.Scheme != Uri.UriSchemeHttp && baseUrl.Scheme != Uri.UriSchemeHttps)) {
+            throw new RequestServiceConfigurationException(
+                ApiProblemCodes.RequestServiceInvalid,
+                "The base URL must be an absolute http or https URL.");
+        }
+
+        return new RequestServiceInstanceSaveCommand(
+            request.Id,
+            request.Kind,
+            request.DisplayName.Trim(),
+            request.BaseUrl.Trim().TrimEnd('/'),
+            request.ApiKey,
+            string.IsNullOrWhiteSpace(request.DefaultRootFolderPath) ? null : request.DefaultRootFolderPath.Trim(),
+            request.DefaultQualityProfileId,
+            request.DefaultMetadataProfileId,
+            request.MinimumAvailability,
+            request.DefaultTagIds.Distinct().Order().ToArray(),
+            request.SearchOnRequest,
+            request.IsDefault);
+    }
 }
 
 /// <summary>Provider adapter implemented by Radarr, Sonarr, Lidarr, and future plugin clients.</summary>

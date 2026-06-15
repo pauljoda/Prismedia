@@ -46,6 +46,20 @@ public interface IVideoScanPersistence {
 public interface IImageGalleryScanPersistence {
     Task<Guid> UpsertImageAsync(string filePath, string title, Guid? galleryEntityId, long? sizeBytes, int sortOrder, bool isNsfw, CancellationToken cancellationToken);
     Task<Guid> UpsertGalleryAsync(string folderPath, string title, Guid libraryRootId, Guid? parentGalleryEntityId, int sortOrder, bool isNsfw, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Upserts discovered gallery folders as one persistence unit, returning IDs in input order.
+    /// Parent IDs must already be known, so callers batch by hierarchy depth.
+    /// </summary>
+    Task<IReadOnlyList<Guid>> UpsertGalleriesBatchAsync(
+        IReadOnlyList<GalleryUpsertItem> items, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Upserts discovered image files as one persistence unit, returning IDs in input order.
+    /// </summary>
+    Task<IReadOnlyList<Guid>> UpsertImagesBatchAsync(
+        IReadOnlyList<ImageUpsertItem> items, CancellationToken cancellationToken);
+
     Task<int> RemoveStaleLooseImagesInRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken);
     Task<int> RemoveStaleImagesInGalleryAsync(Guid galleryEntityId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken);
     Task<int> RemoveStaleGalleriesInRootAsync(Guid rootId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken);
@@ -70,6 +84,25 @@ public interface IAudioScanPersistence {
 
     /// <summary>Upserts an artist folder that groups albums under one heading.</summary>
     Task<Guid> UpsertMusicArtistAsync(string folderPath, string title, Guid libraryRootId, int sortOrder, bool isNsfw, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Upserts discovered artist grouping folders as one persistence unit, returning IDs in input order.
+    /// </summary>
+    Task<IReadOnlyList<Guid>> UpsertMusicArtistsBatchAsync(
+        IReadOnlyList<MusicArtistUpsertItem> items, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Upserts discovered album folders as one persistence unit, returning IDs in input order.
+    /// Parent artist IDs must already be resolved by the caller.
+    /// </summary>
+    Task<IReadOnlyList<Guid>> UpsertAudioLibrariesBatchAsync(
+        IReadOnlyList<AudioLibraryUpsertItem> items, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Upserts discovered audio tracks as one persistence unit, returning IDs in input order.
+    /// </summary>
+    Task<IReadOnlyList<Guid>> UpsertAudioTracksBatchAsync(
+        IReadOnlyList<AudioTrackUpsertItem> items, CancellationToken cancellationToken);
 
     Task<int> RemoveStaleLooseAudioTracksInRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken);
     Task<int> RemoveStaleAudioTracksInLibraryAsync(Guid libraryEntityId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken);
@@ -119,6 +152,13 @@ public interface IBookScanPersistence {
     Task<Guid> UpsertBookVolumeAsync(string folderPath, string title, Guid bookEntityId, int sortOrder, bool isNsfw, CancellationToken cancellationToken);
     Task<Guid> UpsertBookChapterAsync(string archivePath, string title, Guid parentEntityId, int sortOrder, int pageCount, bool isNsfw, CancellationToken cancellationToken);
     Task<Guid> UpsertBookPageAsync(string filePath, string title, Guid bookEntityId, Guid chapterEntityId, int sortOrder, bool isNsfw, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Upserts discovered book pages as one persistence unit, returning IDs in input order.
+    /// </summary>
+    Task<IReadOnlyList<Guid>> UpsertBookPagesBatchAsync(
+        IReadOnlyList<BookPageUpsertItem> items, CancellationToken cancellationToken);
+
     Task<int> RemoveStaleBookVolumesAsync(Guid bookEntityId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken);
     Task<int> RemoveStaleBookChaptersAsync(Guid bookEntityId, IReadOnlySet<string> validArchivePaths, CancellationToken cancellationToken);
     Task<int> RemoveStaleBooksInRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken);
@@ -323,6 +363,108 @@ public sealed record VideoUpsertItem(
     VideoSidecarMetadata? Metadata = null,
     MovieScanInfo? Movie = null,
     int? FolderSortOrder = null);
+
+/// <summary>
+/// Image file discovered during a gallery scan.
+/// </summary>
+/// <param name="FilePath">Absolute file path used as the source identity.</param>
+/// <param name="Title">Display title inferred from the file name.</param>
+/// <param name="GalleryEntityId">Optional owning gallery entity ID.</param>
+/// <param name="SizeBytes">Observed file size when available.</param>
+/// <param name="SortOrder">Position within the owning gallery.</param>
+/// <param name="IsNsfw">Whether the owning library root marks discovered media as NSFW.</param>
+public sealed record ImageUpsertItem(
+    string FilePath,
+    string Title,
+    Guid? GalleryEntityId,
+    long? SizeBytes,
+    int SortOrder,
+    bool IsNsfw);
+
+/// <summary>
+/// Gallery folder discovered during an image scan.
+/// </summary>
+/// <param name="FolderPath">Absolute folder path used as the source identity.</param>
+/// <param name="Title">Display title inferred from the folder name.</param>
+/// <param name="LibraryRootId">Library root that owns the folder.</param>
+/// <param name="ParentGalleryEntityId">Optional parent gallery entity ID.</param>
+/// <param name="SortOrder">Position within the parent gallery.</param>
+/// <param name="IsNsfw">Whether the owning library root marks discovered media as NSFW.</param>
+public sealed record GalleryUpsertItem(
+    string FolderPath,
+    string Title,
+    Guid LibraryRootId,
+    Guid? ParentGalleryEntityId,
+    int SortOrder,
+    bool IsNsfw);
+
+/// <summary>
+/// Audio track discovered during an audio scan.
+/// </summary>
+/// <param name="FilePath">Absolute file path used as the source identity.</param>
+/// <param name="Title">Display title inferred from the file name.</param>
+/// <param name="AudioLibraryId">Optional album entity ID.</param>
+/// <param name="SortOrder">Album-global position, spanning disc sections.</param>
+/// <param name="SectionLabel">Optional disc/section label.</param>
+/// <param name="SectionOrder">Ordering index for the disc/section.</param>
+/// <param name="IsNsfw">Whether the owning library root marks discovered media as NSFW.</param>
+public sealed record AudioTrackUpsertItem(
+    string FilePath,
+    string Title,
+    Guid? AudioLibraryId,
+    int SortOrder,
+    string? SectionLabel,
+    int SectionOrder,
+    bool IsNsfw);
+
+/// <summary>
+/// Album folder discovered during an audio scan.
+/// </summary>
+/// <param name="FolderPath">Absolute folder path used as the source identity.</param>
+/// <param name="Title">Display title inferred from the folder name.</param>
+/// <param name="LibraryRootId">Library root that owns the album.</param>
+/// <param name="ParentEntityId">Optional artist grouping entity ID.</param>
+/// <param name="SortOrder">Position within the parent artist/root.</param>
+/// <param name="IsNsfw">Whether the owning library root marks discovered media as NSFW.</param>
+public sealed record AudioLibraryUpsertItem(
+    string FolderPath,
+    string Title,
+    Guid LibraryRootId,
+    Guid? ParentEntityId,
+    int SortOrder,
+    bool IsNsfw);
+
+/// <summary>
+/// Artist grouping folder discovered during an audio scan.
+/// </summary>
+/// <param name="FolderPath">Absolute folder path used as the source identity.</param>
+/// <param name="Title">Display title inferred from the folder name.</param>
+/// <param name="LibraryRootId">Library root that owns the artist grouping.</param>
+/// <param name="SortOrder">Position within the root.</param>
+/// <param name="IsNsfw">Whether the owning library root marks discovered media as NSFW.</param>
+public sealed record MusicArtistUpsertItem(
+    string FolderPath,
+    string Title,
+    Guid LibraryRootId,
+    int SortOrder,
+    bool IsNsfw);
+
+/// <summary>
+/// Book page discovered inside an archive-backed chapter.
+/// </summary>
+/// <param name="FilePath">Synthetic archive member path used as the source identity.</param>
+/// <param name="Title">Display title inferred from the member name.</param>
+/// <param name="BookEntityId">Top-level book entity that owns the page.</param>
+/// <param name="ChapterEntityId">Chapter entity that directly contains the page.</param>
+/// <param name="SortOrder">Position within the chapter.</param>
+/// <param name="IsNsfw">Whether the owning book/chapter marks discovered pages as NSFW.</param>
+public sealed record BookPageUpsertItem(
+    string FilePath,
+    string Title,
+    Guid BookEntityId,
+    Guid ChapterEntityId,
+    int SortOrder,
+    bool IsNsfw);
 
 /// <summary>
 /// Movie folder context inferred during a scan.

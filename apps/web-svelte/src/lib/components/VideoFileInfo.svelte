@@ -1,8 +1,8 @@
 <script lang="ts">
-  import type { VideoDetailDto } from "@prismedia/contracts";
+  import type { VideoFileInfoModel } from "$lib/entities/media-view-models";
 
   interface Props {
-    video: VideoDetailDto;
+    video: VideoFileInfoModel;
   }
 
   let { video }: Props = $props();

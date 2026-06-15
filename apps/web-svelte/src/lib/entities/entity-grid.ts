@@ -9,7 +9,7 @@ import {
   type EntityCapabilityKind,
 } from "$lib/api/capabilities";
 import { numberValue, formatDurationString, durationToSeconds, normalized, formatResolutionLabel } from "$lib/utils/format";
-import type { EntityCard, EntityCapability } from "$lib/api/generated/model";
+import type { EntityCard, EntityCapability, ListEntitiesParams } from "$lib/api/generated/model";
 import type { EntityThumbnail } from "$lib/api/generated/model";
 import {
   CAPABILITY_KIND,
@@ -36,36 +36,24 @@ export type EntityGridSort = "title" | "kind" | "rating" | "position" | "added" 
 export type EntityGridSortDir = "asc" | "desc";
 export type EntityGridViewMode = "grid" | "list" | "feed";
 
-/**
- * Server-resolvable list parameters derived from the active grid controls.
- * These map onto the entity list endpoint so sorting, the seeded shuffle, and
- * the library filters apply across the entire matching set instead of only the
- * page already loaded in the browser. Undefined fields are omitted from the
- * request so the server keeps its defaults.
- */
-export interface EntityGridServerQuery {
-  sort?: EntityGridSort;
-  sortDir?: EntityGridSortDir;
-  seed?: number;
-  favorite?: boolean;
-  organized?: boolean;
-  ratingMin?: number;
-  ratingMax?: number;
-  unrated?: boolean;
-  status?: string;
-  /** Comma-separated book type codes (book/comic/manga/novel). */
-  bookType?: string;
-  /** Comma-separated book format codes (image-archive/epub/pdf). */
-  bookFormat?: string;
-  /** When set, keep only NSFW (true) or only non-NSFW (false) entities. */
-  nsfw?: boolean;
-  /** When set, keep only entities that have (true) or lack (false) a source file. */
-  hasFile?: boolean;
-  /** When set, keep only entities that have been played/read (true) or never engaged (false). */
-  played?: boolean;
-  /** When true, keep only orphaned entities (nothing references them) — for taxonomy cleanup. */
-  orphaned?: boolean;
-}
+export type EntityGridServerQuery = Pick<
+  ListEntitiesParams,
+  | "sort"
+  | "sortDir"
+  | "seed"
+  | "favorite"
+  | "organized"
+  | "ratingMin"
+  | "ratingMax"
+  | "unrated"
+  | "status"
+  | "bookType"
+  | "bookFormat"
+  | "nsfw"
+  | "hasFile"
+  | "played"
+  | "orphaned"
+>;
 
 export interface EntityGridKindTab {
   kind: string;
@@ -590,10 +578,10 @@ export function buildServerQueryFromFilters(filterIds: string[]): EntityGridServ
       server.unrated = true;
     } else if (id.startsWith("rating:min:")) {
       const value = Number(id.slice("rating:min:".length));
-      if (Number.isFinite(value)) server.ratingMin = Math.max(server.ratingMin ?? value, value);
+      if (Number.isFinite(value)) server.ratingMin = Math.max(numberValue(server.ratingMin) ?? value, value);
     } else if (id.startsWith("rating:max:")) {
       const value = Number(id.slice("rating:max:".length));
-      if (Number.isFinite(value)) server.ratingMax = Math.min(server.ratingMax ?? value, value);
+      if (Number.isFinite(value)) server.ratingMax = Math.min(numberValue(server.ratingMax) ?? value, value);
     } else if (STATUS_VALUE_BY_ID.has(id)) {
       server.status = STATUS_VALUE_BY_ID.get(id);
     } else if (id.startsWith(BOOK_TYPE_PREFIX)) {

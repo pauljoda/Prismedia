@@ -1,4 +1,4 @@
-import type { BookChapterDto, BookProgressDto } from "@prismedia/contracts";
+import type { BookChapterDto, BookProgressDto } from "$lib/entities/media-view-models";
 
 type BookProgressSource = {
   chapters: Pick<BookChapterDto, "id" | "title" | "chapterNumber" | "pageCount">[];

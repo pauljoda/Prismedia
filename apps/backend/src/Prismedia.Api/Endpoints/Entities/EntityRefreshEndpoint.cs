@@ -21,7 +21,7 @@ internal static class EntityRefreshEndpoint {
             var job = await queue.EnqueueAsync(
                 new EnqueueJobRequest(
                     JobType.RefreshEntity,
-                    TargetEntityKind: "entity",
+                    TargetEntityKind: JobTargetKinds.Entity,
                     TargetEntityId: id.ToString(),
                     Priority: 25),
                 cancellationToken);

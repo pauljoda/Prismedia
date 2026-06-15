@@ -5,6 +5,17 @@ import path from "node:path";
 const repoRoot = path.resolve(import.meta.dirname, "..", "..");
 const sourceRoot = path.join(repoRoot, "apps/web-svelte/src");
 const transitionalApiImportPattern = /from\s+["']\$lib\/api\/(?:prismedia|identify)["']/;
+const contractsNamedImportPattern = /import\s+(?:type\s+)?\{([\s\S]*?)\}\s+from\s+["']@prismedia\/contracts["']/g;
+const legacyFrontendDtoNames = [
+  "AudioLibraryListItemDto",
+  "AudioTrackListItemDto",
+  "BookChapterDto",
+  "BookProgressDto",
+  "GalleryListItemDto",
+  "ImageListItemDto",
+  "LibraryRootSummaryDto",
+  "VideoDetailDto",
+];
 
 const allowedTransitionalApiImports = new Set([
   "apps/web-svelte/src/lib/api/identify.ts",
@@ -82,6 +93,31 @@ describe("frontend architecture boundaries", () => {
     const unexpected = actual.filter((file) => !allowedTransitionalApiImports.has(file));
 
     expect(unexpected).toEqual([]);
+  });
+
+  it("does not import legacy frontend DTOs from contracts", () => {
+    const offenders = sourceFiles(sourceRoot)
+      .flatMap((file) => {
+        const source = readFileSync(file, "utf8");
+        const importedNames = [...source.matchAll(contractsNamedImportPattern)].flatMap((match) =>
+          match[1]!
+            .split(",")
+            .map((specifier) => specifier.trim().replace(/^type\s+/, "").split(/\s+as\s+/)[0]?.trim())
+            .filter((specifier): specifier is string => Boolean(specifier)),
+        );
+        const importedLegacyNames = legacyFrontendDtoNames.filter((name) =>
+          importedNames.includes(name),
+        );
+        if (importedLegacyNames.length === 0) return [];
+
+        return [{
+          file: path.relative(repoRoot, file).split(path.sep).join("/"),
+          names: importedLegacyNames.sort(),
+        }];
+      })
+      .sort((left, right) => left.file.localeCompare(right.file));
+
+    expect(offenders).toEqual([]);
   });
 });
 

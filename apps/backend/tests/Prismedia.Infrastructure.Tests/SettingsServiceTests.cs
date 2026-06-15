@@ -233,6 +233,32 @@ public sealed class SettingsServiceTests {
     }
 
     [Fact]
+    public async Task BatchUpdateSavesOverridesAndDeletesDefaultsTogether() {
+        await using var db = CreateContext();
+        var service = new SettingsService(new EfSettingsPersistence(db));
+
+        await service.UpdateSettingAsync(
+            AppSettingKeys.PlaybackDefaultMode,
+            JsonSerializer.SerializeToElement("hls"),
+            CancellationToken.None);
+        await service.UpdateSettingAsync(
+            AppSettingKeys.HlsFfmpegPath,
+            JsonSerializer.SerializeToElement("/usr/bin/ffmpeg"),
+            CancellationToken.None);
+
+        await service.UpdateSettingsAsync(
+            new Dictionary<string, JsonElement> {
+                [AppSettingKeys.PlaybackDefaultMode] = JsonSerializer.SerializeToElement("direct"),
+                [AppSettingKeys.HlsFfmpegPath] = JsonSerializer.SerializeToElement("/opt/homebrew/bin/ffmpeg"),
+            },
+            CancellationToken.None);
+
+        var row = await db.AppSettings.SingleAsync();
+        Assert.Equal(AppSettingKeys.HlsFfmpegPath, row.Key);
+        Assert.Equal("\"/opt/homebrew/bin/ffmpeg\"", row.ValueJson);
+    }
+
+    [Fact]
     public async Task AutoIdentifySettingsDefaultOffWithFullKindCoverage() {
         await using var db = CreateContext();
         var service = new SettingsService(new EfSettingsPersistence(db));

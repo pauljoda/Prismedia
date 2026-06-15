@@ -56,21 +56,29 @@ public sealed class ScanGalleryJobHandler(
         // galleries to their top gallery so only the top-level container is queued.
         var autoIdentifyIds = new List<Guid>();
 
-        foreach (var dirPath in validGalleryPaths) {
-            var galleryTitle = Path.GetFileName(dirPath);
-            var parentPath = NearestSurvivingAncestor(dirPath, root.Path, collapsedFolders);
-            Guid? parentGalleryId = parentPath is not null ? galleryIdsByPath[parentPath] : null;
+        foreach (var galleryLevel in validGalleryPaths
+            .GroupBy(path => PathDepth(root.Path, path))
+            .OrderBy(group => group.Key)) {
+            var galleryItems = galleryLevel
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .Select(dirPath => {
+                    var parentPath = NearestSurvivingAncestor(dirPath, root.Path, collapsedFolders);
+                    Guid? parentGalleryId = parentPath is not null ? galleryIdsByPath[parentPath] : null;
+                    return new GalleryUpsertItem(
+                        dirPath,
+                        Path.GetFileName(dirPath),
+                        root.Id,
+                        parentGalleryId,
+                        siblingSortOrders[dirPath],
+                        root.IsNsfw);
+                })
+                .ToArray();
 
-            var galleryId = await images.UpsertGalleryAsync(
-                dirPath,
-                galleryTitle,
-                root.Id,
-                parentGalleryId,
-                siblingSortOrders[dirPath],
-                root.IsNsfw,
-                cancellationToken);
-            galleryIdsByPath[dirPath] = galleryId;
-            autoIdentifyIds.Add(galleryId);
+            var galleryIds = await images.UpsertGalleriesBatchAsync(galleryItems, cancellationToken);
+            for (var i = 0; i < galleryItems.Length && i < galleryIds.Count; i++) {
+                galleryIdsByPath[galleryItems[i].FolderPath] = galleryIds[i];
+                autoIdentifyIds.Add(galleryIds[i]);
+            }
         }
 
         var validLooseImagePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -86,6 +94,7 @@ public sealed class ScanGalleryJobHandler(
         // Tracks the next sort order per surviving gallery so a lone image merged in from a collapsed
         // child folder appends after the gallery's own images instead of colliding at index 0.
         var nextSortOrderByGalleryPath = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var imageItems = new List<ImageUpsertItem>();
 
         foreach (var (dirPath, imageFiles) in orderedDirGroups) {
             var isRootDirectory = SamePath(dirPath, root.Path);
@@ -111,25 +120,7 @@ public sealed class ScanGalleryJobHandler(
                 try { size = new FileInfo(filePath).Length; } catch { }
 
                 var sortOrder = targetGalleryPath is null ? i : NextSortOrder(nextSortOrderByGalleryPath, targetGalleryPath);
-                var imageId = await images.UpsertImageAsync(filePath, title, galleryId, size, sortOrder, root.IsNsfw, cancellationToken);
-
-                if (settings.AutoGeneratePreview && await NeedsPreviewAsync(imageId, filePath, cancellationToken)) {
-                    await context.EnqueueIfNeededAsync(new EnqueueJobRequest(
-                        JobType.GenerateImageThumbnail, TargetEntityKind: "image",
-                        TargetEntityId: imageId.ToString(), TargetLabel: title, Priority: JobPriorities.Thumbnail), cancellationToken);
-                }
-
-                if (await FingerprintGating.ShouldFingerprintAsync(downstreamNeeds, settings, imageId, cancellationToken)) {
-                    await context.EnqueueIfNeededAsync(new EnqueueJobRequest(
-                        JobType.FingerprintImage, TargetEntityKind: "image",
-                        TargetEntityId: imageId.ToString(), TargetLabel: title, Priority: JobPriorities.Fingerprint), cancellationToken);
-                }
-
-                // Loose images (no owning gallery) are their own auto-identify roots; images inside a
-                // gallery are covered by that gallery's identification.
-                if (galleryId is null) {
-                    autoIdentifyIds.Add(imageId);
-                }
+                imageItems.Add(new ImageUpsertItem(filePath, title, galleryId, size, sortOrder, root.IsNsfw));
             }
 
             processedDirs++;
@@ -137,6 +128,40 @@ public sealed class ScanGalleryJobHandler(
             if (processedDirs % 10 == 0) {
                 await context.ReportProgressAsync(processedDirs * 80 / dirGroups.Count,
                     $"Processed {processedDirs}/{dirGroups.Count} directories", cancellationToken);
+            }
+        }
+
+        var imageIds = await images.UpsertImagesBatchAsync(imageItems, cancellationToken);
+        for (var i = 0; i < imageItems.Count && i < imageIds.Count; i++) {
+            var item = imageItems[i];
+            var imageId = imageIds[i];
+
+            if (settings.AutoGeneratePreview && await NeedsPreviewAsync(imageId, item.FilePath, cancellationToken)) {
+                await context.EnqueueIfNeededAsync(
+                    EnqueueJobRequest.ForEntity(
+                        JobType.GenerateImageThumbnail,
+                        EntityKind.Image,
+                        imageId.ToString(),
+                        item.Title,
+                        JobPriorities.Thumbnail),
+                    cancellationToken);
+            }
+
+            if (await FingerprintGating.ShouldFingerprintAsync(downstreamNeeds, settings, imageId, cancellationToken)) {
+                await context.EnqueueIfNeededAsync(
+                    EnqueueJobRequest.ForEntity(
+                        JobType.FingerprintImage,
+                        EntityKind.Image,
+                        imageId.ToString(),
+                        item.Title,
+                        JobPriorities.Fingerprint),
+                    cancellationToken);
+            }
+
+            // Loose images (no owning gallery) are their own auto-identify roots; images inside a
+            // gallery are covered by that gallery's identification.
+            if (item.GalleryEntityId is null) {
+                autoIdentifyIds.Add(imageId);
             }
         }
 

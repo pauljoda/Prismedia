@@ -1,4 +1,3 @@
-import type { AudioTrackListItemDto } from "@prismedia/contracts";
 import {
   clearMusicPlayerState,
   getMusicPlayerState,
@@ -9,6 +8,7 @@ import type {
   UpdateMusicPlayerStateRequest,
 } from "$lib/api/generated/model";
 import { audioTrackDetailToListItem } from "$lib/entities/audio-track-items";
+import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
 import type { MiniPlayerSide, PlaybackContext, RepeatMode } from "$lib/stores/audio-playback.svelte";
 
 export interface RestoredMusicPlayerState {
