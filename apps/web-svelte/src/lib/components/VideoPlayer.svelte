@@ -61,9 +61,9 @@
   import { playbackMethodBadge, resolutionBadge, type StreamMethod } from "$lib/player/media-badges";
   import {
     readQualityPreference,
-    resolvePreferredRung,
     writeQualityPreference,
   } from "$lib/player/quality-preference";
+  import { resolveInitialVideoPlayerSourcePolicy } from "$lib/player/video-player-source-policy";
   import {
     pickPreferredSubtitleTrack,
     readLocalSubtitleAppearance,
@@ -447,12 +447,6 @@
   const showTextSubtitleCue = $derived(
     Boolean(activeCueText && !isAssTrackActive(activeSubtitleId, subtitleTracks)),
   );
-
-  function initialPlaybackMode(): PlaybackMode {
-    if (defaultPlaybackMode === "hls") return "hls";
-    return directAvailable ? "direct" : "hls";
-  }
-
 
   function isAssTrackActive(
     id: string | null | undefined,
@@ -1109,22 +1103,18 @@
     forcedTranscodeSrc = null;
     forceTranscodeRequested = false;
     playRetried = false;
-    playbackMode = initialPlaybackMode();
-    qualityMode = playbackMode === "direct" ? "direct" : "auto";
     // Re-apply this device's saved quality choice so a pinned cap follows the viewer across videos.
-    selectedRungName = null;
-    const savedQuality = readQualityPreference();
-    if (savedQuality === "direct" && directAvailable) {
-      playbackMode = "direct";
-      qualityMode = "direct";
-    } else if (typeof savedQuality === "number") {
-      const preferredRung = resolvePreferredRung(savedQuality, qualityRungs);
-      if (preferredRung) {
-        playbackMode = "hls";
-        qualityMode = preferredRung;
-        selectedRungName = preferredRung;
-      }
-    }
+    const sourcePolicy = resolveInitialVideoPlayerSourcePolicy({
+      src,
+      directSrc,
+      defaultPlaybackMode,
+      directAvailable,
+      savedQuality: readQualityPreference(),
+      qualityRungs,
+    });
+    playbackMode = sourcePolicy.playbackMode;
+    qualityMode = sourcePolicy.qualityMode;
+    selectedRungName = sourcePolicy.selectedRungName;
     currentTime = 0;
     duration = propDuration ?? 0;
     bufferAhead = 0;
