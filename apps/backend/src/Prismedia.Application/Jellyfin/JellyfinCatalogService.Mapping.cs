@@ -60,8 +60,8 @@ public sealed partial class JellyfinCatalogService {
             // Prismedia video tags are broad keywords, not Jellyfin genres. Infuse can surface these
             // arrays as description-like text, so expose tag-derived genre fields only for music where
             // clients use them as expected taxonomy.
-            Genres = isMusic && item.Genres is { Count: > 0 } genreNames ? genreNames.ToArray() : null,
-            GenreItems = isMusic ? GenreItemsFrom(item.Genres) : null,
+            Genres = isMusic && item.Genres is { Count: > 0 } genreNames ? genreNames.ToArray() : [],
+            GenreItems = isMusic ? GenreItemsFrom(item.Genres) : [],
             ImageBlurHashes = EmptyBlurHashes,
             ImageTags = primaryImageTag is null ? new Dictionary<string, string>() : new Dictionary<string, string> { [JellyfinProtocol.ImageTypes.Primary] = primaryImageTag },
             BackdropImageTags = imageTags.Backdrop is null ? [] : [imageTags.Backdrop],
@@ -78,12 +78,12 @@ public sealed partial class JellyfinCatalogService {
             AlbumPrimaryImageTag = isAudio ? context?.AlbumPrimaryImageTag : null,
             AlbumArtist = artistContext?.AlbumArtistName,
             AlbumArtists = AlbumArtistItems(artistContext),
-            Artists = artistContext?.AlbumArtistName is { } artist ? [artist] : null,
+            Artists = artistContext?.AlbumArtistName is { } artist ? [artist] : [],
             ArtistItems = AlbumArtistItems(artistContext),
             ParentLogoItemId = context?.ParentLogoItemId,
             ParentLogoImageTag = context?.ParentLogoImageTag,
             ParentBackdropItemId = context?.ParentBackdropItemId,
-            ParentBackdropImageTags = context?.ParentBackdropImageTags,
+            ParentBackdropImageTags = context?.ParentBackdropImageTags ?? [],
             ParentThumbItemId = context?.ParentThumbItemId,
             ParentThumbImageTag = context?.ParentThumbImageTag,
             VideoType = isPlayable && !isAudio ? "VideoFile" : null,
@@ -95,8 +95,8 @@ public sealed partial class JellyfinCatalogService {
             UserData = UserDataForThumbnail(item),
             MediaSources = isPlayable
                 ? [CatalogMediaSource(item.Id, item.Title, VirtualItemPath(item.Id), container, null, runtimeTicks, streams ?? [], videoType: isAudio ? null : "VideoFile")]
-                : null,
-            MediaStreams = streams
+                : [],
+            MediaStreams = streams ?? []
         };
     }
 
@@ -156,14 +156,14 @@ public sealed partial class JellyfinCatalogService {
             OfficialRating = EmptyAsNull(classification?.Value),
             CustomRating = EmptyAsNull(classification?.Value),
             CommunityRating = communityRating,
-            Genres = isMusic && tags.Count > 0 ? tags.Select(tag => tag.Name).ToArray() : null,
-            GenreItems = isMusic && tags.Count > 0 ? tags : null,
+            Genres = isMusic && tags.Count > 0 ? tags.Select(tag => tag.Name).ToArray() : [],
+            GenreItems = isMusic && tags.Count > 0 ? tags : [],
             // Infuse and other Jellyfin clients can surface tag/genre arrays as pseudo-description text.
             // Keep video descriptions description-first by omitting Prismedia tag-derived taxonomy from
             // Jellyfin video details; music keeps its taxonomy above where clients expect it.
-            Tags = null,
+            Tags = [],
             People = People(item),
-            Studios = studios.Count == 0 ? null : studios,
+            Studios = studios,
             ProviderIds = ProviderIds(links),
             ExternalUrls = ExternalUrls(links),
             RemoteTrailers = RemoteTrailers(links),
@@ -202,12 +202,12 @@ public sealed partial class JellyfinCatalogService {
             AlbumPrimaryImageTag = isAudio ? context?.AlbumPrimaryImageTag : null,
             AlbumArtist = artistContext?.AlbumArtistName,
             AlbumArtists = AlbumArtistItems(artistContext),
-            Artists = artistContext?.AlbumArtistName is { } albumArtist ? [albumArtist] : null,
+            Artists = artistContext?.AlbumArtistName is { } albumArtist ? [albumArtist] : [],
             ArtistItems = AlbumArtistItems(artistContext),
             ParentLogoItemId = context?.ParentLogoItemId,
             ParentLogoImageTag = context?.ParentLogoImageTag,
             ParentBackdropItemId = context?.ParentBackdropItemId,
-            ParentBackdropImageTags = context?.ParentBackdropImageTags,
+            ParentBackdropImageTags = context?.ParentBackdropImageTags ?? [],
             ParentThumbItemId = context?.ParentThumbItemId,
             ParentThumbImageTag = context?.ParentThumbImageTag,
             VideoType = isPlayable && !isAudio ? "VideoFile" : null,
@@ -223,8 +223,8 @@ public sealed partial class JellyfinCatalogService {
             UserData = UserDataFor(item.Id, flags?.IsFavorite == true, playback, runtimeTicks),
             MediaSources = isPlayable
                 ? [CatalogMediaSource(item.Id, item.Title, source?.Path ?? VirtualItemPath(item.Id), container, source?.Path, runtimeTicks, streams ?? [], technical, videoType: isAudio ? null : "VideoFile")]
-                : null,
-            MediaStreams = streams,
+                : [],
+            MediaStreams = streams ?? [],
             Chapters = Chapters(markers)
         };
     }
@@ -464,11 +464,11 @@ public sealed partial class JellyfinCatalogService {
 
     /// <summary>
     /// Builds the single-element album-artist name/id pair list used for both <c>ArtistItems</c> and
-    /// <c>AlbumArtists</c>, or null when the context carries no resolved album artist.
+    /// <c>AlbumArtists</c>, or an empty list when the context carries no resolved album artist.
     /// </summary>
-    private static IReadOnlyList<JellyfinNameGuidPairDto>? AlbumArtistItems(ItemContext? context) =>
+    private static IReadOnlyList<JellyfinNameGuidPairDto> AlbumArtistItems(ItemContext? context) =>
         context?.AlbumArtistId is { } artistId && context.AlbumArtistName is { } artistName
             ? [new JellyfinNameGuidPairDto(artistName, artistId)]
-            : null;
+            : [];
 
 }

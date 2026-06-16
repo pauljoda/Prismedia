@@ -456,21 +456,25 @@ public sealed partial class SecurityEndpointTests : IDisposable {
         Assert.Contains("Logo", item.ImageTags.Keys);
         Assert.Single(item.BackdropImageTags);
 
-        Assert.Null(item.Tags);
-        Assert.Null(item.Genres);
-        Assert.Null(item.GenreItems);
+        Assert.Empty(item.Tags);
+        Assert.Empty(item.Genres);
+        Assert.Empty(item.GenreItems);
+        Assert.DoesNotContain("Adventure", item.Tags);
+        Assert.DoesNotContain("Adventure", item.Genres);
+        Assert.DoesNotContain("Cozy", item.Tags);
+        Assert.DoesNotContain("Cozy", item.Genres);
 
-        var studio = Assert.Single(item.Studios!);
+        var studio = Assert.Single(item.Studios);
         Assert.Equal("Studio One", studio.Name);
         Assert.Equal(JellyfinMetadataEntityReadService.StudioId, studio.Id);
 
         Assert.Equal("tt1234567", item.ProviderIds!["imdb"]);
-        Assert.Contains(item.ExternalUrls!, url => url.Name == "IMDb" && url.Url == "https://www.imdb.com/title/tt1234567/");
+        Assert.Contains(item.ExternalUrls, url => url.Name == "IMDb" && url.Url == "https://www.imdb.com/title/tt1234567/");
 
-        Assert.Equal(["Opening"], item.Chapters!.Select(chapter => chapter.Name).ToArray());
-        Assert.Equal(TimeSpan.FromSeconds(12).Ticks, item.Chapters![0].StartPositionTicks);
+        Assert.Equal(["Opening"], item.Chapters.Select(chapter => chapter.Name).ToArray());
+        Assert.Equal(TimeSpan.FromSeconds(12).Ticks, item.Chapters[0].StartPositionTicks);
 
-        var people = item.People!.OrderBy(person => person.Name, StringComparer.Ordinal).ToArray();
+        var people = item.People.OrderBy(person => person.Name, StringComparer.Ordinal).ToArray();
         Assert.Collection(
             people,
             person => {

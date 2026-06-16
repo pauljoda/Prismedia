@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Prismedia.Application.Collections;
 using Prismedia.Application.Entities;
 using Prismedia.Application.Jellyfin;
@@ -15,6 +16,7 @@ namespace Prismedia.Api.Tests;
 /// </summary>
 public sealed class JellyfinCatalogServiceTests {
     private const string ServerId = "0123456789abcdef0123456789abcdef";
+    private static readonly JsonSerializerOptions JellyfinJson = new(JsonSerializerDefaults.Web);
 
     [Fact]
     public async Task UserViewsIncludeUnwatchedMovieAndSeriesLibraries() {
@@ -87,6 +89,38 @@ public sealed class JellyfinCatalogServiceTests {
             item.Id == collectionId &&
             item.Type == JellyfinProtocol.ItemTypes.BoxSet);
         Assert.DoesNotContain(result.Items, item => item.Id == JellyfinCatalogService.CollectionsViewId);
+    }
+
+    [Fact]
+    public async Task CatalogBrowseSerializesStrictClientTaxonomyArraysAsEmptyArraysWhenAbsent() {
+        var videoId = Guid.NewGuid();
+        var artistId = Guid.NewGuid();
+        var entities = new FakeEntityReadService();
+        entities.ListByKind[EntityKindRegistry.Video.Code] = [
+            Thumb(videoId, EntityKind.Video, "Standalone Video") with { Genres = ["Adventure"] }
+        ];
+        entities.ListByKind[EntityKindRegistry.MusicArtist.Code] = [
+            Thumb(artistId, EntityKind.MusicArtist, "Empty Artist")
+        ];
+        var catalog = new JellyfinCatalogService(entities, new FakeCollections());
+
+        var root = await catalog.GetItemsAsync(Query(parentId: null), ServerId, hideNsfw: false, CancellationToken.None);
+        using var rootJson = ToJsonDocument(root);
+        var rootItem = JellyfinItems(rootJson).First();
+        AssertStrictClientListFieldsAreArrays(rootItem);
+        AssertEmptyStrictClientTaxonomyArrays(rootItem);
+
+        var videos = await catalog.GetItemsAsync(Query(parentId: JellyfinCatalogService.VideosViewId), ServerId, hideNsfw: false, CancellationToken.None);
+        using var videosJson = ToJsonDocument(videos);
+        var videoItem = Assert.Single(JellyfinItems(videosJson));
+        AssertStrictClientListFieldsAreArrays(videoItem);
+        AssertEmptyStrictClientTaxonomyArrays(videoItem);
+
+        var music = await catalog.GetItemsAsync(Query(parentId: JellyfinCatalogService.MusicViewId), ServerId, hideNsfw: false, CancellationToken.None);
+        using var musicJson = ToJsonDocument(music);
+        var musicItem = Assert.Single(JellyfinItems(musicJson));
+        AssertStrictClientListFieldsAreArrays(musicItem);
+        AssertEmptyStrictClientTaxonomyArrays(musicItem);
     }
 
     [Fact]
@@ -822,6 +856,53 @@ public sealed class JellyfinCatalogServiceTests {
             IsFavorite: false,
             IsNsfw: isNsfw,
             IsOrganized: true);
+
+    private static JsonDocument ToJsonDocument<T>(T value) =>
+        JsonDocument.Parse(JsonSerializer.Serialize(value, JellyfinJson));
+
+    private static JsonElement.ArrayEnumerator JellyfinItems(JsonDocument document) {
+        // prism-vocab: external Jellyfin JSON result field asserted at the wire boundary.
+        return document.RootElement.GetProperty("Items").EnumerateArray();
+    }
+
+    private static void AssertEmptyStrictClientTaxonomyArrays(JsonElement item) {
+        // prism-vocab: external Jellyfin JSON array fields asserted at the wire boundary.
+        foreach (var field in new[] { "Genres", "GenreItems", "Tags" }) {
+            var property = AssertJsonArrayField(item, field);
+            Assert.Equal(0, property.GetArrayLength());
+        }
+    }
+
+    private static void AssertStrictClientListFieldsAreArrays(JsonElement item) {
+        // prism-vocab: external Jellyfin JSON array fields asserted at the wire boundary.
+        foreach (var field in new[] {
+            "Genres",
+            "GenreItems",
+            "Tags",
+            "People",
+            "Studios",
+            "ExternalUrls",
+            "RemoteTrailers",
+            "Taglines",
+            "ProductionLocations",
+            "AlbumArtists",
+            "Artists",
+            "ArtistItems",
+            "ParentBackdropImageTags",
+            "BackdropImageTags",
+            "MediaSources",
+            "MediaStreams",
+            "Chapters"
+        }) {
+            AssertJsonArrayField(item, field);
+        }
+    }
+
+    private static JsonElement AssertJsonArrayField(JsonElement item, string field) {
+        Assert.True(item.TryGetProperty(field, out var property), $"Missing Jellyfin field {field}.");
+        Assert.Equal(JsonValueKind.Array, property.ValueKind);
+        return property;
+    }
 
     private sealed class FakeEntityReadService : IEntityReadService {
         public Dictionary<string, IReadOnlyList<EntityThumbnail>> ListByKind { get; } = new();

@@ -125,12 +125,12 @@ public sealed partial class JellyfinCatalogService {
         return pairs;
     }
 
-    private static IReadOnlyList<JellyfinBaseItemPersonDto>? People(IEntityCard item) {
+    private static IReadOnlyList<JellyfinBaseItemPersonDto> People(IEntityCard item) {
         var groups = item.Relationships
             .Where(group => group.Kind == EntityKind.Person)
             .ToArray();
         if (groups.Length == 0) {
-            return null;
+            return [];
         }
 
         var creditMetadata = CreditMetadata(item)
@@ -150,7 +150,7 @@ public sealed partial class JellyfinCatalogService {
             }
         }
 
-        return people.Count == 0 ? null : people;
+        return people;
     }
 
     private static IReadOnlyList<EntityCreditMetadata> CreditMetadata(IEntityCard item) =>
@@ -278,9 +278,9 @@ public sealed partial class JellyfinCatalogService {
         return providerIds.Count == 0 ? null : providerIds;
     }
 
-    private static IReadOnlyList<JellyfinExternalUrlDto>? ExternalUrls(LinksCapability? links) {
+    private static IReadOnlyList<JellyfinExternalUrlDto> ExternalUrls(LinksCapability? links) {
         if (links is null) {
-            return null;
+            return [];
         }
 
         var urls = new List<JellyfinExternalUrlDto>();
@@ -293,19 +293,18 @@ public sealed partial class JellyfinCatalogService {
             AddExternalUrl(urls, seen, ProviderLabel(id.Provider), id.Url!);
         }
 
-        return urls.Count == 0 ? null : urls;
+        return urls;
     }
 
-    private static IReadOnlyList<JellyfinMediaUrlDto>? RemoteTrailers(LinksCapability? links) {
+    private static IReadOnlyList<JellyfinMediaUrlDto> RemoteTrailers(LinksCapability? links) {
         if (links is null) {
-            return null;
+            return [];
         }
 
-        var trailers = links.Urls
+        return links.Urls
             .Where(url => IsTrailerUrl(url))
             .Select(url => new JellyfinMediaUrlDto(EmptyAsNull(url.Label) ?? "Trailer", url.Value))
             .ToArray();
-        return trailers.Length == 0 ? null : trailers;
     }
 
     private static void AddExternalUrl(
@@ -340,9 +339,9 @@ public sealed partial class JellyfinCatalogService {
             _ => TitleLabel(provider)
         };
 
-    private static IReadOnlyList<JellyfinChapterInfoDto>? Chapters(MarkersCapability? markers) {
+    private static IReadOnlyList<JellyfinChapterInfoDto> Chapters(MarkersCapability? markers) {
         if (markers?.Items.Count is not > 0) {
-            return null;
+            return [];
         }
 
         return markers.Items
