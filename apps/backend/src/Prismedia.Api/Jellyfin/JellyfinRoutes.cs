@@ -37,7 +37,8 @@ internal static class JellyfinRoutes {
         LibraryPrefix,
         "/Branding",
         "/QuickConnect",
-        "/DisplayPreferences"
+        "/DisplayPreferences",
+        "/Startup"
     ];
 
     /// <summary>
@@ -116,11 +117,20 @@ internal static class JellyfinRoutes {
     /// <summary>QuickConnect availability probe, called before authentication.</summary>
     public const string QuickConnectEnabled = "/QuickConnect/Enabled";
 
+    /// <summary>QuickConnect disabled-login initiation probe.</summary>
+    public const string QuickConnectInitiate = "/QuickConnect/Initiate";
+
+    /// <summary>QuickConnect polling endpoint.</summary>
+    public const string QuickConnectConnect = "/QuickConnect/Connect";
+
     /// <summary>Public users listing endpoint.</summary>
     public const string UsersPublic = "/Users/Public";
 
     /// <summary>Authenticate-by-name endpoint.</summary>
     public const string UsersAuthenticateByName = "/Users/AuthenticateByName";
+
+    /// <summary>QuickConnect authenticate endpoint.</summary>
+    public const string UsersAuthenticateWithQuickConnect = "/Users/AuthenticateWithQuickConnect";
 
     /// <summary>Users path prefix used for per-user authenticate matching.</summary>
     public const string UsersPrefix = "/Users/";

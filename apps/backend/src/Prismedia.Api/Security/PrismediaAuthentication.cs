@@ -228,8 +228,11 @@ internal static class PrismediaAuthentication {
             (HttpMethods.IsGet(request.Method) && (path.Equals(JellyfinRoutes.BrandingCss, StringComparison.OrdinalIgnoreCase) ||
                 path.Equals(JellyfinRoutes.BrandingCssFile, StringComparison.OrdinalIgnoreCase))) ||
             (HttpMethods.IsGet(request.Method) && path.Equals(JellyfinRoutes.QuickConnectEnabled, StringComparison.OrdinalIgnoreCase)) ||
+            (HttpMethods.IsPost(request.Method) && path.Equals(JellyfinRoutes.QuickConnectInitiate, StringComparison.OrdinalIgnoreCase)) ||
+            (HttpMethods.IsGet(request.Method) && path.Equals(JellyfinRoutes.QuickConnectConnect, StringComparison.OrdinalIgnoreCase)) ||
             (HttpMethods.IsGet(request.Method) && path.Equals(JellyfinRoutes.UsersPublic, StringComparison.OrdinalIgnoreCase)) ||
             (HttpMethods.IsPost(request.Method) && path.Equals(JellyfinRoutes.UsersAuthenticateByName, StringComparison.OrdinalIgnoreCase)) ||
+            (HttpMethods.IsPost(request.Method) && path.Equals(JellyfinRoutes.UsersAuthenticateWithQuickConnect, StringComparison.OrdinalIgnoreCase)) ||
             (HttpMethods.IsPost(request.Method) &&
                 path.StartsWith(JellyfinRoutes.UsersPrefix, StringComparison.OrdinalIgnoreCase) &&
                 path.EndsWith(JellyfinRoutes.AuthenticateSuffix, StringComparison.OrdinalIgnoreCase));

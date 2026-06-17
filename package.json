@@ -8,6 +8,7 @@
     "dev": "pnpm --filter @prismedia/web-svelte dev",
     "dev:api": "dotnet watch --project apps/backend/src/Prismedia.Api/Prismedia.Api.csproj run",
     "dev:worker": "dotnet watch --project apps/backend/src/Prismedia.Worker/Prismedia.Worker.csproj run",
+    "jellyfin:capture": "node scripts/dev/jellyfin-capture-proxy.mjs",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "check": "pnpm --filter @prismedia/web-svelte sync && turbo run lint typecheck",

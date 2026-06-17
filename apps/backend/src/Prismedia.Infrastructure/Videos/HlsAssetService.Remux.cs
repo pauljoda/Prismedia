@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Prismedia.Application.Videos;
+using Prismedia.Contracts.Jellyfin;
 using Prismedia.Contracts.Media;
 using Prismedia.Infrastructure.Processes;
 
@@ -70,7 +71,7 @@ public sealed partial class HlsAssetService {
         }
 
         var fileName = assetName switch {
-            "stream.m3u8" or "index.m3u8" => "index.m3u8",
+            JellyfinProtocol.Hls.StreamPlaylist or JellyfinProtocol.Hls.IndexPlaylist => JellyfinProtocol.Hls.IndexPlaylist,
             "init.mp4" => "init.mp4",
             _ when assetName.StartsWith("seg_", StringComparison.OrdinalIgnoreCase) &&
                 assetName.EndsWith(".m4s", StringComparison.OrdinalIgnoreCase) => assetName,

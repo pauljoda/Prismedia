@@ -113,6 +113,21 @@ public static class JellyfinProtocol {
         public const string Unknown = "Unknown";
     }
 
+    /// <summary>Jellyfin HLS playlist asset names used in playback URLs and asset lookups.</summary>
+    public static class Hls {
+        /// <summary>Adaptive master playlist entry point.</summary>
+        public const string MasterPlaylist = "master.m3u8";
+
+        /// <summary>Legacy Jellyfin variant playlist entry point requested by some native clients.</summary>
+        public const string MainPlaylist = "main.m3u8";
+
+        /// <summary>Rendition media playlist name.</summary>
+        public const string StreamPlaylist = "stream.m3u8";
+
+        /// <summary>Cache-local rendition media playlist name.</summary>
+        public const string IndexPlaylist = "index.m3u8";
+    }
+
     /// <summary>Jellyfin <c>ImageType</c> values used in image tags, info, and asset lookups.</summary>
     public static class ImageTypes {
         /// <summary>Primary cover/poster image.</summary>

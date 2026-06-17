@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Prismedia.Application.Settings;
 using Prismedia.Application.Videos;
+using Prismedia.Contracts.Jellyfin;
 using Prismedia.Contracts.Media;
 using Prismedia.Infrastructure.Media.Processing;
 using Prismedia.Infrastructure.Persistence;
@@ -147,17 +148,30 @@ public sealed partial class HlsAssetService : IHlsAssetService {
         var selectedAudioStreamIndex = SelectAudioStreamIndex(source, requestedAudioStreamIndex);
         var audioCacheKey = AudioCacheKey(selectedAudioStreamIndex);
 
-        if (normalizedAssetPath.Equals("master.m3u8", StringComparison.OrdinalIgnoreCase)) {
+        if (normalizedAssetPath.Equals(JellyfinProtocol.Hls.MasterPlaylist, StringComparison.OrdinalIgnoreCase)) {
             var trickplayStreams = await GetTrickplayStreamsAsync(id, cancellationToken);
             var transcoderOptions = await ResolveTranscoderOptionsAsync(cancellationToken);
             return await WriteTextAssetAsync(
-                VirtualPath(id, audioCacheKey, "master.m3u8"),
+                VirtualPath(id, audioCacheKey, JellyfinProtocol.Hls.MasterPlaylist),
                 BuildVirtualMasterPlaylist(
                     source,
                     renditions,
                     trickplayStreams,
                     selectedAudioStreamIndex,
                     transcoderOptions.EnableAdaptiveBitrate),
+                ".m3u8",
+                cancellationToken);
+        }
+
+        if (normalizedAssetPath.Equals(JellyfinProtocol.Hls.MainPlaylist, StringComparison.OrdinalIgnoreCase)) {
+            var rendition = renditions.FirstOrDefault();
+            if (rendition is null) {
+                return null;
+            }
+
+            return await WriteTextAssetAsync(
+                VirtualPath(id, audioCacheKey, "v", rendition.Name, JellyfinProtocol.Hls.IndexPlaylist),
+                BuildVirtualVariantPlaylist(source.DurationSeconds.Value, selectedAudioStreamIndex),
                 ".m3u8",
                 cancellationToken);
         }
@@ -517,8 +531,8 @@ public sealed partial class HlsAssetService : IHlsAssetService {
     }
 
     private static bool IsVirtualVariantPlaylist(string assetName) =>
-        assetName.Equals("index.m3u8", StringComparison.OrdinalIgnoreCase) ||
-        assetName.Equals("stream.m3u8", StringComparison.OrdinalIgnoreCase);
+        assetName.Equals(JellyfinProtocol.Hls.IndexPlaylist, StringComparison.OrdinalIgnoreCase) ||
+        assetName.Equals(JellyfinProtocol.Hls.StreamPlaylist, StringComparison.OrdinalIgnoreCase);
 
     private static string? ResolveInside(string root, string assetPath) {
         var rootFullPath = Path.GetFullPath(root);
@@ -608,7 +622,7 @@ public sealed partial class HlsAssetService : IHlsAssetService {
             var bandwidth = ToBitsPerSecond(rendition.VideoBitrate);
             lines.Add(
                 $"#EXT-X-STREAM-INF:BANDWIDTH={bandwidth},AVERAGE-BANDWIDTH={bandwidth}{resolution},CODECS=\"{codecs},mp4a.40.2\"");
-            lines.Add(AppendAudioStreamQuery($"hls/{rendition.Name}/stream.m3u8", audioStreamIndex));
+            lines.Add(AppendAudioStreamQuery($"hls/{rendition.Name}/{JellyfinProtocol.Hls.StreamPlaylist}", audioStreamIndex));
         }
 
         foreach (var stream in trickplayStreams) {

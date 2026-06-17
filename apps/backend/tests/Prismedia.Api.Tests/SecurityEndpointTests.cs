@@ -216,11 +216,31 @@ public sealed partial class SecurityEndpointTests : IDisposable {
 
         Assert.Equal(HttpStatusCode.OK, ping.StatusCode);
         Assert.NotNull(publicInfo);
+        Assert.Equal("", publicInfo.OperatingSystem);
         Assert.True(passwordFieldResponse.IsSuccessStatusCode);
         Assert.True(legacyResponse.IsSuccessStatusCode);
 
         var auth = await passwordFieldResponse.Content.ReadFromJsonAsync<JellyfinAuthenticationResult>();
         Assert.NotNull(auth);
+        var systemInfo = await JellyfinGetFromJsonAsync<JellyfinSystemInfo>(
+            client,
+            "/System/Info",
+            auth.AccessToken);
+        var endpointInfo = await JellyfinGetFromJsonAsync<JellyfinEndpointInfo>(
+            client,
+            "/System/Endpoint",
+            auth.AccessToken);
+        var sessions = await JellyfinGetFromJsonAsync<IReadOnlyList<JellyfinSessionInfoDto>>(
+            client,
+            "/Sessions",
+            auth.AccessToken);
+
+        Assert.NotNull(systemInfo);
+        Assert.Equal(publicInfo.Id, systemInfo.Id);
+        Assert.NotNull(endpointInfo);
+        Assert.NotNull(sessions);
+        Assert.Contains(sessions, session => session.UserId == auth.User.Id);
+
         var groupingOptions = await JellyfinGetFromJsonAsync<IReadOnlyList<JellyfinSpecialViewOptionDto>>(
             client,
             $"/Users/{auth.User.Id:D}/GroupingOptions",
@@ -241,6 +261,25 @@ public sealed partial class SecurityEndpointTests : IDisposable {
             ["Movies", "Unwatched Movies", "Videos", "Series", "Unwatched Series", "Music"],
             virtualFolders.Select(item => item.Name).ToArray());
         Assert.All(virtualFolders, folder => Assert.True(folder.LibraryOptions.Enabled));
+    }
+
+    [Fact]
+    public async Task JellyfinDisabledQuickConnectRoutesReturnJsonInsteadOfFallingThrough() {
+        using var factory = CreateFactory();
+        using var client = factory.CreateClient();
+
+        using var initiate = await client.PostAsync("/QuickConnect/Initiate", null);
+        using var connect = await client.GetAsync("/QuickConnect/Connect?Secret=missing");
+        using var authenticate = await client.PostAsJsonAsync(
+            "/Users/AuthenticateWithQuickConnect",
+            new { Secret = "missing" });
+
+        Assert.Equal(HttpStatusCode.Unauthorized, initiate.StatusCode);
+        Assert.Equal("application/json", initiate.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(HttpStatusCode.NotFound, connect.StatusCode);
+        Assert.Equal("application/json", connect.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(HttpStatusCode.Unauthorized, authenticate.StatusCode);
+        Assert.Equal("application/json", authenticate.Content.Headers.ContentType?.MediaType);
     }
 
     [Fact]

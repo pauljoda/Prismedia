@@ -9,7 +9,8 @@ public sealed record JellyfinPublicSystemInfo(
     [property: JsonPropertyName("Version")] string Version,
     [property: JsonPropertyName("ProductName")] string ProductName,
     [property: JsonPropertyName("Id")] string Id,
-    [property: JsonPropertyName("StartupWizardCompleted")] bool StartupWizardCompleted);
+    [property: JsonPropertyName("StartupWizardCompleted")] bool StartupWizardCompleted,
+    [property: JsonPropertyName("OperatingSystem")] string OperatingSystem = "");
 
 /// <summary>Minimal Jellyfin-compatible private system information.</summary>
 public sealed record JellyfinSystemInfo(
@@ -22,6 +23,18 @@ public sealed record JellyfinSystemInfo(
     [property: JsonPropertyName("OperatingSystem")] string OperatingSystem,
     [property: JsonPropertyName("PackageName")] string PackageName,
     [property: JsonPropertyName("ServerNameRaw")] string? ServerNameRaw = null);
+
+/// <summary>Minimal Jellyfin-compatible information about the request endpoint.</summary>
+public sealed record JellyfinEndpointInfo(
+    [property: JsonPropertyName("IsLocal")] bool IsLocal,
+    [property: JsonPropertyName("IsInNetwork")] bool IsInNetwork);
+
+/// <summary>Minimal Jellyfin-compatible startup configuration.</summary>
+public sealed record JellyfinStartupConfiguration(
+    [property: JsonPropertyName("ServerName")] string ServerName,
+    [property: JsonPropertyName("UICulture")] string UICulture,
+    [property: JsonPropertyName("MetadataCountryCode")] string MetadataCountryCode,
+    [property: JsonPropertyName("PreferredMetadataLanguage")] string PreferredMetadataLanguage);
 
 /// <summary>Jellyfin-compatible authenticate-by-name request.</summary>
 public sealed record JellyfinAuthenticateByNameRequest {
@@ -104,4 +117,3 @@ public sealed record JellyfinBrandingConfiguration(
     [property: JsonPropertyName("LoginDisclaimer")] string LoginDisclaimer,
     [property: JsonPropertyName("CustomCss")] string CustomCss,
     [property: JsonPropertyName("SplashscreenEnabled")] bool SplashscreenEnabled);
-

@@ -103,6 +103,12 @@ public static class ApiProblemCodes {
     /// <summary>Problem code <c>jellyfin_profile_not_found</c>.</summary>
     public const string JellyfinProfileNotFound = "jellyfin_profile_not_found";
 
+    /// <summary>Problem code <c>jellyfin_quick_connect_disabled</c>.</summary>
+    public const string JellyfinQuickConnectDisabled = "jellyfin_quick_connect_disabled";
+
+    /// <summary>Problem code <c>jellyfin_quick_connect_not_found</c>.</summary>
+    public const string JellyfinQuickConnectNotFound = "jellyfin_quick_connect_not_found";
+
     /// <summary>Problem code <c>jellyfin_user_not_found</c>.</summary>
     public const string JellyfinUserNotFound = "jellyfin_user_not_found";
 

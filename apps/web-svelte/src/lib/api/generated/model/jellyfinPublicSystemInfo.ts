@@ -12,4 +12,5 @@ export interface JellyfinPublicSystemInfo {
   ProductName: string;
   Id: string;
   StartupWizardCompleted: boolean;
+  OperatingSystem?: string;
 }

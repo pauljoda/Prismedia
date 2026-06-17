@@ -1,4 +1,5 @@
 using Prismedia.Application.Settings;
+using Prismedia.Contracts.Jellyfin;
 using Prismedia.Contracts.Media;
 
 namespace Prismedia.Application.Videos;
@@ -135,7 +136,7 @@ public sealed class PlaybackInfoService : IPlaybackInfoService {
         string playSessionId,
         int? audioStreamIndex,
         string? accessToken) {
-        var url = $"/Videos/{itemId:D}/master.m3u8?MediaSourceId={mediaSourceId}&PlaySessionId={playSessionId}";
+        var url = $"/Videos/{itemId:D}/{JellyfinProtocol.Hls.MasterPlaylist}?MediaSourceId={mediaSourceId}&PlaySessionId={playSessionId}";
         if (audioStreamIndex is not null) {
             url = $"{url}&AudioStreamIndex={audioStreamIndex.Value}";
         }
@@ -151,7 +152,7 @@ public sealed class PlaybackInfoService : IPlaybackInfoService {
         string playSessionId,
         int? audioStreamIndex,
         string? accessToken) {
-        var url = $"/Videos/{itemId:D}/hls/remux/stream.m3u8?MediaSourceId={mediaSourceId}&PlaySessionId={playSessionId}";
+        var url = $"/Videos/{itemId:D}/hls/remux/{JellyfinProtocol.Hls.StreamPlaylist}?MediaSourceId={mediaSourceId}&PlaySessionId={playSessionId}";
         if (audioStreamIndex is not null) {
             url = $"{url}&AudioStreamIndex={audioStreamIndex.Value}";
         }

@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Settings;
 using Prismedia.Application.Videos;
+using Prismedia.Contracts.Jellyfin;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
@@ -309,6 +310,37 @@ public sealed class HlsAssetServiceTests : IDisposable {
         Assert.Contains("#EXT-X-TARGETDURATION:6", playlist);
         Assert.Contains("#EXTINF:1.000000,", playlist);
         Assert.Contains("#EXT-X-ENDLIST", playlist);
+        Assert.False(process.WasCalled);
+    }
+
+    [Fact]
+    public async Task VirtualMainPlaylistReturnsJellyfinVariantPlaylist() {
+        var videoId = Guid.Parse("33333333-3333-3333-3333-333333333335");
+        var sourcePath = Path.Combine(_cacheRoot, "source.mkv");
+        await File.WriteAllTextAsync(sourcePath, "source");
+        var process = new ManifestWritingProcessExecutor();
+        var service = new HlsAssetService(
+            new HlsAssetServiceOptions(_cacheRoot),
+            new FakeVideoSourceService(new VideoSourceFile(
+                videoId,
+                sourcePath,
+                "video/x-matroska",
+                false,
+                DurationSeconds: 13,
+                Width: 1920,
+                Height: 1080,
+                BitRate: 8_000_000,
+                VideoCodec: "h264")),
+            process,
+            NullLogger<HlsAssetService>.Instance);
+
+        var main = await service.GetAssetAsync(videoId, JellyfinProtocol.Hls.MainPlaylist, audioStreamIndex: 2, CancellationToken.None);
+
+        Assert.NotNull(main);
+        var playlist = await File.ReadAllTextAsync(main.Path);
+        Assert.Contains("#EXT-X-PLAYLIST-TYPE:VOD", playlist);
+        Assert.Contains("seg_00000.ts?AudioStreamIndex=2", playlist);
+        Assert.DoesNotContain("#EXT-X-STREAM-INF", playlist);
         Assert.False(process.WasCalled);
     }
 

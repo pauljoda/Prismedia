@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Prismedia.Application.Entities;
 using Prismedia.Application.Videos;
+using Prismedia.Contracts.Jellyfin;
 using Prismedia.Contracts.Playback;
 
 namespace Prismedia.Api.Tests;
@@ -33,7 +34,7 @@ public sealed class JellyfinPlaybackEndpointTests : IDisposable {
                     SupportsDirectPlay: false,
                     SupportsDirectStream: false,
                     SupportsTranscoding: true,
-                    TranscodingUrl: $"/Videos/{VideoId}/master.m3u8?PlaySessionId=play-session",
+                    TranscodingUrl: $"/Videos/{VideoId}/{JellyfinProtocol.Hls.MasterPlaylist}?PlaySessionId=play-session",
                     TranscodingSubProtocol: "hls",
                     TranscodingContainer: "ts",
                     MediaStreams:
@@ -55,23 +56,40 @@ public sealed class JellyfinPlaybackEndpointTests : IDisposable {
         Assert.Equal("play-session", body.PlaySessionId);
         Assert.False(body.MediaSources.Single().SupportsDirectPlay);
         Assert.Equal("hls", body.MediaSources.Single().TranscodingSubProtocol);
-        Assert.StartsWith($"/Videos/{VideoId}/master.m3u8", body.MediaSources.Single().TranscodingUrl);
+        Assert.StartsWith($"/Videos/{VideoId}/{JellyfinProtocol.Hls.MasterPlaylist}", body.MediaSources.Single().TranscodingUrl);
     }
 
     [Fact]
     public async Task MasterPlaylistEndpointMapsToMasterHlsAsset() {
-        var path = Path.Combine(_tempDir, "master.m3u8");
+        var path = Path.Combine(_tempDir, JellyfinProtocol.Hls.MasterPlaylist);
         await File.WriteAllTextAsync(path, "#EXTM3U\n");
         var hls = new RecordingHlsAssetService(new HlsAsset(path, "application/vnd.apple.mpegurl", "public, max-age=60"));
         using var factory = CreateFactory(hls: hls);
         using var client = factory.CreateAuthenticatedClient();
 
-        using var response = await client.GetAsync($"/Videos/{VideoId}/master.m3u8");
+        using var response = await client.GetAsync($"/Videos/{VideoId}/{JellyfinProtocol.Hls.MasterPlaylist}");
         var body = await response.Content.ReadAsStringAsync();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal("master.m3u8", hls.LastAssetPath);
+        Assert.Equal(JellyfinProtocol.Hls.MasterPlaylist, hls.LastAssetPath);
         Assert.Equal("#EXTM3U\n", body);
+    }
+
+    [Fact]
+    public async Task MainPlaylistEndpointMapsToJellyfinVariantHlsAsset() {
+        var path = Path.Combine(_tempDir, JellyfinProtocol.Hls.MainPlaylist);
+        await File.WriteAllTextAsync(path, "#EXTM3U\n#EXT-X-PLAYLIST-TYPE:VOD\n");
+        var hls = new RecordingHlsAssetService(new HlsAsset(path, "application/vnd.apple.mpegurl", "public, max-age=60"));
+        using var factory = CreateFactory(hls: hls);
+        using var client = factory.CreateAuthenticatedClient();
+
+        using var response = await client.GetAsync($"/Videos/{VideoId}/{JellyfinProtocol.Hls.MainPlaylist}?AudioStreamIndex=2");
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(JellyfinProtocol.Hls.MainPlaylist, hls.LastAssetPath);
+        Assert.Equal(2, hls.LastAudioStreamIndex);
+        Assert.Contains("#EXT-X-PLAYLIST-TYPE:VOD", body);
     }
 
     [Fact]

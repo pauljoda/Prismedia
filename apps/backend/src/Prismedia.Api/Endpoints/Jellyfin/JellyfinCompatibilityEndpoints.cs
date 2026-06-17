@@ -58,6 +58,12 @@ public static partial class JellyfinCompatibilityEndpoints {
             .WithName("GetJellyfinSystemInfo")
             .Produces<JellyfinSystemInfo>();
 
+        routes.MapGet("/System/Endpoint", (HttpContext httpContext) =>
+            Results.Ok(ToEndpointInfo(httpContext)))
+            .WithTags("Jellyfin System")
+            .WithName("GetJellyfinEndpointInfo")
+            .Produces<JellyfinEndpointInfo>();
+
         routes.MapGet("/Branding/Configuration", () =>
             Results.Ok(new JellyfinBrandingConfiguration("", "", SplashscreenEnabled: false)))
             .WithTags("Jellyfin Branding")
@@ -79,6 +85,28 @@ public static partial class JellyfinCompatibilityEndpoints {
             .WithTags("Jellyfin System")
             .WithName("GetJellyfinQuickConnectEnabled")
             .Produces<bool>();
+
+        routes.MapPost("/QuickConnect/Initiate", () =>
+            Results.Json(
+                new ApiProblem(ApiProblemCodes.JellyfinQuickConnectDisabled, "Quick Connect is disabled."),
+                statusCode: StatusCodes.Status401Unauthorized))
+            .WithTags("Jellyfin System")
+            .WithName("InitiateJellyfinQuickConnect")
+            .Produces<ApiProblem>(StatusCodes.Status401Unauthorized);
+
+        routes.MapGet("/QuickConnect/Connect", () =>
+            Results.Json(
+                new ApiProblem(ApiProblemCodes.JellyfinQuickConnectNotFound, "Unknown Quick Connect secret."),
+                statusCode: StatusCodes.Status404NotFound))
+            .WithTags("Jellyfin System")
+            .WithName("GetJellyfinQuickConnectState")
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+
+        routes.MapGet("/Startup/Configuration", () =>
+            Results.Ok(new JellyfinStartupConfiguration("Prismedia", "", "US", "en")))
+            .WithTags("Jellyfin Startup")
+            .WithName("GetJellyfinStartupConfiguration")
+            .Produces<JellyfinStartupConfiguration>();
     }
 
     private static void MapJellyfinUserEndpoints(this IEndpointRouteBuilder routes) {
@@ -144,6 +172,14 @@ public static partial class JellyfinCompatibilityEndpoints {
             .Produces<JellyfinAuthenticationResult>()
             .Produces<ApiProblem>(StatusCodes.Status401Unauthorized)
             .Produces<ApiProblem>(StatusCodes.Status429TooManyRequests);
+
+        routes.MapPost("/Users/AuthenticateWithQuickConnect", () =>
+            Results.Json(
+                new ApiProblem(ApiProblemCodes.JellyfinQuickConnectDisabled, "Quick Connect is disabled."),
+                statusCode: StatusCodes.Status401Unauthorized))
+            .WithTags("Jellyfin Users")
+            .WithName("AuthenticateJellyfinUserWithQuickConnect")
+            .Produces<ApiProblem>(StatusCodes.Status401Unauthorized);
 
         routes.MapPost("/Users/{userId:guid}/Authenticate", async (
             Guid userId,
@@ -398,6 +434,12 @@ public static partial class JellyfinCompatibilityEndpoints {
     }
 
     private static void MapJellyfinCompatibilityNoOps(this IEndpointRouteBuilder routes) {
+        routes.MapGet("/Sessions", (HttpContext httpContext) =>
+            Results.Ok(CurrentSessions(httpContext)))
+            .WithTags("Jellyfin Sessions")
+            .WithName("GetJellyfinSessions")
+            .Produces<IReadOnlyList<JellyfinSessionInfoDto>>();
+
         routes.MapPost("/Sessions/Capabilities", () => Results.NoContent())
             .WithTags("Jellyfin Sessions")
             .WithName("PostJellyfinCapabilities")
@@ -468,6 +510,37 @@ public static partial class JellyfinCompatibilityEndpoints {
             ToSessionDto(result.Profile, result.Session),
             result.AccessToken,
             state.ServerId.ToString("N")));
+    }
+
+    private static IReadOnlyList<JellyfinSessionInfoDto> CurrentSessions(HttpContext httpContext) =>
+        httpContext.GetPrismediaAuth()?.JellyfinSession is { } resolution
+            ? [ToSessionDto(resolution.Profile, resolution.Session)]
+            : [];
+
+    private static JellyfinEndpointInfo ToEndpointInfo(HttpContext httpContext) {
+        var remote = httpContext.Connection.RemoteIpAddress;
+        var isLocal = remote is null || System.Net.IPAddress.IsLoopback(remote);
+        return new JellyfinEndpointInfo(isLocal, isLocal || IsPrivateNetworkAddress(remote));
+    }
+
+    private static bool IsPrivateNetworkAddress(System.Net.IPAddress? address) {
+        if (address is null) {
+            return true;
+        }
+
+        if (address.IsIPv4MappedToIPv6) {
+            address = address.MapToIPv4();
+        }
+
+        if (address.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork) {
+            return address.IsIPv6LinkLocal || address.IsIPv6SiteLocal || address.IsIPv6UniqueLocal;
+        }
+
+        var bytes = address.GetAddressBytes();
+        return bytes[0] == 10 ||
+            (bytes[0] == 172 && bytes[1] is >= 16 and <= 31) ||
+            (bytes[0] == 192 && bytes[1] == 168) ||
+            (bytes[0] == 169 && bytes[1] == 254);
     }
 
     private static async Task<IResult> StreamImageAsync(

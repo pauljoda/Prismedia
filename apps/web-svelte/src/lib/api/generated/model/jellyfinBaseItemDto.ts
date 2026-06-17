@@ -51,22 +51,15 @@ export interface JellyfinBaseItemDto {
      * @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$
      */
   CriticRating?: number | string | null;
-  /** @nullable */
-  Genres?: string[] | null;
-  /** @nullable */
-  GenreItems?: JellyfinNameGuidPairDto[] | null;
-  /** @nullable */
-  Tags?: string[] | null;
-  /** @nullable */
-  People?: JellyfinBaseItemPersonDto[] | null;
-  /** @nullable */
-  Studios?: JellyfinNameGuidPairDto[] | null;
+  Genres?: string[];
+  GenreItems?: JellyfinNameGuidPairDto[];
+  Tags?: string[];
+  People?: JellyfinBaseItemPersonDto[];
+  Studios?: JellyfinNameGuidPairDto[];
   /** @nullable */
   ProviderIds?: JellyfinBaseItemDtoProviderIds;
-  /** @nullable */
-  ExternalUrls?: JellyfinExternalUrlDto[] | null;
-  /** @nullable */
-  RemoteTrailers?: JellyfinMediaUrlDto[] | null;
+  ExternalUrls?: JellyfinExternalUrlDto[];
+  RemoteTrailers?: JellyfinMediaUrlDto[];
   Type: string;
   /** @nullable */
   MediaType?: string | null;
@@ -99,10 +92,8 @@ export interface JellyfinBaseItemDto {
   DisplayPreferencesId?: string | null;
   /** @nullable */
   VideoType?: string | null;
-  /** @nullable */
-  Taglines?: string[] | null;
-  /** @nullable */
-  ProductionLocations?: string[] | null;
+  Taglines?: string[];
+  ProductionLocations?: string[];
   /**
      * @nullable
      * @pattern ^-?(?:0|[1-9]\d*)$
@@ -178,18 +169,14 @@ export interface JellyfinBaseItemDto {
   AlbumPrimaryImageTag?: string | null;
   /** @nullable */
   AlbumArtist?: string | null;
-  /** @nullable */
-  AlbumArtists?: JellyfinNameGuidPairDto[] | null;
-  /** @nullable */
-  Artists?: string[] | null;
-  /** @nullable */
-  ArtistItems?: JellyfinNameGuidPairDto[] | null;
+  AlbumArtists?: JellyfinNameGuidPairDto[];
+  Artists?: string[];
+  ArtistItems?: JellyfinNameGuidPairDto[];
   ParentLogoItemId?: unknown;
   /** @nullable */
   ParentLogoImageTag?: string | null;
   ParentBackdropItemId?: unknown;
-  /** @nullable */
-  ParentBackdropImageTags?: string[] | null;
+  ParentBackdropImageTags?: string[];
   ParentThumbItemId?: unknown;
   /** @nullable */
   ParentThumbImageTag?: string | null;
@@ -203,10 +190,7 @@ export interface JellyfinBaseItemDto {
      */
   PrimaryImageAspectRatio?: number | string | null;
   UserData?: null | JellyfinUserItemDataDto;
-  /** @nullable */
-  MediaSources?: JellyfinCatalogMediaSourceDto[] | null;
-  /** @nullable */
-  MediaStreams?: JellyfinCatalogMediaStreamDto[] | null;
-  /** @nullable */
-  Chapters?: JellyfinChapterInfoDto[] | null;
+  MediaSources?: JellyfinCatalogMediaSourceDto[];
+  MediaStreams?: JellyfinCatalogMediaStreamDto[];
+  Chapters?: JellyfinChapterInfoDto[];
 }
