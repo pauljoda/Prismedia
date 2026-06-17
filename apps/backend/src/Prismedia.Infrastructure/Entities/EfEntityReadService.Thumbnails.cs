@@ -273,10 +273,27 @@ public sealed partial class EfEntityReadService {
             .ToArrayAsync(cancellationToken);
 
         return covers
+            .Where(HasUsableAssetPath)
             .GroupBy(file => file.EntityId)
             .ToDictionary(
                 group => group.Key,
                 group => EntityCoverSelection.Select(group)!.Path);
+    }
+
+    private bool HasUsableAssetPath(EntityFileRow file) =>
+        HasUsableAssetPath(file.Path);
+
+    private bool HasUsableAssetPath(string path) {
+        if (!path.StartsWith("/assets/", StringComparison.Ordinal)) {
+            return true;
+        }
+
+        if (_assets is null) {
+            return true;
+        }
+
+        var diskPath = _assets.ResolveAssetDiskPath(path);
+        return diskPath is not null && File.Exists(diskPath);
     }
 
     private static IReadOnlyList<EntityThumbnailMeta> ProjectThumbnailMeta(
@@ -470,5 +487,7 @@ public sealed partial class EfEntityReadService {
         kindCode == EntityKindRegistry.Book.Code ||
         kindCode == EntityKindRegistry.BookVolume.Code ||
         kindCode == EntityKindRegistry.BookChapter.Code ||
-        kindCode == EntityKindRegistry.Gallery.Code;
+        kindCode == EntityKindRegistry.Gallery.Code ||
+        kindCode == EntityKindRegistry.VideoSeries.Code ||
+        kindCode == EntityKindRegistry.VideoSeason.Code;
 }

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Application.Settings;
 using Prismedia.Domain.Entities;
+using Prismedia.Infrastructure.Media.Processing;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 using Prismedia.Infrastructure.Settings;
@@ -11,7 +12,7 @@ namespace Prismedia.Infrastructure.Media.Persistence;
 /// <summary>
 /// Implements entity persistence operations for library scanning against the entity schema.
 /// </summary>
-public sealed partial class LibraryScanPersistenceService(PrismediaDbContext db) :
+public sealed partial class LibraryScanPersistenceService(PrismediaDbContext db, AssetPathService? assets = null) :
     ILibraryScanRootPersistence,
     IVideoScanPersistence,
     IImageGalleryScanPersistence,
@@ -22,4 +23,5 @@ public sealed partial class LibraryScanPersistenceService(PrismediaDbContext db)
     IEntityRefreshTreePersistence,
     IScanMetadataPersistence {
     private readonly PrismediaDbContext _db = db;
+    private readonly AssetPathService? _assets = assets;
 }

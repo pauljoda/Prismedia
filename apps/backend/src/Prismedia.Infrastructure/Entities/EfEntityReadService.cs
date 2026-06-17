@@ -4,6 +4,7 @@ using Prismedia.Application.Entities;
 using Prismedia.Contracts.Entities;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Entities.Mappers;
+using Prismedia.Infrastructure.Media.Processing;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 
@@ -28,16 +29,19 @@ public sealed partial class EfEntityReadService : IEntityReadService {
     private readonly EfEntityRepository _repository;
     private readonly IReadOnlyDictionary<EntityKind, IEntityKindMapper> _kindMappers;
     private readonly IReadOnlyList<Thumbnails.IThumbnailContributor> _thumbnailContributors;
+    private readonly AssetPathService? _assets;
 
     public EfEntityReadService(
         PrismediaDbContext db,
         EfEntityRepository repository,
         IEnumerable<IEntityKindMapper> kindMappers,
-        IEnumerable<Thumbnails.IThumbnailContributor> thumbnailContributors) {
+        IEnumerable<Thumbnails.IThumbnailContributor> thumbnailContributors,
+        AssetPathService? assets = null) {
         _db = db;
         _repository = repository;
         _kindMappers = kindMappers.ToDictionary(mapper => mapper.Kind);
         _thumbnailContributors = thumbnailContributors.ToArray();
+        _assets = assets;
     }
 
     public async Task<EntityListResponse> ListAsync(
@@ -467,12 +471,45 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             return null;
         }
 
-        var card = EntityCardProjector.ToCard(entity) with {
+        var projected = SanitizeLocalAssets(EntityCardProjector.ToCard(entity));
+        var card = projected with {
             ChildrenByKind = await ProjectDirectChildGroupsAsync(id, hideNsfw, enforceLibraryVisibility, cancellationToken),
             Relationships = await ProjectRelationshipGroupsAsync(id, hideNsfw, enforceLibraryVisibility, cancellationToken)
         };
         return await EnrichBookProgressAsync(card, hideNsfw, cancellationToken);
     }
+
+    private EntityCard SanitizeLocalAssets(EntityCard card) {
+        if (_assets is null) {
+            return card;
+        }
+
+        var capabilities = card.Capabilities
+            .Select(SanitizeLocalAssetCapability)
+            .ToArray();
+        return card with { Capabilities = capabilities };
+    }
+
+    private EntityCapability SanitizeLocalAssetCapability(EntityCapability capability) {
+        if (capability is not ImagesCapability images) {
+            return capability;
+        }
+
+        var items = images.Items
+            .Where(item => HasUsableAssetPath(item.Path))
+            .ToArray();
+
+        return images with {
+            Items = items,
+            ThumbnailUrl = UsableImageUrl(images.ThumbnailUrl, items),
+            CoverUrl = UsableImageUrl(images.CoverUrl, items)
+        };
+    }
+
+    private string? UsableImageUrl(string? current, IReadOnlyList<EntityImageAsset> items) =>
+        !string.IsNullOrWhiteSpace(current) && HasUsableAssetPath(current)
+            ? current
+            : items.FirstOrDefault()?.Path;
 
     public async Task<EntityThumbnailBatchResponse> GetThumbnailsAsync(
         IReadOnlyList<Guid> ids,

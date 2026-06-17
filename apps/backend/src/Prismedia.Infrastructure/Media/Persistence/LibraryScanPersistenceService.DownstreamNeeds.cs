@@ -49,45 +49,37 @@ public sealed partial class LibraryScanPersistenceService {
             .Select(entity => new { entity.Id, entity.KindCode })
             .ToDictionaryAsync(entity => entity.Id, entity => entity.KindCode, cancellationToken);
 
-        var hasThumbnail = (await _db.EntityFiles.AsNoTracking()
-            .Where(f => ids.Contains(f.EntityId) && f.Role == EntityFileRole.Thumbnail)
-            .Select(f => f.EntityId)
-            .ToListAsync(cancellationToken)).ToHashSet();
+        var hasThumbnail = await LoadUsableAssetIdsAsync(ids, [EntityFileRole.Thumbnail], cancellationToken);
 
-        var hasPreview = (await _db.EntityFiles.AsNoTracking()
-            .Where(f => ids.Contains(f.EntityId) && f.Role == EntityFileRole.Preview)
-            .Select(f => f.EntityId)
-            .ToListAsync(cancellationToken)).ToHashSet();
+        var hasPreview = await LoadUsableAssetIdsAsync(ids, [EntityFileRole.Preview], cancellationToken);
 
         var sourcePaths = await _db.EntityFiles.AsNoTracking()
             .Where(f => ids.Contains(f.EntityId) && f.Role == EntityFileRole.Source)
             .Select(f => new { f.EntityId, f.Path })
             .ToDictionaryAsync(f => f.EntityId, f => f.Path, cancellationToken);
 
-        var hasCover = (await _db.EntityFiles.AsNoTracking()
-            .Where(f => ids.Contains(f.EntityId) && (
-                f.Role == EntityFileRole.Thumbnail ||
-                f.Role == EntityFileRole.Poster ||
-                f.Role == EntityFileRole.Cover ||
-                f.Role == EntityFileRole.Logo ||
-                f.Role == EntityFileRole.Backdrop))
-            .Select(f => f.EntityId)
-            .ToListAsync(cancellationToken)).ToHashSet();
+        var hasCover = await LoadUsableAssetIdsAsync(
+            ids,
+            [
+                EntityFileRole.Thumbnail,
+                EntityFileRole.Poster,
+                EntityFileRole.Cover,
+                EntityFileRole.Logo,
+                EntityFileRole.Backdrop
+            ],
+            cancellationToken);
 
-        var hasGridThumbnail = (await _db.EntityFiles.AsNoTracking()
-            .Where(f => ids.Contains(f.EntityId) && f.Role == EntityFileRole.GridThumbnail)
-            .Select(f => f.EntityId)
-            .ToListAsync(cancellationToken)).ToHashSet();
+        var hasGridThumbnail = await LoadUsableAssetIdsAsync(ids, [EntityFileRole.GridThumbnail], cancellationToken);
 
-        var hasWaveform = (await _db.EntityFiles.AsNoTracking()
-            .Where(f => ids.Contains(f.EntityId) && f.Role == EntityFileRole.Waveform)
-            .Select(f => f.EntityId)
-            .ToListAsync(cancellationToken)).ToHashSet();
+        var hasWaveform = await LoadUsableAssetIdsAsync(ids, [EntityFileRole.Waveform], cancellationToken);
 
         var hasTrickplay = (await _db.TrickplayInfos.AsNoTracking()
             .Where(t => ids.Contains(t.EntityId) && t.ThumbnailCount > 0)
-            .Select(t => t.EntityId)
-            .ToListAsync(cancellationToken)).ToHashSet();
+            .Select(t => new { t.EntityId, t.Width })
+            .ToListAsync(cancellationToken))
+            .Where(row => HasUsableTrickplayTiles(row.EntityId, row.Width))
+            .Select(row => row.EntityId)
+            .ToHashSet();
 
         var subtitlesExtracted = (await _db.VideoDetails.AsNoTracking()
             .Where(v => ids.Contains(v.EntityId) && v.SubtitlesExtractedAt != null)
@@ -137,7 +129,62 @@ public sealed partial class LibraryScanPersistenceService {
         _db.EntityFileFingerprints.AnyAsync(f => f.EntityId == entityId && f.Algorithm == algorithm, cancellationToken);
 
     public Task<bool> HasEntityFileAsync(Guid entityId, EntityFileRole role, CancellationToken cancellationToken) =>
-        _db.EntityFiles.AnyAsync(f => f.EntityId == entityId && f.Role == role, cancellationToken);
+        HasUsableEntityFileAsync(entityId, role, cancellationToken);
+
+    private async Task<HashSet<Guid>> LoadUsableAssetIdsAsync(
+        IReadOnlyList<Guid> ids,
+        IReadOnlyCollection<EntityFileRole> roles,
+        CancellationToken cancellationToken) {
+        var files = await _db.EntityFiles.AsNoTracking()
+            .Where(f => ids.Contains(f.EntityId) && roles.Contains(f.Role))
+            .Select(f => new { f.EntityId, f.Path })
+            .ToListAsync(cancellationToken);
+
+        return files
+            .Where(file => HasUsableAssetPath(file.Path))
+            .Select(file => file.EntityId)
+            .ToHashSet();
+    }
+
+    private async Task<bool> HasUsableEntityFileAsync(
+        Guid entityId,
+        EntityFileRole role,
+        CancellationToken cancellationToken) {
+        var paths = await _db.EntityFiles.AsNoTracking()
+            .Where(f => f.EntityId == entityId && f.Role == role)
+            .Select(f => f.Path)
+            .ToListAsync(cancellationToken);
+
+        return paths.Any(HasUsableAssetPath);
+    }
+
+    private bool HasUsableAssetPath(string path) {
+        if (!path.StartsWith("/assets/", StringComparison.Ordinal)) {
+            return true;
+        }
+
+        if (_assets is null) {
+            return true;
+        }
+
+        var diskPath = _assets.ResolveAssetDiskPath(path);
+        return diskPath is not null && File.Exists(diskPath);
+    }
+
+    private bool HasUsableTrickplayTiles(Guid entityId, int width) {
+        if (_assets is null) {
+            return true;
+        }
+
+        var tileDir = _assets.TrickplayTileDir(entityId, width);
+        try {
+            return Directory.Exists(tileDir) && Directory.EnumerateFiles(tileDir, "*.jpg").Any();
+        } catch (IOException) {
+            return false;
+        } catch (UnauthorizedAccessException) {
+            return false;
+        }
+    }
 
     private static bool NeedsAnimatedImagePreviewClip(
         string kindCode,

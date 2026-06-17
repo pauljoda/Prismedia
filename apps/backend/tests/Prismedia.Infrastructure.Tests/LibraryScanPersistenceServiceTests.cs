@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Domain.Entities;
+using Prismedia.Infrastructure.Media.Processing;
 using Prismedia.Infrastructure.Media.Persistence;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
@@ -50,6 +51,100 @@ public sealed class LibraryScanPersistenceServiceTests {
 
         Assert.False(needs[videoId].NeedsPreview);
         Assert.True(needs[videoId].NeedsTrickplay);
+    }
+
+    [Fact]
+    public async Task DownstreamNeedsPreviewWhenStoredThumbnailFileIsMissing() {
+        var cacheRoot = CreateCacheRoot();
+        try {
+            await using var db = CreateContext();
+            var videoId = Guid.Parse("22222222-aaaa-1111-1111-111111111111");
+            var thumbnailPath = $"/assets/videos/{videoId}/thumb.jpg";
+            SeedVideo(db, videoId);
+            db.EntityFiles.Add(new EntityFileRow {
+                Id = Guid.NewGuid(),
+                EntityId = videoId,
+                Role = EntityFileRole.Thumbnail,
+                Path = thumbnailPath,
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow
+            });
+            await db.SaveChangesAsync();
+
+            var service = new LibraryScanPersistenceService(db, Assets(cacheRoot));
+            var needs = await service.CheckDownstreamNeedsBatchAsync([videoId], CancellationToken.None);
+            Assert.True(needs[videoId].NeedsPreview);
+
+            WriteCacheFile(cacheRoot, thumbnailPath);
+            needs = await service.CheckDownstreamNeedsBatchAsync([videoId], CancellationToken.None);
+            Assert.False(needs[videoId].NeedsPreview);
+        } finally {
+            DeleteDirectory(cacheRoot);
+        }
+    }
+
+    [Fact]
+    public async Task DownstreamNeedsGridThumbnailWhenStoredGridFileIsMissing() {
+        var cacheRoot = CreateCacheRoot();
+        try {
+            await using var db = CreateContext();
+            var videoId = Guid.Parse("22222222-bbbb-1111-1111-111111111111");
+            var thumbnailPath = $"/assets/videos/{videoId}/thumb.jpg";
+            var gridPath = $"/assets/grid-thumbs/{videoId}.jpg";
+            SeedVideo(db, videoId);
+            db.EntityFiles.AddRange(
+                new EntityFileRow {
+                    Id = Guid.NewGuid(),
+                    EntityId = videoId,
+                    Role = EntityFileRole.Thumbnail,
+                    Path = thumbnailPath,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                    UpdatedAt = DateTimeOffset.UtcNow
+                },
+                new EntityFileRow {
+                    Id = Guid.NewGuid(),
+                    EntityId = videoId,
+                    Role = EntityFileRole.GridThumbnail,
+                    Path = gridPath,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                    UpdatedAt = DateTimeOffset.UtcNow
+                });
+            await db.SaveChangesAsync();
+            WriteCacheFile(cacheRoot, thumbnailPath);
+
+            var service = new LibraryScanPersistenceService(db, Assets(cacheRoot));
+            var needs = await service.CheckDownstreamNeedsBatchAsync([videoId], CancellationToken.None);
+
+            Assert.False(needs[videoId].NeedsPreview);
+            Assert.True(needs[videoId].NeedsGridThumbnail);
+        } finally {
+            DeleteDirectory(cacheRoot);
+        }
+    }
+
+    [Fact]
+    public async Task HasEntityFileAsyncReturnsFalseWhenStoredAssetFileIsMissing() {
+        var cacheRoot = CreateCacheRoot();
+        try {
+            await using var db = CreateContext();
+            var imageId = Guid.Parse("22222222-cccc-1111-1111-111111111111");
+            SeedSourceEntity(db, imageId, EntityKindRegistry.Image.Code, "/media/images/photo.jpg");
+            db.EntityFiles.Add(new EntityFileRow {
+                Id = Guid.NewGuid(),
+                EntityId = imageId,
+                Role = EntityFileRole.Thumbnail,
+                Path = $"/assets/images/{imageId}/thumb.jpg",
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow
+            });
+            await db.SaveChangesAsync();
+
+            var service = new LibraryScanPersistenceService(db, Assets(cacheRoot));
+
+            Assert.False(await service.HasEntityFileAsync(imageId, EntityFileRole.Thumbnail, CancellationToken.None));
+        } finally {
+            DeleteDirectory(cacheRoot);
+        }
     }
 
     [Fact]
@@ -1460,6 +1555,29 @@ public sealed class LibraryScanPersistenceServiceTests {
         Assert.Contains(db.EntityRelationshipLinks, row => row.EntityId == bookId && row.RelationshipCode == "tags");
         Assert.Contains(db.EntityRelationshipLinks, row => row.EntityId == bookId && row.RelationshipCode == "studio");
         Assert.Contains(db.EntityRelationshipLinks, row => row.EntityId == bookId && row.RelationshipCode == "cast" && row.MetadataJson!.Contains("creator"));
+    }
+
+    private static string CreateCacheRoot() {
+        var path = Path.Combine(Path.GetTempPath(), $"prismedia-test-cache-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(path);
+        return path;
+    }
+
+    private static AssetPathService Assets(string cacheRoot) =>
+        new(Path.GetDirectoryName(cacheRoot) ?? cacheRoot, cacheRoot);
+
+    private static void WriteCacheFile(string cacheRoot, string assetPath) {
+        const string prefix = "/assets/";
+        var relative = assetPath[prefix.Length..].Replace('/', Path.DirectorySeparatorChar);
+        var path = Path.Combine(cacheRoot, relative);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllBytes(path, [0xff, 0xd8, 0xff, 0xd9]);
+    }
+
+    private static void DeleteDirectory(string path) {
+        if (Directory.Exists(path)) {
+            Directory.Delete(path, recursive: true);
+        }
     }
 
     private static PrismediaDbContext CreateContext() {

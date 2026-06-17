@@ -5,6 +5,7 @@ using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Entities;
 using Prismedia.Infrastructure.Entities.Mappers;
 using Prismedia.Infrastructure.Entities.Thumbnails;
+using Prismedia.Infrastructure.Media.Processing;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 
@@ -366,6 +367,129 @@ public sealed class EfEntityReadServiceTests {
         var item = Assert.Single(result.Items);
 
         Assert.Equal("/assets/custom/artwork/15151515/poster.webp", item.CoverUrl);
+    }
+
+    [Fact]
+    public async Task ListAsyncSkipsMissingLocalArtworkAndUsesGeneratedThumbnail() {
+        var cacheRoot = CreateCacheRoot();
+        try {
+            await using var db = CreateContext();
+            var videoId = Guid.Parse("15151515-aaaa-1515-1515-151515151515");
+            var thumbPath = $"/assets/videos/{videoId}/thumb.jpg";
+            var posterPath = $"/assets/custom/artwork/{videoId}/poster.webp";
+            var now = DateTimeOffset.UtcNow;
+            db.Entities.Add(new EntityRow {
+                Id = videoId,
+                KindCode = EntityKindRegistry.Video.Code,
+                Title = "Stale Poster Video",
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+            db.EntityFiles.AddRange(
+                File(videoId, EntityFileRole.Thumbnail, thumbPath, now),
+                File(videoId, EntityFileRole.Poster, posterPath, now.AddSeconds(1)));
+            await db.SaveChangesAsync();
+            WriteCacheFile(cacheRoot, thumbPath);
+
+            var repository = new EfEntityRepository(db, EntityMappers.Kinds(db), EntityMappers.Capabilities(db));
+            var service = new EfEntityReadService(db, repository, EntityMappers.Kinds(db), ThumbnailContributors.For(db), Assets(cacheRoot));
+
+            var result = await service.ListAsync(EntityKindRegistry.Video.Code, null, null, null, null, CancellationToken.None);
+            var item = Assert.Single(result.Items);
+
+            Assert.Equal(thumbPath, item.CoverUrl);
+        } finally {
+            DeleteDirectory(cacheRoot);
+        }
+    }
+
+    [Fact]
+    public async Task GetAsyncSkipsMissingLocalArtworkAndUsesGeneratedThumbnail() {
+        var cacheRoot = CreateCacheRoot();
+        try {
+            await using var db = CreateContext();
+            var videoId = Guid.Parse("15151515-bbbb-1515-1515-151515151515");
+            var thumbPath = $"/assets/videos/{videoId}/thumb.jpg";
+            var posterPath = $"/assets/custom/artwork/{videoId}/poster.webp";
+            var now = DateTimeOffset.UtcNow;
+            db.Entities.Add(new EntityRow {
+                Id = videoId,
+                KindCode = EntityKindRegistry.Video.Code,
+                Title = "Stale Detail Poster Video",
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+            db.EntityFiles.AddRange(
+                File(videoId, EntityFileRole.Thumbnail, thumbPath, now),
+                File(videoId, EntityFileRole.Poster, posterPath, now.AddSeconds(1)));
+            await db.SaveChangesAsync();
+            WriteCacheFile(cacheRoot, thumbPath);
+
+            var repository = new EfEntityRepository(db, EntityMappers.Kinds(db), EntityMappers.Capabilities(db));
+            var service = new EfEntityReadService(db, repository, EntityMappers.Kinds(db), ThumbnailContributors.For(db), Assets(cacheRoot));
+
+            var item = await service.GetAsync(videoId, hideNsfw: false, CancellationToken.None);
+            var images = Assert.IsType<ImagesCapability>(Assert.Single(item!.Capabilities.OfType<ImagesCapability>()));
+
+            Assert.Equal(thumbPath, images.CoverUrl);
+            Assert.Equal(thumbPath, images.ThumbnailUrl);
+            Assert.DoesNotContain(images.Items, image => image.Path == posterPath);
+        } finally {
+            DeleteDirectory(cacheRoot);
+        }
+    }
+
+    [Fact]
+    public async Task GetThumbnailsAsyncUsesEpisodeRepresentativeWhenSeriesPosterIsMissing() {
+        var cacheRoot = CreateCacheRoot();
+        try {
+            await using var db = CreateContext();
+            var seriesId = Guid.Parse("15151515-cccc-1515-1515-151515151515");
+            var seasonId = Guid.Parse("15151515-dddd-1515-1515-151515151515");
+            var episodeId = Guid.Parse("15151515-eeee-1515-1515-151515151515");
+            var episodeThumb = $"/assets/videos/{episodeId}/thumb.jpg";
+            var seriesPoster = $"/assets/plugins/artwork/{seriesId}/poster.jpg";
+            var now = DateTimeOffset.UtcNow;
+            db.Entities.AddRange(
+                new EntityRow {
+                    Id = seriesId,
+                    KindCode = EntityKindRegistry.VideoSeries.Code,
+                    Title = "Series",
+                    CreatedAt = now,
+                    UpdatedAt = now
+                },
+                new EntityRow {
+                    Id = seasonId,
+                    KindCode = EntityKindRegistry.VideoSeason.Code,
+                    Title = "Season",
+                    ParentEntityId = seriesId,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                },
+                new EntityRow {
+                    Id = episodeId,
+                    KindCode = EntityKindRegistry.Video.Code,
+                    Title = "Episode",
+                    ParentEntityId = seasonId,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                });
+            db.EntityFiles.AddRange(
+                File(seriesId, EntityFileRole.Poster, seriesPoster, now),
+                File(episodeId, EntityFileRole.Thumbnail, episodeThumb, now));
+            await db.SaveChangesAsync();
+            WriteCacheFile(cacheRoot, episodeThumb);
+
+            var repository = new EfEntityRepository(db, EntityMappers.Kinds(db), EntityMappers.Capabilities(db));
+            var service = new EfEntityReadService(db, repository, EntityMappers.Kinds(db), ThumbnailContributors.For(db), Assets(cacheRoot));
+
+            var result = await service.GetThumbnailsAsync([seriesId], hideNsfw: false, CancellationToken.None);
+            var item = Assert.Single(result.Items);
+
+            Assert.Equal(episodeThumb, item.CoverUrl);
+        } finally {
+            DeleteDirectory(cacheRoot);
+        }
     }
 
     [Fact]
@@ -1745,6 +1869,29 @@ public sealed class EfEntityReadServiceTests {
 
         var video = Assert.Single(response.Items);
         Assert.Null(video.CoverUrl);
+    }
+
+    private static string CreateCacheRoot() {
+        var path = Path.Combine(Path.GetTempPath(), $"prismedia-read-cache-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(path);
+        return path;
+    }
+
+    private static AssetPathService Assets(string cacheRoot) =>
+        new(Path.GetDirectoryName(cacheRoot) ?? cacheRoot, cacheRoot);
+
+    private static void WriteCacheFile(string cacheRoot, string assetPath) {
+        const string prefix = "/assets/";
+        var relative = assetPath[prefix.Length..].Replace('/', Path.DirectorySeparatorChar);
+        var path = Path.Combine(cacheRoot, relative);
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        System.IO.File.WriteAllBytes(path, [0xff, 0xd8, 0xff, 0xd9]);
+    }
+
+    private static void DeleteDirectory(string path) {
+        if (Directory.Exists(path)) {
+            Directory.Delete(path, recursive: true);
+        }
     }
 
     private static EntityFileRow File(Guid entityId, EntityFileRole role, string path, DateTimeOffset at) =>

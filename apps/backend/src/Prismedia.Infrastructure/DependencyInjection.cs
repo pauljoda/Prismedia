@@ -168,7 +168,10 @@ public static class DependencyInjection {
                 provider.GetRequiredService<AssetPathService>(),
                 provider.GetRequiredService<SettingsService>(),
                 provider.GetRequiredService<MediaToolOptions>()));
-        services.AddScoped<LibraryScanPersistenceService>();
+        services.AddScoped(provider =>
+            new LibraryScanPersistenceService(
+                provider.GetRequiredService<PrismediaDbContext>(),
+                provider.GetRequiredService<AssetPathService>()));
         services.AddScoped<ILibraryScanRootPersistence>(provider =>
             provider.GetRequiredService<LibraryScanPersistenceService>());
         services.AddScoped<IVideoScanPersistence>(provider =>
