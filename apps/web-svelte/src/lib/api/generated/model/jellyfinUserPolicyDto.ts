@@ -9,6 +9,8 @@ export interface JellyfinUserPolicyDto {
   IsAdministrator: boolean;
   IsHidden: boolean;
   IsDisabled: boolean;
+  AuthenticationProviderId: string;
+  PasswordResetProviderId: string;
   EnableRemoteControlOfOtherUsers: boolean;
   EnableSharedDeviceControl: boolean;
   EnableContentDeletion: boolean;

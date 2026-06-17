@@ -16,6 +16,15 @@ public static class JellyfinProtocol {
     /// <summary>Product name expected by Jellyfin SDK discovery and native client compatibility checks.</summary>
     public const string CompatibleProductName = "Jellyfin Server";
 
+    /// <summary>Jellyfin provider ids emitted in user policy responses.</summary>
+    public static class UserPolicyProviders {
+        /// <summary>Default Jellyfin authentication provider id expected by strict native clients.</summary>
+        public const string DefaultAuthentication = "Jellyfin.Server.Implementations.Users.DefaultAuthenticationProvider";
+
+        /// <summary>Default Jellyfin password reset provider id expected by strict native clients.</summary>
+        public const string DefaultPasswordReset = "Jellyfin.Server.Implementations.Users.DefaultPasswordResetProvider";
+    }
+
     /// <summary>HTTP header names carrying Jellyfin authentication.</summary>
     public static class Headers {
         /// <summary>Emby/Jellyfin authorization header carrying client identity and token.</summary>

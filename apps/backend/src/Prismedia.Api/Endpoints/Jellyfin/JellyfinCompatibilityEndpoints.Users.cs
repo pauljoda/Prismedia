@@ -113,6 +113,8 @@ public static partial class JellyfinCompatibilityEndpoints {
             IsAdministrator: false,
             IsHidden: false,
             IsDisabled: !enabled,
+            AuthenticationProviderId: JellyfinProtocol.UserPolicyProviders.DefaultAuthentication,
+            PasswordResetProviderId: JellyfinProtocol.UserPolicyProviders.DefaultPasswordReset,
             EnableRemoteControlOfOtherUsers: false,
             EnableSharedDeviceControl: false,
             EnableContentDeletion: false,

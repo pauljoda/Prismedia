@@ -207,6 +207,7 @@ public sealed partial class SecurityEndpointTests : IDisposable {
         var publicInfo = await client.GetFromJsonAsync<JellyfinPublicSystemInfo>("/System/Info/Public");
         var users = await client.GetFromJsonAsync<IReadOnlyList<JellyfinUserDto>>("/Users/Public");
         var user = Assert.Single(users!);
+        using var splashscreen = await client.GetAsync("/Branding/Splashscreen");
         using var passwordFieldResponse = await client.PostAsJsonAsync(
             "/Users/AuthenticateByName",
             new { Username = "Prismedia", Password = TestAuth.ApiKey });
@@ -220,11 +221,16 @@ public sealed partial class SecurityEndpointTests : IDisposable {
         Assert.Equal(JellyfinProtocol.CompatibleProductName, publicInfo.ProductName);
         Assert.Equal(JellyfinProtocol.CompatibleServerVersion, publicInfo.Version);
         Assert.Equal("", publicInfo.OperatingSystem);
+        Assert.Equal(HttpStatusCode.NotFound, splashscreen.StatusCode);
+        Assert.Equal(JellyfinProtocol.UserPolicyProviders.DefaultAuthentication, user.Policy.AuthenticationProviderId);
+        Assert.Equal(JellyfinProtocol.UserPolicyProviders.DefaultPasswordReset, user.Policy.PasswordResetProviderId);
         Assert.True(passwordFieldResponse.IsSuccessStatusCode);
         Assert.True(legacyResponse.IsSuccessStatusCode);
 
         var auth = await passwordFieldResponse.Content.ReadFromJsonAsync<JellyfinAuthenticationResult>();
         Assert.NotNull(auth);
+        Assert.Equal(JellyfinProtocol.UserPolicyProviders.DefaultAuthentication, auth.User.Policy.AuthenticationProviderId);
+        Assert.Equal(JellyfinProtocol.UserPolicyProviders.DefaultPasswordReset, auth.User.Policy.PasswordResetProviderId);
         var systemInfo = await JellyfinGetFromJsonAsync<JellyfinSystemInfo>(
             client,
             "/System/Info",

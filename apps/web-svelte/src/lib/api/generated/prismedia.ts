@@ -639,6 +639,39 @@ export const getJellyfinBrandingCssFile = async ( options?: RequestInit): Promis
 
 
 
+export type getJellyfinBrandingSplashscreenResponse404 = {
+  data: void
+  status: 404
+}
+
+;
+export type getJellyfinBrandingSplashscreenResponseError = (getJellyfinBrandingSplashscreenResponse404) & {
+  headers: Headers;
+};
+
+export type getJellyfinBrandingSplashscreenResponse = (getJellyfinBrandingSplashscreenResponseError)
+
+export const getGetJellyfinBrandingSplashscreenUrl = () => {
+
+
+
+
+  return `/Branding/Splashscreen`
+}
+
+export const getJellyfinBrandingSplashscreen = async ( options?: RequestInit): Promise<getJellyfinBrandingSplashscreenResponse> => {
+
+  return orvalFetch<getJellyfinBrandingSplashscreenResponse>(getGetJellyfinBrandingSplashscreenUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
 export type getJellyfinQuickConnectEnabledResponse200 = {
   data: boolean
   status: 200

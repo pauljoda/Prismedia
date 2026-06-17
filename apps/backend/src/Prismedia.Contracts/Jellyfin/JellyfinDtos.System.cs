@@ -79,6 +79,8 @@ public sealed record JellyfinUserPolicyDto(
     [property: JsonPropertyName("IsAdministrator")] bool IsAdministrator,
     [property: JsonPropertyName("IsHidden")] bool IsHidden,
     [property: JsonPropertyName("IsDisabled")] bool IsDisabled,
+    [property: JsonPropertyName("AuthenticationProviderId")] string AuthenticationProviderId,
+    [property: JsonPropertyName("PasswordResetProviderId")] string PasswordResetProviderId,
     [property: JsonPropertyName("EnableRemoteControlOfOtherUsers")] bool EnableRemoteControlOfOtherUsers,
     [property: JsonPropertyName("EnableSharedDeviceControl")] bool EnableSharedDeviceControl,
     [property: JsonPropertyName("EnableContentDeletion")] bool EnableContentDeletion,
