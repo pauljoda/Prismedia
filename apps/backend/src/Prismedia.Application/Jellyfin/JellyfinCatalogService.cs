@@ -878,12 +878,31 @@ public sealed partial class JellyfinCatalogService {
                 continue;
             }
 
+            var shelfItem = MapThumbnail(thumbnail, serverId);
             var context = await ResolveStandaloneContextAsync(detail, visibility, cancellationToken);
-            items.Add(await MapDetailAsync(detail, serverId, context, visibility, cancellationToken));
+            var detailedItem = await MapDetailAsync(detail, serverId, context, visibility, cancellationToken);
+            items.Add(WithPlayableSource(shelfItem, detailedItem));
         }
 
         return items;
     }
+
+    private static JellyfinBaseItemDto WithPlayableSource(
+        JellyfinBaseItemDto shelfItem,
+        JellyfinBaseItemDto detailedItem) =>
+        shelfItem with {
+            Path = detailedItem.Path ?? shelfItem.Path,
+            Container = detailedItem.Container ?? shelfItem.Container,
+            MediaSourceCount = detailedItem.MediaSourceCount ?? shelfItem.MediaSourceCount,
+            RunTimeTicks = detailedItem.RunTimeTicks ?? shelfItem.RunTimeTicks,
+            Width = detailedItem.Width,
+            Height = detailedItem.Height,
+            AspectRatio = detailedItem.AspectRatio,
+            IsHD = detailedItem.IsHD,
+            HasSubtitles = detailedItem.HasSubtitles,
+            MediaSources = detailedItem.MediaSources.Count > 0 ? detailedItem.MediaSources : shelfItem.MediaSources,
+            MediaStreams = detailedItem.MediaStreams.Count > 0 ? detailedItem.MediaStreams : shelfItem.MediaStreams
+        };
 
     private async Task<IEntityCard?> GetDetailedCardAsync(
         Guid id,
