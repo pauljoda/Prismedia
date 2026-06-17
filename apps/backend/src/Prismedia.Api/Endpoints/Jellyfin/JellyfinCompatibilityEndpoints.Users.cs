@@ -12,11 +12,10 @@ namespace Prismedia.Api.Endpoints;
 /// </summary>
 public static partial class JellyfinCompatibilityEndpoints {
     private static JellyfinPublicSystemInfo ToPublicSystemInfo(HttpContext httpContext, AppSecurityState state) {
-        var version = typeof(Program).Assembly.GetName().Version?.ToString(3) ?? "1.0.0";
         return new JellyfinPublicSystemInfo(
             PublicBaseUrl(httpContext.Request),
             "Prismedia",
-            version,
+            JellyfinProtocol.CompatibleServerVersion,
             "Prismedia",
             state.ServerId.ToString("N"),
             StartupWizardCompleted: true);

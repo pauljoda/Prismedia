@@ -7,6 +7,12 @@ namespace Prismedia.Contracts.Jellyfin;
 /// must not be retyped inline at call sites.
 /// </summary>
 public static class JellyfinProtocol {
+    /// <summary>
+    /// Jellyfin server version advertised by the compatibility surface. Native clients use this
+    /// field for protocol gating, so this is intentionally distinct from Prismedia's app version.
+    /// </summary>
+    public const string CompatibleServerVersion = "10.10.7";
+
     /// <summary>HTTP header names carrying Jellyfin authentication.</summary>
     public static class Headers {
         /// <summary>Emby/Jellyfin authorization header carrying client identity and token.</summary>

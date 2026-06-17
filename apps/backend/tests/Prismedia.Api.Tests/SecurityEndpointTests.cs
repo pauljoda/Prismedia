@@ -216,6 +216,7 @@ public sealed partial class SecurityEndpointTests : IDisposable {
 
         Assert.Equal(HttpStatusCode.OK, ping.StatusCode);
         Assert.NotNull(publicInfo);
+        Assert.Equal(JellyfinProtocol.CompatibleServerVersion, publicInfo.Version);
         Assert.Equal("", publicInfo.OperatingSystem);
         Assert.True(passwordFieldResponse.IsSuccessStatusCode);
         Assert.True(legacyResponse.IsSuccessStatusCode);
@@ -237,6 +238,7 @@ public sealed partial class SecurityEndpointTests : IDisposable {
 
         Assert.NotNull(systemInfo);
         Assert.Equal(publicInfo.Id, systemInfo.Id);
+        Assert.Equal(JellyfinProtocol.CompatibleServerVersion, systemInfo.Version);
         Assert.NotNull(endpointInfo);
         Assert.NotNull(sessions);
         Assert.Contains(sessions, session => session.UserId == auth.User.Id);
