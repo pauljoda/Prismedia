@@ -13,6 +13,9 @@ public static class JellyfinProtocol {
     /// </summary>
     public const string CompatibleServerVersion = "10.10.7";
 
+    /// <summary>Product name expected by Jellyfin SDK discovery and native client compatibility checks.</summary>
+    public const string CompatibleProductName = "Jellyfin Server";
+
     /// <summary>HTTP header names carrying Jellyfin authentication.</summary>
     public static class Headers {
         /// <summary>Emby/Jellyfin authorization header carrying client identity and token.</summary>

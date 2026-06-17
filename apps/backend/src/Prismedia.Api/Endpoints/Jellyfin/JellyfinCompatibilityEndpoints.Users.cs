@@ -16,7 +16,7 @@ public static partial class JellyfinCompatibilityEndpoints {
             PublicBaseUrl(httpContext.Request),
             "Prismedia",
             JellyfinProtocol.CompatibleServerVersion,
-            "Prismedia",
+            JellyfinProtocol.CompatibleProductName,
             state.ServerId.ToString("N"),
             StartupWizardCompleted: true);
     }

@@ -30,6 +30,7 @@ const redactQueryNames = new Set([
   "password",
   "secret"
 ]);
+const maxPreviewBytes = 2048;
 
 if (Number.isNaN(listenPort) || listenPort <= 0) {
   throw new Error("JELLYFIN_CAPTURE_PORT must be a positive integer.");
@@ -72,14 +73,25 @@ const server = http.createServer(async (req, res) => {
   }, upstreamResponse => {
     res.writeHead(upstreamResponse.statusCode ?? 502, upstreamResponse.headers);
     let responseBytes = 0;
+    const responsePreviewChunks = [];
+    let responsePreviewBytes = 0;
     upstreamResponse.on("data", chunk => {
       responseBytes += chunk.length;
+      if (responsePreviewBytes < maxPreviewBytes) {
+        const available = maxPreviewBytes - responsePreviewBytes;
+        const previewChunk = chunk.subarray(0, available);
+        responsePreviewChunks.push(previewChunk);
+        responsePreviewBytes += previewChunk.length;
+      }
     });
     upstreamResponse.pipe(res);
     upstreamResponse.on("end", () => {
       writeEntry({
         ...requestEntry,
         status: upstreamResponse.statusCode,
+        responsePreview: previewBody(
+          Buffer.concat(responsePreviewChunks),
+          upstreamResponse.headers["content-type"]),
         responseBytes,
         durationMs: Date.now() - startedAt
       });
