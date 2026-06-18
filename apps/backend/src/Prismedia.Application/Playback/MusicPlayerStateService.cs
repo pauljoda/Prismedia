@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Prismedia.Application.Entities;
-using Prismedia.Application.Settings;
+using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Media;
 using Prismedia.Contracts.Playback;
 using Prismedia.Domain.Entities;
@@ -9,33 +9,34 @@ using Prismedia.Domain.Entities;
 namespace Prismedia.Application.Playback;
 
 /// <summary>
-/// Application use-case service for the household-wide in-app music player state.
+/// Application use-case service for browser-scoped in-app music player state.
 /// The client remains responsible for real audio playback; this service stores only
-/// the queue, transport intent, and UI settings needed to reconstruct the player after
-/// a page refresh.
+/// the queue, transport intent, timestamp, and browser-local output settings needed to
+/// reconstruct the player after a page refresh.
 /// </summary>
 public sealed class MusicPlayerStateService {
-    /// <summary>
-    /// Reserved app-settings key holding the music player state JSON document. Not a
-    /// registered catalog setting.
-    /// </summary>
-    internal const string StateKey = "ui.music-player-state";
-
     private static readonly JsonSerializerOptions SerializerOptions = JsonSerializerOptions.Web;
+    private static readonly string[] MusicPlayerSettingKeys = [
+        BrowserSessionConstants.AudioOutputSettingKey,
+        BrowserSessionConstants.AudioPlaybackStateSettingKey
+    ];
 
-    private readonly ISettingsPersistence _settings;
+    private readonly IBrowserSessionPersistence _sessions;
     private readonly IEntityReadService _entities;
+    private readonly TimeProvider _timeProvider;
     private readonly ILogger<MusicPlayerStateService>? _logger;
 
     /// <summary>
-    /// Creates the service over settings persistence and entity read ports.
+    /// Creates the service over browser-session persistence and entity read ports.
     /// </summary>
     public MusicPlayerStateService(
-        ISettingsPersistence settings,
+        IBrowserSessionPersistence sessions,
         IEntityReadService entities,
+        TimeProvider? timeProvider = null,
         ILogger<MusicPlayerStateService>? logger = null) {
-        _settings = settings;
+        _sessions = sessions;
         _entities = entities;
+        _timeProvider = timeProvider ?? TimeProvider.System;
         _logger = logger;
     }
 
@@ -43,54 +44,76 @@ public sealed class MusicPlayerStateService {
     /// Loads the persisted player state, filtering missing tracks and repairing invalid
     /// order/position data into a safe empty or reduced queue.
     /// </summary>
-    public async Task<MusicPlayerStateResponse> GetAsync(CancellationToken cancellationToken) {
-        var overrides = await _settings.LoadSettingOverridesAsync(cancellationToken);
-        if (!overrides.TryGetValue(StateKey, out var rawJson) || string.IsNullOrWhiteSpace(rawJson)) {
-            return Empty();
+    public async Task<MusicPlayerStateResponse> GetAsync(
+        Guid browserSessionId,
+        CancellationToken cancellationToken) {
+        var settings = await _sessions.LoadSettingsAsync(browserSessionId, MusicPlayerSettingKeys, cancellationToken);
+        var output = LoadOutput(settings);
+
+        if (!settings.TryGetValue(BrowserSessionConstants.AudioPlaybackStateSettingKey, out var rawJson) ||
+            string.IsNullOrWhiteSpace(rawJson)) {
+            return Empty(output);
         }
 
-        StoredMusicPlayerState? stored;
-        try {
-            stored = JsonSerializer.Deserialize<StoredMusicPlayerState>(rawJson, SerializerOptions);
-        } catch (JsonException ex) {
-            _logger?.LogWarning(ex, "Stored music player state is invalid JSON and will be ignored.");
-            return Empty();
-        }
-
-        return stored is null ? Empty() : await HydrateAsync(stored, cancellationToken);
+        var stored = DeserializeOrNull<StoredMusicPlayerPlaybackState>(
+            rawJson,
+            "Stored music player playback state is invalid JSON and will be ignored.");
+        return stored is null ? Empty(output) : await HydrateAsync(stored, output, cancellationToken);
     }
 
     /// <summary>
-    /// Replaces the persisted player state. Empty queues clear the server state so a
-    /// dismissed player does not reappear after refresh.
+    /// Replaces the browser-scoped player state. Empty queues clear only the playback
+    /// queue state so browser audio-output preferences survive closing the player.
     /// </summary>
     public async Task<MusicPlayerStateResponse> SaveAsync(
+        Guid browserSessionId,
         UpdateMusicPlayerStateRequest request,
         CancellationToken cancellationToken) {
-        if (request.QueueTrackIds.Count == 0) {
-            await ClearAsync(cancellationToken);
-            return Empty();
+        var output = NormalizeOutput(request);
+        var upserts = new Dictionary<string, string>(StringComparer.Ordinal) {
+            [BrowserSessionConstants.AudioOutputSettingKey] = JsonSerializer.Serialize(output, SerializerOptions)
+        };
+        var deletes = new List<string>();
+        StoredMusicPlayerPlaybackState? playback = null;
+
+        if (request.QueueTrackIds.Count > 0) {
+            playback = NormalizePlayback(request);
+            if (playback.QueueTrackIds.Count > 0) {
+                upserts[BrowserSessionConstants.AudioPlaybackStateSettingKey] =
+                    JsonSerializer.Serialize(playback, SerializerOptions);
+            } else {
+                playback = null;
+            }
         }
 
-        var stored = Normalize(request);
-        if (stored.QueueTrackIds.Count == 0) {
-            await ClearAsync(cancellationToken);
-            return Empty();
+        if (playback is null) {
+            deletes.Add(BrowserSessionConstants.AudioPlaybackStateSettingKey);
         }
 
-        var json = JsonSerializer.Serialize(stored, SerializerOptions);
-        await _settings.SaveSettingOverrideAsync(StateKey, json, cancellationToken);
-        return await HydrateAsync(stored, cancellationToken);
+        await _sessions.ReplaceSettingsAsync(
+            browserSessionId,
+            upserts,
+            deletes,
+            _timeProvider.GetUtcNow(),
+            cancellationToken);
+
+        return playback is null ? Empty(output) : await HydrateAsync(playback, output, cancellationToken);
     }
 
     /// <summary>
-    /// Removes any persisted music player state.
+    /// Removes any persisted playback queue for this browser session.
     /// </summary>
-    public async Task ClearAsync(CancellationToken cancellationToken) =>
-        await _settings.DeleteSettingOverrideAsync(StateKey, cancellationToken);
+    public async Task ClearAsync(Guid browserSessionId, CancellationToken cancellationToken) =>
+        await _sessions.ReplaceSettingsAsync(
+            browserSessionId,
+            new Dictionary<string, string>(StringComparer.Ordinal),
+            [BrowserSessionConstants.AudioPlaybackStateSettingKey],
+            _timeProvider.GetUtcNow(),
+            cancellationToken);
 
     private async Task<MusicPlayerStateResponse> HydrateAsync(
-        StoredMusicPlayerState stored,
+        StoredMusicPlayerPlaybackState stored,
+        StoredMusicPlayerOutput output,
         CancellationToken cancellationToken) {
         var tracks = new List<AudioTrackDetail>();
         var oldToNewIndex = new Dictionary<int, int>();
@@ -110,13 +133,7 @@ public sealed class MusicPlayerStateService {
         }
 
         if (tracks.Count == 0) {
-            return Empty() with {
-                Volume = stored.Volume,
-                Muted = stored.Muted,
-                Collapsed = stored.Collapsed,
-                CollapsedSide = DecodeOrDefault(stored.CollapsedSide, MusicPlayerMiniSide.Left),
-                Context = stored.Context,
-            };
+            return Empty(output);
         }
 
         var order = stored.Order
@@ -133,23 +150,61 @@ public sealed class MusicPlayerStateService {
             : 0;
 
         var repeat = DecodeOrDefault(stored.Repeat, MusicPlayerRepeatMode.Off);
-        var collapsedSide = DecodeOrDefault(stored.CollapsedSide, MusicPlayerMiniSide.Left);
+        var currentTime = ClampCurrentTime(stored.CurrentTime, tracks, order, position);
 
         return new MusicPlayerStateResponse(
             tracks,
             order,
             position,
+            currentTime,
             stored.Playing,
             stored.Shuffle,
             repeat,
-            stored.Volume,
-            stored.Muted,
-            stored.Collapsed,
-            collapsedSide,
+            output.Volume,
+            output.Muted,
+            output.Collapsed,
+            DecodeOrDefault(output.CollapsedSide, MusicPlayerMiniSide.Left),
             stored.Context);
     }
 
-    private static StoredMusicPlayerState Normalize(UpdateMusicPlayerStateRequest request) {
+    private StoredMusicPlayerOutput LoadOutput(IReadOnlyDictionary<string, string> settings) {
+        if (!settings.TryGetValue(BrowserSessionConstants.AudioOutputSettingKey, out var rawJson) ||
+            string.IsNullOrWhiteSpace(rawJson)) {
+            return StoredMusicPlayerOutput.Default;
+        }
+
+        return DeserializeOrNull<StoredMusicPlayerOutput>(
+            rawJson,
+            "Stored music player output settings are invalid JSON and will be ignored.") is { } output
+            ? NormalizeOutput(output)
+            : StoredMusicPlayerOutput.Default;
+    }
+
+    private T? DeserializeOrNull<T>(string rawJson, string logMessage)
+        where T : class {
+        try {
+            return JsonSerializer.Deserialize<T>(rawJson, SerializerOptions);
+        } catch (JsonException ex) {
+            _logger?.LogWarning(ex, logMessage);
+            return null;
+        }
+    }
+
+    private static StoredMusicPlayerOutput NormalizeOutput(UpdateMusicPlayerStateRequest request) =>
+        NormalizeOutput(new StoredMusicPlayerOutput(
+            Math.Clamp(FiniteOrDefault(request.Volume, 1), 0, 1),
+            request.Muted,
+            request.Collapsed,
+            request.CollapsedSide.ToCode()));
+
+    private static StoredMusicPlayerOutput NormalizeOutput(StoredMusicPlayerOutput output) =>
+        new(
+            Math.Clamp(FiniteOrDefault(output.Volume, 1), 0, 1),
+            output.Muted,
+            output.Collapsed,
+            DecodeOrDefault(output.CollapsedSide, MusicPlayerMiniSide.Left).ToCode());
+
+    private static StoredMusicPlayerPlaybackState NormalizePlayback(UpdateMusicPlayerStateRequest request) {
         var trackIds = request.QueueTrackIds
             .Where(id => id != Guid.Empty)
             .ToArray();
@@ -165,19 +220,43 @@ public sealed class MusicPlayerStateService {
             ? -1
             : Math.Clamp(request.Position, 0, Math.Max(0, order.Length - 1));
 
-        return new StoredMusicPlayerState(
+        return new StoredMusicPlayerPlaybackState(
             trackIds,
             order,
             position,
+            Math.Max(0, FiniteOrDefault(request.CurrentTime, 0)),
             request.Playing,
             request.Shuffle,
             request.Repeat.ToCode(),
-            Math.Clamp(request.Volume, 0, 1),
-            request.Muted,
-            request.Collapsed,
-            request.CollapsedSide.ToCode(),
             request.Context);
     }
+
+    private static double ClampCurrentTime(
+        double value,
+        IReadOnlyList<AudioTrackDetail> tracks,
+        IReadOnlyList<int> order,
+        int position) {
+        var currentTime = Math.Max(0, FiniteOrDefault(value, 0));
+        if (position < 0 || position >= order.Count) {
+            return 0;
+        }
+
+        var queueIndex = order[position];
+        if (queueIndex < 0 || queueIndex >= tracks.Count) {
+            return 0;
+        }
+
+        var duration = tracks[queueIndex]
+            .Capabilities
+            .OfType<TechnicalCapability>()
+            .FirstOrDefault()
+            ?.Duration
+            ?.TotalSeconds;
+        return duration is > 0 ? Math.Min(currentTime, duration.Value) : currentTime;
+    }
+
+    private static double FiniteOrDefault(double value, double fallback) =>
+        double.IsFinite(value) ? value : fallback;
 
     private static TEnum DecodeOrDefault<TEnum>(string? code, TEnum fallback)
         where TEnum : struct, Enum =>
@@ -185,29 +264,42 @@ public sealed class MusicPlayerStateService {
             ? decoded
             : fallback;
 
-    private static MusicPlayerStateResponse Empty() => new(
+    private static MusicPlayerStateResponse Empty(StoredMusicPlayerOutput? output = null) {
+        var normalized = output is null ? StoredMusicPlayerOutput.Default : NormalizeOutput(output);
+        return new MusicPlayerStateResponse(
         [],
         [],
         -1,
+        0,
         false,
         false,
         MusicPlayerRepeatMode.Off,
-        1,
-        false,
-        false,
-        MusicPlayerMiniSide.Left,
+        normalized.Volume,
+        normalized.Muted,
+        normalized.Collapsed,
+        DecodeOrDefault(normalized.CollapsedSide, MusicPlayerMiniSide.Left),
         null);
+    }
 
-    private sealed record StoredMusicPlayerState(
-        IReadOnlyList<Guid> QueueTrackIds,
-        IReadOnlyList<int> Order,
-        int Position,
-        bool Playing,
-        bool Shuffle,
-        string Repeat,
+    private sealed record StoredMusicPlayerOutput(
         double Volume,
         bool Muted,
         bool Collapsed,
-        string CollapsedSide,
+        string CollapsedSide) {
+        public static readonly StoredMusicPlayerOutput Default = new(
+            1,
+            false,
+            false,
+            MusicPlayerMiniSide.Left.ToCode());
+    }
+
+    private sealed record StoredMusicPlayerPlaybackState(
+        IReadOnlyList<Guid> QueueTrackIds,
+        IReadOnlyList<int> Order,
+        int Position,
+        double CurrentTime,
+        bool Playing,
+        bool Shuffle,
+        string Repeat,
         MusicPlayerContext? Context);
 }

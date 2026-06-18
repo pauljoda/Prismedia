@@ -14,6 +14,7 @@ import type {
   AudioTrackDetail,
   BookDetail,
   BrowseLibraryPathParams,
+  BrowserSessionResponse,
   BulkJobResponse,
   CancelJobsParams,
   ClearJobFailuresParams,
@@ -6901,6 +6902,42 @@ export const refreshCollection = async (id: string, options?: RequestInit): Prom
 
 
 
+export type checkInBrowserSessionResponse200 = {
+  data: BrowserSessionResponse
+  status: 200
+}
+
+export type checkInBrowserSessionResponseSuccess = (checkInBrowserSessionResponse200) & {
+  headers: Headers;
+};
+;
+
+export type checkInBrowserSessionResponse = (checkInBrowserSessionResponseSuccess)
+
+export const getCheckInBrowserSessionUrl = () => {
+
+
+
+
+  return `/api/browser-session/check-in`
+}
+
+/**
+ * @summary Ensures a browser-scoped persistence session.
+ */
+export const checkInBrowserSession = async ( options?: RequestInit): Promise<checkInBrowserSessionResponse> => {
+
+  return orvalFetch<checkInBrowserSessionResponse>(getCheckInBrowserSessionUrl(),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
 export type getMusicPlayerStateResponse200 = {
   data: MusicPlayerStateResponse
   status: 200
@@ -6922,7 +6959,7 @@ export const getGetMusicPlayerStateUrl = () => {
 }
 
 /**
- * @summary Gets the server-persisted music player state.
+ * @summary Gets the browser-scoped music player state.
  */
 export const getMusicPlayerState = async ( options?: RequestInit): Promise<getMusicPlayerStateResponse> => {
 
@@ -6958,7 +6995,7 @@ export const getUpdateMusicPlayerStateUrl = () => {
 }
 
 /**
- * @summary Saves the server-persisted music player state.
+ * @summary Saves the browser-scoped music player state.
  */
 export const updateMusicPlayerState = async (updateMusicPlayerStateRequest: UpdateMusicPlayerStateRequest, options?: RequestInit): Promise<updateMusicPlayerStateResponse> => {
 
@@ -6995,7 +7032,7 @@ export const getClearMusicPlayerStateUrl = () => {
 }
 
 /**
- * @summary Clears the server-persisted music player state.
+ * @summary Clears the browser-scoped music player queue state.
  */
 export const clearMusicPlayerState = async ( options?: RequestInit): Promise<clearMusicPlayerStateResponse> => {
 

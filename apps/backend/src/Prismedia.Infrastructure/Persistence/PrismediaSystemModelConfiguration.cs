@@ -61,6 +61,26 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
         });
 
+        modelBuilder.Entity<BrowserSessionRow>(entity => {
+            entity.ToTable("browser_sessions");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.Property(row => row.LastSeenAt).HasColumnName("last_seen_at");
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            entity.HasIndex(row => row.LastSeenAt);
+        });
+
+        modelBuilder.Entity<BrowserSessionSettingRow>(entity => {
+            entity.ToTable("browser_session_settings");
+            entity.HasKey(row => new { row.BrowserSessionId, row.Key });
+            entity.Property(row => row.BrowserSessionId).HasColumnName("browser_session_id");
+            entity.Property(row => row.Key).HasColumnName("key").HasMaxLength(128);
+            entity.Property(row => row.ValueJson).HasColumnName("value_json").HasColumnType("jsonb");
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            entity.HasOne<BrowserSessionRow>().WithMany().HasForeignKey(row => row.BrowserSessionId).OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<AppSettingRow>(entity => {
             entity.ToTable("app_settings");
             entity.HasKey(row => row.Key);

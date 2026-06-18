@@ -136,6 +136,7 @@ describe("AudioPlaybackStore", () => {
       queue: tracks(3),
       order: [2, 0, 1],
       position: 1,
+      currentTime: 27,
       playing: true,
       shuffle: true,
       repeat: MUSIC_PLAYER_REPEAT_MODE.one,
@@ -148,6 +149,7 @@ describe("AudioPlaybackStore", () => {
 
     expect(ids(store)).toEqual(["t3", "t1", "t2"]);
     expect(store.currentTrack?.id).toBe("t1");
+    expect(store.currentTime).toBe(27);
     expect(store.playIntent).toBe(true);
     expect(store.playing).toBe(false);
     expect(store.shuffle).toBe(true);
@@ -166,5 +168,20 @@ describe("AudioPlaybackStore", () => {
 
     expect(store.playIntent).toBe(true);
     expect(store.playing).toBe(false);
+  });
+
+  it("clears the queue without resetting browser audio output preferences", () => {
+    const store = new AudioPlaybackStore();
+    store.volume = 0.3;
+    store.muted = true;
+    store.collapsedSide = MUSIC_PLAYER_MINI_SIDE.right;
+    store.play(tracks(2), "t1");
+
+    store.clear();
+
+    expect(store.queue).toEqual([]);
+    expect(store.volume).toBe(0.3);
+    expect(store.muted).toBe(true);
+    expect(store.collapsedSide).toBe(MUSIC_PLAYER_MINI_SIDE.right);
   });
 });

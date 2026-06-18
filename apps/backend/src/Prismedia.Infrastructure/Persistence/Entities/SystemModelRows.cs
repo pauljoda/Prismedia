@@ -18,6 +18,20 @@ public sealed class UiPreferenceRow {
     public DateTimeOffset UpdatedAt { get; set; }
 }
 
+public sealed class BrowserSessionRow {
+    public Guid Id { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset LastSeenAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
+public sealed class BrowserSessionSettingRow {
+    public Guid BrowserSessionId { get; set; }
+    public string Key { get; set; } = string.Empty;
+    public string ValueJson { get; set; } = "{}";
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
 public sealed class AppSettingRow {
     public string Key { get; set; } = string.Empty;
     public string ValueJson { get; set; } = "{}";

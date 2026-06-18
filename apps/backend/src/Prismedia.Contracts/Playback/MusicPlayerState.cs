@@ -21,11 +21,12 @@ public sealed record MusicPlayerContext(
     IReadOnlyDictionary<Guid, string?>? AlbumCoverUrls);
 
 /// <summary>
-/// Persisted global music player state returned to the web client.
+/// Persisted browser-scoped music player state returned to the web client.
 /// </summary>
 /// <param name="Tracks">Hydrated queue tracks in source queue order, with missing/deleted tracks filtered out.</param>
 /// <param name="Order">Indices into <paramref name="Tracks"/> representing the current play order.</param>
 /// <param name="Position">Index into <paramref name="Order"/> for the current track, or -1 when the queue is empty.</param>
+/// <param name="CurrentTime">Current playback time in seconds for the restored track.</param>
 /// <param name="Playing">Whether the last persisted transport intent was playing.</param>
 /// <param name="Shuffle">Whether shuffle is enabled for the restored queue.</param>
 /// <param name="Repeat">Repeat behavior for the restored queue.</param>
@@ -38,6 +39,7 @@ public sealed record MusicPlayerStateResponse(
     IReadOnlyList<AudioTrackDetail> Tracks,
     IReadOnlyList<int> Order,
     int Position,
+    double CurrentTime,
     bool Playing,
     bool Shuffle,
     MusicPlayerRepeatMode Repeat,
@@ -48,11 +50,12 @@ public sealed record MusicPlayerStateResponse(
     MusicPlayerContext? Context);
 
 /// <summary>
-/// Request body used to replace the persisted global music player state.
+/// Request body used to replace the persisted browser-scoped music player state.
 /// </summary>
 /// <param name="QueueTrackIds">Audio track ids in source queue order.</param>
 /// <param name="Order">Indices into <paramref name="QueueTrackIds"/> representing the current play order.</param>
 /// <param name="Position">Index into <paramref name="Order"/> for the current track, or -1 when empty.</param>
+/// <param name="CurrentTime">Current playback time in seconds for the current track.</param>
 /// <param name="Playing">Whether the client intends playback to be running.</param>
 /// <param name="Shuffle">Whether shuffle is enabled.</param>
 /// <param name="Repeat">Repeat behavior.</param>
@@ -65,6 +68,7 @@ public sealed record UpdateMusicPlayerStateRequest(
     IReadOnlyList<Guid> QueueTrackIds,
     IReadOnlyList<int> Order,
     int Position,
+    double CurrentTime,
     bool Playing,
     bool Shuffle,
     MusicPlayerRepeatMode Repeat,

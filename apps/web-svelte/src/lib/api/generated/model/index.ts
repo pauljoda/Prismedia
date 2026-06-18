@@ -18,6 +18,7 @@ export * from './bookDetail';
 export * from './bookFormat';
 export * from './bookType';
 export * from './browseLibraryPathParams';
+export * from './browserSessionResponse';
 export * from './bulkJobResponse';
 export * from './cancelJobsParams';
 export * from './clearJobFailuresParams';

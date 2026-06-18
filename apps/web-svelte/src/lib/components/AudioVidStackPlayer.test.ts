@@ -11,7 +11,9 @@ describe("AudioVidStackPlayer playback continuity", () => {
 
     expect(source).toContain("let audioStartedInThisSession = false;");
     expect(source).toContain("audioStartedInThisSession = true;");
-    expect(source).toContain("requestPlay(track.id, { deferWhenHidden: !audioStartedInThisSession });");
+    expect(source).toContain("const deferWhenHidden = !audioStartedInThisSession;");
+    expect(source).toContain("requestPlay(track.id, { deferWhenHidden, stealActiveTab: false });");
+    expect(source).toContain("requestPlay(track.id, { stealActiveTab: true });");
     expect(source).toContain("document.visibilityState === \"visible\"");
     expect(source).toContain("!options?.deferWhenHidden");
     expect(source).toContain("audioStartedInThisSession");

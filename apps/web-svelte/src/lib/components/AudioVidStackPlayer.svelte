@@ -26,9 +26,14 @@
   import AudioWaveformFilmstrip from "./AudioWaveformFilmstrip.svelte";
   import PlaybackQueueFlyout from "./PlaybackQueueFlyout.svelte";
   import { waveformForDisplay } from "./audio-waveform";
-  import { resolveAudioArtwork, useAudioPlayback } from "$lib/stores/audio-playback.svelte";
+  import {
+    AUDIO_PLAYBACK_SAVE_EVENT,
+    resolveAudioArtwork,
+    useAudioPlayback,
+  } from "$lib/stores/audio-playback.svelte";
   import { useAppChrome } from "$lib/stores/app-chrome.svelte";
   import { MUSIC_PLAYER_MINI_SIDE, MUSIC_PLAYER_REPEAT_MODE } from "$lib/api/generated/codes";
+  import { createAudioTabCoordinator, type AudioTabCoordinator } from "$lib/player/audio-tab-coordinator";
   import {
     setMediaSessionHandlers,
     setMediaSessionMetadata,
@@ -48,6 +53,9 @@
   let timelineDraggingRef = false;
   let currentSrcTrackId: string | null = null;
   let audioStartedInThisSession = false;
+  let pendingInitialSeekSeconds: number | null = null;
+  let pendingAutoplay: { trackId: string; deferWhenHidden: boolean } | null = null;
+  let tabCoordinator: AudioTabCoordinator | null = null;
 
   const activeTrack = $derived(playback.currentTrack);
   const ctx = $derived(playback.context);
@@ -97,7 +105,9 @@
 
   function dismiss() {
     if (audioEl) audioEl.pause();
+    tabCoordinator?.releasePlayback();
     playback.clear();
+    window.dispatchEvent(new Event(AUDIO_PLAYBACK_SAVE_EVENT));
   }
 
   // --- Collapsed mini-player drag (fling left/right, snap with momentum) --------
@@ -196,17 +206,27 @@
     return Boolean(target.closest("input, textarea, select"));
   }
 
-  function loadTrackSource(track: AudioTrackListItemDto) {
-    if (!audioEl) return;
-    if (track.id === currentSrcTrackId) return;
+  function loadTrackSource(track: AudioTrackListItemDto): boolean {
+    if (!audioEl) return false;
+    if (track.id === currentSrcTrackId) return false;
 
     const nextSrc = apiAssetUrl(`/audio-stream/${track.id}`);
-    if (!nextSrc) return;
+    if (!nextSrc) return false;
 
+    const resumeTime = Math.max(0, playback.currentTime);
     currentSrcTrackId = track.id;
     audioEl.src = nextSrc;
-    resetPlaybackPosition(track.duration ?? 0);
+    playback.duration = track.duration ?? 0;
+    pendingInitialSeekSeconds = resumeTime > 0 ? resumeTime : null;
     audioEl.load();
+    if (pendingInitialSeekSeconds !== null) {
+      try {
+        audioEl.currentTime = pendingInitialSeekSeconds;
+      } catch {
+        // Metadata may not be available yet; loadedmetadata applies the same seek.
+      }
+    }
+    return true;
   }
 
   function canAttemptPlayback(options?: { deferWhenHidden?: boolean }): boolean {
@@ -218,10 +238,14 @@
     );
   }
 
-  function requestPlay(expectedTrackId = currentSrcTrackId, options?: { deferWhenHidden?: boolean }) {
+  function requestPlay(
+    expectedTrackId = currentSrcTrackId,
+    options?: { deferWhenHidden?: boolean; stealActiveTab?: boolean },
+  ) {
     if (!audioEl || !currentSrcTrackId) return;
     playback.playIntent = true;
     if (!canAttemptPlayback(options)) return;
+    if (!tabCoordinator?.claimPlayback({ steal: options?.stealActiveTab ?? true })) return;
 
     const playPromise = audioEl.play();
     if (playPromise && typeof playPromise.catch === "function") {
@@ -237,10 +261,12 @@
 
   function playTrackNow(track: AudioTrackListItemDto) {
     loadTrackSource(track);
-    requestPlay(track.id);
+    requestPlay(track.id, { stealActiveTab: true });
   }
 
   function resetPlaybackPosition(nextDuration = 0) {
+    pendingInitialSeekSeconds = null;
+    pendingAutoplay = null;
     if (audioEl) {
       try {
         audioEl.currentTime = 0;
@@ -256,6 +282,7 @@
     if (!audioEl) return;
     audioEl.currentTime = time;
     playback.currentTime = time;
+    window.dispatchEvent(new Event(AUDIO_PLAYBACK_SAVE_EVENT));
   }
 
   function toggleMute() {
@@ -277,16 +304,19 @@
     // The Next button advances even in repeat-one; the play position effect loads the new track.
     if (playback.next()) {
       resetPlaybackPosition(playback.currentTrack?.duration ?? 0);
+      window.dispatchEvent(new Event(AUDIO_PLAYBACK_SAVE_EVENT));
     }
   }
 
   function handlePrev() {
     if (audioEl && audioEl.currentTime > 3) {
       resetPlaybackPosition(duration);
+      window.dispatchEvent(new Event(AUDIO_PLAYBACK_SAVE_EVENT));
       return;
     }
     if (playback.prev()) {
       resetPlaybackPosition(playback.currentTrack?.duration ?? 0);
+      window.dispatchEvent(new Event(AUDIO_PLAYBACK_SAVE_EVENT));
     }
   }
 
@@ -298,10 +328,12 @@
     }
     if (playback.next()) {
       resetPlaybackPosition(playback.currentTrack?.duration ?? 0);
+      window.dispatchEvent(new Event(AUDIO_PLAYBACK_SAVE_EVENT));
       return;
     }
     playback.playIntent = false;
     playback.playing = false;
+    tabCoordinator?.releasePlayback();
   }
 
   function handleVolumeInput(event: Event) {
@@ -335,13 +367,18 @@
       return;
     }
 
-    loadTrackSource(track);
+    const sourceChanged = loadTrackSource(track);
     if (playback.playIntent) {
       // Restored sessions may be blocked by browser autoplay policy; defer hidden-tab
       // restore attempts until the page is visible. Once audio has actually played in
       // this tab, continuing the queue while hidden should still try to start the
       // next track so background playback does not stall between songs.
-      requestPlay(track.id, { deferWhenHidden: !audioStartedInThisSession });
+      const deferWhenHidden = !audioStartedInThisSession;
+      if (sourceChanged && pendingInitialSeekSeconds !== null) {
+        pendingAutoplay = { trackId: track.id, deferWhenHidden };
+      } else {
+        requestPlay(track.id, { deferWhenHidden, stealActiveTab: false });
+      }
     }
   });
 
@@ -405,9 +442,40 @@
     };
   });
 
+  function applyPendingInitialSeek(audio: HTMLAudioElement) {
+    if (pendingInitialSeekSeconds === null) return;
+    const max =
+      Number.isFinite(audio.duration) && audio.duration > 0
+        ? audio.duration
+        : duration > 0
+          ? duration
+          : Number.POSITIVE_INFINITY;
+    const next = Math.max(0, Math.min(pendingInitialSeekSeconds, max));
+    try {
+      audio.currentTime = next;
+    } catch (error) {
+      console.warn("Failed to restore audio position:", error);
+    }
+    playback.currentTime = next;
+    pendingInitialSeekSeconds = null;
+  }
+
+  function resumePendingAutoplay() {
+    if (!pendingAutoplay || pendingInitialSeekSeconds !== null) return;
+    const pending = pendingAutoplay;
+    if (pending.trackId !== currentSrcTrackId) return;
+    pendingAutoplay = null;
+    requestPlay(pending.trackId, {
+      deferWhenHidden: pending.deferWhenHidden,
+      stealActiveTab: false,
+    });
+  }
+
   onMount(() => {
     const audio = audioEl;
     if (!audio) return;
+    const coordinator = createAudioTabCoordinator();
+    tabCoordinator = coordinator;
 
     const handleTimeUpdate = () => {
       if (!timelineDraggingRef) playback.currentTime = audio.currentTime;
@@ -415,17 +483,24 @@
     };
     const handleDurationChange = () => {
       if (Number.isFinite(audio.duration)) playback.duration = audio.duration;
+      applyPendingInitialSeek(audio);
       setMediaSessionPosition(audio.duration, audio.currentTime);
+      resumePendingAutoplay();
     };
     const handlePlay = () => {
       audioStartedInThisSession = true;
       playback.playIntent = true;
       playback.playing = true;
     };
-    const handlePause = () => (playback.playing = false);
+    const handlePause = () => {
+      playback.playing = false;
+      coordinator.releasePlayback();
+      window.dispatchEvent(new Event(AUDIO_PLAYBACK_SAVE_EVENT));
+    };
     const handleEnded = () => {
       if (playback.currentTrack) recordTrackPlay(playback.currentTrack.id);
       handleTrackEnd();
+      window.dispatchEvent(new Event(AUDIO_PLAYBACK_SAVE_EVENT));
     };
     const handleError = () => {
       playback.playIntent = false;
@@ -435,8 +510,13 @@
     const handleVisibilityChange = () => {
       if (document.visibilityState !== "visible") return;
       if (!playback.playIntent || !playback.currentTrack || !audio.paused) return;
-      requestPlay(currentSrcTrackId);
+      requestPlay(currentSrcTrackId, { stealActiveTab: false });
     };
+    const detachDisplaced = coordinator.onDisplaced(() => {
+      if (!audio.paused) audio.pause();
+      playback.playIntent = false;
+      playback.playing = false;
+    });
 
     audio.addEventListener("timeupdate", handleTimeUpdate);
     audio.addEventListener("loadedmetadata", handleDurationChange);
@@ -477,6 +557,9 @@
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       detachController();
       detachMediaSession();
+      detachDisplaced();
+      coordinator.destroy();
+      if (tabCoordinator === coordinator) tabCoordinator = null;
       setMediaSessionMetadata(null);
     };
   });

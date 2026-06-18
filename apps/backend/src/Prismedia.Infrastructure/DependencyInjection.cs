@@ -15,6 +15,7 @@ using Prismedia.Application.Jellyfin;
 using Prismedia.Application.Audio;
 using Prismedia.Application.Backups;
 using Prismedia.Application.Plugins;
+using Prismedia.Application.Playback;
 using Prismedia.Application.Requests;
 using Prismedia.Application.Security;
 using Prismedia.Application.Videos;
@@ -32,6 +33,7 @@ using Prismedia.Infrastructure.Media.Sidecars;
 using Prismedia.Infrastructure.Organization;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Plugins;
+using Prismedia.Infrastructure.Playback;
 using Prismedia.Infrastructure.Processes;
 using Prismedia.Infrastructure.Queue;
 using Prismedia.Infrastructure.Requests;
@@ -300,6 +302,7 @@ public static class DependencyInjection {
         services.AddScoped<IDatabaseBackupService, DatabaseBackupService>();
         services.AddScoped<IJobQueueService, JobQueueService>();
         services.AddScoped<ISettingsPersistence, EfSettingsPersistence>();
+        services.AddScoped<IBrowserSessionPersistence, EfBrowserSessionPersistence>();
         services.AddScoped<ISecurityPersistence, EfSecurityPersistence>();
         services.AddScoped<IJellyfinImageFileService, JellyfinImageFileService>();
     }

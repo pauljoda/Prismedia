@@ -1,10 +1,8 @@
 using Prismedia.Application.Entities;
 using Prismedia.Application.Playback;
-using Prismedia.Application.Settings;
 using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Media;
 using Prismedia.Contracts.Playback;
-using Prismedia.Contracts.Settings;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Infrastructure.Tests;
@@ -12,16 +10,18 @@ namespace Prismedia.Infrastructure.Tests;
 public sealed class MusicPlayerStateServiceTests {
     [Fact]
     public async Task SaveThenGetRoundTripsQueueAndPlayerSettings() {
+        var browserSessionId = Guid.NewGuid();
         var track1 = Guid.NewGuid();
         var track2 = Guid.NewGuid();
-        var settings = new InMemorySettingsPersistence();
+        var settings = new InMemoryBrowserSessionPersistence();
         var entities = new FakeEntityReadService(track1, track2);
         var service = new MusicPlayerStateService(settings, entities);
 
-        await service.SaveAsync(new UpdateMusicPlayerStateRequest(
+        await service.SaveAsync(browserSessionId, new UpdateMusicPlayerStateRequest(
             QueueTrackIds: [track1, track2],
             Order: [1, 0],
             Position: 1,
+            CurrentTime: 37.5,
             Playing: true,
             Shuffle: true,
             Repeat: MusicPlayerRepeatMode.One,
@@ -32,11 +32,12 @@ public sealed class MusicPlayerStateServiceTests {
             Context: new MusicPlayerContext(null, "Album", null, "Artist", "/cover.jpg", null)),
             CancellationToken.None);
 
-        var loaded = await service.GetAsync(CancellationToken.None);
+        var loaded = await service.GetAsync(browserSessionId, CancellationToken.None);
 
         Assert.Equal([track1, track2], loaded.Tracks.Select(track => track.Id));
         Assert.Equal([1, 0], loaded.Order);
         Assert.Equal(1, loaded.Position);
+        Assert.Equal(37.5, loaded.CurrentTime);
         Assert.True(loaded.Playing);
         Assert.True(loaded.Shuffle);
         Assert.Equal(MusicPlayerRepeatMode.One, loaded.Repeat);
@@ -49,16 +50,18 @@ public sealed class MusicPlayerStateServiceTests {
 
     [Fact]
     public async Task GetFiltersDeletedTracksAndRepairsOrder() {
+        var browserSessionId = Guid.NewGuid();
         var existing = Guid.NewGuid();
         var deleted = Guid.NewGuid();
-        var settings = new InMemorySettingsPersistence();
+        var settings = new InMemoryBrowserSessionPersistence();
         var entities = new FakeEntityReadService(existing);
         var service = new MusicPlayerStateService(settings, entities);
 
-        await service.SaveAsync(new UpdateMusicPlayerStateRequest(
+        await service.SaveAsync(browserSessionId, new UpdateMusicPlayerStateRequest(
             QueueTrackIds: [existing, deleted],
             Order: [1, 0],
             Position: 0,
+            CurrentTime: 150,
             Playing: true,
             Shuffle: true,
             Repeat: MusicPlayerRepeatMode.All,
@@ -69,106 +72,148 @@ public sealed class MusicPlayerStateServiceTests {
             Context: null),
             CancellationToken.None);
 
-        var loaded = await service.GetAsync(CancellationToken.None);
+        var loaded = await service.GetAsync(browserSessionId, CancellationToken.None);
 
         var track = Assert.Single(loaded.Tracks);
         Assert.Equal(existing, track.Id);
         Assert.Equal([0], loaded.Order);
         Assert.Equal(0, loaded.Position);
+        Assert.Equal(100, loaded.CurrentTime);
         Assert.Equal(1, loaded.Volume);
     }
 
     [Fact]
-    public async Task EmptyQueueClearsPersistedState() {
+    public async Task ClearRemovesQueueButKeepsBrowserOutputSettings() {
+        var browserSessionId = Guid.NewGuid();
         var track = Guid.NewGuid();
-        var settings = new InMemorySettingsPersistence();
+        var settings = new InMemoryBrowserSessionPersistence();
         var service = new MusicPlayerStateService(settings, new FakeEntityReadService(track));
 
-        await service.SaveAsync(new UpdateMusicPlayerStateRequest(
+        await service.SaveAsync(browserSessionId, new UpdateMusicPlayerStateRequest(
             QueueTrackIds: [track],
             Order: [0],
             Position: 0,
+            CurrentTime: 12,
             Playing: true,
             Shuffle: false,
             Repeat: MusicPlayerRepeatMode.Off,
-            Volume: 1,
-            Muted: false,
-            Collapsed: false,
-            CollapsedSide: MusicPlayerMiniSide.Left,
+            Volume: 0.35,
+            Muted: true,
+            Collapsed: true,
+            CollapsedSide: MusicPlayerMiniSide.Right,
             Context: null),
             CancellationToken.None);
-        await service.SaveAsync(new UpdateMusicPlayerStateRequest(
-            QueueTrackIds: [],
-            Order: [],
-            Position: -1,
+        await service.ClearAsync(browserSessionId, CancellationToken.None);
+
+        var loaded = await service.GetAsync(browserSessionId, CancellationToken.None);
+        Assert.Empty(loaded.Tracks);
+        Assert.Equal(0.35, loaded.Volume);
+        Assert.True(loaded.Muted);
+        Assert.True(loaded.Collapsed);
+        Assert.Equal(MusicPlayerMiniSide.Right, loaded.CollapsedSide);
+        Assert.DoesNotContain(BrowserSessionConstants.AudioPlaybackStateSettingKey, settings.ValuesFor(browserSessionId).Keys);
+        Assert.Contains(BrowserSessionConstants.AudioOutputSettingKey, settings.ValuesFor(browserSessionId).Keys);
+    }
+
+    [Fact]
+    public async Task StateIsIsolatedByBrowserSession() {
+        var session1 = Guid.NewGuid();
+        var session2 = Guid.NewGuid();
+        var track1 = Guid.NewGuid();
+        var track2 = Guid.NewGuid();
+        var settings = new InMemoryBrowserSessionPersistence();
+        var service = new MusicPlayerStateService(settings, new FakeEntityReadService(track1, track2));
+
+        await service.SaveAsync(session1, Request(track1, 0.2), CancellationToken.None);
+        await service.SaveAsync(session2, Request(track2, 0.8), CancellationToken.None);
+
+        var loaded1 = await service.GetAsync(session1, CancellationToken.None);
+        var loaded2 = await service.GetAsync(session2, CancellationToken.None);
+
+        Assert.Equal(track1, Assert.Single(loaded1.Tracks).Id);
+        Assert.Equal(0.2, loaded1.Volume);
+        Assert.Equal(track2, Assert.Single(loaded2.Tracks).Id);
+        Assert.Equal(0.8, loaded2.Volume);
+    }
+
+    private static UpdateMusicPlayerStateRequest Request(Guid trackId, double volume) =>
+        new(
+            QueueTrackIds: [trackId],
+            Order: [0],
+            Position: 0,
+            CurrentTime: 0,
             Playing: false,
             Shuffle: false,
             Repeat: MusicPlayerRepeatMode.Off,
-            Volume: 1,
+            Volume: volume,
             Muted: false,
             Collapsed: false,
             CollapsedSide: MusicPlayerMiniSide.Left,
-            Context: null),
-            CancellationToken.None);
+            Context: null);
 
-        var loaded = await service.GetAsync(CancellationToken.None);
-        Assert.Empty(loaded.Tracks);
-        Assert.False(settings.Values.ContainsKey(MusicPlayerStateService.StateKey));
-    }
+    private sealed class InMemoryBrowserSessionPersistence : IBrowserSessionPersistence {
+        private readonly Dictionary<Guid, Dictionary<string, string>> _values = new();
+        private readonly Dictionary<Guid, BrowserSessionState> _sessions = new();
 
-    private sealed class InMemorySettingsPersistence : ISettingsPersistence {
-        public Dictionary<string, string> Values { get; } = new(StringComparer.Ordinal);
+        public IReadOnlyDictionary<string, string> ValuesFor(Guid sessionId) =>
+            _values.TryGetValue(sessionId, out var values)
+                ? values
+                : new Dictionary<string, string>(StringComparer.Ordinal);
 
-        public Task<IReadOnlyDictionary<string, string>> LoadSettingOverridesAsync(CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyDictionary<string, string>>(Values);
-
-        public Task SaveSettingOverrideAsync(string key, string valueJson, CancellationToken cancellationToken) {
-            Values[key] = valueJson;
-            return Task.CompletedTask;
-        }
-
-        public Task SaveSettingOverridesAsync(IReadOnlyDictionary<string, string> values, CancellationToken cancellationToken) {
-            foreach (var (key, value) in values) {
-                Values[key] = value;
+        public Task<BrowserSessionState> EnsureAsync(
+            Guid? requestedSessionId,
+            DateTimeOffset now,
+            DateTimeOffset staleBefore,
+            CancellationToken cancellationToken) {
+            foreach (var stale in _sessions.Where(pair => pair.Value.LastSeenAt < staleBefore).Select(pair => pair.Key).ToArray()) {
+                _sessions.Remove(stale);
+                _values.Remove(stale);
             }
 
-            return Task.CompletedTask;
+            if (requestedSessionId is { } id && _sessions.TryGetValue(id, out var existing)) {
+                var refreshed = existing with { LastSeenAt = now };
+                _sessions[id] = refreshed;
+                return Task.FromResult(refreshed);
+            }
+
+            var sessionId = Guid.NewGuid();
+            var created = new BrowserSessionState(sessionId, now, now);
+            _sessions[sessionId] = created;
+            return Task.FromResult(created);
         }
 
-        public Task ReplaceSettingOverridesAsync(
+        public Task<IReadOnlyDictionary<string, string>> LoadSettingsAsync(
+            Guid sessionId,
+            IReadOnlyCollection<string> keys,
+            CancellationToken cancellationToken) {
+            var sessionValues = ValuesFor(sessionId);
+            var values = sessionValues
+                .Where(pair => keys.Contains(pair.Key))
+                .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
+            return Task.FromResult<IReadOnlyDictionary<string, string>>(values);
+        }
+
+        public Task ReplaceSettingsAsync(
+            Guid sessionId,
             IReadOnlyDictionary<string, string> upserts,
             IReadOnlyCollection<string> deletes,
+            DateTimeOffset now,
             CancellationToken cancellationToken) {
+            if (!_values.TryGetValue(sessionId, out var values)) {
+                values = new Dictionary<string, string>(StringComparer.Ordinal);
+                _values[sessionId] = values;
+            }
+
             foreach (var key in deletes) {
-                Values.Remove(key);
+                values.Remove(key);
             }
 
             foreach (var (key, value) in upserts) {
-                Values[key] = value;
+                values[key] = value;
             }
 
             return Task.CompletedTask;
         }
-
-        public Task DeleteSettingOverrideAsync(string key, CancellationToken cancellationToken) {
-            Values.Remove(key);
-            return Task.CompletedTask;
-        }
-
-        public Task<IReadOnlyList<LibraryRoot>> ListLibraryRootsAsync(CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
-
-        public Task<LibraryRoot?> GetLibraryRootAsync(Guid id, CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
-
-        public Task<LibraryRoot> AddLibraryRootAsync(LibraryRoot state, CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
-
-        public Task<LibraryRoot> SaveLibraryRootAsync(LibraryRoot state, CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
-
-        public Task<bool> DeleteLibraryRootAsync(Guid id, CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
     }
 
     private sealed class FakeEntityReadService : IEntityReadService {
@@ -183,7 +228,7 @@ public sealed class MusicPlayerStateServiceTests {
                     Title = $"Track {id:N}",
                     ParentEntityId = null,
                     SortOrder = null,
-                    Capabilities = [],
+                    Capabilities = [new TechnicalCapability(TimeSpan.FromSeconds(100), null, null, null, null, null, null, null, null, null)],
                     ChildrenByKind = [],
                     Relationships = [],
                     EmbeddedArtist = null,

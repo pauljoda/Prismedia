@@ -100,6 +100,10 @@ public sealed class PrismediaDbContext : DbContext {
 
     public DbSet<UiPreferenceRow> UiPreferences => Set<UiPreferenceRow>();
 
+    public DbSet<BrowserSessionRow> BrowserSessions => Set<BrowserSessionRow>();
+
+    public DbSet<BrowserSessionSettingRow> BrowserSessionSettings => Set<BrowserSessionSettingRow>();
+
     public DbSet<ProviderConfigRow> ProviderConfigs => Set<ProviderConfigRow>();
 
     public DbSet<ProviderCredentialRow> ProviderCredentials => Set<ProviderCredentialRow>();

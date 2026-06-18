@@ -42,6 +42,7 @@ function shuffleInPlace<T>(items: T[]): T[] {
 }
 
 export const PRISMEDIA_AUDIO_ARTWORK_FALLBACK = "/brand/prismedia-logo.png";
+export const AUDIO_PLAYBACK_SAVE_EVENT = "prismedia:audio-playback-save";
 
 export function resolveAudioArtwork(
   track: AudioTrackListItemDto | null | undefined,
@@ -139,6 +140,8 @@ export class AudioPlaybackStore {
 
     const currentQueueIndex = this.order[this.position] ?? -1;
     const currentTrack = this.queue[currentQueueIndex];
+    this.currentTime = 0;
+    this.duration = currentTrack?.duration ?? 0;
     if (currentTrack) this.#controller?.playTrack(currentTrack);
   }
 
@@ -220,10 +223,7 @@ export class AudioPlaybackStore {
     this.duration = 0;
     this.shuffle = false;
     this.repeat = MUSIC_PLAYER_REPEAT_MODE.off;
-    this.volume = 1;
-    this.muted = false;
     this.collapsed = false;
-    this.collapsedSide = MUSIC_PLAYER_MINI_SIDE.left;
   }
 
   /** Restores a persisted queue and player settings after page load. */
@@ -231,6 +231,7 @@ export class AudioPlaybackStore {
     queue: AudioTrackListItemDto[];
     order: number[];
     position: number;
+    currentTime: number;
     playing: boolean;
     shuffle: boolean;
     repeat: RepeatMode;
@@ -251,8 +252,8 @@ export class AudioPlaybackStore {
     this.shuffle = state.shuffle;
     this.repeat = state.repeat;
     this.context = state.context ?? null;
-    this.currentTime = 0;
     this.duration = queue[this.order[this.position] ?? -1]?.duration ?? 0;
+    this.currentTime = Math.max(0, Math.min(state.currentTime, this.duration || Number.POSITIVE_INFINITY));
     this.volume = Math.max(0, Math.min(1, state.volume));
     this.muted = state.muted;
     this.collapsed = state.collapsed;

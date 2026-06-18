@@ -13,6 +13,8 @@ export interface UpdateMusicPlayerStateRequest {
   order: (number | string)[];
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
   position: number | string;
+  /** @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$ */
+  currentTime: number | string;
   playing: boolean;
   shuffle: boolean;
   repeat: MusicPlayerRepeatMode;

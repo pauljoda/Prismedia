@@ -9,30 +9,41 @@ public static class MusicPlayerEndpoints {
             .WithTags("Playback");
 
         group.MapGet("/state", async (
+            HttpContext httpContext,
+            BrowserSessionService sessions,
             MusicPlayerStateService playerState,
-            CancellationToken cancellationToken) =>
-            await playerState.GetAsync(cancellationToken))
+            CancellationToken cancellationToken) => {
+            var browserSession = await BrowserSessionHttp.EnsureAsync(httpContext, sessions, cancellationToken);
+            return await playerState.GetAsync(browserSession.SessionId, cancellationToken);
+        })
             .WithName("GetMusicPlayerState")
-            .WithSummary("Gets the server-persisted music player state.")
+            .WithSummary("Gets the browser-scoped music player state.")
             .Produces<MusicPlayerStateResponse>();
 
         group.MapPut("/state", async (
+            HttpContext httpContext,
             UpdateMusicPlayerStateRequest request,
+            BrowserSessionService sessions,
             MusicPlayerStateService playerState,
-            CancellationToken cancellationToken) =>
-            await playerState.SaveAsync(request, cancellationToken))
+            CancellationToken cancellationToken) => {
+            var browserSession = await BrowserSessionHttp.EnsureAsync(httpContext, sessions, cancellationToken);
+            return await playerState.SaveAsync(browserSession.SessionId, request, cancellationToken);
+        })
             .WithName("UpdateMusicPlayerState")
-            .WithSummary("Saves the server-persisted music player state.")
+            .WithSummary("Saves the browser-scoped music player state.")
             .Produces<MusicPlayerStateResponse>();
 
         group.MapDelete("/state", async (
+            HttpContext httpContext,
+            BrowserSessionService sessions,
             MusicPlayerStateService playerState,
             CancellationToken cancellationToken) => {
-            await playerState.ClearAsync(cancellationToken);
+            var browserSession = await BrowserSessionHttp.EnsureAsync(httpContext, sessions, cancellationToken);
+            await playerState.ClearAsync(browserSession.SessionId, cancellationToken);
             return Results.NoContent();
         })
             .WithName("ClearMusicPlayerState")
-            .WithSummary("Clears the server-persisted music player state.")
+            .WithSummary("Clears the browser-scoped music player queue state.")
             .Produces(StatusCodes.Status204NoContent);
 
         return group;

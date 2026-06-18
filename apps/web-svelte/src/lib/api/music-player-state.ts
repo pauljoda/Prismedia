@@ -15,6 +15,7 @@ export interface RestoredMusicPlayerState {
   queue: AudioTrackListItemDto[];
   order: number[];
   position: number;
+  currentTime: number;
   playing: boolean;
   shuffle: boolean;
   repeat: RepeatMode;
@@ -29,6 +30,7 @@ export interface PersistMusicPlayerState {
   queueTrackIds: string[];
   order: number[];
   position: number;
+  currentTime: number;
   playing: boolean;
   shuffle: boolean;
   repeat: RepeatMode;
@@ -57,6 +59,7 @@ function fromResponse(response: MusicPlayerStateResponse): RestoredMusicPlayerSt
     queue: response.tracks.map(audioTrackDetailToListItem),
     order: response.order.map(numberValue),
     position: numberValue(response.position),
+    currentTime: numberValue(response.currentTime),
     playing: response.playing,
     shuffle: response.shuffle,
     repeat: response.repeat,
@@ -82,6 +85,7 @@ function toRequest(state: PersistMusicPlayerState): UpdateMusicPlayerStateReques
     queueTrackIds: state.queueTrackIds,
     order: state.order,
     position: state.position,
+    currentTime: state.currentTime,
     playing: state.playing,
     shuffle: state.shuffle,
     repeat: state.repeat,

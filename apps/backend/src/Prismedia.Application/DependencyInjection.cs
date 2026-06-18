@@ -39,6 +39,7 @@ public static class DependencyInjection {
         services.AddScoped<SettingsService>();
         services.AddScoped<NavLayoutService>();
         services.AddScoped<PrismediaSecurityService>();
+        services.AddScoped<BrowserSessionService>();
         services.AddScoped<MusicPlayerStateService>();
         services.AddScoped<JellyfinCatalogService>();
         services.AddScoped<OrganizeService>();
