@@ -46,6 +46,7 @@ export * from './databaseBackupListResponse';
 export * from './databaseBackupStatus';
 export * from './databaseRestoreRequest';
 export * from './databaseRestoreScheduledResponse';
+export * from './databaseRestoreStatusResponse';
 export * from './deleteFileParams';
 export * from './deviceProfileRequest';
 export * from './directPlayProfileRequest';

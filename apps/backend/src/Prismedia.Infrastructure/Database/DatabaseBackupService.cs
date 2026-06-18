@@ -132,6 +132,19 @@ public sealed class DatabaseBackupService(
     public Task<bool> HasPendingRestoreAsync(CancellationToken cancellationToken) =>
         Task.FromResult(File.Exists(options.RestoreRequestPath));
 
+    public async Task<DatabaseRestoreStatusResponse> GetRestoreStatusAsync(CancellationToken cancellationToken) {
+        var failedPath = FailedRestoreRequestPath();
+        var errorPath = $"{failedPath}.error";
+        var error = File.Exists(errorPath)
+            ? await File.ReadAllTextAsync(errorPath, cancellationToken)
+            : null;
+
+        return new DatabaseRestoreStatusResponse(
+            RestorePending: File.Exists(options.RestoreRequestPath),
+            RestoreFailed: File.Exists(failedPath),
+            Error: string.IsNullOrWhiteSpace(error) ? null : error);
+    }
+
     public async Task<bool> RunPendingRestoreAsync(CancellationToken cancellationToken) {
         if (!File.Exists(options.RestoreRequestPath)) {
             return false;
@@ -594,7 +607,7 @@ public sealed class DatabaseBackupService(
     }
 
     private void MoveRestoreRequestAside(Exception? ex = null) {
-        var failedPath = $"{options.RestoreRequestPath}.failed";
+        var failedPath = FailedRestoreRequestPath();
         if (File.Exists(failedPath)) {
             File.Delete(failedPath);
         }
@@ -604,6 +617,8 @@ public sealed class DatabaseBackupService(
             File.WriteAllText($"{failedPath}.error", ex.Message);
         }
     }
+
+    private string FailedRestoreRequestPath() => $"{options.RestoreRequestPath}.failed";
 
     private static bool IsPathUnderDirectory(string path, string directory) {
         var root = Path.GetFullPath(directory);

@@ -208,6 +208,12 @@ export interface DatabaseRestoreScheduled {
   restartScheduled: boolean;
 }
 
+export interface DatabaseRestoreStatus {
+  restorePending: boolean;
+  restoreFailed: boolean;
+  error: string | null;
+}
+
 function normalizeTranscodeCacheStatus(raw: { usedBytes?: number; maxBytes?: number }): TranscodeCacheStatus {
   return {
     usedBytes: Number(raw?.usedBytes ?? 0),
@@ -278,6 +284,17 @@ export async function restoreDatabaseBackup(
     backupId: String(raw.backupId ?? backupId),
     requestedAt: String(raw.requestedAt ?? new Date().toISOString()),
     restartScheduled: Boolean(raw.restartScheduled),
+  };
+}
+
+export async function fetchDatabaseRestoreStatus(options?: RequestOptions): Promise<DatabaseRestoreStatus> {
+  const raw = await fetchApi<Partial<DatabaseRestoreStatus>>("/health/database-restore", {
+    signal: options?.signal,
+  });
+  return {
+    restorePending: Boolean(raw.restorePending),
+    restoreFailed: Boolean(raw.restoreFailed),
+    error: typeof raw.error === "string" && raw.error.trim() ? raw.error : null,
   };
 }
 

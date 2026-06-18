@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { goto } from "$app/navigation";
   import { Archive, Clock, Database, Loader2, RefreshCw, RotateCcw, ShieldAlert } from "@lucide/svelte";
   import { Badge, Button, Panel, Select, TextInput, cn, type SelectOption } from "@prismedia/ui-svelte";
   import { DATABASE_BACKUP_STATUS } from "$lib/api/generated/codes";
@@ -97,7 +98,7 @@
     localError = null;
     try {
       await restoreDatabaseBackup(selectedBackup.id, confirmationText);
-      flash("Restore scheduled. Prismedia is restarting.", 6000);
+      await goto("/restore", { replaceState: true });
     } catch (err) {
       localError = err instanceof Error ? err.message : "Failed to schedule restore";
       restoring = false;

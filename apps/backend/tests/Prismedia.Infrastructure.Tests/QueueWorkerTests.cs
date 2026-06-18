@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Prismedia.Application.Backups;
 using Prismedia.Application.Health;
 using Prismedia.Application.Jobs;
 using Prismedia.Application.Settings;
@@ -126,6 +127,43 @@ public sealed class QueueWorkerTests {
     }
 
     [Fact]
+    public async Task QueueWorkerDoesNotClaimJobsWhileDatabaseRestoreIsPending() {
+        var queue = new RecordingJobQueueService([CreateJob()]);
+        var settings = new MutableSettingsPersistence { BackgroundConcurrency = 1 };
+        var handler = new BlockingJobHandler();
+        var backups = new MutableBackupService { PendingRestore = true };
+
+        var services = new ServiceCollection();
+        services.AddSingleton<IJobQueueService>(queue);
+        services.AddSingleton<ISettingsPersistence>(settings);
+        services.AddScoped<SettingsService>();
+        services.AddSingleton<IJobHandler>(handler);
+        services.AddSingleton<IDatabaseBackupService>(backups);
+        await using var provider = services.BuildServiceProvider();
+
+        var worker = new QueueWorker(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            new WorkerRuntimeIdentity(),
+            NullLogger<QueueWorker>.Instance,
+            TimeSpan.FromMilliseconds(25),
+            TimeSpan.FromMilliseconds(25));
+
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await worker.StartAsync(CancellationToken.None);
+        try {
+            await Task.Delay(150, timeout.Token);
+            Assert.Equal(0, queue.Claims);
+
+            backups.PendingRestore = false;
+            await handler.WaitForMaxActiveAsync(1, timeout.Token);
+            Assert.True(queue.Claims > 0);
+        } finally {
+            handler.ReleaseAll();
+            await worker.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
     public async Task JobContextDoesNotEnqueueDownstreamWorkAfterCancellation() {
         var job = CreateJob();
         var queue = new RecordingJobQueueService([]);
@@ -209,6 +247,40 @@ public sealed class QueueWorkerTests {
 
         public Task WaitForCancelledAsync(CancellationToken cancellationToken) =>
             _cancelled.Task.WaitAsync(cancellationToken);
+    }
+
+    private sealed class MutableBackupService : IDatabaseBackupService {
+        public bool PendingRestore { get; set; }
+
+        public Task<DatabaseBackupListResponse> ListAsync(CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<DatabaseBackupDto> CreateManualBackupAsync(CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<DatabaseBackupDto> CreateAutomaticBackupAsync(CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<bool> IsAutomaticBackupDueAsync(CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<int> PruneExpiredAutomaticBackupsAsync(CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<DatabaseRestoreScheduledResponse> ScheduleRestoreAsync(
+            Guid backupId,
+            string confirmationText,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<bool> RunPendingRestoreAsync(CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<DatabaseRestoreStatusResponse> GetRestoreStatusAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(new DatabaseRestoreStatusResponse(PendingRestore, RestoreFailed: false, Error: null));
+
+        public Task<bool> HasPendingRestoreAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(PendingRestore);
     }
 
     private sealed class MutableSettingsPersistence : ISettingsPersistence {

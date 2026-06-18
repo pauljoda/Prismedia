@@ -57,7 +57,9 @@ Restoring is destructive. The selected dump replaces the current database.
 3. Type `DESTROY AND RESTORE` exactly in the confirmation field.
 4. Press **Restore** and confirm the browser warning.
 
-Prismedia stages a restore request, stops the API, and relies on the container supervisor to start it again. On startup, the API applies the restore before normal request handling. The worker waits while the restore marker exists, so background jobs do not run against a database that is being replaced.
+Prismedia moves the browser to a restore progress page while the database is being replaced. When the restore finishes, the page returns to the dashboard automatically.
+
+In production, Prismedia stages a restore request, stops the API, and relies on the container supervisor to start it again. On startup, the API applies the restore before normal request handling. In local development, the API applies the restore in the running process so `localhost:8008` does not stay shut down. The worker pauses while the restore marker exists, so background jobs do not claim new database work while a restore is pending.
 
 :::caution
 Do not restore unless you are certain. Anything created, scanned, watched, edited, requested, or configured after the selected backup was made will be replaced by the backup's older state.

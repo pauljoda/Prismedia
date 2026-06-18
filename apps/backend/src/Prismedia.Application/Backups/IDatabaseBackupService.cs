@@ -45,6 +45,11 @@ public interface IDatabaseBackupService {
     Task<bool> RunPendingRestoreAsync(CancellationToken cancellationToken);
 
     /// <summary>
+    /// Reads pending or failed restore marker state for status surfaces.
+    /// </summary>
+    Task<DatabaseRestoreStatusResponse> GetRestoreStatusAsync(CancellationToken cancellationToken);
+
+    /// <summary>
     /// Returns true while a restore marker is waiting for the API startup restore pass.
     /// </summary>
     Task<bool> HasPendingRestoreAsync(CancellationToken cancellationToken);

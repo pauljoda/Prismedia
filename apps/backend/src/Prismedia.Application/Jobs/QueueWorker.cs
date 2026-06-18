@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Prismedia.Application.Backups;
 using Prismedia.Application.Health;
 using Prismedia.Application.Settings;
 using Prismedia.Domain.Entities;
@@ -15,7 +16,8 @@ public sealed class QueueWorker(
     IServiceScopeFactory scopeFactory,
     WorkerRuntimeIdentity workerIdentity,
     ILogger<QueueWorker> logger,
-    TimeSpan? concurrencyRefreshInterval = null) : BackgroundService {
+    TimeSpan? concurrencyRefreshInterval = null,
+    TimeSpan? restorePauseInterval = null) : BackgroundService {
     private static readonly TimeSpan IdleDelay = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(30);
 
@@ -29,8 +31,11 @@ public sealed class QueueWorker(
     private static readonly TimeSpan StaleLeaseRecoveryInterval = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan JobCancellationPollInterval = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan DefaultConcurrencyRefreshInterval = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan DefaultRestorePauseInterval = TimeSpan.FromSeconds(2);
     private readonly TimeSpan _concurrencyRefreshInterval =
         concurrencyRefreshInterval ?? DefaultConcurrencyRefreshInterval;
+    private readonly TimeSpan _restorePauseInterval =
+        restorePauseInterval ?? DefaultRestorePauseInterval;
     private readonly string _workerId = workerIdentity.WorkerId;
 
     /// <summary>
@@ -47,8 +52,24 @@ public sealed class QueueWorker(
             _workerId, concurrency);
 
         var nextRecoveryAt = DateTimeOffset.MinValue;
+        var restorePauseLogged = false;
         while (!stoppingToken.IsCancellationRequested) {
             RemoveCompletedJobs(runningJobs);
+
+            if (await HasPendingRestoreAsync(stoppingToken)) {
+                if (!restorePauseLogged) {
+                    logger.LogWarning("Database restore is pending; worker {WorkerId} is pausing job claims.", _workerId);
+                    restorePauseLogged = true;
+                }
+
+                await Task.Delay(_restorePauseInterval, stoppingToken);
+                continue;
+            }
+
+            if (restorePauseLogged) {
+                logger.LogInformation("Database restore marker cleared; worker {WorkerId} is resuming job claims.", _workerId);
+                restorePauseLogged = false;
+            }
 
             var now = DateTimeOffset.UtcNow;
             if (now >= nextConcurrencyRefreshAt) {
@@ -108,6 +129,19 @@ public sealed class QueueWorker(
 
         if (runningJobs.Count > 0) {
             await Task.WhenAll(runningJobs);
+        }
+    }
+
+    private async Task<bool> HasPendingRestoreAsync(CancellationToken stoppingToken) {
+        try {
+            await using var scope = scopeFactory.CreateAsyncScope();
+            var backups = scope.ServiceProvider.GetService<IDatabaseBackupService>();
+            return backups is not null && await backups.HasPendingRestoreAsync(stoppingToken);
+        } catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) {
+            throw;
+        } catch (Exception ex) {
+            logger.LogWarning(ex, "Could not check pending database restore state.");
+            return false;
         }
     }
 

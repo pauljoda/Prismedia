@@ -4,7 +4,9 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Prismedia.Application.Backups;
 using Prismedia.Application.Health;
+using Prismedia.Contracts.Settings;
 
 namespace Prismedia.Api.Tests;
 
@@ -60,6 +62,24 @@ public sealed class HealthEndpointTests : IClassFixture<WebApplicationFactory<Pr
         Assert.Null(payload.LastSeenAt);
     }
 
+    [Fact]
+    public async Task RestoreHealthEndpointReportsPendingWithoutApiKey() {
+        using var factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder => {
+            builder.ConfigureServices(services => {
+                services.RemoveAll<IDatabaseBackupService>();
+                services.AddSingleton<IDatabaseBackupService>(new FakeDatabaseBackupService(PendingRestore: true));
+            });
+        });
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync("/api/health/database-restore");
+        var payload = await response.Content.ReadFromJsonAsync<DatabaseRestoreStatusResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(payload);
+        Assert.True(payload.RestorePending);
+    }
+
     private static WebApplicationFactory<Program> CreateFactory(WorkerHeartbeatSnapshot? heartbeat) {
         return new WebApplicationFactory<Program>().WithWebHostBuilder(builder => {
             builder.ConfigureServices(services => {
@@ -86,5 +106,37 @@ public sealed class HealthEndpointTests : IClassFixture<WebApplicationFactory<Pr
             DateTimeOffset observedAt,
             CancellationToken cancellationToken) =>
             Task.CompletedTask;
+    }
+
+    private sealed class FakeDatabaseBackupService(bool PendingRestore) : IDatabaseBackupService {
+        public Task<DatabaseBackupListResponse> ListAsync(CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<DatabaseBackupDto> CreateManualBackupAsync(CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<DatabaseBackupDto> CreateAutomaticBackupAsync(CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<bool> IsAutomaticBackupDueAsync(CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<int> PruneExpiredAutomaticBackupsAsync(CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<DatabaseRestoreScheduledResponse> ScheduleRestoreAsync(
+            Guid backupId,
+            string confirmationText,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<bool> RunPendingRestoreAsync(CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<DatabaseRestoreStatusResponse> GetRestoreStatusAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(new DatabaseRestoreStatusResponse(PendingRestore, RestoreFailed: false, Error: null));
+
+        public Task<bool> HasPendingRestoreAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(PendingRestore);
     }
 }

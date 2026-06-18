@@ -1,4 +1,6 @@
+using Prismedia.Application.Backups;
 using Prismedia.Application.Health;
+using Prismedia.Contracts.Settings;
 using Prismedia.Contracts.System;
 
 namespace Prismedia.Api.Endpoints;
@@ -29,6 +31,14 @@ public static class HealthEndpoints {
             .WithName("GetWorkerHealth")
             .WithSummary("Reports whether the Prismedia worker has published a fresh heartbeat.")
             .Produces<WorkerHealthResponse>();
+
+        routes.MapGet("/api/health/database-restore", async (
+            IDatabaseBackupService backups,
+            CancellationToken cancellationToken) =>
+            Results.Ok(await backups.GetRestoreStatusAsync(cancellationToken)))
+            .WithName("GetDatabaseRestoreHealth")
+            .WithSummary("Reports whether a destructive database restore is pending or failed.")
+            .Produces<DatabaseRestoreStatusResponse>();
 
         return routes;
     }

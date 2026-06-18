@@ -1,4 +1,7 @@
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Prismedia.Application.Backups;
 using Prismedia.Application.Settings;
 using Prismedia.Application.Videos;
@@ -8,6 +11,8 @@ using Prismedia.Contracts.System;
 namespace Prismedia.Api.Endpoints;
 
 public static class SettingsEndpoints {
+    private static readonly TimeSpan RestoreTransitionDelay = TimeSpan.FromSeconds(1.5);
+
     public static RouteGroupBuilder MapSettingsEndpoints(this IEndpointRouteBuilder routes) {
         var group = routes.MapGroup("/api/settings")
             .WithTags("Settings");
@@ -65,14 +70,26 @@ public static class SettingsEndpoints {
             DatabaseRestoreRequest request,
             IDatabaseBackupService backups,
             IHostApplicationLifetime lifetime,
+            IHostEnvironment environment,
+            IServiceScopeFactory scopeFactory,
+            IConfiguration configuration,
+            ILoggerFactory loggerFactory,
             CancellationToken cancellationToken) => {
             try {
                 var response = await backups.ScheduleRestoreAsync(
                     request.BackupId,
                     request.ConfirmationText,
                     cancellationToken);
+
+                if (ShouldRestoreInProcess(environment, configuration)) {
+                    _ = Task.Run(
+                        () => RunRestoreInProcessAsync(scopeFactory, loggerFactory, RestoreTransitionDelay),
+                        CancellationToken.None);
+                    return Results.Ok(response with { RestartScheduled = false });
+                }
+
                 _ = Task.Run(async () => {
-                    await Task.Delay(TimeSpan.FromSeconds(1.5), CancellationToken.None);
+                    await Task.Delay(RestoreTransitionDelay, CancellationToken.None);
                     lifetime.StopApplication();
                 }, CancellationToken.None);
                 return Results.Ok(response);
@@ -188,4 +205,29 @@ public static class SettingsEndpoints {
         ex.ProblemCode == ApiProblemCodes.DatabaseBackupNotFound
             ? Results.NotFound(new ApiProblem(ex.ProblemCode, ex.Message))
             : Results.BadRequest(new ApiProblem(ex.ProblemCode, ex.Message));
+
+    private static bool ShouldRestoreInProcess(IHostEnvironment environment, IConfiguration configuration) {
+        var configured = configuration["PRISMEDIA_BACKUP_RESTORE_IN_PROCESS"] ??
+            configuration["Prismedia:Backups:RestoreInProcess"];
+        if (bool.TryParse(configured, out var restoreInProcess)) {
+            return restoreInProcess;
+        }
+
+        return environment.IsDevelopment();
+    }
+
+    private static async Task RunRestoreInProcessAsync(
+        IServiceScopeFactory scopeFactory,
+        ILoggerFactory loggerFactory,
+        TimeSpan delay) {
+        var logger = loggerFactory.CreateLogger("Prismedia.DatabaseRestore");
+        try {
+            await Task.Delay(delay, CancellationToken.None);
+            await using var scope = scopeFactory.CreateAsyncScope();
+            var backups = scope.ServiceProvider.GetRequiredService<IDatabaseBackupService>();
+            await backups.RunPendingRestoreAsync(CancellationToken.None);
+        } catch (Exception ex) {
+            logger.LogError(ex, "Failed to apply pending database restore in the running API process.");
+        }
+    }
 }

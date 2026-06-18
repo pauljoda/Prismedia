@@ -33,6 +33,7 @@ import type {
   DatabaseBackupListResponse,
   DatabaseRestoreRequest,
   DatabaseRestoreScheduledResponse,
+  DatabaseRestoreStatusResponse,
   DeleteFileParams,
   EntityCard,
   EntityCreateRequest,
@@ -297,6 +298,42 @@ export const getGetWorkerHealthUrl = () => {
 export const getWorkerHealth = async ( options?: RequestInit): Promise<getWorkerHealthResponse> => {
 
   return orvalFetch<getWorkerHealthResponse>(getGetWorkerHealthUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getDatabaseRestoreHealthResponse200 = {
+  data: DatabaseRestoreStatusResponse
+  status: 200
+}
+
+export type getDatabaseRestoreHealthResponseSuccess = (getDatabaseRestoreHealthResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getDatabaseRestoreHealthResponse = (getDatabaseRestoreHealthResponseSuccess)
+
+export const getGetDatabaseRestoreHealthUrl = () => {
+
+
+
+
+  return `/api/health/database-restore`
+}
+
+/**
+ * @summary Reports whether a destructive database restore is pending or failed.
+ */
+export const getDatabaseRestoreHealth = async ( options?: RequestInit): Promise<getDatabaseRestoreHealthResponse> => {
+
+  return orvalFetch<getDatabaseRestoreHealthResponse>(getGetDatabaseRestoreHealthUrl(),
   {
     ...options,
     method: 'GET'

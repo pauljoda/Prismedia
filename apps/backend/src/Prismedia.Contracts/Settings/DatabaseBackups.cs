@@ -61,6 +61,17 @@ public sealed record DatabaseRestoreScheduledResponse(
     bool RestartScheduled);
 
 /// <summary>
+/// Current destructive database restore status.
+/// </summary>
+/// <param name="RestorePending">True while a restore marker is waiting to be applied.</param>
+/// <param name="RestoreFailed">True when the last pending restore marker was moved aside as failed.</param>
+/// <param name="Error">Failure details from the moved-aside restore marker, when available.</param>
+public sealed record DatabaseRestoreStatusResponse(
+    bool RestorePending,
+    bool RestoreFailed,
+    string? Error);
+
+/// <summary>
 /// Shared destructive restore confirmation phrase.
 /// </summary>
 public static class DatabaseRestoreConfirmation {
