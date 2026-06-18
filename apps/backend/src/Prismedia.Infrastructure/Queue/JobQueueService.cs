@@ -49,6 +49,33 @@ public sealed class JobQueueService : IJobQueueService {
     private static readonly JobType[] ScanJobTypes =
         [JobType.ScanLibrary, JobType.ScanGallery, JobType.ScanBook, JobType.ScanAudio];
 
+    /// <summary>
+    /// Work that must drain before background Auto Identify starts. This keeps first scans focused on
+    /// creating entities, importing local/technical metadata, and generating browseable artwork before
+    /// slower provider identification begins.
+    /// </summary>
+    private static readonly JobType[] AutoIdentifyPrerequisiteJobTypes = [
+        JobType.ScanLibrary,
+        JobType.ScanGallery,
+        JobType.ScanBook,
+        JobType.ScanAudio,
+        JobType.ProbeVideo,
+        JobType.ProbeAudio,
+        JobType.FingerprintVideo,
+        JobType.FingerprintImage,
+        JobType.FingerprintAudio,
+        JobType.GeneratePreview,
+        JobType.GenerateImageThumbnail,
+        JobType.GenerateGridThumbnail,
+        JobType.GenerateBookPageThumbnail,
+        JobType.GenerateBookCoverThumbnail,
+        JobType.GenerateAudioWaveform,
+        JobType.ExtractSubtitles,
+        JobType.ImportMetadata
+    ];
+
+    private static readonly string AutoIdentifyJobTypeCode = JobType.AutoIdentify.ToCode();
+
     public async Task<JobRunSnapshot> EnqueueAsync(JobType type, CancellationToken cancellationToken) {
         return await EnqueueAsync(new EnqueueJobRequest(type), cancellationToken);
     }
@@ -274,6 +301,7 @@ public sealed class JobQueueService : IJobQueueService {
         ArgumentException.ThrowIfNullOrWhiteSpace(workerId);
 
         var now = DateTimeOffset.UtcNow;
+        var autoIdentifyBlocked = await HasPendingAutoIdentifyPrerequisiteAsync(cancellationToken);
 
         if (_db.Database.IsRelational()) {
             var claimed = lane is null
@@ -288,13 +316,18 @@ public sealed class JobQueueService : IJobQueueService {
                     WHERE id = (
                         SELECT id FROM job_runs
                         WHERE status = 'queued' AND available_at <= {0}
+                          AND ({3} = FALSE OR type <> {4})
                         ORDER BY priority DESC, CASE WHEN lane = {2} THEN 1 ELSE 0 END DESC, available_at, created_at
                         LIMIT 1
                         FOR UPDATE SKIP LOCKED
                     )
                     RETURNING id
                     """,
-                    now, workerId, JobRunLane.ForegroundIdentify.ToCode()).ToListAsync(cancellationToken)
+                    now,
+                    workerId,
+                    JobRunLane.ForegroundIdentify.ToCode(),
+                    autoIdentifyBlocked,
+                    AutoIdentifyJobTypeCode).ToListAsync(cancellationToken)
                 : await _db.Database.SqlQueryRaw<Guid>(
                     """
                     UPDATE job_runs
@@ -306,13 +339,18 @@ public sealed class JobQueueService : IJobQueueService {
                     WHERE id = (
                         SELECT id FROM job_runs
                         WHERE status = 'queued' AND available_at <= {0} AND lane = {2}
+                          AND ({3} = FALSE OR type <> {4})
                         ORDER BY priority DESC, available_at, created_at
                         LIMIT 1
                         FOR UPDATE SKIP LOCKED
                     )
                     RETURNING id
                     """,
-                    now, workerId, lane.Value.ToCode()).ToListAsync(cancellationToken);
+                    now,
+                    workerId,
+                    lane.Value.ToCode(),
+                    autoIdentifyBlocked,
+                    AutoIdentifyJobTypeCode).ToListAsync(cancellationToken);
 
             if (claimed.Count == 0) {
                 return null;
@@ -324,6 +362,10 @@ public sealed class JobQueueService : IJobQueueService {
 
         var query = _db.JobRuns
             .Where(job => job.Status == JobRunStatus.Queued && job.AvailableAt <= now);
+        if (autoIdentifyBlocked) {
+            query = query.Where(job => job.Type != JobType.AutoIdentify);
+        }
+
         if (lane is not null) {
             query = query.Where(job => job.Lane == lane);
         }
@@ -348,6 +390,12 @@ public sealed class JobQueueService : IJobQueueService {
 
         return ToSnapshot(row);
     }
+
+    private Task<bool> HasPendingAutoIdentifyPrerequisiteAsync(CancellationToken cancellationToken) =>
+        _db.JobRuns.AsNoTracking().AnyAsync(job =>
+            AutoIdentifyPrerequisiteJobTypes.Contains(job.Type) &&
+            (job.Status == JobRunStatus.Queued || job.Status == JobRunStatus.Running),
+            cancellationToken);
 
     public async Task<int> RecoverStaleRunningAsync(
         string currentWorkerId,

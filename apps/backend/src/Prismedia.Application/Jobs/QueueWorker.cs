@@ -152,10 +152,12 @@ public sealed class QueueWorker(
 
         if (handler is null) {
             logger.LogWarning("No handler registered for job type '{JobType}'.", job.Type.ToCode());
-            await queue.FailAsync(
-                job.Id,
-                $"No handler registered for job type '{job.Type.ToCode()}'.",
-                RetryDelay,
+            await MutateJobWithFreshQueueAsync(
+                freshQueue => freshQueue.FailAsync(
+                    job.Id,
+                    $"No handler registered for job type '{job.Type.ToCode()}'.",
+                    RetryDelay,
+                    stoppingToken),
                 stoppingToken);
             return;
         }
@@ -168,7 +170,9 @@ public sealed class QueueWorker(
             var context = new JobContext(job, queue);
             await handler.HandleAsync(context, jobCancellation.Token);
             jobCancellation.Token.ThrowIfCancellationRequested();
-            await queue.CompleteAsync(job.Id, "Completed", stoppingToken);
+            await MutateJobWithFreshQueueAsync(
+                freshQueue => freshQueue.CompleteAsync(job.Id, "Completed", stoppingToken),
+                stoppingToken);
 
             var report = timer.Finish();
             logger.LogInformation(
@@ -184,17 +188,29 @@ public sealed class QueueWorker(
                 "[METRICS] {JobType} {Label} deferred after {Elapsed:F2}s — {Timing}: {Message}",
                 job.Type.ToCode(), job.TargetLabel ?? job.Id.ToString(),
                 report.Total.TotalSeconds, report.ToLogString(), ex.Message);
-            await queue.DeferAsync(job.Id, ex.Message, ex.RetryDelay, stoppingToken);
+            await MutateJobWithFreshQueueAsync(
+                freshQueue => freshQueue.DeferAsync(job.Id, ex.Message, ex.RetryDelay, stoppingToken),
+                stoppingToken);
         } catch (Exception ex) {
             var report = timer.Finish();
             logger.LogError(ex,
                 "[METRICS] {JobType} {Label} FAILED after {Elapsed:F2}s — {Timing}",
                 job.Type.ToCode(), job.TargetLabel ?? job.Id.ToString(),
                 report.Total.TotalSeconds, report.ToLogString());
-            await queue.FailAsync(job.Id, ex.Message, RetryDelay, stoppingToken);
+            await MutateJobWithFreshQueueAsync(
+                freshQueue => freshQueue.FailAsync(job.Id, ex.Message, RetryDelay, stoppingToken),
+                stoppingToken);
         } finally {
             await StopJobCancellationMonitorAsync(monitorCancellation, cancellationMonitor);
         }
+    }
+
+    private async Task MutateJobWithFreshQueueAsync(
+        Func<IJobQueueService, Task> mutation,
+        CancellationToken cancellationToken) {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var queue = scope.ServiceProvider.GetRequiredService<IJobQueueService>();
+        await mutation(queue);
     }
 
     private async Task MonitorJobCancellationAsync(

@@ -4,8 +4,8 @@ namespace Prismedia.Application.Jobs;
 /// Background job priorities. The queue claims the highest priority first, so these are ordered to
 /// make the library usable as fast as possible after a scan: scanning creates the lightweight
 /// entities the UI shows, then fast metadata queries and the quick static thumbnails that give cards
-/// a cover, then metadata sidecars, leaving the heavy preview-clip and trickplay generation last so a
-/// large backlog of it never delays newly added media from appearing.
+/// a cover, then metadata sidecars and preview/trickplay generation. Background Auto Identify is
+/// intentionally last because provider lookups can be slow and should not delay first-scan assets.
 /// </summary>
 public static class JobPriorities {
     /// <summary>User-triggered identify review cascades — interactive UI work must not wait behind scan backlogs.</summary>
@@ -29,9 +29,9 @@ public static class JobPriorities {
     /// <summary>Metadata sidecars such as embedded subtitle extraction.</summary>
     public const int Sidecar = 30;
 
-    /// <summary>Auto Identify — provider metadata lookups that fill and organize matched media.</summary>
-    public const int AutoIdentify = 20;
-
-    /// <summary>Video preview clip and trickplay sprite generation — the heaviest work. Lowest.</summary>
+    /// <summary>Video preview clip and trickplay sprite generation — the heaviest work before provider identification.</summary>
     public const int Preview = 10;
+
+    /// <summary>Auto Identify — provider metadata lookups run last, after scan/import/generation work drains.</summary>
+    public const int AutoIdentify = 5;
 }

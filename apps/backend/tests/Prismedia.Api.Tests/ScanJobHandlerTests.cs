@@ -343,6 +343,59 @@ public sealed class ScanJobHandlerTests {
     }
 
     [Fact]
+    public async Task AllRootsScanSkipsRootDeletedAfterInitialListing() {
+        var activeRoot = new LibraryRootData(
+            Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            "/media/active",
+            "Active",
+            Enabled: true,
+            Recursive: true,
+            ScanVideos: true,
+            ScanImages: false,
+            ScanAudio: false,
+            ScanBooks: false,
+            IsNsfw: false);
+        var deletedRoot = new LibraryRootData(
+            Guid.Parse("22222222-2222-2222-2222-222222222222"),
+            "/media/deleted",
+            "Deleted",
+            Enabled: true,
+            Recursive: true,
+            ScanVideos: true,
+            ScanImages: false,
+            ScanAudio: false,
+            ScanBooks: false,
+            IsNsfw: false);
+        var persistence = new FakeScanPersistence([activeRoot, deletedRoot]) {
+            DeletedRootIds = new HashSet<Guid> { deletedRoot.Id }
+        };
+        var handler = new ScanLibraryJobHandler(
+            NullLogger<ScanLibraryJobHandler>.Instance,
+            new RecordingFileDiscovery([]),
+            persistence,
+            persistence,
+            persistence);
+        var job = new JobRunSnapshot(
+            Guid.NewGuid(),
+            JobType.ScanLibrary,
+            JobRunStatus.Running,
+            Progress: 0,
+            Message: null,
+            PayloadJson: "{}",
+            TargetEntityKind: null,
+            TargetEntityId: null,
+            TargetLabel: null,
+            CreatedAt: DateTimeOffset.UtcNow,
+            StartedAt: DateTimeOffset.UtcNow,
+            FinishedAt: null);
+
+        await handler.HandleAsync(new JobContext(job, new RecordingJobQueue()), CancellationToken.None);
+
+        Assert.Equal([activeRoot.Id, deletedRoot.Id], persistence.LoadedRootIds);
+        Assert.Equal([activeRoot.Id], persistence.LastScannedRootIds);
+    }
+
+    [Fact]
     public async Task VideoScanClassifiesSeasonFolderEpisodesForHierarchyMaterialization() {
         var root = new LibraryRootData(
             Guid.Parse("11111111-1111-1111-1111-111111111111"),
@@ -2088,10 +2141,15 @@ public sealed class ScanJobHandlerTests {
         public IReadOnlyList<string> ValidBookChapterPaths { get; private set; } = [];
         public IReadOnlyDictionary<Guid, IReadOnlySet<string>> ExcludedPathsByRoot { get; init; } =
             new Dictionary<Guid, IReadOnlySet<string>>();
+        public IReadOnlySet<Guid> DeletedRootIds { get; init; } = new HashSet<Guid>();
         private readonly Dictionary<string, Guid> _entityIdsBySource = new(StringComparer.OrdinalIgnoreCase);
 
         public Task<LibraryRootData?> GetLibraryRootAsync(Guid rootId, CancellationToken cancellationToken) {
             LoadedRootIds.Add(rootId);
+            if (DeletedRootIds.Contains(rootId)) {
+                return Task.FromResult<LibraryRootData?>(null);
+            }
+
             return Task.FromResult(roots.FirstOrDefault(root => root.Id == rootId));
         }
 

@@ -308,6 +308,62 @@ public sealed class JobQueueServiceTests {
     }
 
     [Fact]
+    public async Task ClaimNextDoesNotClaimAutoIdentifyWhileScanIsRunning() {
+        await using var db = CreateContext();
+        var service = new JobQueueService(db);
+        var now = DateTimeOffset.UtcNow;
+        var scan = NewJobRun(
+            JobType.ScanLibrary,
+            JobRunStatus.Running,
+            now.AddMinutes(-5),
+            priority: JobPriorities.Scan);
+        var autoIdentify = NewJobRun(
+            JobType.AutoIdentify,
+            JobRunStatus.Queued,
+            now,
+            priority: JobPriorities.AutoIdentify);
+        db.JobRuns.AddRange(scan, autoIdentify);
+        await db.SaveChangesAsync();
+
+        var blocked = await service.ClaimNextAsync("worker-1", CancellationToken.None);
+
+        Assert.Null(blocked);
+
+        scan.Status = JobRunStatus.Completed;
+        scan.FinishedAt = now;
+        await db.SaveChangesAsync();
+
+        var claimed = await service.ClaimNextAsync("worker-1", CancellationToken.None);
+
+        Assert.NotNull(claimed);
+        Assert.Equal(autoIdentify.Id, claimed.Id);
+    }
+
+    [Fact]
+    public async Task ClaimNextClaimsPreviewBeforeAutoIdentifyEvenWithLowerPreviewPriority() {
+        await using var db = CreateContext();
+        var service = new JobQueueService(db);
+        var now = DateTimeOffset.UtcNow;
+        var autoIdentify = NewJobRun(
+            JobType.AutoIdentify,
+            JobRunStatus.Queued,
+            now.AddMinutes(-10),
+            priority: JobPriorities.AutoIdentify);
+        var preview = NewJobRun(
+            JobType.GeneratePreview,
+            JobRunStatus.Queued,
+            now,
+            priority: JobPriorities.Preview);
+        db.JobRuns.AddRange(autoIdentify, preview);
+        await db.SaveChangesAsync();
+
+        var claimed = await service.ClaimNextAsync("worker-1", CancellationToken.None);
+
+        Assert.NotNull(claimed);
+        Assert.Equal(preview.Id, claimed.Id);
+    }
+
+    [Fact]
     public async Task ClaimNextWithForegroundLaneIgnoresNonForegroundBacklog() {
         await using var db = CreateContext();
         var service = new JobQueueService(db);

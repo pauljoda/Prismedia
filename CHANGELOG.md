@@ -87,6 +87,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Fixed
+- First scans now keep building the library before starting background Auto Identify: scan, probe, fingerprint, thumbnail, preview/trickplay, subtitle, and metadata-import jobs drain first, and failed scan jobs are recorded with a retry instead of being stranded as forever-running rows when their scoped database context was left in a bad state. All-root scans also re-check each library root before processing it, so roots deleted while a long scan is in progress are skipped instead of crashing the scan.
 - Swiftfin and other strict Jellyfin clients no longer receive the Prismedia app shell while probing similar-item or malformed image URLs, and playback shelves now include full media source and audio stream details before playback starts.
 - Library scans now treat missing generated asset files as stale instead of complete, so thumbnails and grid images are regenerated after a local cache is cleared or partially rebuilt.
 - Swiftfin and other strict Jellyfin clients can now finish login after successful authentication because Prismedia includes Jellyfin's required user policy provider IDs and answers the login splashscreen probe like a Jellyfin server with no splashscreen configured.

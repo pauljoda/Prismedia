@@ -38,8 +38,21 @@ public abstract class ScanJobHandler(
             logger.LogInformation("{JobType}: scanning {Count} eligible roots", Type.ToCode(), eligible.Count);
 
             for (var i = 0; i < eligible.Count; i++) {
-                await ScanRootWithSnapshotAsync(context, eligible[i], cancellationToken);
-                await roots.UpdateRootLastScannedAsync(eligible[i].Id, cancellationToken);
+                var listedRoot = eligible[i];
+                var currentRoot = await roots.GetLibraryRootAsync(listedRoot.Id, cancellationToken);
+                if (currentRoot is null) {
+                    logger.LogInformation(
+                        "{JobType}: skipping library root {RootId} because it no longer exists",
+                        Type.ToCode(), listedRoot.Id);
+                } else if (!currentRoot.Enabled || !IsEligibleRoot(currentRoot)) {
+                    logger.LogInformation(
+                        "{JobType}: skipping library root {RootId} because it is no longer enabled for this scan",
+                        Type.ToCode(), listedRoot.Id);
+                } else {
+                    await ScanRootWithSnapshotAsync(context, currentRoot, cancellationToken);
+                    await roots.UpdateRootLastScannedAsync(currentRoot.Id, cancellationToken);
+                }
+
                 // Never name the individual root here: the all-roots scan job is not scoped to a
                 // single (potentially NSFW) target, so it is not redacted by the jobs list, and this
                 // message is persisted and shown to every client regardless of their SFW mode.
