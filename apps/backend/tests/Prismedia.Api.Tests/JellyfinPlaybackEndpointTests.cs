@@ -558,10 +558,13 @@ public sealed class JellyfinPlaybackEndpointTests : IDisposable {
 
         public IReadOnlyList<PlaybackEventAppend> Events => _events;
 
-        public Task AppendAsync(PlaybackEventAppend entry, CancellationToken cancellationToken) {
+        public Task StageAsync(PlaybackEventAppend entry, CancellationToken cancellationToken) {
             _events.Add(entry);
             return Task.CompletedTask;
         }
+
+        public Task AppendAsync(PlaybackEventAppend entry, CancellationToken cancellationToken) =>
+            StageAsync(entry, cancellationToken);
     }
 
     private sealed class PlaybackEntityWriteRepository : IEntityWriteRepository {

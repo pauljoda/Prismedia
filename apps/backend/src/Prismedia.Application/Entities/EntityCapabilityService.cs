@@ -87,11 +87,10 @@ public sealed class EntityCapabilityService {
         double? durationSeconds,
         bool? completed,
         CancellationToken cancellationToken) {
-        PlaybackEventAppend? completedEvent = null;
-        var card = await MutateAsync(id, entity => {
+        var card = await MutateWithPlaybackEventAsync(id, entity => {
             var playback = entity.GetOrAddCapability(() => new CapabilityPlayback());
             var now = _timeProvider.GetUtcNow();
-            completedEvent = null;
+            PlaybackEventAppend? completedEvent = null;
             var playCountBefore = playback.Value.PlayCount;
 
             if (durationSeconds is > 0) {
@@ -115,18 +114,18 @@ public sealed class EntityCapabilityService {
                     playback.MarkUnwatched(now);
                 }
 
-                return true;
+                return completedEvent;
             }
 
             if (resumeSeconds is not { } seconds) {
-                return true;
+                return null;
             }
 
             var position = TimeSpan.FromSeconds(Math.Max(0, seconds));
             var runtime = entity.Technical?.Duration;
             if (runtime is not { } total || total <= TimeSpan.Zero) {
                 playback.RecordResume(position, now);
-                return true;
+                return null;
             }
 
             var fraction = position.TotalSeconds / total.TotalSeconds;
@@ -141,12 +140,8 @@ public sealed class EntityCapabilityService {
                 playback.RecordResume(position, now);
             }
 
-            return true;
+            return completedEvent;
         }, cancellationToken);
-
-        if (card is not null && completedEvent is not null) {
-            await _playbackEvents.AppendAsync(completedEvent, cancellationToken);
-        }
 
         return card;
     }
@@ -159,17 +154,11 @@ public sealed class EntityCapabilityService {
     /// <param name="cancellationToken">Cancellation token.</param>
     public async Task<EntityCard?> RecordCompletedPlaybackAsync(Guid id, CancellationToken cancellationToken) {
         var now = _timeProvider.GetUtcNow();
-        PlaybackEventAppend? completedEvent = null;
-        var card = await MutateAsync(id, entity => {
+        var card = await MutateWithPlaybackEventAsync(id, entity => {
             var playback = entity.GetOrAddCapability(() => new CapabilityPlayback());
             playback.RecordCompletedPlay(now);
-            completedEvent = CompletedEvent(entity, now, positionSeconds: null, durationSeconds: entity.Technical?.Duration?.TotalSeconds);
-            return true;
+            return CompletedEvent(entity, now, positionSeconds: null, durationSeconds: entity.Technical?.Duration?.TotalSeconds);
         }, cancellationToken);
-
-        if (card is not null && completedEvent is not null) {
-            await _playbackEvents.AppendAsync(completedEvent, cancellationToken);
-        }
 
         return card;
     }
@@ -209,17 +198,11 @@ public sealed class EntityCapabilityService {
         double? positionSeconds,
         double? durationSeconds,
         CancellationToken cancellationToken) {
-        PlaybackEventAppend? completedEvent = null;
-        var card = await MutateAsync(id, entity => {
+        var card = await MutateWithPlaybackEventAsync(id, entity => {
             var playback = entity.GetOrAddCapability(() => new CapabilityPlayback());
             playback.RecordCompletedPlay(occurredAt);
-            completedEvent = CompletedEvent(entity, occurredAt, positionSeconds, durationSeconds ?? entity.Technical?.Duration?.TotalSeconds);
-            return true;
+            return CompletedEvent(entity, occurredAt, positionSeconds, durationSeconds ?? entity.Technical?.Duration?.TotalSeconds);
         }, cancellationToken);
-
-        if (card is not null && completedEvent is not null) {
-            await _playbackEvents.AppendAsync(completedEvent, cancellationToken);
-        }
 
         return card;
     }
@@ -233,22 +216,16 @@ public sealed class EntityCapabilityService {
         double? positionSeconds,
         double? durationSeconds,
         CancellationToken cancellationToken) {
-        PlaybackEventAppend? skippedEvent = null;
-        var card = await MutateAsync(id, entity => {
+        var card = await MutateWithPlaybackEventAsync(id, entity => {
             var playback = entity.GetOrAddCapability(() => new CapabilityPlayback());
             playback.RecordSkipped(occurredAt);
-            skippedEvent = new PlaybackEventAppend(
+            return new PlaybackEventAppend(
                 entity.Id,
                 PlaybackEventKind.Skipped,
                 occurredAt,
                 positionSeconds,
                 durationSeconds ?? entity.Technical?.Duration?.TotalSeconds);
-            return true;
         }, cancellationToken);
-
-        if (card is not null && skippedEvent is not null) {
-            await _playbackEvents.AppendAsync(skippedEvent, cancellationToken);
-        }
 
         return card;
     }
@@ -340,10 +317,10 @@ public sealed class EntityCapabilityService {
             completedEvent = CompletedEvent(entity, now, positionSeconds: null, durationSeconds: null);
         }
 
-        await _entities.SaveAsync(entity, cancellationToken);
         if (completedEvent is not null) {
-            await _playbackEvents.AppendAsync(completedEvent, cancellationToken);
+            await _playbackEvents.StageAsync(completedEvent, cancellationToken);
         }
+        await _entities.SaveAsync(entity, cancellationToken);
 
         return EntityCardProjector.ToCard(entity);
     }
@@ -405,6 +382,33 @@ public sealed class EntityCapabilityService {
             }
 
             try {
+                await _entities.SaveAsync(entity, cancellationToken);
+                return EntityCardProjector.ToCard(entity);
+            } catch (EntityConcurrencyConflictException) when (attempt < MaxConcurrencyRetries) {
+                // Re-read the current row and apply the mutation again on the next loop iteration.
+            }
+        }
+    }
+
+    private async Task<EntityCard?> MutateWithPlaybackEventAsync(
+        Guid id,
+        Func<Entity, PlaybackEventAppend?> mutate,
+        CancellationToken cancellationToken) {
+        // Playback counters and playback history describe the same user action. Stage the
+        // event before saving so EF persists both inside the entity repository transaction.
+        for (var attempt = 0; ; attempt++) {
+            var entity = await _entities.FindShallowAsync(id, cancellationToken);
+            if (entity is null) {
+                return null;
+            }
+
+            var playbackEvent = mutate(entity);
+
+            try {
+                if (playbackEvent is not null) {
+                    await _playbackEvents.StageAsync(playbackEvent, cancellationToken);
+                }
+
                 await _entities.SaveAsync(entity, cancellationToken);
                 return EntityCardProjector.ToCard(entity);
             } catch (EntityConcurrencyConflictException) when (attempt < MaxConcurrencyRetries) {

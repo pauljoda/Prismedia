@@ -44,6 +44,7 @@
 
   const playback = useAudioPlayback()!;
   const chrome = useAppChrome();
+  const QUICK_SKIP_THRESHOLD_SECONDS = 10;
 
   let audioEl: HTMLAudioElement | null = $state(null);
   let rootEl: HTMLElement | null = $state(null);
@@ -57,6 +58,7 @@
   let pendingInitialSeekSeconds: number | null = null;
   let pendingAutoplay: { trackId: string; deferWhenHidden: boolean } | null = null;
   let tabCoordinator: AudioTabCoordinator | null = null;
+  let currentTrackRequestedAtMs: number | null = null;
 
   const activeTrack = $derived(playback.currentTrack);
   const ctx = $derived(playback.context);
@@ -216,6 +218,7 @@
 
     const resumeTime = Math.max(0, playback.currentTime);
     currentSrcTrackId = track.id;
+    currentTrackRequestedAtMs = Date.now();
     audioEl.src = nextSrc;
     playback.duration = track.duration ?? 0;
     pendingInitialSeekSeconds = resumeTime > 0 ? resumeTime : null;
@@ -302,12 +305,22 @@
   }
 
   function recordCurrentTrackSkip(track: AudioTrackListItemDto | null = activeTrack) {
-    if (!track) return;
+    if (!track || !isQuickSkipCandidate()) return;
     void recordEntityPlaybackEvent(track.id, {
       kind: PLAYBACK_EVENT_KIND.skipped,
       positionSeconds: playback.currentTime,
       durationSeconds: duration || track.duration || null,
     }).catch(() => {});
+  }
+
+  function isQuickSkipCandidate(): boolean {
+    const positionSeconds = Math.max(0, playback.currentTime);
+    const elapsedSinceRequestSeconds =
+      currentTrackRequestedAtMs === null ? 0 : (Date.now() - currentTrackRequestedAtMs) / 1000;
+    return (
+      positionSeconds <= QUICK_SKIP_THRESHOLD_SECONDS &&
+      elapsedSinceRequestSeconds <= QUICK_SKIP_THRESHOLD_SECONDS
+    );
   }
 
   function jumpToQueuedTrack(orderIndex: number) {
@@ -381,6 +394,7 @@
     const track = activeTrack;
     if (!track) {
       currentSrcTrackId = null;
+      currentTrackRequestedAtMs = null;
       audioEl.removeAttribute("src");
       audioEl.load();
       playback.playing = false;

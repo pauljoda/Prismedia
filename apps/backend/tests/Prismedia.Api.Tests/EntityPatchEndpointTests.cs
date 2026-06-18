@@ -381,9 +381,12 @@ public sealed class EntityPatchEndpointTests {
     private sealed class RecordingPlaybackEventStore : IPlaybackEventStore {
         public List<PlaybackEventAppend> Events { get; } = [];
 
-        public Task AppendAsync(PlaybackEventAppend entry, CancellationToken cancellationToken) {
+        public Task StageAsync(PlaybackEventAppend entry, CancellationToken cancellationToken) {
             Events.Add(entry);
             return Task.CompletedTask;
         }
+
+        public Task AppendAsync(PlaybackEventAppend entry, CancellationToken cancellationToken) =>
+            StageAsync(entry, cancellationToken);
     }
 }

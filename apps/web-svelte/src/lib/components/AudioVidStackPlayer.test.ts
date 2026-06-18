@@ -19,10 +19,14 @@ describe("AudioVidStackPlayer playback continuity", () => {
     expect(source).toContain("audioStartedInThisSession");
   });
 
-  it("records a skipped playback event before local next advances away from the current track", () => {
+  it("records a skipped playback event before local next advances away from a quick-abandoned track", () => {
     expect(source).toContain("import { recordEntityPlaybackEvent } from \"$lib/api/playback\";");
+    expect(source).toContain("const QUICK_SKIP_THRESHOLD_SECONDS = 10;");
     expect(source).toContain("PLAYBACK_EVENT_KIND.skipped");
     expect(source).toContain("function recordCurrentTrackSkip");
+    expect(source).toContain("function isQuickSkipCandidate");
+    expect(source).toContain("positionSeconds <= QUICK_SKIP_THRESHOLD_SECONDS");
+    expect(source).toContain("elapsedSinceRequestSeconds <= QUICK_SKIP_THRESHOLD_SECONDS");
     expect(source).toContain("const skippedTrack = activeTrack;");
     expect(source).toContain("if (playback.next()) {\n      recordCurrentTrackSkip(skippedTrack);");
   });

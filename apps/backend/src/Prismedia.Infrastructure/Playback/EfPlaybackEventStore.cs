@@ -9,7 +9,7 @@ namespace Prismedia.Infrastructure.Playback;
 /// </summary>
 public sealed class EfPlaybackEventStore(PrismediaDbContext db) : IPlaybackEventStore {
     /// <inheritdoc />
-    public async Task AppendAsync(PlaybackEventAppend entry, CancellationToken cancellationToken) {
+    public Task StageAsync(PlaybackEventAppend entry, CancellationToken cancellationToken) {
         db.EntityPlaybackEvents.Add(new EntityPlaybackEventRow {
             Id = Guid.NewGuid(),
             EntityId = entry.EntityId,
@@ -20,6 +20,12 @@ public sealed class EfPlaybackEventStore(PrismediaDbContext db) : IPlaybackEvent
             CreatedAt = DateTimeOffset.UtcNow
         });
 
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public async Task AppendAsync(PlaybackEventAppend entry, CancellationToken cancellationToken) {
+        await StageAsync(entry, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
     }
 }

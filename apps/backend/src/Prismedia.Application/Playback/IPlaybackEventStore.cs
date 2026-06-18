@@ -7,7 +7,14 @@ namespace Prismedia.Application.Playback;
 /// </summary>
 public interface IPlaybackEventStore {
     /// <summary>
-    /// Appends one playback-history event.
+    /// Stages one playback-history event in the current unit of work without committing it.
+    /// </summary>
+    /// <param name="entry">Playback event to persist.</param>
+    /// <param name="cancellationToken">Token used to cancel the operation.</param>
+    Task StageAsync(PlaybackEventAppend entry, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Appends and commits one playback-history event immediately.
     /// </summary>
     /// <param name="entry">Playback event to persist.</param>
     /// <param name="cancellationToken">Token used to cancel the operation.</param>
@@ -35,6 +42,7 @@ internal sealed class NullPlaybackEventStore : IPlaybackEventStore {
     private NullPlaybackEventStore() {
     }
 
-    public Task AppendAsync(PlaybackEventAppend entry, CancellationToken cancellationToken) =>
-        Task.CompletedTask;
+    public Task StageAsync(PlaybackEventAppend entry, CancellationToken cancellationToken) => Task.CompletedTask;
+
+    public Task AppendAsync(PlaybackEventAppend entry, CancellationToken cancellationToken) => Task.CompletedTask;
 }

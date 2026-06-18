@@ -19,33 +19,55 @@ public sealed class EfPlaybackStatisticsService(PrismediaDbContext db) : IPlayba
     public async Task<PlaybackStatisticsResponse> GetAsync(
         PlaybackStatisticsQuery query,
         CancellationToken cancellationToken) {
-        var rows = await QueryRows(query).ToArrayAsync(cancellationToken);
+        var rows = QueryRows(query);
+        var counts = await rows
+            .GroupBy(_ => 1)
+            .Select(group => new PlaybackStatisticsCounts(
+                group.Count(),
+                group.Count(row => row.Kind == PlaybackEventKind.Completed),
+                group.Count(row => row.Kind == PlaybackEventKind.Skipped),
+                group.Select(row => row.EntityId).Distinct().Count()))
+            .SingleOrDefaultAsync(cancellationToken) ?? PlaybackStatisticsCounts.Empty;
 
-        var coverByEntity = await LoadCoverPathsAsync(rows.Select(row => row.EntityId).Distinct().ToArray(), cancellationToken);
-        var completedCount = rows.Count(row => row.Kind == PlaybackEventKind.Completed);
-        var skippedCount = rows.Count(row => row.Kind == PlaybackEventKind.Skipped);
-
-        var topEntities = rows
+        var topEntityRows = await rows
             .GroupBy(row => new { row.EntityId, row.EntityKindCode, row.EntityTitle })
-            .Select(group => {
-                var entityId = group.Key.EntityId;
-                return new PlaybackStatisticsEntity(
-                    entityId,
-                    group.Key.EntityKindCode.DecodeAs<EntityKind>(),
-                    group.Key.EntityTitle,
-                    coverByEntity.GetValueOrDefault(entityId),
-                    group.Count(row => row.Kind == PlaybackEventKind.Completed),
-                    group.Count(row => row.Kind == PlaybackEventKind.Skipped),
-                    group.Max(row => row.OccurredAt));
+            .Select(group => new {
+                group.Key.EntityId,
+                group.Key.EntityKindCode,
+                group.Key.EntityTitle,
+                CompletedCount = group.Count(row => row.Kind == PlaybackEventKind.Completed),
+                SkippedCount = group.Count(row => row.Kind == PlaybackEventKind.Skipped),
+                LastEventAt = group.Max(row => row.OccurredAt)
             })
             .OrderByDescending(entity => entity.CompletedCount)
             .ThenByDescending(entity => entity.SkippedCount)
             .ThenByDescending(entity => entity.LastEventAt)
             .Take(TopEntityLimit)
+            .ToArrayAsync(cancellationToken);
+
+        var recentEventRows = await rows
+            .Take(RecentEventLimit)
+            .ToArrayAsync(cancellationToken);
+
+        var coverByEntity = await LoadCoverPathsAsync(
+            topEntityRows.Select(row => row.EntityId)
+                .Concat(recentEventRows.Select(row => row.EntityId))
+                .Distinct()
+                .ToArray(),
+            cancellationToken);
+
+        var topEntities = topEntityRows
+            .Select(row => new PlaybackStatisticsEntity(
+                row.EntityId,
+                row.EntityKindCode.DecodeAs<EntityKind>(),
+                row.EntityTitle,
+                coverByEntity.GetValueOrDefault(row.EntityId),
+                row.CompletedCount,
+                row.SkippedCount,
+                row.LastEventAt))
             .ToArray();
 
-        var recentEvents = rows
-            .Take(RecentEventLimit)
+        var recentEvents = recentEventRows
             .Select(row => new PlaybackStatisticsEvent(
                 row.EventId,
                 row.EntityId,
@@ -58,7 +80,10 @@ public sealed class EfPlaybackStatisticsService(PrismediaDbContext db) : IPlayba
                 row.DurationSeconds))
             .ToArray();
 
-        var dailyEvents = rows
+        var dailyRows = await rows
+            .Select(row => new PlaybackStatisticsDailyRow(row.OccurredAt, row.Kind))
+            .ToArrayAsync(cancellationToken);
+        var dailyEvents = dailyRows
             .GroupBy(row => DateOnly.FromDateTime(row.OccurredAt.UtcDateTime.Date))
             .Select(group => new PlaybackStatisticsBucket(
                 group.Key,
@@ -70,10 +95,10 @@ public sealed class EfPlaybackStatisticsService(PrismediaDbContext db) : IPlayba
         return new PlaybackStatisticsResponse(
             query.From,
             query.To,
-            rows.Length,
-            completedCount,
-            skippedCount,
-            rows.Select(row => row.EntityId).Distinct().Count(),
+            counts.TotalEvents,
+            counts.CompletedCount,
+            counts.SkippedCount,
+            counts.DistinctEntityCount,
             topEntities,
             recentEvents,
             dailyEvents);
@@ -109,15 +134,16 @@ public sealed class EfPlaybackStatisticsService(PrismediaDbContext db) : IPlayba
         return rows
             .OrderByDescending(row => row.OccurredAt)
             .ThenByDescending(row => row.EventId)
-            .Select(row => new PlaybackStatisticsRow(
-                row.EventId,
-                row.EntityId,
-                row.EntityKindCode,
-                row.EntityTitle,
-                row.Kind,
-                row.OccurredAt,
-                row.PositionSeconds,
-                row.DurationSeconds));
+            .Select(row => new PlaybackStatisticsRow {
+                EventId = row.EventId,
+                EntityId = row.EntityId,
+                EntityKindCode = row.EntityKindCode,
+                EntityTitle = row.EntityTitle,
+                Kind = row.Kind,
+                OccurredAt = row.OccurredAt,
+                PositionSeconds = row.PositionSeconds,
+                DurationSeconds = row.DurationSeconds
+            });
     }
 
     private async Task<IReadOnlyDictionary<Guid, string>> LoadCoverPathsAsync(
@@ -139,13 +165,26 @@ public sealed class EfPlaybackStatisticsService(PrismediaDbContext db) : IPlayba
             .ToDictionary(item => item.EntityId, item => item.File!.Path);
     }
 
-    private sealed record PlaybackStatisticsRow(
-        Guid EventId,
-        Guid EntityId,
-        string EntityKindCode,
-        string EntityTitle,
-        PlaybackEventKind Kind,
+    private sealed class PlaybackStatisticsRow {
+        public Guid EventId { get; init; }
+        public Guid EntityId { get; init; }
+        public string EntityKindCode { get; init; } = string.Empty;
+        public string EntityTitle { get; init; } = string.Empty;
+        public PlaybackEventKind Kind { get; init; }
+        public DateTimeOffset OccurredAt { get; init; }
+        public double? PositionSeconds { get; init; }
+        public double? DurationSeconds { get; init; }
+    }
+
+    private sealed record PlaybackStatisticsCounts(
+        int TotalEvents,
+        int CompletedCount,
+        int SkippedCount,
+        int DistinctEntityCount) {
+        public static PlaybackStatisticsCounts Empty { get; } = new(0, 0, 0, 0);
+    }
+
+    private sealed record PlaybackStatisticsDailyRow(
         DateTimeOffset OccurredAt,
-        double? PositionSeconds,
-        double? DurationSeconds);
+        PlaybackEventKind Kind);
 }

@@ -43,6 +43,7 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.PositionSeconds).HasColumnName("position_seconds");
             entity.Property(row => row.DurationSeconds).HasColumnName("duration_seconds");
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.HasIndex(row => row.OccurredAt);
             entity.HasIndex(row => new { row.EntityId, row.OccurredAt });
             entity.HasIndex(row => new { row.Kind, row.OccurredAt });
             entity.HasOne<EntityRow>().WithMany().HasForeignKey(row => row.EntityId).OnDelete(DeleteBehavior.Cascade);

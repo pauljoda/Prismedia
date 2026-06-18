@@ -8,6 +8,7 @@ using Prismedia.Domain.Media;
 using Prismedia.Infrastructure.Entities;
 using Prismedia.Infrastructure.Entities.Mappers;
 using Prismedia.Infrastructure.Persistence;
+using Prismedia.Infrastructure.Playback;
 
 namespace Prismedia.Infrastructure.Tests;
 
@@ -132,6 +133,39 @@ public sealed class PlaybackSessionServiceTests {
     }
 
     [Fact]
+    public async Task PlaybackEventPersistsWithCapabilityMutationInEfUnitOfWork() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.Parse("2026-06-18T12:00:00Z");
+        db.Entities.Add(new Persistence.Entities.EntityRow {
+            Id = AudioTrackId,
+            KindCode = EntityKindRegistry.ToCode(EntityKind.AudioTrack),
+            Title = "Track",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+
+        var repository = new EfEntityRepository(db, EntityMappers.Kinds(db), EntityMappers.Capabilities(db));
+        var capabilities = new EntityCapabilityService(repository, new EfPlaybackEventStore(db));
+
+        await capabilities.RecordPlaybackEventAsync(
+            AudioTrackId,
+            PlaybackEventKind.Skipped,
+            now,
+            positionSeconds: 4,
+            durationSeconds: 120,
+            CancellationToken.None);
+
+        var entity = await repository.FindAsync(AudioTrackId, CancellationToken.None);
+        var evt = await db.EntityPlaybackEvents.SingleAsync();
+
+        Assert.Equal(1, entity!.RequireCapability<CapabilityPlayback>().Value.SkipCount);
+        Assert.Equal(AudioTrackId, evt.EntityId);
+        Assert.Equal(PlaybackEventKind.Skipped, evt.Kind);
+        Assert.Equal(now, evt.OccurredAt);
+    }
+
+    [Fact]
     public async Task RepeatedProgressDoesNotInflatePlayCount() {
         var state = await RunAsync(async (sessions, _) => {
             for (var i = 1; i <= 5; i++) {
@@ -249,9 +283,12 @@ public sealed class PlaybackSessionServiceTests {
 
         public IReadOnlyList<PlaybackEventAppend> Events => _events;
 
-        public Task AppendAsync(PlaybackEventAppend entry, CancellationToken cancellationToken) {
+        public Task StageAsync(PlaybackEventAppend entry, CancellationToken cancellationToken) {
             _events.Add(entry);
             return Task.CompletedTask;
         }
+
+        public Task AppendAsync(PlaybackEventAppend entry, CancellationToken cancellationToken) =>
+            StageAsync(entry, cancellationToken);
     }
 }
