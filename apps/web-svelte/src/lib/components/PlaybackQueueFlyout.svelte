@@ -6,9 +6,10 @@
 
   interface Props {
     onClose: () => void;
+    onJumpTo?: (orderIndex: number) => void;
   }
 
-  let { onClose }: Props = $props();
+  let { onClose, onJumpTo }: Props = $props();
 
   const playback = useAudioPlayback()!;
   let root: HTMLElement | null = $state(null);
@@ -23,6 +24,14 @@
     // handler closing it first and the trigger immediately reopening it.
     const anchor = root?.parentElement ?? root;
     if (anchor && !anchor.contains(event.target as Node)) onClose();
+  }
+
+  function jumpToTrack(orderIndex: number) {
+    if (onJumpTo) {
+      onJumpTo(orderIndex);
+      return;
+    }
+    playback.jumpTo(orderIndex);
   }
 </script>
 
@@ -81,7 +90,7 @@
             <li>
               <button
                 type="button"
-                onclick={() => { playback.jumpTo(playback.position + 1 + i); }}
+                onclick={() => { jumpToTrack(playback.position + 1 + i); }}
                 class="group flex w-full items-center gap-2.5 rounded-sm px-2 py-1.5 text-left transition-colors hover:bg-surface-2"
               >
                 <span class="w-5 shrink-0 text-right font-mono text-[0.64rem] text-text-disabled group-hover:hidden">

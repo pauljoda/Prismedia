@@ -20,6 +20,7 @@
   } from "@lucide/svelte";
   import { cn } from "@prismedia/ui-svelte";
   import { formatDuration } from "@prismedia/contracts";
+  import { recordEntityPlaybackEvent } from "$lib/api/playback";
   import { apiAssetUrl, assetUrl } from "$lib/api/orval-fetch";
   import { resolveEntityHref } from "$lib/entities/entity-codes";
   import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
@@ -32,7 +33,7 @@
     useAudioPlayback,
   } from "$lib/stores/audio-playback.svelte";
   import { useAppChrome } from "$lib/stores/app-chrome.svelte";
-  import { MUSIC_PLAYER_MINI_SIDE, MUSIC_PLAYER_REPEAT_MODE } from "$lib/api/generated/codes";
+  import { MUSIC_PLAYER_MINI_SIDE, MUSIC_PLAYER_REPEAT_MODE, PLAYBACK_EVENT_KIND } from "$lib/api/generated/codes";
   import { createAudioTabCoordinator, type AudioTabCoordinator } from "$lib/player/audio-tab-coordinator";
   import {
     setMediaSessionHandlers,
@@ -300,9 +301,30 @@
     }
   }
 
+  function recordCurrentTrackSkip(track: AudioTrackListItemDto | null = activeTrack) {
+    if (!track) return;
+    void recordEntityPlaybackEvent(track.id, {
+      kind: PLAYBACK_EVENT_KIND.skipped,
+      positionSeconds: playback.currentTime,
+      durationSeconds: duration || track.duration || null,
+    }).catch(() => {});
+  }
+
+  function jumpToQueuedTrack(orderIndex: number) {
+    const skippedTrack = activeTrack;
+    if (orderIndex === playback.position) return;
+    playback.jumpTo(orderIndex);
+    if (playback.position !== orderIndex) return;
+    recordCurrentTrackSkip(skippedTrack);
+    resetPlaybackPosition(playback.currentTrack?.duration ?? 0);
+    window.dispatchEvent(new Event(AUDIO_PLAYBACK_SAVE_EVENT));
+  }
+
   function handleNext() {
     // The Next button advances even in repeat-one; the play position effect loads the new track.
+    const skippedTrack = activeTrack;
     if (playback.next()) {
+      recordCurrentTrackSkip(skippedTrack);
       resetPlaybackPosition(playback.currentTrack?.duration ?? 0);
       window.dispatchEvent(new Event(AUDIO_PLAYBACK_SAVE_EVENT));
     }
@@ -861,7 +883,7 @@
           <ListMusic class="h-3.5 w-3.5" />
         </button>
         {#if queueOpen}
-          <PlaybackQueueFlyout onClose={() => (queueOpen = false)} />
+          <PlaybackQueueFlyout onClose={() => (queueOpen = false)} onJumpTo={jumpToQueuedTrack} />
         {/if}
       </div>
     </div>

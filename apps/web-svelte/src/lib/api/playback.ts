@@ -1,11 +1,13 @@
-import type { ProgressUnitCode, ReaderModeCode } from "$lib/api/generated/codes";
+import type { PlaybackEventKindCode, ProgressUnitCode, ReaderModeCode } from "$lib/api/generated/codes";
 import {
+  createEntityPlaybackEvent as createEntityPlaybackEventRequest,
   recordAudioTrackPlay as recordAudioTrackPlayRequest,
   updateEntityPlayback as updateEntityPlaybackRequest,
   updateEntityProgress as updateEntityProgressRequest,
 } from "$lib/api/generated/prismedia";
 import type {
   EntityCard,
+  PlaybackEventCreateRequest,
   EntityProgressUpdateRequest,
   PlaybackUpdateRequest,
 } from "$lib/api/generated/model";
@@ -215,5 +217,30 @@ export async function recordAudioTrackPlay(
   return unwrapGenerated(
     await recordAudioTrackPlayRequest(id, requestInit(options)),
     `Failed to record audio track play for ${id}`,
+  );
+}
+
+export async function recordEntityPlaybackEvent(
+  id: string,
+  payload: {
+    kind: PlaybackEventKindCode;
+    occurredAt?: string | null;
+    positionSeconds?: number | null;
+    durationSeconds?: number | null;
+  },
+  options?: RequestOptions,
+): Promise<EntityCard> {
+  return unwrapGenerated(
+    await createEntityPlaybackEventRequest(
+      id,
+      {
+        kind: payload.kind,
+        occurredAt: payload.occurredAt ?? null,
+        positionSeconds: payload.positionSeconds ?? null,
+        durationSeconds: payload.durationSeconds ?? null,
+      } as PlaybackEventCreateRequest,
+      requestInit(options),
+    ),
+    `Failed to record playback event for ${id}`,
   );
 }

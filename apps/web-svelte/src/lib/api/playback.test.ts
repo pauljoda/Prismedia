@@ -3,6 +3,7 @@ import {
   fetchJellyfinPlaybackInfo,
   markJellyfinUserPlayedItem,
   postJellyfinSessionProgress,
+  recordEntityPlaybackEvent,
   updateEntityProgress,
 } from "./playback";
 
@@ -74,6 +75,29 @@ describe("playback API", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "/Sessions/Playing/Progress",
       expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("records explicit playback events through the entity event route", async () => {
+    const fetchMock = mockFetch(entityCard("track-1"));
+
+    await recordEntityPlaybackEvent("track-1", {
+      kind: "skipped",
+      positionSeconds: 4.2,
+      durationSeconds: 180,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/entities/track-1/playback/events",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          kind: "skipped",
+          occurredAt: null,
+          positionSeconds: 4.2,
+          durationSeconds: 180,
+        }),
+      }),
     );
   });
 });
