@@ -77,7 +77,7 @@
 
   let timeframe = $state<TimeframeKey>("year");
   let kindFilter = $state<KindFilter>(ALL_FILTER);
-  let eventFilter = $state<EventFilter>(ALL_FILTER);
+  let eventFilter = $state<EventFilter>(PLAYBACK_EVENT_KIND.completed);
   let stats = $state<PlaybackStatisticsResponse | null>(null);
   let loading = $state(true);
   let error = $state<string | null>(null);
@@ -86,9 +86,16 @@
   const topEntities = $derived(stats?.topEntities ?? []);
   const recentEvents = $derived(stats?.recentEvents ?? []);
   const dailyEvents = $derived(stats?.dailyEvents ?? []);
+  const dailyChartBuckets = $derived.by(() => {
+    const activeBuckets = dailyEvents.filter((bucket) => countBucketEvents(bucket) > 0);
+    return activeBuckets.length > 0 ? activeBuckets : dailyEvents;
+  });
   const maxDailyEvents = $derived(
-    Math.max(1, ...dailyEvents.map((bucket) => countBucketEvents(bucket))),
+    Math.max(1, ...dailyChartBuckets.map((bucket) => countBucketEvents(bucket))),
   );
+  const dailyActivityLabel = $derived(activityLabelFor(eventFilter));
+  const showCompletedLegend = $derived(eventFilter !== PLAYBACK_EVENT_KIND.skipped);
+  const showSkippedLegend = $derived(eventFilter !== PLAYBACK_EVENT_KIND.completed);
   const summaryFrom = $derived(stats ? formatDate(stats.from) : "");
   const summaryTo = $derived(stats ? formatDate(stats.to) : "");
   const showEmpty = $derived(!loading && !error && (stats?.totalEvents ?? 0) === 0);
@@ -183,6 +190,12 @@
     return kind === PLAYBACK_EVENT_KIND.skipped
       ? "border-warning/30 bg-warning-muted/30 text-warning-text"
       : "border-border-accent bg-accent-950/40 text-text-accent-bright";
+  }
+
+  function activityLabelFor(selectedEvent: EventFilter): string {
+    if (selectedEvent === PLAYBACK_EVENT_KIND.completed) return "Completed plays by active day";
+    if (selectedEvent === PLAYBACK_EVENT_KIND.skipped) return "Skips by active day";
+    return "Plays and skips by active day";
   }
 
   function coverFor(entity: Pick<PlaybackStatisticsEntity | PlaybackStatisticsEvent, "coverUrl">): string | undefined {
@@ -372,21 +385,21 @@
         <div class="flex items-center justify-between gap-3 border-b border-border-subtle px-3 py-2.5">
           <div>
             <h2 class="font-heading text-base text-text-primary">Daily Activity</h2>
-            <p class="text-xs text-text-muted">Plays and skips by day</p>
+            <p class="text-xs text-text-muted">{dailyActivityLabel}</p>
           </div>
           <RotateCcw class="h-3.5 w-3.5 text-text-muted" />
         </div>
 
         <div class="px-3 py-3">
-          <div class="flex h-28 items-end gap-1 overflow-x-auto border-b border-border-subtle pb-2 sm:h-32">
-            {#each dailyEvents as bucket (bucket.date)}
+          <div class="flex h-28 items-end gap-1.5 overflow-x-auto border-b border-border-subtle pb-2 sm:h-32">
+            {#each dailyChartBuckets as bucket (bucket.date)}
               {@const completed = Number(bucket.completedCount)}
               {@const skipped = Number(bucket.skippedCount)}
               {@const total = completed + skipped}
               {@const height = Math.max(4, Math.round((total / maxDailyEvents) * 100))}
-              <div class="group flex min-w-4 flex-1 flex-col items-center justify-end gap-1">
+              <div class="group flex min-w-7 flex-1 flex-col items-center justify-end gap-1">
                 <div
-                  class="flex w-full max-w-8 flex-col justify-end overflow-hidden rounded-xs border border-border-subtle bg-surface-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+                  class="flex w-full max-w-9 flex-col justify-end overflow-hidden rounded-xs border border-border-subtle bg-surface-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
                   style="height: {height}%"
                   title={`${formatShortDate(bucket.date)}: ${total} events`}
                 >
@@ -405,8 +418,12 @@
           </div>
 
           <div class="mt-2 flex items-center gap-4 text-xs text-text-muted">
-            <span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-xs bg-accent-300"></span>Plays</span>
-            <span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-xs bg-warning"></span>Skips</span>
+            {#if showCompletedLegend}
+              <span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-xs bg-accent-300"></span>Plays</span>
+            {/if}
+            {#if showSkippedLegend}
+              <span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-xs bg-warning"></span>Skips</span>
+            {/if}
           </div>
         </div>
       </section>

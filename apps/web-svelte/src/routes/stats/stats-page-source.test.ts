@@ -10,6 +10,12 @@ describe("stats page source", () => {
     expect(source).toContain("ENTITY_KIND.");
   });
 
+  it("opens on completed plays and charts active daily buckets", () => {
+    expect(source).toContain("let eventFilter = $state<EventFilter>(PLAYBACK_EVENT_KIND.completed);");
+    expect(source).toContain("const dailyChartBuckets = $derived.by");
+    expect(source).toContain("{#each dailyChartBuckets as bucket (bucket.date)}");
+  });
+
   it("renders playback thumbnails through the shared EntityThumbnail component", () => {
     expect(source).toContain("EntityThumbnail");
     expect(source).toContain("entityReferenceToThumbnailCard");
