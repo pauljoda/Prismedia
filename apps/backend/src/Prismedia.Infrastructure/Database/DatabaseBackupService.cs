@@ -188,11 +188,55 @@ public sealed class DatabaseBackupService(
                     $"Database restore failed: {ex.Message}");
             }
 
+            await ReconcileRunningBackupsAfterRestoreAsync(cancellationToken);
             File.Delete(options.RestoreRequestPath);
             logger.LogWarning("Prismedia database restore completed from {BackupPath}.", backupPath);
             return true;
         } finally {
             BackupGate.Release();
+        }
+    }
+
+    private async Task ReconcileRunningBackupsAfterRestoreAsync(CancellationToken cancellationToken) {
+        try {
+            db.ChangeTracker.Clear();
+            var rows = await db.DatabaseBackups
+                .Where(row => row.Status == DatabaseBackupStatus.Running)
+                .ToListAsync(cancellationToken);
+            if (rows.Count == 0) {
+                return;
+            }
+
+            var now = _timeProvider.GetUtcNow();
+            foreach (var row in rows) {
+                var backupPath = Path.GetFullPath(row.BackupPath);
+                if (!IsPathUnderDirectory(backupPath, options.BackupDirectory) || !File.Exists(backupPath)) {
+                    row.Status = DatabaseBackupStatus.Failed;
+                    row.CompletedAt = now;
+                    row.SizeBytes = null;
+                    row.Error = "Backup was marked running in the restored snapshot, but the dump file is missing.";
+                    continue;
+                }
+
+                var file = new FileInfo(backupPath);
+                if (file.Length <= 0) {
+                    row.Status = DatabaseBackupStatus.Failed;
+                    row.CompletedAt = now;
+                    row.SizeBytes = file.Length;
+                    row.Error = "Backup was marked running in the restored snapshot, but the dump file is empty.";
+                    continue;
+                }
+
+                row.Status = DatabaseBackupStatus.Completed;
+                row.CompletedAt = new DateTimeOffset(file.LastWriteTimeUtc);
+                row.SizeBytes = file.Length;
+                row.Error = null;
+            }
+
+            await db.SaveChangesAsync(cancellationToken);
+            logger.LogInformation("Reconciled {Count} database backup row(s) after restore.", rows.Count);
+        } catch (Exception ex) when (ex is not OperationCanceledException) {
+            logger.LogWarning(ex, "Could not reconcile restored database backup rows.");
         }
     }
 

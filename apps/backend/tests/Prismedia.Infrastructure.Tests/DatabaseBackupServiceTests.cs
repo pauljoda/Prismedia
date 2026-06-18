@@ -160,6 +160,52 @@ public sealed class DatabaseBackupServiceTests : IDisposable {
     }
 
     [Fact]
+    public async Task PendingRestoreReconcilesRunningRowsFromRestoredSnapshot() {
+        await using var db = CreateContext();
+        var backupDir = Path.Combine(_tempDir, "database");
+        Directory.CreateDirectory(backupDir);
+        var path = Path.Combine(backupDir, "manual.dump");
+        await File.WriteAllTextAsync(path, "backup");
+        var backupId = Guid.NewGuid();
+        db.DatabaseBackups.Add(new DatabaseBackupRow {
+            Id = backupId,
+            BackupPath = path,
+            Status = DatabaseBackupStatus.Completed,
+            IsManual = true,
+            CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-1),
+            CompletedAt = DateTimeOffset.UtcNow,
+            SizeBytes = 6
+        });
+        await db.SaveChangesAsync();
+        var process = new DumpProcessExecutor {
+            OnRunAsync = async call => {
+                if (call.FileName != "pg_restore") {
+                    return;
+                }
+
+                var row = await db.DatabaseBackups.SingleAsync(backup => backup.Id == backupId);
+                row.Status = DatabaseBackupStatus.Running;
+                row.CompletedAt = null;
+                row.SizeBytes = null;
+                await db.SaveChangesAsync();
+            }
+        };
+        var service = CreateService(db, process);
+        await service.ScheduleRestoreAsync(backupId, DatabaseRestoreConfirmation.Text, CancellationToken.None);
+
+        var restored = await service.RunPendingRestoreAsync(CancellationToken.None);
+
+        Assert.True(restored);
+        Assert.False(await service.HasPendingRestoreAsync(CancellationToken.None));
+        db.ChangeTracker.Clear();
+        var restoredRow = await db.DatabaseBackups.SingleAsync(backup => backup.Id == backupId);
+        Assert.Equal(DatabaseBackupStatus.Completed, restoredRow.Status);
+        Assert.NotNull(restoredRow.CompletedAt);
+        Assert.Equal(new FileInfo(path).Length, restoredRow.SizeBytes);
+        Assert.Null(restoredRow.Error);
+    }
+
+    [Fact]
     public async Task PendingRestoreFallsBackToDockerComposeWhenPgRestoreIsMissing() {
         await using var db = CreateContext();
         var backupDir = Path.Combine(_tempDir, "database");
@@ -250,6 +296,7 @@ public sealed class DatabaseBackupServiceTests : IDisposable {
     private sealed class DumpProcessExecutor : ProcessExecutor {
         public HashSet<string> MissingExecutables { get; } = new(StringComparer.Ordinal);
         public List<ProcessCall> Calls { get; } = [];
+        public Func<ProcessCall, Task>? OnRunAsync { get; set; }
 
         public override async Task<ProcessExecutionResult> RunAsync(
             string fileName,
@@ -270,6 +317,10 @@ public sealed class DatabaseBackupServiceTests : IDisposable {
                     Directory.CreateDirectory(Path.GetDirectoryName(arguments[fileIndex + 1])!);
                     await File.WriteAllTextAsync(arguments[fileIndex + 1], "backup", cancellationToken);
                 }
+            }
+
+            if (OnRunAsync is not null) {
+                await OnRunAsync(Calls[^1]);
             }
 
             return new ProcessExecutionResult(0, string.Empty, string.Empty);

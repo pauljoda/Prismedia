@@ -89,6 +89,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 - Database restore now shows an in-progress page, automatically returns to the dashboard when Prismedia is ready again, and applies restores in-process on local development so `localhost:8008` does not stay stopped after scheduling a restore.
+- Database restore now reconciles restored backup metadata so completed dump files do not reappear as indefinitely running, and running backup badges use one consistent warning style.
 - The database restore confirmation field now keeps the required `DESTROY AND RESTORE` phrase visible while you type, so the placeholder no longer disappears with the only copy of the confirmation text.
 - Database Backups can now create and restore backups in the local dev stack even when PostgreSQL client tools are not installed on the host, and Settings now shows API error messages as readable text instead of raw JSON.
 - Swiftfin and other strict Jellyfin clients no longer receive the Prismedia app shell while probing similar-item or malformed image URLs, and playback shelves now include full media source and audio stream details before playback starts.

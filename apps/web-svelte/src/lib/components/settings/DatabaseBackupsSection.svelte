@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { Archive, Clock, Database, Loader2, RefreshCw, RotateCcw, ShieldAlert } from "@lucide/svelte";
-  import { Badge, Button, Panel, Select, TextInput, cn, type SelectOption } from "@prismedia/ui-svelte";
+  import { Badge, Button, Panel, Select, TextInput, cn, type BadgeVariant, type SelectOption } from "@prismedia/ui-svelte";
   import { DATABASE_BACKUP_STATUS } from "$lib/api/generated/codes";
   import {
     createDatabaseBackup,
@@ -116,6 +116,12 @@
     if (backup.status === DATABASE_BACKUP_STATUS.completed) return backup.isManual ? "Permanent" : "7-day";
     if (backup.status === DATABASE_BACKUP_STATUS.running) return "Running";
     return "Failed";
+  }
+
+  function backupBadgeVariant(backup: DatabaseBackup): BadgeVariant {
+    if (backup.status === DATABASE_BACKUP_STATUS.failed) return "error";
+    if (backup.status === DATABASE_BACKUP_STATUS.running) return "warning";
+    return backup.isManual ? "accent" : "default";
   }
 
   function formatDateTime(value: string | null | undefined): string {
@@ -238,7 +244,7 @@
                 </div>
               </div>
               <Badge
-                variant={backup.status === DATABASE_BACKUP_STATUS.failed ? "error" : backup.isManual ? "accent" : "default"}
+                variant={backupBadgeVariant(backup)}
                 class="w-fit"
               >
                 {statusLabel(backup)}
