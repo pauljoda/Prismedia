@@ -25,6 +25,27 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
     private static readonly EntityKind[] TargetKinds =
         [EntityKind.Video, EntityKind.Movie, EntityKind.VideoSeries, EntityKind.Gallery, EntityKind.Image, EntityKind.Book, EntityKind.AudioTrack];
 
+    private static readonly Dictionary<string, HashSet<string>> FieldTargetKinds = new(StringComparer.Ordinal) {
+        ["fileSize"] = Kinds(EntityKindRegistry.Video.Code, EntityKindRegistry.Image.Code, EntityKindRegistry.AudioTrack.Code),
+        ["duration"] = Kinds(EntityKindRegistry.Video.Code, EntityKindRegistry.AudioTrack.Code),
+        ["height"] = Kinds(EntityKindRegistry.Image.Code),
+        ["width"] = Kinds(EntityKindRegistry.Image.Code),
+        ["codec"] = Kinds(EntityKindRegistry.Video.Code),
+        ["bitRate"] = Kinds(EntityKindRegistry.AudioTrack.Code),
+        ["bit_rate"] = Kinds(EntityKindRegistry.AudioTrack.Code),
+        ["channels"] = Kinds(EntityKindRegistry.AudioTrack.Code),
+        ["sampleRate"] = Kinds(EntityKindRegistry.AudioTrack.Code),
+        ["sample_rate"] = Kinds(EntityKindRegistry.AudioTrack.Code),
+        ["playCount"] = Kinds(EntityKindRegistry.Video.Code, EntityKindRegistry.AudioTrack.Code),
+        ["skipCount"] = Kinds(EntityKindRegistry.Video.Code, EntityKindRegistry.AudioTrack.Code),
+        ["resolution"] = Kinds(EntityKindRegistry.Video.Code),
+        ["videoSeriesId"] = Kinds(EntityKindRegistry.Video.Code),
+        ["galleryType"] = Kinds(EntityKindRegistry.Gallery.Code),
+        ["imageCount"] = Kinds(EntityKindRegistry.Gallery.Code),
+        ["format"] = Kinds(EntityKindRegistry.Image.Code),
+        ["interactive"] = Kinds(EntityKindRegistry.Video.Code),
+    };
+
     public async Task<IReadOnlyList<CollectionRuleMatch>> EvaluateAsync(
         string ruleTreeJson, CancellationToken cancellationToken) {
         var ruleTree = JsonSerializer.Deserialize<CollectionRuleNode>(ruleTreeJson);
@@ -119,6 +140,9 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
     }
 
     private string? TranslateCondition(CollectionRuleCondition condition, string kindCode, SqlBuildContext ctx) {
+        if (!FieldAppliesToKind(condition.Field, kindCode))
+            return null;
+
         if (condition.EntityTypes.Count > 0 && !ConditionAppliesToKind(condition.EntityTypes, kindCode))
             return null;
 
@@ -140,6 +164,7 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
             "channels" => TranslateTechnical("channels", condition, ctx),
             "sampleRate" or "sample_rate" => TranslateTechnical("sample_rate", condition, ctx),
             "playCount" => TranslatePlayback("play_count", condition, ctx),
+            "skipCount" => TranslatePlayback("skip_count", condition, ctx),
             "resolution" => TranslateResolution(condition, ctx),
             "videoSeriesId" => TranslateVideoSeries(condition, kindCode, ctx),
             "galleryType" => TranslateGalleryType(condition, kindCode, ctx),
@@ -158,6 +183,12 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
         }
         return false;
     }
+
+    private static bool FieldAppliesToKind(string field, string kindCode) =>
+        !FieldTargetKinds.TryGetValue(field, out var kinds) || kinds.Contains(kindCode);
+
+    private static HashSet<string> Kinds(params string[] kindCodes) =>
+        new(kindCodes, StringComparer.Ordinal);
 
     // ── Scalar field translation ──
 
@@ -303,23 +334,83 @@ public sealed class CollectionRuleEngine(PrismediaDbContext db) : ICollectionRul
     private string? TranslateVideoSeries(CollectionRuleCondition condition, string kindCode, SqlBuildContext ctx) {
         if (kindCode != "video") return null;
 
-        var subquery = @"(
-            e.parent_entity_id {0}
-            OR EXISTS (
-                SELECT 1
-                FROM entities parent_entity
-                WHERE parent_entity.id = e.parent_entity_id
-                  AND parent_entity.parent_entity_id {0}
-            )
+        var predicate = TranslateVideoSeriesPredicate(condition, ctx);
+        if (predicate is null) return null;
+
+        var seriesKindParam = ctx.AddParam(EntityKindRegistry.VideoSeries.Code, NpgsqlDbType.Text);
+        var subquery = $@"EXISTS (
+            SELECT 1
+            FROM entities series_entity
+            WHERE series_entity.kind_code = {seriesKindParam}
+              AND (
+                series_entity.id = e.parent_entity_id
+                OR EXISTS (
+                    SELECT 1
+                    FROM entities parent_entity
+                    WHERE parent_entity.id = e.parent_entity_id
+                      AND parent_entity.parent_entity_id = series_entity.id
+                )
+              )
+              AND ({predicate})
         )";
 
-        return condition.Operator switch {
-            "equals" => string.Format(CultureInfo.InvariantCulture, subquery, $"= {ctx.AddJsonParam(condition.Value)}"),
-            "in" when condition.Value?.ValueKind == JsonValueKind.Array =>
-                string.Format(CultureInfo.InvariantCulture, subquery, $"IN ({string.Join(", ", condition.Value.Value.EnumerateArray().Select(v => ctx.AddJsonParam(v)))})"),
-            "not_in" when condition.Value?.ValueKind == JsonValueKind.Array =>
-                $"NOT {string.Format(CultureInfo.InvariantCulture, subquery, $"IN ({string.Join(", ", condition.Value.Value.EnumerateArray().Select(v => ctx.AddJsonParam(v)))})")}",
-            _ => null
+        return condition.Operator is "not_in" ? $"NOT ({subquery})" : subquery;
+    }
+
+    private static string? TranslateVideoSeriesPredicate(CollectionRuleCondition condition, SqlBuildContext ctx) {
+        if (condition.Operator is "equals") {
+            if (condition.Value?.ValueKind != JsonValueKind.String) {
+                return "false";
+            }
+
+            var value = condition.Value.Value.GetString();
+            if (string.IsNullOrWhiteSpace(value)) {
+                return "false";
+            }
+
+            return Guid.TryParse(value, out var id)
+                ? $"series_entity.id = {ctx.AddParam(id, NpgsqlDbType.Uuid)}"
+                : $"series_entity.title = {ctx.AddParam(value, NpgsqlDbType.Text)}";
+        }
+
+        if (condition.Operator is not ("in" or "not_in") ||
+            condition.Value?.ValueKind != JsonValueKind.Array) {
+            return null;
+        }
+
+        var ids = new List<Guid>();
+        var titles = new List<string>();
+        foreach (var item in condition.Value.Value.EnumerateArray()) {
+            if (item.ValueKind != JsonValueKind.String) {
+                continue;
+            }
+
+            var value = item.GetString();
+            if (string.IsNullOrWhiteSpace(value)) {
+                continue;
+            }
+
+            if (Guid.TryParse(value, out var id)) {
+                ids.Add(id);
+                continue;
+            }
+
+            titles.Add(value);
+        }
+
+        var fragments = new List<string>();
+        if (ids.Count > 0) {
+            fragments.Add($"series_entity.id IN ({string.Join(", ", ids.Select(id => ctx.AddParam(id, NpgsqlDbType.Uuid)))})");
+        }
+
+        if (titles.Count > 0) {
+            fragments.Add($"series_entity.title IN ({string.Join(", ", titles.Select(title => ctx.AddParam(title, NpgsqlDbType.Text)))})");
+        }
+
+        return fragments.Count switch {
+            0 => "false",
+            1 => fragments[0],
+            _ => $"({string.Join(" OR ", fragments)})"
         };
     }
 

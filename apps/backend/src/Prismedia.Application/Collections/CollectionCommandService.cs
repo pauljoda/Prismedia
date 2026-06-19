@@ -40,6 +40,7 @@ public sealed class CollectionCommandService(
         "sampleRate",
         "sample_rate",
         "playCount",
+        "skipCount",
         "resolution",
         "videoSeriesId",
         "galleryType",

@@ -165,6 +165,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Portrait videos opened in the lightbox now keep their natural shape and use the available screen height instead of being squeezed into a wide landscape frame.
 - Random sorting now reshuffles local detail-page grids such as a gallery's Sub Galleries and Images sections instead of only working on full library grids.
 - Creating dynamic or hybrid collections with rules no longer trips server errors, and malformed rule payloads are now rejected as invalid collection requests.
+- Dynamic collection rules now keep media-specific filters scoped to the media types that support them, so Series rules no longer error when other library types are selected. Skip Count is also available as a rule, and date ranges preview correctly.
 - Comics now keep advancing reading progress across chapters, so continuing into chapter 2 or later no longer leaves Resume stuck on chapter 1.
 - The empty-library dashboard action now uses Prismedia's shared primary button styling instead of the older square brass button.
 - Long metadata subtitles on detail pages now wrap inside the hero area instead of running off screen on narrow layouts.

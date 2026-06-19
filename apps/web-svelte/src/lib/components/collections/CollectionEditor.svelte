@@ -102,6 +102,10 @@
     if (value === null || value === undefined) return false;
     if (op === "between") {
       if (!Array.isArray(value) || value.length !== 2) return false;
+      if (field.fieldType === "date") {
+        return !Number.isNaN(new Date(String(value[0])).getTime()) &&
+          !Number.isNaN(new Date(String(value[1])).getTime());
+      }
       return Number.isFinite(Number(value[0])) && Number.isFinite(Number(value[1]));
     }
     if (op === "in" || op === "not_in") {

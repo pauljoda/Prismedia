@@ -41,6 +41,8 @@ describe("collection detail route", () => {
     expect(addMenuSource).toContain("addCollectionItems");
     expect(detailSource).toContain("refreshCollection");
     expect(editorSource).toContain("ConditionBuilder");
+    expect(modelsSource).toContain('"playCount"');
+    expect(modelsSource).toContain('"skipCount"');
     expect(modelsSource).toContain("\"video-series\"");
     expect(conditionBuilderSource).toContain("value: \"video-series\"");
   });
@@ -81,7 +83,22 @@ describe("collection detail route", () => {
     expect(conditionBuilderSource).toContain("overflow-x-auto");
     expect(conditionBuilderSource).toContain("[-webkit-overflow-scrolling:touch]");
     expect(conditionBuilderSource).toContain("inline-flex shrink-0 items-center");
+    expect(conditionBuilderSource).toContain("entityTypes: field.entityTypes");
+    expect(conditionBuilderSource).toContain("kindSupported");
     expect(conditionBuilderSource).not.toContain('style="padding-left: 3.5rem"');
+  });
+
+  it("keeps date range rules as backend-readable date strings", async () => {
+    const editorSource = await readFile("src/lib/components/collections/CollectionEditor.svelte", "utf8");
+    const conditionBuilderSource = await readFile(
+      "src/lib/components/collections/ConditionBuilder.svelte",
+      "utf8",
+    );
+
+    expect(conditionBuilderSource).toContain("return [min, max]");
+    expect(conditionBuilderSource).not.toContain("Number(new Date");
+    expect(editorSource).toContain('field.fieldType === "date"');
+    expect(editorSource).toContain("new Date(String(value[0]))");
   });
 
   it("derives collection hero artwork from member thumbnails when no custom cover exists", async () => {

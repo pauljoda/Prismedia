@@ -106,6 +106,7 @@
   function setField(index: number, fieldName: string) {
     const field = COLLECTION_RULE_FIELDS.find((item) => item.field === fieldName) ?? COLLECTION_RULE_FIELDS[0];
     updateCondition(index, {
+      entityTypes: field.entityTypes,
       field: field.field,
       operator: field.operators[0],
       value: defaultValue(field, field.operators[0]),
@@ -127,7 +128,7 @@
 
   function defaultValue(field: CollectionRuleFieldDef, operator: CollectionOperator): CollectionConditionValue {
     if (isNullaryOp(operator)) return null;
-    if (operator === "between") return [0, 0];
+    if (operator === "between") return field.fieldType === "date" ? ["", ""] : [0, 0];
     if (operator === "in" || operator === "not_in") return [];
     if (field.fieldType === "number") return 0;
     if (field.fieldType === "boolean") return true;
@@ -135,12 +136,20 @@
   }
 
   function toggleEntityType(index: number, kind: CollectionEntityType) {
-    const current = conditions[index].entityTypes;
+    const condition = conditions[index];
+    const field = fieldFor(condition);
+    if (!fieldSupportsKind(field, kind)) return;
+
+    const current = condition.entityTypes;
     updateCondition(index, {
       entityTypes: current.includes(kind)
         ? current.filter((item) => item !== kind)
         : [...current, kind],
     });
+  }
+
+  function fieldSupportsKind(field: CollectionRuleFieldDef, kind: CollectionEntityType): boolean {
+    return field.entityTypes.length === 0 || field.entityTypes.includes(kind);
   }
 
   function getStringValue(value: CollectionConditionValue): string {
@@ -172,7 +181,7 @@
 
   function parseBetween(field: CollectionRuleFieldDef, min: string, max: string): CollectionConditionValue {
     if (field.fieldType === "date") {
-      return [Number(new Date(min)) || 0, Number(new Date(max)) || 0];
+      return [min, max];
     }
     return [Number(min) || 0, Number(max) || 0];
   }
@@ -426,18 +435,22 @@
               class="scrollbar-hidden flex min-w-0 flex-1 items-center gap-1 overflow-x-auto pr-2.5 [-webkit-overflow-scrolling:touch]"
             >
               {#each entityKinds as kind (kind.value)}
-                {@const active = condition.entityTypes.length === 0 || condition.entityTypes.includes(kind.value)}
+                {@const kindSupported = fieldSupportsKind(field, kind.value)}
+                {@const active = kindSupported && (condition.entityTypes.length === 0 || condition.entityTypes.includes(kind.value))}
                 {@const KindIcon = kind.icon}
                 <button
                   type="button"
-                  {disabled}
+                  disabled={disabled || !kindSupported}
                   aria-pressed={active}
+                  aria-disabled={!kindSupported}
                   title={kind.label}
                   onclick={() => toggleEntityType(i, kind.value)}
                   class={cn(
                     "inline-flex shrink-0 items-center gap-1 rounded-xs px-1.5 py-0.5 text-[0.58rem] font-semibold uppercase tracking-wider border transition-all",
                     "disabled:cursor-not-allowed disabled:opacity-50",
-                    active
+                    !kindSupported
+                      ? "border-transparent bg-transparent text-text-disabled/35"
+                      : active
                       ? "border-border-accent/50 bg-accent-950/30 text-text-accent"
                       : "border-transparent bg-transparent text-text-disabled/60 hover:text-text-muted hover:border-border-subtle",
                   )}

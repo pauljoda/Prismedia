@@ -28,6 +28,7 @@ export type CollectionConditionValue =
   | boolean
   | string[]
   | [number, number]
+  | [string, string]
   | null;
 
 export interface CollectionRuleCondition {
@@ -86,6 +87,7 @@ export const COLLECTION_RULE_FIELDS: CollectionRuleFieldDef[] = [
   { field: "codec", label: "Codec", fieldType: "text", entityTypes: ["video"], operators: ["equals", "not_equals", "in", "not_in"] },
   { field: "interactive", label: "Interactive", fieldType: "boolean", entityTypes: ["video"], operators: ["is_true", "is_false"] },
   { field: "playCount", label: "Play Count", fieldType: "number", entityTypes: ["video", "audio-track"], operators: ["equals", "greater_than", "less_than", "greater_equal", "less_equal", "between"] },
+  { field: "skipCount", label: "Skip Count", fieldType: "number", entityTypes: ["video", "audio-track"], operators: ["equals", "greater_than", "less_than", "greater_equal", "less_equal", "between"] },
   { field: "videoSeriesId", label: "Series", fieldType: "relation", entityTypes: ["video"], operators: ["equals", "in", "not_in"] },
 
   // Gallery-specific

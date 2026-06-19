@@ -42,7 +42,7 @@ export type CollectionOperator =
   | "is_true"
   | "is_false";
 
-export type CollectionConditionValue = string | number | boolean | string[] | [number, number] | null;
+export type CollectionConditionValue = string | number | boolean | string[] | [number, number] | [string, string] | null;
 
 export interface CollectionRuleCondition {
   type: "condition";
@@ -85,6 +85,7 @@ export const COLLECTION_RULE_FIELDS: CollectionRuleFieldDef[] = [
   { field: "codec", label: "Codec", fieldType: "text", entityTypes: ["video"], operators: ["equals", "not_equals", "in", "not_in"] },
   { field: "interactive", label: "Interactive", fieldType: "boolean", entityTypes: ["video"], operators: ["is_true", "is_false"] },
   { field: "playCount", label: "Play Count", fieldType: "number", entityTypes: ["video", "audio-track"], operators: ["equals", "greater_than", "less_than", "greater_equal", "less_equal", "between"] },
+  { field: "skipCount", label: "Skip Count", fieldType: "number", entityTypes: ["video", "audio-track"], operators: ["equals", "greater_than", "less_than", "greater_equal", "less_equal", "between"] },
   { field: "videoSeriesId", label: "Series", fieldType: "relation", entityTypes: ["video"], operators: ["equals", "in", "not_in"] },
   { field: "galleryType", label: "Gallery Type", fieldType: "enum", entityTypes: ["gallery"], operators: ["equals", "not_equals", "in"], enumValues: ["folder", "zip", "virtual"] },
   { field: "imageCount", label: "Image Count", fieldType: "number", entityTypes: ["gallery"], operators: ["greater_than", "less_than", "greater_equal", "less_equal", "between"] },
