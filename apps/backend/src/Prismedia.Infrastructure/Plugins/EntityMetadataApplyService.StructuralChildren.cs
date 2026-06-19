@@ -28,7 +28,7 @@ public sealed partial class EntityMetadataApplyService {
         DateTimeOffset now,
         HashSet<Guid> visited,
         IReadOnlyList<string> parentPath,
-        IdentifyApplyProgressReporter? progress,
+        IIdentifyApplyProgressReporter? progress,
         CancellationToken cancellationToken) {
         if (relationshipFieldsApplied) {
             foreach (var relation in relationshipProposals) {
@@ -137,11 +137,11 @@ public sealed partial class EntityMetadataApplyService {
         DateTimeOffset now,
         HashSet<Guid> visited,
         IReadOnlyList<string> parentPath,
-        IdentifyApplyProgressReporter? progress,
+        IIdentifyApplyProgressReporter? progress,
         CancellationToken cancellationToken) {
         var title = !string.IsNullOrWhiteSpace(node.Patch.Title) ? node.Patch.Title.Trim() : entity.Title;
         var path = parentPath.Count == 0 ? [title] : parentPath.Concat([title]).ToArray();
-        progress?.ReportEntity(entity.KindCode.DecodeAs<EntityKind>(), title, path);
+        await ReportApplyProgressAsync(progress, entity.KindCode.DecodeAs<EntityKind>(), title, path, cancellationToken);
 
         await ApplyPatchToEntityAsync(entity, node.Patch, isRelationship ? [] : node.Images, now, cancellationToken);
         if (isRelationship) {
@@ -162,6 +162,14 @@ public sealed partial class EntityMetadataApplyService {
             progress,
             cancellationToken);
     }
+
+    private static Task ReportApplyProgressAsync(
+        IIdentifyApplyProgressReporter? progress,
+        EntityKind kind,
+        string title,
+        IReadOnlyList<string> path,
+        CancellationToken cancellationToken) =>
+        progress?.ReportEntityAsync(kind, title, path, cancellationToken) ?? Task.CompletedTask;
 
     // Resolves the local structural child a proposal targets: external-id-first, then title, scoped to
     // this parent — the shared FindEntityAsync rule used everywhere in the apply walk.

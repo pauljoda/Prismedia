@@ -16,6 +16,18 @@ public sealed record IdentifyApplyProgressStep(
     IReadOnlyList<string> Path);
 
 /// <summary>
+/// Receives entity-level progress while an identify proposal is being applied.
+/// </summary>
+public interface IIdentifyApplyProgressReporter {
+    /// <summary>Records the entity currently being updated.</summary>
+    Task ReportEntityAsync(
+        EntityKind kind,
+        string title,
+        IReadOnlyList<string> path,
+        CancellationToken cancellationToken);
+}
+
+/// <summary>
 /// Stores short-lived progress for synchronous Identify proposal apply requests.
 /// </summary>
 public interface IIdentifyApplyProgressStore {
@@ -38,7 +50,7 @@ public interface IIdentifyApplyProgressStore {
 /// <summary>
 /// Convenience reporter bound to one Identify apply operation.
 /// </summary>
-public sealed class IdentifyApplyProgressReporter {
+public sealed class IdentifyApplyProgressReporter : IIdentifyApplyProgressReporter {
     private readonly IIdentifyApplyProgressStore _store;
     private readonly Guid _operationId;
 
@@ -60,6 +72,17 @@ public sealed class IdentifyApplyProgressReporter {
     /// <param name="path">Structural path from the root proposal.</param>
     public void ReportEntity(EntityKind kind, string title, IReadOnlyList<string> path) =>
         _store.ReportStep(_operationId, new IdentifyApplyProgressStep(kind, title, path));
+
+    /// <inheritdoc />
+    public Task ReportEntityAsync(
+        EntityKind kind,
+        string title,
+        IReadOnlyList<string> path,
+        CancellationToken cancellationToken) {
+        cancellationToken.ThrowIfCancellationRequested();
+        ReportEntity(kind, title, path);
+        return Task.CompletedTask;
+    }
 }
 
 /// <summary>

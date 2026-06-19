@@ -33,8 +33,12 @@ public sealed class AutoIdentifyJobHandler(
                 new AutoIdentifyRunOptions(
                     _identifyInactivityTimeout,
                     (progress, token) => context.ReportProgressAsync(
-                        Math.Min(90, 10 + progress.ResolvedSteps),
-                        $"Identifying children ({progress.RootChildCount} found)",
+                        progress.Phase == AutoIdentifyProgressPhase.Applying
+                            ? 90
+                            : Math.Min(90, 10 + progress.ResolvedSteps),
+                        progress.Phase == AutoIdentifyProgressPhase.Applying
+                            ? FormatApplyProgressMessage(progress)
+                            : $"Identifying children ({progress.RootChildCount} found)",
                         token)),
                 cancellationToken);
         } catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) {
@@ -55,4 +59,9 @@ public sealed class AutoIdentifyJobHandler(
             await context.ReportProgressAsync(100, result.SkipReason ?? "No confident match", cancellationToken);
         }
     }
+
+    private static string FormatApplyProgressMessage(AutoIdentifyProgress progress) =>
+        string.IsNullOrWhiteSpace(progress.CurrentTitle)
+            ? "Applying metadata"
+            : $"Applying metadata: {progress.CurrentTitle}";
 }

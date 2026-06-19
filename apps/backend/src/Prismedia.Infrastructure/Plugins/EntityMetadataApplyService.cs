@@ -185,7 +185,7 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
         EntityMetadataProposal proposal,
         IReadOnlyCollection<string> selectedFields,
         IReadOnlyDictionary<string, string?>? selectedImages,
-        IdentifyApplyProgressReporter? progress,
+        IIdentifyApplyProgressReporter? progress,
         CancellationToken cancellationToken) {
         ArgumentNullException.ThrowIfNull(proposal);
         ArgumentNullException.ThrowIfNull(selectedFields);
@@ -201,7 +201,7 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
         var now = DateTimeOffset.UtcNow;
         var rootTitle = !string.IsNullOrWhiteSpace(patch.Title) ? patch.Title.Trim() : entity.Title;
         var rootPath = new[] { rootTitle };
-        progress?.ReportEntity(entity.KindCode.DecodeAs<EntityKind>(), rootTitle, rootPath);
+        await ReportApplyProgressAsync(progress, entity.KindCode.DecodeAs<EntityKind>(), rootTitle, rootPath, cancellationToken);
 
         if (selected.Contains("title") && !string.IsNullOrWhiteSpace(patch.Title)) {
             entity.Title = patch.Title.Trim();

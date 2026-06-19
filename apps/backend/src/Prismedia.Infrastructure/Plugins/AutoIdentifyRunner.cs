@@ -174,7 +174,7 @@ public sealed class AutoIdentifyRunner(
             var images = SelectDefaultImages(proposal);
             var acceptedProposal = AcceptedProposalMarker.MarkTreeOrganized(proposal);
             inactivity?.Reset();
-            var applied = await identify.ApplyAsync(entityId, acceptedProposal, fields, images, runToken);
+            var applied = await identify.ApplyAsync(entityId, acceptedProposal, fields, images, runToken, progressSink);
             if (!applied) {
                 continue;
             }
@@ -334,7 +334,7 @@ public sealed class AutoIdentifyRunner(
 
     private sealed class AutoIdentifyProgressSink(
         AutoIdentifyRunOptions options,
-        ProgressSensitiveCancellation? timeout) : IIdentifyCascadeSink {
+        ProgressSensitiveCancellation? timeout) : IIdentifyCascadeSink, IIdentifyApplyProgressReporter {
         private int _resolvedSteps;
         private int _rootChildCount;
 
@@ -347,13 +347,24 @@ public sealed class AutoIdentifyRunner(
 
         public async Task OnEntityResolvedAsync(EntityMetadataProposal partialRoot, CancellationToken cancellationToken) {
             Interlocked.Exchange(ref _rootChildCount, EntityMetadataProposalTraversal.StructuralChildren(partialRoot).Count);
-            await ReportProgressAsync(cancellationToken);
+            await ReportProgressAsync(cancellationToken, AutoIdentifyProgressPhase.Identifying);
         }
 
         public Task OnProgressAsync(CancellationToken cancellationToken) =>
-            ReportProgressAsync(cancellationToken);
+            ReportProgressAsync(cancellationToken, AutoIdentifyProgressPhase.Identifying);
 
-        private async Task ReportProgressAsync(CancellationToken cancellationToken) {
+        public Task ReportEntityAsync(
+            EntityKind kind,
+            string title,
+            IReadOnlyList<string> path,
+            CancellationToken cancellationToken) =>
+            ReportProgressAsync(cancellationToken, AutoIdentifyProgressPhase.Applying, title, path);
+
+        private async Task ReportProgressAsync(
+            CancellationToken cancellationToken,
+            AutoIdentifyProgressPhase phase,
+            string? currentTitle = null,
+            IReadOnlyList<string>? currentPath = null) {
             timeout?.Reset();
             var steps = Interlocked.Increment(ref _resolvedSteps);
             if (options.ReportProgressAsync is null) {
@@ -361,7 +372,12 @@ public sealed class AutoIdentifyRunner(
             }
 
             await options.ReportProgressAsync(
-                new AutoIdentifyProgress(steps, Volatile.Read(ref _rootChildCount)),
+                new AutoIdentifyProgress(
+                    phase,
+                    steps,
+                    Volatile.Read(ref _rootChildCount),
+                    currentTitle,
+                    currentPath),
                 cancellationToken);
         }
 

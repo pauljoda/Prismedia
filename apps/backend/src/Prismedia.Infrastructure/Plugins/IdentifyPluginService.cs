@@ -259,8 +259,9 @@ public sealed partial class IdentifyPluginService : IIdentifyProviderService {
         EntityMetadataProposal proposal,
         IReadOnlyCollection<string> selectedFields,
         IReadOnlyDictionary<string, string?>? selectedImages,
-        CancellationToken cancellationToken) =>
-        _apply.ApplyAsync(entityId, proposal, selectedFields, selectedImages, cancellationToken);
+        CancellationToken cancellationToken,
+        IIdentifyApplyProgressReporter? progress = null) =>
+        _apply.ApplyAsync(entityId, proposal, selectedFields, selectedImages, progress, cancellationToken);
 
     /// <summary>
     /// Applies selected metadata proposal fields to an entity while publishing live progress.
@@ -270,7 +271,7 @@ public sealed partial class IdentifyPluginService : IIdentifyProviderService {
         EntityMetadataProposal proposal,
         IReadOnlyCollection<string> selectedFields,
         IReadOnlyDictionary<string, string?>? selectedImages,
-        IdentifyApplyProgressReporter? progress,
+        IIdentifyApplyProgressReporter? progress,
         CancellationToken cancellationToken) =>
         _apply.ApplyAsync(entityId, proposal, selectedFields, selectedImages, progress, cancellationToken);
 

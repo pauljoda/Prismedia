@@ -41,5 +41,6 @@ public interface IIdentifyProviderService {
         EntityMetadataProposal proposal,
         IReadOnlyCollection<string> selectedFields,
         IReadOnlyDictionary<string, string?>? selectedImages,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        IIdentifyApplyProgressReporter? progress = null);
 }
