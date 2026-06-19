@@ -249,6 +249,7 @@ public sealed class CollectionRuleEngineSqlTests {
         yield return Case("height", "greater_than", 480, EntityKindRegistry.Image.Code);
         yield return Case("format", "equals", "jpeg", EntityKindRegistry.Image.Code);
         yield return Case("bitRate", "greater_than", 128000, EntityKindRegistry.AudioTrack.Code);
+        yield return Case("sampleRate", "greater_than", 44100, EntityKindRegistry.AudioTrack.Code);
         yield return Case("channels", "equals", 2, EntityKindRegistry.AudioTrack.Code);
     }
 

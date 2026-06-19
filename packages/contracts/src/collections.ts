@@ -101,6 +101,7 @@ export const COLLECTION_RULE_FIELDS: CollectionRuleFieldDef[] = [
 
   // Audio-specific
   { field: "bitRate", label: "Bit Rate", fieldType: "number", entityTypes: ["audio-track"], operators: ["greater_than", "less_than", "between"] },
+  { field: "sampleRate", label: "Sample Rate", fieldType: "number", entityTypes: ["audio-track"], operators: ["equals", "greater_than", "less_than", "between"] },
   { field: "channels", label: "Channels", fieldType: "number", entityTypes: ["audio-track"], operators: ["equals", "greater_than", "less_than"] },
 ];
 

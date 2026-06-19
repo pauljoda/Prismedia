@@ -420,25 +420,25 @@ public sealed class CollectionCommandService(
             return false;
         }
 
+        var value = condition.Value.Value;
         if (condition.Operator is "between") {
-            return ValidateBetweenValue(condition, out message);
+            return ValidateBetweenValue(condition.Field, value, out message);
         }
 
         if (condition.Operator is "in" or "not_in") {
-            return ValidateArrayValue(condition.Value.Value, out message);
+            return ValidateArrayValue(value, out message);
         }
 
-        if (condition.Value.Value.ValueKind is JsonValueKind.Object or JsonValueKind.Array) {
+        if (value.ValueKind is JsonValueKind.Object or JsonValueKind.Array) {
             message = "Collection rule condition value must be a scalar.";
             return false;
         }
 
-        return ValidateTypedScalarValue(condition, out message);
+        return ValidateTypedScalarValue(condition.Field, value, out message);
     }
 
-    private static bool ValidateBetweenValue(CollectionRuleCondition condition, out string message) {
+    private static bool ValidateBetweenValue(string field, JsonElement value, out string message) {
         message = string.Empty;
-        var value = condition.Value.Value;
         if (value.ValueKind != JsonValueKind.Array) {
             message = "Collection rule between value must be an array.";
             return false;
@@ -458,7 +458,7 @@ public sealed class CollectionCommandService(
             return false;
         }
 
-        return condition.Field switch {
+        return field switch {
             "date" => value.EnumerateArray().All(IsDateValue) ||
                 InvalidRule("Collection rule date values must be valid dates.", out message),
             "createdAt" => value.EnumerateArray().All(IsDateTimeValue) ||
@@ -484,12 +484,12 @@ public sealed class CollectionCommandService(
         return true;
     }
 
-    private static bool ValidateTypedScalarValue(CollectionRuleCondition condition, out string message) {
+    private static bool ValidateTypedScalarValue(string field, JsonElement value, out string message) {
         message = string.Empty;
-        return condition.Field switch {
-            "date" when !IsDateValue(condition.Value.Value) =>
+        return field switch {
+            "date" when !IsDateValue(value) =>
                 InvalidRule("Collection rule date value must be a valid date.", out message),
-            "createdAt" when !IsDateTimeValue(condition.Value.Value) =>
+            "createdAt" when !IsDateTimeValue(value) =>
                 InvalidRule("Collection rule added-date value must be a valid timestamp.", out message),
             _ => true
         };

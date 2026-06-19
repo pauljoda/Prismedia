@@ -43,6 +43,7 @@ describe("collection detail route", () => {
     expect(editorSource).toContain("ConditionBuilder");
     expect(modelsSource).toContain('"playCount"');
     expect(modelsSource).toContain('"skipCount"');
+    expect(modelsSource).toContain('"sampleRate"');
     expect(modelsSource).toContain("\"video-series\"");
     expect(conditionBuilderSource).toContain("value: \"video-series\"");
   });

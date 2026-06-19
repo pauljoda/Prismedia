@@ -93,6 +93,7 @@ export const COLLECTION_RULE_FIELDS: CollectionRuleFieldDef[] = [
   { field: "height", label: "Height", fieldType: "number", entityTypes: ["image"], operators: ["greater_than", "less_than", "between"] },
   { field: "format", label: "Format", fieldType: "text", entityTypes: ["image"], operators: ["equals", "not_equals", "in", "not_in"] },
   { field: "bitRate", label: "Bit Rate", fieldType: "number", entityTypes: ["audio-track"], operators: ["greater_than", "less_than", "between"] },
+  { field: "sampleRate", label: "Sample Rate", fieldType: "number", entityTypes: ["audio-track"], operators: ["equals", "greater_than", "less_than", "between"] },
   { field: "channels", label: "Channels", fieldType: "number", entityTypes: ["audio-track"], operators: ["equals", "greater_than", "less_than"] },
 ];
 
