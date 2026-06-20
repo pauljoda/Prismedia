@@ -33,12 +33,16 @@ public interface IIdentifyCascadeRunner {
 /// <param name="Query">Query (typically the picked candidate's external id) used to seed the root.</param>
 /// <param name="HideNsfw">NSFW visibility carried from the originating request.</param>
 /// <param name="IsForeground">True when this cascade belongs to a direct manual identify search.</param>
+/// <param name="GateApply">True when this cascade is resolving structural children and should keep Accept gated.</param>
+/// <param name="ExpectedProposalId">Root proposal id this cascade is allowed to stream into when it does not gate Accept.</param>
 public sealed record IdentifyCascadePayload(
     Guid EntityId,
     string Provider,
     IdentifyQuery? Query,
     bool HideNsfw,
-    bool IsForeground = false) {
+    bool IsForeground = false,
+    bool GateApply = true,
+    string? ExpectedProposalId = null) {
     public string ToJson() => JsonSerializer.Serialize(this);
 
     public static IdentifyCascadePayload Parse(string payloadJson) =>

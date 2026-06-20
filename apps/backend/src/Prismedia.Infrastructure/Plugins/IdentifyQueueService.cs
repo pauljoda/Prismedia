@@ -673,7 +673,15 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
             return;
         }
 
-        var payload = new IdentifyCascadePayload(entity.Id, provider, query, hideNsfw, isForeground);
+        var gatesApply = needsStructuralCascade;
+        var payload = new IdentifyCascadePayload(
+            entity.Id,
+            provider,
+            query,
+            hideNsfw,
+            isForeground,
+            GateApply: gatesApply,
+            ExpectedProposalId: gatesApply ? null : proposal.ProposalId);
         var job = await _jobs.EnqueueAsync(
             new EnqueueJobRequest(
                 JobType.IdentifyCascade,
@@ -684,7 +692,9 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
                 Priority: JobPriorities.InteractiveIdentify,
                 Lane: isForeground ? JobRunLane.ForegroundIdentify : null),
             cancellationToken);
-        row.CascadeJobId = job.Id;
+        if (gatesApply) {
+            row.CascadeJobId = job.Id;
+        }
     }
 
     private async Task<bool> HasHydratableRelationshipsAsync(
@@ -765,7 +775,16 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
     /// </summary>
     public async Task RunCascadeAsync(IdentifyCascadePayload payload, Guid cascadeJobId, bool isFinalAttempt, CancellationToken cancellationToken) {
         try {
-            var sink = new QueueProposalSink(this, payload.EntityId, cascadeJobId);
+            var sink = new QueueProposalSink(
+                this,
+                payload.EntityId,
+                cascadeJobId,
+                payload.GateApply,
+                payload.ExpectedProposalId);
+            if (!await sink.IsActiveAsync(cancellationToken)) {
+                return;
+            }
+
             var response = await _identify.IdentifyAsync(
                 payload.EntityId,
                 payload.Provider,
@@ -780,13 +799,20 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
             // state explicit and resilient to a 0-child cascade that never flushed) — but only while the
             // item is still queued and still ours, so a removed or superseded item is never revived.
             if (response.Ok && response.Result?.Patch is not null
-                && await IsCascadeActiveAsync(payload.EntityId, cascadeJobId, cancellationToken)) {
+                && await IsCascadeActiveAsync(
+                    payload.EntityId,
+                    cascadeJobId,
+                    payload.GateApply,
+                    payload.ExpectedProposalId,
+                    cancellationToken)) {
                 await SaveProposalSafelyAsync(payload.EntityId, response.Result, cancellationToken);
             }
 
             // The cascade finished (with a tree, or with no further matches): clear the marker so the
             // review screen's Accept unlocks. Id-guarded, so a superseding search's newer marker survives.
-            await ClearCascadeJobAsync(payload.EntityId, cascadeJobId, CancellationToken.None);
+            if (payload.GateApply) {
+                await ClearCascadeJobAsync(payload.EntityId, cascadeJobId, CancellationToken.None);
+            }
         } catch (OperationCanceledException) {
             // Superseded/deleted (CancelCascadeAsync already replaced or cleared our marker, so a clear
             // here would be a no-op) or worker shutdown (the run is recovered and re-attempted later).
@@ -797,7 +823,7 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
             // tree, so cascadeRunning has to stay true or the review screen would unlock Accept on a
             // half-resolved proposal during the retry gap. Clear only when this final attempt failed, so a
             // permanently-failed cascade does not leave Accept disabled forever.
-            if (isFinalAttempt) {
+            if (isFinalAttempt && payload.GateApply) {
                 await ClearCascadeJobAsync(payload.EntityId, cascadeJobId, CancellationToken.None);
             }
 
@@ -811,12 +837,33 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
     /// cascade's job id (or transiently unmarked). Returns false once the user removes the item or a
     /// newer search supersedes it, which is the signal for the cascade to stop walking and stop writing.
     /// </summary>
-    private async Task<bool> IsCascadeActiveAsync(Guid entityId, Guid cascadeJobId, CancellationToken cancellationToken) {
+    private async Task<bool> IsCascadeActiveAsync(
+        Guid entityId,
+        Guid cascadeJobId,
+        bool gateApply,
+        string? expectedProposalId,
+        CancellationToken cancellationToken) {
         var row = await _db.IdentifyQueueItems
             .AsNoTracking()
             .FirstOrDefaultAsync(item => item.EntityId == entityId, cancellationToken);
-        return row is { State: IdentifyQueueState.Proposal }
-            && (row.CascadeJobId == cascadeJobId || row.CascadeJobId is null);
+        if (row is not { State: IdentifyQueueState.Proposal }) {
+            return false;
+        }
+
+        if (gateApply) {
+            return row.CascadeJobId == cascadeJobId || row.CascadeJobId is null;
+        }
+
+        if (row.CascadeJobId is not null) {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(expectedProposalId)) {
+            return true;
+        }
+
+        var storedProposal = Deserialize<EntityMetadataProposal>(row.ProposalJson);
+        return string.Equals(storedProposal?.ProposalId, expectedProposalId, StringComparison.Ordinal);
     }
 
     private async Task SaveProposalSafelyAsync(Guid entityId, EntityMetadataProposal proposal, CancellationToken cancellationToken) {
@@ -835,12 +882,17 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
     /// lets the walk stop early; the re-check inside <see cref="OnEntityResolvedAsync"/> closes the gap
     /// between that check and the write so a just-removed item is never revived by a late flush.
     /// </summary>
-    private sealed class QueueProposalSink(IdentifyQueueService owner, Guid entityId, Guid cascadeJobId) : IIdentifyCascadeSink {
+    private sealed class QueueProposalSink(
+        IdentifyQueueService owner,
+        Guid entityId,
+        Guid cascadeJobId,
+        bool gateApply,
+        string? expectedProposalId) : IIdentifyCascadeSink {
         public Task<bool> IsActiveAsync(CancellationToken cancellationToken) =>
-            owner.IsCascadeActiveAsync(entityId, cascadeJobId, cancellationToken);
+            owner.IsCascadeActiveAsync(entityId, cascadeJobId, gateApply, expectedProposalId, cancellationToken);
 
         public async Task OnEntityResolvedAsync(EntityMetadataProposal partialRoot, CancellationToken cancellationToken) {
-            if (!await owner.IsCascadeActiveAsync(entityId, cascadeJobId, cancellationToken)) {
+            if (!await owner.IsCascadeActiveAsync(entityId, cascadeJobId, gateApply, expectedProposalId, cancellationToken)) {
                 return;
             }
 

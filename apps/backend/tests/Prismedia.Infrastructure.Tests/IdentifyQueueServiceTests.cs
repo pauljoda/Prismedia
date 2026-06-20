@@ -213,17 +213,19 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         var baseActor = Assert.Single(item.Proposal!.Relationships ?? []);
         Assert.Equal("Actor Shell", baseActor.Patch.Title);
         Assert.Null(baseActor.Patch.Description);
-        Assert.True(item.CascadeRunning);
+        Assert.False(item.CascadeRunning);
         Assert.Contains(queue.Enqueued, job => job.Type == JobType.IdentifyCascade);
         Assert.DoesNotContain(queue.Enqueued, job => job.Type == JobType.IdentifySearch);
 
-        var cascadeJobId = (await db.IdentifyQueueItems.AsNoTracking().SingleAsync(row => row.EntityId == entityId)).CascadeJobId!.Value;
+        var persistedBeforeHydration = await db.IdentifyQueueItems.AsNoTracking().SingleAsync(row => row.EntityId == entityId);
+        Assert.Null(persistedBeforeHydration.CascadeJobId);
+        var enqueuedCascade = Assert.Single(queue.Enqueued, job => job.Type == JobType.IdentifyCascade);
+        var payload = IdentifyCascadePayload.Parse(enqueuedCascade.PayloadJson!);
+        Assert.False(payload.GateApply);
+        Assert.Equal(item.Proposal.ProposalId, payload.ExpectedProposalId);
+        var cascadeJobId = Assert.Single(queue.Pending, job => job.Type == JobType.IdentifyCascade).Id;
         await service.RunCascadeAsync(
-            new IdentifyCascadePayload(
-                entityId,
-                "tmdb",
-                new IdentifyQuery(null, null, new Dictionary<string, string> { ["tmdb"] = "movie-1" }),
-                HideNsfw: false),
+            payload,
             cascadeJobId,
             isFinalAttempt: true,
             CancellationToken.None);
@@ -234,6 +236,48 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         Assert.Equal("Actor Shell", hydratedActor.Patch.Title);
         Assert.Equal("Hydrated actor biography.", hydratedActor.Patch.Description);
         Assert.False(hydrated.CascadeRunning);
+    }
+
+    [Fact]
+    public async Task ResolveCandidateAsyncAllowsApplyBeforeRelationshipHydrationFinishes() {
+        await using var db = CreateContext();
+        var entityId = Guid.Parse("33333333-3333-3333-3333-33333333334b");
+        SeedProvider(db);
+        SeedEntity(db, entityId, "video", "Cast Heavy Movie");
+        await db.SaveChangesAsync();
+        var queue = new RecordingJobQueue();
+        var executor = new RelationshipHydrationProcessExecutor();
+        var service = new IdentifyQueueService(
+            db,
+            CreateIdentifyService(db, executor, _tempRoot),
+            new InMemoryIdentifyApplyProgressStore(),
+            queue);
+        await service.AddAsync(entityId, CancellationToken.None);
+        var search = await SearchToCompletionAsync(
+            service,
+            db,
+            entityId,
+            new IdentifyQueueSearchRequest("tmdb", new IdentifyQuery("Cast Heavy", null, null)),
+            hideNsfw: false,
+            CancellationToken.None);
+        var candidate = Assert.Single(search.Candidates);
+        queue.Enqueued.Clear();
+
+        var item = await service.ResolveCandidateAsync(
+            entityId,
+            new IdentifyQueueCandidateRequest("tmdb", candidate),
+            hideNsfw: false,
+            CancellationToken.None);
+
+        Assert.False(item.CascadeRunning);
+        Assert.Contains(queue.Enqueued, job => job.Type == JobType.IdentifyCascade);
+        var applied = await service.ApplyAsync(
+            entityId,
+            new ApplyIdentifyQueueItemRequest(item.Proposal, ["title"], null),
+            CancellationToken.None);
+
+        Assert.Equal("done", applied.State);
+        Assert.Equal("Cast Heavy Movie identified", (await db.Entities.SingleAsync(row => row.Id == entityId)).Title);
     }
 
     [Fact]
