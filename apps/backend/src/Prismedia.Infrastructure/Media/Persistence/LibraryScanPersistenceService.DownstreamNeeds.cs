@@ -205,6 +205,55 @@ public sealed partial class LibraryScanPersistenceService {
         return detail?.SubtitlesExtractedAt is not null;
     }
 
+    public async Task<IReadOnlyList<EntityRefreshTarget>> GetAudioTrackTargetsInRootAsync(
+        Guid rootId, CancellationToken cancellationToken) {
+        var albumIds = await _db.AudioLibraryDetails.AsNoTracking()
+            .Where(detail => detail.LibraryRootId == rootId)
+            .Select(detail => detail.EntityId)
+            .ToListAsync(cancellationToken);
+
+        var targets = new Dictionary<Guid, EntityRefreshTarget>();
+        if (albumIds.Count > 0) {
+            var albumTracks = await _db.Entities.AsNoTracking()
+                .Where(entity => entity.KindCode == EntityKindRegistry.AudioTrack.Code &&
+                    entity.ParentEntityId != null &&
+                    albumIds.Contains(entity.ParentEntityId.Value))
+                .OrderBy(entity => entity.ParentEntityId)
+                .ThenBy(entity => entity.SortOrder)
+                .ThenBy(entity => entity.Title)
+                .Select(entity => new EntityRefreshTarget(entity.Id, entity.KindCode, entity.Title))
+                .ToListAsync(cancellationToken);
+
+            foreach (var track in albumTracks) {
+                targets[track.Id] = track;
+            }
+        }
+
+        var rootPath = await _db.LibraryRoots.AsNoTracking()
+            .Where(root => root.Id == rootId)
+            .Select(root => root.Path)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (!string.IsNullOrWhiteSpace(rootPath)) {
+            var looseTracks = await _db.EntityFiles.AsNoTracking()
+                .Where(file => file.Role == EntityFileRole.Source)
+                .Join(
+                    _db.Entities.AsNoTracking().Where(entity =>
+                        entity.KindCode == EntityKindRegistry.AudioTrack.Code &&
+                        entity.ParentEntityId == null),
+                    file => file.EntityId,
+                    entity => entity.Id,
+                    (file, entity) => new { entity.Id, entity.KindCode, entity.Title, file.Path })
+                .ToListAsync(cancellationToken);
+
+            foreach (var track in looseTracks.Where(track =>
+                         LibraryScanPathRules.IsDirectChildPath(track.Path, rootPath))) {
+                targets[track.Id] = new EntityRefreshTarget(track.Id, track.KindCode, track.Title);
+            }
+        }
+
+        return targets.Values.ToList();
+    }
+
     public async Task<IReadOnlyList<AutoIdentifyRootTarget>> ResolveAutoIdentifyRootsForLibraryRootAsync(
         Guid libraryRootId,
         IReadOnlyList<MediaCategory> scanCategories,

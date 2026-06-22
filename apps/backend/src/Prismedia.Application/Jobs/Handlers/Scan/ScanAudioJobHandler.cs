@@ -25,10 +25,17 @@ public sealed class ScanAudioJobHandler(
 
     protected override IReadOnlyList<MediaCategory> ScanCategories => [MediaCategory.Audio];
 
-    protected override Task OnNoFileChangesAsync(
-        JobContext context, LibraryRootData root, CancellationToken cancellationToken) =>
-        AutoIdentifyScanEnqueue.EnqueueExistingRootsForUnchangedScanAsync(
-            context, Roots, downstreamNeeds, root, ScanCategories, cancellationToken);
+    protected override async Task OnNoFileChangesAsync(
+        JobContext context, LibraryRootData root, CancellationToken cancellationToken) {
+        var settings = await Roots.GetSettingsAsync(cancellationToken);
+        if (!root.AutoIdentify) {
+            settings = settings with { AutoIdentifyEnabled = false };
+        }
+
+        await AutoIdentifyScanEnqueue.EnqueueExistingRootsForRootAsync(
+            context, settings, downstreamNeeds, root.Id, ScanCategories, cancellationToken);
+        await EnqueueExistingTrackJobsAsync(context, settings, root.Id, cancellationToken);
+    }
 
     protected override async Task ScanRootCoreAsync(JobContext context, LibraryRootData root, CancellationToken cancellationToken) {
         logger.LogInformation("ScanAudio: discovering audio files in {Path}", root.Path);
@@ -197,7 +204,8 @@ public sealed class ScanAudioJobHandler(
         Guid trackId,
         string title,
         CancellationToken cancellationToken) {
-        if (settings.AutoGenerateMetadata && !await downstreamNeeds.HasEntityTechnicalAsync(trackId, cancellationToken)) {
+        var hasTechnical = await downstreamNeeds.HasEntityTechnicalAsync(trackId, cancellationToken);
+        if (settings.AutoGenerateMetadata && !hasTechnical) {
             await context.EnqueueIfNeededAsync(
                 EnqueueJobRequest.ForEntity(
                     JobType.ProbeAudio,
@@ -217,6 +225,72 @@ public sealed class ScanAudioJobHandler(
                     title,
                     JobPriorities.Fingerprint),
                 cancellationToken);
+        }
+
+        if (settings.AutoGeneratePreview && hasTechnical &&
+            !await downstreamNeeds.HasEntityFileAsync(trackId, EntityFileRole.Waveform, cancellationToken)) {
+            await context.EnqueueIfNeededAsync(
+                EnqueueJobRequest.ForEntity(
+                    JobType.GenerateAudioWaveform,
+                    EntityKind.AudioTrack,
+                    trackId.ToString(),
+                    title,
+                    JobPriorities.Waveform),
+                cancellationToken);
+        }
+    }
+
+    private async Task EnqueueExistingTrackJobsAsync(
+        JobContext context,
+        LibrarySettingsData settings,
+        Guid rootId,
+        CancellationToken cancellationToken) {
+        var tracks = await audio.GetAudioTrackTargetsInRootAsync(rootId, cancellationToken);
+        if (tracks.Count == 0) {
+            return;
+        }
+
+        var needs = await downstreamNeeds.CheckDownstreamNeedsBatchAsync(
+            tracks.Select(track => track.Id).ToArray(), cancellationToken);
+        var requests = new List<EnqueueJobRequest>();
+        foreach (var track in tracks) {
+            if (!needs.TryGetValue(track.Id, out var entityNeeds)) {
+                continue;
+            }
+
+            var id = track.Id.ToString();
+            if (settings.AutoGenerateMetadata && entityNeeds.NeedsProbe) {
+                requests.Add(EnqueueJobRequest.ForEntity(
+                    JobType.ProbeAudio,
+                    EntityKind.AudioTrack,
+                    id,
+                    track.Title,
+                    JobPriorities.Probe));
+            }
+
+            if (FingerprintGating.ShouldFingerprint(settings, entityNeeds)) {
+                requests.Add(EnqueueJobRequest.ForEntity(
+                    JobType.FingerprintAudio,
+                    EntityKind.AudioTrack,
+                    id,
+                    track.Title,
+                    JobPriorities.Fingerprint));
+            }
+
+            if (settings.AutoGeneratePreview && !entityNeeds.NeedsProbe && entityNeeds.NeedsPreview) {
+                requests.Add(EnqueueJobRequest.ForEntity(
+                    JobType.GenerateAudioWaveform,
+                    EntityKind.AudioTrack,
+                    id,
+                    track.Title,
+                    JobPriorities.Waveform));
+            }
+        }
+
+        if (requests.Count > 0) {
+            var enqueued = await context.EnqueueBatchAsync(requests, cancellationToken);
+            logger.LogDebug("ScanAudio: enqueued {Enqueued}/{Total} downstream jobs for unchanged tracks",
+                enqueued, requests.Count);
         }
     }
 

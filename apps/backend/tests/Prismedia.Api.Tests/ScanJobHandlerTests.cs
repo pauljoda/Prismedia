@@ -409,6 +409,133 @@ public sealed class ScanJobHandlerTests {
     }
 
     [Fact]
+    public async Task AudioScanEnqueuesWaveformForAlreadyProbedTrackMissingWaveform() {
+        var root = new LibraryRootData(
+            Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            "/media/music",
+            "Music",
+            Enabled: true,
+            Recursive: true,
+            ScanVideos: false,
+            ScanImages: false,
+            ScanAudio: true,
+            ScanBooks: false,
+            IsNsfw: false);
+        var sourcePath = "/media/music/Album/song.flac";
+        var persistence = new FakeScanPersistence([root]) {
+            Settings = new LibrarySettingsData(
+                AutoGenerateMetadata: true,
+                AutoGenerateOshash: false,
+                AutoGenerateMd5: false,
+                AutoGeneratePreview: true,
+                GenerateTrickplay: false,
+                TrickplayIntervalSeconds: 10,
+                PreviewClipDurationSeconds: 8,
+                ThumbnailQuality: 2,
+                TrickplayQuality: 2),
+            HasTechnical = true
+        };
+        var queue = new RecordingJobQueue();
+        var handler = new ScanAudioJobHandler(
+            NullLogger<ScanAudioJobHandler>.Instance,
+            new RecordingFileDiscovery([sourcePath]),
+            persistence,
+            persistence,
+            persistence);
+        var job = new JobRunSnapshot(
+            Guid.NewGuid(),
+            JobType.ScanAudio,
+            JobRunStatus.Running,
+            Progress: 0,
+            Message: null,
+            PayloadJson: $$"""{"libraryRootId":"{{root.Id}}"}""",
+            TargetEntityKind: "library-root",
+            TargetEntityId: root.Id.ToString(),
+            TargetLabel: root.Label,
+            CreatedAt: DateTimeOffset.UtcNow,
+            StartedAt: DateTimeOffset.UtcNow,
+            FinishedAt: null);
+
+        await handler.HandleAsync(new JobContext(job, queue), CancellationToken.None);
+
+        var track = Assert.Single(persistence.UpsertedAudioTracks);
+        var request = Assert.Single(queue.Enqueued);
+        Assert.Equal(JobType.GenerateAudioWaveform, request.Type);
+        Assert.Equal(EntityKindRegistry.AudioTrack.Code, request.TargetEntityKind);
+        Assert.Equal(track.Id.ToString(), request.TargetEntityId);
+    }
+
+    [Fact]
+    public async Task AudioScanEnqueuesWaveformForUnchangedExistingTrackMissingWaveform() {
+        var root = new LibraryRootData(
+            Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            "/media/music",
+            "Music",
+            Enabled: true,
+            Recursive: true,
+            ScanVideos: false,
+            ScanImages: false,
+            ScanAudio: true,
+            ScanBooks: false,
+            IsNsfw: false);
+        var sourcePath = "/media/music/Album/song.flac";
+        var trackId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        var persistence = new FakeScanPersistence([root]) {
+            Settings = new LibrarySettingsData(
+                AutoGenerateMetadata: true,
+                AutoGenerateOshash: false,
+                AutoGenerateMd5: false,
+                AutoGeneratePreview: true,
+                GenerateTrickplay: false,
+                TrickplayIntervalSeconds: 10,
+                PreviewClipDurationSeconds: 8,
+                ThumbnailQuality: 2,
+                TrickplayQuality: 2),
+            ExistingAudioTrackTargets = [new EntityRefreshTarget(trackId, EntityKindRegistry.AudioTrack.Code, "song")],
+            DownstreamNeedsById = new Dictionary<Guid, DownstreamNeeds> {
+                [trackId] = new(
+                    NeedsProbe: false,
+                    MissingOshash: false,
+                    MissingMd5: false,
+                    NeedsPreview: true,
+                    NeedsTrickplay: false,
+                    NeedsSubtitleExtraction: false,
+                    NeedsGridThumbnail: false)
+            }
+        };
+        var snapshots = new FakeScanSnapshotStore();
+        snapshots.Seed(root.Id, JobType.ScanAudio.ToCode(), [sourcePath]);
+        var queue = new RecordingJobQueue();
+        var handler = new ScanAudioJobHandler(
+            NullLogger<ScanAudioJobHandler>.Instance,
+            new RecordingFileDiscovery([sourcePath]),
+            persistence,
+            persistence,
+            persistence,
+            snapshots);
+        var job = new JobRunSnapshot(
+            Guid.NewGuid(),
+            JobType.ScanAudio,
+            JobRunStatus.Running,
+            Progress: 0,
+            Message: null,
+            PayloadJson: $$"""{"libraryRootId":"{{root.Id}}"}""",
+            TargetEntityKind: "library-root",
+            TargetEntityId: root.Id.ToString(),
+            TargetLabel: root.Label,
+            CreatedAt: DateTimeOffset.UtcNow,
+            StartedAt: DateTimeOffset.UtcNow,
+            FinishedAt: null);
+
+        await handler.HandleAsync(new JobContext(job, queue), CancellationToken.None);
+
+        var request = Assert.Single(queue.Enqueued);
+        Assert.Equal(JobType.GenerateAudioWaveform, request.Type);
+        Assert.Equal(EntityKindRegistry.AudioTrack.Code, request.TargetEntityKind);
+        Assert.Equal(trackId.ToString(), request.TargetEntityId);
+    }
+
+    [Fact]
     public async Task AllRootsScanSkipsRootDeletedAfterInitialListing() {
         var activeRoot = new LibraryRootData(
             Guid.Parse("11111111-1111-1111-1111-111111111111"),
@@ -2257,6 +2384,13 @@ public sealed class ScanJobHandlerTests {
 
         public int ApplyCount { get; private set; }
 
+        public void Seed(Guid rootId, string scanKind, IReadOnlyList<string> paths) {
+            _store[(rootId, scanKind)] = paths.ToDictionary(
+                path => path,
+                path => new FileSignature(path, path.Length, 0),
+                StringComparer.OrdinalIgnoreCase);
+        }
+
         public Task<IReadOnlyList<FileSignature>> LoadAsync(Guid rootId, string scanKind, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<FileSignature>>(
                 _store.TryGetValue((rootId, scanKind), out var map) ? map.Values.ToArray() : []);
@@ -2294,6 +2428,8 @@ public sealed class ScanJobHandlerTests {
             ThumbnailQuality: 2,
             TrickplayQuality: 2);
         public IReadOnlyList<Guid> UpsertedVideoIds { get; init; } = [];
+        public bool HasTechnical { get; init; }
+        public IReadOnlyList<EntityRefreshTarget> ExistingAudioTrackTargets { get; init; } = [];
         public IReadOnlyDictionary<Guid, DownstreamNeeds> DownstreamNeedsById { get; init; } =
             new Dictionary<Guid, DownstreamNeeds>();
         public IReadOnlyList<AutoIdentifyRootTarget>? AutoIdentifyRootTargets { get; init; }
@@ -2445,6 +2581,10 @@ public sealed class ScanJobHandlerTests {
 
             return ids;
         }
+
+        public Task<IReadOnlyList<EntityRefreshTarget>> GetAudioTrackTargetsInRootAsync(
+            Guid rootId, CancellationToken cancellationToken) =>
+            Task.FromResult(ExistingAudioTrackTargets);
 
         public async Task<IReadOnlyList<Guid>> UpsertAudioLibrariesBatchAsync(IReadOnlyList<AudioLibraryUpsertItem> items, CancellationToken cancellationToken) {
             AudioLibraryBatchCalls++;
@@ -2642,7 +2782,7 @@ public sealed class ScanJobHandlerTests {
             Task.FromResult<IReadOnlyList<AutoIdentifyRootTarget>>(AutoIdentifyRootTargets ?? []);
 
         public Task<bool> HasEntityTechnicalAsync(Guid entityId, CancellationToken cancellationToken) =>
-            Task.FromResult(false);
+            Task.FromResult(HasTechnical);
 
         public Task<bool> HasEntityFingerprintAsync(Guid entityId, FingerprintAlgorithm algorithm, CancellationToken cancellationToken) =>
             Task.FromResult(false);

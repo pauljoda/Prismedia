@@ -104,6 +104,14 @@ public interface IAudioScanPersistence {
     Task<IReadOnlyList<Guid>> UpsertAudioTracksBatchAsync(
         IReadOnlyList<AudioTrackUpsertItem> items, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Lists existing audio tracks under a library root without re-running discovery/upsert. Used by
+    /// unchanged scans to recover downstream work such as cancelled waveform jobs.
+    /// </summary>
+    Task<IReadOnlyList<EntityRefreshTarget>> GetAudioTrackTargetsInRootAsync(
+        Guid rootId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<EntityRefreshTarget>>([]);
+
     Task<int> RemoveStaleLooseAudioTracksInRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken);
     Task<int> RemoveStaleAudioTracksInLibraryAsync(Guid libraryEntityId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken);
     Task<int> RemoveStaleAudioLibrariesInRootAsync(Guid rootId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken);
