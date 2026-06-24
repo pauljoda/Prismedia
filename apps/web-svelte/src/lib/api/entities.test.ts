@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getListEntitiesUrl } from "$lib/api/generated/prismedia";
+import { getGetEntityThumbnailsUrl, getListEntitiesUrl } from "$lib/api/generated/prismedia";
 
 describe("generated entity API", () => {
   it("includes typed list query params used by generated-client consumers", () => {
@@ -15,5 +15,12 @@ describe("generated entity API", () => {
     expect(url).toContain("query=matrix");
     expect(url).toContain("hideNsfw=true");
     expect(url).toContain("limit=25");
+  });
+
+  it("includes NSFW visibility on thumbnail hydration requests", () => {
+    const url = getGetEntityThumbnailsUrl({ hideNsfw: true });
+
+    expect(url).toContain("/api/entities/thumbnails?");
+    expect(url).toContain("hideNsfw=true");
   });
 });

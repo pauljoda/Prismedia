@@ -12,8 +12,9 @@
   } from "@lucide/svelte";
   import { Button, cn } from "@prismedia/ui-svelte";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
-  import { apiAssetUrl } from "$lib/api/orval-fetch";
+  import { fetchEntityThumbnails } from "$lib/api/entities";
   import { fetchPlaybackStatistics } from "$lib/api/playback-statistics";
+  import { entityCardToThumbnailCard } from "$lib/entities/entity-grid";
   import {
     entityReferenceToThumbnailCard,
     toAspectRatioNumeric,
@@ -79,9 +80,11 @@
   let kindFilter = $state<KindFilter>(ALL_FILTER);
   let eventFilter = $state<EventFilter>(PLAYBACK_EVENT_KIND.completed);
   let stats = $state<PlaybackStatisticsResponse | null>(null);
+  let thumbnailCardsById = $state.raw<Map<string, EntityThumbnailCard>>(new Map());
   let loading = $state(true);
   let error = $state<string | null>(null);
   let activeRequest = 0;
+  let selectedChartDate = $state<string | null>(null);
 
   const topEntities = $derived(stats?.topEntities ?? []);
   const recentEvents = $derived(stats?.recentEvents ?? []);
@@ -93,9 +96,18 @@
   const maxDailyEvents = $derived(
     Math.max(1, ...dailyChartBuckets.map((bucket) => countBucketEvents(bucket))),
   );
+  const selectedChartBucket = $derived.by(() => {
+    if (dailyChartBuckets.length === 0) return null;
+    if (selectedChartDate) {
+      const selected = dailyChartBuckets.find((bucket) => bucket.date === selectedChartDate);
+      if (selected) return selected;
+    }
+    return dailyChartBuckets[dailyChartBuckets.length - 1] ?? null;
+  });
   const dailyActivityLabel = $derived(activityLabelFor(eventFilter));
   const showCompletedLegend = $derived(eventFilter !== PLAYBACK_EVENT_KIND.skipped);
   const showSkippedLegend = $derived(eventFilter !== PLAYBACK_EVENT_KIND.completed);
+  const selectedChartTotal = $derived(selectedChartBucket ? countBucketEvents(selectedChartBucket) : 0);
   const summaryFrom = $derived(stats ? formatDate(stats.from) : "");
   const summaryTo = $derived(stats ? formatDate(stats.to) : "");
   const showEmpty = $derived(!loading && !error && (stats?.totalEvents ?? 0) === 0);
@@ -108,14 +120,16 @@
     loading = true;
     error = null;
 
-    fetchPlaybackStatistics(params, { signal: controller.signal })
-      .then((response) => {
+    loadStatistics(params, nsfw.mode === "off", controller.signal)
+      .then(({ response, thumbnails }) => {
         if (requestId !== activeRequest) return;
         stats = response;
+        thumbnailCardsById = thumbnails;
       })
       .catch((err) => {
         if (requestId !== activeRequest || isAbortError(err)) return;
         stats = null;
+        thumbnailCardsById = new Map();
         error = err instanceof Error ? err.message : "Failed to load playback statistics";
       })
       .finally(() => {
@@ -124,6 +138,24 @@
 
     return () => controller.abort();
   });
+
+  async function loadStatistics(
+    params: ReturnType<typeof buildQuery>,
+    hideNsfw: boolean,
+    signal: AbortSignal,
+  ): Promise<{ response: PlaybackStatisticsResponse; thumbnails: Map<string, EntityThumbnailCard> }> {
+    const response = await fetchPlaybackStatistics(params, { signal });
+    const thumbnails = await fetchEntityThumbnails(entityIdsForStatistics(response), { hideNsfw, signal });
+    return {
+      response,
+      thumbnails: new Map(
+        thumbnails.map((thumbnail) => [
+          thumbnail.id,
+          entityCardToThumbnailCard(thumbnail, resolveEntityHref(thumbnail.kind, thumbnail.id)),
+        ]),
+      ),
+    };
+  }
 
   function buildQuery(
     selectedTimeframe: TimeframeKey,
@@ -159,6 +191,15 @@
     return Number(bucket.completedCount) + Number(bucket.skippedCount);
   }
 
+  function entityIdsForStatistics(response: PlaybackStatisticsResponse): string[] {
+    return [
+      ...new Set([
+        ...response.topEntities.map((entity) => entity.id),
+        ...response.recentEvents.map((event) => event.entityId),
+      ]),
+    ];
+  }
+
   function formatNumber(value: number | string | null | undefined): string {
     return Number(value ?? 0).toLocaleString();
   }
@@ -169,8 +210,13 @@
   }
 
   function formatShortDate(value: string): string {
-    return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" })
-      .format(new Date(value));
+    return formatDateOnly(value, { month: "short", day: "numeric" });
+  }
+
+  function formatDateOnly(value: string, options: Intl.DateTimeFormatOptions): string {
+    const [year, month, day] = value.split("-").map(Number);
+    if (!year || !month || !day) return value;
+    return new Intl.DateTimeFormat(undefined, options).format(new Date(year, month - 1, day));
   }
 
   function formatEventTime(value: string): string {
@@ -198,26 +244,40 @@
     return "Plays and skips by active day";
   }
 
-  function coverFor(entity: Pick<PlaybackStatisticsEntity | PlaybackStatisticsEvent, "coverUrl">): string | undefined {
-    return apiAssetUrl(entity.coverUrl);
+  function chartBucketLabel(bucket: PlaybackStatisticsBucket): string {
+    const completed = Number(bucket.completedCount);
+    const skipped = Number(bucket.skippedCount);
+    const total = completed + skipped;
+    return `${formatDateOnly(bucket.date, { month: "long", day: "numeric", year: "numeric" })}: ${formatNumber(total)} events, ${formatNumber(completed)} plays, ${formatNumber(skipped)} skips`;
+  }
+
+  function chartBucketSegmentHeight(value: number, total: number): string {
+    if (value <= 0 || total <= 0) return "0%";
+    return `${Math.max(2, Math.round((value / total) * 100))}%`;
   }
 
   function topEntityThumbnail(entity: PlaybackStatisticsEntity): EntityThumbnailCard {
-    return entityReferenceToThumbnailCard({
-      id: entity.id,
-      kind: entity.kind,
-      title: entity.title,
-      thumbnailUrl: coverFor(entity),
-    });
+    return (
+      thumbnailCardsById.get(entity.id) ??
+      entityReferenceToThumbnailCard({
+        id: entity.id,
+        kind: entity.kind,
+        title: entity.title,
+        thumbnailUrl: entity.coverUrl,
+      })
+    );
   }
 
   function recentEventThumbnail(event: PlaybackStatisticsEvent): EntityThumbnailCard {
-    return entityReferenceToThumbnailCard({
-      id: event.entityId,
-      kind: event.entityKind,
-      title: event.entityTitle,
-      thumbnailUrl: coverFor(event),
-    });
+    return (
+      thumbnailCardsById.get(event.entityId) ??
+      entityReferenceToThumbnailCard({
+        id: event.entityId,
+        kind: event.entityKind,
+        title: event.entityTitle,
+        thumbnailUrl: event.coverUrl,
+      })
+    );
   }
 
   function thumbnailWidth(card: EntityThumbnailCard): string {
@@ -235,14 +295,25 @@
 
   function selectTimeframe(value: TimeframeKey) {
     timeframe = value;
+    selectedChartDate = null;
   }
 
   function selectKind(value: KindFilter) {
     kindFilter = value;
+    selectedChartDate = null;
   }
 
   function selectEvent(value: EventFilter) {
     eventFilter = value;
+    selectedChartDate = null;
+  }
+
+  function selectChartBucket(date: string) {
+    selectedChartDate = selectedChartDate === date ? null : date;
+  }
+
+  function clearChartSelection() {
+    selectedChartDate = null;
   }
 </script>
 
@@ -387,7 +458,17 @@
             <h2 class="font-heading text-base text-text-primary">Daily Activity</h2>
             <p class="text-xs text-text-muted">{dailyActivityLabel}</p>
           </div>
-          <RotateCcw class="h-3.5 w-3.5 text-text-muted" />
+          <Button
+            variant="ghost"
+            size="icon"
+            class="h-7 w-7"
+            title="Reset selected day"
+            aria-label="Reset selected day"
+            disabled={!selectedChartDate}
+            onclick={clearChartSelection}
+          >
+            <RotateCcw class="h-3.5 w-3.5" />
+          </Button>
         </div>
 
         <div class="px-3 py-3">
@@ -398,31 +479,63 @@
               {@const total = completed + skipped}
               {@const height = Math.max(4, Math.round((total / maxDailyEvents) * 100))}
               <div class="group flex min-w-7 flex-1 flex-col items-center justify-end gap-1">
-                <div
-                  class="flex w-full max-w-9 flex-col justify-end overflow-hidden rounded-xs border border-border-subtle bg-surface-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+                <button
+                  type="button"
+                  class={cn(
+                    "flex w-full max-w-9 flex-col justify-end overflow-hidden rounded-xs border bg-surface-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/25 focus-visible:ring-offset-1 focus-visible:ring-offset-bg",
+                    selectedChartBucket?.date === bucket.date
+                      ? "border-accent-300/70 shadow-[0_0_18px_rgba(242,194,106,0.22),inset_0_1px_0_rgba(255,255,255,0.06)]"
+                      : "border-border-subtle hover:border-border-accent hover:bg-surface-3/70",
+                  )}
                   style="height: {height}%"
                   title={`${formatShortDate(bucket.date)}: ${total} events`}
+                  aria-label={chartBucketLabel(bucket)}
+                  aria-pressed={selectedChartBucket?.date === bucket.date}
+                  onclick={() => selectChartBucket(bucket.date)}
                 >
                   {#if skipped > 0}
-                    <div
+                    <span
                       class="bg-warning/80"
-                      style="height: {Math.max(2, Math.round((skipped / Math.max(1, total)) * height))}%"
-                    ></div>
+                      style="height: {chartBucketSegmentHeight(skipped, total)}"
+                    ></span>
                   {/if}
                   {#if completed > 0}
-                    <div class="flex-1 bg-accent-300/85 shadow-[0_0_12px_rgba(242,194,106,0.22)]"></div>
+                    <span class="flex-1 bg-accent-300/85 shadow-[0_0_12px_rgba(242,194,106,0.22)]"></span>
                   {/if}
-                </div>
+                </button>
               </div>
             {/each}
           </div>
 
-          <div class="mt-2 flex items-center gap-4 text-xs text-text-muted">
-            {#if showCompletedLegend}
-              <span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-xs bg-accent-300"></span>Plays</span>
-            {/if}
-            {#if showSkippedLegend}
-              <span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-xs bg-warning"></span>Skips</span>
+          <div class="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div class="flex items-center gap-4 text-xs text-text-muted">
+              {#if showCompletedLegend}
+                <span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-xs bg-accent-300"></span>Plays</span>
+              {/if}
+              {#if showSkippedLegend}
+                <span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-xs bg-warning"></span>Skips</span>
+              {/if}
+            </div>
+
+            {#if selectedChartBucket}
+              <div class="flex flex-wrap items-center gap-2 text-xs">
+                <span class="font-medium text-text-primary">
+                  {formatDateOnly(selectedChartBucket.date, { month: "long", day: "numeric", year: "numeric" })}
+                </span>
+                <span class="rounded-xs border border-border-subtle bg-surface-2 px-1.5 py-0.5 font-mono text-text-muted">
+                  {formatNumber(selectedChartTotal)} events
+                </span>
+                {#if showCompletedLegend}
+                  <span class="rounded-xs border border-border-accent bg-accent-950/40 px-1.5 py-0.5 font-mono text-text-accent-bright">
+                    {formatNumber(selectedChartBucket.completedCount)} plays
+                  </span>
+                {/if}
+                {#if showSkippedLegend}
+                  <span class="rounded-xs border border-warning/30 bg-warning-muted/30 px-1.5 py-0.5 font-mono text-warning-text">
+                    {formatNumber(selectedChartBucket.skippedCount)} skips
+                  </span>
+                {/if}
+              </div>
             {/if}
           </div>
         </div>
@@ -454,7 +567,6 @@
                 <div class="stats-thumb" style:width={thumbnailWidth(thumbnail)}>
                   <EntityThumbnail
                     card={thumbnail}
-                    hoverPreviewsEnabled={false}
                     imageLoading="lazy"
                     interactive={false}
                     mediaOnly
@@ -499,7 +611,6 @@
             <div class="stats-thumb" style:width={thumbnailWidth(thumbnail)}>
               <EntityThumbnail
                 card={thumbnail}
-                hoverPreviewsEnabled={false}
                 imageLoading="lazy"
                 interactive={false}
                 mediaOnly

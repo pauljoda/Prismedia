@@ -23,6 +23,10 @@ export type EntityRelationshipGroup = GeneratedEntityGroup;
 export type EntityThumbnail = GeneratedEntityThumbnail;
 export type EntityListResponse = GeneratedEntityListResponse;
 
+export interface EntityThumbnailRequestOptions extends RequestOptions {
+  hideNsfw?: boolean;
+}
+
 export function fetchEntities(
   params?: ListEntitiesParams,
   options?: RequestOptions,
@@ -34,12 +38,16 @@ export function fetchEntities(
 
 export async function fetchEntityThumbnails(
   ids: string[],
-  options?: RequestOptions,
+  options?: EntityThumbnailRequestOptions,
 ): Promise<EntityThumbnail[]> {
   const uniqueIds = [...new Set(ids.filter(Boolean))];
   if (uniqueIds.length === 0) return [];
 
-  const response = await getEntityThumbnails({ ids: uniqueIds }, undefined, requestInit(options));
+  const response = await getEntityThumbnails(
+    { ids: uniqueIds },
+    { hideNsfw: options?.hideNsfw },
+    requestInit(options),
+  );
   return (response.data as GeneratedEntityThumbnailBatchResponse).items;
 }
 
