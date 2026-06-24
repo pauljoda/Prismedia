@@ -6,7 +6,6 @@
     Eye,
     History,
     Loader2,
-    RotateCcw,
     SkipForward,
     Trophy,
   } from "@lucide/svelte";
@@ -93,20 +92,24 @@
     const activeBuckets = dailyEvents.filter((bucket) => countBucketEvents(bucket) > 0);
     return activeBuckets.length > 0 ? activeBuckets : dailyEvents;
   });
+  const dailyActivityBuckets = $derived.by(() => [...dailyChartBuckets].reverse());
   const maxDailyEvents = $derived(
     Math.max(1, ...dailyChartBuckets.map((bucket) => countBucketEvents(bucket))),
   );
   const selectedChartBucket = $derived.by(() => {
-    if (dailyChartBuckets.length === 0) return null;
+    if (dailyActivityBuckets.length === 0) return null;
     if (selectedChartDate) {
-      const selected = dailyChartBuckets.find((bucket) => bucket.date === selectedChartDate);
+      const selected = dailyActivityBuckets.find((bucket) => bucket.date === selectedChartDate);
       if (selected) return selected;
     }
-    return dailyChartBuckets[dailyChartBuckets.length - 1] ?? null;
+    return dailyActivityBuckets[0] ?? null;
   });
   const dailyActivityLabel = $derived(activityLabelFor(eventFilter));
   const showCompletedLegend = $derived(eventFilter !== PLAYBACK_EVENT_KIND.skipped);
   const showSkippedLegend = $derived(eventFilter !== PLAYBACK_EVENT_KIND.completed);
+  const dailyActivityCountLabel = $derived(
+    `${formatNumber(dailyActivityBuckets.length)} active ${dailyActivityBuckets.length === 1 ? "day" : "days"}`,
+  );
   const selectedChartTotal = $derived(selectedChartBucket ? countBucketEvents(selectedChartBucket) : 0);
   const summaryFrom = $derived(stats ? formatDate(stats.from) : "");
   const summaryTo = $derived(stats ? formatDate(stats.to) : "");
@@ -251,9 +254,18 @@
     return `${formatDateOnly(bucket.date, { month: "long", day: "numeric", year: "numeric" })}: ${formatNumber(total)} events, ${formatNumber(completed)} plays, ${formatNumber(skipped)} skips`;
   }
 
-  function chartBucketSegmentHeight(value: number, total: number): string {
-    if (value <= 0 || total <= 0) return "0%";
-    return `${Math.max(2, Math.round((value / total) * 100))}%`;
+  function chartBucketSummary(bucket: PlaybackStatisticsBucket): string {
+    const completed = Number(bucket.completedCount);
+    const skipped = Number(bucket.skippedCount);
+    const parts: string[] = [];
+    if (showCompletedLegend) parts.push(`${formatNumber(completed)} ${completed === 1 ? "play" : "plays"}`);
+    if (showSkippedLegend) parts.push(`${formatNumber(skipped)} ${skipped === 1 ? "skip" : "skips"}`);
+    return parts.join(" · ");
+  }
+
+  function chartBucketShareWidth(value: number): string {
+    if (value <= 0 || maxDailyEvents <= 0) return "0%";
+    return `${Math.min(100, Math.max(2, Math.round((value / maxDailyEvents) * 100)))}%`;
   }
 
   function topEntityThumbnail(entity: PlaybackStatisticsEntity): EntityThumbnailCard {
@@ -309,11 +321,7 @@
   }
 
   function selectChartBucket(date: string) {
-    selectedChartDate = selectedChartDate === date ? null : date;
-  }
-
-  function clearChartSelection() {
-    selectedChartDate = null;
+    selectedChartDate = date;
   }
 </script>
 
@@ -458,85 +466,91 @@
             <h2 class="font-heading text-base text-text-primary">Daily Activity</h2>
             <p class="text-xs text-text-muted">{dailyActivityLabel}</p>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            class="h-7 w-7"
-            title="Reset selected day"
-            aria-label="Reset selected day"
-            disabled={!selectedChartDate}
-            onclick={clearChartSelection}
-          >
-            <RotateCcw class="h-3.5 w-3.5" />
-          </Button>
+          <span class="rounded-xs border border-border-subtle bg-surface-2 px-2 py-1 font-mono text-[0.68rem] text-text-muted">
+            {dailyActivityCountLabel}
+          </span>
         </div>
 
         <div class="px-3 py-3">
-          <div class="flex h-28 items-end gap-1.5 overflow-x-auto border-b border-border-subtle pb-2 sm:h-32">
-            {#each dailyChartBuckets as bucket (bucket.date)}
-              {@const completed = Number(bucket.completedCount)}
-              {@const skipped = Number(bucket.skippedCount)}
-              {@const total = completed + skipped}
-              {@const height = Math.max(4, Math.round((total / maxDailyEvents) * 100))}
-              <div class="group flex min-w-7 flex-1 flex-col items-center justify-end gap-1">
+          <div class="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(220px,0.34fr)]">
+            <div class="max-h-64 space-y-2 overflow-y-auto pr-1">
+              {#each dailyActivityBuckets as bucket (bucket.date)}
+                {@const completed = Number(bucket.completedCount)}
+                {@const skipped = Number(bucket.skippedCount)}
+                {@const total = completed + skipped}
                 <button
                   type="button"
                   class={cn(
-                    "flex w-full max-w-9 flex-col justify-end overflow-hidden rounded-xs border bg-surface-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/25 focus-visible:ring-offset-1 focus-visible:ring-offset-bg",
+                    "w-full rounded-xs border px-3 py-2 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/25 focus-visible:ring-offset-1 focus-visible:ring-offset-bg",
                     selectedChartBucket?.date === bucket.date
-                      ? "border-accent-300/70 shadow-[0_0_18px_rgba(242,194,106,0.22),inset_0_1px_0_rgba(255,255,255,0.06)]"
-                      : "border-border-subtle hover:border-border-accent hover:bg-surface-3/70",
+                      ? "border-accent-300/70 bg-accent-950/20 shadow-[0_0_18px_rgba(242,194,106,0.16),inset_0_1px_0_rgba(255,255,255,0.06)]"
+                      : "border-border-subtle bg-surface-2/60 hover:border-border-accent hover:bg-surface-3/70",
                   )}
-                  style="height: {height}%"
                   title={`${formatShortDate(bucket.date)}: ${total} events`}
                   aria-label={chartBucketLabel(bucket)}
                   aria-pressed={selectedChartBucket?.date === bucket.date}
                   onclick={() => selectChartBucket(bucket.date)}
                 >
-                  {#if skipped > 0}
-                    <span
-                      class="bg-warning/80"
-                      style="height: {chartBucketSegmentHeight(skipped, total)}"
-                    ></span>
-                  {/if}
-                  {#if completed > 0}
-                    <span class="flex-1 bg-accent-300/85 shadow-[0_0_12px_rgba(242,194,106,0.22)]"></span>
-                  {/if}
-                </button>
-              </div>
-            {/each}
-          </div>
+                  <span class="flex items-start justify-between gap-3">
+                    <span class="min-w-0">
+                      <span class="block truncate text-[0.82rem] font-medium text-text-primary">
+                        {formatDateOnly(bucket.date, { month: "long", day: "numeric", year: "numeric" })}
+                      </span>
+                      <span class="mt-0.5 block text-xs text-text-muted">{chartBucketSummary(bucket)}</span>
+                    </span>
+                    <span class="shrink-0 font-heading text-lg font-semibold text-text-primary">{formatNumber(total)}</span>
+                  </span>
 
-          <div class="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div class="flex items-center gap-4 text-xs text-text-muted">
-              {#if showCompletedLegend}
-                <span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-xs bg-accent-300"></span>Plays</span>
-              {/if}
-              {#if showSkippedLegend}
-                <span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-xs bg-warning"></span>Skips</span>
-              {/if}
+                  <span class="mt-2 flex h-2 overflow-hidden rounded-xs border border-border-subtle bg-surface-1/80" aria-hidden="true">
+                    {#if completed > 0}
+                      <span
+                        class="h-full bg-accent-300/90 shadow-[0_0_12px_rgba(242,194,106,0.24)]"
+                        style:width={chartBucketShareWidth(completed)}
+                      ></span>
+                    {/if}
+                    {#if skipped > 0}
+                      <span
+                        class="h-full bg-warning/80"
+                        style:width={chartBucketShareWidth(skipped)}
+                      ></span>
+                    {/if}
+                  </span>
+                </button>
+              {/each}
             </div>
 
-            {#if selectedChartBucket}
-              <div class="flex flex-wrap items-center gap-2 text-xs">
-                <span class="font-medium text-text-primary">
+            <div class="border-t border-border-subtle pt-3 lg:border-l lg:border-t-0 lg:pl-3 lg:pt-0">
+              {#if selectedChartBucket}
+                <span class="text-mono-sm uppercase tracking-[0.14em] text-text-muted">Selected Day</span>
+                <div class="mt-1 font-heading text-lg font-semibold text-text-primary">
                   {formatDateOnly(selectedChartBucket.date, { month: "long", day: "numeric", year: "numeric" })}
-                </span>
-                <span class="rounded-xs border border-border-subtle bg-surface-2 px-1.5 py-0.5 font-mono text-text-muted">
-                  {formatNumber(selectedChartTotal)} events
-                </span>
-                {#if showCompletedLegend}
-                  <span class="rounded-xs border border-border-accent bg-accent-950/40 px-1.5 py-0.5 font-mono text-text-accent-bright">
-                    {formatNumber(selectedChartBucket.completedCount)} plays
-                  </span>
-                {/if}
-                {#if showSkippedLegend}
-                  <span class="rounded-xs border border-warning/30 bg-warning-muted/30 px-1.5 py-0.5 font-mono text-warning-text">
-                    {formatNumber(selectedChartBucket.skippedCount)} skips
-                  </span>
-                {/if}
-              </div>
-            {/if}
+                </div>
+                <div class="mt-3 flex items-end gap-2">
+                  <span class="font-heading text-4xl font-semibold text-text-primary">{formatNumber(selectedChartTotal)}</span>
+                  <span class="pb-1 text-xs text-text-muted">{selectedChartTotal === 1 ? "event" : "events"}</span>
+                </div>
+                <div class="mt-3 flex flex-wrap gap-2 text-xs">
+                  {#if showCompletedLegend}
+                    <span class="rounded-xs border border-border-accent bg-accent-950/40 px-1.5 py-0.5 font-mono text-text-accent-bright">
+                      {formatNumber(selectedChartBucket.completedCount)} plays
+                    </span>
+                  {/if}
+                  {#if showSkippedLegend}
+                    <span class="rounded-xs border border-warning/30 bg-warning-muted/30 px-1.5 py-0.5 font-mono text-warning-text">
+                      {formatNumber(selectedChartBucket.skippedCount)} skips
+                    </span>
+                  {/if}
+                </div>
+                <div class="mt-4 flex items-center gap-4 text-xs text-text-muted">
+                  {#if showCompletedLegend}
+                    <span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-xs bg-accent-300"></span>Plays</span>
+                  {/if}
+                  {#if showSkippedLegend}
+                    <span class="inline-flex items-center gap-1.5"><span class="h-2 w-2 rounded-xs bg-warning"></span>Skips</span>
+                  {/if}
+                </div>
+              {/if}
+            </div>
           </div>
         </div>
       </section>

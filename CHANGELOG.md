@@ -96,7 +96,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - OPDS catalog entries now use the same representative thumbnail logic as the main library grid for covers, so folder-backed comics expose their first visible page thumbnail as the OPDS cover image.
 - The Artists page now reliably opens as the Prismedia app instead of occasionally showing Jellyfin-compatible JSON when the browser reloads or lands directly on `/artists`.
 - Playback Stats now opens on Plays by default, and its daily activity chart focuses on active days so longer timeframes stay readable.
-- Playback Stats now uses the same hydrated entity thumbnails as the rest of the app, so tracks inherit album artwork and videos keep their hover/trickplay previews; the daily activity chart can also be selected to inspect a specific day.
+- Playback Stats now uses the same hydrated entity thumbnails as the rest of the app, so tracks inherit album artwork and videos keep their hover/trickplay previews; daily activity now shows selectable full-width day rows with a selected-day summary instead of a sparse timeline sliver.
 - The local audio player now records skipped playback events only for quick first-10-seconds advances, matching Jellyfin-compatible skip inference while still showing real in-app skips in Playback Stats.
 - Playback history now saves aggregate play/skip counters and timestamped history events in the same persistence unit, and long-range Stats queries avoid loading full event details before calculating totals and top items.
 - Playback Stats now follows the same dense Prismedia panel/list styling as the rest of the app, and its rows use the shared entity thumbnail treatment with compact, unclipped media-type fallbacks.

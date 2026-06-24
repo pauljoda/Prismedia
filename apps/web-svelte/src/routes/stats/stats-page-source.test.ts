@@ -13,10 +13,14 @@ describe("stats page source", () => {
   it("opens on completed plays and exposes selectable daily buckets", () => {
     expect(source).toContain("let eventFilter = $state<EventFilter>(PLAYBACK_EVENT_KIND.completed);");
     expect(source).toContain("const dailyChartBuckets = $derived.by");
+    expect(source).toContain("const dailyActivityBuckets = $derived.by");
     expect(source).toContain("const selectedChartBucket = $derived.by");
-    expect(source).toContain("{#each dailyChartBuckets as bucket (bucket.date)}");
+    expect(source).toContain("{#each dailyActivityBuckets as bucket (bucket.date)}");
+    expect(source).toContain("chartBucketShareWidth");
     expect(source).toContain("aria-pressed={selectedChartBucket?.date === bucket.date}");
     expect(source).toContain("onclick={() => selectChartBucket(bucket.date)}");
+    expect(source).not.toContain("h-28 items-end");
+    expect(source).not.toContain("max-w-9 flex-col");
   });
 
   it("hydrates playback thumbnails through the shared thumbnail pipeline", () => {
