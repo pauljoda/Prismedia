@@ -72,6 +72,12 @@
     { value: PLAYBACK_EVENT_KIND.skipped, label: "Skips" },
   ];
   const STATS_THUMBNAIL_HEIGHT_REM = 3.75;
+  const DAILY_ACTIVITY_VISIBLE_ROW_LIMIT = 15;
+  const DAILY_ACTIVITY_ROW_HEIGHT_REM = 4.35;
+  const DAILY_ACTIVITY_ROW_GAP_REM = 0.5;
+  const DAILY_ACTIVITY_LIST_MAX_HEIGHT_REM =
+    DAILY_ACTIVITY_VISIBLE_ROW_LIMIT * DAILY_ACTIVITY_ROW_HEIGHT_REM +
+    (DAILY_ACTIVITY_VISIBLE_ROW_LIMIT - 1) * DAILY_ACTIVITY_ROW_GAP_REM;
 
   const nsfw = useNsfw();
 
@@ -473,7 +479,10 @@
 
         <div class="px-3 py-3">
           <div class="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(220px,0.34fr)]">
-            <div class="max-h-64 space-y-2 overflow-y-auto pr-1">
+            <div
+              class="space-y-2 overflow-y-auto pr-1"
+              style:max-height={`${DAILY_ACTIVITY_LIST_MAX_HEIGHT_REM}rem`}
+            >
               {#each dailyActivityBuckets as bucket (bucket.date)}
                 {@const completed = Number(bucket.completedCount)}
                 {@const skipped = Number(bucket.skippedCount)}

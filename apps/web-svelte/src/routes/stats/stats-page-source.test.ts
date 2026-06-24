@@ -19,8 +19,12 @@ describe("stats page source", () => {
     expect(source).toContain("chartBucketShareWidth");
     expect(source).toContain("aria-pressed={selectedChartBucket?.date === bucket.date}");
     expect(source).toContain("onclick={() => selectChartBucket(bucket.date)}");
+    expect(source).toContain("const DAILY_ACTIVITY_VISIBLE_ROW_LIMIT = 15;");
+    expect(source).toContain("style:max-height={`${DAILY_ACTIVITY_LIST_MAX_HEIGHT_REM}rem`}");
+    expect(source).toContain("space-y-2 overflow-y-auto pr-1");
     expect(source).not.toContain("h-28 items-end");
     expect(source).not.toContain("max-w-9 flex-col");
+    expect(source).not.toContain("max-h-64");
   });
 
   it("keeps the header picker wells sized to their options", () => {

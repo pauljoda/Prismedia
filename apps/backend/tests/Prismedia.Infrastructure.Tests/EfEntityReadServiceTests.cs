@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Contracts.Entities;
+using Prismedia.Contracts.Media;
 using Prismedia.Contracts.Videos;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Entities;
@@ -1768,6 +1769,43 @@ public sealed class EfEntityReadServiceTests {
 
         var track = Assert.Single(response.Items);
         Assert.Equal("/assets/audio-libraries/album/cover.jpg", track.CoverUrl);
+    }
+
+    [Fact]
+    public async Task GetDetailAsyncUsesAlbumCoverForAudioTrackWithoutOwnCover() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var albumId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000031");
+        var trackId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000032");
+
+        db.Entities.AddRange(
+            new EntityRow {
+                Id = albumId,
+                KindCode = EntityKindRegistry.AudioLibrary.Code,
+                Title = "Album",
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new EntityRow {
+                Id = trackId,
+                KindCode = EntityKindRegistry.AudioTrack.Code,
+                Title = "Track",
+                ParentEntityId = albumId,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+        db.AudioLibraryDetails.Add(new AudioLibraryDetailRow { EntityId = albumId });
+        db.AudioTrackDetails.Add(new AudioTrackDetailRow { EntityId = trackId });
+        db.EntityFiles.Add(File(albumId, EntityFileRole.Cover, "/assets/audio-libraries/album/cover.jpg", now));
+        await db.SaveChangesAsync();
+
+        var detail = Assert.IsType<AudioTrackDetail>(
+            await CreateService(db).GetDetailAsync(trackId, EntityKindRegistry.AudioTrack.Code, hideNsfw: false, CancellationToken.None));
+
+        var images = Assert.IsType<ImagesCapability>(Assert.Single(detail.Capabilities.OfType<ImagesCapability>()));
+        Assert.Equal("/assets/audio-libraries/album/cover.jpg", images.CoverUrl);
+        Assert.Equal("/assets/audio-libraries/album/cover.jpg", images.ThumbnailUrl);
+        Assert.Empty(images.Items);
     }
 
     [Fact]

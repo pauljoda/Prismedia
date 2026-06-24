@@ -5,13 +5,11 @@
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import EntityDetailHeroDates from "$lib/components/entities/EntityDetailHeroDates.svelte";
   import { fetchAudioTrack, type AudioTrackDetail } from "$lib/api/media";
-  import { fetchEntityThumbnails } from "$lib/api/entities";
   import {
     updateEntityFlags,
     updateEntityMetadata,
     updateEntityRating,
   } from "$lib/api/entity-mutations";
-  import { assetUrl } from "$lib/api/orval-fetch";
   import { getCapability } from "$lib/api/capabilities";
   import {
     toggleOptimisticEntityFlag,
@@ -45,7 +43,6 @@
   let relationshipCredits = $state<EntityDetailCredit[]>([]);
   let relationshipStudio = $state<EntityDetailCredit | null>(null);
   let relationshipTags = $state<EntityDetailTag[]>([]);
-  let parentCoverUrl = $state<string | undefined>(undefined);
 
   const card = $derived.by((): EntityDetailCardFull | null => {
     if (!track) return null;
@@ -62,6 +59,7 @@
   const dates = $derived(card?.dates ?? []);
 
   const trackItem = $derived(track ? audioTrackDetailToListItem(track) : null);
+  const coverUrl = $derived(card?.posterCard?.cover?.src ?? card?.poster?.src ?? null);
 
   const heroActions = $derived.by((): EntityDetailActionButton[] => {
     if (!trackItem) return [];
@@ -85,7 +83,7 @@
     playback.play([trackItem], trackItem.id, {
       albumTitle: trackItem.embeddedAlbum,
       artistName: trackItem.embeddedArtist,
-      coverUrl: parentCoverUrl ?? null,
+      coverUrl,
     });
   }
 
@@ -117,16 +115,6 @@
       relationshipCredits = relationships.credits;
       relationshipStudio = relationships.studio;
       relationshipTags = relationships.relationshipTags;
-
-      // Fetch parent library cover for player thumbnail
-      if (nextTrack.parentEntityId) {
-        fetchEntityThumbnails([nextTrack.parentEntityId])
-          .then((thumbs) => {
-            const parentThumb = thumbs[0];
-            parentCoverUrl = assetUrl(parentThumb?.coverUrl) || undefined;
-          })
-          .catch(() => {});
-      }
 
       loadState = "ready";
     } catch (err) {

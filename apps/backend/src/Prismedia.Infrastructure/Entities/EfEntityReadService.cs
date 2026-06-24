@@ -471,7 +471,8 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             return null;
         }
 
-        var projected = SanitizeLocalAssets(EntityCardProjector.ToCard(entity));
+        var projected = SanitizeLocalAssets(
+            await EnrichAudioTrackAlbumCoverAsync(EntityCardProjector.ToCard(entity), hideNsfw, cancellationToken));
         var card = projected with {
             ChildrenByKind = await ProjectDirectChildGroupsAsync(id, hideNsfw, enforceLibraryVisibility, cancellationToken),
             Relationships = await ProjectRelationshipGroupsAsync(id, hideNsfw, enforceLibraryVisibility, cancellationToken)
@@ -541,7 +542,9 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             return null;
         }
 
-        var card = await EnrichBookProgressAsync(EntityCardProjector.ToCard(entity) with {
+        var projected = SanitizeLocalAssets(
+            await EnrichAudioTrackAlbumCoverAsync(EntityCardProjector.ToCard(entity), hideNsfw, cancellationToken));
+        var card = await EnrichBookProgressAsync(projected with {
             ChildrenByKind = await ProjectDirectChildGroupsAsync(id, hideNsfw, enforceLibraryVisibility, cancellationToken),
             Relationships = await ProjectRelationshipGroupsAsync(id, hideNsfw, enforceLibraryVisibility, cancellationToken)
         }, hideNsfw, cancellationToken);
@@ -787,6 +790,69 @@ public sealed partial class EfEntityReadService : IEntityReadService {
                     }
                     : capability).ToArray()
         };
+    }
+
+    private async Task<EntityCard> EnrichAudioTrackAlbumCoverAsync(
+        EntityCard card,
+        bool hideNsfw,
+        CancellationToken cancellationToken) {
+        if (card.Kind != EntityKind.AudioTrack ||
+            card.ParentEntityId is not { } albumId) {
+            return card;
+        }
+
+        var trackCovers = await LoadCoverPathsAsync([card.Id], cancellationToken);
+        if (trackCovers.ContainsKey(card.Id)) {
+            return card;
+        }
+
+        var albumExists = await _db.Entities.AsNoTracking()
+            .AnyAsync(entity =>
+                entity.Id == albumId &&
+                entity.KindCode == EntityKindRegistry.AudioLibrary.Code &&
+                (!hideNsfw || !entity.IsNsfw),
+                cancellationToken);
+        if (!albumExists) {
+            return card;
+        }
+
+        var albumCovers = await LoadCoverPathsAsync([albumId], cancellationToken);
+        if (!albumCovers.TryGetValue(albumId, out var albumCover)) {
+            return card;
+        }
+
+        return card with {
+            Capabilities = WithImageCoverFallback(card.Capabilities, albumCover)
+        };
+    }
+
+    private static IReadOnlyList<EntityCapability> WithImageCoverFallback(
+        IReadOnlyList<EntityCapability> capabilities,
+        string coverUrl) {
+        var result = capabilities.ToArray();
+        var index = Array.FindIndex(result, capability => capability is ImagesCapability);
+        if (index >= 0) {
+            var images = (ImagesCapability)result[index];
+            result[index] = images with {
+                ThumbnailUrl = images.ThumbnailUrl ?? coverUrl,
+                CoverUrl = images.CoverUrl ?? coverUrl
+            };
+            return result;
+        }
+
+        return result
+            .Append(new ImagesCapability(
+                [
+                    EntityFileRole.Thumbnail.ToCode(),
+                    EntityFileRole.Poster.ToCode(),
+                    EntityFileRole.Backdrop.ToCode(),
+                    EntityFileRole.Cover.ToCode(),
+                    EntityFileRole.Logo.ToCode()
+                ],
+                [],
+                coverUrl,
+                coverUrl))
+            .ToArray();
     }
 
     private async Task<IReadOnlyList<EntityGroup>> ProjectDirectChildGroupsAsync(
