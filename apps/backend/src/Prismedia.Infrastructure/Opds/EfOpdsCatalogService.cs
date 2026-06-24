@@ -253,12 +253,14 @@ public sealed class EfOpdsCatalogService(
             return null;
         }
 
+        var downloadPath = DownloadPathFor(row.SourcePath);
+        var contentType = ContentTypeFor(row.Format, downloadPath, row.SourceMimeType);
         return new OpdsFileContent(
             row.Id,
             EntityFileRole.Source,
-            row.SourcePath,
-            ContentTypeFor(row.Format, row.SourcePath, row.SourceMimeType),
-            Path.GetFileName(row.SourcePath));
+            downloadPath,
+            contentType,
+            DownloadFileNameFor(downloadPath, contentType));
     }
 
     public async Task<OpdsFileContent?> GetBookCoverAsync(
@@ -294,28 +296,26 @@ public sealed class EfOpdsCatalogService(
                   (detail.LibraryRootId == null || (root != null && root.Enabled)) &&
                   (detail.Format == BookFormat.Epub ||
                    detail.Format == BookFormat.Pdf ||
-                   (detail.Format == BookFormat.ImageArchive &&
-                    (source.Path.ToLower().EndsWith(".cbz") ||
-                     source.Path.ToLower().EndsWith(".zip") ||
-                     source.Path.ToLower().EndsWith(".cbr")))) &&
+                   detail.Format == BookFormat.ImageArchive) &&
                   (!hideNsfw ||
                    (!entity.IsNsfw &&
                     (root == null || !root.IsNsfw) &&
                     (parent == null || !parent.IsNsfw)))
-            select new VisibleBookRow(
-                entity.Id,
-                entity.Title,
-                entity.SortName,
-                entity.ParentEntityId,
-                parent == null ? null : parent.Title,
-                entity.CreatedAt,
-                entity.UpdatedAt,
-                detail.BookType,
-                detail.Format,
-                detail.LibraryRootId,
-                source.Path,
-                source.MimeType,
-                source.SizeBytes);
+            select new VisibleBookRow {
+                Id = entity.Id,
+                Title = entity.Title,
+                SortName = entity.SortName,
+                SeriesId = entity.ParentEntityId,
+                SeriesTitle = parent == null ? null : parent.Title,
+                CreatedAt = entity.CreatedAt,
+                UpdatedAt = entity.UpdatedAt,
+                BookType = detail.BookType,
+                Format = detail.Format,
+                LibraryRootId = detail.LibraryRootId,
+                SourcePath = source.Path,
+                SourceMimeType = source.MimeType,
+                SizeBytes = source.SizeBytes
+            };
     }
 
     private async Task<IReadOnlyList<NavigationProjection>> LibraryNavigationRowsAsync(
@@ -594,6 +594,8 @@ public sealed class EfOpdsCatalogService(
         return rows
             .Select(row => {
                 var cover = coversByBook.GetValueOrDefault(row.Id);
+                var downloadPath = DownloadPathFor(row.SourcePath);
+                var contentType = ContentTypeFor(row.Format, downloadPath, row.SourceMimeType);
                 return new OpdsBookEntry(
                     row.Id,
                     row.Title,
@@ -606,8 +608,8 @@ public sealed class EfOpdsCatalogService(
                     row.SeriesTitle,
                     authorsByBook.GetValueOrDefault(row.Id) ?? [],
                     categoriesByBook.GetValueOrDefault(row.Id) ?? [],
-                    ContentTypeFor(row.Format, row.SourcePath, row.SourceMimeType),
-                    row.SizeBytes,
+                    contentType,
+                    SizeBytesFor(downloadPath, row.SizeBytes),
                     cover?.CoverContentType,
                     cover?.ThumbnailContentType);
             })
@@ -727,9 +729,65 @@ public sealed class EfOpdsCatalogService(
         return format switch {
             BookFormat.Epub => MediaContentTypes.Epub,
             BookFormat.Pdf => MediaContentTypes.Pdf,
-            BookFormat.ImageArchive => MimeForPath(sourcePath, storedMime),
+            BookFormat.ImageArchive => ImageArchiveMimeForPath(sourcePath, storedMime),
             _ => MediaContentTypes.OctetStream
         };
+    }
+
+    private static string ImageArchiveMimeForPath(string path, string? storedMime) {
+        var downloadPath = DownloadPathFor(path);
+        var mime = MimeForPath(downloadPath, storedMime);
+        return mime.Equals(MediaContentTypes.OctetStream, StringComparison.OrdinalIgnoreCase) && Directory.Exists(downloadPath)
+            ? MediaContentTypes.ComicBookZip
+            : mime;
+    }
+
+    private static string DownloadPathFor(string sourcePath) {
+        if (!Directory.Exists(sourcePath)) {
+            return sourcePath;
+        }
+
+        return EnumerateContainedAcquisitionFiles(sourcePath).FirstOrDefault() ?? sourcePath;
+    }
+
+    private static IEnumerable<string> EnumerateContainedAcquisitionFiles(string directory) {
+        IEnumerable<string> files;
+        try {
+            files = Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories);
+        } catch {
+            return [];
+        }
+
+        return files
+            .Where(IsAcquisitionFile)
+            .OrderBy(file => Path.GetRelativePath(directory, file), StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static bool IsAcquisitionFile(string path) =>
+        Path.GetExtension(path).ToLowerInvariant() is ".epub" or ".pdf" or ".cbz" or ".zip" or ".cbr";
+
+    private static long? SizeBytesFor(string downloadPath, long? storedSize) {
+        if (!File.Exists(downloadPath)) {
+            return storedSize;
+        }
+
+        try {
+            return new FileInfo(downloadPath).Length;
+        } catch {
+            return storedSize;
+        }
+    }
+
+    private static string DownloadFileNameFor(string path, string contentType) {
+        var fileName = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        if (string.IsNullOrWhiteSpace(fileName)) {
+            fileName = "book";
+        }
+
+        return contentType.Equals(MediaContentTypes.ComicBookZip, StringComparison.OrdinalIgnoreCase) &&
+               string.IsNullOrEmpty(Path.GetExtension(fileName))
+            ? $"{fileName}.cbz"
+            : fileName;
     }
 
     private static string MimeForPath(string path, string? storedMime) {
@@ -753,20 +811,21 @@ public sealed class EfOpdsCatalogService(
         };
     }
 
-    private sealed record VisibleBookRow(
-        Guid Id,
-        string Title,
-        string SortName,
-        Guid? SeriesId,
-        string? SeriesTitle,
-        DateTimeOffset CreatedAt,
-        DateTimeOffset UpdatedAt,
-        BookType BookType,
-        BookFormat Format,
-        Guid? LibraryRootId,
-        string SourcePath,
-        string? SourceMimeType,
-        long? SizeBytes);
+    private sealed class VisibleBookRow {
+        public Guid Id { get; init; }
+        public string Title { get; init; } = string.Empty;
+        public string SortName { get; init; } = string.Empty;
+        public Guid? SeriesId { get; init; }
+        public string? SeriesTitle { get; init; }
+        public DateTimeOffset CreatedAt { get; init; }
+        public DateTimeOffset UpdatedAt { get; init; }
+        public BookType BookType { get; init; }
+        public BookFormat Format { get; init; }
+        public Guid? LibraryRootId { get; init; }
+        public string SourcePath { get; init; } = string.Empty;
+        public string? SourceMimeType { get; init; }
+        public long? SizeBytes { get; init; }
+    }
 
     private sealed record NavigationProjection(
         Guid Id,

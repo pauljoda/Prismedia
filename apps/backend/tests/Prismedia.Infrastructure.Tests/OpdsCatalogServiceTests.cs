@@ -23,6 +23,8 @@ public sealed class OpdsCatalogServiceTests : IDisposable {
     private static readonly Guid HiddenTagId = Guid.Parse("99999999-9999-9999-9999-999999999999");
     private static readonly Guid VisibleCollectionId = Guid.Parse("12121212-1212-1212-1212-121212121212");
     private static readonly Guid HiddenCollectionId = Guid.Parse("13131313-1313-1313-1313-131313131313");
+    private static readonly Guid DirectoryComicId = Guid.Parse("14141414-1414-1414-1414-141414141414");
+    private static readonly Guid WrappedComicId = Guid.Parse("15151515-1515-1515-1515-151515151515");
     private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"prismedia-opds-catalog-{Guid.NewGuid():N}");
 
     public OpdsCatalogServiceTests() {
@@ -79,22 +81,48 @@ public sealed class OpdsCatalogServiceTests : IDisposable {
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
         });
-        db.Entities.Add(Entity(Guid.Parse("14141414-1414-1414-1414-141414141414"), EntityKindRegistry.Book.Code, "Comic", false));
-        db.BookDetails.Add(new BookDetailRow {
-            EntityId = Guid.Parse("14141414-1414-1414-1414-141414141414"),
-            BookType = BookType.Comic,
-            Format = BookFormat.ImageArchive,
-            LibraryRootId = VisibleRootId
-        });
-        db.EntityFiles.Add(Source(Guid.Parse("14141414-1414-1414-1414-141414141414"), Path.Combine(_tempDir, "comic.cbz"), null));
+        db.Entities.AddRange(
+            Entity(DirectoryComicId, EntityKindRegistry.Book.Code, "Comic", false),
+            Entity(WrappedComicId, EntityKindRegistry.Book.Code, "Wrapped Comic", false));
+        db.BookDetails.AddRange(
+            new BookDetailRow {
+                EntityId = DirectoryComicId,
+                BookType = BookType.Comic,
+                Format = BookFormat.ImageArchive,
+                LibraryRootId = VisibleRootId
+            },
+            new BookDetailRow {
+                EntityId = WrappedComicId,
+                BookType = BookType.Comic,
+                Format = BookFormat.ImageArchive,
+                LibraryRootId = VisibleRootId
+            });
+        var comicDirectory = Path.Combine(_tempDir, "comic-folder");
+        Directory.CreateDirectory(comicDirectory);
+        await File.WriteAllTextAsync(Path.Combine(comicDirectory, "001.jpg"), "page");
+        var wrappedComicDirectory = Path.Combine(_tempDir, "wrapped-comic");
+        Directory.CreateDirectory(wrappedComicDirectory);
+        var wrappedComicPath = Path.Combine(wrappedComicDirectory, "wrapped.cbz");
+        await File.WriteAllTextAsync(wrappedComicPath, "archive");
+        db.EntityFiles.AddRange(
+            Source(DirectoryComicId, comicDirectory, null),
+            Source(WrappedComicId, wrappedComicDirectory, null));
         await db.SaveChangesAsync();
         var service = CreateService(db);
 
         var recent = await service.ListRecentAsync(hideNsfw: true, new OpdsPageRequest(1, 50), CancellationToken.None);
+        var directoryDownload = await service.GetBookDownloadAsync(DirectoryComicId, hideNsfw: true, CancellationToken.None);
+        var wrappedDownload = await service.GetBookDownloadAsync(WrappedComicId, hideNsfw: true, CancellationToken.None);
         var cover = await service.GetBookCoverAsync(VisibleBookId, hideNsfw: true, CancellationToken.None);
 
         Assert.Contains(recent.Items, book => book.Id == VisibleBookId && book.AcquisitionContentType == MediaContentTypes.Epub);
-        Assert.Contains(recent.Items, book => book.AcquisitionContentType == MediaContentTypes.ComicBookZip);
+        Assert.Contains(recent.Items, book => book.Id == DirectoryComicId && book.AcquisitionContentType == MediaContentTypes.ComicBookZip);
+        Assert.Contains(recent.Items, book => book.Id == WrappedComicId && book.AcquisitionContentType == MediaContentTypes.ComicBookZip);
+        Assert.NotNull(directoryDownload);
+        Assert.Equal("comic-folder.cbz", directoryDownload.FileName);
+        Assert.NotNull(wrappedDownload);
+        Assert.Equal(wrappedComicPath, wrappedDownload.Path);
+        Assert.Equal("wrapped.cbz", wrappedDownload.FileName);
         Assert.NotNull(cover);
         Assert.Equal(coverPath, cover.Path);
         Assert.Equal(MediaContentTypes.ImageJpeg, cover.ContentType);
