@@ -8,6 +8,10 @@ namespace Prismedia.Infrastructure.Security;
 /// <summary>EF-backed persistence for app API key and Jellyfin compatibility profiles.</summary>
 public sealed class EfSecurityPersistence : ISecurityPersistence {
     private const int SingletonSecurityId = 1;
+    private const int ClientMaxLength = 128;
+    private const int DeviceNameMaxLength = 128;
+    private const int DeviceIdMaxLength = 256;
+    private const int ApplicationVersionMaxLength = 64;
     private const string DefaultProfileUsername = "Prismedia";
 
     private readonly PrismediaDbContext _db;
@@ -224,10 +228,10 @@ public sealed class EfSecurityPersistence : ISecurityPersistence {
             Id = Guid.NewGuid(),
             ProfileId = profileId,
             TokenHash = tokenHash,
-            Client = client.Client,
-            DeviceName = client.DeviceName,
-            DeviceId = client.DeviceId,
-            ApplicationVersion = client.ApplicationVersion,
+            Client = Truncate(client.Client, ClientMaxLength),
+            DeviceName = Truncate(client.DeviceName, DeviceNameMaxLength),
+            DeviceId = Truncate(client.DeviceId, DeviceIdMaxLength),
+            ApplicationVersion = Truncate(client.ApplicationVersion, ApplicationVersionMaxLength),
             CreatedAt = now,
             LastSeenAt = now
         };
@@ -267,6 +271,11 @@ public sealed class EfSecurityPersistence : ISecurityPersistence {
     }
 
     private static string NormalizeUsername(string username) => username.Trim().ToLowerInvariant();
+
+    private static string? Truncate(string? value, int maxLength) =>
+        value is { Length: > 0 }
+            ? value.Length <= maxLength ? value : value[..maxLength]
+            : value;
 
     private static AppSecurityState ToState(AppSecurityRow row) =>
         new(

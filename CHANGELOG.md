@@ -90,6 +90,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added a worker status badge to Job Control so stalled queues show when the background worker is offline.
 
 ### Fixed
+- OPDS Basic Auth no longer fails with a 500 when reader apps send long User-Agent/device strings; Jellyfin session client metadata is now clamped to the database column limits before persisting.
 - OPDS feed links now honor forwarded HTTPS host/protocol headers so reverse-proxied reader apps receive public `https://...` cover and download URLs instead of internal/plain-HTTP links.
 - OPDS library/acquisition feeds no longer list book-series folder containers as downloadable books; series folders remain available through OPDS Series and show their individual books there.
 - OPDS catalog entries now use the same representative thumbnail logic as the main library grid for covers, so folder-backed comics expose their first visible page thumbnail as the OPDS cover image.
