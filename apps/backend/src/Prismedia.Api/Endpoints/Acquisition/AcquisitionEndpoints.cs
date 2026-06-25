@@ -96,6 +96,96 @@ public static class AcquisitionEndpoints {
             .Produces<AcquisitionDetail>()
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
+        group.MapPost("/{id:guid}/queue", async (
+            Guid id,
+            AcquisitionQueueRequest request,
+            AcquisitionQueueService queue,
+            CancellationToken cancellationToken) => {
+                try {
+                    var detail = await queue.QueueAsync(id, request.CandidateId, cancellationToken);
+                    return detail is null
+                        ? Results.NotFound(new ApiProblem(ApiProblemCodes.AcquisitionNotFound, "Acquisition was not found."))
+                        : Results.Ok(detail);
+                } catch (AcquisitionConfigurationException ex) {
+                    return Results.BadRequest(new ApiProblem(ex.Code, ex.Message));
+                }
+            })
+            .WithName("QueueAcquisition")
+            .WithSummary("Sends a chosen release to the download client and begins tracking the transfer.")
+            .Produces<AcquisitionDetail>()
+            .Produces<ApiProblem>(StatusCodes.Status400BadRequest)
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+
+        group.MapPost("/{id:guid}/cancel", async (
+            Guid id,
+            AcquisitionService acquisitions,
+            CancellationToken cancellationToken) => {
+                var detail = await acquisitions.CancelAsync(id, cancellationToken);
+                return detail is null
+                    ? Results.NotFound(new ApiProblem(ApiProblemCodes.AcquisitionNotFound, "Acquisition was not found."))
+                    : Results.Ok(detail);
+            })
+            .WithName("CancelAcquisition")
+            .WithSummary("Cancels an acquisition, removing the torrent from the download client.")
+            .Produces<AcquisitionDetail>()
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+
+        group.MapGet("/download-clients", (
+            DownloadClientCommandService downloadClients,
+            CancellationToken cancellationToken) =>
+            downloadClients.ListAsync(cancellationToken))
+            .WithName("ListDownloadClients")
+            .WithSummary("Lists configured download clients with passwords redacted.")
+            .Produces<IReadOnlyList<DownloadClientSummary>>();
+
+        group.MapPost("/download-clients", async (
+            DownloadClientSaveRequest request,
+            DownloadClientCommandService downloadClients,
+            CancellationToken cancellationToken) =>
+            await SaveDownloadClientAsync(request, downloadClients, cancellationToken))
+            .WithName("SaveDownloadClient")
+            .WithSummary("Creates or updates a download client configuration.")
+            .Produces<DownloadClientSummary>()
+            .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
+
+        group.MapPut("/download-clients/{id:guid}", async (
+            Guid id,
+            DownloadClientSaveRequest request,
+            DownloadClientCommandService downloadClients,
+            CancellationToken cancellationToken) =>
+            await SaveDownloadClientAsync(request with { Id = id }, downloadClients, cancellationToken))
+            .WithName("UpdateDownloadClient")
+            .WithSummary("Updates an existing download client configuration.")
+            .Produces<DownloadClientSummary>()
+            .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
+
+        group.MapDelete("/download-clients/{id:guid}", async (
+            Guid id,
+            DownloadClientCommandService downloadClients,
+            CancellationToken cancellationToken) =>
+            await downloadClients.DeleteAsync(id, cancellationToken)
+                ? Results.NoContent()
+                : Results.NotFound(new ApiProblem(ApiProblemCodes.NotFound, "Download client was not found.")))
+            .WithName("DeleteDownloadClient")
+            .WithSummary("Deletes a configured download client.")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+
+        group.MapPost("/download-clients/test", async (
+            DownloadClientTestRequest request,
+            DownloadClientCommandService downloadClients,
+            CancellationToken cancellationToken) => {
+                try {
+                    return Results.Ok(await downloadClients.TestAsync(request, cancellationToken));
+                } catch (AcquisitionConfigurationException ex) {
+                    return Results.BadRequest(new ApiProblem(ex.Code, ex.Message));
+                }
+            })
+            .WithName("TestDownloadClient")
+            .WithSummary("Tests connectivity for a download client configuration.")
+            .Produces<DownloadClientTestResponse>()
+            .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
+
         return group;
     }
 
@@ -105,6 +195,17 @@ public static class AcquisitionEndpoints {
         CancellationToken cancellationToken) {
         try {
             return Results.Ok(await indexers.SaveAsync(request, cancellationToken));
+        } catch (AcquisitionConfigurationException ex) {
+            return Results.BadRequest(new ApiProblem(ex.Code, ex.Message));
+        }
+    }
+
+    private static async Task<IResult> SaveDownloadClientAsync(
+        DownloadClientSaveRequest request,
+        DownloadClientCommandService downloadClients,
+        CancellationToken cancellationToken) {
+        try {
+            return Results.Ok(await downloadClients.SaveAsync(request, cancellationToken));
         } catch (AcquisitionConfigurationException ex) {
             return Results.BadRequest(new ApiProblem(ex.Code, ex.Message));
         }

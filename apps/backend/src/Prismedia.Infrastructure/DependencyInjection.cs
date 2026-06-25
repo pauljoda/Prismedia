@@ -333,11 +333,15 @@ public static class DependencyInjection {
 
     private static void RegisterAcquisition(IServiceCollection services) {
         services.AddScoped<IIndexerConfigStore, EfIndexerConfigStore>();
+        services.AddScoped<IDownloadClientConfigStore, EfDownloadClientConfigStore>();
         services.AddScoped<IBookAcquisitionProfileStore, EfBookAcquisitionProfileStore>();
         services.AddScoped<IAcquisitionStore, EfAcquisitionStore>();
         services.AddScoped(_ => new ProwlarrIndexerClient(new HttpClient()));
         services.AddScoped<IIndexerSearchClient>(provider => provider.GetRequiredService<ProwlarrIndexerClient>());
         services.AddScoped<IIndexerSearchClientFactory, IndexerSearchClientFactory>();
+        services.AddScoped(_ => new QBittorrentDownloadClient(new HttpClient()));
+        services.AddScoped<IDownloadClient>(provider => provider.GetRequiredService<QBittorrentDownloadClient>());
+        services.AddScoped<IDownloadClientFactory, DownloadClientFactory>();
     }
 
     private static void RegisterThumbnailContributors(IServiceCollection services) {

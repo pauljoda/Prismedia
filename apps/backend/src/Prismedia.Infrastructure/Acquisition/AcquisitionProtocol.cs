@@ -37,3 +37,34 @@ public static class ProwlarrProtocol {
     public const string LimitParam = "limit";
     public const int DefaultLimit = 100;
 }
+
+/// <summary>qBittorrent WebUI API wire vocabulary (API v2). Referenced by the qBittorrent download client; never retyped.</summary>
+public static class QBittorrentProtocol {
+    public const string LoginEndpoint = "api/v2/auth/login";
+    public const string VersionEndpoint = "api/v2/app/version";
+    public const string CreateCategoryEndpoint = "api/v2/torrents/createCategory";
+    public const string AddEndpoint = "api/v2/torrents/add";
+    public const string InfoEndpoint = "api/v2/torrents/info";
+    public const string DeleteEndpoint = "api/v2/torrents/delete";
+
+    public const string UsernameField = "username";
+    public const string PasswordField = "password";
+    public const string CategoryField = "category";
+    public const string SavePathField = "savePath";
+    public const string UrlsField = "urls";
+    public const string HashesField = "hashes";
+    public const string DeleteFilesField = "deleteFiles";
+
+    // ── torrent info JSON fields ────────────────────────────────
+    // prism-vocab: external — qBittorrent JSON field names, decoded only at this parse boundary.
+    public const string Hash = "hash";
+    public const string Name = "name";
+    public const string Progress = "progress";
+    public const string State = "state";
+    public const string SavePathJson = "save_path";
+    public const string ContentPathJson = "content_path";
+
+    /// <summary>qBittorrent requires a Referer header on WebUI API calls to pass its CSRF check.</summary>
+    public const string RefererHeader = "Referer";
+    public const string SessionCookie = "SID";
+}

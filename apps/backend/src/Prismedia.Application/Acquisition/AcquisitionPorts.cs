@@ -65,4 +65,22 @@ public interface IAcquisitionStore {
 
     /// <summary>Replaces an acquisition's candidate set with a freshly scored search result.</summary>
     Task ReplaceCandidatesAsync(Guid id, IReadOnlyList<ScoredRelease> candidates, CancellationToken cancellationToken);
+
+    /// <summary>Loads the server-side download details for a candidate belonging to an acquisition, or null when absent.</summary>
+    Task<AcquisitionQueueCandidate?> GetQueueCandidateAsync(Guid acquisitionId, Guid candidateId, CancellationToken cancellationToken);
+
+    /// <summary>Records a started transfer linking an acquisition to its download-client item.</summary>
+    Task CreateTransferAsync(Guid acquisitionId, Guid? downloadClientConfigId, string clientItemId, string? category, CancellationToken cancellationToken);
+
+    /// <summary>Lists transfers whose acquisitions are still queued or downloading, for the monitor to advance.</summary>
+    Task<IReadOnlyList<ActiveTransfer>> ListActiveTransfersAsync(CancellationToken cancellationToken);
+
+    /// <summary>True when any acquisition still has an in-flight transfer; gates scheduling the monitor job.</summary>
+    Task<bool> HasActiveTransfersAsync(CancellationToken cancellationToken);
+
+    /// <summary>Updates a transfer's progress, raw state, and on-disk content path.</summary>
+    Task UpdateTransferAsync(Guid transferId, double progress, string? state, string? contentPath, CancellationToken cancellationToken);
+
+    /// <summary>Returns the most recent transfer's client item id for an acquisition, or null when none exists.</summary>
+    Task<string?> GetTransferClientItemIdAsync(Guid acquisitionId, CancellationToken cancellationToken);
 }

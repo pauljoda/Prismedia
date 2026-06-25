@@ -79,3 +79,20 @@ public sealed record AcquisitionSearchInput(Guid Id, string Title, string? Autho
 public sealed record AcquisitionSearchOutcome(
     IReadOnlyList<ScoredRelease> Candidates,
     IReadOnlyList<IndexerSearchError> Errors);
+
+/// <summary>Server-side view of a candidate selected for download, including the links kept out of the API surface.</summary>
+public sealed record AcquisitionQueueCandidate(
+    Guid CandidateId,
+    string Title,
+    string? DownloadUrl,
+    string? MagnetUrl,
+    string? InfoHash,
+    DownloadProtocol Protocol);
+
+/// <summary>An in-flight transfer the monitor advances, with the acquisition's current status for transition decisions.</summary>
+public sealed record ActiveTransfer(
+    Guid TransferId,
+    Guid AcquisitionId,
+    Guid? DownloadClientConfigId,
+    string ClientItemId,
+    AcquisitionStatus AcquisitionStatus);

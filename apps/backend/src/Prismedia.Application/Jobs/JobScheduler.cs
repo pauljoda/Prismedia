@@ -25,6 +25,7 @@ public sealed class JobScheduler(
                 await ScheduleRecurringScansAsync(stoppingToken);
                 await ScheduleRecurringCollectionRefreshAsync(stoppingToken);
                 await ScheduleRecurringBackupsAsync(stoppingToken);
+                await ScheduleAcquisitionMonitorAsync(stoppingToken);
             } catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) {
                 break;
             } catch (Exception ex) {
@@ -149,6 +150,23 @@ public sealed class JobScheduler(
             cancellationToken);
 
         logger.LogInformation("Scheduled hourly collection refresh job.");
+    }
+
+    internal async Task ScheduleAcquisitionMonitorAsync(CancellationToken cancellationToken) {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var acquisitions = scope.ServiceProvider.GetRequiredService<Acquisition.IAcquisitionStore>();
+        if (!await acquisitions.HasActiveTransfersAsync(cancellationToken)) {
+            return;
+        }
+
+        var queue = scope.ServiceProvider.GetRequiredService<IJobQueueService>();
+        if (await queue.HasPendingAsync(JobType.AcquisitionMonitor, null, cancellationToken)) {
+            return;
+        }
+
+        await queue.EnqueueAsync(
+            new EnqueueJobRequest(JobType.AcquisitionMonitor, TargetLabel: "Monitor acquisition downloads"),
+            cancellationToken);
     }
 
     private static DateTimeOffset GetWindowStart(DateTimeOffset now, TimeSpan interval) {

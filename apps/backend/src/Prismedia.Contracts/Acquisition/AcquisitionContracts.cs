@@ -102,3 +102,51 @@ public sealed record AcquisitionSummary(
 public sealed record AcquisitionDetail(
     AcquisitionSummary Summary,
     IReadOnlyList<ReleaseCandidateView> Candidates);
+
+/// <summary>Selects which scored candidate to download for an acquisition.</summary>
+public sealed record AcquisitionQueueRequest(Guid CandidateId);
+
+/// <summary>Configured download client safe for list displays (no secret material).</summary>
+public sealed record DownloadClientSummary(
+    Guid Id,
+    DownloadClientKind Kind,
+    string DisplayName,
+    string BaseUrl,
+    string? Username,
+    string Category,
+    bool Enabled,
+    bool HasPassword);
+
+/// <summary>Configured download client with secret material for server-side use only.</summary>
+public sealed record DownloadClientDetail(
+    Guid Id,
+    DownloadClientKind Kind,
+    string DisplayName,
+    string BaseUrl,
+    string? Username,
+    string Category,
+    bool Enabled,
+    bool HasPassword,
+    string? Password);
+
+/// <summary>Request payload for creating or updating a download client configuration.</summary>
+public sealed record DownloadClientSaveRequest(
+    Guid? Id,
+    DownloadClientKind Kind,
+    string DisplayName,
+    string BaseUrl,
+    string? Username,
+    string? Password,
+    string Category,
+    bool Enabled);
+
+/// <summary>Connection test payload for a download client configuration that may not be saved yet.</summary>
+public sealed record DownloadClientTestRequest(
+    Guid? Id,
+    DownloadClientKind Kind,
+    string BaseUrl,
+    string? Username,
+    string? Password);
+
+/// <summary>Connection test result for a download client configuration.</summary>
+public sealed record DownloadClientTestResponse(bool Connected, string? Message);

@@ -113,6 +113,76 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
         await db.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task<AcquisitionQueueCandidate?> GetQueueCandidateAsync(Guid acquisitionId, Guid candidateId, CancellationToken cancellationToken) {
+        var row = await db.ReleaseCandidates
+            .AsNoTracking()
+            .FirstOrDefaultAsync(candidate => candidate.Id == candidateId && candidate.AcquisitionId == acquisitionId, cancellationToken);
+        return row is null
+            ? null
+            : new AcquisitionQueueCandidate(row.Id, row.Title, row.DownloadUrl, row.MagnetUrl, row.InfoHash, row.Protocol);
+    }
+
+    public async Task CreateTransferAsync(Guid acquisitionId, Guid? downloadClientConfigId, string clientItemId, string? category, CancellationToken cancellationToken) {
+        var now = DateTimeOffset.UtcNow;
+        db.DownloadTransfers.Add(new DownloadTransferRow {
+            Id = Guid.NewGuid(),
+            AcquisitionId = acquisitionId,
+            DownloadClientConfigId = downloadClientConfigId,
+            ClientItemId = clientItemId,
+            Category = category,
+            Progress = 0,
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<ActiveTransfer>> ListActiveTransfersAsync(CancellationToken cancellationToken) {
+        var active = new[] { AcquisitionStatus.Queued, AcquisitionStatus.Downloading };
+        var rows = await (
+            from transfer in db.DownloadTransfers.AsNoTracking()
+            join acquisition in db.Acquisitions.AsNoTracking() on transfer.AcquisitionId equals acquisition.Id
+            where active.Contains(acquisition.Status)
+            select new { transfer.Id, transfer.AcquisitionId, transfer.DownloadClientConfigId, transfer.ClientItemId, acquisition.Status })
+            .ToArrayAsync(cancellationToken);
+        return rows
+            .Select(row => new ActiveTransfer(row.Id, row.AcquisitionId, row.DownloadClientConfigId, row.ClientItemId, row.Status))
+            .ToArray();
+    }
+
+    public async Task<bool> HasActiveTransfersAsync(CancellationToken cancellationToken) {
+        var active = new[] { AcquisitionStatus.Queued, AcquisitionStatus.Downloading };
+        return await (
+            from transfer in db.DownloadTransfers.AsNoTracking()
+            join acquisition in db.Acquisitions.AsNoTracking() on transfer.AcquisitionId equals acquisition.Id
+            where active.Contains(acquisition.Status)
+            select transfer.Id).AnyAsync(cancellationToken);
+    }
+
+    public async Task UpdateTransferAsync(Guid transferId, double progress, string? state, string? contentPath, CancellationToken cancellationToken) {
+        var row = await db.DownloadTransfers.FirstOrDefaultAsync(transfer => transfer.Id == transferId, cancellationToken);
+        if (row is null) {
+            return;
+        }
+
+        row.Progress = progress;
+        row.State = state;
+        if (!string.IsNullOrWhiteSpace(contentPath)) {
+            row.ContentPath = contentPath;
+        }
+
+        row.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<string?> GetTransferClientItemIdAsync(Guid acquisitionId, CancellationToken cancellationToken) =>
+        await db.DownloadTransfers
+            .AsNoTracking()
+            .Where(transfer => transfer.AcquisitionId == acquisitionId)
+            .OrderByDescending(transfer => transfer.CreatedAt)
+            .Select(transfer => transfer.ClientItemId)
+            .FirstOrDefaultAsync(cancellationToken);
+
     private async Task<Dictionary<Guid, double?>> LatestProgressAsync(IReadOnlyList<Guid> acquisitionIds, CancellationToken cancellationToken) {
         if (acquisitionIds.Count == 0) {
             return [];
