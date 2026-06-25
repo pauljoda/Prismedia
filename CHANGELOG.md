@@ -27,6 +27,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added configurable sidebar and mobile navigation sections, with rename, reorder, hide, collapse, reset, pinned mobile destinations, and server-saved layout preferences.
 - Added dynamic and hybrid collections, including rule previews, media-specific filters, library-root filters, watched/progress filters, and collection cover modes.
 - Added audio-capable collections that can act like playlists when they include artists, albums, or tracks, including a reusable Audio tab and Jellyfin playlist exposure for compatible clients.
+- Added track-level multi-select to audio track lists, including select-all, Add to Collection, and shared bulk action controls.
 - Added automatic hourly collection refresh, enabled by default, so dynamic collection rules stay current without a manual refresh.
 - Added durable Identify queues, bulk identify, provider seeking, auto identify settings, cascade child matching, live apply progress, and review screens for movies, shows, seasons, episodes, books, music, galleries, people, studios, and tags.
 - Added first-class editing for metadata, credits, roles, characters, studios, tags, links, dates, provider IDs, ratings, classification, poster/header artwork, and related entities across detail pages.

@@ -55,6 +55,29 @@ describe("TrackListRow", () => {
     expect(ratingButton.parentElement?.parentElement).not.toHaveClass("opacity-0");
   });
 
+  it("selects a row without starting playback", async () => {
+    const onPlay = vi.fn();
+    const onSelectedChange = vi.fn();
+
+    render(TrackListRow, {
+      props: {
+        track: track("track-1", "Prelude in E minor"),
+        index: 0,
+        isActive: false,
+        isPlaying: false,
+        onPlay,
+        selectable: true,
+        selected: false,
+        onSelectedChange,
+      },
+    });
+
+    await fireEvent.click(screen.getByLabelText("Select Prelude in E minor"));
+
+    expect(onSelectedChange).toHaveBeenCalledWith(true);
+    expect(onPlay).not.toHaveBeenCalled();
+  });
+
   it("opens a row actions flyout and renames a track without starting playback", async () => {
     const onPlay = vi.fn();
     const onRename = vi.fn().mockResolvedValue(undefined);

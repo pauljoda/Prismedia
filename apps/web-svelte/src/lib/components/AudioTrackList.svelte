@@ -1,10 +1,15 @@
 <script lang="ts">
-  import { cn } from "@prismedia/ui-svelte";
+  import { Checkbox, cn } from "@prismedia/ui-svelte";
+  import type { CollectionEntityType } from "$lib/collections/models";
   import { resolveEntityHref } from "$lib/entities/entity-routes";
+  import { ENTITY_KIND } from "$lib/entities/entity-codes";
+  import type { EntityGridBulkAction } from "$lib/entities/entity-grid";
   import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
+  import BulkSelectionBar from "./entities/BulkSelectionBar.svelte";
   import TrackListRow from "./TrackListRow.svelte";
 
   interface Props {
+    bulkActions?: EntityGridBulkAction[];
     tracks: AudioTrackListItemDto[];
     activeTrackId: string | null;
     isPlaying: boolean;
@@ -12,10 +17,13 @@
     onRatingChange?: (trackId: string, value: number | null) => void;
     onRename?: (track: AudioTrackListItemDto, title: string) => void | Promise<void>;
     onDelete?: (track: AudioTrackListItemDto) => void;
+    onSelectionChange?: (selectedIds: string[]) => void;
+    selectable?: boolean;
     class?: string;
   }
 
   let {
+    bulkActions = [],
     tracks,
     activeTrackId,
     isPlaying,
@@ -23,8 +31,12 @@
     onRatingChange,
     onRename,
     onDelete,
+    onSelectionChange,
+    selectable = true,
     class: className = "",
   }: Props = $props();
+
+  let selectedIds = $state<string[]>([]);
 
   function formatTotalDuration(seconds: number): string {
     const h = Math.floor(seconds / 3600);
@@ -35,6 +47,20 @@
 
   const totalDuration = $derived(
     tracks.reduce((sum, t) => sum + (t.duration ?? 0), 0),
+  );
+  const visibleTrackIds = $derived(new Set(tracks.map((track) => track.id)));
+  const visibleSelectedIds = $derived(selectedIds.filter((id) => visibleTrackIds.has(id)));
+  const selectedIdSet = $derived(new Set(visibleSelectedIds));
+  const selectedCount = $derived(visibleSelectedIds.length);
+  const allTracksSelected = $derived(
+    tracks.length > 0 && tracks.every((track) => selectedIdSet.has(track.id)),
+  );
+  const someTracksSelected = $derived(selectedCount > 0 && !allTracksSelected);
+  const selectedCollectionItems = $derived(
+    visibleSelectedIds.map((id) => ({
+      entityType: ENTITY_KIND.audioTrack as CollectionEntityType,
+      entityId: id,
+    })),
   );
 
   // Group consecutive tracks by their section (disc) label. Multi-disc albums render a small
@@ -62,18 +88,84 @@
   });
 
   const hasSections = $derived(sections.some((group) => group.label !== null));
+
+  function setSelectedIds(ids: string[]) {
+    selectedIds = ids;
+    onSelectionChange?.(selectedIds);
+  }
+
+  function updateSelection(id: string, selected: boolean) {
+    setSelectedIds(
+      selected
+        ? Array.from(new Set([...selectedIds, id]))
+        : selectedIds.filter((selectedId) => selectedId !== id),
+    );
+  }
+
+  function selectAllTracks() {
+    setSelectedIds(tracks.map((track) => track.id));
+  }
+
+  function clearSelection() {
+    setSelectedIds([]);
+  }
+
+  function handleSelectAllChange(event: Event) {
+    if ((event.currentTarget as HTMLInputElement).checked) {
+      selectAllTracks();
+      return;
+    }
+
+    clearSelection();
+  }
 </script>
 
 <div class={cn("surface-panel border border-border-subtle overflow-hidden", className)}>
   <div
-    class="hidden grid-cols-[2rem_minmax(0,1fr)_auto_3rem_2rem] items-center gap-3 border-b border-border-subtle px-4 py-2 sm:grid"
+    class={cn("track-header hidden items-center gap-3 border-b border-border-subtle px-4 py-2 sm:grid", selectable && "has-selection")}
   >
+    {#if selectable}
+      <span></span>
+    {/if}
     <span class="text-center font-mono text-[0.65rem] font-semibold uppercase tracking-widest text-text-disabled">#</span>
     <span class="text-[0.65rem] font-semibold uppercase tracking-widest text-text-disabled">Title</span>
     <span class="justify-self-end text-[0.65rem] font-semibold uppercase tracking-widest text-text-disabled">Rating</span>
     <span class="justify-self-end text-[0.65rem] font-semibold uppercase tracking-widest text-text-disabled">Time</span>
     <span></span>
   </div>
+
+  {#if selectable && tracks.length > 0}
+    <div class="track-select-row">
+      <label class="track-select-all">
+        <Checkbox
+          checked={allTracksSelected}
+          indeterminate={someTracksSelected}
+          aria-label="Select all tracks"
+          onchange={handleSelectAllChange}
+        />
+        <span>Select all</span>
+      </label>
+      <span class="track-select-count">
+        {selectedCount > 0
+          ? `${selectedCount} selected`
+          : `${tracks.length} ${tracks.length === 1 ? "track" : "tracks"}`}
+      </span>
+    </div>
+
+    {#if selectedCount > 0}
+      <BulkSelectionBar
+        bulkActions={bulkActions}
+        collectionItems={selectedCollectionItems}
+        onClearSelection={clearSelection}
+        onSelectAllVisible={selectAllTracks}
+        selectedCount={selectedCount}
+        selectedIds={visibleSelectedIds}
+        showNsfwAction={false}
+        showSelectionToggle={false}
+        variant="track-list"
+      />
+    {/if}
+  {/if}
 
   {#each sections as section (section.key)}
     {#if hasSections && section.label}
@@ -94,6 +186,9 @@
         {onRatingChange}
         {onRename}
         {onDelete}
+        selectable={selectable}
+        selected={selectedIdSet.has(row.track.id)}
+        onSelectedChange={(selected) => updateSelection(row.track.id, selected)}
         trackHref={resolveEntityHref("audio-track", row.track.id)}
       />
     {/each}
@@ -112,3 +207,42 @@
     </div>
   {/if}
 </div>
+
+<style>
+  .track-header {
+    grid-template-columns: 2rem minmax(0, 1fr) auto 3rem 2rem;
+  }
+
+  .track-header.has-selection {
+    grid-template-columns: 1.35rem 2rem minmax(0, 1fr) auto 3rem 2rem;
+  }
+
+  .track-select-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    border-bottom: 1px solid var(--color-border-subtle, rgba(148, 158, 178, 0.07));
+    background: rgb(255 255 255 / 0.015);
+    padding: 0.55rem 0.75rem;
+  }
+
+  .track-select-all {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--color-text-muted);
+    font-family: var(--font-mono, "JetBrains Mono", monospace);
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .track-select-count {
+    color: var(--color-text-disabled);
+    font-family: var(--font-mono, "JetBrains Mono", monospace);
+    font-size: 0.68rem;
+    font-variant-numeric: tabular-nums;
+  }
+</style>

@@ -7,7 +7,7 @@
     Trash2,
     X,
   } from "@lucide/svelte";
-  import { cn } from "@prismedia/ui-svelte";
+  import { Checkbox, cn } from "@prismedia/ui-svelte";
   import { keepFlyoutOnScreen } from "$lib/actions/keep-flyout-on-screen";
   import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
   import StarRatingPicker from "./StarRatingPicker.svelte";
@@ -21,6 +21,9 @@
     onRatingChange?: (trackId: string, value: number | null) => void;
     onRename?: (track: AudioTrackListItemDto, title: string) => void | Promise<void>;
     onDelete?: (track: AudioTrackListItemDto) => void;
+    onSelectedChange?: (selected: boolean) => void;
+    selectable?: boolean;
+    selected?: boolean;
     trackHref?: string;
     ratingAriaPrefix?: string;
     /** Explicit number to show in the "#" column, overriding the index-based default. Used so multi-disc albums restart numbering per section. */
@@ -36,6 +39,9 @@
     onRatingChange,
     onRename,
     onDelete,
+    onSelectedChange,
+    selectable = false,
+    selected = false,
     trackHref,
     ratingAriaPrefix,
     displayNumber,
@@ -93,6 +99,10 @@
       renameBusy = false;
     }
   }
+
+  function handleSelectedChange(event: Event) {
+    onSelectedChange?.((event.currentTarget as HTMLInputElement).checked);
+  }
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -101,6 +111,7 @@
   class={cn(
     "track-row group/row relative cursor-pointer transition-colors duration-fast",
     "before:pointer-events-none before:absolute before:inset-y-0 before:left-0 before:w-[2px] before:transition-all before:duration-normal",
+    selectable && "has-selection",
     isActive
       ? "bg-gradient-to-r from-accent-900/40 via-accent-950/30 to-transparent before:bg-[var(--color-accent-500)] before:shadow-[0_0_12px_rgba(199,155,92,0.55)]"
       : "hover:bg-surface-2 before:bg-transparent",
@@ -112,6 +123,16 @@
     onPlay(track.id);
   }}
 >
+  {#if selectable}
+    <div class="selection-cell flex items-center justify-center">
+      <Checkbox
+        checked={selected}
+        aria-label={`Select ${track.title}`}
+        onchange={handleSelectedChange}
+      />
+    </div>
+  {/if}
+
   <div class="index-cell flex h-7 w-7 items-center justify-center">
     {#if isActive && isPlaying}
       <span
@@ -314,6 +335,14 @@
     padding: 0.75rem;
   }
 
+  .track-row.has-selection {
+    grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      "select index title  title  actions"
+      "select index rating time   actions";
+  }
+
+  .selection-cell { grid-area: select; justify-self: start; align-self: start; padding-top: 0.35rem; }
   .index-cell { grid-area: index; justify-self: start; align-self: start; }
   .title-cell { grid-area: title; }
   .rating-cell { grid-area: rating; justify-self: start; }
@@ -345,6 +374,12 @@
       row-gap: 0;
     }
 
+    .track-row.has-selection {
+      grid-template-columns: 1.35rem 2rem minmax(0, 1fr) auto 3rem 2rem;
+      grid-template-areas: "select index title rating time actions";
+    }
+
+    .selection-cell,
     .index-cell,
     .rating-cell,
     .time-cell,
@@ -355,6 +390,12 @@
     .index-cell {
       justify-self: center;
       align-self: center;
+    }
+
+    .selection-cell {
+      justify-self: center;
+      align-self: center;
+      padding-top: 0;
     }
 
     .track-title,

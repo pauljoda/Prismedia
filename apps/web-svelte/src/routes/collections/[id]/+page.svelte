@@ -498,6 +498,7 @@
 
         {#if audioTrackItems.length > 0}
           <AudioTrackList
+            bulkActions={itemBulkActions}
             tracks={audioTrackItems}
             activeTrackId={playback.currentTrack?.id ?? null}
             isPlaying={playback.playing}
