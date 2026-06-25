@@ -88,6 +88,20 @@ public sealed partial class SecurityEndpointTests : IDisposable {
     }
 
     [Fact]
+    public void BootstrapNavigationAllowsDirectPrivateLanNavigation() {
+        var context = new DefaultHttpContext();
+        context.Connection.RemoteIpAddress = IPAddress.Parse("192.168.1.44");
+        context.Request.Method = HttpMethods.Get;
+        context.Request.Path = "/library";
+        context.Request.Host = new HostString("192.168.1.10:8008");
+        context.Request.Headers.Accept = "text/html";
+
+        var shouldBootstrap = PrismediaAuthentication.ShouldBootstrapCookie(context.Request);
+
+        Assert.True(shouldBootstrap);
+    }
+
+    [Fact]
     public void BootstrapNavigationAllowsProxiedUiNavigationFromPrivateProxyNetwork() {
         var context = new DefaultHttpContext();
         context.Connection.RemoteIpAddress = IPAddress.Parse("172.22.0.5");
@@ -102,6 +116,21 @@ public sealed partial class SecurityEndpointTests : IDisposable {
         var shouldBootstrap = PrismediaAuthentication.ShouldBootstrapCookie(context.Request);
 
         Assert.True(shouldBootstrap);
+    }
+
+    [Fact]
+    public void BootstrapNavigationRefusesPrivateProxyTrafficWithoutForwardedOrigin() {
+        var context = new DefaultHttpContext();
+        context.Connection.RemoteIpAddress = IPAddress.Parse("172.22.0.5");
+        context.Request.Method = HttpMethods.Get;
+        context.Request.Path = "/library";
+        context.Request.Host = new HostString("dev-prismedia.pauljoda.com");
+        context.Request.Headers.Accept = "text/html";
+        context.Request.Headers["X-Forwarded-For"] = "203.0.113.8";
+
+        var shouldBootstrap = PrismediaAuthentication.ShouldBootstrapCookie(context.Request);
+
+        Assert.False(shouldBootstrap);
     }
 
     [Theory]
