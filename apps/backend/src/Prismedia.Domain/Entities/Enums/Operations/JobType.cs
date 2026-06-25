@@ -114,5 +114,14 @@ public enum JobType {
 
     /// <summary>Walks a queued entity's full child tree through a provider, streaming the growing proposal onto the queue item.</summary>
     [Code("identify-cascade")]
-    IdentifyCascade
+    IdentifyCascade,
+
+    // ── Acquisition ─────────────────────────────────────────────
+    /// <summary>Polls active download-client transfers for in-flight acquisitions and advances their status.</summary>
+    [Code("acquisition-monitor")]
+    AcquisitionMonitor,
+
+    /// <summary>Moves a completed acquisition payload into a library root, writes identify hints, and enqueues a book scan.</summary>
+    [Code("acquisition-import")]
+    AcquisitionImport
 }

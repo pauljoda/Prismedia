@@ -46,6 +46,12 @@ const ENUM_EXPORTS = [
   ["RequestMinimumAvailability", "REQUEST_MINIMUM_AVAILABILITY", "RequestMinimumAvailabilityCode"],
   ["RequestHistoryStatus", "REQUEST_HISTORY_STATUS", "RequestHistoryStatusCode"],
   ["RequestRatingSource", "REQUEST_RATING_SOURCE", "RequestRatingSourceCode"],
+  ["IndexerKind", "INDEXER_KIND", "IndexerKindCode"],
+  ["DownloadClientKind", "DOWNLOAD_CLIENT_KIND", "DownloadClientKindCode"],
+  ["DownloadProtocol", "DOWNLOAD_PROTOCOL", "DownloadProtocolCode"],
+  ["AcquisitionStatus", "ACQUISITION_STATUS", "AcquisitionStatusCode"],
+  ["ReleaseRejectionReason", "RELEASE_REJECTION_REASON", "ReleaseRejectionReasonCode"],
+  ["ImportMode", "IMPORT_MODE", "ImportModeCode"],
 ];
 
 const camel = (name) => (name.length === 0 ? name : name[0].toLowerCase() + name.slice(1));

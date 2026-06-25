@@ -7,8 +7,35 @@ namespace Prismedia.Contracts.System;
 /// constants instead of bare string literals.
 /// </summary>
 public static class ApiProblemCodes {
+    /// <summary>Problem code <c>acquisition_import_blocked</c>.</summary>
+    public const string AcquisitionImportBlocked = "acquisition_import_blocked";
+
+    /// <summary>Problem code <c>acquisition_invalid</c>.</summary>
+    public const string AcquisitionInvalid = "acquisition_invalid";
+
+    /// <summary>Problem code <c>acquisition_not_found</c>.</summary>
+    public const string AcquisitionNotFound = "acquisition_not_found";
+
+    /// <summary>Problem code <c>acquisition_profile_invalid</c>.</summary>
+    public const string AcquisitionProfileInvalid = "acquisition_profile_invalid";
+
+    /// <summary>Problem code <c>acquisition_release_not_found</c>.</summary>
+    public const string AcquisitionReleaseNotFound = "acquisition_release_not_found";
+
     /// <summary>Problem code <c>audio_stream_not_found</c>.</summary>
     public const string AudioStreamNotFound = "audio_stream_not_found";
+
+    /// <summary>Problem code <c>download_client_invalid</c>.</summary>
+    public const string DownloadClientInvalid = "download_client_invalid";
+
+    /// <summary>Problem code <c>download_client_unreachable</c>.</summary>
+    public const string DownloadClientUnreachable = "download_client_unreachable";
+
+    /// <summary>Problem code <c>indexer_invalid</c>.</summary>
+    public const string IndexerInvalid = "indexer_invalid";
+
+    /// <summary>Problem code <c>indexer_unreachable</c>.</summary>
+    public const string IndexerUnreachable = "indexer_unreachable";
 
     /// <summary>Problem code <c>auth_rate_limited</c>.</summary>
     public const string AuthRateLimited = "auth_rate_limited";

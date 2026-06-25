@@ -12,5 +12,6 @@ internal static partial class PrismediaModelConfiguration {
         ConfigureTaxonomyDetails(modelBuilder);
         ConfigureCollections(modelBuilder);
         ConfigureSystemTables(modelBuilder);
+        ConfigureAcquisitionTables(modelBuilder);
     }
 }

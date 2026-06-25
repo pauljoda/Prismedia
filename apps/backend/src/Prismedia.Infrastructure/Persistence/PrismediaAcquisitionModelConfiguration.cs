@@ -1,0 +1,205 @@
+using Microsoft.EntityFrameworkCore;
+using Prismedia.Domain.Entities;
+using Prismedia.Infrastructure.Persistence.Entities;
+
+namespace Prismedia.Infrastructure.Persistence;
+
+internal static partial class PrismediaModelConfiguration {
+    private static void ConfigureAcquisitionTables(ModelBuilder modelBuilder) {
+        modelBuilder.Entity<IndexerConfigRow>(entity => {
+            entity.ToTable("indexer_configs");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(row => row.Kind)
+                .HasColumnName("kind")
+                .HasMaxLength(64)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<IndexerKind>())
+                .IsRequired();
+            entity.Property(row => row.DisplayName).HasColumnName("display_name").HasMaxLength(256).IsRequired();
+            entity.Property(row => row.BaseUrl).HasColumnName("base_url").HasMaxLength(2048).IsRequired();
+            entity.Property(row => row.Enabled).HasColumnName("enabled");
+            entity.Property(row => row.Priority).HasColumnName("priority");
+            entity.Property(row => row.Categories).HasColumnName("categories");
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            entity.HasIndex(row => new { row.Kind, row.Enabled });
+        });
+
+        modelBuilder.Entity<IndexerCredentialRow>(entity => {
+            entity.ToTable("indexer_credentials");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(row => row.IndexerConfigId).HasColumnName("indexer_config_id");
+            entity.Property(row => row.CredentialKey).HasColumnName("credential_key").HasMaxLength(128).IsRequired();
+            entity.Property(row => row.EncryptedValue).HasColumnName("encrypted_value").IsRequired();
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            entity.HasIndex(row => new { row.IndexerConfigId, row.CredentialKey }).IsUnique();
+            entity.HasOne<IndexerConfigRow>().WithMany().HasForeignKey(row => row.IndexerConfigId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<DownloadClientConfigRow>(entity => {
+            entity.ToTable("download_client_configs");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(row => row.Kind)
+                .HasColumnName("kind")
+                .HasMaxLength(64)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<DownloadClientKind>())
+                .IsRequired();
+            entity.Property(row => row.DisplayName).HasColumnName("display_name").HasMaxLength(256).IsRequired();
+            entity.Property(row => row.BaseUrl).HasColumnName("base_url").HasMaxLength(2048).IsRequired();
+            entity.Property(row => row.Username).HasColumnName("username").HasMaxLength(256);
+            entity.Property(row => row.Category).HasColumnName("category").HasMaxLength(256).IsRequired();
+            entity.Property(row => row.Enabled).HasColumnName("enabled");
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            entity.HasIndex(row => new { row.Kind, row.Enabled });
+        });
+
+        modelBuilder.Entity<DownloadClientCredentialRow>(entity => {
+            entity.ToTable("download_client_credentials");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(row => row.DownloadClientConfigId).HasColumnName("download_client_config_id");
+            entity.Property(row => row.CredentialKey).HasColumnName("credential_key").HasMaxLength(128).IsRequired();
+            entity.Property(row => row.EncryptedValue).HasColumnName("encrypted_value").IsRequired();
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            entity.HasIndex(row => new { row.DownloadClientConfigId, row.CredentialKey }).IsUnique();
+            entity.HasOne<DownloadClientConfigRow>().WithMany().HasForeignKey(row => row.DownloadClientConfigId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<BookAcquisitionProfileRow>(entity => {
+            entity.ToTable("book_acquisition_profiles");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(row => row.DisplayName).HasColumnName("display_name").HasMaxLength(256).IsRequired();
+            entity.Property(row => row.IsDefault).HasColumnName("is_default");
+            entity.Property(row => row.TargetLibraryRootId).HasColumnName("target_library_root_id");
+            entity.Property(row => row.PathTemplate).HasColumnName("path_template").HasMaxLength(1024).IsRequired();
+            entity.Property(row => row.ImportMode)
+                .HasColumnName("import_mode")
+                .HasMaxLength(32)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<ImportMode>())
+                .HasDefaultValue(ImportMode.Move)
+                .IsRequired();
+            entity.Property(row => row.AllowedFormats).HasColumnName("allowed_formats");
+            entity.Property(row => row.Language).HasColumnName("language").HasMaxLength(64);
+            entity.Property(row => row.MinSeeders).HasColumnName("min_seeders");
+            entity.Property(row => row.MinSizeBytes).HasColumnName("min_size_bytes");
+            entity.Property(row => row.MaxSizeBytes).HasColumnName("max_size_bytes");
+            entity.Property(row => row.RequiredTerms).HasColumnName("required_terms");
+            entity.Property(row => row.IgnoredTerms).HasColumnName("ignored_terms");
+            entity.Property(row => row.AutoPick).HasColumnName("auto_pick");
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            entity.HasIndex(row => row.IsDefault);
+            entity.HasOne<LibraryRootRow>().WithMany().HasForeignKey(row => row.TargetLibraryRootId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<AcquisitionRow>(entity => {
+            entity.ToTable("acquisitions");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(row => row.RequestHistoryId).HasColumnName("request_history_id");
+            entity.Property(row => row.ProfileId).HasColumnName("profile_id");
+            entity.Property(row => row.Status)
+                .HasColumnName("status")
+                .HasMaxLength(32)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<AcquisitionStatus>())
+                .HasDefaultValue(AcquisitionStatus.Pending)
+                .IsRequired();
+            entity.Property(row => row.StatusMessage).HasColumnName("status_message").HasMaxLength(2048);
+            entity.Property(row => row.Title).HasColumnName("title").HasMaxLength(1024).IsRequired();
+            entity.Property(row => row.Author).HasColumnName("author").HasMaxLength(512);
+            entity.Property(row => row.Series).HasColumnName("series").HasMaxLength(512);
+            entity.Property(row => row.Year).HasColumnName("year");
+            entity.Property(row => row.PosterUrl).HasColumnName("poster_url").HasMaxLength(2048);
+            entity.Property(row => row.PluginId).HasColumnName("plugin_id").HasMaxLength(256);
+            entity.Property(row => row.PluginItemId).HasColumnName("plugin_item_id").HasMaxLength(256);
+            entity.Property(row => row.ExternalIdsJson).HasColumnName("external_ids_json").HasColumnType("jsonb");
+            entity.Property(row => row.SourceUrlsJson).HasColumnName("source_urls_json").HasColumnType("jsonb");
+            entity.Property(row => row.SelectedReleaseJson).HasColumnName("selected_release_json").HasColumnType("jsonb");
+            entity.Property(row => row.FinalSourcePath).HasColumnName("final_source_path").HasMaxLength(2048);
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            entity.HasIndex(row => row.CreatedAt);
+            entity.HasIndex(row => row.Status);
+            entity.HasOne<RequestHistoryRow>().WithMany().HasForeignKey(row => row.RequestHistoryId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne<BookAcquisitionProfileRow>().WithMany().HasForeignKey(row => row.ProfileId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<ReleaseCandidateRow>(entity => {
+            entity.ToTable("release_candidates");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(row => row.AcquisitionId).HasColumnName("acquisition_id");
+            entity.Property(row => row.IndexerConfigId).HasColumnName("indexer_config_id");
+            entity.Property(row => row.IndexerName).HasColumnName("indexer_name").HasMaxLength(256).IsRequired();
+            entity.Property(row => row.Title).HasColumnName("title").HasMaxLength(2048).IsRequired();
+            entity.Property(row => row.SizeBytes).HasColumnName("size_bytes");
+            entity.Property(row => row.Seeders).HasColumnName("seeders");
+            entity.Property(row => row.Peers).HasColumnName("peers");
+            entity.Property(row => row.Protocol)
+                .HasColumnName("protocol")
+                .HasMaxLength(32)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<DownloadProtocol>())
+                .HasDefaultValue(DownloadProtocol.Torrent)
+                .IsRequired();
+            entity.Property(row => row.DownloadUrl).HasColumnName("download_url").HasMaxLength(4096);
+            entity.Property(row => row.MagnetUrl).HasColumnName("magnet_url");
+            entity.Property(row => row.InfoHash).HasColumnName("info_hash").HasMaxLength(128);
+            entity.Property(row => row.InfoUrl).HasColumnName("info_url").HasMaxLength(4096);
+            entity.Property(row => row.PublishedAt).HasColumnName("published_at");
+            entity.Property(row => row.Score).HasColumnName("score");
+            entity.Property(row => row.Accepted).HasColumnName("accepted");
+            entity.Property(row => row.RejectionsJson).HasColumnName("rejections_json").HasColumnType("jsonb");
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.HasIndex(row => new { row.AcquisitionId, row.Score });
+            entity.HasOne<AcquisitionRow>().WithMany().HasForeignKey(row => row.AcquisitionId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<IndexerConfigRow>().WithMany().HasForeignKey(row => row.IndexerConfigId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<DownloadTransferRow>(entity => {
+            entity.ToTable("download_transfers");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(row => row.AcquisitionId).HasColumnName("acquisition_id");
+            entity.Property(row => row.DownloadClientConfigId).HasColumnName("download_client_config_id");
+            entity.Property(row => row.ClientItemId).HasColumnName("client_item_id").HasMaxLength(256).IsRequired();
+            entity.Property(row => row.Category).HasColumnName("category").HasMaxLength(256);
+            entity.Property(row => row.SavePath).HasColumnName("save_path").HasMaxLength(2048);
+            entity.Property(row => row.ContentPath).HasColumnName("content_path").HasMaxLength(2048);
+            entity.Property(row => row.Progress).HasColumnName("progress");
+            entity.Property(row => row.State).HasColumnName("state").HasMaxLength(64);
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            entity.HasIndex(row => row.AcquisitionId);
+            entity.HasOne<AcquisitionRow>().WithMany().HasForeignKey(row => row.AcquisitionId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<DownloadClientConfigRow>().WithMany().HasForeignKey(row => row.DownloadClientConfigId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<AcquisitionImportHintRow>(entity => {
+            entity.ToTable("acquisition_import_hints");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(row => row.AcquisitionId).HasColumnName("acquisition_id");
+            entity.Property(row => row.SourcePath).HasColumnName("source_path").HasMaxLength(2048).IsRequired();
+            entity.Property(row => row.PluginId).HasColumnName("plugin_id").HasMaxLength(256);
+            entity.Property(row => row.PluginItemId).HasColumnName("plugin_item_id").HasMaxLength(256);
+            entity.Property(row => row.ExternalIdsJson).HasColumnName("external_ids_json").HasColumnType("jsonb");
+            entity.Property(row => row.SourceUrlsJson).HasColumnName("source_urls_json").HasColumnType("jsonb");
+            entity.Property(row => row.Title).HasColumnName("title").HasMaxLength(1024);
+            entity.Property(row => row.Author).HasColumnName("author").HasMaxLength(512);
+            entity.Property(row => row.Series).HasColumnName("series").HasMaxLength(512);
+            entity.Property(row => row.Year).HasColumnName("year");
+            entity.Property(row => row.PosterUrl).HasColumnName("poster_url").HasMaxLength(2048);
+            entity.Property(row => row.Consumed).HasColumnName("consumed");
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            entity.HasIndex(row => row.SourcePath);
+            entity.HasOne<AcquisitionRow>().WithMany().HasForeignKey(row => row.AcquisitionId).OnDelete(DeleteBehavior.Cascade);
+        });
+    }
+}

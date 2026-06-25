@@ -126,6 +126,24 @@ public sealed class PrismediaDbContext : DbContext {
 
     public DbSet<JobRunRow> JobRuns => Set<JobRunRow>();
 
+    public DbSet<IndexerConfigRow> IndexerConfigs => Set<IndexerConfigRow>();
+
+    public DbSet<IndexerCredentialRow> IndexerCredentials => Set<IndexerCredentialRow>();
+
+    public DbSet<DownloadClientConfigRow> DownloadClientConfigs => Set<DownloadClientConfigRow>();
+
+    public DbSet<DownloadClientCredentialRow> DownloadClientCredentials => Set<DownloadClientCredentialRow>();
+
+    public DbSet<BookAcquisitionProfileRow> BookAcquisitionProfiles => Set<BookAcquisitionProfileRow>();
+
+    public DbSet<AcquisitionRow> Acquisitions => Set<AcquisitionRow>();
+
+    public DbSet<ReleaseCandidateRow> ReleaseCandidates => Set<ReleaseCandidateRow>();
+
+    public DbSet<DownloadTransferRow> DownloadTransfers => Set<DownloadTransferRow>();
+
+    public DbSet<AcquisitionImportHintRow> AcquisitionImportHints => Set<AcquisitionImportHintRow>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder) {
         modelBuilder.ConfigureBaseEntityModel();
         modelBuilder.ConfigureEntityRelationshipModel();
