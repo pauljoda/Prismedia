@@ -71,20 +71,25 @@ public static partial class ImportPlanBuilder {
             return ImportPlan.Block(ImportBlockReason.NoSupportedPayload);
         }
 
-        // A single standalone book file: render the full template (including the file name and extension).
-        if (primaries.Length == 1 && archives.Length == 0) {
-            var source = primaries[0];
-            var target = RenderPath(pathTemplate, context, Path.GetExtension(source), fileNameOnly: false);
-            return ImportPlan.For([new ImportPlanItem(source, target)]);
-        }
-
-        // Multiple standalone books, or a standalone book mixed with archives: the intent is ambiguous.
-        if (primaries.Length >= 2) {
-            return ImportPlan.Block(ImportBlockReason.AmbiguousMultiplePrimaries);
-        }
-
-        if (primaries.Length == 1) {
+        // A standalone book file mixed with comic archives is ambiguous intent.
+        if (primaries.Length >= 1 && archives.Length >= 1) {
             return ImportPlan.Block(ImportBlockReason.MixedPayload);
+        }
+
+        if (primaries.Length >= 1) {
+            // Distinct base names mean genuinely different books; a single base name in several formats
+            // (e.g. "Book.epub" + "Book.pdf" + "Book.mobi") is one book, so pick the preferred format.
+            var distinctBooks = primaries
+                .Select(path => NormalizeBaseName(path))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count();
+            if (distinctBooks > 1) {
+                return ImportPlan.Block(ImportBlockReason.AmbiguousMultiplePrimaries);
+            }
+
+            var chosen = PreferredPrimary(primaries);
+            var target = RenderPath(pathTemplate, context, Path.GetExtension(chosen), fileNameOnly: false);
+            return ImportPlan.For([new ImportPlanItem(chosen, target)]);
         }
 
         // One or more comic archives: treat them as volumes/chapters of one book under the rendered folder.
@@ -141,4 +146,14 @@ public static partial class ImportPlanBuilder {
 
     private static string CombineRelative(string folder, string fileName) =>
         string.IsNullOrEmpty(folder) ? fileName : $"{folder}/{fileName}";
+
+    /// <summary>Normalizes a file's base name (no extension) so format variants of one book compare equal.</summary>
+    private static string NormalizeBaseName(string path) =>
+        CollapseWhitespaceRegex().Replace(Path.GetFileNameWithoutExtension(path).Replace('_', ' '), " ").Trim();
+
+    /// <summary>Chooses the preferred format among one book's files: EPUB first, then PDF, else the first.</summary>
+    private static string PreferredPrimary(IReadOnlyList<string> primaries) =>
+        primaries.FirstOrDefault(path => string.Equals(Path.GetExtension(path), ".epub", StringComparison.OrdinalIgnoreCase))
+        ?? primaries.FirstOrDefault(path => string.Equals(Path.GetExtension(path), ".pdf", StringComparison.OrdinalIgnoreCase))
+        ?? primaries[0];
 }

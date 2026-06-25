@@ -101,6 +101,14 @@ public sealed class IgnoredTermsSpecification : IReleaseSpecification {
     }
 }
 
+/// <summary>Rejects releases with no usable grab link — meta-search indexers often return info-page results only.</summary>
+public sealed class DownloadLinkSpecification : IReleaseSpecification {
+    public ReleaseRejectionReason Reason => ReleaseRejectionReason.NoDownloadLink;
+
+    public ReleaseRejectionReason? Evaluate(IndexerRelease release, BookAcquisitionRules rules) =>
+        !string.IsNullOrWhiteSpace(release.DownloadUrl) || !string.IsNullOrWhiteSpace(release.MagnetUrl) ? null : Reason;
+}
+
 /// <summary>Rejects releases whose language does not match a profile-required language.</summary>
 public sealed class LanguageSpecification : IReleaseSpecification {
     public ReleaseRejectionReason Reason => ReleaseRejectionReason.LanguageMismatch;
@@ -129,6 +137,7 @@ public interface IBookReleaseDecisionEngine {
 public sealed class BookReleaseDecisionEngine : IBookReleaseDecisionEngine {
     private static readonly IReleaseSpecification[] Specifications = [
         new ProtocolSpecification(),
+        new DownloadLinkSpecification(),
         new FormatSpecification(),
         new MinSeedersSpecification(),
         new SizeSpecification(),

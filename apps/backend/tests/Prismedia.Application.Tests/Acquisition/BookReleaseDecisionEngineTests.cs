@@ -28,6 +28,16 @@ public sealed class BookReleaseDecisionEngineTests {
     }
 
     [Fact]
+    public void RejectsReleaseWithNoGrabLink() {
+        var linkless = new IndexerRelease("Some Book (epub)", 5_000_000, 5, 1, DownloadProtocol.Torrent, null, null, null, "http://info", null, null);
+
+        var result = Engine.Evaluate(One(linkless), BookAcquisitionRules.Default);
+
+        Assert.False(result[0].Accepted);
+        Assert.Contains(ReleaseRejectionReason.NoDownloadLink, result[0].Rejections);
+    }
+
+    [Fact]
     public void RejectsUsenetProtocol() {
         var result = Engine.Evaluate(One(Release(protocol: DownloadProtocol.Usenet)), BookAcquisitionRules.Default);
 

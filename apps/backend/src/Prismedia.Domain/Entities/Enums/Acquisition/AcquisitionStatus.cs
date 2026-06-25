@@ -83,7 +83,11 @@ public enum ReleaseRejectionReason {
 
     /// <summary>The release uses a protocol Prismedia does not acquire in v1 (e.g. usenet).</summary>
     [Code("wrong-protocol")]
-    WrongProtocol
+    WrongProtocol,
+
+    /// <summary>The release has no usable download or magnet link (e.g. a meta-search info-page result).</summary>
+    [Code("no-download-link")]
+    NoDownloadLink
 }
 
 /// <summary>

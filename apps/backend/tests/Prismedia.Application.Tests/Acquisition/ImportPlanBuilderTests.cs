@@ -73,6 +73,20 @@ public sealed class ImportPlanBuilderTests {
     }
 
     [Fact]
+    public void FormatVariantsOfOneBookPickEpub() {
+        // A common book release bundles several formats of the same title.
+        var plan = ImportPlanBuilder.Plan(
+            ["The Anxious Generation.pdf", "The Anxious Generation.epub", "The Anxious Generation.mobi"],
+            Context(title: "The Anxious Generation", author: "Jonathan Haidt", year: 2024),
+            Template);
+
+        Assert.False(plan.Blocked);
+        var item = Assert.Single(plan.Items);
+        Assert.EndsWith(".epub", item.TargetRelativePath);
+        Assert.Equal("Jonathan Haidt/The Anxious Generation (2024)/The Anxious Generation.epub", item.TargetRelativePath);
+    }
+
+    [Fact]
     public void BookMixedWithArchiveBlocks() {
         var plan = ImportPlanBuilder.Plan(["a.epub", "b.cbz"], Context(), Template);
 
