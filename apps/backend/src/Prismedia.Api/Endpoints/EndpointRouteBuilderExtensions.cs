@@ -37,6 +37,7 @@ public static class EndpointRouteBuilderExtensions {
         routes.MapIdentifyEndpoints();
         routes.MapOrganizeEndpoints();
         routes.MapRequestEndpoints();
+        routes.MapAcquisitionEndpoints();
 
         return routes;
     }

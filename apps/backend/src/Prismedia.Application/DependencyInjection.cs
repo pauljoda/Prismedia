@@ -52,6 +52,9 @@ public static class DependencyInjection {
         services.AddScoped<RequestServiceTestService>();
         services.AddScoped<RequestSubmitService>();
         services.AddScoped<RequestHistoryService>();
+        services.AddScoped<Acquisition.IndexerConfigCommandService>();
+        services.AddScoped<Acquisition.AcquisitionSearchService>();
+        services.AddSingleton<Acquisition.IBookReleaseDecisionEngine, Acquisition.BookReleaseDecisionEngine>();
         services.AddScoped<IAudioStreamService, AudioStreamService>();
         services.AddSingleton<IIdentifyApplyProgressStore, InMemoryIdentifyApplyProgressStore>();
         services.AddSingleton<AuthAttemptThrottle>();

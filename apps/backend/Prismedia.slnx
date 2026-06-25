@@ -8,6 +8,7 @@
     <Project Path="src/Prismedia.Worker/Prismedia.Worker.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Prismedia.Application.Tests/Prismedia.Application.Tests.csproj" />
     <Project Path="tests/Prismedia.Api.Tests/Prismedia.Api.Tests.csproj" />
     <Project Path="tests/Prismedia.Domain.Tests/Prismedia.Domain.Tests.csproj" />
     <Project Path="tests/Prismedia.Infrastructure.Tests/Prismedia.Infrastructure.Tests.csproj" />

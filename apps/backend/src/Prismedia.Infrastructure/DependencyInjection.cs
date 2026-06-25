@@ -17,6 +17,7 @@ using Prismedia.Application.Audio;
 using Prismedia.Application.Backups;
 using Prismedia.Application.Plugins;
 using Prismedia.Application.Playback;
+using Prismedia.Application.Acquisition;
 using Prismedia.Application.Requests;
 using Prismedia.Application.Security;
 using Prismedia.Application.Videos;
@@ -38,6 +39,7 @@ using Prismedia.Infrastructure.Plugins;
 using Prismedia.Infrastructure.Playback;
 using Prismedia.Infrastructure.Processes;
 using Prismedia.Infrastructure.Queue;
+using Prismedia.Infrastructure.Acquisition;
 using Prismedia.Infrastructure.Requests;
 using Prismedia.Infrastructure.Settings;
 using Prismedia.Infrastructure.Security;
@@ -83,6 +85,7 @@ public static class DependencyInjection {
         RegisterFilesAndOrganization(services);
         RegisterPlayback(services, configuration, cacheDir, mediaToolOptions);
         RegisterRequests(services);
+        RegisterAcquisition(services);
         RegisterJobsSettingsAndState(services, configuration, dataDir, connectionString, pathBase);
 
         return services;
@@ -326,6 +329,14 @@ public static class DependencyInjection {
         services.AddScoped<IRequestProviderClient>(provider => provider.GetRequiredService<SonarrRequestProviderClient>());
         services.AddScoped<IRequestProviderClient>(provider => provider.GetRequiredService<LidarrRequestProviderClient>());
         services.AddScoped<IRequestProviderClientFactory, RequestProviderClientFactory>();
+    }
+
+    private static void RegisterAcquisition(IServiceCollection services) {
+        services.AddScoped<IIndexerConfigStore, EfIndexerConfigStore>();
+        services.AddScoped<IBookAcquisitionProfileStore, EfBookAcquisitionProfileStore>();
+        services.AddScoped(_ => new ProwlarrIndexerClient(new HttpClient()));
+        services.AddScoped<IIndexerSearchClient>(provider => provider.GetRequiredService<ProwlarrIndexerClient>());
+        services.AddScoped<IIndexerSearchClientFactory, IndexerSearchClientFactory>();
     }
 
     private static void RegisterThumbnailContributors(IServiceCollection services) {

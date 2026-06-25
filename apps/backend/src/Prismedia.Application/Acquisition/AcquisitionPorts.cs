@@ -1,0 +1,53 @@
+using Prismedia.Contracts.Acquisition;
+using Prismedia.Domain.Entities;
+
+namespace Prismedia.Application.Acquisition;
+
+/// <summary>Validation failure raised by acquisition configuration use cases.</summary>
+public sealed class AcquisitionConfigurationException(string code, string message) : Exception(message) {
+    /// <summary>Machine-readable problem code (see <see cref="Contracts.System.ApiProblemCodes"/>).</summary>
+    public string Code { get; } = code;
+}
+
+/// <summary>Searches an indexer aggregator for releases. Prowlarr is the v1 implementation; the shape is Torznab-compatible.</summary>
+public interface IIndexerSearchClient {
+    /// <summary>The indexer family this client serves.</summary>
+    IndexerKind Kind { get; }
+
+    /// <summary>Runs a release search against the connection, returning normalized releases.</summary>
+    Task<IReadOnlyList<IndexerRelease>> SearchAsync(IndexerConnection connection, IndexerQuery query, CancellationToken cancellationToken);
+
+    /// <summary>Probes the connection for reachability and authentication.</summary>
+    Task<IndexerConnectionTest> TestAsync(IndexerConnection connection, CancellationToken cancellationToken);
+}
+
+/// <summary>Resolves the search client for an indexer family.</summary>
+public interface IIndexerSearchClientFactory {
+    IIndexerSearchClient Get(IndexerKind kind);
+}
+
+/// <summary>Command for creating or updating an indexer configuration.</summary>
+public sealed record IndexerConfigSaveCommand(
+    Guid? Id,
+    IndexerKind Kind,
+    string DisplayName,
+    string BaseUrl,
+    string? ApiKey,
+    bool Enabled,
+    int Priority,
+    IReadOnlyList<int> Categories);
+
+/// <summary>Persistence port for configured indexers.</summary>
+public interface IIndexerConfigStore {
+    Task<IReadOnlyList<IndexerConfigSummary>> ListAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyList<IndexerConfigDetail>> ListDetailsAsync(CancellationToken cancellationToken);
+    Task<IndexerConfigDetail?> GetAsync(Guid id, CancellationToken cancellationToken);
+    Task<IndexerConfigSummary> SaveAsync(IndexerConfigSaveCommand command, CancellationToken cancellationToken);
+    Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken);
+}
+
+/// <summary>Persistence port for the book acquisition matching/import profile.</summary>
+public interface IBookAcquisitionProfileStore {
+    /// <summary>Returns the decision rules from the default profile, or <see cref="BookAcquisitionRules.Default"/> when none exists.</summary>
+    Task<BookAcquisitionRules> GetDefaultRulesAsync(CancellationToken cancellationToken);
+}
