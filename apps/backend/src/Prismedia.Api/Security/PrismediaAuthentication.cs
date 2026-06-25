@@ -186,10 +186,18 @@ internal static class PrismediaAuthentication {
             return true;
         }
 
-        return IsPrivateNetworkAddress(remoteAddress) &&
-            HasForwardedClient(context.Request) &&
-            HasForwardedOrigin(context.Request);
+        if (!IsPrivateNetworkAddress(remoteAddress)) {
+            return false;
+        }
+
+        return !HasForwardedHeaders(context.Request) ||
+            (HasForwardedClient(context.Request) && HasForwardedOrigin(context.Request));
     }
+
+    private static bool HasForwardedHeaders(HttpRequest request) =>
+        HasForwardedClient(request) ||
+        request.Headers.ContainsKey("X-Forwarded-Host") ||
+        request.Headers.ContainsKey("X-Forwarded-Proto");
 
     private static bool HasForwardedClient(HttpRequest request) =>
         ForwardedHeaderNames.Any(name => request.Headers.ContainsKey(name));
