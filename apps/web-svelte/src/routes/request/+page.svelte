@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { CloudDownload, History, Loader2, Search, Send, Settings } from "@lucide/svelte";
+  import { CloudDownload, Loader2, Search, Send, Settings } from "@lucide/svelte";
   import { Button, Select, TextInput, cn } from "@prismedia/ui-svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
@@ -8,6 +8,7 @@
   import type { RequestMediaKindCode, RequestProviderKindCode } from "$lib/api/generated/codes";
   import { fetchRequestServices, searchRequests } from "$lib/api/requests";
   import RequestPosterCard from "$lib/components/requests/RequestPosterCard.svelte";
+  import RequestsReview from "$lib/components/requests/RequestsReview.svelte";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import type { RequestSearchResult, RequestServiceInstanceSummary } from "$lib/requests/request-model";
   import {
@@ -48,6 +49,12 @@
   ];
 
   const nsfw = useNsfw();
+
+  const tabs = [
+    { id: "discover", label: "Discover" },
+    { id: "requests", label: "Requests" },
+  ] as const;
+  let activeTab = $state<"discover" | "requests">("discover");
 
   let query = $state("");
   let selectedKind = $state<RequestMediaKindCode | "all">("all");
@@ -227,22 +234,44 @@
         Request
       </h1>
       <p class="mt-1 text-[0.78rem] text-text-muted">
-        Search connected services and request new movies, series, and music
+        Search connected services and review what you've requested
       </p>
     </div>
     <Button
       type="button"
       variant="secondary"
       size="sm"
-      onclick={() => void goto("/request/history")}
+      onclick={() => void goto("/settings")}
       class="no-lift gap-1.5 px-3 py-1.5 text-xs"
     >
-      <History class="h-3.5 w-3.5" />
-      History
+      <Settings class="h-3.5 w-3.5" />
+      Settings
     </Button>
   </div>
 
-  {#if servicesLoaded && services.length === 0}
+  <!-- ── Tabs ── -->
+  <div class="flex items-center gap-2" role="tablist" aria-label="Request views">
+    {#each tabs as tab (tab.id)}
+      <button
+        type="button"
+        role="tab"
+        aria-selected={activeTab === tab.id}
+        onclick={() => (activeTab = tab.id)}
+        class={cn(
+          "rounded-xs border px-3 py-1 text-[0.75rem] font-medium transition-all duration-fast",
+          activeTab === tab.id
+            ? "bg-accent-950/30 border-border-accent text-text-accent shadow-[var(--shadow-glow-accent)]"
+            : "bg-surface-1 border-border-subtle text-text-muted hover:border-border-default hover:text-text-primary",
+        )}
+      >
+        {tab.label}
+      </button>
+    {/each}
+  </div>
+
+  {#if activeTab === "requests"}
+    <RequestsReview />
+  {:else if servicesLoaded && services.length === 0}
     <div class="empty-rack-slot flex flex-col items-center gap-2 p-10 text-center">
       <CloudDownload class="h-8 w-8 text-text-disabled" />
       <p class="text-sm font-medium text-text-secondary">No request services configured</p>
