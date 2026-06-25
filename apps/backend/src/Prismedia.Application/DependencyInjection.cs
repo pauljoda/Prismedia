@@ -53,7 +53,8 @@ public static class DependencyInjection {
         services.AddScoped<RequestSubmitService>();
         services.AddScoped<RequestHistoryService>();
         services.AddScoped<Acquisition.IndexerConfigCommandService>();
-        services.AddScoped<Acquisition.AcquisitionSearchService>();
+        services.AddScoped<Acquisition.AcquisitionSearchRunner>();
+        services.AddScoped<Acquisition.AcquisitionService>();
         services.AddSingleton<Acquisition.IBookReleaseDecisionEngine, Acquisition.BookReleaseDecisionEngine>();
         services.AddScoped<IAudioStreamService, AudioStreamService>();
         services.AddSingleton<IIdentifyApplyProgressStore, InMemoryIdentifyApplyProgressStore>();
@@ -121,6 +122,9 @@ public static class DependencyInjection {
         services.AddTransient<IJobHandler, BulkIdentifyJobHandler>();
         services.AddTransient<IJobHandler, AutoIdentifyJobHandler>();
         services.AddTransient<IJobHandler, IdentifyCascadeJobHandler>();
+
+        // Acquisition
+        services.AddTransient<IJobHandler, AcquisitionSearchJobHandler>();
 
         // Background services
         services.AddSingleton<WorkerRuntimeIdentity>();

@@ -57,3 +57,25 @@ public sealed record IndexerQuery(string Text, IReadOnlyList<int> Categories);
 
 /// <summary>Result of probing an indexer connection.</summary>
 public sealed record IndexerConnectionTest(bool Connected, string? Message);
+
+/// <summary>An indexer that failed during a search; surfaced in the acquisition status so partial results stay transparent.</summary>
+public sealed record IndexerSearchError(Guid IndexerId, string IndexerName, string Message);
+
+/// <summary>Book metadata captured when an acquisition is created, retained for the identify-hint handoff at import.</summary>
+public sealed record AcquisitionMetadata(
+    string Title,
+    string? Author,
+    string? Series,
+    int? Year,
+    string? PosterUrl,
+    string? PluginId,
+    string? PluginItemId,
+    Guid? RequestHistoryId);
+
+/// <summary>The minimal input the background search job needs to query indexers for an acquisition.</summary>
+public sealed record AcquisitionSearchInput(Guid Id, string Title, string? Author);
+
+/// <summary>The outcome of running indexer searches for an acquisition: scored candidates plus any indexer failures.</summary>
+public sealed record AcquisitionSearchOutcome(
+    IReadOnlyList<ScoredRelease> Candidates,
+    IReadOnlyList<IndexerSearchError> Errors);

@@ -65,14 +65,36 @@ public static class AcquisitionEndpoints {
             .Produces<IndexerTestResponse>()
             .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
 
-        group.MapPost("/search", (
-            AcquisitionSearchRequest request,
-            AcquisitionSearchService search,
+        group.MapPost("/search", async (
+            AcquisitionCreateRequest request,
+            AcquisitionService acquisitions,
             CancellationToken cancellationToken) =>
-            search.SearchAsync(request, cancellationToken))
-            .WithName("SearchReleases")
-            .WithSummary("Searches configured indexers for book releases and returns candidates scored against the default profile.")
-            .Produces<AcquisitionSearchResponse>();
+            Results.Ok(await acquisitions.CreateAndSearchAsync(request, cancellationToken)))
+            .WithName("CreateAcquisition")
+            .WithSummary("Creates an acquisition and starts a background indexer search; poll the acquisition for scored candidates.")
+            .Produces<AcquisitionSummary>();
+
+        group.MapGet("/", (
+            AcquisitionService acquisitions,
+            CancellationToken cancellationToken) =>
+            acquisitions.ListAsync(cancellationToken))
+            .WithName("ListAcquisitions")
+            .WithSummary("Lists acquisitions with their current status.")
+            .Produces<IReadOnlyList<AcquisitionSummary>>();
+
+        group.MapGet("/{id:guid}", async (
+            Guid id,
+            AcquisitionService acquisitions,
+            CancellationToken cancellationToken) => {
+                var detail = await acquisitions.GetAsync(id, cancellationToken);
+                return detail is null
+                    ? Results.NotFound(new ApiProblem(ApiProblemCodes.AcquisitionNotFound, "Acquisition was not found."))
+                    : Results.Ok(detail);
+            })
+            .WithName("GetAcquisition")
+            .WithSummary("Gets an acquisition with its scored release candidates for review.")
+            .Produces<AcquisitionDetail>()
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
         return group;
     }

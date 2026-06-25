@@ -47,13 +47,31 @@ public sealed record IndexerTestRequest(
 /// <summary>Connection test result for an indexer configuration.</summary>
 public sealed record IndexerTestResponse(bool Connected, string? Message);
 
-/// <summary>Ad-hoc release search for verification and the request-driven acquisition flow.</summary>
-/// <param name="Title">Primary search text (book title).</param>
-/// <param name="Author">Optional author, appended to the query when present.</param>
-public sealed record AcquisitionSearchRequest(string Title, string? Author);
+/// <summary>
+/// Creates an acquisition and kicks off a background release search. Book metadata captured here is
+/// later stamped onto the imported entity so identify resolves it ID-first.
+/// </summary>
+/// <param name="Title">Book title; primary search text.</param>
+/// <param name="Author">Optional author, appended to the query and stored for the import hint.</param>
+/// <param name="Series">Optional series name stored for the import hint.</param>
+/// <param name="Year">Optional publication year stored for the import hint.</param>
+/// <param name="PosterUrl">Optional cover URL stored for the import hint.</param>
+/// <param name="PluginId">Optional plugin manifest id that supplied the metadata.</param>
+/// <param name="PluginItemId">Optional plugin item id (external-id value) for ID-first identify.</param>
+/// <param name="RequestHistoryId">Optional originating request-history entry to link.</param>
+public sealed record AcquisitionCreateRequest(
+    string Title,
+    string? Author,
+    string? Series,
+    int? Year,
+    string? PosterUrl,
+    string? PluginId,
+    string? PluginItemId,
+    Guid? RequestHistoryId);
 
-/// <summary>A scored release candidate surfaced for review. Rejected candidates carry their reasons rather than being hidden.</summary>
+/// <summary>A scored release candidate surfaced for review. Download links stay server-side; the id selects one to queue.</summary>
 public sealed record ReleaseCandidateView(
+    Guid Id,
     string IndexerName,
     string Title,
     long SizeBytes,
@@ -63,15 +81,24 @@ public sealed record ReleaseCandidateView(
     bool Accepted,
     double Score,
     IReadOnlyList<ReleaseRejectionReason> Rejections,
-    string? MagnetUrl,
-    string? DownloadUrl,
     string? InfoUrl,
     DateTimeOffset? PublishedAt);
 
-/// <summary>An indexer that failed during a search, surfaced so partial results are transparent.</summary>
-public sealed record IndexerSearchError(Guid IndexerId, string IndexerName, string Message);
+/// <summary>An acquisition in list form: its state machine position and the metadata that identifies it.</summary>
+public sealed record AcquisitionSummary(
+    Guid Id,
+    AcquisitionStatus Status,
+    string? StatusMessage,
+    string Title,
+    string? Author,
+    string? Series,
+    int? Year,
+    string? PosterUrl,
+    double? Progress,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt);
 
-/// <summary>Scored candidates plus any indexer errors for a release search.</summary>
-public sealed record AcquisitionSearchResponse(
-    IReadOnlyList<ReleaseCandidateView> Candidates,
-    IReadOnlyList<IndexerSearchError> Errors);
+/// <summary>An acquisition with its scored candidates for the review screen.</summary>
+public sealed record AcquisitionDetail(
+    AcquisitionSummary Summary,
+    IReadOnlyList<ReleaseCandidateView> Candidates);

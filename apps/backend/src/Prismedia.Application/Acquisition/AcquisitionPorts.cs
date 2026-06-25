@@ -51,3 +51,18 @@ public interface IBookAcquisitionProfileStore {
     /// <summary>Returns the decision rules from the default profile, or <see cref="BookAcquisitionRules.Default"/> when none exists.</summary>
     Task<BookAcquisitionRules> GetDefaultRulesAsync(CancellationToken cancellationToken);
 }
+
+/// <summary>Persistence port for acquisition records and their scored release candidates.</summary>
+public interface IAcquisitionStore {
+    Task<AcquisitionSummary> CreateAsync(AcquisitionMetadata metadata, CancellationToken cancellationToken);
+    Task<IReadOnlyList<AcquisitionSummary>> ListAsync(CancellationToken cancellationToken);
+    Task<AcquisitionDetail?> GetAsync(Guid id, CancellationToken cancellationToken);
+
+    /// <summary>Returns the search input (title/author) for an acquisition, or null when it no longer exists.</summary>
+    Task<AcquisitionSearchInput?> GetSearchInputAsync(Guid id, CancellationToken cancellationToken);
+
+    Task SetStatusAsync(Guid id, AcquisitionStatus status, string? message, CancellationToken cancellationToken);
+
+    /// <summary>Replaces an acquisition's candidate set with a freshly scored search result.</summary>
+    Task ReplaceCandidatesAsync(Guid id, IReadOnlyList<ScoredRelease> candidates, CancellationToken cancellationToken);
+}

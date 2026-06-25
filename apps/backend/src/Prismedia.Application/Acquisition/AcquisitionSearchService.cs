@@ -1,32 +1,29 @@
-using Prismedia.Contracts.Acquisition;
-
 namespace Prismedia.Application.Acquisition;
 
 /// <summary>
-/// Searches all enabled indexers for a book and returns release candidates scored against the
-/// default acquisition profile. Indexer failures are surfaced as errors rather than failing the
-/// whole search, so partial results stay usable.
+/// Runs the indexer search for an acquisition: queries every enabled indexer concurrently, scores the
+/// combined releases against the default profile, and reports per-indexer failures. Pure orchestration
+/// over the ports — the background <c>AcquisitionSearch</c> job persists the outcome.
 /// </summary>
-public sealed class AcquisitionSearchService(
+public sealed class AcquisitionSearchRunner(
     IIndexerConfigStore indexers,
     IIndexerSearchClientFactory clients,
     IBookAcquisitionProfileStore profiles,
     IBookReleaseDecisionEngine decisionEngine) {
-    public async Task<AcquisitionSearchResponse> SearchAsync(AcquisitionSearchRequest request, CancellationToken cancellationToken) {
-        var text = BuildQueryText(request);
+    public async Task<AcquisitionSearchOutcome> RunAsync(AcquisitionSearchInput input, CancellationToken cancellationToken) {
+        var text = BuildQueryText(input.Title, input.Author);
         if (string.IsNullOrWhiteSpace(text)) {
-            return new AcquisitionSearchResponse([], []);
+            return new AcquisitionSearchOutcome([], []);
         }
 
         var configs = (await indexers.ListDetailsAsync(cancellationToken))
             .Where(config => config.Enabled)
             .ToArray();
         if (configs.Length == 0) {
-            return new AcquisitionSearchResponse([], []);
+            return new AcquisitionSearchOutcome([], []);
         }
 
         var rules = await profiles.GetDefaultRulesAsync(cancellationToken);
-
         var searches = await Task.WhenAll(configs.Select(config => SearchIndexerAsync(config, text, cancellationToken)));
 
         var releases = new List<(IndexerRelease Release, Guid? IndexerConfigId, string IndexerName)>();
@@ -41,13 +38,11 @@ public sealed class AcquisitionSearchService(
             }
         }
 
-        var scored = decisionEngine.Evaluate(releases, rules);
-        var candidates = scored.Select(ToView).ToArray();
-        return new AcquisitionSearchResponse(candidates, errors);
+        return new AcquisitionSearchOutcome(decisionEngine.Evaluate(releases, rules), errors);
     }
 
-    private async Task<(IndexerConfigDetail Config, IReadOnlyList<IndexerRelease> Found, string? Error)> SearchIndexerAsync(
-        IndexerConfigDetail config,
+    private async Task<(Contracts.Acquisition.IndexerConfigDetail Config, IReadOnlyList<IndexerRelease> Found, string? Error)> SearchIndexerAsync(
+        Contracts.Acquisition.IndexerConfigDetail config,
         string text,
         CancellationToken cancellationToken) {
         try {
@@ -59,27 +54,9 @@ public sealed class AcquisitionSearchService(
         }
     }
 
-    private static string BuildQueryText(AcquisitionSearchRequest request) {
-        var title = request.Title?.Trim() ?? string.Empty;
-        var author = request.Author?.Trim();
-        return string.IsNullOrWhiteSpace(author) ? title : $"{title} {author}".Trim();
-    }
-
-    private static ReleaseCandidateView ToView(ScoredRelease scored) {
-        var release = scored.Release;
-        return new ReleaseCandidateView(
-            scored.IndexerName,
-            release.Title,
-            release.SizeBytes,
-            release.Seeders,
-            release.Peers,
-            release.Protocol,
-            scored.Accepted,
-            scored.Score,
-            scored.Rejections,
-            release.MagnetUrl,
-            release.DownloadUrl,
-            release.InfoUrl,
-            release.PublishedAt);
+    private static string BuildQueryText(string title, string? author) {
+        var trimmedTitle = title?.Trim() ?? string.Empty;
+        var trimmedAuthor = author?.Trim();
+        return string.IsNullOrWhiteSpace(trimmedAuthor) ? trimmedTitle : $"{trimmedTitle} {trimmedAuthor}".Trim();
     }
 }

@@ -117,6 +117,10 @@ public enum JobType {
     IdentifyCascade,
 
     // ── Acquisition ─────────────────────────────────────────────
+    /// <summary>Searches configured indexers for an acquisition's book and persists scored release candidates.</summary>
+    [Code("acquisition-search")]
+    AcquisitionSearch,
+
     /// <summary>Polls active download-client transfers for in-flight acquisitions and advances their status.</summary>
     [Code("acquisition-monitor")]
     AcquisitionMonitor,
