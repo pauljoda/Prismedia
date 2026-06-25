@@ -27,13 +27,14 @@ public sealed class AcquisitionMonitorJobHandler(
         var processed = 0;
         foreach (var transfer in transfers) {
             cancellationToken.ThrowIfCancellationRequested();
-            await AdvanceTransferAsync(transfer, clientCache, cancellationToken);
+            await AdvanceTransferAsync(context, transfer, clientCache, cancellationToken);
             processed++;
             await context.ReportProgressAsync(processed * 100 / transfers.Count, "Polling transfers", cancellationToken);
         }
     }
 
     private async Task AdvanceTransferAsync(
+        JobContext context,
         ActiveTransfer transfer,
         Dictionary<Guid, Contracts.Acquisition.DownloadClientDetail?> clientCache,
         CancellationToken cancellationToken) {
@@ -53,8 +54,14 @@ public sealed class AcquisitionMonitorJobHandler(
             await acquisitions.UpdateTransferAsync(transfer.TransferId, status.Progress, status.State, status.ContentPath, cancellationToken);
 
             if (status.IsComplete) {
-                // Phase 3 enqueues the import job from here once the import planner lands.
-                await acquisitions.SetStatusAsync(transfer.AcquisitionId, AcquisitionStatus.Downloaded, "Download complete; ready to import.", cancellationToken);
+                await acquisitions.SetStatusAsync(transfer.AcquisitionId, AcquisitionStatus.Downloaded, "Download complete; importing.", cancellationToken);
+                await context.EnqueueIfNeededAsync(
+                    new EnqueueJobRequest(
+                        JobType.AcquisitionImport,
+                        PayloadJson: AcquisitionJobPayload.Serialize(transfer.AcquisitionId),
+                        TargetEntityId: transfer.AcquisitionId.ToString(),
+                        TargetLabel: "Import completed download"),
+                    cancellationToken);
             } else if (transfer.AcquisitionStatus != AcquisitionStatus.Downloading) {
                 await acquisitions.SetStatusAsync(transfer.AcquisitionId, AcquisitionStatus.Downloading, null, cancellationToken);
             }

@@ -96,3 +96,18 @@ public sealed record ActiveTransfer(
     Guid? DownloadClientConfigId,
     string ClientItemId,
     AcquisitionStatus AcquisitionStatus);
+
+/// <summary>Everything the import job needs: the captured metadata, the chosen profile, and the completed download's location.</summary>
+public sealed record AcquisitionImportContext(
+    Guid Id,
+    string Title,
+    string? Author,
+    string? Series,
+    int? Year,
+    string? PosterUrl,
+    string? PluginId,
+    string? PluginItemId,
+    Guid? ProfileId,
+    string? ContentPath,
+    string? ClientItemId,
+    Guid? DownloadClientConfigId);

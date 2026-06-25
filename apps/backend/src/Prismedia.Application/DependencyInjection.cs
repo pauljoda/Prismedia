@@ -54,6 +54,7 @@ public static class DependencyInjection {
         services.AddScoped<RequestHistoryService>();
         services.AddScoped<Acquisition.IndexerConfigCommandService>();
         services.AddScoped<Acquisition.DownloadClientCommandService>();
+        services.AddScoped<Acquisition.BookAcquisitionProfileCommandService>();
         services.AddScoped<Acquisition.AcquisitionSearchRunner>();
         services.AddScoped<Acquisition.AcquisitionService>();
         services.AddScoped<Acquisition.AcquisitionQueueService>();
@@ -128,6 +129,7 @@ public static class DependencyInjection {
         // Acquisition
         services.AddTransient<IJobHandler, AcquisitionSearchJobHandler>();
         services.AddTransient<IJobHandler, AcquisitionMonitorJobHandler>();
+        services.AddTransient<IJobHandler, AcquisitionImportJobHandler>();
 
         // Background services
         services.AddSingleton<WorkerRuntimeIdentity>();

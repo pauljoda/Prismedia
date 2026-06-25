@@ -186,6 +186,47 @@ public static class AcquisitionEndpoints {
             .Produces<DownloadClientTestResponse>()
             .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
 
+        group.MapGet("/profiles", (
+            BookAcquisitionProfileCommandService profiles,
+            CancellationToken cancellationToken) =>
+            profiles.ListAsync(cancellationToken))
+            .WithName("ListAcquisitionProfiles")
+            .WithSummary("Lists book acquisition profiles (matching rules and import target).")
+            .Produces<IReadOnlyList<BookAcquisitionProfileView>>();
+
+        group.MapPost("/profiles", async (
+            BookAcquisitionProfileSaveRequest request,
+            BookAcquisitionProfileCommandService profiles,
+            CancellationToken cancellationToken) =>
+            await SaveProfileAsync(request, profiles, cancellationToken))
+            .WithName("SaveAcquisitionProfile")
+            .WithSummary("Creates or updates a book acquisition profile.")
+            .Produces<BookAcquisitionProfileView>()
+            .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
+
+        group.MapPut("/profiles/{id:guid}", async (
+            Guid id,
+            BookAcquisitionProfileSaveRequest request,
+            BookAcquisitionProfileCommandService profiles,
+            CancellationToken cancellationToken) =>
+            await SaveProfileAsync(request with { Id = id }, profiles, cancellationToken))
+            .WithName("UpdateAcquisitionProfile")
+            .WithSummary("Updates an existing book acquisition profile.")
+            .Produces<BookAcquisitionProfileView>()
+            .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
+
+        group.MapDelete("/profiles/{id:guid}", async (
+            Guid id,
+            BookAcquisitionProfileCommandService profiles,
+            CancellationToken cancellationToken) =>
+            await profiles.DeleteAsync(id, cancellationToken)
+                ? Results.NoContent()
+                : Results.NotFound(new ApiProblem(ApiProblemCodes.NotFound, "Acquisition profile was not found.")))
+            .WithName("DeleteAcquisitionProfile")
+            .WithSummary("Deletes a book acquisition profile.")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+
         return group;
     }
 
@@ -206,6 +247,17 @@ public static class AcquisitionEndpoints {
         CancellationToken cancellationToken) {
         try {
             return Results.Ok(await downloadClients.SaveAsync(request, cancellationToken));
+        } catch (AcquisitionConfigurationException ex) {
+            return Results.BadRequest(new ApiProblem(ex.Code, ex.Message));
+        }
+    }
+
+    private static async Task<IResult> SaveProfileAsync(
+        BookAcquisitionProfileSaveRequest request,
+        BookAcquisitionProfileCommandService profiles,
+        CancellationToken cancellationToken) {
+        try {
+            return Results.Ok(await profiles.SaveAsync(request, cancellationToken));
         } catch (AcquisitionConfigurationException ex) {
             return Results.BadRequest(new ApiProblem(ex.Code, ex.Message));
         }

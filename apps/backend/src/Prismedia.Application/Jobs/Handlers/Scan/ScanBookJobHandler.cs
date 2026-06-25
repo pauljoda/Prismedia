@@ -19,7 +19,8 @@ public sealed class ScanBookJobHandler(
     IScanSnapshotStore? snapshots = null,
     IComicInfoMetadataReader? comicInfoReader = null,
     IScanMetadataPersistence? scanMetadata = null,
-    IBookFileMetadataReader? bookFileMetadata = null) : ScanJobHandler(logger, fileDiscovery, roots, snapshots) {
+    IBookFileMetadataReader? bookFileMetadata = null,
+    Acquisition.IAcquisitionHintApplier? acquisitionHints = null) : ScanJobHandler(logger, fileDiscovery, roots, snapshots) {
     private static readonly HashSet<string> ImageExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif"
@@ -85,6 +86,11 @@ public sealed class ScanBookJobHandler(
             }
             validBookPaths.Add(first.BookPath);
             archiveBookPaths.Add(first.BookPath);
+
+            // Stamp acquisition-supplied identity (plugin/external ids) before auto-identify so it resolves ID-first.
+            if (acquisitionHints is not null) {
+                await acquisitionHints.ApplyAsync(bookId, first.BookPath, cancellationToken);
+            }
 
             // A book is the top-level root of its volumes/chapters/pages, so identify it directly.
             var bookAutoIdentify = AutoIdentifyScanEnqueue.RequestFor(
@@ -279,6 +285,11 @@ public sealed class ScanBookJobHandler(
             sortOrder,
             cancellationToken);
         validBookPaths.Add(item.SourcePath);
+
+        // Stamp acquisition-supplied identity before auto-identify so it resolves ID-first.
+        if (acquisitionHints is not null) {
+            await acquisitionHints.ApplyAsync(bookId, item.SourcePath, cancellationToken);
+        }
 
         if (item.Metadata is not null && scanMetadata is not null) {
             await scanMetadata.ApplyComicInfoMetadataAsync(bookId, item.Metadata, item.IsNsfw, cancellationToken);

@@ -150,3 +150,37 @@ public sealed record DownloadClientTestRequest(
 
 /// <summary>Connection test result for a download client configuration.</summary>
 public sealed record DownloadClientTestResponse(bool Connected, string? Message);
+
+/// <summary>A book acquisition profile: matching rules plus where and how completed books are imported.</summary>
+public sealed record BookAcquisitionProfileView(
+    Guid Id,
+    string DisplayName,
+    bool IsDefault,
+    Guid TargetLibraryRootId,
+    string PathTemplate,
+    ImportMode ImportMode,
+    IReadOnlyList<BookFormat> AllowedFormats,
+    string? Language,
+    int MinSeeders,
+    long? MinSizeBytes,
+    long? MaxSizeBytes,
+    IReadOnlyList<string> RequiredTerms,
+    IReadOnlyList<string> IgnoredTerms,
+    bool AutoPick);
+
+/// <summary>Request payload for creating or updating a book acquisition profile.</summary>
+public sealed record BookAcquisitionProfileSaveRequest(
+    Guid? Id,
+    string DisplayName,
+    bool IsDefault,
+    Guid TargetLibraryRootId,
+    string PathTemplate,
+    ImportMode ImportMode,
+    IReadOnlyList<BookFormat> AllowedFormats,
+    string? Language,
+    int MinSeeders,
+    long? MinSizeBytes,
+    long? MaxSizeBytes,
+    IReadOnlyList<string> RequiredTerms,
+    IReadOnlyList<string> IgnoredTerms,
+    bool AutoPick);

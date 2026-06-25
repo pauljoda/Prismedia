@@ -46,10 +46,73 @@ public interface IIndexerConfigStore {
     Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken);
 }
 
-/// <summary>Persistence port for the book acquisition matching/import profile.</summary>
+/// <summary>The import target a profile contributes: which library root, how to place files, and the path template.</summary>
+public sealed record BookImportProfile(Guid TargetLibraryRootId, string PathTemplate, ImportMode ImportMode);
+
+/// <summary>Command for creating or updating a book acquisition profile.</summary>
+public sealed record BookAcquisitionProfileSaveCommand(
+    Guid? Id,
+    string DisplayName,
+    bool IsDefault,
+    Guid TargetLibraryRootId,
+    string PathTemplate,
+    ImportMode ImportMode,
+    IReadOnlyList<BookFormat> AllowedFormats,
+    string? Language,
+    int MinSeeders,
+    long? MinSizeBytes,
+    long? MaxSizeBytes,
+    IReadOnlyList<string> RequiredTerms,
+    IReadOnlyList<string> IgnoredTerms,
+    bool AutoPick);
+
+/// <summary>Persistence port for book acquisition profiles (matching rules + import target).</summary>
 public interface IBookAcquisitionProfileStore {
     /// <summary>Returns the decision rules from the default profile, or <see cref="BookAcquisitionRules.Default"/> when none exists.</summary>
     Task<BookAcquisitionRules> GetDefaultRulesAsync(CancellationToken cancellationToken);
+
+    /// <summary>Returns the import target from the default profile, or null when none exists.</summary>
+    Task<BookImportProfile?> GetDefaultImportProfileAsync(CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<BookAcquisitionProfileView>> ListAsync(CancellationToken cancellationToken);
+    Task<BookAcquisitionProfileView?> GetAsync(Guid id, CancellationToken cancellationToken);
+    Task<BookAcquisitionProfileView> SaveAsync(BookAcquisitionProfileSaveCommand command, CancellationToken cancellationToken);
+    Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken);
+}
+
+/// <summary>Plans how a completed download's files map into the target library root.</summary>
+public interface IAcquisitionImportPlanner {
+    /// <summary>
+    /// Inspects the downloaded content at <paramref name="contentPath"/> and produces an import plan of
+    /// absolute source → absolute target moves into the library root, or a block when the payload is ambiguous.
+    /// </summary>
+    Task<ResolvedImportPlan> PlanAsync(string contentPath, string libraryRootPath, BookImportProfile profile, ImportTemplateContext context, CancellationToken cancellationToken);
+}
+
+/// <summary>An import plan resolved to absolute paths, ready to execute.</summary>
+public sealed record ResolvedImportPlan(bool Blocked, ImportBlockReason? BlockReason, IReadOnlyList<ResolvedImportItem> Items) {
+    public static ResolvedImportPlan Block(ImportBlockReason reason) => new(true, reason, []);
+}
+
+/// <summary>One resolved move: absolute source file to absolute destination under the library root.</summary>
+public sealed record ResolvedImportItem(string SourceAbsolutePath, string TargetAbsolutePath);
+
+/// <summary>Executes the file moves of a resolved import plan, returning the final on-disk paths.</summary>
+public interface IImportFileMover {
+    /// <summary>
+    /// Places one planned file at its target (move for <see cref="ImportMode.Move"/>, copy otherwise),
+    /// creating parent directories and giving colliding targets a stable numeric suffix. Returns the final path.
+    /// </summary>
+    Task<string> PlaceAsync(ResolvedImportItem item, ImportMode mode, CancellationToken cancellationToken);
+}
+
+/// <summary>Stamps acquisition-supplied identity onto a freshly scanned book so auto-identify resolves it ID-first.</summary>
+public interface IAcquisitionHintApplier {
+    /// <summary>
+    /// Looks up an unconsumed import hint whose source path matches <paramref name="sourcePath"/> and, if found,
+    /// writes its external/plugin ids onto the entity and marks the hint consumed. Returns true when applied.
+    /// </summary>
+    Task<bool> ApplyAsync(Guid entityId, string sourcePath, CancellationToken cancellationToken);
 }
 
 /// <summary>Persistence port for acquisition records and their scored release candidates.</summary>
@@ -83,4 +146,13 @@ public interface IAcquisitionStore {
 
     /// <summary>Returns the most recent transfer's client item id for an acquisition, or null when none exists.</summary>
     Task<string?> GetTransferClientItemIdAsync(Guid acquisitionId, CancellationToken cancellationToken);
+
+    /// <summary>Loads the full import context (metadata + profile + completed download path) for an acquisition.</summary>
+    Task<AcquisitionImportContext?> GetImportContextAsync(Guid acquisitionId, CancellationToken cancellationToken);
+
+    /// <summary>Records the final on-disk location of the imported payload.</summary>
+    Task SetFinalSourcePathAsync(Guid acquisitionId, string finalSourcePath, CancellationToken cancellationToken);
+
+    /// <summary>Writes the path-keyed identity hint the book scan consumes to stamp the new entity.</summary>
+    Task WriteImportHintAsync(Guid acquisitionId, string sourcePath, AcquisitionImportContext context, CancellationToken cancellationToken);
 }

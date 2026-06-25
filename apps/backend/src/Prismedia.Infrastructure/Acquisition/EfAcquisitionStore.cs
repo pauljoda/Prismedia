@@ -175,6 +175,67 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
         await db.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task<AcquisitionImportContext?> GetImportContextAsync(Guid acquisitionId, CancellationToken cancellationToken) {
+        var row = await db.Acquisitions.AsNoTracking().FirstOrDefaultAsync(row => row.Id == acquisitionId, cancellationToken);
+        if (row is null) {
+            return null;
+        }
+
+        var transfer = await db.DownloadTransfers
+            .AsNoTracking()
+            .Where(transfer => transfer.AcquisitionId == acquisitionId)
+            .OrderByDescending(transfer => transfer.CreatedAt)
+            .Select(transfer => new { transfer.ContentPath, transfer.ClientItemId, transfer.DownloadClientConfigId })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return new AcquisitionImportContext(
+            row.Id, row.Title, row.Author, row.Series, row.Year, row.PosterUrl, row.PluginId, row.PluginItemId,
+            row.ProfileId, transfer?.ContentPath, transfer?.ClientItemId, transfer?.DownloadClientConfigId);
+    }
+
+    public async Task SetFinalSourcePathAsync(Guid acquisitionId, string finalSourcePath, CancellationToken cancellationToken) {
+        var row = await db.Acquisitions.FirstOrDefaultAsync(row => row.Id == acquisitionId, cancellationToken);
+        if (row is null) {
+            return;
+        }
+
+        row.FinalSourcePath = finalSourcePath;
+        row.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task WriteImportHintAsync(Guid acquisitionId, string sourcePath, AcquisitionImportContext context, CancellationToken cancellationToken) {
+        var now = DateTimeOffset.UtcNow;
+        var existing = await db.AcquisitionImportHints
+            .Where(hint => hint.AcquisitionId == acquisitionId)
+            .ToArrayAsync(cancellationToken);
+        db.AcquisitionImportHints.RemoveRange(existing);
+
+        var externalIds = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (!string.IsNullOrWhiteSpace(context.PluginId) && !string.IsNullOrWhiteSpace(context.PluginItemId)) {
+            externalIds[context.PluginId] = context.PluginItemId;
+        }
+
+        db.AcquisitionImportHints.Add(new AcquisitionImportHintRow {
+            Id = Guid.NewGuid(),
+            AcquisitionId = acquisitionId,
+            SourcePath = sourcePath,
+            PluginId = context.PluginId,
+            PluginItemId = context.PluginItemId,
+            ExternalIdsJson = JsonSerializer.Serialize(externalIds),
+            SourceUrlsJson = "[]",
+            Title = context.Title,
+            Author = context.Author,
+            Series = context.Series,
+            Year = context.Year,
+            PosterUrl = context.PosterUrl,
+            Consumed = false,
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
     public async Task<string?> GetTransferClientItemIdAsync(Guid acquisitionId, CancellationToken cancellationToken) =>
         await db.DownloadTransfers
             .AsNoTracking()
