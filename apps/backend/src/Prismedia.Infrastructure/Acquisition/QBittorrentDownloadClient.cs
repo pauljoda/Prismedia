@@ -15,11 +15,6 @@ public sealed class QBittorrentDownloadClient(HttpClient http) : IDownloadClient
     public DownloadClientKind Kind => DownloadClientKind.QBittorrent;
 
     public async Task<string> AddAsync(DownloadClientConnection connection, DownloadAddRequest request, CancellationToken cancellationToken) {
-        if (string.IsNullOrWhiteSpace(request.InfoHash)) {
-            // Without an info hash we cannot reliably correlate the added torrent back to this acquisition.
-            throw new InvalidOperationException("The selected release has no info hash, so qBittorrent cannot track it.");
-        }
-
         var session = await LoginAsync(connection, cancellationToken);
 
         // Ensure the category exists; qBittorrent returns a conflict when it already does, which is fine.
@@ -27,13 +22,51 @@ public sealed class QBittorrentDownloadClient(HttpClient http) : IDownloadClient
             [QBittorrentProtocol.CategoryField] = request.Category
         }, cancellationToken, allowConflict: true);
 
+        // Snapshot the category before adding so the new torrent can be identified even when Prowlarr's
+        // proxied link carries no info hash (qBittorrent's add endpoint does not return the hash).
+        var before = await CategoryHashesAsync(connection, session, request.Category, cancellationToken);
+
         var addResponse = await PostAsync(connection, session, QBittorrentProtocol.AddEndpoint, new Dictionary<string, string> {
             [QBittorrentProtocol.UrlsField] = request.Url,
             [QBittorrentProtocol.CategoryField] = request.Category
         }, cancellationToken);
         addResponse.EnsureSuccessStatusCode();
 
-        return request.InfoHash.ToLowerInvariant();
+        // A known info hash is the most reliable id; otherwise discover the newly added torrent by diff.
+        if (!string.IsNullOrWhiteSpace(request.InfoHash)) {
+            return request.InfoHash.ToLowerInvariant();
+        }
+
+        for (var attempt = 0; attempt < 15; attempt++) {
+            await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
+            var after = await CategoryHashesAsync(connection, session, request.Category, cancellationToken);
+            after.ExceptWith(before);
+            if (after.Count > 0) {
+                return after.First();
+            }
+        }
+
+        throw new InvalidOperationException("qBittorrent accepted the release but the torrent did not appear in the category.");
+    }
+
+    private async Task<HashSet<string>> CategoryHashesAsync(DownloadClientConnection connection, string? session, string category, CancellationToken cancellationToken) {
+        var path = $"{QBittorrentProtocol.InfoEndpoint}?{QBittorrentProtocol.CategoryField}={Uri.EscapeDataString(category)}";
+        using var request = BuildRequest(connection, session, HttpMethod.Get, path, content: null);
+        using var response = await http.SendAsync(request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+        var hashes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (document.RootElement.ValueKind == JsonValueKind.Array) {
+            foreach (var item in document.RootElement.EnumerateArray()) {
+                if (Text(item, QBittorrentProtocol.Hash) is { } hash) {
+                    hashes.Add(hash);
+                }
+            }
+        }
+
+        return hashes;
     }
 
     public async Task<DownloadItemStatus?> GetItemAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) {
