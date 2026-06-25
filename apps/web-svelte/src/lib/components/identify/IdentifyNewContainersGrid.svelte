@@ -26,7 +26,7 @@
   }
 </script>
 
-<div class="grid grid-cols-2 gap-2 p-3.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+<div class="containers-grid p-3.5">
   {#each containers as container (container.proposalId)}
     {@const cover = containerCover(container)}
     {@const title = container.patch?.title ?? container.targetKind}
@@ -55,6 +55,13 @@
 </div>
 
 <style>
+  .containers-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(8rem, 100%), 9.5rem));
+    justify-content: start;
+    gap: 0.5rem;
+  }
+
   .container-tile { display: grid; gap: 0.3rem; }
   .container-cover-wrap { position: relative; }
   .container-cover { position: relative; display: block; width: 100%; overflow: hidden; border-radius: var(--radius-sm, 6px); border: 1px solid var(--color-border-accent, #6b5526); background: var(--color-surface-2, #101420); cursor: pointer; }

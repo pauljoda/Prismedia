@@ -68,7 +68,7 @@
   }
 </script>
 
-<div class="grid grid-cols-2 gap-2 p-3.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+<div class="children-grid p-3.5">
   {#each childEntities as child, index (child.id)}
     {@const matched = matchedProposal(child.id)}
     {@const status = statusFor(child.id, index)}
@@ -119,6 +119,13 @@
 </div>
 
 <style>
+  .children-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(8rem, 100%), 9.5rem));
+    justify-content: start;
+    gap: 0.5rem;
+  }
+
   .child-tile { display: grid; gap: 0.3rem; }
   .child-cover-wrap { position: relative; }
   .child-cover { position: relative; display: block; width: 100%; overflow: hidden; border-radius: var(--radius-sm, 6px); border: 1px solid var(--color-border-subtle, #1c2235); background: var(--color-surface-2, #101420); cursor: pointer; }

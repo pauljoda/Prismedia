@@ -36,7 +36,7 @@
 
   const DEFAULT_PAGE_SIZE = 250;
   const DEFAULT_PAGE_SIZE_OPTIONS = [100, 250, 500, 1000];
-  const DEFAULT_SCALE = 5;
+  const DEFAULT_DESKTOP_SCALE = 11;
   const MOBILE_THUMBNAIL_QUERY = "(max-width: 639.98px)";
 
   interface Props {
@@ -149,9 +149,10 @@
 
   function defaultScale(): number {
     // On phones the very largest thumbnails (minScale) can feel oversized, so
-    // start one step in — the second-from-largest size reads better as a default
-    // while still leaning large for touch. Desktop keeps the roomier default.
-    return isMobileThumbnailViewport() ? clampScale(minScale + 1) : DEFAULT_SCALE;
+    // start one step in while still leaning large for touch. Desktop starts near
+    // the smallest end of the slider so dense libraries do not open as oversized
+    // posters on wide screens.
+    return isMobileThumbnailViewport() ? clampScale(minScale + 1) : clampScale(DEFAULT_DESKTOP_SCALE);
   }
 
   function clampScale(value: number): number {

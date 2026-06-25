@@ -9,7 +9,7 @@ const GRID_PREFS_DEFAULTS = {
   sortBy: "title",
   sortDir: "asc",
   mediaWall: false,
-  scale: 5,
+  scale: 11,
   pageSize: 250,
 } as const;
 
@@ -52,6 +52,21 @@ describe("EntityGrid pagination", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+  });
+
+  it("defaults desktop thumbnail grids near the smallest card size when no saved size exists", async () => {
+    vi.stubGlobal("matchMedia", createMatchMedia(false));
+    const cards = Array.from({ length: 6 }, (_, index) => card(index));
+    const { container } = render(EntityGrid, {
+      props: {
+        cards,
+        prefsKey: "desktop-small-default-test",
+      },
+    });
+
+    await waitFor(() => {
+      expect(container.querySelector<HTMLElement>(".entity-grid")?.style.getPropertyValue("--col-count")).toBe("11");
+    });
   });
 
   it("defaults mobile thumbnail grids to the second-from-largest card size when no saved size exists", async () => {

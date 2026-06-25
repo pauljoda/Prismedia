@@ -345,7 +345,7 @@
       {#snippet icon()}
         <Users class="h-3.5 w-3.5 text-text-accent" />
       {/snippet}
-      <div class="identify-thumbnail-grid grid grid-cols-2 gap-2 p-3.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+      <div class="identify-thumbnail-grid p-3.5">
         {#each credits as credit (credit.proposalId)}
           <EntityThumbnail
             card={creditCard(credit, proposal, relationshipTitlesForDetail(detail, credit.targetKind), selectedImages, proposal.proposalId, store)}
@@ -372,7 +372,7 @@
       {#snippet icon()}
         <Layers class="h-3.5 w-3.5 text-text-accent" />
       {/snippet}
-      <div class="identify-thumbnail-grid grid grid-cols-2 gap-2 p-3.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+      <div class="identify-thumbnail-grid p-3.5">
         {#each nonCreditRelationships as relationship (relationship.proposalId)}
           <EntityThumbnail
             card={relationshipCard(relationship, relationshipTitlesForDetail(detail, relationship.targetKind), selectedImages, proposal.proposalId, store)}
@@ -645,6 +645,10 @@
   }
 
   .identify-thumbnail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(8rem, 100%), 9.5rem));
+    justify-content: start;
+    gap: 0.5rem;
     content-visibility: auto;
     contain-intrinsic-size: auto 28rem;
   }

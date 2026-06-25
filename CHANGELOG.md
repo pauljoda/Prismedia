@@ -36,6 +36,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ### Changed
 - Reworked the dashboard around Continue, Recent, recently added media, and a resume-focused hero so active items appear immediately instead of being buried in per-type shelves.
 - Standardized detail pages and library grids on shared Prismedia building blocks, improving filters, sort, pagination, thumbnails, media-wall/feed views, responsive controls, and cross-page consistency.
+- Made desktop library grids and Identify review thumbnails open denser by default so large screens show more items without oversized cards.
 - Made scans incremental, batched, deduplicated per media kind, and priority-aware so large unchanged libraries finish quickly while new items surface with useful metadata and covers first.
 - Improved media organization rules for loose videos, movies, direct-child series, audio folders, ebook/PDF folders, galleries, single-image folders, comic archives, sidecars, and generated assets.
 - Reworked video playback negotiation around client capabilities, direct play, direct stream, stream-copy, hardware-aware transcoding, clearer manual quality selection, and lower CPU usage.
