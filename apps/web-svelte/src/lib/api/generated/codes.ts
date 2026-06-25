@@ -117,6 +117,9 @@ export const JOB_TYPE = {
   bulkIdentify: "bulk-identify",
   autoIdentify: "auto-identify",
   identifyCascade: "identify-cascade",
+  acquisitionSearch: "acquisition-search",
+  acquisitionMonitor: "acquisition-monitor",
+  acquisitionImport: "acquisition-import",
 } as const;
 
 export type JobTypeCode = (typeof JOB_TYPE)[keyof typeof JOB_TYPE];
@@ -311,6 +314,63 @@ export const REQUEST_RATING_SOURCE = {
 } as const;
 
 export type RequestRatingSourceCode = (typeof REQUEST_RATING_SOURCE)[keyof typeof REQUEST_RATING_SOURCE];
+
+export const INDEXER_KIND = {
+  prowlarr: "prowlarr",
+  jackett: "jackett",
+} as const;
+
+export type IndexerKindCode = (typeof INDEXER_KIND)[keyof typeof INDEXER_KIND];
+
+export const DOWNLOAD_CLIENT_KIND = {
+  qBittorrent: "qbittorrent",
+  transmission: "transmission",
+} as const;
+
+export type DownloadClientKindCode = (typeof DOWNLOAD_CLIENT_KIND)[keyof typeof DOWNLOAD_CLIENT_KIND];
+
+export const DOWNLOAD_PROTOCOL = {
+  torrent: "torrent",
+  usenet: "usenet",
+} as const;
+
+export type DownloadProtocolCode = (typeof DOWNLOAD_PROTOCOL)[keyof typeof DOWNLOAD_PROTOCOL];
+
+export const ACQUISITION_STATUS = {
+  pending: "pending",
+  searching: "searching",
+  awaitingSelection: "awaiting-selection",
+  queued: "queued",
+  downloading: "downloading",
+  downloaded: "downloaded",
+  importing: "importing",
+  imported: "imported",
+  failed: "failed",
+  cancelled: "cancelled",
+  manualImportRequired: "manual-import-required",
+} as const;
+
+export type AcquisitionStatusCode = (typeof ACQUISITION_STATUS)[keyof typeof ACQUISITION_STATUS];
+
+export const RELEASE_REJECTION_REASON = {
+  unsupportedFormat: "unsupported-format",
+  belowMinSeeders: "below-min-seeders",
+  sizeOutOfRange: "size-out-of-range",
+  missingRequiredTerm: "missing-required-term",
+  hasIgnoredTerm: "has-ignored-term",
+  languageMismatch: "language-mismatch",
+  wrongProtocol: "wrong-protocol",
+  noDownloadLink: "no-download-link",
+} as const;
+
+export type ReleaseRejectionReasonCode = (typeof RELEASE_REJECTION_REASON)[keyof typeof RELEASE_REJECTION_REASON];
+
+export const IMPORT_MODE = {
+  move: "move",
+  copy: "copy",
+} as const;
+
+export type ImportModeCode = (typeof IMPORT_MODE)[keyof typeof IMPORT_MODE];
 
 export const CAPABILITY_KIND = {
   classification: "classification",

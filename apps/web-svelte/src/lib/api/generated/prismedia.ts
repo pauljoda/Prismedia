@@ -5,6 +5,10 @@
  * OpenAPI spec version: 1.0.0
  */
 import type {
+  AcquisitionCreateRequest,
+  AcquisitionDetail,
+  AcquisitionQueueRequest,
+  AcquisitionSummary,
   ApiKeyRegenerateResponse,
   ApiKeyResponse,
   ApiProblem,
@@ -12,6 +16,8 @@ import type {
   ApplyIdentifyQueueItemRequest,
   AudioLibraryDetail,
   AudioTrackDetail,
+  BookAcquisitionProfileSaveRequest,
+  BookAcquisitionProfileView,
   BookDetail,
   BrowseLibraryPathParams,
   BrowserSessionResponse,
@@ -36,6 +42,10 @@ import type {
   DatabaseRestoreScheduledResponse,
   DatabaseRestoreStatusResponse,
   DeleteFileParams,
+  DownloadClientSaveRequest,
+  DownloadClientSummary,
+  DownloadClientTestRequest,
+  DownloadClientTestResponse,
   EntityCard,
   EntityCreateRequest,
   EntityFlagsUpdateRequest,
@@ -112,6 +122,10 @@ import type {
   IdentifyQueueItem,
   IdentifyQueueSearchRequest,
   ImageDetail,
+  IndexerConfigSaveRequest,
+  IndexerConfigSummary,
+  IndexerTestRequest,
+  IndexerTestResponse,
   JellyfinAuthenticateByNameRequest,
   JellyfinAuthenticationResult,
   JellyfinBaseItemDto,
@@ -11030,6 +11044,807 @@ export const submitRequest = async (requestSubmitRequest: RequestSubmitRequest, 
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       requestSubmitRequest,)
+  }
+);}
+
+
+
+export type listIndexersResponse200 = {
+  data: IndexerConfigSummary[]
+  status: 200
+}
+
+export type listIndexersResponseSuccess = (listIndexersResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listIndexersResponse = (listIndexersResponseSuccess)
+
+export const getListIndexersUrl = () => {
+
+
+
+
+  return `/api/acquisitions/indexers`
+}
+
+/**
+ * @summary Lists configured indexers with API keys redacted.
+ */
+export const listIndexers = async ( options?: RequestInit): Promise<listIndexersResponse> => {
+
+  return orvalFetch<listIndexersResponse>(getListIndexersUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type saveIndexerResponse200 = {
+  data: IndexerConfigSummary
+  status: 200
+}
+
+export type saveIndexerResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type saveIndexerResponseSuccess = (saveIndexerResponse200) & {
+  headers: Headers;
+};
+export type saveIndexerResponseError = (saveIndexerResponse400) & {
+  headers: Headers;
+};
+
+export type saveIndexerResponse = (saveIndexerResponseSuccess | saveIndexerResponseError)
+
+export const getSaveIndexerUrl = () => {
+
+
+
+
+  return `/api/acquisitions/indexers`
+}
+
+/**
+ * @summary Creates or updates an indexer configuration.
+ */
+export const saveIndexer = async (indexerConfigSaveRequest: IndexerConfigSaveRequest, options?: RequestInit): Promise<saveIndexerResponse> => {
+
+  return orvalFetch<saveIndexerResponse>(getSaveIndexerUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      indexerConfigSaveRequest,)
+  }
+);}
+
+
+
+export type updateIndexerResponse200 = {
+  data: IndexerConfigSummary
+  status: 200
+}
+
+export type updateIndexerResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type updateIndexerResponseSuccess = (updateIndexerResponse200) & {
+  headers: Headers;
+};
+export type updateIndexerResponseError = (updateIndexerResponse400) & {
+  headers: Headers;
+};
+
+export type updateIndexerResponse = (updateIndexerResponseSuccess | updateIndexerResponseError)
+
+export const getUpdateIndexerUrl = (id: string,) => {
+
+
+
+
+  return `/api/acquisitions/indexers/${id}`
+}
+
+/**
+ * @summary Updates an existing indexer configuration.
+ */
+export const updateIndexer = async (id: string,
+    indexerConfigSaveRequest: IndexerConfigSaveRequest, options?: RequestInit): Promise<updateIndexerResponse> => {
+
+  return orvalFetch<updateIndexerResponse>(getUpdateIndexerUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      indexerConfigSaveRequest,)
+  }
+);}
+
+
+
+export type deleteIndexerResponse204 = {
+  data: void
+  status: 204
+}
+
+export type deleteIndexerResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type deleteIndexerResponseSuccess = (deleteIndexerResponse204) & {
+  headers: Headers;
+};
+export type deleteIndexerResponseError = (deleteIndexerResponse404) & {
+  headers: Headers;
+};
+
+export type deleteIndexerResponse = (deleteIndexerResponseSuccess | deleteIndexerResponseError)
+
+export const getDeleteIndexerUrl = (id: string,) => {
+
+
+
+
+  return `/api/acquisitions/indexers/${id}`
+}
+
+/**
+ * @summary Deletes a configured indexer.
+ */
+export const deleteIndexer = async (id: string, options?: RequestInit): Promise<deleteIndexerResponse> => {
+
+  return orvalFetch<deleteIndexerResponse>(getDeleteIndexerUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type testIndexerResponse200 = {
+  data: IndexerTestResponse
+  status: 200
+}
+
+export type testIndexerResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type testIndexerResponseSuccess = (testIndexerResponse200) & {
+  headers: Headers;
+};
+export type testIndexerResponseError = (testIndexerResponse400) & {
+  headers: Headers;
+};
+
+export type testIndexerResponse = (testIndexerResponseSuccess | testIndexerResponseError)
+
+export const getTestIndexerUrl = () => {
+
+
+
+
+  return `/api/acquisitions/indexers/test`
+}
+
+/**
+ * @summary Tests connectivity for an indexer configuration.
+ */
+export const testIndexer = async (indexerTestRequest: IndexerTestRequest, options?: RequestInit): Promise<testIndexerResponse> => {
+
+  return orvalFetch<testIndexerResponse>(getTestIndexerUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      indexerTestRequest,)
+  }
+);}
+
+
+
+export type createAcquisitionResponse200 = {
+  data: AcquisitionSummary
+  status: 200
+}
+
+export type createAcquisitionResponseSuccess = (createAcquisitionResponse200) & {
+  headers: Headers;
+};
+;
+
+export type createAcquisitionResponse = (createAcquisitionResponseSuccess)
+
+export const getCreateAcquisitionUrl = () => {
+
+
+
+
+  return `/api/acquisitions/search`
+}
+
+/**
+ * @summary Creates an acquisition and starts a background indexer search; poll the acquisition for scored candidates.
+ */
+export const createAcquisition = async (acquisitionCreateRequest: AcquisitionCreateRequest, options?: RequestInit): Promise<createAcquisitionResponse> => {
+
+  return orvalFetch<createAcquisitionResponse>(getCreateAcquisitionUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      acquisitionCreateRequest,)
+  }
+);}
+
+
+
+export type listAcquisitionsResponse200 = {
+  data: AcquisitionSummary[]
+  status: 200
+}
+
+export type listAcquisitionsResponseSuccess = (listAcquisitionsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listAcquisitionsResponse = (listAcquisitionsResponseSuccess)
+
+export const getListAcquisitionsUrl = () => {
+
+
+
+
+  return `/api/acquisitions`
+}
+
+/**
+ * @summary Lists acquisitions with their current status.
+ */
+export const listAcquisitions = async ( options?: RequestInit): Promise<listAcquisitionsResponse> => {
+
+  return orvalFetch<listAcquisitionsResponse>(getListAcquisitionsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getAcquisitionResponse200 = {
+  data: AcquisitionDetail
+  status: 200
+}
+
+export type getAcquisitionResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type getAcquisitionResponseSuccess = (getAcquisitionResponse200) & {
+  headers: Headers;
+};
+export type getAcquisitionResponseError = (getAcquisitionResponse404) & {
+  headers: Headers;
+};
+
+export type getAcquisitionResponse = (getAcquisitionResponseSuccess | getAcquisitionResponseError)
+
+export const getGetAcquisitionUrl = (id: string,) => {
+
+
+
+
+  return `/api/acquisitions/${id}`
+}
+
+/**
+ * @summary Gets an acquisition with its scored release candidates for review.
+ */
+export const getAcquisition = async (id: string, options?: RequestInit): Promise<getAcquisitionResponse> => {
+
+  return orvalFetch<getAcquisitionResponse>(getGetAcquisitionUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type queueAcquisitionResponse200 = {
+  data: AcquisitionDetail
+  status: 200
+}
+
+export type queueAcquisitionResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type queueAcquisitionResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type queueAcquisitionResponseSuccess = (queueAcquisitionResponse200) & {
+  headers: Headers;
+};
+export type queueAcquisitionResponseError = (queueAcquisitionResponse400 | queueAcquisitionResponse404) & {
+  headers: Headers;
+};
+
+export type queueAcquisitionResponse = (queueAcquisitionResponseSuccess | queueAcquisitionResponseError)
+
+export const getQueueAcquisitionUrl = (id: string,) => {
+
+
+
+
+  return `/api/acquisitions/${id}/queue`
+}
+
+/**
+ * @summary Sends a chosen release to the download client and begins tracking the transfer.
+ */
+export const queueAcquisition = async (id: string,
+    acquisitionQueueRequest: AcquisitionQueueRequest, options?: RequestInit): Promise<queueAcquisitionResponse> => {
+
+  return orvalFetch<queueAcquisitionResponse>(getQueueAcquisitionUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      acquisitionQueueRequest,)
+  }
+);}
+
+
+
+export type cancelAcquisitionResponse200 = {
+  data: AcquisitionDetail
+  status: 200
+}
+
+export type cancelAcquisitionResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type cancelAcquisitionResponseSuccess = (cancelAcquisitionResponse200) & {
+  headers: Headers;
+};
+export type cancelAcquisitionResponseError = (cancelAcquisitionResponse404) & {
+  headers: Headers;
+};
+
+export type cancelAcquisitionResponse = (cancelAcquisitionResponseSuccess | cancelAcquisitionResponseError)
+
+export const getCancelAcquisitionUrl = (id: string,) => {
+
+
+
+
+  return `/api/acquisitions/${id}/cancel`
+}
+
+/**
+ * @summary Cancels an acquisition, removing the torrent from the download client.
+ */
+export const cancelAcquisition = async (id: string, options?: RequestInit): Promise<cancelAcquisitionResponse> => {
+
+  return orvalFetch<cancelAcquisitionResponse>(getCancelAcquisitionUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type listDownloadClientsResponse200 = {
+  data: DownloadClientSummary[]
+  status: 200
+}
+
+export type listDownloadClientsResponseSuccess = (listDownloadClientsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listDownloadClientsResponse = (listDownloadClientsResponseSuccess)
+
+export const getListDownloadClientsUrl = () => {
+
+
+
+
+  return `/api/acquisitions/download-clients`
+}
+
+/**
+ * @summary Lists configured download clients with passwords redacted.
+ */
+export const listDownloadClients = async ( options?: RequestInit): Promise<listDownloadClientsResponse> => {
+
+  return orvalFetch<listDownloadClientsResponse>(getListDownloadClientsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type saveDownloadClientResponse200 = {
+  data: DownloadClientSummary
+  status: 200
+}
+
+export type saveDownloadClientResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type saveDownloadClientResponseSuccess = (saveDownloadClientResponse200) & {
+  headers: Headers;
+};
+export type saveDownloadClientResponseError = (saveDownloadClientResponse400) & {
+  headers: Headers;
+};
+
+export type saveDownloadClientResponse = (saveDownloadClientResponseSuccess | saveDownloadClientResponseError)
+
+export const getSaveDownloadClientUrl = () => {
+
+
+
+
+  return `/api/acquisitions/download-clients`
+}
+
+/**
+ * @summary Creates or updates a download client configuration.
+ */
+export const saveDownloadClient = async (downloadClientSaveRequest: DownloadClientSaveRequest, options?: RequestInit): Promise<saveDownloadClientResponse> => {
+
+  return orvalFetch<saveDownloadClientResponse>(getSaveDownloadClientUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      downloadClientSaveRequest,)
+  }
+);}
+
+
+
+export type updateDownloadClientResponse200 = {
+  data: DownloadClientSummary
+  status: 200
+}
+
+export type updateDownloadClientResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type updateDownloadClientResponseSuccess = (updateDownloadClientResponse200) & {
+  headers: Headers;
+};
+export type updateDownloadClientResponseError = (updateDownloadClientResponse400) & {
+  headers: Headers;
+};
+
+export type updateDownloadClientResponse = (updateDownloadClientResponseSuccess | updateDownloadClientResponseError)
+
+export const getUpdateDownloadClientUrl = (id: string,) => {
+
+
+
+
+  return `/api/acquisitions/download-clients/${id}`
+}
+
+/**
+ * @summary Updates an existing download client configuration.
+ */
+export const updateDownloadClient = async (id: string,
+    downloadClientSaveRequest: DownloadClientSaveRequest, options?: RequestInit): Promise<updateDownloadClientResponse> => {
+
+  return orvalFetch<updateDownloadClientResponse>(getUpdateDownloadClientUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      downloadClientSaveRequest,)
+  }
+);}
+
+
+
+export type deleteDownloadClientResponse204 = {
+  data: void
+  status: 204
+}
+
+export type deleteDownloadClientResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type deleteDownloadClientResponseSuccess = (deleteDownloadClientResponse204) & {
+  headers: Headers;
+};
+export type deleteDownloadClientResponseError = (deleteDownloadClientResponse404) & {
+  headers: Headers;
+};
+
+export type deleteDownloadClientResponse = (deleteDownloadClientResponseSuccess | deleteDownloadClientResponseError)
+
+export const getDeleteDownloadClientUrl = (id: string,) => {
+
+
+
+
+  return `/api/acquisitions/download-clients/${id}`
+}
+
+/**
+ * @summary Deletes a configured download client.
+ */
+export const deleteDownloadClient = async (id: string, options?: RequestInit): Promise<deleteDownloadClientResponse> => {
+
+  return orvalFetch<deleteDownloadClientResponse>(getDeleteDownloadClientUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type testDownloadClientResponse200 = {
+  data: DownloadClientTestResponse
+  status: 200
+}
+
+export type testDownloadClientResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type testDownloadClientResponseSuccess = (testDownloadClientResponse200) & {
+  headers: Headers;
+};
+export type testDownloadClientResponseError = (testDownloadClientResponse400) & {
+  headers: Headers;
+};
+
+export type testDownloadClientResponse = (testDownloadClientResponseSuccess | testDownloadClientResponseError)
+
+export const getTestDownloadClientUrl = () => {
+
+
+
+
+  return `/api/acquisitions/download-clients/test`
+}
+
+/**
+ * @summary Tests connectivity for a download client configuration.
+ */
+export const testDownloadClient = async (downloadClientTestRequest: DownloadClientTestRequest, options?: RequestInit): Promise<testDownloadClientResponse> => {
+
+  return orvalFetch<testDownloadClientResponse>(getTestDownloadClientUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      downloadClientTestRequest,)
+  }
+);}
+
+
+
+export type listAcquisitionProfilesResponse200 = {
+  data: BookAcquisitionProfileView[]
+  status: 200
+}
+
+export type listAcquisitionProfilesResponseSuccess = (listAcquisitionProfilesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listAcquisitionProfilesResponse = (listAcquisitionProfilesResponseSuccess)
+
+export const getListAcquisitionProfilesUrl = () => {
+
+
+
+
+  return `/api/acquisitions/profiles`
+}
+
+/**
+ * @summary Lists book acquisition profiles (matching rules and import target).
+ */
+export const listAcquisitionProfiles = async ( options?: RequestInit): Promise<listAcquisitionProfilesResponse> => {
+
+  return orvalFetch<listAcquisitionProfilesResponse>(getListAcquisitionProfilesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type saveAcquisitionProfileResponse200 = {
+  data: BookAcquisitionProfileView
+  status: 200
+}
+
+export type saveAcquisitionProfileResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type saveAcquisitionProfileResponseSuccess = (saveAcquisitionProfileResponse200) & {
+  headers: Headers;
+};
+export type saveAcquisitionProfileResponseError = (saveAcquisitionProfileResponse400) & {
+  headers: Headers;
+};
+
+export type saveAcquisitionProfileResponse = (saveAcquisitionProfileResponseSuccess | saveAcquisitionProfileResponseError)
+
+export const getSaveAcquisitionProfileUrl = () => {
+
+
+
+
+  return `/api/acquisitions/profiles`
+}
+
+/**
+ * @summary Creates or updates a book acquisition profile.
+ */
+export const saveAcquisitionProfile = async (bookAcquisitionProfileSaveRequest: BookAcquisitionProfileSaveRequest, options?: RequestInit): Promise<saveAcquisitionProfileResponse> => {
+
+  return orvalFetch<saveAcquisitionProfileResponse>(getSaveAcquisitionProfileUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      bookAcquisitionProfileSaveRequest,)
+  }
+);}
+
+
+
+export type updateAcquisitionProfileResponse200 = {
+  data: BookAcquisitionProfileView
+  status: 200
+}
+
+export type updateAcquisitionProfileResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type updateAcquisitionProfileResponseSuccess = (updateAcquisitionProfileResponse200) & {
+  headers: Headers;
+};
+export type updateAcquisitionProfileResponseError = (updateAcquisitionProfileResponse400) & {
+  headers: Headers;
+};
+
+export type updateAcquisitionProfileResponse = (updateAcquisitionProfileResponseSuccess | updateAcquisitionProfileResponseError)
+
+export const getUpdateAcquisitionProfileUrl = (id: string,) => {
+
+
+
+
+  return `/api/acquisitions/profiles/${id}`
+}
+
+/**
+ * @summary Updates an existing book acquisition profile.
+ */
+export const updateAcquisitionProfile = async (id: string,
+    bookAcquisitionProfileSaveRequest: BookAcquisitionProfileSaveRequest, options?: RequestInit): Promise<updateAcquisitionProfileResponse> => {
+
+  return orvalFetch<updateAcquisitionProfileResponse>(getUpdateAcquisitionProfileUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      bookAcquisitionProfileSaveRequest,)
+  }
+);}
+
+
+
+export type deleteAcquisitionProfileResponse204 = {
+  data: void
+  status: 204
+}
+
+export type deleteAcquisitionProfileResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type deleteAcquisitionProfileResponseSuccess = (deleteAcquisitionProfileResponse204) & {
+  headers: Headers;
+};
+export type deleteAcquisitionProfileResponseError = (deleteAcquisitionProfileResponse404) & {
+  headers: Headers;
+};
+
+export type deleteAcquisitionProfileResponse = (deleteAcquisitionProfileResponseSuccess | deleteAcquisitionProfileResponseError)
+
+export const getDeleteAcquisitionProfileUrl = (id: string,) => {
+
+
+
+
+  return `/api/acquisitions/profiles/${id}`
+}
+
+/**
+ * @summary Deletes a book acquisition profile.
+ */
+export const deleteAcquisitionProfile = async (id: string, options?: RequestInit): Promise<deleteAcquisitionProfileResponse> => {
+
+  return orvalFetch<deleteAcquisitionProfileResponse>(getDeleteAcquisitionProfileUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
   }
 );}
 
