@@ -339,7 +339,9 @@ public static class DependencyInjection {
         services.AddScoped(_ => new ProwlarrIndexerClient(new HttpClient()));
         services.AddScoped<IIndexerSearchClient>(provider => provider.GetRequiredService<ProwlarrIndexerClient>());
         services.AddScoped<IIndexerSearchClientFactory, IndexerSearchClientFactory>();
-        services.AddScoped(_ => new QBittorrentDownloadClient(new HttpClient()));
+        // UseCookies=false keeps the default handler from swallowing qBittorrent's Set-Cookie SID,
+        // so the client can read and re-send the session cookie explicitly.
+        services.AddScoped(_ => new QBittorrentDownloadClient(new HttpClient(new HttpClientHandler { UseCookies = false })));
         services.AddScoped<IDownloadClient>(provider => provider.GetRequiredService<QBittorrentDownloadClient>());
         services.AddScoped<IDownloadClientFactory, DownloadClientFactory>();
         services.AddScoped<IAcquisitionImportPlanner, AcquisitionImportPlanner>();

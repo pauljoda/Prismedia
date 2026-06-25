@@ -125,21 +125,27 @@ public sealed class QBittorrentDownloadClient(HttpClient http) : IDownloadClient
         return response;
     }
 
+    /// <summary>
+    /// Returns the session cookie as a full <c>name=value</c> pair. qBittorrent's cookie name varies by
+    /// version (legacy <c>SID</c>, modern <c>QBT_SID_&lt;port&gt;</c>), so it is matched by its <c>SID</c>
+    /// marker and resent under whatever name the server issued.
+    /// </summary>
     private static string? ExtractSessionCookie(HttpResponseMessage response) {
         if (!response.Headers.TryGetValues("Set-Cookie", out var cookies)) {
             return null;
         }
 
         foreach (var cookie in cookies) {
-            var prefix = $"{QBittorrentProtocol.SessionCookie}=";
-            var start = cookie.IndexOf(prefix, StringComparison.Ordinal);
-            if (start < 0) {
+            var pair = cookie.Split(';', 2)[0].Trim();
+            var separator = pair.IndexOf('=');
+            if (separator <= 0) {
                 continue;
             }
 
-            var value = cookie[(start + prefix.Length)..];
-            var end = value.IndexOf(';');
-            return end < 0 ? value : value[..end];
+            var name = pair[..separator];
+            if (name.Contains(QBittorrentProtocol.SessionCookieMarker, StringComparison.OrdinalIgnoreCase)) {
+                return pair;
+            }
         }
 
         return null;
@@ -151,7 +157,7 @@ public sealed class QBittorrentDownloadClient(HttpClient http) : IDownloadClient
         // qBittorrent enforces a CSRF check that requires a same-origin Referer header.
         request.Headers.Add(QBittorrentProtocol.RefererHeader, connection.BaseUrl.TrimEnd('/'));
         if (!string.IsNullOrEmpty(session)) {
-            request.Headers.Add("Cookie", $"{QBittorrentProtocol.SessionCookie}={session}");
+            request.Headers.Add("Cookie", session);
         }
 
         return request;

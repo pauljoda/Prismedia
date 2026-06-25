@@ -66,5 +66,7 @@ public static class QBittorrentProtocol {
 
     /// <summary>qBittorrent requires a Referer header on WebUI API calls to pass its CSRF check.</summary>
     public const string RefererHeader = "Referer";
-    public const string SessionCookie = "SID";
+
+    /// <summary>Marker shared by qBittorrent session-cookie names across versions (<c>SID</c>, <c>QBT_SID_&lt;port&gt;</c>).</summary>
+    public const string SessionCookieMarker = "SID";
 }
