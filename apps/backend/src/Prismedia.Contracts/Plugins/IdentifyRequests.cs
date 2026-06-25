@@ -67,6 +67,12 @@ public sealed record IdentifyQuery(
 /// Whether plugins should eagerly hydrate related entity proposals (people, studios, tags) before
 /// returning. Prismedia can set this to false when it will stream relationship hydration itself.
 /// </param>
+/// <param name="IncludeStructuralChildren">
+/// Whether plugins should include structural child proposals (seasons, episodes, book volumes,
+/// chapters) in their immediate response. Prismedia can set this to false for seed lookups that
+/// should return the root quickly and let a background cascade stream children after the review
+/// page opens.
+/// </param>
 public sealed record IdentifyPluginRequest(
     int ProtocolVersion,
     IdentifyAction Action,
@@ -76,7 +82,8 @@ public sealed record IdentifyPluginRequest(
     IdentifyMatchHints Hints,
     IdentifyStructuralContext? StructuralContext = null,
     bool IncludeNsfw = false,
-    bool IncludeRelationshipDetails = true);
+    bool IncludeRelationshipDetails = true,
+    bool IncludeStructuralChildren = true);
 
 /// <summary>
 /// Request body for identifying one entity with a provider.

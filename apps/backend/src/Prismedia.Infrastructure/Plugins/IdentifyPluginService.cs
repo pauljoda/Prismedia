@@ -238,7 +238,8 @@ public sealed partial class IdentifyPluginService : IIdentifyProviderService {
             Hints: resolvedHints,
             StructuralContext: structuralContext,
             IncludeNsfw: includeNsfw,
-            IncludeRelationshipDetails: false);
+            IncludeRelationshipDetails: false,
+            IncludeStructuralChildren: true);
 
         var response = await _runners.Resolve(descriptor).IdentifyAsync(descriptor, request, cancellationToken);
         return await FallBackToSearchAsync(descriptor, parent, request, resolvedAction, response, cancellationToken);
@@ -376,7 +377,8 @@ public sealed partial class IdentifyPluginService : IIdentifyProviderService {
             Hints: hints,
             StructuralContext: structuralContext,
             IncludeNsfw: includeNsfw,
-            IncludeRelationshipDetails: false);
+            IncludeRelationshipDetails: false,
+            IncludeStructuralChildren: cascadeChildren);
 
         var response = await _runners.Resolve(descriptor).IdentifyAsync(descriptor, request, cancellationToken);
         response = await FallBackToSearchAsync(descriptor, entity, request, resolvedAction, response, cancellationToken);

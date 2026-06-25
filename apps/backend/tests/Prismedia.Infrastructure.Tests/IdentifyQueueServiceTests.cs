@@ -205,9 +205,9 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             CancellationToken.None);
 
         Assert.Equal([
-            "Search:Video:False",
-            "LookupId:Video:False"
-        ], executor.Requests.Select(request => $"{request.Action}:{request.Entity.Kind}:{request.IncludeRelationshipDetails}").ToArray());
+            "Search:Video:False:False",
+            "LookupId:Video:False:False"
+        ], executor.Requests.Select(request => $"{request.Action}:{request.Entity.Kind}:{request.IncludeRelationshipDetails}:{request.IncludeStructuralChildren}").ToArray());
         Assert.Equal("proposal", item.State);
         Assert.NotNull(item.Proposal);
         var baseActor = Assert.Single(item.Proposal!.Relationships ?? []);
@@ -336,7 +336,8 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         episode2.ParentEntityId = seriesId;
         episode2.SortOrder = 2;
         await db.SaveChangesAsync();
-        var service = CreateQueueService(db, new StructuralChildrenProcessExecutor(), _tempRoot);
+        var executor = new StructuralChildrenProcessExecutor();
+        var service = CreateQueueService(db, executor, _tempRoot);
         await service.AddAsync(seriesId, CancellationToken.None);
 
         var query = new IdentifyQuery(null, null, new Dictionary<string, string> { ["tmdb"] = "series-1" });
@@ -351,6 +352,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         Assert.NotNull(item.Proposal);
         Assert.Empty(item.Proposal.Children);
         Assert.True(item.CascadeRunning);
+        Assert.Equal([false], executor.Requests.Select(request => request.IncludeStructuralChildren).ToArray());
 
         // Run the cascade (the worker does this in production) and re-read the streamed proposal: each
         // local episode is bound to its provider track by position, and the phantom Episode 3 (with no
@@ -367,6 +369,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         Assert.Equal([episode1Id, episode2Id], resolved!.Proposal!.Children.Select(child => child.TargetEntityId.GetValueOrDefault()).ToArray());
         Assert.Equal(["Episode 1", "Episode 2"], resolved.Proposal.Children.Select(child => child.Patch.Title ?? string.Empty).ToArray());
         Assert.DoesNotContain(resolved.Proposal.Children, child => child.Patch.Title == "Episode 3");
+        Assert.Equal([false, true], executor.Requests.Select(request => request.IncludeStructuralChildren).ToArray());
     }
 
     [Fact]
@@ -1762,6 +1765,8 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
     }
 
     private sealed class StructuralChildrenProcessExecutor : ProcessExecutor {
+        public List<IdentifyPluginRequest> Requests { get; } = [];
+
         public override async Task<ProcessExecutionResult> RunAsync(
             string fileName,
             IReadOnlyList<string> arguments,
@@ -1769,6 +1774,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             CancellationToken cancellationToken, bool lowPriority = false) {
             var requestJson = await File.ReadAllTextAsync(arguments[1], cancellationToken);
             var request = JsonSerializer.Deserialize<IdentifyPluginRequest>(requestJson, JsonOptions)!;
+            Requests.Add(request);
             var proposal = new EntityMetadataProposal(
                 "tmdb:series:1",
                 "tmdb",

@@ -269,7 +269,8 @@ public sealed partial class IdentifyPluginService {
             Hints: new IdentifyMatchHints(container.Patch.ExternalIds, container.Patch.Urls, container.Patch.Title, null),
             StructuralContext: new IdentifyStructuralContext(ancestorPath, container.Patch.Positions),
             IncludeNsfw: includeNsfw,
-            IncludeRelationshipDetails: false);
+            IncludeRelationshipDetails: false,
+            IncludeStructuralChildren: true);
 
         var response = await _runners.Resolve(descriptor).IdentifyAsync(descriptor, request, cancellationToken);
         return response.Ok && response.Result?.Patch is not null ? response.Result : null;
@@ -313,7 +314,8 @@ public sealed partial class IdentifyPluginService {
             Hints: new IdentifyMatchHints(externalIds, urls, title, null),
             StructuralContext: null,
             IncludeNsfw: includeNsfw,
-            IncludeRelationshipDetails: false);
+            IncludeRelationshipDetails: false,
+            IncludeStructuralChildren: false);
 
         try {
             var response = await _runners.Resolve(descriptor).IdentifyAsync(descriptor, request, cancellationToken);
