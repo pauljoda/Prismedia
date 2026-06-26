@@ -1,11 +1,13 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import { ChevronLeft, FileText, Loader2, Upload, X } from "@lucide/svelte";
+  import { ChevronLeft, CloudDownload, FileText, Loader2, Search, SearchX, Upload, X } from "@lucide/svelte";
   import { Badge } from "@prismedia/ui-svelte";
   import { page } from "$app/state";
   import EntityDetail from "$lib/components/entities/EntityDetail.svelte";
   import PieceStateBar from "$lib/components/acquisitions/PieceStateBar.svelte";
   import ReleaseTable from "$lib/components/acquisitions/ReleaseTable.svelte";
+  import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
+  import { isTransferActive, transferStageLabel } from "$lib/requests/acquisition-transfer";
   import type { EntityDetailActionButton } from "$lib/components/entities/entity-detail-types";
   import { ACQUISITION_STATUS } from "$lib/api/generated/codes";
   import type {
@@ -38,6 +40,12 @@
   const status = $derived(detail?.summary.status ?? null);
   const isActive = $derived(status ? ACTIVE_ACQUISITION_STATUSES.includes(status) : false);
   const canChoose = $derived(status === ACQUISITION_STATUS.awaitingSelection);
+  // A release can still be (re)selected after a failed or cancelled attempt — picking one re-queues it.
+  const canPickRelease = $derived(
+    status === ACQUISITION_STATUS.awaitingSelection ||
+      status === ACQUISITION_STATUS.failed ||
+      status === ACQUISITION_STATUS.cancelled,
+  );
   const isDownloading = $derived(status === ACQUISITION_STATUS.queued || status === ACQUISITION_STATUS.downloading);
   const isDone = $derived(
     status === ACQUISITION_STATUS.downloaded ||
@@ -176,31 +184,50 @@
       {#snippet afterBody()}
         {#if detail}
           {#if status === ACQUISITION_STATUS.searching}
-            <p class="flex items-center gap-2 text-sm text-text-muted">
-              <Loader2 class="h-4 w-4 animate-spin" /> Searching indexers…
-            </p>
+            <StatePlaceholder
+              icon={Search}
+              title="Searching indexers"
+              description="Querying your configured indexers for matching releases. This can take a moment."
+              busy
+            />
 
           {:else if isDownloading}
             <!-- ── Live transfer ── -->
             <section class="space-y-3">
               <h2 class="text-kicker text-text-primary">Download</h2>
               {#if transfer}
-                <div class="space-y-2 rounded-sm border border-border-subtle bg-surface-1 p-3">
-                  <div class="h-2 w-full overflow-hidden rounded-full bg-surface-3">
-                    <div class="h-full rounded-full bg-accent-500 transition-all" style:width={`${Math.round(Number(transfer.progress) * 100)}%`}></div>
+                {@const pct = Math.round(Number(transfer.progress) * 100)}
+                <div class="space-y-3 rounded-sm border border-border-subtle bg-surface-1 p-3.5">
+                  <!-- Stage + percent -->
+                  <div class="flex items-center justify-between gap-3">
+                    <span class="flex items-center gap-2 text-sm font-medium text-text-primary">
+                      {#if isTransferActive(transfer.state)}
+                        <Loader2 class="h-3.5 w-3.5 animate-spin text-text-accent" />
+                      {/if}
+                      {transferStageLabel(transfer.state)}
+                    </span>
+                    <span class="font-mono text-sm text-text-accent">{pct}%</span>
                   </div>
-                  <div class="flex flex-wrap gap-x-5 gap-y-1 font-mono text-[0.72rem] text-text-muted">
-                    <span>{Math.round(Number(transfer.progress) * 100)}%</span>
-                    <span>↓ {formatSpeed(Number(transfer.downloadSpeedBytesPerSecond))}</span>
-                    <span>ETA {formatEta(Number(transfer.etaSeconds))}</span>
-                    <span>{transfer.seeds} seeds · {transfer.peers} peers</span>
-                    <span>{formatBytes(Number(transfer.totalSizeBytes))}</span>
-                    {#if transfer.state}<span>{transfer.state}</span>{/if}
+                  <!-- Progress bar -->
+                  <div class="h-2 w-full overflow-hidden rounded-full bg-surface-3">
+                    <div class="h-full rounded-full bg-accent-500 transition-all" style:width={`${pct}%`}></div>
+                  </div>
+                  <!-- Stats -->
+                  <div class="grid grid-cols-2 gap-x-4 gap-y-2.5 sm:grid-cols-4">
+                    {@render stat("Speed", formatSpeed(Number(transfer.downloadSpeedBytesPerSecond)))}
+                    {@render stat("ETA", formatEta(Number(transfer.etaSeconds)))}
+                    {@render stat("Seeds / Peers", `${transfer.seeds} / ${transfer.peers}`)}
+                    {@render stat("Size", formatBytes(Number(transfer.totalSizeBytes)))}
                   </div>
                   <PieceStateBar pieces={transfer.pieceStates.map(Number)} />
                 </div>
               {:else}
-                <p class="text-sm text-text-muted">Waiting for the download client to report progress…</p>
+                <StatePlaceholder
+                  icon={CloudDownload}
+                  title="Preparing download"
+                  description="Connecting to the download client and waiting for the first progress report…"
+                  busy
+                />
               {/if}
             </section>
 
@@ -224,7 +251,12 @@
                   {/each}
                 </div>
               {:else}
-                <p class="text-sm text-text-muted">No files to show yet.</p>
+                <StatePlaceholder
+                  icon={FileText}
+                  title="No files yet"
+                  description="Files will appear here once the download produces them."
+                  busy={isActive}
+                />
               {/if}
             </section>
 
@@ -237,12 +269,16 @@
               </h2>
 
               {#if detail.candidates.length === 0}
-                <p class="text-sm text-text-muted">No release candidates found.</p>
+                <StatePlaceholder
+                  icon={SearchX}
+                  title="No releases found"
+                  description="No indexer returned a matching release for this title. You can upload a .torrent manually below."
+                />
               {:else}
-                <ReleaseTable candidates={detail.candidates} {canChoose} {busy} onQueue={queue} />
+                <ReleaseTable candidates={detail.candidates} canChoose={canPickRelease} {busy} onQueue={queue} />
               {/if}
 
-              {#if canChoose}
+              {#if canPickRelease}
                 <!-- ── Manual .torrent fallback ── -->
                 <div class="flex flex-wrap items-center gap-3 rounded-sm border border-dashed border-border-subtle bg-surface-1 p-3">
                   <div class="min-w-0 flex-1">
@@ -263,3 +299,10 @@
     </EntityDetail>
   {/if}
 </div>
+
+{#snippet stat(label: string, value: string)}
+  <div class="flex flex-col gap-0.5">
+    <span class="text-label text-text-muted">{label}</span>
+    <span class="font-mono text-[0.8rem] text-text-primary">{value}</span>
+  </div>
+{/snippet}
