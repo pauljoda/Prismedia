@@ -1,5 +1,6 @@
 using Prismedia.Application.Jobs;
 using Prismedia.Contracts.Acquisition;
+using Prismedia.Contracts.System;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Acquisition;
@@ -114,6 +115,10 @@ public sealed class AcquisitionService(
 
     /// <summary>Persists a new acquisition and enqueues the background search job that fills in candidates.</summary>
     public async Task<AcquisitionSummary> CreateAndSearchAsync(AcquisitionCreateRequest request, CancellationToken cancellationToken) {
+        if (string.IsNullOrWhiteSpace(request.Title)) {
+            throw new AcquisitionConfigurationException(ApiProblemCodes.AcquisitionInvalid, "A title is required to start an acquisition.");
+        }
+
         var metadata = new AcquisitionMetadata(
             request.Title.Trim(),
             string.IsNullOrWhiteSpace(request.Author) ? null : request.Author.Trim(),

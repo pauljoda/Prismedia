@@ -212,7 +212,9 @@
       const pluginItemId = rest.join(":") || null;
       const summary = await createAcquisition({
         title: result.title,
-        author: result.subtitle ?? null,
+        // subtitle holds the source label (e.g. "OpenLibrary"), not the author. The real author is
+        // resolved by ID-first identify from pluginId/pluginItemId after download.
+        author: null,
         series: null,
         year: numericValue(result.year),
         posterUrl: result.posterUrl,

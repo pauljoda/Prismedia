@@ -26,11 +26,10 @@ public sealed class QBittorrentDownloadClient(HttpClient http) : IDownloadClient
         // proxied link carries no info hash (qBittorrent's add endpoint does not return the hash).
         var before = await CategoryHashesAsync(connection, session, request.Category, cancellationToken);
 
-        var addResponse = await PostAsync(connection, session, QBittorrentProtocol.AddEndpoint, new Dictionary<string, string> {
+        await PostAsync(connection, session, QBittorrentProtocol.AddEndpoint, new Dictionary<string, string> {
             [QBittorrentProtocol.UrlsField] = request.Url,
             [QBittorrentProtocol.CategoryField] = request.Category
         }, cancellationToken);
-        addResponse.EnsureSuccessStatusCode();
 
         // A known info hash is the most reliable id; otherwise discover the newly added torrent by diff.
         if (!string.IsNullOrWhiteSpace(request.InfoHash)) {
@@ -248,7 +247,11 @@ public sealed class QBittorrentDownloadClient(HttpClient http) : IDownloadClient
         return session;
     }
 
-    private async Task<HttpResponseMessage> PostAsync(
+    /// <summary>
+    /// Posts a form to a qBittorrent endpoint, disposing the response. Throws on a non-success status unless
+    /// <paramref name="allowConflict"/> is set, in which case a 409 (e.g. category already exists) is tolerated.
+    /// </summary>
+    private async Task PostAsync(
         DownloadClientConnection connection,
         string? session,
         string path,
@@ -256,12 +259,12 @@ public sealed class QBittorrentDownloadClient(HttpClient http) : IDownloadClient
         CancellationToken cancellationToken,
         bool allowConflict = false) {
         using var request = BuildRequest(connection, session, HttpMethod.Post, path, new FormUrlEncodedContent(form));
-        var response = await http.SendAsync(request, cancellationToken);
+        using var response = await http.SendAsync(request, cancellationToken);
         if (allowConflict && response.StatusCode == HttpStatusCode.Conflict) {
-            return response;
+            return;
         }
 
-        return response;
+        response.EnsureSuccessStatusCode();
     }
 
     /// <summary>

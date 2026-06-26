@@ -19,6 +19,11 @@ public sealed class EfBookAcquisitionProfileStore(PrismediaDbContext db) : IBook
         return row is null ? null : new BookImportProfile(row.TargetLibraryRootId, row.PathTemplate, row.ImportMode);
     }
 
+    public async Task<bool> GetDefaultAutoPickAsync(CancellationToken cancellationToken) {
+        var row = await DefaultRowAsync(cancellationToken);
+        return row?.AutoPick ?? false;
+    }
+
     public async Task<IReadOnlyList<BookAcquisitionProfileView>> ListAsync(CancellationToken cancellationToken) {
         var rows = await db.BookAcquisitionProfiles
             .AsNoTracking()

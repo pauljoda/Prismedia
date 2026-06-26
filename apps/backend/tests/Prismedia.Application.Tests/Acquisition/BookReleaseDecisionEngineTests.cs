@@ -93,6 +93,17 @@ public sealed class BookReleaseDecisionEngineTests {
     }
 
     [Fact]
+    public void RejectsTitleNamingOnlyAnUnimportableFormat() {
+        // Default rules (allow-all): a release whose only declared format is mobi/cbr can't be imported,
+        // so it must be rejected up front rather than downloaded and dead-ended at import.
+        var mobi = Engine.Evaluate(One(Release(title: "The Hobbit (MOBI)")), BookAcquisitionRules.Default);
+        var cbr = Engine.Evaluate(One(Release(title: "Saga Vol 1 (CBR)")), BookAcquisitionRules.Default);
+
+        Assert.Contains(ReleaseRejectionReason.UnsupportedFormat, mobi[0].Rejections);
+        Assert.Contains(ReleaseRejectionReason.UnsupportedFormat, cbr[0].Rejections);
+    }
+
+    [Fact]
     public void TitleWithoutFormatTokenPassesFormatRule() {
         var rules = BookAcquisitionRules.Default with { AllowedFormats = [BookFormat.Epub] };
 

@@ -68,11 +68,17 @@ public static class AcquisitionEndpoints {
         group.MapPost("/search", async (
             AcquisitionCreateRequest request,
             AcquisitionService acquisitions,
-            CancellationToken cancellationToken) =>
-            Results.Ok(await acquisitions.CreateAndSearchAsync(request, cancellationToken)))
+            CancellationToken cancellationToken) => {
+                try {
+                    return Results.Ok(await acquisitions.CreateAndSearchAsync(request, cancellationToken));
+                } catch (AcquisitionConfigurationException ex) {
+                    return Results.BadRequest(new ApiProblem(ex.Code, ex.Message));
+                }
+            })
             .WithName("CreateAcquisition")
             .WithSummary("Creates an acquisition and starts a background indexer search; poll the acquisition for scored candidates.")
-            .Produces<AcquisitionSummary>();
+            .Produces<AcquisitionSummary>()
+            .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
 
         group.MapGet("/", (
             AcquisitionService acquisitions,

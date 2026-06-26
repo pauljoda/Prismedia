@@ -349,7 +349,10 @@ public static class DependencyInjection {
         services.AddScoped<IImportFileMover, ImportFileMover>();
         services.AddScoped<IAcquisitionHintApplier, AcquisitionHintApplier>();
         services.AddScoped<IImportedFilesReader, ImportedFilesReader>();
-        services.AddScoped<IReleaseLinkResolver>(_ => new ReleaseLinkResolver(new HttpClient { Timeout = TimeSpan.FromSeconds(20) }));
+        // No auto-redirect: the resolver validates the destination host is public before fetching, and a
+        // redirect could hop to a private address that bypasses that check (SSRF defense for the LAN host).
+        services.AddScoped<IReleaseLinkResolver>(_ => new ReleaseLinkResolver(
+            new HttpClient(new SocketsHttpHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(20) }));
     }
 
     private static void RegisterThumbnailContributors(IServiceCollection services) {

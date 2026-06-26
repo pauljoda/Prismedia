@@ -13,6 +13,8 @@ namespace Prismedia.Application.Jobs.Handlers;
 public sealed class AcquisitionSearchJobHandler(
     IAcquisitionStore store,
     AcquisitionSearchRunner runner,
+    IBookAcquisitionProfileStore profiles,
+    AcquisitionQueueService queue,
     ILogger<AcquisitionSearchJobHandler> logger) : IJobHandler {
     public JobType Type => JobType.AcquisitionSearch;
 
@@ -35,10 +37,39 @@ public sealed class AcquisitionSearchJobHandler(
             var message = BuildMessage(outcome);
             await store.SetStatusAsync(payload.AcquisitionId, AcquisitionStatus.AwaitingSelection, message, cancellationToken);
             await context.ReportProgressAsync(100, "Search finished", cancellationToken);
+
+            // When the default profile opts into auto-pick and the search found an acceptable release,
+            // queue the top-ranked one immediately rather than waiting for manual selection.
+            if (outcome.Candidates.Any(candidate => candidate.Accepted)
+                && await profiles.GetDefaultAutoPickAsync(cancellationToken)) {
+                await TryAutoQueueAsync(payload.AcquisitionId, cancellationToken);
+            }
         } catch (Exception ex) when (ex is not OperationCanceledException) {
             logger.LogWarning(ex, "AcquisitionSearch: failed for acquisition {Id}", payload.AcquisitionId);
             await store.SetStatusAsync(payload.AcquisitionId, AcquisitionStatus.Failed, ex.Message, CancellationToken.None);
             throw;
+        }
+    }
+
+    /// <summary>
+    /// Best-effort auto-pick: queues the highest-scored accepted candidate. Failures (e.g. no download client
+    /// configured) are swallowed so the acquisition simply stays awaiting manual selection.
+    /// </summary>
+    private async Task TryAutoQueueAsync(Guid acquisitionId, CancellationToken cancellationToken) {
+        var detail = await store.GetAsync(acquisitionId, cancellationToken);
+        var top = detail?.Candidates
+            .Where(candidate => candidate.Accepted)
+            .OrderByDescending(candidate => candidate.Score)
+            .FirstOrDefault();
+        if (top is null) {
+            return;
+        }
+
+        try {
+            await queue.QueueAsync(acquisitionId, top.Id, cancellationToken);
+            logger.LogInformation("AcquisitionSearch: auto-picked release {Candidate} for acquisition {Id}.", top.Id, acquisitionId);
+        } catch (Exception ex) when (ex is not OperationCanceledException) {
+            logger.LogWarning(ex, "AcquisitionSearch: auto-pick failed for acquisition {Id}; awaiting manual selection.", acquisitionId);
         }
     }
 

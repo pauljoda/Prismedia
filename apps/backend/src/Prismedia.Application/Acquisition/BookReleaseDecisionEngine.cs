@@ -23,17 +23,23 @@ public sealed class ProtocolSpecification : IReleaseSpecification {
         release.Protocol == DownloadProtocol.Torrent ? null : Reason;
 }
 
-/// <summary>Rejects releases whose named format is not in the profile's allowed set. Titles that name no format pass.</summary>
+/// <summary>
+/// Rejects releases the importer can't handle. A title naming only an unimportable format (CBR/RAR/MOBI/AZW)
+/// is rejected up front so it is never downloaded only to dead-end at import. When a profile restricts
+/// formats, a title naming an importable format outside that set is also rejected. Titles that name no
+/// recognizable format pass — the actual payload is checked at import.
+/// </summary>
 public sealed class FormatSpecification : IReleaseSpecification {
     public ReleaseRejectionReason Reason => ReleaseRejectionReason.UnsupportedFormat;
 
     public ReleaseRejectionReason? Evaluate(IndexerRelease release, BookAcquisitionRules rules) {
-        if (rules.AllowedFormats.Count == 0) {
-            return null;
-        }
-
         var detected = BookFormatDetection.Detect(release.Title);
         if (detected.Count == 0) {
+            // No importable format named — reject only if the title declares an unimportable format.
+            return BookFormatDetection.NamesUnsupportedFormat(release.Title) ? Reason : null;
+        }
+
+        if (rules.AllowedFormats.Count == 0) {
             return null;
         }
 

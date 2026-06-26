@@ -74,6 +74,9 @@ public interface IBookAcquisitionProfileStore {
     /// <summary>Returns the import target from the default profile, or null when none exists.</summary>
     Task<BookImportProfile?> GetDefaultImportProfileAsync(CancellationToken cancellationToken);
 
+    /// <summary>True when the default profile is set to auto-queue the top accepted release without manual review.</summary>
+    Task<bool> GetDefaultAutoPickAsync(CancellationToken cancellationToken);
+
     Task<IReadOnlyList<BookAcquisitionProfileView>> ListAsync(CancellationToken cancellationToken);
     Task<BookAcquisitionProfileView?> GetAsync(Guid id, CancellationToken cancellationToken);
     Task<BookAcquisitionProfileView> SaveAsync(BookAcquisitionProfileSaveCommand command, CancellationToken cancellationToken);
