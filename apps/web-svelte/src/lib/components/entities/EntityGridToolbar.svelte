@@ -79,6 +79,8 @@
     query: string;
     scale: number;
     selectable: boolean;
+    /** Whether the selection bar offers the Mark NSFW action (off for non-library grids). */
+    showNsfwAction?: boolean;
     selectedCount: number;
     selectedIds: string[];
     selectionActive: boolean;
@@ -125,6 +127,7 @@
     query,
     scale,
     selectable,
+    showNsfwAction = true,
     selectedCount,
     selectedIds,
     selectionActive,
@@ -497,6 +500,7 @@
         {onSelectAllVisible}
         {onSelectionActiveChange}
         {onToggleNsfwFlag}
+        {showNsfwAction}
         {selectedCount}
         {selectedIds}
         {selectionActive}

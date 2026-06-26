@@ -88,14 +88,15 @@ function syntheticEntityCard(id: string, kind: EntityKind, title: string, poster
  * Status groups for the review queue, ordered so the user sees what needs them first. "action" floats
  * to the top, then live "progress", then settled "done".
  */
-export type ReviewGroup = "action" | "progress" | "done";
+export type ReviewGroup = "action" | "progress" | "completed" | "cancelled";
 
-export const REVIEW_GROUP_ORDER: ReviewGroup[] = ["action", "progress", "done"];
+export const REVIEW_GROUP_ORDER: ReviewGroup[] = ["action", "progress", "completed", "cancelled"];
 
 export const REVIEW_GROUP_LABELS: Record<ReviewGroup, string> = {
   action: "Needs your attention",
   progress: "In progress",
-  done: "Completed",
+  completed: "Completed",
+  cancelled: "Cancelled",
 };
 
 const ACQUISITION_GROUP: Record<string, ReviewGroup> = {
@@ -108,8 +109,8 @@ const ACQUISITION_GROUP: Record<string, ReviewGroup> = {
   [ACQUISITION_STATUS.downloading]: "progress",
   [ACQUISITION_STATUS.downloaded]: "progress",
   [ACQUISITION_STATUS.importing]: "progress",
-  [ACQUISITION_STATUS.imported]: "done",
-  [ACQUISITION_STATUS.cancelled]: "done",
+  [ACQUISITION_STATUS.imported]: "completed",
+  [ACQUISITION_STATUS.cancelled]: "cancelled",
 };
 
 const HISTORY_GROUP: Record<string, ReviewGroup> = {
@@ -117,21 +118,23 @@ const HISTORY_GROUP: Record<string, ReviewGroup> = {
   [REQUEST_HISTORY_STATUS.pending]: "progress",
   [REQUEST_HISTORY_STATUS.downloading]: "progress",
   [REQUEST_HISTORY_STATUS.partial]: "progress",
-  [REQUEST_HISTORY_STATUS.available]: "done",
-  [REQUEST_HISTORY_STATUS.removed]: "done",
-  [REQUEST_HISTORY_STATUS.unknown]: "done",
+  [REQUEST_HISTORY_STATUS.available]: "completed",
+  [REQUEST_HISTORY_STATUS.removed]: "cancelled",
+  [REQUEST_HISTORY_STATUS.unknown]: "cancelled",
 };
 
-/** A request/acquisition normalized for the grouped review queue: its card plus the metadata the queue groups, sorts, filters, and removes by. */
+/** Which subsystem owns an item, so the queue removes it through the right endpoint. */
+export type ReviewItemType = "acquisition" | "history";
+
+/** A request/acquisition normalized for the grouped review queue: its card plus the metadata the queue groups, sorts, and removes by. */
 export interface ReviewItem {
   id: string;
+  type: ReviewItemType;
   kind: RequestMediaKindCode;
   group: ReviewGroup;
   statusLabel: string;
   /** ISO timestamp the item was created/requested, for date-added-descending sort. */
   createdAt: string;
-  /** Whether this item can be removed (Prismedia acquisitions; *arr history entries are read-only here). */
-  removable: boolean;
   card: EntityThumbnailCard;
 }
 
@@ -149,11 +152,11 @@ export function acquisitionToReviewItem(item: AcquisitionSummary): ReviewItem {
   );
   return {
     id: item.id,
+    type: "acquisition",
     kind: REQUEST_MEDIA_KIND.book,
     group: ACQUISITION_GROUP[status] ?? "progress",
     statusLabel,
     createdAt: item.createdAt,
-    removable: true,
     card: { ...card, subtitle: statusLabel },
   };
 }
@@ -169,11 +172,11 @@ export function requestHistoryToReviewItem(entry: RequestHistoryEntry): ReviewIt
   const card = entityCardToThumbnailCard(syntheticEntityCard(entry.id, kind, entry.title, entry.posterUrl), href);
   return {
     id: entry.id,
+    type: "history",
     kind: entry.kind as RequestMediaKindCode,
     group: HISTORY_GROUP[status] ?? "progress",
     statusLabel,
     createdAt: entry.requestedAt,
-    removable: false,
     card: { ...card, subtitle: `${statusLabel} · ${entry.serviceName}` },
   };
 }

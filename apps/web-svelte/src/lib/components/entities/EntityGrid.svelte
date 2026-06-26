@@ -41,6 +41,12 @@
 
   interface Props {
     bulkActions?: EntityGridBulkAction[];
+    /**
+     * Whether the selection bar offers the library-wide built-in bulk actions (Add to Collection, Mark
+     * NSFW). Disable for non-library grids (e.g. the request queue of synthetic entities) so only the
+     * custom {@link bulkActions} are offered.
+     */
+    bulkLibraryActions?: boolean;
     cards: EntityThumbnailCard[];
     emptyMessage?: string;
     emptyTitle?: string;
@@ -101,6 +107,7 @@
 
   let {
     bulkActions = [],
+    bulkLibraryActions = true,
     cards,
     emptyMessage = "Try adjusting your search or filters.",
     emptyTitle = "Nothing present",
@@ -831,7 +838,8 @@
     {allSelectedNsfw}
     {barsCollapsed}
     {bulkActions}
-    {collectionItems}
+    collectionItems={bulkLibraryActions ? collectionItems : []}
+    showNsfwAction={bulkLibraryActions}
     canClearFiltersAndSort={Boolean(
       activeKind !== ENTITY_GRID_ALL_KINDS ||
         filterIds.length > 0 ||
