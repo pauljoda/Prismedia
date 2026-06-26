@@ -7,16 +7,15 @@
   import { REQUEST_MEDIA_KIND, REQUEST_PROVIDER_KIND } from "$lib/api/generated/codes";
   import type { RequestMediaKindCode, RequestProviderKindCode } from "$lib/api/generated/codes";
   import { fetchRequestServices, searchRequests } from "$lib/api/requests";
-  import RequestPosterCard from "$lib/components/requests/RequestPosterCard.svelte";
   import RequestsReview from "$lib/components/requests/RequestsReview.svelte";
+  import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import type { RequestSearchResult, RequestServiceInstanceSummary } from "$lib/requests/request-model";
+  import { requestSearchResultToThumbnailCard } from "$lib/requests/review-cards";
   import {
     REQUEST_KIND_LABELS_PLURAL,
     REQUEST_PROVIDER_LABELS,
     numericValue,
-    thumbnailAspectForKind,
-    trackedLabel,
   } from "$lib/requests/request-helpers";
 
   const kindsBySource: Record<string, RequestMediaKindCode[]> = {
@@ -191,35 +190,11 @@
     });
   }
 
-  function sourceName(result: RequestSearchResult) {
-    return (
-      services.find((service) => service.id === result.serviceId)?.displayName ??
-      REQUEST_PROVIDER_LABELS[result.source] ??
-      result.source
-    );
-  }
-
   function detailHref(result: RequestSearchResult) {
     const params = new URLSearchParams({ source: result.source, serviceId: result.serviceId });
     const backQuery = searchHref(query, selectedKind, selectedSource).split("?")[1];
     if (backQuery) params.set("back", backQuery);
     return `/request/${result.kind}/${encodeURIComponent(result.externalId)}?${params.toString()}`;
-  }
-
-  function cardChips(result: RequestSearchResult) {
-    const year = numericValue(result.year);
-    const runtime = numericValue(result.runtimeMinutes);
-    const trackCount = numericValue(result.trackCount);
-    return [
-      year ? String(year) : null,
-      result.certification,
-      runtime ? `${runtime} min` : null,
-      trackCount ? `${trackCount} tracks` : null,
-    ];
-  }
-
-  function isMusic(kind: RequestMediaKindCode) {
-    return kind === REQUEST_MEDIA_KIND.artist || kind === REQUEST_MEDIA_KIND.album;
   }
 </script>
 
@@ -416,21 +391,7 @@
             {/if}
             <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
               {#each section.items as result (`${result.source}:${result.kind}:${result.externalId}`)}
-                <RequestPosterCard
-                  href={detailHref(result)}
-                  title={result.title}
-                  subtitle={result.subtitle ?? sourceName(result)}
-                  imageUrl={result.posterUrl}
-                  aspect={thumbnailAspectForKind(result.kind)}
-                  chips={cardChips(result)}
-                  trackedLabel={result.tracked ? trackedLabel(result.source) : null}
-                  rating={numericValue(result.rating)}
-                  placeholder={result.kind === REQUEST_MEDIA_KIND.artist
-                    ? "person"
-                    : isMusic(result.kind)
-                      ? "music"
-                      : "video"}
-                />
+                <EntityThumbnail card={requestSearchResultToThumbnailCard(result, detailHref(result))} />
               {/each}
             </div>
           </section>

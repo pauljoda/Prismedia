@@ -13,9 +13,11 @@ import type {
   EntityCard,
   EntityKind,
   RequestHistoryEntry,
+  RequestSearchResult,
 } from "$lib/api/generated/model";
 import { entityCardToThumbnailCard } from "$lib/entities/entity-grid";
 import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
+import { numericValue, trackedLabel } from "$lib/requests/request-helpers";
 
 /** Library entity kind that best represents a request media kind, for poster aspect + placeholder family. */
 export const ENTITY_KIND_FOR_REQUEST: Record<string, EntityKind> = {
@@ -108,6 +110,30 @@ export function requestHistoryToThumbnailCard(entry: RequestHistoryEntry): Entit
   const status =
     REQUEST_HISTORY_STATUS_LABEL[String(entry.status)] ?? String(entry.status);
   return withStatus(card, status, entry.subtitle ?? entry.serviceName);
+}
+
+/** A provider search result rendered as a synthetic EntityThumbnail for the Discover grid. */
+export function requestSearchResultToThumbnailCard(result: RequestSearchResult, href: string): EntityThumbnailCard {
+  const kind = ENTITY_KIND_FOR_REQUEST[result.kind] ?? ENTITY_KIND.video;
+  const card = entityCardToThumbnailCard(syntheticEntityCard(result.externalId, kind, result.title, result.posterUrl), href);
+
+  const meta: NonNullable<EntityThumbnailCard["meta"]> = [];
+  const year = numericValue(result.year);
+  if (year) {
+    meta.push({ icon: "calendar", label: String(year) });
+  }
+  const rating = numericValue(result.rating);
+  if (rating) {
+    meta.push({ icon: "count", label: rating.toFixed(1) });
+  }
+
+  return {
+    ...card,
+    subtitle: result.subtitle ?? undefined,
+    meta: meta.length > 0 ? meta : undefined,
+    // Surface "already in Radarr/Sonarr/…" as the corner overlay, mirroring library cards.
+    custom: result.tracked ? { bottomLeft: { label: trackedLabel(result.source) } } : undefined,
+  };
 }
 
 /** Status codes that mean an acquisition is still mid-flight (drives live polling). */
