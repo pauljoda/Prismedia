@@ -117,6 +117,25 @@ public sealed class AcquisitionService(
         return await store.GetAsync(id, cancellationToken);
     }
 
+    /// <summary>Removes an acquisition entirely: best-effort deletes its torrent (and data) from the client, then hard-deletes the record.</summary>
+    public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken) {
+        var clientItemId = await store.GetTransferClientItemIdAsync(id, cancellationToken);
+        if (!string.IsNullOrWhiteSpace(clientItemId)) {
+            var client = await downloadClients.GetDefaultAsync(cancellationToken);
+            if (client is not null) {
+                try {
+                    await clients.Get(client.Kind).RemoveAsync(ConnectionFor(client), clientItemId, deleteData: true, cancellationToken);
+                } catch (OperationCanceledException) {
+                    throw;
+                } catch (Exception) {
+                    // The torrent may already be gone; removal should still delete the record.
+                }
+            }
+        }
+
+        return await store.DeleteAsync(id, cancellationToken);
+    }
+
     /// <summary>Persists a new acquisition and enqueues the background search job that fills in candidates.</summary>
     public async Task<AcquisitionSummary> CreateAndSearchAsync(AcquisitionCreateRequest request, CancellationToken cancellationToken) {
         if (string.IsNullOrWhiteSpace(request.Title)) {

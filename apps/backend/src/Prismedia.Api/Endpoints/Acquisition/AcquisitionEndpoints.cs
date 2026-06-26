@@ -136,6 +136,18 @@ public static class AcquisitionEndpoints {
             .Produces<AcquisitionDetail>()
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
+        group.MapDelete("/{id:guid}", async (
+            Guid id,
+            AcquisitionService acquisitions,
+            CancellationToken cancellationToken) =>
+            await acquisitions.DeleteAsync(id, cancellationToken)
+                ? Results.NoContent()
+                : Results.NotFound(new ApiProblem(ApiProblemCodes.AcquisitionNotFound, "Acquisition was not found.")))
+            .WithName("DeleteAcquisition")
+            .WithSummary("Removes an acquisition and its torrent (and downloaded data) from the download client.")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+
         group.MapGet("/{id:guid}/transfer", async (
             Guid id,
             AcquisitionService acquisitions,

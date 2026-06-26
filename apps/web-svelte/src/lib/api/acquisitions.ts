@@ -1,6 +1,7 @@
 import {
   cancelAcquisition as cancelAcquisitionRequest,
   createAcquisition as createAcquisitionRequest,
+  deleteAcquisition as deleteAcquisitionRequest,
   deleteAcquisitionProfile as deleteAcquisitionProfileRequest,
   deleteDownloadClient,
   deleteIndexer,
@@ -111,6 +112,10 @@ export async function queueAcquisitionCandidate(id: string, candidateId: string)
 
 export async function cancelAcquisition(id: string): Promise<AcquisitionDetail> {
   return unwrapGenerated(await cancelAcquisitionRequest(id), "Failed to cancel acquisition");
+}
+
+export async function deleteAcquisition(id: string): Promise<void> {
+  unwrapGenerated(await deleteAcquisitionRequest(id), "Failed to remove acquisition", [204]);
 }
 
 export async function fetchAcquisitionTransfer(id: string): Promise<AcquisitionTransferView | null> {

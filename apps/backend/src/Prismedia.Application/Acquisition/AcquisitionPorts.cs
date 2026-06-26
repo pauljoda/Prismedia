@@ -124,6 +124,9 @@ public interface IAcquisitionStore {
     Task<IReadOnlyList<AcquisitionSummary>> ListAsync(CancellationToken cancellationToken);
     Task<AcquisitionDetail?> GetAsync(Guid id, CancellationToken cancellationToken);
 
+    /// <summary>Hard-deletes an acquisition and its candidates/transfers/hints via cascade. Returns false when it no longer exists.</summary>
+    Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken);
+
     /// <summary>Returns the search input (title/author) for an acquisition, or null when it no longer exists.</summary>
     Task<AcquisitionSearchInput?> GetSearchInputAsync(Guid id, CancellationToken cancellationToken);
 

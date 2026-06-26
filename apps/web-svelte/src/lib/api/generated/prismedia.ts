@@ -11269,12 +11269,19 @@ export type createAcquisitionResponse200 = {
   status: 200
 }
 
+export type createAcquisitionResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
 export type createAcquisitionResponseSuccess = (createAcquisitionResponse200) & {
   headers: Headers;
 };
-;
+export type createAcquisitionResponseError = (createAcquisitionResponse400) & {
+  headers: Headers;
+};
 
-export type createAcquisitionResponse = (createAcquisitionResponseSuccess)
+export type createAcquisitionResponse = (createAcquisitionResponseSuccess | createAcquisitionResponseError)
 
 export const getCreateAcquisitionUrl = () => {
 
@@ -11373,6 +11380,49 @@ export const getAcquisition = async (id: string, options?: RequestInit): Promise
   {
     ...options,
     method: 'GET'
+
+
+  }
+);}
+
+
+
+export type deleteAcquisitionResponse204 = {
+  data: void
+  status: 204
+}
+
+export type deleteAcquisitionResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type deleteAcquisitionResponseSuccess = (deleteAcquisitionResponse204) & {
+  headers: Headers;
+};
+export type deleteAcquisitionResponseError = (deleteAcquisitionResponse404) & {
+  headers: Headers;
+};
+
+export type deleteAcquisitionResponse = (deleteAcquisitionResponseSuccess | deleteAcquisitionResponseError)
+
+export const getDeleteAcquisitionUrl = (id: string,) => {
+
+
+
+
+  return `/api/acquisitions/${id}`
+}
+
+/**
+ * @summary Removes an acquisition and its torrent (and downloaded data) from the download client.
+ */
+export const deleteAcquisition = async (id: string, options?: RequestInit): Promise<deleteAcquisitionResponse> => {
+
+  return orvalFetch<deleteAcquisitionResponse>(getDeleteAcquisitionUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
 
 
   }
