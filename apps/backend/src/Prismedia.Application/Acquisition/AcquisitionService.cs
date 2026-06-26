@@ -35,22 +35,26 @@ public sealed class AcquisitionService(
 
         var connection = ConnectionFor(client);
         var download = clients.Get(client.Kind);
+        // torrents/info (status) reports the live stage and progress even before metadata resolves;
+        // torrents/properties adds speed/seeds/eta once the transfer is underway. Surface whatever is
+        // available so early stages (e.g. fetching metadata) still show what's happening rather than a
+        // bare "waiting" placeholder. Only when the torrent is gone entirely do we report no transfer.
+        var status = await download.GetItemAsync(connection, clientItemId, cancellationToken);
         var properties = await download.GetPropertiesAsync(connection, clientItemId, cancellationToken);
-        if (properties is null) {
+        if (status is null && properties is null) {
             return null;
         }
 
-        var status = await download.GetItemAsync(connection, clientItemId, cancellationToken);
         var pieces = await download.GetPieceStatesAsync(connection, clientItemId, cancellationToken);
         return new AcquisitionTransferView(
             status?.Progress ?? 0,
             status?.State,
-            properties.TotalSizeBytes,
-            properties.DownloadSpeedBytesPerSecond,
-            properties.EtaSeconds,
-            properties.Seeds,
-            properties.Peers,
-            properties.SavePath,
+            properties?.TotalSizeBytes ?? 0,
+            properties?.DownloadSpeedBytesPerSecond ?? 0,
+            properties?.EtaSeconds ?? 0,
+            properties?.Seeds ?? 0,
+            properties?.Peers ?? 0,
+            properties?.SavePath ?? status?.SavePath,
             Array.ConvertAll(pieces, piece => (int)piece));
     }
 

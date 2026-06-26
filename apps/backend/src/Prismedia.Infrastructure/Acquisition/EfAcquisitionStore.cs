@@ -143,10 +143,10 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
             from transfer in db.DownloadTransfers.AsNoTracking()
             join acquisition in db.Acquisitions.AsNoTracking() on transfer.AcquisitionId equals acquisition.Id
             where active.Contains(acquisition.Status)
-            select new { transfer.Id, transfer.AcquisitionId, transfer.DownloadClientConfigId, transfer.ClientItemId, acquisition.Status })
+            select new { transfer.Id, transfer.AcquisitionId, transfer.DownloadClientConfigId, transfer.ClientItemId, acquisition.Status, transfer.UpdatedAt })
             .ToArrayAsync(cancellationToken);
         return rows
-            .Select(row => new ActiveTransfer(row.Id, row.AcquisitionId, row.DownloadClientConfigId, row.ClientItemId, row.Status))
+            .Select(row => new ActiveTransfer(row.Id, row.AcquisitionId, row.DownloadClientConfigId, row.ClientItemId, row.Status, row.UpdatedAt))
             .ToArray();
     }
 

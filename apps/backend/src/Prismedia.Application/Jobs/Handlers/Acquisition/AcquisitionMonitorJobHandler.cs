@@ -17,6 +17,13 @@ public sealed class AcquisitionMonitorJobHandler(
     ILogger<AcquisitionMonitorJobHandler> logger) : IJobHandler {
     public JobType Type => JobType.AcquisitionMonitor;
 
+    /// <summary>
+    /// How long a torrent may stay absent from the download client before the acquisition is treated as
+    /// removed. A single missed poll (a client restart, a brief empty response, a hash hiccup) must not
+    /// permanently fail an otherwise-healthy download, so removal is only declared after this grace window.
+    /// </summary>
+    private static readonly TimeSpan RemovalGrace = TimeSpan.FromMinutes(2);
+
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var transfers = await acquisitions.ListActiveTransfersAsync(cancellationToken);
         if (transfers.Count == 0) {
@@ -47,7 +54,15 @@ public sealed class AcquisitionMonitorJobHandler(
             var connection = new DownloadClientConnection(client.Id, client.Kind, client.BaseUrl, client.Username, client.Password, client.Category);
             var status = await clients.Get(client.Kind).GetItemAsync(connection, transfer.ClientItemId, cancellationToken);
             if (status is null) {
-                await acquisitions.SetStatusAsync(transfer.AcquisitionId, AcquisitionStatus.Failed, "The download was removed from the client.", cancellationToken);
+                // The torrent isn't reporting. Only treat it as genuinely removed once it has been absent
+                // past the grace window; a transient miss leaves the acquisition untouched so the next poll
+                // can recover it.
+                if (DateTimeOffset.UtcNow - transfer.UpdatedAt >= RemovalGrace) {
+                    await acquisitions.SetStatusAsync(transfer.AcquisitionId, AcquisitionStatus.Failed, "The download was removed from the client.", cancellationToken);
+                } else {
+                    logger.LogDebug("AcquisitionMonitor: transfer {TransferId} not yet visible in client; within grace window.", transfer.TransferId);
+                }
+
                 return;
             }
 

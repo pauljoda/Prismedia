@@ -115,7 +115,9 @@ public sealed record ActiveTransfer(
     Guid AcquisitionId,
     Guid? DownloadClientConfigId,
     string ClientItemId,
-    AcquisitionStatus AcquisitionStatus);
+    AcquisitionStatus AcquisitionStatus,
+    /// <summary>When the transfer was last touched by the monitor; used as the "last seen" anchor for the removal grace period.</summary>
+    DateTimeOffset UpdatedAt);
 
 /// <summary>Everything the import job needs: the captured metadata, the chosen profile, and the completed download's location.</summary>
 public sealed record AcquisitionImportContext(
