@@ -59,6 +59,13 @@ public interface IDownloadClient {
     /// <summary>Reads the current status of a tracked item, or null when the client no longer has it.</summary>
     Task<DownloadItemStatus?> GetItemAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Lists the status of every item in the connection's category. This is the authoritative presence
+    /// check: a per-item lookup can momentarily miss a torrent (e.g. while it is fetching metadata), but a
+    /// torrent absent from the full listing is genuinely gone from the client.
+    /// </summary>
+    Task<IReadOnlyList<DownloadItemStatus>> ListItemsAsync(DownloadClientConnection connection, CancellationToken cancellationToken);
+
     /// <summary>Lists the files within a tracked item.</summary>
     Task<IReadOnlyList<DownloadItemFile>> GetFilesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken);
 

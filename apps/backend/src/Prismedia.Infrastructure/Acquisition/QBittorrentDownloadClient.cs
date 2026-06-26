@@ -81,14 +81,38 @@ public sealed class QBittorrentDownloadClient(HttpClient http) : IDownloadClient
             return null;
         }
 
-        var item = document.RootElement[0];
+        return MapStatus(document.RootElement[0], clientItemId);
+    }
+
+    public async Task<IReadOnlyList<DownloadItemStatus>> ListItemsAsync(DownloadClientConnection connection, CancellationToken cancellationToken) {
+        var session = await LoginAsync(connection, cancellationToken);
+        var path = $"{QBittorrentProtocol.InfoEndpoint}?{QBittorrentProtocol.CategoryField}={Uri.EscapeDataString(connection.Category)}";
+        using var request = BuildRequest(connection, session, HttpMethod.Get, path, content: null);
+        using var response = await http.SendAsync(request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+        if (document.RootElement.ValueKind != JsonValueKind.Array) {
+            return [];
+        }
+
+        var items = new List<DownloadItemStatus>(document.RootElement.GetArrayLength());
+        foreach (var item in document.RootElement.EnumerateArray()) {
+            items.Add(MapStatus(item, Text(item, QBittorrentProtocol.Hash) ?? string.Empty));
+        }
+
+        return items;
+    }
+
+    /// <summary>Projects a qBittorrent torrent JSON object into a <see cref="DownloadItemStatus"/>.</summary>
+    private static DownloadItemStatus MapStatus(JsonElement item, string fallbackId) {
         var progress = Double(item, QBittorrentProtocol.Progress) ?? 0;
-        var state = Text(item, QBittorrentProtocol.State);
         return new DownloadItemStatus(
-            Text(item, QBittorrentProtocol.Hash) ?? clientItemId,
+            Text(item, QBittorrentProtocol.Hash) ?? fallbackId,
             Text(item, QBittorrentProtocol.Name),
             progress,
-            state,
+            Text(item, QBittorrentProtocol.State),
             progress >= 1.0d,
             Text(item, QBittorrentProtocol.SavePathJson),
             Text(item, QBittorrentProtocol.ContentPathJson));

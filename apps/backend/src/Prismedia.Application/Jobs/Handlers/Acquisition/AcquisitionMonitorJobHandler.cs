@@ -18,11 +18,13 @@ public sealed class AcquisitionMonitorJobHandler(
     public JobType Type => JobType.AcquisitionMonitor;
 
     /// <summary>
-    /// How long a torrent may stay absent from the download client before the acquisition is treated as
-    /// removed. A single missed poll (a client restart, a brief empty response, a hash hiccup) must not
-    /// permanently fail an otherwise-healthy download, so removal is only declared after this grace window.
+    /// How long a torrent may stay absent from the download client's listing before the acquisition is
+    /// treated as removed. Presence is checked against the client's full listing (see
+    /// <see cref="IDownloadClient.ListItemsAsync"/>), so a momentary miss can't trigger this — but a brief
+    /// client outage still shouldn't fail a healthy download, so removal is only declared after the torrent
+    /// has been continuously absent for this window.
     /// </summary>
-    private static readonly TimeSpan RemovalGrace = TimeSpan.FromMinutes(2);
+    private static readonly TimeSpan RemovalGrace = TimeSpan.FromMinutes(5);
 
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var transfers = await acquisitions.ListActiveTransfersAsync(cancellationToken);
@@ -31,10 +33,13 @@ public sealed class AcquisitionMonitorJobHandler(
         }
 
         var clientCache = new Dictionary<Guid, Contracts.Acquisition.DownloadClientDetail?>();
+        // Authoritative per-client torrent listings, fetched at most once per pass. A null entry means the
+        // listing could not be read this pass, in which case transfers are left untouched.
+        var listingCache = new Dictionary<Guid, IReadOnlyDictionary<string, DownloadItemStatus>?>();
         var processed = 0;
         foreach (var transfer in transfers) {
             cancellationToken.ThrowIfCancellationRequested();
-            await AdvanceTransferAsync(context, transfer, clientCache, cancellationToken);
+            await AdvanceTransferAsync(context, transfer, clientCache, listingCache, cancellationToken);
             processed++;
             await context.ReportProgressAsync(processed * 100 / transfers.Count, "Polling transfers", cancellationToken);
         }
@@ -44,6 +49,7 @@ public sealed class AcquisitionMonitorJobHandler(
         JobContext context,
         ActiveTransfer transfer,
         Dictionary<Guid, Contracts.Acquisition.DownloadClientDetail?> clientCache,
+        Dictionary<Guid, IReadOnlyDictionary<string, DownloadItemStatus>?> listingCache,
         CancellationToken cancellationToken) {
         var client = await ResolveClientAsync(transfer.DownloadClientConfigId, clientCache, cancellationToken);
         if (client is null) {
@@ -52,15 +58,19 @@ public sealed class AcquisitionMonitorJobHandler(
 
         try {
             var connection = new DownloadClientConnection(client.Id, client.Kind, client.BaseUrl, client.Username, client.Password, client.Category);
-            var status = await clients.Get(client.Kind).GetItemAsync(connection, transfer.ClientItemId, cancellationToken);
-            if (status is null) {
-                // The torrent isn't reporting. Only treat it as genuinely removed once it has been absent
-                // past the grace window; a transient miss leaves the acquisition untouched so the next poll
-                // can recover it.
+            var listing = await GetListingAsync(client.Id, clients.Get(client.Kind), connection, listingCache, cancellationToken);
+            if (listing is null) {
+                // Couldn't read the client this pass — leave the acquisition untouched and try again later.
+                return;
+            }
+
+            if (!listing.TryGetValue(transfer.ClientItemId.ToLowerInvariant(), out var status)) {
+                // Genuinely absent from the client's full listing. Only declare removal after the grace
+                // window so a brief client outage doesn't fail an otherwise-healthy download.
                 if (DateTimeOffset.UtcNow - transfer.UpdatedAt >= RemovalGrace) {
                     await acquisitions.SetStatusAsync(transfer.AcquisitionId, AcquisitionStatus.Failed, "The download was removed from the client.", cancellationToken);
                 } else {
-                    logger.LogDebug("AcquisitionMonitor: transfer {TransferId} not yet visible in client; within grace window.", transfer.TransferId);
+                    logger.LogDebug("AcquisitionMonitor: transfer {TransferId} not in client listing; within grace window.", transfer.TransferId);
                 }
 
                 return;
@@ -85,6 +95,40 @@ public sealed class AcquisitionMonitorJobHandler(
         } catch (Exception ex) {
             logger.LogWarning(ex, "AcquisitionMonitor: failed to poll transfer {TransferId}", transfer.TransferId);
         }
+    }
+
+    /// <summary>
+    /// Returns the client's torrents keyed by lowercased hash, fetched at most once per pass. Returns null
+    /// when the listing can't be read so callers leave their transfers untouched rather than treating every
+    /// torrent as removed.
+    /// </summary>
+    private async Task<IReadOnlyDictionary<string, DownloadItemStatus>?> GetListingAsync(
+        Guid clientId,
+        IDownloadClient client,
+        DownloadClientConnection connection,
+        Dictionary<Guid, IReadOnlyDictionary<string, DownloadItemStatus>?> cache,
+        CancellationToken cancellationToken) {
+        if (cache.TryGetValue(clientId, out var cached)) {
+            return cached;
+        }
+
+        IReadOnlyDictionary<string, DownloadItemStatus>? map = null;
+        try {
+            var items = await client.ListItemsAsync(connection, cancellationToken);
+            var byHash = new Dictionary<string, DownloadItemStatus>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in items) {
+                byHash[item.ClientItemId.ToLowerInvariant()] = item;
+            }
+
+            map = byHash;
+        } catch (OperationCanceledException) {
+            throw;
+        } catch (Exception ex) {
+            logger.LogWarning(ex, "AcquisitionMonitor: failed to list items for download client {ClientId}", clientId);
+        }
+
+        cache[clientId] = map;
+        return map;
     }
 
     private async Task<Contracts.Acquisition.DownloadClientDetail?> ResolveClientAsync(
