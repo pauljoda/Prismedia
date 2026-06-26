@@ -12,12 +12,79 @@ public sealed class AcquisitionService(
     IAcquisitionStore store,
     IJobQueueService queue,
     IDownloadClientConfigStore downloadClients,
-    IDownloadClientFactory clients) {
+    IDownloadClientFactory clients,
+    IImportedFilesReader importedFiles) {
     public Task<IReadOnlyList<AcquisitionSummary>> ListAsync(CancellationToken cancellationToken) =>
         store.ListAsync(cancellationToken);
 
     public Task<AcquisitionDetail?> GetAsync(Guid id, CancellationToken cancellationToken) =>
         store.GetAsync(id, cancellationToken);
+
+    /// <summary>Live transfer telemetry (progress, speed, ETA, peers, per-piece state) for an in-flight acquisition, or null when there is no live transfer.</summary>
+    public async Task<AcquisitionTransferView?> GetTransferAsync(Guid id, CancellationToken cancellationToken) {
+        var info = await store.GetTransferInfoAsync(id, cancellationToken);
+        if (info?.ClientItemId is not { } clientItemId) {
+            return null;
+        }
+
+        var client = await ResolveClientAsync(info.DownloadClientConfigId, cancellationToken);
+        if (client is null) {
+            return null;
+        }
+
+        var connection = ConnectionFor(client);
+        var download = clients.Get(client.Kind);
+        var properties = await download.GetPropertiesAsync(connection, clientItemId, cancellationToken);
+        if (properties is null) {
+            return null;
+        }
+
+        var status = await download.GetItemAsync(connection, clientItemId, cancellationToken);
+        var pieces = await download.GetPieceStatesAsync(connection, clientItemId, cancellationToken);
+        return new AcquisitionTransferView(
+            status?.Progress ?? 0,
+            status?.State,
+            properties.TotalSizeBytes,
+            properties.DownloadSpeedBytesPerSecond,
+            properties.EtaSeconds,
+            properties.Seeds,
+            properties.Peers,
+            properties.SavePath,
+            Array.ConvertAll(pieces, piece => (int)piece));
+    }
+
+    /// <summary>The acquisition's files: the imported library files once imported, otherwise the in-progress download files.</summary>
+    public async Task<AcquisitionFilesView> GetFilesAsync(Guid id, CancellationToken cancellationToken) {
+        var info = await store.GetTransferInfoAsync(id, cancellationToken);
+        if (info is null) {
+            return new AcquisitionFilesView(false, []);
+        }
+
+        if (!string.IsNullOrWhiteSpace(info.FinalSourcePath)) {
+            var imported = importedFiles.List(info.FinalSourcePath);
+            return new AcquisitionFilesView(true, imported.Select(ToFileItem).ToArray());
+        }
+
+        if (info.ClientItemId is { } clientItemId) {
+            var client = await ResolveClientAsync(info.DownloadClientConfigId, cancellationToken);
+            if (client is not null) {
+                var files = await clients.Get(client.Kind).GetFilesAsync(ConnectionFor(client), clientItemId, cancellationToken);
+                return new AcquisitionFilesView(false, files.Select(ToFileItem).ToArray());
+            }
+        }
+
+        return new AcquisitionFilesView(false, []);
+    }
+
+    private async Task<Contracts.Acquisition.DownloadClientDetail?> ResolveClientAsync(Guid? configId, CancellationToken cancellationToken) =>
+        configId is { } id
+            ? await downloadClients.GetAsync(id, cancellationToken) ?? await downloadClients.GetDefaultAsync(cancellationToken)
+            : await downloadClients.GetDefaultAsync(cancellationToken);
+
+    private static DownloadClientConnection ConnectionFor(Contracts.Acquisition.DownloadClientDetail client) =>
+        new(client.Id, client.Kind, client.BaseUrl, client.Username, client.Password, client.Category);
+
+    private static AcquisitionFileItem ToFileItem(DownloadItemFile file) => new(file.Name, file.SizeBytes, file.Progress);
 
     /// <summary>Cancels an acquisition: best-effort removes the torrent (and its data) from the client, then marks it cancelled.</summary>
     public async Task<AcquisitionDetail?> CancelAsync(Guid id, CancellationToken cancellationToken) {

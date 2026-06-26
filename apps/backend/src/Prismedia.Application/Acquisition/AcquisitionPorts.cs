@@ -150,6 +150,9 @@ public interface IAcquisitionStore {
     /// <summary>Loads the full import context (metadata + profile + completed download path) for an acquisition.</summary>
     Task<AcquisitionImportContext?> GetImportContextAsync(Guid acquisitionId, CancellationToken cancellationToken);
 
+    /// <summary>Loads the transfer wiring (status, final path, client item) for an acquisition, or null when absent.</summary>
+    Task<AcquisitionTransferInfo?> GetTransferInfoAsync(Guid acquisitionId, CancellationToken cancellationToken);
+
     /// <summary>Records the final on-disk location of the imported payload.</summary>
     Task SetFinalSourcePathAsync(Guid acquisitionId, string finalSourcePath, CancellationToken cancellationToken);
 

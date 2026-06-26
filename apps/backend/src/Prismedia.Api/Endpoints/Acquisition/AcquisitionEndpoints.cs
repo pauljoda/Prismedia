@@ -130,6 +130,54 @@ public static class AcquisitionEndpoints {
             .Produces<AcquisitionDetail>()
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
+        group.MapGet("/{id:guid}/transfer", async (
+            Guid id,
+            AcquisitionService acquisitions,
+            CancellationToken cancellationToken) => {
+                var transfer = await acquisitions.GetTransferAsync(id, cancellationToken);
+                return transfer is null ? Results.NoContent() : Results.Ok(transfer);
+            })
+            .WithName("GetAcquisitionTransfer")
+            .WithSummary("Live transfer telemetry (progress, speed, ETA, peers, per-piece state) for an in-flight acquisition.")
+            .Produces<AcquisitionTransferView>()
+            .Produces(StatusCodes.Status204NoContent);
+
+        group.MapGet("/{id:guid}/files", (
+            Guid id,
+            AcquisitionService acquisitions,
+            CancellationToken cancellationToken) =>
+            acquisitions.GetFilesAsync(id, cancellationToken))
+            .WithName("GetAcquisitionFiles")
+            .WithSummary("The acquisition's files: imported library files once imported, otherwise the in-progress download files.")
+            .Produces<AcquisitionFilesView>();
+
+        group.MapPost("/{id:guid}/upload-torrent", async (
+            Guid id,
+            IFormFile file,
+            AcquisitionQueueService queue,
+            CancellationToken cancellationToken) => {
+                if (file.Length == 0) {
+                    return Results.BadRequest(new ApiProblem(ApiProblemCodes.AcquisitionInvalid, "The uploaded torrent file is empty."));
+                }
+
+                using var stream = new MemoryStream();
+                await file.CopyToAsync(stream, cancellationToken);
+                try {
+                    var detail = await queue.QueueManualTorrentAsync(id, file.FileName, stream.ToArray(), cancellationToken);
+                    return detail is null
+                        ? Results.NotFound(new ApiProblem(ApiProblemCodes.AcquisitionNotFound, "Acquisition was not found."))
+                        : Results.Ok(detail);
+                } catch (AcquisitionConfigurationException ex) {
+                    return Results.BadRequest(new ApiProblem(ex.Code, ex.Message));
+                }
+            })
+            .WithName("UploadAcquisitionTorrent")
+            .WithSummary("Queues an acquisition from a user-supplied .torrent file (manual fallback for linkless releases).")
+            .DisableAntiforgery()
+            .Produces<AcquisitionDetail>()
+            .Produces<ApiProblem>(StatusCodes.Status400BadRequest)
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+
         group.MapGet("/download-clients", (
             DownloadClientCommandService downloadClients,
             CancellationToken cancellationToken) =>

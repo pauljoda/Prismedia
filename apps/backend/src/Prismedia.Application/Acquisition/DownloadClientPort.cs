@@ -32,6 +32,19 @@ public sealed record DownloadItemStatus(
 /// <summary>Result of probing a download client connection.</summary>
 public sealed record DownloadClientConnectionTest(bool Connected, string? Message);
 
+/// <summary>One file within a download client item.</summary>
+public sealed record DownloadItemFile(string Name, long SizeBytes, double Progress);
+
+/// <summary>Live transfer telemetry for a download client item.</summary>
+public sealed record DownloadItemProperties(
+    long TotalSizeBytes,
+    double DownloadSpeedBytesPerSecond,
+    double UploadSpeedBytesPerSecond,
+    long EtaSeconds,
+    int Seeds,
+    int Peers,
+    string? SavePath);
+
 /// <summary>Drives a download client. qBittorrent is the v1 implementation; the port stays client-agnostic.</summary>
 public interface IDownloadClient {
     /// <summary>The download client family this implementation serves.</summary>
@@ -40,8 +53,20 @@ public interface IDownloadClient {
     /// <summary>Ensures the category exists, adds the release, and returns the client item id used to track it (the info hash when known).</summary>
     Task<string> AddAsync(DownloadClientConnection connection, DownloadAddRequest request, CancellationToken cancellationToken);
 
+    /// <summary>Adds a user-supplied .torrent file and returns the discovered client item id.</summary>
+    Task<string> AddTorrentFileAsync(DownloadClientConnection connection, string fileName, byte[] torrent, CancellationToken cancellationToken);
+
     /// <summary>Reads the current status of a tracked item, or null when the client no longer has it.</summary>
     Task<DownloadItemStatus?> GetItemAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken);
+
+    /// <summary>Lists the files within a tracked item.</summary>
+    Task<IReadOnlyList<DownloadItemFile>> GetFilesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken);
+
+    /// <summary>Reads live transfer telemetry for a tracked item, or null when the client no longer has it.</summary>
+    Task<DownloadItemProperties?> GetPropertiesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken);
+
+    /// <summary>Reads per-piece download state (0 = missing, 1 = downloading, 2 = downloaded).</summary>
+    Task<byte[]> GetPieceStatesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken);
 
     /// <summary>Removes a tracked item, optionally deleting its downloaded data.</summary>
     Task RemoveAsync(DownloadClientConnection connection, string clientItemId, bool deleteData, CancellationToken cancellationToken);

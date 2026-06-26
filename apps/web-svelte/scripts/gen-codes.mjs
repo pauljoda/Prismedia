@@ -46,6 +46,7 @@ const ENUM_EXPORTS = [
   ["RequestMinimumAvailability", "REQUEST_MINIMUM_AVAILABILITY", "RequestMinimumAvailabilityCode"],
   ["RequestHistoryStatus", "REQUEST_HISTORY_STATUS", "RequestHistoryStatusCode"],
   ["RequestRatingSource", "REQUEST_RATING_SOURCE", "RequestRatingSourceCode"],
+  ["FulfillmentMode", "FULFILLMENT_MODE", "FulfillmentModeCode"],
   ["IndexerKind", "INDEXER_KIND", "IndexerKindCode"],
   ["DownloadClientKind", "DOWNLOAD_CLIENT_KIND", "DownloadClientKindCode"],
   ["DownloadProtocol", "DOWNLOAD_PROTOCOL", "DownloadProtocolCode"],

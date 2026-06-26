@@ -119,7 +119,7 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
             .FirstOrDefaultAsync(candidate => candidate.Id == candidateId && candidate.AcquisitionId == acquisitionId, cancellationToken);
         return row is null
             ? null
-            : new AcquisitionQueueCandidate(row.Id, row.Title, row.DownloadUrl, row.MagnetUrl, row.InfoHash, row.Protocol);
+            : new AcquisitionQueueCandidate(row.Id, row.Title, row.DownloadUrl, row.MagnetUrl, row.InfoHash, row.InfoUrl, row.Protocol);
     }
 
     public async Task CreateTransferAsync(Guid acquisitionId, Guid? downloadClientConfigId, string clientItemId, string? category, CancellationToken cancellationToken) {
@@ -191,6 +191,26 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
         return new AcquisitionImportContext(
             row.Id, row.Title, row.Author, row.Series, row.Year, row.PosterUrl, row.PluginId, row.PluginItemId,
             row.ProfileId, transfer?.ContentPath, transfer?.ClientItemId, transfer?.DownloadClientConfigId);
+    }
+
+    public async Task<AcquisitionTransferInfo?> GetTransferInfoAsync(Guid acquisitionId, CancellationToken cancellationToken) {
+        var row = await db.Acquisitions
+            .AsNoTracking()
+            .Where(row => row.Id == acquisitionId)
+            .Select(row => new { row.Status, row.FinalSourcePath })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (row is null) {
+            return null;
+        }
+
+        var transfer = await db.DownloadTransfers
+            .AsNoTracking()
+            .Where(transfer => transfer.AcquisitionId == acquisitionId)
+            .OrderByDescending(transfer => transfer.CreatedAt)
+            .Select(transfer => new { transfer.ClientItemId, transfer.DownloadClientConfigId })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return new AcquisitionTransferInfo(row.Status, row.FinalSourcePath, transfer?.ClientItemId, transfer?.DownloadClientConfigId);
     }
 
     public async Task SetFinalSourcePathAsync(Guid acquisitionId, string finalSourcePath, CancellationToken cancellationToken) {

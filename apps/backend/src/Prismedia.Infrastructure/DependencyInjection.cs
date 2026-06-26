@@ -329,6 +329,7 @@ public static class DependencyInjection {
         services.AddScoped<IRequestProviderClient>(provider => provider.GetRequiredService<SonarrRequestProviderClient>());
         services.AddScoped<IRequestProviderClient>(provider => provider.GetRequiredService<LidarrRequestProviderClient>());
         services.AddScoped<IRequestProviderClientFactory, RequestProviderClientFactory>();
+        services.AddScoped<IBookMetadataSearchSource, PluginBookMetadataSearchSource>();
     }
 
     private static void RegisterAcquisition(IServiceCollection services) {
@@ -347,6 +348,8 @@ public static class DependencyInjection {
         services.AddScoped<IAcquisitionImportPlanner, AcquisitionImportPlanner>();
         services.AddScoped<IImportFileMover, ImportFileMover>();
         services.AddScoped<IAcquisitionHintApplier, AcquisitionHintApplier>();
+        services.AddScoped<IImportedFilesReader, ImportedFilesReader>();
+        services.AddScoped<IReleaseLinkResolver>(_ => new ReleaseLinkResolver(new HttpClient { Timeout = TimeSpan.FromSeconds(20) }));
     }
 
     private static void RegisterThumbnailContributors(IServiceCollection services) {

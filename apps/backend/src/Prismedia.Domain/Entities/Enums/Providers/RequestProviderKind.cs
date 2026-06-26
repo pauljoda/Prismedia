@@ -114,7 +114,25 @@ public enum RequestMediaKind {
     [Code("album")]
     Album,
 
+    /// <summary>Book request target (fulfilled by Prismedia-direct acquisition or an external app).</summary>
+    [Code("book")]
+    Book,
+
     /// <summary>Plugin-defined request target.</summary>
     [Code("plugin")]
     Plugin
+}
+
+/// <summary>
+/// Closed set of fulfilment modes for a content kind: Prismedia handles acquisition directly,
+/// or the request is handed off to an external application (Radarr/Sonarr/Lidarr).
+/// </summary>
+public enum FulfillmentMode {
+    /// <summary>Prismedia searches indexers and downloads the release itself.</summary>
+    [Code("prismedia")]
+    Prismedia,
+
+    /// <summary>The request is handed off to a configured external service.</summary>
+    [Code("external")]
+    External
 }

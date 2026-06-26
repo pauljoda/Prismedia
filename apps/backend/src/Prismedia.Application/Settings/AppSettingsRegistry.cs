@@ -16,6 +16,7 @@ public static class AppSettingsRegistry {
     private const string Jobs = "jobs";
     private const string Playback = "playback";
     private const string Subtitles = "subtitles";
+    private const string Requests = "requests";
     private const string Hls = "hls";
     private const string TranscodeCache = "transcodeCache";
 
@@ -120,6 +121,16 @@ public static class AppSettingsRegistry {
                 "Auto identify during scans",
                 "When on, each scanned item runs through your enabled plugins and the first confident match is applied automatically — no manual review needed. Requires at least one installed plugin and can noticeably increase library scan times.",
                 false,
+                10),
+            StringList(
+                AppSettingKeys.RequestFulfillmentByKind,
+                Requests,
+                "Requests",
+                "Choose how each kind of request is fulfilled: handled directly by Prismedia (search indexers and download) or handed off to an external app.",
+                65,
+                "Fulfilment by kind",
+                "One entry per content kind as \"kind:mode\", where mode is \"prismedia\" or \"external\". Kinds without an entry default to external handoff.",
+                ["book:prismedia", "movie:external", "series:external", "artist:external", "album:external"],
                 10),
             StringList(
                 AppSettingKeys.AutoIdentifyProviders,

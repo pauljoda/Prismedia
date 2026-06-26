@@ -106,6 +106,24 @@ public sealed record AcquisitionDetail(
 /// <summary>Selects which scored candidate to download for an acquisition.</summary>
 public sealed record AcquisitionQueueRequest(Guid CandidateId);
 
+/// <summary>Live transfer telemetry for an in-flight acquisition, including per-piece state for a progress map.</summary>
+public sealed record AcquisitionTransferView(
+    double Progress,
+    string? State,
+    long TotalSizeBytes,
+    double DownloadSpeedBytesPerSecond,
+    long EtaSeconds,
+    int Seeds,
+    int Peers,
+    string? SavePath,
+    IReadOnlyList<int> PieceStates);
+
+/// <summary>One file belonging to an acquisition (download client file while transferring, or imported library file).</summary>
+public sealed record AcquisitionFileItem(string Name, long SizeBytes, double Progress);
+
+/// <summary>The files of an acquisition; <see cref="Imported"/> distinguishes library files from in-progress download files.</summary>
+public sealed record AcquisitionFilesView(bool Imported, IReadOnlyList<AcquisitionFileItem> Files);
+
 /// <summary>Configured download client safe for list displays (no secret material).</summary>
 public sealed record DownloadClientSummary(
     Guid Id,

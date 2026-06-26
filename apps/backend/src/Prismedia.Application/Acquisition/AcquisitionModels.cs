@@ -87,7 +87,27 @@ public sealed record AcquisitionQueueCandidate(
     string? DownloadUrl,
     string? MagnetUrl,
     string? InfoHash,
+    string? InfoUrl,
     DownloadProtocol Protocol);
+
+/// <summary>Resolves an indexer release's info page into a usable magnet link when no direct link is provided.</summary>
+public interface IReleaseLinkResolver {
+    /// <summary>Fetches <paramref name="infoUrl"/> and extracts the first magnet link on the page, or null when none is found.</summary>
+    Task<string?> ResolveMagnetAsync(string infoUrl, CancellationToken cancellationToken);
+}
+
+/// <summary>Minimal transfer wiring for an acquisition: its status, imported location, and download-client item.</summary>
+public sealed record AcquisitionTransferInfo(
+    AcquisitionStatus Status,
+    string? FinalSourcePath,
+    string? ClientItemId,
+    Guid? DownloadClientConfigId);
+
+/// <summary>Lists the files that landed on disk for an imported acquisition.</summary>
+public interface IImportedFilesReader {
+    /// <summary>Enumerates files under <paramref name="path"/> (recursively), or an empty list when the path is missing.</summary>
+    IReadOnlyList<DownloadItemFile> List(string path);
+}
 
 /// <summary>An in-flight transfer the monitor advances, with the acquisition's current status for transition decisions.</summary>
 public sealed record ActiveTransfer(

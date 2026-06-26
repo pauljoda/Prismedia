@@ -95,6 +95,112 @@ public sealed class QBittorrentDownloadClient(HttpClient http) : IDownloadClient
             Text(item, QBittorrentProtocol.ContentPathJson));
     }
 
+    public async Task<string> AddTorrentFileAsync(DownloadClientConnection connection, string fileName, byte[] torrent, CancellationToken cancellationToken) {
+        var session = await LoginAsync(connection, cancellationToken);
+        await PostAsync(connection, session, QBittorrentProtocol.CreateCategoryEndpoint, new Dictionary<string, string> {
+            [QBittorrentProtocol.CategoryField] = connection.Category
+        }, cancellationToken, allowConflict: true);
+
+        var before = await CategoryHashesAsync(connection, session, connection.Category, cancellationToken);
+
+        using var form = new MultipartFormDataContent();
+        var fileContent = new ByteArrayContent(torrent);
+        fileContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/x-bittorrent");
+        form.Add(fileContent, QBittorrentProtocol.TorrentsField, string.IsNullOrWhiteSpace(fileName) ? "upload.torrent" : fileName);
+        form.Add(new StringContent(connection.Category), QBittorrentProtocol.CategoryField);
+
+        using var request = BuildRequest(connection, session, HttpMethod.Post, QBittorrentProtocol.AddEndpoint, form);
+        using var response = await http.SendAsync(request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        for (var attempt = 0; attempt < 15; attempt++) {
+            await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
+            var after = await CategoryHashesAsync(connection, session, connection.Category, cancellationToken);
+            after.ExceptWith(before);
+            if (after.Count > 0) {
+                return after.First();
+            }
+        }
+
+        throw new InvalidOperationException("qBittorrent accepted the uploaded torrent but it did not appear in the category.");
+    }
+
+    public async Task<IReadOnlyList<DownloadItemFile>> GetFilesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) {
+        var session = await LoginAsync(connection, cancellationToken);
+        var path = $"{QBittorrentProtocol.FilesEndpoint}?{QBittorrentProtocol.HashesField}={Uri.EscapeDataString(clientItemId.ToLowerInvariant())}";
+        using var request = BuildRequest(connection, session, HttpMethod.Get, path, content: null);
+        using var response = await http.SendAsync(request, cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+        if (document.RootElement.ValueKind != JsonValueKind.Array) {
+            return [];
+        }
+
+        var files = new List<DownloadItemFile>(document.RootElement.GetArrayLength());
+        foreach (var item in document.RootElement.EnumerateArray()) {
+            files.Add(new DownloadItemFile(
+                Text(item, QBittorrentProtocol.Name) ?? "(unknown)",
+                Long(item, QBittorrentProtocol.Size) ?? 0,
+                Double(item, QBittorrentProtocol.Progress) ?? 0));
+        }
+
+        return files;
+    }
+
+    public async Task<DownloadItemProperties?> GetPropertiesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) {
+        var session = await LoginAsync(connection, cancellationToken);
+        var path = $"{QBittorrentProtocol.PropertiesEndpoint}?{QBittorrentProtocol.HashesField}={Uri.EscapeDataString(clientItemId.ToLowerInvariant())}";
+        using var request = BuildRequest(connection, session, HttpMethod.Get, path, content: null);
+        using var response = await http.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode) {
+            return null;
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+        var item = document.RootElement;
+        if (item.ValueKind != JsonValueKind.Object) {
+            return null;
+        }
+
+        return new DownloadItemProperties(
+            Long(item, QBittorrentProtocol.TotalSize) ?? 0,
+            Long(item, QBittorrentProtocol.DlSpeed) ?? 0,
+            Long(item, QBittorrentProtocol.UpSpeed) ?? 0,
+            Long(item, QBittorrentProtocol.Eta) ?? 0,
+            Int(item, QBittorrentProtocol.Seeds) ?? 0,
+            Int(item, QBittorrentProtocol.Peers) ?? 0,
+            Text(item, QBittorrentProtocol.SavePathJson));
+    }
+
+    public async Task<byte[]> GetPieceStatesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) {
+        var session = await LoginAsync(connection, cancellationToken);
+        var path = $"{QBittorrentProtocol.PieceStatesEndpoint}?{QBittorrentProtocol.HashesField}={Uri.EscapeDataString(clientItemId.ToLowerInvariant())}";
+        using var request = BuildRequest(connection, session, HttpMethod.Get, path, content: null);
+        using var response = await http.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode) {
+            return [];
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+        if (document.RootElement.ValueKind != JsonValueKind.Array) {
+            return [];
+        }
+
+        var states = new byte[document.RootElement.GetArrayLength()];
+        var index = 0;
+        foreach (var element in document.RootElement.EnumerateArray()) {
+            states[index++] = element.ValueKind == JsonValueKind.Number && element.TryGetInt32(out var value)
+                ? (byte)Math.Clamp(value, 0, 2)
+                : (byte)0;
+        }
+
+        return states;
+    }
+
     public async Task RemoveAsync(DownloadClientConnection connection, string clientItemId, bool deleteData, CancellationToken cancellationToken) {
         var session = await LoginAsync(connection, cancellationToken);
         await PostAsync(connection, session, QBittorrentProtocol.DeleteEndpoint, new Dictionary<string, string> {
@@ -203,6 +309,16 @@ public sealed class QBittorrentDownloadClient(HttpClient http) : IDownloadClient
 
     private static double? Double(JsonElement element, string property) =>
         element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var number)
+            ? number
+            : null;
+
+    private static int? Int(JsonElement element, string property) =>
+        element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var number)
+            ? number
+            : null;
+
+    private static long? Long(JsonElement element, string property) =>
+        element.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out var number)
             ? number
             : null;
 }

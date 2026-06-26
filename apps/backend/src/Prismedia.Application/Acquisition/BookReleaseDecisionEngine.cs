@@ -101,12 +101,20 @@ public sealed class IgnoredTermsSpecification : IReleaseSpecification {
     }
 }
 
-/// <summary>Rejects releases with no usable grab link — meta-search indexers often return info-page results only.</summary>
+/// <summary>
+/// Rejects releases with no path to a download at all. A direct download/magnet link passes; so does a
+/// release that only has an info page, because the link can be resolved from that page (or the user can
+/// upload the .torrent manually). Only a release with neither is rejected.
+/// </summary>
 public sealed class DownloadLinkSpecification : IReleaseSpecification {
     public ReleaseRejectionReason Reason => ReleaseRejectionReason.NoDownloadLink;
 
     public ReleaseRejectionReason? Evaluate(IndexerRelease release, BookAcquisitionRules rules) =>
-        !string.IsNullOrWhiteSpace(release.DownloadUrl) || !string.IsNullOrWhiteSpace(release.MagnetUrl) ? null : Reason;
+        !string.IsNullOrWhiteSpace(release.DownloadUrl)
+        || !string.IsNullOrWhiteSpace(release.MagnetUrl)
+        || !string.IsNullOrWhiteSpace(release.InfoUrl)
+            ? null
+            : Reason;
 }
 
 /// <summary>Rejects releases whose language does not match a profile-required language.</summary>

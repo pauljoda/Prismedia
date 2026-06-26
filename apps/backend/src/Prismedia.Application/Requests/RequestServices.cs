@@ -117,11 +117,21 @@ public interface IAdultMovieSearchSource {
     Task<IReadOnlyList<RequestSearchResult>> SearchAsync(Guid serviceId, string query, CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// Searches plugin-backed metadata providers (e.g. OpenLibrary) for books at request time, returning
+/// results carrying the provider id and external id so a Prismedia-direct acquisition can capture them.
+/// </summary>
+public interface IBookMetadataSearchSource {
+    /// <summary>Book search results across enabled book-capable plugin providers. Empty when none are configured.</summary>
+    Task<IReadOnlyList<RequestSearchResult>> SearchAsync(string query, bool hideNsfw, CancellationToken cancellationToken);
+}
+
 /// <summary>Aggregates request searches across configured service instances.</summary>
 public sealed class RequestSearchService(
     IRequestServiceInstanceStore store,
     IRequestProviderClientFactory clients,
-    IAdultMovieSearchSource adultMovies) {
+    IAdultMovieSearchSource adultMovies,
+    IBookMetadataSearchSource bookMetadata) {
     public async Task<RequestSearchResponse> SearchAsync(RequestSearchRequest request, CancellationToken cancellationToken) {
         if (string.IsNullOrWhiteSpace(request.Query)) {
             return new RequestSearchResponse([], []);
@@ -142,6 +152,16 @@ public sealed class RequestSearchService(
             results.AddRange(request.HideNsfw ? found.Where(result => !AdultCertifications.IsAdult(result.Certification)) : found);
             if (error is not null) {
                 errors.Add(error);
+            }
+        }
+
+        // Books are fulfilled by Prismedia-direct acquisition, so they come from plugin metadata
+        // providers rather than an *arr instance. Merge them into the same unified result set.
+        if (request.Kinds.Count == 0 || request.Kinds.Contains(RequestMediaKind.Book)) {
+            try {
+                results.AddRange(await bookMetadata.SearchAsync(request.Query, request.HideNsfw, cancellationToken));
+            } catch (Exception ex) when (ex is not OperationCanceledException) {
+                errors.Add(new RequestProviderHealth(Guid.Empty, RequestProviderKind.Plugin, "Book providers", ex.Message));
             }
         }
 
