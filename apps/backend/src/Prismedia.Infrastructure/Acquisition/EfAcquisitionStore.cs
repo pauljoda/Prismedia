@@ -124,6 +124,14 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
 
     public async Task CreateTransferAsync(Guid acquisitionId, Guid? downloadClientConfigId, string clientItemId, string? category, CancellationToken cancellationToken) {
         var now = DateTimeOffset.UtcNow;
+        // One in-flight transfer per acquisition: re-queueing (after a failed/cancelled attempt) supersedes
+        // any prior transfer. Leaving stale rows would make the monitor poll torrents that no longer exist
+        // and wrongly fail the acquisition based on their ancient last-seen timestamps.
+        var existing = await db.DownloadTransfers.Where(transfer => transfer.AcquisitionId == acquisitionId).ToListAsync(cancellationToken);
+        if (existing.Count > 0) {
+            db.DownloadTransfers.RemoveRange(existing);
+        }
+
         db.DownloadTransfers.Add(new DownloadTransferRow {
             Id = Guid.NewGuid(),
             AcquisitionId = acquisitionId,

@@ -33,8 +33,12 @@ public sealed class AcquisitionQueueService(
         }
 
         var (client, connection) = await ResolveClientAsync(cancellationToken);
+        var downloadClient = clients.Get(client.Kind);
+        // Re-queueing (after a failed/cancelled attempt) supersedes any prior download — drop the old
+        // torrent from the client first so it doesn't linger as an orphan or collide on re-add.
+        await RemovePriorTorrentAsync(acquisitionId, downloadClient, connection, cancellationToken);
         try {
-            var clientItemId = await clients.Get(client.Kind)
+            var clientItemId = await downloadClient
                 .AddAsync(connection, new DownloadAddRequest(url, candidate.InfoHash, client.Category), cancellationToken);
             await acquisitions.CreateTransferAsync(acquisitionId, client.Id, clientItemId, client.Category, cancellationToken);
             await acquisitions.SetStatusAsync(acquisitionId, AcquisitionStatus.Queued, "Sent to download client.", cancellationToken);
@@ -55,8 +59,10 @@ public sealed class AcquisitionQueueService(
         }
 
         var (client, connection) = await ResolveClientAsync(cancellationToken);
+        var downloadClient = clients.Get(client.Kind);
+        await RemovePriorTorrentAsync(acquisitionId, downloadClient, connection, cancellationToken);
         try {
-            var clientItemId = await clients.Get(client.Kind).AddTorrentFileAsync(connection, fileName, torrent, cancellationToken);
+            var clientItemId = await downloadClient.AddTorrentFileAsync(connection, fileName, torrent, cancellationToken);
             await acquisitions.CreateTransferAsync(acquisitionId, client.Id, clientItemId, client.Category, cancellationToken);
             await acquisitions.SetStatusAsync(acquisitionId, AcquisitionStatus.Queued, "Uploaded torrent sent to download client.", cancellationToken);
         } catch (Exception ex) when (ex is not OperationCanceledException) {
@@ -65,6 +71,22 @@ public sealed class AcquisitionQueueService(
         }
 
         return await acquisitions.GetAsync(acquisitionId, cancellationToken);
+    }
+
+    /// <summary>Best-effort removal of an acquisition's prior torrent before a re-queue. Never blocks the new download.</summary>
+    private async Task RemovePriorTorrentAsync(Guid acquisitionId, IDownloadClient downloadClient, DownloadClientConnection connection, CancellationToken cancellationToken) {
+        var priorItemId = await acquisitions.GetTransferClientItemIdAsync(acquisitionId, cancellationToken);
+        if (string.IsNullOrWhiteSpace(priorItemId)) {
+            return;
+        }
+
+        try {
+            await downloadClient.RemoveAsync(connection, priorItemId, deleteData: true, cancellationToken);
+        } catch (OperationCanceledException) {
+            throw;
+        } catch (Exception) {
+            // The prior torrent may already be gone; the re-queue should still proceed.
+        }
     }
 
     /// <summary>Direct link first, then magnet, then a magnet scraped from the release's info page.</summary>
