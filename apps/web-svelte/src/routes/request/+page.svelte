@@ -4,10 +4,12 @@
   import { Button, Select, TextInput, cn } from "@prismedia/ui-svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { REQUEST_MEDIA_KIND, REQUEST_PROVIDER_KIND } from "$lib/api/generated/codes";
+  import { FULFILLMENT_MODE, REQUEST_MEDIA_KIND, REQUEST_PROVIDER_KIND } from "$lib/api/generated/codes";
   import type { RequestMediaKindCode, RequestProviderKindCode } from "$lib/api/generated/codes";
   import { fetchRequestServices, searchRequests } from "$lib/api/requests";
   import { createAcquisition } from "$lib/api/acquisitions";
+  import { fetchLibraryConfig } from "$lib/api/settings";
+  import { findSetting, settingKeys, valueAsStringList } from "$lib/settings/app-settings";
   import RequestsReview from "$lib/components/requests/RequestsReview.svelte";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
   import { useNsfw } from "$lib/nsfw/store.svelte";
@@ -19,12 +21,17 @@
     numericValue,
   } from "$lib/requests/request-helpers";
 
+  // Kinds served by an external *arr service — only offered when that service is connected.
   const kindsBySource: Record<string, RequestMediaKindCode[]> = {
     [REQUEST_PROVIDER_KIND.radarr]: [REQUEST_MEDIA_KIND.movie],
     [REQUEST_PROVIDER_KIND.sonarr]: [REQUEST_MEDIA_KIND.series],
     [REQUEST_PROVIDER_KIND.lidarr]: [REQUEST_MEDIA_KIND.artist, REQUEST_MEDIA_KIND.album],
     [REQUEST_PROVIDER_KIND.plugin]: [REQUEST_MEDIA_KIND.book, REQUEST_MEDIA_KIND.plugin],
   };
+
+  // Kinds Prismedia can search and fulfil itself (via plugins + the acquisition pipeline), with no
+  // external *arr service required. Offered whenever the kind is routed to internal fulfilment.
+  const INTERNAL_SEARCH_KINDS: RequestMediaKindCode[] = [REQUEST_MEDIA_KIND.book];
 
   const sortOptions = [
     { value: "relevance", label: "Relevance" },
@@ -64,6 +71,8 @@
   let availability = $state<"all" | "requestable" | "tracked">("all");
   let services = $state<RequestServiceInstanceSummary[]>([]);
   let servicesLoaded = $state(false);
+  // Per-kind fulfilment routing ("prismedia" | "external"), keyed by request media kind.
+  let routing = $state<Record<string, string>>({});
   let results = $state<RequestSearchResult[]>([]);
   let hasSearched = $state(false);
   let loading = $state(false);
@@ -74,8 +83,14 @@
   const availableSources = $derived(
     [...new Set(services.map((service) => service.kind))] as RequestProviderKindCode[],
   );
+  // Internal kinds Prismedia fulfils itself, unless explicitly routed to an external service. Books
+  // default to internal fulfilment, so an unset route still surfaces them.
+  const internalKinds = $derived(
+    INTERNAL_SEARCH_KINDS.filter((kind) => (routing[kind] ?? FULFILLMENT_MODE.prismedia) !== FULFILLMENT_MODE.external),
+  );
+  // Filterable kinds = internally fulfilled kinds + kinds from connected external services.
   const availableKinds = $derived(
-    [...new Set(availableSources.flatMap((source) => kindsBySource[source] ?? []))].sort(
+    [...new Set([...internalKinds, ...availableSources.flatMap((source) => kindsBySource[source] ?? [])])].sort(
       (a, b) => sectionOrder.indexOf(a) - sectionOrder.indexOf(b),
     ),
   );
@@ -96,7 +111,15 @@
 
   onMount(async () => {
     try {
-      services = await fetchRequestServices();
+      const [serviceList, config] = await Promise.all([fetchRequestServices(), fetchLibraryConfig()]);
+      services = serviceList;
+      const setting = findSetting(config.settings, settingKeys.requestFulfillmentByKind);
+      const parsed: Record<string, string> = {};
+      for (const entry of valueAsStringList(setting?.value)) {
+        const [kind, mode] = entry.split(":");
+        if (kind && mode) parsed[kind] = mode;
+      }
+      routing = parsed;
     } catch (err) {
       error = err instanceof Error ? err.message : "Failed to load request services";
     } finally {
@@ -319,7 +342,7 @@
 
     <!-- ── Filters ── -->
     <div class="space-y-2">
-      {#if availableKinds.length > 1}
+      {#if availableKinds.length >= 1}
         <div class="flex flex-wrap items-center gap-2" role="group" aria-label="Filter by kind">
           {#each [{ value: "all", label: "All" }, ...availableKinds.map((kind) => ({ value: kind, label: REQUEST_KIND_LABELS_PLURAL[kind] ?? kind }))] as option (option.value)}
             <button
@@ -417,15 +440,13 @@
             <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
               {#each section.items as result (`${result.source}:${result.kind}:${result.externalId}`)}
                 {#if result.kind === REQUEST_MEDIA_KIND.book}
-                  <button
-                    type="button"
-                    class="contents text-left"
-                    onclick={() => requestBook(result)}
-                    disabled={requestingId === result.externalId}
-                    aria-label={`Request ${result.title}`}
-                  >
-                    <EntityThumbnail card={requestSearchResultToThumbnailCard(result, "")} interactive={false} />
-                  </button>
+                  <!-- Books are fulfilled internally: activating the card starts an acquisition rather
+                       than navigating to an *arr detail page. onActivate (no href) renders the thumbnail
+                       as a real button so it is clickable and keyboard-operable. -->
+                  <EntityThumbnail
+                    card={requestSearchResultToThumbnailCard(result, "")}
+                    onActivate={() => requestBook(result)}
+                  />
                 {:else}
                   <EntityThumbnail card={requestSearchResultToThumbnailCard(result, detailHref(result))} />
                 {/if}

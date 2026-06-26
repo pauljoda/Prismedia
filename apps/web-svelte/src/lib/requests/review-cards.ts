@@ -25,6 +25,7 @@ export const ENTITY_KIND_FOR_REQUEST: Record<string, EntityKind> = {
   [REQUEST_MEDIA_KIND.series]: ENTITY_KIND.videoSeries,
   [REQUEST_MEDIA_KIND.artist]: ENTITY_KIND.musicArtist,
   [REQUEST_MEDIA_KIND.album]: ENTITY_KIND.audioLibrary,
+  [REQUEST_MEDIA_KIND.book]: ENTITY_KIND.book,
   [REQUEST_MEDIA_KIND.plugin]: ENTITY_KIND.book,
 };
 
