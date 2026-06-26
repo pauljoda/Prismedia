@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { CloudDownload, Loader2, Search, Send, Settings } from "@lucide/svelte";
+  import { CloudDownload, Compass, Inbox, Loader2, Search, Send, Settings } from "@lucide/svelte";
   import { Button, Select, TextInput, cn } from "@prismedia/ui-svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
@@ -59,8 +59,8 @@
   const nsfw = useNsfw();
 
   const tabs = [
-    { id: "discover", label: "Discover" },
-    { id: "requests", label: "Requests" },
+    { id: "discover", label: "Discover", icon: Compass },
+    { id: "requests", label: "Requests", icon: Inbox },
   ] as const;
   let activeTab = $state<"discover" | "requests">("discover");
 
@@ -281,20 +281,17 @@
   </div>
 
   <!-- ── Tabs ── -->
-  <div class="flex items-center gap-2" role="tablist" aria-label="Request views">
+  <div class="primary-tabs" role="tablist" aria-label="Request views">
     {#each tabs as tab (tab.id)}
+      {@const TabIcon = tab.icon}
       <button
         type="button"
         role="tab"
         aria-selected={activeTab === tab.id}
         onclick={() => (activeTab = tab.id)}
-        class={cn(
-          "rounded-xs border px-3 py-1 text-[0.75rem] font-medium transition-all duration-fast",
-          activeTab === tab.id
-            ? "bg-accent-950/30 border-border-accent text-text-accent shadow-[var(--shadow-glow-accent)]"
-            : "bg-surface-1 border-border-subtle text-text-muted hover:border-border-default hover:text-text-primary",
-        )}
+        class={cn("primary-tab", activeTab === tab.id && "is-active")}
       >
+        <TabIcon class="h-4 w-4" />
         {tab.label}
       </button>
     {/each}
@@ -477,3 +474,85 @@
     {/if}
   {/if}
 </div>
+
+<style>
+  /* Primary mode tabs (Discover / Requests): the app's underline-glow tab treatment, scaled up for
+     top-level navigation. */
+  .primary-tabs {
+    position: relative;
+    display: flex;
+    gap: 0.25rem;
+  }
+
+  .primary-tabs::after {
+    content: "";
+    position: absolute;
+    inset: auto 0 0 0;
+    height: 1px;
+    background: linear-gradient(
+      to right,
+      transparent,
+      var(--color-border-subtle) 8%,
+      var(--color-border-subtle) 92%,
+      transparent
+    );
+    pointer-events: none;
+  }
+
+  .primary-tab {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: transparent;
+    color: var(--color-text-muted);
+    font-family: var(--font-heading, Geist, sans-serif);
+    font-size: 0.92rem;
+    font-weight: 600;
+    line-height: 1;
+    padding: 0.65rem 0.9rem;
+    transition: color var(--duration-fast, 120ms) var(--ease-default);
+  }
+
+  .primary-tab::before {
+    content: "";
+    position: absolute;
+    inset: auto 0.35rem 0 0.35rem;
+    height: 2px;
+    background: transparent;
+    transition:
+      background var(--duration-normal, 200ms) var(--ease-mechanical),
+      box-shadow var(--duration-normal, 200ms) var(--ease-mechanical);
+    z-index: 1;
+  }
+
+  .primary-tab:hover {
+    color: var(--color-text-secondary);
+  }
+
+  .primary-tab:hover::before {
+    background: rgb(255 255 255 / 0.16);
+  }
+
+  .primary-tab:focus-visible {
+    outline: 1px solid rgb(242 194 106 / 0.72);
+    outline-offset: 2px;
+    border-radius: var(--radius-xs, 4px);
+  }
+
+  .primary-tab.is-active {
+    color: var(--color-text-accent-bright, #f2c26a);
+  }
+
+  .primary-tab.is-active::before {
+    background: linear-gradient(
+      to right,
+      var(--color-accent-overlay-faint),
+      var(--color-accent-overlay-strong) 50%,
+      var(--color-accent-overlay-faint)
+    );
+    box-shadow:
+      0 0 8px var(--color-accent-overlay-light),
+      0 0 16px rgba(196, 154, 90, 0.1);
+  }
+</style>

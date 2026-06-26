@@ -3,9 +3,11 @@ import {
   CAPABILITY_KIND,
   ENTITY_FILE_ROLE,
   ENTITY_KIND,
+  REQUEST_HISTORY_STATUS,
   REQUEST_MEDIA_KIND,
   type AcquisitionStatusCode,
   type RequestHistoryStatusCode,
+  type RequestMediaKindCode,
 } from "$lib/api/generated/codes";
 import type {
   AcquisitionSummary,
@@ -82,35 +84,98 @@ function syntheticEntityCard(id: string, kind: EntityKind, title: string, poster
   } as EntityCard;
 }
 
-function withStatus(card: EntityThumbnailCard, statusLabel: string, subtitle: string | null): EntityThumbnailCard {
-  return {
-    ...card,
-    subtitle: subtitle ?? undefined,
-    custom: { bottomLeft: { label: statusLabel } },
-  };
+/**
+ * Status groups for the review queue, ordered so the user sees what needs them first. "action" floats
+ * to the top, then live "progress", then settled "done".
+ */
+export type ReviewGroup = "action" | "progress" | "done";
+
+export const REVIEW_GROUP_ORDER: ReviewGroup[] = ["action", "progress", "done"];
+
+export const REVIEW_GROUP_LABELS: Record<ReviewGroup, string> = {
+  action: "Needs your attention",
+  progress: "In progress",
+  done: "Completed",
+};
+
+const ACQUISITION_GROUP: Record<string, ReviewGroup> = {
+  [ACQUISITION_STATUS.awaitingSelection]: "action",
+  [ACQUISITION_STATUS.manualImportRequired]: "action",
+  [ACQUISITION_STATUS.failed]: "action",
+  [ACQUISITION_STATUS.pending]: "progress",
+  [ACQUISITION_STATUS.searching]: "progress",
+  [ACQUISITION_STATUS.queued]: "progress",
+  [ACQUISITION_STATUS.downloading]: "progress",
+  [ACQUISITION_STATUS.downloaded]: "progress",
+  [ACQUISITION_STATUS.importing]: "progress",
+  [ACQUISITION_STATUS.imported]: "done",
+  [ACQUISITION_STATUS.cancelled]: "done",
+};
+
+const HISTORY_GROUP: Record<string, ReviewGroup> = {
+  [REQUEST_HISTORY_STATUS.submitted]: "progress",
+  [REQUEST_HISTORY_STATUS.pending]: "progress",
+  [REQUEST_HISTORY_STATUS.downloading]: "progress",
+  [REQUEST_HISTORY_STATUS.partial]: "progress",
+  [REQUEST_HISTORY_STATUS.available]: "done",
+  [REQUEST_HISTORY_STATUS.removed]: "done",
+  [REQUEST_HISTORY_STATUS.unknown]: "done",
+};
+
+/** A request/acquisition normalized for the grouped review queue: its card plus the metadata the queue groups, sorts, filters, and removes by. */
+export interface ReviewItem {
+  id: string;
+  kind: RequestMediaKindCode;
+  group: ReviewGroup;
+  statusLabel: string;
+  /** ISO timestamp the item was created/requested, for date-added-descending sort. */
+  createdAt: string;
+  /** Whether this item can be removed (Prismedia acquisitions; *arr history entries are read-only here). */
+  removable: boolean;
+  card: EntityThumbnailCard;
 }
 
-/** A Prismedia acquisition rendered as a synthetic EntityThumbnail for the review grid. */
-export function acquisitionToThumbnailCard(item: AcquisitionSummary): EntityThumbnailCard {
+/** A Prismedia acquisition normalized into a review-queue item. */
+export function acquisitionToReviewItem(item: AcquisitionSummary): ReviewItem {
+  const status = item.status as AcquisitionStatusCode;
+  const base = ACQUISITION_STATUS_LABEL[status] ?? status;
+  const statusLabel =
+    status === ACQUISITION_STATUS.downloading && item.progress != null
+      ? `${base} · ${Math.round(Number(item.progress) * 100)}%`
+      : base;
   const card = entityCardToThumbnailCard(
     syntheticEntityCard(item.id, ENTITY_KIND.book, item.title, item.posterUrl),
     `/request/acquisition/${item.id}`,
   );
-  const subtitle = [item.author, item.year ? String(item.year) : null].filter(Boolean).join(" · ") || null;
-  return withStatus(card, ACQUISITION_STATUS_LABEL[item.status] ?? item.status, subtitle);
+  return {
+    id: item.id,
+    kind: REQUEST_MEDIA_KIND.book,
+    group: ACQUISITION_GROUP[status] ?? "progress",
+    statusLabel,
+    createdAt: item.createdAt,
+    removable: true,
+    card: { ...card, subtitle: statusLabel },
+  };
 }
 
-/** An *arr request-history entry rendered as a synthetic EntityThumbnail for the review grid. */
-export function requestHistoryToThumbnailCard(entry: RequestHistoryEntry): EntityThumbnailCard {
+/** An *arr request-history entry normalized into a review-queue item. */
+export function requestHistoryToReviewItem(entry: RequestHistoryEntry): ReviewItem {
   const kind = ENTITY_KIND_FOR_REQUEST[entry.kind] ?? ENTITY_KIND.video;
   const params = new URLSearchParams({ source: entry.source });
   if (entry.serviceId) params.set("serviceId", entry.serviceId);
   const href = `/request/${entry.kind}/${encodeURIComponent(entry.externalId)}?${params.toString()}`;
-
+  const status = String(entry.status);
+  const statusLabel = REQUEST_HISTORY_STATUS_LABEL[status] ?? status;
   const card = entityCardToThumbnailCard(syntheticEntityCard(entry.id, kind, entry.title, entry.posterUrl), href);
-  const status =
-    REQUEST_HISTORY_STATUS_LABEL[String(entry.status)] ?? String(entry.status);
-  return withStatus(card, status, entry.subtitle ?? entry.serviceName);
+  return {
+    id: entry.id,
+    kind: entry.kind as RequestMediaKindCode,
+    group: HISTORY_GROUP[status] ?? "progress",
+    statusLabel,
+    createdAt: entry.requestedAt,
+    removable: false,
+    card: { ...card, subtitle: `${statusLabel} · ${entry.serviceName}` },
+  };
 }
 
 /** A provider search result rendered as a synthetic EntityThumbnail for the Discover grid. */
