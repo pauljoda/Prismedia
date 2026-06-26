@@ -1,10 +1,11 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import { ChevronLeft, Download, ExternalLink, FileText, Loader2, Upload, X } from "@lucide/svelte";
-  import { Badge, Button } from "@prismedia/ui-svelte";
+  import { ChevronLeft, FileText, Loader2, Upload, X } from "@lucide/svelte";
+  import { Badge } from "@prismedia/ui-svelte";
   import { page } from "$app/state";
   import EntityDetail from "$lib/components/entities/EntityDetail.svelte";
   import PieceStateBar from "$lib/components/acquisitions/PieceStateBar.svelte";
+  import ReleaseTable from "$lib/components/acquisitions/ReleaseTable.svelte";
   import type { EntityDetailActionButton } from "$lib/components/entities/entity-detail-types";
   import { ACQUISITION_STATUS } from "$lib/api/generated/codes";
   import type {
@@ -238,51 +239,7 @@
               {#if detail.candidates.length === 0}
                 <p class="text-sm text-text-muted">No release candidates found.</p>
               {:else}
-                <div class="overflow-x-auto rounded-sm border border-border-subtle">
-                  <table class="w-full text-sm">
-                    <thead class="bg-surface-1 text-left text-[0.7rem] uppercase tracking-wide text-text-muted">
-                      <tr>
-                        <th class="px-3 py-2">Release</th>
-                        <th class="px-3 py-2">Indexer</th>
-                        <th class="px-3 py-2 text-right">Size</th>
-                        <th class="px-3 py-2 text-right">Seeders</th>
-                        <th class="px-3 py-2 text-right">Score</th>
-                        <th class="px-3 py-2"></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {#each detail.candidates as c (c.id)}
-                        <tr class="border-t border-border-subtle {c.accepted ? '' : 'opacity-55'}">
-                          <td class="px-3 py-2">
-                            <div class="max-w-[26rem] truncate text-text-primary" title={c.title}>{c.title}</div>
-                            {#if !c.accepted && c.rejections.length > 0}
-                              <div class="text-[0.7rem] text-warning-text">{c.rejections.map((r) => String(r).replace(/-/g, " ")).join(", ")}</div>
-                            {/if}
-                          </td>
-                          <td class="px-3 py-2 text-text-muted">{c.indexerName}</td>
-                          <td class="px-3 py-2 text-right text-text-muted">{formatBytes(Number(c.sizeBytes))}</td>
-                          <td class="px-3 py-2 text-right text-text-muted">{c.seeders ?? "—"}</td>
-                          <td class="px-3 py-2 text-right font-mono text-[0.72rem] text-text-muted">{Number(c.score).toFixed(0)}</td>
-                          <td class="px-3 py-2">
-                            <div class="flex items-center justify-end gap-1.5">
-                              {#if c.infoUrl}
-                                <a href={c.infoUrl} target="_blank" rel="noopener" title="Open release page" class="inline-flex items-center text-text-muted transition-colors hover:text-text-accent">
-                                  <ExternalLink class="h-3.5 w-3.5" />
-                                </a>
-                              {/if}
-                              {#if c.accepted && canChoose}
-                                <Button size="sm" onclick={() => queue(c)} disabled={busy} class="gap-1.5">
-                                  <Download class="h-3.5 w-3.5" />
-                                  Download
-                                </Button>
-                              {/if}
-                            </div>
-                          </td>
-                        </tr>
-                      {/each}
-                    </tbody>
-                  </table>
-                </div>
+                <ReleaseTable candidates={detail.candidates} {canChoose} {busy} onQueue={queue} />
               {/if}
 
               {#if canChoose}
