@@ -114,11 +114,22 @@
 </label>
 
 <!-- ── Desktop: sortable table ── -->
-<div class="hidden overflow-x-auto rounded-sm border border-border-subtle sm:block">
-  <table class="w-full text-sm">
+<!-- Fixed layout so a long release title truncates to its column rather than widening the table into a
+     horizontal scroll. Release takes ~half the width; the remaining columns share the rest. -->
+<div class="hidden rounded-sm border border-border-subtle sm:block">
+  <table class="w-full table-fixed text-sm">
+    <colgroup>
+      <col style:width="2.5rem" />
+      <col style:width="50%" />
+      <col />
+      <col />
+      <col />
+      <col />
+      <col />
+    </colgroup>
     <thead class="bg-surface-1 text-left text-[0.7rem] uppercase tracking-wide text-text-muted">
       <tr>
-        <th class="w-8 px-3 py-2"><span class="sr-only">Type</span></th>
+        <th class="px-3 py-2"><span class="sr-only">Type</span></th>
         {#each columns as col (col.key)}
           <th class={cn("px-3 py-2", col.align === "right" && "text-right")}>
             <button
@@ -156,10 +167,10 @@
           <td class="px-3 py-2">
             <div class="truncate text-text-primary" title={row.title}>{row.title}</div>
             {#if !c.accepted && c.rejections.length > 0}
-              <div class="text-[0.7rem] text-warning-text">{rejectionText(c)}</div>
+              <div class="truncate text-[0.7rem] text-warning-text" title={rejectionText(c)}>{rejectionText(c)}</div>
             {/if}
           </td>
-          <td class="px-3 py-2 text-text-muted">{c.indexerName}</td>
+          <td class="truncate px-3 py-2 text-text-muted">{c.indexerName}</td>
           <td class="px-3 py-2 text-right text-text-muted">{formatBytes(Number(c.sizeBytes))}</td>
           <td class="px-3 py-2 text-right text-text-muted">{c.seeders ?? "—"}</td>
           <td class="px-3 py-2 text-right font-mono text-[0.72rem] text-text-muted">{Number(c.score).toFixed(0)}</td>
