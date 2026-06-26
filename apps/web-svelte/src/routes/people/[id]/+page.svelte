@@ -214,12 +214,10 @@
   :global(.meta-item) { white-space: nowrap; font-size: 0.82rem; }
   :global(.meta-sep) { display: inline-block; width: 3px; height: 3px; margin: 0 0.5rem; background: var(--color-text-muted, #8a93a6); opacity: 0.5; }
 
-  .bio-section { padding: 1rem 1.5rem; }
+  /* Edge padding comes from EntityDetail's .detail-after-body. */
 
   .content-section { display: grid; gap: 0.75rem; }
   .content-heading { display: flex; align-items: center; gap: 0.5rem; margin: 0; font-family: var(--font-heading, Geist, sans-serif); font-size: 1.1rem; font-weight: 600; color: var(--color-text-primary, #f2eed8); }
   .content-count { font-family: var(--font-mono, "JetBrains Mono", monospace); font-size: 0.68rem; font-weight: 600; color: var(--color-text-muted, #8a93a6); padding: 0.1rem 0.4rem; border: 1px solid var(--color-border, #1c2235); background: var(--color-surface-3, #151a28); }
-
-  @media (min-width: 640px) { .bio-section { padding: 1rem 2rem; } }
 
 </style>

@@ -1076,9 +1076,13 @@
         </div>
       {/if}
 
-      <!-- Kind-specific content between body and metadata (studio, credits, etc.) -->
+      <!-- Kind-specific content between body and metadata (studio, credits, etc.).
+           Padded at this base level so every page's afterBody is inset consistently and never
+           hugs the card edges — pages should not re-add their own horizontal padding. -->
       {#if afterBody}
-        {@render afterBody()}
+        <div class="detail-after-body">
+          {@render afterBody()}
+        </div>
       {/if}
 
       <!-- Lower metadata sections -->
@@ -2361,6 +2365,17 @@
     padding: 1rem 1.5rem 1.5rem;
   }
 
+  /* Page-supplied content (afterBody) inset to match the standard body padding. */
+  .detail-after-body {
+    padding: 1rem 1.5rem 1.5rem;
+  }
+
+  /* When the description/tags body renders above, its bottom padding already
+     provides the separation — don't double it up. */
+  .detail-body + .detail-after-body {
+    padding-top: 0;
+  }
+
   /* ── Description (markdown) ─────────────────────────────── */
 
   .description-content {
@@ -2705,6 +2720,10 @@
     [data-poster-size="large"] .poster-frame { --poster-width: 13rem; }
 
     .detail-body {
+      padding: 1.25rem 2rem 2rem;
+    }
+
+    .detail-after-body {
       padding: 1.25rem 2rem 2rem;
     }
 

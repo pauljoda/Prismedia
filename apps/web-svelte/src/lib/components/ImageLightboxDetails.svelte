@@ -206,9 +206,10 @@
     opacity: 0.5;
   }
 
+  /* Edge padding comes from EntityDetail's .detail-after-body. */
   .credits-section {
-    padding: 1rem 1.5rem;
     border-top: 1px solid var(--color-border, #1c2235);
+    padding-top: 1rem;
   }
 
   .section-label {
@@ -243,12 +244,6 @@
   .credit-chip:hover {
     color: var(--color-text-accent, #c49a5a);
     border-color: var(--color-accent-overlay-medium);
-  }
-
-  @media (min-width: 640px) {
-    .credits-section {
-      padding: 1rem 2rem;
-    }
   }
 
   @keyframes pulse {

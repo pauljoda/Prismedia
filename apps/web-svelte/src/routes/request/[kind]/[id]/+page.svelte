@@ -580,20 +580,12 @@
 {/snippet}
 
 <style>
-  /* Aligns the request sections with EntityDetail's .detail-body padding so the
-     afterBody content doesn't sit on the card edge, and embeds the request
-     panel as an inline well beside the sections on wide screens. */
+  /* EntityDetail's .detail-after-body supplies the edge padding; this just lays the
+     sections and request panel out and embeds the panel as an inline well on wide screens. */
   .request-detail-body {
     display: grid;
     gap: 1.25rem;
     align-items: start;
-    padding: 1.25rem 1.5rem 1.5rem;
-  }
-
-  /* When the description/tags body renders above, its bottom padding already
-     provides the separation — don't double it up. */
-  :global(.detail-body) + .request-detail-body {
-    padding-top: 0;
   }
 
   @media (min-width: 64rem) {
