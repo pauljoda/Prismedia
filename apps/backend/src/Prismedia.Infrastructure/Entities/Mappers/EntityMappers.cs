@@ -96,6 +96,17 @@ public static class EntityMappers {
                     Relationships = card.Relationships,
                     CreditMetadata = creditMetadata,
                 },
+                EntityKind.BookAuthor => new BookAuthorDetail {
+                    Id = card.Id,
+                    Kind = card.Kind,
+                    Title = card.Title,
+                    ParentEntityId = card.ParentEntityId,
+                    SortOrder = card.SortOrder,
+                    Capabilities = card.Capabilities,
+                    ChildrenByKind = card.ChildrenByKind,
+                    Relationships = card.Relationships,
+                    CreditMetadata = creditMetadata,
+                },
                 EntityKind.Image => new ImageDetail {
                     Id = card.Id,
                     Kind = card.Kind,

@@ -65,6 +65,15 @@ public enum EntityKind {
     [EntityKindMeta(EntityKindCategory.Media, EntityStorageShape.Folder, "Artists", typeof(Prismedia.Domain.Media.MusicArtist), enumeratesIdentifyChildren: true)]
     MusicArtist,
 
+    /// <summary>
+    /// Book author: a folder-backed grouping that gathers an author's books
+    /// (<see cref="EntityKind.Book"/> children) under one heading, mirroring how
+    /// <see cref="EntityKind.MusicArtist"/> groups albums.
+    /// </summary>
+    [Code("book-author")]
+    [EntityKindMeta(EntityKindCategory.Media, EntityStorageShape.Folder, "Authors", typeof(Prismedia.Domain.Media.BookAuthor), enumeratesIdentifyChildren: true)]
+    BookAuthor,
+
     /// <summary>Person taxonomy entity.</summary>
     [Code("person")]
     [EntityKindMeta(EntityKindCategory.Taxonomy, EntityStorageShape.None, "People", typeof(Prismedia.Domain.Taxonomy.Person))]

@@ -20,6 +20,7 @@ import type {
   AudioTrackDetail,
   BookAcquisitionProfileSaveRequest,
   BookAcquisitionProfileView,
+  BookAuthorDetail,
   BookDetail,
   BrowseLibraryPathParams,
   BrowserSessionResponse,
@@ -72,6 +73,7 @@ import type {
   GalleryDetail,
   GetAudioLibraryParams,
   GetAudioTrackParams,
+  GetBookAuthorParams,
   GetBookParams,
   GetCollectionParams,
   GetEntityParams,
@@ -159,6 +161,7 @@ import type {
   LibraryRootUpdateRequest,
   ListAudioLibrariesParams,
   ListAudioTracksParams,
+  ListBookAuthorsParams,
   ListBooksParams,
   ListCollectionItemsParams,
   ListCollectionsParams,
@@ -6154,6 +6157,151 @@ export const getBookPatch = async (id: string,
     entityMetadataUpdateRequest: EntityMetadataUpdateRequest, options?: RequestInit): Promise<getBookPatchResponse> => {
 
   return orvalFetch<getBookPatchResponse>(getGetBookPatchUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      entityMetadataUpdateRequest,)
+  }
+);}
+
+
+
+export type listBookAuthorsResponse200 = {
+  data: EntityListResponse
+  status: 200
+}
+
+export type listBookAuthorsResponseSuccess = (listBookAuthorsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listBookAuthorsResponse = (listBookAuthorsResponseSuccess)
+
+export const getListBookAuthorsUrl = (params?: ListBookAuthorsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/book-authors?${stringifiedParams}` : `/api/book-authors`
+}
+
+/**
+ * @summary List Authors.
+ */
+export const listBookAuthors = async (params?: ListBookAuthorsParams, options?: RequestInit): Promise<listBookAuthorsResponse> => {
+
+  return orvalFetch<listBookAuthorsResponse>(getListBookAuthorsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getBookAuthorResponse200 = {
+  data: BookAuthorDetail
+  status: 200
+}
+
+export type getBookAuthorResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type getBookAuthorResponseSuccess = (getBookAuthorResponse200) & {
+  headers: Headers;
+};
+export type getBookAuthorResponseError = (getBookAuthorResponse404) & {
+  headers: Headers;
+};
+
+export type getBookAuthorResponse = (getBookAuthorResponseSuccess | getBookAuthorResponseError)
+
+export const getGetBookAuthorUrl = (id: string,
+    params?: GetBookAuthorParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/book-authors/${id}?${stringifiedParams}` : `/api/book-authors/${id}`
+}
+
+/**
+ * @summary Get Authors detail.
+ */
+export const getBookAuthor = async (id: string,
+    params?: GetBookAuthorParams, options?: RequestInit): Promise<getBookAuthorResponse> => {
+
+  return orvalFetch<getBookAuthorResponse>(getGetBookAuthorUrl(id,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getBookAuthorPatchResponse200 = {
+  data: BookAuthorDetail
+  status: 200
+}
+
+export type getBookAuthorPatchResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type getBookAuthorPatchResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type getBookAuthorPatchResponseSuccess = (getBookAuthorPatchResponse200) & {
+  headers: Headers;
+};
+export type getBookAuthorPatchResponseError = (getBookAuthorPatchResponse400 | getBookAuthorPatchResponse404) & {
+  headers: Headers;
+};
+
+export type getBookAuthorPatchResponse = (getBookAuthorPatchResponseSuccess | getBookAuthorPatchResponseError)
+
+export const getGetBookAuthorPatchUrl = (id: string,) => {
+
+
+
+
+  return `/api/book-authors/${id}`
+}
+
+/**
+ * @summary Update Authors detail.
+ */
+export const getBookAuthorPatch = async (id: string,
+    entityMetadataUpdateRequest: EntityMetadataUpdateRequest, options?: RequestInit): Promise<getBookAuthorPatchResponse> => {
+
+  return orvalFetch<getBookAuthorPatchResponse>(getGetBookAuthorPatchUrl(id),
   {
     ...options,
     method: 'PATCH',

@@ -172,6 +172,8 @@ public sealed class ScanBookJobHandler(
         await ScanSingleFileBooksAsync(context, root, settings, excludedPaths, validBookPaths, archiveBookPaths, cancellationToken);
 
         await books.RemoveStaleBooksInRootAsync(root.Id, validBookPaths, cancellationToken);
+        // Author groupings whose books were all removed (or that used to be the old "series" parents) are pruned.
+        await books.RemoveEmptyBookAuthorsAsync(cancellationToken);
         await Roots.RemoveEntitiesInExcludedPathsAsync(root.Id, cancellationToken);
     }
 
@@ -213,7 +215,7 @@ public sealed class ScanBookJobHandler(
         }
 
         foreach (var looseItem in items
-            .Where(item => item.SeriesPath is null)
+            .Where(item => item.AuthorPath is null)
             .OrderBy(item => item.SourcePath, NaturalPathComparer.Instance)) {
             await UpsertSingleFileBookAsync(
                 context,
@@ -226,38 +228,32 @@ public sealed class ScanBookJobHandler(
                 cancellationToken);
         }
 
-        foreach (var seriesGroup in items
-            .Where(item => item.SeriesPath is not null)
-            .GroupBy(item => item.SeriesPath!, StringComparer.OrdinalIgnoreCase)
+        // Books under an `Author/` folder are grouped under a folder-backed author entity (like
+        // Artist/Album for music). Each book is parented to its author; empty authors are pruned later.
+        foreach (var authorGroup in items
+            .Where(item => item.AuthorPath is not null)
+            .GroupBy(item => item.AuthorPath!, StringComparer.OrdinalIgnoreCase)
             .OrderBy(group => group.Key, NaturalPathComparer.Instance)) {
-            var first = seriesGroup.First();
-            var seriesIsNsfw = root.IsNsfw || seriesGroup.Any(item => item.IsNsfw);
-            var seriesId = await books.UpsertBookSeriesAsync(
-                first.SeriesPath!,
-                first.SeriesTitle!,
-                root.Id,
-                seriesIsNsfw,
-                DefaultBookTypeFor(first.Format),
-                first.Format,
+            var first = authorGroup.First();
+            var authorIsNsfw = root.IsNsfw || authorGroup.Any(item => item.IsNsfw);
+            var authorId = await books.UpsertBookAuthorAsync(
+                first.AuthorPath!,
+                first.AuthorTitle!,
+                sortOrder: null,
+                authorIsNsfw,
                 cancellationToken);
-            validBookPaths.Add(first.SeriesPath!);
 
-            if (!archiveBookPaths.Contains(first.SeriesPath!)) {
-                await books.RemoveStaleBookChaptersAsync(seriesId, new HashSet<string>(StringComparer.OrdinalIgnoreCase), cancellationToken);
-                await books.RemoveStaleBookVolumesAsync(seriesId, new HashSet<string>(StringComparer.OrdinalIgnoreCase), cancellationToken);
-            }
-
-            var booksInSeries = seriesGroup
+            var booksByAuthor = authorGroup
                 .OrderBy(item => item.SourcePath, NaturalPathComparer.Instance)
                 .ToArray();
-            for (var index = 0; index < booksInSeries.Length; index++) {
+            for (var index = 0; index < booksByAuthor.Length; index++) {
                 await UpsertSingleFileBookAsync(
                     context,
                     settings,
                     root,
-                    booksInSeries[index],
+                    booksByAuthor[index],
                     validBookPaths,
-                    seriesId,
+                    authorId,
                     index,
                     cancellationToken);
             }
@@ -466,8 +462,8 @@ public sealed class ScanBookJobHandler(
         bool IsNsfw,
         BookFormat Format,
         ComicInfoMetadata? Metadata,
-        string? SeriesPath,
-        string? SeriesTitle) {
+        string? AuthorPath,
+        string? AuthorTitle) {
         public static SingleFileBookItem From(
             string rootPath,
             string sourcePath,
@@ -482,8 +478,10 @@ public sealed class ScanBookJobHandler(
                 return new SingleFileBookItem(sourcePath, title, isNsfw, format, metadata, null, null);
             }
 
-            var seriesPath = Path.Combine(rootPath, segments[0]);
-            return new SingleFileBookItem(sourcePath, title, isNsfw, format, metadata, seriesPath, segments[0]);
+            // The top-level folder under the root groups a single-file book's author (e.g. Author/Title/book.epub),
+            // mirroring Artist/Album for music.
+            var authorPath = Path.Combine(rootPath, segments[0]);
+            return new SingleFileBookItem(sourcePath, title, isNsfw, format, metadata, authorPath, segments[0]);
         }
     }
 

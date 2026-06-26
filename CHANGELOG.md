@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Release operations are now ready for channel publishing: the root package version is the source of truth, Docker builds validate the release metadata, pushes to `main` publish only the dev image, and alpha/beta/release images are published manually.
 
 ### Added
+- Added an Authors library: books organized as `Author/Title` are grouped under a browsable author, mirroring how artists group albums — selecting an author shows their books.
 - Added OPDS 1.2 catalog support for external ebook and comic readers, including authenticated feeds, search, covers, downloads, profile visibility rules, and reverse-proxy-aware links.
 - Added playback history and a Stats page for plays, skips, top items, recent activity, and timeframe-based summaries across video, books, and audio.
 - Added Request workflows for Radarr, Sonarr, and Lidarr, including service setup, connection testing, defaults, TMDB/MusicBrainz enrichment, already-tracked updates, NSFW-aware search, and request history.

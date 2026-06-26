@@ -385,6 +385,55 @@ public sealed partial class LibraryScanPersistenceService {
         return id;
     }
 
+    public async Task<Guid> UpsertBookAuthorAsync(
+        string folderPath, string title, int? sortOrder, bool isNsfw, CancellationToken cancellationToken) {
+        var existing = await FindEntityBySourcePath(EntityKindRegistry.BookAuthor.Code, folderPath, cancellationToken);
+        if (existing is not null) {
+            var tracked = await _db.Entities.FindAsync([existing.Id], cancellationToken);
+            if (tracked is not null) {
+                tracked.Title = title;
+                tracked.ParentEntityId = null;
+                tracked.SortOrder = sortOrder;
+                tracked.UpdatedAt = DateTimeOffset.UtcNow;
+                if (isNsfw) tracked.IsNsfw = true;
+            }
+
+            await _db.SaveChangesAsync(cancellationToken);
+            return existing.Id;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var id = Guid.NewGuid();
+        _db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKindRegistry.BookAuthor.Code, Title = title, ParentEntityId = null, SortOrder = sortOrder, IsNsfw = isNsfw, CreatedAt = now, UpdatedAt = now });
+        _db.EntityFiles.Add(new EntityFileRow {
+            Id = Guid.NewGuid(),
+            EntityId = id,
+            Role = EntityFileRole.Source,
+            Path = folderPath,
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        await _db.SaveChangesAsync(cancellationToken);
+        return id;
+    }
+
+    public async Task<int> RemoveEmptyBookAuthorsAsync(CancellationToken cancellationToken) {
+        // An author grouping with no remaining child books is stale (its books were removed or moved).
+        var emptyAuthorIds = await _db.Entities
+            .Where(entity => entity.KindCode == EntityKindRegistry.BookAuthor.Code)
+            .Where(entity => !_db.Entities.Any(child => child.ParentEntityId == entity.Id))
+            .Select(entity => entity.Id)
+            .ToListAsync(cancellationToken);
+        if (emptyAuthorIds.Count == 0) {
+            return 0;
+        }
+
+        var rows = await _db.Entities.Where(entity => emptyAuthorIds.Contains(entity.Id)).ToListAsync(cancellationToken);
+        _db.Entities.RemoveRange(rows);
+        await _db.SaveChangesAsync(cancellationToken);
+        return rows.Count;
+    }
+
     public async Task<Guid> UpsertBookAsync(string sourcePath, string title, Guid libraryRootId, bool isNsfw, CancellationToken cancellationToken) {
         var existing = await FindEntityBySourcePath(EntityKindRegistry.Book.Code, sourcePath, cancellationToken);
         if (existing is not null) {

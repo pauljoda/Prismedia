@@ -167,9 +167,18 @@ public interface IBookScanPersistence {
     Task<IReadOnlyList<Guid>> UpsertBookPagesBatchAsync(
         IReadOnlyList<BookPageUpsertItem> items, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Upserts a folder-backed author grouping that gathers an author's single-file books as children,
+    /// mirroring how a music artist groups albums. Returns the author entity id.
+    /// </summary>
+    Task<Guid> UpsertBookAuthorAsync(string folderPath, string title, int? sortOrder, bool isNsfw, CancellationToken cancellationToken);
+
     Task<int> RemoveStaleBookVolumesAsync(Guid bookEntityId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken);
     Task<int> RemoveStaleBookChaptersAsync(Guid bookEntityId, IReadOnlySet<string> validArchivePaths, CancellationToken cancellationToken);
     Task<int> RemoveStaleBooksInRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken);
+
+    /// <summary>Removes author groupings that no longer have any child books (run after stale book cleanup).</summary>
+    Task<int> RemoveEmptyBookAuthorsAsync(CancellationToken cancellationToken);
 }
 
 /// <summary>Reads downstream processing state used to decide which jobs are still needed.</summary>

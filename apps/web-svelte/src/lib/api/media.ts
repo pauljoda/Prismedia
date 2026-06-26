@@ -2,6 +2,7 @@ import {
   getAudioLibrary,
   getAudioTrack,
   getBook,
+  getBookAuthor,
   getGallery,
   getImage,
   getMusicArtist,
@@ -20,6 +21,7 @@ import { orvalFetch } from "$lib/api/orval-fetch";
 import type {
   AudioLibraryDetail,
   AudioTrackDetail,
+  BookAuthorDetail,
   BookDetail,
   EntityListResponse,
   GalleryDetail,
@@ -35,6 +37,7 @@ import { requestInit, unwrapGenerated, type RequestOptions } from "$lib/api/gene
 export type {
   AudioLibraryDetail,
   AudioTrackDetail,
+  BookAuthorDetail,
   BookDetail,
   GalleryDetail,
   ImageDetail,
@@ -164,6 +167,15 @@ export function fetchMusicArtist(
 ): Promise<MusicArtistDetail> {
   return getMusicArtist(id, undefined, requestInit(options)).then((response) =>
     unwrapGenerated(response, `Failed to fetch artist ${id}`),
+  );
+}
+
+export function fetchBookAuthor(
+  id: string,
+  options?: RequestOptions,
+): Promise<BookAuthorDetail> {
+  return getBookAuthor(id, undefined, requestInit(options)).then((response) =>
+    unwrapGenerated(response, `Failed to fetch author ${id}`),
   );
 }
 

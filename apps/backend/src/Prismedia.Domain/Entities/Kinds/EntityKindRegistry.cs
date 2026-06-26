@@ -73,6 +73,7 @@ public static class EntityKindRegistry {
     public static EntityKindDescriptor AudioLibrary => Describe(EntityKind.AudioLibrary);
     public static EntityKindDescriptor AudioTrack => Describe(EntityKind.AudioTrack);
     public static EntityKindDescriptor Book => Describe(EntityKind.Book);
+    public static EntityKindDescriptor BookAuthor => Describe(EntityKind.BookAuthor);
     public static EntityKindDescriptor BookVolume => Describe(EntityKind.BookVolume);
     public static EntityKindDescriptor BookChapter => Describe(EntityKind.BookChapter);
     public static EntityKindDescriptor BookPage => Describe(EntityKind.BookPage);

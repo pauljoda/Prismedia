@@ -20,6 +20,7 @@ export const EntityKind = {
   gallery: 'gallery',
   image: 'image',
   'music-artist': 'music-artist',
+  'book-author': 'book-author',
   person: 'person',
   movie: 'movie',
   studio: 'studio',
