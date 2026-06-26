@@ -129,7 +129,11 @@ public sealed class QBittorrentDownloadClient(HttpClient http) : IDownloadClient
         var path = $"{QBittorrentProtocol.FilesEndpoint}?{QBittorrentProtocol.HashesField}={Uri.EscapeDataString(clientItemId.ToLowerInvariant())}";
         using var request = BuildRequest(connection, session, HttpMethod.Get, path, content: null);
         using var response = await http.SendAsync(request, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        // A freshly added magnet has no file list until metadata resolves; qBittorrent answers 400 in that
+        // window. Treat it as "no files yet" (like the properties/piece-state reads) instead of throwing.
+        if (!response.IsSuccessStatusCode) {
+            return [];
+        }
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
         using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
