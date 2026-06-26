@@ -1,0 +1,1 @@
+import"../chunks/Bzak7iHL.js";import{E as e}from"../chunks/DBQ2YkUP.js";import{T as a}from"../chunks/ByroW9iN.js";function g(t){e(t,{kind:"tag",title:"Tags",itemNoun:"tag",get icon(){return a},prefsKey:"tags",emptyTitle:"No tags",emptyMessage:"No tags in your library yet. They will appear as you tag your media.",errorMessage:"Failed to load tags."})}export{g as component};

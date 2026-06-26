@@ -1,0 +1,1 @@
+import"./Bzak7iHL.js";import{s as r,r as s}from"./ZrrKOAZ7.js";import{I as e}from"./pkBU_ohN.js";function c(o,t){let a=s(t,["$$slots","$$events","$$legacy"]);const p=[["path",{d:"M12 15V3"}],["path",{d:"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"}],["path",{d:"m7 10 5 5 5-5"}]];e(o,r({name:"download"},()=>a,{get iconNode(){return p}}))}export{c as D};

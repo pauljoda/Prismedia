@@ -23,7 +23,7 @@
     [REQUEST_PROVIDER_KIND.radarr]: [REQUEST_MEDIA_KIND.movie],
     [REQUEST_PROVIDER_KIND.sonarr]: [REQUEST_MEDIA_KIND.series],
     [REQUEST_PROVIDER_KIND.lidarr]: [REQUEST_MEDIA_KIND.artist, REQUEST_MEDIA_KIND.album],
-    [REQUEST_PROVIDER_KIND.plugin]: [REQUEST_MEDIA_KIND.plugin],
+    [REQUEST_PROVIDER_KIND.plugin]: [REQUEST_MEDIA_KIND.book, REQUEST_MEDIA_KIND.plugin],
   };
 
   const sortOptions = [
@@ -45,6 +45,7 @@
     REQUEST_MEDIA_KIND.series,
     REQUEST_MEDIA_KIND.artist,
     REQUEST_MEDIA_KIND.album,
+    REQUEST_MEDIA_KIND.book,
     REQUEST_MEDIA_KIND.plugin,
   ];
 
@@ -276,25 +277,17 @@
 
   {#if activeTab === "requests"}
     <RequestsReview />
-  {:else if servicesLoaded && services.length === 0}
-    <div class="empty-rack-slot flex flex-col items-center gap-2 p-10 text-center">
-      <CloudDownload class="h-8 w-8 text-text-disabled" />
-      <p class="text-sm font-medium text-text-secondary">No request services configured</p>
-      <p class="max-w-md text-[0.78rem] text-text-muted">
-        Connect a Radarr, Sonarr, or Lidarr instance in Settings to start requesting media.
-      </p>
-      <Button
-        type="button"
-        variant="primary"
-        size="sm"
-        onclick={() => void goto("/settings")}
-        class="mt-2 gap-1.5 px-3 py-1.5 text-xs"
-      >
-        <Settings class="h-3.5 w-3.5" />
-        Open Settings
-      </Button>
-    </div>
   {:else}
+    {#if servicesLoaded && services.length === 0}
+      <div class="empty-rack-slot flex flex-wrap items-center justify-center gap-2 p-4 text-center text-[0.78rem] text-text-muted">
+        <CloudDownload class="h-5 w-5 text-text-disabled" />
+        <span>
+          Connect Radarr, Sonarr, or Lidarr in
+          <button type="button" class="text-text-accent underline-offset-2 hover:underline" onclick={() => void goto("/settings")}>Settings</button>
+          to request movies, series, and music. Books are handled directly by Prismedia.
+        </span>
+      </div>
+    {/if}
     <!-- ── Search ── -->
     <form
       class="flex flex-wrap items-center gap-2"
@@ -422,12 +415,15 @@
             <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
               {#each section.items as result (`${result.source}:${result.kind}:${result.externalId}`)}
                 {#if result.kind === REQUEST_MEDIA_KIND.book}
-                  <EntityThumbnail
-                    card={requestSearchResultToThumbnailCard(result, "")}
-                    linkable={false}
-                    interactive={requestingId !== result.externalId}
-                    onActivate={() => requestBook(result)}
-                  />
+                  <button
+                    type="button"
+                    class="contents text-left"
+                    onclick={() => requestBook(result)}
+                    disabled={requestingId === result.externalId}
+                    aria-label={`Request ${result.title}`}
+                  >
+                    <EntityThumbnail card={requestSearchResultToThumbnailCard(result, "")} interactive={false} />
+                  </button>
                 {:else}
                   <EntityThumbnail card={requestSearchResultToThumbnailCard(result, detailHref(result))} />
                 {/if}

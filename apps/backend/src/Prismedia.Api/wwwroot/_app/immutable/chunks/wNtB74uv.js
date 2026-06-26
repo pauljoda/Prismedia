@@ -1,0 +1,1 @@
+import{g as e}from"./CqZ6WOKQ.js";const o="entity_not_found";function i(t){const n=t instanceof Error?t.message:String(t??"");return n.includes(o)||/^Entity '[^']+' was not found\.$/.test(n.trim())}function s(t,n){return n!=="off"||!i(t)?!1:(e("/",{replaceState:!0}),!0)}export{i,s as r};

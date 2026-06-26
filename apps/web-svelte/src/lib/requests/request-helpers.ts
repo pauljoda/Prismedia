@@ -31,6 +31,7 @@ export const REQUEST_KIND_LABELS: Record<string, string> = {
   [REQUEST_MEDIA_KIND.series]: "Series",
   [REQUEST_MEDIA_KIND.artist]: "Artist",
   [REQUEST_MEDIA_KIND.album]: "Album",
+  [REQUEST_MEDIA_KIND.book]: "Book",
   [REQUEST_MEDIA_KIND.plugin]: "Plugin",
 };
 
@@ -40,6 +41,7 @@ export const REQUEST_KIND_LABELS_PLURAL: Record<string, string> = {
   [REQUEST_MEDIA_KIND.series]: "Series",
   [REQUEST_MEDIA_KIND.artist]: "Artists",
   [REQUEST_MEDIA_KIND.album]: "Albums",
+  [REQUEST_MEDIA_KIND.book]: "Books",
   [REQUEST_MEDIA_KIND.plugin]: "Plugins",
 };
 

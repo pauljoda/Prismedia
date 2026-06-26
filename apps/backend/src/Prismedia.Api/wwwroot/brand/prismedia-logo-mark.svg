@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">Prismedia line mark</title>
+  <desc id="desc">A glowing circular prism line mark.</desc>
+  <defs>
+    <linearGradient id="prismedia-mark-line" x1="132" y1="94" x2="382" y2="428" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#fff3cc" />
+      <stop offset="0.45" stop-color="#ffd06c" />
+      <stop offset="1" stop-color="#9b6420" />
+    </linearGradient>
+    <filter id="prismedia-mark-glow" x="-25%" y="-25%" width="150%" height="150%" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="5" result="soft-glow" />
+      <feColorMatrix
+        in="soft-glow"
+        type="matrix"
+        values="1 0 0 0 0.92 0 1 0 0 0.56 0 0 1 0 0.16 0 0 0 0.8 0"
+      />
+      <feMerge>
+        <feMergeNode />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+  <g
+    filter="url(#prismedia-mark-glow)"
+    stroke="url(#prismedia-mark-line)"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  >
+    <circle cx="256" cy="226" r="173" stroke-width="5" opacity="0.94" />
+    <path d="M256 104 88 369h336L256 104Z" stroke-width="7" />
+    <path d="M88 369 256 417 424 369" stroke-width="7" />
+    <path d="M256 104v313" stroke-width="4.5" />
+    <path d="M88 369 256 279 424 369" stroke-width="5.5" />
+  </g>
+</svg>

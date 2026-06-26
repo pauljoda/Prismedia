@@ -1,0 +1,1 @@
+export const env={"PUBLIC_APP_URL":"http://localhost:8008","PUBLIC_API_URL":"/api"}
