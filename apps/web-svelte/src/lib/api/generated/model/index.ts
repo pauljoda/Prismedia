@@ -7,9 +7,12 @@
 
 export * from './acquisitionCreateRequest';
 export * from './acquisitionDetail';
+export * from './acquisitionFileItem';
+export * from './acquisitionFilesView';
 export * from './acquisitionQueueRequest';
 export * from './acquisitionStatus';
 export * from './acquisitionSummary';
+export * from './acquisitionTransferView';
 export * from './apiKeyRegenerateResponse';
 export * from './apiKeyResponse';
 export * from './apiProblem';
@@ -211,6 +214,7 @@ export * from './identifyQueryExternalIds';
 export * from './identifyQueueCandidateRequest';
 export * from './identifyQueueItem';
 export * from './identifyQueueSearchRequest';
+export * from './iFormFile';
 export * from './imageCandidate';
 export * from './imageDetail';
 export * from './importMode';
@@ -383,6 +387,7 @@ export * from './transcodeCacheStatusResponse';
 export * from './transcodingInfo';
 export * from './updateCheckResponse';
 export * from './updateMusicPlayerStateRequest';
+export * from './uploadAcquisitionTorrentBody';
 export * from './videoDetail';
 export * from './videoSeasonDetail';
 export * from './videoSeriesDetail';

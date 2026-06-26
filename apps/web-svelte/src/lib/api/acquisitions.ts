@@ -5,6 +5,8 @@ import {
   deleteDownloadClient,
   deleteIndexer,
   getAcquisition as getAcquisitionRequest,
+  getAcquisitionFiles,
+  getAcquisitionTransfer,
   listAcquisitionProfiles,
   listAcquisitions,
   listDownloadClients,
@@ -18,11 +20,14 @@ import {
   updateAcquisitionProfile,
   updateDownloadClient,
   updateIndexer,
+  uploadAcquisitionTorrent,
 } from "$lib/api/generated/prismedia";
 import type {
   AcquisitionCreateRequest,
   AcquisitionDetail,
+  AcquisitionFilesView,
   AcquisitionSummary,
+  AcquisitionTransferView,
   BookAcquisitionProfileSaveRequest,
   BookAcquisitionProfileView,
   DownloadClientSaveRequest,
@@ -33,6 +38,7 @@ import type {
   IndexerConfigSummary,
   IndexerTestRequest,
   IndexerTestResponse,
+  UploadAcquisitionTorrentBody,
 } from "$lib/api/generated/model";
 import { unwrapGenerated } from "$lib/api/generated-response";
 
@@ -105,4 +111,18 @@ export async function queueAcquisitionCandidate(id: string, candidateId: string)
 
 export async function cancelAcquisition(id: string): Promise<AcquisitionDetail> {
   return unwrapGenerated(await cancelAcquisitionRequest(id), "Failed to cancel acquisition");
+}
+
+export async function fetchAcquisitionTransfer(id: string): Promise<AcquisitionTransferView | null> {
+  // 204 means there is no live transfer (not started, or already imported/removed).
+  return (unwrapGenerated(await getAcquisitionTransfer(id), "Failed to load transfer", [200, 204]) ?? null) as AcquisitionTransferView | null;
+}
+
+export async function fetchAcquisitionFiles(id: string): Promise<AcquisitionFilesView> {
+  return unwrapGenerated(await getAcquisitionFiles(id), "Failed to load files");
+}
+
+export async function uploadManualTorrent(id: string, file: File): Promise<AcquisitionDetail> {
+  const body = { file } as unknown as UploadAcquisitionTorrentBody;
+  return unwrapGenerated(await uploadAcquisitionTorrent(id, body), "Failed to upload torrent");
 }

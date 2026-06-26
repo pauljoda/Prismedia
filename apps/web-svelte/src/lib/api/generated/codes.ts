@@ -281,6 +281,7 @@ export const REQUEST_MEDIA_KIND = {
   series: "series",
   artist: "artist",
   album: "album",
+  book: "book",
   plugin: "plugin",
 } as const;
 
@@ -314,6 +315,13 @@ export const REQUEST_RATING_SOURCE = {
 } as const;
 
 export type RequestRatingSourceCode = (typeof REQUEST_RATING_SOURCE)[keyof typeof REQUEST_RATING_SOURCE];
+
+export const FULFILLMENT_MODE = {
+  prismedia: "prismedia",
+  external: "external",
+} as const;
+
+export type FulfillmentModeCode = (typeof FULFILLMENT_MODE)[keyof typeof FULFILLMENT_MODE];
 
 export const INDEXER_KIND = {
   prowlarr: "prowlarr",
@@ -432,6 +440,7 @@ export const SETTING_KEYS = {
   playbackAudioPreferredLanguages: "playback.audioPreferredLanguages",
   playbackDefaultMode: "playback.defaultMode",
   playbackShowCastControls: "playback.showCastControls",
+  requestFulfillmentByKind: "request.fulfillmentByKind",
   scanAutoScanEnabled: "scan.autoScanEnabled",
   scanIntervalMinutes: "scan.intervalMinutes",
   subtitlesAutoEnable: "subtitles.autoEnable",

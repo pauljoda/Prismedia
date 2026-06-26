@@ -7,8 +7,10 @@
 import type {
   AcquisitionCreateRequest,
   AcquisitionDetail,
+  AcquisitionFilesView,
   AcquisitionQueueRequest,
   AcquisitionSummary,
+  AcquisitionTransferView,
   ApiKeyRegenerateResponse,
   ApiKeyResponse,
   ApiProblem,
@@ -225,6 +227,7 @@ import type {
   TranscodeCacheStatusResponse,
   UpdateCheckResponse,
   UpdateMusicPlayerStateRequest,
+  UploadAcquisitionTorrentBody,
   VideoDetail,
   VideoSeasonDetail,
   VideoSeriesDetail,
@@ -11465,6 +11468,135 @@ export const cancelAcquisition = async (id: string, options?: RequestInit): Prom
     method: 'POST'
 
 
+  }
+);}
+
+
+
+export type getAcquisitionTransferResponse200 = {
+  data: AcquisitionTransferView
+  status: 200
+}
+
+export type getAcquisitionTransferResponse204 = {
+  data: void
+  status: 204
+}
+
+export type getAcquisitionTransferResponseSuccess = (getAcquisitionTransferResponse200 | getAcquisitionTransferResponse204) & {
+  headers: Headers;
+};
+;
+
+export type getAcquisitionTransferResponse = (getAcquisitionTransferResponseSuccess)
+
+export const getGetAcquisitionTransferUrl = (id: string,) => {
+
+
+
+
+  return `/api/acquisitions/${id}/transfer`
+}
+
+/**
+ * @summary Live transfer telemetry (progress, speed, ETA, peers, per-piece state) for an in-flight acquisition.
+ */
+export const getAcquisitionTransfer = async (id: string, options?: RequestInit): Promise<getAcquisitionTransferResponse> => {
+
+  return orvalFetch<getAcquisitionTransferResponse>(getGetAcquisitionTransferUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getAcquisitionFilesResponse200 = {
+  data: AcquisitionFilesView
+  status: 200
+}
+
+export type getAcquisitionFilesResponseSuccess = (getAcquisitionFilesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getAcquisitionFilesResponse = (getAcquisitionFilesResponseSuccess)
+
+export const getGetAcquisitionFilesUrl = (id: string,) => {
+
+
+
+
+  return `/api/acquisitions/${id}/files`
+}
+
+/**
+ * @summary The acquisition's files: imported library files once imported, otherwise the in-progress download files.
+ */
+export const getAcquisitionFiles = async (id: string, options?: RequestInit): Promise<getAcquisitionFilesResponse> => {
+
+  return orvalFetch<getAcquisitionFilesResponse>(getGetAcquisitionFilesUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type uploadAcquisitionTorrentResponse200 = {
+  data: AcquisitionDetail
+  status: 200
+}
+
+export type uploadAcquisitionTorrentResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type uploadAcquisitionTorrentResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type uploadAcquisitionTorrentResponseSuccess = (uploadAcquisitionTorrentResponse200) & {
+  headers: Headers;
+};
+export type uploadAcquisitionTorrentResponseError = (uploadAcquisitionTorrentResponse400 | uploadAcquisitionTorrentResponse404) & {
+  headers: Headers;
+};
+
+export type uploadAcquisitionTorrentResponse = (uploadAcquisitionTorrentResponseSuccess | uploadAcquisitionTorrentResponseError)
+
+export const getUploadAcquisitionTorrentUrl = (id: string,) => {
+
+
+
+
+  return `/api/acquisitions/${id}/upload-torrent`
+}
+
+/**
+ * @summary Queues an acquisition from a user-supplied .torrent file (manual fallback for linkless releases).
+ */
+export const uploadAcquisitionTorrent = async (id: string,
+    uploadAcquisitionTorrentBody: UploadAcquisitionTorrentBody, options?: RequestInit): Promise<uploadAcquisitionTorrentResponse> => {
+    const formData = new FormData();
+formData.append(`file`, uploadAcquisitionTorrentBody.file);
+
+  return orvalFetch<uploadAcquisitionTorrentResponse>(getUploadAcquisitionTorrentUrl(id),
+  {
+    ...options,
+    method: 'POST'
+    ,
+    body:
+      formData,
   }
 );}
 

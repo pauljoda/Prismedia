@@ -7,6 +7,7 @@
   import { REQUEST_MEDIA_KIND, REQUEST_PROVIDER_KIND } from "$lib/api/generated/codes";
   import type { RequestMediaKindCode, RequestProviderKindCode } from "$lib/api/generated/codes";
   import { fetchRequestServices, searchRequests } from "$lib/api/requests";
+  import { createAcquisition } from "$lib/api/acquisitions";
   import RequestsReview from "$lib/components/requests/RequestsReview.svelte";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
   import { useNsfw } from "$lib/nsfw/store.svelte";
@@ -195,6 +196,35 @@
     const backQuery = searchHref(query, selectedKind, selectedSource).split("?")[1];
     if (backQuery) params.set("back", backQuery);
     return `/request/${result.kind}/${encodeURIComponent(result.externalId)}?${params.toString()}`;
+  }
+
+  let requestingId = $state<string | null>(null);
+
+  // Books are fulfilled by Prismedia directly: requesting one creates an acquisition (capturing the
+  // plugin's external id for ID-first identify) and jumps to its detail. The external id is
+  // provider-qualified ("provider:id").
+  async function requestBook(result: RequestSearchResult) {
+    if (requestingId) return;
+    requestingId = result.externalId;
+    try {
+      const [pluginId, ...rest] = result.externalId.split(":");
+      const pluginItemId = rest.join(":") || null;
+      const summary = await createAcquisition({
+        title: result.title,
+        author: result.subtitle ?? null,
+        series: null,
+        year: numericValue(result.year),
+        posterUrl: result.posterUrl,
+        pluginId: pluginId || null,
+        pluginItemId,
+        requestHistoryId: null,
+      });
+      await goto(`/request/acquisition/${summary.id}`);
+    } catch (err) {
+      error = err instanceof Error ? err.message : "Failed to start acquisition";
+    } finally {
+      requestingId = null;
+    }
   }
 </script>
 
@@ -391,7 +421,16 @@
             {/if}
             <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
               {#each section.items as result (`${result.source}:${result.kind}:${result.externalId}`)}
-                <EntityThumbnail card={requestSearchResultToThumbnailCard(result, detailHref(result))} />
+                {#if result.kind === REQUEST_MEDIA_KIND.book}
+                  <EntityThumbnail
+                    card={requestSearchResultToThumbnailCard(result, "")}
+                    linkable={false}
+                    interactive={requestingId !== result.externalId}
+                    onActivate={() => requestBook(result)}
+                  />
+                {:else}
+                  <EntityThumbnail card={requestSearchResultToThumbnailCard(result, detailHref(result))} />
+                {/if}
               {/each}
             </div>
           </section>
