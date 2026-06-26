@@ -12,6 +12,7 @@
   import { findSetting, settingKeys, valueAsStringList } from "$lib/settings/app-settings";
   import RequestsReview from "$lib/components/requests/RequestsReview.svelte";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
+  import { usePageSnapshots } from "$lib/stores/page-snapshots.svelte";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import type { RequestSearchResult, RequestServiceInstanceSummary } from "$lib/requests/request-model";
   import { requestSearchResultToThumbnailCard } from "$lib/requests/review-cards";
@@ -126,6 +127,18 @@
       servicesLoaded = true;
     }
   });
+
+  // Preserve the active tab across navigation so returning from a detail page lands back on Requests
+  // rather than resetting to Discover. (Discover's search state already restores from the URL.)
+  const pageSnapshots = usePageSnapshots();
+  onMount(() =>
+    pageSnapshots.registerSurface<{ tab: "discover" | "requests" }>("request-view", {
+      capture: () => ({ tab: activeTab }),
+      restore: (snapshot) => {
+        activeTab = snapshot.tab;
+      },
+    }),
+  );
 
   // The URL is the source of truth for search state, so back/forward and
   // shared links land on the same results. Effect re-runs on URL changes.
