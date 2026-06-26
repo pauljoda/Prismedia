@@ -24,3 +24,6 @@ apps/backend/data/
 
 # Local dev tools (host-specific binaries, e.g. jellyfin-ffmpeg for the VSCode launch configs)
 .tools/
+
+# .NET API serves the built Svelte app from wwwroot; it is produced by the web build, not committed.
+apps/backend/src/Prismedia.Api/wwwroot/

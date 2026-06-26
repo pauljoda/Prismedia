@@ -1,1 +1,0 @@
-import"../chunks/Bzak7iHL.js";import{E as e}from"../chunks/DBQ2YkUP.js";import{B as t}from"../chunks/DVAzfmy4.js";function i(o){e(o,{kind:"book",title:"Books",get icon(){return t},prefsKey:"books",emptyTitle:"No books",emptyMessage:"No books in your library yet. Add a library root and scan to get started.",errorMessage:"Failed to load books."})}export{i as component};

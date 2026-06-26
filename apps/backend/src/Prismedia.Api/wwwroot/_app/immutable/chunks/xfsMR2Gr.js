@@ -1,1 +1,0 @@
-import"./Bzak7iHL.js";import{s,r as p}from"./ZrrKOAZ7.js";import{I as n}from"./pkBU_ohN.js";function i(o,e){let r=p(e,["$$slots","$$events","$$legacy"]);const t=[["path",{d:"m15 18-6-6 6-6"}]];n(o,s({name:"chevron-left"},()=>r,{get iconNode(){return t}}))}export{i as C};

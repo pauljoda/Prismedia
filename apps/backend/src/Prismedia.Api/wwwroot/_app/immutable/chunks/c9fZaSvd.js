@@ -1,1 +1,0 @@
-import"./Bzak7iHL.js";import{s,r as a}from"./ZrrKOAZ7.js";import{I as d}from"./pkBU_ohN.js";function c(o,t){let p=a(t,["$$slots","$$events","$$legacy"]);const r=[["path",{d:"M12 13v8l-4-4"}],["path",{d:"m12 21 4-4"}],["path",{d:"M4.393 15.269A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.436 8.284"}]];d(o,s({name:"cloud-download"},()=>p,{get iconNode(){return r}}))}export{c as C};

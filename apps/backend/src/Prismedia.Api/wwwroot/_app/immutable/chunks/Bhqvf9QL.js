@@ -1,1 +1,0 @@
-import"./Bzak7iHL.js";import{s as e,r as p}from"./ZrrKOAZ7.js";import{I as a}from"./pkBU_ohN.js";function d(o,r){let t=p(r,["$$slots","$$events","$$legacy"]);const s=[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2"}],["path",{d:"M21 9H3"}],["path",{d:"M21 15H3"}]];a(o,e({name:"rows-3"},()=>t,{get iconNode(){return s}}))}export{d as R};
