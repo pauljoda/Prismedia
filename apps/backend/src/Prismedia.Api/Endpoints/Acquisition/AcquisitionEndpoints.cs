@@ -331,6 +331,72 @@ public static class AcquisitionEndpoints {
         return group;
     }
 
+    /// <summary>Maps the monitor endpoints (start/stop/pause/resume + list) for keeping a wanted item's search alive.</summary>
+    public static RouteGroupBuilder MapMonitorEndpoints(this IEndpointRouteBuilder routes) {
+        var group = routes.MapGroup("/api/monitors")
+            .WithTags("Monitors");
+
+        group.MapGet("/", (
+            MonitorService monitors,
+            CancellationToken cancellationToken) =>
+            monitors.ListAsync(cancellationToken))
+            .WithName("ListMonitors")
+            .WithSummary("Lists monitored items with the status of each linked acquisition.")
+            .Produces<IReadOnlyList<MonitorView>>();
+
+        group.MapPost("/", async (
+            MonitorCreateRequest request,
+            MonitorService monitors,
+            CancellationToken cancellationToken) => {
+                var monitor = await monitors.StartAsync(request.AcquisitionId, cancellationToken);
+                return monitor is null
+                    ? Results.NotFound(new ApiProblem(ApiProblemCodes.AcquisitionNotFound, "Acquisition was not found."))
+                    : Results.Ok(monitor);
+            })
+            .WithName("StartMonitor")
+            .WithSummary("Starts monitoring an acquisition so its release search is re-run until the item is acquired.")
+            .Produces<MonitorView>()
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+
+        group.MapDelete("/{id:guid}", async (
+            Guid id,
+            MonitorService monitors,
+            CancellationToken cancellationToken) =>
+            await monitors.StopAsync(id, cancellationToken)
+                ? Results.NoContent()
+                : Results.NotFound(new ApiProblem(ApiProblemCodes.NotFound, "Monitor was not found.")))
+            .WithName("StopMonitor")
+            .WithSummary("Stops monitoring (the acquisition is left untouched).")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+
+        group.MapPost("/{id:guid}/pause", async (
+            Guid id,
+            MonitorService monitors,
+            CancellationToken cancellationToken) =>
+            await monitors.PauseAsync(id, cancellationToken)
+                ? Results.NoContent()
+                : Results.NotFound(new ApiProblem(ApiProblemCodes.NotFound, "Monitor was not found.")))
+            .WithName("PauseMonitor")
+            .WithSummary("Pauses a monitor so it is not re-searched until resumed.")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+
+        group.MapPost("/{id:guid}/resume", async (
+            Guid id,
+            MonitorService monitors,
+            CancellationToken cancellationToken) =>
+            await monitors.ResumeAsync(id, cancellationToken)
+                ? Results.NoContent()
+                : Results.NotFound(new ApiProblem(ApiProblemCodes.NotFound, "Monitor was not found.")))
+            .WithName("ResumeMonitor")
+            .WithSummary("Resumes a paused monitor.")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+
+        return group;
+    }
+
     private static async Task<IResult> SaveIndexerAsync(
         IndexerConfigSaveRequest request,
         IndexerConfigCommandService indexers,

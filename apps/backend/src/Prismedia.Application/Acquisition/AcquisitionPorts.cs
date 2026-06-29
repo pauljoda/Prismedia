@@ -196,6 +196,40 @@ public interface IAcquisitionStore {
 }
 
 /// <summary>
+/// Persistence port for monitors — standing intents that keep an acquisition's release search alive until
+/// the wanted item is acquired. The "due" and reconciliation logic (fulfilling a monitor whose acquisition
+/// imported, pausing one whose acquisition was deleted/cancelled) lives here so the sweep handler stays thin.
+/// </summary>
+public interface IMonitorStore {
+    /// <summary>Starts (or re-activates) monitoring for an acquisition. Idempotent on the acquisition — returns the existing monitor if one exists.</summary>
+    Task<Contracts.Acquisition.MonitorView> StartAsync(Guid acquisitionId, Domain.Entities.EntityKind kind, string title, string? author, CancellationToken cancellationToken);
+
+    /// <summary>Stops monitoring by hard-deleting the monitor row (the acquisition is left untouched). Returns false when it no longer exists.</summary>
+    Task<bool> DeleteAsync(Guid monitorId, CancellationToken cancellationToken);
+
+    /// <summary>Sets a monitor's status (pause/resume). Returns false when it no longer exists.</summary>
+    Task<bool> SetStatusAsync(Guid monitorId, Domain.Entities.MonitorStatus status, CancellationToken cancellationToken);
+
+    /// <summary>Lists all monitors (with each linked acquisition's status) for the monitored/wanted surface, newest first.</summary>
+    Task<IReadOnlyList<Contracts.Acquisition.MonitorView>> ListAsync(CancellationToken cancellationToken);
+
+    /// <summary>Returns the monitor linked to an acquisition, or null when it is not monitored.</summary>
+    Task<Contracts.Acquisition.MonitorView?> GetByAcquisitionAsync(Guid acquisitionId, CancellationToken cancellationToken);
+
+    /// <summary>Cheap gate for the scheduler: true when any active monitor with a live acquisition exists.</summary>
+    Task<bool> HasActiveMonitorsAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Reconciles monitors (fulfilling those whose acquisition imported, pausing orphaned/cancelled ones)
+    /// and returns the active monitors whose re-search is now due given the default interval.
+    /// </summary>
+    Task<IReadOnlyList<DueMonitor>> ListDueMonitorsAsync(int defaultIntervalMinutes, CancellationToken cancellationToken);
+
+    /// <summary>Stamps a monitor as just re-searched so it is not picked up again until the interval elapses.</summary>
+    Task MarkSearchedAsync(Guid monitorId, CancellationToken cancellationToken);
+}
+
+/// <summary>
 /// Persistence port for the acquisition blocklist: release identities refused for future grabs. Consulted
 /// by the search runner (to reject blocklisted releases) and written by failed-download auto-recovery and
 /// manual blocking.

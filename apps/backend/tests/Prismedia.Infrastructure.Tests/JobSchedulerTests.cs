@@ -1,8 +1,10 @@
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Prismedia.Application.Acquisition;
 using Prismedia.Application.Jobs;
 using Prismedia.Application.Settings;
+using Prismedia.Contracts.Acquisition;
 using Prismedia.Contracts.Settings;
 using Prismedia.Domain.Entities;
 
@@ -139,13 +141,73 @@ public sealed class JobSchedulerTests {
         Assert.Empty(queue.Enqueued);
     }
 
+    [Fact]
+    public async Task ScheduleMonitoredSearchEnqueuesOnBoundaryWhenActiveMonitorsExist() {
+        var queue = new SchedulerJobQueue();
+        await using var provider = CreateProvider(new SchedulerSettingsPersistence([]), queue, new SchedulerMonitorStore(hasActive: true));
+        var scheduler = CreateScheduler(provider, new DateTimeOffset(2026, 5, 30, 12, 0, 15, TimeSpan.Zero));
+
+        await scheduler.ScheduleMonitoredSearchAsync(CancellationToken.None);
+
+        var request = Assert.Single(queue.Enqueued);
+        Assert.Equal(JobType.MonitoredSearch, request.Type);
+        Assert.Null(request.TargetEntityId);
+        Assert.Equal("Re-search monitored items", request.TargetLabel);
+    }
+
+    [Fact]
+    public async Task ScheduleMonitoredSearchSkipsAwayFromWindowBoundary() {
+        var queue = new SchedulerJobQueue();
+        await using var provider = CreateProvider(new SchedulerSettingsPersistence([]), queue, new SchedulerMonitorStore(hasActive: true));
+        var scheduler = CreateScheduler(provider, new DateTimeOffset(2026, 5, 30, 12, 12, 0, TimeSpan.Zero));
+
+        await scheduler.ScheduleMonitoredSearchAsync(CancellationToken.None);
+
+        Assert.Empty(queue.Enqueued);
+    }
+
+    [Fact]
+    public async Task ScheduleMonitoredSearchSkipsWhenDisabled() {
+        var queue = new SchedulerJobQueue();
+        await using var provider = CreateProvider(new SchedulerSettingsPersistence([], monitoringSearchEnabled: false), queue, new SchedulerMonitorStore(hasActive: true));
+        var scheduler = CreateScheduler(provider, new DateTimeOffset(2026, 5, 30, 12, 0, 15, TimeSpan.Zero));
+
+        await scheduler.ScheduleMonitoredSearchAsync(CancellationToken.None);
+
+        Assert.Empty(queue.Enqueued);
+    }
+
+    [Fact]
+    public async Task ScheduleMonitoredSearchSkipsWhenNoActiveMonitors() {
+        var queue = new SchedulerJobQueue();
+        await using var provider = CreateProvider(new SchedulerSettingsPersistence([]), queue, new SchedulerMonitorStore(hasActive: false));
+        var scheduler = CreateScheduler(provider, new DateTimeOffset(2026, 5, 30, 12, 0, 15, TimeSpan.Zero));
+
+        await scheduler.ScheduleMonitoredSearchAsync(CancellationToken.None);
+
+        Assert.Empty(queue.Enqueued);
+    }
+
+    [Fact]
+    public async Task ScheduleMonitoredSearchSkipsWhenAlreadyPending() {
+        var queue = new SchedulerJobQueue(hasPendingMonitoredSearch: true);
+        await using var provider = CreateProvider(new SchedulerSettingsPersistence([]), queue, new SchedulerMonitorStore(hasActive: true));
+        var scheduler = CreateScheduler(provider, new DateTimeOffset(2026, 5, 30, 12, 0, 15, TimeSpan.Zero));
+
+        await scheduler.ScheduleMonitoredSearchAsync(CancellationToken.None);
+
+        Assert.Empty(queue.Enqueued);
+    }
+
     private static ServiceProvider CreateProvider(
         ISettingsPersistence settings,
-        IJobQueueService queue) {
+        IJobQueueService queue,
+        IMonitorStore? monitors = null) {
         var services = new ServiceCollection();
         services.AddSingleton(settings);
         services.AddScoped<SettingsService>();
         services.AddSingleton(queue);
+        services.AddSingleton(monitors ?? new SchedulerMonitorStore(hasActive: false));
         return services.BuildServiceProvider();
     }
 
@@ -175,7 +237,8 @@ public sealed class JobSchedulerTests {
 
     private sealed class SchedulerSettingsPersistence(
         IEnumerable<LibraryRoot> roots,
-        bool collectionAutoRefreshEnabled = true) : ISettingsPersistence {
+        bool collectionAutoRefreshEnabled = true,
+        bool monitoringSearchEnabled = true) : ISettingsPersistence {
         private readonly List<LibraryRoot> _roots = roots.ToList();
 
         public IReadOnlyList<LibraryRoot> Roots => _roots;
@@ -185,6 +248,8 @@ public sealed class JobSchedulerTests {
                 [AppSettingKeys.ScanAutoScanEnabled] = JsonSerializer.Serialize(true),
                 [AppSettingKeys.ScanIntervalMinutes] = JsonSerializer.Serialize(60),
                 [AppSettingKeys.CollectionsAutoRefreshEnabled] = JsonSerializer.Serialize(collectionAutoRefreshEnabled),
+                [AppSettingKeys.MonitoringSearchEnabled] = JsonSerializer.Serialize(monitoringSearchEnabled),
+                [AppSettingKeys.MonitoringIntervalMinutes] = JsonSerializer.Serialize(360),
             });
 
         public Task SaveSettingOverrideAsync(string key, string valueJson, CancellationToken cancellationToken) =>
@@ -224,11 +289,12 @@ public sealed class JobSchedulerTests {
             Task.FromResult(false);
     }
 
-    private sealed class SchedulerJobQueue(bool hasPendingRefresh = false) : IJobQueueService {
+    private sealed class SchedulerJobQueue(bool hasPendingRefresh = false, bool hasPendingMonitoredSearch = false) : IJobQueueService {
         public List<EnqueueJobRequest> Enqueued { get; } = [];
 
         public Task<bool> HasPendingAsync(JobType type, string? targetEntityId, CancellationToken cancellationToken) =>
-            Task.FromResult(type == JobType.RefreshCollection && hasPendingRefresh);
+            Task.FromResult((type == JobType.RefreshCollection && hasPendingRefresh)
+                || (type == JobType.MonitoredSearch && hasPendingMonitoredSearch));
 
         public Task<JobRunSnapshot> EnqueueAsync(EnqueueJobRequest request, CancellationToken cancellationToken) {
             Enqueued.Add(request);
@@ -290,6 +356,17 @@ public sealed class JobSchedulerTests {
                 StartedAt: null,
                 FinishedAt: null);
         }
+    }
+
+    private sealed class SchedulerMonitorStore(bool hasActive) : IMonitorStore {
+        public Task<bool> HasActiveMonitorsAsync(CancellationToken cancellationToken) => Task.FromResult(hasActive);
+        public Task<MonitorView> StartAsync(Guid acquisitionId, EntityKind kind, string title, string? author, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> DeleteAsync(Guid monitorId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> SetStatusAsync(Guid monitorId, MonitorStatus status, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<MonitorView>> ListAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<MonitorView?> GetByAcquisitionAsync(Guid acquisitionId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<DueMonitor>> ListDueMonitorsAsync(int defaultIntervalMinutes, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task MarkSearchedAsync(Guid monitorId, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider {

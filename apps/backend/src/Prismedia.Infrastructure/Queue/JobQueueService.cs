@@ -47,7 +47,7 @@ public sealed class JobQueueService : IJobQueueService {
     /// may be queued or running at a time — see the singleton guard in <see cref="EnqueueAsync(EnqueueJobRequest, CancellationToken)"/>.
     /// </summary>
     private static readonly JobType[] SingletonJobTypes =
-        [JobType.ScanLibrary, JobType.ScanGallery, JobType.ScanBook, JobType.ScanAudio, JobType.DatabaseBackup];
+        [JobType.ScanLibrary, JobType.ScanGallery, JobType.ScanBook, JobType.ScanAudio, JobType.DatabaseBackup, JobType.MonitoredSearch];
 
     /// <summary>
     /// Work that must drain before background Auto Identify starts. This keeps first scans focused on

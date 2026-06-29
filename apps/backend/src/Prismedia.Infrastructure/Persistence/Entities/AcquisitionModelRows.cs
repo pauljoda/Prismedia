@@ -258,3 +258,33 @@ public sealed class AcquisitionBlocklistRow {
 
     public DateTimeOffset CreatedAt { get; set; }
 }
+
+/// <summary>
+/// A standing intent that Prismedia keeps acting on — the persistent counterpart to a one-and-done
+/// acquisition. In this version a monitor keeps a wanted book's acquisition alive: while
+/// <see cref="MonitorStatus.Active"/> the scheduler periodically re-runs its release search until the
+/// book is acquired. The <see cref="Kind"/> discriminator is present from day one so later monitor kinds
+/// (authors, series) share this table; only <see cref="EntityKind.Book"/> monitors are honored for now.
+/// </summary>
+public sealed class MonitorRow {
+    public Guid Id { get; set; }
+
+    /// <summary>The kind of target this monitor watches. Books only in this version.</summary>
+    public EntityKind Kind { get; set; } = EntityKind.Book;
+
+    /// <summary>The acquisition this monitor keeps re-searching. Nulled (and the monitor auto-paused) if that acquisition is hard-deleted.</summary>
+    public Guid? AcquisitionId { get; set; }
+
+    public MonitorStatus Status { get; set; } = MonitorStatus.Active;
+
+    /// <summary>Denormalized title of the wanted item, for the monitored list and job labels.</summary>
+    public string Title { get; set; } = string.Empty;
+
+    public string? Author { get; set; }
+
+    /// <summary>When the monitor was last re-searched; null means never. Used to decide whether it is due.</summary>
+    public DateTimeOffset? LastSearchedAt { get; set; }
+
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}

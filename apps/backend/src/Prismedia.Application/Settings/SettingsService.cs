@@ -172,6 +172,18 @@ public sealed partial class SettingsService {
             GetInt(values, AppSettingKeys.ScanIntervalMinutes));
     }
 
+    /// <summary>Returns the cadence settings for re-searching monitored items.</summary>
+    public async Task<MonitoredSearchSettings> GetMonitoredSearchSettingsAsync(CancellationToken cancellationToken) {
+        var values = await GetValueMapAsync([
+            AppSettingKeys.MonitoringSearchEnabled,
+            AppSettingKeys.MonitoringIntervalMinutes,
+        ], cancellationToken);
+
+        return new MonitoredSearchSettings(
+            GetBoolean(values, AppSettingKeys.MonitoringSearchEnabled),
+            GetInt(values, AppSettingKeys.MonitoringIntervalMinutes));
+    }
+
     /// <summary>
     /// Returns recurring collection refresh settings.
     /// </summary>

@@ -131,5 +131,9 @@ public enum JobType {
 
     /// <summary>Handles a failed download: blocklists the release and, when auto-redownload is on, grabs the next-best candidate.</summary>
     [Code("acquisition-failed-handle")]
-    AcquisitionFailedHandle
+    AcquisitionFailedHandle,
+
+    /// <summary>Re-runs the release search for every due monitored acquisition so a wanted item is fetched once a release appears.</summary>
+    [Code("monitored-search")]
+    MonitoredSearch
 }

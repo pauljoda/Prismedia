@@ -111,6 +111,9 @@ public sealed record AcquisitionCandidateRef(Guid CandidateId, string Title, str
     public string Identity => ReleaseIdentity.For(InfoHash, IndexerName, Title);
 }
 
+/// <summary>A monitor whose periodic re-search is due now, paired with the acquisition the sweep should re-search.</summary>
+public sealed record DueMonitor(Guid MonitorId, Guid AcquisitionId, string Title);
+
 /// <summary>Input for adding a release identity to the acquisition blocklist (idempotent on the identity).</summary>
 public sealed record BlocklistAddRequest(
     string Identity,

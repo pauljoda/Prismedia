@@ -10,6 +10,7 @@ public static class AppSettingsRegistry {
     private const string Visibility = "visibility";
     private const string Scan = "scan";
     private const string Collections = "collections";
+    private const string Monitoring = "monitoring";
     private const string Taxonomy = "taxonomy";
     private const string AutoIdentify = "autoIdentify";
     private const string Generation = "generation";
@@ -100,6 +101,30 @@ public static class AppSettingsRegistry {
                 "When on, Prismedia queues an hourly job at the top of the hour to evaluate dynamic collection rules and update collection membership.",
                 true,
                 10),
+
+            Boolean(
+                AppSettingKeys.MonitoringSearchEnabled,
+                Monitoring,
+                "Monitoring",
+                "Keep searching for monitored items until they are acquired.",
+                22,
+                "Re-search monitored items",
+                "When on, Prismedia periodically re-runs the release search for monitored items so a wanted book is fetched once a release appears.",
+                true,
+                10),
+            Integer(
+                AppSettingKeys.MonitoringIntervalMinutes,
+                Monitoring,
+                "Monitoring",
+                "Keep searching for monitored items until they are acquired.",
+                22,
+                "Re-search interval",
+                "Minutes between re-searches of monitored items.",
+                360,
+                20,
+                min: 15,
+                max: 10080,
+                step: 15),
 
             Boolean(
                 AppSettingKeys.TaxonomyRemoveOrphanTags,

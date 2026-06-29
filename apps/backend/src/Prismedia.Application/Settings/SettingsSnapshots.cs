@@ -15,6 +15,9 @@ public sealed record ScanSettings(bool AutoScanEnabled, int IntervalMinutes);
 /// </summary>
 public sealed record CollectionRefreshSettings(bool AutoRefreshEnabled);
 
+/// <summary>Cadence for re-searching monitored items so a wanted book is fetched once a release appears.</summary>
+public sealed record MonitoredSearchSettings(bool Enabled, int IntervalMinutes);
+
 /// <summary>
 /// Auto-identify settings that drive plugin-based identification during library scans.
 /// </summary>

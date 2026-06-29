@@ -205,6 +205,21 @@ public sealed record BookAcquisitionProfileSaveRequest(
     bool AutoPick,
     bool AutoRedownload);
 
+/// <summary>A monitored wanted item: the standing intent plus the current state of the acquisition it keeps alive.</summary>
+public sealed record MonitorView(
+    Guid Id,
+    EntityKind Kind,
+    Guid? AcquisitionId,
+    MonitorStatus Status,
+    string Title,
+    string? Author,
+    AcquisitionStatus? AcquisitionStatus,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt);
+
+/// <summary>Request to start monitoring (keep re-searching) an existing acquisition until it is acquired.</summary>
+public sealed record MonitorCreateRequest(Guid AcquisitionId);
+
 /// <summary>A blocklisted release identity, surfaced for the blocklist management surface.</summary>
 public sealed record AcquisitionBlocklistEntry(
     Guid Id,

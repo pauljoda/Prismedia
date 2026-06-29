@@ -59,6 +59,7 @@ public static class DependencyInjection {
         services.AddScoped<Acquisition.AcquisitionService>();
         services.AddScoped<Acquisition.AcquisitionQueueService>();
         services.AddScoped<Acquisition.IAcquisitionQueueService>(sp => sp.GetRequiredService<Acquisition.AcquisitionQueueService>());
+        services.AddScoped<Acquisition.MonitorService>();
         services.AddSingleton<Acquisition.IAcquisitionDecisionEngine, Acquisition.BookReleaseDecisionEngine>();
         services.AddSingleton<Acquisition.IAcquisitionDecisionEngineFactory, Acquisition.AcquisitionDecisionEngineFactory>();
         services.AddScoped<IAudioStreamService, AudioStreamService>();
@@ -133,6 +134,7 @@ public static class DependencyInjection {
         services.AddTransient<IJobHandler, AcquisitionMonitorJobHandler>();
         services.AddTransient<IJobHandler, AcquisitionImportJobHandler>();
         services.AddTransient<IJobHandler, AcquisitionFailedHandleJobHandler>();
+        services.AddTransient<IJobHandler, MonitoredSearchJobHandler>();
 
         // Background services
         services.AddSingleton<WorkerRuntimeIdentity>();

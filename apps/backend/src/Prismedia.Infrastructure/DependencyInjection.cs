@@ -338,6 +338,7 @@ public static class DependencyInjection {
         services.AddScoped<IBookAcquisitionProfileStore, EfBookAcquisitionProfileStore>();
         services.AddScoped<IAcquisitionStore, EfAcquisitionStore>();
         services.AddScoped<IAcquisitionBlocklistStore, EfAcquisitionBlocklistStore>();
+        services.AddScoped<IMonitorStore, EfMonitorStore>();
         services.AddScoped(_ => new ProwlarrIndexerClient(new HttpClient()));
         services.AddScoped<IIndexerSearchClient>(provider => provider.GetRequiredService<ProwlarrIndexerClient>());
         services.AddScoped<IIndexerSearchClientFactory, IndexerSearchClientFactory>();

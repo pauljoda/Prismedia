@@ -146,6 +146,8 @@ public sealed class PrismediaDbContext : DbContext {
 
     public DbSet<AcquisitionBlocklistRow> AcquisitionBlocklist => Set<AcquisitionBlocklistRow>();
 
+    public DbSet<MonitorRow> Monitors => Set<MonitorRow>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder) {
         modelBuilder.ConfigureBaseEntityModel();
         modelBuilder.ConfigureEntityRelationshipModel();

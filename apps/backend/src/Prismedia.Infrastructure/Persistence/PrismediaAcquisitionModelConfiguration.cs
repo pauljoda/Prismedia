@@ -223,5 +223,33 @@ internal static partial class PrismediaModelConfiguration {
             entity.HasIndex(row => row.Identity).IsUnique();
             entity.HasOne<AcquisitionRow>().WithMany().HasForeignKey(row => row.AcquisitionId).OnDelete(DeleteBehavior.SetNull);
         });
+
+        modelBuilder.Entity<MonitorRow>(entity => {
+            entity.ToTable("monitors");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(row => row.Kind)
+                .HasColumnName("kind")
+                .HasMaxLength(64)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<EntityKind>())
+                .HasDefaultValue(EntityKind.Book)
+                .IsRequired();
+            entity.Property(row => row.AcquisitionId).HasColumnName("acquisition_id");
+            entity.Property(row => row.Status)
+                .HasColumnName("status")
+                .HasMaxLength(32)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<MonitorStatus>())
+                .HasDefaultValue(MonitorStatus.Active)
+                .IsRequired();
+            entity.Property(row => row.Title).HasColumnName("title").HasMaxLength(1024).IsRequired();
+            entity.Property(row => row.Author).HasColumnName("author").HasMaxLength(512);
+            entity.Property(row => row.LastSearchedAt).HasColumnName("last_searched_at");
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            entity.HasIndex(row => new { row.Status, row.LastSearchedAt });
+            entity.HasIndex(row => row.AcquisitionId).IsUnique();
+            // SetNull (not Cascade): hard-deleting the linked acquisition must auto-pause the monitor, not delete it.
+            entity.HasOne<AcquisitionRow>().WithMany().HasForeignKey(row => row.AcquisitionId).OnDelete(DeleteBehavior.SetNull);
+        });
     }
 }

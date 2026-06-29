@@ -12,6 +12,9 @@ public static class AppSettingKeys {
 
     public const string CollectionsAutoRefreshEnabled = "collections.autoRefreshEnabled";
 
+    public const string MonitoringSearchEnabled = "monitoring.searchEnabled";
+    public const string MonitoringIntervalMinutes = "monitoring.intervalMinutes";
+
     public const string AutoIdentifyEnabled = "autoIdentify.enabled";
     public const string AutoIdentifyProviders = "autoIdentify.providers";
     public const string AutoIdentifyEntityKinds = "autoIdentify.entityKinds";

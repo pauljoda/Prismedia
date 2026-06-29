@@ -26,6 +26,7 @@ public sealed class JobScheduler(
                 await ScheduleRecurringCollectionRefreshAsync(stoppingToken);
                 await ScheduleRecurringBackupsAsync(stoppingToken);
                 await ScheduleAcquisitionMonitorAsync(stoppingToken);
+                await ScheduleMonitoredSearchAsync(stoppingToken);
             } catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) {
                 break;
             } catch (Exception ex) {
@@ -150,6 +151,38 @@ public sealed class JobScheduler(
             cancellationToken);
 
         logger.LogInformation("Scheduled hourly collection refresh job.");
+    }
+
+    internal async Task ScheduleMonitoredSearchAsync(CancellationToken cancellationToken) {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var settings = scope.ServiceProvider.GetRequiredService<SettingsService>();
+        var config = await settings.GetMonitoredSearchSettingsAsync(cancellationToken);
+        if (!config.Enabled || config.IntervalMinutes <= 0) {
+            return;
+        }
+
+        // Window-gated so the sweep enqueues at most once per interval (in the tick that opens the window).
+        var now = (timeProvider ?? TimeProvider.System).GetUtcNow();
+        var windowStart = GetWindowStart(now, TimeSpan.FromMinutes(config.IntervalMinutes));
+        if (now - windowStart >= CheckInterval) {
+            return;
+        }
+
+        var monitors = scope.ServiceProvider.GetRequiredService<Acquisition.IMonitorStore>();
+        if (!await monitors.HasActiveMonitorsAsync(cancellationToken)) {
+            return;
+        }
+
+        var queue = scope.ServiceProvider.GetRequiredService<IJobQueueService>();
+        if (await queue.HasPendingAsync(JobType.MonitoredSearch, null, cancellationToken)) {
+            return;
+        }
+
+        await queue.EnqueueAsync(
+            new EnqueueJobRequest(JobType.MonitoredSearch, TargetLabel: "Re-search monitored items"),
+            cancellationToken);
+
+        logger.LogInformation("Scheduled monitored-search sweep.");
     }
 
     internal async Task ScheduleAcquisitionMonitorAsync(CancellationToken cancellationToken) {
