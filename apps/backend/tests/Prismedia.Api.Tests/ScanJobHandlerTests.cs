@@ -2130,6 +2130,52 @@ public sealed class ScanJobHandlerTests {
     }
 
     [Fact]
+    public async Task SingleFileBookScanNamesAuthorFromEmbeddedCreatorNotFolder() {
+        var tempRoot = Directory.CreateTempSubdirectory("prismedia-book-author-metadata-");
+        try {
+            var rootPath = tempRoot.FullName;
+            var seriesPath = Path.Combine(rootPath, "Game of Thrones");
+            Directory.CreateDirectory(seriesPath);
+            var bookPath = Path.Combine(seriesPath, "01 - A Game of Thrones.epub");
+            await File.WriteAllTextAsync(bookPath, "epub");
+
+            var root = new LibraryRootData(
+                Guid.Parse("11111111-1111-1111-1111-111111111111"),
+                rootPath, "Books", Enabled: true, Recursive: true,
+                ScanVideos: false, ScanImages: false, ScanAudio: false, ScanBooks: true, IsNsfw: false);
+            var persistence = new FakeScanPersistence([root]) { Settings = DisabledGeneratedWorkSettings };
+            var handler = new ScanBookJobHandler(
+                NullLogger<ScanBookJobHandler>.Instance,
+                new RecordingFileDiscovery([bookPath]),
+                persistence, persistence, persistence,
+                bookFileMetadata: new StubBookFileMetadataReader(new ComicInfoMetadata {
+                    Title = "A Game of Thrones",
+                    Creators = ["George R.R. Martin"],
+                }));
+            var job = new JobRunSnapshot(
+                Guid.NewGuid(), JobType.ScanBook, JobRunStatus.Running, 0, null,
+                $$"""{"libraryRootId":"{{root.Id}}"}""",
+                "library-root", root.Id.ToString(), root.Label,
+                DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null);
+
+            await handler.HandleAsync(new JobContext(job, new RecordingJobQueue()), CancellationToken.None);
+
+            // The series-named folder ("Game of Thrones") must NOT become the author — the embedded
+            // EPUB creator wins, so the author is named "George R.R. Martin".
+            var author = Assert.Single(persistence.UpsertedBookAuthors);
+            Assert.Equal("George R.R. Martin", author.Title);
+            Assert.Equal(seriesPath, author.FolderPath);
+        } finally {
+            tempRoot.Delete(recursive: true);
+        }
+    }
+
+    private sealed class StubBookFileMetadataReader(ComicInfoMetadata metadata) : IBookFileMetadataReader {
+        public Task<ComicInfoMetadata?> ReadAsync(string sourcePath, BookFormat format, CancellationToken cancellationToken) =>
+            Task.FromResult<ComicInfoMetadata?>(metadata);
+    }
+
+    [Fact]
     public async Task HandlesScheduledLibraryRootPayloadAsSingleRootScan() {
         var targetRoot = new LibraryRootData(
             Guid.Parse("11111111-1111-1111-1111-111111111111"),

@@ -236,9 +236,16 @@ public sealed class ScanBookJobHandler(
             .OrderBy(group => group.Key, NaturalPathComparer.Instance)) {
             var first = authorGroup.First();
             var authorIsNsfw = root.IsNsfw || authorGroup.Any(item => item.IsNsfw);
+            // Name the author from the first book that carried embedded creator metadata (i.e. whose title
+            // differs from the folder name); fall back to the folder name when none of them did.
+            var folderName = Path.GetFileName(first.AuthorPath!);
+            var authorTitle = authorGroup
+                .Select(item => item.AuthorTitle!)
+                .FirstOrDefault(name => !string.Equals(name, folderName, StringComparison.OrdinalIgnoreCase))
+                ?? folderName;
             var authorId = await books.UpsertBookAuthorAsync(
                 first.AuthorPath!,
-                first.AuthorTitle!,
+                authorTitle,
                 sortOrder: null,
                 authorIsNsfw,
                 cancellationToken);
@@ -479,9 +486,12 @@ public sealed class ScanBookJobHandler(
             }
 
             // The top-level folder under the root groups a single-file book's author (e.g. Author/Title/book.epub),
-            // mirroring Artist/Album for music.
+            // mirroring Artist/Album for music. The display name prefers the embedded author (EPUB dc:creator /
+            // PDF Author) so a series- or title-named folder (e.g. "Game of Thrones") still shows the real
+            // author ("George R.R. Martin"); the folder name is the fallback when no creator metadata exists.
             var authorPath = Path.Combine(rootPath, segments[0]);
-            return new SingleFileBookItem(sourcePath, title, isNsfw, format, metadata, authorPath, segments[0]);
+            var authorTitle = FirstNonEmpty(metadata?.Creators.Count > 0 ? metadata.Creators[0] : null) ?? segments[0];
+            return new SingleFileBookItem(sourcePath, title, isNsfw, format, metadata, authorPath, authorTitle);
         }
     }
 
