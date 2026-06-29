@@ -71,6 +71,7 @@ public sealed class EfBookAcquisitionProfileStore(PrismediaDbContext db) : IBook
         row.MaxSizeBytes = command.MaxSizeBytes;
         row.RequiredTerms = command.RequiredTerms.ToArray();
         row.IgnoredTerms = command.IgnoredTerms.ToArray();
+        row.PreferredTerms = command.PreferredTerms.ToArray();
         row.AutoPick = command.AutoPick;
         row.AutoRedownload = command.AutoRedownload;
         row.IsDefault = shouldBeDefault;
@@ -125,7 +126,8 @@ public sealed class EfBookAcquisitionProfileStore(PrismediaDbContext db) : IBook
             row.MinSizeBytes,
             row.MaxSizeBytes,
             row.RequiredTerms,
-            row.IgnoredTerms);
+            row.IgnoredTerms,
+            row.PreferredTerms);
 
     private static BookAcquisitionProfileView ToView(BookAcquisitionProfileRow row) =>
         new(
@@ -142,6 +144,7 @@ public sealed class EfBookAcquisitionProfileStore(PrismediaDbContext db) : IBook
             row.MaxSizeBytes,
             row.RequiredTerms,
             row.IgnoredTerms,
+            row.PreferredTerms,
             row.AutoPick,
             row.AutoRedownload);
 }

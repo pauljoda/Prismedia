@@ -61,6 +61,7 @@
   let indexerCategories = $state("7000,8000");
   let clientForm = $state<DownloadClientSaveRequest | null>(null);
   let profileForm = $state<BookAcquisitionProfileSaveRequest | null>(null);
+  let profileTerms = $state({ preferred: "", required: "", ignored: "" });
 
   const importModeOptions = [
     { value: IMPORT_MODE.move, label: "Move (delete torrent after import)" },
@@ -205,19 +206,28 @@
       id: null, displayName: "Default Books", isDefault: profiles.length === 0,
       targetLibraryRootId: bookRoots[0]?.id ?? "", pathTemplate: DEFAULT_PATH_TEMPLATE,
       importMode: IMPORT_MODE.move, allowedFormats: [], language: null, minSeeders: 1,
-      minSizeBytes: null, maxSizeBytes: null, requiredTerms: [], ignoredTerms: [], autoPick: false, autoRedownload: false,
+      minSizeBytes: null, maxSizeBytes: null, requiredTerms: [], ignoredTerms: [], preferredTerms: [], autoPick: false, autoRedownload: false,
     };
+    profileTerms = { preferred: "", required: "", ignored: "" };
   }
   function editProfile(p: BookAcquisitionProfileView) {
     profileForm = {
       id: p.id, displayName: p.displayName, isDefault: p.isDefault, targetLibraryRootId: p.targetLibraryRootId,
       pathTemplate: p.pathTemplate, importMode: p.importMode, allowedFormats: p.allowedFormats, language: p.language,
       minSeeders: p.minSeeders, minSizeBytes: p.minSizeBytes, maxSizeBytes: p.maxSizeBytes,
-      requiredTerms: p.requiredTerms, ignoredTerms: p.ignoredTerms, autoPick: p.autoPick, autoRedownload: p.autoRedownload,
+      requiredTerms: p.requiredTerms, ignoredTerms: p.ignoredTerms, preferredTerms: p.preferredTerms, autoPick: p.autoPick, autoRedownload: p.autoRedownload,
     };
+    profileTerms = { preferred: p.preferredTerms.join(", "), required: p.requiredTerms.join(", "), ignored: p.ignoredTerms.join(", ") };
+  }
+  // Comma/newline-separated term lists are edited as text and parsed on save.
+  function parseTerms(text: string): string[] {
+    return text.split(/[,\n]/).map((term) => term.trim()).filter((term) => term.length > 0);
   }
   async function saveProfile() {
     if (!profileForm) return;
+    profileForm.preferredTerms = parseTerms(profileTerms.preferred);
+    profileForm.requiredTerms = parseTerms(profileTerms.required);
+    profileForm.ignoredTerms = parseTerms(profileTerms.ignored);
     busy = true;
     try {
       await saveAcquisitionProfile(profileForm);
@@ -424,6 +434,14 @@
                 <Select size="sm" value={profileForm.importMode} options={importModeOptions} onchange={(v) => profileForm && (profileForm.importMode = v as typeof profileForm.importMode)} /></label>
               <label class="space-y-1"><span class="text-label text-text-muted">Min seeders</span>
                 <TextInput size="sm" value={String(profileForm.minSeeders)} oninput={(e) => profileForm && (profileForm.minSeeders = Number(e.currentTarget.value) || 0)} /></label>
+            </div>
+            <div class="grid gap-2">
+              <label class="space-y-1"><span class="text-label text-text-muted">Preferred terms<span class="ml-1 text-text-muted">— comma-separated; matches rank a release higher (e.g. retail, epub)</span></span>
+                <TextInput size="sm" value={profileTerms.preferred} oninput={(e) => (profileTerms.preferred = e.currentTarget.value)} placeholder="retail, epub" /></label>
+              <label class="space-y-1"><span class="text-label text-text-muted">Required terms<span class="ml-1 text-text-muted">— a release must contain all of these</span></span>
+                <TextInput size="sm" value={profileTerms.required} oninput={(e) => (profileTerms.required = e.currentTarget.value)} /></label>
+              <label class="space-y-1"><span class="text-label text-text-muted">Ignored terms<span class="ml-1 text-text-muted">— a release containing any of these is rejected</span></span>
+                <TextInput size="sm" value={profileTerms.ignored} oninput={(e) => (profileTerms.ignored = e.currentTarget.value)} placeholder="scan, retail rip" /></label>
             </div>
             <label class="flex items-center gap-2"><Checkbox checked={profileForm.isDefault} onchange={(e) => profileForm && (profileForm.isDefault = e.currentTarget.checked)} /><span class="text-sm text-text-secondary">Default profile</span></label>
             <label class="flex items-start gap-2"><Checkbox checked={profileForm.autoPick} onchange={(e) => profileForm && (profileForm.autoPick = e.currentTarget.checked)} /><span class="text-sm text-text-secondary">Auto-grab<span class="block text-[0.72rem] text-text-muted">Download the best acceptable release automatically instead of waiting for manual review.</span></span></label>

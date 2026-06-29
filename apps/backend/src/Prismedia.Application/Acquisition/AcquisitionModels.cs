@@ -30,9 +30,10 @@ public sealed record BookAcquisitionRules(
     long? MinSizeBytes,
     long? MaxSizeBytes,
     IReadOnlyList<string> RequiredTerms,
-    IReadOnlyList<string> IgnoredTerms) {
+    IReadOnlyList<string> IgnoredTerms,
+    IReadOnlyList<string> PreferredTerms) {
     /// <summary>Permissive defaults used when no profile is configured yet (e.g. ad-hoc verification searches).</summary>
-    public static BookAcquisitionRules Default { get; } = new([], null, 1, null, null, [], []);
+    public static BookAcquisitionRules Default { get; } = new([], null, 1, null, null, [], [], []);
 }
 
 /// <summary>A release evaluated against the rules: its accept/reject verdict, ranking score, and any rejection reasons.</summary>

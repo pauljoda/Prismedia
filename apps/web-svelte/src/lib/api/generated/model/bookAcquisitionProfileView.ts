@@ -30,6 +30,7 @@ export interface BookAcquisitionProfileView {
   maxSizeBytes: number | string | null;
   requiredTerms: string[];
   ignoredTerms: string[];
+  preferredTerms: string[];
   autoPick: boolean;
   autoRedownload: boolean;
 }

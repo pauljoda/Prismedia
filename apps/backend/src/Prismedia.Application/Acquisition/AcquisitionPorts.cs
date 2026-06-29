@@ -64,6 +64,7 @@ public sealed record BookAcquisitionProfileSaveCommand(
     long? MaxSizeBytes,
     IReadOnlyList<string> RequiredTerms,
     IReadOnlyList<string> IgnoredTerms,
+    IReadOnlyList<string> PreferredTerms,
     bool AutoPick,
     bool AutoRedownload);
 

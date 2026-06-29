@@ -91,6 +91,7 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.MaxSizeBytes).HasColumnName("max_size_bytes");
             entity.Property(row => row.RequiredTerms).HasColumnName("required_terms");
             entity.Property(row => row.IgnoredTerms).HasColumnName("ignored_terms");
+            entity.Property(row => row.PreferredTerms).HasColumnName("preferred_terms");
             entity.Property(row => row.AutoPick).HasColumnName("auto_pick");
             entity.Property(row => row.AutoRedownload).HasColumnName("auto_redownload");
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");

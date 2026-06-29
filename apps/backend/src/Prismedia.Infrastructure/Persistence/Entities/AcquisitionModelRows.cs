@@ -91,6 +91,9 @@ public sealed class BookAcquisitionProfileRow {
     public string[] RequiredTerms { get; set; } = [];
     public string[] IgnoredTerms { get; set; } = [];
 
+    /// <summary>Terms that boost a release's ranking when present in its title (e.g. "retail", "epub"); each match outranks seeders.</summary>
+    public string[] PreferredTerms { get; set; } = [];
+
     /// <summary>When true, automatically queue the best acceptable candidate instead of waiting for review.</summary>
     public bool AutoPick { get; set; }
 

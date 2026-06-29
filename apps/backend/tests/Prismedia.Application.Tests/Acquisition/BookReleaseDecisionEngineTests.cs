@@ -186,6 +186,41 @@ public sealed class BookReleaseDecisionEngineTests {
     }
 
     [Fact]
+    public void PreferredTermOutranksSeeders() {
+        var rules = BookAcquisitionRules.Default with { PreferredTerms = ["retail"] };
+        var preferred = Release(title: "Some Book (retail) (epub)", seeders: 5);
+        var seedy = Release(title: "Some Book (epub)", seeders: 500);
+
+        var result = Engine.Evaluate([(seedy, null, "i"), (preferred, null, "i")], rules);
+
+        // The preferred release ranks first despite far fewer seeders.
+        Assert.Equal("Some Book (retail) (epub)", result[0].Release.Title);
+        Assert.True(result[0].Score > result[1].Score);
+    }
+
+    [Fact]
+    public void MorePreferredMatchesRankHigher() {
+        var rules = BookAcquisitionRules.Default with { PreferredTerms = ["retail", "epub"] };
+        var two = Release(title: "Some Book (retail) (epub)", seeders: 1);
+        var one = Release(title: "Some Book (retail) (pdf)", seeders: 999);
+
+        var result = Engine.Evaluate([(one, null, "i"), (two, null, "i")], rules);
+
+        Assert.Equal("Some Book (retail) (epub)", result[0].Release.Title);
+    }
+
+    [Fact]
+    public void NoPreferredTermsLeavesSeederOrderingUnchanged() {
+        // Default rules (no preferred terms) → the original seeder-based ranking is preserved.
+        var high = Release(title: "Book A (epub)", seeders: 100);
+        var low = Release(title: "Book B (epub)", seeders: 5);
+
+        var result = Engine.Evaluate([(low, null, "i"), (high, null, "i")], BookAcquisitionRules.Default);
+
+        Assert.Equal("Book A (epub)", result[0].Release.Title);
+    }
+
+    [Fact]
     public void OrdersAcceptedBeforeRejectedAndBySeeders() {
         var highSeed = Release(title: "Book A (epub)", seeders: 100);
         var lowSeed = Release(title: "Book B (epub)", seeders: 5);

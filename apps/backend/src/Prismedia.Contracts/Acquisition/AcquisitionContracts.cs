@@ -184,6 +184,7 @@ public sealed record BookAcquisitionProfileView(
     long? MaxSizeBytes,
     IReadOnlyList<string> RequiredTerms,
     IReadOnlyList<string> IgnoredTerms,
+    IReadOnlyList<string> PreferredTerms,
     bool AutoPick,
     bool AutoRedownload);
 
@@ -202,6 +203,7 @@ public sealed record BookAcquisitionProfileSaveRequest(
     long? MaxSizeBytes,
     IReadOnlyList<string> RequiredTerms,
     IReadOnlyList<string> IgnoredTerms,
+    IReadOnlyList<string> PreferredTerms,
     bool AutoPick,
     bool AutoRedownload);
 
