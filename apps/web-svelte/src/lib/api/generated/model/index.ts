@@ -5,6 +5,7 @@
  * OpenAPI spec version: 1.0.0
  */
 
+export * from './acquisitionBlocklistEntry';
 export * from './acquisitionCreateRequest';
 export * from './acquisitionDetail';
 export * from './acquisitionFileItem';
@@ -22,6 +23,7 @@ export * from './applyIdentifyQueueItemRequest';
 export * from './applyIdentifyQueueItemRequestSelectedImages';
 export * from './audioLibraryDetail';
 export * from './audioTrackDetail';
+export * from './blocklistReason';
 export * from './bookAcquisitionProfileSaveRequest';
 export * from './bookAcquisitionProfileView';
 export * from './bookAuthorDetail';

@@ -2,9 +2,10 @@
   import { onMount } from "svelte";
   import { Boxes, Loader2, Pencil, PlugZap, Plus, Trash2 } from "@lucide/svelte";
   import { Badge, Button, Checkbox, Panel, Select, StatusLed, TextInput } from "@prismedia/ui-svelte";
-  import { INDEXER_KIND, DOWNLOAD_CLIENT_KIND, IMPORT_MODE, FULFILLMENT_MODE, REQUEST_MEDIA_KIND } from "$lib/api/generated/codes";
+  import { INDEXER_KIND, DOWNLOAD_CLIENT_KIND, IMPORT_MODE, FULFILLMENT_MODE, REQUEST_MEDIA_KIND, BLOCKLIST_REASON } from "$lib/api/generated/codes";
   import { cn } from "@prismedia/ui-svelte";
   import type {
+    AcquisitionBlocklistEntry,
     BookAcquisitionProfileSaveRequest,
     BookAcquisitionProfileView,
     DownloadClientSaveRequest,
@@ -14,9 +15,11 @@
   } from "$lib/api/generated/model";
   import {
     deleteAcquisitionProfileConfig,
+    deleteBlocklistEntry,
     deleteDownloadClientConfig,
     deleteIndexerConfig,
     fetchAcquisitionProfiles,
+    fetchBlocklist,
     fetchDownloadClients,
     fetchIndexers,
     saveAcquisitionProfile,
@@ -39,6 +42,7 @@
   let indexers = $state<IndexerConfigSummary[]>([]);
   let downloadClients = $state<DownloadClientSummary[]>([]);
   let profiles = $state<BookAcquisitionProfileView[]>([]);
+  let blocklist = $state<AcquisitionBlocklistEntry[]>([]);
   let bookRoots = $state<LibraryRoot[]>([]);
   let routing = $state<Record<string, string>>({});
   let loading = $state(true);
@@ -62,19 +66,28 @@
     { value: IMPORT_MODE.move, label: "Move (delete torrent after import)" },
     { value: IMPORT_MODE.copy, label: "Copy (keep seeding)" },
   ];
+  const reasonLabels: Record<string, string> = {
+    [BLOCKLIST_REASON.failed]: "Download failed",
+    [BLOCKLIST_REASON.stalled]: "Stalled",
+    [BLOCKLIST_REASON.noImportableFiles]: "No importable files",
+    [BLOCKLIST_REASON.manual]: "Manual",
+  };
   const rootOptions = $derived(bookRoots.map((r) => ({ value: r.id, label: r.label || r.path })));
 
   async function load() {
     try {
-      const [idx, clients, profs, config] = await Promise.all([
+      const [idx, clients, profs, bl, config] = await Promise.all([
         fetchIndexers(),
         fetchDownloadClients(),
         fetchAcquisitionProfiles(),
+        // Secondary surface: a blocklist failure must not take down indexers/clients/profiles/config.
+        fetchBlocklist().catch(() => [] as AcquisitionBlocklistEntry[]),
         fetchLibraryConfig(),
       ]);
       indexers = idx;
       downloadClients = clients;
       profiles = profs;
+      blocklist = bl;
       bookRoots = config.roots.filter((r) => r.scanBooks);
 
       const setting = findSetting(config.settings, settingKeys.requestFulfillmentByKind);
@@ -192,7 +205,7 @@
       id: null, displayName: "Default Books", isDefault: profiles.length === 0,
       targetLibraryRootId: bookRoots[0]?.id ?? "", pathTemplate: DEFAULT_PATH_TEMPLATE,
       importMode: IMPORT_MODE.move, allowedFormats: [], language: null, minSeeders: 1,
-      minSizeBytes: null, maxSizeBytes: null, requiredTerms: [], ignoredTerms: [], autoPick: false,
+      minSizeBytes: null, maxSizeBytes: null, requiredTerms: [], ignoredTerms: [], autoPick: false, autoRedownload: false,
     };
   }
   function editProfile(p: BookAcquisitionProfileView) {
@@ -200,7 +213,7 @@
       id: p.id, displayName: p.displayName, isDefault: p.isDefault, targetLibraryRootId: p.targetLibraryRootId,
       pathTemplate: p.pathTemplate, importMode: p.importMode, allowedFormats: p.allowedFormats, language: p.language,
       minSeeders: p.minSeeders, minSizeBytes: p.minSizeBytes, maxSizeBytes: p.maxSizeBytes,
-      requiredTerms: p.requiredTerms, ignoredTerms: p.ignoredTerms, autoPick: p.autoPick,
+      requiredTerms: p.requiredTerms, ignoredTerms: p.ignoredTerms, autoPick: p.autoPick, autoRedownload: p.autoRedownload,
     };
   }
   async function saveProfile() {
@@ -224,6 +237,21 @@
       await load();
     } catch (err) {
       onError(err instanceof Error ? err.message : "Failed to delete profile");
+    } finally {
+      busy = false;
+    }
+  }
+
+  // ── Blocklist ───────────────────────────────────────────────
+  async function removeBlocklistEntry(id: string) {
+    busy = true;
+    try {
+      await deleteBlocklistEntry(id);
+      onMessage("Removed from blocklist");
+      // Only the blocklist changed — refetch just it rather than reloading the whole panel.
+      blocklist = await fetchBlocklist();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Failed to remove blocklist entry");
     } finally {
       busy = false;
     }
@@ -398,12 +426,35 @@
                 <TextInput size="sm" value={String(profileForm.minSeeders)} oninput={(e) => profileForm && (profileForm.minSeeders = Number(e.currentTarget.value) || 0)} /></label>
             </div>
             <label class="flex items-center gap-2"><Checkbox checked={profileForm.isDefault} onchange={(e) => profileForm && (profileForm.isDefault = e.currentTarget.checked)} /><span class="text-sm text-text-secondary">Default profile</span></label>
+            <label class="flex items-start gap-2"><Checkbox checked={profileForm.autoPick} onchange={(e) => profileForm && (profileForm.autoPick = e.currentTarget.checked)} /><span class="text-sm text-text-secondary">Auto-grab<span class="block text-[0.72rem] text-text-muted">Download the best acceptable release automatically instead of waiting for manual review.</span></span></label>
+            <label class="flex items-start gap-2"><Checkbox checked={profileForm.autoRedownload} onchange={(e) => profileForm && (profileForm.autoRedownload = e.currentTarget.checked)} /><span class="text-sm text-text-secondary">Auto-redownload on failure<span class="block text-[0.72rem] text-text-muted">When a download fails, blocklist that release and automatically grab the next-best candidate.</span></span></label>
             <div class="flex justify-end gap-1.5">
               <Button size="sm" variant="ghost" onclick={() => (profileForm = null)} disabled={busy}>Cancel</Button>
               <Button size="sm" variant="primary" onclick={saveProfile} disabled={busy || !profileForm.displayName || !profileForm.targetLibraryRootId}>Save</Button>
             </div>
           </div>
         {/if}
+      </section>
+
+      <!-- Blocklist -->
+      <section class="space-y-2">
+        <h3 class="text-kicker text-text-primary">Blocklist</h3>
+        <p class="text-[0.72rem] text-text-muted">
+          Releases a failed download blocklisted so they are never grabbed again. Remove an entry to allow that release to be acquired once more.
+        </p>
+        {#if blocklist.length === 0}
+          <p class="text-[0.78rem] text-text-muted">No blocklisted releases.</p>
+        {/if}
+        {#each blocklist as entry (entry.id)}
+          <div class="flex items-center justify-between rounded-sm border border-border-subtle bg-surface-1 px-3 py-2">
+            <div class="flex min-w-0 items-center gap-2">
+              <Badge variant="default">{reasonLabels[entry.reason] ?? entry.reason}</Badge>
+              <span class="truncate text-sm text-text-primary">{entry.title ?? "Unknown release"}</span>
+              {#if entry.indexerName}<span class="shrink-0 text-xs text-text-muted">{entry.indexerName}</span>{/if}
+            </div>
+            <Button size="sm" variant="ghost" onclick={() => removeBlocklistEntry(entry.id)} disabled={busy}><Trash2 class="h-3.5 w-3.5" /></Button>
+          </div>
+        {/each}
       </section>
 
       <!-- Fulfilment routing -->

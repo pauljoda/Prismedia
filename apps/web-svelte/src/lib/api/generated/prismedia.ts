@@ -5,6 +5,7 @@
  * OpenAPI spec version: 1.0.0
  */
 import type {
+  AcquisitionBlocklistEntry,
   AcquisitionCreateRequest,
   AcquisitionDetail,
   AcquisitionFilesView,
@@ -12170,6 +12171,85 @@ export const getDeleteAcquisitionProfileUrl = (id: string,) => {
 export const deleteAcquisitionProfile = async (id: string, options?: RequestInit): Promise<deleteAcquisitionProfileResponse> => {
 
   return orvalFetch<deleteAcquisitionProfileResponse>(getDeleteAcquisitionProfileUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type listAcquisitionBlocklistResponse200 = {
+  data: AcquisitionBlocklistEntry[]
+  status: 200
+}
+
+export type listAcquisitionBlocklistResponseSuccess = (listAcquisitionBlocklistResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listAcquisitionBlocklistResponse = (listAcquisitionBlocklistResponseSuccess)
+
+export const getListAcquisitionBlocklistUrl = () => {
+
+
+
+
+  return `/api/acquisitions/blocklist`
+}
+
+/**
+ * @summary Lists blocklisted releases that failed-download recovery refuses for future acquisition.
+ */
+export const listAcquisitionBlocklist = async ( options?: RequestInit): Promise<listAcquisitionBlocklistResponse> => {
+
+  return orvalFetch<listAcquisitionBlocklistResponse>(getListAcquisitionBlocklistUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type deleteAcquisitionBlocklistEntryResponse204 = {
+  data: void
+  status: 204
+}
+
+export type deleteAcquisitionBlocklistEntryResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type deleteAcquisitionBlocklistEntryResponseSuccess = (deleteAcquisitionBlocklistEntryResponse204) & {
+  headers: Headers;
+};
+export type deleteAcquisitionBlocklistEntryResponseError = (deleteAcquisitionBlocklistEntryResponse404) & {
+  headers: Headers;
+};
+
+export type deleteAcquisitionBlocklistEntryResponse = (deleteAcquisitionBlocklistEntryResponseSuccess | deleteAcquisitionBlocklistEntryResponseError)
+
+export const getDeleteAcquisitionBlocklistEntryUrl = (id: string,) => {
+
+
+
+
+  return `/api/acquisitions/blocklist/${id}`
+}
+
+/**
+ * @summary Removes a release from the blocklist so it can be acquired again.
+ */
+export const deleteAcquisitionBlocklistEntry = async (id: string, options?: RequestInit): Promise<deleteAcquisitionBlocklistEntryResponse> => {
+
+  return orvalFetch<deleteAcquisitionBlocklistEntryResponse>(getDeleteAcquisitionBlocklistEntryUrl(id),
   {
     ...options,
     method: 'DELETE'

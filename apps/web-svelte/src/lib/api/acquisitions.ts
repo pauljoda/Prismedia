@@ -2,9 +2,11 @@ import {
   cancelAcquisition as cancelAcquisitionRequest,
   createAcquisition as createAcquisitionRequest,
   deleteAcquisition as deleteAcquisitionRequest,
+  deleteAcquisitionBlocklistEntry,
   deleteAcquisitionProfile as deleteAcquisitionProfileRequest,
   deleteDownloadClient,
   deleteIndexer,
+  listAcquisitionBlocklist,
   getAcquisition as getAcquisitionRequest,
   getAcquisitionFiles,
   getAcquisitionTransfer,
@@ -24,6 +26,7 @@ import {
   uploadAcquisitionTorrent,
 } from "$lib/api/generated/prismedia";
 import type {
+  AcquisitionBlocklistEntry,
   AcquisitionCreateRequest,
   AcquisitionDetail,
   AcquisitionFilesView,
@@ -130,4 +133,13 @@ export async function fetchAcquisitionFiles(id: string): Promise<AcquisitionFile
 export async function uploadManualTorrent(id: string, file: File): Promise<AcquisitionDetail> {
   const body = { file } as unknown as UploadAcquisitionTorrentBody;
   return unwrapGenerated(await uploadAcquisitionTorrent(id, body), "Failed to upload torrent");
+}
+
+// ── Blocklist ─────────────────────────────────────────────────
+export async function fetchBlocklist(): Promise<AcquisitionBlocklistEntry[]> {
+  return unwrapGenerated(await listAcquisitionBlocklist(), "Failed to load blocklist");
+}
+
+export async function deleteBlocklistEntry(id: string): Promise<void> {
+  unwrapGenerated(await deleteAcquisitionBlocklistEntry(id), "Failed to remove blocklist entry", [204]);
 }

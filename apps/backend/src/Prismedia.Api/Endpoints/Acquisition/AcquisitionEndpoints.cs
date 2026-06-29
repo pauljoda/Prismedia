@@ -293,6 +293,26 @@ public static class AcquisitionEndpoints {
             .Produces(StatusCodes.Status204NoContent)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
+        group.MapGet("/blocklist", (
+            IAcquisitionBlocklistStore blocklist,
+            CancellationToken cancellationToken) =>
+            blocklist.ListAsync(cancellationToken))
+            .WithName("ListAcquisitionBlocklist")
+            .WithSummary("Lists blocklisted releases that failed-download recovery refuses for future acquisition.")
+            .Produces<IReadOnlyList<AcquisitionBlocklistEntry>>();
+
+        group.MapDelete("/blocklist/{id:guid}", async (
+            Guid id,
+            IAcquisitionBlocklistStore blocklist,
+            CancellationToken cancellationToken) =>
+            await blocklist.DeleteAsync(id, cancellationToken)
+                ? Results.NoContent()
+                : Results.NotFound(new ApiProblem(ApiProblemCodes.NotFound, "Blocklist entry was not found.")))
+            .WithName("DeleteAcquisitionBlocklistEntry")
+            .WithSummary("Removes a release from the blocklist so it can be acquired again.")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+
         return group;
     }
 
