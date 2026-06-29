@@ -144,6 +144,35 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
         return rows.Select(row => new AcquisitionCandidateRef(row.Id, row.Title, row.IndexerName, row.InfoHash)).ToArray();
     }
 
+    public async Task MarkCandidatesBlocklistedAsync(Guid acquisitionId, string identity, CancellationToken cancellationToken) {
+        var rows = await db.ReleaseCandidates
+            .Where(candidate => candidate.AcquisitionId == acquisitionId)
+            .ToArrayAsync(cancellationToken);
+        var blocklistedCode = ReleaseRejectionReason.Blocklisted.ToCode();
+        var changed = false;
+
+        foreach (var row in rows) {
+            // Mark every row that resolves to the same release identity — a duplicate from another indexer
+            // (e.g. the same info hash) must not stay selectable once the release is blocklisted.
+            if (ReleaseIdentity.For(row.InfoHash, row.IndexerName, row.Title) != identity) {
+                continue;
+            }
+
+            row.Accepted = false;
+            var reasons = (JsonSerializer.Deserialize<string[]>(row.RejectionsJson) ?? []).ToList();
+            if (!reasons.Contains(blocklistedCode)) {
+                reasons.Add(blocklistedCode);
+            }
+
+            row.RejectionsJson = JsonSerializer.Serialize(reasons);
+            changed = true;
+        }
+
+        if (changed) {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+    }
+
     public async Task SetSelectedReleaseAsync(Guid acquisitionId, SelectedRelease selected, CancellationToken cancellationToken) {
         var row = await db.Acquisitions.FirstOrDefaultAsync(row => row.Id == acquisitionId, cancellationToken);
         if (row is null) {

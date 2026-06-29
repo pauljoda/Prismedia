@@ -1,4 +1,5 @@
 import {
+  blocklistAcquisitionCandidate as blocklistAcquisitionCandidateRequest,
   cancelAcquisition as cancelAcquisitionRequest,
   createAcquisition as createAcquisitionRequest,
   deleteAcquisition as deleteAcquisitionRequest,
@@ -115,6 +116,10 @@ export async function queueAcquisitionCandidate(id: string, candidateId: string)
 
 export async function cancelAcquisition(id: string): Promise<AcquisitionDetail> {
   return unwrapGenerated(await cancelAcquisitionRequest(id), "Failed to cancel acquisition");
+}
+
+export async function blocklistAcquisitionCandidate(id: string, candidateId: string): Promise<AcquisitionDetail> {
+  return unwrapGenerated(await blocklistAcquisitionCandidateRequest(id, candidateId), "Failed to blocklist release");
 }
 
 export async function deleteAcquisition(id: string): Promise<void> {

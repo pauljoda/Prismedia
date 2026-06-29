@@ -11629,6 +11629,51 @@ export const queueAcquisition = async (id: string,
 
 
 
+export type blocklistAcquisitionCandidateResponse200 = {
+  data: AcquisitionDetail
+  status: 200
+}
+
+export type blocklistAcquisitionCandidateResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type blocklistAcquisitionCandidateResponseSuccess = (blocklistAcquisitionCandidateResponse200) & {
+  headers: Headers;
+};
+export type blocklistAcquisitionCandidateResponseError = (blocklistAcquisitionCandidateResponse404) & {
+  headers: Headers;
+};
+
+export type blocklistAcquisitionCandidateResponse = (blocklistAcquisitionCandidateResponseSuccess | blocklistAcquisitionCandidateResponseError)
+
+export const getBlocklistAcquisitionCandidateUrl = (id: string,
+    candidateId: string,) => {
+
+
+
+
+  return `/api/acquisitions/${id}/candidates/${candidateId}/blocklist`
+}
+
+/**
+ * @summary Blocklists a release from an acquisition's candidates so it is never grabbed again.
+ */
+export const blocklistAcquisitionCandidate = async (id: string,
+    candidateId: string, options?: RequestInit): Promise<blocklistAcquisitionCandidateResponse> => {
+
+  return orvalFetch<blocklistAcquisitionCandidateResponse>(getBlocklistAcquisitionCandidateUrl(id,candidateId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
 export type cancelAcquisitionResponse200 = {
   data: AcquisitionDetail
   status: 200

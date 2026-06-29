@@ -122,6 +122,21 @@ public static class AcquisitionEndpoints {
             .Produces<ApiProblem>(StatusCodes.Status400BadRequest)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
+        group.MapPost("/{id:guid}/candidates/{candidateId:guid}/blocklist", async (
+            Guid id,
+            Guid candidateId,
+            AcquisitionService acquisitions,
+            CancellationToken cancellationToken) => {
+                var detail = await acquisitions.BlocklistCandidateAsync(id, candidateId, cancellationToken);
+                return detail is null
+                    ? Results.NotFound(new ApiProblem(ApiProblemCodes.AcquisitionReleaseNotFound, "The release was not found for this acquisition."))
+                    : Results.Ok(detail);
+            })
+            .WithName("BlocklistAcquisitionCandidate")
+            .WithSummary("Blocklists a release from an acquisition's candidates so it is never grabbed again.")
+            .Produces<AcquisitionDetail>()
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+
         group.MapPost("/{id:guid}/cancel", async (
             Guid id,
             AcquisitionService acquisitions,

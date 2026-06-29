@@ -154,6 +154,13 @@ public interface IAcquisitionStore {
     /// <summary>Lists an acquisition's accepted candidates best-first, with the identity fields the failed-handler needs to skip blocklisted ones.</summary>
     Task<IReadOnlyList<AcquisitionCandidateRef>> ListAcceptedCandidatesAsync(Guid acquisitionId, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Marks every candidate of an acquisition whose normalized release identity equals <paramref name="identity"/>
+    /// as rejected with <see cref="ReleaseRejectionReason.Blocklisted"/>, so the picker reflects a manual block
+    /// immediately — including duplicate rows for the same release returned by other indexers.
+    /// </summary>
+    Task MarkCandidatesBlocklistedAsync(Guid acquisitionId, string identity, CancellationToken cancellationToken);
+
     /// <summary>Records the release an acquisition was sent to download, so a later failure can blocklist exactly it.</summary>
     Task SetSelectedReleaseAsync(Guid acquisitionId, SelectedRelease selected, CancellationToken cancellationToken);
 

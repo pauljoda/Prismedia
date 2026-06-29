@@ -11,6 +11,7 @@ namespace Prismedia.Application.Acquisition;
 /// </summary>
 public sealed class AcquisitionService(
     IAcquisitionStore store,
+    IAcquisitionBlocklistStore blocklist,
     IJobQueueService queue,
     IDownloadClientConfigStore downloadClients,
     IDownloadClientFactory clients,
@@ -134,6 +135,25 @@ public sealed class AcquisitionService(
         }
 
         return await store.DeleteAsync(id, cancellationToken);
+    }
+
+    /// <summary>
+    /// Manually blocklists one of an acquisition's release candidates so it is never grabbed (here or on a
+    /// future search) and marks that candidate rejected so the picker reflects it immediately. Returns the
+    /// refreshed acquisition, or null when the candidate no longer exists.
+    /// </summary>
+    public async Task<AcquisitionDetail?> BlocklistCandidateAsync(Guid id, Guid candidateId, CancellationToken cancellationToken) {
+        var candidate = await store.GetQueueCandidateAsync(id, candidateId, cancellationToken);
+        if (candidate is null) {
+            return null;
+        }
+
+        var identity = ReleaseIdentity.For(candidate.InfoHash, candidate.IndexerName, candidate.Title);
+        await blocklist.AddAsync(
+            new BlocklistAddRequest(identity, BlocklistReason.Manual, candidate.Title, candidate.IndexerName, candidate.InfoHash, id, "Blocklisted from the release picker."),
+            cancellationToken);
+        await store.MarkCandidatesBlocklistedAsync(id, identity, cancellationToken);
+        return await store.GetAsync(id, cancellationToken);
     }
 
     /// <summary>Persists a new acquisition and enqueues the background search job that fills in candidates.</summary>

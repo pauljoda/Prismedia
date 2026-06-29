@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ArrowDown, ArrowUp, BookOpen, ChevronsUpDown, Download, ExternalLink, FileText, Film, Headphones, Tag } from "@lucide/svelte";
+  import { ArrowDown, ArrowUp, Ban, BookOpen, ChevronsUpDown, Download, ExternalLink, FileText, Film, Headphones, Tag } from "@lucide/svelte";
   import { Button, Select, cn } from "@prismedia/ui-svelte";
   import type { Component } from "svelte";
   import type { ReleaseCandidateView } from "$lib/api/generated/model";
@@ -10,9 +10,11 @@
     canChoose: boolean;
     busy: boolean;
     onQueue: (candidate: ReleaseCandidateView) => void;
+    /** Optional: blocklist a release so it is never grabbed (here or on a future search). */
+    onBlocklist?: (candidate: ReleaseCandidateView) => void;
   }
 
-  let { candidates, canChoose, busy, onQueue }: Props = $props();
+  let { candidates, canChoose, busy, onQueue, onBlocklist }: Props = $props();
 
   type SortKey = "title" | "indexer" | "size" | "seeders" | "score";
 
@@ -118,14 +120,17 @@
      horizontal scroll. Release takes ~half the width; the remaining columns share the rest. -->
 <div class="hidden rounded-sm border border-border-subtle sm:block">
   <table class="w-full table-fixed text-sm">
+    <!-- Fixed widths for every column except the release title, which flexes to fill. This guarantees the
+         actions column always fits the external-link, Download, and Block controls so they never overlap
+         the Score column. -->
     <colgroup>
       <col style:width="2.5rem" />
-      <col style:width="50%" />
       <col />
-      <col />
-      <col />
-      <col />
-      <col />
+      <col style:width="7rem" />
+      <col style:width="4.5rem" />
+      <col style:width="4.5rem" />
+      <col style:width="4.5rem" />
+      <col style:width="11rem" />
     </colgroup>
     <thead class="bg-surface-1 text-left text-[0.7rem] uppercase tracking-wide text-text-muted">
       <tr>
@@ -187,6 +192,11 @@
                   Download
                 </Button>
               {/if}
+              {#if onBlocklist && c.accepted}
+                <Button size="sm" variant="ghost" onclick={() => onBlocklist?.(c)} disabled={busy} title="Blocklist this release so it is never grabbed" aria-label="Blocklist release">
+                  <Ban class="h-3.5 w-3.5" />
+                </Button>
+              {/if}
             </div>
           </td>
         </tr>
@@ -219,13 +229,19 @@
         <span>{c.seeders ?? "—"} seeders</span>
         <span>score {Number(c.score).toFixed(0)}</span>
       </div>
-      {#if c.infoUrl || (c.accepted && canChoose)}
+      {#if c.infoUrl || c.accepted}
         <div class="mt-2.5 flex items-center justify-end gap-2">
           {#if c.infoUrl}
             <a href={c.infoUrl} target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 text-[0.75rem] text-text-muted transition-colors hover:text-text-accent">
               <ExternalLink class="h-3.5 w-3.5" />
               Release page
             </a>
+          {/if}
+          {#if onBlocklist && c.accepted}
+            <Button size="sm" variant="ghost" onclick={() => onBlocklist?.(c)} disabled={busy} class="gap-1.5" aria-label="Blocklist release">
+              <Ban class="h-3.5 w-3.5" />
+              Block
+            </Button>
           {/if}
           {#if c.accepted && canChoose}
             <Button size="sm" onclick={() => onQueue(c)} disabled={busy} class="gap-1.5">

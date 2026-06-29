@@ -17,6 +17,7 @@
     ReleaseCandidateView,
   } from "$lib/api/generated/model";
   import {
+    blocklistAcquisitionCandidate,
     cancelAcquisition,
     fetchAcquisition,
     fetchAcquisitionFiles,
@@ -79,6 +80,18 @@
       detail = await queueAcquisitionCandidate(id, candidate.id);
     } catch (err) {
       error = err instanceof Error ? err.message : "Failed to queue release";
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function blocklist(candidate: ReleaseCandidateView) {
+    if (busy) return;
+    busy = true;
+    try {
+      detail = await blocklistAcquisitionCandidate(id, candidate.id);
+    } catch (err) {
+      error = err instanceof Error ? err.message : "Failed to blocklist release";
     } finally {
       busy = false;
     }
@@ -275,7 +288,7 @@
                   description="No indexer returned a matching release for this title. You can upload a .torrent manually below."
                 />
               {:else}
-                <ReleaseTable candidates={detail.candidates} canChoose={canPickRelease} {busy} onQueue={queue} />
+                <ReleaseTable candidates={detail.candidates} canChoose={canPickRelease} {busy} onQueue={queue} onBlocklist={blocklist} />
               {/if}
 
               {#if canPickRelease}
