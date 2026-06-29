@@ -38,6 +38,10 @@ public enum ProposalKind {
     [Code("book-page")]
     BookPage,
 
+    /// <summary>Book author or writer grouping (mirrors <see cref="EntityKind.BookAuthor"/>).</summary>
+    [Code("book-author")]
+    BookAuthor,
+
     /// <summary>User collection.</summary>
     [Code("collection")]
     Collection,

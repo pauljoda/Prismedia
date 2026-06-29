@@ -16,6 +16,7 @@ export const ProposalKind = {
   'book-volume': 'book-volume',
   'book-chapter': 'book-chapter',
   'book-page': 'book-page',
+  'book-author': 'book-author',
   collection: 'collection',
   gallery: 'gallery',
   image: 'image',
