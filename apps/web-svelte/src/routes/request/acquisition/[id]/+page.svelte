@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import { ChevronLeft, CloudDownload, FileText, Loader2, Search, SearchX, Upload, X } from "@lucide/svelte";
+  import { Bell, BellRing, ChevronLeft, CloudDownload, FileText, Loader2, Search, SearchX, Upload, X } from "@lucide/svelte";
   import { Badge } from "@prismedia/ui-svelte";
   import { page } from "$app/state";
   import EntityDetail from "$lib/components/entities/EntityDetail.svelte";
@@ -9,11 +9,12 @@
   import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
   import { isTransferActive, transferStageLabel } from "$lib/requests/acquisition-transfer";
   import type { EntityDetailActionButton } from "$lib/components/entities/entity-detail-types";
-  import { ACQUISITION_STATUS } from "$lib/api/generated/codes";
+  import { ACQUISITION_STATUS, MONITOR_STATUS } from "$lib/api/generated/codes";
   import type {
     AcquisitionDetail,
     AcquisitionFilesView,
     AcquisitionTransferView,
+    MonitorView,
     ReleaseCandidateView,
   } from "$lib/api/generated/model";
   import {
@@ -25,6 +26,7 @@
     queueAcquisitionCandidate,
     uploadManualTorrent,
   } from "$lib/api/acquisitions";
+  import { fetchMonitors, resumeMonitor, startMonitor, stopMonitor } from "$lib/api/monitors";
   import { acquisitionToDetailCard } from "$lib/requests/acquisition-entity-card";
   import { ACTIVE_ACQUISITION_STATUSES, acquisitionStatusLabel } from "$lib/requests/review-cards";
 
@@ -33,6 +35,7 @@
   let detail = $state<AcquisitionDetail | null>(null);
   let transfer = $state<AcquisitionTransferView | null>(null);
   let files = $state<AcquisitionFilesView | null>(null);
+  let monitor = $state<MonitorView | null>(null);
   let error = $state<string | null>(null);
   let busy = $state(false);
   let pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -59,6 +62,8 @@
     try {
       detail = await fetchAcquisition(id);
       error = null;
+      // Secondary surface: a monitor lookup failure must not break the acquisition view.
+      monitor = (await fetchMonitors().catch(() => [])).find((m) => m.acquisitionId === id) ?? null;
       // Pull the status-appropriate detail.
       if (isDownloading) {
         transfer = await fetchAcquisitionTransfer(id);
@@ -109,6 +114,29 @@
     }
   }
 
+  // Toggle monitoring across its three states: actively monitoring → stop; auto-paused (e.g. after the
+  // acquisition was cancelled) → resume; not monitored → start. When on, Prismedia keeps re-running the
+  // release search until the book is acquired.
+  async function toggleMonitor() {
+    if (busy) return;
+    busy = true;
+    try {
+      if (monitor && monitor.status === MONITOR_STATUS.active) {
+        await stopMonitor(monitor.id);
+        monitor = null;
+      } else if (monitor) {
+        await resumeMonitor(monitor.id);
+        monitor = { ...monitor, status: MONITOR_STATUS.active };
+      } else {
+        monitor = await startMonitor(id);
+      }
+    } catch (err) {
+      error = err instanceof Error ? err.message : "Failed to update monitoring";
+    } finally {
+      busy = false;
+    }
+  }
+
   async function onUpload(event: Event) {
     const input = event.currentTarget as HTMLInputElement;
     const file = input.files?.[0];
@@ -139,11 +167,24 @@
     return h > 0 ? `${h}h ${m}m` : `${m}m`;
   }
 
-  const actionButtons = $derived<EntityDetailActionButton[]>(
-    isActive || canChoose
-      ? [{ id: "cancel", label: "Cancel", icon: X, variant: "danger", onClick: cancel, disabled: busy }]
-      : [],
-  );
+  // Monitoring is offered for any not-yet-acquired book; an imported book has nothing left to search for.
+  const showMonitorToggle = $derived(status !== null && status !== ACQUISITION_STATUS.imported);
+  const monitorActive = $derived(monitor?.status === MONITOR_STATUS.active);
+  const actionButtons = $derived<EntityDetailActionButton[]>([
+    ...(showMonitorToggle
+      ? [{
+          id: "monitor",
+          label: monitorActive ? "Monitoring" : monitor ? "Resume monitoring" : "Monitor",
+          icon: monitorActive ? BellRing : Bell,
+          variant: monitorActive ? "primary" : "default",
+          onClick: toggleMonitor,
+          disabled: busy,
+        } satisfies EntityDetailActionButton]
+      : []),
+    ...(isActive || canChoose
+      ? [{ id: "cancel", label: "Cancel", icon: X, variant: "danger", onClick: cancel, disabled: busy } satisfies EntityDetailActionButton]
+      : []),
+  ]);
 
   $effect(() => {
     if (id) void load();

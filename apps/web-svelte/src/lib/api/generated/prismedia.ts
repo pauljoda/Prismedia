@@ -181,6 +181,8 @@ import type {
   ListTagsParams,
   ListVideoSeriesParams,
   ListVideosParams,
+  MonitorCreateRequest,
+  MonitorView,
   MoveFileParams,
   MovieDetail,
   MusicArtistDetail,
@@ -12298,6 +12300,215 @@ export const deleteAcquisitionBlocklistEntry = async (id: string, options?: Requ
   {
     ...options,
     method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type listMonitorsResponse200 = {
+  data: MonitorView[]
+  status: 200
+}
+
+export type listMonitorsResponseSuccess = (listMonitorsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listMonitorsResponse = (listMonitorsResponseSuccess)
+
+export const getListMonitorsUrl = () => {
+
+
+
+
+  return `/api/monitors`
+}
+
+/**
+ * @summary Lists monitored items with the status of each linked acquisition.
+ */
+export const listMonitors = async ( options?: RequestInit): Promise<listMonitorsResponse> => {
+
+  return orvalFetch<listMonitorsResponse>(getListMonitorsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type startMonitorResponse200 = {
+  data: MonitorView
+  status: 200
+}
+
+export type startMonitorResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type startMonitorResponseSuccess = (startMonitorResponse200) & {
+  headers: Headers;
+};
+export type startMonitorResponseError = (startMonitorResponse404) & {
+  headers: Headers;
+};
+
+export type startMonitorResponse = (startMonitorResponseSuccess | startMonitorResponseError)
+
+export const getStartMonitorUrl = () => {
+
+
+
+
+  return `/api/monitors`
+}
+
+/**
+ * @summary Starts monitoring an acquisition so its release search is re-run until the item is acquired.
+ */
+export const startMonitor = async (monitorCreateRequest: MonitorCreateRequest, options?: RequestInit): Promise<startMonitorResponse> => {
+
+  return orvalFetch<startMonitorResponse>(getStartMonitorUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      monitorCreateRequest,)
+  }
+);}
+
+
+
+export type stopMonitorResponse204 = {
+  data: void
+  status: 204
+}
+
+export type stopMonitorResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type stopMonitorResponseSuccess = (stopMonitorResponse204) & {
+  headers: Headers;
+};
+export type stopMonitorResponseError = (stopMonitorResponse404) & {
+  headers: Headers;
+};
+
+export type stopMonitorResponse = (stopMonitorResponseSuccess | stopMonitorResponseError)
+
+export const getStopMonitorUrl = (id: string,) => {
+
+
+
+
+  return `/api/monitors/${id}`
+}
+
+/**
+ * @summary Stops monitoring (the acquisition is left untouched).
+ */
+export const stopMonitor = async (id: string, options?: RequestInit): Promise<stopMonitorResponse> => {
+
+  return orvalFetch<stopMonitorResponse>(getStopMonitorUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type pauseMonitorResponse204 = {
+  data: void
+  status: 204
+}
+
+export type pauseMonitorResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type pauseMonitorResponseSuccess = (pauseMonitorResponse204) & {
+  headers: Headers;
+};
+export type pauseMonitorResponseError = (pauseMonitorResponse404) & {
+  headers: Headers;
+};
+
+export type pauseMonitorResponse = (pauseMonitorResponseSuccess | pauseMonitorResponseError)
+
+export const getPauseMonitorUrl = (id: string,) => {
+
+
+
+
+  return `/api/monitors/${id}/pause`
+}
+
+/**
+ * @summary Pauses a monitor so it is not re-searched until resumed.
+ */
+export const pauseMonitor = async (id: string, options?: RequestInit): Promise<pauseMonitorResponse> => {
+
+  return orvalFetch<pauseMonitorResponse>(getPauseMonitorUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type resumeMonitorResponse204 = {
+  data: void
+  status: 204
+}
+
+export type resumeMonitorResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type resumeMonitorResponseSuccess = (resumeMonitorResponse204) & {
+  headers: Headers;
+};
+export type resumeMonitorResponseError = (resumeMonitorResponse404) & {
+  headers: Headers;
+};
+
+export type resumeMonitorResponse = (resumeMonitorResponseSuccess | resumeMonitorResponseError)
+
+export const getResumeMonitorUrl = (id: string,) => {
+
+
+
+
+  return `/api/monitors/${id}/resume`
+}
+
+/**
+ * @summary Resumes a paused monitor.
+ */
+export const resumeMonitor = async (id: string, options?: RequestInit): Promise<resumeMonitorResponse> => {
+
+  return orvalFetch<resumeMonitorResponse>(getResumeMonitorUrl(id),
+  {
+    ...options,
+    method: 'POST'
 
 
   }

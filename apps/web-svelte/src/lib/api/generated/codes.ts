@@ -123,6 +123,7 @@ export const JOB_TYPE = {
   acquisitionMonitor: "acquisition-monitor",
   acquisitionImport: "acquisition-import",
   acquisitionFailedHandle: "acquisition-failed-handle",
+  monitoredSearch: "monitored-search",
 } as const;
 
 export type JobTypeCode = (typeof JOB_TYPE)[keyof typeof JOB_TYPE];
@@ -393,6 +394,14 @@ export const BLOCKLIST_REASON = {
 
 export type BlocklistReasonCode = (typeof BLOCKLIST_REASON)[keyof typeof BLOCKLIST_REASON];
 
+export const MONITOR_STATUS = {
+  active: "active",
+  paused: "paused",
+  fulfilled: "fulfilled",
+} as const;
+
+export type MonitorStatusCode = (typeof MONITOR_STATUS)[keyof typeof MONITOR_STATUS];
+
 export const CAPABILITY_KIND = {
   classification: "classification",
   dates: "dates",
@@ -450,6 +459,8 @@ export const SETTING_KEYS = {
   hlsTranscoderProfile: "hls.transcoderProfile",
   hlsVaapiDevice: "hls.vaapiDevice",
   jobsBackgroundConcurrency: "jobs.backgroundConcurrency",
+  monitoringIntervalMinutes: "monitoring.intervalMinutes",
+  monitoringSearchEnabled: "monitoring.searchEnabled",
   playbackAudioPreferredLanguages: "playback.audioPreferredLanguages",
   playbackDefaultMode: "playback.defaultMode",
   playbackShowCastControls: "playback.showCastControls",

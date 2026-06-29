@@ -39,4 +39,5 @@ export const JobType = {
   'acquisition-monitor': 'acquisition-monitor',
   'acquisition-import': 'acquisition-import',
   'acquisition-failed-handle': 'acquisition-failed-handle',
+  'monitored-search': 'monitored-search',
 } as const;
