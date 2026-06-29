@@ -136,8 +136,16 @@ public sealed class LanguageSpecification : IReleaseSpecification {
     }
 }
 
-/// <summary>Scores and filters indexer releases against a book acquisition profile's rules.</summary>
-public interface IBookReleaseDecisionEngine {
+/// <summary>
+/// Scores and filters indexer releases for one media kind. Resolved per <see cref="Kind"/> through
+/// <see cref="IAcquisitionDecisionEngineFactory"/> so additional kinds (video, audio) register their own
+/// engine without the search runner changing. (The rules type is still book-specific; generalizing it is
+/// a later step — this slice only establishes the kind-dispatch seam.)
+/// </summary>
+public interface IAcquisitionDecisionEngine {
+    /// <summary>The media kind this engine scores releases for.</summary>
+    EntityKind Kind { get; }
+
     /// <summary>
     /// Evaluates each release against the rules and returns scored verdicts ordered best-first.
     /// Accepted candidates (highest score first) precede rejected ones so a review UI can preselect the top accepted release.
@@ -153,8 +161,10 @@ public interface IBookReleaseDecisionEngine {
         IReadOnlySet<string>? blocklistedIdentities = null);
 }
 
-/// <summary>Default decision engine: runs every specification, then ranks accepted releases by a seeder-weighted score.</summary>
-public sealed class BookReleaseDecisionEngine : IBookReleaseDecisionEngine {
+/// <summary>Default book decision engine: runs every specification, then ranks accepted releases by a seeder-weighted score.</summary>
+public sealed class BookReleaseDecisionEngine : IAcquisitionDecisionEngine {
+    public EntityKind Kind => EntityKind.Book;
+
     private static readonly IReleaseSpecification[] Specifications = [
         new ProtocolSpecification(),
         new DownloadLinkSpecification(),
@@ -212,4 +222,21 @@ public sealed class BookReleaseDecisionEngine : IBookReleaseDecisionEngine {
         var peers = Math.Max(release.Peers ?? 0, 0);
         return (Math.Log10(seeders + 1) * 100) + (Math.Min(peers, 100) * 0.25);
     }
+}
+
+/// <summary>Resolves the decision engine for a media kind, mirroring the indexer/download-client factories.</summary>
+public interface IAcquisitionDecisionEngineFactory {
+    /// <summary>Returns the engine registered for <paramref name="kind"/>, or throws when none is registered.</summary>
+    IAcquisitionDecisionEngine Get(EntityKind kind);
+}
+
+/// <summary>Dispatches to the registered <see cref="IAcquisitionDecisionEngine"/> for a kind (one engine per kind).</summary>
+public sealed class AcquisitionDecisionEngineFactory(IEnumerable<IAcquisitionDecisionEngine> engines) : IAcquisitionDecisionEngineFactory {
+    private readonly IReadOnlyDictionary<EntityKind, IAcquisitionDecisionEngine> _byKind =
+        engines.ToDictionary(engine => engine.Kind);
+
+    public IAcquisitionDecisionEngine Get(EntityKind kind) =>
+        _byKind.TryGetValue(kind, out var engine)
+            ? engine
+            : throw new InvalidOperationException($"No acquisition decision engine is registered for kind '{kind}'.");
 }

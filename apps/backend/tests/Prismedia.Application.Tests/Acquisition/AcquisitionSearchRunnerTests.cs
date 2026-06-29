@@ -20,7 +20,7 @@ public sealed class AcquisitionSearchRunnerTests {
             new FakeClientFactory(new FakeIndexerSearchClient([blocked, clean])),
             new FakeProfileStore(),
             new FakeBlocklistStore(ReleaseIdentity.For("blockedhash", null, null)),
-            new BookReleaseDecisionEngine());
+            new AcquisitionDecisionEngineFactory([new BookReleaseDecisionEngine()]));
 
         var outcome = await runner.RunAsync(new AcquisitionSearchInput(Guid.NewGuid(), "Book", null), CancellationToken.None);
 

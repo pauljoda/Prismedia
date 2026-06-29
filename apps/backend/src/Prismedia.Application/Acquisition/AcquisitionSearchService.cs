@@ -10,7 +10,7 @@ public sealed class AcquisitionSearchRunner(
     IIndexerSearchClientFactory clients,
     IBookAcquisitionProfileStore profiles,
     IAcquisitionBlocklistStore blocklist,
-    IBookReleaseDecisionEngine decisionEngine) {
+    IAcquisitionDecisionEngineFactory decisionEngines) {
     public async Task<AcquisitionSearchOutcome> RunAsync(AcquisitionSearchInput input, CancellationToken cancellationToken) {
         var text = BuildQueryText(input.Title, input.Author);
         if (string.IsNullOrWhiteSpace(text)) {
@@ -40,7 +40,8 @@ public sealed class AcquisitionSearchRunner(
             }
         }
 
-        return new AcquisitionSearchOutcome(decisionEngine.Evaluate(releases, rules, blocklisted), errors);
+        var engine = decisionEngines.Get(Domain.Entities.EntityKind.Book);
+        return new AcquisitionSearchOutcome(engine.Evaluate(releases, rules, blocklisted), errors);
     }
 
     private async Task<(Contracts.Acquisition.IndexerConfigDetail Config, IReadOnlyList<IndexerRelease> Found, string? Error)> SearchIndexerAsync(

@@ -59,7 +59,8 @@ public static class DependencyInjection {
         services.AddScoped<Acquisition.AcquisitionService>();
         services.AddScoped<Acquisition.AcquisitionQueueService>();
         services.AddScoped<Acquisition.IAcquisitionQueueService>(sp => sp.GetRequiredService<Acquisition.AcquisitionQueueService>());
-        services.AddSingleton<Acquisition.IBookReleaseDecisionEngine, Acquisition.BookReleaseDecisionEngine>();
+        services.AddSingleton<Acquisition.IAcquisitionDecisionEngine, Acquisition.BookReleaseDecisionEngine>();
+        services.AddSingleton<Acquisition.IAcquisitionDecisionEngineFactory, Acquisition.AcquisitionDecisionEngineFactory>();
         services.AddScoped<IAudioStreamService, AudioStreamService>();
         services.AddSingleton<IIdentifyApplyProgressStore, InMemoryIdentifyApplyProgressStore>();
         services.AddSingleton<AuthAttemptThrottle>();
