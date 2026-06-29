@@ -29,9 +29,11 @@
   } from "$lib/entities/book-entity-reader";
   import { bookReaderHref } from "$lib/entities/book-reader-route";
   import {
+    fetchOrderedEntityThumbnails,
     hydrateStandardRelationshipCards,
     thumbnailsToCards,
   } from "$lib/entities/entity-relationship-thumbnails";
+  import { resolveEntityHref } from "$lib/entities/entity-routes";
   import { CREDIT_ROLE, ENTITY_KIND } from "$lib/entities/entity-codes";
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
   import EntityDetail, {
@@ -48,7 +50,7 @@
     redirectHiddenEntityNotFound,
   } from "$lib/nsfw/hidden-entity";
   import { useNsfw } from "$lib/nsfw/store.svelte";
-  import { useAppChrome } from "$lib/stores/app-chrome.svelte";
+  import { useAppChrome, type AppBreadcrumb } from "$lib/stores/app-chrome.svelte";
 
   type LoadState = "loading" | "ready" | "error";
 
@@ -64,6 +66,8 @@
 
   let loadState: LoadState = $state("loading");
   let book = $state<BookDetail | null>(null);
+  // The book's parent author grouping, when scanned under an Author/ folder, for a breadcrumb back-link.
+  let authorLink = $state<{ id: string; title: string } | null>(null);
   let errorMessage: string | null = $state(null);
   let lastNsfwMode = $state(nsfw.mode);
   let ratingBusy = $state(false);
@@ -204,10 +208,13 @@
 
   $effect(() => {
     if (!book) return;
-    return appChrome.setBreadcrumbs([
-      { label: "Books", href: "/books" },
-      { label: book.title },
-    ]);
+    const crumbs: AppBreadcrumb[] = [{ label: "Books", href: "/books" }];
+    // When the book sits under an author, surface it ("Books / Andy Weir / Project Hail Mary").
+    if (authorLink) {
+      crumbs.push({ label: authorLink.title, href: resolveEntityHref("book-author", authorLink.id) });
+    }
+    crumbs.push({ label: book.title });
+    return appChrome.setBreadcrumbs(crumbs);
   });
 
   async function loadBook(targetBookId = bookId) {
@@ -216,12 +223,18 @@
     errorMessage = null;
     try {
       const nextBook = await fetchBook(targetBookId);
-      const [relationships, chapters] = await Promise.all([
+      const parentId = nextBook.parentEntityId;
+      const [relationships, chapters, parentThumbs] = await Promise.all([
         hydrateStandardRelationshipCards(nextBook),
         hydrateChapters(nextBook),
+        parentId ? fetchOrderedEntityThumbnails([parentId]) : Promise.resolve([]),
       ]);
       const progressSummary = await hydrateProgressChapterSummary(nextBook, chapters);
       if (token !== loadToken) return;
+
+      // A book scanned under an Author/ folder is parented to a book-author; surface it as a back-link.
+      const authorThumb = parentThumbs.find((thumbnail) => thumbnail.kind === ENTITY_KIND.bookAuthor);
+      authorLink = authorThumb ? { id: authorThumb.id, title: authorThumb.title } : null;
 
       book = nextBook;
       chapterDetails = chapters;

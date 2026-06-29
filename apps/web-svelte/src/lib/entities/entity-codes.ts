@@ -70,6 +70,7 @@ const ROUTE_RULES: EntityRouteRule[] = [
   { kind: ENTITY_KIND.videoSeason, topLevel: false, browsePath: "/series", resolve: (id, parent) => parent ? `/series/${parent.id}/seasons/${id}` : undefined },
   { kind: ENTITY_KIND.gallery, topLevel: true, browsePath: "/galleries", resolve: (id) => `/galleries/${id}` },
   { kind: ENTITY_KIND.book, topLevel: true, browsePath: "/books", resolve: (id) => `/books/${id}` },
+  { kind: ENTITY_KIND.bookAuthor, topLevel: true, browsePath: "/authors", resolve: (id) => `/authors/${id}` },
   { kind: ENTITY_KIND.bookVolume, topLevel: false, browsePath: "/books", resolve: (id, parent) => parent ? `/books/${parent.id}/volumes/${id}` : undefined },
   { kind: ENTITY_KIND.bookChapter, topLevel: false, browsePath: "/books", resolve: (id, parent) => parent ? `/books/${parent.id}/chapters/${id}` : undefined },
   { kind: ENTITY_KIND.image, topLevel: true, browsePath: "/images", resolve: (id) => `/images/${id}` },

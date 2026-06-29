@@ -166,7 +166,7 @@ export function toAspectRatioNumeric(ratio: EntityThumbnailAspectRatio): number 
 export function aspectRatioForKind(kind: string): EntityThumbnailAspectRatio {
   if (kind === ENTITY_KIND.video) return "video";
   if (kind === ENTITY_KIND.movie || kind === ENTITY_KIND.videoSeries || kind === ENTITY_KIND.videoSeason) return "poster";
-  if (kind === ENTITY_KIND.book || kind === ENTITY_KIND.bookChapter || kind === ENTITY_KIND.bookPage || kind === ENTITY_KIND.bookVolume) return "poster";
+  if (kind === ENTITY_KIND.book || kind === ENTITY_KIND.bookAuthor || kind === ENTITY_KIND.bookChapter || kind === ENTITY_KIND.bookPage || kind === ENTITY_KIND.bookVolume) return "poster";
   if (kind === ENTITY_KIND.person) return { width: 4, height: 5 };
   if (kind === ENTITY_KIND.studio) return "wide";
   if (kind === ENTITY_KIND.collection) return "video";
@@ -241,7 +241,7 @@ export function pickHoverAsset(card: EntityThumbnailCard, pointerRatio: number):
 /** Maps an entity kind code to the closest matching thumbnail meta icon for placeholder display. */
 export function iconForKind(kind: string): EntityThumbnailMetaIcon {
   if (kind === ENTITY_KIND.audio || kind === ENTITY_KIND.audioLibrary || kind === ENTITY_KIND.audioTrack) return "audio";
-  if (kind === ENTITY_KIND.book || kind === ENTITY_KIND.bookChapter || kind === ENTITY_KIND.bookPage || kind === ENTITY_KIND.bookVolume) return "book";
+  if (kind === ENTITY_KIND.book || kind === ENTITY_KIND.bookAuthor || kind === ENTITY_KIND.bookChapter || kind === ENTITY_KIND.bookPage || kind === ENTITY_KIND.bookVolume) return "book";
   if (kind === ENTITY_KIND.movie || kind === ENTITY_KIND.video || kind === ENTITY_KIND.videoSeason || kind === ENTITY_KIND.videoSeries) return "video";
   if (kind === ENTITY_KIND.gallery) return "gallery";
   if (kind === ENTITY_KIND.image) return "image";
