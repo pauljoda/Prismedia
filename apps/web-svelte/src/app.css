@@ -184,23 +184,27 @@
   }
 
   /*
-   * iOS Safari zooms the viewport when focused inputs use a computed font-size < 16px.
-   * max(16px, 1em) stays at least 16px while still scaling up with component styles.
-   *
-   * Selects are opt-out via `.allow-compact-input-text` because tapping a native
-   * select on iOS opens the system picker rather than focusing inline text, so the
-   * zoom-trap doesn't apply and many UI surfaces need a smaller select to stay
-   * visually consistent with their surrounding monospace controls.
+   * iOS Safari zooms the viewport when a focused text input has a computed font-size < 16px — but that
+   * only happens on touch. The floor is therefore scoped to coarse pointers (below); on desktop, text
+   * inputs/textareas keep their component (Tailwind) font size so they stay visually consistent with the
+   * surrounding controls (notably the custom Select, which renders a button at its component size) rather
+   * than being forced larger than everything around them.
    */
-  input:not(.allow-compact-input-text):not([type="button"]):not([type="checkbox"]):not(
-      [type="color"]
-    ):not([type="file"]):not([type="hidden"]):not([type="image"]):not([type="radio"]):not(
-      [type="range"]
-    ):not([type="reset"]):not([type="submit"]),
-  textarea {
-    font-size: max(16px, 1em) !important;
+  @media (pointer: coarse) {
+    input:not(.allow-compact-input-text):not([type="button"]):not([type="checkbox"]):not(
+        [type="color"]
+      ):not([type="file"]):not([type="hidden"]):not([type="image"]):not([type="radio"]):not(
+        [type="range"]
+      ):not([type="reset"]):not([type="submit"]),
+    textarea {
+      font-size: max(16px, 1em) !important;
+    }
   }
 
+  /*
+   * Native selects don't trip the iOS focus-zoom (tapping opens the system picker), so they never need
+   * the floor; non-compact ones stay at 16px for visual weight, compact ones opt out below.
+   */
   select:not(.allow-compact-input-text) {
     font-size: max(16px, 1em) !important;
   }
