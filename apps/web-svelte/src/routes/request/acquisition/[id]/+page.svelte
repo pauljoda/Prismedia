@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import { Bell, BellRing, ChevronLeft, CloudDownload, FileText, Loader2, Search, SearchX, Upload, X } from "@lucide/svelte";
+  import { Bell, BellRing, ChevronLeft, CloudDownload, FileText, Loader2, RefreshCw, Search, SearchX, Upload, X } from "@lucide/svelte";
   import { Badge } from "@prismedia/ui-svelte";
   import { page } from "$app/state";
   import EntityDetail from "$lib/components/entities/EntityDetail.svelte";
@@ -20,6 +20,7 @@
   import {
     blocklistAcquisitionCandidate,
     cancelAcquisition,
+    reSearchAcquisition,
     fetchAcquisition,
     fetchAcquisitionFiles,
     fetchAcquisitionTransfer,
@@ -39,6 +40,7 @@
   let error = $state<string | null>(null);
   let busy = $state(false);
   let pollTimer: ReturnType<typeof setInterval> | null = null;
+  let reSearchPolls = $state(0);
 
   const card = $derived(detail ? acquisitionToDetailCard(detail.summary) : null);
   const status = $derived(detail?.summary.status ?? null);
@@ -114,6 +116,20 @@
     }
   }
 
+  // Re-run the release search on demand (manual counterpart to monitoring).
+  async function reSearch() {
+    if (busy) return;
+    busy = true;
+    try {
+      detail = await reSearchAcquisition(id);
+      reSearchPolls = 8; // ~24s of bridge polling to catch the search start/finish
+    } catch (err) {
+      error = err instanceof Error ? err.message : "Failed to re-search";
+    } finally {
+      busy = false;
+    }
+  }
+
   // Toggle monitoring across its three states: actively monitoring → stop; auto-paused (e.g. after the
   // acquisition was cancelled) → resume; not monitored → start. When on, Prismedia keeps re-running the
   // release search until the book is acquired.
@@ -170,7 +186,12 @@
   // Monitoring is offered for any not-yet-acquired book; an imported book has nothing left to search for.
   const showMonitorToggle = $derived(status !== null && status !== ACQUISITION_STATUS.imported);
   const monitorActive = $derived(monitor?.status === MONITOR_STATUS.active);
+  // Re-search makes sense only while still seeking a release; an in-flight/imported/cancelled item is left alone.
+  const canReSearch = $derived(status === ACQUISITION_STATUS.awaitingSelection || status === ACQUISITION_STATUS.failed);
   const actionButtons = $derived<EntityDetailActionButton[]>([
+    ...(canReSearch
+      ? [{ id: "research", label: "Search again", icon: RefreshCw, variant: "default", onClick: reSearch, disabled: busy } satisfies EntityDetailActionButton]
+      : []),
     ...(showMonitorToggle
       ? [{
           id: "monitor",
@@ -186,13 +207,23 @@
       : []),
   ]);
 
+  // After a manual "Search again" the status is still failed/awaiting until the worker picks the job up, so
+  // bridge-poll for a bounded window to catch the search starting (and finishing) even if it completes
+  // between ticks; once the acquisition is active the normal poll below drives it.
+  const shouldPoll = $derived(isActive || reSearchPolls > 0);
+
+  async function pollTick() {
+    if (reSearchPolls > 0) reSearchPolls -= 1;
+    await load();
+  }
+
   $effect(() => {
     if (id) void load();
   });
   $effect(() => {
-    if (isActive && !pollTimer) {
-      pollTimer = setInterval(load, 3000);
-    } else if (!isActive && pollTimer) {
+    if (shouldPoll && !pollTimer) {
+      pollTimer = setInterval(pollTick, 3000);
+    } else if (!shouldPoll && pollTimer) {
       clearInterval(pollTimer);
       pollTimer = null;
     }

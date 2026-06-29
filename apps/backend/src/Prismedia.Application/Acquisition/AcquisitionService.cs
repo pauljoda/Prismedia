@@ -156,6 +156,28 @@ public sealed class AcquisitionService(
         return await store.GetAsync(id, cancellationToken);
     }
 
+    /// <summary>
+    /// Re-runs the release search for an existing acquisition on demand (the manual counterpart to monitoring).
+    /// Enqueues the standard <see cref="JobType.AcquisitionSearch"/> — deduped per acquisition, and the handler
+    /// re-checks that the acquisition is still searchable — so it can't disturb an in-flight grab. Returns the
+    /// acquisition, or null when it no longer exists.
+    /// </summary>
+    public async Task<AcquisitionDetail?> ReSearchAsync(Guid id, CancellationToken cancellationToken) {
+        var detail = await store.GetAsync(id, cancellationToken);
+        if (detail is null) {
+            return null;
+        }
+
+        await queue.EnqueueAsync(
+            new EnqueueJobRequest(
+                JobType.AcquisitionSearch,
+                PayloadJson: AcquisitionJobPayload.Serialize(id),
+                TargetEntityId: id.ToString(),
+                TargetLabel: detail.Summary.Title),
+            cancellationToken);
+        return detail;
+    }
+
     /// <summary>Persists a new acquisition and enqueues the background search job that fills in candidates.</summary>
     public async Task<AcquisitionSummary> CreateAndSearchAsync(AcquisitionCreateRequest request, CancellationToken cancellationToken) {
         if (string.IsNullOrWhiteSpace(request.Title)) {

@@ -11676,6 +11676,49 @@ export const blocklistAcquisitionCandidate = async (id: string,
 
 
 
+export type reSearchAcquisitionResponse200 = {
+  data: AcquisitionDetail
+  status: 200
+}
+
+export type reSearchAcquisitionResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type reSearchAcquisitionResponseSuccess = (reSearchAcquisitionResponse200) & {
+  headers: Headers;
+};
+export type reSearchAcquisitionResponseError = (reSearchAcquisitionResponse404) & {
+  headers: Headers;
+};
+
+export type reSearchAcquisitionResponse = (reSearchAcquisitionResponseSuccess | reSearchAcquisitionResponseError)
+
+export const getReSearchAcquisitionUrl = (id: string,) => {
+
+
+
+
+  return `/api/acquisitions/${id}/search`
+}
+
+/**
+ * @summary Re-runs the release search for an existing acquisition on demand.
+ */
+export const reSearchAcquisition = async (id: string, options?: RequestInit): Promise<reSearchAcquisitionResponse> => {
+
+  return orvalFetch<reSearchAcquisitionResponse>(getReSearchAcquisitionUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
 export type cancelAcquisitionResponse200 = {
   data: AcquisitionDetail
   status: 200

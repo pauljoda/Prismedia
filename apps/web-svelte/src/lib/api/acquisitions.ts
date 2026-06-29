@@ -16,6 +16,7 @@ import {
   listDownloadClients,
   listIndexers,
   queueAcquisition as queueAcquisitionRequest,
+  reSearchAcquisition as reSearchAcquisitionRequest,
   saveAcquisitionProfile as saveAcquisitionProfileRequest,
   saveDownloadClient,
   saveIndexer,
@@ -116,6 +117,11 @@ export async function queueAcquisitionCandidate(id: string, candidateId: string)
 
 export async function cancelAcquisition(id: string): Promise<AcquisitionDetail> {
   return unwrapGenerated(await cancelAcquisitionRequest(id), "Failed to cancel acquisition");
+}
+
+/** Re-runs the release search for an existing acquisition on demand. */
+export async function reSearchAcquisition(id: string): Promise<AcquisitionDetail> {
+  return unwrapGenerated(await reSearchAcquisitionRequest(id), "Failed to re-search");
 }
 
 export async function blocklistAcquisitionCandidate(id: string, candidateId: string): Promise<AcquisitionDetail> {
