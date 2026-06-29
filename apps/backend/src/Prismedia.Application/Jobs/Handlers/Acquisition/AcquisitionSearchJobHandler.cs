@@ -18,12 +18,35 @@ public sealed class AcquisitionSearchJobHandler(
     ILogger<AcquisitionSearchJobHandler> logger) : IJobHandler {
     public JobType Type => JobType.AcquisitionSearch;
 
+    /// <summary>
+    /// A search may only mutate an acquisition that is genuinely still seeking a release. A queued or
+    /// in-flight grab, an imported book, or a cancelled request must be left alone — otherwise a stale
+    /// monitor-enqueued search that ran after the state changed would reset the status, replace candidates,
+    /// and (with auto-pick) delete and re-grab the live torrent. This is the execution-time counterpart to
+    /// the monitor's enqueue-time gate, closing the queue-latency window between them.
+    /// </summary>
+    public static bool IsSearchable(AcquisitionStatus status) => status is not (
+        AcquisitionStatus.Queued
+        or AcquisitionStatus.Downloading
+        or AcquisitionStatus.Downloaded
+        or AcquisitionStatus.Importing
+        or AcquisitionStatus.Imported
+        or AcquisitionStatus.Cancelled);
+
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var payload = AcquisitionJobPayload.Parse(context.Job.PayloadJson);
 
         var input = await store.GetSearchInputAsync(payload.AcquisitionId, cancellationToken);
         if (input is null) {
             logger.LogInformation("AcquisitionSearch: acquisition {Id} no longer exists; skipping.", payload.AcquisitionId);
+            return;
+        }
+
+        // Re-check at execution time: the acquisition may have been queued/imported/cancelled since this
+        // search was enqueued (e.g. a monitor sweep that then waited behind other work).
+        var currentStatus = await store.GetStatusAsync(payload.AcquisitionId, cancellationToken);
+        if (currentStatus is { } status && !IsSearchable(status)) {
+            logger.LogInformation("AcquisitionSearch: acquisition {Id} is {Status}; skipping a now-stale search.", payload.AcquisitionId, status.ToCode());
             return;
         }
 

@@ -143,6 +143,9 @@ public interface IAcquisitionStore {
     /// <summary>Returns the search input (title/author) for an acquisition, or null when it no longer exists.</summary>
     Task<AcquisitionSearchInput?> GetSearchInputAsync(Guid id, CancellationToken cancellationToken);
 
+    /// <summary>Returns an acquisition's current status, or null when it no longer exists.</summary>
+    Task<AcquisitionStatus?> GetStatusAsync(Guid id, CancellationToken cancellationToken);
+
     Task SetStatusAsync(Guid id, AcquisitionStatus status, string? message, CancellationToken cancellationToken);
 
     /// <summary>Replaces an acquisition's candidate set with a freshly scored search result.</summary>
