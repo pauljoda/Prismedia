@@ -24,6 +24,11 @@ public sealed class EfBookAcquisitionProfileStore(PrismediaDbContext db) : IBook
         return row?.AutoPick ?? false;
     }
 
+    public async Task<bool> GetDefaultAutoRedownloadAsync(CancellationToken cancellationToken) {
+        var row = await DefaultRowAsync(cancellationToken);
+        return row?.AutoRedownload ?? false;
+    }
+
     public async Task<IReadOnlyList<BookAcquisitionProfileView>> ListAsync(CancellationToken cancellationToken) {
         var rows = await db.BookAcquisitionProfiles
             .AsNoTracking()
@@ -67,6 +72,7 @@ public sealed class EfBookAcquisitionProfileStore(PrismediaDbContext db) : IBook
         row.RequiredTerms = command.RequiredTerms.ToArray();
         row.IgnoredTerms = command.IgnoredTerms.ToArray();
         row.AutoPick = command.AutoPick;
+        row.AutoRedownload = command.AutoRedownload;
         row.IsDefault = shouldBeDefault;
         row.UpdatedAt = now;
 
@@ -136,5 +142,6 @@ public sealed class EfBookAcquisitionProfileStore(PrismediaDbContext db) : IBook
             row.MaxSizeBytes,
             row.RequiredTerms,
             row.IgnoredTerms,
-            row.AutoPick);
+            row.AutoPick,
+            row.AutoRedownload);
 }

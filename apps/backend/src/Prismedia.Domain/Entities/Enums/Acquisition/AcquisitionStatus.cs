@@ -87,7 +87,11 @@ public enum ReleaseRejectionReason {
 
     /// <summary>The release has no usable download or magnet link (e.g. a meta-search info-page result).</summary>
     [Code("no-download-link")]
-    NoDownloadLink
+    NoDownloadLink,
+
+    /// <summary>The release's identity is on the acquisition blocklist (a prior attempt failed or it was manually blocked).</summary>
+    [Code("blocklisted")]
+    Blocklisted
 }
 
 /// <summary>

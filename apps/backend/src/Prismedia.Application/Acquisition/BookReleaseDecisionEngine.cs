@@ -142,9 +142,15 @@ public interface IBookReleaseDecisionEngine {
     /// Evaluates each release against the rules and returns scored verdicts ordered best-first.
     /// Accepted candidates (highest score first) precede rejected ones so a review UI can preselect the top accepted release.
     /// </summary>
+    /// <param name="blocklistedIdentities">
+    /// Normalized release identities (see <see cref="ReleaseIdentity"/>) that have been blocklisted. A release whose
+    /// identity is in this set is rejected with <see cref="ReleaseRejectionReason.Blocklisted"/> so failed-download
+    /// auto-recovery never re-grabs a release a prior attempt already failed. Null/empty means no blocklist applies.
+    /// </param>
     IReadOnlyList<ScoredRelease> Evaluate(
         IReadOnlyList<(IndexerRelease Release, Guid? IndexerConfigId, string IndexerName)> releases,
-        BookAcquisitionRules rules);
+        BookAcquisitionRules rules,
+        IReadOnlySet<string>? blocklistedIdentities = null);
 }
 
 /// <summary>Default decision engine: runs every specification, then ranks accepted releases by a seeder-weighted score.</summary>
@@ -162,7 +168,8 @@ public sealed class BookReleaseDecisionEngine : IBookReleaseDecisionEngine {
 
     public IReadOnlyList<ScoredRelease> Evaluate(
         IReadOnlyList<(IndexerRelease Release, Guid? IndexerConfigId, string IndexerName)> releases,
-        BookAcquisitionRules rules) {
+        BookAcquisitionRules rules,
+        IReadOnlySet<string>? blocklistedIdentities = null) {
         var scored = new List<ScoredRelease>(releases.Count);
         foreach (var (release, indexerConfigId, indexerName) in releases) {
             var rejections = new List<ReleaseRejectionReason>();
@@ -170,6 +177,14 @@ public sealed class BookReleaseDecisionEngine : IBookReleaseDecisionEngine {
                 if (specification.Evaluate(release, rules) is { } reason) {
                     rejections.Add(reason);
                 }
+            }
+
+            // The blocklist gate is the dynamic-state analog of a specification: it depends on the
+            // current blocklist (not the static profile rules), so it is applied here rather than in
+            // the rules-only Specifications array. Same transparent-rejection outcome.
+            if (blocklistedIdentities is { Count: > 0 }
+                && blocklistedIdentities.Contains(ReleaseIdentity.For(release.InfoHash, indexerName, release.Title))) {
+                rejections.Add(ReleaseRejectionReason.Blocklisted);
             }
 
             scored.Add(new ScoredRelease(

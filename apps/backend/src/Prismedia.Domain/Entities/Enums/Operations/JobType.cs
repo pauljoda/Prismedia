@@ -127,5 +127,9 @@ public enum JobType {
 
     /// <summary>Moves a completed acquisition payload into a library root, writes identify hints, and enqueues a book scan.</summary>
     [Code("acquisition-import")]
-    AcquisitionImport
+    AcquisitionImport,
+
+    /// <summary>Handles a failed download: blocklists the release and, when auto-redownload is on, grabs the next-best candidate.</summary>
+    [Code("acquisition-failed-handle")]
+    AcquisitionFailedHandle
 }

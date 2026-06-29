@@ -84,11 +84,42 @@ public sealed record AcquisitionSearchOutcome(
 public sealed record AcquisitionQueueCandidate(
     Guid CandidateId,
     string Title,
+    string IndexerName,
     string? DownloadUrl,
     string? MagnetUrl,
     string? InfoHash,
     string? InfoUrl,
     DownloadProtocol Protocol);
+
+/// <summary>
+/// Snapshot of the release an acquisition was last sent to download, persisted so a later failure can
+/// blocklist exactly that release. The <see cref="Identity"/> is computed the same way future search
+/// candidates are, so the blocklist recognizes the release when it reappears.
+/// </summary>
+public sealed record SelectedRelease(string Title, string? IndexerName, string? InfoHash) {
+    /// <summary>The normalized blocklist identity for this release. Derived, so it is not persisted.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string Identity => ReleaseIdentity.For(InfoHash, IndexerName, Title);
+}
+
+/// <summary>
+/// Server-side reference to an accepted candidate the failed-handler may re-queue, carrying the fields
+/// needed to compute its blocklist <see cref="Identity"/> and skip it when it is itself blocklisted.
+/// </summary>
+public sealed record AcquisitionCandidateRef(Guid CandidateId, string Title, string IndexerName, string? InfoHash) {
+    /// <summary>The normalized blocklist identity for this candidate.</summary>
+    public string Identity => ReleaseIdentity.For(InfoHash, IndexerName, Title);
+}
+
+/// <summary>Input for adding a release identity to the acquisition blocklist (idempotent on the identity).</summary>
+public sealed record BlocklistAddRequest(
+    string Identity,
+    BlocklistReason Reason,
+    string? Title,
+    string? IndexerName,
+    string? InfoHash,
+    Guid? AcquisitionId,
+    string? Message);
 
 /// <summary>Resolves an indexer release's info page into a usable magnet link when no direct link is provided.</summary>
 public interface IReleaseLinkResolver {

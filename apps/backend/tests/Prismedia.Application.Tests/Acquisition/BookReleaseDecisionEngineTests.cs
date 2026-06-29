@@ -146,6 +146,46 @@ public sealed class BookReleaseDecisionEngineTests {
     }
 
     [Fact]
+    public void RejectsBlocklistedReleaseByInfoHash() {
+        var release = new IndexerRelease("Some Book (epub)", 5_000_000, 50, 5, DownloadProtocol.Torrent, "http://dl", "magnet:?x", "ABCDEF", "http://info", null, null);
+        var blocklist = new HashSet<string> { ReleaseIdentity.For("abcdef", "Test Indexer", "irrelevant title") };
+
+        var result = Engine.Evaluate(One(release), BookAcquisitionRules.Default, blocklist);
+
+        Assert.False(result[0].Accepted);
+        Assert.Contains(ReleaseRejectionReason.Blocklisted, result[0].Rejections);
+    }
+
+    [Fact]
+    public void RejectsBlocklistedReleaseByTitleWhenNoInfoHash() {
+        var noHash = new IndexerRelease("Some Book (epub)", 5_000_000, 50, 5, DownloadProtocol.Torrent, "http://dl", "magnet:?x", null, "http://info", null, null);
+        var blocklist = new HashSet<string> { ReleaseIdentity.For(null, "Test Indexer", "Some Book (epub)") };
+
+        var result = Engine.Evaluate(One(noHash), BookAcquisitionRules.Default, blocklist);
+
+        Assert.Contains(ReleaseRejectionReason.Blocklisted, result[0].Rejections);
+    }
+
+    [Fact]
+    public void NonBlocklistedReleaseIsUnaffectedByBlocklist() {
+        var blocklist = new HashSet<string> { ReleaseIdentity.For("someotherhash", "Other", "Other Book") };
+
+        var result = Engine.Evaluate(One(Release()), BookAcquisitionRules.Default, blocklist);
+
+        Assert.True(result[0].Accepted);
+        Assert.DoesNotContain(ReleaseRejectionReason.Blocklisted, result[0].Rejections);
+    }
+
+    [Fact]
+    public void NullBlocklistLeavesDecisionsUnchanged() {
+        // The blocklist parameter defaults to null so existing callers see no behavior change.
+        var result = Engine.Evaluate(One(Release()), BookAcquisitionRules.Default, null);
+
+        Assert.True(result[0].Accepted);
+        Assert.Empty(result[0].Rejections);
+    }
+
+    [Fact]
     public void OrdersAcceptedBeforeRejectedAndBySeeders() {
         var highSeed = Release(title: "Book A (epub)", seeders: 100);
         var lowSeed = Release(title: "Book B (epub)", seeders: 5);

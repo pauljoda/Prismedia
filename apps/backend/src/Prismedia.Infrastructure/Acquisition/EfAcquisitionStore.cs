@@ -131,7 +131,37 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
             .FirstOrDefaultAsync(candidate => candidate.Id == candidateId && candidate.AcquisitionId == acquisitionId, cancellationToken);
         return row is null
             ? null
-            : new AcquisitionQueueCandidate(row.Id, row.Title, row.DownloadUrl, row.MagnetUrl, row.InfoHash, row.InfoUrl, row.Protocol);
+            : new AcquisitionQueueCandidate(row.Id, row.Title, row.IndexerName, row.DownloadUrl, row.MagnetUrl, row.InfoHash, row.InfoUrl, row.Protocol);
+    }
+
+    public async Task<IReadOnlyList<AcquisitionCandidateRef>> ListAcceptedCandidatesAsync(Guid acquisitionId, CancellationToken cancellationToken) {
+        var rows = await db.ReleaseCandidates
+            .AsNoTracking()
+            .Where(candidate => candidate.AcquisitionId == acquisitionId && candidate.Accepted)
+            .OrderByDescending(candidate => candidate.Score)
+            .Select(candidate => new { candidate.Id, candidate.Title, candidate.IndexerName, candidate.InfoHash })
+            .ToArrayAsync(cancellationToken);
+        return rows.Select(row => new AcquisitionCandidateRef(row.Id, row.Title, row.IndexerName, row.InfoHash)).ToArray();
+    }
+
+    public async Task SetSelectedReleaseAsync(Guid acquisitionId, SelectedRelease selected, CancellationToken cancellationToken) {
+        var row = await db.Acquisitions.FirstOrDefaultAsync(row => row.Id == acquisitionId, cancellationToken);
+        if (row is null) {
+            return;
+        }
+
+        row.SelectedReleaseJson = JsonSerializer.Serialize(selected);
+        row.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<SelectedRelease?> GetSelectedReleaseAsync(Guid acquisitionId, CancellationToken cancellationToken) {
+        var json = await db.Acquisitions
+            .AsNoTracking()
+            .Where(row => row.Id == acquisitionId)
+            .Select(row => row.SelectedReleaseJson)
+            .FirstOrDefaultAsync(cancellationToken);
+        return string.IsNullOrWhiteSpace(json) ? null : JsonSerializer.Deserialize<SelectedRelease>(json);
     }
 
     public async Task CreateTransferAsync(Guid acquisitionId, Guid? downloadClientConfigId, string clientItemId, string? category, CancellationToken cancellationToken) {

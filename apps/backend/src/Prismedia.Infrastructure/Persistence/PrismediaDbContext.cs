@@ -144,6 +144,8 @@ public sealed class PrismediaDbContext : DbContext {
 
     public DbSet<AcquisitionImportHintRow> AcquisitionImportHints => Set<AcquisitionImportHintRow>();
 
+    public DbSet<AcquisitionBlocklistRow> AcquisitionBlocklist => Set<AcquisitionBlocklistRow>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder) {
         modelBuilder.ConfigureBaseEntityModel();
         modelBuilder.ConfigureEntityRelationshipModel();

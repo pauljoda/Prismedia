@@ -11,9 +11,10 @@ namespace Prismedia.Application.Acquisition;
 /// </summary>
 public sealed class AcquisitionQueueService(
     IAcquisitionStore acquisitions,
+    IAcquisitionBlocklistStore blocklist,
     IDownloadClientConfigStore downloadClients,
     IDownloadClientFactory clients,
-    IReleaseLinkResolver linkResolver) {
+    IReleaseLinkResolver linkResolver) : IAcquisitionQueueService {
     /// <summary>Queues a chosen candidate: resolves a usable link (direct, magnet, or scraped from the info page) and hands it to the download client.</summary>
     public async Task<AcquisitionDetail?> QueueAsync(Guid acquisitionId, Guid candidateId, CancellationToken cancellationToken) {
         var candidate = await acquisitions.GetQueueCandidateAsync(acquisitionId, candidateId, cancellationToken);
@@ -23,6 +24,16 @@ public sealed class AcquisitionQueueService(
 
         if (candidate.Protocol != DownloadProtocol.Torrent) {
             throw new AcquisitionConfigurationException(ApiProblemCodes.AcquisitionInvalid, "Only torrent releases can be downloaded in this version.");
+        }
+
+        // The blocklist is enforced at search time, but a stored candidate row can still carry a blocklisted
+        // identity (e.g. the release that just failed). Refuse it here too so the manual "queue this release"
+        // action can't bypass the blocklist.
+        var identity = ReleaseIdentity.For(candidate.InfoHash, candidate.IndexerName, candidate.Title);
+        if ((await blocklist.GetIdentitiesAsync(cancellationToken)).Contains(identity)) {
+            throw new AcquisitionConfigurationException(
+                ApiProblemCodes.AcquisitionInvalid,
+                "This release is blocklisted from a previous failed attempt. Remove it from the blocklist to download it again.");
         }
 
         var url = await ResolveUrlAsync(candidate, cancellationToken);
@@ -41,6 +52,11 @@ public sealed class AcquisitionQueueService(
             var clientItemId = await downloadClient
                 .AddAsync(connection, new DownloadAddRequest(url, candidate.InfoHash, client.Category), cancellationToken);
             await acquisitions.CreateTransferAsync(acquisitionId, client.Id, clientItemId, client.Category, cancellationToken);
+            // Snapshot the chosen release so a later failure can blocklist exactly it (and pick the next-best).
+            await acquisitions.SetSelectedReleaseAsync(
+                acquisitionId,
+                new SelectedRelease(candidate.Title, candidate.IndexerName, candidate.InfoHash),
+                cancellationToken);
             await acquisitions.SetStatusAsync(acquisitionId, AcquisitionStatus.Queued, "Sent to download client.", cancellationToken);
         } catch (AcquisitionConfigurationException) {
             throw;

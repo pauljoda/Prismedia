@@ -31,4 +31,5 @@ export interface BookAcquisitionProfileView {
   requiredTerms: string[];
   ignoredTerms: string[];
   autoPick: boolean;
+  autoRedownload: boolean;
 }

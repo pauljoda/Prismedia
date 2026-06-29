@@ -32,4 +32,5 @@ export interface BookAcquisitionProfileSaveRequest {
   requiredTerms: string[];
   ignoredTerms: string[];
   autoPick: boolean;
+  autoRedownload: boolean;
 }

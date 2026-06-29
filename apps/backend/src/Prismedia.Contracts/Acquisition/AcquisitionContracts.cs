@@ -184,7 +184,8 @@ public sealed record BookAcquisitionProfileView(
     long? MaxSizeBytes,
     IReadOnlyList<string> RequiredTerms,
     IReadOnlyList<string> IgnoredTerms,
-    bool AutoPick);
+    bool AutoPick,
+    bool AutoRedownload);
 
 /// <summary>Request payload for creating or updating a book acquisition profile.</summary>
 public sealed record BookAcquisitionProfileSaveRequest(
@@ -201,4 +202,16 @@ public sealed record BookAcquisitionProfileSaveRequest(
     long? MaxSizeBytes,
     IReadOnlyList<string> RequiredTerms,
     IReadOnlyList<string> IgnoredTerms,
-    bool AutoPick);
+    bool AutoPick,
+    bool AutoRedownload);
+
+/// <summary>A blocklisted release identity, surfaced for the blocklist management surface.</summary>
+public sealed record AcquisitionBlocklistEntry(
+    Guid Id,
+    BlocklistReason Reason,
+    string? Title,
+    string? IndexerName,
+    string? InfoHash,
+    Guid? AcquisitionId,
+    string? Message,
+    DateTimeOffset CreatedAt);

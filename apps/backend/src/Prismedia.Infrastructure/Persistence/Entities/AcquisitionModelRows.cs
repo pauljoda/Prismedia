@@ -94,6 +94,13 @@ public sealed class BookAcquisitionProfileRow {
     /// <summary>When true, automatically queue the best acceptable candidate instead of waiting for review.</summary>
     public bool AutoPick { get; set; }
 
+    /// <summary>
+    /// When true, a failed download is automatically blocklisted and the next-best acceptable candidate is
+    /// grabbed without manual intervention. When false, a failed download blocklists the release but leaves
+    /// the acquisition <see cref="AcquisitionStatus.Failed"/> for the user to retry.
+    /// </summary>
+    public bool AutoRedownload { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }
@@ -218,4 +225,36 @@ public sealed class AcquisitionImportHintRow {
 
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
+}
+
+/// <summary>
+/// A release identity refused for future acquisition. Populated when a download fails (auto-recovery)
+/// or when the user manually blocks a release, and consulted by the decision engine so the same bad
+/// release is never re-grabbed. The identity is computed by <c>ReleaseIdentity</c> (info hash first,
+/// else normalized indexer + title); the display fields are retained for the management surface.
+/// </summary>
+public sealed class AcquisitionBlocklistRow {
+    public Guid Id { get; set; }
+
+    /// <summary>Normalized release identity (the lookup key); unique across the blocklist.</summary>
+    public string Identity { get; set; } = string.Empty;
+
+    public BlocklistReason Reason { get; set; } = BlocklistReason.Failed;
+
+    /// <summary>Release title at the time it was blocklisted, for display.</summary>
+    public string? Title { get; set; }
+
+    /// <summary>Indexer the blocklisted release came from, for display.</summary>
+    public string? IndexerName { get; set; }
+
+    /// <summary>Torrent info hash when known, for display/debugging.</summary>
+    public string? InfoHash { get; set; }
+
+    /// <summary>Acquisition that triggered the block, kept loose so deleting it leaves the blocklist intact.</summary>
+    public Guid? AcquisitionId { get; set; }
+
+    /// <summary>Optional human-readable detail (e.g. the failure message).</summary>
+    public string? Message { get; set; }
+
+    public DateTimeOffset CreatedAt { get; set; }
 }

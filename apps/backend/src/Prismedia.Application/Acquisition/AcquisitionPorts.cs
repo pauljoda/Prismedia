@@ -64,7 +64,8 @@ public sealed record BookAcquisitionProfileSaveCommand(
     long? MaxSizeBytes,
     IReadOnlyList<string> RequiredTerms,
     IReadOnlyList<string> IgnoredTerms,
-    bool AutoPick);
+    bool AutoPick,
+    bool AutoRedownload);
 
 /// <summary>Persistence port for book acquisition profiles (matching rules + import target).</summary>
 public interface IBookAcquisitionProfileStore {
@@ -77,10 +78,22 @@ public interface IBookAcquisitionProfileStore {
     /// <summary>True when the default profile is set to auto-queue the top accepted release without manual review.</summary>
     Task<bool> GetDefaultAutoPickAsync(CancellationToken cancellationToken);
 
+    /// <summary>True when the default profile auto-blocklists a failed download and grabs the next-best candidate.</summary>
+    Task<bool> GetDefaultAutoRedownloadAsync(CancellationToken cancellationToken);
+
     Task<IReadOnlyList<BookAcquisitionProfileView>> ListAsync(CancellationToken cancellationToken);
     Task<BookAcquisitionProfileView?> GetAsync(Guid id, CancellationToken cancellationToken);
     Task<BookAcquisitionProfileView> SaveAsync(BookAcquisitionProfileSaveCommand command, CancellationToken cancellationToken);
     Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken);
+}
+
+/// <summary>
+/// Sends a chosen release candidate to the download client. Extracted so failed-download recovery can
+/// re-grab the next-best candidate without depending on the full queue service implementation.
+/// </summary>
+public interface IAcquisitionQueueService {
+    /// <summary>Queues the given candidate of an acquisition for download. Returns the refreshed acquisition, or null when it no longer exists.</summary>
+    Task<Contracts.Acquisition.AcquisitionDetail?> QueueAsync(Guid acquisitionId, Guid candidateId, CancellationToken cancellationToken);
 }
 
 /// <summary>Plans how a completed download's files map into the target library root.</summary>
@@ -138,6 +151,15 @@ public interface IAcquisitionStore {
     /// <summary>Loads the server-side download details for a candidate belonging to an acquisition, or null when absent.</summary>
     Task<AcquisitionQueueCandidate?> GetQueueCandidateAsync(Guid acquisitionId, Guid candidateId, CancellationToken cancellationToken);
 
+    /// <summary>Lists an acquisition's accepted candidates best-first, with the identity fields the failed-handler needs to skip blocklisted ones.</summary>
+    Task<IReadOnlyList<AcquisitionCandidateRef>> ListAcceptedCandidatesAsync(Guid acquisitionId, CancellationToken cancellationToken);
+
+    /// <summary>Records the release an acquisition was sent to download, so a later failure can blocklist exactly it.</summary>
+    Task SetSelectedReleaseAsync(Guid acquisitionId, SelectedRelease selected, CancellationToken cancellationToken);
+
+    /// <summary>Reads the last release an acquisition was sent to download, or null when none was recorded.</summary>
+    Task<SelectedRelease?> GetSelectedReleaseAsync(Guid acquisitionId, CancellationToken cancellationToken);
+
     /// <summary>Records a started transfer linking an acquisition to its download-client item.</summary>
     Task CreateTransferAsync(Guid acquisitionId, Guid? downloadClientConfigId, string clientItemId, string? category, CancellationToken cancellationToken);
 
@@ -164,4 +186,27 @@ public interface IAcquisitionStore {
 
     /// <summary>Writes the path-keyed identity hint the book scan consumes to stamp the new entity.</summary>
     Task WriteImportHintAsync(Guid acquisitionId, string sourcePath, AcquisitionImportContext context, CancellationToken cancellationToken);
+}
+
+/// <summary>
+/// Persistence port for the acquisition blocklist: release identities refused for future grabs. Consulted
+/// by the search runner (to reject blocklisted releases) and written by failed-download auto-recovery and
+/// manual blocking.
+/// </summary>
+public interface IAcquisitionBlocklistStore {
+    /// <summary>Returns every blocklisted release identity, for the decision engine's blocklist gate.</summary>
+    Task<IReadOnlySet<string>> GetIdentitiesAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Adds a release identity to the blocklist. Idempotent and first-reason-wins: if the identity is
+    /// already present its existing reason, message, and timestamp are kept and the request is a no-op
+    /// (so an automatic <see cref="BlocklistReason.Failed"/> entry is not overwritten by a later add).
+    /// </summary>
+    Task AddAsync(BlocklistAddRequest request, CancellationToken cancellationToken);
+
+    /// <summary>Lists blocklist entries newest-first for the management surface.</summary>
+    Task<IReadOnlyList<Contracts.Acquisition.AcquisitionBlocklistEntry>> ListAsync(CancellationToken cancellationToken);
+
+    /// <summary>Removes a blocklist entry by id. Returns false when it no longer exists.</summary>
+    Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken);
 }

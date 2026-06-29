@@ -58,22 +58,35 @@ public sealed class AcquisitionMonitorJobHandler(
 
         try {
             var connection = new DownloadClientConnection(client.Id, client.Kind, client.BaseUrl, client.Username, client.Password, client.Category);
-            var listing = await GetListingAsync(client.Id, clients.Get(client.Kind), connection, listingCache, cancellationToken);
+            var downloadClient = clients.Get(client.Kind);
+            var listing = await GetListingAsync(client.Id, downloadClient, connection, listingCache, cancellationToken);
             if (listing is null) {
                 // Couldn't read the client this pass — leave the acquisition untouched and try again later.
                 return;
             }
 
             if (!listing.TryGetValue(transfer.ClientItemId.ToLowerInvariant(), out var status)) {
-                // Genuinely absent from the client's full listing. Only declare removal after the grace
-                // window so a brief client outage doesn't fail an otherwise-healthy download.
-                if (DateTimeOffset.UtcNow - transfer.UpdatedAt >= RemovalGrace) {
-                    await acquisitions.SetStatusAsync(transfer.AcquisitionId, AcquisitionStatus.Failed, "The download was removed from the client.", cancellationToken);
-                } else {
-                    logger.LogDebug("AcquisitionMonitor: transfer {TransferId} not in client listing; within grace window.", transfer.TransferId);
+                // Absent from the category-scoped listing. That can mean genuinely removed OR a healthy
+                // torrent whose category drifted in the client (the category filter silently omits it), so
+                // confirm with an unfiltered per-hash lookup before treating it as gone — otherwise a
+                // recategorized but perfectly healthy download would be failed and permanently blocklisted.
+                var direct = await downloadClient.GetItemAsync(connection, transfer.ClientItemId, cancellationToken);
+                if (direct is null) {
+                    // Genuinely gone. Only declare removal after the grace window so a brief client outage
+                    // doesn't fail an otherwise-healthy download. The failed-handle job (not the monitor)
+                    // owns the terminal Failed transition, so the acquisition stays active — deduped by
+                    // target — until that job resolves it to Failed or a re-grab.
+                    if (DateTimeOffset.UtcNow - transfer.UpdatedAt >= RemovalGrace) {
+                        await EnqueueFailedHandleAsync(context, transfer.AcquisitionId, cancellationToken);
+                    } else {
+                        logger.LogDebug("AcquisitionMonitor: transfer {TransferId} not in client listing; within grace window.", transfer.TransferId);
+                    }
+
+                    return;
                 }
 
-                return;
+                // Present after all (its category drifted) — advance from the direct status rather than failing.
+                status = direct;
             }
 
             await acquisitions.UpdateTransferAsync(transfer.TransferId, status.Progress, status.State, status.ContentPath, cancellationToken);
@@ -95,6 +108,24 @@ public sealed class AcquisitionMonitorJobHandler(
         } catch (Exception ex) {
             logger.LogWarning(ex, "AcquisitionMonitor: failed to poll transfer {TransferId}", transfer.TransferId);
         }
+    }
+
+    /// <summary>
+    /// Hands a vanished download off to failed-download recovery. The release that was downloading is
+    /// snapshotted into the payload here (before any manual re-queue can overwrite the acquisition's
+    /// selected-release field) so the recovery job blocklists exactly the release that failed. Enqueue is
+    /// deduped by target, so repeated passes while the job is pending enqueue it at most once.
+    /// </summary>
+    private async Task EnqueueFailedHandleAsync(JobContext context, Guid acquisitionId, CancellationToken cancellationToken) {
+        var selected = await acquisitions.GetSelectedReleaseAsync(acquisitionId, cancellationToken);
+        const string message = "The download was removed from the client.";
+        await context.EnqueueIfNeededAsync(
+            new EnqueueJobRequest(
+                JobType.AcquisitionFailedHandle,
+                PayloadJson: AcquisitionFailedPayload.Serialize(acquisitionId, BlocklistReason.Failed, message, selected),
+                TargetEntityId: acquisitionId.ToString(),
+                TargetLabel: "Recover failed download"),
+            cancellationToken);
     }
 
     /// <summary>

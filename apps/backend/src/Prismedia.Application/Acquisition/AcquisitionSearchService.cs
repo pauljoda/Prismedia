@@ -9,6 +9,7 @@ public sealed class AcquisitionSearchRunner(
     IIndexerConfigStore indexers,
     IIndexerSearchClientFactory clients,
     IBookAcquisitionProfileStore profiles,
+    IAcquisitionBlocklistStore blocklist,
     IBookReleaseDecisionEngine decisionEngine) {
     public async Task<AcquisitionSearchOutcome> RunAsync(AcquisitionSearchInput input, CancellationToken cancellationToken) {
         var text = BuildQueryText(input.Title, input.Author);
@@ -24,6 +25,7 @@ public sealed class AcquisitionSearchRunner(
         }
 
         var rules = await profiles.GetDefaultRulesAsync(cancellationToken);
+        var blocklisted = await blocklist.GetIdentitiesAsync(cancellationToken);
         var searches = await Task.WhenAll(configs.Select(config => SearchIndexerAsync(config, text, cancellationToken)));
 
         var releases = new List<(IndexerRelease Release, Guid? IndexerConfigId, string IndexerName)>();
@@ -38,7 +40,7 @@ public sealed class AcquisitionSearchRunner(
             }
         }
 
-        return new AcquisitionSearchOutcome(decisionEngine.Evaluate(releases, rules), errors);
+        return new AcquisitionSearchOutcome(decisionEngine.Evaluate(releases, rules, blocklisted), errors);
     }
 
     private async Task<(Contracts.Acquisition.IndexerConfigDetail Config, IReadOnlyList<IndexerRelease> Found, string? Error)> SearchIndexerAsync(

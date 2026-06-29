@@ -53,6 +53,7 @@ const ENUM_EXPORTS = [
   ["AcquisitionStatus", "ACQUISITION_STATUS", "AcquisitionStatusCode"],
   ["ReleaseRejectionReason", "RELEASE_REJECTION_REASON", "ReleaseRejectionReasonCode"],
   ["ImportMode", "IMPORT_MODE", "ImportModeCode"],
+  ["BlocklistReason", "BLOCKLIST_REASON", "BlocklistReasonCode"],
 ];
 
 const camel = (name) => (name.length === 0 ? name : name[0].toLowerCase() + name.slice(1));

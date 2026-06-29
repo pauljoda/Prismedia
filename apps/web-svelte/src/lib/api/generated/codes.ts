@@ -34,6 +34,7 @@ export const PROPOSAL_KIND = {
   bookVolume: "book-volume",
   bookChapter: "book-chapter",
   bookPage: "book-page",
+  bookAuthor: "book-author",
   collection: "collection",
   gallery: "gallery",
   image: "image",
@@ -121,6 +122,7 @@ export const JOB_TYPE = {
   acquisitionSearch: "acquisition-search",
   acquisitionMonitor: "acquisition-monitor",
   acquisitionImport: "acquisition-import",
+  acquisitionFailedHandle: "acquisition-failed-handle",
 } as const;
 
 export type JobTypeCode = (typeof JOB_TYPE)[keyof typeof JOB_TYPE];
@@ -370,6 +372,7 @@ export const RELEASE_REJECTION_REASON = {
   languageMismatch: "language-mismatch",
   wrongProtocol: "wrong-protocol",
   noDownloadLink: "no-download-link",
+  blocklisted: "blocklisted",
 } as const;
 
 export type ReleaseRejectionReasonCode = (typeof RELEASE_REJECTION_REASON)[keyof typeof RELEASE_REJECTION_REASON];
@@ -380,6 +383,15 @@ export const IMPORT_MODE = {
 } as const;
 
 export type ImportModeCode = (typeof IMPORT_MODE)[keyof typeof IMPORT_MODE];
+
+export const BLOCKLIST_REASON = {
+  failed: "failed",
+  stalled: "stalled",
+  noImportableFiles: "no-importable-files",
+  manual: "manual",
+} as const;
+
+export type BlocklistReasonCode = (typeof BLOCKLIST_REASON)[keyof typeof BLOCKLIST_REASON];
 
 export const CAPABILITY_KIND = {
   classification: "classification",

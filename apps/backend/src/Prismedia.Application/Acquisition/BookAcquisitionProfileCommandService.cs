@@ -45,6 +45,7 @@ public sealed class BookAcquisitionProfileCommandService(IBookAcquisitionProfile
             request.MaxSizeBytes,
             request.RequiredTerms.Where(term => !string.IsNullOrWhiteSpace(term)).Select(term => term.Trim()).ToArray(),
             request.IgnoredTerms.Where(term => !string.IsNullOrWhiteSpace(term)).Select(term => term.Trim()).ToArray(),
-            request.AutoPick);
+            request.AutoPick,
+            request.AutoRedownload);
     }
 }

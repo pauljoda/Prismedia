@@ -92,6 +92,7 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.RequiredTerms).HasColumnName("required_terms");
             entity.Property(row => row.IgnoredTerms).HasColumnName("ignored_terms");
             entity.Property(row => row.AutoPick).HasColumnName("auto_pick");
+            entity.Property(row => row.AutoRedownload).HasColumnName("auto_redownload");
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
             entity.HasIndex(row => row.IsDefault);
@@ -200,6 +201,27 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
             entity.HasIndex(row => row.SourcePath);
             entity.HasOne<AcquisitionRow>().WithMany().HasForeignKey(row => row.AcquisitionId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AcquisitionBlocklistRow>(entity => {
+            entity.ToTable("acquisition_blocklist");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(row => row.Identity).HasColumnName("identity").HasMaxLength(2048).IsRequired();
+            entity.Property(row => row.Reason)
+                .HasColumnName("reason")
+                .HasMaxLength(32)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<BlocklistReason>())
+                .HasDefaultValue(BlocklistReason.Failed)
+                .IsRequired();
+            entity.Property(row => row.Title).HasColumnName("title").HasMaxLength(2048);
+            entity.Property(row => row.IndexerName).HasColumnName("indexer_name").HasMaxLength(256);
+            entity.Property(row => row.InfoHash).HasColumnName("info_hash").HasMaxLength(128);
+            entity.Property(row => row.AcquisitionId).HasColumnName("acquisition_id");
+            entity.Property(row => row.Message).HasColumnName("message").HasMaxLength(2048);
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.HasIndex(row => row.Identity).IsUnique();
+            entity.HasOne<AcquisitionRow>().WithMany().HasForeignKey(row => row.AcquisitionId).OnDelete(DeleteBehavior.SetNull);
         });
     }
 }
