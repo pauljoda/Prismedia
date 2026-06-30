@@ -1,37 +1,22 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { CloudDownload, Compass, Inbox, Loader2, Search, Send, Settings } from "@lucide/svelte";
+  import { Compass, Inbox, Loader2, Search, Send, Settings } from "@lucide/svelte";
   import { Button, Select, TextInput, cn } from "@prismedia/ui-svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { FULFILLMENT_MODE, REQUEST_MEDIA_KIND, REQUEST_PROVIDER_KIND } from "$lib/api/generated/codes";
-  import type { RequestMediaKindCode, RequestProviderKindCode } from "$lib/api/generated/codes";
-  import { fetchRequestServices, searchRequests } from "$lib/api/requests";
-  import { fetchLibraryConfig } from "$lib/api/settings";
-  import { findSetting, settingKeys, valueAsStringList } from "$lib/settings/app-settings";
+  import { REQUEST_MEDIA_KIND } from "$lib/api/generated/codes";
+  import type { RequestMediaKindCode } from "$lib/api/generated/codes";
+  import { searchRequests } from "$lib/api/requests";
   import RequestsReview from "$lib/components/requests/RequestsReview.svelte";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
   import { usePageSnapshots } from "$lib/stores/page-snapshots.svelte";
   import { useNsfw } from "$lib/nsfw/store.svelte";
-  import type { RequestSearchResult, RequestServiceInstanceSummary } from "$lib/requests/request-model";
+  import type { RequestSearchResult } from "$lib/requests/request-model";
   import { requestSearchResultToThumbnailCard } from "$lib/requests/review-cards";
   import {
     REQUEST_KIND_LABELS_PLURAL,
-    REQUEST_PROVIDER_LABELS,
     numericValue,
   } from "$lib/requests/request-helpers";
-
-  // Kinds served by an external *arr service — only offered when that service is connected.
-  const kindsBySource: Record<string, RequestMediaKindCode[]> = {
-    [REQUEST_PROVIDER_KIND.radarr]: [REQUEST_MEDIA_KIND.movie],
-    [REQUEST_PROVIDER_KIND.sonarr]: [REQUEST_MEDIA_KIND.series],
-    [REQUEST_PROVIDER_KIND.lidarr]: [REQUEST_MEDIA_KIND.artist, REQUEST_MEDIA_KIND.album],
-    [REQUEST_PROVIDER_KIND.plugin]: [REQUEST_MEDIA_KIND.book, REQUEST_MEDIA_KIND.author, REQUEST_MEDIA_KIND.plugin],
-  };
-
-  // Kinds Prismedia can search and fulfil itself (via plugins + the acquisition pipeline), with no
-  // external *arr service required. Offered whenever the kind is routed to internal fulfilment.
-  const INTERNAL_SEARCH_KINDS: RequestMediaKindCode[] = [REQUEST_MEDIA_KIND.book, REQUEST_MEDIA_KIND.author];
 
   const sortOptions = [
     { value: "relevance", label: "Relevance" },
@@ -47,15 +32,7 @@
   ];
 
   /** Order sections appear in mixed-kind results. */
-  const sectionOrder: RequestMediaKindCode[] = [
-    REQUEST_MEDIA_KIND.movie,
-    REQUEST_MEDIA_KIND.series,
-    REQUEST_MEDIA_KIND.artist,
-    REQUEST_MEDIA_KIND.album,
-    REQUEST_MEDIA_KIND.book,
-    REQUEST_MEDIA_KIND.author,
-    REQUEST_MEDIA_KIND.plugin,
-  ];
+  const sectionOrder: RequestMediaKindCode[] = [REQUEST_MEDIA_KIND.book, REQUEST_MEDIA_KIND.author];
 
   const nsfw = useNsfw();
 
@@ -67,13 +44,8 @@
 
   let query = $state("");
   let selectedKind = $state<RequestMediaKindCode | "all">("all");
-  let selectedSource = $state<RequestProviderKindCode | "all">("all");
   let sortBy = $state("relevance");
   let availability = $state<"all" | "requestable" | "tracked">("all");
-  let services = $state<RequestServiceInstanceSummary[]>([]);
-  let servicesLoaded = $state(false);
-  // Per-kind fulfilment routing ("prismedia" | "external"), keyed by request media kind.
-  let routing = $state<Record<string, string>>({});
   let results = $state<RequestSearchResult[]>([]);
   let hasSearched = $state(false);
   let loading = $state(false);
@@ -81,20 +53,8 @@
   let providerWarnings = $state<string[]>([]);
   let lastSearchKey = "";
 
-  const availableSources = $derived(
-    [...new Set(services.map((service) => service.kind))] as RequestProviderKindCode[],
-  );
-  // Internal kinds Prismedia fulfils itself, unless explicitly routed to an external service. Books
-  // default to internal fulfilment, so an unset route still surfaces them.
-  const internalKinds = $derived(
-    INTERNAL_SEARCH_KINDS.filter((kind) => (routing[kind] ?? FULFILLMENT_MODE.prismedia) !== FULFILLMENT_MODE.external),
-  );
-  // Filterable kinds = internally fulfilled kinds + kinds from connected external services.
-  const availableKinds = $derived(
-    [...new Set([...internalKinds, ...availableSources.flatMap((source) => kindsBySource[source] ?? [])])].sort(
-      (a, b) => sectionOrder.indexOf(a) - sectionOrder.indexOf(b),
-    ),
-  );
+  // Kinds Prismedia searches and fulfils itself via the plugin acquisition pipeline.
+  const availableKinds: RequestMediaKindCode[] = [REQUEST_MEDIA_KIND.book, REQUEST_MEDIA_KIND.author];
 
   const filteredResults = $derived(
     results.filter((result) =>
@@ -109,24 +69,6 @@
   );
 
   const trackedCount = $derived(results.filter((result) => result.tracked).length);
-
-  onMount(async () => {
-    try {
-      const [serviceList, config] = await Promise.all([fetchRequestServices(), fetchLibraryConfig()]);
-      services = serviceList;
-      const setting = findSetting(config.settings, settingKeys.requestFulfillmentByKind);
-      const parsed: Record<string, string> = {};
-      for (const entry of valueAsStringList(setting?.value)) {
-        const [kind, mode] = entry.split(":");
-        if (kind && mode) parsed[kind] = mode;
-      }
-      routing = parsed;
-    } catch (err) {
-      error = err instanceof Error ? err.message : "Failed to load request services";
-    } finally {
-      servicesLoaded = true;
-    }
-  });
 
   // Preserve the active tab across navigation so returning from a detail page lands back on Requests
   // rather than resetting to Discover. (Discover's search state already restores from the URL.)
@@ -146,44 +88,37 @@
     const params = page.url.searchParams;
     const urlQuery = params.get("q") ?? "";
     const urlKind = (params.get("kind") as RequestMediaKindCode | null) ?? "all";
-    const urlSource = (params.get("source") as RequestProviderKindCode | null) ?? "all";
-    const searchKey = `${urlQuery}::${urlKind}::${urlSource}::${nsfw.mode}`;
+    const searchKey = `${urlQuery}::${urlKind}::${nsfw.mode}`;
     if (searchKey === lastSearchKey) return;
     lastSearchKey = searchKey;
 
     query = urlQuery;
     selectedKind = urlKind;
-    selectedSource = urlSource;
     if (urlQuery.trim()) {
-      void runSearch(urlQuery, urlKind, urlSource);
+      void runSearch(urlQuery, urlKind);
     } else {
       results = [];
       hasSearched = false;
     }
   });
 
-  function searchHref(value: string, kind: RequestMediaKindCode | "all", source: RequestProviderKindCode | "all") {
+  function searchHref(value: string, kind: RequestMediaKindCode | "all") {
     const params = new URLSearchParams();
     if (value.trim()) params.set("q", value.trim());
     if (kind !== "all") params.set("kind", kind);
-    if (source !== "all") params.set("source", source);
     const queryString = params.toString();
     return queryString ? `/request?${queryString}` : "/request";
   }
 
-  function commitSearchState(kind = selectedKind, source = selectedSource) {
-    void goto(searchHref(query, kind, source), {
+  function commitSearchState(kind = selectedKind) {
+    void goto(searchHref(query, kind), {
       replaceState: hasSearched,
       keepFocus: true,
       noScroll: true,
     });
   }
 
-  async function runSearch(
-    value: string,
-    kind: RequestMediaKindCode | "all",
-    source: RequestProviderKindCode | "all",
-  ) {
+  async function runSearch(value: string, kind: RequestMediaKindCode | "all") {
     loading = true;
     error = null;
     providerWarnings = [];
@@ -194,7 +129,7 @@
       const response = await searchRequests({
         query: value.trim(),
         kinds: kind === "all" ? [] : [kind],
-        sources: source === "all" ? [] : [source],
+        sources: [],
         hideNsfw: nsfw.mode !== "show",
       });
       results = response.results;
@@ -211,12 +146,7 @@
 
   function setKind(kind: RequestMediaKindCode | "all") {
     selectedKind = kind;
-    if (hasSearched || query.trim()) commitSearchState(kind, selectedSource);
-  }
-
-  function setSource(source: RequestProviderKindCode | "all") {
-    selectedSource = source;
-    if (hasSearched || query.trim()) commitSearchState(selectedKind, source);
+    if (hasSearched || query.trim()) commitSearchState(kind);
   }
 
   function sortResults(items: RequestSearchResult[]) {
@@ -229,8 +159,8 @@
   }
 
   function detailHref(result: RequestSearchResult) {
-    const params = new URLSearchParams({ source: result.source, serviceId: result.serviceId });
-    const backQuery = searchHref(query, selectedKind, selectedSource).split("?")[1];
+    const params = new URLSearchParams({ source: result.source });
+    const backQuery = searchHref(query, selectedKind).split("?")[1];
     if (backQuery) params.set("back", backQuery);
     return `/request/${result.kind}/${encodeURIComponent(result.externalId)}?${params.toString()}`;
   }
@@ -248,7 +178,7 @@
         Request
       </h1>
       <p class="mt-1 text-[0.78rem] text-text-muted">
-        Search connected services and review what you've requested
+        Search for books and authors to add to your library
       </p>
     </div>
     <Button
@@ -283,16 +213,6 @@
   {#if activeTab === "requests"}
     <RequestsReview />
   {:else}
-    {#if servicesLoaded && services.length === 0}
-      <div class="empty-rack-slot flex flex-wrap items-center justify-center gap-2 p-4 text-center text-[0.78rem] text-text-muted">
-        <CloudDownload class="h-5 w-5 text-text-disabled" />
-        <span>
-          Connect Radarr, Sonarr, or Lidarr in
-          <button type="button" class="text-text-accent underline-offset-2 hover:underline" onclick={() => void goto("/settings")}>Settings</button>
-          to request movies, series, and music. Books are handled directly by Prismedia.
-        </span>
-      </div>
-    {/if}
     <!-- ── Search ── -->
     <form
       class="flex flex-wrap items-center gap-2"
@@ -305,7 +225,7 @@
         <TextInput
           value={query}
           oninput={(event) => (query = event.currentTarget.value)}
-          placeholder="Search movies, series, artists, albums…"
+          placeholder="Search books and authors…"
           aria-label="Search requests"
           autocomplete="off"
         />
@@ -331,24 +251,6 @@
               class={cn(
                 "rounded-xs border px-2.5 py-1 text-[0.72rem] font-medium transition-all duration-fast",
                 selectedKind === option.value
-                  ? "bg-accent-950/30 border-border-accent text-text-accent shadow-[var(--shadow-glow-accent)]"
-                  : "bg-surface-1 border-border-subtle text-text-muted hover:border-border-default hover:text-text-primary",
-              )}
-            >
-              {option.label}
-            </button>
-          {/each}
-        </div>
-      {/if}
-      {#if availableSources.length > 1}
-        <div class="flex flex-wrap items-center gap-2" role="group" aria-label="Filter by source">
-          {#each [{ value: "all", label: "All sources" }, ...availableSources.map((source) => ({ value: source, label: REQUEST_PROVIDER_LABELS[source] ?? source }))] as option (option.value)}
-            <button
-              type="button"
-              onclick={() => setSource(option.value as RequestProviderKindCode | "all")}
-              class={cn(
-                "rounded-xs border px-2.5 py-1 text-[0.72rem] font-medium transition-all duration-fast",
-                selectedSource === option.value
                   ? "bg-accent-950/30 border-border-accent text-text-accent shadow-[var(--shadow-glow-accent)]"
                   : "bg-surface-1 border-border-subtle text-text-muted hover:border-border-default hover:text-text-primary",
               )}
@@ -419,9 +321,8 @@
             {/if}
             <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
               {#each section.items as result (`${result.source}:${result.kind}:${result.externalId}`)}
-                <!-- Every result — books included — opens its detail page first, where the user reviews it
-                     and explicitly requests (toggling quality/children). Nothing is queued on a thumbnail
-                     click; this mirrors the *arr handoff so switching a kind to Prismedia is a drop-in. -->
+                <!-- Every result opens its detail page first, where the user reviews it and explicitly
+                     requests it. Nothing is queued on a thumbnail click. -->
                 <EntityThumbnail card={requestSearchResultToThumbnailCard(result, detailHref(result))} />
               {/each}
             </div>
@@ -444,7 +345,7 @@
     {:else if !hasSearched}
       <div class="empty-rack-slot p-8 text-center">
         <p class="text-sm text-text-muted">
-          Search across your connected services to find media to request.
+          Search for books and authors to add to your library.
         </p>
       </div>
     {/if}

@@ -58,7 +58,6 @@ public sealed record IndexerTestResponse(bool Connected, string? Message);
 /// <param name="PosterUrl">Optional cover URL stored for the import hint.</param>
 /// <param name="PluginId">Optional plugin manifest id that supplied the metadata.</param>
 /// <param name="PluginItemId">Optional plugin item id (external-id value) for ID-first identify.</param>
-/// <param name="RequestHistoryId">Optional originating request-history entry to link.</param>
 public sealed record AcquisitionCreateRequest(
     string Title,
     string? Author,
@@ -67,7 +66,6 @@ public sealed record AcquisitionCreateRequest(
     string? PosterUrl,
     string? PluginId,
     string? PluginItemId,
-    Guid? RequestHistoryId,
     string? Description = null);
 
 /// <summary>A scored release candidate surfaced for review. Download links stay server-side; the id selects one to queue.</summary>

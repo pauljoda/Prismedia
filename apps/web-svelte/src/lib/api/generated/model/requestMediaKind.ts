@@ -9,10 +9,6 @@ export type RequestMediaKind = typeof RequestMediaKind[keyof typeof RequestMedia
 
 
 export const RequestMediaKind = {
-  movie: 'movie',
-  series: 'series',
-  artist: 'artist',
-  album: 'album',
   book: 'book',
   author: 'author',
   plugin: 'plugin',

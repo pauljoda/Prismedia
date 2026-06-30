@@ -274,45 +274,18 @@ export const READER_MODE = {
 export type ReaderModeCode = (typeof READER_MODE)[keyof typeof READER_MODE];
 
 export const REQUEST_PROVIDER_KIND = {
-  radarr: "radarr",
-  sonarr: "sonarr",
-  lidarr: "lidarr",
   plugin: "plugin",
 } as const;
 
 export type RequestProviderKindCode = (typeof REQUEST_PROVIDER_KIND)[keyof typeof REQUEST_PROVIDER_KIND];
 
 export const REQUEST_MEDIA_KIND = {
-  movie: "movie",
-  series: "series",
-  artist: "artist",
-  album: "album",
   book: "book",
   author: "author",
   plugin: "plugin",
 } as const;
 
 export type RequestMediaKindCode = (typeof REQUEST_MEDIA_KIND)[keyof typeof REQUEST_MEDIA_KIND];
-
-export const REQUEST_MINIMUM_AVAILABILITY = {
-  announced: "announced",
-  inCinemas: "inCinemas",
-  released: "released",
-} as const;
-
-export type RequestMinimumAvailabilityCode = (typeof REQUEST_MINIMUM_AVAILABILITY)[keyof typeof REQUEST_MINIMUM_AVAILABILITY];
-
-export const REQUEST_HISTORY_STATUS = {
-  submitted: "submitted",
-  pending: "pending",
-  downloading: "downloading",
-  partial: "partial",
-  available: "available",
-  removed: "removed",
-  unknown: "unknown",
-} as const;
-
-export type RequestHistoryStatusCode = (typeof REQUEST_HISTORY_STATUS)[keyof typeof REQUEST_HISTORY_STATUS];
 
 export const REQUEST_RATING_SOURCE = {
   tmdb: "tmdb",
@@ -322,13 +295,6 @@ export const REQUEST_RATING_SOURCE = {
 } as const;
 
 export type RequestRatingSourceCode = (typeof REQUEST_RATING_SOURCE)[keyof typeof REQUEST_RATING_SOURCE];
-
-export const FULFILLMENT_MODE = {
-  prismedia: "prismedia",
-  external: "external",
-} as const;
-
-export type FulfillmentModeCode = (typeof FULFILLMENT_MODE)[keyof typeof FULFILLMENT_MODE];
 
 export const INDEXER_KIND = {
   prowlarr: "prowlarr",
@@ -487,7 +453,6 @@ export const SETTING_KEYS = {
   playbackAudioPreferredLanguages: "playback.audioPreferredLanguages",
   playbackDefaultMode: "playback.defaultMode",
   playbackShowCastControls: "playback.showCastControls",
-  requestFulfillmentByKind: "request.fulfillmentByKind",
   scanAutoScanEnabled: "scan.autoScanEnabled",
   scanIntervalMinutes: "scan.intervalMinutes",
   subtitlesAutoEnable: "subtitles.autoEnable",

@@ -81,7 +81,6 @@ public sealed record AcquisitionMetadata(
     string? PosterUrl,
     string? PluginId,
     string? PluginItemId,
-    Guid? RequestHistoryId,
     string? Description = null);
 
 /// <summary>The minimal input the background search job needs to query indexers for an acquisition.</summary>

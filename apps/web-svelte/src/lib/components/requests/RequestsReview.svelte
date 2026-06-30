@@ -5,14 +5,12 @@
   import EntityGridSection from "$lib/components/entities/EntityGridSection.svelte";
   import ConfirmDialog from "$lib/components/entities/ConfirmDialog.svelte";
   import { deleteAcquisition, fetchAcquisitions } from "$lib/api/acquisitions";
-  import { deleteRequestHistoryEntry, fetchRequestHistory } from "$lib/api/requests";
   import type { EntityGridBulkAction } from "$lib/entities/entity-grid";
   import {
     ACTIVE_ACQUISITION_STATUSES,
     REVIEW_GROUP_LABELS,
     REVIEW_GROUP_ORDER,
     acquisitionToReviewItem,
-    requestHistoryToReviewItem,
     type ReviewGroup,
     type ReviewItem,
   } from "$lib/requests/review-cards";
@@ -68,10 +66,8 @@
 
   async function load() {
     try {
-      const [acq, history] = await Promise.all([fetchAcquisitions(), fetchRequestHistory()]);
-      acquisitions = acq;
-      warnings = history.providerErrors.map((item) => `${item.displayName}: ${item.message}`);
-      items = [...acq.map(acquisitionToReviewItem), ...history.entries.map(requestHistoryToReviewItem)];
+      acquisitions = await fetchAcquisitions();
+      items = acquisitions.map(acquisitionToReviewItem);
       error = null;
     } catch (err) {
       error = err instanceof Error ? err.message : "Failed to load requests";
@@ -81,11 +77,7 @@
   }
 
   async function removeSelected() {
-    await Promise.all(
-      pendingRemoveIds.map((id) =>
-        byId.get(id)?.type === "history" ? deleteRequestHistoryEntry(id) : deleteAcquisition(id),
-      ),
-    );
+    await Promise.all(pendingRemoveIds.map((id) => deleteAcquisition(id)));
     pendingRemoveIds = [];
     await load();
   }

@@ -3,10 +3,8 @@ import {
   CAPABILITY_KIND,
   ENTITY_FILE_ROLE,
   ENTITY_KIND,
-  REQUEST_HISTORY_STATUS,
   REQUEST_MEDIA_KIND,
   type AcquisitionStatusCode,
-  type RequestHistoryStatusCode,
   type RequestMediaKindCode,
 } from "$lib/api/generated/codes";
 import type {
@@ -14,7 +12,7 @@ import type {
   EntityCapability,
   EntityCard,
   EntityKind,
-  RequestHistoryEntry,
+  RequestChildOption,
   RequestSearchResult,
 } from "$lib/api/generated/model";
 import { entityCardToThumbnailCard } from "$lib/entities/entity-grid";
@@ -23,10 +21,6 @@ import { numericValue, trackedLabel } from "$lib/requests/request-helpers";
 
 /** Library entity kind that best represents a request media kind, for poster aspect + placeholder family. */
 export const ENTITY_KIND_FOR_REQUEST: Record<string, EntityKind> = {
-  [REQUEST_MEDIA_KIND.movie]: ENTITY_KIND.movie,
-  [REQUEST_MEDIA_KIND.series]: ENTITY_KIND.videoSeries,
-  [REQUEST_MEDIA_KIND.artist]: ENTITY_KIND.musicArtist,
-  [REQUEST_MEDIA_KIND.album]: ENTITY_KIND.audioLibrary,
   [REQUEST_MEDIA_KIND.book]: ENTITY_KIND.book,
   [REQUEST_MEDIA_KIND.author]: ENTITY_KIND.bookAuthor,
   [REQUEST_MEDIA_KIND.plugin]: ENTITY_KIND.book,
@@ -48,16 +42,6 @@ const ACQUISITION_STATUS_LABEL: Record<AcquisitionStatusCode, string> = {
   [ACQUISITION_STATUS.failed]: "Failed",
   [ACQUISITION_STATUS.cancelled]: "Cancelled",
   [ACQUISITION_STATUS.manualImportRequired]: "Manual import",
-};
-
-const REQUEST_HISTORY_STATUS_LABEL: Record<string, string> = {
-  submitted: "Submitted",
-  pending: "Pending",
-  downloading: "Downloading",
-  partial: "Partial",
-  available: "Available",
-  removed: "Removed",
-  unknown: "Unknown",
 };
 
 /** Builds a synthetic, presentation-only entity card carrying just a poster image. */
@@ -114,18 +98,8 @@ const ACQUISITION_GROUP: Record<string, ReviewGroup> = {
   [ACQUISITION_STATUS.cancelled]: "cancelled",
 };
 
-const HISTORY_GROUP: Record<string, ReviewGroup> = {
-  [REQUEST_HISTORY_STATUS.submitted]: "progress",
-  [REQUEST_HISTORY_STATUS.pending]: "progress",
-  [REQUEST_HISTORY_STATUS.downloading]: "progress",
-  [REQUEST_HISTORY_STATUS.partial]: "progress",
-  [REQUEST_HISTORY_STATUS.available]: "completed",
-  [REQUEST_HISTORY_STATUS.removed]: "cancelled",
-  [REQUEST_HISTORY_STATUS.unknown]: "cancelled",
-};
-
 /** Which subsystem owns an item, so the queue removes it through the right endpoint. */
-export type ReviewItemType = "acquisition" | "history";
+export type ReviewItemType = "acquisition";
 
 /** A request/acquisition normalized for the grouped review queue: its card plus the metadata the queue groups, sorts, and removes by. */
 export interface ReviewItem {
@@ -162,26 +136,6 @@ export function acquisitionToReviewItem(item: AcquisitionSummary): ReviewItem {
   };
 }
 
-/** An *arr request-history entry normalized into a review-queue item. */
-export function requestHistoryToReviewItem(entry: RequestHistoryEntry): ReviewItem {
-  const kind = ENTITY_KIND_FOR_REQUEST[entry.kind] ?? ENTITY_KIND.video;
-  const params = new URLSearchParams({ source: entry.source });
-  if (entry.serviceId) params.set("serviceId", entry.serviceId);
-  const href = `/request/${entry.kind}/${encodeURIComponent(entry.externalId)}?${params.toString()}`;
-  const status = String(entry.status);
-  const statusLabel = REQUEST_HISTORY_STATUS_LABEL[status] ?? status;
-  const card = entityCardToThumbnailCard(syntheticEntityCard(entry.id, kind, entry.title, entry.posterUrl), href);
-  return {
-    id: entry.id,
-    type: "history",
-    kind: entry.kind as RequestMediaKindCode,
-    group: HISTORY_GROUP[status] ?? "progress",
-    statusLabel,
-    createdAt: entry.requestedAt,
-    card: { ...card, subtitle: `${statusLabel} · ${entry.serviceName}` },
-  };
-}
-
 /** A provider search result rendered as a synthetic EntityThumbnail for the Discover grid. */
 export function requestSearchResultToThumbnailCard(result: RequestSearchResult, href: string): EntityThumbnailCard {
   const kind = ENTITY_KIND_FOR_REQUEST[result.kind] ?? ENTITY_KIND.video;
@@ -201,8 +155,23 @@ export function requestSearchResultToThumbnailCard(result: RequestSearchResult, 
     ...card,
     subtitle: result.subtitle ?? undefined,
     meta: meta.length > 0 ? meta : undefined,
-    // Surface "already in Radarr/Sonarr/…" as the corner overlay, mirroring library cards.
+    // Surface an "already in library" indicator as the corner overlay when the result is tracked.
     custom: result.tracked ? { bottomLeft: { label: trackedLabel(result.source) } } : undefined,
+  };
+}
+
+/**
+ * A selectable child work (an author's book or a series volume) rendered as a synthetic EntityThumbnail
+ * for the request review grid. Keyed by the child's provider-qualified id so selection maps back to it.
+ */
+export function requestChildToThumbnailCard(child: RequestChildOption): EntityThumbnailCard {
+  const card = entityCardToThumbnailCard(
+    syntheticEntityCard(child.id, ENTITY_KIND.book, child.title, child.posterUrl),
+  );
+  const year = numericValue(child.year);
+  return {
+    ...card,
+    meta: year ? [{ icon: "calendar", label: String(year) }] : undefined,
   };
 }
 

@@ -9,10 +9,6 @@ import type { RequestDetailResponse } from "./request-model";
  * (poster aspect, placeholder family).
  */
 const ENTITY_KIND_FOR_REQUEST: Record<string, EntityKind> = {
-  [REQUEST_MEDIA_KIND.movie]: ENTITY_KIND.movie,
-  [REQUEST_MEDIA_KIND.series]: ENTITY_KIND.videoSeries,
-  [REQUEST_MEDIA_KIND.artist]: ENTITY_KIND.musicArtist,
-  [REQUEST_MEDIA_KIND.album]: ENTITY_KIND.audioLibrary,
   // Books render like their library sibling: a 2:3 portrait poster (not the 16:9 video fallback).
   [REQUEST_MEDIA_KIND.book]: ENTITY_KIND.book,
   // Authors render like the Authors library: the folder/poster sibling, not the video fallback.

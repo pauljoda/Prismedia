@@ -148,16 +148,6 @@ public static class AppSettingsRegistry {
                 false,
                 10),
             StringList(
-                AppSettingKeys.RequestFulfillmentByKind,
-                Requests,
-                "Requests",
-                "Choose how each kind of request is fulfilled: handled directly by Prismedia (search indexers and download) or handed off to an external app.",
-                65,
-                "Fulfilment by kind",
-                "One entry per content kind as \"kind:mode\", where mode is \"prismedia\" or \"external\". Kinds without an entry default to external handoff.",
-                ["book:prismedia", "movie:external", "series:external", "artist:external", "album:external"],
-                10),
-            StringList(
                 AppSettingKeys.AutoIdentifyProviders,
                 AutoIdentify,
                 "Auto Identify",

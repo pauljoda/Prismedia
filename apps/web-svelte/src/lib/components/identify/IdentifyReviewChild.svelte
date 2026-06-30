@@ -15,7 +15,7 @@
   } from "@lucide/svelte";
   import { cn } from "@prismedia/ui-svelte";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
-  import IdentifyReviewSection from "./IdentifyReviewSection.svelte";
+  import ReviewSection from "$lib/components/review/ReviewSection.svelte";
   import IdentifyTargetPreview from "./IdentifyTargetPreview.svelte";
   import {
     currentFieldValueForReview,
@@ -263,7 +263,7 @@
   </div>
 
   <!-- Base fields -->
-  <IdentifyReviewSection
+  <ReviewSection
     panelId={`base-fields-${proposal.proposalId}`}
     title={proposal.patch?.title ? `Base fields · ${proposal.patch.title}` : "Base fields"}
     meta={`${DIFF_FIELD_KEYS.filter((k) => selectedFields[k]).length}/${DIFF_FIELD_KEYS.filter((k) => proposalHasField(proposal, k)).length} accepted`}
@@ -318,11 +318,11 @@
         </div>
       {/if}
     {/each}
-  </IdentifyReviewSection>
+  </ReviewSection>
 
   <!-- Credits (inherited) -->
   {#if credits.length > 0}
-    <IdentifyReviewSection
+    <ReviewSection
       panelId={`credits-${proposal.proposalId}`}
       title="Credits"
       meta={`inherited · ${credits.filter((credit) => store.isReviewProposalSelected(credit.proposalId)).length} of ${credits.length} selected`}
@@ -344,12 +344,12 @@
           />
         {/each}
       </div>
-    </IdentifyReviewSection>
+    </ReviewSection>
   {/if}
 
   <!-- Relationships -->
   {#if nonCreditRelationships.length > 0}
-    <IdentifyReviewSection
+    <ReviewSection
       panelId={`relationships-${proposal.proposalId}`}
       title="Relationships"
       meta={`${nonCreditRelationships.filter((relationship) => store.isReviewProposalSelected(relationship.proposalId)).length} of ${nonCreditRelationships.length} selected`}
@@ -371,12 +371,12 @@
           />
         {/each}
       </div>
-    </IdentifyReviewSection>
+    </ReviewSection>
   {/if}
 
   <!-- Tags -->
   {#if looseTags.length > 0}
-    <IdentifyReviewSection
+    <ReviewSection
       panelId={`tags-${proposal.proposalId}`}
       title="Tags"
       meta={`${selectedTagCount} of ${tags.length} selected`}
@@ -415,12 +415,12 @@
           </button>
         {/each}
       </div>
-    </IdentifyReviewSection>
+    </ReviewSection>
   {/if}
 
   <!-- Artwork — one card per kind -->
   {#each imageGroups as group (group.kind)}
-    <IdentifyReviewSection
+    <ReviewSection
       panelId={`artwork-${group.kind}-${proposal.proposalId}`}
       title={group.kind.charAt(0).toUpperCase() + group.kind.slice(1)}
       meta={`${group.images.length} candidate${group.images.length === 1 ? "" : "s"}${selectedImages[group.kind] ? " · 1 selected" : ""}`}
@@ -471,12 +471,12 @@
           </button>
         {/each}
       </div>
-    </IdentifyReviewSection>
+    </ReviewSection>
   {/each}
 
   <!-- Children (episodes) -->
   {#if children.length > 0}
-    <IdentifyReviewSection
+    <ReviewSection
       panelId={`children-${proposal.proposalId}`}
       title="Children"
       meta={`${selectedChildCount} of ${children.length} selected`}
@@ -499,7 +499,7 @@
           />
         {/each}
       </div>
-    </IdentifyReviewSection>
+    </ReviewSection>
   {/if}
 
   <!-- Action footer -->

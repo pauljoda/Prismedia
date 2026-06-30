@@ -9,8 +9,5 @@ export type RequestProviderKind = typeof RequestProviderKind[keyof typeof Reques
 
 
 export const RequestProviderKind = {
-  radarr: 'radarr',
-  sonarr: 'sonarr',
-  lidarr: 'lidarr',
   plugin: 'plugin',
 } as const;

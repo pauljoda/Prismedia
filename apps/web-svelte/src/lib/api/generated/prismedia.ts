@@ -207,14 +207,7 @@ import type {
   RemoveFileExclusionParams,
   RenameFileParams,
   RequestDetailResponse,
-  RequestHistoryResponse,
   RequestSearchResponse,
-  RequestServiceInstanceSaveRequest,
-  RequestServiceInstanceSummary,
-  RequestServiceTestRequest,
-  RequestServiceTestResponse,
-  RequestSubmitRequest,
-  RequestSubmitResponse,
   RescanFileRootParams,
   ResolveIdentifyQueueCandidateParams,
   SaveIdentifyQueueProposalRequest,
@@ -10769,218 +10762,6 @@ export const applyOrganizePlan = async (organizePlanRequest: OrganizePlanRequest
 
 
 
-export type listRequestServicesResponse200 = {
-  data: RequestServiceInstanceSummary[]
-  status: 200
-}
-
-export type listRequestServicesResponseSuccess = (listRequestServicesResponse200) & {
-  headers: Headers;
-};
-;
-
-export type listRequestServicesResponse = (listRequestServicesResponseSuccess)
-
-export const getListRequestServicesUrl = () => {
-
-
-
-
-  return `/api/requests/services`
-}
-
-/**
- * @summary Lists configured request service instances with credentials redacted.
- */
-export const listRequestServices = async ( options?: RequestInit): Promise<listRequestServicesResponse> => {
-
-  return orvalFetch<listRequestServicesResponse>(getListRequestServicesUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-export type saveRequestServiceResponse200 = {
-  data: RequestServiceInstanceSummary
-  status: 200
-}
-
-export type saveRequestServiceResponse400 = {
-  data: ApiProblem
-  status: 400
-}
-
-export type saveRequestServiceResponseSuccess = (saveRequestServiceResponse200) & {
-  headers: Headers;
-};
-export type saveRequestServiceResponseError = (saveRequestServiceResponse400) & {
-  headers: Headers;
-};
-
-export type saveRequestServiceResponse = (saveRequestServiceResponseSuccess | saveRequestServiceResponseError)
-
-export const getSaveRequestServiceUrl = () => {
-
-
-
-
-  return `/api/requests/services`
-}
-
-/**
- * @summary Creates or updates a request service instance.
- */
-export const saveRequestService = async (requestServiceInstanceSaveRequest: RequestServiceInstanceSaveRequest, options?: RequestInit): Promise<saveRequestServiceResponse> => {
-
-  return orvalFetch<saveRequestServiceResponse>(getSaveRequestServiceUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(
-      requestServiceInstanceSaveRequest,)
-  }
-);}
-
-
-
-export type updateRequestServiceResponse200 = {
-  data: RequestServiceInstanceSummary
-  status: 200
-}
-
-export type updateRequestServiceResponse400 = {
-  data: ApiProblem
-  status: 400
-}
-
-export type updateRequestServiceResponseSuccess = (updateRequestServiceResponse200) & {
-  headers: Headers;
-};
-export type updateRequestServiceResponseError = (updateRequestServiceResponse400) & {
-  headers: Headers;
-};
-
-export type updateRequestServiceResponse = (updateRequestServiceResponseSuccess | updateRequestServiceResponseError)
-
-export const getUpdateRequestServiceUrl = (id: string,) => {
-
-
-
-
-  return `/api/requests/services/${id}`
-}
-
-/**
- * @summary Updates an existing request service instance.
- */
-export const updateRequestService = async (id: string,
-    requestServiceInstanceSaveRequest: RequestServiceInstanceSaveRequest, options?: RequestInit): Promise<updateRequestServiceResponse> => {
-
-  return orvalFetch<updateRequestServiceResponse>(getUpdateRequestServiceUrl(id),
-  {
-    ...options,
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(
-      requestServiceInstanceSaveRequest,)
-  }
-);}
-
-
-
-export type deleteRequestServiceResponse204 = {
-  data: void
-  status: 204
-}
-
-export type deleteRequestServiceResponse404 = {
-  data: ApiProblem
-  status: 404
-}
-
-export type deleteRequestServiceResponseSuccess = (deleteRequestServiceResponse204) & {
-  headers: Headers;
-};
-export type deleteRequestServiceResponseError = (deleteRequestServiceResponse404) & {
-  headers: Headers;
-};
-
-export type deleteRequestServiceResponse = (deleteRequestServiceResponseSuccess | deleteRequestServiceResponseError)
-
-export const getDeleteRequestServiceUrl = (id: string,) => {
-
-
-
-
-  return `/api/requests/services/${id}`
-}
-
-/**
- * @summary Deletes a configured request service instance.
- */
-export const deleteRequestService = async (id: string, options?: RequestInit): Promise<deleteRequestServiceResponse> => {
-
-  return orvalFetch<deleteRequestServiceResponse>(getDeleteRequestServiceUrl(id),
-  {
-    ...options,
-    method: 'DELETE'
-
-
-  }
-);}
-
-
-
-export type testRequestServiceResponse200 = {
-  data: RequestServiceTestResponse
-  status: 200
-}
-
-export type testRequestServiceResponse400 = {
-  data: ApiProblem
-  status: 400
-}
-
-export type testRequestServiceResponseSuccess = (testRequestServiceResponse200) & {
-  headers: Headers;
-};
-export type testRequestServiceResponseError = (testRequestServiceResponse400) & {
-  headers: Headers;
-};
-
-export type testRequestServiceResponse = (testRequestServiceResponseSuccess | testRequestServiceResponseError)
-
-export const getTestRequestServiceUrl = () => {
-
-
-
-
-  return `/api/requests/services/test`
-}
-
-/**
- * @summary Tests connectivity for a request service configuration and returns its selectable options on success. A successful test gates saving the service.
- */
-export const testRequestService = async (requestServiceTestRequest: RequestServiceTestRequest, options?: RequestInit): Promise<testRequestServiceResponse> => {
-
-  return orvalFetch<testRequestServiceResponse>(getTestRequestServiceUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(
-      requestServiceTestRequest,)
-  }
-);}
-
-
-
 export type searchRequestsResponse200 = {
   data: RequestSearchResponse
   status: 200
@@ -11009,7 +10790,7 @@ export const getSearchRequestsUrl = (params: SearchRequestsParams,) => {
 }
 
 /**
- * @summary Searches configured request providers for requestable external media. Adults-only certifications are filtered out when hideNsfw is set.
+ * @summary Searches Prismedia's plugin metadata providers for requestable books and authors. Adults-only results are filtered out when hideNsfw is set.
  */
 export const searchRequests = async (params: SearchRequestsParams, options?: RequestInit): Promise<searchRequestsResponse> => {
 
@@ -11017,85 +10798,6 @@ export const searchRequests = async (params: SearchRequestsParams, options?: Req
   {
     ...options,
     method: 'GET'
-
-
-  }
-);}
-
-
-
-export type listRequestHistoryResponse200 = {
-  data: RequestHistoryResponse
-  status: 200
-}
-
-export type listRequestHistoryResponseSuccess = (listRequestHistoryResponse200) & {
-  headers: Headers;
-};
-;
-
-export type listRequestHistoryResponse = (listRequestHistoryResponseSuccess)
-
-export const getListRequestHistoryUrl = () => {
-
-
-
-
-  return `/api/requests/history`
-}
-
-/**
- * @summary Lists submitted request history with statuses refreshed live from each upstream service.
- */
-export const listRequestHistory = async ( options?: RequestInit): Promise<listRequestHistoryResponse> => {
-
-  return orvalFetch<listRequestHistoryResponse>(getListRequestHistoryUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-export type deleteRequestHistoryEntryResponse204 = {
-  data: void
-  status: 204
-}
-
-export type deleteRequestHistoryEntryResponse404 = {
-  data: ApiProblem
-  status: 404
-}
-
-export type deleteRequestHistoryEntryResponseSuccess = (deleteRequestHistoryEntryResponse204) & {
-  headers: Headers;
-};
-export type deleteRequestHistoryEntryResponseError = (deleteRequestHistoryEntryResponse404) & {
-  headers: Headers;
-};
-
-export type deleteRequestHistoryEntryResponse = (deleteRequestHistoryEntryResponseSuccess | deleteRequestHistoryEntryResponseError)
-
-export const getDeleteRequestHistoryEntryUrl = (id: string,) => {
-
-
-
-
-  return `/api/requests/history/${id}`
-}
-
-/**
- * @summary Deletes a request history entry.
- */
-export const deleteRequestHistoryEntry = async (id: string, options?: RequestInit): Promise<deleteRequestHistoryEntryResponse> => {
-
-  return orvalFetch<deleteRequestHistoryEntryResponse>(getDeleteRequestHistoryEntryUrl(id),
-  {
-    ...options,
-    method: 'DELETE'
 
 
   }
@@ -11141,7 +10843,7 @@ export const getGetRequestDetailUrl = (source: string,
 }
 
 /**
- * @summary Gets rich detail metadata for a requestable external item.
+ * @summary Gets rich detail metadata for a requestable external item, including its selectable child works.
  */
 export const getRequestDetail = async (source: string,
     kind: string,
@@ -11154,50 +10856,6 @@ export const getRequestDetail = async (source: string,
     method: 'GET'
 
 
-  }
-);}
-
-
-
-export type submitRequestResponse200 = {
-  data: RequestSubmitResponse
-  status: 200
-}
-
-export type submitRequestResponse404 = {
-  data: ApiProblem
-  status: 404
-}
-
-export type submitRequestResponseSuccess = (submitRequestResponse200) & {
-  headers: Headers;
-};
-export type submitRequestResponseError = (submitRequestResponse404) & {
-  headers: Headers;
-};
-
-export type submitRequestResponse = (submitRequestResponseSuccess | submitRequestResponseError)
-
-export const getSubmitRequestUrl = () => {
-
-
-
-
-  return `/api/requests`
-}
-
-/**
- * @summary Submits a media request to the selected upstream service instance.
- */
-export const submitRequest = async (requestSubmitRequest: RequestSubmitRequest, options?: RequestInit): Promise<submitRequestResponse> => {
-
-  return orvalFetch<submitRequestResponse>(getSubmitRequestUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(
-      requestSubmitRequest,)
   }
 );}
 

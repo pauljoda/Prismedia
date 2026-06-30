@@ -316,19 +316,8 @@ public static class DependencyInjection {
     }
 
     private static void RegisterRequests(IServiceCollection services) {
-        services.AddScoped<IRequestServiceInstanceStore, EfRequestServiceInstanceStore>();
-        services.AddScoped<IRequestHistoryStore, EfRequestHistoryStore>();
-        services.AddScoped<IAdultMovieSearchSource>(provider =>
-            new TmdbAdultMovieSearchSource(new HttpClient(), provider.GetRequiredService<PrismediaDbContext>()));
-        services.AddScoped<IRequestDetailEnrichmentSource>(provider =>
-            new TmdbRequestEnrichmentSource(new HttpClient(), provider.GetRequiredService<PrismediaDbContext>()));
-        services.AddScoped(_ => new RadarrRequestProviderClient(new HttpClient()));
-        services.AddScoped(_ => new SonarrRequestProviderClient(new HttpClient()));
-        services.AddScoped(_ => new LidarrRequestProviderClient(new HttpClient()));
-        services.AddScoped<IRequestProviderClient>(provider => provider.GetRequiredService<RadarrRequestProviderClient>());
-        services.AddScoped<IRequestProviderClient>(provider => provider.GetRequiredService<SonarrRequestProviderClient>());
-        services.AddScoped<IRequestProviderClient>(provider => provider.GetRequiredService<LidarrRequestProviderClient>());
-        services.AddScoped<IRequestProviderClientFactory, RequestProviderClientFactory>();
+        // Prismedia fulfils all requests itself through its plugin-backed acquisition pipeline; the request
+        // layer is purely the book/author metadata search + detail surface that feeds acquisitions.
         services.AddScoped<IBookMetadataSearchSource, PluginBookMetadataSearchSource>();
         services.AddScoped<IAuthorMetadataSearchSource, PluginBookMetadataSearchSource>();
         services.AddScoped<IBookMetadataEnricher, PluginBookMetadataSearchSource>();

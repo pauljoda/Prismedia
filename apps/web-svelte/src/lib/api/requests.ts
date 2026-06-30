@@ -1,51 +1,10 @@
 import type { RequestMediaKindCode, RequestProviderKindCode } from "$lib/api/generated/codes";
 import {
-  deleteRequestHistoryEntry as deleteRequestHistoryEntryRequest,
-  deleteRequestService,
   getRequestDetail as getRequestDetailRequest,
-  listRequestHistory,
-  listRequestServices,
-  saveRequestService,
   searchRequests as searchRequestsRequest,
-  submitRequest as submitRequestRequest,
-  testRequestService,
-  updateRequestService,
 } from "$lib/api/generated/prismedia";
-import type {
-  RequestDetailResponse,
-  RequestHistoryResponse,
-  RequestSearchResponse,
-  RequestServiceInstanceSaveRequest,
-  RequestServiceInstanceSummary,
-  RequestServiceTestRequest,
-  RequestServiceTestResponse,
-  RequestSubmitRequest,
-  RequestSubmitResponse,
-} from "$lib/requests/request-model";
+import type { RequestDetailResponse, RequestSearchResponse } from "$lib/requests/request-model";
 import { unwrapGenerated } from "$lib/api/generated-response";
-
-export async function fetchRequestServices(): Promise<RequestServiceInstanceSummary[]> {
-  return unwrapGenerated(await listRequestServices(), "Failed to load request services");
-}
-
-export async function saveRequestServiceInstance(
-  payload: RequestServiceInstanceSaveRequest,
-): Promise<RequestServiceInstanceSummary> {
-  const request = payload.id
-    ? updateRequestService(payload.id, payload)
-    : saveRequestService(payload);
-  return unwrapGenerated(await request, "Failed to save request service");
-}
-
-export async function deleteRequestServiceInstance(id: string): Promise<void> {
-  unwrapGenerated(await deleteRequestService(id), "Failed to delete request service", [204]);
-}
-
-export async function testRequestServiceConnection(
-  payload: RequestServiceTestRequest,
-): Promise<RequestServiceTestResponse> {
-  return unwrapGenerated(await testRequestService(payload), "Failed to test request service");
-}
 
 export async function searchRequests(params: {
   query: string;
@@ -64,14 +23,6 @@ export async function searchRequests(params: {
   );
 }
 
-export async function fetchRequestHistory(): Promise<RequestHistoryResponse> {
-  return unwrapGenerated(await listRequestHistory(), "Failed to load request history");
-}
-
-export async function deleteRequestHistoryEntry(id: string): Promise<void> {
-  unwrapGenerated(await deleteRequestHistoryEntryRequest(id), "Failed to delete request history entry", [204]);
-}
-
 export async function fetchRequestDetail(params: {
   source: RequestProviderKindCode;
   kind: RequestMediaKindCode;
@@ -84,8 +35,4 @@ export async function fetchRequestDetail(params: {
     }),
     "Failed to load request detail",
   );
-}
-
-export async function submitRequest(payload: RequestSubmitRequest): Promise<RequestSubmitResponse> {
-  return unwrapGenerated(await submitRequestRequest(payload), "Failed to submit request");
 }

@@ -53,7 +53,4 @@ public static class AppSettingKeys {
     public const string HlsEnableAdaptiveBitrate = "hls.enableAdaptiveBitrate";
     public const string HlsEncodingThreadCount = "hls.encodingThreadCount";
     public const string HlsMaxCacheSizeGb = "hls.maxCacheSizeGb";
-
-    /// <summary>Per-content-kind fulfilment routing, stored as "kind:mode" entries (e.g. "book:prismedia").</summary>
-    public const string RequestFulfillmentByKind = "request.fulfillmentByKind";
 }

@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { Boxes, Loader2, Pencil, PlugZap, Plus, Trash2 } from "@lucide/svelte";
   import { Badge, Button, Checkbox, Panel, Select, StatusLed, TextInput } from "@prismedia/ui-svelte";
-  import { INDEXER_KIND, DOWNLOAD_CLIENT_KIND, IMPORT_MODE, FULFILLMENT_MODE, REQUEST_MEDIA_KIND, BLOCKLIST_REASON, BOOK_SOURCE_TIER, BOOK_FORMAT_TIER } from "$lib/api/generated/codes";
+  import { INDEXER_KIND, DOWNLOAD_CLIENT_KIND, IMPORT_MODE, BLOCKLIST_REASON, BOOK_SOURCE_TIER, BOOK_FORMAT_TIER } from "$lib/api/generated/codes";
   import { cn } from "@prismedia/ui-svelte";
   import type {
     AcquisitionBlocklistEntry,
@@ -44,17 +44,8 @@
   let profiles = $state<BookAcquisitionProfileView[]>([]);
   let blocklist = $state<AcquisitionBlocklistEntry[]>([]);
   let bookRoots = $state<LibraryRoot[]>([]);
-  let routing = $state<Record<string, string>>({});
   let loading = $state(true);
   let busy = $state(false);
-
-  const ROUTING_KINDS = [
-    { kind: REQUEST_MEDIA_KIND.book, label: "Books" },
-    { kind: REQUEST_MEDIA_KIND.movie, label: "Movies" },
-    { kind: REQUEST_MEDIA_KIND.series, label: "Series" },
-    { kind: REQUEST_MEDIA_KIND.artist, label: "Artists" },
-    { kind: REQUEST_MEDIA_KIND.album, label: "Albums" },
-  ];
 
   // Inline edit forms (null = closed).
   let indexerForm = $state<IndexerConfigSaveRequest | null>(null);
@@ -102,14 +93,6 @@
       profiles = profs;
       blocklist = bl;
       bookRoots = config.roots.filter((r) => r.scanBooks);
-
-      const setting = findSetting(config.settings, settingKeys.requestFulfillmentByKind);
-      const parsed: Record<string, string> = {};
-      for (const entry of valueAsStringList(setting?.value)) {
-        const [kind, mode] = entry.split(":");
-        if (kind && mode) parsed[kind] = mode;
-      }
-      routing = parsed;
     } catch (err) {
       onError(err instanceof Error ? err.message : "Failed to load acquisition settings");
     } finally {
@@ -281,25 +264,6 @@
     }
   }
 
-  function modeFor(kind: string): string {
-    return routing[kind] ?? FULFILLMENT_MODE.external;
-  }
-
-  async function setRouting(kind: string, mode: string) {
-    if (busy) return;
-    busy = true;
-    try {
-      const next = { ...routing, [kind]: mode };
-      const entries = ROUTING_KINDS.map((k) => `${k.kind}:${next[k.kind] ?? FULFILLMENT_MODE.external}`);
-      await updateSetting(settingKeys.requestFulfillmentByKind, entries);
-      routing = next;
-      onMessage("Fulfilment routing updated");
-    } catch (err) {
-      onError(err instanceof Error ? err.message : "Failed to update routing");
-    } finally {
-      busy = false;
-    }
-  }
 
   onMount(load);
 </script>
@@ -494,36 +458,6 @@
               {#if entry.indexerName}<span class="shrink-0 text-xs text-text-muted">{entry.indexerName}</span>{/if}
             </div>
             <Button size="sm" variant="ghost" onclick={() => removeBlocklistEntry(entry.id)} disabled={busy}><Trash2 class="h-3.5 w-3.5" /></Button>
-          </div>
-        {/each}
-      </section>
-
-      <!-- Fulfilment routing -->
-      <section class="space-y-2">
-        <h3 class="text-kicker text-text-primary">Fulfilment routing</h3>
-        <p class="text-[0.72rem] text-text-muted">
-          How each kind of request is fulfilled. Prismedia downloads directly; External hands off to a configured app (Radarr/Sonarr/Lidarr).
-        </p>
-        {#each ROUTING_KINDS as r (r.kind)}
-          <div class="flex items-center justify-between rounded-sm border border-border-subtle bg-surface-1 px-3 py-2">
-            <span class="text-sm text-text-primary">{r.label}</span>
-            <div class="flex gap-1">
-              {#each [{ m: FULFILLMENT_MODE.prismedia, l: "Prismedia" }, { m: FULFILLMENT_MODE.external, l: "External" }] as opt (opt.m)}
-                <button
-                  type="button"
-                  onclick={() => setRouting(r.kind, opt.m)}
-                  disabled={busy}
-                  class={cn(
-                    "rounded-xs border px-2.5 py-1 text-[0.72rem] font-medium transition-all duration-fast",
-                    modeFor(r.kind) === opt.m
-                      ? "bg-accent-950/30 border-border-accent text-text-accent"
-                      : "bg-surface-2 border-border-subtle text-text-muted hover:text-text-primary",
-                  )}
-                >
-                  {opt.l}
-                </button>
-              {/each}
-            </div>
           </div>
         {/each}
       </section>

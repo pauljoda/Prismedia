@@ -14,7 +14,6 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
         var now = DateTimeOffset.UtcNow;
         var row = new AcquisitionRow {
             Id = Guid.NewGuid(),
-            RequestHistoryId = metadata.RequestHistoryId,
             Status = AcquisitionStatus.Pending,
             Title = metadata.Title,
             Author = metadata.Author,

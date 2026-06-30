@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Eye } from "@lucide/svelte";
-  import IdentifyReviewSection from "./IdentifyReviewSection.svelte";
+  import ReviewSection from "$lib/components/review/ReviewSection.svelte";
   import IdentifyTargetPreviewBody from "./IdentifyTargetPreviewBody.svelte";
   import type { EntityCard } from "$lib/api/entities";
 
@@ -12,7 +12,7 @@
   let { entity }: Props = $props();
 </script>
 
-<IdentifyReviewSection panelId="identify-preview" title="To Identify" startCollapsed>
+<ReviewSection panelId="identify-preview" title="To Identify" startCollapsed>
   {#snippet icon()}
     <Eye class="h-3.5 w-3.5 text-text-accent" />
   {/snippet}
@@ -21,4 +21,4 @@
          Mounted lazily by the collapsed section, so thumbnails are only fetched once opened. -->
     <IdentifyTargetPreviewBody {entity} />
   {/snippet}
-</IdentifyReviewSection>
+</ReviewSection>

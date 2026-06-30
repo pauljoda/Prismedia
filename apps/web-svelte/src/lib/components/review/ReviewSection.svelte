@@ -29,7 +29,7 @@
   let collapsed = $state(startCollapsed);
   const contentId = $derived(`${panelId}-content`);
   const sectionClass = $derived(
-    `surface-panel overflow-hidden${lazy ? " identify-lazy-section" : ""}${collapsed ? " is-collapsed" : ""}`,
+    `surface-panel overflow-hidden${lazy ? " review-lazy-section" : ""}${collapsed ? " is-collapsed" : ""}`,
   );
   const chevronClass = $derived(`h-3.5 w-3.5 transition-transform${collapsed ? "" : " rotate-180"}`);
 
@@ -81,7 +81,7 @@
 </section>
 
 <style>
-  .identify-lazy-section {
+  .review-lazy-section {
     content-visibility: auto;
     contain-intrinsic-size: auto 36rem;
   }

@@ -124,9 +124,6 @@ public sealed class BookAcquisitionProfileRow {
 public sealed class AcquisitionRow {
     public Guid Id { get; set; }
 
-    /// <summary>Optional link to the originating request-history entry, kept loose so deleting either side is safe.</summary>
-    public Guid? RequestHistoryId { get; set; }
-
     public Guid? ProfileId { get; set; }
     public AcquisitionStatus Status { get; set; } = AcquisitionStatus.Pending;
     public string? StatusMessage { get; set; }

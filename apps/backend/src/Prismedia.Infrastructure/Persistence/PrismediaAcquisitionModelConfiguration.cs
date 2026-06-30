@@ -117,7 +117,6 @@ internal static partial class PrismediaModelConfiguration {
             entity.ToTable("acquisitions");
             entity.HasKey(row => row.Id);
             entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
-            entity.Property(row => row.RequestHistoryId).HasColumnName("request_history_id");
             entity.Property(row => row.ProfileId).HasColumnName("profile_id");
             entity.Property(row => row.Status)
                 .HasColumnName("status")
@@ -157,7 +156,6 @@ internal static partial class PrismediaModelConfiguration {
             entity.HasIndex(row => row.CreatedAt);
             entity.HasIndex(row => row.Status);
             entity.HasIndex(row => row.UpgradeOfAcquisitionId);
-            entity.HasOne<RequestHistoryRow>().WithMany().HasForeignKey(row => row.RequestHistoryId).OnDelete(DeleteBehavior.SetNull);
             entity.HasOne<BookAcquisitionProfileRow>().WithMany().HasForeignKey(row => row.ProfileId).OnDelete(DeleteBehavior.SetNull);
             entity.HasOne<AcquisitionRow>().WithMany().HasForeignKey(row => row.UpgradeOfAcquisitionId).OnDelete(DeleteBehavior.SetNull);
         });

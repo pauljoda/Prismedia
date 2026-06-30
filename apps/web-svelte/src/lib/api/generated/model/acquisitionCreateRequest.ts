@@ -23,7 +23,5 @@ export interface AcquisitionCreateRequest {
   /** @nullable */
   pluginItemId: string | null;
   /** @nullable */
-  requestHistoryId: string | null;
-  /** @nullable */
   description?: string | null;
 }

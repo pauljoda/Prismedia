@@ -46,12 +46,8 @@ public static class DependencyInjection {
         services.AddScoped<JellyfinCatalogService>();
         services.AddScoped<OrganizeService>();
         services.AddScoped<FilesService>();
-        services.AddScoped<RequestServiceInstanceCommandService>();
         services.AddScoped<RequestSearchService>();
         services.AddScoped<RequestDetailService>();
-        services.AddScoped<RequestServiceTestService>();
-        services.AddScoped<RequestSubmitService>();
-        services.AddScoped<RequestHistoryService>();
         services.AddScoped<Acquisition.IndexerConfigCommandService>();
         services.AddScoped<Acquisition.DownloadClientCommandService>();
         services.AddScoped<Acquisition.BookAcquisitionProfileCommandService>();

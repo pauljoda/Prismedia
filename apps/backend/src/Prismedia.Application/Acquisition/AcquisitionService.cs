@@ -192,7 +192,6 @@ public sealed class AcquisitionService(
             string.IsNullOrWhiteSpace(request.PosterUrl) ? null : request.PosterUrl.Trim(),
             string.IsNullOrWhiteSpace(request.PluginId) ? null : request.PluginId.Trim(),
             string.IsNullOrWhiteSpace(request.PluginItemId) ? null : request.PluginItemId.Trim(),
-            request.RequestHistoryId,
             string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim());
 
         var summary = await store.CreateAsync(metadata, cancellationToken);
