@@ -197,6 +197,9 @@ public sealed class DownloadTransferRow {
     /// <summary>Raw client state string, surfaced for display.</summary>
     public string? State { get; set; }
 
+    /// <summary>When the transfer was first observed stalled, or null when not currently stalled.</summary>
+    public DateTimeOffset? StalledSince { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }

@@ -231,10 +231,10 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
             from transfer in db.DownloadTransfers.AsNoTracking()
             join acquisition in db.Acquisitions.AsNoTracking() on transfer.AcquisitionId equals acquisition.Id
             where active.Contains(acquisition.Status)
-            select new { transfer.Id, transfer.AcquisitionId, transfer.DownloadClientConfigId, transfer.ClientItemId, acquisition.Status, transfer.UpdatedAt })
+            select new { transfer.Id, transfer.AcquisitionId, transfer.DownloadClientConfigId, transfer.ClientItemId, acquisition.Status, transfer.Progress, transfer.UpdatedAt, transfer.StalledSince })
             .ToArrayAsync(cancellationToken);
         return rows
-            .Select(row => new ActiveTransfer(row.Id, row.AcquisitionId, row.DownloadClientConfigId, row.ClientItemId, row.Status, row.UpdatedAt))
+            .Select(row => new ActiveTransfer(row.Id, row.AcquisitionId, row.DownloadClientConfigId, row.ClientItemId, row.Status, row.Progress, row.UpdatedAt, row.StalledSince))
             .ToArray();
     }
 
@@ -260,6 +260,16 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
         }
 
         row.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task MarkTransferStalledAsync(Guid transferId, DateTimeOffset? stalledSince, CancellationToken cancellationToken) {
+        var row = await db.DownloadTransfers.FirstOrDefaultAsync(transfer => transfer.Id == transferId, cancellationToken);
+        if (row is null) {
+            return;
+        }
+
+        row.StalledSince = stalledSince;
         await db.SaveChangesAsync(cancellationToken);
     }
 

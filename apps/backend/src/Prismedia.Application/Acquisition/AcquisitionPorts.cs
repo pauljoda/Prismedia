@@ -183,6 +183,12 @@ public interface IAcquisitionStore {
     /// <summary>Updates a transfer's progress, raw state, and on-disk content path.</summary>
     Task UpdateTransferAsync(Guid transferId, double progress, string? state, string? contentPath, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Sets (or clears, with null) the timestamp at which a transfer was first observed stalled. The monitor
+    /// uses it as the anchor for the stall grace window before abandoning a stuck download.
+    /// </summary>
+    Task MarkTransferStalledAsync(Guid transferId, DateTimeOffset? stalledSince, CancellationToken cancellationToken);
+
     /// <summary>Returns the most recent transfer's client item id for an acquisition, or null when none exists.</summary>
     Task<string?> GetTransferClientItemIdAsync(Guid acquisitionId, CancellationToken cancellationToken);
 

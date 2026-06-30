@@ -151,8 +151,16 @@ public sealed record ActiveTransfer(
     Guid? DownloadClientConfigId,
     string ClientItemId,
     AcquisitionStatus AcquisitionStatus,
+    /// <summary>Last persisted transfer progress (0..1) from the previous monitor pass; compared against the live value to detect whether a stalled-looking torrent actually moved.</summary>
+    double Progress,
     /// <summary>When the transfer was last touched by the monitor; used as the "last seen" anchor for the removal grace period.</summary>
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    /// <summary>
+    /// When the transfer was first observed stalled, or null if it is not currently stalled. The monitor
+    /// anchors a stall here on first observation and abandons the download only once the stall persists past
+    /// the grace window, so a briefly-unseeded torrent isn't blocklisted for a transient stall.
+    /// </summary>
+    DateTimeOffset? StalledSince = null);
 
 /// <summary>Everything the import job needs: the captured metadata, the chosen profile, and the completed download's location.</summary>
 public sealed record AcquisitionImportContext(

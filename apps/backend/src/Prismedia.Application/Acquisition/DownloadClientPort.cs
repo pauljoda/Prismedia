@@ -27,7 +27,13 @@ public sealed record DownloadItemStatus(
     string? State,
     bool IsComplete,
     string? SavePath,
-    string? ContentPath);
+    string? ContentPath,
+    /// <summary>
+    /// True when the client reports the transfer is stuck and won't progress on its own (no peers/metadata,
+    /// errored, or missing files). Normalized by the client adapter so callers stay free of client-specific
+    /// state vocabulary. Distinct from <see cref="IsComplete"/>; a completed transfer is never stalled.
+    /// </summary>
+    bool IsStalled = false);
 
 /// <summary>Result of probing a download client connection.</summary>
 public sealed record DownloadClientConnectionTest(bool Connected, string? Message);

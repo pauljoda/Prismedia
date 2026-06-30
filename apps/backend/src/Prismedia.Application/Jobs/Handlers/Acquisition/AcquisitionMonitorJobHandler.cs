@@ -26,6 +26,15 @@ public sealed class AcquisitionMonitorJobHandler(
     /// </summary>
     private static readonly TimeSpan RemovalGrace = TimeSpan.FromMinutes(5);
 
+    /// <summary>
+    /// How long a transfer may stay stalled (the client reports no peers/metadata, an error, or missing
+    /// files — see <see cref="DownloadItemStatus.IsStalled"/>) before it is abandoned and handed to
+    /// failed-download recovery. The grace window deliberately tolerates transient stalls — a torrent whose
+    /// seeders briefly vanish should resume, not be blocklisted — so only a sustained stall is treated as a
+    /// dead release.
+    /// </summary>
+    private static readonly TimeSpan StallGrace = TimeSpan.FromMinutes(60);
+
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var transfers = await acquisitions.ListActiveTransfersAsync(cancellationToken);
         if (transfers.Count == 0) {
@@ -77,7 +86,12 @@ public sealed class AcquisitionMonitorJobHandler(
                     // owns the terminal Failed transition, so the acquisition stays active — deduped by
                     // target — until that job resolves it to Failed or a re-grab.
                     if (DateTimeOffset.UtcNow - transfer.UpdatedAt >= RemovalGrace) {
-                        await EnqueueFailedHandleAsync(context, transfer.AcquisitionId, cancellationToken);
+                        await EnqueueFailedHandleAsync(
+                            context,
+                            transfer.AcquisitionId,
+                            BlocklistReason.Failed,
+                            "The download was removed from the client.",
+                            cancellationToken);
                     } else {
                         logger.LogDebug("AcquisitionMonitor: transfer {TransferId} not in client listing; within grace window.", transfer.TransferId);
                     }
@@ -100,8 +114,8 @@ public sealed class AcquisitionMonitorJobHandler(
                         TargetEntityId: transfer.AcquisitionId.ToString(),
                         TargetLabel: "Import completed download"),
                     cancellationToken);
-            } else if (transfer.AcquisitionStatus != AcquisitionStatus.Downloading) {
-                await acquisitions.SetStatusAsync(transfer.AcquisitionId, AcquisitionStatus.Downloading, null, cancellationToken);
+            } else {
+                await AdvanceStallAsync(context, transfer, status, cancellationToken);
             }
         } catch (OperationCanceledException) {
             throw;
@@ -111,18 +125,73 @@ public sealed class AcquisitionMonitorJobHandler(
     }
 
     /// <summary>
-    /// Hands a vanished download off to failed-download recovery. The release that was downloading is
-    /// snapshotted into the payload here (before any manual re-queue can overwrite the acquisition's
-    /// selected-release field) so the recovery job blocklists exactly the release that failed. Enqueue is
-    /// deduped by target, so repeated passes while the job is pending enqueue it at most once.
+    /// Advances a transfer the client still reports as in-flight (not complete), handling stalls. A download
+    /// is abandoned to failed-download recovery only when the client reports it stalled (no peers/metadata,
+    /// errored, or missing files) AND it has made no progress since the previous pass, continuously for longer
+    /// than <see cref="StallGrace"/>. Requiring both a stalled state and zero forward progress means a slow
+    /// torrent that is still inching along — even one that momentarily reads stalled at a poll instant — is
+    /// treated as alive and never blocklisted; only a genuinely dead release (stuck with no bytes moving) is
+    /// abandoned. The anchor resets whenever the transfer makes progress, so the grace window measures a
+    /// continuous, truly-stuck stretch. The terminal Failed transition is owned by the failed-handle job (as
+    /// in the removal path); the monitor only surfaces the acquisition as actively downloading here.
     /// </summary>
-    private async Task EnqueueFailedHandleAsync(JobContext context, Guid acquisitionId, CancellationToken cancellationToken) {
+    private async Task AdvanceStallAsync(JobContext context, ActiveTransfer transfer, DownloadItemStatus status, CancellationToken cancellationToken) {
+        // A torrent that advanced since the last poll is alive even if it reads stalled this instant (slow,
+        // not dead). Only a stalled torrent that has not moved is a stall candidate.
+        var madeProgress = status.Progress > transfer.Progress;
+        if (!status.IsStalled || madeProgress) {
+            if (transfer.StalledSince is not null) {
+                await acquisitions.MarkTransferStalledAsync(transfer.TransferId, null, cancellationToken);
+            }
+
+            if (transfer.AcquisitionStatus != AcquisitionStatus.Downloading) {
+                await acquisitions.SetStatusAsync(transfer.AcquisitionId, AcquisitionStatus.Downloading, null, cancellationToken);
+            }
+
+            return;
+        }
+
+        // Stalled and not moving: anchor the stall on first observation and abandon only past the grace window.
+        var stalledSince = transfer.StalledSince ?? DateTimeOffset.UtcNow;
+        if (transfer.StalledSince is null) {
+            await acquisitions.MarkTransferStalledAsync(transfer.TransferId, stalledSince, cancellationToken);
+            logger.LogDebug("AcquisitionMonitor: transfer {TransferId} entered a stalled state ({State}).", transfer.TransferId, status.State);
+        }
+
+        if (DateTimeOffset.UtcNow - stalledSince >= StallGrace) {
+            await EnqueueFailedHandleAsync(
+                context,
+                transfer.AcquisitionId,
+                BlocklistReason.Stalled,
+                "The download stalled with no usable peers and was abandoned.",
+                cancellationToken);
+            // Clear the anchor so abandonment is idempotent: if the monitor runs again before the recovery
+            // job resolves this acquisition, the stall is re-measured from scratch rather than re-firing on
+            // a stale anchor (which, once recovery has completed, could snapshot a different release).
+            await acquisitions.MarkTransferStalledAsync(transfer.TransferId, null, cancellationToken);
+            return;
+        }
+
+        // Still within the grace window: keep waiting, but make sure it reads as actively downloading (a fresh
+        // transfer can stall straight out of Queued) rather than silently sitting.
+        if (transfer.AcquisitionStatus != AcquisitionStatus.Downloading) {
+            await acquisitions.SetStatusAsync(transfer.AcquisitionId, AcquisitionStatus.Downloading, null, cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// Hands a failed download (vanished or stalled past its grace window) off to failed-download recovery.
+    /// The release that was downloading is snapshotted into the payload here (before any manual re-queue can
+    /// overwrite the acquisition's selected-release field) so the recovery job blocklists exactly the release
+    /// that failed. Enqueue is deduped by target, so repeated passes while the job is pending enqueue it at
+    /// most once.
+    /// </summary>
+    private async Task EnqueueFailedHandleAsync(JobContext context, Guid acquisitionId, BlocklistReason reason, string message, CancellationToken cancellationToken) {
         var selected = await acquisitions.GetSelectedReleaseAsync(acquisitionId, cancellationToken);
-        const string message = "The download was removed from the client.";
         await context.EnqueueIfNeededAsync(
             new EnqueueJobRequest(
                 JobType.AcquisitionFailedHandle,
-                PayloadJson: AcquisitionFailedPayload.Serialize(acquisitionId, BlocklistReason.Failed, message, selected),
+                PayloadJson: AcquisitionFailedPayload.Serialize(acquisitionId, reason, message, selected),
                 TargetEntityId: acquisitionId.ToString(),
                 TargetLabel: "Recover failed download"),
             cancellationToken);

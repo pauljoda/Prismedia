@@ -75,6 +75,17 @@ public static class QBittorrentProtocol {
     public const string Seeds = "seeds";
     public const string Peers = "peers";
 
+    // qBittorrent state values that mean a download is stuck and won't progress without intervention.
+    // prism-vocab: external — qBittorrent state strings, matched only at this boundary.
+    public const string StateStalledDownload = "stalledDL";
+    public const string StateMetadataDownload = "metaDL";
+    public const string StateError = "error";
+    public const string StateMissingFiles = "missingFiles";
+
+    /// <summary>True when a qBittorrent state means the download is stuck (no peers/metadata, errored, or missing files) and will not progress on its own.</summary>
+    public static bool IsStalledState(string? state) =>
+        state is StateStalledDownload or StateMetadataDownload or StateError or StateMissingFiles;
+
     /// <summary>qBittorrent requires a Referer header on WebUI API calls to pass its CSRF check.</summary>
     public const string RefererHeader = "Referer";
 

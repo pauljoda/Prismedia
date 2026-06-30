@@ -175,6 +175,7 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.ContentPath).HasColumnName("content_path").HasMaxLength(2048);
             entity.Property(row => row.Progress).HasColumnName("progress");
             entity.Property(row => row.State).HasColumnName("state").HasMaxLength(64);
+            entity.Property(row => row.StalledSince).HasColumnName("stalled_since");
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
             entity.HasIndex(row => row.AcquisitionId);

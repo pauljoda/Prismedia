@@ -108,14 +108,18 @@ public sealed class QBittorrentDownloadClient(HttpClient http) : IDownloadClient
     /// <summary>Projects a qBittorrent torrent JSON object into a <see cref="DownloadItemStatus"/>.</summary>
     private static DownloadItemStatus MapStatus(JsonElement item, string fallbackId) {
         var progress = Double(item, QBittorrentProtocol.Progress) ?? 0;
+        var state = Text(item, QBittorrentProtocol.State);
+        var complete = progress >= 1.0d;
         return new DownloadItemStatus(
             Text(item, QBittorrentProtocol.Hash) ?? fallbackId,
             Text(item, QBittorrentProtocol.Name),
             progress,
-            Text(item, QBittorrentProtocol.State),
-            progress >= 1.0d,
+            state,
+            complete,
             Text(item, QBittorrentProtocol.SavePathJson),
-            Text(item, QBittorrentProtocol.ContentPathJson));
+            Text(item, QBittorrentProtocol.ContentPathJson),
+            // A completed transfer is never stalled, even if the client briefly reports an awkward state.
+            IsStalled: !complete && QBittorrentProtocol.IsStalledState(state));
     }
 
     public async Task<string> AddTorrentFileAsync(DownloadClientConnection connection, string fileName, byte[] torrent, CancellationToken cancellationToken) {
