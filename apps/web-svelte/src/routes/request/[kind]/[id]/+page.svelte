@@ -73,6 +73,16 @@
   // A Prismedia-plugin book is fulfilled by direct acquisition, not an *arr service: its request panel and
   // submit differ, and its series children (volumes) toggle like seasons.
   const isPlugin = $derived(detail?.source === REQUEST_PROVIDER_KIND.plugin);
+  // requestSections renders studios/cast/credits/children/tracks. When none apply — a standalone plugin
+  // book — the two-column layout would orphan the request panel beside an empty column, so collapse it.
+  const hasRequestSections = $derived(
+    !!detail &&
+      (detail.studios.length > 0 ||
+        detail.cast.length > 0 ||
+        detail.credits.length > 0 ||
+        detail.children.length > 0 ||
+        detail.tracks.length > 0),
+  );
 
   const backHref = $derived(
     fromId
@@ -380,8 +390,10 @@
         {/snippet}
 
       {#snippet afterBody()}
-        <div class="request-detail-body">
-          {@render requestSections(d)}
+        <div class="request-detail-body" class:request-detail-body--solo={!hasRequestSections}>
+          {#if hasRequestSections}
+            {@render requestSections(d)}
+          {/if}
           {@render requestPanel(d)}
         </div>
       {/snippet}
@@ -698,12 +710,19 @@
   }
 
   @media (min-width: 64rem) {
-    .request-detail-body {
+    /* Two columns only when the left column has content (rich *arr / series / album / multi-volume details). */
+    .request-detail-body:not(.request-detail-body--solo) {
       grid-template-columns: minmax(0, 1fr) 320px;
     }
 
+    /* Standalone plugin book: no sections — present the panel as a clean card under the description
+       rather than orphaned at the right edge. */
+    .request-detail-body--solo {
+      max-width: 30rem;
+    }
+
     /* Long discographies scroll while the request controls stay reachable. */
-    .request-panel {
+    .request-detail-body:not(.request-detail-body--solo) .request-panel {
       position: sticky;
       top: 1rem;
     }
