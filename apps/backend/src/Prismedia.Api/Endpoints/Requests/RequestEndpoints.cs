@@ -105,6 +105,8 @@ public static class RequestEndpoints {
             string kind,
             string externalId,
             Guid? serviceId,
+            bool? hideNsfw,
+            HttpContext httpContext,
             RequestDetailService details,
             CancellationToken cancellationToken) => {
                 try {
@@ -113,6 +115,7 @@ public static class RequestEndpoints {
                         kind.DecodeAs<RequestMediaKind>(),
                         externalId,
                         serviceId,
+                        NsfwVisibility.ShouldHide(hideNsfw, httpContext),
                         cancellationToken);
                     return detail is null
                         ? Results.NotFound(new ApiProblem(ApiProblemCodes.NotFound, "Request detail was not found."))

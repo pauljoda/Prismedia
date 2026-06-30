@@ -245,11 +245,13 @@ public sealed class RequestDetailService(
     IRequestProviderClientFactory clients,
     IRequestDetailEnrichmentSource enrichment,
     IPluginRequestDetailSource pluginDetail) {
-    public async Task<RequestDetailResponse?> GetAsync(RequestProviderKind source, RequestMediaKind kind, string externalId, Guid? serviceId, CancellationToken cancellationToken) {
+    public async Task<RequestDetailResponse?> GetAsync(RequestProviderKind source, RequestMediaKind kind, string externalId, Guid? serviceId, bool hideNsfw, CancellationToken cancellationToken) {
         // Plugin-sourced books have no *arr service instance — resolve their detail (with series children) from
-        // the plugin directly, so book discovery routes through the same detail → toggle → request page.
+        // the plugin directly, so book discovery routes through the same detail → toggle → request page. The
+        // caller's NSFW visibility is honored so a direct/bookmarked detail URL can't surface an NSFW-flagged
+        // provider's book under SFW gating.
         if (source == RequestProviderKind.Plugin) {
-            return await pluginDetail.GetBookDetailAsync(externalId, hideNsfw: false, cancellationToken);
+            return await pluginDetail.GetBookDetailAsync(externalId, hideNsfw, cancellationToken);
         }
 
         var instances = await store.ListDetailsAsync(cancellationToken);
