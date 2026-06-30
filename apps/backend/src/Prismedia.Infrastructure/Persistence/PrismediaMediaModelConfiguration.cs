@@ -45,6 +45,12 @@ internal static partial class PrismediaModelConfiguration {
                 .HasColumnName("format")
                 .HasMaxLength(64)
                 .HasConversion(value => value.ToCode(), value => value.DecodeAs<BookFormat>());
+            entity.Property(row => row.SourceTier)
+                .HasColumnName("source_tier")
+                .HasMaxLength(32)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<BookSourceTier>())
+                .HasDefaultValue(BookSourceTier.Unknown)
+                .IsRequired();
             entity.Property(row => row.CoverPageEntityId).HasColumnName("cover_page_entity_id");
             entity.Property(row => row.LibraryRootId).HasColumnName("library_root_id");
             entity.HasOne<EntityRow>().WithOne().HasForeignKey<BookDetailRow>(row => row.EntityId).OnDelete(DeleteBehavior.Cascade);

@@ -104,6 +104,15 @@ public sealed class BookAcquisitionProfileRow {
     /// </summary>
     public bool AutoRedownload { get; set; }
 
+    /// <summary>When true, an imported book is kept under watch and re-searched for a higher-quality release until the cutoff is reached.</summary>
+    public bool UpgradeUntilCutoff { get; set; }
+
+    /// <summary>The source tier at or above which the upgrade loop stops searching. Half of the cutoff quality.</summary>
+    public BookSourceTier CutoffSourceTier { get; set; } = BookSourceTier.Unknown;
+
+    /// <summary>The format tier at or above which the upgrade loop stops searching. Half of the cutoff quality.</summary>
+    public BookFormatTier CutoffFormatTier { get; set; } = BookFormatTier.Unknown;
+
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }
@@ -145,6 +154,25 @@ public sealed class AcquisitionRow {
 
     /// <summary>Final on-disk path of the imported payload, used as the identify-hint key.</summary>
     public string? FinalSourcePath { get; set; }
+
+    /// <summary>Detected source tier of the release this acquisition imported (the owned quality, source axis).</summary>
+    public BookSourceTier OwnedSourceTier { get; set; } = BookSourceTier.Unknown;
+
+    /// <summary>Detected format tier of the release this acquisition imported (the owned quality, format axis).</summary>
+    public BookFormatTier OwnedFormatTier { get; set; } = BookFormatTier.Unknown;
+
+    /// <summary>
+    /// For an upgrade child acquisition, the parent acquisition it replaces. Self-FK, nulled if the parent is
+    /// hard-deleted. Null for an ordinary (non-upgrade) acquisition.
+    /// </summary>
+    public Guid? UpgradeOfAcquisitionId { get; set; }
+
+    /// <summary>
+    /// Set in the same commit that transitions to <see cref="AcquisitionStatus.Imported"/> and records the
+    /// owned tiers, so the upgrade due-policy treats the owned quality as authoritative only once captured
+    /// (a not-yet-captured import is never mistaken for "owns nothing").
+    /// </summary>
+    public bool UpgradeQualityCaptured { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
@@ -226,6 +254,12 @@ public sealed class AcquisitionImportHintRow {
     public int? Year { get; set; }
     public string? PosterUrl { get; set; }
 
+    /// <summary>Owned source tier captured at import, applied to the book's detail row by the scan hint.</summary>
+    public BookSourceTier OwnedSourceTier { get; set; } = BookSourceTier.Unknown;
+
+    /// <summary>Owned format tier captured at import (derived from the placed file), applied by the scan hint.</summary>
+    public BookFormatTier OwnedFormatTier { get; set; } = BookFormatTier.Unknown;
+
     /// <summary>Set once the scan has applied the hint, so it is not re-applied on subsequent rescans.</summary>
     public bool Consumed { get; set; }
 
@@ -290,6 +324,21 @@ public sealed class MonitorRow {
 
     /// <summary>When the monitor was last re-searched; null means never. Used to decide whether it is due.</summary>
     public DateTimeOffset? LastSearchedAt { get; set; }
+
+    /// <summary>
+    /// The imported book entity this monitor watches for upgrades, set once the acquisition imports. Lets the
+    /// monitor outlive the (transient) acquisition and re-search for a better release of the owned book.
+    /// </summary>
+    public Guid? BookEntityId { get; set; }
+
+    /// <summary>Number of successful upgrade replacements so far, for the replacement cap (reset when the cutoff is met).</summary>
+    public int UpgradeAttempts { get; set; }
+
+    /// <summary>Consecutive upgrade searches that found nothing strictly better, for the barren-search cap and backoff.</summary>
+    public int BarrenSearches { get; set; }
+
+    /// <summary>The in-flight upgrade child acquisition, if one is currently downloading. The interlock that allows at most one upgrade attempt per book at a time.</summary>
+    public Guid? UpgradeChildAcquisitionId { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }

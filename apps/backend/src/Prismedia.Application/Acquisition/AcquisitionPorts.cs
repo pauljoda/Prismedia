@@ -66,7 +66,10 @@ public sealed record BookAcquisitionProfileSaveCommand(
     IReadOnlyList<string> IgnoredTerms,
     IReadOnlyList<string> PreferredTerms,
     bool AutoPick,
-    bool AutoRedownload);
+    bool AutoRedownload,
+    bool UpgradeUntilCutoff,
+    BookSourceTier CutoffSourceTier,
+    BookFormatTier CutoffFormatTier);
 
 /// <summary>Persistence port for book acquisition profiles (matching rules + import target).</summary>
 public interface IBookAcquisitionProfileStore {

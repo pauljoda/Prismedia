@@ -18,6 +18,14 @@ public sealed class BookDetailRow {
     public Guid EntityId { get; set; }
     public BookType BookType { get; set; } = BookType.Book;
     public BookFormat Format { get; set; } = BookFormat.ImageArchive;
+
+    /// <summary>
+    /// Provenance tier of the owned payload (web/retail/unknown), captured at acquisition import. The format
+    /// half of the owned quality is derived from <see cref="Format"/> (never stored), so the live owned quality
+    /// is <c>(SourceTier, BookQualityRank.TierFor(Format))</c>. Unknown for scanned-in books with no acquisition.
+    /// </summary>
+    public BookSourceTier SourceTier { get; set; } = BookSourceTier.Unknown;
+
     public Guid? CoverPageEntityId { get; set; }
     public Guid? LibraryRootId { get; set; }
 }

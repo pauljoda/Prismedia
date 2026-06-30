@@ -4,6 +4,8 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { BookFormatTier } from './bookFormatTier';
+import type { BookSourceTier } from './bookSourceTier';
 import type { ImportMode } from './importMode';
 
 export interface BookAcquisitionProfileView {
@@ -33,4 +35,7 @@ export interface BookAcquisitionProfileView {
   preferredTerms: string[];
   autoPick: boolean;
   autoRedownload: boolean;
+  upgradeUntilCutoff: boolean;
+  cutoffSourceTier: BookSourceTier;
+  cutoffFormatTier: BookFormatTier;
 }

@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { Boxes, Loader2, Pencil, PlugZap, Plus, Trash2 } from "@lucide/svelte";
   import { Badge, Button, Checkbox, Panel, Select, StatusLed, TextInput } from "@prismedia/ui-svelte";
-  import { INDEXER_KIND, DOWNLOAD_CLIENT_KIND, IMPORT_MODE, FULFILLMENT_MODE, REQUEST_MEDIA_KIND, BLOCKLIST_REASON } from "$lib/api/generated/codes";
+  import { INDEXER_KIND, DOWNLOAD_CLIENT_KIND, IMPORT_MODE, FULFILLMENT_MODE, REQUEST_MEDIA_KIND, BLOCKLIST_REASON, BOOK_SOURCE_TIER, BOOK_FORMAT_TIER } from "$lib/api/generated/codes";
   import { cn } from "@prismedia/ui-svelte";
   import type {
     AcquisitionBlocklistEntry,
@@ -66,6 +66,18 @@
   const importModeOptions = [
     { value: IMPORT_MODE.move, label: "Move (delete torrent after import)" },
     { value: IMPORT_MODE.copy, label: "Copy (keep seeding)" },
+  ];
+  // Cutoff tiers: the quality at which the upgrade loop stops searching. Ordered worst→best to match the ranks.
+  const cutoffSourceOptions = [
+    { value: BOOK_SOURCE_TIER.unknown, label: "Unknown (any source)" },
+    { value: BOOK_SOURCE_TIER.web, label: "Web" },
+    { value: BOOK_SOURCE_TIER.retail, label: "Retail" },
+  ];
+  const cutoffFormatOptions = [
+    { value: BOOK_FORMAT_TIER.unknown, label: "Unknown (any format)" },
+    { value: BOOK_FORMAT_TIER.fixed, label: "PDF" },
+    { value: BOOK_FORMAT_TIER.reflowable, label: "EPUB" },
+    { value: BOOK_FORMAT_TIER.archive, label: "Comic archive (CBZ)" },
   ];
   const reasonLabels: Record<string, string> = {
     [BLOCKLIST_REASON.failed]: "Download failed",
@@ -207,6 +219,7 @@
       targetLibraryRootId: bookRoots[0]?.id ?? "", pathTemplate: DEFAULT_PATH_TEMPLATE,
       importMode: IMPORT_MODE.move, allowedFormats: [], language: null, minSeeders: 1,
       minSizeBytes: null, maxSizeBytes: null, requiredTerms: [], ignoredTerms: [], preferredTerms: [], autoPick: false, autoRedownload: false,
+      upgradeUntilCutoff: false, cutoffSourceTier: BOOK_SOURCE_TIER.unknown, cutoffFormatTier: BOOK_FORMAT_TIER.unknown,
     };
     profileTerms = { preferred: "", required: "", ignored: "" };
   }
@@ -216,6 +229,7 @@
       pathTemplate: p.pathTemplate, importMode: p.importMode, allowedFormats: p.allowedFormats, language: p.language,
       minSeeders: p.minSeeders, minSizeBytes: p.minSizeBytes, maxSizeBytes: p.maxSizeBytes,
       requiredTerms: p.requiredTerms, ignoredTerms: p.ignoredTerms, preferredTerms: p.preferredTerms, autoPick: p.autoPick, autoRedownload: p.autoRedownload,
+      upgradeUntilCutoff: p.upgradeUntilCutoff, cutoffSourceTier: p.cutoffSourceTier, cutoffFormatTier: p.cutoffFormatTier,
     };
     profileTerms = { preferred: p.preferredTerms.join(", "), required: p.requiredTerms.join(", "), ignored: p.ignoredTerms.join(", ") };
   }
@@ -446,6 +460,15 @@
             <label class="flex items-center gap-2"><Checkbox checked={profileForm.isDefault} onchange={(e) => profileForm && (profileForm.isDefault = e.currentTarget.checked)} /><span class="text-sm text-text-secondary">Default profile</span></label>
             <label class="flex items-start gap-2"><Checkbox checked={profileForm.autoPick} onchange={(e) => profileForm && (profileForm.autoPick = e.currentTarget.checked)} /><span class="text-sm text-text-secondary">Auto-grab<span class="block text-[0.72rem] text-text-muted">Download the best acceptable release automatically instead of waiting for manual review.</span></span></label>
             <label class="flex items-start gap-2"><Checkbox checked={profileForm.autoRedownload} onchange={(e) => profileForm && (profileForm.autoRedownload = e.currentTarget.checked)} /><span class="text-sm text-text-secondary">Auto-redownload on failure<span class="block text-[0.72rem] text-text-muted">When a download fails, blocklist that release and automatically grab the next-best candidate.</span></span></label>
+            <label class="flex items-start gap-2"><Checkbox checked={profileForm.upgradeUntilCutoff} onchange={(e) => profileForm && (profileForm.upgradeUntilCutoff = e.currentTarget.checked)} /><span class="text-sm text-text-secondary">Upgrade until cutoff<span class="block text-[0.72rem] text-text-muted">After a book is imported, keep searching for a higher-quality release and replace the file, until it reaches the cutoff below.</span></span></label>
+            {#if profileForm.upgradeUntilCutoff}
+              <div class="grid gap-2 sm:grid-cols-2 pl-6">
+                <label class="space-y-1"><span class="text-label text-text-muted">Cutoff source</span>
+                  <Select size="sm" value={profileForm.cutoffSourceTier} options={cutoffSourceOptions} onchange={(v) => profileForm && (profileForm.cutoffSourceTier = v as typeof profileForm.cutoffSourceTier)} /></label>
+                <label class="space-y-1"><span class="text-label text-text-muted">Cutoff format</span>
+                  <Select size="sm" value={profileForm.cutoffFormatTier} options={cutoffFormatOptions} onchange={(v) => profileForm && (profileForm.cutoffFormatTier = v as typeof profileForm.cutoffFormatTier)} /></label>
+              </div>
+            {/if}
             <div class="flex justify-end gap-1.5">
               <Button size="sm" variant="ghost" onclick={() => (profileForm = null)} disabled={busy}>Cancel</Button>
               <Button size="sm" variant="primary" onclick={saveProfile} disabled={busy || !profileForm.displayName || !profileForm.targetLibraryRootId}>Save</Button>

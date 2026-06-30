@@ -374,6 +374,9 @@ export const RELEASE_REJECTION_REASON = {
   wrongProtocol: "wrong-protocol",
   noDownloadLink: "no-download-link",
   blocklisted: "blocklisted",
+  qualityNotAllowed: "quality-not-allowed",
+  notAnUpgrade: "not-an-upgrade",
+  formatDowngrade: "format-downgrade",
 } as const;
 
 export type ReleaseRejectionReasonCode = (typeof RELEASE_REJECTION_REASON)[keyof typeof RELEASE_REJECTION_REASON];
@@ -401,6 +404,23 @@ export const MONITOR_STATUS = {
 } as const;
 
 export type MonitorStatusCode = (typeof MONITOR_STATUS)[keyof typeof MONITOR_STATUS];
+
+export const BOOK_FORMAT_TIER = {
+  unknown: "unknown",
+  fixed: "fixed",
+  reflowable: "reflowable",
+  archive: "archive",
+} as const;
+
+export type BookFormatTierCode = (typeof BOOK_FORMAT_TIER)[keyof typeof BOOK_FORMAT_TIER];
+
+export const BOOK_SOURCE_TIER = {
+  unknown: "unknown",
+  web: "web",
+  retail: "retail",
+} as const;
+
+export type BookSourceTierCode = (typeof BOOK_SOURCE_TIER)[keyof typeof BOOK_SOURCE_TIER];
 
 export const CAPABILITY_KIND = {
   classification: "classification",

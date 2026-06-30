@@ -74,6 +74,9 @@ public sealed class EfBookAcquisitionProfileStore(PrismediaDbContext db) : IBook
         row.PreferredTerms = command.PreferredTerms.ToArray();
         row.AutoPick = command.AutoPick;
         row.AutoRedownload = command.AutoRedownload;
+        row.UpgradeUntilCutoff = command.UpgradeUntilCutoff;
+        row.CutoffSourceTier = command.CutoffSourceTier;
+        row.CutoffFormatTier = command.CutoffFormatTier;
         row.IsDefault = shouldBeDefault;
         row.UpdatedAt = now;
 
@@ -146,5 +149,8 @@ public sealed class EfBookAcquisitionProfileStore(PrismediaDbContext db) : IBook
             row.IgnoredTerms,
             row.PreferredTerms,
             row.AutoPick,
-            row.AutoRedownload);
+            row.AutoRedownload,
+            row.UpgradeUntilCutoff,
+            row.CutoffSourceTier,
+            row.CutoffFormatTier);
 }

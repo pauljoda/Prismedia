@@ -186,7 +186,10 @@ public sealed record BookAcquisitionProfileView(
     IReadOnlyList<string> IgnoredTerms,
     IReadOnlyList<string> PreferredTerms,
     bool AutoPick,
-    bool AutoRedownload);
+    bool AutoRedownload,
+    bool UpgradeUntilCutoff,
+    BookSourceTier CutoffSourceTier,
+    BookFormatTier CutoffFormatTier);
 
 /// <summary>Request payload for creating or updating a book acquisition profile.</summary>
 public sealed record BookAcquisitionProfileSaveRequest(
@@ -205,7 +208,10 @@ public sealed record BookAcquisitionProfileSaveRequest(
     IReadOnlyList<string> IgnoredTerms,
     IReadOnlyList<string> PreferredTerms,
     bool AutoPick,
-    bool AutoRedownload);
+    bool AutoRedownload,
+    bool UpgradeUntilCutoff,
+    BookSourceTier CutoffSourceTier,
+    BookFormatTier CutoffFormatTier);
 
 /// <summary>A monitored wanted item: the standing intent plus the current state of the acquisition it keeps alive.</summary>
 public sealed record MonitorView(

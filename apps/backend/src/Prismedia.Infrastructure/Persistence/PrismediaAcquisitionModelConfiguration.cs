@@ -94,6 +94,19 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.PreferredTerms).HasColumnName("preferred_terms");
             entity.Property(row => row.AutoPick).HasColumnName("auto_pick");
             entity.Property(row => row.AutoRedownload).HasColumnName("auto_redownload");
+            entity.Property(row => row.UpgradeUntilCutoff).HasColumnName("upgrade_until_cutoff").HasDefaultValue(false);
+            entity.Property(row => row.CutoffSourceTier)
+                .HasColumnName("cutoff_source_tier")
+                .HasMaxLength(32)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<BookSourceTier>())
+                .HasDefaultValue(BookSourceTier.Unknown)
+                .IsRequired();
+            entity.Property(row => row.CutoffFormatTier)
+                .HasColumnName("cutoff_format_tier")
+                .HasMaxLength(32)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<BookFormatTier>())
+                .HasDefaultValue(BookFormatTier.Unknown)
+                .IsRequired();
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
             entity.HasIndex(row => row.IsDefault);
@@ -124,12 +137,28 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.SourceUrlsJson).HasColumnName("source_urls_json").HasColumnType("jsonb");
             entity.Property(row => row.SelectedReleaseJson).HasColumnName("selected_release_json").HasColumnType("jsonb");
             entity.Property(row => row.FinalSourcePath).HasColumnName("final_source_path").HasMaxLength(2048);
+            entity.Property(row => row.OwnedSourceTier)
+                .HasColumnName("owned_source_tier")
+                .HasMaxLength(32)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<BookSourceTier>())
+                .HasDefaultValue(BookSourceTier.Unknown)
+                .IsRequired();
+            entity.Property(row => row.OwnedFormatTier)
+                .HasColumnName("owned_format_tier")
+                .HasMaxLength(32)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<BookFormatTier>())
+                .HasDefaultValue(BookFormatTier.Unknown)
+                .IsRequired();
+            entity.Property(row => row.UpgradeOfAcquisitionId).HasColumnName("upgrade_of_acquisition_id");
+            entity.Property(row => row.UpgradeQualityCaptured).HasColumnName("upgrade_quality_captured").HasDefaultValue(false);
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
             entity.HasIndex(row => row.CreatedAt);
             entity.HasIndex(row => row.Status);
+            entity.HasIndex(row => row.UpgradeOfAcquisitionId);
             entity.HasOne<RequestHistoryRow>().WithMany().HasForeignKey(row => row.RequestHistoryId).OnDelete(DeleteBehavior.SetNull);
             entity.HasOne<BookAcquisitionProfileRow>().WithMany().HasForeignKey(row => row.ProfileId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne<AcquisitionRow>().WithMany().HasForeignKey(row => row.UpgradeOfAcquisitionId).OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<ReleaseCandidateRow>(entity => {
@@ -198,6 +227,18 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.Series).HasColumnName("series").HasMaxLength(512);
             entity.Property(row => row.Year).HasColumnName("year");
             entity.Property(row => row.PosterUrl).HasColumnName("poster_url").HasMaxLength(2048);
+            entity.Property(row => row.OwnedSourceTier)
+                .HasColumnName("owned_source_tier")
+                .HasMaxLength(32)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<BookSourceTier>())
+                .HasDefaultValue(BookSourceTier.Unknown)
+                .IsRequired();
+            entity.Property(row => row.OwnedFormatTier)
+                .HasColumnName("owned_format_tier")
+                .HasMaxLength(32)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<BookFormatTier>())
+                .HasDefaultValue(BookFormatTier.Unknown)
+                .IsRequired();
             entity.Property(row => row.Consumed).HasColumnName("consumed");
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
@@ -246,12 +287,20 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.Title).HasColumnName("title").HasMaxLength(1024).IsRequired();
             entity.Property(row => row.Author).HasColumnName("author").HasMaxLength(512);
             entity.Property(row => row.LastSearchedAt).HasColumnName("last_searched_at");
+            entity.Property(row => row.BookEntityId).HasColumnName("book_entity_id");
+            entity.Property(row => row.UpgradeAttempts).HasColumnName("upgrade_attempts").HasDefaultValue(0);
+            entity.Property(row => row.BarrenSearches).HasColumnName("barren_searches").HasDefaultValue(0);
+            entity.Property(row => row.UpgradeChildAcquisitionId).HasColumnName("upgrade_child_acquisition_id");
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
             entity.HasIndex(row => new { row.Status, row.LastSearchedAt });
             entity.HasIndex(row => row.AcquisitionId).IsUnique();
+            entity.HasIndex(row => row.BookEntityId);
             // SetNull (not Cascade): hard-deleting the linked acquisition must auto-pause the monitor, not delete it.
             entity.HasOne<AcquisitionRow>().WithMany().HasForeignKey(row => row.AcquisitionId).OnDelete(DeleteBehavior.SetNull);
+            // The watched book and the in-flight upgrade child are loose links (no FK): the book lives in the
+            // entity graph (a different bounded slice) and the child link is cleared explicitly, so deleting
+            // either must not cascade into the monitor.
         });
     }
 }

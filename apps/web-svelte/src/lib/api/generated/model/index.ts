@@ -29,6 +29,8 @@ export * from './bookAcquisitionProfileView';
 export * from './bookAuthorDetail';
 export * from './bookDetail';
 export * from './bookFormat';
+export * from './bookFormatTier';
+export * from './bookSourceTier';
 export * from './bookType';
 export * from './browseLibraryPathParams';
 export * from './browserSessionResponse';
