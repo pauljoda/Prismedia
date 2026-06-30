@@ -235,4 +235,95 @@ public sealed class BookReleaseDecisionEngineTests {
         Assert.Equal("Book B (epub)", result[1].Release.Title);
         Assert.False(result[2].Accepted);
     }
+
+    // ── Quality gates (slice 2b-ii.4) ─────────────────────────────────────────
+
+    private static ReleaseRejectionReason[] Reasons(IndexerRelease release, BookAcquisitionRules rules) =>
+        [.. Engine.Evaluate(One(release), rules)[0].Rejections];
+
+    [Fact]
+    public void InitialGrabIsNotGatedByQualityOrUpgrade() {
+        // Default rules (MinQuality and OwnedQuality both Floor): even a low-quality release is accepted —
+        // the quality/upgrade specs are inert on an initial grab.
+        var result = Engine.Evaluate(One(Release(title: "Some Book (pdf)")), BookAcquisitionRules.Default);
+
+        Assert.True(result[0].Accepted);
+        Assert.DoesNotContain(ReleaseRejectionReason.QualityNotAllowed, result[0].Rejections);
+        Assert.DoesNotContain(ReleaseRejectionReason.NotAnUpgrade, result[0].Rejections);
+        Assert.DoesNotContain(ReleaseRejectionReason.FormatDowngrade, result[0].Rejections);
+    }
+
+    [Fact]
+    public void InitialGrabRanksHigherQualityFirstEvenWithFewerSeeders() {
+        var retailEpub = Release(title: "Some Book (retail) (epub)", seeders: 5);
+        var plainPdf = Release(title: "Some Book (pdf)", seeders: 500);
+
+        var result = Engine.Evaluate([(plainPdf, null, "i"), (retailEpub, null, "i")], BookAcquisitionRules.Default);
+
+        Assert.True(result[0].Accepted);
+        Assert.Equal("Some Book (retail) (epub)", result[0].Release.Title);
+    }
+
+    [Fact]
+    public void RejectsBelowMinQualityFloor() {
+        var rules = BookAcquisitionRules.Default with { MinQuality = new(BookSourceTier.Web, BookFormatTier.Reflowable) };
+
+        // Untagged source ("(epub)" → Unknown source) is below the Web floor.
+        Assert.Contains(ReleaseRejectionReason.QualityNotAllowed, Reasons(Release(title: "Some Book (epub)"), rules));
+        // Meets the floor on both axes.
+        Assert.DoesNotContain(ReleaseRejectionReason.QualityNotAllowed, Reasons(Release(title: "Some Book (web) (epub)"), rules));
+    }
+
+    [Fact]
+    public void UpgradeRejectsEqualQualityAndAcceptsStrictlyBetter() {
+        var owned = new BookQualityRank(BookSourceTier.Web, BookFormatTier.Reflowable);
+        var rules = BookAcquisitionRules.Default with { OwnedQuality = owned, IsUpgradeSearch = true };
+
+        Assert.Contains(ReleaseRejectionReason.NotAnUpgrade, Reasons(Release(title: "Some Book (web) (epub)"), rules));
+        Assert.DoesNotContain(ReleaseRejectionReason.NotAnUpgrade, Reasons(Release(title: "Some Book (retail) (epub)"), rules));
+    }
+
+    [Fact]
+    public void UpgradeGatesDoNotApplyWithoutTheUpgradeFlag() {
+        // OwnedQuality is set but IsUpgradeSearch is false (e.g. an unrelated ad-hoc search): the upgrade and
+        // format-floor gates stay inert, so this is decoupled from the owned-quality value entirely.
+        var rules = BookAcquisitionRules.Default with { OwnedQuality = new(BookSourceTier.Retail, BookFormatTier.Archive) };
+
+        var reasons = Reasons(Release(title: "Some Book (web) (pdf)"), rules);
+        Assert.DoesNotContain(ReleaseRejectionReason.NotAnUpgrade, reasons);
+        Assert.DoesNotContain(ReleaseRejectionReason.FormatDowngrade, reasons);
+    }
+
+    [Fact]
+    public void UpgradeRejectsFormatDowngradeEvenWithBetterSource() {
+        // The load-bearing rule: a retail PDF must never replace an owned web EPUB (format would regress).
+        var rules = BookAcquisitionRules.Default with { OwnedQuality = new(BookSourceTier.Web, BookFormatTier.Reflowable), IsUpgradeSearch = true };
+        var reasons = Reasons(Release(title: "Some Book (retail) (pdf)"), rules);
+
+        Assert.Contains(ReleaseRejectionReason.FormatDowngrade, reasons);
+        Assert.Contains(ReleaseRejectionReason.NotAnUpgrade, reasons);
+        Assert.False(Engine.Evaluate(One(Release(title: "Some Book (retail) (pdf)")), rules)[0].Accepted);
+    }
+
+    [Fact]
+    public void UpgradeWithFormatAnonymousTitleIsNotAnUpgradeNotADowngrade() {
+        // A title naming no format makes no downgrade claim: it must not be mislabeled FormatDowngrade, but it
+        // still isn't a confirmed upgrade, so UpgradeSpecification rejects it as NotAnUpgrade.
+        var rules = BookAcquisitionRules.Default with { OwnedQuality = new(BookSourceTier.Web, BookFormatTier.Reflowable), IsUpgradeSearch = true };
+        var reasons = Reasons(Release(title: "Some Book (retail)"), rules);
+
+        Assert.DoesNotContain(ReleaseRejectionReason.FormatDowngrade, reasons);
+        Assert.Contains(ReleaseRejectionReason.NotAnUpgrade, reasons);
+    }
+
+    [Fact]
+    public void UnknownOwnedSourceRequiresAFormatWinNotASourceOnlyGain() {
+        // Owned PDF with unparseable source: a "retail" PDF (source-only gain) is NOT trusted to replace it,
+        // because the owned file might already be retail. Only a real format improvement counts.
+        var rules = BookAcquisitionRules.Default with { OwnedQuality = new(BookSourceTier.Unknown, BookFormatTier.Fixed), IsUpgradeSearch = true };
+
+        Assert.Contains(ReleaseRejectionReason.NotAnUpgrade, Reasons(Release(title: "Some Book (retail) (pdf)"), rules));
+        // A genuine format win (PDF → EPUB) is accepted even though the source stays unknown.
+        Assert.DoesNotContain(ReleaseRejectionReason.NotAnUpgrade, Reasons(Release(title: "Some Book (epub)"), rules));
+    }
 }

@@ -137,6 +137,77 @@ public sealed class LanguageSpecification : IReleaseSpecification {
 }
 
 /// <summary>
+/// Rejects releases whose detected quality falls below the profile's minimum-quality floor on either axis.
+/// Off by default: the default <see cref="BookAcquisitionRules.MinQuality"/> is <see cref="BookQualityRank.Floor"/>,
+/// which nothing is below. A title that names no quality scores at the floor, so a floor of Floor never rejects.
+/// </summary>
+public sealed class QualityFloorSpecification : IReleaseSpecification {
+    public ReleaseRejectionReason Reason => ReleaseRejectionReason.QualityNotAllowed;
+
+    public ReleaseRejectionReason? Evaluate(IndexerRelease release, BookAcquisitionRules rules) {
+        var quality = BookFormatDetection.DetectQuality(release.Title);
+        var min = rules.MinQuality;
+        return quality.Source >= min.Source && quality.Format >= min.Format ? null : Reason;
+    }
+}
+
+/// <summary>
+/// On an upgrade search, rejects any candidate that is not a strict improvement over the owned copy. Gated on
+/// <see cref="BookAcquisitionRules.IsUpgradeSearch"/> (not on the owned-quality value), so initial grabs are
+/// never affected and a genuinely-unknown owned quality can't silently disable the gate. When the owned source
+/// is unknown (the owned file's provenance could not be parsed), a source-only gain is NOT trusted to authorize
+/// a replacement — only a verifiable format improvement counts — matching the conservative-replace policy.
+/// </summary>
+public sealed class UpgradeSpecification : IReleaseSpecification {
+    public ReleaseRejectionReason Reason => ReleaseRejectionReason.NotAnUpgrade;
+
+    public ReleaseRejectionReason? Evaluate(IndexerRelease release, BookAcquisitionRules rules) {
+        if (!rules.IsUpgradeSearch) {
+            return null;
+        }
+
+        var owned = rules.OwnedQuality;
+        var candidate = BookFormatDetection.DetectQuality(release.Title);
+        if (!candidate.StrictlyDominates(owned)) {
+            return Reason;
+        }
+
+        // Conservative-replace: an unknown owned source might already be retail (just unparsed), so a gain
+        // that comes only from the source axis is not trusted to auto-replace; require a real format win.
+        if (owned.Source == BookSourceTier.Unknown && candidate.Format <= owned.Format) {
+            return Reason;
+        }
+
+        return null;
+    }
+}
+
+/// <summary>
+/// On an upgrade search, rejects any candidate whose declared format tier is below the owned copy's, even if
+/// its source improves — an explicit guard so a higher-source/lower-format release (e.g. a retail PDF over a
+/// web EPUB) can never replace the owned file. Gated on <see cref="BookAcquisitionRules.IsUpgradeSearch"/>. A
+/// title that names no format makes no downgrade claim, so it passes here and is judged by
+/// <see cref="UpgradeSpecification"/> (which rejects it as <see cref="ReleaseRejectionReason.NotAnUpgrade"/>) —
+/// avoiding a misleading downgrade reason for a format-anonymous title.
+/// </summary>
+public sealed class FormatFloorSpecification : IReleaseSpecification {
+    public ReleaseRejectionReason Reason => ReleaseRejectionReason.FormatDowngrade;
+
+    public ReleaseRejectionReason? Evaluate(IndexerRelease release, BookAcquisitionRules rules) {
+        if (!rules.IsUpgradeSearch) {
+            return null;
+        }
+
+        var tier = BookFormatDetection.DetectFormatTier(release.Title);
+        if (tier == BookFormatTier.Unknown) {
+            return null;
+        }
+
+        return tier < rules.OwnedQuality.Format ? Reason : null;
+    }
+}
+
+/// <summary>
 /// Scores and filters indexer releases for one media kind. Resolved per <see cref="Kind"/> through
 /// <see cref="IAcquisitionDecisionEngineFactory"/> so additional kinds (video, audio) register their own
 /// engine without the search runner changing. (The rules type is still book-specific; generalizing it is
@@ -169,6 +240,12 @@ public sealed class BookReleaseDecisionEngine : IAcquisitionDecisionEngine {
         new ProtocolSpecification(),
         new DownloadLinkSpecification(),
         new FormatSpecification(),
+        // Quality gates run after importability: never accept a quality we cannot import. All three are
+        // no-ops at the default Floor rules, so they only bite once a min-quality floor or an upgrade's
+        // owned-quality is set.
+        new QualityFloorSpecification(),
+        new UpgradeSpecification(),
+        new FormatFloorSpecification(),
         new MinSeedersSpecification(),
         new SizeSpecification(),
         new RequiredTermsSpecification(),

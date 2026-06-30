@@ -31,8 +31,18 @@ public sealed record BookAcquisitionRules(
     long? MaxSizeBytes,
     IReadOnlyList<string> RequiredTerms,
     IReadOnlyList<string> IgnoredTerms,
-    IReadOnlyList<string> PreferredTerms) {
-    /// <summary>Permissive defaults used when no profile is configured yet (e.g. ad-hoc verification searches).</summary>
+    IReadOnlyList<string> PreferredTerms,
+    BookQualityRank MinQuality = default,
+    BookQualityRank OwnedQuality = default,
+    bool IsUpgradeSearch = false) {
+    /// <summary>
+    /// Permissive defaults used when no profile is configured yet (e.g. ad-hoc verification searches).
+    /// <see cref="MinQuality"/> and <see cref="OwnedQuality"/> default to <see cref="BookQualityRank.Floor"/>
+    /// (<c>default(BookQualityRank)</c>) and <see cref="IsUpgradeSearch"/> to false, so the quality and
+    /// upgrade gates are no-ops unless explicitly set. <see cref="IsUpgradeSearch"/> — not the value of
+    /// <see cref="OwnedQuality"/> — is the single source of truth for whether the upgrade gates apply, so a
+    /// genuinely-unknown owned quality can never silently disable them.
+    /// </summary>
     public static BookAcquisitionRules Default { get; } = new([], null, 1, null, null, [], [], []);
 }
 

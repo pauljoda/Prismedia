@@ -91,7 +91,19 @@ public enum ReleaseRejectionReason {
 
     /// <summary>The release's identity is on the acquisition blocklist (a prior attempt failed or it was manually blocked).</summary>
     [Code("blocklisted")]
-    Blocklisted
+    Blocklisted,
+
+    /// <summary>The release's detected quality is below the profile's minimum-quality floor on some axis.</summary>
+    [Code("quality-not-allowed")]
+    QualityNotAllowed,
+
+    /// <summary>An upgrade search: the candidate is not a strict improvement over the owned copy, so it would not upgrade it.</summary>
+    [Code("not-an-upgrade")]
+    NotAnUpgrade,
+
+    /// <summary>An upgrade search: the candidate would downgrade the format relative to the owned copy, even if another axis improves.</summary>
+    [Code("format-downgrade")]
+    FormatDowngrade
 }
 
 /// <summary>
