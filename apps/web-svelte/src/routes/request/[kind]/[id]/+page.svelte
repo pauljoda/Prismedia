@@ -707,11 +707,23 @@
       </div>
 
       {#if d.children.length > 0}
+        {@const requestableChildIds = d.children.filter((child) => child.requestable).map((child) => child.id)}
+        {@const allSelected =
+          requestableChildIds.length > 0 && requestableChildIds.every((id) => selectedChildIds.includes(id))}
         <div class="space-y-2">
-          <h3 class="text-label text-text-muted">
-            {isAuthor ? "Books" : "Volumes"}
-            <span class="ml-1 font-mono text-[0.68rem] text-text-muted">{selectedChildIds.length}/{d.children.length}</span>
-          </h3>
+          <div class="flex items-center justify-between gap-2">
+            <h3 class="text-label text-text-muted">
+              {isAuthor ? "Books" : "Volumes"}
+              <span class="ml-1 font-mono text-[0.68rem] text-text-muted">{selectedChildIds.length}/{d.children.length}</span>
+            </h3>
+            <button
+              type="button"
+              class="text-[0.7rem] font-medium text-text-muted transition-colors hover:text-text-primary"
+              onclick={() => (selectedChildIds = allSelected ? [] : requestableChildIds)}
+            >
+              {allSelected ? "Deselect all" : "Select all"}
+            </button>
+          </div>
           <div class="surface-well max-h-64 divide-y divide-border-subtle overflow-y-auto px-3">
             {#each d.children as child (child.id)}
               <label class="flex cursor-pointer items-center gap-2.5 py-2 text-[0.8rem] text-text-secondary">
