@@ -123,7 +123,44 @@ public sealed record AcquisitionCandidateRef(Guid CandidateId, string Title, str
 }
 
 /// <summary>A monitor whose periodic re-search is due now, paired with the acquisition the sweep should re-search.</summary>
-public sealed record DueMonitor(Guid MonitorId, Guid AcquisitionId, string Title);
+/// <summary>A monitor whose periodic search is due. <see cref="IsUpgrade"/> marks an imported book due for an upgrade re-search (a child acquisition is spawned to search) rather than a still-missing book's initial search.</summary>
+public sealed record DueMonitor(Guid MonitorId, Guid AcquisitionId, string Title, bool IsUpgrade = false);
+
+/// <summary>
+/// Everything the upgrade-replace job needs to swap a downloaded upgrade child's file in for the owned book:
+/// the parent it upgrades, where the owned payload lives, the current owned quality to re-confirm against,
+/// the new payload's download location, and the download-client item to clean up.
+/// </summary>
+public sealed record UpgradeReplaceTarget(
+    Guid ParentId,
+    string? ParentFinalSourcePath,
+    Domain.Entities.BookQualityRank ParentOwnedQuality,
+    string? ChildSelectedTitle,
+    string? ChildContentPath,
+    string? ChildClientItemId,
+    Guid? ChildDownloadClientConfigId);
+
+/// <summary>
+/// Outcome of an in-place owned-file replacement. On success the owned file was atomically swapped for the
+/// new one (the old kept beside it as a <c>.prismedia-bak</c>) and <see cref="NewFormat"/> is the installed
+/// file's format; on failure <see cref="FailureReason"/> explains why and the owned file is untouched.
+/// </summary>
+public sealed record OwnedFileReplaceResult(bool Succeeded, string? SwappedPath, Domain.Entities.BookFormatTier NewFormat, string? FailureReason) {
+    public static OwnedFileReplaceResult Failed(string reason) => new(false, null, Domain.Entities.BookFormatTier.Unknown, reason);
+    public static OwnedFileReplaceResult Ok(string swappedPath, Domain.Entities.BookFormatTier newFormat) => new(true, swappedPath, newFormat, null);
+}
+
+/// <summary>
+/// Replaces an owned book file in place with a strictly-better one. Finds the single importable book file
+/// under the owned folder and under the new download path, verifies the new file and that both live on the
+/// same filesystem (so the swap is an atomic rename), then renames the owned file aside to a
+/// <c>.prismedia-bak</c> and moves the new file into its exact path. The backup is intentionally kept (it is
+/// not an importable extension, so the scanner ignores it) so the previous file is always recoverable. On any
+/// failure the owned file is left exactly as it was.
+/// </summary>
+public interface IOwnedFileReplacer {
+    Task<OwnedFileReplaceResult> ReplaceAsync(string ownedFolder, string newContentPath, Domain.Entities.BookFormatTier ownedFormatTier, CancellationToken cancellationToken);
+}
 
 /// <summary>Input for adding a release identity to the acquisition blocklist (idempotent on the identity).</summary>
 public sealed record BlocklistAddRequest(

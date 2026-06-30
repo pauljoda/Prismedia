@@ -11,7 +11,11 @@ public sealed class AcquisitionSearchRunner(
     IBookAcquisitionProfileStore profiles,
     IAcquisitionBlocklistStore blocklist,
     IAcquisitionDecisionEngineFactory decisionEngines) {
-    public async Task<AcquisitionSearchOutcome> RunAsync(AcquisitionSearchInput input, CancellationToken cancellationToken) {
+    /// <param name="upgradeOwnedQuality">
+    /// When set, runs this as an upgrade search: the engine accepts only releases that strictly beat this
+    /// owned quality (and never downgrade the format). Null for an ordinary first-grab search.
+    /// </param>
+    public async Task<AcquisitionSearchOutcome> RunAsync(AcquisitionSearchInput input, CancellationToken cancellationToken, Domain.Entities.BookQualityRank? upgradeOwnedQuality = null) {
         var text = BuildQueryText(input.Title, input.Author);
         if (string.IsNullOrWhiteSpace(text)) {
             return new AcquisitionSearchOutcome([], []);
@@ -25,6 +29,10 @@ public sealed class AcquisitionSearchRunner(
         }
 
         var rules = await profiles.GetDefaultRulesAsync(cancellationToken);
+        if (upgradeOwnedQuality is { } owned) {
+            rules = rules with { IsUpgradeSearch = true, OwnedQuality = owned };
+        }
+
         var blocklisted = await blocklist.GetIdentitiesAsync(cancellationToken);
         var searches = await Task.WhenAll(configs.Select(config => SearchIndexerAsync(config, text, cancellationToken)));
 

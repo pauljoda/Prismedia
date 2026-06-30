@@ -92,9 +92,24 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
         // reconciles orphaned/fulfilled monitors even when none are due for an actual re-search.
         db.Monitors.AnyAsync(monitor => monitor.Status == MonitorStatus.Active, cancellationToken);
 
+    /// <summary>Most upgrade replacements attempted before a monitor gives up and fulfills (best-effort cutoff).</summary>
+    private const int MaxUpgradeAttempts = 3;
+
+    /// <summary>Most consecutive fruitless upgrade searches (or pre-download failures) before a monitor gives up.</summary>
+    private const int MaxBarrenSearches = 6;
+
     public async Task<IReadOnlyList<DueMonitor>> ListDueMonitorsAsync(int defaultIntervalMinutes, CancellationToken cancellationToken) {
+        // The default profile's cutoff governs upgrades. Upgrade-seeking is fully automatic, so it requires
+        // both the cutoff toggle and auto-grab; without auto-grab there is no path to act on a found upgrade.
+        var profile = await db.BookAcquisitionProfiles.AsNoTracking()
+            .OrderByDescending(p => p.IsDefault).ThenBy(p => p.CreatedAt)
+            .Select(p => new { p.UpgradeUntilCutoff, p.AutoPick, p.CutoffSourceTier, p.CutoffFormatTier })
+            .FirstOrDefaultAsync(cancellationToken);
+        var upgradeEnabled = profile is { UpgradeUntilCutoff: true, AutoPick: true };
+        var cutoff = profile is null ? BookQualityRank.Floor : new BookQualityRank(profile.CutoffSourceTier, profile.CutoffFormatTier);
+
         // Tracked load (we mutate statuses during reconciliation), joined to each acquisition's status and
-        // accepted-candidate count (used to tell "found, awaiting the user" apart from "nothing found yet").
+        // accepted-candidate count, plus the in-flight upgrade child's status when the interlock is set.
         var rows = await (
             from monitor in db.Monitors
             where monitor.Status == MonitorStatus.Active
@@ -103,11 +118,18 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
             select new {
                 Monitor = monitor,
                 AcquisitionStatus = acquisition == null ? (AcquisitionStatus?)null : acquisition.Status,
-                AcceptedCount = acquisition == null ? 0 : db.ReleaseCandidates.Count(candidate => candidate.AcquisitionId == acquisition.Id && candidate.Accepted)
+                OwnedQuality = acquisition == null ? (BookQualityRank?)null : new BookQualityRank(acquisition.OwnedSourceTier, acquisition.OwnedFormatTier),
+                Captured = acquisition != null && acquisition.UpgradeQualityCaptured,
+                AcceptedCount = acquisition == null ? 0 : db.ReleaseCandidates.Count(candidate => candidate.AcquisitionId == acquisition.Id && candidate.Accepted),
+                ChildStatus = monitor.UpgradeChildAcquisitionId == null ? (AcquisitionStatus?)null
+                    : db.Acquisitions.Where(c => c.Id == monitor.UpgradeChildAcquisitionId).Select(c => (AcquisitionStatus?)c.Status).FirstOrDefault(),
+                ChildAcceptedCount = monitor.UpgradeChildAcquisitionId == null ? 0
+                    : db.ReleaseCandidates.Count(candidate => candidate.AcquisitionId == monitor.UpgradeChildAcquisitionId && candidate.Accepted)
             })
             .ToArrayAsync(cancellationToken);
 
         var interval = TimeSpan.FromMinutes(Math.Max(1, defaultIntervalMinutes));
+        var backoffCap = TimeSpan.FromHours(24);
         var now = DateTimeOffset.UtcNow;
         var due = new List<DueMonitor>();
         var changed = false;
@@ -122,16 +144,72 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
                 continue;
             }
 
-            switch (row.AcquisitionStatus) {
-                case AcquisitionStatus.Imported:
-                    monitor.Status = MonitorStatus.Fulfilled; // got it — stop searching
+            // Reconcile an in-flight upgrade child. A SET interlock that the replace handler has not cleared
+            // means the child never reached the replace step (its search found nothing, or its grab/download
+            // failed). Clear the interlock, count it as a barren attempt, and wait for the next cooldown. A
+            // still-in-flight child (anything not terminal/barren) means an upgrade is genuinely in progress —
+            // leave it alone (this is the one-upgrade-at-a-time interlock that protects the in-flight grab).
+            if (monitor.UpgradeChildAcquisitionId is not null) {
+                // Downloaded/Importing are included so a child orphaned by a crash between marking it Downloaded
+                // and enqueuing the replace job (or before the replace job ran) can't freeze the interlock
+                // forever — the sweep reclaims it as a barren attempt. In the normal path the replace handler
+                // clears the interlock first, so the sweep never sees a set interlock for a resolved child; if a
+                // sweep does race a live replace job, the swap still completes correctly (it keys off the child,
+                // not the interlock) — at worst the attempt is miscounted as barren, which is benign.
+                var childSettled = row.ChildStatus is null
+                        or AcquisitionStatus.Failed
+                        or AcquisitionStatus.Cancelled
+                        or AcquisitionStatus.Downloaded
+                        or AcquisitionStatus.Importing
+                    || (row.ChildStatus == AcquisitionStatus.AwaitingSelection && row.ChildAcceptedCount == 0);
+                if (childSettled) {
+                    monitor.UpgradeChildAcquisitionId = null;
+                    monitor.BarrenSearches += 1;
                     monitor.UpdatedAt = now;
                     changed = true;
-                    continue;
+                }
+
+                continue; // upgrade attempt in flight (or just reconciled) — never re-search the same book concurrently
+            }
+
+            switch (row.AcquisitionStatus) {
                 case AcquisitionStatus.Cancelled:
                     monitor.Status = MonitorStatus.Paused; // user gave up on this acquisition
                     monitor.UpdatedAt = now;
                     changed = true;
+                    continue;
+
+                case AcquisitionStatus.Imported:
+                    // The wanted book is in hand. Either keep seeking a higher-quality release (upgrade loop)
+                    // or fulfill — the monitor is done.
+                    if (!upgradeEnabled || !row.Captured || row.OwnedQuality is not { } owned) {
+                        // Upgrade off, or quality not yet captured (a brief post-import window — leave Active to
+                        // retry next sweep rather than fulfilling before the loop can ever run).
+                        if (!upgradeEnabled) {
+                            monitor.Status = MonitorStatus.Fulfilled;
+                            monitor.UpdatedAt = now;
+                            changed = true;
+                        }
+
+                        continue;
+                    }
+
+                    var cutoffMet = owned.Source >= cutoff.Source && owned.Format >= cutoff.Format;
+                    var capsHit = monitor.UpgradeAttempts >= MaxUpgradeAttempts || monitor.BarrenSearches >= MaxBarrenSearches;
+                    if (cutoffMet || capsHit) {
+                        monitor.Status = MonitorStatus.Fulfilled; // best quality reached, or best-effort exhausted
+                        monitor.UpdatedAt = now;
+                        changed = true;
+                        continue;
+                    }
+
+                    // Exponential backoff keyed on consecutive barren searches, capped, so a book that never
+                    // gets a better release does not hammer indexers.
+                    var backoff = TimeSpan.FromMinutes(Math.Min(interval.TotalMinutes * Math.Pow(2, monitor.BarrenSearches), backoffCap.TotalMinutes));
+                    if (monitor.LastSearchedAt is null || now - monitor.LastSearchedAt >= backoff) {
+                        due.Add(new DueMonitor(monitor.Id, acquisitionId, monitor.Title, IsUpgrade: true));
+                    }
+
                     continue;
             }
 
@@ -157,6 +235,61 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
         }
 
         return due;
+    }
+
+    public async Task<Guid?> CreateUpgradeChildAsync(Guid monitorId, CancellationToken cancellationToken) {
+        // Serialized by the MonitoredSearch singleton job, so the null-interlock check is a safe claim.
+        var monitor = await db.Monitors.FirstOrDefaultAsync(m => m.Id == monitorId, cancellationToken);
+        if (monitor is null || monitor.UpgradeChildAcquisitionId is not null || monitor.AcquisitionId is not { } parentId) {
+            return null;
+        }
+
+        var parent = await db.Acquisitions.AsNoTracking().FirstOrDefaultAsync(a => a.Id == parentId, cancellationToken);
+        if (parent is null) {
+            return null;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var childId = Guid.NewGuid();
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = childId,
+            ProfileId = parent.ProfileId,
+            Status = AcquisitionStatus.Pending,
+            Title = parent.Title,
+            Author = parent.Author,
+            Series = parent.Series,
+            Year = parent.Year,
+            PosterUrl = parent.PosterUrl,
+            PluginId = parent.PluginId,
+            PluginItemId = parent.PluginItemId,
+            ExternalIdsJson = parent.ExternalIdsJson,
+            SourceUrlsJson = parent.SourceUrlsJson,
+            UpgradeOfAcquisitionId = parentId,
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        monitor.UpgradeChildAcquisitionId = childId;
+        monitor.UpdatedAt = now;
+        await db.SaveChangesAsync(cancellationToken);
+        return childId;
+    }
+
+    public async Task ResolveUpgradeChildAsync(Guid childId, bool succeeded, CancellationToken cancellationToken) {
+        var monitor = await db.Monitors.FirstOrDefaultAsync(m => m.UpgradeChildAcquisitionId == childId, cancellationToken);
+        if (monitor is null) {
+            return;
+        }
+
+        monitor.UpgradeChildAcquisitionId = null;
+        if (succeeded) {
+            monitor.UpgradeAttempts += 1;
+            monitor.BarrenSearches = 0; // a successful upgrade resets the fruitless-search streak
+        } else {
+            monitor.BarrenSearches += 1;
+        }
+
+        monitor.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     public async Task MarkSearchedAsync(Guid monitorId, CancellationToken cancellationToken) {

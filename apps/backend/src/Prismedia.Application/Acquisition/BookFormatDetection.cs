@@ -88,4 +88,16 @@ public static partial class BookFormatDetection {
 
     /// <summary>The composite (source, format) quality rank named in a release title.</summary>
     public static BookQualityRank DetectQuality(string title) => new(DetectSource(title), DetectFormatTier(title));
+
+    /// <summary>
+    /// The format tier of an actual file, from its extension only. Use this for files on disk — unlike
+    /// <see cref="DetectFormatTier"/> (which scans free text and would match a token anywhere in a path,
+    /// e.g. an "epub" folder name above a PDF), this trusts the concrete extension and nothing else.
+    /// </summary>
+    public static BookFormatTier FormatTierFromExtension(string path) => Path.GetExtension(path).ToLowerInvariant() switch {
+        ".epub" => BookFormatTier.Reflowable,
+        ".pdf" => BookFormatTier.Fixed,
+        ".cbz" or ".zip" => BookFormatTier.Archive,
+        _ => BookFormatTier.Unknown
+    };
 }

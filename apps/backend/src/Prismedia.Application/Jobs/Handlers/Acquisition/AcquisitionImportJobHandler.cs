@@ -68,7 +68,7 @@ public sealed class AcquisitionImportJobHandler(
             var selected = await acquisitions.GetSelectedReleaseAsync(payload.AcquisitionId, cancellationToken);
             var ownedQuality = new BookQualityRank(
                 selected is null ? BookSourceTier.Unknown : BookFormatDetection.DetectSource(selected.Title),
-                BookFormatDetection.DetectFormatTier(finalPaths[0]));
+                BookFormatDetection.FormatTierFromExtension(finalPaths[0]));
 
             var hintFolder = Path.GetDirectoryName(finalPaths[0]) ?? root.Path;
             await acquisitions.WriteImportHintAsync(payload.AcquisitionId, hintFolder, import, ownedQuality, cancellationToken);

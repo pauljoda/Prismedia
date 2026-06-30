@@ -54,7 +54,10 @@ public sealed class AcquisitionSearchJobHandler(
         await context.ReportProgressAsync(10, "Searching indexers", cancellationToken);
 
         try {
-            var outcome = await runner.RunAsync(input, cancellationToken);
+            // If this acquisition is an upgrade child, run an upgrade search against the parent's owned quality
+            // so only strictly-better releases are accepted.
+            var upgradeOwned = await store.GetUpgradeOwnedQualityAsync(payload.AcquisitionId, cancellationToken);
+            var outcome = await runner.RunAsync(input, cancellationToken, upgradeOwned);
             await store.ReplaceCandidatesAsync(payload.AcquisitionId, outcome.Candidates, cancellationToken);
 
             var message = BuildMessage(outcome);

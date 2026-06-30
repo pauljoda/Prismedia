@@ -135,6 +135,7 @@ public static class DependencyInjection {
         services.AddTransient<IJobHandler, AcquisitionImportJobHandler>();
         services.AddTransient<IJobHandler, AcquisitionFailedHandleJobHandler>();
         services.AddTransient<IJobHandler, MonitoredSearchJobHandler>();
+        services.AddTransient<IJobHandler, AcquisitionUpgradeReplaceJobHandler>();
 
         // Background services
         services.AddSingleton<WorkerRuntimeIdentity>();

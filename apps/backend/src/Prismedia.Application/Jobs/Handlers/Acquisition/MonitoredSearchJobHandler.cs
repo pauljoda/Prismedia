@@ -29,12 +29,25 @@ public sealed class MonitoredSearchJobHandler(
         var processed = 0;
         foreach (var monitor in due) {
             cancellationToken.ThrowIfCancellationRequested();
-            // Deduped per acquisition: a search already queued/running for this item is not stacked.
+
+            // An upgrade-due monitor searches on a fresh CHILD acquisition (claimed atomically), so the
+            // imported parent and its on-disk file are never touched by the search or its grab. A still-missing
+            // monitor re-searches its own acquisition. Either way the search job is deduped per target.
+            var searchTarget = monitor.AcquisitionId;
+            if (monitor.IsUpgrade) {
+                var childId = await monitors.CreateUpgradeChildAsync(monitor.MonitorId, cancellationToken);
+                if (childId is not { } id) {
+                    continue; // the upgrade slot was already taken — skip this monitor this pass
+                }
+
+                searchTarget = id;
+            }
+
             await context.EnqueueIfNeededAsync(
                 new EnqueueJobRequest(
                     JobType.AcquisitionSearch,
-                    PayloadJson: AcquisitionJobPayload.Serialize(monitor.AcquisitionId),
-                    TargetEntityId: monitor.AcquisitionId.ToString(),
+                    PayloadJson: AcquisitionJobPayload.Serialize(searchTarget),
+                    TargetEntityId: searchTarget.ToString(),
                     TargetLabel: monitor.Title),
                 cancellationToken);
             await monitors.MarkSearchedAsync(monitor.MonitorId, cancellationToken);

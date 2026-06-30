@@ -135,5 +135,9 @@ public enum JobType {
 
     /// <summary>Re-runs the release search for every due monitored acquisition so a wanted item is fetched once a release appears.</summary>
     [Code("monitored-search")]
-    MonitoredSearch
+    MonitoredSearch,
+
+    /// <summary>Replaces an owned book file with a fully-downloaded, verified, strictly-better upgrade release.</summary>
+    [Code("acquisition-upgrade-replace")]
+    AcquisitionUpgradeReplace
 }

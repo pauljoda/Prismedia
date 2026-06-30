@@ -102,6 +102,63 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
         await db.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task<BookQualityRank?> GetUpgradeOwnedQualityAsync(Guid acquisitionId, CancellationToken cancellationToken) {
+        var parentId = await db.Acquisitions.AsNoTracking()
+            .Where(row => row.Id == acquisitionId)
+            .Select(row => row.UpgradeOfAcquisitionId)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (parentId is not { } id) {
+            return null;
+        }
+
+        return await db.Acquisitions.AsNoTracking()
+            .Where(row => row.Id == id)
+            .Select(row => (BookQualityRank?)new BookQualityRank(row.OwnedSourceTier, row.OwnedFormatTier))
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task<UpgradeReplaceTarget?> GetUpgradeReplaceTargetAsync(Guid childId, CancellationToken cancellationToken) {
+        var child = await db.Acquisitions.AsNoTracking().FirstOrDefaultAsync(row => row.Id == childId, cancellationToken);
+        if (child is null || child.UpgradeOfAcquisitionId is not { } parentId) {
+            return null;
+        }
+
+        var parent = await db.Acquisitions.AsNoTracking().FirstOrDefaultAsync(row => row.Id == parentId, cancellationToken);
+        if (parent is null) {
+            return null;
+        }
+
+        var transfer = await db.DownloadTransfers.AsNoTracking()
+            .Where(row => row.AcquisitionId == childId)
+            .OrderByDescending(row => row.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var selectedTitle = child.SelectedReleaseJson is { Length: > 0 } json
+            ? JsonSerializer.Deserialize<SelectedRelease>(json)?.Title
+            : null;
+
+        return new UpgradeReplaceTarget(
+            parentId,
+            parent.FinalSourcePath,
+            new BookQualityRank(parent.OwnedSourceTier, parent.OwnedFormatTier),
+            selectedTitle,
+            transfer?.ContentPath,
+            transfer?.ClientItemId,
+            transfer?.DownloadClientConfigId);
+    }
+
+    public async Task UpdateOwnedQualityAsync(Guid acquisitionId, BookQualityRank ownedQuality, CancellationToken cancellationToken) {
+        var row = await db.Acquisitions.FirstOrDefaultAsync(row => row.Id == acquisitionId, cancellationToken);
+        if (row is null) {
+            return;
+        }
+
+        row.OwnedSourceTier = ownedQuality.Source;
+        row.OwnedFormatTier = ownedQuality.Format;
+        row.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
     public async Task MarkImportedWithQualityAsync(Guid id, BookQualityRank ownedQuality, string? message, CancellationToken cancellationToken) {
         var row = await db.Acquisitions.FirstOrDefaultAsync(row => row.Id == id, cancellationToken);
         if (row is null) {

@@ -150,6 +150,19 @@ public interface IAcquisitionStore {
     /// <summary>Returns an acquisition's current status, or null when it no longer exists.</summary>
     Task<AcquisitionStatus?> GetStatusAsync(Guid id, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// When the given acquisition is an upgrade child (its <c>UpgradeOfAcquisitionId</c> is set), returns the
+    /// owned quality of the parent it must beat — used to run the child's search as an upgrade search. Returns
+    /// null for an ordinary acquisition, so callers can tell an upgrade grab apart from a first grab.
+    /// </summary>
+    Task<BookQualityRank?> GetUpgradeOwnedQualityAsync(Guid acquisitionId, CancellationToken cancellationToken);
+
+    /// <summary>Assembles everything the upgrade-replace job needs from a downloaded upgrade child, or null when it is not a resolvable upgrade child.</summary>
+    Task<UpgradeReplaceTarget?> GetUpgradeReplaceTargetAsync(Guid childId, CancellationToken cancellationToken);
+
+    /// <summary>Updates an acquisition's owned quality (e.g. after a successful upgrade swap) without changing its status.</summary>
+    Task UpdateOwnedQualityAsync(Guid acquisitionId, BookQualityRank ownedQuality, CancellationToken cancellationToken);
+
     Task SetStatusAsync(Guid id, AcquisitionStatus status, string? message, CancellationToken cancellationToken);
 
     /// <summary>
@@ -247,6 +260,22 @@ public interface IMonitorStore {
 
     /// <summary>Stamps a monitor as just re-searched so it is not picked up again until the interval elapses.</summary>
     Task MarkSearchedAsync(Guid monitorId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Atomically claims the monitor's one upgrade slot and creates a child acquisition (copied from the
+    /// parent, linked via <c>UpgradeOfAcquisitionId</c>) to search for a better release. Returns the child id,
+    /// or null when the slot is already taken (an upgrade is in flight) or the parent is gone. Serialized by
+    /// the MonitoredSearch singleton job, so the claim cannot race.
+    /// </summary>
+    Task<Guid?> CreateUpgradeChildAsync(Guid monitorId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Releases the upgrade slot for the monitor whose in-flight child this was, and counts the outcome: a
+    /// successful swap increments the replacement count, a failure increments the barren-search count (both
+    /// feed the best-effort caps). Called by the replace job; the due-sweep handles children that never
+    /// reached it (their slot is still claimed).
+    /// </summary>
+    Task ResolveUpgradeChildAsync(Guid childId, bool succeeded, CancellationToken cancellationToken);
 }
 
 /// <summary>

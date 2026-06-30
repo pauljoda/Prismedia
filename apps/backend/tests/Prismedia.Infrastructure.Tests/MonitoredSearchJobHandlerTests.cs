@@ -72,8 +72,12 @@ public sealed class MonitoredSearchJobHandlerTests {
 
     private sealed class FakeMonitorStore(IReadOnlyList<DueMonitor> due) : IMonitorStore {
         public List<Guid> Searched { get; } = [];
+        public List<Guid> CreatedChildFor { get; } = [];
+        public Guid? ChildId { get; set; }
         public Task<IReadOnlyList<DueMonitor>> ListDueMonitorsAsync(int defaultIntervalMinutes, CancellationToken cancellationToken) => Task.FromResult(due);
         public Task MarkSearchedAsync(Guid monitorId, CancellationToken cancellationToken) { Searched.Add(monitorId); return Task.CompletedTask; }
+        public Task<Guid?> CreateUpgradeChildAsync(Guid monitorId, CancellationToken cancellationToken) { CreatedChildFor.Add(monitorId); return Task.FromResult(ChildId); }
+        public Task ResolveUpgradeChildAsync(Guid childId, bool succeeded, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task<MonitorView> StartAsync(Guid acquisitionId, EntityKind kind, string title, string? author, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<bool> DeleteAsync(Guid monitorId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<bool> SetStatusAsync(Guid monitorId, MonitorStatus status, CancellationToken cancellationToken) => throw new NotSupportedException();

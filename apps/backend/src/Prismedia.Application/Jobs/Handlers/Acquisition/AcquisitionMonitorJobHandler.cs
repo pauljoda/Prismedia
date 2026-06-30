@@ -106,13 +106,17 @@ public sealed class AcquisitionMonitorJobHandler(
             await acquisitions.UpdateTransferAsync(transfer.TransferId, status.Progress, status.State, status.ContentPath, cancellationToken);
 
             if (status.IsComplete) {
+                // An upgrade child does not import beside the owned book — it routes to the replace job, which
+                // verifies the new file and atomically swaps it in. An ordinary acquisition imports normally.
+                var isUpgrade = await acquisitions.GetUpgradeOwnedQualityAsync(transfer.AcquisitionId, cancellationToken) is not null;
+                var completionJob = isUpgrade ? JobType.AcquisitionUpgradeReplace : JobType.AcquisitionImport;
                 await acquisitions.SetStatusAsync(transfer.AcquisitionId, AcquisitionStatus.Downloaded, "Download complete; importing.", cancellationToken);
                 await context.EnqueueIfNeededAsync(
                     new EnqueueJobRequest(
-                        JobType.AcquisitionImport,
+                        completionJob,
                         PayloadJson: AcquisitionJobPayload.Serialize(transfer.AcquisitionId),
                         TargetEntityId: transfer.AcquisitionId.ToString(),
-                        TargetLabel: "Import completed download"),
+                        TargetLabel: isUpgrade ? "Replace with upgrade" : "Import completed download"),
                     cancellationToken);
             } else {
                 await AdvanceStallAsync(context, transfer, status, cancellationToken);
