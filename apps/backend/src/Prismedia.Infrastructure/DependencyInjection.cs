@@ -330,6 +330,7 @@ public static class DependencyInjection {
         services.AddScoped<IRequestProviderClient>(provider => provider.GetRequiredService<LidarrRequestProviderClient>());
         services.AddScoped<IRequestProviderClientFactory, RequestProviderClientFactory>();
         services.AddScoped<IBookMetadataSearchSource, PluginBookMetadataSearchSource>();
+        services.AddScoped<IAuthorMetadataSearchSource, PluginBookMetadataSearchSource>();
         services.AddScoped<IBookMetadataEnricher, PluginBookMetadataSearchSource>();
         services.AddScoped<IPluginRequestDetailSource, PluginBookMetadataSearchSource>();
     }

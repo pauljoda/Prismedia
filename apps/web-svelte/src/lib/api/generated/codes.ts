@@ -288,6 +288,7 @@ export const REQUEST_MEDIA_KIND = {
   artist: "artist",
   album: "album",
   book: "book",
+  author: "author",
   plugin: "plugin",
 } as const;
 

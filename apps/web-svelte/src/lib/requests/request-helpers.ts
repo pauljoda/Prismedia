@@ -32,6 +32,7 @@ export const REQUEST_KIND_LABELS: Record<string, string> = {
   [REQUEST_MEDIA_KIND.artist]: "Artist",
   [REQUEST_MEDIA_KIND.album]: "Album",
   [REQUEST_MEDIA_KIND.book]: "Book",
+  [REQUEST_MEDIA_KIND.author]: "Author",
   [REQUEST_MEDIA_KIND.plugin]: "Plugin",
 };
 
@@ -42,6 +43,7 @@ export const REQUEST_KIND_LABELS_PLURAL: Record<string, string> = {
   [REQUEST_MEDIA_KIND.artist]: "Artists",
   [REQUEST_MEDIA_KIND.album]: "Albums",
   [REQUEST_MEDIA_KIND.book]: "Books",
+  [REQUEST_MEDIA_KIND.author]: "Authors",
   [REQUEST_MEDIA_KIND.plugin]: "Plugins",
 };
 
@@ -100,9 +102,9 @@ export function inferRequestSourceForKind(kind: RequestMediaKindCode): RequestPr
   if (kind === REQUEST_MEDIA_KIND.movie) return REQUEST_PROVIDER_KIND.radarr;
   if (kind === REQUEST_MEDIA_KIND.series) return REQUEST_PROVIDER_KIND.sonarr;
   if (kind === REQUEST_MEDIA_KIND.artist || kind === REQUEST_MEDIA_KIND.album) return REQUEST_PROVIDER_KIND.lidarr;
-  // Books are fulfilled by the Prismedia plugin path; this is the fallback when a book detail URL is opened
-  // without an explicit source (the Discover flow always sets one, but a direct/back nav may not).
-  if (kind === REQUEST_MEDIA_KIND.book) return REQUEST_PROVIDER_KIND.plugin;
+  // Books and authors are fulfilled by the Prismedia plugin path; this is the fallback when a detail URL is
+  // opened without an explicit source (the Discover flow always sets one, but a direct/back nav may not).
+  if (kind === REQUEST_MEDIA_KIND.book || kind === REQUEST_MEDIA_KIND.author) return REQUEST_PROVIDER_KIND.plugin;
   return null;
 }
 

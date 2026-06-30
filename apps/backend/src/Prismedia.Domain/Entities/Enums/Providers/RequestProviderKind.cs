@@ -118,6 +118,14 @@ public enum RequestMediaKind {
     [Code("book")]
     Book,
 
+    /// <summary>
+    /// Author request target: a container kind that surfaces an author's books as toggleable children.
+    /// Requesting an author fans each selected work out into its own <see cref="Book"/> acquisition; the
+    /// author itself is never acquired as an entity.
+    /// </summary>
+    [Code("author")]
+    Author,
+
     /// <summary>Plugin-defined request target.</summary>
     [Code("plugin")]
     Plugin

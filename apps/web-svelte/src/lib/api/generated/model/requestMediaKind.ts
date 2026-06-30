@@ -14,5 +14,6 @@ export const RequestMediaKind = {
   artist: 'artist',
   album: 'album',
   book: 'book',
+  author: 'author',
   plugin: 'plugin',
 } as const;

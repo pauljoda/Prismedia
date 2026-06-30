@@ -26,12 +26,12 @@
     [REQUEST_PROVIDER_KIND.radarr]: [REQUEST_MEDIA_KIND.movie],
     [REQUEST_PROVIDER_KIND.sonarr]: [REQUEST_MEDIA_KIND.series],
     [REQUEST_PROVIDER_KIND.lidarr]: [REQUEST_MEDIA_KIND.artist, REQUEST_MEDIA_KIND.album],
-    [REQUEST_PROVIDER_KIND.plugin]: [REQUEST_MEDIA_KIND.book, REQUEST_MEDIA_KIND.plugin],
+    [REQUEST_PROVIDER_KIND.plugin]: [REQUEST_MEDIA_KIND.book, REQUEST_MEDIA_KIND.author, REQUEST_MEDIA_KIND.plugin],
   };
 
   // Kinds Prismedia can search and fulfil itself (via plugins + the acquisition pipeline), with no
   // external *arr service required. Offered whenever the kind is routed to internal fulfilment.
-  const INTERNAL_SEARCH_KINDS: RequestMediaKindCode[] = [REQUEST_MEDIA_KIND.book];
+  const INTERNAL_SEARCH_KINDS: RequestMediaKindCode[] = [REQUEST_MEDIA_KIND.book, REQUEST_MEDIA_KIND.author];
 
   const sortOptions = [
     { value: "relevance", label: "Relevance" },
@@ -53,6 +53,7 @@
     REQUEST_MEDIA_KIND.artist,
     REQUEST_MEDIA_KIND.album,
     REQUEST_MEDIA_KIND.book,
+    REQUEST_MEDIA_KIND.author,
     REQUEST_MEDIA_KIND.plugin,
   ];
 

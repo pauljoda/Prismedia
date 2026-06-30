@@ -75,6 +75,9 @@
   // A Prismedia-plugin book is fulfilled by direct acquisition, not an *arr service: its request panel and
   // submit differ, and its series children (volumes) toggle like seasons.
   const isPlugin = $derived(detail?.source === REQUEST_PROVIDER_KIND.plugin);
+  // An author is a container: its children are the author's books, fanned out one acquisition each.
+  const isAuthor = $derived(detail?.kind === REQUEST_MEDIA_KIND.author);
+  const childNoun = $derived(isAuthor ? "book" : "volume");
 
   // A plugin book's request action lives in the hero (like the acquisition page's Monitor/Cancel buttons);
   // the details + series-volume selection open in a dialog rather than a body panel.
@@ -217,6 +220,9 @@
    */
   async function requestPluginBook() {
     if (!detail) return;
+    // An author with no books has nothing to acquire — the button is disabled, but guard defensively so the
+    // author's own id can never be submitted as a (bogus) standalone book acquisition.
+    if (isAuthor && detail.children.length === 0) return;
     const d = detail;
     // Targets: the selected series volumes, or the standalone book itself.
     const raw =
@@ -226,7 +232,7 @@
             .map((child) => ({ id: child.id, title: child.title, year: child.year, posterUrl: child.posterUrl, overview: child.overview }))
         : [{ id: d.externalId, title: d.title, year: d.year, posterUrl: d.posterUrl, overview: d.overview }];
     if (raw.length === 0) {
-      error = "Select at least one volume to request.";
+      error = `Select at least one ${childNoun} to request.`;
       return;
     }
 
@@ -253,14 +259,18 @@
       for (const target of targets) {
         const summary = await createAcquisition({
           title: target.title,
-          author: d.subtitle ?? null,
-          series: d.children.length > 0 ? d.title : null,
+          // For an author container the author IS the entity title; for a book/series it's the subtitle.
+          author: isAuthor ? d.title : (d.subtitle ?? null),
+          // Only a book-series names its children's series; an author's books are unrelated works.
+          series: !isAuthor && d.children.length > 0 ? d.title : null,
           year: numericValue(target.year),
           posterUrl: target.posterUrl ?? null,
           pluginId: target.pluginId,
           pluginItemId: target.pluginItemId,
           requestHistoryId: null,
-          description: target.overview ?? d.overview ?? null,
+          // The target's own overview (the standalone target already carries d.overview); never the parent's,
+          // so an author's bio can't leak in as a book description.
+          description: target.overview ?? null,
         });
         created.push(summary.id);
       }
@@ -690,7 +700,7 @@
         <h2 class="text-base font-heading font-semibold text-text-primary">Request {d.title}</h2>
         <p class="mt-1.5 text-[0.78rem] leading-relaxed text-text-muted">
           Prismedia will search your indexers and download
-          {d.children.length > 0 ? "the selected volume(s)" : "this book"}, then import
+          {d.children.length > 0 ? `the selected ${childNoun}(s)` : "this book"}, then import
           {d.children.length > 0 ? "them" : "it"} into your library. Quality rules and the upgrade cutoff come
           from your default book profile (Settings → Acquisition).
         </p>
@@ -699,7 +709,7 @@
       {#if d.children.length > 0}
         <div class="space-y-2">
           <h3 class="text-label text-text-muted">
-            Volumes
+            {isAuthor ? "Books" : "Volumes"}
             <span class="ml-1 font-mono text-[0.68rem] text-text-muted">{selectedChildIds.length}/{d.children.length}</span>
           </h3>
           <div class="surface-well max-h-64 divide-y divide-border-subtle overflow-y-auto px-3">
@@ -716,6 +726,10 @@
             {/each}
           </div>
         </div>
+      {:else if isAuthor}
+        <p class="surface-well px-3 py-2.5 text-[0.78rem] leading-relaxed text-text-muted">
+          No books were found for this author.
+        </p>
       {/if}
 
       {#if error}
@@ -730,7 +744,9 @@
           type="button"
           variant="primary"
           class="gap-2"
-          disabled={submitting || (d.children.length > 0 && selectedChildIds.length === 0)}
+          disabled={submitting ||
+            (d.children.length > 0 && selectedChildIds.length === 0) ||
+            (isAuthor && d.children.length === 0)}
           onclick={() => void requestPluginBook()}
         >
           {#if submitting}
@@ -741,7 +757,7 @@
           {submitting
             ? "Requesting…"
             : d.children.length > 0
-              ? `Request ${selectedChildIds.length} volume${selectedChildIds.length === 1 ? "" : "s"}`
+              ? `Request ${selectedChildIds.length} ${childNoun}${selectedChildIds.length === 1 ? "" : "s"}`
               : "Request"}
         </Button>
       </div>

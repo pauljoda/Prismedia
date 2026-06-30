@@ -126,6 +126,16 @@ public interface IBookMetadataSearchSource {
     Task<IReadOnlyList<RequestSearchResult>> SearchAsync(string query, bool hideNsfw, CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// Searches plugin-backed metadata providers for authors at request time. Author results are a container
+/// kind: selecting one opens a detail that lists the author's books as toggleable children, each fanned out
+/// into its own book acquisition.
+/// </summary>
+public interface IAuthorMetadataSearchSource {
+    /// <summary>Author search results across enabled author-capable plugin providers. Empty when none are configured.</summary>
+    Task<IReadOnlyList<RequestSearchResult>> SearchAuthorsAsync(string query, bool hideNsfw, CancellationToken cancellationToken);
+}
+
 /// <summary>Full metadata a plugin can resolve for a known book work-id, used to enrich a held request before import.</summary>
 public sealed record BookMetadataEnrichment(string? Description, string? PosterUrl, int? Year);
 
@@ -151,6 +161,12 @@ public interface IPluginRequestDetailSource {
     /// provider can't resolve it. Includes series volume children when the work belongs to a series.
     /// </summary>
     Task<Contracts.Requests.RequestDetailResponse?> GetBookDetailAsync(string externalId, bool hideNsfw, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Builds the request detail for a provider-qualified author id (<c>"provider:authorId"</c>), surfacing the
+    /// author's books as toggleable child options. Null when the provider can't resolve it.
+    /// </summary>
+    Task<Contracts.Requests.RequestDetailResponse?> GetAuthorDetailAsync(string externalId, bool hideNsfw, CancellationToken cancellationToken);
 }
 
 /// <summary>Aggregates request searches across configured service instances.</summary>
@@ -158,7 +174,8 @@ public sealed class RequestSearchService(
     IRequestServiceInstanceStore store,
     IRequestProviderClientFactory clients,
     IAdultMovieSearchSource adultMovies,
-    IBookMetadataSearchSource bookMetadata) {
+    IBookMetadataSearchSource bookMetadata,
+    IAuthorMetadataSearchSource authorMetadata) {
     public async Task<RequestSearchResponse> SearchAsync(RequestSearchRequest request, CancellationToken cancellationToken) {
         if (string.IsNullOrWhiteSpace(request.Query)) {
             return new RequestSearchResponse([], []);
@@ -189,6 +206,15 @@ public sealed class RequestSearchService(
                 results.AddRange(await bookMetadata.SearchAsync(request.Query, request.HideNsfw, cancellationToken));
             } catch (Exception ex) when (ex is not OperationCanceledException) {
                 errors.Add(new RequestProviderHealth(Guid.Empty, RequestProviderKind.Plugin, "Book providers", ex.Message));
+            }
+        }
+
+        // Authors come from the same plugin providers: a container result whose books toggle on the detail page.
+        if (request.Kinds.Count == 0 || request.Kinds.Contains(RequestMediaKind.Author)) {
+            try {
+                results.AddRange(await authorMetadata.SearchAuthorsAsync(request.Query, request.HideNsfw, cancellationToken));
+            } catch (Exception ex) when (ex is not OperationCanceledException) {
+                errors.Add(new RequestProviderHealth(Guid.Empty, RequestProviderKind.Plugin, "Author providers", ex.Message));
             }
         }
 
@@ -251,7 +277,9 @@ public sealed class RequestDetailService(
         // caller's NSFW visibility is honored so a direct/bookmarked detail URL can't surface an NSFW-flagged
         // provider's book under SFW gating.
         if (source == RequestProviderKind.Plugin) {
-            return await pluginDetail.GetBookDetailAsync(externalId, hideNsfw, cancellationToken);
+            return kind == RequestMediaKind.Author
+                ? await pluginDetail.GetAuthorDetailAsync(externalId, hideNsfw, cancellationToken)
+                : await pluginDetail.GetBookDetailAsync(externalId, hideNsfw, cancellationToken);
         }
 
         var instances = await store.ListDetailsAsync(cancellationToken);

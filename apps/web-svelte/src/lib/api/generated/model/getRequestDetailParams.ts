@@ -7,4 +7,5 @@
 
 export type GetRequestDetailParams = {
 serviceId?: string;
+hideNsfw?: boolean;
 };
