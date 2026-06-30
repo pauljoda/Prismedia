@@ -72,7 +72,8 @@ public sealed record IndexerConnectionTest(bool Connected, string? Message);
 /// <summary>An indexer that failed during a search; surfaced in the acquisition status so partial results stay transparent.</summary>
 public sealed record IndexerSearchError(Guid IndexerId, string IndexerName, string Message);
 
-/// <summary>Book metadata captured when an acquisition is created, retained for the identify-hint handoff at import.</summary>
+/// <summary>Metadata captured when an acquisition is created, retained for the identify-hint handoff at import.</summary>
+/// <param name="Kind">The media kind being acquired (book, movie, …); drives per-kind release scoring and import.</param>
 public sealed record AcquisitionMetadata(
     string Title,
     string? Author,
@@ -81,7 +82,8 @@ public sealed record AcquisitionMetadata(
     string? PosterUrl,
     string? PluginId,
     string? PluginItemId,
-    string? Description = null);
+    string? Description = null,
+    EntityKind Kind = EntityKind.Book);
 
 /// <summary>The minimal input the background search job needs to query indexers for an acquisition.</summary>
 public sealed record AcquisitionSearchInput(Guid Id, string Title, string? Author);

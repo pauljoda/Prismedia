@@ -117,6 +117,12 @@ internal static partial class PrismediaModelConfiguration {
             entity.ToTable("acquisitions");
             entity.HasKey(row => row.Id);
             entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(row => row.Kind)
+                .HasColumnName("kind")
+                .HasMaxLength(64)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<EntityKind>())
+                .HasDefaultValue(EntityKind.Book)
+                .IsRequired();
             entity.Property(row => row.ProfileId).HasColumnName("profile_id");
             entity.Property(row => row.Status)
                 .HasColumnName("status")

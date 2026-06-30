@@ -14,6 +14,7 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
         var now = DateTimeOffset.UtcNow;
         var row = new AcquisitionRow {
             Id = Guid.NewGuid(),
+            Kind = metadata.Kind,
             Status = AcquisitionStatus.Pending,
             Title = metadata.Title,
             Author = metadata.Author,
@@ -484,7 +485,7 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
 
     private static AcquisitionSummary ToSummary(AcquisitionRow row, double? progress) =>
         new(row.Id, row.Status, row.StatusMessage, row.Title, row.Author, row.Series, row.Year, row.PosterUrl,
-            progress, row.CreatedAt, row.UpdatedAt, row.Description);
+            progress, row.CreatedAt, row.UpdatedAt, row.Description, row.Kind);
 
     private static ReleaseCandidateView ToView(ReleaseCandidateRow row) =>
         new(row.Id, row.IndexerName, row.Title, row.SizeBytes, row.Seeders, row.Peers, row.Protocol, row.Accepted,

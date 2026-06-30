@@ -20,7 +20,7 @@ public sealed class MonitorService(IMonitorStore monitors, IAcquisitionStore acq
         }
 
         var summary = detail.Summary;
-        return await monitors.StartAsync(acquisitionId, EntityKind.Book, summary.Title, summary.Author, cancellationToken);
+        return await monitors.StartAsync(acquisitionId, summary.Kind, summary.Title, summary.Author, cancellationToken);
     }
 
     public Task<bool> StopAsync(Guid monitorId, CancellationToken cancellationToken) =>

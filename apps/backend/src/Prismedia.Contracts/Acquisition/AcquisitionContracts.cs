@@ -58,6 +58,7 @@ public sealed record IndexerTestResponse(bool Connected, string? Message);
 /// <param name="PosterUrl">Optional cover URL stored for the import hint.</param>
 /// <param name="PluginId">Optional plugin manifest id that supplied the metadata.</param>
 /// <param name="PluginItemId">Optional plugin item id (external-id value) for ID-first identify.</param>
+/// <param name="Kind">Media kind to acquire (book, movie, …). Defaults to book for the established book flow.</param>
 public sealed record AcquisitionCreateRequest(
     string Title,
     string? Author,
@@ -66,7 +67,8 @@ public sealed record AcquisitionCreateRequest(
     string? PosterUrl,
     string? PluginId,
     string? PluginItemId,
-    string? Description = null);
+    string? Description = null,
+    EntityKind Kind = EntityKind.Book);
 
 /// <summary>A scored release candidate surfaced for review. Download links stay server-side; the id selects one to queue.</summary>
 public sealed record ReleaseCandidateView(
@@ -96,7 +98,8 @@ public sealed record AcquisitionSummary(
     double? Progress,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
-    string? Description = null);
+    string? Description = null,
+    EntityKind Kind = EntityKind.Book);
 
 /// <summary>An acquisition with its scored candidates for the review screen.</summary>
 public sealed record AcquisitionDetail(
