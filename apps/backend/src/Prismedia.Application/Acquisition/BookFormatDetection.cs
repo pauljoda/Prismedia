@@ -20,6 +20,13 @@ public static partial class BookFormatDetection {
     [GeneratedRegex(@"\b(cbr|rar|mobi|azw3?)\b", RegexOptions.IgnoreCase)]
     private static partial Regex UnsupportedTokenRegex();
 
+    // Provenance/edition tokens. prism-vocab: external — release-title vocabulary, matched only here.
+    [GeneratedRegex(@"\b(retail|official)\b", RegexOptions.IgnoreCase)]
+    private static partial Regex RetailTokenRegex();
+
+    [GeneratedRegex(@"\b(web|webrip|converted|calibre)\b", RegexOptions.IgnoreCase)]
+    private static partial Regex WebTokenRegex();
+
     /// <summary>
     /// Importable book formats named in <paramref name="title"/>, mapped onto Prismedia's
     /// <see cref="BookFormat"/> set. Returns an empty set when the title names no importable format token.
@@ -50,4 +57,35 @@ public static partial class BookFormatDetection {
     /// only to dead-end at import.
     /// </summary>
     public static bool NamesUnsupportedFormat(string title) => UnsupportedTokenRegex().IsMatch(title);
+
+    /// <summary>
+    /// Detects the provenance/edition tier named in <paramref name="title"/>: retail/official tokens map to
+    /// <see cref="BookSourceTier.Retail"/>, web/converted tokens to <see cref="BookSourceTier.Web"/>, and an
+    /// untagged title to <see cref="BookSourceTier.Unknown"/>. Retail is checked first so a title that names
+    /// both ("retail web conversion") is treated as the higher tier.
+    /// </summary>
+    public static BookSourceTier DetectSource(string title) =>
+        RetailTokenRegex().IsMatch(title) ? BookSourceTier.Retail
+        : WebTokenRegex().IsMatch(title) ? BookSourceTier.Web
+        : BookSourceTier.Unknown;
+
+    /// <summary>
+    /// The best importable format tier named in <paramref name="title"/> (e.g. a title naming both PDF and
+    /// EPUB resolves to <see cref="BookFormatTier.Reflowable"/>), or <see cref="BookFormatTier.Unknown"/> when
+    /// no importable format is named.
+    /// </summary>
+    public static BookFormatTier DetectFormatTier(string title) {
+        var best = BookFormatTier.Unknown;
+        foreach (var format in Detect(title)) {
+            var tier = BookQualityRank.TierFor(format);
+            if (tier > best) {
+                best = tier;
+            }
+        }
+
+        return best;
+    }
+
+    /// <summary>The composite (source, format) quality rank named in a release title.</summary>
+    public static BookQualityRank DetectQuality(string title) => new(DetectSource(title), DetectFormatTier(title));
 }

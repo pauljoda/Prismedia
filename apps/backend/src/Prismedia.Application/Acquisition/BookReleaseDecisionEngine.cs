@@ -202,7 +202,7 @@ public sealed class BookReleaseDecisionEngine : IAcquisitionDecisionEngine {
                 indexerConfigId,
                 indexerName,
                 rejections.Count == 0,
-                Score(release, rules),
+                BookReleaseScore.Of(release, rules),
                 rejections));
         }
 
@@ -211,25 +211,6 @@ public sealed class BookReleaseDecisionEngine : IAcquisitionDecisionEngine {
             .OrderByDescending(candidate => candidate.Accepted)
             .ThenByDescending(candidate => candidate.Score)
             .ToArray();
-    }
-
-    /// <summary>
-    /// Each preferred term found in a release title adds this much to the score — large enough that any
-    /// preferred match outranks any seeder difference, so preference behaves like a quality tier (a release
-    /// with more preferred terms is always ranked first), while seeders order releases within the same tier.
-    /// </summary>
-    private const double PreferredTermBoost = 1000;
-
-    /// <summary>
-    /// Composite ranking score. Preferred-term matches dominate (each is a full tier above seeders), then
-    /// seeders (log-scaled so a 1000-seed release does not bury a healthy 50-seed one), with peers as a small
-    /// tiebreak. Deterministic and independent of wall-clock time.
-    /// </summary>
-    private static double Score(IndexerRelease release, BookAcquisitionRules rules) {
-        var seeders = Math.Max(release.Seeders ?? 0, 0);
-        var peers = Math.Max(release.Peers ?? 0, 0);
-        var preferred = rules.PreferredTerms.Count(term => release.Title.Contains(term, StringComparison.OrdinalIgnoreCase));
-        return (preferred * PreferredTermBoost) + (Math.Log10(seeders + 1) * 100) + (Math.Min(peers, 100) * 0.25);
     }
 }
 
