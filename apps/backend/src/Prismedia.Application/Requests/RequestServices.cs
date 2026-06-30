@@ -139,6 +139,20 @@ public interface IBookMetadataEnricher {
     Task<BookMetadataEnrichment?> LookupByIdAsync(string providerId, string externalId, bool hideNsfw, CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// Produces a provider-detail view for a plugin-sourced book request, so book discovery routes through the
+/// same detail → toggle → request page the *arr handoff uses (rather than auto-queuing on a thumbnail click).
+/// The detail reuses the plugin LookupId path with structural children, so a series surfaces its volumes as
+/// toggleable child options that the request fans out into one acquisition each.
+/// </summary>
+public interface IPluginRequestDetailSource {
+    /// <summary>
+    /// Builds the request detail for a provider-qualified book id (<c>"provider:itemId"</c>), or null when the
+    /// provider can't resolve it. Includes series volume children when the work belongs to a series.
+    /// </summary>
+    Task<Contracts.Requests.RequestDetailResponse?> GetBookDetailAsync(string externalId, bool hideNsfw, CancellationToken cancellationToken);
+}
+
 /// <summary>Aggregates request searches across configured service instances.</summary>
 public sealed class RequestSearchService(
     IRequestServiceInstanceStore store,
@@ -229,8 +243,15 @@ public sealed class RequestSearchService(
 public sealed class RequestDetailService(
     IRequestServiceInstanceStore store,
     IRequestProviderClientFactory clients,
-    IRequestDetailEnrichmentSource enrichment) {
+    IRequestDetailEnrichmentSource enrichment,
+    IPluginRequestDetailSource pluginDetail) {
     public async Task<RequestDetailResponse?> GetAsync(RequestProviderKind source, RequestMediaKind kind, string externalId, Guid? serviceId, CancellationToken cancellationToken) {
+        // Plugin-sourced books have no *arr service instance — resolve their detail (with series children) from
+        // the plugin directly, so book discovery routes through the same detail → toggle → request page.
+        if (source == RequestProviderKind.Plugin) {
+            return await pluginDetail.GetBookDetailAsync(externalId, hideNsfw: false, cancellationToken);
+        }
+
         var instances = await store.ListDetailsAsync(cancellationToken);
         var instance = serviceId is { } id
             ? instances.FirstOrDefault(candidate => candidate.Id == id)

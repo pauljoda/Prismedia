@@ -42,6 +42,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Added operational controls for background jobs, worker status, transcode cache limits, file uploads from the Files tab, reversible scan exclusions, API access profiles, and centralized app settings.
 
 ### Changed
+- Book discovery now opens a detail page before requesting, exactly like the Radarr/Sonarr/Lidarr handoff: clicking a book no longer immediately queues it. You review the cover and synopsis, toggle which series volumes to get, then explicitly Request — at which point Prismedia searches and downloads the selected book(s). Switching a content kind to Prismedia is now a true drop-in for the external-app flow.
 - Reworked the dashboard around Continue, Recent, recently added media, and a resume-focused hero so active items appear immediately instead of being buried in per-type shelves.
 - Standardized detail pages and library grids on shared Prismedia building blocks, improving filters, sort, pagination, thumbnails, media-wall/feed views, responsive controls, and cross-page consistency.
 - Made desktop library grids and Identify review thumbnails open denser by default so large screens show more items without oversized cards.

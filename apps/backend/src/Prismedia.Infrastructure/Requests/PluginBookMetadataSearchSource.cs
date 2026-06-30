@@ -14,7 +14,7 @@ namespace Prismedia.Infrastructure.Requests;
 /// id and item id for an ID-first acquisition.
 /// </summary>
 public sealed class PluginBookMetadataSearchSource(PluginCatalogService catalog, IdentifyRunnerSelector runners)
-    : IBookMetadataSearchSource, IBookMetadataEnricher {
+    : IBookMetadataSearchSource, IBookMetadataEnricher, IPluginRequestDetailSource {
     private static readonly string BookKind = EntityKindRegistry.Book.Code;
     private static readonly string SearchAction = IdentifyAction.Search.ToCode();
     private static readonly string LookupIdAction = IdentifyAction.LookupId.ToCode();
@@ -66,6 +66,67 @@ public sealed class PluginBookMetadataSearchSource(PluginCatalogService catalog,
     }
 
     public async Task<BookMetadataEnrichment?> LookupByIdAsync(string providerId, string externalId, bool hideNsfw, CancellationToken cancellationToken) {
+        var proposal = await ResolveProposalAsync(providerId, externalId, hideNsfw, includeChildren: false, cancellationToken);
+        if (proposal?.Patch is not { } patch) {
+            return null;
+        }
+
+        return new BookMetadataEnrichment(patch.Description, BestImage(proposal), YearFromDates(patch.Dates));
+    }
+
+    public async Task<RequestDetailResponse?> GetBookDetailAsync(string externalId, bool hideNsfw, CancellationToken cancellationToken) {
+        var (providerId, itemId) = SplitProviderQualifiedId(externalId);
+        if (providerId is null || itemId is null) {
+            return null;
+        }
+
+        // Resolve WITH structural children so a book that belongs to a series surfaces its sibling volumes as
+        // toggleable child options (the request fans each selected one out into its own acquisition).
+        var proposal = await ResolveProposalAsync(providerId, itemId, hideNsfw, includeChildren: true, cancellationToken);
+        if (proposal?.Patch is not { } patch) {
+            return null;
+        }
+
+        var author = proposal.Patch.Credits.FirstOrDefault(credit => credit.Role.Contains("author", StringComparison.OrdinalIgnoreCase))?.Name;
+        var children = proposal.Children
+            .Select(child => MapChild(providerId, child))
+            .Where(child => child is not null)
+            .Select(child => child!)
+            .ToArray();
+
+        return new RequestDetailResponse(
+            Source: RequestProviderKind.Plugin,
+            Kind: RequestMediaKind.Book,
+            ExternalId: externalId,
+            Title: string.IsNullOrWhiteSpace(patch.Title) ? itemId : patch.Title,
+            Subtitle: author,
+            Year: YearFromDates(patch.Dates),
+            Overview: patch.Description,
+            PosterUrl: BestImage(proposal),
+            BackdropUrl: null,
+            Rating: null,
+            RuntimeMinutes: null,
+            Certification: null,
+            TrackCount: null,
+            Tags: [],
+            Studios: [],
+            Credits: [],
+            Cast: [],
+            Ratings: [],
+            Children: children,
+            Tracks: [],
+            Tracked: false,
+            UpstreamId: null,
+            Monitored: null,
+            ServiceOptions: new RequestServiceOptionsResponse([], [], [], []));
+    }
+
+    /// <summary>
+    /// Runs a LookupId for a provider-qualified work id through the plugin runner, gating on the same
+    /// enabled/NSFW provider rules as the search path. Returns the resolved proposal, or null when the
+    /// provider is missing/disabled/NSFW-gated or returns no match.
+    /// </summary>
+    private async Task<EntityMetadataProposal?> ResolveProposalAsync(string providerId, string externalId, bool hideNsfw, bool includeChildren, CancellationToken cancellationToken) {
         if (string.IsNullOrWhiteSpace(providerId) || string.IsNullOrWhiteSpace(externalId)) {
             return null;
         }
@@ -77,7 +138,7 @@ public sealed class PluginBookMetadataSearchSource(PluginCatalogService catalog,
         }
 
         // Mirror the search path's provider gating: only query a provider that is enabled, and never an
-        // NSFW-flagged one when NSFW is hidden. Otherwise the held search-result metadata simply stands.
+        // NSFW-flagged one when NSFW is hidden.
         var provider = (await catalog.ListProvidersAsync(cancellationToken)).FirstOrDefault(p => p.Id == providerId);
         if (provider is null || !provider.Enabled || (hideNsfw && provider.IsNsfw)) {
             return null;
@@ -96,20 +157,51 @@ public sealed class PluginBookMetadataSearchSource(PluginCatalogService catalog,
             StructuralContext: null,
             IncludeNsfw: !hideNsfw,
             IncludeRelationshipDetails: false,
-            IncludeStructuralChildren: false);
+            IncludeStructuralChildren: includeChildren);
 
         var response = await runners.Resolve(descriptor).IdentifyAsync(descriptor, request, cancellationToken);
-        if (response.Result?.Patch is not { } patch) {
+        return response.Result;
+    }
+
+    /// <summary>Maps a series volume proposal to a toggleable child option, provider-qualifying its id for the acquisition fan-out.</summary>
+    private static RequestChildOption? MapChild(string providerId, EntityMetadataProposal child) {
+        var workId = child.Patch.ExternalIds.GetValueOrDefault(providerId) ?? child.Patch.ExternalIds.Values.FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(workId)) {
             return null;
         }
 
-        // Cover: the best-ranked image the provider returned (books generally return cover art).
-        var poster = response.Result.Images
+        return new RequestChildOption(
+            Id: $"{providerId}:{workId}",
+            Title: child.Patch.Title ?? workId,
+            Kind: RequestMediaKind.Book,
+            Requestable: true,
+            Number: child.Patch.Positions.TryGetValue("volumeNumber", out var volume) ? volume : null,
+            Year: YearFromDates(child.Patch.Dates),
+            ItemCount: null,
+            Overview: child.Patch.Description,
+            PosterUrl: BestImage(child),
+            Monitored: null);
+    }
+
+    /// <summary>The best-ranked image url a proposal carries (books generally return cover art), or null.</summary>
+    private static string? BestImage(EntityMetadataProposal proposal) =>
+        proposal.Images
             .OrderByDescending(image => image.Rank ?? 0)
             .Select(image => image.Url)
             .FirstOrDefault(url => !string.IsNullOrWhiteSpace(url));
 
-        return new BookMetadataEnrichment(patch.Description, poster, YearFromDates(patch.Dates));
+    /// <summary>Splits a provider-qualified id ("provider:itemId") into its parts, or (null, null) when malformed.</summary>
+    private static (string? ProviderId, string? ItemId) SplitProviderQualifiedId(string externalId) {
+        if (string.IsNullOrWhiteSpace(externalId)) {
+            return (null, null);
+        }
+
+        var separator = externalId.IndexOf(':');
+        if (separator <= 0 || separator >= externalId.Length - 1) {
+            return (null, null);
+        }
+
+        return (externalId[..separator], externalId[(separator + 1)..]);
     }
 
     /// <summary>Extracts a 4-digit year from any of the patch's date values (e.g. "2024" or "2024-03-26").</summary>

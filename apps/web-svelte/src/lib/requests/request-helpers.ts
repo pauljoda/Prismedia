@@ -100,6 +100,9 @@ export function inferRequestSourceForKind(kind: RequestMediaKindCode): RequestPr
   if (kind === REQUEST_MEDIA_KIND.movie) return REQUEST_PROVIDER_KIND.radarr;
   if (kind === REQUEST_MEDIA_KIND.series) return REQUEST_PROVIDER_KIND.sonarr;
   if (kind === REQUEST_MEDIA_KIND.artist || kind === REQUEST_MEDIA_KIND.album) return REQUEST_PROVIDER_KIND.lidarr;
+  // Books are fulfilled by the Prismedia plugin path; this is the fallback when a book detail URL is opened
+  // without an explicit source (the Discover flow always sets one, but a direct/back nav may not).
+  if (kind === REQUEST_MEDIA_KIND.book) return REQUEST_PROVIDER_KIND.plugin;
   return null;
 }
 

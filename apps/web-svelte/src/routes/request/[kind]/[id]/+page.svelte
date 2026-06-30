@@ -4,6 +4,7 @@
   import { Badge, Button, Checkbox, Select, TextInput } from "@prismedia/ui-svelte";
   import { goto } from "$app/navigation";
   import { fetchRequestDetail, fetchRequestServices, submitRequest } from "$lib/api/requests";
+  import { createAcquisition } from "$lib/api/acquisitions";
   import type { RequestMediaKindCode, RequestProviderKindCode } from "$lib/api/generated/codes";
   import { REQUEST_MEDIA_KIND, REQUEST_PROVIDER_KIND } from "$lib/api/generated/codes";
   import RequestPosterCard from "$lib/components/requests/RequestPosterCard.svelte";
@@ -69,6 +70,9 @@
 
   const isSeries = $derived(detail?.kind === REQUEST_MEDIA_KIND.series);
   const isArtist = $derived(detail?.kind === REQUEST_MEDIA_KIND.artist);
+  // A Prismedia-plugin book is fulfilled by direct acquisition, not an *arr service: its request panel and
+  // submit differ, and its series children (volumes) toggle like seasons.
+  const isPlugin = $derived(detail?.source === REQUEST_PROVIDER_KIND.plugin);
 
   const backHref = $derived(
     fromId
@@ -191,6 +195,75 @@
       await refreshDetailAfterSubmit();
     } catch (err) {
       error = err instanceof Error ? err.message : "Request failed";
+    } finally {
+      submitting = false;
+    }
+  }
+
+  /**
+   * Plugin (Prismedia-direct) book request: fans out to one acquisition per selected series volume, or a
+   * single acquisition for a standalone book, then moves to the searching view. No *arr submit involved.
+   */
+  async function requestPluginBook() {
+    if (!detail) return;
+    const d = detail;
+    // Targets: the selected series volumes, or the standalone book itself.
+    const raw =
+      d.children.length > 0
+        ? d.children
+            .filter((child) => selectedChildIds.includes(child.id))
+            .map((child) => ({ id: child.id, title: child.title, year: child.year, posterUrl: child.posterUrl, overview: child.overview }))
+        : [{ id: d.externalId, title: d.title, year: d.year, posterUrl: d.posterUrl, overview: d.overview }];
+    if (raw.length === 0) {
+      error = "Select at least one volume to request.";
+      return;
+    }
+
+    // Pre-flight: every target must carry a resolvable provider-qualified id ("provider:itemId") so each
+    // acquisition can identify ID-first. Validate up front so we never partially fan out on a bad id.
+    const targets = raw.map((target) => {
+      const separator = target.id.indexOf(":");
+      return {
+        ...target,
+        pluginId: separator > 0 ? target.id.slice(0, separator) : null,
+        pluginItemId: separator > 0 ? target.id.slice(separator + 1) : null,
+      };
+    });
+    if (targets.some((target) => !target.pluginId || !target.pluginItemId)) {
+      error = "Could not resolve a provider id for the selection.";
+      return;
+    }
+
+    submitting = true;
+    error = null;
+    message = null;
+    const created: string[] = [];
+    try {
+      for (const target of targets) {
+        const summary = await createAcquisition({
+          title: target.title,
+          author: d.subtitle ?? null,
+          series: d.children.length > 0 ? d.title : null,
+          year: numericValue(target.year),
+          posterUrl: target.posterUrl ?? null,
+          pluginId: target.pluginId,
+          pluginItemId: target.pluginItemId,
+          requestHistoryId: null,
+          description: target.overview ?? d.overview ?? null,
+        });
+        created.push(summary.id);
+      }
+
+      // Single book → its acquisition page; multiple volumes → the request queue where all of them show.
+      await goto(created.length === 1 ? `/request/acquisition/${created[0]}` : "/request");
+    } catch (err) {
+      // A mid-loop failure may have already queued some volumes — route to where they are visible rather
+      // than stranding them here (and re-enabling the button, which would re-create the ones that succeeded).
+      if (created.length > 0) {
+        await goto("/request");
+      } else {
+        error = err instanceof Error ? err.message : "Request failed";
+      }
     } finally {
       submitting = false;
     }
@@ -342,9 +415,9 @@
       {/if}
 
       {#if d.children.length > 0}
-          {#if isSeries}
+          {#if isSeries || isPlugin}
             <div class="space-y-2">
-              <h3 class="text-label text-text-muted">Seasons</h3>
+              <h3 class="text-label text-text-muted">{isSeries ? "Seasons" : "Volumes"}</h3>
               <div class="surface-well divide-y divide-border-subtle px-3">
                 {#each d.children as child (child.id)}
                   <label class="flex cursor-pointer items-center justify-between gap-2.5 py-2 text-[0.8rem] text-text-secondary">
@@ -448,7 +521,43 @@
           {d.tracked ? "Update Request" : "Send Request"}
         </h2>
 
-        {#if matchingServices.length === 0}
+        {#if isPlugin}
+          <p class="text-[0.78rem] leading-relaxed text-text-muted">
+            Prismedia will search your indexers and download
+            {d.children.length > 0 ? " the selected volume(s)" : " this book"}, then import
+            {d.children.length > 0 ? " them" : " it"} into your library. Quality rules and the upgrade cutoff
+            come from your default book profile (Settings → Acquisition).
+          </p>
+
+          {#if error}
+            <p class="text-[0.75rem] leading-relaxed text-error-text">{error}</p>
+          {/if}
+          {#if message}
+            <p class="flex items-center gap-1.5 text-[0.78rem] text-success-text">
+              <Check class="h-3.5 w-3.5" />
+              {message}
+            </p>
+          {/if}
+
+          <Button
+            type="button"
+            variant="primary"
+            disabled={submitting || (d.children.length > 0 && selectedChildIds.length === 0)}
+            onclick={() => void requestPluginBook()}
+            class="w-full gap-2"
+          >
+            {#if submitting}
+              <Loader2 class="h-4 w-4 animate-spin" />
+            {:else}
+              <Send class="h-4 w-4" />
+            {/if}
+            {submitting
+              ? "Requesting…"
+              : d.children.length > 0
+                ? `Request ${selectedChildIds.length} volume${selectedChildIds.length === 1 ? "" : "s"}`
+                : "Request"}
+          </Button>
+        {:else if matchingServices.length === 0}
           <p class="text-[0.78rem] leading-relaxed text-text-muted">
             No matching service is configured for this media type.
           </p>

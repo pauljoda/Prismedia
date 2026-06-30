@@ -7,7 +7,6 @@
   import { FULFILLMENT_MODE, REQUEST_MEDIA_KIND, REQUEST_PROVIDER_KIND } from "$lib/api/generated/codes";
   import type { RequestMediaKindCode, RequestProviderKindCode } from "$lib/api/generated/codes";
   import { fetchRequestServices, searchRequests } from "$lib/api/requests";
-  import { createAcquisition } from "$lib/api/acquisitions";
   import { fetchLibraryConfig } from "$lib/api/settings";
   import { findSetting, settingKeys, valueAsStringList } from "$lib/settings/app-settings";
   import RequestsReview from "$lib/components/requests/RequestsReview.svelte";
@@ -235,38 +234,6 @@
     return `/request/${result.kind}/${encodeURIComponent(result.externalId)}?${params.toString()}`;
   }
 
-  let requestingId = $state<string | null>(null);
-
-  // Books are fulfilled by Prismedia directly: requesting one creates an acquisition (capturing the
-  // plugin's external id for ID-first identify) and jumps to its detail. The external id is
-  // provider-qualified ("provider:id").
-  async function requestBook(result: RequestSearchResult) {
-    if (requestingId) return;
-    requestingId = result.externalId;
-    try {
-      const [pluginId, ...rest] = result.externalId.split(":");
-      const pluginItemId = rest.join(":") || null;
-      const summary = await createAcquisition({
-        title: result.title,
-        // subtitle holds the source label (e.g. "OpenLibrary"), not the author. The real author is
-        // resolved by ID-first identify from pluginId/pluginItemId after download.
-        author: null,
-        series: null,
-        year: numericValue(result.year),
-        posterUrl: result.posterUrl,
-        pluginId: pluginId || null,
-        pluginItemId,
-        requestHistoryId: null,
-        // Hold the search overview now; a background enrich pass fills the cover/fuller text from the provider.
-        description: result.overview,
-      });
-      await goto(`/request/acquisition/${summary.id}`);
-    } catch (err) {
-      error = err instanceof Error ? err.message : "Failed to start acquisition";
-    } finally {
-      requestingId = null;
-    }
-  }
 </script>
 
 <svelte:head><title>Request · Prismedia</title></svelte:head>
@@ -451,17 +418,10 @@
             {/if}
             <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
               {#each section.items as result (`${result.source}:${result.kind}:${result.externalId}`)}
-                {#if result.kind === REQUEST_MEDIA_KIND.book}
-                  <!-- Books are fulfilled internally: activating the card starts an acquisition rather
-                       than navigating to an *arr detail page. onActivate (no href) renders the thumbnail
-                       as a real button so it is clickable and keyboard-operable. -->
-                  <EntityThumbnail
-                    card={requestSearchResultToThumbnailCard(result, "")}
-                    onActivate={() => requestBook(result)}
-                  />
-                {:else}
-                  <EntityThumbnail card={requestSearchResultToThumbnailCard(result, detailHref(result))} />
-                {/if}
+                <!-- Every result — books included — opens its detail page first, where the user reviews it
+                     and explicitly requests (toggling quality/children). Nothing is queued on a thumbnail
+                     click; this mirrors the *arr handoff so switching a kind to Prismedia is a drop-in. -->
+                <EntityThumbnail card={requestSearchResultToThumbnailCard(result, detailHref(result))} />
               {/each}
             </div>
           </section>
