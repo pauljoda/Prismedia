@@ -192,7 +192,8 @@ public sealed class AcquisitionService(
             string.IsNullOrWhiteSpace(request.PosterUrl) ? null : request.PosterUrl.Trim(),
             string.IsNullOrWhiteSpace(request.PluginId) ? null : request.PluginId.Trim(),
             string.IsNullOrWhiteSpace(request.PluginItemId) ? null : request.PluginItemId.Trim(),
-            request.RequestHistoryId);
+            request.RequestHistoryId,
+            string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim());
 
         var summary = await store.CreateAsync(metadata, cancellationToken);
         await queue.EnqueueAsync(
@@ -202,6 +203,20 @@ public sealed class AcquisitionService(
                 TargetEntityId: summary.Id.ToString(),
                 TargetLabel: summary.Title),
             cancellationToken);
+
+        // When the request came from a metadata plugin, enrich the held metadata in the background from the
+        // provider (cover, fuller description, dates the lightweight search result lacked), so the acquisition
+        // surface fills in and the imported book can be seeded. Best-effort — never blocks the request.
+        if (!string.IsNullOrWhiteSpace(metadata.PluginId) && !string.IsNullOrWhiteSpace(metadata.PluginItemId)) {
+            await queue.EnqueueAsync(
+                new EnqueueJobRequest(
+                    JobType.AcquisitionEnrich,
+                    PayloadJson: AcquisitionJobPayload.Serialize(summary.Id),
+                    TargetEntityId: summary.Id.ToString(),
+                    TargetLabel: summary.Title),
+                cancellationToken);
+        }
+
         return summary;
     }
 }

@@ -30,4 +30,6 @@ export interface AcquisitionSummary {
   progress: number | string | null;
   createdAt: string;
   updatedAt: string;
+  /** @nullable */
+  description?: string | null;
 }

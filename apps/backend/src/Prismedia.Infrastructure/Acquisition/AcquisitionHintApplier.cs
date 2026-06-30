@@ -65,6 +65,18 @@ public sealed class AcquisitionHintApplier(PrismediaDbContext db) : IAcquisition
             detail.SourceTier = match.OwnedSourceTier;
         }
 
+        // Seed the request-time description ONLY when the book has none yet, so the authoritative auto-identify
+        // pass (which runs after import) always wins. This just guarantees the book is not blank in the gap
+        // before identify completes, or if identify never resolves it.
+        if (!string.IsNullOrWhiteSpace(match.Description)
+            && !await db.EntityDescriptions.AnyAsync(row => row.EntityId == entityId, cancellationToken)) {
+            db.EntityDescriptions.Add(new EntityDescriptionRow {
+                EntityId = entityId,
+                Value = match.Description,
+                UpdatedAt = DateTimeOffset.UtcNow
+            });
+        }
+
         match.Consumed = true;
         match.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(cancellationToken);

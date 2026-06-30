@@ -19,6 +19,9 @@ export function acquisitionToDetailCard(item: AcquisitionSummary): EntityDetailC
       items: [{ kind: ENTITY_FILE_ROLE.poster, path: item.posterUrl, mimeType: "image/jpeg" }],
     } as EntityCapability);
   }
+  if (item.description) {
+    capabilities.push({ kind: CAPABILITY_KIND.description, value: item.description } as EntityCapability);
+  }
 
   return entityCardToDetailCard({
     id: `acquisition-${item.id}`,

@@ -137,6 +137,9 @@ public sealed class AcquisitionRow {
     public int? Year { get; set; }
     public string? PosterUrl { get; set; }
 
+    /// <summary>Description/overview captured at request time, held so the acquisition surface is populated before import and used to seed the imported book.</summary>
+    public string? Description { get; set; }
+
     /// <summary>Plugin manifest id that supplied the request metadata, used to stamp the imported entity for ID-first identify.</summary>
     public string? PluginId { get; set; }
 
@@ -253,6 +256,9 @@ public sealed class AcquisitionImportHintRow {
     public string? Series { get; set; }
     public int? Year { get; set; }
     public string? PosterUrl { get; set; }
+
+    /// <summary>Request-time description carried to the scan so the imported book is seeded with it (only when it has none yet).</summary>
+    public string? Description { get; set; }
 
     /// <summary>Owned source tier captured at import, applied to the book's detail row by the scan hint.</summary>
     public BookSourceTier OwnedSourceTier { get; set; } = BookSourceTier.Unknown;

@@ -78,6 +78,71 @@ public sealed class EfAcquisitionStoreTests {
     }
 
     [Fact]
+    public async Task EnrichMetadataFillsGapsWithoutClobbering() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var id = Guid.NewGuid();
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = id, Status = AcquisitionStatus.Pending, Title = "B", ExternalIdsJson = "{}", SourceUrlsJson = "[]",
+            PosterUrl = null, Year = null, Description = null, CreatedAt = now, UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+        var store = new EfAcquisitionStore(db);
+
+        await store.EnrichMetadataAsync(id, "a provider description", "http://cover", 2024, CancellationToken.None);
+        var row = await db.Acquisitions.AsNoTracking().FirstAsync(a => a.Id == id);
+        Assert.Equal("http://cover", row.PosterUrl);   // gap filled
+        Assert.Equal(2024, row.Year);                  // gap filled
+        Assert.Equal("a provider description", row.Description); // gap filled
+
+        // A second enrichment must not clobber anything now set (gap-only on every field, including description).
+        await store.EnrichMetadataAsync(id, "a different, longer provider description", "http://other-cover", 1999, CancellationToken.None);
+        var row2 = await db.Acquisitions.AsNoTracking().FirstAsync(a => a.Id == id);
+        Assert.Equal("http://cover", row2.PosterUrl);
+        Assert.Equal(2024, row2.Year);
+        Assert.Equal("a provider description", row2.Description);
+    }
+
+    [Fact]
+    public async Task HintApplierSeedsDescriptionOnlyWhenTheBookHasNone() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var acquisitionId = Guid.NewGuid();
+        var entityId = Guid.NewGuid();
+        db.Acquisitions.Add(new AcquisitionRow { Id = acquisitionId, Status = AcquisitionStatus.Imported, Title = "B", ExternalIdsJson = "{}", SourceUrlsJson = "[]", CreatedAt = now, UpdatedAt = now });
+        db.BookDetails.Add(new BookDetailRow { EntityId = entityId, Format = BookFormat.Epub });
+        db.AcquisitionImportHints.Add(new AcquisitionImportHintRow {
+            Id = Guid.NewGuid(), AcquisitionId = acquisitionId, SourcePath = "/media/books/Book", ExternalIdsJson = "{}", SourceUrlsJson = "[]",
+            Description = "a request-time description", Consumed = false, CreatedAt = now, UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+
+        await new AcquisitionHintApplier(db).ApplyAsync(entityId, "/media/books/Book/Title.epub", CancellationToken.None);
+
+        Assert.Equal("a request-time description", (await db.EntityDescriptions.AsNoTracking().FirstAsync(d => d.EntityId == entityId)).Value);
+    }
+
+    [Fact]
+    public async Task HintApplierDoesNotClobberAnExistingBookDescription() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var acquisitionId = Guid.NewGuid();
+        var entityId = Guid.NewGuid();
+        db.Acquisitions.Add(new AcquisitionRow { Id = acquisitionId, Status = AcquisitionStatus.Imported, Title = "B", ExternalIdsJson = "{}", SourceUrlsJson = "[]", CreatedAt = now, UpdatedAt = now });
+        db.BookDetails.Add(new BookDetailRow { EntityId = entityId, Format = BookFormat.Epub });
+        db.EntityDescriptions.Add(new EntityDescriptionRow { EntityId = entityId, Value = "authoritative from identify", UpdatedAt = now });
+        db.AcquisitionImportHints.Add(new AcquisitionImportHintRow {
+            Id = Guid.NewGuid(), AcquisitionId = acquisitionId, SourcePath = "/media/books/Book", ExternalIdsJson = "{}", SourceUrlsJson = "[]",
+            Description = "request-time fallback", Consumed = false, CreatedAt = now, UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+
+        await new AcquisitionHintApplier(db).ApplyAsync(entityId, "/media/books/Book/Title.epub", CancellationToken.None);
+
+        Assert.Equal("authoritative from identify", (await db.EntityDescriptions.AsNoTracking().FirstAsync(d => d.EntityId == entityId)).Value);
+    }
+
+    [Fact]
     public async Task HintApplierStampsOwnedSourceTierOnTheBook() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;

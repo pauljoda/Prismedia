@@ -67,7 +67,8 @@ public sealed record AcquisitionCreateRequest(
     string? PosterUrl,
     string? PluginId,
     string? PluginItemId,
-    Guid? RequestHistoryId);
+    Guid? RequestHistoryId,
+    string? Description = null);
 
 /// <summary>A scored release candidate surfaced for review. Download links stay server-side; the id selects one to queue.</summary>
 public sealed record ReleaseCandidateView(
@@ -96,7 +97,8 @@ public sealed record AcquisitionSummary(
     string? PosterUrl,
     double? Progress,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    string? Description = null);
 
 /// <summary>An acquisition with its scored candidates for the review screen.</summary>
 public sealed record AcquisitionDetail(

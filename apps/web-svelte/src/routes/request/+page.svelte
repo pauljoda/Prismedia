@@ -257,6 +257,8 @@
         pluginId: pluginId || null,
         pluginItemId,
         requestHistoryId: null,
+        // Hold the search overview now; a background enrich pass fills the cover/fuller text from the provider.
+        description: result.overview,
       });
       await goto(`/request/acquisition/${summary.id}`);
     } catch (err) {

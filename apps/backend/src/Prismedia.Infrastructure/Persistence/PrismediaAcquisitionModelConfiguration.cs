@@ -131,6 +131,7 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.Series).HasColumnName("series").HasMaxLength(512);
             entity.Property(row => row.Year).HasColumnName("year");
             entity.Property(row => row.PosterUrl).HasColumnName("poster_url").HasMaxLength(2048);
+            entity.Property(row => row.Description).HasColumnName("description");
             entity.Property(row => row.PluginId).HasColumnName("plugin_id").HasMaxLength(256);
             entity.Property(row => row.PluginItemId).HasColumnName("plugin_item_id").HasMaxLength(256);
             entity.Property(row => row.ExternalIdsJson).HasColumnName("external_ids_json").HasColumnType("jsonb");
@@ -227,6 +228,7 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.Series).HasColumnName("series").HasMaxLength(512);
             entity.Property(row => row.Year).HasColumnName("year");
             entity.Property(row => row.PosterUrl).HasColumnName("poster_url").HasMaxLength(2048);
+            entity.Property(row => row.Description).HasColumnName("description");
             entity.Property(row => row.OwnedSourceTier)
                 .HasColumnName("owned_source_tier")
                 .HasMaxLength(32)

@@ -125,6 +125,7 @@ export const JOB_TYPE = {
   acquisitionFailedHandle: "acquisition-failed-handle",
   monitoredSearch: "monitored-search",
   acquisitionUpgradeReplace: "acquisition-upgrade-replace",
+  acquisitionEnrich: "acquisition-enrich",
 } as const;
 
 export type JobTypeCode = (typeof JOB_TYPE)[keyof typeof JOB_TYPE];

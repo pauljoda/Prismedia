@@ -126,6 +126,19 @@ public interface IBookMetadataSearchSource {
     Task<IReadOnlyList<RequestSearchResult>> SearchAsync(string query, bool hideNsfw, CancellationToken cancellationToken);
 }
 
+/// <summary>Full metadata a plugin can resolve for a known book work-id, used to enrich a held request before import.</summary>
+public sealed record BookMetadataEnrichment(string? Description, string? PosterUrl, int? Year);
+
+/// <summary>
+/// Resolves full metadata for a known provider work-id (no library entity), so a request's held metadata can
+/// be enriched with the cover/description/dates the lightweight search result lacked. Reuses the plugin
+/// LookupId path — no new plugin-protocol message.
+/// </summary>
+public interface IBookMetadataEnricher {
+    /// <summary>Looks up full book metadata by provider + work-id, or null when the provider can't resolve it.</summary>
+    Task<BookMetadataEnrichment?> LookupByIdAsync(string providerId, string externalId, bool hideNsfw, CancellationToken cancellationToken);
+}
+
 /// <summary>Aggregates request searches across configured service instances.</summary>
 public sealed class RequestSearchService(
     IRequestServiceInstanceStore store,

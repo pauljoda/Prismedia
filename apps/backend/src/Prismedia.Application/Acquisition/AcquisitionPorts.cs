@@ -163,6 +163,13 @@ public interface IAcquisitionStore {
     /// <summary>Updates an acquisition's owned quality (e.g. after a successful upgrade swap) without changing its status.</summary>
     Task UpdateOwnedQualityAsync(Guid acquisitionId, BookQualityRank ownedQuality, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Fills in held metadata from a provider enrichment, gap-only: a poster only when none is set, a year only
+    /// when none is set, and a description only when the held one is empty or shorter. Never overwrites richer
+    /// data the request already captured.
+    /// </summary>
+    Task EnrichMetadataAsync(Guid acquisitionId, string? description, string? posterUrl, int? year, CancellationToken cancellationToken);
+
     Task SetStatusAsync(Guid id, AcquisitionStatus status, string? message, CancellationToken cancellationToken);
 
     /// <summary>

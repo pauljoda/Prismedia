@@ -14,9 +14,10 @@ namespace Prismedia.Infrastructure.Requests;
 /// id and item id for an ID-first acquisition.
 /// </summary>
 public sealed class PluginBookMetadataSearchSource(PluginCatalogService catalog, IdentifyRunnerSelector runners)
-    : IBookMetadataSearchSource {
+    : IBookMetadataSearchSource, IBookMetadataEnricher {
     private static readonly string BookKind = EntityKindRegistry.Book.Code;
     private static readonly string SearchAction = IdentifyAction.Search.ToCode();
+    private static readonly string LookupIdAction = IdentifyAction.LookupId.ToCode();
 
     public async Task<IReadOnlyList<RequestSearchResult>> SearchAsync(string query, bool hideNsfw, CancellationToken cancellationToken) {
         if (string.IsNullOrWhiteSpace(query)) {
@@ -62,6 +63,63 @@ public sealed class PluginBookMetadataSearchSource(PluginCatalogService catalog,
         }
 
         return results;
+    }
+
+    public async Task<BookMetadataEnrichment?> LookupByIdAsync(string providerId, string externalId, bool hideNsfw, CancellationToken cancellationToken) {
+        if (string.IsNullOrWhiteSpace(providerId) || string.IsNullOrWhiteSpace(externalId)) {
+            return null;
+        }
+
+        var descriptor = await catalog.FindProviderAsync(providerId, BookKind, cancellationToken);
+        if (descriptor is null || !descriptor.Manifest.Supports.Any(support =>
+                PluginEntityKindCompatibility.SupportsKind(support, BookKind) && support.Actions.Contains(LookupIdAction))) {
+            return null;
+        }
+
+        // Respect SFW gating exactly as the search path does: never query an NSFW-flagged provider when NSFW
+        // is hidden. The held search-result metadata stands; we simply skip the background enrichment.
+        if (hideNsfw && (await catalog.ListProvidersAsync(cancellationToken)).Any(p => p.Id == providerId && p.IsNsfw)) {
+            return null;
+        }
+
+        var ids = new Dictionary<string, string> { [providerId] = externalId };
+        var auth = await catalog.GetAuthAsync(descriptor.Manifest, cancellationToken);
+        var request = new IdentifyPluginRequest(
+            ProtocolVersion: 2,
+            Action: IdentifyAction.LookupId,
+            Auth: auth,
+            // No library entity: a synthetic snapshot carrying the known id is enough for an id lookup.
+            Entity: new IdentifyEntitySnapshot(Guid.NewGuid(), EntityKind.Book, string.Empty, ids, []),
+            Query: new IdentifyQuery(null, null, ids),
+            Hints: new IdentifyMatchHints(ids, [], null, null),
+            StructuralContext: null,
+            IncludeNsfw: !hideNsfw,
+            IncludeRelationshipDetails: false,
+            IncludeStructuralChildren: false);
+
+        var response = await runners.Resolve(descriptor).IdentifyAsync(descriptor, request, cancellationToken);
+        if (response.Result?.Patch is not { } patch) {
+            return null;
+        }
+
+        // Cover: the best-ranked image the provider returned (books generally return cover art).
+        var poster = response.Result.Images
+            .OrderByDescending(image => image.Rank ?? 0)
+            .Select(image => image.Url)
+            .FirstOrDefault(url => !string.IsNullOrWhiteSpace(url));
+
+        return new BookMetadataEnrichment(patch.Description, poster, YearFromDates(patch.Dates));
+    }
+
+    /// <summary>Extracts a 4-digit year from any of the patch's date values (e.g. "2024" or "2024-03-26").</summary>
+    private static int? YearFromDates(IReadOnlyDictionary<string, string> dates) {
+        foreach (var value in dates.Values) {
+            if (value is { Length: >= 4 } && int.TryParse(value[..4], out var year) && year is >= 1000 and <= 9999) {
+                return year;
+            }
+        }
+
+        return null;
     }
 
     private static RequestSearchResult? MapCandidate(string providerId, EntitySearchCandidate candidate) {

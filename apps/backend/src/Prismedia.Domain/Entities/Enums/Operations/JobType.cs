@@ -139,5 +139,9 @@ public enum JobType {
 
     /// <summary>Replaces an owned book file with a fully-downloaded, verified, strictly-better upgrade release.</summary>
     [Code("acquisition-upgrade-replace")]
-    AcquisitionUpgradeReplace
+    AcquisitionUpgradeReplace,
+
+    /// <summary>Enriches a request's held metadata (cover, description, dates) from the provider before import.</summary>
+    [Code("acquisition-enrich")]
+    AcquisitionEnrich
 }

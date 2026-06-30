@@ -21,6 +21,7 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
             Series = metadata.Series,
             Year = metadata.Year,
             PosterUrl = metadata.PosterUrl,
+            Description = metadata.Description,
             PluginId = metadata.PluginId,
             PluginItemId = metadata.PluginItemId,
             ExternalIdsJson = "{}",
@@ -145,6 +146,36 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
             transfer?.ContentPath,
             transfer?.ClientItemId,
             transfer?.DownloadClientConfigId);
+    }
+
+    public async Task EnrichMetadataAsync(Guid acquisitionId, string? description, string? posterUrl, int? year, CancellationToken cancellationToken) {
+        var row = await db.Acquisitions.FirstOrDefaultAsync(row => row.Id == acquisitionId, cancellationToken);
+        if (row is null) {
+            return;
+        }
+
+        var changed = false;
+        if (string.IsNullOrWhiteSpace(row.PosterUrl) && !string.IsNullOrWhiteSpace(posterUrl)) {
+            row.PosterUrl = posterUrl;
+            changed = true;
+        }
+
+        if (row.Year is null && year is not null) {
+            row.Year = year;
+            changed = true;
+        }
+
+        // Gap-only, like the other fields: fill a description only when none was captured at request time.
+        // Length is not a reliable proxy for "better", so a held description from the search result is kept.
+        if (string.IsNullOrWhiteSpace(row.Description) && !string.IsNullOrWhiteSpace(description)) {
+            row.Description = description;
+            changed = true;
+        }
+
+        if (changed) {
+            row.UpdatedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(cancellationToken);
+        }
     }
 
     public async Task UpdateOwnedQualityAsync(Guid acquisitionId, BookQualityRank ownedQuality, CancellationToken cancellationToken) {
@@ -360,7 +391,7 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
 
         return new AcquisitionImportContext(
             row.Id, row.Title, row.Author, row.Series, row.Year, row.PosterUrl, row.PluginId, row.PluginItemId,
-            row.ProfileId, transfer?.ContentPath, transfer?.ClientItemId, transfer?.DownloadClientConfigId);
+            row.ProfileId, transfer?.ContentPath, transfer?.ClientItemId, transfer?.DownloadClientConfigId, row.Description);
     }
 
     public async Task<AcquisitionTransferInfo?> GetTransferInfoAsync(Guid acquisitionId, CancellationToken cancellationToken) {
@@ -419,6 +450,7 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
             Series = context.Series,
             Year = context.Year,
             PosterUrl = context.PosterUrl,
+            Description = context.Description,
             OwnedSourceTier = ownedQuality.Source,
             OwnedFormatTier = ownedQuality.Format,
             Consumed = false,
@@ -453,7 +485,7 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
 
     private static AcquisitionSummary ToSummary(AcquisitionRow row, double? progress) =>
         new(row.Id, row.Status, row.StatusMessage, row.Title, row.Author, row.Series, row.Year, row.PosterUrl,
-            progress, row.CreatedAt, row.UpdatedAt);
+            progress, row.CreatedAt, row.UpdatedAt, row.Description);
 
     private static ReleaseCandidateView ToView(ReleaseCandidateRow row) =>
         new(row.Id, row.IndexerName, row.Title, row.SizeBytes, row.Seeders, row.Peers, row.Protocol, row.Accepted,

@@ -81,7 +81,8 @@ public sealed record AcquisitionMetadata(
     string? PosterUrl,
     string? PluginId,
     string? PluginItemId,
-    Guid? RequestHistoryId);
+    Guid? RequestHistoryId,
+    string? Description = null);
 
 /// <summary>The minimal input the background search job needs to query indexers for an acquisition.</summary>
 public sealed record AcquisitionSearchInput(Guid Id, string Title, string? Author);
@@ -222,4 +223,5 @@ public sealed record AcquisitionImportContext(
     Guid? ProfileId,
     string? ContentPath,
     string? ClientItemId,
-    Guid? DownloadClientConfigId);
+    Guid? DownloadClientConfigId,
+    string? Description = null);
