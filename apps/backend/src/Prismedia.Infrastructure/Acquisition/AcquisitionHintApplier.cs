@@ -65,17 +65,11 @@ public sealed class AcquisitionHintApplier(PrismediaDbContext db) : IAcquisition
             detail.SourceTier = match.OwnedSourceTier;
         }
 
-        // Seed the request-time description ONLY when the book has none yet, so the authoritative auto-identify
-        // pass (which runs after import) always wins. This just guarantees the book is not blank in the gap
-        // before identify completes, or if identify never resolves it.
-        if (!string.IsNullOrWhiteSpace(match.Description)
-            && !await db.EntityDescriptions.AnyAsync(row => row.EntityId == entityId, cancellationToken)) {
-            db.EntityDescriptions.Add(new EntityDescriptionRow {
-                EntityId = entityId,
-                Value = match.Description,
-                UpdatedAt = DateTimeOffset.UtcNow
-            });
-        }
+        // NOTE: we deliberately do NOT seed the entity's description from the request here. The book's
+        // description is owned by the more authoritative sources that run at/after import — the file's own
+        // embedded metadata (e.g. ComicInfo) and the post-import auto-identify pass — and seeding here (before
+        // the embedded-metadata step) would pre-empt the file's own description. The request-time description
+        // is held on the acquisition for the request surface; the imported entity gets the better source.
 
         match.Consumed = true;
         match.UpdatedAt = DateTimeOffset.UtcNow;

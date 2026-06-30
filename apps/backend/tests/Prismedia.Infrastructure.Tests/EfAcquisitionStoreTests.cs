@@ -104,7 +104,9 @@ public sealed class EfAcquisitionStoreTests {
     }
 
     [Fact]
-    public async Task HintApplierSeedsDescriptionOnlyWhenTheBookHasNone() {
+    public async Task HintApplierDoesNotSeedTheEntityDescription() {
+        // The entity description is owned by embedded file metadata + auto-identify; the hint applier must not
+        // pre-empt them by seeding the request-time description onto the book.
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;
         var acquisitionId = Guid.NewGuid();
@@ -119,27 +121,8 @@ public sealed class EfAcquisitionStoreTests {
 
         await new AcquisitionHintApplier(db).ApplyAsync(entityId, "/media/books/Book/Title.epub", CancellationToken.None);
 
-        Assert.Equal("a request-time description", (await db.EntityDescriptions.AsNoTracking().FirstAsync(d => d.EntityId == entityId)).Value);
-    }
-
-    [Fact]
-    public async Task HintApplierDoesNotClobberAnExistingBookDescription() {
-        await using var db = CreateContext();
-        var now = DateTimeOffset.UtcNow;
-        var acquisitionId = Guid.NewGuid();
-        var entityId = Guid.NewGuid();
-        db.Acquisitions.Add(new AcquisitionRow { Id = acquisitionId, Status = AcquisitionStatus.Imported, Title = "B", ExternalIdsJson = "{}", SourceUrlsJson = "[]", CreatedAt = now, UpdatedAt = now });
-        db.BookDetails.Add(new BookDetailRow { EntityId = entityId, Format = BookFormat.Epub });
-        db.EntityDescriptions.Add(new EntityDescriptionRow { EntityId = entityId, Value = "authoritative from identify", UpdatedAt = now });
-        db.AcquisitionImportHints.Add(new AcquisitionImportHintRow {
-            Id = Guid.NewGuid(), AcquisitionId = acquisitionId, SourcePath = "/media/books/Book", ExternalIdsJson = "{}", SourceUrlsJson = "[]",
-            Description = "request-time fallback", Consumed = false, CreatedAt = now, UpdatedAt = now
-        });
-        await db.SaveChangesAsync();
-
-        await new AcquisitionHintApplier(db).ApplyAsync(entityId, "/media/books/Book/Title.epub", CancellationToken.None);
-
-        Assert.Equal("authoritative from identify", (await db.EntityDescriptions.AsNoTracking().FirstAsync(d => d.EntityId == entityId)).Value);
+        Assert.False(await db.EntityDescriptions.AsNoTracking().AnyAsync(d => d.EntityId == entityId));
+        Assert.True((await db.AcquisitionImportHints.AsNoTracking().FirstAsync()).Consumed); // hint still applied (ids/tier)
     }
 
     [Fact]

@@ -76,9 +76,10 @@ public sealed class PluginBookMetadataSearchSource(PluginCatalogService catalog,
             return null;
         }
 
-        // Respect SFW gating exactly as the search path does: never query an NSFW-flagged provider when NSFW
-        // is hidden. The held search-result metadata stands; we simply skip the background enrichment.
-        if (hideNsfw && (await catalog.ListProvidersAsync(cancellationToken)).Any(p => p.Id == providerId && p.IsNsfw)) {
+        // Mirror the search path's provider gating: only query a provider that is enabled, and never an
+        // NSFW-flagged one when NSFW is hidden. Otherwise the held search-result metadata simply stands.
+        var provider = (await catalog.ListProvidersAsync(cancellationToken)).FirstOrDefault(p => p.Id == providerId);
+        if (provider is null || !provider.Enabled || (hideNsfw && provider.IsNsfw)) {
             return null;
         }
 
