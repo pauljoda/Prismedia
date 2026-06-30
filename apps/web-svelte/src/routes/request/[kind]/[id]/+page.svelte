@@ -1,8 +1,10 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { Check, ChevronLeft, Loader2, RefreshCw, Send, Settings } from "@lucide/svelte";
-  import { Badge, Button, Checkbox, Select, TextInput } from "@prismedia/ui-svelte";
+  import { Badge, Button, Checkbox, Select, TextInput, dur, ease, flyUp } from "@prismedia/ui-svelte";
+  import { fade } from "svelte/transition";
   import { goto } from "$app/navigation";
+  import type { EntityDetailActionButton } from "$lib/components/entities/entity-detail-types";
   import { fetchRequestDetail, fetchRequestServices, submitRequest } from "$lib/api/requests";
   import { createAcquisition } from "$lib/api/acquisitions";
   import type { RequestMediaKindCode, RequestProviderKindCode } from "$lib/api/generated/codes";
@@ -73,15 +75,14 @@
   // A Prismedia-plugin book is fulfilled by direct acquisition, not an *arr service: its request panel and
   // submit differ, and its series children (volumes) toggle like seasons.
   const isPlugin = $derived(detail?.source === REQUEST_PROVIDER_KIND.plugin);
-  // requestSections renders studios/cast/credits/children/tracks. When none apply — a standalone plugin
-  // book — the two-column layout would orphan the request panel beside an empty column, so collapse it.
-  const hasRequestSections = $derived(
-    !!detail &&
-      (detail.studios.length > 0 ||
-        detail.cast.length > 0 ||
-        detail.credits.length > 0 ||
-        detail.children.length > 0 ||
-        detail.tracks.length > 0),
+
+  // A plugin book's request action lives in the hero (like the acquisition page's Monitor/Cancel buttons);
+  // the details + series-volume selection open in a dialog rather than a body panel.
+  let requestDialogOpen = $state(false);
+  const actionButtons = $derived<EntityDetailActionButton[]>(
+    isPlugin
+      ? [{ id: "request", label: "Request", icon: Send, variant: "primary", onClick: () => { requestDialogOpen = true; }, disabled: submitting }]
+      : [],
   );
 
   const backHref = $derived(
@@ -348,7 +349,7 @@
          poster) and description for a synthetic card; request-only concepts
          (ratings, cast, children, tracks, the request panel) layer in through
          snippets so they live inside the same detail card. -->
-    <EntityDetail card={requestCard} posterSize="large" showFlagActions={false}>
+    <EntityDetail card={requestCard} posterSize="large" showFlagActions={false} {actionButtons}>
         {#snippet heroMeta()}
           {#if d.subtitle}
             <span class="meta-item">{d.subtitle}</span>
@@ -390,12 +391,14 @@
         {/snippet}
 
       {#snippet afterBody()}
-        <div class="request-detail-body" class:request-detail-body--solo={!hasRequestSections}>
-          {#if hasRequestSections}
+        <!-- Plugin books request from the hero button + dialog, so they need no body panel. The *arr path
+             keeps its two-column sections + request panel. -->
+        {#if !isPlugin}
+          <div class="request-detail-body">
             {@render requestSections(d)}
-          {/if}
-          {@render requestPanel(d)}
-        </div>
+            {@render requestPanel(d)}
+          </div>
+        {/if}
       {/snippet}
     </EntityDetail>
   {/if}
@@ -427,9 +430,9 @@
       {/if}
 
       {#if d.children.length > 0}
-          {#if isSeries || isPlugin}
+          {#if isSeries}
             <div class="space-y-2">
-              <h3 class="text-label text-text-muted">{isSeries ? "Seasons" : "Volumes"}</h3>
+              <h3 class="text-label text-text-muted">Seasons</h3>
               <div class="surface-well divide-y divide-border-subtle px-3">
                 {#each d.children as child (child.id)}
                   <label class="flex cursor-pointer items-center justify-between gap-2.5 py-2 text-[0.8rem] text-text-secondary">
@@ -533,43 +536,7 @@
           {d.tracked ? "Update Request" : "Send Request"}
         </h2>
 
-        {#if isPlugin}
-          <p class="text-[0.78rem] leading-relaxed text-text-muted">
-            Prismedia will search your indexers and download
-            {d.children.length > 0 ? " the selected volume(s)" : " this book"}, then import
-            {d.children.length > 0 ? " them" : " it"} into your library. Quality rules and the upgrade cutoff
-            come from your default book profile (Settings → Acquisition).
-          </p>
-
-          {#if error}
-            <p class="text-[0.75rem] leading-relaxed text-error-text">{error}</p>
-          {/if}
-          {#if message}
-            <p class="flex items-center gap-1.5 text-[0.78rem] text-success-text">
-              <Check class="h-3.5 w-3.5" />
-              {message}
-            </p>
-          {/if}
-
-          <Button
-            type="button"
-            variant="primary"
-            disabled={submitting || (d.children.length > 0 && selectedChildIds.length === 0)}
-            onclick={() => void requestPluginBook()}
-            class="w-full gap-2"
-          >
-            {#if submitting}
-              <Loader2 class="h-4 w-4 animate-spin" />
-            {:else}
-              <Send class="h-4 w-4" />
-            {/if}
-            {submitting
-              ? "Requesting…"
-              : d.children.length > 0
-                ? `Request ${selectedChildIds.length} volume${selectedChildIds.length === 1 ? "" : "s"}`
-                : "Request"}
-          </Button>
-        {:else if matchingServices.length === 0}
+        {#if matchingServices.length === 0}
           <p class="text-[0.78rem] leading-relaxed text-text-muted">
             No matching service is configured for this media type.
           </p>
@@ -700,6 +667,88 @@
       </aside>
 {/snippet}
 
+<!-- ── Plugin book request dialog (opened from the hero Request action) ── -->
+{#if requestDialogOpen && detail}
+  {@const d = detail}
+  <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <button
+      type="button"
+      class="absolute inset-0 bg-black/80 backdrop-blur-sm"
+      onclick={() => { if (!submitting) requestDialogOpen = false; }}
+      aria-label="Close request dialog"
+      transition:fade={{ duration: dur.normal, easing: ease.enter }}
+    ></button>
+
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Request ${d.title}`}
+      class="relative z-10 w-full max-w-md space-y-4 surface-elevated p-6"
+      transition:flyUp
+    >
+      <div>
+        <h2 class="text-base font-heading font-semibold text-text-primary">Request {d.title}</h2>
+        <p class="mt-1.5 text-[0.78rem] leading-relaxed text-text-muted">
+          Prismedia will search your indexers and download
+          {d.children.length > 0 ? "the selected volume(s)" : "this book"}, then import
+          {d.children.length > 0 ? "them" : "it"} into your library. Quality rules and the upgrade cutoff come
+          from your default book profile (Settings → Acquisition).
+        </p>
+      </div>
+
+      {#if d.children.length > 0}
+        <div class="space-y-2">
+          <h3 class="text-label text-text-muted">
+            Volumes
+            <span class="ml-1 font-mono text-[0.68rem] text-text-muted">{selectedChildIds.length}/{d.children.length}</span>
+          </h3>
+          <div class="surface-well max-h-64 divide-y divide-border-subtle overflow-y-auto px-3">
+            {#each d.children as child (child.id)}
+              <label class="flex cursor-pointer items-center gap-2.5 py-2 text-[0.8rem] text-text-secondary">
+                <Checkbox
+                  checked={selectedChildIds.includes(child.id)}
+                  disabled={!child.requestable}
+                  onchange={(event) => toggleChild(child.id, event.currentTarget.checked)}
+                />
+                <span class="min-w-0 flex-1 truncate">{child.title}</span>
+                {#if child.year}<span class="shrink-0 font-mono text-[0.62rem] text-text-muted">{child.year}</span>{/if}
+              </label>
+            {/each}
+          </div>
+        </div>
+      {/if}
+
+      {#if error}
+        <p class="text-[0.75rem] leading-relaxed text-error-text">{error}</p>
+      {/if}
+
+      <div class="flex justify-end gap-2 pt-1">
+        <Button type="button" variant="ghost" onclick={() => (requestDialogOpen = false)} disabled={submitting}>
+          Cancel
+        </Button>
+        <Button
+          type="button"
+          variant="primary"
+          class="gap-2"
+          disabled={submitting || (d.children.length > 0 && selectedChildIds.length === 0)}
+          onclick={() => void requestPluginBook()}
+        >
+          {#if submitting}
+            <Loader2 class="h-4 w-4 animate-spin" />
+          {:else}
+            <Send class="h-4 w-4" />
+          {/if}
+          {submitting
+            ? "Requesting…"
+            : d.children.length > 0
+              ? `Request ${selectedChildIds.length} volume${selectedChildIds.length === 1 ? "" : "s"}`
+              : "Request"}
+        </Button>
+      </div>
+    </div>
+  </div>
+{/if}
+
 <style>
   /* EntityDetail's .detail-after-body supplies the edge padding; this just lays the
      sections and request panel out and embeds the panel as an inline well on wide screens. */
@@ -710,19 +759,12 @@
   }
 
   @media (min-width: 64rem) {
-    /* Two columns only when the left column has content (rich *arr / series / album / multi-volume details). */
-    .request-detail-body:not(.request-detail-body--solo) {
+    .request-detail-body {
       grid-template-columns: minmax(0, 1fr) 320px;
     }
 
-    /* Standalone plugin book: no sections — present the panel as a clean card under the description
-       rather than orphaned at the right edge. */
-    .request-detail-body--solo {
-      max-width: 30rem;
-    }
-
     /* Long discographies scroll while the request controls stay reachable. */
-    .request-detail-body:not(.request-detail-body--solo) .request-panel {
+    .request-panel {
       position: sticky;
       top: 1rem;
     }
