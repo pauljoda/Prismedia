@@ -57,6 +57,14 @@ public sealed class AcquisitionHintApplier(PrismediaDbContext db) : IAcquisition
             }
         }
 
+        // Record the owned source tier on the book's detail row (the format tier is derived from the row's
+        // Format, never stored). This is the provenance half of the owned quality the upgrade loop compares
+        // against. The scan creates the detail row before hints are applied, so it is expected to exist.
+        var detail = await db.BookDetails.FirstOrDefaultAsync(row => row.EntityId == entityId, cancellationToken);
+        if (detail is not null) {
+            detail.SourceTier = match.OwnedSourceTier;
+        }
+
         match.Consumed = true;
         match.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(cancellationToken);

@@ -61,8 +61,17 @@ public sealed class AcquisitionImportJobHandler(
                 finalPaths.Add(await mover.PlaceAsync(item, profile.ImportMode, cancellationToken));
             }
 
+            // Capture the owned quality: format from the actual placed file (file truth, so a release that
+            // claimed retail-EPUB but delivered a PDF is recorded honestly), source from the selected release
+            // title (provenance is not in the bytes). Stamped onto the acquisition and carried on the hint so
+            // the scan can record it on the book's detail row.
+            var selected = await acquisitions.GetSelectedReleaseAsync(payload.AcquisitionId, cancellationToken);
+            var ownedQuality = new BookQualityRank(
+                selected is null ? BookSourceTier.Unknown : BookFormatDetection.DetectSource(selected.Title),
+                BookFormatDetection.DetectFormatTier(finalPaths[0]));
+
             var hintFolder = Path.GetDirectoryName(finalPaths[0]) ?? root.Path;
-            await acquisitions.WriteImportHintAsync(payload.AcquisitionId, hintFolder, import, cancellationToken);
+            await acquisitions.WriteImportHintAsync(payload.AcquisitionId, hintFolder, import, ownedQuality, cancellationToken);
             await acquisitions.SetFinalSourcePathAsync(payload.AcquisitionId, hintFolder, cancellationToken);
 
             await context.ReportProgressAsync(80, "Scanning library", cancellationToken);
@@ -72,7 +81,7 @@ public sealed class AcquisitionImportJobHandler(
                 await RemoveTorrentAsync(import, cancellationToken);
             }
 
-            await acquisitions.SetStatusAsync(payload.AcquisitionId, AcquisitionStatus.Imported, "Imported into the library.", cancellationToken);
+            await acquisitions.MarkImportedWithQualityAsync(payload.AcquisitionId, ownedQuality, "Imported into the library.", cancellationToken);
             await context.ReportProgressAsync(100, "Imported", cancellationToken);
         } catch (OperationCanceledException) {
             throw;

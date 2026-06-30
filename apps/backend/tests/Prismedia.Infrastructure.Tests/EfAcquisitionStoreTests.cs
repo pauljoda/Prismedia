@@ -59,6 +59,45 @@ public sealed class EfAcquisitionStoreTests {
         Assert.Equal([ReleaseRejectionReason.Blocklisted], candidate.Rejections);
     }
 
+    [Fact]
+    public async Task MarkImportedWithQualityCapturesQualityAtomically() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var id = Guid.NewGuid();
+        db.Acquisitions.Add(new AcquisitionRow { Id = id, Status = AcquisitionStatus.Importing, Title = "B", ExternalIdsJson = "{}", SourceUrlsJson = "[]", CreatedAt = now, UpdatedAt = now });
+        await db.SaveChangesAsync();
+        var store = new EfAcquisitionStore(db);
+
+        await store.MarkImportedWithQualityAsync(id, new BookQualityRank(BookSourceTier.Retail, BookFormatTier.Reflowable), "Imported.", CancellationToken.None);
+
+        var row = await db.Acquisitions.AsNoTracking().FirstAsync(a => a.Id == id);
+        Assert.Equal(AcquisitionStatus.Imported, row.Status);
+        Assert.Equal(BookSourceTier.Retail, row.OwnedSourceTier);
+        Assert.Equal(BookFormatTier.Reflowable, row.OwnedFormatTier);
+        Assert.True(row.UpgradeQualityCaptured);
+    }
+
+    [Fact]
+    public async Task HintApplierStampsOwnedSourceTierOnTheBook() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var acquisitionId = Guid.NewGuid();
+        var entityId = Guid.NewGuid();
+        db.Acquisitions.Add(new AcquisitionRow { Id = acquisitionId, Status = AcquisitionStatus.Imported, Title = "B", ExternalIdsJson = "{}", SourceUrlsJson = "[]", CreatedAt = now, UpdatedAt = now });
+        db.BookDetails.Add(new BookDetailRow { EntityId = entityId, Format = BookFormat.Epub, SourceTier = BookSourceTier.Unknown });
+        db.AcquisitionImportHints.Add(new AcquisitionImportHintRow {
+            Id = Guid.NewGuid(), AcquisitionId = acquisitionId, SourcePath = "/media/books/Book", ExternalIdsJson = "{}", SourceUrlsJson = "[]",
+            OwnedSourceTier = BookSourceTier.Retail, OwnedFormatTier = BookFormatTier.Reflowable, Consumed = false, CreatedAt = now, UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+
+        var applied = await new AcquisitionHintApplier(db).ApplyAsync(entityId, "/media/books/Book/Title.epub", CancellationToken.None);
+
+        Assert.True(applied);
+        Assert.Equal(BookSourceTier.Retail, (await db.BookDetails.AsNoTracking().FirstAsync(d => d.EntityId == entityId)).SourceTier);
+        Assert.True((await db.AcquisitionImportHints.AsNoTracking().FirstAsync()).Consumed);
+    }
+
     private static void AddCandidate(PrismediaDbContext db, Guid acquisitionId, string? infoHash, string indexer, string title, double score) {
         var now = DateTimeOffset.UtcNow;
         if (db.Acquisitions.Local.All(a => a.Id != acquisitionId) && !db.Acquisitions.Any(a => a.Id == acquisitionId)) {

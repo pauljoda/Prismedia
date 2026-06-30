@@ -102,6 +102,21 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
         await db.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task MarkImportedWithQualityAsync(Guid id, BookQualityRank ownedQuality, string? message, CancellationToken cancellationToken) {
+        var row = await db.Acquisitions.FirstOrDefaultAsync(row => row.Id == id, cancellationToken);
+        if (row is null) {
+            return;
+        }
+
+        row.Status = AcquisitionStatus.Imported;
+        row.StatusMessage = message;
+        row.OwnedSourceTier = ownedQuality.Source;
+        row.OwnedFormatTier = ownedQuality.Format;
+        row.UpgradeQualityCaptured = true;
+        row.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
     public async Task ReplaceCandidatesAsync(Guid id, IReadOnlyList<ScoredRelease> candidates, CancellationToken cancellationToken) {
         var existing = await db.ReleaseCandidates.Where(candidate => candidate.AcquisitionId == id).ToArrayAsync(cancellationToken);
         db.ReleaseCandidates.RemoveRange(existing);
@@ -322,7 +337,7 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task WriteImportHintAsync(Guid acquisitionId, string sourcePath, AcquisitionImportContext context, CancellationToken cancellationToken) {
+    public async Task WriteImportHintAsync(Guid acquisitionId, string sourcePath, AcquisitionImportContext context, BookQualityRank ownedQuality, CancellationToken cancellationToken) {
         var now = DateTimeOffset.UtcNow;
         var existing = await db.AcquisitionImportHints
             .Where(hint => hint.AcquisitionId == acquisitionId)
@@ -347,6 +362,8 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
             Series = context.Series,
             Year = context.Year,
             PosterUrl = context.PosterUrl,
+            OwnedSourceTier = ownedQuality.Source,
+            OwnedFormatTier = ownedQuality.Format,
             Consumed = false,
             CreatedAt = now,
             UpdatedAt = now

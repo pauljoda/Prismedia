@@ -152,6 +152,13 @@ public interface IAcquisitionStore {
 
     Task SetStatusAsync(Guid id, AcquisitionStatus status, string? message, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Atomically marks an acquisition <see cref="AcquisitionStatus.Imported"/>, records the owned quality it
+    /// imported, and flags the quality as captured — all in one commit, so the upgrade due-policy never sees a
+    /// half-imported acquisition with a floor owned quality and mistakes it for "owns nothing".
+    /// </summary>
+    Task MarkImportedWithQualityAsync(Guid id, BookQualityRank ownedQuality, string? message, CancellationToken cancellationToken);
+
     /// <summary>Replaces an acquisition's candidate set with a freshly scored search result.</summary>
     Task ReplaceCandidatesAsync(Guid id, IReadOnlyList<ScoredRelease> candidates, CancellationToken cancellationToken);
 
@@ -205,7 +212,7 @@ public interface IAcquisitionStore {
     Task SetFinalSourcePathAsync(Guid acquisitionId, string finalSourcePath, CancellationToken cancellationToken);
 
     /// <summary>Writes the path-keyed identity hint the book scan consumes to stamp the new entity.</summary>
-    Task WriteImportHintAsync(Guid acquisitionId, string sourcePath, AcquisitionImportContext context, CancellationToken cancellationToken);
+    Task WriteImportHintAsync(Guid acquisitionId, string sourcePath, AcquisitionImportContext context, BookQualityRank ownedQuality, CancellationToken cancellationToken);
 }
 
 /// <summary>
