@@ -27,6 +27,12 @@ public sealed class EntityRow {
     public bool IsOrganized { get; set; }
 
     /// <summary>
+    /// True when this entity was created by a request but has no file on disk yet ("wanted"). An acquisition
+    /// download attaches the Source file and clears this flag, turning the placeholder into a real library item.
+    /// </summary>
+    public bool IsWanted { get; set; }
+
+    /// <summary>
     /// Count of completed auto-identify runs that ended without a confident match. Once this
     /// reaches the policy maximum the entity is skipped by auto identify and must be identified
     /// manually.

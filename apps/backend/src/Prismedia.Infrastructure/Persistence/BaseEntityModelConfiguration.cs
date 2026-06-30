@@ -47,6 +47,7 @@ internal static class BaseEntityModelConfiguration {
             entity.Property(row => row.IsFavorite).HasColumnName("is_favorite").HasDefaultValue(false);
             entity.Property(row => row.IsNsfw).HasColumnName("is_nsfw").HasDefaultValue(false);
             entity.Property(row => row.IsOrganized).HasColumnName("is_organized").HasDefaultValue(false);
+            entity.Property(row => row.IsWanted).HasColumnName("is_wanted").HasDefaultValue(false);
             entity.Property(row => row.AutoIdentifyAttempts).HasColumnName("auto_identify_attempts").HasDefaultValue(0);
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
