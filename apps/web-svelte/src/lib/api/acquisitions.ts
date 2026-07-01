@@ -10,6 +10,7 @@ import {
   listAcquisitionBlocklist,
   getAcquisition as getAcquisitionRequest,
   getAcquisitionFiles,
+  getAcquisitionForEntity,
   getAcquisitionTransfer,
   listAcquisitionProfiles,
   listAcquisitions,
@@ -105,6 +106,13 @@ export async function fetchAcquisitions(): Promise<AcquisitionSummary[]> {
 
 export async function fetchAcquisition(id: string): Promise<AcquisitionDetail> {
   return unwrapGenerated(await getAcquisitionRequest(id), "Failed to load acquisition");
+}
+
+/** The latest acquisition backing a library entity, or null when it has none (the common case for scanned-in items). */
+export async function fetchAcquisitionForEntity(entityId: string): Promise<AcquisitionDetail | null> {
+  const response = await getAcquisitionForEntity(entityId);
+  if (response.status === 404) return null;
+  return unwrapGenerated(response, "Failed to load the entity's acquisition");
 }
 
 export async function createAcquisition(payload: AcquisitionCreateRequest): Promise<AcquisitionSummary> {

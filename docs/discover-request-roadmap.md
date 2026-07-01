@@ -46,6 +46,11 @@ yet. Same shapes, same UI, same mental model.
 - **The wanted entity is linked by id, not matched by heuristics.** An acquisition carries the EntityId of
   the wanted entity it fulfils; the import attaches the file to exactly that entity. External-id and path
   matching remain as verification/fallback, never the primary mechanism.
+- **The entity's own detail page is the management surface.** Wanted/tracking state (releases, live
+  download, monitoring, cancel) is managed on the entity where it lives in the library — the same page a
+  real on-disk item uses. `/request` trends toward history/queue only. The same shape later lets a real,
+  already-owned entity be *expanded* by monitoring it (an author watched for new books): on-disk and
+  in-progress states share one home.
 - **Books are rebuilt into the unified shape first** to prove the whole architecture end-to-end (books already
   have a working download/import engine, so no new engine is needed to validate the shape). Movies, music, and
   TV follow as additional kinds.

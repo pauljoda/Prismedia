@@ -102,6 +102,20 @@ public static class AcquisitionEndpoints {
             .Produces<AcquisitionDetail>()
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
+        group.MapGet("/for-entity/{entityId:guid}", async (
+            Guid entityId,
+            AcquisitionService acquisitions,
+            CancellationToken cancellationToken) => {
+                var detail = await acquisitions.GetForEntityAsync(entityId, cancellationToken);
+                return detail is null
+                    ? Results.NotFound(new ApiProblem(ApiProblemCodes.AcquisitionNotFound, "The entity has no acquisition."))
+                    : Results.Ok(detail);
+            })
+            .WithName("GetAcquisitionForEntity")
+            .WithSummary("Gets the latest acquisition backing a library entity, so entity detail pages can surface its wanted/tracking state inline.")
+            .Produces<AcquisitionDetail>()
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+
         group.MapPost("/{id:guid}/queue", async (
             Guid id,
             AcquisitionQueueRequest request,

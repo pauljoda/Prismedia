@@ -254,6 +254,9 @@ public interface IAcquisitionStore {
 
     /// <summary>True when any acquisition targets this wanted library entity; a request commit uses it to avoid double-requesting.</summary>
     Task<bool> AnyForEntityAsync(Guid entityId, CancellationToken cancellationToken);
+
+    /// <summary>The newest acquisition targeting this library entity with its candidates, or null when it has none.</summary>
+    Task<AcquisitionDetail?> GetLatestForEntityAsync(Guid entityId, CancellationToken cancellationToken);
 }
 
 /// <summary>

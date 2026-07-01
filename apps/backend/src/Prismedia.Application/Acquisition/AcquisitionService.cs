@@ -36,6 +36,10 @@ public sealed class AcquisitionService(
     public Task<AcquisitionDetail?> GetAsync(Guid id, CancellationToken cancellationToken) =>
         store.GetAsync(id, cancellationToken);
 
+    /// <summary>The latest acquisition backing a library entity (wanted or imported), or null when it has none.</summary>
+    public Task<AcquisitionDetail?> GetForEntityAsync(Guid entityId, CancellationToken cancellationToken) =>
+        store.GetLatestForEntityAsync(entityId, cancellationToken);
+
     /// <summary>Live transfer telemetry (progress, speed, ETA, peers, per-piece state) for an in-flight acquisition, or null when there is no live transfer.</summary>
     public async Task<AcquisitionTransferView?> GetTransferAsync(Guid id, CancellationToken cancellationToken) {
         var info = await store.GetTransferInfoAsync(id, cancellationToken);

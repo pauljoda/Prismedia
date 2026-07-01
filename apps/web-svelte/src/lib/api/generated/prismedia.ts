@@ -11299,6 +11299,49 @@ export const deleteAcquisition = async (id: string, options?: RequestInit): Prom
 
 
 
+export type getAcquisitionForEntityResponse200 = {
+  data: AcquisitionDetail
+  status: 200
+}
+
+export type getAcquisitionForEntityResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type getAcquisitionForEntityResponseSuccess = (getAcquisitionForEntityResponse200) & {
+  headers: Headers;
+};
+export type getAcquisitionForEntityResponseError = (getAcquisitionForEntityResponse404) & {
+  headers: Headers;
+};
+
+export type getAcquisitionForEntityResponse = (getAcquisitionForEntityResponseSuccess | getAcquisitionForEntityResponseError)
+
+export const getGetAcquisitionForEntityUrl = (entityId: string,) => {
+
+
+
+
+  return `/api/acquisitions/for-entity/${entityId}`
+}
+
+/**
+ * @summary Gets the latest acquisition backing a library entity, so entity detail pages can surface its wanted/tracking state inline.
+ */
+export const getAcquisitionForEntity = async (entityId: string, options?: RequestInit): Promise<getAcquisitionForEntityResponse> => {
+
+  return orvalFetch<getAcquisitionForEntityResponse>(getGetAcquisitionForEntityUrl(entityId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
 export type queueAcquisitionResponse200 = {
   data: AcquisitionDetail
   status: 200

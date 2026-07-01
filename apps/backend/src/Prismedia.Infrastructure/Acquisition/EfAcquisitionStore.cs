@@ -473,6 +473,16 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
     public async Task<bool> AnyForEntityAsync(Guid entityId, CancellationToken cancellationToken) =>
         await db.Acquisitions.AsNoTracking().AnyAsync(row => row.EntityId == entityId, cancellationToken);
 
+    public async Task<AcquisitionDetail?> GetLatestForEntityAsync(Guid entityId, CancellationToken cancellationToken) {
+        var id = await db.Acquisitions
+            .AsNoTracking()
+            .Where(row => row.EntityId == entityId)
+            .OrderByDescending(row => row.CreatedAt)
+            .Select(row => (Guid?)row.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+        return id is { } acquisitionId ? await GetAsync(acquisitionId, cancellationToken) : null;
+    }
+
     public async Task<string?> GetTransferClientItemIdAsync(Guid acquisitionId, CancellationToken cancellationToken) =>
         await db.DownloadTransfers
             .AsNoTracking()

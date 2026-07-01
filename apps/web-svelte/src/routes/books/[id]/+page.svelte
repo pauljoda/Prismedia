@@ -3,10 +3,13 @@
   import { onMount } from "svelte";
   import { afterNavigate, goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { BookOpen, Info, Play, SlidersHorizontal, Users } from "@lucide/svelte";
+  import { BookOpen, CloudDownload, Info, Play, SlidersHorizontal, Users } from "@lucide/svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import MediaProgressPanel from "$lib/components/MediaProgressPanel.svelte";
-  import { getCapability } from "$lib/api/capabilities";
+  import AcquisitionPanel from "$lib/components/acquisitions/AcquisitionPanel.svelte";
+  import { getCapability, isWanted } from "$lib/api/capabilities";
+  import { fetchAcquisitionForEntity } from "$lib/api/acquisitions";
+  import type { AcquisitionDetail } from "$lib/api/generated/model";
   import { updateEntityProgress } from "$lib/api/playback";
   import { fetchBook, type BookDetail } from "$lib/api/media";
   import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
@@ -66,6 +69,9 @@
 
   let loadState: LoadState = $state("loading");
   let book = $state<BookDetail | null>(null);
+  // The acquisition backing this book (wanted placeholder still searching/downloading, or the import
+  // that produced it), so its state is managed right here instead of only under /request.
+  let acquisition = $state<AcquisitionDetail | null>(null);
   // The book's parent author grouping, when scanned under an Author/ folder, for a breadcrumb back-link.
   let authorLink = $state<{ id: string; title: string } | null>(null);
   let errorMessage: string | null = $state(null);
@@ -85,6 +91,8 @@
 
   const bookId = $derived(page.params.id ?? "");
   const bookType = $derived(book?.bookType ?? null);
+  // A wanted placeholder has metadata but no file yet; reading is offered only once the file lands.
+  const entityWanted = $derived(!!book && isWanted(book.capabilities));
   // Single-file books (EPUB/PDF) are read straight from the source file with no chapter entities.
   const isSingleFileBook = $derived(!!book && book.format !== "image-archive");
   const singleFileProgress = $derived(book && isSingleFileBook ? getCapability(book.capabilities, "progress") : null);
@@ -135,6 +143,10 @@
   const heroActions = $derived.by((): EntityDetailActionButton[] => {
     const actions: EntityDetailActionButton[] = [];
     if (identifyAction.action) actions.push(identifyAction.action);
+    if (entityWanted) {
+      // No file yet — the acquisition section below owns the actionable state (releases, monitor, cancel).
+      return actions;
+    }
     if (isSingleFileBook) {
       actions.push({
         id: "read-book",
@@ -224,10 +236,12 @@
     try {
       const nextBook = await fetchBook(targetBookId);
       const parentId = nextBook.parentEntityId;
-      const [relationships, chapters, parentThumbs] = await Promise.all([
+      const [relationships, chapters, parentThumbs, nextAcquisition] = await Promise.all([
         hydrateStandardRelationshipCards(nextBook),
         hydrateChapters(nextBook),
         parentId ? fetchOrderedEntityThumbnails([parentId]) : Promise.resolve([]),
+        // Best-effort: the acquisition section is secondary — its failure must not break the book page.
+        fetchAcquisitionForEntity(targetBookId).catch(() => null),
       ]);
       const progressSummary = await hydrateProgressChapterSummary(nextBook, chapters);
       if (token !== loadToken) return;
@@ -237,6 +251,7 @@
       authorLink = authorThumb ? { id: authorThumb.id, title: authorThumb.title } : null;
 
       book = nextBook;
+      acquisition = nextAcquisition;
       chapterDetails = chapters;
       progressChapterSummary = progressSummary;
       childBookCards = thumbnailsToCards(orderedBookChildren(nextBook, ENTITY_KIND.book), {
@@ -354,6 +369,15 @@
     if (!book) return;
     await updateEntityMetadata(book.id, request, { kind: book.kind });
     await loadBook();
+  }
+
+  /**
+   * Cancelling a wanted book's request deletes the placeholder entity, so this page no longer exists —
+   * return to the author (or the Books grid). A cancel on an already-imported book keeps the entity.
+   */
+  function handleAcquisitionCancelled() {
+    if (!entityWanted) return;
+    void goto((authorLink ? resolveEntityHref("book-author", authorLink.id) : null) ?? "/books");
   }
 
   function openSelectedReader() {
@@ -554,6 +578,9 @@
       {/snippet}
 
       {#snippet heroBadges()}
+        {#if entityWanted}
+          <span class="hero-badge wanted">Wanted</span>
+        {/if}
         {#if progressDisplay}
           <span class="hero-badge">{progressDisplay.percent}%</span>
         {:else if singleFileProgressDisplay}
@@ -562,6 +589,22 @@
       {/snippet}
 
     </EntityDetail>
+
+    {#if acquisition}
+      <!-- Wanted/tracking state lives on the entity itself: the same management surface as the
+           acquisition route, inline — releases, live download, monitoring, cancel. -->
+      <section class="acquisition-section surface-panel">
+        <h2 class="flex items-center gap-2 text-kicker text-text-primary">
+          <CloudDownload class="h-3.5 w-3.5 text-text-accent" />
+          Acquisition
+        </h2>
+        <AcquisitionPanel
+          acquisitionId={acquisition.summary.id}
+          bind:detail={acquisition}
+          onCancelled={handleAcquisitionCancelled}
+        />
+      </section>
+    {/if}
 
     {#if progressDisplay}
       <section class="progress-section">
@@ -717,6 +760,20 @@
   .progress-section {
     display: block;
     min-width: 0;
+  }
+
+  .acquisition-section {
+    display: grid;
+    gap: 0.9rem;
+    padding: 1rem 1.1rem;
+    min-width: 0;
+  }
+
+  :global(.hero-badge.wanted) {
+    color: var(--color-text-accent, #c49a5a);
+    border-color: color-mix(in srgb, var(--color-text-accent, #c49a5a) 45%, transparent);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
   }
 
 </style>
