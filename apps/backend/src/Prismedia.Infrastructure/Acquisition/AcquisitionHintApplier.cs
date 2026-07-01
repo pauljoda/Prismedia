@@ -1,6 +1,8 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Acquisition;
+using Prismedia.Contracts.Media;
+using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 
@@ -11,6 +13,10 @@ namespace Prismedia.Infrastructure.Acquisition;
 /// containment (the scanned book path and the hint's import path overlap), then writes the plugin/external
 /// ids onto the entity so the existing identify hint resolver runs ID-first. Consuming the hint keeps it
 /// from re-applying on later rescans.
+///
+/// Also owns the wanted-entity bind step: when the hint links a request-created wanted entity, the scan
+/// calls the bind methods before its path-keyed upserts so the imported path attaches to that entity —
+/// the "no duplicate on import" half of the request-builds-a-wanted-entity flow.
 /// </summary>
 public sealed class AcquisitionHintApplier(PrismediaDbContext db) : IAcquisitionHintApplier {
     public async Task<bool> ApplyAsync(Guid entityId, string sourcePath, CancellationToken cancellationToken) {
@@ -75,6 +81,108 @@ public sealed class AcquisitionHintApplier(PrismediaDbContext db) : IAcquisition
         match.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
         return true;
+    }
+
+    public async Task<bool> BindWantedBookAsync(string sourcePath, CancellationToken cancellationToken) {
+        var entityId = await FindWantedEntityIdForPathAsync(sourcePath, cancellationToken);
+        if (entityId is null) {
+            return false;
+        }
+
+        // Tolerate a dangling link (the wanted entity was deleted): the scan just creates a fresh entity
+        // and the ordinary hint apply still stamps its ids. Never bind an entity that already has a source.
+        var entity = await db.Entities.FirstOrDefaultAsync(
+            row => row.Id == entityId && row.KindCode == EntityKindRegistry.Book.Code, cancellationToken);
+        if (entity is null || await HasSourceFileAsync(entity.Id, cancellationToken)) {
+            return false;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        // The path is written exactly as the scan keys it, so the following upsert finds this entity.
+        db.EntityFiles.Add(new EntityFileRow {
+            Id = Guid.NewGuid(),
+            EntityId = entity.Id,
+            Role = EntityFileRole.Source,
+            Path = sourcePath,
+            MimeType = ContentTypeForPath(sourcePath),
+            SizeBytes = TryGetFileSize(sourcePath),
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        entity.IsWanted = false;
+        entity.UpdatedAt = now;
+        await db.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    public async Task<bool> BindWantedAuthorAsync(string authorFolderPath, CancellationToken cancellationToken) {
+        var entityId = await FindWantedEntityIdForPathAsync(authorFolderPath, cancellationToken);
+        if (entityId is null) {
+            return false;
+        }
+
+        // The hint links the wanted BOOK; the author is its parent — bind only a fileless author entity.
+        var parentId = await db.Entities
+            .Where(row => row.Id == entityId)
+            .Select(row => row.ParentEntityId)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (parentId is not { } authorId) {
+            return false;
+        }
+
+        var author = await db.Entities.FirstOrDefaultAsync(
+            row => row.Id == authorId && row.KindCode == EntityKindRegistry.BookAuthor.Code, cancellationToken);
+        if (author is null || await HasSourceFileAsync(author.Id, cancellationToken)) {
+            return false;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        db.EntityFiles.Add(new EntityFileRow {
+            Id = Guid.NewGuid(),
+            EntityId = author.Id,
+            Role = EntityFileRole.Source,
+            Path = authorFolderPath,
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        author.IsWanted = false;
+        author.UpdatedAt = now;
+        await db.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    /// <summary>The wanted-entity link of the unconsumed hint whose import path overlaps <paramref name="path"/>, or null.</summary>
+    private async Task<Guid?> FindWantedEntityIdForPathAsync(string path, CancellationToken cancellationToken) {
+        if (string.IsNullOrWhiteSpace(path)) {
+            return null;
+        }
+
+        var normalized = Normalize(path);
+        var hints = await db.AcquisitionImportHints
+            .AsNoTracking()
+            .Where(hint => !hint.Consumed && hint.EntityId != null)
+            .ToArrayAsync(cancellationToken);
+        return hints
+            .Where(hint => PathsOverlap(normalized, Normalize(hint.SourcePath)))
+            .OrderByDescending(hint => hint.SourcePath.Length)
+            .Select(hint => hint.EntityId)
+            .FirstOrDefault();
+    }
+
+    private Task<bool> HasSourceFileAsync(Guid entityId, CancellationToken cancellationToken) =>
+        db.EntityFiles.AsNoTracking()
+            .AnyAsync(file => file.EntityId == entityId && file.Role == EntityFileRole.Source, cancellationToken);
+
+    /// <summary>Content type for a bound single-file book, mirroring what the scan stamps on creation. Null for folders/archives.</summary>
+    private static string? ContentTypeForPath(string path) =>
+        Path.GetExtension(path).ToLowerInvariant() switch {
+            ".epub" => MediaContentTypes.Epub,
+            ".pdf" => MediaContentTypes.Pdf,
+            _ => null
+        };
+
+    private static long? TryGetFileSize(string path) {
+        try { return File.Exists(path) ? new FileInfo(path).Length : null; } catch { return null; }
     }
 
     private static Dictionary<string, string> DecodeExternalIds(AcquisitionImportHintRow hint) {

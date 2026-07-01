@@ -146,6 +146,113 @@ public sealed class EfAcquisitionStoreTests {
         Assert.True((await db.AcquisitionImportHints.AsNoTracking().FirstAsync()).Consumed);
     }
 
+    [Fact]
+    public async Task BindWantedBookAttachesTheImportedPathAndClearsWanted() {
+        await using var db = CreateContext();
+        var entityId = AddWantedEntity(db, EntityKindRegistry.Book.Code, "Elantris");
+        AddHintWithEntity(db, entityId, "/media/books/Brandon Sanderson/Elantris (2005)/Elantris.epub");
+        await db.SaveChangesAsync();
+
+        var bound = await new AcquisitionHintApplier(db).BindWantedBookAsync(
+            "/media/books/Brandon Sanderson/Elantris (2005)/Elantris.epub", CancellationToken.None);
+
+        Assert.True(bound);
+        var entity = await db.Entities.AsNoTracking().FirstAsync(row => row.Id == entityId);
+        Assert.False(entity.IsWanted);
+        var file = Assert.Single(await db.EntityFiles.AsNoTracking().Where(f => f.EntityId == entityId).ToArrayAsync());
+        Assert.Equal(EntityFileRole.Source, file.Role);
+        // Written exactly as the scan keys it, so the path-keyed upsert finds this entity (no duplicate).
+        Assert.Equal("/media/books/Brandon Sanderson/Elantris (2005)/Elantris.epub", file.Path);
+        Assert.Equal(Prismedia.Contracts.Media.MediaContentTypes.Epub, file.MimeType);
+        // The hint stays unconsumed: the ordinary post-upsert apply still stamps ids and the source tier.
+        Assert.False((await db.AcquisitionImportHints.AsNoTracking().FirstAsync()).Consumed);
+    }
+
+    [Fact]
+    public async Task BindWantedBookToleratesADanglingEntityLink() {
+        await using var db = CreateContext();
+        AddHintWithEntity(db, Guid.NewGuid(), "/media/books/Author/Title/Title.epub");
+        await db.SaveChangesAsync();
+
+        Assert.False(await new AcquisitionHintApplier(db).BindWantedBookAsync(
+            "/media/books/Author/Title/Title.epub", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task BindWantedBookNeverRebindsAnEntityThatAlreadyHasASource() {
+        await using var db = CreateContext();
+        var entityId = AddWantedEntity(db, EntityKindRegistry.Book.Code, "Elantris");
+        var now = DateTimeOffset.UtcNow;
+        db.EntityFiles.Add(new EntityFileRow {
+            Id = Guid.NewGuid(), EntityId = entityId, Role = EntityFileRole.Source,
+            Path = "/media/books/existing.epub", CreatedAt = now, UpdatedAt = now
+        });
+        AddHintWithEntity(db, entityId, "/media/books/Author/Title/Title.epub");
+        await db.SaveChangesAsync();
+
+        Assert.False(await new AcquisitionHintApplier(db).BindWantedBookAsync(
+            "/media/books/Author/Title/Title.epub", CancellationToken.None));
+        Assert.Single(await db.EntityFiles.AsNoTracking().Where(f => f.EntityId == entityId).ToArrayAsync());
+    }
+
+    [Fact]
+    public async Task BindWantedAuthorAttachesTheFolderToTheWantedBooksParent() {
+        await using var db = CreateContext();
+        var authorId = AddWantedEntity(db, EntityKindRegistry.BookAuthor.Code, "Brandon Sanderson");
+        var bookId = AddWantedEntity(db, EntityKindRegistry.Book.Code, "Elantris", parentEntityId: authorId);
+        AddHintWithEntity(db, bookId, "/media/books/Brandon Sanderson/Elantris (2005)/Elantris.epub");
+        await db.SaveChangesAsync();
+
+        var bound = await new AcquisitionHintApplier(db).BindWantedAuthorAsync(
+            "/media/books/Brandon Sanderson", CancellationToken.None);
+
+        Assert.True(bound);
+        var author = await db.Entities.AsNoTracking().FirstAsync(row => row.Id == authorId);
+        Assert.False(author.IsWanted);
+        var file = Assert.Single(await db.EntityFiles.AsNoTracking().Where(f => f.EntityId == authorId).ToArrayAsync());
+        Assert.Equal("/media/books/Brandon Sanderson", file.Path);
+        // The book itself stays wanted until its own path binds.
+        Assert.True((await db.Entities.AsNoTracking().FirstAsync(row => row.Id == bookId)).IsWanted);
+    }
+
+    [Fact]
+    public async Task BindIgnoresHintsWithNoWantedEntityLink() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        db.AcquisitionImportHints.Add(new AcquisitionImportHintRow {
+            Id = Guid.NewGuid(), AcquisitionId = Guid.NewGuid(), EntityId = null,
+            SourcePath = "/media/books/Author/Title/Title.epub", ExternalIdsJson = "{}", SourceUrlsJson = "[]",
+            Consumed = false, CreatedAt = now, UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+
+        Assert.False(await new AcquisitionHintApplier(db).BindWantedBookAsync(
+            "/media/books/Author/Title/Title.epub", CancellationToken.None));
+    }
+
+    private static Guid AddWantedEntity(PrismediaDbContext db, string kindCode, string title, Guid? parentEntityId = null) {
+        var now = DateTimeOffset.UtcNow;
+        var id = Guid.NewGuid();
+        db.Entities.Add(new EntityRow {
+            Id = id, KindCode = kindCode, Title = title, ParentEntityId = parentEntityId,
+            IsWanted = true, CreatedAt = now, UpdatedAt = now
+        });
+        return id;
+    }
+
+    private static void AddHintWithEntity(PrismediaDbContext db, Guid entityId, string sourcePath) {
+        var now = DateTimeOffset.UtcNow;
+        var acquisitionId = Guid.NewGuid();
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = acquisitionId, Status = AcquisitionStatus.Imported, Title = "B", EntityId = entityId,
+            ExternalIdsJson = "{}", SourceUrlsJson = "[]", CreatedAt = now, UpdatedAt = now
+        });
+        db.AcquisitionImportHints.Add(new AcquisitionImportHintRow {
+            Id = Guid.NewGuid(), AcquisitionId = acquisitionId, EntityId = entityId, SourcePath = sourcePath,
+            ExternalIdsJson = "{}", SourceUrlsJson = "[]", Consumed = false, CreatedAt = now, UpdatedAt = now
+        });
+    }
+
     private static void AddCandidate(PrismediaDbContext db, Guid acquisitionId, string? infoHash, string indexer, string title, double score) {
         var now = DateTimeOffset.UtcNow;
         if (db.Acquisitions.Local.All(a => a.Id != acquisitionId) && !db.Acquisitions.Any(a => a.Id == acquisitionId)) {

@@ -76,6 +76,11 @@ public sealed class ScanBookJobHandler(
             var first = bookGroup.First();
             var bookMetadata = BestBookMetadata(bookGroup);
             var bookIsNsfw = root.IsNsfw || bookGroup.Any(item => item.MarksNsfw);
+            // Bind a request-created wanted entity to this path first, so the path-keyed upsert finds it
+            // (attaching the imported file to the wanted entity) instead of creating a duplicate.
+            if (acquisitionHints is not null) {
+                await acquisitionHints.BindWantedBookAsync(first.BookPath, cancellationToken);
+            }
             var bookId = await books.UpsertBookAsync(first.BookPath, first.BookTitle, root.Id, bookIsNsfw, cancellationToken);
             if (bookMetadata is not null && scanMetadata is not null) {
                 await scanMetadata.ApplyComicInfoMetadataAsync(
@@ -243,6 +248,10 @@ public sealed class ScanBookJobHandler(
                 .Select(item => item.AuthorTitle!)
                 .FirstOrDefault(name => !string.Equals(name, folderName, StringComparison.OrdinalIgnoreCase))
                 ?? folderName;
+            // Bind a request-created wanted author to this folder first, so the upsert reuses that entity.
+            if (acquisitionHints is not null) {
+                await acquisitionHints.BindWantedAuthorAsync(first.AuthorPath!, cancellationToken);
+            }
             var authorId = await books.UpsertBookAuthorAsync(
                 first.AuthorPath!,
                 authorTitle,
@@ -276,6 +285,11 @@ public sealed class ScanBookJobHandler(
         Guid? parentBookEntityId,
         int? sortOrder,
         CancellationToken cancellationToken) {
+        // Bind a request-created wanted entity to this path first, so the path-keyed upsert finds it
+        // (attaching the imported file to the wanted entity) instead of creating a duplicate.
+        if (acquisitionHints is not null) {
+            await acquisitionHints.BindWantedBookAsync(item.SourcePath, cancellationToken);
+        }
         var bookId = await books.UpsertSingleFileBookAsync(
             item.SourcePath,
             item.Title,

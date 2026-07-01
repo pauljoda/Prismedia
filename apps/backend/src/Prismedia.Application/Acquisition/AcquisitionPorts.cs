@@ -133,6 +133,24 @@ public interface IAcquisitionHintApplier {
     /// writes its external/plugin ids onto the entity and marks the hint consumed. Returns true when applied.
     /// </summary>
     Task<bool> ApplyAsync(Guid entityId, string sourcePath, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Binds a request-created wanted book to the path the scan is about to upsert: when an unconsumed
+    /// import hint matching <paramref name="sourcePath"/> carries a wanted-entity link, the imported path
+    /// becomes that entity's source file and its Wanted state clears — so the scan's path-keyed upsert
+    /// finds the wanted entity instead of creating a duplicate. Call BEFORE the book upsert for the path.
+    /// Returns true when a wanted entity was bound.
+    /// </summary>
+    Task<bool> BindWantedBookAsync(string sourcePath, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Binds a request-created wanted author to the author folder the scan is about to upsert: when an
+    /// unconsumed hint under <paramref name="authorFolderPath"/> links a wanted book whose parent is a
+    /// fileless author entity, the folder becomes that author's source path and its Wanted state clears —
+    /// so the scan reuses the wanted author instead of creating a second one. Call BEFORE the author
+    /// upsert. Returns true when a wanted author was bound.
+    /// </summary>
+    Task<bool> BindWantedAuthorAsync(string authorFolderPath, CancellationToken cancellationToken);
 }
 
 /// <summary>Persistence port for acquisition records and their scored release candidates.</summary>
