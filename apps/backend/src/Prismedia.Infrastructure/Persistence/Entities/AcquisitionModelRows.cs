@@ -126,6 +126,16 @@ public sealed class AcquisitionRow {
 
     /// <summary>Media kind being acquired; drives per-kind release scoring, import, and monitoring.</summary>
     public EntityKind Kind { get; set; } = EntityKind.Book;
+
+    /// <summary>
+    /// The wanted library entity this acquisition fulfils, created up front by a request commit. The
+    /// import attaches the downloaded file to exactly this entity (no duplicate is scanned in) and
+    /// clears its Wanted state. Null for ad-hoc acquisitions with no pre-created entity. Loose link
+    /// (no FK): the entity graph is a different bounded slice, so deleting the entity must not touch
+    /// the acquisition record — consumers tolerate a dangling id and fall back to the scan-created path.
+    /// </summary>
+    public Guid? EntityId { get; set; }
+
     public Guid? ProfileId { get; set; }
     public AcquisitionStatus Status { get; set; } = AcquisitionStatus.Pending;
     public string? StatusMessage { get; set; }
@@ -242,6 +252,13 @@ public sealed class DownloadTransferRow {
 public sealed class AcquisitionImportHintRow {
     public Guid Id { get; set; }
     public Guid AcquisitionId { get; set; }
+
+    /// <summary>
+    /// The wanted library entity the import should attach to (copied from the acquisition at hint-write
+    /// time). The book scan binds the imported path to this entity before its path-keyed upsert, so the
+    /// wanted entity becomes the scanned entity instead of a duplicate. Null for pre-wanted acquisitions.
+    /// </summary>
+    public Guid? EntityId { get; set; }
 
     /// <summary>Normalized absolute path of the imported payload; the lookup key the scan matches against.</summary>
     public string SourcePath { get; set; } = string.Empty;

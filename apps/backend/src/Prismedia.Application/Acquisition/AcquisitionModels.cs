@@ -74,6 +74,7 @@ public sealed record IndexerSearchError(Guid IndexerId, string IndexerName, stri
 
 /// <summary>Metadata captured when an acquisition is created, retained for the identify-hint handoff at import.</summary>
 /// <param name="Kind">The media kind being acquired (book, movie, …); drives per-kind release scoring and import.</param>
+/// <param name="EntityId">The wanted library entity this acquisition fulfils (request-created), or null for an ad-hoc acquisition.</param>
 public sealed record AcquisitionMetadata(
     string Title,
     string? Author,
@@ -83,7 +84,8 @@ public sealed record AcquisitionMetadata(
     string? PluginId,
     string? PluginItemId,
     string? Description = null,
-    EntityKind Kind = EntityKind.Book);
+    EntityKind Kind = EntityKind.Book,
+    Guid? EntityId = null);
 
 /// <summary>The minimal input the background search job needs to query indexers for an acquisition.</summary>
 public sealed record AcquisitionSearchInput(Guid Id, string Title, string? Author);

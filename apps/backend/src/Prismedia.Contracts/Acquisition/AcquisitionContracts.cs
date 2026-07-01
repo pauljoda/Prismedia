@@ -59,6 +59,7 @@ public sealed record IndexerTestResponse(bool Connected, string? Message);
 /// <param name="PluginId">Optional plugin manifest id that supplied the metadata.</param>
 /// <param name="PluginItemId">Optional plugin item id (external-id value) for ID-first identify.</param>
 /// <param name="Kind">Media kind to acquire (book, movie, …). Defaults to book for the established book flow.</param>
+/// <param name="EntityId">Optional wanted library entity this acquisition fulfils; the import attaches its file to this entity.</param>
 public sealed record AcquisitionCreateRequest(
     string Title,
     string? Author,
@@ -68,7 +69,8 @@ public sealed record AcquisitionCreateRequest(
     string? PluginId,
     string? PluginItemId,
     string? Description = null,
-    EntityKind Kind = EntityKind.Book);
+    EntityKind Kind = EntityKind.Book,
+    Guid? EntityId = null);
 
 /// <summary>A scored release candidate surfaced for review. Download links stay server-side; the id selects one to queue.</summary>
 public sealed record ReleaseCandidateView(
@@ -99,7 +101,8 @@ public sealed record AcquisitionSummary(
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
     string? Description = null,
-    EntityKind Kind = EntityKind.Book);
+    EntityKind Kind = EntityKind.Book,
+    Guid? EntityId = null);
 
 /// <summary>An acquisition with its scored candidates for the review screen.</summary>
 public sealed record AcquisitionDetail(

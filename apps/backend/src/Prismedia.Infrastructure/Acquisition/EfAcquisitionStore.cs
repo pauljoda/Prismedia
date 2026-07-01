@@ -15,6 +15,7 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
         var row = new AcquisitionRow {
             Id = Guid.NewGuid(),
             Kind = metadata.Kind,
+            EntityId = metadata.EntityId,
             Status = AcquisitionStatus.Pending,
             Title = metadata.Title,
             Author = metadata.Author,
@@ -432,6 +433,14 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
             .ToArrayAsync(cancellationToken);
         db.AcquisitionImportHints.RemoveRange(existing);
 
+        // Carry the acquisition's wanted-entity link onto the path-keyed hint so the book scan can bind
+        // the imported path to that entity instead of creating a duplicate.
+        var wantedEntityId = await db.Acquisitions
+            .AsNoTracking()
+            .Where(row => row.Id == acquisitionId)
+            .Select(row => row.EntityId)
+            .FirstOrDefaultAsync(cancellationToken);
+
         var externalIds = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         if (!string.IsNullOrWhiteSpace(context.PluginId) && !string.IsNullOrWhiteSpace(context.PluginItemId)) {
             externalIds[context.PluginId] = context.PluginItemId;
@@ -440,6 +449,7 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
         db.AcquisitionImportHints.Add(new AcquisitionImportHintRow {
             Id = Guid.NewGuid(),
             AcquisitionId = acquisitionId,
+            EntityId = wantedEntityId,
             SourcePath = sourcePath,
             PluginId = context.PluginId,
             PluginItemId = context.PluginItemId,
@@ -485,7 +495,7 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
 
     private static AcquisitionSummary ToSummary(AcquisitionRow row, double? progress) =>
         new(row.Id, row.Status, row.StatusMessage, row.Title, row.Author, row.Series, row.Year, row.PosterUrl,
-            progress, row.CreatedAt, row.UpdatedAt, row.Description, row.Kind);
+            progress, row.CreatedAt, row.UpdatedAt, row.Description, row.Kind, row.EntityId);
 
     private static ReleaseCandidateView ToView(ReleaseCandidateRow row) =>
         new(row.Id, row.IndexerName, row.Title, row.SizeBytes, row.Seeders, row.Peers, row.Protocol, row.Accepted,

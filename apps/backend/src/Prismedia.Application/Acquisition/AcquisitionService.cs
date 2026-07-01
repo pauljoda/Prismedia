@@ -193,7 +193,8 @@ public sealed class AcquisitionService(
             string.IsNullOrWhiteSpace(request.PluginId) ? null : request.PluginId.Trim(),
             string.IsNullOrWhiteSpace(request.PluginItemId) ? null : request.PluginItemId.Trim(),
             string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
-            request.Kind);
+            request.Kind,
+            request.EntityId);
 
         var summary = await store.CreateAsync(metadata, cancellationToken);
         await queue.EnqueueAsync(

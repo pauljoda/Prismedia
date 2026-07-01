@@ -123,6 +123,7 @@ internal static partial class PrismediaModelConfiguration {
                 .HasConversion(value => value.ToCode(), value => value.DecodeAs<EntityKind>())
                 .HasDefaultValue(EntityKind.Book)
                 .IsRequired();
+            entity.Property(row => row.EntityId).HasColumnName("entity_id");
             entity.Property(row => row.ProfileId).HasColumnName("profile_id");
             entity.Property(row => row.Status)
                 .HasColumnName("status")
@@ -162,6 +163,9 @@ internal static partial class PrismediaModelConfiguration {
             entity.HasIndex(row => row.CreatedAt);
             entity.HasIndex(row => row.Status);
             entity.HasIndex(row => row.UpgradeOfAcquisitionId);
+            // Loose link into the entity graph (same rule as MonitorRow.BookEntityId): no FK, so
+            // deleting the wanted entity never cascades into (or is blocked by) the acquisition.
+            entity.HasIndex(row => row.EntityId);
             entity.HasOne<BookAcquisitionProfileRow>().WithMany().HasForeignKey(row => row.ProfileId).OnDelete(DeleteBehavior.SetNull);
             entity.HasOne<AcquisitionRow>().WithMany().HasForeignKey(row => row.UpgradeOfAcquisitionId).OnDelete(DeleteBehavior.SetNull);
         });
@@ -222,6 +226,7 @@ internal static partial class PrismediaModelConfiguration {
             entity.HasKey(row => row.Id);
             entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
             entity.Property(row => row.AcquisitionId).HasColumnName("acquisition_id");
+            entity.Property(row => row.EntityId).HasColumnName("entity_id");
             entity.Property(row => row.SourcePath).HasColumnName("source_path").HasMaxLength(2048).IsRequired();
             entity.Property(row => row.PluginId).HasColumnName("plugin_id").HasMaxLength(256);
             entity.Property(row => row.PluginItemId).HasColumnName("plugin_item_id").HasMaxLength(256);
