@@ -48,11 +48,13 @@ public static class DependencyInjection {
         services.AddScoped<FilesService>();
         services.AddScoped<RequestSearchService>();
         services.AddScoped<RequestDetailService>();
+        services.AddScoped<RequestCommitService>();
         services.AddScoped<Acquisition.IndexerConfigCommandService>();
         services.AddScoped<Acquisition.DownloadClientCommandService>();
         services.AddScoped<Acquisition.BookAcquisitionProfileCommandService>();
         services.AddScoped<Acquisition.AcquisitionSearchRunner>();
         services.AddScoped<Acquisition.AcquisitionService>();
+        services.AddScoped<Acquisition.IAcquisitionRequestService>(sp => sp.GetRequiredService<Acquisition.AcquisitionService>());
         services.AddScoped<Acquisition.AcquisitionQueueService>();
         services.AddScoped<Acquisition.IAcquisitionQueueService>(sp => sp.GetRequiredService<Acquisition.AcquisitionQueueService>());
         services.AddScoped<Acquisition.MonitorService>();

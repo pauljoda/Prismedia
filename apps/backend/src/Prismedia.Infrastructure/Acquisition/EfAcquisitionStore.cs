@@ -470,6 +470,9 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
         await db.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task<bool> AnyForEntityAsync(Guid entityId, CancellationToken cancellationToken) =>
+        await db.Acquisitions.AsNoTracking().AnyAsync(row => row.EntityId == entityId, cancellationToken);
+
     public async Task<string?> GetTransferClientItemIdAsync(Guid acquisitionId, CancellationToken cancellationToken) =>
         await db.DownloadTransfers
             .AsNoTracking()

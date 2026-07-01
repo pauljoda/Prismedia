@@ -14,7 +14,7 @@ namespace Prismedia.Infrastructure.Requests;
 /// id and item id for an ID-first acquisition.
 /// </summary>
 public sealed class PluginBookMetadataSearchSource(PluginCatalogService catalog, IdentifyRunnerSelector runners)
-    : IBookMetadataSearchSource, IAuthorMetadataSearchSource, IBookMetadataEnricher, IPluginRequestDetailSource {
+    : IBookMetadataSearchSource, IAuthorMetadataSearchSource, IBookMetadataEnricher, IPluginRequestDetailSource, IPluginRequestProposalSource {
     private static readonly string BookKind = EntityKindRegistry.Book.Code;
     private static readonly string PersonKind = EntityKindRegistry.Person.Code;
     private static readonly string SearchAction = IdentifyAction.Search.ToCode();
@@ -86,6 +86,14 @@ public sealed class PluginBookMetadataSearchSource(PluginCatalogService catalog,
         return results;
     }
 
+    /// <summary>The raw book proposal for a request commit — same resolve path as the detail surface, no mapping-down.</summary>
+    public Task<EntityMetadataProposal?> ResolveBookProposalAsync(string providerId, string itemId, bool hideNsfw, bool includeChildren, CancellationToken cancellationToken) =>
+        ResolveProposalAsync(providerId, itemId, hideNsfw, includeChildren, cancellationToken);
+
+    /// <summary>The raw author proposal (works enumerated as children) for a request commit.</summary>
+    public Task<EntityMetadataProposal?> ResolveAuthorProposalAsync(string providerId, string itemId, bool hideNsfw, CancellationToken cancellationToken) =>
+        ResolveProposalAsync(providerId, itemId, hideNsfw, includeChildren: true, cancellationToken, PersonKind, EntityKind.Person);
+
     public async Task<BookMetadataEnrichment?> LookupByIdAsync(string providerId, string externalId, bool hideNsfw, CancellationToken cancellationToken) {
         var proposal = await ResolveProposalAsync(providerId, externalId, hideNsfw, includeChildren: false, cancellationToken);
         if (proposal?.Patch is not { } patch) {
@@ -108,7 +116,7 @@ public sealed class PluginBookMetadataSearchSource(PluginCatalogService catalog,
             return null;
         }
 
-        var author = proposal.Patch.Credits.FirstOrDefault(credit => credit.Role.Contains("author", StringComparison.OrdinalIgnoreCase))?.Name;
+        var author = RequestProposalReading.AuthorFromCredits(patch);
         var children = proposal.Children
             .Select(child => MapChild(providerId, child))
             .Where(child => child is not null)
@@ -254,37 +262,16 @@ public sealed class PluginBookMetadataSearchSource(PluginCatalogService catalog,
             Monitored: null);
     }
 
-    /// <summary>The best-ranked image url a proposal carries (books generally return cover art), or null.</summary>
+    // Provider-qualified id splitting and the small proposal projections are shared with the request
+    // commit through RequestProposalReading, so the two surfaces read proposals identically.
     private static string? BestImage(EntityMetadataProposal proposal) =>
-        proposal.Images
-            .OrderByDescending(image => image.Rank ?? 0)
-            .Select(image => image.Url)
-            .FirstOrDefault(url => !string.IsNullOrWhiteSpace(url));
+        RequestProposalReading.BestImage(proposal);
 
-    /// <summary>Splits a provider-qualified id ("provider:itemId") into its parts, or (null, null) when malformed.</summary>
-    private static (string? ProviderId, string? ItemId) SplitProviderQualifiedId(string externalId) {
-        if (string.IsNullOrWhiteSpace(externalId)) {
-            return (null, null);
-        }
+    private static (string? ProviderId, string? ItemId) SplitProviderQualifiedId(string externalId) =>
+        RequestProposalReading.SplitProviderQualifiedId(externalId);
 
-        var separator = externalId.IndexOf(':');
-        if (separator <= 0 || separator >= externalId.Length - 1) {
-            return (null, null);
-        }
-
-        return (externalId[..separator], externalId[(separator + 1)..]);
-    }
-
-    /// <summary>Extracts a 4-digit year from any of the patch's date values (e.g. "2024" or "2024-03-26").</summary>
-    private static int? YearFromDates(IReadOnlyDictionary<string, string> dates) {
-        foreach (var value in dates.Values) {
-            if (value is { Length: >= 4 } && int.TryParse(value[..4], out var year) && year is >= 1000 and <= 9999) {
-                return year;
-            }
-        }
-
-        return null;
-    }
+    private static int? YearFromDates(IReadOnlyDictionary<string, string> dates) =>
+        RequestProposalReading.YearFromDates(dates);
 
     private static RequestSearchResult? MapCandidate(string providerId, EntitySearchCandidate candidate, RequestMediaKind kind) {
         var externalId = candidate.ExternalIds.GetValueOrDefault(providerId) ?? candidate.ExternalIds.Values.FirstOrDefault();

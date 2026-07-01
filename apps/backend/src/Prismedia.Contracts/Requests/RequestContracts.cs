@@ -102,6 +102,38 @@ public sealed record RequestChildOption(
 /// <summary>One track on an album detail, for review before requesting.</summary>
 public sealed record RequestTrack(int Number, string Title, int? DurationSeconds);
 
+/// <summary>
+/// Commits a request: creates the wanted library entity/entities for the reviewed item up front —
+/// populated from the plugin proposal but with no file — and starts one acquisition per requested book.
+/// </summary>
+/// <param name="Kind">What the provider-qualified id addresses (a book, or an author container).</param>
+/// <param name="ExternalId">Provider-qualified id (<c>"provider:itemId"</c>) of the reviewed item.</param>
+/// <param name="SelectedChildIds">
+/// Provider-qualified ids of the selected child works (an author's books, or a series' volumes). Required
+/// for an author commit; empty for a standalone book, which requests itself.
+/// </param>
+public sealed record RequestCommitRequest(
+    RequestMediaKind Kind,
+    string ExternalId,
+    IReadOnlyList<string> SelectedChildIds);
+
+/// <summary>Per-item outcome of a request commit, linking the created wanted entity and its acquisition.</summary>
+/// <param name="ExternalId">Provider-qualified id of the item this outcome describes.</param>
+/// <param name="EntityId">The library entity (created wanted, or pre-existing) backing the item.</param>
+/// <param name="AcquisitionId">The acquisition started for the item; null when none was started.</param>
+public sealed record RequestCommitItem(
+    string ExternalId,
+    string Title,
+    RequestCommitOutcome Outcome,
+    Guid? EntityId,
+    Guid? AcquisitionId);
+
+/// <summary>Result of a request commit.</summary>
+/// <param name="ContainerEntityId">The wanted container entity (the author) when the commit created/reused one.</param>
+public sealed record RequestCommitResponse(
+    Guid? ContainerEntityId,
+    IReadOnlyList<RequestCommitItem> Items);
+
 /// <summary>Root folder/profile option exposed by a request service instance.</summary>
 public sealed record RequestServiceOption(string Id, string Name, string? Path);
 

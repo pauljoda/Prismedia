@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Release operations are now ready for channel publishing: the root package version is the source of truth, Docker builds validate the release metadata, pushes to `main` publish only the dev image, and alpha/beta/release images are published manually.
 
 ### Added
+- Requesting now creates the item in your library immediately: committing a request builds the book — or the author with each selected book — as a real library entity marked Wanted, populated with the provider's metadata and artwork before anything downloads. The download that fulfils it attaches to that same entity, so nothing appears twice. Re-requesting something you already own or already have in flight is recognized and skipped transparently.
 - Added an Authors library: books organized as `Author/Title` are grouped under a browsable author, mirroring how artists group albums — selecting an author shows their books.
 - Added OPDS 1.2 catalog support for external ebook and comic readers, including authenticated feeds, search, covers, downloads, profile visibility rules, and reverse-proxy-aware links.
 - Added playback history and a Stats page for plays, skips, top items, recent activity, and timeframe-based summaries across video, books, and audio.

@@ -39,6 +39,13 @@ yet. Same shapes, same UI, same mental model.
 ## Locked decisions
 
 - Wanted entities live **in the library**, badged Wanted (not hidden in a separate area).
+- **Cancelling a request deletes its wanted entity** (and its wanted children for a container), per the
+  hard-delete-only convention. A monitored-but-not-yet-found item stays Wanted while the monitor searches.
+- **Wanted entities are hidden from Jellyfin clients** (Infuse etc.): fileless placeholders never appear
+  through the Jellyfin projection, only in Prismedia's own UI.
+- **The wanted entity is linked by id, not matched by heuristics.** An acquisition carries the EntityId of
+  the wanted entity it fulfils; the import attaches the file to exactly that entity. External-id and path
+  matching remain as verification/fallback, never the primary mechanism.
 - **Books are rebuilt into the unified shape first** to prove the whole architecture end-to-end (books already
   have a working download/import engine, so no new engine is needed to validate the shape). Movies, music, and
   TV follow as additional kinds.

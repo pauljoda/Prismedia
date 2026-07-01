@@ -57,6 +57,31 @@ public static class RequestEndpoints {
             .Produces<RequestDetailResponse>()
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
+        group.MapPost("/commit", async (
+            RequestCommitRequest request,
+            bool? hideNsfw,
+            HttpContext httpContext,
+            RequestCommitService commits,
+            CancellationToken cancellationToken) => {
+                if (string.IsNullOrWhiteSpace(request.ExternalId)) {
+                    return Results.BadRequest(new ApiProblem(ApiProblemCodes.RequestInvalid, "A provider-qualified external id is required."));
+                }
+
+                if (request.Kind == RequestMediaKind.Author && request.SelectedChildIds.Count == 0) {
+                    return Results.BadRequest(new ApiProblem(ApiProblemCodes.RequestInvalid, "Select at least one book to request."));
+                }
+
+                var response = await commits.CommitAsync(request, NsfwVisibility.ShouldHide(hideNsfw, httpContext), cancellationToken);
+                return response is null
+                    ? Results.NotFound(new ApiProblem(ApiProblemCodes.NotFound, "The requested item could not be resolved from its provider."))
+                    : Results.Ok(response);
+            })
+            .WithName("CommitRequest")
+            .WithSummary("Commits a reviewed request: creates the wanted library entities for the picked items up front and starts one acquisition per requested book.")
+            .Produces<RequestCommitResponse>()
+            .Produces<ApiProblem>(StatusCodes.Status400BadRequest)
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+
         return group;
     }
 

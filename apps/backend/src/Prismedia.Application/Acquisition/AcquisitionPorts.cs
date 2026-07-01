@@ -233,6 +233,9 @@ public interface IAcquisitionStore {
 
     /// <summary>Writes the path-keyed identity hint the book scan consumes to stamp the new entity.</summary>
     Task WriteImportHintAsync(Guid acquisitionId, string sourcePath, AcquisitionImportContext context, BookQualityRank ownedQuality, CancellationToken cancellationToken);
+
+    /// <summary>True when any acquisition targets this wanted library entity; a request commit uses it to avoid double-requesting.</summary>
+    Task<bool> AnyForEntityAsync(Guid entityId, CancellationToken cancellationToken);
 }
 
 /// <summary>

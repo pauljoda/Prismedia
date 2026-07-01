@@ -42,8 +42,9 @@ public enum RequestMediaKind {
 
     /// <summary>
     /// Author request target: a container kind that surfaces an author's books as toggleable children.
-    /// Requesting an author fans each selected work out into its own <see cref="Book"/> acquisition; the
-    /// author itself is never acquired as an entity.
+    /// Committing an author request creates the author as a wanted library entity and fans each selected
+    /// work out into its own <see cref="Book"/> acquisition beneath it; the author itself is never
+    /// downloaded, only its books are.
     /// </summary>
     [Code("author")]
     Author,
@@ -51,4 +52,22 @@ public enum RequestMediaKind {
     /// <summary>Plugin-defined request target.</summary>
     [Code("plugin")]
     Plugin
+}
+
+/// <summary>
+/// Closed set of per-item outcomes of committing a request. A commit is item-granular: an author
+/// request reports one outcome per selected book, so partial success stays transparent.
+/// </summary>
+public enum RequestCommitOutcome {
+    /// <summary>A wanted library entity was created (or reused) and an acquisition was started for it.</summary>
+    [Code("requested")]
+    Requested,
+
+    /// <summary>The library already owns this item with a real file; nothing was created.</summary>
+    [Code("already-owned")]
+    AlreadyOwned,
+
+    /// <summary>The item is already a wanted entity with an acquisition in flight; nothing new was started.</summary>
+    [Code("already-requested")]
+    AlreadyRequested
 }

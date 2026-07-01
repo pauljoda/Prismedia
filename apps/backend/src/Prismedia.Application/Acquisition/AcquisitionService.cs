@@ -6,6 +6,19 @@ using Prismedia.Domain.Entities;
 namespace Prismedia.Application.Acquisition;
 
 /// <summary>
+/// The narrow acquisition seam a request commit needs: start an acquisition for a wanted entity and
+/// check whether one already targets it. Implemented by <see cref="AcquisitionService"/>; kept separate
+/// (mirroring <see cref="IAcquisitionQueueService"/>) so the commit flow doesn't couple to the full service.
+/// </summary>
+public interface IAcquisitionRequestService {
+    /// <summary>Persists a new acquisition and enqueues the background search job that fills in candidates.</summary>
+    Task<AcquisitionSummary> CreateAndSearchAsync(AcquisitionCreateRequest request, CancellationToken cancellationToken);
+
+    /// <summary>True when any acquisition targets this wanted library entity.</summary>
+    Task<bool> AnyForEntityAsync(Guid entityId, CancellationToken cancellationToken);
+}
+
+/// <summary>
 /// Application use case for the acquisition lifecycle from the API's perspective: create an acquisition
 /// from request metadata and kick off a background release search, then list and read acquisition state.
 /// </summary>
@@ -15,7 +28,7 @@ public sealed class AcquisitionService(
     IJobQueueService queue,
     IDownloadClientConfigStore downloadClients,
     IDownloadClientFactory clients,
-    IImportedFilesReader importedFiles) {
+    IImportedFilesReader importedFiles) : IAcquisitionRequestService {
     public Task<IReadOnlyList<AcquisitionSummary>> ListAsync(CancellationToken cancellationToken) =>
         store.ListAsync(cancellationToken);
 
@@ -220,4 +233,8 @@ public sealed class AcquisitionService(
 
         return summary;
     }
+
+    /// <inheritdoc />
+    public Task<bool> AnyForEntityAsync(Guid entityId, CancellationToken cancellationToken) =>
+        store.AnyForEntityAsync(entityId, cancellationToken);
 }

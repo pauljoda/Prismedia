@@ -322,6 +322,8 @@ public static class DependencyInjection {
         services.AddScoped<IAuthorMetadataSearchSource, PluginBookMetadataSearchSource>();
         services.AddScoped<IBookMetadataEnricher, PluginBookMetadataSearchSource>();
         services.AddScoped<IPluginRequestDetailSource, PluginBookMetadataSearchSource>();
+        services.AddScoped<IPluginRequestProposalSource, PluginBookMetadataSearchSource>();
+        services.AddScoped<IWantedEntityWriter, WantedEntityWriter>();
     }
 
     private static void RegisterAcquisition(IServiceCollection services) {
