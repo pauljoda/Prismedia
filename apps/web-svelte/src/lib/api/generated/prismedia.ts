@@ -39,6 +39,7 @@ import type {
   CollectionRulePreviewRequest,
   CollectionRulePreviewResponse,
   CollectionWriteRequest,
+  CommitRequestParams,
   CreateFileFolderParams,
   DatabaseBackupDto,
   DatabaseBackupListResponse,
@@ -206,6 +207,8 @@ import type {
   RatingUpdateRequest,
   RemoveFileExclusionParams,
   RenameFileParams,
+  RequestCommitRequest,
+  RequestCommitResponse,
   RequestDetailResponse,
   RequestSearchResponse,
   RescanFileRootParams,
@@ -10856,6 +10859,63 @@ export const getRequestDetail = async (source: string,
     method: 'GET'
 
 
+  }
+);}
+
+
+
+export type commitRequestResponse200 = {
+  data: RequestCommitResponse
+  status: 200
+}
+
+export type commitRequestResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type commitRequestResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type commitRequestResponseSuccess = (commitRequestResponse200) & {
+  headers: Headers;
+};
+export type commitRequestResponseError = (commitRequestResponse400 | commitRequestResponse404) & {
+  headers: Headers;
+};
+
+export type commitRequestResponse = (commitRequestResponseSuccess | commitRequestResponseError)
+
+export const getCommitRequestUrl = (params?: CommitRequestParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/requests/commit?${stringifiedParams}` : `/api/requests/commit`
+}
+
+/**
+ * @summary Commits a reviewed request: creates the wanted library entities for the picked items up front and starts one acquisition per requested book.
+ */
+export const commitRequest = async (requestCommitRequest: RequestCommitRequest,
+    params?: CommitRequestParams, options?: RequestInit): Promise<commitRequestResponse> => {
+
+  return orvalFetch<commitRequestResponse>(getCommitRequestUrl(params),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      requestCommitRequest,)
   }
 );}
 

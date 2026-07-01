@@ -14,4 +14,6 @@ export interface EntityCapabilityFlagsCapability {
   isNsfw: boolean | null;
   /** @nullable */
   isOrganized: boolean | null;
+  /** @nullable */
+  isWanted?: boolean | null;
 }

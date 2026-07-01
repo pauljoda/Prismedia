@@ -20,7 +20,7 @@
     Tag,
     Users,
   } from "@lucide/svelte";
-  import { getRatingValue, isNsfw } from "$lib/api/capabilities";
+  import { getRatingValue, isNsfw, isWanted } from "$lib/api/capabilities";
   import OverflowTicker from "$lib/components/OverflowTicker.svelte";
   import {
     getThumbnailAsset,
@@ -296,6 +296,7 @@
   });
   const hoverable = $derived(hasHoverPreview(card) && !hoverBroken && !spriteError);
   const nsfw = $derived(isNsfw(card.entity.capabilities));
+  const wanted = $derived(isWanted(card.entity.capabilities));
   const rating = $derived(getRatingValue(card.entity.capabilities));
   const bottomLeft = $derived(card.custom?.bottomLeft);
   // Playback/reading progress meter percentage, only when there is something to show.
@@ -640,11 +641,18 @@
       />
     {/if}
 
-    {#if nsfw}
+    {#if nsfw || wanted}
       <div class="badges top-badges">
-        <span class="badge danger icon-only" title="NSFW" aria-label="NSFW">
-          <Flame size={13} />
-        </span>
+        {#if wanted}
+          <span class="badge wanted-badge" title="Wanted — requested, not downloaded yet" aria-label="Wanted">
+            Wanted
+          </span>
+        {/if}
+        {#if nsfw}
+          <span class="badge danger icon-only" title="NSFW" aria-label="NSFW">
+            <Flame size={13} />
+          </span>
+        {/if}
       </div>
     {/if}
 
@@ -1153,6 +1161,17 @@
     border-color: rgb(242 194 106 / 0.38);
     background: rgb(39 29 12 / 0.76);
     box-shadow: 0 0 16px rgb(242 194 106 / 0.18);
+  }
+
+  /* Wanted placeholder: requested but not downloaded yet. Brass glow marks the pending state. */
+  .wanted-badge {
+    color: rgb(242 194 106 / 0.96);
+    border-color: rgb(242 194 106 / 0.42);
+    background: rgb(39 29 12 / 0.78);
+    box-shadow: 0 0 16px rgb(242 194 106 / 0.22);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: 0.6rem;
   }
 
   .rating-badge :global(svg) {

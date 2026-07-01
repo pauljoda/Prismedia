@@ -296,6 +296,14 @@ export const REQUEST_RATING_SOURCE = {
 
 export type RequestRatingSourceCode = (typeof REQUEST_RATING_SOURCE)[keyof typeof REQUEST_RATING_SOURCE];
 
+export const REQUEST_COMMIT_OUTCOME = {
+  requested: "requested",
+  alreadyOwned: "already-owned",
+  alreadyRequested: "already-requested",
+} as const;
+
+export type RequestCommitOutcomeCode = (typeof REQUEST_COMMIT_OUTCOME)[keyof typeof REQUEST_COMMIT_OUTCOME];
+
 export const INDEXER_KIND = {
   prowlarr: "prowlarr",
   jackett: "jackett",

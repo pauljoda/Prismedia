@@ -5,6 +5,7 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { AcquisitionStatus } from './acquisitionStatus';
+import type { AcquisitionSummaryKind } from './acquisitionSummaryKind';
 
 export interface AcquisitionSummary {
   id: string;
@@ -32,4 +33,7 @@ export interface AcquisitionSummary {
   updatedAt: string;
   /** @nullable */
   description?: string | null;
+  kind?: AcquisitionSummaryKind;
+  /** @nullable */
+  entityId?: string | null;
 }

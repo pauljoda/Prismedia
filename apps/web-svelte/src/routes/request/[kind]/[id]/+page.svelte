@@ -4,9 +4,8 @@
   import { Button, dur, ease, flyUp } from "@prismedia/ui-svelte";
   import { fade } from "svelte/transition";
   import { goto } from "$app/navigation";
-  import { fetchRequestDetail } from "$lib/api/requests";
-  import { createAcquisition } from "$lib/api/acquisitions";
-  import { REQUEST_MEDIA_KIND } from "$lib/api/generated/codes";
+  import { commitRequest, fetchRequestDetail } from "$lib/api/requests";
+  import { REQUEST_COMMIT_OUTCOME, REQUEST_MEDIA_KIND } from "$lib/api/generated/codes";
   import type { RequestMediaKindCode, RequestProviderKindCode } from "$lib/api/generated/codes";
   import EntityDetail from "$lib/components/entities/EntityDetail.svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
@@ -14,7 +13,7 @@
   import type { EntityDetailActionButton } from "$lib/components/entities/entity-detail-types";
   import { requestDetailToEntityCard } from "$lib/requests/request-entity-card";
   import { requestChildToThumbnailCard } from "$lib/requests/review-cards";
-  import { inferRequestSourceForKind, numericValue } from "$lib/requests/request-helpers";
+  import { inferRequestSourceForKind } from "$lib/requests/request-helpers";
   import type { RequestChildOption, RequestDetailResponse } from "$lib/requests/request-model";
 
   const params = $derived(page.params as { kind: RequestMediaKindCode; id: string });
@@ -95,73 +94,49 @@
   }
 
   /**
-   * Prismedia-direct request: fans out one acquisition per selected child (an author's books or a series'
-   * volumes), or a single acquisition for a standalone book, then moves to the searching view.
+   * Prismedia-direct request through the single server-side commit: the backend creates the wanted
+   * library entity/entities from the plugin proposal (the author with its picked books, a standalone
+   * book, or picked series volumes) and starts one acquisition per requested book — no client fan-out.
    */
   async function requestPluginBook() {
     if (!detail) return;
-    const d = detail;
-    // Targets: the selected children, or the standalone book itself.
-    const raw = hasChildren
-      ? children
-          .filter((child) => child.requestable && selectedChildIds.includes(child.id))
-          .map((child) => ({ id: child.id, title: child.title, year: child.year, posterUrl: child.posterUrl, overview: child.overview }))
-      : [{ id: d.externalId, title: d.title, year: d.year, posterUrl: d.posterUrl, overview: d.overview }];
-    if (raw.length === 0) {
+    const picked = hasChildren
+      ? children.filter((child) => child.requestable && selectedChildIds.includes(child.id)).map((child) => child.id)
+      : [];
+    if (hasChildren && picked.length === 0) {
       error = `Select at least one ${childNoun} to request.`;
-      return;
-    }
-
-    // Pre-flight: every target must carry a resolvable provider-qualified id ("provider:itemId") so each
-    // acquisition can identify ID-first. Validate up front so we never partially fan out on a bad id.
-    const targets = raw.map((target) => {
-      const separator = target.id.indexOf(":");
-      return {
-        ...target,
-        pluginId: separator > 0 ? target.id.slice(0, separator) : null,
-        pluginItemId: separator > 0 ? target.id.slice(separator + 1) : null,
-      };
-    });
-    if (targets.some((target) => !target.pluginId || !target.pluginItemId)) {
-      error = "Could not resolve a provider id for the selection.";
       return;
     }
 
     submitting = true;
     error = null;
-    const created: string[] = [];
     try {
-      for (const target of targets) {
-        const summary = await createAcquisition({
-          title: target.title,
-          // For an author container the author IS the entity title; for a book/series it's the subtitle.
-          author: isAuthor ? d.title : (d.subtitle ?? null),
-          // Only a book-series names its children's series; an author's books are unrelated works.
-          series: !isAuthor && hasChildren ? d.title : null,
-          year: numericValue(target.year),
-          posterUrl: target.posterUrl ?? null,
-          pluginId: target.pluginId,
-          pluginItemId: target.pluginItemId,
-          // The target's own overview (the standalone target already carries d.overview); never the parent's,
-          // so an author's bio can't leak in as a book description.
-          description: target.overview ?? null,
-        });
-        created.push(summary.id);
+      const response = await commitRequest({
+        kind: detail.kind,
+        externalId: detail.externalId,
+        selectedChildIds: picked,
+      });
+
+      const items = response.items ?? [];
+      const requested = items.filter((item) => item.outcome === REQUEST_COMMIT_OUTCOME.requested);
+      const skipped = items.filter((item) => item.outcome !== REQUEST_COMMIT_OUTCOME.requested);
+      if (requested.length === 0) {
+        // Nothing new was started — everything picked is already owned or already in flight.
+        const owned = skipped.filter((item) => item.outcome === REQUEST_COMMIT_OUTCOME.alreadyOwned).length;
+        error = owned === skipped.length
+          ? "Already in your library — nothing to request."
+          : "Already requested — the existing requests are still searching.";
+        return;
       }
 
-      // Single book → its acquisition page; multiple → the request queue where all of them show.
-      await goto(created.length === 1 ? `/request/acquisition/${created[0]}` : "/request");
+      // Single new acquisition → its progress page; multiple → the request queue where all of them show.
+      await goto(
+        requested.length === 1 && requested[0].acquisitionId
+          ? `/request/acquisition/${requested[0].acquisitionId}`
+          : "/request",
+      );
     } catch (err) {
-      const reason = err instanceof Error ? err.message : "Request failed";
-      if (created.length > 0) {
-        // A mid-loop failure already queued some books. Drop those from the selection so pressing Request
-        // again retries only the remainder (never re-creating the ones that succeeded), and say what happened.
-        const queuedIds = new Set(targets.slice(0, created.length).map((target) => target.id));
-        selectedChildIds = selectedChildIds.filter((id) => !queuedIds.has(id));
-        error = `Requested ${created.length} of ${targets.length} ${childNoun}${targets.length === 1 ? "" : "s"} — the rest failed (${reason}). The queued ones are in your requests; press Request again to retry the remainder.`;
-      } else {
-        error = reason;
-      }
+      error = err instanceof Error ? err.message : "Request failed";
     } finally {
       submitting = false;
     }

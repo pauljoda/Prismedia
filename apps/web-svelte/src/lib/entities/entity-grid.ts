@@ -153,12 +153,13 @@ function capabilitiesForEntity(entity: EntityGridSourceEntity): EntityCapability
   if (isFullEntityCard(entity)) return entity.capabilities;
 
   const caps: EntityCapability[] = [];
-  if (entity.isFavorite || entity.isNsfw || entity.isOrganized) {
+  if (entity.isFavorite || entity.isNsfw || entity.isOrganized || entity.isWanted) {
     caps.push({
       kind: "flags" as const,
       isFavorite: entity.isFavorite || null,
       isNsfw: entity.isNsfw || null,
       isOrganized: entity.isOrganized || null,
+      isWanted: entity.isWanted || null,
     });
   }
   if (entity.rating != null) {

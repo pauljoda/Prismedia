@@ -44,6 +44,7 @@ const ENUM_EXPORTS = [
   ["RequestProviderKind", "REQUEST_PROVIDER_KIND", "RequestProviderKindCode"],
   ["RequestMediaKind", "REQUEST_MEDIA_KIND", "RequestMediaKindCode"],
   ["RequestRatingSource", "REQUEST_RATING_SOURCE", "RequestRatingSourceCode"],
+  ["RequestCommitOutcome", "REQUEST_COMMIT_OUTCOME", "RequestCommitOutcomeCode"],
   ["IndexerKind", "INDEXER_KIND", "IndexerKindCode"],
   ["DownloadClientKind", "DOWNLOAD_CLIENT_KIND", "DownloadClientKindCode"],
   ["DownloadProtocol", "DOWNLOAD_PROTOCOL", "DownloadProtocolCode"],

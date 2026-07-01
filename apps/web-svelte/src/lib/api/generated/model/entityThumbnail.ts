@@ -39,6 +39,7 @@ export interface EntityThumbnail {
   isNsfw: boolean;
   isOrganized: boolean;
   parentKind?: null | EntityKind;
+  isWanted?: boolean;
   /** @nullable */
   createdAt?: string | null;
   /**

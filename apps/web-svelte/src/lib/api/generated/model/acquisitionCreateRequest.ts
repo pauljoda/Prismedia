@@ -4,6 +4,7 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { AcquisitionCreateRequestKind } from './acquisitionCreateRequestKind';
 
 export interface AcquisitionCreateRequest {
   title: string;
@@ -24,4 +25,7 @@ export interface AcquisitionCreateRequest {
   pluginItemId: string | null;
   /** @nullable */
   description?: string | null;
+  kind?: AcquisitionCreateRequestKind;
+  /** @nullable */
+  entityId?: string | null;
 }

@@ -72,6 +72,11 @@ export function isNsfw(capabilities: EntityCapability[]): boolean {
   return getFlagsCapability(capabilities)?.isNsfw === true;
 }
 
+/** True for a request-created Wanted placeholder: a library entity with metadata but no file yet. */
+export function isWanted(capabilities: EntityCapability[]): boolean {
+  return getFlagsCapability(capabilities)?.isWanted === true;
+}
+
 export function withRatingCapability(
   capabilities: EntityCapability[],
   value: number | null,

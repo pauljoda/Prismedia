@@ -17,11 +17,11 @@ describe("global input zoom guard", () => {
     expect(appCss).toMatch(/font-size:\s*max\(16px,\s*1em\)\s*!important/);
 
     // Compact text inputs/textareas must regain the floor on coarse pointers,
-    // while selects stay exempt (they open the iOS picker and never zoom).
-    const coarseBlock = appCss.match(/@media\s*\(pointer:\s*coarse\)\s*\{[\s\S]*?\n {2}\}/);
-    expect(coarseBlock, "expected a (pointer: coarse) re-floor block").not.toBeNull();
-    const block = coarseBlock?.[0] ?? "";
-    expect(block).toContain("input.allow-compact-input-text");
+    // while selects stay exempt (they open the iOS picker and never zoom). The base floor and the
+    // compact re-floor are separate (pointer: coarse) blocks, so find the one that owns the re-floor.
+    const coarseBlocks = appCss.match(/@media\s*\(pointer:\s*coarse\)\s*\{[\s\S]*?\n {2}\}/g) ?? [];
+    const block = coarseBlocks.find((candidate) => candidate.includes("input.allow-compact-input-text"));
+    expect(block, "expected a (pointer: coarse) re-floor block for compact text inputs").toBeDefined();
     expect(block).toContain("textarea.allow-compact-input-text");
     expect(block).not.toContain("select.allow-compact-input-text");
     expect(block).toMatch(/font-size:\s*max\(16px,\s*1em\)\s*!important/);
