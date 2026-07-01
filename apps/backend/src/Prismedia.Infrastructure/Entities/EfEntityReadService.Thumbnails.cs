@@ -173,6 +173,7 @@ public sealed partial class EfEntityReadService {
                     && parentKindCode.TryDecodeAs<EntityKind>(out var parentKind)
                         ? parentKind
                         : null,
+                IsWanted = row.IsWanted,
                 CreatedAt = row.CreatedAt,
                 PlayCount = playback?.PlayCount,
                 Genres = tagsByEntity.GetValueOrDefault(row.Id),

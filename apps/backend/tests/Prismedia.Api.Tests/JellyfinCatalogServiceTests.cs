@@ -1058,7 +1058,8 @@ public sealed class JellyfinCatalogServiceTests {
             bool? nsfw = null,
             bool? hasFile = null,
             bool? played = null,
-            bool? orphaned = null) {
+            bool? orphaned = null,
+        bool? wanted = null) {
             ListCalls.Add(new ListCall(kind, referencedBy, played));
             IReadOnlyList<EntityThumbnail> items;
             if (referencedBy is { } personId) {

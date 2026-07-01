@@ -296,7 +296,8 @@ public sealed class EntityPatchEndpointTests {
             bool? nsfw = null,
             bool? hasFile = null,
             bool? played = null,
-            bool? orphaned = null) =>
+            bool? orphaned = null,
+        bool? wanted = null) =>
             throw new NotSupportedException();
 
         public Task<EntityCard?> GetAsync(Guid id, bool hideNsfw, CancellationToken cancellationToken) =>

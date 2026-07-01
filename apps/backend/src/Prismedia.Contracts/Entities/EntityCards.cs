@@ -116,6 +116,9 @@ public sealed record EntityListQuery {
     public bool? HasFile { get; init; }
     public bool? Played { get; init; }
     public bool? Orphaned { get; init; }
+
+    /// <summary>Filters to wanted placeholders (true), or excludes them (false). Null includes both.</summary>
+    public bool? Wanted { get; init; }
 }
 
 /// <summary>

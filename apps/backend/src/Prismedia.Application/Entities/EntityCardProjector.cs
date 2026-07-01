@@ -62,7 +62,7 @@ public static class EntityCardProjector {
         var capabilities = new List<ContractCapability>();
 
         capabilities.Add(new RatingCapability(entity.RatingValue));
-        capabilities.Add(new FlagsCapability(entity.IsFavorite, entity.IsNsfw, entity.IsOrganized));
+        capabilities.Add(new FlagsCapability(entity.IsFavorite, entity.IsNsfw, entity.IsOrganized, entity.IsWanted));
 
         if (entity.Description is { } description) {
             capabilities.Add(new DescriptionCapability(description.Value));
@@ -268,6 +268,7 @@ public static class EntityCardProjector {
             entity.IsFavorite ?? false,
             entity.IsNsfw ?? false,
             entity.IsOrganized ?? false) {
+            IsWanted = entity.IsWanted ?? false,
             Progress = ResolveThumbnailProgress(entity)
         };
     }

@@ -143,7 +143,7 @@ public sealed partial class JellyfinCatalogService {
             sort: "added",
             sortDir: "desc",
             played: view.ForcedPlayed,
-            nsfw: visibility.NsfwFilter);
+            nsfw: visibility.NsfwFilter, wanted: false);
         foreach (var thumbnail in response.Items) {
             // The Videos view shows standalone videos only, so prefer a top-level poster for its tile.
             if (view.Kind == "video" && thumbnail.ParentEntityId is not null) {
@@ -369,7 +369,7 @@ public sealed partial class JellyfinCatalogService {
                 sort: "added",
                 sortDir: "desc",
                 played: view.ForcedPlayed,
-                nsfw: visibility.NsfwFilter);
+                nsfw: visibility.NsfwFilter, wanted: false);
             var viewItems = viewResponse.Items;
             if (view.Id == VideosViewId) {
                 viewItems = viewItems.Where(item => item.ParentEntityId is null).ToArray();
@@ -392,7 +392,7 @@ public sealed partial class JellyfinCatalogService {
             cancellationToken,
             sort: "added",
             sortDir: "desc",
-            nsfw: visibility.NsfwFilter);
+            nsfw: visibility.NsfwFilter, wanted: false);
         var items = await MapPlaybackShelfItemsAsync(response.Items, serverId, visibility, cancellationToken);
         return new JellyfinQueryResult<JellyfinBaseItemDto>(items, response.TotalCount, 0);
     }
@@ -427,7 +427,7 @@ public sealed partial class JellyfinCatalogService {
             sort: "last-played",
             sortDir: "desc",
             status: "in-progress",
-            nsfw: visibility.NsfwFilter);
+            nsfw: visibility.NsfwFilter, wanted: false);
         var items = await MapPlaybackShelfItemsAsync(response.Items, serverId, visibility, cancellationToken);
         var total = items.Count;
         var start = Math.Clamp(startIndex, 0, total);
@@ -472,7 +472,7 @@ public sealed partial class JellyfinCatalogService {
             sort: "last-played",
             sortDir: "desc",
             status: "in-progress",
-            nsfw: visibility.NsfwFilter);
+            nsfw: visibility.NsfwFilter, wanted: false);
         var episodeThumbnails = response.Items
             .Where(item => JellyfinType(item.Kind, item.ParentEntityId).Equals(JellyfinProtocol.ItemTypes.Episode, StringComparison.OrdinalIgnoreCase))
             .ToArray();
@@ -1065,7 +1065,7 @@ public sealed partial class JellyfinCatalogService {
             return 0;
         }
 
-        var response = await _entities.ListAsync(kind, null, null, visibility.HideNsfw, 1, cancellationToken, nsfw: visibility.NsfwFilter);
+        var response = await _entities.ListAsync(kind, null, null, visibility.HideNsfw, 1, cancellationToken, nsfw: visibility.NsfwFilter, wanted: false);
         return response.TotalCount;
     }
 
@@ -1081,7 +1081,7 @@ public sealed partial class JellyfinCatalogService {
         var results = new List<EntityThumbnail>();
         string? cursor = null;
         do {
-            var response = await _entities.ListAsync(kind, null, cursor, visibility.HideNsfw, 1000, cancellationToken, nsfw: visibility.NsfwFilter);
+            var response = await _entities.ListAsync(kind, null, cursor, visibility.HideNsfw, 1000, cancellationToken, nsfw: visibility.NsfwFilter, wanted: false);
             results.AddRange(response.Items);
             cursor = response.NextCursor;
         } while (cursor is not null && results.Count < MaxBrowseItems);
@@ -1113,7 +1113,7 @@ public sealed partial class JellyfinCatalogService {
                 sortDir: ToPrismediaSortDir(query.SortOrder),
                 favorite: query.IsFavorite,
                 played: forcedPlayed,
-                nsfw: visibility.NsfwFilter);
+                nsfw: visibility.NsfwFilter, wanted: false);
             results.AddRange(response.Items);
             cursor = response.NextCursor;
         } while (cursor is not null && results.Count < MaxBrowseItems);
@@ -1150,7 +1150,7 @@ public sealed partial class JellyfinCatalogService {
                 referencedBy: personId,
                 sort: ToPrismediaSort(query.SortBy),
                 sortDir: ToPrismediaSortDir(query.SortOrder),
-                nsfw: visibility.NsfwFilter);
+                nsfw: visibility.NsfwFilter, wanted: false);
             results.AddRange(response.Items);
             cursor = response.NextCursor;
         } while (cursor is not null && results.Count < MaxBrowseItems);

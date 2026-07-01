@@ -67,7 +67,8 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         bool? nsfw = null,
         bool? hasFile = null,
         bool? played = null,
-        bool? orphaned = null) {
+        bool? orphaned = null,
+        bool? wanted = null) {
         var pageSize = Math.Clamp(limit ?? DefaultPageSize, 1, MaxPageSize);
         var normalizedRelationshipCode = string.IsNullOrWhiteSpace(relationshipCode)
             ? null
@@ -104,7 +105,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             entityQuery = ApplyEnabledLibraryVisibility(entityQuery, kind);
         }
         entityQuery = ApplyNsfwVisibility(entityQuery, hideNsfw == true);
-        entityQuery = ApplyListFilters(entityQuery, favorite, organized, ratingMin, ratingMax, unrated, status, bookType, bookFormat, nsfw, hasFile, played, orphaned);
+        entityQuery = ApplyListFilters(entityQuery, favorite, organized, ratingMin, ratingMax, unrated, status, bookType, bookFormat, nsfw, hasFile, played, orphaned, wanted);
 
         // Snapshot the unbounded filtered total before applying the cursor; this is what
         // drives the client's page-of-pages and seek-to-end behaviour and must stay
@@ -308,9 +309,16 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         bool? nsfw = null,
         bool? hasFile = null,
         bool? played = null,
-        bool? orphaned = null) {
+        bool? orphaned = null,
+        bool? wanted = null) {
         if (favorite == true) {
             query = query.Where(entity => entity.IsFavorite);
+        }
+
+        if (wanted is { } wantsWanted) {
+            query = wantsWanted
+                ? query.Where(entity => entity.IsWanted)
+                : query.Where(entity => !entity.IsWanted);
         }
 
         if (orphaned is { } wantsOrphaned) {

@@ -54,6 +54,10 @@ public interface IEntityReadService {
     /// When true, keeps only entities that nothing references (no inbound relationship links) — the
     /// orphaned/empty tags, people, and studios. When false, keeps only referenced entities.
     /// </param>
+    /// <param name="wanted">
+    /// When set, keeps only wanted placeholders (true) or excludes them (false). External projections
+    /// (Jellyfin, OPDS) pass false so fileless request placeholders never reach external clients.
+    /// </param>
     Task<EntityListResponse> ListAsync(
         string? kind,
         string? query,
@@ -77,7 +81,8 @@ public interface IEntityReadService {
         bool? nsfw = null,
         bool? hasFile = null,
         bool? played = null,
-        bool? orphaned = null);
+        bool? orphaned = null,
+        bool? wanted = null);
 
     /// <summary>
     /// Lists active entities using the generated query contract shared by the API and frontend.
@@ -106,7 +111,8 @@ public interface IEntityReadService {
             query.Nsfw,
             query.HasFile,
             query.Played,
-            query.Orphaned);
+            query.Orphaned,
+            query.Wanted);
 
     /// <summary>
     /// Gets one active entity as the shared entity card read model.

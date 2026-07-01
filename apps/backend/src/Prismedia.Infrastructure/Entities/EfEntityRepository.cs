@@ -388,6 +388,7 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
                 IsFavorite = entity.IsFavorite ?? false,
                 IsNsfw = entity.IsNsfw ?? false,
                 IsOrganized = entity.IsOrganized ?? false,
+                IsWanted = entity.IsWanted ?? false,
                 CreatedAt = now,
                 UpdatedAt = now,
             });
@@ -402,6 +403,7 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
         row.IsFavorite = entity.IsFavorite ?? false;
         row.IsNsfw = entity.IsNsfw ?? false;
         row.IsOrganized = entity.IsOrganized ?? false;
+        row.IsWanted = entity.IsWanted ?? false;
         row.UpdatedAt = now;
     }
 
@@ -431,7 +433,8 @@ public sealed class EfEntityRepository : IEntityWriteRepository {
             row.IsOrganized,
             urls,
             externalIds,
-            files);
+            files,
+            row.IsWanted);
     }
 
     private Task PersistUniversalCollectionsAsync(Entity entity) {

@@ -104,6 +104,12 @@ public abstract class Entity {
     /// <summary>Organized/reviewed flag when set.</summary>
     public bool? IsOrganized { get; private set; }
 
+    /// <summary>
+    /// Wanted-placeholder flag when set: the entity was created by a request with metadata but no
+    /// file yet; the acquisition import attaches the file and clears it.
+    /// </summary>
+    public bool? IsWanted { get; private set; }
+
     /// <summary>Applies a sparse flag update. Null arguments leave the corresponding flag unchanged.</summary>
     public void PatchFlags(bool? isFavorite, bool? isNsfw, bool? isOrganized) {
         if (isFavorite.HasValue) IsFavorite = isFavorite;
@@ -151,11 +157,13 @@ public abstract class Entity {
         bool? isOrganized,
         IEnumerable<EntityUrl>? urls,
         IEnumerable<EntityExternalId>? externalIds,
-        IEnumerable<EntityFile>? files) {
+        IEnumerable<EntityFile>? files,
+        bool? isWanted = null) {
         RatingValue = ratingValue;
         IsFavorite = isFavorite;
         IsNsfw = isNsfw;
         IsOrganized = isOrganized;
+        IsWanted = isWanted;
         _urls.Clear();
         if (urls is not null) _urls.AddRange(urls);
         _externalIds.Clear();

@@ -47,6 +47,12 @@ public sealed record EntityThumbnail(
     public EntityKind? ParentKind { get; init; }
 
     /// <summary>
+    /// True for a request-created wanted placeholder: a real library entity with metadata and artwork
+    /// but no file yet. Grids badge it; external projections (Jellyfin, OPDS) exclude it.
+    /// </summary>
+    public bool IsWanted { get; init; }
+
+    /// <summary>
     /// When the entity was added to the library. Surfaced so compatibility layers (e.g. the Jellyfin
     /// surface) can populate the always-present <c>DateCreated</c> field that clients sort by.
     /// </summary>

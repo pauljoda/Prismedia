@@ -25,12 +25,20 @@ public readonly record struct JellyfinContentVisibility(bool AllowSfw, bool Allo
     /// </summary>
     public bool? NsfwFilter => AllowSfw ? null : AllowNsfw ? true : false;
 
-    /// <summary>Returns true when a thumbnail's content class is visible.</summary>
-    public bool Allows(EntityThumbnail item) => item.IsNsfw ? AllowNsfw : AllowSfw;
+    /// <summary>
+    /// Returns true when a thumbnail's content class is visible. Wanted placeholders (request-created
+    /// entities with no file yet) are never visible to Jellyfin clients — locked decision: they exist
+    /// only in Prismedia's own UI until their download imports.
+    /// </summary>
+    public bool Allows(EntityThumbnail item) => !item.IsWanted && (item.IsNsfw ? AllowNsfw : AllowSfw);
 
-    /// <summary>Returns true when a card/detail's content class is visible.</summary>
+    /// <summary>Returns true when a card/detail's content class is visible; wanted placeholders never are.</summary>
     public bool Allows(IEntityCard item) {
-        var isNsfw = item.Capabilities.OfType<FlagsCapability>().FirstOrDefault()?.IsNsfw == true;
-        return isNsfw ? AllowNsfw : AllowSfw;
+        var flags = item.Capabilities.OfType<FlagsCapability>().FirstOrDefault();
+        if (flags?.IsWanted == true) {
+            return false;
+        }
+
+        return flags?.IsNsfw == true ? AllowNsfw : AllowSfw;
     }
 }
