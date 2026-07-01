@@ -207,6 +207,9 @@ public sealed class RequestCommitServiceTests {
             Applied.Add(new ApplyCall(entityId, proposal));
             return Task.CompletedTask;
         }
+
+        public Task<bool> DeleteIfWantedAsync(Guid entityId, CancellationToken cancellationToken) =>
+            Task.FromResult(false);
     }
 
     private sealed class FakeAcquisitionRequestService : IAcquisitionRequestService {

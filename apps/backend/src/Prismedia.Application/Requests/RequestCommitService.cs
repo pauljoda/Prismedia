@@ -40,6 +40,14 @@ public interface IWantedEntityWriter {
 
     /// <summary>Applies a plugin proposal to an entity through the shared metadata-apply cascade (all present fields, default artwork).</summary>
     Task ApplyProposalAsync(Guid entityId, EntityMetadataProposal proposal, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Hard-deletes a request-created wanted entity — the cancel path's other half: cancelling a request
+    /// removes the placeholder it created. Deletes nothing when the entity is gone, no longer Wanted, or
+    /// owns a real file (an import won the race). Removing the last child of a wanted, fileless author
+    /// removes the author too. Returns true when the entity was deleted.
+    /// </summary>
+    Task<bool> DeleteIfWantedAsync(Guid entityId, CancellationToken cancellationToken);
 }
 
 /// <summary>

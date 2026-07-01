@@ -23,8 +23,7 @@ public sealed class WantedEntityWriter(PrismediaDbContext db, EntityMetadataAppl
 
         var now = DateTimeOffset.UtcNow;
         if (entity is not null) {
-            var hasFile = await db.EntityFiles.AsNoTracking()
-                .AnyAsync(file => file.EntityId == entity.Id && file.Role == EntityFileRole.Source, cancellationToken);
+            var hasFile = await HasSourceFileAsync(entity.Id, cancellationToken);
 
             // A title-matched entity (e.g. a scanned author folder with no provider ids yet) gains the
             // provider id so every later lookup — including the import bind — resolves it id-first.
@@ -72,6 +71,36 @@ public sealed class WantedEntityWriter(PrismediaDbContext db, EntityMetadataAppl
         var images = ProposalApplySelection.SelectDefaultImages(proposal);
         await apply.ApplyAsync(entityId, proposal, fields, images, cancellationToken);
     }
+
+    public async Task<bool> DeleteIfWantedAsync(Guid entityId, CancellationToken cancellationToken) {
+        var entity = await db.Entities.FirstOrDefaultAsync(row => row.Id == entityId, cancellationToken);
+        if (entity is null || !entity.IsWanted || await HasSourceFileAsync(entityId, cancellationToken)) {
+            return false;
+        }
+
+        var parentId = entity.ParentEntityId;
+        db.Entities.Remove(entity);
+        await db.SaveChangesAsync(cancellationToken);
+
+        // A wanted author that just lost its last child is an empty placeholder; remove it with the book
+        // (the scan's empty-author pruning would eventually do the same, but not until the next scan).
+        if (parentId is { } authorId) {
+            var author = await db.Entities.FirstOrDefaultAsync(
+                row => row.Id == authorId && row.KindCode == EntityKindRegistry.BookAuthor.Code, cancellationToken);
+            if (author is { IsWanted: true } &&
+                !await db.Entities.AnyAsync(row => row.ParentEntityId == authorId, cancellationToken) &&
+                !await HasSourceFileAsync(authorId, cancellationToken)) {
+                db.Entities.Remove(author);
+                await db.SaveChangesAsync(cancellationToken);
+            }
+        }
+
+        return true;
+    }
+
+    private Task<bool> HasSourceFileAsync(Guid entityId, CancellationToken cancellationToken) =>
+        db.EntityFiles.AsNoTracking()
+            .AnyAsync(file => file.EntityId == entityId && file.Role == EntityFileRole.Source, cancellationToken);
 
     private Task<EntityRow?> FindByExternalIdAsync(string kindCode, string providerId, string itemId, CancellationToken cancellationToken) =>
         db.EntityExternalIds

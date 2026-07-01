@@ -28,7 +28,8 @@ public sealed class AcquisitionService(
     IJobQueueService queue,
     IDownloadClientConfigStore downloadClients,
     IDownloadClientFactory clients,
-    IImportedFilesReader importedFiles) : IAcquisitionRequestService {
+    IImportedFilesReader importedFiles,
+    Requests.IWantedEntityWriter wantedEntities) : IAcquisitionRequestService {
     public Task<IReadOnlyList<AcquisitionSummary>> ListAsync(CancellationToken cancellationToken) =>
         store.ListAsync(cancellationToken);
 
@@ -128,11 +129,22 @@ public sealed class AcquisitionService(
         }
 
         await store.SetStatusAsync(id, AcquisitionStatus.Cancelled, "Cancelled.", cancellationToken);
+
+        // Cancelling a request removes the wanted placeholder it created (locked decision: cancel deletes).
+        // A no-op when the entity already imported a file or the user deleted it from the library first.
+        if (detail.Summary.EntityId is { } wantedEntityId) {
+            await wantedEntities.DeleteIfWantedAsync(wantedEntityId, cancellationToken);
+        }
+
         return await store.GetAsync(id, cancellationToken);
     }
 
-    /// <summary>Removes an acquisition entirely: best-effort deletes its torrent (and data) from the client, then hard-deletes the record.</summary>
+    /// <summary>
+    /// Removes an acquisition entirely: best-effort deletes its torrent (and data) from the client, then
+    /// hard-deletes the record — and, like cancel, removes the wanted placeholder entity it created.
+    /// </summary>
     public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken) {
+        var wantedEntityId = (await store.GetAsync(id, cancellationToken))?.Summary.EntityId;
         var clientItemId = await store.GetTransferClientItemIdAsync(id, cancellationToken);
         if (!string.IsNullOrWhiteSpace(clientItemId)) {
             var client = await downloadClients.GetDefaultAsync(cancellationToken);
@@ -147,7 +159,12 @@ public sealed class AcquisitionService(
             }
         }
 
-        return await store.DeleteAsync(id, cancellationToken);
+        var deleted = await store.DeleteAsync(id, cancellationToken);
+        if (deleted && wantedEntityId is { } entityId) {
+            await wantedEntities.DeleteIfWantedAsync(entityId, cancellationToken);
+        }
+
+        return deleted;
     }
 
     /// <summary>
