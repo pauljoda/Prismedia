@@ -18,6 +18,13 @@ export interface RequestKindInfo {
   plural: string;
   committable: boolean;
   childNoun: string | null;
+  /**
+   * The library entity kind this request materializes as. Request items are "virtual" entities: they
+   * render through the exact same components — and therefore the same thumbnail shape, placeholder
+   * family, and detail layout — as the real thing they become (a movie result IS a movie poster, an
+   * album result IS square album art).
+   */
+  entityKind: EntityKindCode;
   /** The acquisition-profile kind this request's downloads are governed by (null while not committable). */
   profileKind: EntityKindCode | null;
   /** The library-root capability flag the acquired files need ("scanBooks" | "scanVideos" | "scanAudio"). */
@@ -25,13 +32,27 @@ export interface RequestKindInfo {
 }
 
 export const REQUEST_KINDS: RequestKindInfo[] = [
-  { kind: REQUEST_MEDIA_KIND.book, label: "Book", plural: "Books", committable: true, childNoun: "volume", profileKind: ENTITY_KIND.book, rootFlag: "scanBooks" },
-  { kind: REQUEST_MEDIA_KIND.author, label: "Author", plural: "Authors", committable: true, childNoun: "book", profileKind: ENTITY_KIND.book, rootFlag: "scanBooks" },
-  { kind: REQUEST_MEDIA_KIND.movie, label: "Movie", plural: "Movies", committable: true, childNoun: null, profileKind: ENTITY_KIND.movie, rootFlag: "scanVideos" },
-  { kind: REQUEST_MEDIA_KIND.series, label: "Series", plural: "Series", committable: false, childNoun: null, profileKind: null, rootFlag: null },
-  { kind: REQUEST_MEDIA_KIND.artist, label: "Artist", plural: "Artists", committable: true, childNoun: "album", profileKind: ENTITY_KIND.audioLibrary, rootFlag: "scanAudio" },
-  { kind: REQUEST_MEDIA_KIND.album, label: "Album", plural: "Albums", committable: true, childNoun: null, profileKind: ENTITY_KIND.audioLibrary, rootFlag: "scanAudio" },
+  { kind: REQUEST_MEDIA_KIND.book, label: "Book", plural: "Books", committable: true, childNoun: "volume", entityKind: ENTITY_KIND.book, profileKind: ENTITY_KIND.book, rootFlag: "scanBooks" },
+  { kind: REQUEST_MEDIA_KIND.author, label: "Author", plural: "Authors", committable: true, childNoun: "book", entityKind: ENTITY_KIND.bookAuthor, profileKind: ENTITY_KIND.book, rootFlag: "scanBooks" },
+  { kind: REQUEST_MEDIA_KIND.movie, label: "Movie", plural: "Movies", committable: true, childNoun: null, entityKind: ENTITY_KIND.movie, profileKind: ENTITY_KIND.movie, rootFlag: "scanVideos" },
+  { kind: REQUEST_MEDIA_KIND.series, label: "Series", plural: "Series", committable: false, childNoun: null, entityKind: ENTITY_KIND.videoSeries, profileKind: null, rootFlag: null },
+  { kind: REQUEST_MEDIA_KIND.artist, label: "Artist", plural: "Artists", committable: true, childNoun: "album", entityKind: ENTITY_KIND.musicArtist, profileKind: ENTITY_KIND.audioLibrary, rootFlag: "scanAudio" },
+  { kind: REQUEST_MEDIA_KIND.album, label: "Album", plural: "Albums", committable: true, childNoun: null, entityKind: ENTITY_KIND.audioLibrary, profileKind: ENTITY_KIND.audioLibrary, rootFlag: "scanAudio" },
 ];
+
+/**
+ * The library entity kind a request media kind renders as — the single mapping every request surface
+ * (search grid, review children, detail hero, queue) uses so virtual items look exactly like the real
+ * entities they become. Unmapped kinds fall back to book (a 2:3 poster).
+ */
+export function entityKindForRequest(kind: RequestMediaKindCode | string): EntityKindCode {
+  return requestKindInfo(kind as RequestMediaKindCode)?.entityKind ?? ENTITY_KIND.book;
+}
+
+/** The request media kind a library entity kind maps back to (for queue grouping), or null when none does. */
+export function requestKindForEntityKind(entityKind: string): RequestMediaKindCode | null {
+  return REQUEST_KINDS.find((info) => info.entityKind === entityKind)?.kind ?? null;
+}
 
 export function requestKindInfo(kind: RequestMediaKindCode): RequestKindInfo | null {
   return REQUEST_KINDS.find((info) => info.kind === kind) ?? null;
@@ -50,14 +71,6 @@ export const REQUEST_KIND_LABELS_PLURAL: Record<string, string> = Object.fromEnt
 /** "In Library"-style label for items already tracked. */
 export function trackedLabel(source: RequestProviderKindCode): string {
   return `In ${REQUEST_PROVIDER_LABELS[source] ?? source}`;
-}
-
-/**
- * CSS aspect-ratio for a request result's artwork. Every requestable kind renders as a 2:3 portrait
- * poster (movie/series posters, book covers, album art scaled into the same frame).
- */
-export function thumbnailAspectForKind(_kind: RequestMediaKindCode): string {
-  return "2 / 3";
 }
 
 export function inferRequestSourceForKind(kind: RequestMediaKindCode): RequestProviderKindCode | null {

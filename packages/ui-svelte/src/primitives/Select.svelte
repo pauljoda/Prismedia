@@ -89,13 +89,15 @@
 
     await tick();
     positionDropdown();
-    listEl?.focus();
+    // preventScroll: the menu is absolutely positioned, so letting the browser scroll it "into view"
+    // on focus shifts the whole page under the dropdown instead of just overlaying it.
+    listEl?.focus({ preventScroll: true });
   }
 
   function close() {
     open = false;
     focusedIndex = -1;
-    triggerEl?.focus();
+    triggerEl?.focus({ preventScroll: true });
   }
 
   function select(option: SelectOption) {

@@ -17,14 +17,7 @@ import type {
 } from "$lib/api/generated/model";
 import { entityCardToThumbnailCard } from "$lib/entities/entity-grid";
 import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
-import { numericValue, trackedLabel } from "$lib/requests/request-helpers";
-
-/** Library entity kind that best represents a request media kind, for poster aspect + placeholder family. */
-export const ENTITY_KIND_FOR_REQUEST: Record<string, EntityKind> = {
-  [REQUEST_MEDIA_KIND.book]: ENTITY_KIND.book,
-  [REQUEST_MEDIA_KIND.author]: ENTITY_KIND.bookAuthor,
-  [REQUEST_MEDIA_KIND.plugin]: ENTITY_KIND.book,
-};
+import { entityKindForRequest, numericValue, requestKindForEntityKind, trackedLabel } from "$lib/requests/request-helpers";
 
 export function acquisitionStatusLabel(status: AcquisitionStatusCode): string {
   return ACQUISITION_STATUS_LABEL[status] ?? status;
@@ -113,7 +106,7 @@ export interface ReviewItem {
   card: EntityThumbnailCard;
 }
 
-/** A Prismedia acquisition normalized into a review-queue item. */
+/** A Prismedia acquisition normalized into a review-queue item, rendered as the entity kind it acquires. */
 export function acquisitionToReviewItem(item: AcquisitionSummary): ReviewItem {
   const status = item.status as AcquisitionStatusCode;
   const base = ACQUISITION_STATUS_LABEL[status] ?? status;
@@ -121,14 +114,15 @@ export function acquisitionToReviewItem(item: AcquisitionSummary): ReviewItem {
     status === ACQUISITION_STATUS.downloading && item.progress != null
       ? `${base} · ${Math.round(Number(item.progress) * 100)}%`
       : base;
+  const entityKind = (item.kind as EntityKind | undefined) ?? ENTITY_KIND.book;
   const card = entityCardToThumbnailCard(
-    syntheticEntityCard(item.id, ENTITY_KIND.book, item.title, item.posterUrl),
+    syntheticEntityCard(item.id, entityKind, item.title, item.posterUrl),
     `/request/acquisition/${item.id}`,
   );
   return {
     id: item.id,
     type: "acquisition",
-    kind: REQUEST_MEDIA_KIND.book,
+    kind: requestKindForEntityKind(entityKind) ?? REQUEST_MEDIA_KIND.book,
     group: ACQUISITION_GROUP[status] ?? "progress",
     statusLabel,
     createdAt: item.createdAt,
@@ -138,7 +132,7 @@ export function acquisitionToReviewItem(item: AcquisitionSummary): ReviewItem {
 
 /** A provider search result rendered as a synthetic EntityThumbnail for the Discover grid. */
 export function requestSearchResultToThumbnailCard(result: RequestSearchResult, href: string): EntityThumbnailCard {
-  const kind = ENTITY_KIND_FOR_REQUEST[result.kind] ?? ENTITY_KIND.video;
+  const kind = entityKindForRequest(result.kind);
   const card = entityCardToThumbnailCard(syntheticEntityCard(result.externalId, kind, result.title, result.posterUrl), href);
 
   const meta: NonNullable<EntityThumbnailCard["meta"]> = [];
@@ -161,12 +155,13 @@ export function requestSearchResultToThumbnailCard(result: RequestSearchResult, 
 }
 
 /**
- * A selectable child work (an author's book or a series volume) rendered as a synthetic EntityThumbnail
- * for the request review grid. Keyed by the child's provider-qualified id so selection maps back to it.
+ * A selectable child work (an author's book, an artist's album, a series' season) rendered as a
+ * synthetic EntityThumbnail for the request review grid, in the shape of the entity kind it becomes.
+ * Keyed by the child's provider-qualified id so selection maps back to it.
  */
 export function requestChildToThumbnailCard(child: RequestChildOption): EntityThumbnailCard {
   const card = entityCardToThumbnailCard(
-    syntheticEntityCard(child.id, ENTITY_KIND.book, child.title, child.posterUrl),
+    syntheticEntityCard(child.id, entityKindForRequest(child.kind), child.title, child.posterUrl),
   );
   const year = numericValue(child.year);
   return {

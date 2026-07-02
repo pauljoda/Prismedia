@@ -1,19 +1,8 @@
-import { CAPABILITY_KIND, ENTITY_FILE_ROLE, ENTITY_KIND, REQUEST_MEDIA_KIND } from "$lib/api/generated/codes";
-import type { EntityCapability, EntityKind } from "$lib/api/generated/model";
+import { CAPABILITY_KIND, ENTITY_FILE_ROLE, ENTITY_KIND } from "$lib/api/generated/codes";
+import type { EntityCapability } from "$lib/api/generated/model";
 import { entityCardToDetailCard, type EntityDetailCardFull } from "$lib/entities/entity-detail";
+import { entityKindForRequest } from "./request-helpers";
 import type { RequestDetailResponse } from "./request-model";
-
-/**
- * Library entity kind that best represents a request media kind, so the
- * EntityDetail surface lays the synthetic card out like its library sibling
- * (poster aspect, placeholder family).
- */
-const ENTITY_KIND_FOR_REQUEST: Record<string, EntityKind> = {
-  // Books render like their library sibling: a 2:3 portrait poster (not the 16:9 video fallback).
-  [REQUEST_MEDIA_KIND.book]: ENTITY_KIND.book,
-  // Authors render like the Authors library: the folder/poster sibling, not the video fallback.
-  [REQUEST_MEDIA_KIND.author]: ENTITY_KIND.bookAuthor,
-};
 
 /**
  * Builds a synthetic EntityDetail card for an external request item so request
@@ -49,7 +38,7 @@ export function requestDetailToEntityCard(detail: RequestDetailResponse): Entity
 
   const card = entityCardToDetailCard({
     id: `request-${detail.source}-${detail.externalId}`,
-    kind: ENTITY_KIND_FOR_REQUEST[detail.kind] ?? ENTITY_KIND.video,
+    kind: entityKindForRequest(detail.kind),
     title: detail.title,
     parentEntityId: null,
     sortOrder: null,

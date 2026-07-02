@@ -11,6 +11,7 @@
   import { Select } from "@prismedia/ui-svelte";
   import { fetchAcquisitionProfiles } from "$lib/api/acquisitions";
   import { fetchLibraryRoots, type LibraryRoot } from "$lib/api/settings";
+  import { useNsfw } from "$lib/nsfw/store.svelte";
   import type { BookAcquisitionProfileView } from "$lib/api/generated/model";
   import type { RequestKindInfo } from "$lib/requests/request-helpers";
 
@@ -21,12 +22,22 @@
   }
   let { kindInfo, targetLibraryRootId = $bindable(), profileId = $bindable() }: Props = $props();
 
+  const nsfw = useNsfw();
+
   let roots = $state<LibraryRoot[]>([]);
   let profiles = $state<BookAcquisitionProfileView[]>([]);
   let loaded = $state(false);
 
+  // Offer only libraries the current view mode may see: in SFW mode an NSFW library is not a
+  // valid destination the user can pick (the same visibility rule the rest of the app follows).
   const suitableRoots = $derived(
-    roots.filter((root) => root.enabled && kindInfo.rootFlag !== null && root[kindInfo.rootFlag]),
+    roots.filter(
+      (root) =>
+        root.enabled &&
+        kindInfo.rootFlag !== null &&
+        root[kindInfo.rootFlag] &&
+        (nsfw.mode === "show" || !root.isNsfw),
+    ),
   );
   /** Profiles are named by what they govern (a "music" profile covers an artist's album requests). */
   const profileNoun = $derived(
@@ -59,42 +70,43 @@
   });
 </script>
 
-{#if loaded}
-  <div class="flex flex-wrap items-end gap-3">
-    <label class="min-w-44 flex-1 space-y-1 sm:max-w-64">
-      <span class="text-label flex items-center gap-1.5 text-text-muted">
-        <FolderOpen class="h-3.5 w-3.5" /> Import into
-      </span>
-      {#if rootOptions.length > 0}
-        <Select
-          size="sm"
-          value={targetLibraryRootId ?? ""}
-          options={rootOptions}
-          onchange={(value) => (targetLibraryRootId = value || null)}
-        />
-      {:else}
-        <p class="text-[0.72rem] leading-relaxed text-error-text">
-          No enabled library supports {kindInfo.plural.toLowerCase()} — add one in Settings → Libraries first.
-        </p>
-      {/if}
-    </label>
+<!-- Rendered from first paint (selects fill in as the lookups land) so the page never jumps. -->
+<div class="flex flex-wrap items-end gap-3">
+  <label class="min-w-44 flex-1 space-y-1 sm:max-w-64">
+    <span class="text-label flex items-center gap-1.5 text-text-muted">
+      <FolderOpen class="h-3.5 w-3.5" /> Import into
+    </span>
+    {#if !loaded || rootOptions.length > 0}
+      <Select
+        size="sm"
+        disabled={!loaded}
+        value={targetLibraryRootId ?? ""}
+        options={rootOptions}
+        onchange={(value) => (targetLibraryRootId = value || null)}
+      />
+    {:else}
+      <p class="text-[0.72rem] leading-relaxed text-error-text">
+        No enabled library supports {kindInfo.plural.toLowerCase()} — add one in Settings → Libraries first.
+      </p>
+    {/if}
+  </label>
 
-    <label class="min-w-44 flex-1 space-y-1 sm:max-w-64">
-      <span class="text-label flex items-center gap-1.5 text-text-muted">
-        <SlidersHorizontal class="h-3.5 w-3.5" /> Quality profile
-      </span>
-      {#if profileOptions.length > 0}
-        <Select
-          size="sm"
-          value={profileId ?? ""}
-          options={profileOptions}
-          onchange={(value) => (profileId = value || null)}
-        />
-      {:else}
-        <p class="text-[0.72rem] leading-relaxed text-text-muted">
-          No {profileNoun} profile yet — permissive defaults apply (Settings → Acquisition).
-        </p>
-      {/if}
-    </label>
-  </div>
-{/if}
+  <label class="min-w-44 flex-1 space-y-1 sm:max-w-64">
+    <span class="text-label flex items-center gap-1.5 text-text-muted">
+      <SlidersHorizontal class="h-3.5 w-3.5" /> Quality profile
+    </span>
+    {#if !loaded || profileOptions.length > 0}
+      <Select
+        size="sm"
+        disabled={!loaded}
+        value={profileId ?? ""}
+        options={profileOptions}
+        onchange={(value) => (profileId = value || null)}
+      />
+    {:else}
+      <p class="text-[0.72rem] leading-relaxed text-text-muted">
+        No {profileNoun} profile yet — permissive defaults apply (Settings → Acquisition).
+      </p>
+    {/if}
+  </label>
+</div>

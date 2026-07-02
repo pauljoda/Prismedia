@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { REQUEST_MEDIA_KIND, REQUEST_PROVIDER_KIND } from "$lib/api/generated/codes";
-import { inferRequestSourceForKind, numericValue, thumbnailAspectForKind } from "./request-helpers";
+import { ENTITY_KIND, REQUEST_MEDIA_KIND, REQUEST_PROVIDER_KIND } from "$lib/api/generated/codes";
+import { entityKindForRequest, inferRequestSourceForKind, numericValue, requestKindForEntityKind } from "./request-helpers";
 
 describe("request helpers", () => {
   it("infers the plugin source for book and author detail routes", () => {
@@ -8,9 +8,21 @@ describe("request helpers", () => {
     expect(inferRequestSourceForKind(REQUEST_MEDIA_KIND.author)).toBe(REQUEST_PROVIDER_KIND.plugin);
   });
 
-  it("uses a 2:3 poster aspect for books and authors", () => {
-    expect(thumbnailAspectForKind(REQUEST_MEDIA_KIND.book)).toBe("2 / 3");
-    expect(thumbnailAspectForKind(REQUEST_MEDIA_KIND.author)).toBe("2 / 3");
+  it("maps every request kind to the library entity kind it becomes (virtual entities)", () => {
+    expect(entityKindForRequest(REQUEST_MEDIA_KIND.book)).toBe(ENTITY_KIND.book);
+    expect(entityKindForRequest(REQUEST_MEDIA_KIND.author)).toBe(ENTITY_KIND.bookAuthor);
+    expect(entityKindForRequest(REQUEST_MEDIA_KIND.movie)).toBe(ENTITY_KIND.movie);
+    expect(entityKindForRequest(REQUEST_MEDIA_KIND.series)).toBe(ENTITY_KIND.videoSeries);
+    expect(entityKindForRequest(REQUEST_MEDIA_KIND.artist)).toBe(ENTITY_KIND.musicArtist);
+    expect(entityKindForRequest(REQUEST_MEDIA_KIND.album)).toBe(ENTITY_KIND.audioLibrary);
+    // Unknown kinds fall back to a book poster rather than a wide video card.
+    expect(entityKindForRequest("mystery")).toBe(ENTITY_KIND.book);
+  });
+
+  it("maps entity kinds back to request kinds for the review queue", () => {
+    expect(requestKindForEntityKind(ENTITY_KIND.audioLibrary)).toBe(REQUEST_MEDIA_KIND.album);
+    expect(requestKindForEntityKind(ENTITY_KIND.movie)).toBe(REQUEST_MEDIA_KIND.movie);
+    expect(requestKindForEntityKind(ENTITY_KIND.video)).toBeNull();
   });
 
   it("coerces numeric values, returning null for blanks and non-numbers", () => {
