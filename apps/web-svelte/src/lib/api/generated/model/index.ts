@@ -403,4 +403,5 @@ export * from './videoSeasonDetail';
 export * from './videoSeriesDetail';
 export * from './wantedRemovalRequest';
 export * from './wantedRemovalResponse';
+export * from './weightedTerm';
 export * from './workerHealthResponse';

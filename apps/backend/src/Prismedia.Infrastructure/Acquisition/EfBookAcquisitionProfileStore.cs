@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Acquisition;
 using Prismedia.Contracts.Acquisition;
@@ -65,13 +66,14 @@ public sealed class EfBookAcquisitionProfileStore(PrismediaDbContext db) : IBook
         row.PathTemplate = command.PathTemplate;
         row.ImportMode = command.ImportMode;
         row.AllowedFormats = command.AllowedFormats.Select(format => format.ToCode()).ToArray();
-        row.Language = command.Language;
+        row.PreferredLanguages = command.PreferredLanguages.ToArray();
         row.MinSeeders = command.MinSeeders;
         row.MinSizeBytes = command.MinSizeBytes;
         row.MaxSizeBytes = command.MaxSizeBytes;
         row.RequiredTerms = command.RequiredTerms.ToArray();
         row.IgnoredTerms = command.IgnoredTerms.ToArray();
         row.PreferredTerms = command.PreferredTerms.ToArray();
+        row.WeightedTermsJson = JsonSerializer.Serialize(command.WeightedTerms);
         row.AutoPick = command.AutoPick;
         row.AutoRedownload = command.AutoRedownload;
         row.UpgradeUntilCutoff = command.UpgradeUntilCutoff;
@@ -124,13 +126,14 @@ public sealed class EfBookAcquisitionProfileStore(PrismediaDbContext db) : IBook
     private static BookAcquisitionRules ToRules(BookAcquisitionProfileRow row) =>
         new(
             row.AllowedFormats.Select(code => code.DecodeAs<BookFormat>()).ToArray(),
-            row.Language,
+            row.PreferredLanguages,
             row.MinSeeders,
             row.MinSizeBytes,
             row.MaxSizeBytes,
             row.RequiredTerms,
             row.IgnoredTerms,
-            row.PreferredTerms);
+            row.PreferredTerms,
+            DecodeWeightedTerms(row.WeightedTermsJson));
 
     private static BookAcquisitionProfileView ToView(BookAcquisitionProfileRow row) =>
         new(
@@ -141,16 +144,29 @@ public sealed class EfBookAcquisitionProfileStore(PrismediaDbContext db) : IBook
             row.PathTemplate,
             row.ImportMode,
             row.AllowedFormats.Select(code => code.DecodeAs<BookFormat>()).ToArray(),
-            row.Language,
+            row.PreferredLanguages,
             row.MinSeeders,
             row.MinSizeBytes,
             row.MaxSizeBytes,
             row.RequiredTerms,
             row.IgnoredTerms,
             row.PreferredTerms,
+            DecodeWeightedTerms(row.WeightedTermsJson),
             row.AutoPick,
             row.AutoRedownload,
             row.UpgradeUntilCutoff,
             row.CutoffSourceTier,
             row.CutoffFormatTier);
+
+    private static IReadOnlyList<WeightedTerm> DecodeWeightedTerms(string json) {
+        if (string.IsNullOrWhiteSpace(json)) {
+            return [];
+        }
+
+        try {
+            return JsonSerializer.Deserialize<WeightedTerm[]>(json) ?? [];
+        } catch (JsonException) {
+            return [];
+        }
+    }
 }

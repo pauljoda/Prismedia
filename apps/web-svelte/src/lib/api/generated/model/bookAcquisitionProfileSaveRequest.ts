@@ -7,6 +7,7 @@
 import type { BookFormatTier } from './bookFormatTier';
 import type { BookSourceTier } from './bookSourceTier';
 import type { ImportMode } from './importMode';
+import type { WeightedTerm } from './weightedTerm';
 
 export interface BookAcquisitionProfileSaveRequest {
   /** @nullable */
@@ -17,8 +18,7 @@ export interface BookAcquisitionProfileSaveRequest {
   pathTemplate: string;
   importMode: ImportMode;
   allowedFormats: unknown[];
-  /** @nullable */
-  language: string | null;
+  preferredLanguages: string[];
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
   minSeeders: number | string;
   /**
@@ -34,6 +34,7 @@ export interface BookAcquisitionProfileSaveRequest {
   requiredTerms: string[];
   ignoredTerms: string[];
   preferredTerms: string[];
+  weightedTerms: WeightedTerm[];
   autoPick: boolean;
   autoRedownload: boolean;
   upgradeUntilCutoff: boolean;

@@ -123,16 +123,28 @@ public sealed class DownloadLinkSpecification : IReleaseSpecification {
             : Reason;
 }
 
-/// <summary>Rejects releases whose language does not match a profile-required language.</summary>
+/// <summary>
+/// Rejects releases that declare a language (indexer attribute or a title token like FRENCH/GERMAN/ITA)
+/// none of which is in the profile's preferred-language list. Unmarked releases pass — by convention only
+/// non-English (or multi) audio gets tagged, so no declaration is assumed to be the top preference — and
+/// multi-language releases satisfy any preference. An empty preferred list disables the gate.
+/// </summary>
 public sealed class LanguageSpecification : IReleaseSpecification {
     public ReleaseRejectionReason Reason => ReleaseRejectionReason.LanguageMismatch;
 
     public ReleaseRejectionReason? Evaluate(IndexerRelease release, BookAcquisitionRules rules) {
-        if (string.IsNullOrWhiteSpace(rules.Language) || string.IsNullOrWhiteSpace(release.Language)) {
+        if (rules.PreferredLanguages.Count == 0) {
             return null;
         }
 
-        return string.Equals(release.Language, rules.Language, StringComparison.OrdinalIgnoreCase) ? null : Reason;
+        var declared = ReleaseLanguageDetection.Detect(release.Title, release.Language);
+        if (declared.Count == 0 || declared.Contains(ReleaseLanguageDetection.Multi)) {
+            return null;
+        }
+
+        return rules.PreferredLanguages.Any(preferred => declared.Contains(ReleaseLanguageDetection.Canonicalize(preferred)))
+            ? null
+            : Reason;
     }
 }
 

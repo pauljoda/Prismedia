@@ -85,7 +85,8 @@ internal static partial class PrismediaModelConfiguration {
                 .HasDefaultValue(ImportMode.Move)
                 .IsRequired();
             entity.Property(row => row.AllowedFormats).HasColumnName("allowed_formats");
-            entity.Property(row => row.Language).HasColumnName("language").HasMaxLength(64);
+            entity.Property(row => row.PreferredLanguages).HasColumnName("preferred_languages");
+            entity.Property(row => row.WeightedTermsJson).HasColumnName("weighted_terms_json").HasDefaultValue("[]").IsRequired();
             entity.Property(row => row.MinSeeders).HasColumnName("min_seeders");
             entity.Property(row => row.MinSizeBytes).HasColumnName("min_size_bytes");
             entity.Property(row => row.MaxSizeBytes).HasColumnName("max_size_bytes");

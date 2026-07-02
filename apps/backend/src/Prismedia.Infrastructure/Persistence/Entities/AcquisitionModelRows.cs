@@ -82,8 +82,12 @@ public sealed class BookAcquisitionProfileRow {
     /// <summary><see cref="BookFormat"/> codes acceptable for this profile. Empty allows all supported book formats.</summary>
     public string[] AllowedFormats { get; set; } = [];
 
-    /// <summary>Required release language (free-form match against the indexer language). Null accepts any.</summary>
-    public string? Language { get; set; }
+    /// <summary>
+    /// Ordered preferred release languages (canonicalized case-insensitively against title tokens and the
+    /// indexer language attribute). A release declaring only other languages is rejected; earlier entries
+    /// rank higher. Empty disables the language gate.
+    /// </summary>
+    public string[] PreferredLanguages { get; set; } = ["English"];
 
     public int MinSeeders { get; set; } = 1;
     public long? MinSizeBytes { get; set; }
@@ -93,6 +97,9 @@ public sealed class BookAcquisitionProfileRow {
 
     /// <summary>Terms that boost a release's ranking when present in its title (e.g. "retail", "epub"); each match outranks seeders.</summary>
     public string[] PreferredTerms { get; set; } = [];
+
+    /// <summary>JSON array of custom weighted terms ([{"Term":"remux","Weight":100}, …]) added to a matching release's ranking score.</summary>
+    public string WeightedTermsJson { get; set; } = "[]";
 
     /// <summary>When true, automatically queue the best acceptable candidate instead of waiting for review.</summary>
     public bool AutoPick { get; set; }

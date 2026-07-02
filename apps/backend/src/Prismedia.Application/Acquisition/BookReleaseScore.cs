@@ -15,24 +15,26 @@ public static class BookReleaseScore {
     public const double QualityRankBoost = 100_000;
 
     /// <summary>
-    /// Each preferred term found in a release title adds this much — large enough that any preferred match
-    /// outranks any seeder difference, so preference behaves like a sub-tier while seeders order within it.
+    /// Preference points (see <see cref="MediaReleaseEvaluation.PreferenceScore"/> — a preferred term is
+    /// 100 points, a custom weighted term its own weight, language up to 50 per preference step) are
+    /// multiplied by this, so one preferred term (1000) outranks any seeder difference — preference
+    /// behaves like a sub-tier while seeders order within it.
     /// </summary>
-    public const double PreferredTermBoost = 1000;
+    public const double PreferenceBoost = 10;
 
     /// <summary>
-    /// Composite ranking score: detected quality dominates, then preferred-term matches, then seeders
-    /// (log-scaled so a 1000-seed release does not bury a healthy 50-seed one), with peers as a small
-    /// tiebreak. Quality is detected from the title, so an untagged release scores at the quality floor and
-    /// is ordered purely by preference/seeders — never rejected here (acceptance is the engine's job).
+    /// Composite ranking score: detected quality dominates, then profile preference (preferred terms,
+    /// custom weighted terms, preferred languages), then seeders (log-scaled so a 1000-seed release does
+    /// not bury a healthy 50-seed one), with peers as a small tiebreak. Quality is detected from the
+    /// title, so an untagged release scores at the quality floor and is ordered purely by
+    /// preference/seeders — never rejected here (acceptance is the engine's job).
     /// </summary>
     public static double Of(IndexerRelease release, BookAcquisitionRules rules) {
         var quality = BookFormatDetection.DetectQuality(release.Title).Value;
         var seeders = Math.Max(release.Seeders ?? 0, 0);
         var peers = Math.Max(release.Peers ?? 0, 0);
-        var preferred = rules.PreferredTerms.Count(term => release.Title.Contains(term, StringComparison.OrdinalIgnoreCase));
         return (quality * QualityRankBoost)
-            + (preferred * PreferredTermBoost)
+            + (MediaReleaseEvaluation.PreferenceScore(release, rules) * PreferenceBoost)
             + (Math.Log10(seeders + 1) * 100)
             + (Math.Min(peers, 100) * 0.25);
     }

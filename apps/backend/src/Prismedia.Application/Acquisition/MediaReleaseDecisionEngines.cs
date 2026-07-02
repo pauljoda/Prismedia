@@ -65,7 +65,7 @@ public sealed class MovieReleaseDecisionEngine : IAcquisitionDecisionEngine {
         IReadOnlySet<string>? blocklistedIdentities = null) =>
         MediaReleaseEvaluation.Evaluate(releases, rules, blocklistedIdentities, Specifications, MovieScore);
 
-    /// <summary>Preferred terms outrank everything; then resolution, then source provenance, then seeders.</summary>
+    /// <summary>Profile preference (terms, custom weights, language) outranks everything; then resolution, then source provenance, then seeders.</summary>
     private static double MovieScore(IndexerRelease release, BookAcquisitionRules rules) {
         var title = release.Title;
         var resolution =
@@ -79,7 +79,7 @@ public sealed class MovieReleaseDecisionEngine : IAcquisitionDecisionEngine {
             MediaReleaseEvaluation.TitleHasAny(title, "web-dl", "webdl") ? 3 :
             MediaReleaseEvaluation.TitleHasAny(title, "webrip", "web") ? 2 :
             MediaReleaseEvaluation.TitleHasAny(title, "hdtv") ? 1 : 0;
-        return MediaReleaseEvaluation.PreferredTermMatches(title, rules) * 1_000_000
+        return MediaReleaseEvaluation.PreferenceScore(release, rules) * 10_000
             + resolution * 100_000
             + source * 10_000
             + Math.Min(release.Seeders ?? 0, 9_999);
@@ -110,14 +110,14 @@ public sealed class MusicReleaseDecisionEngine : IAcquisitionDecisionEngine {
         IReadOnlySet<string>? blocklistedIdentities = null) =>
         MediaReleaseEvaluation.Evaluate(releases, rules, blocklistedIdentities, Specifications, MusicScore);
 
-    /// <summary>Preferred terms outrank everything; then codec quality (lossless first), then seeders.</summary>
+    /// <summary>Profile preference (terms, custom weights, language) outranks everything; then codec quality (lossless first), then seeders.</summary>
     private static double MusicScore(IndexerRelease release, BookAcquisitionRules rules) {
         var title = release.Title;
         var codec =
             MediaReleaseEvaluation.TitleHasAny(title, "flac", "alac", "lossless") ? 3 :
             MediaReleaseEvaluation.TitleHasAny(title, "320", "v0") ? 2 :
             MediaReleaseEvaluation.TitleHasAny(title, "mp3", "aac", "opus", "ogg") ? 1 : 0;
-        return MediaReleaseEvaluation.PreferredTermMatches(title, rules) * 1_000_000
+        return MediaReleaseEvaluation.PreferenceScore(release, rules) * 10_000
             + codec * 100_000
             + Math.Min(release.Seeders ?? 0, 9_999);
     }
@@ -166,4 +166,50 @@ internal static class MediaReleaseEvaluation {
     /// <summary>How many of the profile's preferred terms the title matches.</summary>
     public static int PreferredTermMatches(string title, BookAcquisitionRules rules) =>
         rules.PreferredTerms.Count(term => !string.IsNullOrWhiteSpace(term) && title.Contains(term, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// The profile-preference component of a release's score, in shared preference points: each preferred
+    /// term is worth 100, each matched custom weighted term contributes its own weight (so 100 equals one
+    /// preferred term, negatives push down), and the release's language earns up to 50 per step of the
+    /// ordered preferred-language list (an unmarked or multi release counts as the top preference). Every
+    /// engine multiplies this by its own boost so preference always compares the same way across kinds.
+    /// </summary>
+    public static double PreferenceScore(IndexerRelease release, BookAcquisitionRules rules) {
+        var title = release.Title;
+        double score = PreferredTermMatches(title, rules) * 100;
+        foreach (var term in rules.WeightedTerms) {
+            if (!string.IsNullOrWhiteSpace(term.Term) && title.Contains(term.Term, StringComparison.OrdinalIgnoreCase)) {
+                score += term.Weight;
+            }
+        }
+
+        return score + LanguagePreferenceBonus(release, rules);
+    }
+
+    /// <summary>
+    /// Ranks a release by where its declared language sits in the ordered preferred-language list:
+    /// the first preference earns <c>50 × list length</c>, each later preference 50 less. Unmarked and
+    /// multi releases count as the first preference (the acceptance gate has already filtered
+    /// declared-but-unpreferred languages).
+    /// </summary>
+    private static double LanguagePreferenceBonus(IndexerRelease release, BookAcquisitionRules rules) {
+        var preferred = rules.PreferredLanguages;
+        if (preferred.Count == 0) {
+            return 0;
+        }
+
+        var declared = ReleaseLanguageDetection.Detect(release.Title, release.Language);
+        if (declared.Count == 0 || declared.Contains(ReleaseLanguageDetection.Multi)) {
+            return preferred.Count * 50;
+        }
+
+        for (var i = 0; i < preferred.Count; i++) {
+            if (declared.Contains(ReleaseLanguageDetection.Canonicalize(preferred[i]))) {
+                return (preferred.Count - i) * 50;
+            }
+        }
+
+        // Declares only unpreferred languages — no bonus (the acceptance gate rejects it anyway).
+        return 0;
+    }
 }

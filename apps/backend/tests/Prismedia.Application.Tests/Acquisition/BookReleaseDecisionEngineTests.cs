@@ -1,4 +1,5 @@
 using Prismedia.Application.Acquisition;
+using Prismedia.Contracts.Acquisition;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Tests.Acquisition;
@@ -136,13 +137,58 @@ public sealed class BookReleaseDecisionEngineTests {
 
     [Fact]
     public void RejectsLanguageMismatchButAllowsUnknownLanguage() {
-        var rules = BookAcquisitionRules.Default with { Language = "English" };
+        var rules = BookAcquisitionRules.Default with { PreferredLanguages = ["English"] };
 
         var mismatch = Engine.Evaluate(One(Release(language: "French")), rules);
         var unknown = Engine.Evaluate(One(Release(language: null)), rules);
 
         Assert.Contains(ReleaseRejectionReason.LanguageMismatch, mismatch[0].Rejections);
         Assert.DoesNotContain(ReleaseRejectionReason.LanguageMismatch, unknown[0].Rejections);
+    }
+
+    [Fact]
+    public void LanguageGateReadsTitleTokensAndAllowsMultiAndAliases() {
+        var rules = BookAcquisitionRules.Default with { PreferredLanguages = ["English"] };
+
+        var french = Engine.Evaluate(One(Release(title: "Some Book FRENCH epub")), rules);
+        var multi = Engine.Evaluate(One(Release(title: "Some Book MULTi epub")), rules);
+        var aliased = Engine.Evaluate(One(Release(title: "Some Book ENG epub")), rules);
+
+        Assert.Contains(ReleaseRejectionReason.LanguageMismatch, french[0].Rejections);
+        Assert.DoesNotContain(ReleaseRejectionReason.LanguageMismatch, multi[0].Rejections);
+        Assert.DoesNotContain(ReleaseRejectionReason.LanguageMismatch, aliased[0].Rejections);
+    }
+
+    [Fact]
+    public void WeightedTermsMoveRankingUpAndDown() {
+        var rules = BookAcquisitionRules.Default with {
+            WeightedTerms = [new WeightedTerm("retail", 100), new WeightedTerm("abridged", -200)]
+        };
+
+        var result = Engine.Evaluate([
+            (Release(title: "Some Book abridged epub", seeders: 500), null, "Test Indexer"),
+            (Release(title: "Some Book epub", seeders: 10), null, "Test Indexer"),
+            (Release(title: "Some Book retail epub", seeders: 10), null, "Test Indexer")
+        ], rules);
+
+        Assert.Equal(
+            ["Some Book retail epub", "Some Book epub", "Some Book abridged epub"],
+            result.Select(candidate => candidate.Release.Title).ToArray());
+    }
+
+    [Fact]
+    public void PreferredLanguageOrderRanksEarlierLanguagesHigher() {
+        var rules = BookAcquisitionRules.Default with { PreferredLanguages = ["English", "German"] };
+
+        var result = Engine.Evaluate([
+            (Release(title: "Some Book GERMAN epub", seeders: 500), null, "Test Indexer"),
+            (Release(title: "Some Book epub", seeders: 10), null, "Test Indexer")
+        ], rules);
+
+        // The unmarked release counts as the top preference (English) and outranks the German copy.
+        Assert.Equal(
+            ["Some Book epub", "Some Book GERMAN epub"],
+            result.Select(candidate => candidate.Release.Title).ToArray());
     }
 
     [Fact]

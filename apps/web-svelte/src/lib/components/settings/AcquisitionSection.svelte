@@ -12,6 +12,7 @@
     DownloadClientSummary,
     IndexerConfigSaveRequest,
     IndexerConfigSummary,
+    WeightedTerm,
   } from "$lib/api/generated/model";
   import {
     deleteAcquisitionProfileConfig,
@@ -52,7 +53,7 @@
   let indexerCategories = $state("7000,8000");
   let clientForm = $state<DownloadClientSaveRequest | null>(null);
   let profileForm = $state<BookAcquisitionProfileSaveRequest | null>(null);
-  let profileTerms = $state({ preferred: "", required: "", ignored: "" });
+  let profileTerms = $state({ preferred: "", required: "", ignored: "", weighted: "", languages: "" });
 
   const importModeOptions = [
     { value: IMPORT_MODE.move, label: "Move (delete torrent after import)" },
@@ -200,31 +201,53 @@
     profileForm = {
       id: null, displayName: "Default Books", isDefault: profiles.length === 0,
       targetLibraryRootId: bookRoots[0]?.id ?? "", pathTemplate: DEFAULT_PATH_TEMPLATE,
-      importMode: IMPORT_MODE.move, allowedFormats: [], language: null, minSeeders: 1,
-      minSizeBytes: null, maxSizeBytes: null, requiredTerms: [], ignoredTerms: [], preferredTerms: [], autoPick: false, autoRedownload: false,
+      importMode: IMPORT_MODE.move, allowedFormats: [], preferredLanguages: ["English"], minSeeders: 1,
+      minSizeBytes: null, maxSizeBytes: null, requiredTerms: [], ignoredTerms: [], preferredTerms: [], weightedTerms: [], autoPick: false, autoRedownload: false,
       upgradeUntilCutoff: false, cutoffSourceTier: BOOK_SOURCE_TIER.unknown, cutoffFormatTier: BOOK_FORMAT_TIER.unknown,
     };
-    profileTerms = { preferred: "", required: "", ignored: "" };
+    profileTerms = { preferred: "", required: "", ignored: "", weighted: "", languages: "English" };
   }
   function editProfile(p: BookAcquisitionProfileView) {
     profileForm = {
       id: p.id, displayName: p.displayName, isDefault: p.isDefault, targetLibraryRootId: p.targetLibraryRootId,
-      pathTemplate: p.pathTemplate, importMode: p.importMode, allowedFormats: p.allowedFormats, language: p.language,
+      pathTemplate: p.pathTemplate, importMode: p.importMode, allowedFormats: p.allowedFormats, preferredLanguages: p.preferredLanguages,
       minSeeders: p.minSeeders, minSizeBytes: p.minSizeBytes, maxSizeBytes: p.maxSizeBytes,
-      requiredTerms: p.requiredTerms, ignoredTerms: p.ignoredTerms, preferredTerms: p.preferredTerms, autoPick: p.autoPick, autoRedownload: p.autoRedownload,
+      requiredTerms: p.requiredTerms, ignoredTerms: p.ignoredTerms, preferredTerms: p.preferredTerms, weightedTerms: p.weightedTerms,
+      autoPick: p.autoPick, autoRedownload: p.autoRedownload,
       upgradeUntilCutoff: p.upgradeUntilCutoff, cutoffSourceTier: p.cutoffSourceTier, cutoffFormatTier: p.cutoffFormatTier,
     };
-    profileTerms = { preferred: p.preferredTerms.join(", "), required: p.requiredTerms.join(", "), ignored: p.ignoredTerms.join(", ") };
+    profileTerms = {
+      preferred: p.preferredTerms.join(", "),
+      required: p.requiredTerms.join(", "),
+      ignored: p.ignoredTerms.join(", "),
+      weighted: p.weightedTerms.map((t) => `${t.term}: ${t.weight}`).join(", "),
+      languages: p.preferredLanguages.join(", "),
+    };
   }
   // Comma/newline-separated term lists are edited as text and parsed on save.
   function parseTerms(text: string): string[] {
     return text.split(/[,\n]/).map((term) => term.trim()).filter((term) => term.length > 0);
+  }
+  // Weighted terms are edited as "term: weight" entries; entries without a numeric weight are dropped.
+  function parseWeightedTerms(text: string): WeightedTerm[] {
+    return text
+      .split(/[,\n]/)
+      .map((entry): WeightedTerm | null => {
+        const match = /^(.*?)[:=]\s*(-?\d+)\s*$/.exec(entry.trim());
+        if (!match) return null;
+        const term = match[1].trim();
+        const weight = Number(match[2]);
+        return term && weight !== 0 ? { term, weight } : null;
+      })
+      .filter((entry): entry is WeightedTerm => entry !== null);
   }
   async function saveProfile() {
     if (!profileForm) return;
     profileForm.preferredTerms = parseTerms(profileTerms.preferred);
     profileForm.requiredTerms = parseTerms(profileTerms.required);
     profileForm.ignoredTerms = parseTerms(profileTerms.ignored);
+    profileForm.weightedTerms = parseWeightedTerms(profileTerms.weighted);
+    profileForm.preferredLanguages = parseTerms(profileTerms.languages);
     busy = true;
     try {
       await saveAcquisitionProfile(profileForm);
@@ -420,6 +443,10 @@
                 <TextInput size="sm" value={profileTerms.required} oninput={(e) => (profileTerms.required = e.currentTarget.value)} /></label>
               <label class="space-y-1"><span class="text-label text-text-muted">Ignored terms<span class="ml-1 text-text-muted">— a release containing any of these is rejected</span></span>
                 <TextInput size="sm" value={profileTerms.ignored} oninput={(e) => (profileTerms.ignored = e.currentTarget.value)} placeholder="scan, retail rip" /></label>
+              <label class="space-y-1"><span class="text-label text-text-muted">Weighted terms<span class="ml-1 text-text-muted">— "term: weight" entries; a match adds its weight to the ranking (100 equals one preferred term, negatives push down)</span></span>
+                <TextInput size="sm" value={profileTerms.weighted} oninput={(e) => (profileTerms.weighted = e.currentTarget.value)} placeholder="remux: 150, x265: 50, upscale: -200" /></label>
+              <label class="space-y-1"><span class="text-label text-text-muted">Preferred languages<span class="ml-1 text-text-muted">— in order of preference; releases tagged only with other languages are skipped, untagged ones count as the first entry</span></span>
+                <TextInput size="sm" value={profileTerms.languages} oninput={(e) => (profileTerms.languages = e.currentTarget.value)} placeholder="English" /></label>
             </div>
             <label class="flex items-center gap-2"><Checkbox checked={profileForm.isDefault} onchange={(e) => profileForm && (profileForm.isDefault = e.currentTarget.checked)} /><span class="text-sm text-text-secondary">Default profile</span></label>
             <label class="flex items-start gap-2"><Checkbox checked={profileForm.autoPick} onchange={(e) => profileForm && (profileForm.autoPick = e.currentTarget.checked)} /><span class="text-sm text-text-secondary">Auto-grab<span class="block text-[0.72rem] text-text-muted">Download the best acceptable release automatically instead of waiting for manual review.</span></span></label>

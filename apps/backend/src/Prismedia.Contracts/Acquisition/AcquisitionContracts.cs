@@ -175,6 +175,13 @@ public sealed record DownloadClientTestRequest(
 /// <summary>Connection test result for a download client configuration.</summary>
 public sealed record DownloadClientTestResponse(bool Connected, string? Message);
 
+/// <summary>
+/// A custom scoring rule: when <paramref name="Term"/> appears in a release title, <paramref name="Weight"/>
+/// is added to the release's ranking score. Positive weights pull a release up, negative push it down;
+/// a weight of 100 counts as much as one preferred-term match.
+/// </summary>
+public sealed record WeightedTerm(string Term, int Weight);
+
 /// <summary>A book acquisition profile: matching rules plus where and how completed books are imported.</summary>
 public sealed record BookAcquisitionProfileView(
     Guid Id,
@@ -184,13 +191,14 @@ public sealed record BookAcquisitionProfileView(
     string PathTemplate,
     ImportMode ImportMode,
     IReadOnlyList<BookFormat> AllowedFormats,
-    string? Language,
+    IReadOnlyList<string> PreferredLanguages,
     int MinSeeders,
     long? MinSizeBytes,
     long? MaxSizeBytes,
     IReadOnlyList<string> RequiredTerms,
     IReadOnlyList<string> IgnoredTerms,
     IReadOnlyList<string> PreferredTerms,
+    IReadOnlyList<WeightedTerm> WeightedTerms,
     bool AutoPick,
     bool AutoRedownload,
     bool UpgradeUntilCutoff,
@@ -206,13 +214,14 @@ public sealed record BookAcquisitionProfileSaveRequest(
     string PathTemplate,
     ImportMode ImportMode,
     IReadOnlyList<BookFormat> AllowedFormats,
-    string? Language,
+    IReadOnlyList<string> PreferredLanguages,
     int MinSeeders,
     long? MinSizeBytes,
     long? MaxSizeBytes,
     IReadOnlyList<string> RequiredTerms,
     IReadOnlyList<string> IgnoredTerms,
     IReadOnlyList<string> PreferredTerms,
+    IReadOnlyList<WeightedTerm> WeightedTerms,
     bool AutoPick,
     bool AutoRedownload,
     bool UpgradeUntilCutoff,

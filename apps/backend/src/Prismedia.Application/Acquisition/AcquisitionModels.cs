@@ -1,3 +1,4 @@
+using Prismedia.Contracts.Acquisition;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Acquisition;
@@ -25,13 +26,14 @@ public sealed record IndexerRelease(
 /// </summary>
 public sealed record BookAcquisitionRules(
     IReadOnlyList<BookFormat> AllowedFormats,
-    string? Language,
+    IReadOnlyList<string> PreferredLanguages,
     int MinSeeders,
     long? MinSizeBytes,
     long? MaxSizeBytes,
     IReadOnlyList<string> RequiredTerms,
     IReadOnlyList<string> IgnoredTerms,
     IReadOnlyList<string> PreferredTerms,
+    IReadOnlyList<WeightedTerm> WeightedTerms,
     BookQualityRank MinQuality = default,
     BookQualityRank OwnedQuality = default,
     bool IsUpgradeSearch = false) {
@@ -43,7 +45,7 @@ public sealed record BookAcquisitionRules(
     /// <see cref="OwnedQuality"/> — is the single source of truth for whether the upgrade gates apply, so a
     /// genuinely-unknown owned quality can never silently disable them.
     /// </summary>
-    public static BookAcquisitionRules Default { get; } = new([], null, 1, null, null, [], [], []);
+    public static BookAcquisitionRules Default { get; } = new([], [], 1, null, null, [], [], [], []);
 }
 
 /// <summary>A release evaluated against the rules: its accept/reject verdict, ranking score, and any rejection reasons.</summary>
