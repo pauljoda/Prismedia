@@ -16,6 +16,8 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
             Id = Guid.NewGuid(),
             Kind = metadata.Kind,
             EntityId = metadata.EntityId,
+            ProfileId = metadata.ProfileId,
+            TargetLibraryRootId = metadata.TargetLibraryRootId,
             Status = AcquisitionStatus.Pending,
             Title = metadata.Title,
             Author = metadata.Author,
@@ -66,9 +68,9 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
         var row = await db.Acquisitions
             .AsNoTracking()
             .Where(row => row.Id == id)
-            .Select(row => new { row.Id, row.Title, row.Author, row.Kind, row.EntityId, row.Year })
+            .Select(row => new { row.Id, row.Title, row.Author, row.Kind, row.EntityId, row.Year, row.ProfileId })
             .FirstOrDefaultAsync(cancellationToken);
-        return row is null ? null : new AcquisitionSearchInput(row.Id, row.Title, row.Author, row.Kind, row.EntityId, row.Year);
+        return row is null ? null : new AcquisitionSearchInput(row.Id, row.Title, row.Author, row.Kind, row.EntityId, row.Year, row.ProfileId);
     }
 
     public async Task<AcquisitionStatus?> GetStatusAsync(Guid id, CancellationToken cancellationToken) {
@@ -393,7 +395,7 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
         return new AcquisitionImportContext(
             row.Id, row.Title, row.Author, row.Series, row.Year, row.PosterUrl, row.PluginId, row.PluginItemId,
             row.ProfileId, transfer?.ContentPath, transfer?.ClientItemId, transfer?.DownloadClientConfigId, row.Description,
-            row.Kind);
+            row.Kind, row.TargetLibraryRootId);
     }
 
     public async Task<AcquisitionTransferInfo?> GetTransferInfoAsync(Guid acquisitionId, CancellationToken cancellationToken) {

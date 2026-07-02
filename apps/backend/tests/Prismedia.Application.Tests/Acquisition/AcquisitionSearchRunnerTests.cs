@@ -119,10 +119,10 @@ public sealed class AcquisitionSearchRunnerTests {
     }
 
     private sealed class FakeProfileStore : IBookAcquisitionProfileStore {
-        public Task<BookAcquisitionRules> GetDefaultRulesAsync(CancellationToken cancellationToken) => Task.FromResult(BookAcquisitionRules.Default);
-        public Task<BookImportProfile?> GetDefaultImportProfileAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<bool> GetDefaultAutoPickAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<bool> GetDefaultAutoRedownloadAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<BookAcquisitionRules> GetRulesAsync(Guid? profileId, EntityKind kind, CancellationToken cancellationToken) => Task.FromResult(BookAcquisitionRules.Default);
+        public Task<BookImportProfile?> GetImportProfileAsync(Guid? profileId, EntityKind kind, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> GetAutoPickAsync(Guid? profileId, EntityKind kind, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> GetAutoRedownloadAsync(Guid? profileId, EntityKind kind, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<IReadOnlyList<BookAcquisitionProfileView>> ListAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<BookAcquisitionProfileView?> GetAsync(Guid id, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<BookAcquisitionProfileView> SaveAsync(BookAcquisitionProfileSaveCommand command, CancellationToken cancellationToken) => throw new NotSupportedException();

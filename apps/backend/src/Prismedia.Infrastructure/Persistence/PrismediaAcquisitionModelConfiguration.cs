@@ -74,6 +74,12 @@ internal static partial class PrismediaModelConfiguration {
             entity.ToTable("book_acquisition_profiles");
             entity.HasKey(row => row.Id);
             entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(row => row.Kind)
+                .HasColumnName("kind")
+                .HasMaxLength(64)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<EntityKind>())
+                .HasDefaultValue(EntityKind.Book)
+                .IsRequired();
             entity.Property(row => row.DisplayName).HasColumnName("display_name").HasMaxLength(256).IsRequired();
             entity.Property(row => row.IsDefault).HasColumnName("is_default");
             entity.Property(row => row.TargetLibraryRootId).HasColumnName("target_library_root_id");
@@ -126,6 +132,7 @@ internal static partial class PrismediaModelConfiguration {
                 .IsRequired();
             entity.Property(row => row.EntityId).HasColumnName("entity_id");
             entity.Property(row => row.ProfileId).HasColumnName("profile_id");
+            entity.Property(row => row.TargetLibraryRootId).HasColumnName("target_library_root_id");
             entity.Property(row => row.Status)
                 .HasColumnName("status")
                 .HasMaxLength(32)
@@ -308,6 +315,8 @@ internal static partial class PrismediaModelConfiguration {
                 .IsRequired();
             entity.Property(row => row.AcquisitionId).HasColumnName("acquisition_id");
             entity.Property(row => row.EntityId).HasColumnName("entity_id");
+            entity.Property(row => row.TargetLibraryRootId).HasColumnName("target_library_root_id");
+            entity.Property(row => row.ProfileId).HasColumnName("profile_id");
             entity.Property(row => row.Status)
                 .HasColumnName("status")
                 .HasMaxLength(32)

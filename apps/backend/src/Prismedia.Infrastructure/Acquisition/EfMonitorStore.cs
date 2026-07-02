@@ -99,9 +99,11 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
     private const int MaxBarrenSearches = 6;
 
     public async Task<IReadOnlyList<DueMonitor>> ListDueMonitorsAsync(int defaultIntervalMinutes, CancellationToken cancellationToken) {
-        // The default profile's cutoff governs upgrades. Upgrade-seeking is fully automatic, so it requires
-        // both the cutoff toggle and auto-grab; without auto-grab there is no path to act on a found upgrade.
+        // The default BOOK profile's cutoff governs upgrades (the upgrade loop speaks book quality
+        // vocabulary). Upgrade-seeking is fully automatic, so it requires both the cutoff toggle and
+        // auto-grab; without auto-grab there is no path to act on a found upgrade.
         var profile = await db.BookAcquisitionProfiles.AsNoTracking()
+            .Where(p => p.Kind == EntityKind.Book)
             .OrderByDescending(p => p.IsDefault).ThenBy(p => p.CreatedAt)
             .Select(p => new { p.UpgradeUntilCutoff, p.AutoPick, p.CutoffSourceTier, p.CutoffFormatTier })
             .FirstOrDefaultAsync(cancellationToken);
@@ -266,6 +268,7 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
         db.Acquisitions.Add(new AcquisitionRow {
             Id = childId,
             ProfileId = parent.ProfileId,
+            TargetLibraryRootId = parent.TargetLibraryRootId,
             Status = AcquisitionStatus.Pending,
             Title = parent.Title,
             Author = parent.Author,
@@ -316,7 +319,7 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<MonitorView> StartForEntityAsync(Guid entityId, EntityKind kind, string title, CancellationToken cancellationToken) {
+    public async Task<MonitorView> StartForEntityAsync(Guid entityId, EntityKind kind, string title, AcquisitionTargeting? targeting, CancellationToken cancellationToken) {
         var now = DateTimeOffset.UtcNow;
         var row = await db.Monitors.FirstOrDefaultAsync(monitor => monitor.EntityId == entityId, cancellationToken);
         if (row is null) {
@@ -337,6 +340,13 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
             row.UpdatedAt = now;
         }
 
+        // An explicit request's library/profile choices stick to the monitor so later phantom requests
+        // inherit them; a caller with no choices (a sync, the monitor toggle) never clears stored ones.
+        if (targeting is not null) {
+            row.TargetLibraryRootId = targeting.TargetLibraryRootId;
+            row.ProfileId = targeting.ProfileId;
+        }
+
         await db.SaveChangesAsync(cancellationToken);
         return ToView(row, null);
     }
@@ -344,6 +354,14 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
     public async Task<MonitorView?> GetByEntityAsync(Guid entityId, CancellationToken cancellationToken) {
         var row = await db.Monitors.AsNoTracking().FirstOrDefaultAsync(monitor => monitor.EntityId == entityId, cancellationToken);
         return row is null ? null : ToView(row, null);
+    }
+
+    public async Task<AcquisitionTargeting?> GetTargetingByEntityAsync(Guid entityId, CancellationToken cancellationToken) {
+        var row = await db.Monitors.AsNoTracking()
+            .Where(monitor => monitor.EntityId == entityId)
+            .Select(monitor => new { monitor.TargetLibraryRootId, monitor.ProfileId })
+            .FirstOrDefaultAsync(cancellationToken);
+        return row is null ? null : new AcquisitionTargeting(row.TargetLibraryRootId, row.ProfileId);
     }
 
     private static MonitorView ToView(MonitorRow row, AcquisitionStatus? acquisitionStatus) =>

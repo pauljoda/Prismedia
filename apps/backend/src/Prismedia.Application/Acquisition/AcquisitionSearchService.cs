@@ -28,7 +28,7 @@ public sealed class AcquisitionSearchRunner(
             return new AcquisitionSearchOutcome([], []);
         }
 
-        var rules = await profiles.GetDefaultRulesAsync(cancellationToken);
+        var rules = await profiles.GetRulesAsync(input.ProfileId, input.Kind, cancellationToken);
         if (upgradeOwnedQuality is { } owned) {
             rules = rules with { IsUpgradeSearch = true, OwnedQuality = owned };
         }

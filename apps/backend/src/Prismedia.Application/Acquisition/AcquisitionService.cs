@@ -234,7 +234,9 @@ public sealed class AcquisitionService(
             string.IsNullOrWhiteSpace(request.PluginItemId) ? null : request.PluginItemId.Trim(),
             string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
             request.Kind,
-            request.EntityId);
+            request.EntityId,
+            request.ProfileId,
+            request.TargetLibraryRootId);
 
         var summary = await store.CreateAsync(metadata, cancellationToken);
         await queue.EnqueueAsync(

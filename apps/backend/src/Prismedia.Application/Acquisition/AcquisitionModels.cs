@@ -77,6 +77,8 @@ public sealed record IndexerSearchError(Guid IndexerId, string IndexerName, stri
 /// <summary>Metadata captured when an acquisition is created, retained for the identify-hint handoff at import.</summary>
 /// <param name="Kind">The media kind being acquired (book, movie, …); drives per-kind release scoring and import.</param>
 /// <param name="EntityId">The wanted library entity this acquisition fulfils (request-created), or null for an ad-hoc acquisition.</param>
+/// <param name="ProfileId">The request-time profile choice whose rules govern this acquisition; null uses the kind's default.</param>
+/// <param name="TargetLibraryRootId">The request-time import-target choice; null uses the kind's default.</param>
 public sealed record AcquisitionMetadata(
     string Title,
     string? Author,
@@ -87,13 +89,25 @@ public sealed record AcquisitionMetadata(
     string? PluginItemId,
     string? Description = null,
     EntityKind Kind = EntityKind.Book,
-    Guid? EntityId = null);
+    Guid? EntityId = null,
+    Guid? ProfileId = null,
+    Guid? TargetLibraryRootId = null);
 
 /// <summary>The minimal input the background search job needs to query indexers for an acquisition.</summary>
 /// <param name="Kind">The media kind being acquired; picks the decision engine and the Torznab category range.</param>
 /// <param name="EntityId">The wanted library entity this acquisition fulfils; a wanted-linked search auto-grabs its best accepted release.</param>
 /// <param name="Year">Release year context for the query ladder (year-disambiguated movie searches).</param>
-public sealed record AcquisitionSearchInput(Guid Id, string Title, string? Author, EntityKind Kind = EntityKind.Book, Guid? EntityId = null, int? Year = null);
+/// <param name="ProfileId">The acquisition's chosen profile; its rules score the search (null = the kind's default).</param>
+public sealed record AcquisitionSearchInput(Guid Id, string Title, string? Author, EntityKind Kind = EntityKind.Book, Guid? EntityId = null, int? Year = null, Guid? ProfileId = null);
+
+/// <summary>
+/// Request-time acquisition choices (import target, profile) threaded from a commit to the acquisitions
+/// and container monitors it creates, so later sweep- and phantom-created work inherits them.
+/// </summary>
+public sealed record AcquisitionTargeting(Guid? TargetLibraryRootId, Guid? ProfileId) {
+    public static AcquisitionTargeting None { get; } = new(null, null);
+    public bool IsEmpty => TargetLibraryRootId is null && ProfileId is null;
+}
 
 /// <summary>The outcome of running indexer searches for an acquisition: scored candidates plus any indexer failures.</summary>
 public sealed record AcquisitionSearchOutcome(
@@ -224,6 +238,7 @@ public sealed record ActiveTransfer(
 
 /// <summary>Everything the import job needs: the captured metadata, the chosen profile, and the completed download's location.</summary>
 /// <param name="Kind">The media kind being acquired; drives per-kind enrichment and import dispatch.</param>
+/// <param name="TargetLibraryRootId">The request-time import-target choice; null uses the kind's default.</param>
 public sealed record AcquisitionImportContext(
     Guid Id,
     string Title,
@@ -238,4 +253,5 @@ public sealed record AcquisitionImportContext(
     string? ClientItemId,
     Guid? DownloadClientConfigId,
     string? Description = null,
-    EntityKind Kind = EntityKind.Book);
+    EntityKind Kind = EntityKind.Book,
+    Guid? TargetLibraryRootId = null);

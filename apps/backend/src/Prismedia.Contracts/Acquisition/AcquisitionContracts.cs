@@ -70,7 +70,9 @@ public sealed record AcquisitionCreateRequest(
     string? PluginItemId,
     string? Description = null,
     EntityKind Kind = EntityKind.Book,
-    Guid? EntityId = null);
+    Guid? EntityId = null,
+    Guid? ProfileId = null,
+    Guid? TargetLibraryRootId = null);
 
 /// <summary>A scored release candidate surfaced for review. Download links stay server-side; the id selects one to queue.</summary>
 public sealed record ReleaseCandidateView(
@@ -182,9 +184,14 @@ public sealed record DownloadClientTestResponse(bool Connected, string? Message)
 /// </summary>
 public sealed record WeightedTerm(string Term, int Weight);
 
-/// <summary>A book acquisition profile: matching rules plus where and how completed books are imported.</summary>
+/// <summary>
+/// An acquisition profile: matching rules plus where and how completed downloads are imported. Profiles
+/// are scoped to one media kind (book, movie, or album) and IsDefault is per kind; the book-specific
+/// fields (formats, path template, quality cutoffs) are ignored for other kinds.
+/// </summary>
 public sealed record BookAcquisitionProfileView(
     Guid Id,
+    EntityKind Kind,
     string DisplayName,
     bool IsDefault,
     Guid TargetLibraryRootId,
@@ -205,11 +212,12 @@ public sealed record BookAcquisitionProfileView(
     BookSourceTier CutoffSourceTier,
     BookFormatTier CutoffFormatTier);
 
-/// <summary>Request payload for creating or updating a book acquisition profile.</summary>
+/// <summary>Request payload for creating or updating an acquisition profile.</summary>
 public sealed record BookAcquisitionProfileSaveRequest(
     Guid? Id,
     string DisplayName,
     bool IsDefault,
+    EntityKind Kind,
     Guid TargetLibraryRootId,
     string PathTemplate,
     ImportMode ImportMode,

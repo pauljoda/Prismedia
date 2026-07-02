@@ -84,15 +84,17 @@ public sealed class BookAcquisitionImportEngine(
     public EntityKind Kind => EntityKind.Book;
 
     public async Task ImportAsync(JobContext context, AcquisitionImportContext import, CancellationToken cancellationToken) {
-        var profile = await profiles.GetDefaultImportProfileAsync(cancellationToken);
+        var profile = await profiles.GetImportProfileAsync(import.ProfileId, EntityKind.Book, cancellationToken);
         if (profile is null) {
             await Fail(import.Id, "No book acquisition profile is configured for import.", cancellationToken);
             return;
         }
 
-        var root = await roots.GetLibraryRootAsync(profile.TargetLibraryRootId, cancellationToken);
-        if (root is null || !root.ScanBooks) {
-            await Fail(import.Id, "The profile's target library root is missing or not book-enabled.", cancellationToken);
+        // A request-time library choice overrides the profile's target; an unsuitable choice falls back.
+        var root = await ImportRootResolution.ResolveAsync(
+            roots, import.TargetLibraryRootId, profile.TargetLibraryRootId, static candidate => candidate.ScanBooks, cancellationToken);
+        if (root is null) {
+            await Fail(import.Id, "The target library root is missing or not book-enabled.", cancellationToken);
             return;
         }
 
@@ -150,6 +152,37 @@ public sealed class BookAcquisitionImportEngine(
 }
 
 /// <summary>
+/// Shared import-target resolution: the request-time library choice wins when it exists and supports
+/// the kind, then the profile's target, then the first suitable enabled root (never an NSFW one ahead
+/// of a regular one). An unsuitable explicit choice degrades to the next tier instead of failing.
+/// </summary>
+internal static class ImportRootResolution {
+    public static async Task<LibraryRootData?> ResolveAsync(
+        ILibraryScanRootPersistence roots,
+        Guid? requestedRootId,
+        Guid? profileRootId,
+        Func<LibraryRootData, bool> supportsKind,
+        CancellationToken cancellationToken) {
+        foreach (var rootId in new[] { requestedRootId, profileRootId }) {
+            if (rootId is not { } id) {
+                continue;
+            }
+
+            var chosen = await roots.GetLibraryRootAsync(id, cancellationToken);
+            if (chosen is { Enabled: true } && supportsKind(chosen)) {
+                return chosen;
+            }
+        }
+
+        return (await roots.GetEnabledRootsAsync(cancellationToken))
+            .Where(supportsKind)
+            .OrderBy(candidate => candidate.IsNsfw)
+            .ThenBy(candidate => candidate.Label, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
+    }
+}
+
+/// <summary>
 /// Movie import engine: places the release's primary video file at
 /// <c>{Title (Year)}/{Title (Year)}.{ext}</c> under the first video-enabled library root, writes the
 /// identify hint keyed on the movie folder, and chains a video scan — which binds the folder to the
@@ -158,6 +191,7 @@ public sealed class BookAcquisitionImportEngine(
 /// </summary>
 public sealed class MovieAcquisitionImportEngine(
     IAcquisitionStore acquisitions,
+    IBookAcquisitionProfileStore profiles,
     ILibraryScanRootPersistence roots,
     IDownloadPayloadReader payloads,
     IImportFileMover mover,
@@ -165,13 +199,9 @@ public sealed class MovieAcquisitionImportEngine(
     public EntityKind Kind => EntityKind.Movie;
 
     public async Task ImportAsync(JobContext context, AcquisitionImportContext import, CancellationToken cancellationToken) {
-        // Deterministic default target until per-kind import profiles exist: the first video-enabled
-        // root, never an NSFW one ahead of a regular one.
-        var root = (await roots.GetEnabledRootsAsync(cancellationToken))
-            .Where(candidate => candidate.ScanVideos)
-            .OrderBy(candidate => candidate.IsNsfw)
-            .ThenBy(candidate => candidate.Label, StringComparer.OrdinalIgnoreCase)
-            .FirstOrDefault();
+        var profile = await profiles.GetImportProfileAsync(import.ProfileId, EntityKind.Movie, cancellationToken);
+        var root = await ImportRootResolution.ResolveAsync(
+            roots, import.TargetLibraryRootId, profile?.TargetLibraryRootId, static candidate => candidate.ScanVideos, cancellationToken);
         if (root is null) {
             await Fail(import.Id, "No enabled video library root exists to import the movie into.", cancellationToken);
             return;
@@ -229,6 +259,7 @@ public sealed class MovieAcquisitionImportEngine(
 /// </summary>
 public sealed class MusicAcquisitionImportEngine(
     IAcquisitionStore acquisitions,
+    IBookAcquisitionProfileStore profiles,
     ILibraryScanRootPersistence roots,
     IDownloadPayloadReader payloads,
     IImportFileMover mover,
@@ -236,13 +267,9 @@ public sealed class MusicAcquisitionImportEngine(
     public EntityKind Kind => EntityKind.AudioLibrary;
 
     public async Task ImportAsync(JobContext context, AcquisitionImportContext import, CancellationToken cancellationToken) {
-        // Deterministic default target until per-kind import profiles exist: the first audio-enabled
-        // root, never an NSFW one ahead of a regular one.
-        var root = (await roots.GetEnabledRootsAsync(cancellationToken))
-            .Where(candidate => candidate.ScanAudio)
-            .OrderBy(candidate => candidate.IsNsfw)
-            .ThenBy(candidate => candidate.Label, StringComparer.OrdinalIgnoreCase)
-            .FirstOrDefault();
+        var profile = await profiles.GetImportProfileAsync(import.ProfileId, EntityKind.AudioLibrary, cancellationToken);
+        var root = await ImportRootResolution.ResolveAsync(
+            roots, import.TargetLibraryRootId, profile?.TargetLibraryRootId, static candidate => candidate.ScanAudio, cancellationToken);
         if (root is null) {
             await Fail(import.Id, "No enabled audio library root exists to import the album into.", cancellationToken);
             return;

@@ -28,4 +28,8 @@ export interface AcquisitionCreateRequest {
   kind?: AcquisitionCreateRequestKind;
   /** @nullable */
   entityId?: string | null;
+  /** @nullable */
+  profileId?: string | null;
+  /** @nullable */
+  targetLibraryRootId?: string | null;
 }

@@ -94,7 +94,11 @@ public static class RequestEndpoints {
             HttpContext httpContext,
             RequestCommitService commits,
             CancellationToken cancellationToken) => {
-                var response = await commits.RequestEntityAsync(request.EntityId, NsfwVisibility.ShouldHide(hideNsfw, httpContext), cancellationToken);
+                var response = await commits.RequestEntityAsync(
+                    request.EntityId,
+                    NsfwVisibility.ShouldHide(hideNsfw, httpContext),
+                    cancellationToken,
+                    new Prismedia.Application.Acquisition.AcquisitionTargeting(request.TargetLibraryRootId, request.ProfileId));
                 return response is null
                     ? Results.NotFound(new ApiProblem(ApiProblemCodes.NotFound, "The entity could not be requested — it may be gone, not a requestable kind, or unresolvable from its providers."))
                     : Results.Ok(response);

@@ -7,4 +7,8 @@
 
 export interface RequestEntityCommitRequest {
   entityId: string;
+  /** @nullable */
+  targetLibraryRootId?: string | null;
+  /** @nullable */
+  profileId?: string | null;
 }

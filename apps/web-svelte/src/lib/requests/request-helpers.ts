@@ -1,5 +1,5 @@
-import { REQUEST_MEDIA_KIND, REQUEST_PROVIDER_KIND } from "$lib/api/generated/codes";
-import type { RequestMediaKindCode, RequestProviderKindCode } from "$lib/api/generated/codes";
+import { ENTITY_KIND, REQUEST_MEDIA_KIND, REQUEST_PROVIDER_KIND } from "$lib/api/generated/codes";
+import type { EntityKindCode, RequestMediaKindCode, RequestProviderKindCode } from "$lib/api/generated/codes";
 
 /** Display names for request provider families. */
 export const REQUEST_PROVIDER_LABELS: Record<string, string> = {
@@ -18,15 +18,19 @@ export interface RequestKindInfo {
   plural: string;
   committable: boolean;
   childNoun: string | null;
+  /** The acquisition-profile kind this request's downloads are governed by (null while not committable). */
+  profileKind: EntityKindCode | null;
+  /** The library-root capability flag the acquired files need ("scanBooks" | "scanVideos" | "scanAudio"). */
+  rootFlag: "scanBooks" | "scanVideos" | "scanAudio" | null;
 }
 
 export const REQUEST_KINDS: RequestKindInfo[] = [
-  { kind: REQUEST_MEDIA_KIND.book, label: "Book", plural: "Books", committable: true, childNoun: "volume" },
-  { kind: REQUEST_MEDIA_KIND.author, label: "Author", plural: "Authors", committable: true, childNoun: "book" },
-  { kind: REQUEST_MEDIA_KIND.movie, label: "Movie", plural: "Movies", committable: true, childNoun: null },
-  { kind: REQUEST_MEDIA_KIND.series, label: "Series", plural: "Series", committable: false, childNoun: null },
-  { kind: REQUEST_MEDIA_KIND.artist, label: "Artist", plural: "Artists", committable: true, childNoun: "album" },
-  { kind: REQUEST_MEDIA_KIND.album, label: "Album", plural: "Albums", committable: true, childNoun: null },
+  { kind: REQUEST_MEDIA_KIND.book, label: "Book", plural: "Books", committable: true, childNoun: "volume", profileKind: ENTITY_KIND.book, rootFlag: "scanBooks" },
+  { kind: REQUEST_MEDIA_KIND.author, label: "Author", plural: "Authors", committable: true, childNoun: "book", profileKind: ENTITY_KIND.book, rootFlag: "scanBooks" },
+  { kind: REQUEST_MEDIA_KIND.movie, label: "Movie", plural: "Movies", committable: true, childNoun: null, profileKind: ENTITY_KIND.movie, rootFlag: "scanVideos" },
+  { kind: REQUEST_MEDIA_KIND.series, label: "Series", plural: "Series", committable: false, childNoun: null, profileKind: null, rootFlag: null },
+  { kind: REQUEST_MEDIA_KIND.artist, label: "Artist", plural: "Artists", committable: true, childNoun: "album", profileKind: ENTITY_KIND.audioLibrary, rootFlag: "scanAudio" },
+  { kind: REQUEST_MEDIA_KIND.album, label: "Album", plural: "Albums", committable: true, childNoun: null, profileKind: ENTITY_KIND.audioLibrary, rootFlag: "scanAudio" },
 ];
 
 export function requestKindInfo(kind: RequestMediaKindCode): RequestKindInfo | null {

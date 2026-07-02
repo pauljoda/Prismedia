@@ -43,7 +43,7 @@ public sealed class MonitorService(IMonitorStore monitors, IAcquisitionStore acq
             return null;
         }
 
-        return await monitors.StartForEntityAsync(entityId, container.Kind, container.Title, cancellationToken);
+        return await monitors.StartForEntityAsync(entityId, container.Kind, container.Title, targeting: null, cancellationToken);
     }
 
     /// <summary>The container monitor watching an entity, or null when it is not monitored.</summary>

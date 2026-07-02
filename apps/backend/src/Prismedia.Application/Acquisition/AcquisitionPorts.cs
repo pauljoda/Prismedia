@@ -49,11 +49,12 @@ public interface IIndexerConfigStore {
 /// <summary>The import target a profile contributes: which library root, how to place files, and the path template.</summary>
 public sealed record BookImportProfile(Guid TargetLibraryRootId, string PathTemplate, ImportMode ImportMode);
 
-/// <summary>Command for creating or updating a book acquisition profile.</summary>
+/// <summary>Command for creating or updating an acquisition profile (kind-scoped; see the contract record).</summary>
 public sealed record BookAcquisitionProfileSaveCommand(
     Guid? Id,
     string DisplayName,
     bool IsDefault,
+    EntityKind Kind,
     Guid TargetLibraryRootId,
     string PathTemplate,
     ImportMode ImportMode,
@@ -72,19 +73,25 @@ public sealed record BookAcquisitionProfileSaveCommand(
     BookSourceTier CutoffSourceTier,
     BookFormatTier CutoffFormatTier);
 
-/// <summary>Persistence port for book acquisition profiles (matching rules + import target).</summary>
+/// <summary>
+/// Persistence port for acquisition profiles (matching rules + import target), scoped per media kind.
+/// Every resolution method takes an optional explicit profile id (a request-time choice): when it names
+/// an existing profile of the right kind that profile wins, otherwise resolution falls back to the
+/// kind's default profile, then to permissive defaults — a stale or wrong-kind choice degrades, never
+/// fails.
+/// </summary>
 public interface IBookAcquisitionProfileStore {
-    /// <summary>Returns the decision rules from the default profile, or <see cref="BookAcquisitionRules.Default"/> when none exists.</summary>
-    Task<BookAcquisitionRules> GetDefaultRulesAsync(CancellationToken cancellationToken);
+    /// <summary>The decision rules for a search: the chosen profile, else the kind's default, else <see cref="BookAcquisitionRules.Default"/>.</summary>
+    Task<BookAcquisitionRules> GetRulesAsync(Guid? profileId, EntityKind kind, CancellationToken cancellationToken);
 
-    /// <summary>Returns the import target from the default profile, or null when none exists.</summary>
-    Task<BookImportProfile?> GetDefaultImportProfileAsync(CancellationToken cancellationToken);
+    /// <summary>The import target: the chosen profile's, else the kind's default profile's, or null when the kind has no profile.</summary>
+    Task<BookImportProfile?> GetImportProfileAsync(Guid? profileId, EntityKind kind, CancellationToken cancellationToken);
 
-    /// <summary>True when the default profile is set to auto-queue the top accepted release without manual review.</summary>
-    Task<bool> GetDefaultAutoPickAsync(CancellationToken cancellationToken);
+    /// <summary>True when the resolved profile auto-queues the top accepted release without manual review.</summary>
+    Task<bool> GetAutoPickAsync(Guid? profileId, EntityKind kind, CancellationToken cancellationToken);
 
-    /// <summary>True when the default profile auto-blocklists a failed download and grabs the next-best candidate.</summary>
-    Task<bool> GetDefaultAutoRedownloadAsync(CancellationToken cancellationToken);
+    /// <summary>True when the resolved profile auto-blocklists a failed download and grabs the next-best candidate.</summary>
+    Task<bool> GetAutoRedownloadAsync(Guid? profileId, EntityKind kind, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<BookAcquisitionProfileView>> ListAsync(CancellationToken cancellationToken);
     Task<BookAcquisitionProfileView?> GetAsync(Guid id, CancellationToken cancellationToken);
@@ -276,12 +283,17 @@ public interface IMonitorStore {
 
     /// <summary>
     /// Starts (or re-activates) a container monitor watching a library entity (an author, an artist) for
-    /// new works. Idempotent on the entity — returns the existing monitor if one exists.
+    /// new works. Idempotent on the entity — returns the existing monitor if one exists. A non-null
+    /// <paramref name="targeting"/> stores the request-time library/profile choices on the monitor
+    /// (phantom requests inherit them later); null leaves any stored choices untouched.
     /// </summary>
-    Task<Contracts.Acquisition.MonitorView> StartForEntityAsync(Guid entityId, Domain.Entities.EntityKind kind, string title, CancellationToken cancellationToken);
+    Task<Contracts.Acquisition.MonitorView> StartForEntityAsync(Guid entityId, Domain.Entities.EntityKind kind, string title, AcquisitionTargeting? targeting, CancellationToken cancellationToken);
 
     /// <summary>Returns the container monitor watching an entity, or null when the entity is not monitored.</summary>
     Task<Contracts.Acquisition.MonitorView?> GetByEntityAsync(Guid entityId, CancellationToken cancellationToken);
+
+    /// <summary>The request-time library/profile choices stored on an entity's container monitor, or null when it has none.</summary>
+    Task<AcquisitionTargeting?> GetTargetingByEntityAsync(Guid entityId, CancellationToken cancellationToken);
 
     /// <summary>Stops monitoring by hard-deleting the monitor row (the acquisition is left untouched). Returns false when it no longer exists.</summary>
     Task<bool> DeleteAsync(Guid monitorId, CancellationToken cancellationToken);

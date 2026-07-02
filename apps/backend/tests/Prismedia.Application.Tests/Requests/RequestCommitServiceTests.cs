@@ -221,6 +221,59 @@ public sealed class RequestCommitServiceTests {
     }
 
     [Fact]
+    public async Task CommitThreadsTheLibraryAndProfileChoicesToAcquisitionsAndTheContainerMonitor() {
+        var proposal = Container(ProposalKind.Person, "Author", "A1", Leaf(ProposalKind.Book, "Elantris", "W1"));
+        var (service, _, acquisitions, monitors) = ServiceWithMonitors(proposal);
+        var rootId = Guid.NewGuid();
+        var profileId = Guid.NewGuid();
+
+        await service.CommitAsync(
+            new RequestCommitRequest(RequestMediaKind.Author, $"{Provider}:A1", [$"{Provider}:W1"], rootId, profileId),
+            hideNsfw: false, CancellationToken.None);
+
+        var created = Assert.Single(acquisitions.Created);
+        Assert.Equal(rootId, created.TargetLibraryRootId);
+        Assert.Equal(profileId, created.ProfileId);
+
+        // The choices stick to the container monitor so later phantom requests inherit them.
+        var stored = Assert.Single(monitors.EntityMonitorTargetings);
+        Assert.Equal(new AcquisitionTargeting(rootId, profileId), stored);
+    }
+
+    [Fact]
+    public async Task RequestEntityInheritsTheFollowedContainersChoices() {
+        var proposal = Leaf(ProposalKind.Book, "New Work", "W9");
+        var (service, writer, acquisitions, monitors) = ServiceWithMonitors(proposal);
+        var parentId = Guid.NewGuid();
+        var phantomId = Guid.NewGuid();
+        writer.Container = new MonitorableContainer(
+            phantomId, EntityKind.Book, "New Work", [new ProviderRef(Provider, "W9")], ParentEntityId: parentId);
+        monitors.StoredTargeting = new AcquisitionTargeting(Guid.NewGuid(), Guid.NewGuid());
+
+        var response = await service.RequestEntityAsync(phantomId, hideNsfw: true, CancellationToken.None);
+
+        Assert.NotNull(response);
+        var created = Assert.Single(acquisitions.Created);
+        Assert.Equal(monitors.StoredTargeting.TargetLibraryRootId, created.TargetLibraryRootId);
+        Assert.Equal(monitors.StoredTargeting.ProfileId, created.ProfileId);
+    }
+
+    [Fact]
+    public async Task ContainerSyncNeverClobbersTheMonitorsStoredChoices() {
+        var proposal = Container(ProposalKind.Person, "Author", "A1", Leaf(ProposalKind.Book, "Brand New", "W2"));
+        var (service, writer, _, monitors) = ServiceWithMonitors(proposal);
+        var authorEntityId = FakeWantedEntityWriter.EntityIdFor("A1");
+        writer.Container = new MonitorableContainer(
+            authorEntityId, EntityKind.BookAuthor, "Author", [new ProviderRef(Provider, "A1")]);
+
+        await service.SyncContainerAsync(authorEntityId, CancellationToken.None);
+
+        // A sync passes no targeting, so the store keeps whatever an explicit request stored earlier.
+        var stored = Assert.Single(monitors.EntityMonitorTargetings);
+        Assert.Null(stored);
+    }
+
+    [Fact]
     public async Task RequestEntityRefusesContainersAndUnknownEntities() {
         var (service, writer, _, _) = ServiceWithMonitors(Leaf(ProposalKind.Book, "Book", "W1"));
 
@@ -394,14 +447,17 @@ public sealed class RequestCommitServiceTests {
     private sealed class FakeMonitorStore : Prismedia.Application.Acquisition.IMonitorStore {
         public List<Guid> AcquisitionMonitors { get; } = [];
         public List<Guid> EntityMonitors { get; } = [];
+        public List<AcquisitionTargeting?> EntityMonitorTargetings { get; } = [];
+        public AcquisitionTargeting? StoredTargeting { get; set; }
 
         public Task<MonitorView> StartAsync(Guid acquisitionId, EntityKind kind, string title, string? author, CancellationToken cancellationToken) {
             AcquisitionMonitors.Add(acquisitionId);
             return Task.FromResult(View(kind, title, acquisitionId: acquisitionId));
         }
 
-        public Task<MonitorView> StartForEntityAsync(Guid entityId, EntityKind kind, string title, CancellationToken cancellationToken) {
+        public Task<MonitorView> StartForEntityAsync(Guid entityId, EntityKind kind, string title, AcquisitionTargeting? targeting, CancellationToken cancellationToken) {
             EntityMonitors.Add(entityId);
+            EntityMonitorTargetings.Add(targeting);
             return Task.FromResult(View(kind, title, entityId: entityId));
         }
 
@@ -409,6 +465,7 @@ public sealed class RequestCommitServiceTests {
             new(Guid.NewGuid(), kind, acquisitionId, MonitorStatus.Active, title, null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, entityId);
 
         public Task<MonitorView?> GetByEntityAsync(Guid entityId, CancellationToken cancellationToken) => Task.FromResult<MonitorView?>(null);
+        public Task<AcquisitionTargeting?> GetTargetingByEntityAsync(Guid entityId, CancellationToken cancellationToken) => Task.FromResult(StoredTargeting);
         public Task<bool> DeleteAsync(Guid monitorId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<bool> SetStatusAsync(Guid monitorId, MonitorStatus status, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<IReadOnlyList<MonitorView>> ListAsync(CancellationToken cancellationToken) => throw new NotSupportedException();

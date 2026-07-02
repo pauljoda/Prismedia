@@ -9,6 +9,7 @@
   import type { RequestMediaKindCode, RequestProviderKindCode } from "$lib/api/generated/codes";
   import EntityDetail from "$lib/components/entities/EntityDetail.svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
+  import RequestTargetOptions from "$lib/components/acquisitions/RequestTargetOptions.svelte";
   import SelectableCardSection from "$lib/components/review/SelectableCardSection.svelte";
   import type { EntityDetailActionButton } from "$lib/components/entities/entity-detail-types";
   import { requestDetailToEntityCard } from "$lib/requests/request-entity-card";
@@ -23,6 +24,9 @@
 
   let detail = $state<RequestDetailResponse | null>(null);
   let selectedChildIds = $state<string[]>([]);
+  /** Request-time choices: which library the files import into and which quality profile applies. */
+  let targetLibraryRootId = $state<string | null>(null);
+  let profileId = $state<string | null>(null);
   let loading = $state(true);
   let submitting = $state(false);
   let error = $state<string | null>(null);
@@ -71,6 +75,8 @@
     detail = null;
     error = null;
     selectedChildIds = [];
+    targetLibraryRootId = null;
+    profileId = null;
     infoChild = null;
     try {
       const resolvedSource = sourceQuery ?? inferRequestSourceForKind(params.kind);
@@ -117,6 +123,8 @@
         kind: detail.kind,
         externalId: detail.externalId,
         selectedChildIds: picked,
+        targetLibraryRootId,
+        profileId,
       });
 
       const items = response.items ?? [];
@@ -178,7 +186,7 @@
             <div class="flex flex-wrap items-center justify-between gap-3">
               <p class="text-[0.78rem] leading-relaxed text-text-muted">
                 Select the {childNoun}s to request — Prismedia searches your indexers and downloads each one,
-                then imports it. Quality rules come from your acquisition profile (Settings → Acquisition).
+                then imports it into the library you choose below.
               </p>
               <Button
                 type="button"
@@ -201,6 +209,10 @@
               </Button>
             </div>
 
+            {#if kindInfo}
+              <RequestTargetOptions {kindInfo} bind:targetLibraryRootId bind:profileId />
+            {/if}
+
             {#if error}
               <p class="text-[0.75rem] leading-relaxed text-error-text">{error}</p>
             {/if}
@@ -218,8 +230,16 @@
               {#snippet icon()}<BookOpen class="h-3.5 w-3.5 text-text-accent" />{/snippet}
             </SelectableCardSection>
           </div>
-        {:else if error}
-          <p class="text-[0.75rem] leading-relaxed text-error-text">{error}</p>
+        {:else}
+          <!-- Standalone leaf: the hero's Request button commits; the same questions sit right below it. -->
+          <div class="space-y-2 rounded-sm border border-border-subtle bg-surface-1 p-3">
+            {#if kindInfo}
+              <RequestTargetOptions {kindInfo} bind:targetLibraryRootId bind:profileId />
+            {/if}
+            {#if error}
+              <p class="text-[0.75rem] leading-relaxed text-error-text">{error}</p>
+            {/if}
+          </div>
         {/if}
       {/snippet}
     </EntityDetail>

@@ -10,4 +10,8 @@ export interface RequestCommitRequest {
   kind: RequestMediaKind;
   externalId: string;
   selectedChildIds: string[];
+  /** @nullable */
+  targetLibraryRootId?: string | null;
+  /** @nullable */
+  profileId?: string | null;
 }

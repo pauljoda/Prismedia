@@ -112,10 +112,20 @@ public sealed record RequestTrack(int Number, string Title, int? DurationSeconds
 /// Provider-qualified ids of the selected child works (an author's books, or a series' volumes). Required
 /// for an author commit; empty for a standalone book, which requests itself.
 /// </param>
+/// <param name="TargetLibraryRootId">
+/// The library root the acquired files should import into. Null uses the kind's default (the default
+/// profile's target, else the first suitable root). An unsuitable root (wrong media flags) is ignored.
+/// </param>
+/// <param name="ProfileId">
+/// The acquisition profile whose rules score this request's release searches. Null uses the kind's
+/// default profile. A profile of the wrong kind is ignored.
+/// </param>
 public sealed record RequestCommitRequest(
     RequestMediaKind Kind,
     string ExternalId,
-    IReadOnlyList<string> SelectedChildIds);
+    IReadOnlyList<string> SelectedChildIds,
+    Guid? TargetLibraryRootId = null,
+    Guid? ProfileId = null);
 
 /// <summary>Per-item outcome of a request commit, linking the created wanted entity and its acquisition.</summary>
 /// <param name="ExternalId">Provider-qualified id of the item this outcome describes.</param>
@@ -139,7 +149,9 @@ public sealed record RequestCommitResponse(
 /// resolves the entity's kind and provider identity itself, so callers never guess which of the
 /// entity's external ids belongs to a plugin.
 /// </summary>
-public sealed record RequestEntityCommitRequest(Guid EntityId);
+/// <param name="TargetLibraryRootId">Optional import target override; null inherits the followed container's choice, else the kind default.</param>
+/// <param name="ProfileId">Optional profile override; null inherits the followed container's choice, else the kind default.</param>
+public sealed record RequestEntityCommitRequest(Guid EntityId, Guid? TargetLibraryRootId = null, Guid? ProfileId = null);
 
 /// <summary>
 /// Removes wanted placeholders the user no longer wants: each is deleted (with any in-flight

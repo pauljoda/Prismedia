@@ -35,7 +35,8 @@ public sealed class AcquisitionFailedHandleJobHandler(
             new BlocklistAddRequest(selected.Identity, payload.Reason, selected.Title, selected.IndexerName, selected.InfoHash, acquisitionId, payload.Message),
             cancellationToken);
 
-        if (!await profiles.GetDefaultAutoRedownloadAsync(cancellationToken)) {
+        var input = await acquisitions.GetSearchInputAsync(acquisitionId, cancellationToken);
+        if (!await profiles.GetAutoRedownloadAsync(input?.ProfileId, input?.Kind ?? EntityKind.Book, cancellationToken)) {
             // Release blocklisted, but the profile leaves recovery to the user. This handler owns the
             // terminal Failed transition (the monitor only enqueues), so record it here.
             await acquisitions.SetStatusAsync(acquisitionId, AcquisitionStatus.Failed, payload.Message ?? "Download failed.", cancellationToken);

@@ -68,6 +68,10 @@ public sealed class DownloadClientCredentialRow {
 /// </summary>
 public sealed class BookAcquisitionProfileRow {
     public Guid Id { get; set; }
+
+    /// <summary>The media kind this profile's rules and import target apply to. IsDefault is per kind.</summary>
+    public EntityKind Kind { get; set; } = EntityKind.Book;
+
     public string DisplayName { get; set; } = string.Empty;
     public bool IsDefault { get; set; }
 
@@ -144,6 +148,13 @@ public sealed class AcquisitionRow {
     public Guid? EntityId { get; set; }
 
     public Guid? ProfileId { get; set; }
+
+    /// <summary>
+    /// The request-time library-root choice this acquisition should import into. Null uses the kind's
+    /// default. Loose link (no FK) — the import validates and degrades to the default when it dangles.
+    /// </summary>
+    public Guid? TargetLibraryRootId { get; set; }
+
     public AcquisitionStatus Status { get; set; } = AcquisitionStatus.Pending;
     public string? StatusMessage { get; set; }
 
@@ -375,6 +386,12 @@ public sealed class MonitorRow {
     /// a dangling id auto-pauses the monitor at the next sweep.
     /// </summary>
     public Guid? EntityId { get; set; }
+
+    /// <summary>Request-time library-root choice stored by an explicit container request; phantom requests inherit it. Loose link.</summary>
+    public Guid? TargetLibraryRootId { get; set; }
+
+    /// <summary>Request-time profile choice stored by an explicit container request; phantom requests inherit it. Loose link.</summary>
+    public Guid? ProfileId { get; set; }
 
     public MonitorStatus Status { get; set; } = MonitorStatus.Active;
 

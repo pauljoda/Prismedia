@@ -8,32 +8,33 @@ using Prismedia.Infrastructure.Persistence.Entities;
 
 namespace Prismedia.Infrastructure.Acquisition;
 
-/// <summary>EF-backed store for book acquisition profiles: decision rules, import target, and CRUD.</summary>
+/// <summary>EF-backed store for acquisition profiles (kind-scoped): decision rules, import target, and CRUD.</summary>
 public sealed class EfBookAcquisitionProfileStore(PrismediaDbContext db) : IBookAcquisitionProfileStore {
-    public async Task<BookAcquisitionRules> GetDefaultRulesAsync(CancellationToken cancellationToken) {
-        var row = await DefaultRowAsync(cancellationToken);
+    public async Task<BookAcquisitionRules> GetRulesAsync(Guid? profileId, EntityKind kind, CancellationToken cancellationToken) {
+        var row = await ResolveRowAsync(profileId, kind, cancellationToken);
         return row is null ? BookAcquisitionRules.Default : ToRules(row);
     }
 
-    public async Task<BookImportProfile?> GetDefaultImportProfileAsync(CancellationToken cancellationToken) {
-        var row = await DefaultRowAsync(cancellationToken);
+    public async Task<BookImportProfile?> GetImportProfileAsync(Guid? profileId, EntityKind kind, CancellationToken cancellationToken) {
+        var row = await ResolveRowAsync(profileId, kind, cancellationToken);
         return row is null ? null : new BookImportProfile(row.TargetLibraryRootId, row.PathTemplate, row.ImportMode);
     }
 
-    public async Task<bool> GetDefaultAutoPickAsync(CancellationToken cancellationToken) {
-        var row = await DefaultRowAsync(cancellationToken);
+    public async Task<bool> GetAutoPickAsync(Guid? profileId, EntityKind kind, CancellationToken cancellationToken) {
+        var row = await ResolveRowAsync(profileId, kind, cancellationToken);
         return row?.AutoPick ?? false;
     }
 
-    public async Task<bool> GetDefaultAutoRedownloadAsync(CancellationToken cancellationToken) {
-        var row = await DefaultRowAsync(cancellationToken);
+    public async Task<bool> GetAutoRedownloadAsync(Guid? profileId, EntityKind kind, CancellationToken cancellationToken) {
+        var row = await ResolveRowAsync(profileId, kind, cancellationToken);
         return row?.AutoRedownload ?? false;
     }
 
     public async Task<IReadOnlyList<BookAcquisitionProfileView>> ListAsync(CancellationToken cancellationToken) {
         var rows = await db.BookAcquisitionProfiles
             .AsNoTracking()
-            .OrderByDescending(profile => profile.IsDefault)
+            .OrderBy(profile => profile.Kind)
+            .ThenByDescending(profile => profile.IsDefault)
             .ThenBy(profile => profile.DisplayName)
             .ToArrayAsync(cancellationToken);
         return rows.Select(ToView).ToArray();
@@ -58,9 +59,12 @@ public sealed class EfBookAcquisitionProfileStore(PrismediaDbContext db) : IBook
             db.BookAcquisitionProfiles.Add(row);
         }
 
-        var hasOthers = await db.BookAcquisitionProfiles.AnyAsync(profile => profile.Id != row.Id, cancellationToken);
+        // IsDefault is per kind: the first profile of a kind is that kind's default automatically.
+        var hasOthers = await db.BookAcquisitionProfiles.AnyAsync(
+            profile => profile.Id != row.Id && profile.Kind == command.Kind, cancellationToken);
         var shouldBeDefault = command.IsDefault || !hasOthers;
 
+        row.Kind = command.Kind;
         row.DisplayName = command.DisplayName;
         row.TargetLibraryRootId = command.TargetLibraryRootId;
         row.PathTemplate = command.PathTemplate;
@@ -84,7 +88,7 @@ public sealed class EfBookAcquisitionProfileStore(PrismediaDbContext db) : IBook
 
         if (shouldBeDefault) {
             var priorDefaults = await db.BookAcquisitionProfiles
-                .Where(profile => profile.Id != row.Id && profile.IsDefault)
+                .Where(profile => profile.Id != row.Id && profile.IsDefault && profile.Kind == command.Kind)
                 .ToArrayAsync(cancellationToken);
             foreach (var priorDefault in priorDefaults) {
                 priorDefault.IsDefault = false;
@@ -102,11 +106,15 @@ public sealed class EfBookAcquisitionProfileStore(PrismediaDbContext db) : IBook
         }
 
         var wasDefault = row.IsDefault;
+        var kind = row.Kind;
         db.BookAcquisitionProfiles.Remove(row);
         await db.SaveChangesAsync(cancellationToken);
 
         if (wasDefault) {
-            var replacement = await db.BookAcquisitionProfiles.OrderBy(profile => profile.CreatedAt).FirstOrDefaultAsync(cancellationToken);
+            var replacement = await db.BookAcquisitionProfiles
+                .Where(profile => profile.Kind == kind)
+                .OrderBy(profile => profile.CreatedAt)
+                .FirstOrDefaultAsync(cancellationToken);
             if (replacement is not null) {
                 replacement.IsDefault = true;
                 await db.SaveChangesAsync(cancellationToken);
@@ -116,12 +124,27 @@ public sealed class EfBookAcquisitionProfileStore(PrismediaDbContext db) : IBook
         return true;
     }
 
-    private Task<BookAcquisitionProfileRow?> DefaultRowAsync(CancellationToken cancellationToken) =>
-        db.BookAcquisitionProfiles
+    /// <summary>
+    /// Resolves the effective profile row: an explicit id wins when it exists and is the right kind,
+    /// else the kind's default profile, else any profile of the kind — a stale or wrong-kind request
+    /// choice degrades instead of failing the search or import.
+    /// </summary>
+    private async Task<BookAcquisitionProfileRow?> ResolveRowAsync(Guid? profileId, EntityKind kind, CancellationToken cancellationToken) {
+        if (profileId is { } id) {
+            var chosen = await db.BookAcquisitionProfiles.AsNoTracking()
+                .FirstOrDefaultAsync(profile => profile.Id == id && profile.Kind == kind, cancellationToken);
+            if (chosen is not null) {
+                return chosen;
+            }
+        }
+
+        return await db.BookAcquisitionProfiles
             .AsNoTracking()
+            .Where(profile => profile.Kind == kind)
             .OrderByDescending(profile => profile.IsDefault)
             .ThenBy(profile => profile.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);
+    }
 
     private static BookAcquisitionRules ToRules(BookAcquisitionProfileRow row) =>
         new(
@@ -138,6 +161,7 @@ public sealed class EfBookAcquisitionProfileStore(PrismediaDbContext db) : IBook
     private static BookAcquisitionProfileView ToView(BookAcquisitionProfileRow row) =>
         new(
             row.Id,
+            row.Kind,
             row.DisplayName,
             row.IsDefault,
             row.TargetLibraryRootId,

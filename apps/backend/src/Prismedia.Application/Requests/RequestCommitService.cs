@@ -25,7 +25,7 @@ public sealed record ProviderRef(string Provider, string ItemId);
 /// A library entity read for monitoring/removal: its kind, display title, the provider identities a
 /// discovery sync can re-resolve it from, and whether it owns a real source file.
 /// </summary>
-public sealed record MonitorableContainer(Guid EntityId, EntityKind Kind, string Title, IReadOnlyList<ProviderRef> ProviderIds, bool HasSourceFile = false);
+public sealed record MonitorableContainer(Guid EntityId, EntityKind Kind, string Title, IReadOnlyList<ProviderRef> ProviderIds, bool HasSourceFile = false, Guid? ParentEntityId = null);
 
 /// <summary>
 /// The discovery blacklist: provider work identities the user removed from Wanted. Container sweeps
@@ -126,8 +126,12 @@ public sealed class RequestCommitService(
 
         return await CommitContainerCoreAsync(
             descriptor, providerId, itemId, proposal, request.SelectedChildIds,
-            startAcquisitions: true, cancellationToken);
+            startAcquisitions: true, TargetingOf(request), cancellationToken);
     }
+
+    /// <summary>The request-time acquisition choices (import target, profile) carried by a commit.</summary>
+    private static AcquisitionTargeting TargetingOf(RequestCommitRequest request) =>
+        new(request.TargetLibraryRootId, request.ProfileId);
 
     /// <summary>
     /// Requests an existing library entity by id — the phantom's "Search for release": resolves the
@@ -137,7 +141,8 @@ public sealed class RequestCommitService(
     /// monitored acquisition. Null when the entity is gone, isn't a committable leaf kind, or no
     /// provider can resolve it.
     /// </summary>
-    public async Task<RequestCommitResponse?> RequestEntityAsync(Guid entityId, bool hideNsfw, CancellationToken cancellationToken) {
+    public async Task<RequestCommitResponse?> RequestEntityAsync(
+        Guid entityId, bool hideNsfw, CancellationToken cancellationToken, AcquisitionTargeting? targeting = null) {
         var entity = await wanted.GetContainerAsync(entityId, cancellationToken);
         if (entity is null) {
             return null;
@@ -149,8 +154,18 @@ public sealed class RequestCommitService(
             return null;
         }
 
+        // No explicit choices: inherit the followed container's (a phantom episode of a monitored
+        // artist should land where the artist's request chose), else kind defaults apply downstream.
+        if (targeting is null || targeting.IsEmpty) {
+            targeting = entity.ParentEntityId is { } parentId
+                ? await monitors.GetTargetingByEntityAsync(parentId, cancellationToken) ?? AcquisitionTargeting.None
+                : AcquisitionTargeting.None;
+        }
+
         foreach (var providerRef in entity.ProviderIds) {
-            var request = new RequestCommitRequest(descriptor.Kind, $"{providerRef.Provider}:{providerRef.ItemId}", []);
+            var request = new RequestCommitRequest(
+                descriptor.Kind, $"{providerRef.Provider}:{providerRef.ItemId}", [],
+                targeting.TargetLibraryRootId, targeting.ProfileId);
             var response = await CommitLeafAsync(descriptor, request, providerRef.Provider, providerRef.ItemId, hideNsfw, cancellationToken);
             if (response is not null) {
                 return response;
@@ -196,7 +211,7 @@ public sealed class RequestCommitService(
                 .ToArray();
             await CommitContainerCoreAsync(
                 descriptor, providerRef.Provider, providerRef.ItemId, proposal, allChildIds,
-                startAcquisitions: false, cancellationToken);
+                startAcquisitions: false, AcquisitionTargeting.None, cancellationToken);
             return true;
         }
 
@@ -212,7 +227,7 @@ public sealed class RequestCommitService(
     /// </summary>
     private async Task<RequestCommitResponse> CommitContainerCoreAsync(
         RequestKindDescriptor descriptor, string providerId, string itemId, EntityMetadataProposal proposal,
-        IReadOnlyList<string> selectedChildIds, bool startAcquisitions, CancellationToken cancellationToken) {
+        IReadOnlyList<string> selectedChildIds, bool startAcquisitions, AcquisitionTargeting targeting, CancellationToken cancellationToken) {
         var child = RequestKindRegistry.ChildOf(descriptor)!;
         var containerTitle = TitleOr(proposal.Patch.Title, itemId);
         var container = await wanted.EnsureAsync(
@@ -253,13 +268,17 @@ public sealed class RequestCommitService(
         }
 
         // The container keeps watching for new works either way — requesting an author/artist implies
-        // following them; the daily sweep then surfaces future works as phantoms.
-        await monitors.StartForEntityAsync(container.EntityId, descriptor.WantedEntityKind, containerTitle, cancellationToken);
+        // following them; the daily sweep then surfaces future works as phantoms. The request's
+        // library/profile choices stick to the monitor so later phantom requests inherit them (a sync,
+        // carrying no choices, never clobbers what an explicit request stored).
+        await monitors.StartForEntityAsync(
+            container.EntityId, descriptor.WantedEntityKind, containerTitle,
+            startAcquisitions ? targeting : null, cancellationToken);
 
         var items = new List<RequestCommitItem>();
         foreach (var pick in picks) {
             items.Add(startAcquisitions
-                ? await StartAcquisitionAsync(pick, providerId, child.AcquisitionKind, author: containerTitle, series: null, cancellationToken)
+                ? await StartAcquisitionAsync(pick, providerId, child.AcquisitionKind, author: containerTitle, series: null, targeting, cancellationToken)
                 : new RequestCommitItem($"{providerId}:{pick.WorkId}", pick.Title, pick.Outcome, pick.Entity.EntityId, null));
         }
 
@@ -279,6 +298,7 @@ public sealed class RequestCommitService(
         }
 
         var creator = RequestProposalReading.AuthorFromCredits(proposal.Patch) ?? RequestProposalReading.PrimaryCredit(proposal.Patch);
+        var targeting = TargetingOf(request);
         if (!includeChildren) {
             var pick = await EnsurePickAsync(descriptor, providerId, proposal, parentEntityId: null, cancellationToken);
             if (pick is null) {
@@ -291,7 +311,7 @@ public sealed class RequestCommitService(
 
             return new RequestCommitResponse(
                 null,
-                [await StartAcquisitionAsync(pick, providerId, descriptor.AcquisitionKind, creator, series: null, cancellationToken)]);
+                [await StartAcquisitionAsync(pick, providerId, descriptor.AcquisitionKind, creator, series: null, targeting, cancellationToken)]);
         }
 
         // Sibling-work fan-out (a book's series volumes): each pick is its own standalone leaf request.
@@ -308,7 +328,7 @@ public sealed class RequestCommitService(
             }
 
             items.Add(await StartAcquisitionAsync(
-                pick, providerId, child.AcquisitionKind, creator, series: TitleOr(proposal.Patch.Title, itemId), cancellationToken));
+                pick, providerId, child.AcquisitionKind, creator, series: TitleOr(proposal.Patch.Title, itemId), targeting, cancellationToken));
         }
 
         return new RequestCommitResponse(null, items);
@@ -343,7 +363,8 @@ public sealed class RequestCommitService(
     /// user turns monitoring off.
     /// </summary>
     private async Task<RequestCommitItem> StartAcquisitionAsync(
-        CommitPick pick, string providerId, EntityKind acquisitionKind, string? author, string? series, CancellationToken cancellationToken) {
+        CommitPick pick, string providerId, EntityKind acquisitionKind, string? author, string? series,
+        AcquisitionTargeting targeting, CancellationToken cancellationToken) {
         // A direct request un-blacklists the work: if the user removed it from Wanted before, asking
         // for it again by name is the explicit signal to want it after all.
         await suppressions.ClearAsync(IdentitiesOf(pick, providerId), cancellationToken);
@@ -361,7 +382,9 @@ public sealed class RequestCommitService(
                     pick.WorkId,
                     pick.Proposal.Patch?.Description,
                     acquisitionKind,
-                    pick.Entity.EntityId),
+                    pick.Entity.EntityId,
+                    targeting.ProfileId,
+                    targeting.TargetLibraryRootId),
                 cancellationToken);
             acquisitionId = summary.Id;
             await monitors.StartAsync(summary.Id, acquisitionKind, pick.Title, author, cancellationToken);

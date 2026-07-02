@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { Boxes, Loader2, Pencil, PlugZap, Plus, Trash2 } from "@lucide/svelte";
   import { Badge, Button, Checkbox, Panel, Select, StatusLed, TextInput } from "@prismedia/ui-svelte";
-  import { INDEXER_KIND, DOWNLOAD_CLIENT_KIND, IMPORT_MODE, BLOCKLIST_REASON, BOOK_SOURCE_TIER, BOOK_FORMAT_TIER } from "$lib/api/generated/codes";
+  import { INDEXER_KIND, DOWNLOAD_CLIENT_KIND, IMPORT_MODE, BLOCKLIST_REASON, BOOK_SOURCE_TIER, BOOK_FORMAT_TIER, ENTITY_KIND } from "$lib/api/generated/codes";
   import { cn } from "@prismedia/ui-svelte";
   import type {
     AcquisitionBlocklistEntry,
@@ -44,7 +44,7 @@
   let downloadClients = $state<DownloadClientSummary[]>([]);
   let profiles = $state<BookAcquisitionProfileView[]>([]);
   let blocklist = $state<AcquisitionBlocklistEntry[]>([]);
-  let bookRoots = $state<LibraryRoot[]>([]);
+  let allRoots = $state<LibraryRoot[]>([]);
   let loading = $state(true);
   let busy = $state(false);
 
@@ -77,7 +77,23 @@
     [BLOCKLIST_REASON.noImportableFiles]: "No importable files",
     [BLOCKLIST_REASON.manual]: "Manual",
   };
-  const rootOptions = $derived(bookRoots.map((r) => ({ value: r.id, label: r.label || r.path })));
+  // Profiles are kind-scoped: each kind offers only the libraries that can hold its media.
+  const profileKindOptions = [
+    { value: ENTITY_KIND.book, label: "Books" },
+    { value: ENTITY_KIND.movie, label: "Movies" },
+    { value: ENTITY_KIND.audioLibrary, label: "Music (albums)" },
+  ];
+  const profileKindLabels: Record<string, string> = Object.fromEntries(
+    profileKindOptions.map((option) => [option.value, option.label]),
+  );
+  function rootsForKind(kind: string): LibraryRoot[] {
+    return allRoots.filter((r) =>
+      kind === ENTITY_KIND.movie ? r.scanVideos : kind === ENTITY_KIND.audioLibrary ? r.scanAudio : r.scanBooks);
+  }
+  const bookRoots = $derived(rootsForKind(ENTITY_KIND.book));
+  const formRoots = $derived(profileForm ? rootsForKind(profileForm.kind) : []);
+  const rootOptions = $derived(formRoots.map((r) => ({ value: r.id, label: r.label || r.path })));
+  const formIsBookKind = $derived(profileForm?.kind === ENTITY_KIND.book);
 
   async function load() {
     try {
@@ -93,7 +109,7 @@
       downloadClients = clients;
       profiles = profs;
       blocklist = bl;
-      bookRoots = config.roots.filter((r) => r.scanBooks);
+      allRoots = config.roots;
     } catch (err) {
       onError(err instanceof Error ? err.message : "Failed to load acquisition settings");
     } finally {
@@ -196,10 +212,11 @@
     }
   }
 
-  // ── Book profile ────────────────────────────────────────────
+  // ── Acquisition profiles (kind-scoped) ──────────────────────
   function newProfile() {
     profileForm = {
-      id: null, displayName: "Default Books", isDefault: profiles.length === 0,
+      id: null, displayName: "Default Books", isDefault: !profiles.some((p) => p.kind === ENTITY_KIND.book),
+      kind: ENTITY_KIND.book,
       targetLibraryRootId: bookRoots[0]?.id ?? "", pathTemplate: DEFAULT_PATH_TEMPLATE,
       importMode: IMPORT_MODE.move, allowedFormats: [], preferredLanguages: ["English"], minSeeders: 1,
       minSizeBytes: null, maxSizeBytes: null, requiredTerms: [], ignoredTerms: [], preferredTerms: [], weightedTerms: [], autoPick: false, autoRedownload: false,
@@ -207,9 +224,22 @@
     };
     profileTerms = { preferred: "", required: "", ignored: "", weighted: "", languages: "English" };
   }
+  /** Switching the form's kind re-targets the root (each kind offers different libraries) and refreshes the suggested name. */
+  function setProfileKind(kind: string) {
+    if (!profileForm) return;
+    profileForm.kind = kind as typeof profileForm.kind;
+    const suitable = rootsForKind(kind);
+    if (!suitable.some((r) => r.id === profileForm?.targetLibraryRootId)) {
+      profileForm.targetLibraryRootId = suitable[0]?.id ?? "";
+    }
+    if (!profileForm.id && /^Default /.test(profileForm.displayName)) {
+      profileForm.displayName = `Default ${profileKindLabels[kind] ?? kind}`;
+      profileForm.isDefault = !profiles.some((p) => p.kind === kind);
+    }
+  }
   function editProfile(p: BookAcquisitionProfileView) {
     profileForm = {
-      id: p.id, displayName: p.displayName, isDefault: p.isDefault, targetLibraryRootId: p.targetLibraryRootId,
+      id: p.id, displayName: p.displayName, isDefault: p.isDefault, kind: p.kind, targetLibraryRootId: p.targetLibraryRootId,
       pathTemplate: p.pathTemplate, importMode: p.importMode, allowedFormats: p.allowedFormats, preferredLanguages: p.preferredLanguages,
       minSeeders: p.minSeeders, minSizeBytes: p.minSizeBytes, maxSizeBytes: p.maxSizeBytes,
       requiredTerms: p.requiredTerms, ignoredTerms: p.ignoredTerms, preferredTerms: p.preferredTerms, weightedTerms: p.weightedTerms,
@@ -398,23 +428,24 @@
         {/if}
       </section>
 
-      <!-- Book profile -->
+      <!-- Acquisition profiles (per media kind) -->
       <section class="space-y-2">
         <div class="flex items-center justify-between">
-          <h3 class="text-kicker text-text-primary">Book profile</h3>
+          <h3 class="text-kicker text-text-primary">Profiles</h3>
           {#if !profileForm}
-            <Button size="sm" variant="secondary" onclick={newProfile} disabled={bookRoots.length === 0} class="gap-1.5"><Plus class="h-3.5 w-3.5" /> Add</Button>
+            <Button size="sm" variant="secondary" onclick={newProfile} disabled={allRoots.length === 0} class="gap-1.5"><Plus class="h-3.5 w-3.5" /> Add</Button>
           {/if}
         </div>
-        {#if bookRoots.length === 0}
-          <p class="text-[0.78rem] text-text-muted">Add a library root with book scanning enabled to create a profile.</p>
+        {#if allRoots.length === 0}
+          <p class="text-[0.78rem] text-text-muted">Add a library root first to create an acquisition profile.</p>
         {/if}
         {#each profiles as p (p.id)}
           <div class="flex items-center justify-between rounded-sm border border-border-subtle bg-surface-1 px-3 py-2">
             <div class="flex items-center gap-2">
+              <Badge variant="default">{profileKindLabels[p.kind] ?? p.kind}</Badge>
               <span class="text-sm text-text-primary">{p.displayName}</span>
               {#if p.isDefault}<Badge variant="accent">default</Badge>{/if}
-              <span class="text-xs text-text-muted">→ {bookRoots.find((r) => r.id === p.targetLibraryRootId)?.label ?? "root"}</span>
+              <span class="text-xs text-text-muted">→ {allRoots.find((r) => r.id === p.targetLibraryRootId)?.label ?? "root"}</span>
             </div>
             <div class="flex items-center gap-1">
               <Button size="sm" variant="ghost" onclick={() => editProfile(p)} disabled={busy}><Pencil class="h-3.5 w-3.5" /></Button>
@@ -425,12 +456,21 @@
         {#if profileForm}
           <div class="space-y-2 rounded-sm border border-border-accent bg-surface-1 p-3">
             <div class="grid gap-2 sm:grid-cols-2">
+              <label class="space-y-1"><span class="text-label text-text-muted">Media kind</span>
+                <Select size="sm" value={profileForm.kind} options={profileKindOptions} onchange={setProfileKind} /></label>
               <label class="space-y-1"><span class="text-label text-text-muted">Name</span>
                 <TextInput size="sm" value={profileForm.displayName} oninput={(e) => profileForm && (profileForm.displayName = e.currentTarget.value)} /></label>
               <label class="space-y-1"><span class="text-label text-text-muted">Target library root</span>
                 <Select size="sm" value={profileForm.targetLibraryRootId} options={rootOptions} onchange={(v) => profileForm && (profileForm.targetLibraryRootId = v)} /></label>
-              <label class="space-y-1 sm:col-span-2"><span class="text-label text-text-muted">Path template</span>
-                <TextInput size="sm" value={profileForm.pathTemplate} oninput={(e) => profileForm && (profileForm.pathTemplate = e.currentTarget.value)} /></label>
+              {#if formIsBookKind}
+                <label class="space-y-1 sm:col-span-2"><span class="text-label text-text-muted">Path template</span>
+                  <TextInput size="sm" value={profileForm.pathTemplate} oninput={(e) => profileForm && (profileForm.pathTemplate = e.currentTarget.value)} /></label>
+              {:else}
+                <p class="sm:col-span-2 text-[0.72rem] leading-relaxed text-text-muted">
+                  Placement is fixed to match library scanning: movies land as <span class="font-mono">Title (Year)/Title (Year).ext</span>,
+                  albums as <span class="font-mono">Artist/Album/</span>.
+                </p>
+              {/if}
               <label class="space-y-1"><span class="text-label text-text-muted">Import mode</span>
                 <Select size="sm" value={profileForm.importMode} options={importModeOptions} onchange={(v) => profileForm && (profileForm.importMode = v as typeof profileForm.importMode)} /></label>
               <label class="space-y-1"><span class="text-label text-text-muted">Min seeders</span>
@@ -451,8 +491,10 @@
             <label class="flex items-center gap-2"><Checkbox checked={profileForm.isDefault} onchange={(e) => profileForm && (profileForm.isDefault = e.currentTarget.checked)} /><span class="text-sm text-text-secondary">Default profile</span></label>
             <label class="flex items-start gap-2"><Checkbox checked={profileForm.autoPick} onchange={(e) => profileForm && (profileForm.autoPick = e.currentTarget.checked)} /><span class="text-sm text-text-secondary">Auto-grab<span class="block text-[0.72rem] text-text-muted">Download the best acceptable release automatically instead of waiting for manual review.</span></span></label>
             <label class="flex items-start gap-2"><Checkbox checked={profileForm.autoRedownload} onchange={(e) => profileForm && (profileForm.autoRedownload = e.currentTarget.checked)} /><span class="text-sm text-text-secondary">Auto-redownload on failure<span class="block text-[0.72rem] text-text-muted">When a download fails, blocklist that release and automatically grab the next-best candidate.</span></span></label>
+            {#if formIsBookKind}
             <label class="flex items-start gap-2"><Checkbox checked={profileForm.upgradeUntilCutoff} onchange={(e) => profileForm && (profileForm.upgradeUntilCutoff = e.currentTarget.checked)} /><span class="text-sm text-text-secondary">Upgrade until cutoff<span class="block text-[0.72rem] text-text-muted">After a book is imported, keep searching for a higher-quality release and replace the file, until it reaches the cutoff below.</span></span></label>
-            {#if profileForm.upgradeUntilCutoff}
+            {/if}
+            {#if formIsBookKind && profileForm.upgradeUntilCutoff}
               <div class="grid gap-2 sm:grid-cols-2 pl-6">
                 <label class="space-y-1"><span class="text-label text-text-muted">Cutoff source</span>
                   <Select size="sm" value={profileForm.cutoffSourceTier} options={cutoffSourceOptions} onchange={(v) => profileForm && (profileForm.cutoffSourceTier = v as typeof profileForm.cutoffSourceTier)} /></label>

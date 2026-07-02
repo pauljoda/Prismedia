@@ -6,6 +6,7 @@
  */
 import type { BookFormatTier } from './bookFormatTier';
 import type { BookSourceTier } from './bookSourceTier';
+import type { EntityKind } from './entityKind';
 import type { ImportMode } from './importMode';
 import type { WeightedTerm } from './weightedTerm';
 
@@ -14,6 +15,7 @@ export interface BookAcquisitionProfileSaveRequest {
   id: string | null;
   displayName: string;
   isDefault: boolean;
+  kind: EntityKind;
   targetLibraryRootId: string;
   pathTemplate: string;
   importMode: ImportMode;

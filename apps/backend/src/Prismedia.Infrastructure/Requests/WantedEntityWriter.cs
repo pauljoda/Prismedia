@@ -127,7 +127,7 @@ public sealed class WantedEntityWriter(PrismediaDbContext db, EntityMetadataAppl
     public async Task<MonitorableContainer?> GetContainerAsync(Guid entityId, CancellationToken cancellationToken) {
         var entity = await db.Entities.AsNoTracking()
             .Where(row => row.Id == entityId)
-            .Select(row => new { row.Id, row.KindCode, row.Title })
+            .Select(row => new { row.Id, row.KindCode, row.Title, row.ParentEntityId })
             .FirstOrDefaultAsync(cancellationToken);
         if (entity is null) {
             return null;
@@ -139,7 +139,7 @@ public sealed class WantedEntityWriter(PrismediaDbContext db, EntityMetadataAppl
             .Select(row => new ProviderRef(row.Provider, row.Value))
             .ToArrayAsync(cancellationToken);
         var hasSource = await HasSourceFileAsync(entityId, cancellationToken);
-        return new MonitorableContainer(entity.Id, entity.KindCode.DecodeAs<EntityKind>(), entity.Title, providerIds, hasSource);
+        return new MonitorableContainer(entity.Id, entity.KindCode.DecodeAs<EntityKind>(), entity.Title, providerIds, hasSource, entity.ParentEntityId);
     }
 
     private Task<bool> HasSourceFileAsync(Guid entityId, CancellationToken cancellationToken) =>

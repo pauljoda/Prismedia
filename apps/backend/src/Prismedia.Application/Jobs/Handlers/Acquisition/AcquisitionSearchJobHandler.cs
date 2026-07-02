@@ -68,7 +68,7 @@ public sealed class AcquisitionSearchJobHandler(
             // accepted release — the user asked for the item, not for a release-picking chore; the
             // release picker remains for the no-acceptable-release case. Ad-hoc acquisitions keep the
             // profile's explicit auto-pick opt-in.
-            var autoGrab = input.EntityId is not null || await profiles.GetDefaultAutoPickAsync(cancellationToken);
+            var autoGrab = input.EntityId is not null || await profiles.GetAutoPickAsync(input.ProfileId, input.Kind, cancellationToken);
             if (autoGrab && outcome.Candidates.Any(candidate => candidate.Accepted)) {
                 await TryAutoQueueAsync(payload.AcquisitionId, cancellationToken);
             }

@@ -32,17 +32,23 @@ export async function searchRequests(params: {
  * Commits a reviewed request: the server creates the wanted library entity/entities up front (the
  * author container plus each picked book, a standalone book, or picked series volumes) and starts one
  * acquisition per requested book. Already-owned / already-in-flight picks are reported per item.
+ * The request-time choices — which library to import into and which quality profile to score releases
+ * with — ride along; null falls back to the kind's defaults server-side.
  */
 export async function commitRequest(params: {
   kind: RequestMediaKindCode;
   externalId: string;
   selectedChildIds: string[];
+  targetLibraryRootId?: string | null;
+  profileId?: string | null;
 }): Promise<RequestCommitResponse> {
   return unwrapGenerated(
     await commitRequestRequest({
       kind: params.kind,
       externalId: params.externalId,
       selectedChildIds: params.selectedChildIds,
+      targetLibraryRootId: params.targetLibraryRootId ?? null,
+      profileId: params.profileId ?? null,
     }),
     "Failed to commit the request",
   );
