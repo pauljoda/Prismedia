@@ -184,6 +184,8 @@
     {@const d = detail}
     <EntityDetail card={requestCard} {actionButtons} posterSize="medium">
       {#snippet afterBody()}
+        <!-- Consistent breathing room between the request card, tracks, and cast/studio rails. -->
+        <div class="space-y-5">
         {#if !committable}
           <p class="rounded-sm border border-border-subtle bg-surface-1 p-3 text-[0.78rem] leading-relaxed text-text-muted">
             Requesting {kindInfo?.plural.toLowerCase() ?? "this kind"} isn't available yet — its per-episode
@@ -303,6 +305,7 @@
         {#if castCards.length > 0 || studioCards.length > 0}
           <EntityCastAndCrewSection creditCards={castCards} {studioCards} />
         {/if}
+        </div>
       {/snippet}
     </EntityDetail>
   {/if}
