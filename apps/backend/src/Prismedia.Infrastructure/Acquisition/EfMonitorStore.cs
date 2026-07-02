@@ -136,6 +136,16 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
 
         foreach (var row in rows) {
             var monitor = row.Monitor;
+            // A container monitor (an author/artist watched for new works) has no acquisition of its
+            // own: it is due for a discovery sync on the plain interval.
+            if (monitor.AcquisitionId is null && monitor.EntityId is { } watchedEntityId) {
+                if (monitor.LastSearchedAt is null || now - monitor.LastSearchedAt >= interval) {
+                    due.Add(new DueMonitor(monitor.Id, null, monitor.Title, IsUpgrade: false, EntityId: watchedEntityId));
+                }
+
+                continue;
+            }
+
             // The acquisition was hard-deleted (FK set null) — auto-pause; nothing to re-search.
             if (monitor.AcquisitionId is not { } acquisitionId) {
                 monitor.Status = MonitorStatus.Paused;
@@ -304,6 +314,36 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
         await db.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task<MonitorView> StartForEntityAsync(Guid entityId, EntityKind kind, string title, CancellationToken cancellationToken) {
+        var now = DateTimeOffset.UtcNow;
+        var row = await db.Monitors.FirstOrDefaultAsync(monitor => monitor.EntityId == entityId, cancellationToken);
+        if (row is null) {
+            row = new MonitorRow {
+                Id = Guid.NewGuid(),
+                Kind = kind,
+                EntityId = entityId,
+                Status = MonitorStatus.Active,
+                Title = title,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+            db.Monitors.Add(row);
+        } else {
+            // Idempotent: re-activate an existing (possibly paused) container monitor and refresh its label.
+            row.Status = MonitorStatus.Active;
+            row.Title = title;
+            row.UpdatedAt = now;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        return ToView(row, null);
+    }
+
+    public async Task<MonitorView?> GetByEntityAsync(Guid entityId, CancellationToken cancellationToken) {
+        var row = await db.Monitors.AsNoTracking().FirstOrDefaultAsync(monitor => monitor.EntityId == entityId, cancellationToken);
+        return row is null ? null : ToView(row, null);
+    }
+
     private static MonitorView ToView(MonitorRow row, AcquisitionStatus? acquisitionStatus) =>
-        new(row.Id, row.Kind, row.AcquisitionId, row.Status, row.Title, row.Author, acquisitionStatus, row.CreatedAt, row.UpdatedAt);
+        new(row.Id, row.Kind, row.AcquisitionId, row.Status, row.Title, row.Author, acquisitionStatus, row.CreatedAt, row.UpdatedAt, row.EntityId);
 }

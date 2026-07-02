@@ -89,7 +89,8 @@ public sealed record AcquisitionMetadata(
 
 /// <summary>The minimal input the background search job needs to query indexers for an acquisition.</summary>
 /// <param name="Kind">The media kind being acquired; picks the decision engine and the Torznab category range.</param>
-public sealed record AcquisitionSearchInput(Guid Id, string Title, string? Author, EntityKind Kind = EntityKind.Book);
+/// <param name="EntityId">The wanted library entity this acquisition fulfils; a wanted-linked search auto-grabs its best accepted release.</param>
+public sealed record AcquisitionSearchInput(Guid Id, string Title, string? Author, EntityKind Kind = EntityKind.Book, Guid? EntityId = null);
 
 /// <summary>The outcome of running indexer searches for an acquisition: scored candidates plus any indexer failures.</summary>
 public sealed record AcquisitionSearchOutcome(
@@ -127,9 +128,13 @@ public sealed record AcquisitionCandidateRef(Guid CandidateId, string Title, str
     public string Identity => ReleaseIdentity.For(InfoHash, IndexerName, Title);
 }
 
-/// <summary>A monitor whose periodic re-search is due now, paired with the acquisition the sweep should re-search.</summary>
-/// <summary>A monitor whose periodic search is due. <see cref="IsUpgrade"/> marks an imported book due for an upgrade re-search (a child acquisition is spawned to search) rather than a still-missing book's initial search.</summary>
-public sealed record DueMonitor(Guid MonitorId, Guid AcquisitionId, string Title, bool IsUpgrade = false);
+/// <summary>
+/// A monitor whose periodic action is due. <see cref="IsUpgrade"/> marks an imported book due for an
+/// upgrade re-search (a child acquisition is spawned to search). <see cref="EntityId"/> marks a
+/// container monitor due for a discovery sync (re-resolve the author/artist from its provider and
+/// request missing works); container dues carry no acquisition.
+/// </summary>
+public sealed record DueMonitor(Guid MonitorId, Guid? AcquisitionId, string Title, bool IsUpgrade = false, Guid? EntityId = null);
 
 /// <summary>
 /// Everything the upgrade-replace job needs to swap a downloaded upgrade child's file in for the owned book:

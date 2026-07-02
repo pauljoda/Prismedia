@@ -337,6 +337,14 @@ public sealed class MonitorRow {
     /// <summary>The acquisition this monitor keeps re-searching. Nulled (and the monitor auto-paused) if that acquisition is hard-deleted.</summary>
     public Guid? AcquisitionId { get; set; }
 
+    /// <summary>
+    /// The library container entity (an author, an artist) this monitor watches for NEW works, for
+    /// monitors not tied to a single acquisition. The sweep re-resolves the container from its provider
+    /// ids and requests missing works as wanted placeholders. Loose link (no FK) into the entity graph;
+    /// a dangling id auto-pauses the monitor at the next sweep.
+    /// </summary>
+    public Guid? EntityId { get; set; }
+
     public MonitorStatus Status { get; set; } = MonitorStatus.Active;
 
     /// <summary>Denormalized title of the wanted item, for the monitored list and job labels.</summary>

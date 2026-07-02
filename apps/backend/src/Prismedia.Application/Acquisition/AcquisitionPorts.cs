@@ -268,6 +268,15 @@ public interface IMonitorStore {
     /// <summary>Starts (or re-activates) monitoring for an acquisition. Idempotent on the acquisition — returns the existing monitor if one exists.</summary>
     Task<Contracts.Acquisition.MonitorView> StartAsync(Guid acquisitionId, Domain.Entities.EntityKind kind, string title, string? author, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Starts (or re-activates) a container monitor watching a library entity (an author, an artist) for
+    /// new works. Idempotent on the entity — returns the existing monitor if one exists.
+    /// </summary>
+    Task<Contracts.Acquisition.MonitorView> StartForEntityAsync(Guid entityId, Domain.Entities.EntityKind kind, string title, CancellationToken cancellationToken);
+
+    /// <summary>Returns the container monitor watching an entity, or null when the entity is not monitored.</summary>
+    Task<Contracts.Acquisition.MonitorView?> GetByEntityAsync(Guid entityId, CancellationToken cancellationToken);
+
     /// <summary>Stops monitoring by hard-deleting the monitor row (the acquisition is left untouched). Returns false when it no longer exists.</summary>
     Task<bool> DeleteAsync(Guid monitorId, CancellationToken cancellationToken);
 

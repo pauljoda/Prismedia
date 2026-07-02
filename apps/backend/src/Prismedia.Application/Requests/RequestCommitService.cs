@@ -18,6 +18,15 @@ public interface IPluginRequestProposalSource {
 /// <summary>Result of ensuring a wanted entity: the entity, whether this call created it, and whether it already owns a real file.</summary>
 public sealed record WantedEntityResult(Guid EntityId, bool Created, bool HasFile);
 
+/// <summary>One provider identity an entity carries (from a request commit or from Identify).</summary>
+public sealed record ProviderRef(string Provider, string ItemId);
+
+/// <summary>
+/// A library container entity (an author, an artist) read for monitoring: its kind, display title, and
+/// the provider identities a discovery sync can re-resolve it from.
+/// </summary>
+public sealed record MonitorableContainer(Guid EntityId, EntityKind Kind, string Title, IReadOnlyList<ProviderRef> ProviderIds);
+
 /// <summary>
 /// Creates and populates wanted library entities for request commits. A wanted entity is a real library
 /// entity (grid-visible immediately) flagged Wanted, carrying plugin metadata and artwork but no file;
@@ -44,6 +53,13 @@ public interface IWantedEntityWriter {
     /// removes the container too. Returns true when the entity was deleted.
     /// </summary>
     Task<bool> DeleteIfWantedAsync(Guid entityId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Reads a library entity as a monitorable container: its kind, title, and provider identities.
+    /// Null when the entity doesn't exist. Works for wanted placeholders and real scanned-in entities
+    /// alike — an on-disk author identified from its files monitors exactly like a requested one.
+    /// </summary>
+    Task<MonitorableContainer?> GetContainerAsync(Guid entityId, CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -57,7 +73,8 @@ public interface IWantedEntityWriter {
 public sealed class RequestCommitService(
     IPluginRequestProposalSource proposals,
     IWantedEntityWriter wanted,
-    IAcquisitionRequestService acquisitions) {
+    IAcquisitionRequestService acquisitions,
+    Acquisition.IMonitorStore monitors) {
     /// <summary>
     /// Commits a reviewed request. Returns null when the kind isn't committable, the provider-qualified
     /// id is malformed, or the provider can't resolve it; otherwise reports a per-item outcome (an
@@ -81,27 +98,81 @@ public sealed class RequestCommitService(
 
     /// <summary>
     /// Commits a container request (author, artist): the container becomes a wanted grouping entity and
-    /// each picked work a wanted leaf beneath it, each with its own acquisition.
+    /// each picked work a wanted leaf beneath it, each with its own auto-grabbing acquisition. The
+    /// container itself is monitored so future works keep appearing.
     /// </summary>
     private async Task<RequestCommitResponse?> CommitContainerAsync(
         RequestKindDescriptor descriptor, RequestCommitRequest request, string providerId, string itemId, bool hideNsfw, CancellationToken cancellationToken) {
-        var child = RequestKindRegistry.ChildOf(descriptor);
-        if (child is null) {
-            return null;
-        }
-
         var proposal = await proposals.ResolveProposalAsync(descriptor, providerId, itemId, hideNsfw, includeChildren: true, cancellationToken);
         if (proposal?.Patch is null) {
             return null;
         }
 
+        return await CommitContainerCoreAsync(
+            descriptor, providerId, itemId, proposal, request.SelectedChildIds,
+            startAcquisitions: true, cancellationToken);
+    }
+
+    /// <summary>
+    /// Re-syncs a monitored container entity from its provider: resolves the container's proposal, and
+    /// materializes any works the library doesn't have yet as clearly-badged wanted placeholders —
+    /// phantoms with metadata and artwork but NO acquisition. Discovery never downloads on its own; the
+    /// user requests a phantom (or its page's search action does) and only then does the auto-grabbing
+    /// acquisition flow take over. Returns false when the entity is gone, isn't a monitorable container
+    /// kind, or no provider can resolve it — the sweep pauses the monitor in that case.
+    /// </summary>
+    public async Task<bool> SyncContainerAsync(Guid entityId, CancellationToken cancellationToken) {
+        var container = await wanted.GetContainerAsync(entityId, cancellationToken);
+        if (container is null || container.ProviderIds.Count == 0) {
+            return false;
+        }
+
+        var descriptor = RequestKindRegistry.All.FirstOrDefault(candidate =>
+            candidate is { IsContainer: true, Committable: true } && candidate.WantedEntityKind == container.Kind);
+        if (descriptor is null) {
+            return false;
+        }
+
+        foreach (var providerRef in container.ProviderIds) {
+            // Conservative SFW default: the sweep has no user session (mirrors background enrichment).
+            var proposal = await proposals.ResolveProposalAsync(
+                descriptor, providerRef.Provider, providerRef.ItemId, hideNsfw: true, includeChildren: true, cancellationToken);
+            if (proposal?.Patch is null) {
+                continue;
+            }
+
+            var allChildIds = proposal.Children
+                .Where(child => !child.TargetKind.IsRelationship())
+                .Select(child => RequestProposalReading.QualifiedIdFor(providerRef.Provider, child))
+                .Where(id => id is not null)
+                .Select(id => id!)
+                .ToArray();
+            await CommitContainerCoreAsync(
+                descriptor, providerRef.Provider, providerRef.ItemId, proposal, allChildIds,
+                startAcquisitions: false, cancellationToken);
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// The shared container materialization: ensure the container and its picked works as wanted
+    /// entities, apply the proposal filtered to the fileless picks, and keep the container monitored.
+    /// <paramref name="startAcquisitions"/> separates an explicit request (each new pick gets an
+    /// auto-grabbing, monitored acquisition) from monitor discovery (phantoms only).
+    /// </summary>
+    private async Task<RequestCommitResponse> CommitContainerCoreAsync(
+        RequestKindDescriptor descriptor, string providerId, string itemId, EntityMetadataProposal proposal,
+        IReadOnlyList<string> selectedChildIds, bool startAcquisitions, CancellationToken cancellationToken) {
+        var child = RequestKindRegistry.ChildOf(descriptor)!;
         var containerTitle = TitleOr(proposal.Patch.Title, itemId);
         var container = await wanted.EnsureAsync(
             descriptor.WantedEntityKind, providerId, itemId, containerTitle,
             parentEntityId: null, matchTitleKindWide: true, cancellationToken);
 
         var picks = new List<CommitPick>();
-        foreach (var childProposal in SelectStructuralChildren(providerId, proposal, request.SelectedChildIds)) {
+        foreach (var childProposal in SelectStructuralChildren(providerId, proposal, selectedChildIds)) {
             var pick = await EnsurePickAsync(child, providerId, childProposal, container.EntityId, cancellationToken);
             if (pick is not null) {
                 picks.Add(pick);
@@ -110,15 +181,25 @@ public sealed class RequestCommitService(
 
         // Apply the proposal filtered to the picked (fileless) works: the cascade finds the pre-created
         // skeletons external-id-first and enriches them in place, and never materializes unpicked works.
-        // Owned works are excluded so a request can't overwrite metadata the library already has.
-        var applyChildren = proposal.Children.Where(node => node.TargetKind.IsRelationship())
-            .Concat(picks.Where(pick => !pick.Entity.HasFile).Select(pick => pick.Proposal))
-            .ToArray();
-        await wanted.ApplyProposalAsync(container.EntityId, proposal with { Children = applyChildren }, cancellationToken);
+        // Owned works are excluded so a request can't overwrite metadata the library already has. A
+        // discovery sync that found nothing new skips the apply entirely (no daily artwork churn).
+        var anythingNew = picks.Any(pick => pick.Outcome == RequestCommitOutcome.Requested);
+        if (anythingNew || startAcquisitions) {
+            var applyChildren = proposal.Children.Where(node => node.TargetKind.IsRelationship())
+                .Concat(picks.Where(pick => !pick.Entity.HasFile).Select(pick => pick.Proposal))
+                .ToArray();
+            await wanted.ApplyProposalAsync(container.EntityId, proposal with { Children = applyChildren }, cancellationToken);
+        }
+
+        // The container keeps watching for new works either way — requesting an author/artist implies
+        // following them; the daily sweep then surfaces future works as phantoms.
+        await monitors.StartForEntityAsync(container.EntityId, descriptor.WantedEntityKind, containerTitle, cancellationToken);
 
         var items = new List<RequestCommitItem>();
         foreach (var pick in picks) {
-            items.Add(await StartAcquisitionAsync(pick, providerId, child.AcquisitionKind, author: containerTitle, series: null, cancellationToken));
+            items.Add(startAcquisitions
+                ? await StartAcquisitionAsync(pick, providerId, child.AcquisitionKind, author: containerTitle, series: null, cancellationToken)
+                : new RequestCommitItem($"{providerId}:{pick.WorkId}", pick.Title, pick.Outcome, pick.Entity.EntityId, null));
         }
 
         return new RequestCommitResponse(container.EntityId, items);
@@ -194,7 +275,12 @@ public sealed class RequestCommitService(
         return new CommitPick(proposal, workId, title, entity, outcome);
     }
 
-    /// <summary>Starts the acquisition for a requested pick (no-op for owned/in-flight picks) and shapes its response item.</summary>
+    /// <summary>
+    /// Starts the acquisition for a requested pick (no-op for owned/in-flight picks) and shapes its
+    /// response item. A wanted item is hands-off by default: the acquisition auto-grabs its best
+    /// accepted release, and a monitor keeps re-searching on the schedule until it is acquired or the
+    /// user turns monitoring off.
+    /// </summary>
     private async Task<RequestCommitItem> StartAcquisitionAsync(
         CommitPick pick, string providerId, EntityKind acquisitionKind, string? author, string? series, CancellationToken cancellationToken) {
         Guid? acquisitionId = null;
@@ -213,6 +299,7 @@ public sealed class RequestCommitService(
                     pick.Entity.EntityId),
                 cancellationToken);
             acquisitionId = summary.Id;
+            await monitors.StartAsync(summary.Id, acquisitionKind, pick.Title, author, cancellationToken);
         }
 
         return new RequestCommitItem($"{providerId}:{pick.WorkId}", pick.Title, pick.Outcome, pick.Entity.EntityId, acquisitionId);

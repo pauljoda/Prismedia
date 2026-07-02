@@ -120,7 +120,7 @@ public static class AppSettingsRegistry {
                 22,
                 "Re-search interval",
                 "Minutes between re-searches of monitored items.",
-                360,
+                1440,
                 20,
                 min: 15,
                 max: 10080,

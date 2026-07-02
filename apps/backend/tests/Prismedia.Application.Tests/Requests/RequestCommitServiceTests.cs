@@ -168,6 +168,55 @@ public sealed class RequestCommitServiceTests {
     }
 
     [Fact]
+    public async Task CommitsAutoMonitorTheirAcquisitionsAndTheContainer() {
+        var proposal = Container(ProposalKind.Person, "Author", "A1", Leaf(ProposalKind.Book, "New Book", "W1"));
+        var (service, _, acquisitions, monitors) = ServiceWithMonitors(proposal);
+
+        var response = await service.CommitAsync(
+            new RequestCommitRequest(RequestMediaKind.Author, $"{Provider}:A1", [$"{Provider}:W1"]),
+            hideNsfw: false, CancellationToken.None);
+
+        // The requested pick is hands-off: its acquisition is monitored until acquired, and the author
+        // container is monitored for new works so future releases keep appearing.
+        Assert.Single(monitors.AcquisitionMonitors);
+        Assert.Single(acquisitions.Created);
+        Assert.Equal([response!.ContainerEntityId!.Value], monitors.EntityMonitors.ToArray());
+    }
+
+    [Fact]
+    public async Task ContainerSyncCreatesPhantomsWithoutAcquisitions() {
+        var proposal = Container(ProposalKind.Person, "Author", "A1",
+            Leaf(ProposalKind.Book, "Known", "W1"), Leaf(ProposalKind.Book, "Brand New", "W2"));
+        var (service, writer, acquisitions, monitors) = ServiceWithMonitors(proposal);
+        var authorEntityId = FakeWantedEntityWriter.EntityIdFor("A1");
+        writer.Container = new MonitorableContainer(
+            authorEntityId, EntityKind.BookAuthor, "Author", [new ProviderRef(Provider, "A1")]);
+        writer.ExistingWanted.Add("W1"); // already tracked from an earlier request
+        acquisitions.EntitiesWithAcquisitions.Add(FakeWantedEntityWriter.EntityIdFor("W1"));
+
+        var synced = await service.SyncContainerAsync(authorEntityId, CancellationToken.None);
+
+        Assert.True(synced);
+        // Discovery materializes the missing work as a wanted phantom but never downloads on its own.
+        Assert.Contains(writer.Ensured, call => call.ItemId == "W2");
+        Assert.Empty(acquisitions.Created);
+        Assert.Empty(monitors.AcquisitionMonitors);
+    }
+
+    [Fact]
+    public async Task ContainerSyncFailsCleanlyWhenTheEntityOrProviderIsGone() {
+        var (service, writer, _, _) = ServiceWithMonitors(Container(ProposalKind.Person, "Author", "A1"));
+
+        // Entity gone entirely.
+        Assert.False(await service.SyncContainerAsync(Guid.NewGuid(), CancellationToken.None));
+
+        // Entity exists but carries no provider identity to re-resolve from.
+        var entityId = Guid.NewGuid();
+        writer.Container = new MonitorableContainer(entityId, EntityKind.BookAuthor, "Author", []);
+        Assert.False(await service.SyncContainerAsync(entityId, CancellationToken.None));
+    }
+
+    [Fact]
     public async Task MalformedOrUnresolvableExternalIdsReturnNull() {
         var (service, _, _) = Service(Leaf(ProposalKind.Book, "Book", "W1"));
 
@@ -177,11 +226,18 @@ public sealed class RequestCommitServiceTests {
             new RequestCommitRequest(RequestMediaKind.Book, $"{Provider}:W404", []), hideNsfw: false, CancellationToken.None));
     }
 
-    private static (RequestCommitService Service, FakeWantedEntityWriter Writer, FakeAcquisitionRequestService Acquisitions) Service(
+    private static (RequestCommitService Service, FakeWantedEntityWriter Writer, FakeAcquisitionRequestService Acquisitions, FakeMonitorStore Monitors) ServiceWithMonitors(
         EntityMetadataProposal proposal) {
         var writer = new FakeWantedEntityWriter();
         var acquisitions = new FakeAcquisitionRequestService();
-        var service = new RequestCommitService(new FakeProposalSource(proposal), writer, acquisitions);
+        var monitors = new FakeMonitorStore();
+        var service = new RequestCommitService(new FakeProposalSource(proposal), writer, acquisitions, monitors);
+        return (service, writer, acquisitions, monitors);
+    }
+
+    private static (RequestCommitService Service, FakeWantedEntityWriter Writer, FakeAcquisitionRequestService Acquisitions) Service(
+        EntityMetadataProposal proposal) {
+        var (service, writer, acquisitions, _) = ServiceWithMonitors(proposal);
         return (service, writer, acquisitions);
     }
 
@@ -232,6 +288,41 @@ public sealed class RequestCommitServiceTests {
 
         public Task<bool> DeleteIfWantedAsync(Guid entityId, CancellationToken cancellationToken) =>
             Task.FromResult(false);
+
+        /// <summary>Container ref returned by GetContainerAsync, for sync tests.</summary>
+        public MonitorableContainer? Container { get; set; }
+
+        public Task<MonitorableContainer?> GetContainerAsync(Guid entityId, CancellationToken cancellationToken) =>
+            Task.FromResult(Container?.EntityId == entityId ? Container : null);
+    }
+
+    private sealed class FakeMonitorStore : Prismedia.Application.Acquisition.IMonitorStore {
+        public List<Guid> AcquisitionMonitors { get; } = [];
+        public List<Guid> EntityMonitors { get; } = [];
+
+        public Task<MonitorView> StartAsync(Guid acquisitionId, EntityKind kind, string title, string? author, CancellationToken cancellationToken) {
+            AcquisitionMonitors.Add(acquisitionId);
+            return Task.FromResult(View(kind, title, acquisitionId: acquisitionId));
+        }
+
+        public Task<MonitorView> StartForEntityAsync(Guid entityId, EntityKind kind, string title, CancellationToken cancellationToken) {
+            EntityMonitors.Add(entityId);
+            return Task.FromResult(View(kind, title, entityId: entityId));
+        }
+
+        private static MonitorView View(EntityKind kind, string title, Guid? acquisitionId = null, Guid? entityId = null) =>
+            new(Guid.NewGuid(), kind, acquisitionId, MonitorStatus.Active, title, null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, entityId);
+
+        public Task<MonitorView?> GetByEntityAsync(Guid entityId, CancellationToken cancellationToken) => Task.FromResult<MonitorView?>(null);
+        public Task<bool> DeleteAsync(Guid monitorId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> SetStatusAsync(Guid monitorId, MonitorStatus status, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<MonitorView>> ListAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<MonitorView?> GetByAcquisitionAsync(Guid acquisitionId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<Prismedia.Application.Acquisition.DueMonitor>> ListDueMonitorsAsync(int defaultIntervalMinutes, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task MarkSearchedAsync(Guid monitorId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<Guid?> CreateUpgradeChildAsync(Guid monitorId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task ResolveUpgradeChildAsync(Guid childId, bool succeeded, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> HasActiveMonitorsAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
     private sealed class FakeAcquisitionRequestService : IAcquisitionRequestService {

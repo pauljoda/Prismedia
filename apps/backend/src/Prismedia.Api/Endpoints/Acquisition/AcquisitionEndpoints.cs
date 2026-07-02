@@ -386,6 +386,34 @@ public static class AcquisitionEndpoints {
             .Produces<MonitorView>()
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
+        group.MapPost("/entity", async (
+            EntityMonitorCreateRequest request,
+            MonitorService monitors,
+            CancellationToken cancellationToken) => {
+                var monitor = await monitors.StartForEntityAsync(request.EntityId, cancellationToken);
+                return monitor is null
+                    ? Results.BadRequest(new ApiProblem(ApiProblemCodes.RequestInvalid, "The entity can't be monitored: it must be an author/artist-style container with a provider identity (run Identify first for scanned-in items)."))
+                    : Results.Ok(monitor);
+            })
+            .WithName("StartEntityMonitor")
+            .WithSummary("Monitors a library container entity (author, artist) for new works; the daily sweep surfaces missing works as wanted placeholders.")
+            .Produces<MonitorView>()
+            .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
+
+        group.MapGet("/for-entity/{entityId:guid}", async (
+            Guid entityId,
+            MonitorService monitors,
+            CancellationToken cancellationToken) => {
+                var monitor = await monitors.GetForEntityAsync(entityId, cancellationToken);
+                return monitor is null
+                    ? Results.NotFound(new ApiProblem(ApiProblemCodes.NotFound, "The entity is not monitored."))
+                    : Results.Ok(monitor);
+            })
+            .WithName("GetEntityMonitor")
+            .WithSummary("Gets the container monitor watching a library entity, when one exists.")
+            .Produces<MonitorView>()
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+
         group.MapDelete("/{id:guid}", async (
             Guid id,
             MonitorService monitors,

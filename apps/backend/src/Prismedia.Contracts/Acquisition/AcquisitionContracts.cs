@@ -229,10 +229,18 @@ public sealed record MonitorView(
     string? Author,
     AcquisitionStatus? AcquisitionStatus,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    Guid? EntityId = null);
 
 /// <summary>Request to start monitoring (keep re-searching) an existing acquisition until it is acquired.</summary>
 public sealed record MonitorCreateRequest(Guid AcquisitionId);
+
+/// <summary>
+/// Request to monitor a library container entity (an author, an artist) for new works: the daily sweep
+/// re-resolves the container from its provider and requests any works the library doesn't have yet,
+/// which appear as clearly-badged Wanted placeholders under the container.
+/// </summary>
+public sealed record EntityMonitorCreateRequest(Guid EntityId);
 
 /// <summary>A blocklisted release identity, surfaced for the blocklist management surface.</summary>
 public sealed record AcquisitionBlocklistEntry(

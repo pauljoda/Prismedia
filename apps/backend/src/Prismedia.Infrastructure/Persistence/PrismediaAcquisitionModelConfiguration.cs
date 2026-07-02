@@ -289,6 +289,7 @@ internal static partial class PrismediaModelConfiguration {
                 .HasDefaultValue(EntityKind.Book)
                 .IsRequired();
             entity.Property(row => row.AcquisitionId).HasColumnName("acquisition_id");
+            entity.Property(row => row.EntityId).HasColumnName("entity_id");
             entity.Property(row => row.Status)
                 .HasColumnName("status")
                 .HasMaxLength(32)
@@ -306,6 +307,8 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
             entity.HasIndex(row => new { row.Status, row.LastSearchedAt });
             entity.HasIndex(row => row.AcquisitionId).IsUnique();
+            // Loose link like BookEntityId: one container monitor per watched entity.
+            entity.HasIndex(row => row.EntityId).IsUnique();
             entity.HasIndex(row => row.BookEntityId);
             // SetNull (not Cascade): hard-deleting the linked acquisition must auto-pause the monitor, not delete it.
             entity.HasOne<AcquisitionRow>().WithMany().HasForeignKey(row => row.AcquisitionId).OnDelete(DeleteBehavior.SetNull);

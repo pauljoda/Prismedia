@@ -1,14 +1,15 @@
+using Prismedia.Application.Requests;
 using Prismedia.Contracts.Acquisition;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Acquisition;
 
 /// <summary>
-/// Application use case for monitors: start/stop/pause/resume monitoring of a wanted acquisition and list
-/// the monitored items. Starting a monitor denormalizes the acquisition's title/author onto the monitor so
-/// the monitored list and re-search labels stand alone.
+/// Application use case for monitors: start/stop/pause/resume monitoring of a wanted acquisition or a
+/// library container entity, and list the monitored items. Starting a monitor denormalizes the target's
+/// title onto the monitor so the monitored list and re-search labels stand alone.
 /// </summary>
-public sealed class MonitorService(IMonitorStore monitors, IAcquisitionStore acquisitions) {
+public sealed class MonitorService(IMonitorStore monitors, IAcquisitionStore acquisitions, IWantedEntityWriter entities) {
     public Task<IReadOnlyList<MonitorView>> ListAsync(CancellationToken cancellationToken) =>
         monitors.ListAsync(cancellationToken);
 
@@ -22,6 +23,32 @@ public sealed class MonitorService(IMonitorStore monitors, IAcquisitionStore acq
         var summary = detail.Summary;
         return await monitors.StartAsync(acquisitionId, summary.Kind, summary.Title, summary.Author, cancellationToken);
     }
+
+    /// <summary>
+    /// Starts (or re-activates) a container monitor watching a library entity (an author, an artist) for
+    /// new works. Works for wanted placeholders and real scanned-in entities alike, as long as the
+    /// entity carries a provider identity the daily sync can re-resolve it from (a scanned-in author
+    /// gains one the moment Identify runs). Returns null when the entity is missing, isn't a monitorable
+    /// container kind, or has no provider identity yet.
+    /// </summary>
+    public async Task<MonitorView?> StartForEntityAsync(Guid entityId, CancellationToken cancellationToken) {
+        var container = await entities.GetContainerAsync(entityId, cancellationToken);
+        if (container is null || container.ProviderIds.Count == 0) {
+            return null;
+        }
+
+        var monitorable = RequestKindRegistry.All.Any(descriptor =>
+            descriptor is { IsContainer: true, Committable: true } && descriptor.WantedEntityKind == container.Kind);
+        if (!monitorable) {
+            return null;
+        }
+
+        return await monitors.StartForEntityAsync(entityId, container.Kind, container.Title, cancellationToken);
+    }
+
+    /// <summary>The container monitor watching an entity, or null when it is not monitored.</summary>
+    public Task<MonitorView?> GetForEntityAsync(Guid entityId, CancellationToken cancellationToken) =>
+        monitors.GetByEntityAsync(entityId, cancellationToken);
 
     public Task<bool> StopAsync(Guid monitorId, CancellationToken cancellationToken) =>
         monitors.DeleteAsync(monitorId, cancellationToken);

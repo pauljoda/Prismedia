@@ -64,10 +64,12 @@ public sealed class AcquisitionSearchJobHandler(
             await store.SetStatusAsync(payload.AcquisitionId, AcquisitionStatus.AwaitingSelection, message, cancellationToken);
             await context.ReportProgressAsync(100, "Search finished", cancellationToken);
 
-            // When the default profile opts into auto-pick and the search found an acceptable release,
-            // queue the top-ranked one immediately rather than waiting for manual selection.
-            if (outcome.Candidates.Any(candidate => candidate.Accepted)
-                && await profiles.GetDefaultAutoPickAsync(cancellationToken)) {
+            // A wanted-linked acquisition (created by a request commit) always auto-grabs its best
+            // accepted release — the user asked for the item, not for a release-picking chore; the
+            // release picker remains for the no-acceptable-release case. Ad-hoc acquisitions keep the
+            // profile's explicit auto-pick opt-in.
+            var autoGrab = input.EntityId is not null || await profiles.GetDefaultAutoPickAsync(cancellationToken);
+            if (autoGrab && outcome.Candidates.Any(candidate => candidate.Accepted)) {
                 await TryAutoQueueAsync(payload.AcquisitionId, cancellationToken);
             }
         } catch (Exception ex) when (ex is not OperationCanceledException) {

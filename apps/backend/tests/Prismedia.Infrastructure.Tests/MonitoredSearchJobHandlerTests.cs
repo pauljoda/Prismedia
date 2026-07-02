@@ -19,7 +19,7 @@ public sealed class MonitoredSearchJobHandlerTests {
             new DueMonitor(Guid.NewGuid(), b, "Book B"),
         ]);
         var queue = new RecordingJobQueue();
-        var handler = new MonitoredSearchJobHandler(monitors, new SettingsService(new EmptySettingsPersistence()), NullLogger<MonitoredSearchJobHandler>.Instance);
+        var handler = new MonitoredSearchJobHandler(monitors, new SettingsService(new EmptySettingsPersistence()), CommitService(monitors), NullLogger<MonitoredSearchJobHandler>.Instance);
 
         await handler.HandleAsync(new JobContext(Job(), queue), CancellationToken.None);
 
@@ -42,7 +42,7 @@ public sealed class MonitoredSearchJobHandlerTests {
         ]);
         var queue = new RecordingJobQueue();
         queue.AlreadyPending.Add(a.ToString()); // a search is already in flight for A
-        var handler = new MonitoredSearchJobHandler(monitors, new SettingsService(new EmptySettingsPersistence()), NullLogger<MonitoredSearchJobHandler>.Instance);
+        var handler = new MonitoredSearchJobHandler(monitors, new SettingsService(new EmptySettingsPersistence()), CommitService(monitors), NullLogger<MonitoredSearchJobHandler>.Instance);
 
         await handler.HandleAsync(new JobContext(Job(), queue), CancellationToken.None);
 
@@ -57,7 +57,7 @@ public sealed class MonitoredSearchJobHandlerTests {
     public async Task NoDueMonitorsEnqueuesNothing() {
         var monitors = new FakeMonitorStore([]);
         var queue = new RecordingJobQueue();
-        var handler = new MonitoredSearchJobHandler(monitors, new SettingsService(new EmptySettingsPersistence()), NullLogger<MonitoredSearchJobHandler>.Instance);
+        var handler = new MonitoredSearchJobHandler(monitors, new SettingsService(new EmptySettingsPersistence()), CommitService(monitors), NullLogger<MonitoredSearchJobHandler>.Instance);
 
         await handler.HandleAsync(new JobContext(Job(), queue), CancellationToken.None);
 
@@ -68,6 +68,29 @@ public sealed class MonitoredSearchJobHandlerTests {
     private static JobRunSnapshot Job() {
         var now = DateTimeOffset.UtcNow;
         return new JobRunSnapshot(Guid.NewGuid(), JobType.MonitoredSearch, JobRunStatus.Running, 0, null, "{}", null, null, null, now, now, null);
+    }
+
+    /// <summary>A commit service whose container sync never resolves (null sources), for the non-container test paths.</summary>
+    private static Prismedia.Application.Requests.RequestCommitService CommitService(IMonitorStore monitors) =>
+        new(new NullProposalSource(), new NullWantedWriter(), new NullAcquisitionRequestService(), monitors);
+
+    private sealed class NullProposalSource : Prismedia.Application.Requests.IPluginRequestProposalSource {
+        public Task<Prismedia.Contracts.Plugins.EntityMetadataProposal?> ResolveProposalAsync(
+            Prismedia.Application.Requests.RequestKindDescriptor descriptor, string providerId, string itemId, bool hideNsfw, bool includeChildren, CancellationToken cancellationToken) =>
+            Task.FromResult<Prismedia.Contracts.Plugins.EntityMetadataProposal?>(null);
+    }
+
+    private sealed class NullWantedWriter : Prismedia.Application.Requests.IWantedEntityWriter {
+        public Task<Prismedia.Application.Requests.WantedEntityResult> EnsureAsync(EntityKind kind, string providerId, string itemId, string title, Guid? parentEntityId, bool matchTitleKindWide, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task ApplyProposalAsync(Guid entityId, Prismedia.Contracts.Plugins.EntityMetadataProposal proposal, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> DeleteIfWantedAsync(Guid entityId, CancellationToken cancellationToken) => Task.FromResult(false);
+        public Task<Prismedia.Application.Requests.MonitorableContainer?> GetContainerAsync(Guid entityId, CancellationToken cancellationToken) =>
+            Task.FromResult<Prismedia.Application.Requests.MonitorableContainer?>(null);
+    }
+
+    private sealed class NullAcquisitionRequestService : IAcquisitionRequestService {
+        public Task<AcquisitionSummary> CreateAndSearchAsync(AcquisitionCreateRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> AnyForEntityAsync(Guid entityId, CancellationToken cancellationToken) => Task.FromResult(false);
     }
 
     private sealed class FakeMonitorStore(IReadOnlyList<DueMonitor> due) : IMonitorStore {
@@ -83,6 +106,8 @@ public sealed class MonitoredSearchJobHandlerTests {
         public Task<bool> SetStatusAsync(Guid monitorId, MonitorStatus status, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<IReadOnlyList<MonitorView>> ListAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<MonitorView?> GetByAcquisitionAsync(Guid acquisitionId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<MonitorView> StartForEntityAsync(Guid entityId, EntityKind kind, string title, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<MonitorView?> GetByEntityAsync(Guid entityId, CancellationToken cancellationToken) => Task.FromResult<MonitorView?>(null);
         public Task<bool> HasActiveMonitorsAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
