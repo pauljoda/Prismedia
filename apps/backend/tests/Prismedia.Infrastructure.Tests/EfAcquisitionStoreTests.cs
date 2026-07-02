@@ -153,7 +153,7 @@ public sealed class EfAcquisitionStoreTests {
         AddHintWithEntity(db, entityId, "/media/books/Brandon Sanderson/Elantris (2005)/Elantris.epub");
         await db.SaveChangesAsync();
 
-        var bound = await new AcquisitionHintApplier(db).BindWantedBookAsync(
+        var bound = await new AcquisitionHintApplier(db).BindWantedEntityAsync(EntityKind.Book, 
             "/media/books/Brandon Sanderson/Elantris (2005)/Elantris.epub", CancellationToken.None);
 
         Assert.True(bound);
@@ -174,7 +174,7 @@ public sealed class EfAcquisitionStoreTests {
         AddHintWithEntity(db, Guid.NewGuid(), "/media/books/Author/Title/Title.epub");
         await db.SaveChangesAsync();
 
-        Assert.False(await new AcquisitionHintApplier(db).BindWantedBookAsync(
+        Assert.False(await new AcquisitionHintApplier(db).BindWantedEntityAsync(EntityKind.Book, 
             "/media/books/Author/Title/Title.epub", CancellationToken.None));
     }
 
@@ -190,7 +190,7 @@ public sealed class EfAcquisitionStoreTests {
         AddHintWithEntity(db, entityId, "/media/books/Author/Title/Title.epub");
         await db.SaveChangesAsync();
 
-        Assert.False(await new AcquisitionHintApplier(db).BindWantedBookAsync(
+        Assert.False(await new AcquisitionHintApplier(db).BindWantedEntityAsync(EntityKind.Book, 
             "/media/books/Author/Title/Title.epub", CancellationToken.None));
         Assert.Single(await db.EntityFiles.AsNoTracking().Where(f => f.EntityId == entityId).ToArrayAsync());
     }
@@ -203,7 +203,7 @@ public sealed class EfAcquisitionStoreTests {
         AddHintWithEntity(db, bookId, "/media/books/Brandon Sanderson/Elantris (2005)/Elantris.epub");
         await db.SaveChangesAsync();
 
-        var bound = await new AcquisitionHintApplier(db).BindWantedAuthorAsync(
+        var bound = await new AcquisitionHintApplier(db).BindWantedParentAsync(EntityKind.BookAuthor, 
             "/media/books/Brandon Sanderson", CancellationToken.None);
 
         Assert.True(bound);
@@ -226,7 +226,7 @@ public sealed class EfAcquisitionStoreTests {
         });
         await db.SaveChangesAsync();
 
-        Assert.False(await new AcquisitionHintApplier(db).BindWantedBookAsync(
+        Assert.False(await new AcquisitionHintApplier(db).BindWantedEntityAsync(EntityKind.Book, 
             "/media/books/Author/Title/Title.epub", CancellationToken.None));
     }
 

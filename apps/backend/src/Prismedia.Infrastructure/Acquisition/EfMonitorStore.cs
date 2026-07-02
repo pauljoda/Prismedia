@@ -190,12 +190,14 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
                     continue;
 
                 case AcquisitionStatus.Imported:
-                    // The wanted book is in hand. Either keep seeking a higher-quality release (upgrade loop)
-                    // or fulfill — the monitor is done.
-                    if (!upgradeEnabled || !row.Captured || row.OwnedQuality is not { } owned) {
-                        // Upgrade off, or quality not yet captured (a brief post-import window — leave Active to
-                        // retry next sweep rather than fulfilling before the loop can ever run).
-                        if (!upgradeEnabled) {
+                    // The wanted item is in hand. Books may keep seeking a higher-quality release (the
+                    // upgrade loop speaks book quality vocabulary); every other kind fulfills on import.
+                    var kindUpgrades = upgradeEnabled && monitor.Kind == EntityKind.Book;
+                    if (!kindUpgrades || !row.Captured || row.OwnedQuality is not { } owned) {
+                        // Upgrades off for this monitor, or quality not yet captured (a brief post-import
+                        // window — leave Active to retry next sweep rather than fulfilling before the loop
+                        // can ever run).
+                        if (!kindUpgrades) {
                             monitor.Status = MonitorStatus.Fulfilled;
                             monitor.UpdatedAt = now;
                             changed = true;

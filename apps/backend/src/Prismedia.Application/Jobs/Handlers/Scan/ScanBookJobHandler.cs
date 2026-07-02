@@ -79,7 +79,7 @@ public sealed class ScanBookJobHandler(
             // Bind a request-created wanted entity to this path first, so the path-keyed upsert finds it
             // (attaching the imported file to the wanted entity) instead of creating a duplicate.
             if (acquisitionHints is not null) {
-                await acquisitionHints.BindWantedBookAsync(first.BookPath, cancellationToken);
+                await acquisitionHints.BindWantedEntityAsync(EntityKind.Book, first.BookPath, cancellationToken);
             }
             var bookId = await books.UpsertBookAsync(first.BookPath, first.BookTitle, root.Id, bookIsNsfw, cancellationToken);
             if (bookMetadata is not null && scanMetadata is not null) {
@@ -250,7 +250,7 @@ public sealed class ScanBookJobHandler(
                 ?? folderName;
             // Bind a request-created wanted author to this folder first, so the upsert reuses that entity.
             if (acquisitionHints is not null) {
-                await acquisitionHints.BindWantedAuthorAsync(first.AuthorPath!, cancellationToken);
+                await acquisitionHints.BindWantedParentAsync(EntityKind.BookAuthor, first.AuthorPath!, cancellationToken);
             }
             var authorId = await books.UpsertBookAuthorAsync(
                 first.AuthorPath!,
@@ -288,7 +288,7 @@ public sealed class ScanBookJobHandler(
         // Bind a request-created wanted entity to this path first, so the path-keyed upsert finds it
         // (attaching the imported file to the wanted entity) instead of creating a duplicate.
         if (acquisitionHints is not null) {
-            await acquisitionHints.BindWantedBookAsync(item.SourcePath, cancellationToken);
+            await acquisitionHints.BindWantedEntityAsync(EntityKind.Book, item.SourcePath, cancellationToken);
         }
         var bookId = await books.UpsertSingleFileBookAsync(
             item.SourcePath,

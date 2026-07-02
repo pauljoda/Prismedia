@@ -1,5 +1,6 @@
 using Prismedia.Application.Jobs.Handlers;
 using Microsoft.Extensions.Logging;
+using Prismedia.Application.Acquisition;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Domain.Entities;
 using System.Text.RegularExpressions;
@@ -19,7 +20,8 @@ public sealed class ScanLibraryJobHandler(
     IDownstreamNeedsPersistence downstreamNeeds,
     IScanSnapshotStore? snapshots = null,
     IVideoSidecarMetadataReader? sidecars = null,
-    IScanMetadataPersistence? scanMetadata = null) : ScanJobHandler(logger, fileDiscovery, roots, snapshots) {
+    IScanMetadataPersistence? scanMetadata = null,
+    IAcquisitionHintApplier? acquisitionHints = null) : ScanJobHandler(logger, fileDiscovery, roots, snapshots) {
     private const int BatchSize = 50;
     private static readonly Regex SeasonFolderPattern = new(
         @"^(?:Season\s*(?<season>\d{1,3})|S(?<season>\d{1,3}))$",
@@ -78,6 +80,11 @@ public sealed class ScanLibraryJobHandler(
                     var item = BuildVideoUpsertItem(filePath, root, files, sidecar);
                     if (item.Movie is { } movie) {
                         validMovieFolders.Add(movie.FolderPath);
+                        if (acquisitionHints is not null) {
+                            // Bind a request-created wanted Movie to this folder BEFORE the upsert, so the
+                            // path-keyed movie upsert finds the wanted entity instead of creating a duplicate.
+                            await acquisitionHints.BindWantedEntityAsync(EntityKind.Movie, movie.FolderPath, cancellationToken);
+                        }
                     }
 
                     batchItems.Add(item);

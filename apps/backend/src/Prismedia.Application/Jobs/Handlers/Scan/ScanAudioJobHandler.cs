@@ -1,5 +1,6 @@
 using Prismedia.Application.Jobs.Handlers;
 using Microsoft.Extensions.Logging;
+using Prismedia.Application.Acquisition;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Domain.Entities;
 
@@ -18,7 +19,8 @@ public sealed class ScanAudioJobHandler(
     ILibraryScanRootPersistence roots,
     IAudioScanPersistence audio,
     IDownstreamNeedsPersistence downstreamNeeds,
-    IScanSnapshotStore? snapshots = null) : ScanJobHandler(logger, fileDiscovery, roots, snapshots) {
+    IScanSnapshotStore? snapshots = null,
+    IAcquisitionHintApplier? acquisitionHints = null) : ScanJobHandler(logger, fileDiscovery, roots, snapshots) {
     public override JobType Type => JobType.ScanAudio;
 
     protected override bool IsEligibleRoot(LibraryRootData root) => root.ScanAudio;
@@ -64,6 +66,19 @@ public sealed class ScanAudioJobHandler(
         // Albums, loose tracks, and artist groupings are all auto-identify candidates. The artist
         // identifies for its own metadata/artwork only; each album stays its own auto-identify root.
         var autoIdentifyIds = new List<Guid>();
+
+        // Bind request-created wanted entities to the folders the scan is about to upsert (the album an
+        // acquisition imported, and its fileless wanted artist container), so the path-keyed upserts find
+        // them instead of creating duplicates. Must run BEFORE the artist/album upserts.
+        if (acquisitionHints is not null) {
+            foreach (var artist in layout.Artists) {
+                await acquisitionHints.BindWantedParentAsync(EntityKind.MusicArtist, artist.Path, cancellationToken);
+            }
+
+            foreach (var album in layout.Albums) {
+                await acquisitionHints.BindWantedEntityAsync(EntityKind.AudioLibrary, album.Path, cancellationToken);
+            }
+        }
 
         // 1. Artist groupings.
         var artistSortOrders = SiblingSortOrders(layout.Artists.Select(artist => artist.Path).ToList());

@@ -137,7 +137,12 @@ public static partial class ImportPlanBuilder {
         return result;
     }
 
-    private static string SanitizeSegment(string segment) {
+    /// <summary>
+    /// Sanitizes one path segment for library placement: illegal filesystem characters become spaces,
+    /// whitespace collapses, and relative markers are neutralized. Shared by the per-kind import planners
+    /// so every import renders target paths under the same rules.
+    /// </summary>
+    public static string SanitizeSegment(string segment) {
         var cleaned = IllegalPathCharsRegex().Replace(segment, " ");
         cleaned = CollapseWhitespaceRegex().Replace(cleaned, " ").Trim();
         // Never allow a segment to escape upward or resolve to a relative marker.

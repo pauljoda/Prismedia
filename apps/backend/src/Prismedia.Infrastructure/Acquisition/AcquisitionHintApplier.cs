@@ -83,7 +83,7 @@ public sealed class AcquisitionHintApplier(PrismediaDbContext db) : IAcquisition
         return true;
     }
 
-    public async Task<bool> BindWantedBookAsync(string sourcePath, CancellationToken cancellationToken) {
+    public async Task<bool> BindWantedEntityAsync(EntityKind kind, string sourcePath, CancellationToken cancellationToken) {
         var entityId = await FindWantedEntityIdForPathAsync(sourcePath, cancellationToken);
         if (entityId is null) {
             return false;
@@ -91,8 +91,9 @@ public sealed class AcquisitionHintApplier(PrismediaDbContext db) : IAcquisition
 
         // Tolerate a dangling link (the wanted entity was deleted): the scan just creates a fresh entity
         // and the ordinary hint apply still stamps its ids. Never bind an entity that already has a source.
+        var kindCode = kind.ToCode();
         var entity = await db.Entities.FirstOrDefaultAsync(
-            row => row.Id == entityId && row.KindCode == EntityKindRegistry.Book.Code, cancellationToken);
+            row => row.Id == entityId && row.KindCode == kindCode, cancellationToken);
         if (entity is null || await HasSourceFileAsync(entity.Id, cancellationToken)) {
             return false;
         }
@@ -115,38 +116,40 @@ public sealed class AcquisitionHintApplier(PrismediaDbContext db) : IAcquisition
         return true;
     }
 
-    public async Task<bool> BindWantedAuthorAsync(string authorFolderPath, CancellationToken cancellationToken) {
-        var entityId = await FindWantedEntityIdForPathAsync(authorFolderPath, cancellationToken);
+    public async Task<bool> BindWantedParentAsync(EntityKind parentKind, string folderPath, CancellationToken cancellationToken) {
+        var entityId = await FindWantedEntityIdForPathAsync(folderPath, cancellationToken);
         if (entityId is null) {
             return false;
         }
 
-        // The hint links the wanted BOOK; the author is its parent — bind only a fileless author entity.
+        // The hint links the wanted CHILD (a book, an album); the container is its parent — bind only a
+        // fileless container entity of the expected kind.
         var parentId = await db.Entities
             .Where(row => row.Id == entityId)
             .Select(row => row.ParentEntityId)
             .FirstOrDefaultAsync(cancellationToken);
-        if (parentId is not { } authorId) {
+        if (parentId is not { } containerId) {
             return false;
         }
 
-        var author = await db.Entities.FirstOrDefaultAsync(
-            row => row.Id == authorId && row.KindCode == EntityKindRegistry.BookAuthor.Code, cancellationToken);
-        if (author is null || await HasSourceFileAsync(author.Id, cancellationToken)) {
+        var parentKindCode = parentKind.ToCode();
+        var container = await db.Entities.FirstOrDefaultAsync(
+            row => row.Id == containerId && row.KindCode == parentKindCode, cancellationToken);
+        if (container is null || await HasSourceFileAsync(container.Id, cancellationToken)) {
             return false;
         }
 
         var now = DateTimeOffset.UtcNow;
         db.EntityFiles.Add(new EntityFileRow {
             Id = Guid.NewGuid(),
-            EntityId = author.Id,
+            EntityId = container.Id,
             Role = EntityFileRole.Source,
-            Path = authorFolderPath,
+            Path = folderPath,
             CreatedAt = now,
             UpdatedAt = now
         });
-        author.IsWanted = false;
-        author.UpdatedAt = now;
+        container.IsWanted = false;
+        container.UpdatedAt = now;
         await db.SaveChangesAsync(cancellationToken);
         return true;
     }

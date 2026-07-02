@@ -347,6 +347,7 @@ public static class DependencyInjection {
         services.AddScoped<IOwnedFileReplacer, OwnedFileReplacer>();
         services.AddScoped<IAcquisitionHintApplier, AcquisitionHintApplier>();
         services.AddScoped<IImportedFilesReader, ImportedFilesReader>();
+        services.AddScoped<IDownloadPayloadReader, DownloadPayloadReader>();
         // No auto-redirect: the resolver validates the destination host is public before fetching, and a
         // redirect could hop to a private address that bypasses that check (SSRF defense for the LAN host).
         services.AddScoped<IReleaseLinkResolver>(_ => new ReleaseLinkResolver(

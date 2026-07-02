@@ -62,6 +62,11 @@ public static class DependencyInjection {
         services.AddSingleton<Acquisition.IAcquisitionDecisionEngine, Acquisition.MovieReleaseDecisionEngine>();
         services.AddSingleton<Acquisition.IAcquisitionDecisionEngine, Acquisition.MusicReleaseDecisionEngine>();
         services.AddSingleton<Acquisition.IAcquisitionDecisionEngineFactory, Acquisition.AcquisitionDecisionEngineFactory>();
+        services.AddScoped<ImportedTorrentRemover>();
+        services.AddScoped<IAcquisitionImportEngine, BookAcquisitionImportEngine>();
+        services.AddScoped<IAcquisitionImportEngine, MovieAcquisitionImportEngine>();
+        services.AddScoped<IAcquisitionImportEngine, MusicAcquisitionImportEngine>();
+        services.AddScoped<IAcquisitionImportEngineFactory, AcquisitionImportEngineFactory>();
         services.AddScoped<IAudioStreamService, AudioStreamService>();
         services.AddSingleton<IIdentifyApplyProgressStore, InMemoryIdentifyApplyProgressStore>();
         services.AddSingleton<AuthAttemptThrottle>();
