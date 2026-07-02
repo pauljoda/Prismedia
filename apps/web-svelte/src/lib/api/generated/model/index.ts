@@ -401,4 +401,6 @@ export * from './uploadAcquisitionTorrentBody';
 export * from './videoDetail';
 export * from './videoSeasonDetail';
 export * from './videoSeriesDetail';
+export * from './wantedRemovalRequest';
+export * from './wantedRemovalResponse';
 export * from './workerHealthResponse';

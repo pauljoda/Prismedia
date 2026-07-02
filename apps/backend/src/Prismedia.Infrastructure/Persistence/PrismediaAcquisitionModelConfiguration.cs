@@ -257,6 +257,23 @@ internal static partial class PrismediaModelConfiguration {
             entity.HasOne<AcquisitionRow>().WithMany().HasForeignKey(row => row.AcquisitionId).OnDelete(DeleteBehavior.Cascade);
         });
 
+        modelBuilder.Entity<WantedSuppressionRow>(entity => {
+            entity.ToTable("wanted_suppressions");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(row => row.Provider).HasColumnName("provider").HasMaxLength(256).IsRequired();
+            entity.Property(row => row.ItemId).HasColumnName("item_id").HasMaxLength(512).IsRequired();
+            entity.Property(row => row.Kind)
+                .HasColumnName("kind")
+                .HasMaxLength(64)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<EntityKind>())
+                .HasDefaultValue(EntityKind.Book)
+                .IsRequired();
+            entity.Property(row => row.Title).HasColumnName("title").HasMaxLength(1024).IsRequired();
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.HasIndex(row => new { row.Provider, row.ItemId }).IsUnique();
+        });
+
         modelBuilder.Entity<AcquisitionBlocklistRow>(entity => {
             entity.ToTable("acquisition_blocklist");
             entity.HasKey(row => row.Id);

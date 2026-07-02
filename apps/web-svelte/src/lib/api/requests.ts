@@ -3,6 +3,7 @@ import {
   commitEntityRequest as commitEntityRequestRequest,
   commitRequest as commitRequestRequest,
   getRequestDetail as getRequestDetailRequest,
+  removeWanted as removeWantedRequest,
   searchRequests as searchRequestsRequest,
   syncContainerRequest as syncContainerRequestRequest,
 } from "$lib/api/generated/prismedia";
@@ -53,6 +54,15 @@ export async function commitRequest(params: {
  */
 export async function commitEntityRequest(entityId: string): Promise<RequestCommitResponse> {
   return unwrapGenerated(await commitEntityRequestRequest({ entityId }), "Failed to search for a release");
+}
+
+/**
+ * Removes wanted placeholders: each is deleted (any in-flight download torn down) and blacklisted from
+ * container discovery so a followed author/artist sweep never resurrects it. Explicitly requesting the
+ * same work again clears its blacklist entry.
+ */
+export async function removeWantedEntities(entityIds: string[]): Promise<void> {
+  unwrapGenerated(await removeWantedRequest({ entityIds }), "Failed to remove wanted items");
 }
 
 /** Immediately re-syncs a followed author/artist from its provider — the manual counterpart to the daily sweep. */

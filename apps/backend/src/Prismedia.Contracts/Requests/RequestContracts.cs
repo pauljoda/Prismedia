@@ -141,6 +141,17 @@ public sealed record RequestCommitResponse(
 /// </summary>
 public sealed record RequestEntityCommitRequest(Guid EntityId);
 
+/// <summary>
+/// Removes wanted placeholders the user no longer wants: each is deleted (with any in-flight
+/// acquisition torn down) and blacklisted from container discovery, so a followed author/artist sweep
+/// never resurrects it. Explicitly requesting the same work again clears its blacklist entry.
+/// </summary>
+public sealed record WantedRemovalRequest(IReadOnlyList<Guid> EntityIds);
+
+/// <summary>Result of a wanted removal.</summary>
+/// <param name="Removed">How many placeholders were removed (on-disk items are skipped).</param>
+public sealed record WantedRemovalResponse(int Removed);
+
 /// <summary>Root folder/profile option exposed by a request service instance.</summary>
 public sealed record RequestServiceOption(string Id, string Name, string? Path);
 

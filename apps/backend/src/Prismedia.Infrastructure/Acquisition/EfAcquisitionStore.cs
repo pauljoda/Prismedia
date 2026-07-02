@@ -474,6 +474,13 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
     public async Task<bool> AnyForEntityAsync(Guid entityId, CancellationToken cancellationToken) =>
         await db.Acquisitions.AsNoTracking().AnyAsync(row => row.EntityId == entityId, cancellationToken);
 
+    public async Task<IReadOnlyList<Guid>> ListIdsForEntityAsync(Guid entityId, CancellationToken cancellationToken) =>
+        await db.Acquisitions.AsNoTracking()
+            .Where(row => row.EntityId == entityId)
+            .OrderByDescending(row => row.CreatedAt)
+            .Select(row => row.Id)
+            .ToArrayAsync(cancellationToken);
+
     public async Task<AcquisitionDetail?> GetLatestForEntityAsync(Guid entityId, CancellationToken cancellationToken) {
         var id = await db.Acquisitions
             .AsNoTracking()

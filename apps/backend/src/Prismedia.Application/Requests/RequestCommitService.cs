@@ -22,10 +22,25 @@ public sealed record WantedEntityResult(Guid EntityId, bool Created, bool HasFil
 public sealed record ProviderRef(string Provider, string ItemId);
 
 /// <summary>
-/// A library container entity (an author, an artist) read for monitoring: its kind, display title, and
-/// the provider identities a discovery sync can re-resolve it from.
+/// A library entity read for monitoring/removal: its kind, display title, the provider identities a
+/// discovery sync can re-resolve it from, and whether it owns a real source file.
 /// </summary>
-public sealed record MonitorableContainer(Guid EntityId, EntityKind Kind, string Title, IReadOnlyList<ProviderRef> ProviderIds);
+public sealed record MonitorableContainer(Guid EntityId, EntityKind Kind, string Title, IReadOnlyList<ProviderRef> ProviderIds, bool HasSourceFile = false);
+
+/// <summary>
+/// The discovery blacklist: provider work identities the user removed from Wanted. Container sweeps
+/// skip suppressed works so a removed phantom never reappears; explicitly requesting a work clears it.
+/// </summary>
+public interface IWantedSuppressionStore {
+    /// <summary>Suppresses every given identity (idempotent per identity).</summary>
+    Task SuppressAsync(IReadOnlyList<ProviderRef> identities, EntityKind kind, string title, CancellationToken cancellationToken);
+
+    /// <summary>The subset of the given identities that are suppressed, as "provider:itemId" strings.</summary>
+    Task<IReadOnlySet<string>> FilterSuppressedAsync(IReadOnlyList<ProviderRef> identities, CancellationToken cancellationToken);
+
+    /// <summary>Clears the suppression for every given identity — a direct request un-blacklists the work.</summary>
+    Task ClearAsync(IReadOnlyList<ProviderRef> identities, CancellationToken cancellationToken);
+}
 
 /// <summary>
 /// Creates and populates wanted library entities for request commits. A wanted entity is a real library
@@ -74,7 +89,8 @@ public sealed class RequestCommitService(
     IPluginRequestProposalSource proposals,
     IWantedEntityWriter wanted,
     IAcquisitionRequestService acquisitions,
-    Acquisition.IMonitorStore monitors) {
+    Acquisition.IMonitorStore monitors,
+    IWantedSuppressionStore suppressions) {
     /// <summary>
     /// Commits a reviewed request. Returns null when the kind isn't committable, the provider-qualified
     /// id is malformed, or the provider can't resolve it; otherwise reports a per-item outcome (an
@@ -191,7 +207,8 @@ public sealed class RequestCommitService(
     /// The shared container materialization: ensure the container and its picked works as wanted
     /// entities, apply the proposal filtered to the fileless picks, and keep the container monitored.
     /// <paramref name="startAcquisitions"/> separates an explicit request (each new pick gets an
-    /// auto-grabbing, monitored acquisition) from monitor discovery (phantoms only).
+    /// auto-grabbing, monitored acquisition, and any suppression on it is cleared) from monitor
+    /// discovery (phantoms only — and works the user removed from Wanted stay suppressed).
     /// </summary>
     private async Task<RequestCommitResponse> CommitContainerCoreAsync(
         RequestKindDescriptor descriptor, string providerId, string itemId, EntityMetadataProposal proposal,
@@ -202,8 +219,21 @@ public sealed class RequestCommitService(
             descriptor.WantedEntityKind, providerId, itemId, containerTitle,
             parentEntityId: null, matchTitleKindWide: true, cancellationToken);
 
+        var selectedChildren = SelectStructuralChildren(providerId, proposal, selectedChildIds);
+        if (!startAcquisitions) {
+            // Discovery honors the blacklist: a work the user removed from Wanted never reappears as a
+            // phantom. An explicit pick below (startAcquisitions) instead CLEARS its suppression.
+            var candidates = selectedChildren
+                .Select(node => new ProviderRef(providerId, RequestProposalReading.WorkIdFor(providerId, node)!))
+                .ToArray();
+            var suppressed = await suppressions.FilterSuppressedAsync(candidates, cancellationToken);
+            selectedChildren = selectedChildren
+                .Where(node => !suppressed.Contains($"{providerId}:{RequestProposalReading.WorkIdFor(providerId, node)}"))
+                .ToArray();
+        }
+
         var picks = new List<CommitPick>();
-        foreach (var childProposal in SelectStructuralChildren(providerId, proposal, selectedChildIds)) {
+        foreach (var childProposal in selectedChildren) {
             var pick = await EnsurePickAsync(child, providerId, childProposal, container.EntityId, cancellationToken);
             if (pick is not null) {
                 picks.Add(pick);
@@ -314,6 +344,10 @@ public sealed class RequestCommitService(
     /// </summary>
     private async Task<RequestCommitItem> StartAcquisitionAsync(
         CommitPick pick, string providerId, EntityKind acquisitionKind, string? author, string? series, CancellationToken cancellationToken) {
+        // A direct request un-blacklists the work: if the user removed it from Wanted before, asking
+        // for it again by name is the explicit signal to want it after all.
+        await suppressions.ClearAsync(IdentitiesOf(pick, providerId), cancellationToken);
+
         Guid? acquisitionId = null;
         if (pick.Outcome == RequestCommitOutcome.Requested) {
             var summary = await acquisitions.CreateAndSearchAsync(
@@ -334,6 +368,48 @@ public sealed class RequestCommitService(
         }
 
         return new RequestCommitItem($"{providerId}:{pick.WorkId}", pick.Title, pick.Outcome, pick.Entity.EntityId, acquisitionId);
+    }
+
+    /// <summary>
+    /// Removes wanted placeholders the user no longer wants: suppresses every provider identity each
+    /// entity carries (so a container sweep never resurrects it as a phantom), tears down any
+    /// acquisitions targeting it (removing in-flight downloads), and deletes the placeholder entity.
+    /// Entities with a real source file are left untouched — on-disk items aren't "wanted" to remove.
+    /// Returns how many entities were removed.
+    /// </summary>
+    public async Task<int> RemoveWantedAsync(IReadOnlyList<Guid> entityIds, CancellationToken cancellationToken) {
+        var removed = 0;
+        foreach (var entityId in entityIds.Distinct()) {
+            var entity = await wanted.GetContainerAsync(entityId, cancellationToken);
+            if (entity is null || entity.HasSourceFile) {
+                continue;
+            }
+
+            await suppressions.SuppressAsync(entity.ProviderIds, entity.Kind, entity.Title, cancellationToken);
+
+            // Deleting an acquisition removes its torrent/data and (being wanted-linked) the entity;
+            // the direct delete below covers acquisition-less phantoms.
+            foreach (var acquisitionId in await acquisitions.ListIdsForEntityAsync(entityId, cancellationToken)) {
+                await acquisitions.DeleteAsync(acquisitionId, cancellationToken);
+            }
+
+            await wanted.DeleteIfWantedAsync(entityId, cancellationToken);
+            removed++;
+        }
+
+        return removed;
+    }
+
+    /// <summary>Every provider identity a pick carries: the resolving provider's pair plus the proposal's external ids.</summary>
+    private static IReadOnlyList<ProviderRef> IdentitiesOf(CommitPick pick, string providerId) {
+        var identities = new List<ProviderRef> { new(providerId, pick.WorkId) };
+        foreach (var (provider, value) in pick.Proposal.Patch?.ExternalIds ?? new Dictionary<string, string>()) {
+            if (!string.IsNullOrWhiteSpace(provider) && !string.IsNullOrWhiteSpace(value)) {
+                identities.Add(new ProviderRef(provider, value));
+            }
+        }
+
+        return identities;
     }
 
     /// <summary>The structural (non-relationship) children whose provider-qualified ids were picked.</summary>

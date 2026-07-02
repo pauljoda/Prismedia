@@ -104,6 +104,22 @@ public static class RequestEndpoints {
             .Produces<RequestCommitResponse>()
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
+        group.MapPost("/remove-wanted", async (
+            WantedRemovalRequest request,
+            RequestCommitService commits,
+            CancellationToken cancellationToken) => {
+                if (request.EntityIds.Count == 0) {
+                    return Results.BadRequest(new ApiProblem(ApiProblemCodes.RequestInvalid, "Select at least one wanted item to remove."));
+                }
+
+                var removed = await commits.RemoveWantedAsync(request.EntityIds, cancellationToken);
+                return Results.Ok(new WantedRemovalResponse(removed));
+            })
+            .WithName("RemoveWanted")
+            .WithSummary("Removes wanted placeholders: deletes each (tearing down in-flight downloads) and blacklists it from discovery; requesting it again later clears the blacklist entry.")
+            .Produces<WantedRemovalResponse>()
+            .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
+
         group.MapPost("/sync-container", async (
             RequestEntityCommitRequest request,
             RequestCommitService commits,

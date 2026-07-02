@@ -236,6 +236,8 @@ import type {
   VideoDetail,
   VideoSeasonDetail,
   VideoSeriesDetail,
+  WantedRemovalRequest,
+  WantedRemovalResponse,
   WorkerHealthResponse
 } from './model';
 
@@ -10971,6 +10973,50 @@ export const commitEntityRequest = async (requestEntityCommitRequest: RequestEnt
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       requestEntityCommitRequest,)
+  }
+);}
+
+
+
+export type removeWantedResponse200 = {
+  data: WantedRemovalResponse
+  status: 200
+}
+
+export type removeWantedResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type removeWantedResponseSuccess = (removeWantedResponse200) & {
+  headers: Headers;
+};
+export type removeWantedResponseError = (removeWantedResponse400) & {
+  headers: Headers;
+};
+
+export type removeWantedResponse = (removeWantedResponseSuccess | removeWantedResponseError)
+
+export const getRemoveWantedUrl = () => {
+
+
+
+
+  return `/api/requests/remove-wanted`
+}
+
+/**
+ * @summary Removes wanted placeholders: deletes each (tearing down in-flight downloads) and blacklists it from discovery; requesting it again later clears the blacklist entry.
+ */
+export const removeWanted = async (wantedRemovalRequest: WantedRemovalRequest, options?: RequestInit): Promise<removeWantedResponse> => {
+
+  return orvalFetch<removeWantedResponse>(getRemoveWantedUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      wantedRemovalRequest,)
   }
 );}
 

@@ -72,7 +72,14 @@ public sealed class MonitoredSearchJobHandlerTests {
 
     /// <summary>A commit service whose container sync never resolves (null sources), for the non-container test paths.</summary>
     private static Prismedia.Application.Requests.RequestCommitService CommitService(IMonitorStore monitors) =>
-        new(new NullProposalSource(), new NullWantedWriter(), new NullAcquisitionRequestService(), monitors);
+        new(new NullProposalSource(), new NullWantedWriter(), new NullAcquisitionRequestService(), monitors, new NullSuppressionStore());
+
+    private sealed class NullSuppressionStore : Prismedia.Application.Requests.IWantedSuppressionStore {
+        public Task SuppressAsync(IReadOnlyList<Prismedia.Application.Requests.ProviderRef> identities, EntityKind kind, string title, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task<IReadOnlySet<string>> FilterSuppressedAsync(IReadOnlyList<Prismedia.Application.Requests.ProviderRef> identities, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlySet<string>>(new HashSet<string>());
+        public Task ClearAsync(IReadOnlyList<Prismedia.Application.Requests.ProviderRef> identities, CancellationToken cancellationToken) => Task.CompletedTask;
+    }
 
     private sealed class NullProposalSource : Prismedia.Application.Requests.IPluginRequestProposalSource {
         public Task<Prismedia.Contracts.Plugins.EntityMetadataProposal?> ResolveProposalAsync(
@@ -91,6 +98,8 @@ public sealed class MonitoredSearchJobHandlerTests {
     private sealed class NullAcquisitionRequestService : IAcquisitionRequestService {
         public Task<AcquisitionSummary> CreateAndSearchAsync(AcquisitionCreateRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<bool> AnyForEntityAsync(Guid entityId, CancellationToken cancellationToken) => Task.FromResult(false);
+        public Task<IReadOnlyList<Guid>> ListIdsForEntityAsync(Guid entityId, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<Guid>>([]);
+        public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken) => Task.FromResult(false);
     }
 
     private sealed class FakeMonitorStore(IReadOnlyList<DueMonitor> due) : IMonitorStore {

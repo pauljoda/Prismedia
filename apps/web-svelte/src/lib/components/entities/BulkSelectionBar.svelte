@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { CheckCheck, EllipsisVertical, Flame, ListChecks, X } from "@lucide/svelte";
+  import { BellOff, CheckCheck, EllipsisVertical, Flame, ListChecks, X } from "@lucide/svelte";
   import { cubicOut } from "svelte/easing";
   import { slide } from "svelte/transition";
   import { cn } from "@prismedia/ui-svelte";
@@ -10,6 +10,10 @@
 
   interface Props {
     allSelectedNsfw?: boolean;
+    /** True when every selected card is a wanted placeholder; enables the Remove wanted action. */
+    allSelectedWanted?: boolean;
+    /** Removes the selected wanted placeholders (delete + discovery blacklist; a direct re-request restores). */
+    onRemoveWanted?: () => void;
     bulkActions?: EntityGridBulkAction[];
     class?: string;
     collectionItems?: { entityType: CollectionEntityType; entityId: string }[];
@@ -28,6 +32,8 @@
 
   let {
     allSelectedNsfw = false,
+    allSelectedWanted = false,
+    onRemoveWanted,
     bulkActions = [],
     class: className = "",
     collectionItems = [],
@@ -47,6 +53,7 @@
   let actionsMenuOpen = $state(false);
 
   const canToggleNsfw = $derived(showNsfwAction && typeof onToggleNsfwFlag === "function");
+  const canRemoveWanted = $derived(allSelectedWanted && typeof onRemoveWanted === "function");
 </script>
 
 <div
@@ -115,6 +122,19 @@
           >
             <Flame class="h-3.5 w-3.5" />
             <span class="bulk-btn-label">{allSelectedNsfw ? "Mark SFW" : "Mark NSFW"}</span>
+          </button>
+        {/if}
+
+        {#if canRemoveWanted}
+          <span class="bulk-divider" aria-hidden="true"></span>
+          <button
+            type="button"
+            class="bulk-btn is-danger"
+            title="Remove from Wanted — deletes these placeholders and keeps them out of future discovery; requesting one again brings it back"
+            onclick={() => onRemoveWanted?.()}
+          >
+            <BellOff class="h-3.5 w-3.5" />
+            <span class="bulk-btn-label">Remove wanted</span>
           </button>
         {/if}
 
@@ -282,6 +302,13 @@
   .bulk-btn:disabled {
     cursor: not-allowed;
     opacity: 0.5;
+  }
+
+  .bulk-btn.is-danger:hover,
+  .bulk-btn.is-danger:focus-visible {
+    border-color: rgba(255, 92, 67, 0.42);
+    color: var(--color-status-error-text, #ff806f);
+    box-shadow: 0 0 0 1px rgba(255, 92, 67, 0.3), 0 0 8px rgba(255, 92, 67, 0.12);
   }
 
   .bulk-btn-label {

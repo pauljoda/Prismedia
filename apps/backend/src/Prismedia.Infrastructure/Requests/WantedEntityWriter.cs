@@ -138,7 +138,8 @@ public sealed class WantedEntityWriter(PrismediaDbContext db, EntityMetadataAppl
             .OrderBy(row => row.CreatedAt)
             .Select(row => new ProviderRef(row.Provider, row.Value))
             .ToArrayAsync(cancellationToken);
-        return new MonitorableContainer(entity.Id, entity.KindCode.DecodeAs<EntityKind>(), entity.Title, providerIds);
+        var hasSource = await HasSourceFileAsync(entityId, cancellationToken);
+        return new MonitorableContainer(entity.Id, entity.KindCode.DecodeAs<EntityKind>(), entity.Title, providerIds, hasSource);
     }
 
     private Task<bool> HasSourceFileAsync(Guid entityId, CancellationToken cancellationToken) =>

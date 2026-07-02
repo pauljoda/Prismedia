@@ -4,7 +4,8 @@
     SearchX,
   } from "@lucide/svelte";
   import { onMount } from "svelte";
-  import { isNsfw, withFlagCapability } from "$lib/api/capabilities";
+  import { isNsfw, isWanted, withFlagCapability } from "$lib/api/capabilities";
+  import { removeWantedEntities } from "$lib/api/requests";
   import type { EntityCapability } from "$lib/api/generated/model";
   import { updateEntityFlags } from "$lib/api/entity-mutations";
   import { createFilterPresets, type FilterPreset } from "$lib/filter-presets";
@@ -188,6 +189,8 @@
   const persistedPrefs: EntityGridPrefs | null = prefsStore ? prefsStore.load() : null;
 
   let capabilityOverrides = $state(new Map<string, EntityCapability[]>());
+  /** Wanted placeholders removed via the bulk action this session; dropped from the grid optimistically. */
+  let removedIds = $state(new Set<string>());
   let activeKind = $state(persistedPrefs?.activeKind ?? ENTITY_GRID_ALL_KINDS);
   let activePresetId = $state<string | null>(persistedPrefs?.activePresetId ?? null);
   let drawerOpen = $state(false);
@@ -252,8 +255,9 @@
     randomSeed,
   });
   const effectiveCards = $derived.by(() => {
-    if (capabilityOverrides.size === 0) return cards;
-    return cards.map((c) => {
+    const present = removedIds.size === 0 ? cards : cards.filter((c) => !removedIds.has(c.entity.id));
+    if (capabilityOverrides.size === 0) return present;
+    return present.map((c) => {
       const overridden = capabilityOverrides.get(c.entity.id);
       if (!overridden) return c;
       return { ...c, entity: { ...c.entity, capabilities: overridden } };
@@ -274,6 +278,11 @@
   );
   const allSelectedNsfw = $derived(
     selectedCards.length > 0 && selectedCards.every((c) => isNsfw(c.entity.capabilities)),
+  );
+  // "Remove wanted" is offered only when the whole selection is wanted placeholders — mixing in real
+  // on-disk items would make the action ambiguous (the server skips them anyway).
+  const allSelectedWanted = $derived(
+    selectedCards.length > 0 && selectedCards.every((c) => isWanted(c.entity.capabilities)),
   );
   // Members of the current selection that can live in a collection, mapped to the
   // collection item reference shape. Kinds the backend rejects (people, studios,
@@ -706,6 +715,25 @@
     onSelectionChange?.(selectedIds);
   }
 
+  /**
+   * Removes the selected wanted placeholders: the server deletes each (tearing down in-flight
+   * downloads) and blacklists it from container discovery so a followed author/artist sweep never
+   * brings it back — requesting the exact item again later clears its blacklist entry. The grid drops
+   * the cards optimistically.
+   */
+  async function removeWantedSelection() {
+    if (selectedCards.length === 0) return;
+    const targets = selectedCards.map((card) => card.entity.id);
+    try {
+      await removeWantedEntities(targets);
+      removedIds = new Set([...removedIds, ...targets]);
+      selectedIds = [];
+      onSelectionChange?.(selectedIds);
+    } catch {
+      // best-effort; the cards stay and the user can retry
+    }
+  }
+
   function toggleNsfwFlag(markNsfw: boolean) {
     if (selectedCards.length === 0) return;
     const targets = [...selectedCards];
@@ -836,6 +864,8 @@
     activeFilterIds={filterIds}
     {activePresetId}
     {allSelectedNsfw}
+    {allSelectedWanted}
+    onRemoveWanted={removeWantedSelection}
     {barsCollapsed}
     {bulkActions}
     collectionItems={bulkLibraryActions ? collectionItems : []}

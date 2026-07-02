@@ -40,6 +40,10 @@
     activeFilterIds: string[];
     activePresetId?: string | null;
     allSelectedNsfw: boolean;
+    /** True when every selected card is a wanted placeholder; enables the Remove wanted bulk action. */
+    allSelectedWanted?: boolean;
+    /** Removes the selected wanted placeholders (delete + discovery blacklist). */
+    onRemoveWanted?: () => void;
     /** Persisted collapse state for the secondary toolbar rows; seeds the initial view. */
     barsCollapsed?: boolean;
     bulkActions: EntityGridBulkAction[];
@@ -93,6 +97,8 @@
     activeFilterIds,
     activePresetId = null,
     allSelectedNsfw,
+    allSelectedWanted = false,
+    onRemoveWanted,
     barsCollapsed: initialBarsCollapsed = false,
     bulkActions,
     collectionItems,
@@ -494,6 +500,8 @@
     {#if selectable && !barsCollapsed}
       <BulkSelectionBar
         {allSelectedNsfw}
+        {allSelectedWanted}
+        {onRemoveWanted}
         {bulkActions}
         {collectionItems}
         {onClearSelection}

@@ -16,6 +16,12 @@ public interface IAcquisitionRequestService {
 
     /// <summary>True when any acquisition targets this wanted library entity.</summary>
     Task<bool> AnyForEntityAsync(Guid entityId, CancellationToken cancellationToken);
+
+    /// <summary>Every acquisition targeting this wanted library entity, for teardown when the want is removed.</summary>
+    Task<IReadOnlyList<Guid>> ListIdsForEntityAsync(Guid entityId, CancellationToken cancellationToken);
+
+    /// <summary>Removes an acquisition entirely: best-effort deletes its torrent (and data) from the client, then hard-deletes the record.</summary>
+    Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -258,4 +264,8 @@ public sealed class AcquisitionService(
     /// <inheritdoc />
     public Task<bool> AnyForEntityAsync(Guid entityId, CancellationToken cancellationToken) =>
         store.AnyForEntityAsync(entityId, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<Guid>> ListIdsForEntityAsync(Guid entityId, CancellationToken cancellationToken) =>
+        store.ListIdsForEntityAsync(entityId, cancellationToken);
 }

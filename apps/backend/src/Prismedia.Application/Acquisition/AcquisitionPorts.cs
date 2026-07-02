@@ -257,6 +257,9 @@ public interface IAcquisitionStore {
 
     /// <summary>The newest acquisition targeting this library entity with its candidates, or null when it has none.</summary>
     Task<AcquisitionDetail?> GetLatestForEntityAsync(Guid entityId, CancellationToken cancellationToken);
+
+    /// <summary>Every acquisition id targeting this library entity, newest first.</summary>
+    Task<IReadOnlyList<Guid>> ListIdsForEntityAsync(Guid entityId, CancellationToken cancellationToken);
 }
 
 /// <summary>

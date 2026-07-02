@@ -246,6 +246,65 @@ public sealed class RequestCommitServiceTests {
     }
 
     [Fact]
+    public async Task RemoveWantedSuppressesDeletesAndTearsDownAcquisitions() {
+        var (service, writer, acquisitions, _, suppressions) = ServiceWithSuppressions(Leaf(ProposalKind.Book, "Book", "W1"));
+        var phantomId = Guid.NewGuid();
+        var acquisitionId = Guid.NewGuid();
+        writer.Container = new MonitorableContainer(
+            phantomId, EntityKind.Book, "The Martian", [new ProviderRef(Provider, "W1"), new ProviderRef("isbn13", "978")]);
+        acquisitions.AcquisitionIdsByEntity[phantomId] = [acquisitionId];
+
+        var removed = await service.RemoveWantedAsync([phantomId], CancellationToken.None);
+
+        Assert.Equal(1, removed);
+        // Every identity the entity carried is blacklisted, its download torn down, the entity deleted.
+        Assert.Contains($"{Provider}:W1", suppressions.Suppressed);
+        Assert.Contains("isbn13:978", suppressions.Suppressed);
+        Assert.Equal([acquisitionId], acquisitions.Deleted.ToArray());
+    }
+
+    [Fact]
+    public async Task RemoveWantedSkipsOnDiskEntities() {
+        var (service, writer, acquisitions, _, suppressions) = ServiceWithSuppressions(Leaf(ProposalKind.Book, "Book", "W1"));
+        var ownedId = Guid.NewGuid();
+        writer.Container = new MonitorableContainer(
+            ownedId, EntityKind.Book, "Owned", [new ProviderRef(Provider, "W1")], HasSourceFile: true);
+
+        Assert.Equal(0, await service.RemoveWantedAsync([ownedId], CancellationToken.None));
+        Assert.Empty(suppressions.Suppressed);
+        Assert.Empty(acquisitions.Deleted);
+    }
+
+    [Fact]
+    public async Task ContainerSyncNeverResurrectsASuppressedWork() {
+        var proposal = Container(ProposalKind.Person, "Author", "A1",
+            Leaf(ProposalKind.Book, "Removed", "W1"), Leaf(ProposalKind.Book, "Kept", "W2"));
+        var (service, writer, _, _, suppressions) = ServiceWithSuppressions(proposal);
+        var authorEntityId = FakeWantedEntityWriter.EntityIdFor("A1");
+        writer.Container = new MonitorableContainer(authorEntityId, EntityKind.BookAuthor, "Author", [new ProviderRef(Provider, "A1")]);
+        suppressions.Suppressed.Add($"{Provider}:W1"); // the user removed this work earlier
+
+        Assert.True(await service.SyncContainerAsync(authorEntityId, CancellationToken.None));
+
+        Assert.DoesNotContain(writer.Ensured, call => call.ItemId == "W1");
+        Assert.Contains(writer.Ensured, call => call.ItemId == "W2");
+    }
+
+    [Fact]
+    public async Task ExplicitRequestClearsTheSuppression() {
+        var proposal = Leaf(ProposalKind.Book, "The Martian", "W1");
+        var (service, _, acquisitions, _, suppressions) = ServiceWithSuppressions(proposal);
+        suppressions.Suppressed.Add($"{Provider}:W1");
+
+        var response = await service.CommitAsync(
+            new RequestCommitRequest(RequestMediaKind.Book, $"{Provider}:W1", []), hideNsfw: false, CancellationToken.None);
+
+        Assert.Equal(RequestCommitOutcome.Requested, Assert.Single(response!.Items).Outcome);
+        Assert.Contains($"{Provider}:W1", suppressions.Cleared);
+        Assert.Single(acquisitions.Created);
+    }
+
+    [Fact]
     public async Task MalformedOrUnresolvableExternalIdsReturnNull() {
         var (service, _, _) = Service(Leaf(ProposalKind.Book, "Book", "W1"));
 
@@ -257,11 +316,18 @@ public sealed class RequestCommitServiceTests {
 
     private static (RequestCommitService Service, FakeWantedEntityWriter Writer, FakeAcquisitionRequestService Acquisitions, FakeMonitorStore Monitors) ServiceWithMonitors(
         EntityMetadataProposal proposal) {
+        var (service, writer, acquisitions, monitors, _) = ServiceWithSuppressions(proposal);
+        return (service, writer, acquisitions, monitors);
+    }
+
+    private static (RequestCommitService Service, FakeWantedEntityWriter Writer, FakeAcquisitionRequestService Acquisitions, FakeMonitorStore Monitors, FakeSuppressionStore Suppressions) ServiceWithSuppressions(
+        EntityMetadataProposal proposal) {
         var writer = new FakeWantedEntityWriter();
         var acquisitions = new FakeAcquisitionRequestService();
         var monitors = new FakeMonitorStore();
-        var service = new RequestCommitService(new FakeProposalSource(proposal), writer, acquisitions, monitors);
-        return (service, writer, acquisitions, monitors);
+        var suppressions = new FakeSuppressionStore();
+        var service = new RequestCommitService(new FakeProposalSource(proposal), writer, acquisitions, monitors, suppressions);
+        return (service, writer, acquisitions, monitors, suppressions);
     }
 
     private static (RequestCommitService Service, FakeWantedEntityWriter Writer, FakeAcquisitionRequestService Acquisitions) Service(
@@ -357,6 +423,8 @@ public sealed class RequestCommitServiceTests {
     private sealed class FakeAcquisitionRequestService : IAcquisitionRequestService {
         public List<AcquisitionCreateRequest> Created { get; } = [];
         public HashSet<Guid> EntitiesWithAcquisitions { get; } = [];
+        public Dictionary<Guid, Guid[]> AcquisitionIdsByEntity { get; } = [];
+        public List<Guid> Deleted { get; } = [];
 
         public Task<AcquisitionSummary> CreateAndSearchAsync(AcquisitionCreateRequest request, CancellationToken cancellationToken) {
             Created.Add(request);
@@ -368,5 +436,39 @@ public sealed class RequestCommitServiceTests {
 
         public Task<bool> AnyForEntityAsync(Guid entityId, CancellationToken cancellationToken) =>
             Task.FromResult(EntitiesWithAcquisitions.Contains(entityId));
+
+        public Task<IReadOnlyList<Guid>> ListIdsForEntityAsync(Guid entityId, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<Guid>>(AcquisitionIdsByEntity.GetValueOrDefault(entityId) ?? []);
+
+        public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken) {
+            Deleted.Add(id);
+            return Task.FromResult(true);
+        }
+    }
+
+    private sealed class FakeSuppressionStore : IWantedSuppressionStore {
+        public List<string> Suppressed { get; } = [];
+        public List<string> Cleared { get; } = [];
+
+        public Task SuppressAsync(IReadOnlyList<ProviderRef> identities, EntityKind kind, string title, CancellationToken cancellationToken) {
+            Suppressed.AddRange(identities.Select(identity => $"{identity.Provider}:{identity.ItemId}"));
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlySet<string>> FilterSuppressedAsync(IReadOnlyList<ProviderRef> identities, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlySet<string>>(identities
+                .Select(identity => $"{identity.Provider}:{identity.ItemId}")
+                .Where(key => Suppressed.Contains(key))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase));
+
+        public Task ClearAsync(IReadOnlyList<ProviderRef> identities, CancellationToken cancellationToken) {
+            foreach (var identity in identities) {
+                var key = $"{identity.Provider}:{identity.ItemId}";
+                Cleared.Add(key);
+                Suppressed.Remove(key);
+            }
+
+            return Task.CompletedTask;
+        }
     }
 }

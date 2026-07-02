@@ -290,6 +290,30 @@ public sealed class AcquisitionImportHintRow {
 }
 
 /// <summary>
+/// A provider work identity the user explicitly removed from Wanted — the discovery blacklist.
+/// Container sweeps (a followed author/artist) skip suppressed works so a removed phantom never
+/// reappears; explicitly requesting the same work again clears its suppression. One row per provider
+/// identity the removed entity carried, so a sync through any of its providers stays suppressed.
+/// </summary>
+public sealed class WantedSuppressionRow {
+    public Guid Id { get; set; }
+
+    /// <summary>Provider code half of the suppressed identity (e.g. a plugin id, or isbn13).</summary>
+    public string Provider { get; set; } = string.Empty;
+
+    /// <summary>The provider's item id for the suppressed work.</summary>
+    public string ItemId { get; set; } = string.Empty;
+
+    /// <summary>Media kind of the removed entity, for display.</summary>
+    public EntityKind Kind { get; set; } = EntityKind.Book;
+
+    /// <summary>Title at removal time, for a future management surface.</summary>
+    public string Title { get; set; } = string.Empty;
+
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
+/// <summary>
 /// A release identity refused for future acquisition. Populated when a download fails (auto-recovery)
 /// or when the user manually blocks a release, and consulted by the decision engine so the same bad
 /// release is never re-grabbed. The identity is computed by <c>ReleaseIdentity</c> (info hash first,
