@@ -66,21 +66,9 @@
     return formatDurationString(`${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`);
   }
 
-  // A standalone leaf (no children) requests straight from the hero; container kinds use the works footer.
-  const actionButtons = $derived<EntityDetailActionButton[]>(
-    detail && committable && !hasChildren
-      ? [
-          {
-            id: "request",
-            label: "Request",
-            icon: Send,
-            variant: "primary",
-            onClick: () => void requestSelection(),
-            disabled: submitting,
-          },
-        ]
-      : [],
-  );
+  // The Request action lives with the request controls (library/profile/works), never detached in
+  // the hero — so the hero carries no action buttons on this page.
+  const actionButtons: EntityDetailActionButton[] = [];
 
   let loadedKey = $state("");
   $effect(() => {
@@ -203,39 +191,45 @@
           </p>
         {:else if hasChildren}
           <div class="space-y-3">
-            <div class="flex flex-wrap items-center justify-between gap-3">
+            <!-- One request card owns the whole decision: profile, library, and the Request action. -->
+            <div class="space-y-3 rounded-sm border border-border-accent bg-surface-1 p-4">
+              <h3 class="flex items-center gap-1.5 font-mono text-[0.68rem] font-semibold uppercase tracking-[0.04em] text-text-secondary">
+                <Send class="h-3.5 w-3.5 text-text-accent" />
+                Request {childNoun}s
+              </h3>
               <p class="text-[0.78rem] leading-relaxed text-text-muted">
-                Select the {childNoun}s to request — Prismedia searches your indexers and downloads each one,
-                then imports it into the library you choose below.
+                Select the {childNoun}s below — Prismedia searches your indexers and downloads each one,
+                then imports it into the library you choose here.
               </p>
-              <Button
-                type="button"
-                variant="primary"
-                class="shrink-0 gap-2"
-                disabled={submitting || selectedChildIds.length === 0}
-                title={selectedChildIds.length === 0 ? `Select ${childNoun}s to request` : undefined}
-                onclick={() => void requestSelection()}
-              >
-                {#if submitting}
-                  <Loader2 class="h-4 w-4 animate-spin" />
-                {:else}
-                  <Send class="h-4 w-4" />
-                {/if}
-                {submitting
-                  ? "Requesting…"
-                  : selectedChildIds.length === 0
-                    ? "Request"
-                    : `Request ${selectedChildIds.length} ${childNoun}${selectedChildIds.length === 1 ? "" : "s"}`}
-              </Button>
+              {#if kindInfo}
+                <RequestTargetOptions {kindInfo} bind:targetLibraryRootId bind:profileId>
+                  {#snippet actions()}
+                    <Button
+                      type="button"
+                      variant="primary"
+                      class="shrink-0 gap-2"
+                      disabled={submitting || selectedChildIds.length === 0}
+                      title={selectedChildIds.length === 0 ? `Select ${childNoun}s to request` : undefined}
+                      onclick={() => void requestSelection()}
+                    >
+                      {#if submitting}
+                        <Loader2 class="h-4 w-4 animate-spin" />
+                      {:else}
+                        <Send class="h-4 w-4" />
+                      {/if}
+                      {submitting
+                        ? "Requesting…"
+                        : selectedChildIds.length === 0
+                          ? "Request"
+                          : `Request ${selectedChildIds.length} ${childNoun}${selectedChildIds.length === 1 ? "" : "s"}`}
+                    </Button>
+                  {/snippet}
+                </RequestTargetOptions>
+              {/if}
+              {#if error}
+                <p class="text-[0.75rem] leading-relaxed text-error-text">{error}</p>
+              {/if}
             </div>
-
-            {#if kindInfo}
-              <RequestTargetOptions {kindInfo} bind:targetLibraryRootId bind:profileId />
-            {/if}
-
-            {#if error}
-              <p class="text-[0.75rem] leading-relaxed text-error-text">{error}</p>
-            {/if}
 
             <SelectableCardSection
               panelId="request-works"
@@ -251,10 +245,32 @@
             </SelectableCardSection>
           </div>
         {:else}
-          <!-- Standalone leaf: the hero's Request button commits; the same questions sit right below it. -->
-          <div class="space-y-2 rounded-sm border border-border-subtle bg-surface-1 p-3">
+          <!-- Standalone leaf: one request card owns the whole decision — profile, library, and the
+               Request action together, never a detached hero button. -->
+          <div class="space-y-3 rounded-sm border border-border-accent bg-surface-1 p-4">
+            <h3 class="flex items-center gap-1.5 font-mono text-[0.68rem] font-semibold uppercase tracking-[0.04em] text-text-secondary">
+              <Send class="h-3.5 w-3.5 text-text-accent" />
+              Request this {kindInfo?.label.toLowerCase() ?? "item"}
+            </h3>
             {#if kindInfo}
-              <RequestTargetOptions {kindInfo} bind:targetLibraryRootId bind:profileId />
+              <RequestTargetOptions {kindInfo} bind:targetLibraryRootId bind:profileId>
+                {#snippet actions()}
+                  <Button
+                    type="button"
+                    variant="primary"
+                    class="gap-2"
+                    disabled={submitting}
+                    onclick={() => void requestSelection()}
+                  >
+                    {#if submitting}
+                      <Loader2 class="h-4 w-4 animate-spin" />
+                    {:else}
+                      <Send class="h-4 w-4" />
+                    {/if}
+                    {submitting ? "Requesting…" : "Request"}
+                  </Button>
+                {/snippet}
+              </RequestTargetOptions>
             {/if}
             {#if error}
               <p class="text-[0.75rem] leading-relaxed text-error-text">{error}</p>

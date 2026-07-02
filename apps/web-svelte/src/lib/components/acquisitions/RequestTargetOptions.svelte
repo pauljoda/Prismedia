@@ -1,12 +1,12 @@
 <script lang="ts">
   /**
-   * The request-time questions asked before committing: which library the acquired files import into
-   * and which quality profile scores the release search. Options are filtered to the request kind
-   * (video libraries for a movie, the movie profiles, …) and default to the kind's default profile and
-   * its target library, so accepting the defaults is one glance — but nothing is assumed silently.
-   * The selections bind out and ride the commit; the server degrades gracefully if they go stale.
+   * The request-time questions asked before committing, profile-first: the quality profile is the
+   * governing choice (it owns the rules AND the default import target), and the library select follows
+   * it — picking a profile re-targets the library to that profile's default, which the user can then
+   * override manually before submitting. Options are filtered to the request kind and to libraries the
+   * current view mode may see; the selections bind out and ride the commit.
    */
-  import { onMount } from "svelte";
+  import { onMount, type Snippet } from "svelte";
   import { FolderOpen, SlidersHorizontal } from "@lucide/svelte";
   import { Select } from "@prismedia/ui-svelte";
   import { fetchAcquisitionProfiles } from "$lib/api/acquisitions";
@@ -19,8 +19,10 @@
     kindInfo: RequestKindInfo;
     targetLibraryRootId: string | null;
     profileId: string | null;
+    /** Optional action (the Request button) rendered at the end of the options row. */
+    actions?: Snippet;
   }
-  let { kindInfo, targetLibraryRootId = $bindable(), profileId = $bindable() }: Props = $props();
+  let { kindInfo, targetLibraryRootId = $bindable(), profileId = $bindable(), actions }: Props = $props();
 
   const nsfw = useNsfw();
 
@@ -47,6 +49,23 @@
   const rootOptions = $derived(suitableRoots.map((root) => ({ value: root.id, label: root.label || root.path })));
   const profileOptions = $derived(kindProfiles.map((profile) => ({ value: profile.id, label: profile.displayName })));
 
+  /** The library the given profile targets when it suits this kind, else the first regular suitable library. */
+  function defaultRootFor(profile: BookAcquisitionProfileView | null): string | null {
+    const profileRoot = suitableRoots.find((root) => root.id === profile?.targetLibraryRootId);
+    if (profileRoot) return profileRoot.id;
+    const sorted = [...suitableRoots].sort(
+      (a, b) => Number(a.isNsfw) - Number(b.isNsfw) || (a.label || a.path).localeCompare(b.label || b.path),
+    );
+    return sorted[0]?.id ?? null;
+  }
+
+  function selectProfile(value: string) {
+    profileId = value || null;
+    // Profile first: the chosen profile re-targets the library to its default; the user can still
+    // change the library manually afterwards — the override just never outlives a profile switch.
+    targetLibraryRootId = defaultRootFor(kindProfiles.find((profile) => profile.id === profileId) ?? null);
+  }
+
   onMount(async () => {
     try {
       [roots, profiles] = await Promise.all([fetchLibraryRoots(), fetchAcquisitionProfiles()]);
@@ -54,15 +73,8 @@
       if (!profileId && defaultProfile) {
         profileId = defaultProfile.id;
       }
-
       if (!targetLibraryRootId) {
-        // Prefer the chosen profile's import target when it suits the kind; else the first regular
-        // (non-NSFW-first) suitable library — mirroring the server's fallback order.
-        const sorted = [...suitableRoots].sort(
-          (a, b) => Number(a.isNsfw) - Number(b.isNsfw) || (a.label || a.path).localeCompare(b.label || b.path),
-        );
-        const profileRoot = suitableRoots.find((root) => root.id === defaultProfile?.targetLibraryRootId);
-        targetLibraryRootId = (profileRoot ?? sorted[0])?.id ?? null;
+        targetLibraryRootId = defaultRootFor(kindProfiles.find((profile) => profile.id === profileId) ?? defaultProfile);
       }
     } finally {
       loaded = true;
@@ -72,6 +84,25 @@
 
 <!-- Rendered from first paint (selects fill in as the lookups land) so the page never jumps. -->
 <div class="flex flex-wrap items-end gap-3">
+  <label class="min-w-44 flex-1 space-y-1 sm:max-w-64">
+    <span class="text-label flex items-center gap-1.5 text-text-muted">
+      <SlidersHorizontal class="h-3.5 w-3.5" /> Quality profile
+    </span>
+    {#if !loaded || profileOptions.length > 0}
+      <Select
+        size="sm"
+        disabled={!loaded}
+        value={profileId ?? ""}
+        options={profileOptions}
+        onchange={selectProfile}
+      />
+    {:else}
+      <p class="text-[0.72rem] leading-relaxed text-text-muted">
+        No {profileNoun} profile yet — permissive defaults apply (Settings → Acquisition).
+      </p>
+    {/if}
+  </label>
+
   <label class="min-w-44 flex-1 space-y-1 sm:max-w-64">
     <span class="text-label flex items-center gap-1.5 text-text-muted">
       <FolderOpen class="h-3.5 w-3.5" /> Import into
@@ -91,22 +122,9 @@
     {/if}
   </label>
 
-  <label class="min-w-44 flex-1 space-y-1 sm:max-w-64">
-    <span class="text-label flex items-center gap-1.5 text-text-muted">
-      <SlidersHorizontal class="h-3.5 w-3.5" /> Quality profile
-    </span>
-    {#if !loaded || profileOptions.length > 0}
-      <Select
-        size="sm"
-        disabled={!loaded}
-        value={profileId ?? ""}
-        options={profileOptions}
-        onchange={(value) => (profileId = value || null)}
-      />
-    {:else}
-      <p class="text-[0.72rem] leading-relaxed text-text-muted">
-        No {profileNoun} profile yet — permissive defaults apply (Settings → Acquisition).
-      </p>
-    {/if}
-  </label>
+  {#if actions}
+    <div class="ml-auto flex items-end">
+      {@render actions()}
+    </div>
+  {/if}
 </div>
