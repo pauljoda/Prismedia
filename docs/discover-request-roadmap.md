@@ -98,15 +98,25 @@ keeps the children's searches going and can pick up newly discovered children ov
 review surface are covered by tests and confirmed end-to-end at the running app; a review pass (internal + a
 second reviewer) is clean. **Stop here and evaluate before adding new media kinds.**
 
-## After books prove out (future kinds — not this push)
+## After books prove out (status: multi-kind expansion underway)
 
-Each new kind reuses everything above and only adds the acquisition-side specifics for that medium:
-- **Movies:** release grading by resolution/source/codec, and laying a downloaded video file into the library
-  as a Movie (the library already scans/identifies movies).
-- **Music:** artist/album/track structure and audio-quality grading.
-- **TV:** series → season → episode structure with per-episode tracking, the richest container case.
+The request layer is now registry-driven (`RequestKindRegistry`): search, detail, commit, wanted-entity
+creation, per-kind Torznab category routing, and release-engine dispatch are all one descriptor table.
+Adding a kind = a registry row + its acquisition-side engine. Current per-kind status:
 
-The measure of success: adding a kind should feel like filling in a template, not designing a new feature.
+- **Movies:** ✅ discover → request → wanted Movie entity (full TMDB metadata/cast/artwork) → release
+  search graded by resolution/source. ⏳ Remaining: the movie import (lay the video file into a video
+  root, bind the wanted movie at scan — the book bind pattern, applied to the video scan).
+- **Music:** ✅ artist container → album fan-out (MusicBrainz discography via release-groups; the plugin
+  gained artist→album children), release search graded by codec (lossless first). ⏳ Remaining: album
+  import + audio scan bind.
+- **TV:** discover/detail only (registry `Committable: false`); series → season → episode per-episode
+  tracking is the richest container case and lands last, as planned.
+- Non-book downloads complete and hold at Downloaded with an honest status until their import engine
+  lands — never pushed through the book import planner.
+
+The measure of success held: movies and music reused the whole flow; each needed only a registry row,
+an engine, and (for music) a plugin children capability.
 
 ## How we verify each phase
 

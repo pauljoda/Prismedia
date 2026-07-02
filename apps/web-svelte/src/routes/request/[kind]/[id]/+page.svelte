@@ -5,7 +5,7 @@
   import { fade } from "svelte/transition";
   import { goto } from "$app/navigation";
   import { commitRequest, fetchRequestDetail } from "$lib/api/requests";
-  import { REQUEST_COMMIT_OUTCOME, REQUEST_MEDIA_KIND } from "$lib/api/generated/codes";
+  import { REQUEST_COMMIT_OUTCOME } from "$lib/api/generated/codes";
   import type { RequestMediaKindCode, RequestProviderKindCode } from "$lib/api/generated/codes";
   import EntityDetail from "$lib/components/entities/EntityDetail.svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
@@ -13,7 +13,7 @@
   import type { EntityDetailActionButton } from "$lib/components/entities/entity-detail-types";
   import { requestDetailToEntityCard } from "$lib/requests/request-entity-card";
   import { requestChildToThumbnailCard } from "$lib/requests/review-cards";
-  import { inferRequestSourceForKind } from "$lib/requests/request-helpers";
+  import { inferRequestSourceForKind, requestKindInfo } from "$lib/requests/request-helpers";
   import type { RequestChildOption, RequestDetailResponse } from "$lib/requests/request-model";
 
   const params = $derived(page.params as { kind: RequestMediaKindCode; id: string });
@@ -30,9 +30,11 @@
   let infoChild = $state<RequestChildOption | null>(null);
 
   const requestCard = $derived(detail ? requestDetailToEntityCard(detail) : null);
-  // An author/series is a container: its children (books/volumes) are selected and fanned out one each.
-  const isAuthor = $derived(detail?.kind === REQUEST_MEDIA_KIND.author);
-  const childNoun = $derived(isAuthor ? "book" : "volume");
+  // Per-kind flow hints from the shared kind catalog: containers (author, artist) select children and
+  // fan them out one acquisition each; leaves request themselves; non-committable kinds only browse.
+  const kindInfo = $derived(detail ? requestKindInfo(detail.kind) : null);
+  const committable = $derived(kindInfo?.committable ?? false);
+  const childNoun = $derived(kindInfo?.childNoun ?? "item");
   const children = $derived(detail?.children ?? []);
   const hasChildren = $derived(children.length > 0);
   const childCards = $derived(children.map(requestChildToThumbnailCard));
@@ -40,16 +42,16 @@
 
   const backHref = $derived(backQuery ? `/request?${backQuery}` : "/request");
 
-  // A standalone book (no children) requests straight from the hero; container kinds use the works footer.
+  // A standalone leaf (no children) requests straight from the hero; container kinds use the works footer.
   const actionButtons = $derived<EntityDetailActionButton[]>(
-    detail && !hasChildren
+    detail && committable && !hasChildren
       ? [
           {
             id: "request",
             label: "Request",
             icon: Send,
             variant: "primary",
-            onClick: () => void requestPluginBook(),
+            onClick: () => void requestSelection(),
             disabled: submitting,
           },
         ]
@@ -95,11 +97,11 @@
 
   /**
    * Prismedia-direct request through the single server-side commit: the backend creates the wanted
-   * library entity/entities from the plugin proposal (the author with its picked books, a standalone
-   * book, or picked series volumes) and starts one acquisition per requested book — no client fan-out.
+   * library entity/entities from the plugin proposal (a container with its picked works, a standalone
+   * leaf, or picked sibling volumes) and starts one acquisition per requested item — no client fan-out.
    */
-  async function requestPluginBook() {
-    if (!detail) return;
+  async function requestSelection() {
+    if (!detail || !committable) return;
     const picked = hasChildren
       ? children.filter((child) => child.requestable && selectedChildIds.includes(child.id)).map((child) => child.id)
       : [];
@@ -166,12 +168,17 @@
     {@const d = detail}
     <EntityDetail card={requestCard} {actionButtons} posterSize="medium">
       {#snippet afterBody()}
-        {#if hasChildren}
+        {#if !committable}
+          <p class="rounded-sm border border-border-subtle bg-surface-1 p-3 text-[0.78rem] leading-relaxed text-text-muted">
+            Requesting {kindInfo?.plural.toLowerCase() ?? "this kind"} isn't available yet — its per-episode
+            acquisition engine is on the roadmap. You can still browse the details here.
+          </p>
+        {:else if hasChildren}
           <div class="space-y-3">
             <div class="flex flex-wrap items-center justify-between gap-3">
               <p class="text-[0.78rem] leading-relaxed text-text-muted">
                 Select the {childNoun}s to request — Prismedia searches your indexers and downloads each one,
-                then imports it. Quality rules come from your default book profile (Settings → Acquisition).
+                then imports it. Quality rules come from your acquisition profile (Settings → Acquisition).
               </p>
               <Button
                 type="button"
@@ -179,7 +186,7 @@
                 class="shrink-0 gap-2"
                 disabled={submitting || selectedChildIds.length === 0}
                 title={selectedChildIds.length === 0 ? `Select ${childNoun}s to request` : undefined}
-                onclick={() => void requestPluginBook()}
+                onclick={() => void requestSelection()}
               >
                 {#if submitting}
                   <Loader2 class="h-4 w-4 animate-spin" />
@@ -200,7 +207,7 @@
 
             <SelectableCardSection
               panelId="request-works"
-              title={isAuthor ? "Books" : "Volumes"}
+              title={childNoun === "album" ? "Albums" : childNoun === "book" ? "Books" : "Volumes"}
               cards={childCards}
               selectedIds={selectedChildIds}
               selectableIds={selectableChildIds}

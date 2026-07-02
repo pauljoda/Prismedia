@@ -4,7 +4,6 @@
   import { Button, Select, TextInput, cn } from "@prismedia/ui-svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { REQUEST_MEDIA_KIND } from "$lib/api/generated/codes";
   import type { RequestMediaKindCode } from "$lib/api/generated/codes";
   import { searchRequests } from "$lib/api/requests";
   import RequestsReview from "$lib/components/requests/RequestsReview.svelte";
@@ -14,6 +13,7 @@
   import type { RequestSearchResult } from "$lib/requests/request-model";
   import { requestSearchResultToThumbnailCard } from "$lib/requests/review-cards";
   import {
+    REQUEST_KINDS,
     REQUEST_KIND_LABELS_PLURAL,
     numericValue,
   } from "$lib/requests/request-helpers";
@@ -31,8 +31,8 @@
     { value: "tracked", label: "Already tracked" },
   ];
 
-  /** Order sections appear in mixed-kind results. */
-  const sectionOrder: RequestMediaKindCode[] = [REQUEST_MEDIA_KIND.book, REQUEST_MEDIA_KIND.author];
+  /** Order sections appear in mixed-kind results (the kind catalog's Discover order). */
+  const sectionOrder: RequestMediaKindCode[] = REQUEST_KINDS.map((info) => info.kind);
 
   const nsfw = useNsfw();
 
@@ -53,8 +53,8 @@
   let providerWarnings = $state<string[]>([]);
   let lastSearchKey = "";
 
-  // Kinds Prismedia searches and fulfils itself via the plugin acquisition pipeline.
-  const availableKinds: RequestMediaKindCode[] = [REQUEST_MEDIA_KIND.book, REQUEST_MEDIA_KIND.author];
+  // Kinds Prismedia searches via the plugin acquisition pipeline (from the shared kind catalog).
+  const availableKinds: RequestMediaKindCode[] = REQUEST_KINDS.map((info) => info.kind);
 
   const filteredResults = $derived(
     results.filter((result) =>

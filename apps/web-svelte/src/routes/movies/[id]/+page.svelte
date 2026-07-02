@@ -3,6 +3,7 @@
   import { page } from "$app/state";
   import {
     Captions,
+    CloudDownload,
     Info,
     MapPin,
     Play,
@@ -10,6 +11,11 @@
     Users,
   } from "@lucide/svelte";
   import { cn } from "@prismedia/ui-svelte";
+  import { goto } from "$app/navigation";
+  import AcquisitionPanel from "$lib/components/acquisitions/AcquisitionPanel.svelte";
+  import { fetchAcquisitionForEntity } from "$lib/api/acquisitions";
+  import type { AcquisitionDetail } from "$lib/api/generated/model";
+  import { isWanted } from "$lib/api/capabilities";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import EntityDetailHeroDates from "$lib/components/entities/EntityDetailHeroDates.svelte";
   import { fetchMovie, fetchVideo, type MovieDetail, type VideoDetail } from "$lib/api/media";
@@ -78,6 +84,9 @@
   let loadState: LoadState = $state("loading");
   let movie = $state<MovieDetail | null>(null);
   let video = $state<VideoDetail | null>(null);
+  // The acquisition backing this movie (a wanted placeholder still searching/downloading, or the
+  // import that produced it), so its state is managed right here instead of only under /request.
+  let acquisition = $state<AcquisitionDetail | null>(null);
   let playbackInfo = $state<JellyfinPlaybackInfoResponse | null>(null);
   let errorMessage: string | null = $state(null);
   let lastNsfwMode = $state(nsfw.mode);
@@ -382,7 +391,18 @@
       const nextMovie = await fetchMovie(page.params.id ?? "");
       const childVideoId = getChildIds(nextMovie, ENTITY_KIND.video)[0];
       if (!childVideoId) {
-        throw new Error("Movie has no playable video.");
+        // A wanted movie (request placeholder) has no video child yet: render metadata plus the
+        // inline acquisition surface instead of the player.
+        movie = nextMovie;
+        video = null;
+        playbackInfo = null;
+        // Best-effort: the acquisition section is secondary — its failure must not break the page.
+        [acquisition] = await Promise.all([
+          fetchAcquisitionForEntity(nextMovie.id).catch(() => null),
+          hydrateMovieRelationships(nextMovie),
+        ]);
+        loadState = "ready";
+        return;
       }
       const nextVideo = await fetchVideo(childVideoId);
       movie = nextMovie;
@@ -398,6 +418,14 @@
       errorMessage = err instanceof Error ? err.message : String(err);
       loadState = "error";
     }
+  }
+
+  const entityWanted = $derived(!!movie && isWanted(movie.capabilities));
+
+  /** Cancelling a wanted movie's request deletes the placeholder entity, so this page no longer exists. */
+  function handleAcquisitionCancelled() {
+    if (!entityWanted) return;
+    void goto("/movies");
   }
 
   async function refreshMovie() {
@@ -761,6 +789,48 @@
         />
       {/snippet}
     </EntityDetail>
+  {:else if card}
+    <!-- Fileless movie (a wanted request placeholder): metadata plus the inline acquisition surface —
+         wanted/tracking state is managed on the entity itself, same as books. -->
+    <EntityDetail
+      {card}
+      onRatingChange={handleRatingChange}
+      onFavoriteToggle={handleFavoriteToggle}
+      onOrganizedToggle={handleOrganizedToggle}
+      onMetadataSave={handleMetadataSave}
+      {ratingBusy}
+      showHero
+      posterSize="large"
+      actionButtons={heroActions}
+      defaultCreditRole={CREDIT_ROLE.actor}
+    >
+      {#snippet heroMeta()}
+        {#if primaryStudio}
+          <a href={resolveEntityHref(primaryStudio.kind as EntityKindCode, primaryStudio.id)} class="meta-item is-studio">{primaryStudio.title}</a>
+        {/if}
+        <EntityDetailHeroDates {dates} leadingSeparator={Boolean(primaryStudio)} />
+      {/snippet}
+
+      {#snippet heroBadges()}
+        {#if entityWanted}
+          <span class="hero-badge wanted">Wanted</span>
+        {/if}
+      {/snippet}
+    </EntityDetail>
+
+    {#if acquisition}
+      <section class="acquisition-section surface-panel">
+        <h2 class="flex items-center gap-2 text-kicker text-text-primary">
+          <CloudDownload class="h-3.5 w-3.5 text-text-accent" />
+          Acquisition
+        </h2>
+        <AcquisitionPanel
+          acquisitionId={acquisition.summary.id}
+          bind:detail={acquisition}
+          onCancelled={handleAcquisitionCancelled}
+        />
+      </section>
+    {/if}
   {/if}
 </div>
 
@@ -777,6 +847,20 @@
     aspect-ratio: 16 / 9;
     background: #050508;
     animation: pulse 1.2s ease-in-out infinite;
+  }
+
+  .acquisition-section {
+    display: grid;
+    gap: 0.9rem;
+    padding: 1rem 1.1rem;
+    min-width: 0;
+  }
+
+  :global(.hero-badge.wanted) {
+    color: var(--color-text-accent, #c49a5a);
+    border-color: color-mix(in srgb, var(--color-text-accent, #c49a5a) 45%, transparent);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
   }
 
   .error-notice {

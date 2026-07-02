@@ -282,6 +282,10 @@ export type RequestProviderKindCode = (typeof REQUEST_PROVIDER_KIND)[keyof typeo
 export const REQUEST_MEDIA_KIND = {
   book: "book",
   author: "author",
+  movie: "movie",
+  series: "series",
+  artist: "artist",
+  album: "album",
   plugin: "plugin",
 } as const;
 
