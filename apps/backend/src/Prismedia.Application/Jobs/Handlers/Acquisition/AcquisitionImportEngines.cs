@@ -165,7 +165,13 @@ public sealed class MovieAcquisitionImportEngine(
     public EntityKind Kind => EntityKind.Movie;
 
     public async Task ImportAsync(JobContext context, AcquisitionImportContext import, CancellationToken cancellationToken) {
-        var root = (await roots.GetEnabledRootsAsync(cancellationToken)).FirstOrDefault(candidate => candidate.ScanVideos);
+        // Deterministic default target until per-kind import profiles exist: the first video-enabled
+        // root, never an NSFW one ahead of a regular one.
+        var root = (await roots.GetEnabledRootsAsync(cancellationToken))
+            .Where(candidate => candidate.ScanVideos)
+            .OrderBy(candidate => candidate.IsNsfw)
+            .ThenBy(candidate => candidate.Label, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
         if (root is null) {
             await Fail(import.Id, "No enabled video library root exists to import the movie into.", cancellationToken);
             return;
@@ -230,7 +236,13 @@ public sealed class MusicAcquisitionImportEngine(
     public EntityKind Kind => EntityKind.AudioLibrary;
 
     public async Task ImportAsync(JobContext context, AcquisitionImportContext import, CancellationToken cancellationToken) {
-        var root = (await roots.GetEnabledRootsAsync(cancellationToken)).FirstOrDefault(candidate => candidate.ScanAudio);
+        // Deterministic default target until per-kind import profiles exist: the first audio-enabled
+        // root, never an NSFW one ahead of a regular one.
+        var root = (await roots.GetEnabledRootsAsync(cancellationToken))
+            .Where(candidate => candidate.ScanAudio)
+            .OrderBy(candidate => candidate.IsNsfw)
+            .ThenBy(candidate => candidate.Label, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
         if (root is null) {
             await Fail(import.Id, "No enabled audio library root exists to import the album into.", cancellationToken);
             return;
