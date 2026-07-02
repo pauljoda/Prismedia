@@ -1,3 +1,4 @@
+using Prismedia.Application.Acquisition;
 using Prismedia.Application.Requests;
 using Prismedia.Contracts.Requests;
 using Prismedia.Contracts.System;
@@ -101,6 +102,25 @@ public static class RequestEndpoints {
             .WithName("CommitEntityRequest")
             .WithSummary("Requests an existing library entity (a wanted placeholder's Search-for-release): the server resolves its provider identity and starts the auto-grabbing acquisition.")
             .Produces<RequestCommitResponse>()
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+
+        group.MapPost("/sync-container", async (
+            RequestEntityCommitRequest request,
+            RequestCommitService commits,
+            MonitorService monitors,
+            CancellationToken cancellationToken) => {
+                // The manual counterpart to the daily sweep for one container: discover new works now.
+                var synced = await commits.SyncContainerAsync(request.EntityId, cancellationToken);
+                if (!synced) {
+                    return Results.NotFound(new ApiProblem(ApiProblemCodes.NotFound, "The container could not be synced — it may be gone, not a followable kind, or unresolvable from its providers."));
+                }
+
+                await monitors.MarkEntitySearchedAsync(request.EntityId, cancellationToken);
+                return Results.NoContent();
+            })
+            .WithName("SyncContainerRequest")
+            .WithSummary("Immediately re-syncs a followed author/artist from its provider, surfacing newly discovered works as wanted placeholders.")
+            .Produces(StatusCodes.Status204NoContent)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
         return group;

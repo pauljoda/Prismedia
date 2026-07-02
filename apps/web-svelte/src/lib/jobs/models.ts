@@ -102,6 +102,12 @@ export const queueDefinitions = [
     concurrency: 1,
   },
   {
+    name: "monitored-search",
+    label: "Monitored Search",
+    description: "Re-searches monitored items and syncs followed authors/artists for new works",
+    concurrency: 1,
+  },
+  {
     name: "plugin-batch-identify",
     label: "Plugin Batch Identify",
     description: "Batch metadata identification via Prismedia plugins",

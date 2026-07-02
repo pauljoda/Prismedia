@@ -90,7 +90,8 @@ public sealed record AcquisitionMetadata(
 /// <summary>The minimal input the background search job needs to query indexers for an acquisition.</summary>
 /// <param name="Kind">The media kind being acquired; picks the decision engine and the Torznab category range.</param>
 /// <param name="EntityId">The wanted library entity this acquisition fulfils; a wanted-linked search auto-grabs its best accepted release.</param>
-public sealed record AcquisitionSearchInput(Guid Id, string Title, string? Author, EntityKind Kind = EntityKind.Book, Guid? EntityId = null);
+/// <param name="Year">Release year context for the query ladder (year-disambiguated movie searches).</param>
+public sealed record AcquisitionSearchInput(Guid Id, string Title, string? Author, EntityKind Kind = EntityKind.Book, Guid? EntityId = null, int? Year = null);
 
 /// <summary>The outcome of running indexer searches for an acquisition: scored candidates plus any indexer failures.</summary>
 public sealed record AcquisitionSearchOutcome(

@@ -133,6 +133,12 @@ const _JOB_DEFINITIONS = [
     description: "Re-evaluates dynamic collection rules and updates membership.",
   },
   {
+    type: "monitored-search",
+    queueName: "monitored-search",
+    label: "Monitored Search",
+    description: "Re-searches monitored items and syncs followed authors/artists for new works.",
+  },
+  {
     type: "library-maintenance",
     queueName: "library-maintenance",
     label: "Library Maintenance",

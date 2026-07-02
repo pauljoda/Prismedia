@@ -16,8 +16,8 @@ public sealed class AcquisitionSearchRunner(
     /// owned quality (and never downgrade the format). Null for an ordinary first-grab search.
     /// </param>
     public async Task<AcquisitionSearchOutcome> RunAsync(AcquisitionSearchInput input, CancellationToken cancellationToken, Domain.Entities.BookQualityRank? upgradeOwnedQuality = null) {
-        var text = BuildQueryText(input.Title, input.Author);
-        if (string.IsNullOrWhiteSpace(text)) {
+        var queries = ReleaseQueryLadder.For(input);
+        if (queries.Count == 0) {
             return new AcquisitionSearchOutcome([], []);
         }
 
@@ -34,22 +34,35 @@ public sealed class AcquisitionSearchRunner(
         }
 
         var blocklisted = await blocklist.GetIdentitiesAsync(cancellationToken);
-        var searches = await Task.WhenAll(configs.Select(config => SearchIndexerAsync(config, text, input.Kind, cancellationToken)));
+        var engine = decisionEngines.Get(input.Kind);
 
-        var releases = new List<(IndexerRelease Release, Guid? IndexerConfigId, string IndexerName)>();
-        var errors = new List<IndexerSearchError>();
-        foreach (var (config, found, error) in searches) {
-            foreach (var release in found) {
-                releases.Add((release, config.Id, config.DisplayName));
+        // Walk the query ladder: the first rung whose results include an acceptable release wins. A
+        // rung that found only rejects falls through to the next, broader phrasing; the last rung's
+        // outcome (candidates and all) is returned regardless, so the review UI always has something
+        // transparent to show.
+        AcquisitionSearchOutcome outcome = new([], []);
+        foreach (var text in queries) {
+            var searches = await Task.WhenAll(configs.Select(config => SearchIndexerAsync(config, text, input.Kind, cancellationToken)));
+
+            var releases = new List<(IndexerRelease Release, Guid? IndexerConfigId, string IndexerName)>();
+            var errors = new List<IndexerSearchError>();
+            foreach (var (config, found, error) in searches) {
+                foreach (var release in found) {
+                    releases.Add((release, config.Id, config.DisplayName));
+                }
+
+                if (error is not null) {
+                    errors.Add(new IndexerSearchError(config.Id, config.DisplayName, error));
+                }
             }
 
-            if (error is not null) {
-                errors.Add(new IndexerSearchError(config.Id, config.DisplayName, error));
+            outcome = new AcquisitionSearchOutcome(engine.Evaluate(releases, rules, blocklisted), errors);
+            if (outcome.Candidates.Any(candidate => candidate.Accepted)) {
+                return outcome;
             }
         }
 
-        var engine = decisionEngines.Get(input.Kind);
-        return new AcquisitionSearchOutcome(engine.Evaluate(releases, rules, blocklisted), errors);
+        return outcome;
     }
 
     private async Task<(Contracts.Acquisition.IndexerConfigDetail Config, IReadOnlyList<IndexerRelease> Found, string? Error)> SearchIndexerAsync(
@@ -69,9 +82,4 @@ public sealed class AcquisitionSearchRunner(
         }
     }
 
-    private static string BuildQueryText(string title, string? author) {
-        var trimmedTitle = title?.Trim() ?? string.Empty;
-        var trimmedAuthor = author?.Trim();
-        return string.IsNullOrWhiteSpace(trimmedAuthor) ? trimmedTitle : $"{trimmedTitle} {trimmedAuthor}".Trim();
-    }
 }

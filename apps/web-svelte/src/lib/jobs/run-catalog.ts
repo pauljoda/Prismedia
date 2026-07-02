@@ -4,6 +4,7 @@ import {
   Image,
   Music,
   RefreshCw,
+  Search,
   type LucideIcon,
 } from "@lucide/svelte";
 
@@ -66,6 +67,13 @@ export const RUN_CATALOG: readonly RunCatalogGroup[] = [
         label: "Refresh collections",
         description: "Re-evaluate dynamic collection rules.",
         icon: RefreshCw,
+      },
+      {
+        jobType: "monitored-search",
+        queueName: "monitored-search",
+        label: "Check monitored items",
+        description: "Re-search wanted items and sync followed authors/artists now.",
+        icon: Search,
       },
     ],
   },

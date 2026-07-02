@@ -10976,6 +10976,50 @@ export const commitEntityRequest = async (requestEntityCommitRequest: RequestEnt
 
 
 
+export type syncContainerRequestResponse204 = {
+  data: void
+  status: 204
+}
+
+export type syncContainerRequestResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type syncContainerRequestResponseSuccess = (syncContainerRequestResponse204) & {
+  headers: Headers;
+};
+export type syncContainerRequestResponseError = (syncContainerRequestResponse404) & {
+  headers: Headers;
+};
+
+export type syncContainerRequestResponse = (syncContainerRequestResponseSuccess | syncContainerRequestResponseError)
+
+export const getSyncContainerRequestUrl = () => {
+
+
+
+
+  return `/api/requests/sync-container`
+}
+
+/**
+ * @summary Immediately re-syncs a followed author/artist from its provider, surfacing newly discovered works as wanted placeholders.
+ */
+export const syncContainerRequest = async (requestEntityCommitRequest: RequestEntityCommitRequest, options?: RequestInit): Promise<syncContainerRequestResponse> => {
+
+  return orvalFetch<syncContainerRequestResponse>(getSyncContainerRequestUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      requestEntityCommitRequest,)
+  }
+);}
+
+
+
 export type listIndexersResponse200 = {
   data: IndexerConfigSummary[]
   status: 200

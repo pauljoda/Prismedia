@@ -1,8 +1,9 @@
-import { Bell, BellRing } from "@lucide/svelte";
+import { Bell, BellRing, RefreshCw } from "@lucide/svelte";
 import { MONITOR_STATUS } from "$lib/api/generated/codes";
 import type { EntityCapability, MonitorView } from "$lib/api/generated/model";
 import { firstProviderQualifiedId } from "$lib/api/capabilities";
 import { fetchEntityMonitor, resumeMonitor, startEntityMonitor, stopMonitor } from "$lib/api/monitors";
+import { syncContainerRequest } from "$lib/api/requests";
 import type { EntityDetailActionButton } from "$lib/components/entities/EntityDetail.svelte";
 
 /**
@@ -16,9 +17,11 @@ import type { EntityDetailActionButton } from "$lib/components/entities/EntityDe
 export function useEntityMonitorAction(
   entityId: () => string | null | undefined,
   capabilities: () => EntityCapability[] | undefined,
-): { readonly action: EntityDetailActionButton | null } {
+  onSynced?: () => void,
+): { readonly action: EntityDetailActionButton | null; readonly syncAction: EntityDetailActionButton | null } {
   let monitor: MonitorView | null = $state(null);
   let busy = $state(false);
+  let syncBusy = $state(false);
   let lastLoadedId = "";
 
   const providerId = $derived.by(() => {
@@ -64,6 +67,36 @@ export function useEntityMonitorAction(
     }
   }
 
+  /** Run the discovery sync now instead of waiting for the daily sweep. */
+  async function syncNow() {
+    const id = entityId();
+    if (!id || syncBusy) return;
+    syncBusy = true;
+    try {
+      await syncContainerRequest(id);
+      onSynced?.();
+    } catch {
+      // best-effort; the daily sweep covers it either way
+    } finally {
+      syncBusy = false;
+    }
+  }
+
+  const syncAction = $derived.by((): EntityDetailActionButton | null => {
+    // Offered only while actively monitoring — it is the monitor's manual trigger.
+    if (!entityId() || !monitorActive) return null;
+    return {
+      id: "entity-monitor-sync",
+      label: syncBusy ? "Checking…" : "Check for new works",
+      icon: RefreshCw,
+      iconClass: "h-3.5 w-3.5",
+      title: "Re-sync from the provider now instead of waiting for the daily sweep",
+      ariaLabel: "Check for new works",
+      disabled: syncBusy,
+      onClick: () => void syncNow(),
+    };
+  });
+
   const action = $derived.by((): EntityDetailActionButton | null => {
     const id = entityId();
     // No provider identity yet → nothing to monitor from; the Identify action beside this one is the
@@ -89,6 +122,9 @@ export function useEntityMonitorAction(
   return {
     get action() {
       return action;
+    },
+    get syncAction() {
+      return syncAction;
     },
   };
 }

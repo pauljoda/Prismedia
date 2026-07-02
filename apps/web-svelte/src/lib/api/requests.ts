@@ -4,6 +4,7 @@ import {
   commitRequest as commitRequestRequest,
   getRequestDetail as getRequestDetailRequest,
   searchRequests as searchRequestsRequest,
+  syncContainerRequest as syncContainerRequestRequest,
 } from "$lib/api/generated/prismedia";
 import type { RequestCommitResponse } from "$lib/api/generated/model";
 import type { RequestDetailResponse, RequestSearchResponse } from "$lib/requests/request-model";
@@ -52,6 +53,11 @@ export async function commitRequest(params: {
  */
 export async function commitEntityRequest(entityId: string): Promise<RequestCommitResponse> {
   return unwrapGenerated(await commitEntityRequestRequest({ entityId }), "Failed to search for a release");
+}
+
+/** Immediately re-syncs a followed author/artist from its provider — the manual counterpart to the daily sweep. */
+export async function syncContainerRequest(entityId: string): Promise<void> {
+  unwrapGenerated(await syncContainerRequestRequest({ entityId }), "Failed to check for new works", [204]);
 }
 
 export async function fetchRequestDetail(params: {

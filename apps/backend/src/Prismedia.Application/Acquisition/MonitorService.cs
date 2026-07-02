@@ -50,6 +50,17 @@ public sealed class MonitorService(IMonitorStore monitors, IAcquisitionStore acq
     public Task<MonitorView?> GetForEntityAsync(Guid entityId, CancellationToken cancellationToken) =>
         monitors.GetByEntityAsync(entityId, cancellationToken);
 
+    /// <summary>
+    /// Stamps the entity's container monitor as just-searched after a manual sync, so the daily sweep's
+    /// clock restarts from now instead of double-syncing. A no-op when the entity isn't monitored.
+    /// </summary>
+    public async Task MarkEntitySearchedAsync(Guid entityId, CancellationToken cancellationToken) {
+        var monitor = await monitors.GetByEntityAsync(entityId, cancellationToken);
+        if (monitor is not null) {
+            await monitors.MarkSearchedAsync(monitor.Id, cancellationToken);
+        }
+    }
+
     public Task<bool> StopAsync(Guid monitorId, CancellationToken cancellationToken) =>
         monitors.DeleteAsync(monitorId, cancellationToken);
 

@@ -72,11 +72,13 @@
 
   const identifyAction = useIdentifyDetailAction(() => artist?.id, () => artist?.kind);
   // Monitoring works for scanned-in and requested artists alike; it needs a provider identity, which
-  // Identify supplies for on-disk artists and a request commit supplies for wanted ones.
-  const monitorAction = useEntityMonitorAction(() => artist?.id, () => artist?.capabilities);
+  // Identify supplies for on-disk artists and a request commit supplies for wanted ones. "Check for
+  // new works" runs the discovery sync now; the page reloads to show any new phantoms.
+  const monitorAction = useEntityMonitorAction(() => artist?.id, () => artist?.capabilities, () => void loadArtist());
   const heroActions = $derived.by((): EntityDetailActionButton[] => {
     const actions: EntityDetailActionButton[] = [];
     if (monitorAction.action) actions.push(monitorAction.action);
+    if (monitorAction.syncAction) actions.push(monitorAction.syncAction);
     if (albumCards.length > 0) {
       actions.push(
         {

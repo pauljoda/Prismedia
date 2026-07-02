@@ -60,11 +60,13 @@
 
   const identifyAction = useIdentifyDetailAction(() => author?.id, () => author?.kind);
   // Monitoring works for scanned-in and requested authors alike; it needs a provider identity, which
-  // Identify supplies for on-disk authors and a request commit supplies for wanted ones.
-  const monitorAction = useEntityMonitorAction(() => author?.id, () => author?.capabilities);
+  // Identify supplies for on-disk authors and a request commit supplies for wanted ones. "Check for
+  // new works" runs the discovery sync now; the page reloads to show any new phantoms.
+  const monitorAction = useEntityMonitorAction(() => author?.id, () => author?.capabilities, () => void loadAuthor());
   const heroActions = $derived.by((): EntityDetailActionButton[] => {
     const actions: EntityDetailActionButton[] = [];
     if (monitorAction.action) actions.push(monitorAction.action);
+    if (monitorAction.syncAction) actions.push(monitorAction.syncAction);
     if (identifyAction.action) actions.push(identifyAction.action);
     return actions;
   });
