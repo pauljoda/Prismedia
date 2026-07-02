@@ -28,6 +28,18 @@ public sealed class AcquisitionImportJobHandler(
             return;
         }
 
+        // Import is per-kind: only the book pipeline exists today. A non-book download stays Downloaded
+        // (files intact in the client) with an honest status instead of being pushed through the book
+        // planner — its import lands with that kind's engine workstream.
+        if (import.Kind != EntityKind.Book) {
+            await acquisitions.SetStatusAsync(
+                payload.AcquisitionId,
+                AcquisitionStatus.Downloaded,
+                $"Downloaded. Automatic import for {import.Kind.ToCode()} acquisitions isn't available yet — the files remain in the download client.",
+                cancellationToken);
+            return;
+        }
+
         await acquisitions.SetStatusAsync(payload.AcquisitionId, AcquisitionStatus.Importing, null, cancellationToken);
 
         try {

@@ -88,7 +88,8 @@ public sealed record AcquisitionMetadata(
     Guid? EntityId = null);
 
 /// <summary>The minimal input the background search job needs to query indexers for an acquisition.</summary>
-public sealed record AcquisitionSearchInput(Guid Id, string Title, string? Author);
+/// <param name="Kind">The media kind being acquired; picks the decision engine and the Torznab category range.</param>
+public sealed record AcquisitionSearchInput(Guid Id, string Title, string? Author, EntityKind Kind = EntityKind.Book);
 
 /// <summary>The outcome of running indexer searches for an acquisition: scored candidates plus any indexer failures.</summary>
 public sealed record AcquisitionSearchOutcome(

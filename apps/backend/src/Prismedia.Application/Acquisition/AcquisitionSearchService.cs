@@ -34,7 +34,7 @@ public sealed class AcquisitionSearchRunner(
         }
 
         var blocklisted = await blocklist.GetIdentitiesAsync(cancellationToken);
-        var searches = await Task.WhenAll(configs.Select(config => SearchIndexerAsync(config, text, cancellationToken)));
+        var searches = await Task.WhenAll(configs.Select(config => SearchIndexerAsync(config, text, input.Kind, cancellationToken)));
 
         var releases = new List<(IndexerRelease Release, Guid? IndexerConfigId, string IndexerName)>();
         var errors = new List<IndexerSearchError>();
@@ -48,17 +48,21 @@ public sealed class AcquisitionSearchRunner(
             }
         }
 
-        var engine = decisionEngines.Get(Domain.Entities.EntityKind.Book);
+        var engine = decisionEngines.Get(input.Kind);
         return new AcquisitionSearchOutcome(engine.Evaluate(releases, rules, blocklisted), errors);
     }
 
     private async Task<(Contracts.Acquisition.IndexerConfigDetail Config, IReadOnlyList<IndexerRelease> Found, string? Error)> SearchIndexerAsync(
         Contracts.Acquisition.IndexerConfigDetail config,
         string text,
+        Domain.Entities.EntityKind kind,
         CancellationToken cancellationToken) {
         try {
-            var connection = new IndexerConnection(config.Id, config.Kind, config.BaseUrl, config.ApiKey, config.Categories);
-            var found = await clients.Get(config.Kind).SearchAsync(connection, new IndexerQuery(text, config.Categories), cancellationToken);
+            // Narrow the indexer's configured categories to the acquisition kind's Torznab range, so a
+            // movie or album search never queries the book categories the indexer was set up with.
+            var categories = TorznabCategories.ForKind(kind, config.Categories);
+            var connection = new IndexerConnection(config.Id, config.Kind, config.BaseUrl, config.ApiKey, categories);
+            var found = await clients.Get(config.Kind).SearchAsync(connection, new IndexerQuery(text, categories), cancellationToken);
             return (config, found, null);
         } catch (Exception ex) when (ex is not OperationCanceledException) {
             return (config, [], ex.Message);

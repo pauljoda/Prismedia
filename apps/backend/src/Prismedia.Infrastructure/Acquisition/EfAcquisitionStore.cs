@@ -66,9 +66,9 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
         var row = await db.Acquisitions
             .AsNoTracking()
             .Where(row => row.Id == id)
-            .Select(row => new { row.Id, row.Title, row.Author })
+            .Select(row => new { row.Id, row.Title, row.Author, row.Kind })
             .FirstOrDefaultAsync(cancellationToken);
-        return row is null ? null : new AcquisitionSearchInput(row.Id, row.Title, row.Author);
+        return row is null ? null : new AcquisitionSearchInput(row.Id, row.Title, row.Author, row.Kind);
     }
 
     public async Task<AcquisitionStatus?> GetStatusAsync(Guid id, CancellationToken cancellationToken) {
