@@ -67,8 +67,13 @@ public static class RequestEndpoints {
                     return Results.BadRequest(new ApiProblem(ApiProblemCodes.RequestInvalid, "A provider-qualified external id is required."));
                 }
 
-                if (request.Kind == RequestMediaKind.Author && request.SelectedChildIds.Count == 0) {
-                    return Results.BadRequest(new ApiProblem(ApiProblemCodes.RequestInvalid, "Select at least one book to request."));
+                var descriptor = RequestKindRegistry.Find(request.Kind);
+                if (descriptor is null || !descriptor.Committable) {
+                    return Results.BadRequest(new ApiProblem(ApiProblemCodes.RequestInvalid, "This kind can't be requested yet."));
+                }
+
+                if (descriptor.IsContainer && request.SelectedChildIds.Count == 0) {
+                    return Results.BadRequest(new ApiProblem(ApiProblemCodes.RequestInvalid, "Select at least one item to request."));
                 }
 
                 var response = await commits.CommitAsync(request, NsfwVisibility.ShouldHide(hideNsfw, httpContext), cancellationToken);

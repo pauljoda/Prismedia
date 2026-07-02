@@ -8,18 +8,19 @@ using Prismedia.Domain.Entities;
 namespace Prismedia.Application.Tests.Requests;
 
 /// <summary>
-/// Covers the request commit — the Identify apply run on entities that don't exist on disk yet: an
-/// author commit creates the wanted author + picked books and one acquisition per book (each linked to
-/// its wanted entity), owned/in-flight picks are skipped transparently, the proposal is applied filtered
-/// to the picked works, and book commits handle both the standalone and series-volume shapes.
+/// Covers the registry-driven request commit — the Identify apply run on entities that don't exist on
+/// disk yet, for every requestable kind: containers (author, artist) create the wanted grouping plus
+/// picked works with one acquisition each; leaves (book, movie, album) create themselves; owned and
+/// in-flight picks are skipped transparently; non-committable kinds (series) are refused.
 /// </summary>
 public sealed class RequestCommitServiceTests {
     private const string Provider = "openlibrary";
 
     [Fact]
     public async Task AuthorCommitCreatesTheWantedAuthorAndPickedBooksAndAcquiresEach() {
-        var proposal = AuthorProposal("Brandon Sanderson", Book("W1", "Elantris"), Book("W2", "Warbreaker"), Book("W3", "Skipped"));
-        var (service, writer, acquisitions) = Service(authorProposal: proposal);
+        var proposal = Container(ProposalKind.Person, "Brandon Sanderson", "A1",
+            Leaf(ProposalKind.Book, "Elantris", "W1"), Leaf(ProposalKind.Book, "Warbreaker", "W2"), Leaf(ProposalKind.Book, "Skipped", "W3"));
+        var (service, writer, acquisitions) = Service(proposal);
 
         var response = await service.CommitAsync(
             new RequestCommitRequest(RequestMediaKind.Author, $"{Provider}:A1", [$"{Provider}:W1", $"{Provider}:W2"]),
@@ -30,39 +31,87 @@ public sealed class RequestCommitServiceTests {
 
         var author = Assert.Single(writer.Ensured, call => call.Kind == EntityKind.BookAuthor);
         Assert.Equal("Brandon Sanderson", author.Title);
+        Assert.True(author.MatchTitleKindWide);
         Assert.Null(author.ParentEntityId);
 
         var books = writer.Ensured.Where(call => call.Kind == EntityKind.Book).ToArray();
         Assert.Equal(["W1", "W2"], books.Select(call => call.ItemId).ToArray());
         Assert.All(books, call => Assert.Equal(response.ContainerEntityId, call.ParentEntityId));
+        Assert.All(books, call => Assert.False(call.MatchTitleKindWide));
 
         Assert.Equal(2, response.Items.Count);
         Assert.All(response.Items, item => Assert.Equal(RequestCommitOutcome.Requested, item.Outcome));
         Assert.Equal(2, acquisitions.Created.Count);
         Assert.All(acquisitions.Created, request => Assert.Equal("Brandon Sanderson", request.Author));
+        Assert.All(acquisitions.Created, request => Assert.Equal(EntityKind.Book, request.Kind));
         Assert.Equal(
             response.Items.Select(item => item.EntityId).ToArray(),
             acquisitions.Created.Select(request => request.EntityId).ToArray());
     }
 
     [Fact]
-    public async Task AuthorCommitAppliesTheProposalFilteredToThePickedWorks() {
-        var proposal = AuthorProposal("Author", Book("W1", "Picked"), Book("W2", "Unpicked"));
-        var (service, writer, _) = Service(authorProposal: proposal);
+    public async Task ArtistCommitCreatesTheWantedArtistAndAlbumAcquisitions() {
+        var proposal = Container(ProposalKind.MusicArtist, "Daft Punk", "MB1",
+            Leaf(ProposalKind.AudioLibrary, "Discovery", "R1"), Leaf(ProposalKind.AudioLibrary, "Homework", "R2"));
+        var (service, writer, acquisitions) = Service(proposal);
 
-        await service.CommitAsync(
-            new RequestCommitRequest(RequestMediaKind.Author, $"{Provider}:A1", [$"{Provider}:W1"]),
+        var response = await service.CommitAsync(
+            new RequestCommitRequest(RequestMediaKind.Artist, $"{Provider}:MB1", [$"{Provider}:R1"]),
             hideNsfw: false, CancellationToken.None);
 
-        var applied = Assert.Single(writer.Applied);
-        var child = Assert.Single(applied.Proposal.Children);
-        Assert.Equal("Picked", child.Patch.Title);
+        var artist = Assert.Single(writer.Ensured, call => call.Kind == EntityKind.MusicArtist);
+        Assert.True(artist.MatchTitleKindWide);
+        var album = Assert.Single(writer.Ensured, call => call.Kind == EntityKind.AudioLibrary);
+        Assert.Equal("R1", album.ItemId);
+        Assert.Equal(response!.ContainerEntityId, album.ParentEntityId);
+
+        var created = Assert.Single(acquisitions.Created);
+        Assert.Equal(EntityKind.AudioLibrary, created.Kind);
+        Assert.Equal("Daft Punk", created.Author);
+        Assert.Equal("Discovery", created.Title);
+    }
+
+    [Fact]
+    public async Task MovieCommitCreatesAWantedMovieWithItsAcquisitionLinked() {
+        var proposal = Leaf(ProposalKind.Movie, "Dune: Part Two", "M1") with {
+            Patch = Patch("Dune: Part Two", "M1") with { Credits = [new CreditPatch("Denis Villeneuve", "director", null, null)] }
+        };
+        var (service, writer, acquisitions) = Service(proposal);
+
+        var response = await service.CommitAsync(
+            new RequestCommitRequest(RequestMediaKind.Movie, $"{Provider}:M1", []),
+            hideNsfw: false, CancellationToken.None);
+
+        Assert.Null(response!.ContainerEntityId);
+        var item = Assert.Single(response.Items);
+        Assert.Equal(RequestCommitOutcome.Requested, item.Outcome);
+        Assert.Equal(EntityKind.Movie, Assert.Single(writer.Ensured).Kind);
+
+        var created = Assert.Single(acquisitions.Created);
+        Assert.Equal(EntityKind.Movie, created.Kind);
+        // No author concept for movies — the primary credit strengthens the release query instead.
+        Assert.Equal("Denis Villeneuve", created.Author);
+        Assert.Equal(item.EntityId, created.EntityId);
+    }
+
+    [Fact]
+    public async Task SeriesCommitIsRefusedWhileItsEngineHasNotLanded() {
+        var (service, writer, acquisitions) = Service(Container(ProposalKind.VideoSeries, "Andor", "TV1"));
+
+        var response = await service.CommitAsync(
+            new RequestCommitRequest(RequestMediaKind.Series, $"{Provider}:TV1", []),
+            hideNsfw: false, CancellationToken.None);
+
+        Assert.Null(response);
+        Assert.Empty(writer.Ensured);
+        Assert.Empty(acquisitions.Created);
     }
 
     [Fact]
     public async Task OwnedPickIsReportedAlreadyOwnedAndNeitherAppliedNorAcquired() {
-        var proposal = AuthorProposal("Author", Book("W1", "Owned"), Book("W2", "New"));
-        var (service, writer, acquisitions) = Service(authorProposal: proposal);
+        var proposal = Container(ProposalKind.Person, "Author", "A1",
+            Leaf(ProposalKind.Book, "Owned", "W1"), Leaf(ProposalKind.Book, "New", "W2"));
+        var (service, writer, acquisitions) = Service(proposal);
         writer.ExistingWithFile.Add("W1");
 
         var response = await service.CommitAsync(
@@ -74,15 +123,15 @@ public sealed class RequestCommitServiceTests {
             response!.Items.Select(item => item.Outcome).ToArray());
         Assert.Equal("New", Assert.Single(acquisitions.Created).Title);
 
-        // The owned book is excluded from the author apply so a request can't overwrite owned metadata.
+        // The owned work is excluded from the container apply so a request can't overwrite owned metadata.
         var applied = Assert.Single(writer.Applied);
         Assert.Equal("New", Assert.Single(applied.Proposal.Children).Patch.Title);
     }
 
     [Fact]
     public async Task InFlightWantedPickIsReportedAlreadyRequestedWithoutANewAcquisition() {
-        var proposal = AuthorProposal("Author", Book("W1", "InFlight"));
-        var (service, writer, acquisitions) = Service(authorProposal: proposal);
+        var proposal = Container(ProposalKind.Person, "Author", "A1", Leaf(ProposalKind.Book, "InFlight", "W1"));
+        var (service, writer, acquisitions) = Service(proposal);
         writer.ExistingWanted.Add("W1");
         acquisitions.EntitiesWithAcquisitions.Add(FakeWantedEntityWriter.EntityIdFor("W1"));
 
@@ -95,35 +144,11 @@ public sealed class RequestCommitServiceTests {
     }
 
     [Fact]
-    public async Task StandaloneBookCommitCreatesAWantedBookWithItsAcquisitionLinked() {
-        var proposal = Book("W1", "Elantris") with {
-            Patch = Patch("Elantris", "W1") with { Credits = [new CreditPatch("Brandon Sanderson", "author", null, null)] }
-        };
-        var (service, writer, acquisitions) = Service(bookProposal: proposal);
-
-        var response = await service.CommitAsync(
-            new RequestCommitRequest(RequestMediaKind.Book, $"{Provider}:W1", []),
-            hideNsfw: false, CancellationToken.None);
-
-        Assert.Null(response!.ContainerEntityId);
-        var item = Assert.Single(response.Items);
-        Assert.Equal(RequestCommitOutcome.Requested, item.Outcome);
-
-        var created = Assert.Single(acquisitions.Created);
-        Assert.Equal("Elantris", created.Title);
-        Assert.Equal("Brandon Sanderson", created.Author);
-        Assert.Equal(item.EntityId, created.EntityId);
-        Assert.Equal(Provider, created.PluginId);
-        Assert.Equal("W1", created.PluginItemId);
-        Assert.Single(writer.Applied);
-    }
-
-    [Fact]
     public async Task SeriesVolumePicksBecomeStandaloneWantedBooksStampedWithTheSeries() {
-        var proposal = Book("W0", "The Stormlight Archive") with {
-            Children = [Book("V1", "The Way of Kings"), Book("V2", "Words of Radiance")]
+        var proposal = Leaf(ProposalKind.Book, "The Stormlight Archive", "W0") with {
+            Children = [Leaf(ProposalKind.Book, "The Way of Kings", "V1"), Leaf(ProposalKind.Book, "Words of Radiance", "V2")]
         };
-        var (service, writer, acquisitions) = Service(bookProposal: proposal);
+        var (service, writer, acquisitions) = Service(proposal);
 
         var response = await service.CommitAsync(
             new RequestCommitRequest(RequestMediaKind.Book, $"{Provider}:W0", [$"{Provider}:V2"]),
@@ -144,7 +169,7 @@ public sealed class RequestCommitServiceTests {
 
     [Fact]
     public async Task MalformedOrUnresolvableExternalIdsReturnNull() {
-        var (service, _, _) = Service();
+        var (service, _, _) = Service(Leaf(ProposalKind.Book, "Book", "W1"));
 
         Assert.Null(await service.CommitAsync(
             new RequestCommitRequest(RequestMediaKind.Book, "missing-separator", []), hideNsfw: false, CancellationToken.None));
@@ -153,34 +178,31 @@ public sealed class RequestCommitServiceTests {
     }
 
     private static (RequestCommitService Service, FakeWantedEntityWriter Writer, FakeAcquisitionRequestService Acquisitions) Service(
-        EntityMetadataProposal? authorProposal = null,
-        EntityMetadataProposal? bookProposal = null) {
+        EntityMetadataProposal proposal) {
         var writer = new FakeWantedEntityWriter();
         var acquisitions = new FakeAcquisitionRequestService();
-        var service = new RequestCommitService(new FakeProposalSource(authorProposal, bookProposal), writer, acquisitions);
+        var service = new RequestCommitService(new FakeProposalSource(proposal), writer, acquisitions);
         return (service, writer, acquisitions);
     }
 
-    private static EntityMetadataProposal AuthorProposal(string name, params EntityMetadataProposal[] works) =>
-        new("p-author", Provider, ProposalKind.Person, null, null, Patch(name, "A1"), [], works, [], null, []);
+    private static EntityMetadataProposal Container(ProposalKind kind, string title, string itemId, params EntityMetadataProposal[] works) =>
+        new($"p-{itemId}", Provider, kind, null, null, Patch(title, itemId), [], works, [], null, []);
 
-    private static EntityMetadataProposal Book(string workId, string title) =>
-        new($"p-{workId}", Provider, ProposalKind.Book, null, null, Patch(title, workId), [], [], [], null, []);
+    private static EntityMetadataProposal Leaf(ProposalKind kind, string title, string workId) =>
+        new($"p-{workId}", Provider, kind, null, null, Patch(title, workId), [], [], [], null, []);
 
     private static EntityMetadataPatch Patch(string title, string workId) =>
         new(title, null, new Dictionary<string, string> { [Provider] = workId }, [], [], null, [],
             new Dictionary<string, string>(), new Dictionary<string, int>(), new Dictionary<string, int>(), null);
 
-    private sealed class FakeProposalSource(EntityMetadataProposal? author, EntityMetadataProposal? book) : IPluginRequestProposalSource {
-        public Task<EntityMetadataProposal?> ResolveBookProposalAsync(string providerId, string itemId, bool hideNsfw, bool includeChildren, CancellationToken cancellationToken) =>
-            Task.FromResult(book?.Patch.ExternalIds.GetValueOrDefault(providerId) == itemId ? book : null);
-
-        public Task<EntityMetadataProposal?> ResolveAuthorProposalAsync(string providerId, string itemId, bool hideNsfw, CancellationToken cancellationToken) =>
-            Task.FromResult(author);
+    private sealed class FakeProposalSource(EntityMetadataProposal proposal) : IPluginRequestProposalSource {
+        public Task<EntityMetadataProposal?> ResolveProposalAsync(
+            RequestKindDescriptor descriptor, string providerId, string itemId, bool hideNsfw, bool includeChildren, CancellationToken cancellationToken) =>
+            Task.FromResult(proposal.Patch.ExternalIds.GetValueOrDefault(providerId) == itemId ? proposal : null);
     }
 
     private sealed class FakeWantedEntityWriter : IWantedEntityWriter {
-        public sealed record EnsureCall(EntityKind Kind, string ItemId, string Title, Guid? ParentEntityId);
+        public sealed record EnsureCall(EntityKind Kind, string ItemId, string Title, Guid? ParentEntityId, bool MatchTitleKindWide);
         public sealed record ApplyCall(Guid EntityId, EntityMetadataProposal Proposal);
 
         public List<EnsureCall> Ensured { get; } = [];
@@ -196,8 +218,8 @@ public sealed class RequestCommitServiceTests {
         public static Guid EntityIdFor(string itemId) =>
             new(System.Security.Cryptography.MD5.HashData(System.Text.Encoding.UTF8.GetBytes(itemId)));
 
-        public Task<WantedEntityResult> EnsureAsync(EntityKind kind, string providerId, string itemId, string title, Guid? parentEntityId, CancellationToken cancellationToken) {
-            Ensured.Add(new EnsureCall(kind, itemId, title, parentEntityId));
+        public Task<WantedEntityResult> EnsureAsync(EntityKind kind, string providerId, string itemId, string title, Guid? parentEntityId, bool matchTitleKindWide, CancellationToken cancellationToken) {
+            Ensured.Add(new EnsureCall(kind, itemId, title, parentEntityId, matchTitleKindWide));
             var hasFile = ExistingWithFile.Contains(itemId);
             var created = !hasFile && !ExistingWanted.Contains(itemId);
             return Task.FromResult(new WantedEntityResult(EntityIdFor(itemId), created, hasFile));

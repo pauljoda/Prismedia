@@ -14,7 +14,7 @@ namespace Prismedia.Application.Jobs.Handlers;
 /// </summary>
 public sealed class AcquisitionEnrichJobHandler(
     IAcquisitionStore acquisitions,
-    IBookMetadataEnricher enricher,
+    IRequestMetadataEnricher enricher,
     ILogger<AcquisitionEnrichJobHandler> logger) : IJobHandler {
     public JobType Type => JobType.AcquisitionEnrich;
 
@@ -25,12 +25,12 @@ public sealed class AcquisitionEnrichJobHandler(
             return; // nothing to enrich from
         }
 
-        BookMetadataEnrichment? enrichment;
+        RequestMetadataEnrichment? enrichment;
         try {
             // Conservative SFW default: this background pass has no user session, and the request already
             // captured whatever the (already SFW-gated) search returned — so never pull NSFW-unrestricted
             // results here. An NSFW-flagged provider is skipped by the enricher.
-            enrichment = await enricher.LookupByIdAsync(import.PluginId, import.PluginItemId, hideNsfw: true, cancellationToken);
+            enrichment = await enricher.LookupByIdAsync(import.Kind, import.PluginId, import.PluginItemId, hideNsfw: true, cancellationToken);
         } catch (OperationCanceledException) {
             throw;
         } catch (Exception ex) {

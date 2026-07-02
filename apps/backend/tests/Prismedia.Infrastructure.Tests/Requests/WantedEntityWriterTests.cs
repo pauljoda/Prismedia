@@ -18,7 +18,7 @@ public sealed class WantedEntityWriterTests {
         await using var db = CreateContext();
         var writer = Writer(db);
 
-        var result = await writer.EnsureAsync(EntityKind.Book, "openlibrary", "W1", "Elantris", null, CancellationToken.None);
+        var result = await writer.EnsureAsync(EntityKind.Book, "openlibrary", "W1", "Elantris", null, matchTitleKindWide: false, CancellationToken.None);
 
         Assert.True(result.Created);
         Assert.False(result.HasFile);
@@ -40,7 +40,7 @@ public sealed class WantedEntityWriterTests {
         await db.SaveChangesAsync();
         var writer = Writer(db);
 
-        var result = await writer.EnsureAsync(EntityKind.Book, "openlibrary", "W1", "Elantris", null, CancellationToken.None);
+        var result = await writer.EnsureAsync(EntityKind.Book, "openlibrary", "W1", "Elantris", null, matchTitleKindWide: false, CancellationToken.None);
 
         Assert.False(result.Created);
         Assert.True(result.HasFile);
@@ -57,7 +57,7 @@ public sealed class WantedEntityWriterTests {
         await db.SaveChangesAsync();
         var writer = Writer(db);
 
-        var result = await writer.EnsureAsync(EntityKind.BookAuthor, "openlibrary", "A1", "brandon sanderson", null, CancellationToken.None);
+        var result = await writer.EnsureAsync(EntityKind.BookAuthor, "openlibrary", "A1", "brandon sanderson", null, matchTitleKindWide: true, CancellationToken.None);
 
         Assert.False(result.Created);
         Assert.Equal(authorId, result.EntityId);
@@ -72,10 +72,46 @@ public sealed class WantedEntityWriterTests {
         await db.SaveChangesAsync();
         var writer = Writer(db);
 
-        var result = await writer.EnsureAsync(EntityKind.Book, "openlibrary", "W9", "Common Title", null, CancellationToken.None);
+        var result = await writer.EnsureAsync(EntityKind.Book, "openlibrary", "W9", "Common Title", null, matchTitleKindWide: false, CancellationToken.None);
 
         Assert.True(result.Created);
         Assert.Equal(2, await db.Entities.AsNoTracking().CountAsync());
+    }
+
+    [Fact]
+    public async Task EnsureCreatesWantedMusicSkeletonsWithTheirRootlessDetailRows() {
+        await using var db = CreateContext();
+        var writer = Writer(db);
+
+        var artist = await writer.EnsureAsync(EntityKind.MusicArtist, "musicbrainz", "MB1", "Daft Punk", null, matchTitleKindWide: true, CancellationToken.None);
+        var album = await writer.EnsureAsync(EntityKind.AudioLibrary, "musicbrainz", "R1", "Discovery", artist.EntityId, matchTitleKindWide: false, CancellationToken.None);
+
+        Assert.Null((await db.MusicArtistDetails.AsNoTracking().FirstAsync(row => row.EntityId == artist.EntityId)).LibraryRootId);
+        Assert.Null((await db.AudioLibraryDetails.AsNoTracking().FirstAsync(row => row.EntityId == album.EntityId)).LibraryRootId);
+        Assert.Equal(artist.EntityId, (await db.Entities.AsNoTracking().FirstAsync(row => row.Id == album.EntityId)).ParentEntityId);
+    }
+
+    [Fact]
+    public async Task EnsureCreatesAWantedMovieWithoutADetailRow() {
+        await using var db = CreateContext();
+
+        var movie = await Writer(db).EnsureAsync(EntityKind.Movie, "tmdb", "M1", "Dune", null, matchTitleKindWide: false, CancellationToken.None);
+
+        var entity = await db.Entities.AsNoTracking().FirstAsync(row => row.Id == movie.EntityId);
+        Assert.True(entity.IsWanted);
+        Assert.Equal(EntityKindRegistry.Movie.Code, entity.KindCode);
+    }
+
+    [Fact]
+    public async Task DeleteIfWantedPrunesAnOrphanedWantedArtistLikeAnAuthor() {
+        await using var db = CreateContext();
+        var artistId = AddEntity(db, EntityKindRegistry.MusicArtist.Code, "Artist", isWanted: true);
+        var albumId = AddEntity(db, EntityKindRegistry.AudioLibrary.Code, "Album", isWanted: true, parentEntityId: artistId);
+        await db.SaveChangesAsync();
+
+        Assert.True(await Writer(db).DeleteIfWantedAsync(albumId, CancellationToken.None));
+
+        Assert.Empty(await db.Entities.AsNoTracking().ToArrayAsync());
     }
 
     [Fact]

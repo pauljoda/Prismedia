@@ -32,8 +32,11 @@ public enum RequestRatingSource {
 }
 
 /// <summary>
-/// Closed set of media categories exposed by the request workflow. Prismedia fulfils requests through its
-/// own acquisition pipeline, so the requestable kinds are books and the author container that groups them.
+/// Closed set of media categories exposed by the request workflow. Prismedia fulfils requests through
+/// its own acquisition pipeline. Leaf kinds (book, movie, album) are acquired directly; container kinds
+/// (author, series, artist) surface their works as toggleable children and are created as wanted library
+/// entities that group them. Per-kind behavior lives in <c>RequestKindRegistry</c> — this enum is only
+/// the wire vocabulary.
 /// </summary>
 public enum RequestMediaKind {
     /// <summary>Book request target (fulfilled by Prismedia-direct acquisition).</summary>
@@ -48,6 +51,28 @@ public enum RequestMediaKind {
     /// </summary>
     [Code("author")]
     Author,
+
+    /// <summary>Movie request target: a wanted Movie entity whose video file arrives by acquisition.</summary>
+    [Code("movie")]
+    Movie,
+
+    /// <summary>
+    /// TV series request target: a container kind. Discover and detail are available; committing waits
+    /// for the per-episode acquisition engine (the richest container case, deliberately last).
+    /// </summary>
+    [Code("series")]
+    Series,
+
+    /// <summary>
+    /// Music artist request target: a container kind that surfaces the artist's albums as toggleable
+    /// children, each fanned out into its own <see cref="Album"/> acquisition.
+    /// </summary>
+    [Code("artist")]
+    Artist,
+
+    /// <summary>Album request target: a wanted album entity — the acquisition unit for music.</summary>
+    [Code("album")]
+    Album,
 
     /// <summary>Plugin-defined request target.</summary>
     [Code("plugin")]

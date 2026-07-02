@@ -392,7 +392,8 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
 
         return new AcquisitionImportContext(
             row.Id, row.Title, row.Author, row.Series, row.Year, row.PosterUrl, row.PluginId, row.PluginItemId,
-            row.ProfileId, transfer?.ContentPath, transfer?.ClientItemId, transfer?.DownloadClientConfigId, row.Description);
+            row.ProfileId, transfer?.ContentPath, transfer?.ClientItemId, transfer?.DownloadClientConfigId, row.Description,
+            row.Kind);
     }
 
     public async Task<AcquisitionTransferInfo?> GetTransferInfoAsync(Guid acquisitionId, CancellationToken cancellationToken) {

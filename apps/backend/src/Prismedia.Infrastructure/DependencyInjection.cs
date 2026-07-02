@@ -316,13 +316,13 @@ public static class DependencyInjection {
     }
 
     private static void RegisterRequests(IServiceCollection services) {
-        // Prismedia fulfils all requests itself through its plugin-backed acquisition pipeline; the request
-        // layer is purely the book/author metadata search + detail surface that feeds acquisitions.
-        services.AddScoped<IBookMetadataSearchSource, PluginBookMetadataSearchSource>();
-        services.AddScoped<IAuthorMetadataSearchSource, PluginBookMetadataSearchSource>();
-        services.AddScoped<IBookMetadataEnricher, PluginBookMetadataSearchSource>();
-        services.AddScoped<IPluginRequestDetailSource, PluginBookMetadataSearchSource>();
-        services.AddScoped<IPluginRequestProposalSource, PluginBookMetadataSearchSource>();
+        // Prismedia fulfils all requests itself through its plugin-backed acquisition pipeline; the
+        // request layer is the kind-registry-driven metadata search + detail surface that feeds
+        // acquisitions. One source class serves every requestable kind.
+        services.AddScoped<IRequestMetadataSearchSource, PluginRequestMetadataSource>();
+        services.AddScoped<IRequestMetadataEnricher, PluginRequestMetadataSource>();
+        services.AddScoped<IPluginRequestDetailSource, PluginRequestMetadataSource>();
+        services.AddScoped<IPluginRequestProposalSource, PluginRequestMetadataSource>();
         services.AddScoped<IWantedEntityWriter, WantedEntityWriter>();
     }
 

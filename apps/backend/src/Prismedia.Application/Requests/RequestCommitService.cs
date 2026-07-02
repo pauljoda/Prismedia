@@ -9,16 +9,10 @@ namespace Prismedia.Application.Requests;
 /// <summary>Resolves full plugin metadata proposals for provider-qualified request ids (no library entity involved).</summary>
 public interface IPluginRequestProposalSource {
     /// <summary>
-    /// Resolves a book work's proposal by provider + work id; series-volume children are included on
-    /// request. Null when the provider is missing/disabled/NSFW-gated or can't resolve the id.
+    /// Resolves the proposal for a provider work-id of the descriptor's kind; structural children are
+    /// included on request. Null when the provider is missing/disabled/NSFW-gated or can't resolve it.
     /// </summary>
-    Task<EntityMetadataProposal?> ResolveBookProposalAsync(string providerId, string itemId, bool hideNsfw, bool includeChildren, CancellationToken cancellationToken);
-
-    /// <summary>
-    /// Resolves an author's proposal by provider + author id, with the author's works enumerated as
-    /// structural children. Null when the provider can't resolve it.
-    /// </summary>
-    Task<EntityMetadataProposal?> ResolveAuthorProposalAsync(string providerId, string itemId, bool hideNsfw, CancellationToken cancellationToken);
+    Task<EntityMetadataProposal?> ResolveProposalAsync(RequestKindDescriptor descriptor, string providerId, string itemId, bool hideNsfw, bool includeChildren, CancellationToken cancellationToken);
 }
 
 /// <summary>Result of ensuring a wanted entity: the entity, whether this call created it, and whether it already owns a real file.</summary>
@@ -26,17 +20,19 @@ public sealed record WantedEntityResult(Guid EntityId, bool Created, bool HasFil
 
 /// <summary>
 /// Creates and populates wanted library entities for request commits. A wanted entity is a real library
-/// entity — visible in its normal grid immediately — flagged Wanted, carrying plugin metadata and artwork
-/// but no file; the acquisition import later attaches the file and clears the flag.
+/// entity (grid-visible immediately) flagged Wanted, carrying plugin metadata and artwork but no file;
+/// the acquisition import later attaches the file and clears the flag.
 /// </summary>
 public interface IWantedEntityWriter {
     /// <summary>
     /// Finds the library entity for (kind, provider external id) or creates a wanted skeleton for it
     /// (flagged Wanted, stamped with the provider external id, parented when a parent is given).
-    /// Existing entities are matched external-id-first, mirroring the identify apply rule, so a
-    /// re-request or an already-scanned copy is reused rather than duplicated.
+    /// Existing entities are matched external-id-first, mirroring the identify apply rule.
+    /// <paramref name="matchTitleKindWide"/> additionally allows a kind-wide case-insensitive title
+    /// match — right for container groupings (an already-scanned author or artist folder that has no
+    /// provider ids yet), too weak a signal for leaves, which only title-match inside their parent.
     /// </summary>
-    Task<WantedEntityResult> EnsureAsync(EntityKind kind, string providerId, string itemId, string title, Guid? parentEntityId, CancellationToken cancellationToken);
+    Task<WantedEntityResult> EnsureAsync(EntityKind kind, string providerId, string itemId, string title, Guid? parentEntityId, bool matchTitleKindWide, CancellationToken cancellationToken);
 
     /// <summary>Applies a plugin proposal to an entity through the shared metadata-apply cascade (all present fields, default artwork).</summary>
     Task ApplyProposalAsync(Guid entityId, EntityMetadataProposal proposal, CancellationToken cancellationToken);
@@ -44,92 +40,105 @@ public interface IWantedEntityWriter {
     /// <summary>
     /// Hard-deletes a request-created wanted entity — the cancel path's other half: cancelling a request
     /// removes the placeholder it created. Deletes nothing when the entity is gone, no longer Wanted, or
-    /// owns a real file (an import won the race). Removing the last child of a wanted, fileless author
-    /// removes the author too. Returns true when the entity was deleted.
+    /// owns a real file (an import won the race). Removing the last child of a wanted, fileless container
+    /// removes the container too. Returns true when the entity was deleted.
     /// </summary>
     Task<bool> DeleteIfWantedAsync(Guid entityId, CancellationToken cancellationToken);
 }
 
 /// <summary>
 /// Application use case for committing a reviewed request: Identify's apply, run on entities that don't
-/// exist on disk yet. Resolves the plugin proposal, materializes wanted library entities from it (the
-/// author container plus its picked books, a standalone book, or picked series volumes), populates them
-/// through the shared metadata-apply cascade, and starts one acquisition per requested book — each linked
-/// to its wanted entity so the import attaches the file to exactly that entity.
+/// exist on disk yet. Kind behavior comes from <see cref="RequestKindRegistry"/> — a container commit
+/// (author, artist) materializes the container plus its picked works; a leaf commit (book, movie, album)
+/// materializes the item itself, or its picked sibling works. Every created entity is populated through
+/// the shared metadata-apply cascade, and each requested leaf gets one acquisition linked to its wanted
+/// entity so the import attaches the file to exactly that entity.
 /// </summary>
 public sealed class RequestCommitService(
     IPluginRequestProposalSource proposals,
     IWantedEntityWriter wanted,
     IAcquisitionRequestService acquisitions) {
     /// <summary>
-    /// Commits a reviewed request. Returns null when the provider-qualified id is malformed or the
-    /// provider can't resolve it; otherwise reports a per-item outcome (an already-owned or
-    /// already-requested pick is skipped, not an error, so partial commits stay transparent).
+    /// Commits a reviewed request. Returns null when the kind isn't committable, the provider-qualified
+    /// id is malformed, or the provider can't resolve it; otherwise reports a per-item outcome (an
+    /// already-owned or already-requested pick is skipped, not an error, so partial commits stay transparent).
     /// </summary>
     public async Task<RequestCommitResponse?> CommitAsync(RequestCommitRequest request, bool hideNsfw, CancellationToken cancellationToken) {
+        var descriptor = RequestKindRegistry.Find(request.Kind);
+        if (descriptor is not { Committable: true }) {
+            return null;
+        }
+
         var (providerId, itemId) = RequestProposalReading.SplitProviderQualifiedId(request.ExternalId);
         if (providerId is null || itemId is null) {
             return null;
         }
 
-        return request.Kind == RequestMediaKind.Author
-            ? await CommitAuthorAsync(request, providerId, itemId, hideNsfw, cancellationToken)
-            : await CommitBookAsync(request, providerId, itemId, hideNsfw, cancellationToken);
+        return descriptor.IsContainer
+            ? await CommitContainerAsync(descriptor, request, providerId, itemId, hideNsfw, cancellationToken)
+            : await CommitLeafAsync(descriptor, request, providerId, itemId, hideNsfw, cancellationToken);
     }
 
     /// <summary>
-    /// Commits an author request: the author becomes a wanted container entity and each picked work a
-    /// wanted book beneath it, each with its own acquisition.
+    /// Commits a container request (author, artist): the container becomes a wanted grouping entity and
+    /// each picked work a wanted leaf beneath it, each with its own acquisition.
     /// </summary>
-    private async Task<RequestCommitResponse?> CommitAuthorAsync(
-        RequestCommitRequest request, string providerId, string itemId, bool hideNsfw, CancellationToken cancellationToken) {
-        var proposal = await proposals.ResolveAuthorProposalAsync(providerId, itemId, hideNsfw, cancellationToken);
+    private async Task<RequestCommitResponse?> CommitContainerAsync(
+        RequestKindDescriptor descriptor, RequestCommitRequest request, string providerId, string itemId, bool hideNsfw, CancellationToken cancellationToken) {
+        var child = RequestKindRegistry.ChildOf(descriptor);
+        if (child is null) {
+            return null;
+        }
+
+        var proposal = await proposals.ResolveProposalAsync(descriptor, providerId, itemId, hideNsfw, includeChildren: true, cancellationToken);
         if (proposal?.Patch is null) {
             return null;
         }
 
-        var authorTitle = TitleOr(proposal.Patch.Title, itemId);
-        var author = await wanted.EnsureAsync(EntityKind.BookAuthor, providerId, itemId, authorTitle, parentEntityId: null, cancellationToken);
+        var containerTitle = TitleOr(proposal.Patch.Title, itemId);
+        var container = await wanted.EnsureAsync(
+            descriptor.WantedEntityKind, providerId, itemId, containerTitle,
+            parentEntityId: null, matchTitleKindWide: true, cancellationToken);
 
         var picks = new List<CommitPick>();
-        foreach (var child in SelectStructuralChildren(providerId, proposal, request.SelectedChildIds)) {
-            var pick = await EnsurePickAsync(providerId, child, author.EntityId, cancellationToken);
+        foreach (var childProposal in SelectStructuralChildren(providerId, proposal, request.SelectedChildIds)) {
+            var pick = await EnsurePickAsync(child, providerId, childProposal, container.EntityId, cancellationToken);
             if (pick is not null) {
                 picks.Add(pick);
             }
         }
 
         // Apply the proposal filtered to the picked (fileless) works: the cascade finds the pre-created
-        // skeletons external-id-first and enriches them in place, and never materializes unpicked books.
-        // Owned books are excluded so a request can't overwrite metadata the library already has.
-        var applyChildren = proposal.Children.Where(child => child.TargetKind.IsRelationship())
+        // skeletons external-id-first and enriches them in place, and never materializes unpicked works.
+        // Owned works are excluded so a request can't overwrite metadata the library already has.
+        var applyChildren = proposal.Children.Where(node => node.TargetKind.IsRelationship())
             .Concat(picks.Where(pick => !pick.Entity.HasFile).Select(pick => pick.Proposal))
             .ToArray();
-        await wanted.ApplyProposalAsync(author.EntityId, proposal with { Children = applyChildren }, cancellationToken);
+        await wanted.ApplyProposalAsync(container.EntityId, proposal with { Children = applyChildren }, cancellationToken);
 
         var items = new List<RequestCommitItem>();
         foreach (var pick in picks) {
-            items.Add(await StartAcquisitionAsync(pick, providerId, author: authorTitle, series: null, cancellationToken));
+            items.Add(await StartAcquisitionAsync(pick, providerId, child.AcquisitionKind, author: containerTitle, series: null, cancellationToken));
         }
 
-        return new RequestCommitResponse(author.EntityId, items);
+        return new RequestCommitResponse(container.EntityId, items);
     }
 
     /// <summary>
-    /// Commits a book request. With no picked children the book requests itself; with picked children
-    /// (its series' volumes) each pick becomes its own standalone wanted book and acquisition.
+    /// Commits a leaf request (book, movie, album). With no picked children the item requests itself;
+    /// with picked children (a book's series volumes) each pick becomes its own standalone wanted leaf.
     /// </summary>
-    private async Task<RequestCommitResponse?> CommitBookAsync(
-        RequestCommitRequest request, string providerId, string itemId, bool hideNsfw, CancellationToken cancellationToken) {
-        var includeChildren = request.SelectedChildIds.Count > 0;
-        var proposal = await proposals.ResolveBookProposalAsync(providerId, itemId, hideNsfw, includeChildren, cancellationToken);
+    private async Task<RequestCommitResponse?> CommitLeafAsync(
+        RequestKindDescriptor descriptor, RequestCommitRequest request, string providerId, string itemId, bool hideNsfw, CancellationToken cancellationToken) {
+        var includeChildren = request.SelectedChildIds.Count > 0 && descriptor.ChildKind is not null;
+        var proposal = await proposals.ResolveProposalAsync(descriptor, providerId, itemId, hideNsfw, includeChildren, cancellationToken);
         if (proposal?.Patch is null) {
             return null;
         }
 
-        var author = RequestProposalReading.AuthorFromCredits(proposal.Patch);
+        var creator = RequestProposalReading.AuthorFromCredits(proposal.Patch) ?? RequestProposalReading.PrimaryCredit(proposal.Patch);
         if (!includeChildren) {
-            var pick = await EnsurePickAsync(providerId, proposal, parentEntityId: null, cancellationToken);
+            var pick = await EnsurePickAsync(descriptor, providerId, proposal, parentEntityId: null, cancellationToken);
             if (pick is null) {
                 return null;
             }
@@ -138,12 +147,16 @@ public sealed class RequestCommitService(
                 await wanted.ApplyProposalAsync(pick.Entity.EntityId, proposal, cancellationToken);
             }
 
-            return new RequestCommitResponse(null, [await StartAcquisitionAsync(pick, providerId, author, series: null, cancellationToken)]);
+            return new RequestCommitResponse(
+                null,
+                [await StartAcquisitionAsync(pick, providerId, descriptor.AcquisitionKind, creator, series: null, cancellationToken)]);
         }
 
+        // Sibling-work fan-out (a book's series volumes): each pick is its own standalone leaf request.
+        var child = RequestKindRegistry.ChildOf(descriptor)!;
         var items = new List<RequestCommitItem>();
-        foreach (var child in SelectStructuralChildren(providerId, proposal, request.SelectedChildIds)) {
-            var pick = await EnsurePickAsync(providerId, child, parentEntityId: null, cancellationToken);
+        foreach (var childProposal in SelectStructuralChildren(providerId, proposal, request.SelectedChildIds)) {
+            var pick = await EnsurePickAsync(child, providerId, childProposal, parentEntityId: null, cancellationToken);
             if (pick is null) {
                 continue;
             }
@@ -152,7 +165,8 @@ public sealed class RequestCommitService(
                 await wanted.ApplyProposalAsync(pick.Entity.EntityId, pick.Proposal, cancellationToken);
             }
 
-            items.Add(await StartAcquisitionAsync(pick, providerId, author, series: TitleOr(proposal.Patch.Title, itemId), cancellationToken));
+            items.Add(await StartAcquisitionAsync(
+                pick, providerId, child.AcquisitionKind, creator, series: TitleOr(proposal.Patch.Title, itemId), cancellationToken));
         }
 
         return new RequestCommitResponse(null, items);
@@ -163,13 +177,15 @@ public sealed class RequestCommitService(
 
     /// <summary>Ensures the wanted entity for a picked work and decides its outcome, or null when the proposal carries no work id.</summary>
     private async Task<CommitPick?> EnsurePickAsync(
-        string providerId, EntityMetadataProposal proposal, Guid? parentEntityId, CancellationToken cancellationToken) {
+        RequestKindDescriptor descriptor, string providerId, EntityMetadataProposal proposal, Guid? parentEntityId, CancellationToken cancellationToken) {
         if (RequestProposalReading.WorkIdFor(providerId, proposal) is not { } workId) {
             return null;
         }
 
         var title = TitleOr(proposal.Patch?.Title, workId);
-        var entity = await wanted.EnsureAsync(EntityKind.Book, providerId, workId, title, parentEntityId, cancellationToken);
+        var entity = await wanted.EnsureAsync(
+            descriptor.WantedEntityKind, providerId, workId, title, parentEntityId,
+            matchTitleKindWide: descriptor.IsContainer, cancellationToken);
         var outcome = entity.HasFile
             ? RequestCommitOutcome.AlreadyOwned
             : !entity.Created && await acquisitions.AnyForEntityAsync(entity.EntityId, cancellationToken)
@@ -180,7 +196,7 @@ public sealed class RequestCommitService(
 
     /// <summary>Starts the acquisition for a requested pick (no-op for owned/in-flight picks) and shapes its response item.</summary>
     private async Task<RequestCommitItem> StartAcquisitionAsync(
-        CommitPick pick, string providerId, string? author, string? series, CancellationToken cancellationToken) {
+        CommitPick pick, string providerId, EntityKind acquisitionKind, string? author, string? series, CancellationToken cancellationToken) {
         Guid? acquisitionId = null;
         if (pick.Outcome == RequestCommitOutcome.Requested) {
             var summary = await acquisitions.CreateAndSearchAsync(
@@ -193,7 +209,7 @@ public sealed class RequestCommitService(
                     providerId,
                     pick.WorkId,
                     pick.Proposal.Patch?.Description,
-                    EntityKind.Book,
+                    acquisitionKind,
                     pick.Entity.EntityId),
                 cancellationToken);
             acquisitionId = summary.Id;

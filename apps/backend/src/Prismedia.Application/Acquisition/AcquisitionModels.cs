@@ -214,6 +214,7 @@ public sealed record ActiveTransfer(
     DateTimeOffset? StalledSince = null);
 
 /// <summary>Everything the import job needs: the captured metadata, the chosen profile, and the completed download's location.</summary>
+/// <param name="Kind">The media kind being acquired; drives per-kind enrichment and import dispatch.</param>
 public sealed record AcquisitionImportContext(
     Guid Id,
     string Title,
@@ -227,4 +228,5 @@ public sealed record AcquisitionImportContext(
     string? ContentPath,
     string? ClientItemId,
     Guid? DownloadClientConfigId,
-    string? Description = null);
+    string? Description = null,
+    EntityKind Kind = EntityKind.Book);

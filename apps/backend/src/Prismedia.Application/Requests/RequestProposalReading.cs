@@ -54,4 +54,11 @@ public static class RequestProposalReading {
     /// <summary>The first credited author on a patch, or null. Credit roles are open provider vocabulary, so this matches loosely.</summary>
     public static string? AuthorFromCredits(EntityMetadataPatch patch) =>
         patch.Credits.FirstOrDefault(credit => credit.Role.Contains("author", StringComparison.OrdinalIgnoreCase))?.Name;
+
+    /// <summary>
+    /// The first credited name of any role, or null — the generic "who made this" for kinds without an
+    /// author concept (an album's artist, a movie's director), used to strengthen release search queries.
+    /// </summary>
+    public static string? PrimaryCredit(EntityMetadataPatch patch) =>
+        patch.Credits.FirstOrDefault()?.Name;
 }

@@ -5,127 +5,115 @@ using Prismedia.Domain.Entities;
 namespace Prismedia.Application.Tests.Requests;
 
 /// <summary>
-/// Covers the plugin-only request layer left after the *arr integrations were removed: the search
-/// aggregator's kind gating across the book + author plugin sources, and the detail service's
-/// author-vs-book routing.
+/// Covers the registry-driven request layer: the search aggregator's kind gating and error capture
+/// across the requestable kinds, the detail service's registry routing, and the registry's own shape
+/// invariants (containers with committable children, leaves with acquisition kinds).
 /// </summary>
 public sealed class RequestServicesTests {
     [Fact]
-    public async Task SearchWithNoKindFilterQueriesBothBookAndAuthorSources() {
-        var books = new FakeBookSource(Result(RequestMediaKind.Book, "b1"));
-        var authors = new FakeAuthorSource(Result(RequestMediaKind.Author, "a1"));
-        var service = new RequestSearchService(books, authors);
+    public async Task SearchWithNoKindFilterQueriesEveryRegisteredKind() {
+        var source = new FakeSearchSource();
+        var service = new RequestSearchService(source);
 
-        var response = await service.SearchAsync(Request([]), CancellationToken.None);
+        await service.SearchAsync(Request("query", []), CancellationToken.None);
 
-        Assert.True(books.Called);
-        Assert.True(authors.Called);
-        Assert.Equal(["b1", "a1"], response.Results.Select(r => r.ExternalId).ToArray());
-        Assert.Empty(response.ProviderErrors);
+        Assert.Equal(
+            RequestKindRegistry.All.Select(descriptor => descriptor.Kind).ToArray(),
+            source.QueriedKinds.ToArray());
     }
 
     [Fact]
-    public async Task SearchScopedToBooksDoesNotQueryTheAuthorSource() {
-        var books = new FakeBookSource(Result(RequestMediaKind.Book, "b1"));
-        var authors = new FakeAuthorSource(Result(RequestMediaKind.Author, "a1"));
-        var service = new RequestSearchService(books, authors);
+    public async Task SearchScopedToKindsQueriesOnlyThose() {
+        var source = new FakeSearchSource();
+        var service = new RequestSearchService(source);
 
-        var response = await service.SearchAsync(Request([RequestMediaKind.Book]), CancellationToken.None);
+        await service.SearchAsync(Request("query", [RequestMediaKind.Movie, RequestMediaKind.Artist]), CancellationToken.None);
 
-        Assert.True(books.Called);
-        Assert.False(authors.Called);
-        Assert.Equal(["b1"], response.Results.Select(r => r.ExternalId).ToArray());
+        Assert.Equal([RequestMediaKind.Movie, RequestMediaKind.Artist], source.QueriedKinds.ToArray());
     }
 
     [Fact]
-    public async Task SearchScopedToAuthorsDoesNotQueryTheBookSource() {
-        var books = new FakeBookSource(Result(RequestMediaKind.Book, "b1"));
-        var authors = new FakeAuthorSource(Result(RequestMediaKind.Author, "a1"));
-        var service = new RequestSearchService(books, authors);
+    public async Task SearchCapturesAFailingKindAsAProviderErrorWithoutThrowing() {
+        var source = new FakeSearchSource { FailingKind = RequestMediaKind.Book };
+        var service = new RequestSearchService(source);
 
-        var response = await service.SearchAsync(Request([RequestMediaKind.Author]), CancellationToken.None);
+        var response = await service.SearchAsync(Request("query", [RequestMediaKind.Book, RequestMediaKind.Movie]), CancellationToken.None);
 
-        Assert.False(books.Called);
-        Assert.True(authors.Called);
-        Assert.Equal(["a1"], response.Results.Select(r => r.ExternalId).ToArray());
-    }
-
-    [Fact]
-    public async Task SearchCapturesAFailingSourceAsAProviderErrorWithoutThrowing() {
-        var books = new FakeBookSource(new InvalidOperationException("boom"));
-        var authors = new FakeAuthorSource(Result(RequestMediaKind.Author, "a1"));
-        var service = new RequestSearchService(books, authors);
-
-        var response = await service.SearchAsync(Request([]), CancellationToken.None);
-
-        Assert.Equal(["a1"], response.Results.Select(r => r.ExternalId).ToArray());
         var error = Assert.Single(response.ProviderErrors);
         Assert.Equal(RequestProviderKind.Plugin, error.Kind);
+        Assert.Contains(RequestMediaKind.Book.ToCode(), error.DisplayName);
+        Assert.Equal([RequestMediaKind.Movie], response.Results.Select(result => result.Kind).ToArray());
     }
 
     [Fact]
-    public async Task DetailRoutesAuthorKindToTheAuthorLookup() {
+    public async Task DetailRoutesThroughTheRegistryDescriptor() {
         var source = new FakeDetailSource();
         var service = new RequestDetailService(source);
 
-        await service.GetAsync(RequestProviderKind.Plugin, RequestMediaKind.Author, "openlibrary:OL1A", null, hideNsfw: true, CancellationToken.None);
+        await service.GetAsync(RequestProviderKind.Plugin, RequestMediaKind.Artist, "musicbrainz:MB1", null, hideNsfw: true, CancellationToken.None);
 
-        Assert.Equal("author", source.LastCall);
+        Assert.Equal(RequestMediaKind.Artist, source.LastDescriptor?.Kind);
+        Assert.Equal(EntityKind.MusicArtist, source.LastDescriptor?.PluginEntityKind);
         Assert.True(source.LastHideNsfw);
     }
 
     [Fact]
-    public async Task DetailRoutesBookKindToTheBookLookup() {
+    public async Task DetailForAnUnregisteredKindReturnsNull() {
         var source = new FakeDetailSource();
         var service = new RequestDetailService(source);
 
-        await service.GetAsync(RequestProviderKind.Plugin, RequestMediaKind.Book, "openlibrary:OL1W", null, hideNsfw: false, CancellationToken.None);
+        var detail = await service.GetAsync(RequestProviderKind.Plugin, RequestMediaKind.Plugin, "x:y", null, hideNsfw: false, CancellationToken.None);
 
-        Assert.Equal("book", source.LastCall);
-        Assert.False(source.LastHideNsfw);
+        Assert.Null(detail);
+        Assert.Null(source.LastDescriptor);
     }
 
-    private static RequestSearchRequest Request(IReadOnlyList<RequestMediaKind> kinds) =>
-        new("query", kinds, [], HideNsfw: false);
+    [Fact]
+    public void RegistryShapeInvariantsHold() {
+        foreach (var descriptor in RequestKindRegistry.All) {
+            // A committable container must fan out into a committable child kind, or a commit could
+            // never start an acquisition for it.
+            if (descriptor is { IsContainer: true, Committable: true }) {
+                var child = RequestKindRegistry.ChildOf(descriptor);
+                Assert.NotNull(child);
+                Assert.True(child!.Committable, $"{descriptor.Kind} fans out into non-committable {child.Kind}");
+                Assert.False(child.IsContainer, $"{descriptor.Kind}'s child {child.Kind} must be a leaf");
+            }
+        }
+
+        // The registry is the closed set for the flow; kinds must be unique.
+        Assert.Equal(RequestKindRegistry.All.Count, RequestKindRegistry.All.Select(d => d.Kind).Distinct().Count());
+    }
+
+    private static RequestSearchRequest Request(string query, IReadOnlyList<RequestMediaKind> kinds) =>
+        new(query, kinds, [], HideNsfw: false);
 
     private static RequestSearchResult Result(RequestMediaKind kind, string externalId) =>
         new(Guid.Empty, RequestProviderKind.Plugin, kind, externalId, externalId, null, null, null, null, null,
             null, null, null, null, [], false, null, null, true);
 
-    private sealed class FakeBookSource(object outcome) : IBookMetadataSearchSource {
-        public bool Called { get; private set; }
+    private sealed class FakeSearchSource : IRequestMetadataSearchSource {
+        public List<RequestMediaKind> QueriedKinds { get; } = [];
+        public RequestMediaKind? FailingKind { get; set; }
 
-        public Task<IReadOnlyList<RequestSearchResult>> SearchAsync(string query, bool hideNsfw, CancellationToken cancellationToken) {
-            Called = true;
-            return outcome is Exception ex
-                ? Task.FromException<IReadOnlyList<RequestSearchResult>>(ex)
-                : Task.FromResult<IReadOnlyList<RequestSearchResult>>([(RequestSearchResult)outcome]);
-        }
-    }
+        public Task<IReadOnlyList<RequestSearchResult>> SearchAsync(
+            RequestKindDescriptor descriptor, string query, bool hideNsfw, CancellationToken cancellationToken) {
+            QueriedKinds.Add(descriptor.Kind);
+            if (descriptor.Kind == FailingKind) {
+                return Task.FromException<IReadOnlyList<RequestSearchResult>>(new InvalidOperationException("boom"));
+            }
 
-    private sealed class FakeAuthorSource(object outcome) : IAuthorMetadataSearchSource {
-        public bool Called { get; private set; }
-
-        public Task<IReadOnlyList<RequestSearchResult>> SearchAuthorsAsync(string query, bool hideNsfw, CancellationToken cancellationToken) {
-            Called = true;
-            return outcome is Exception ex
-                ? Task.FromException<IReadOnlyList<RequestSearchResult>>(ex)
-                : Task.FromResult<IReadOnlyList<RequestSearchResult>>([(RequestSearchResult)outcome]);
+            return Task.FromResult<IReadOnlyList<RequestSearchResult>>([Result(descriptor.Kind, $"p:{descriptor.Kind.ToCode()}")]);
         }
     }
 
     private sealed class FakeDetailSource : IPluginRequestDetailSource {
-        public string? LastCall { get; private set; }
+        public RequestKindDescriptor? LastDescriptor { get; private set; }
         public bool LastHideNsfw { get; private set; }
 
-        public Task<RequestDetailResponse?> GetBookDetailAsync(string externalId, bool hideNsfw, CancellationToken cancellationToken) {
-            LastCall = "book";
-            LastHideNsfw = hideNsfw;
-            return Task.FromResult<RequestDetailResponse?>(null);
-        }
-
-        public Task<RequestDetailResponse?> GetAuthorDetailAsync(string externalId, bool hideNsfw, CancellationToken cancellationToken) {
-            LastCall = "author";
+        public Task<RequestDetailResponse?> GetDetailAsync(
+            RequestKindDescriptor descriptor, string externalId, bool hideNsfw, CancellationToken cancellationToken) {
+            LastDescriptor = descriptor;
             LastHideNsfw = hideNsfw;
             return Task.FromResult<RequestDetailResponse?>(null);
         }

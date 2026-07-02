@@ -21,7 +21,7 @@ public sealed class AcquisitionEnrichJobHandlerTests {
     public async Task FillsGapsFromTheProviderLookup() {
         await using var db = CreateContext();
         var id = await SeedAsync(db, pluginId: "openlibrary", pluginItemId: "OL123W", posterUrl: null);
-        var enricher = new FakeEnricher(new BookMetadataEnrichment("A fuller description from the provider.", "http://covers/OL123W.jpg", 2024));
+        var enricher = new FakeEnricher(new RequestMetadataEnrichment("A fuller description from the provider.", "http://covers/OL123W.jpg", 2024));
 
         await RunAsync(db, enricher, id);
 
@@ -36,7 +36,7 @@ public sealed class AcquisitionEnrichJobHandlerTests {
     public async Task SkipsWhenThereIsNoPluginToLookUp() {
         await using var db = CreateContext();
         var id = await SeedAsync(db, pluginId: null, pluginItemId: null, posterUrl: null);
-        var enricher = new FakeEnricher(new BookMetadataEnrichment("x", "y", 1));
+        var enricher = new FakeEnricher(new RequestMetadataEnrichment("x", "y", 1));
 
         await RunAsync(db, enricher, id);
 
@@ -77,9 +77,9 @@ public sealed class AcquisitionEnrichJobHandlerTests {
     private static PrismediaDbContext CreateContext() =>
         new(new DbContextOptionsBuilder<PrismediaDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
 
-    private sealed class FakeEnricher(BookMetadataEnrichment? result) : IBookMetadataEnricher {
+    private sealed class FakeEnricher(RequestMetadataEnrichment? result) : IRequestMetadataEnricher {
         public string? LookedUp { get; private set; }
-        public Task<BookMetadataEnrichment?> LookupByIdAsync(string providerId, string externalId, bool hideNsfw, CancellationToken cancellationToken) {
+        public Task<RequestMetadataEnrichment?> LookupByIdAsync(EntityKind kind, string providerId, string externalId, bool hideNsfw, CancellationToken cancellationToken) {
             LookedUp = $"{providerId}:{externalId}";
             return Task.FromResult(result);
         }
