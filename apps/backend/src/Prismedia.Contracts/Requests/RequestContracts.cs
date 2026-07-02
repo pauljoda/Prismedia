@@ -44,6 +44,7 @@ public sealed record RequestSearchResult(
 
 /// <summary>Normalized external detail record for a requestable item.</summary>
 /// <param name="Subtitle">Short secondary line for review context (e.g. the author for a book, the book count for an author).</param>
+/// <param name="Dates">Provider date entries (code → ISO-ish value: release, firstAir, …) — the same dates identify would apply.</param>
 /// <param name="Children">Selectable child works — an author's books, or a series' volumes — fanned out into one acquisition each.</param>
 public sealed record RequestDetailResponse(
     RequestProviderKind Source,
@@ -52,6 +53,7 @@ public sealed record RequestDetailResponse(
     string Title,
     string? Subtitle,
     int? Year,
+    IReadOnlyDictionary<string, string> Dates,
     string? Overview,
     string? PosterUrl,
     string? BackdropUrl,

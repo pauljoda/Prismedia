@@ -12,6 +12,7 @@ import type {
   EntityCapability,
   EntityCard,
   EntityKind,
+  RequestCastMember,
   RequestChildOption,
   RequestSearchResult,
 } from "$lib/api/generated/model";
@@ -168,6 +169,30 @@ export function requestChildToThumbnailCard(child: RequestChildOption): EntityTh
     ...card,
     meta: year ? [{ icon: "calendar", label: String(year) }] : undefined,
   };
+}
+
+/**
+ * Cast members rendered as link-less person thumbnails for the shared cast strip — virtual people
+ * with the headshot and role line the provider supplied, in the same 4:5 frame real credits use.
+ */
+export function requestCastToThumbnailCards(cast: RequestCastMember[]): EntityThumbnailCard[] {
+  return cast.map((member, index) => {
+    const card = entityCardToThumbnailCard(
+      syntheticEntityCard(`request-cast-${index}-${member.name}`, ENTITY_KIND.person, member.name, member.imageUrl ?? null),
+    );
+    // An empty href renders a non-link card: these people don't exist in the library (yet).
+    return { ...card, href: "", subtitle: member.role ?? undefined };
+  });
+}
+
+/** Studios rendered as link-less wide thumbnails for the shared studio rail. */
+export function requestStudiosToThumbnailCards(studios: string[]): EntityThumbnailCard[] {
+  return studios.map((name, index) => {
+    const card = entityCardToThumbnailCard(
+      syntheticEntityCard(`request-studio-${index}-${name}`, ENTITY_KIND.studio, name, null),
+    );
+    return { ...card, href: "" };
+  });
 }
 
 /** Status codes that mean an acquisition is still mid-flight (drives live polling). */

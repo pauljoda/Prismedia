@@ -6,6 +6,7 @@
  */
 import type { RequestCastMember } from './requestCastMember';
 import type { RequestChildOption } from './requestChildOption';
+import type { RequestDetailResponseDates } from './requestDetailResponseDates';
 import type { RequestMediaKind } from './requestMediaKind';
 import type { RequestProviderKind } from './requestProviderKind';
 import type { RequestRatingValue } from './requestRatingValue';
@@ -24,6 +25,7 @@ export interface RequestDetailResponse {
      * @pattern ^-?(?:0|[1-9]\d*)$
      */
   year: number | string | null;
+  dates: RequestDetailResponseDates;
   /** @nullable */
   overview: string | null;
   /** @nullable */

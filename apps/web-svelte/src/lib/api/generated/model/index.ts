@@ -361,6 +361,7 @@ export * from './requestCommitOutcome';
 export * from './requestCommitRequest';
 export * from './requestCommitResponse';
 export * from './requestDetailResponse';
+export * from './requestDetailResponseDates';
 export * from './requestEntityCommitRequest';
 export * from './requestMediaKind';
 export * from './requestProviderHealth';

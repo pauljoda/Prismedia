@@ -1,7 +1,7 @@
 import { CAPABILITY_KIND, ENTITY_FILE_ROLE, ENTITY_KIND } from "$lib/api/generated/codes";
 import type { EntityCapability } from "$lib/api/generated/model";
 import { entityCardToDetailCard, type EntityDetailCardFull } from "$lib/entities/entity-detail";
-import { entityKindForRequest } from "./request-helpers";
+import { entityKindForRequest, numericValue } from "./request-helpers";
 import type { RequestDetailResponse } from "./request-model";
 
 /**
@@ -34,6 +34,24 @@ export function requestDetailToEntityCard(detail: RequestDetailResponse): Entity
 
   if (detail.overview) {
     capabilities.push({ kind: CAPABILITY_KIND.description, value: detail.overview } as EntityCapability);
+  }
+
+  // Dates and runtime flow through the same capabilities a real entity carries, so EntityDetail's
+  // hero meta and metadata sections light up exactly as they would after identify.
+  const dateItems = Object.entries(detail.dates ?? {})
+    .filter(([, value]) => Boolean(value))
+    .map(([code, value]) => ({ code, value }));
+  if (dateItems.length === 0 && detail.year) {
+    dateItems.push({ code: "release", value: String(detail.year) });
+  }
+  if (dateItems.length > 0) {
+    capabilities.push({ kind: CAPABILITY_KIND.dates, items: dateItems } as EntityCapability);
+  }
+
+  const runtimeMinutes = numericValue(detail.runtimeMinutes);
+  if (runtimeMinutes) {
+    const duration = `${Math.floor(runtimeMinutes / 60)}:${String(runtimeMinutes % 60).padStart(2, "0")}:00`;
+    capabilities.push({ kind: CAPABILITY_KIND.technical, duration } as EntityCapability);
   }
 
   const card = entityCardToDetailCard({

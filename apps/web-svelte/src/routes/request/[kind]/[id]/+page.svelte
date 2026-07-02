@@ -1,19 +1,25 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import { BookOpen, ChevronLeft, Loader2, Send } from "@lucide/svelte";
+  import { BookOpen, ChevronLeft, ListMusic, Loader2, Send } from "@lucide/svelte";
   import { Button, dur, ease, flyUp } from "@prismedia/ui-svelte";
   import { fade } from "svelte/transition";
   import { goto } from "$app/navigation";
   import { commitRequest, fetchRequestDetail } from "$lib/api/requests";
   import { REQUEST_COMMIT_OUTCOME } from "$lib/api/generated/codes";
   import type { RequestMediaKindCode, RequestProviderKindCode } from "$lib/api/generated/codes";
+  import EntityCastAndCrewSection from "$lib/components/entities/EntityCastAndCrewSection.svelte";
   import EntityDetail from "$lib/components/entities/EntityDetail.svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import RequestTargetOptions from "$lib/components/acquisitions/RequestTargetOptions.svelte";
   import SelectableCardSection from "$lib/components/review/SelectableCardSection.svelte";
   import type { EntityDetailActionButton } from "$lib/components/entities/entity-detail-types";
   import { requestDetailToEntityCard } from "$lib/requests/request-entity-card";
-  import { requestChildToThumbnailCard } from "$lib/requests/review-cards";
+  import {
+    requestCastToThumbnailCards,
+    requestChildToThumbnailCard,
+    requestStudiosToThumbnailCards,
+  } from "$lib/requests/review-cards";
+  import { formatDurationString } from "$lib/utils/format";
   import { inferRequestSourceForKind, requestKindInfo } from "$lib/requests/request-helpers";
   import type { RequestChildOption, RequestDetailResponse } from "$lib/requests/request-model";
 
@@ -45,6 +51,20 @@
   const selectableChildIds = $derived(children.filter((child) => child.requestable).map((child) => child.id));
 
   const backHref = $derived(backQuery ? `/request?${backQuery}` : "/request");
+
+  // Rich provider metadata rendered through the same shared blocks a real (identified) entity uses.
+  const castCards = $derived(detail?.cast?.length ? requestCastToThumbnailCards(detail.cast) : []);
+  const studioCards = $derived(detail?.studios?.length ? requestStudiosToThumbnailCards(detail.studios) : []);
+  const tracks = $derived(detail?.tracks ?? []);
+
+  function trackDuration(seconds: number | string | null | undefined): string | null {
+    const value = typeof seconds === "string" ? Number(seconds) : seconds;
+    if (!value || !Number.isFinite(value)) return null;
+    const h = Math.floor(value / 3600);
+    const m = Math.floor((value % 3600) / 60);
+    const s = Math.floor(value % 60);
+    return formatDurationString(`${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`);
+  }
 
   // A standalone leaf (no children) requests straight from the hero; container kinds use the works footer.
   const actionButtons = $derived<EntityDetailActionButton[]>(
@@ -240,6 +260,32 @@
               <p class="text-[0.75rem] leading-relaxed text-error-text">{error}</p>
             {/if}
           </div>
+        {/if}
+
+        <!-- ── Provider metadata, rendered like the identified entity it becomes ── -->
+        {#if tracks.length > 0}
+          <section class="space-y-2" aria-label="Tracks">
+            <h3 class="flex items-center gap-1.5 font-mono text-[0.68rem] font-semibold uppercase tracking-[0.04em] text-text-secondary">
+              <ListMusic class="h-3.5 w-3.5 text-text-muted" />
+              Tracks
+              <span class="font-normal text-text-muted">{tracks.length}</span>
+            </h3>
+            <ol class="divide-y divide-border-subtle rounded-sm border border-border-subtle bg-surface-1">
+              {#each tracks as track (track.number + track.title)}
+                <li class="flex items-baseline gap-3 px-3 py-1.5 text-[0.8rem]">
+                  <span class="w-6 shrink-0 text-right font-mono text-[0.7rem] text-text-muted">{track.number}</span>
+                  <span class="min-w-0 flex-1 truncate text-text-primary">{track.title}</span>
+                  {#if trackDuration(track.durationSeconds)}
+                    <span class="shrink-0 font-mono text-[0.7rem] text-text-muted">{trackDuration(track.durationSeconds)}</span>
+                  {/if}
+                </li>
+              {/each}
+            </ol>
+          </section>
+        {/if}
+
+        {#if castCards.length > 0 || studioCards.length > 0}
+          <EntityCastAndCrewSection creditCards={castCards} {studioCards} />
         {/if}
       {/snippet}
     </EntityDetail>

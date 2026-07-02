@@ -116,6 +116,9 @@ public sealed class PluginRequestMetadataSource(PluginCatalogService catalog, Id
             ? children.Length > 0 ? $"{children.Length} {ChildNoun(child!, children.Length)}" : null
             : RequestProposalReading.AuthorFromCredits(patch) ?? RequestProposalReading.PrimaryCredit(patch);
 
+        // Surface everything the proposal carries — this is the same data identify would apply to a
+        // library entity, so the review page reads like the entity will once it exists.
+        var tracks = RequestProposalReading.TracksOf(proposal);
         return new RequestDetailResponse(
             Source: RequestProviderKind.Plugin,
             Kind: descriptor.Kind,
@@ -123,20 +126,22 @@ public sealed class PluginRequestMetadataSource(PluginCatalogService catalog, Id
             Title: string.IsNullOrWhiteSpace(patch.Title) ? itemId : patch.Title,
             Subtitle: subtitle,
             Year: RequestProposalReading.YearFromDates(patch.Dates),
+            Dates: patch.Dates,
             Overview: patch.Description,
-            PosterUrl: RequestProposalReading.BestImage(proposal),
-            BackdropUrl: null,
+            PosterUrl: RequestProposalReading.BestImageOfKind(proposal, EntityFileRole.Poster.ToCode())
+                ?? RequestProposalReading.BestImage(proposal),
+            BackdropUrl: RequestProposalReading.BestImageOfKind(proposal, EntityFileRole.Backdrop.ToCode()),
             Rating: null,
-            RuntimeMinutes: null,
+            RuntimeMinutes: RequestProposalReading.RuntimeMinutesOf(patch),
             Certification: null,
-            TrackCount: null,
-            Tags: [],
-            Studios: [],
+            TrackCount: tracks.Count > 0 ? tracks.Count : null,
+            Tags: patch.Tags.Where(tag => !string.IsNullOrWhiteSpace(tag)).ToArray(),
+            Studios: string.IsNullOrWhiteSpace(patch.Studio) ? [] : [patch.Studio],
             Credits: [],
-            Cast: [],
+            Cast: RequestProposalReading.CastOf(proposal),
             Ratings: [],
             Children: children,
-            Tracks: [],
+            Tracks: tracks,
             Tracked: false,
             UpstreamId: null,
             Monitored: null,

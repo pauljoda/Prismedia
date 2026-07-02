@@ -1,4 +1,6 @@
 using Prismedia.Contracts.Plugins;
+using Prismedia.Contracts.Requests;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Requests;
 
@@ -61,4 +63,92 @@ public static class RequestProposalReading {
     /// </summary>
     public static string? PrimaryCredit(EntityMetadataPatch patch) =>
         patch.Credits.FirstOrDefault()?.Name;
+
+    /// <summary>
+    /// The best-ranked image of one image role (poster, backdrop — providers emit the entity image-role
+    /// vocabulary), or null when the proposal carries none of that role.
+    /// </summary>
+    public static string? BestImageOfKind(EntityMetadataProposal proposal, string kind) =>
+        proposal.Images
+            .Where(image => string.Equals(image.Kind, kind, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(image => image.Rank ?? 0)
+            .Select(image => image.Url)
+            .FirstOrDefault(url => !string.IsNullOrWhiteSpace(url));
+
+    /// <summary>
+    /// Runtime in minutes from the patch's open stats vocabulary, or null. Providers report either
+    /// minutes or seconds; this is the single decode site for those keys.
+    /// </summary>
+    public static int? RuntimeMinutesOf(EntityMetadataPatch patch) {
+        // prism-vocab: external (open plugin stats vocabulary)
+        if (patch.Stats.TryGetValue("runtimeMinutes", out var minutes) && minutes > 0) {
+            return minutes;
+        }
+
+        if (patch.Stats.TryGetValue("runtimeSeconds", out var seconds) && seconds > 0) {
+            return Math.Max(1, (int)Math.Round(seconds / 60.0));
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Cast members in billed order, each with the character/role line and a headshot resolved from the
+    /// proposal's person relationship nodes (providers ship them alongside the credits). Performing
+    /// credit roles show their character; crew roles (director, writer, author, …) show the role itself.
+    /// </summary>
+    public static IReadOnlyList<RequestCastMember> CastOf(EntityMetadataProposal proposal) {
+        if (proposal.Patch is not { } patch) {
+            return [];
+        }
+
+        var headshots = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var node in proposal.Relationships ?? []) {
+            if (node.TargetKind == ProposalKind.Person && node.Patch?.Title is { Length: > 0 } name && BestImage(node) is { } image) {
+                headshots.TryAdd(name.Trim(), image);
+            }
+        }
+
+        return patch.Credits
+            .Where(credit => !string.IsNullOrWhiteSpace(credit.Name))
+            .OrderBy(credit => credit.SortOrder ?? int.MaxValue)
+            .Select(credit => new RequestCastMember(
+                credit.Name.Trim(),
+                RoleLine(credit),
+                headshots.GetValueOrDefault(credit.Name.Trim())))
+            .ToArray();
+    }
+
+    /// <summary>The subtitle line for a credit: the character when known, else the humanized crew role, else null for plain cast.</summary>
+    private static string? RoleLine(CreditPatch credit) {
+        if (!string.IsNullOrWhiteSpace(credit.Character)) {
+            return credit.Character.Trim();
+        }
+
+        // prism-vocab: external (open plugin credit-role vocabulary) — performing roles carry no label of their own.
+        var role = credit.Role.Trim();
+        if (role.Length == 0 || role.Equals("cast", StringComparison.OrdinalIgnoreCase)
+            || role.Equals("actor", StringComparison.OrdinalIgnoreCase)
+            || role.Equals("guest", StringComparison.OrdinalIgnoreCase)) {
+            return null;
+        }
+
+        return char.ToUpperInvariant(role[0]) + role[1..];
+    }
+
+    /// <summary>
+    /// An album proposal's track children projected to review tracks: album-global number (provider
+    /// sort order when present), title, and duration when known.
+    /// </summary>
+    public static IReadOnlyList<RequestTrack> TracksOf(EntityMetadataProposal proposal) =>
+        proposal.Children
+            .Where(node => node.TargetKind == ProposalKind.AudioTrack && node.Patch is not null)
+            .Select((node, index) => {
+                // prism-vocab: external (open plugin positions/stats vocabulary)
+                var patch = node.Patch!;
+                var number = patch.Positions.TryGetValue("sortOrder", out var order) ? order + 1 : index + 1;
+                int? duration = patch.Stats.TryGetValue("runtimeSeconds", out var seconds) && seconds > 0 ? seconds : null;
+                return new RequestTrack(number, string.IsNullOrWhiteSpace(patch.Title) ? $"Track {index + 1}" : patch.Title!, duration);
+            })
+            .ToArray();
 }
