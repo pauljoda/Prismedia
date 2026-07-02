@@ -3,12 +3,13 @@
   import { onMount } from "svelte";
   import { afterNavigate, goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { BookOpen, CloudDownload, Info, Play, SlidersHorizontal, Users } from "@lucide/svelte";
+  import { BookOpen, CloudDownload, Info, Play, Search, SlidersHorizontal, Users } from "@lucide/svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import MediaProgressPanel from "$lib/components/MediaProgressPanel.svelte";
   import AcquisitionPanel from "$lib/components/acquisitions/AcquisitionPanel.svelte";
-  import { getCapability, isWanted } from "$lib/api/capabilities";
+  import { firstProviderQualifiedId, getCapability, isWanted } from "$lib/api/capabilities";
   import { fetchAcquisitionForEntity } from "$lib/api/acquisitions";
+  import { commitEntityRequest } from "$lib/api/requests";
   import type { AcquisitionDetail } from "$lib/api/generated/model";
   import { updateEntityProgress } from "$lib/api/playback";
   import { fetchBook, type BookDetail } from "$lib/api/media";
@@ -144,7 +145,19 @@
     const actions: EntityDetailActionButton[] = [];
     if (identifyAction.action) actions.push(identifyAction.action);
     if (entityWanted) {
-      // No file yet — the acquisition section below owns the actionable state (releases, monitor, cancel).
+      // No file yet. A phantom (discovered by a container monitor, no acquisition of its own) offers
+      // Search here — committing it starts the auto-grabbing acquisition; otherwise the acquisition
+      // section below owns the actionable state (releases, monitor, cancel).
+      if (!acquisition && firstProviderQualifiedId(book?.capabilities ?? [])) {
+        actions.push({
+          id: "search-release",
+          label: searchBusy ? "Searching…" : "Search for release",
+          icon: Search,
+          variant: "primary",
+          onClick: () => void searchForRelease(),
+          disabled: searchBusy,
+        });
+      }
       return actions;
     }
     if (isSingleFileBook) {
@@ -369,6 +382,26 @@
     if (!book) return;
     await updateEntityMetadata(book.id, request, { kind: book.kind });
     await loadBook();
+  }
+
+  let searchBusy = $state(false);
+
+  /**
+   * Requests this phantom: the commit finds the existing wanted entity by its provider id, starts an
+   * auto-grabbing, monitored acquisition for it, and the inline acquisition section takes over.
+   */
+  async function searchForRelease() {
+    if (!book || searchBusy) return;
+    searchBusy = true;
+    try {
+      // The server resolves which of the entity's external ids belongs to a plugin.
+      await commitEntityRequest(book.id);
+      await loadBook();
+    } catch {
+      // best-effort; the page reflects the last known state
+    } finally {
+      searchBusy = false;
+    }
   }
 
   /**

@@ -20,4 +20,6 @@ export interface MonitorView {
   acquisitionStatus: null | AcquisitionStatus;
   createdAt: string;
   updatedAt: string;
+  /** @nullable */
+  entityId?: string | null;
 }

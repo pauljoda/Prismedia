@@ -7,6 +7,7 @@
     Info,
     MapPin,
     Play,
+    Search,
     SlidersHorizontal,
     Users,
   } from "@lucide/svelte";
@@ -14,8 +15,9 @@
   import { goto } from "$app/navigation";
   import AcquisitionPanel from "$lib/components/acquisitions/AcquisitionPanel.svelte";
   import { fetchAcquisitionForEntity } from "$lib/api/acquisitions";
+  import { commitEntityRequest } from "$lib/api/requests";
   import type { AcquisitionDetail } from "$lib/api/generated/model";
-  import { isWanted } from "$lib/api/capabilities";
+  import { firstProviderQualifiedId, isWanted } from "$lib/api/capabilities";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import EntityDetailHeroDates from "$lib/components/entities/EntityDetailHeroDates.svelte";
   import { fetchMovie, fetchVideo, type MovieDetail, type VideoDetail } from "$lib/api/media";
@@ -129,7 +131,22 @@
     video ? entityCardToDetailCard(video) : null
   ));
   const identifyAction = useIdentifyDetailAction(() => card?.entity.id, () => card?.entity.kind);
-  const heroActions = $derived.by((): EntityDetailActionButton[] => identifyAction.action ? [identifyAction.action] : []);
+  const heroActions = $derived.by((): EntityDetailActionButton[] => {
+    const actions: EntityDetailActionButton[] = identifyAction.action ? [identifyAction.action] : [];
+    // A phantom (wanted, no acquisition of its own) offers Search here — committing it starts the
+    // auto-grabbing acquisition and the inline acquisition section takes over.
+    if (entityWanted && !acquisition && firstProviderQualifiedId(movie?.capabilities ?? [])) {
+      actions.push({
+        id: "search-release",
+        label: searchBusy ? "Searching…" : "Search for release",
+        icon: Search,
+        variant: "primary",
+        onClick: () => void searchForRelease(),
+        disabled: searchBusy,
+      });
+    }
+    return actions;
+  });
   const videoId = $derived(video?.id ?? "");
 
   const playerProps = $derived.by(() => {
@@ -421,6 +438,25 @@
   }
 
   const entityWanted = $derived(!!movie && isWanted(movie.capabilities));
+  let searchBusy = $state(false);
+
+  /**
+   * Requests this phantom: the commit finds the existing wanted entity by its provider id, starts an
+   * auto-grabbing, monitored acquisition for it, and the inline acquisition section takes over.
+   */
+  async function searchForRelease() {
+    if (!movie || searchBusy) return;
+    searchBusy = true;
+    try {
+      // The server resolves which of the entity's external ids belongs to a plugin.
+      await commitEntityRequest(movie.id);
+      await loadMovie();
+    } catch {
+      // best-effort; the page reflects the last known state
+    } finally {
+      searchBusy = false;
+    }
+  }
 
   /** Cancelling a wanted movie's request deletes the placeholder entity, so this page no longer exists. */
   function handleAcquisitionCancelled() {

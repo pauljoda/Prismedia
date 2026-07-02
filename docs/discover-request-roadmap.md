@@ -86,11 +86,19 @@ entity/entities (Phase A) and starts the acquisition + monitoring.
 **Done when:** the bespoke request page is retired; requesting a book or an author goes through the shared
 review surface and produces wanted entities, acquisitions, and monitors.
 
-### Phase D — Containers request and monitor with their children
+### Phase D — Containers request and monitor with their children ✅ (books/music)
 **Goal:** Requesting a container creates and monitors the parent entity with its children tracked underneath,
 rather than a flat pile of independent item requests.
 **Done when:** requesting an author yields a monitored author with its wanted books beneath it; the monitor
 keeps the children's searches going and can pick up newly discovered children over time.
+**Status:** Landed for authors and artists. A container commit auto-monitors the container entity; the
+daily sweep re-resolves it from its provider and materializes newly discovered works as wanted
+*phantoms* (metadata + artwork, no acquisition — discovery never downloads on its own). A phantom's own
+page carries "Search for release", which flows into the ordinary auto-grabbing commit. Real scanned-in
+authors/artists are monitorable from their pages once Identify supplies a provider id — on-disk and
+requested items share the flow, differing only in how they entered the library. Requested leaves are
+hands-off: auto-search → auto-grab best accepted → monitored daily until acquired. TV series will reuse
+exactly this shape (phantom seasons/episodes) once the per-episode engine lands.
 
 ### Phase E — Prove it and harden it
 **Goal:** The unified book vertical is trustworthy end-to-end and the Identify path is provably unregressed.

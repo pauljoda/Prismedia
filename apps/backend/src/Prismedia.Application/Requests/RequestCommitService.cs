@@ -114,6 +114,37 @@ public sealed class RequestCommitService(
     }
 
     /// <summary>
+    /// Requests an existing library entity by id — the phantom's "Search for release": resolves the
+    /// entity's registry kind and tries each of its provider identities until one resolves (an entity
+    /// carries non-plugin identifiers like ISBNs too, so the caller can't just pick the first), then
+    /// runs the ordinary leaf commit — which dedupes onto this same entity and starts its auto-grabbing,
+    /// monitored acquisition. Null when the entity is gone, isn't a committable leaf kind, or no
+    /// provider can resolve it.
+    /// </summary>
+    public async Task<RequestCommitResponse?> RequestEntityAsync(Guid entityId, bool hideNsfw, CancellationToken cancellationToken) {
+        var entity = await wanted.GetContainerAsync(entityId, cancellationToken);
+        if (entity is null) {
+            return null;
+        }
+
+        var descriptor = RequestKindRegistry.All.FirstOrDefault(candidate =>
+            candidate is { IsContainer: false, Committable: true } && candidate.WantedEntityKind == entity.Kind);
+        if (descriptor is null) {
+            return null;
+        }
+
+        foreach (var providerRef in entity.ProviderIds) {
+            var request = new RequestCommitRequest(descriptor.Kind, $"{providerRef.Provider}:{providerRef.ItemId}", []);
+            var response = await CommitLeafAsync(descriptor, request, providerRef.Provider, providerRef.ItemId, hideNsfw, cancellationToken);
+            if (response is not null) {
+                return response;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Re-syncs a monitored container entity from its provider: resolves the container's proposal, and
     /// materializes any works the library doesn't have yet as clearly-badged wanted placeholders —
     /// phantoms with metadata and artwork but NO acquisition. Discovery never downloads on its own; the

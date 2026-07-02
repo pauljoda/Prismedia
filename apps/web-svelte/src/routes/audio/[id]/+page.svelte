@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { page } from "$app/state";
-  import { Info, MicVocal, Music, Play, Shuffle, SlidersHorizontal, Users } from "@lucide/svelte";
+  import { Info, MicVocal, Music, Play, Search, Shuffle, SlidersHorizontal, Users } from "@lucide/svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import EntityDetailHeroDates from "$lib/components/entities/EntityDetailHeroDates.svelte";
   import { fetchAudioLibrary, type AudioLibraryDetail } from "$lib/api/media";
@@ -11,7 +11,8 @@
     updateEntityMetadata,
   } from "$lib/api/entity-mutations";
   import { assetUrl } from "$lib/api/orval-fetch";
-  import { getCapability } from "$lib/api/capabilities";
+  import { firstProviderQualifiedId, getCapability, isWanted } from "$lib/api/capabilities";
+  import { commitEntityRequest } from "$lib/api/requests";
   import {
     toggleOptimisticEntityFlag,
     updateOptimisticEntityRating,
@@ -82,6 +83,27 @@
     return assetUrl(images?.coverUrl ?? images?.thumbnailUrl) || undefined;
   });
   const identifyAction = useIdentifyDetailAction(() => library?.id, () => library?.kind);
+  const entityWanted = $derived.by(() => !!library && isWanted(library.capabilities));
+  let searchBusy = $state(false);
+
+  /**
+   * Requests this phantom album (a wanted placeholder discovered by an artist monitor): the commit
+   * finds the existing wanted entity by its provider id and starts the auto-grabbing acquisition.
+   */
+  async function searchForRelease() {
+    if (!library || searchBusy) return;
+    searchBusy = true;
+    try {
+      // The server resolves which of the entity's external ids belongs to a plugin.
+      await commitEntityRequest(library.id);
+      await loadLibrary();
+    } catch {
+      // best-effort; the page reflects the last known state
+    } finally {
+      searchBusy = false;
+    }
+  }
+
   const heroActions = $derived.by((): EntityDetailActionButton[] => {
     const actions: EntityDetailActionButton[] = [];
     if (trackItems.length > 0) {
@@ -101,6 +123,18 @@
           onClick: shuffleAll,
         },
       );
+    }
+    // A phantom (wanted, no tracks yet) offers Search here — committing it starts the auto-grabbing
+    // acquisition; nothing is playable until the download imports.
+    if (entityWanted && trackItems.length === 0 && firstProviderQualifiedId(library?.capabilities ?? [])) {
+      actions.push({
+        id: "search-release",
+        label: searchBusy ? "Searching…" : "Search for release",
+        icon: Search,
+        variant: "primary",
+        onClick: () => void searchForRelease(),
+        disabled: searchBusy,
+      });
     }
     if (identifyAction.action) actions.push(identifyAction.action);
     return actions;

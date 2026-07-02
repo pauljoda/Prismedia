@@ -134,6 +134,13 @@ public sealed record RequestCommitResponse(
     Guid? ContainerEntityId,
     IReadOnlyList<RequestCommitItem> Items);
 
+/// <summary>
+/// Requests an existing library entity by id — a wanted placeholder's "Search for release". The server
+/// resolves the entity's kind and provider identity itself, so callers never guess which of the
+/// entity's external ids belongs to a plugin.
+/// </summary>
+public sealed record RequestEntityCommitRequest(Guid EntityId);
+
 /// <summary>Root folder/profile option exposed by a request service instance.</summary>
 public sealed record RequestServiceOption(string Id, string Name, string? Path);
 

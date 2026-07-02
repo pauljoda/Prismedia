@@ -87,6 +87,22 @@ public static class RequestEndpoints {
             .Produces<ApiProblem>(StatusCodes.Status400BadRequest)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
+        group.MapPost("/commit-entity", async (
+            RequestEntityCommitRequest request,
+            bool? hideNsfw,
+            HttpContext httpContext,
+            RequestCommitService commits,
+            CancellationToken cancellationToken) => {
+                var response = await commits.RequestEntityAsync(request.EntityId, NsfwVisibility.ShouldHide(hideNsfw, httpContext), cancellationToken);
+                return response is null
+                    ? Results.NotFound(new ApiProblem(ApiProblemCodes.NotFound, "The entity could not be requested — it may be gone, not a requestable kind, or unresolvable from its providers."))
+                    : Results.Ok(response);
+            })
+            .WithName("CommitEntityRequest")
+            .WithSummary("Requests an existing library entity (a wanted placeholder's Search-for-release): the server resolves its provider identity and starts the auto-grabbing acquisition.")
+            .Produces<RequestCommitResponse>()
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+
         return group;
     }
 

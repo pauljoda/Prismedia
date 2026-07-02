@@ -204,6 +204,35 @@ public sealed class RequestCommitServiceTests {
     }
 
     [Fact]
+    public async Task RequestEntitySkipsNonPluginIdentifiersAndReusesTheEntity() {
+        var proposal = Leaf(ProposalKind.Book, "The Martian", "W1");
+        var (service, writer, acquisitions, _) = ServiceWithMonitors(proposal);
+        var phantomId = Guid.NewGuid();
+        // The cascade stamps every provider identity, plugin or not — the isbn must be tried and skipped.
+        writer.Container = new MonitorableContainer(
+            phantomId, EntityKind.Book, "The Martian", [new ProviderRef("isbn13", "9780000000000"), new ProviderRef(Provider, "W1")]);
+
+        var response = await service.RequestEntityAsync(phantomId, hideNsfw: true, CancellationToken.None);
+
+        var item = Assert.Single(response!.Items);
+        Assert.Equal(RequestCommitOutcome.Requested, item.Outcome);
+        Assert.Equal($"{Provider}:W1", item.ExternalId);
+        Assert.Single(acquisitions.Created);
+    }
+
+    [Fact]
+    public async Task RequestEntityRefusesContainersAndUnknownEntities() {
+        var (service, writer, _, _) = ServiceWithMonitors(Leaf(ProposalKind.Book, "Book", "W1"));
+
+        Assert.Null(await service.RequestEntityAsync(Guid.NewGuid(), hideNsfw: true, CancellationToken.None));
+
+        // Containers are monitored/synced, not leaf-requested.
+        var authorId = Guid.NewGuid();
+        writer.Container = new MonitorableContainer(authorId, EntityKind.BookAuthor, "Author", [new ProviderRef(Provider, "A1")]);
+        Assert.Null(await service.RequestEntityAsync(authorId, hideNsfw: true, CancellationToken.None));
+    }
+
+    [Fact]
     public async Task ContainerSyncFailsCleanlyWhenTheEntityOrProviderIsGone() {
         var (service, writer, _, _) = ServiceWithMonitors(Container(ProposalKind.Person, "Author", "A1"));
 

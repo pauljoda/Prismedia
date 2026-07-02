@@ -39,6 +39,7 @@ import type {
   CollectionRulePreviewRequest,
   CollectionRulePreviewResponse,
   CollectionWriteRequest,
+  CommitEntityRequestParams,
   CommitRequestParams,
   CreateFileFolderParams,
   DatabaseBackupDto,
@@ -58,6 +59,7 @@ import type {
   EntityMarkerWriteRequest,
   EntityMetadataProposal,
   EntityMetadataUpdateRequest,
+  EntityMonitorCreateRequest,
   EntityProgressUpdateRequest,
   EntityRefreshResponse,
   EntityThumbnailBatchRequest,
@@ -210,6 +212,7 @@ import type {
   RequestCommitRequest,
   RequestCommitResponse,
   RequestDetailResponse,
+  RequestEntityCommitRequest,
   RequestSearchResponse,
   RescanFileRootParams,
   ResolveIdentifyQueueCandidateParams,
@@ -10921,6 +10924,58 @@ export const commitRequest = async (requestCommitRequest: RequestCommitRequest,
 
 
 
+export type commitEntityRequestResponse200 = {
+  data: RequestCommitResponse
+  status: 200
+}
+
+export type commitEntityRequestResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type commitEntityRequestResponseSuccess = (commitEntityRequestResponse200) & {
+  headers: Headers;
+};
+export type commitEntityRequestResponseError = (commitEntityRequestResponse404) & {
+  headers: Headers;
+};
+
+export type commitEntityRequestResponse = (commitEntityRequestResponseSuccess | commitEntityRequestResponseError)
+
+export const getCommitEntityRequestUrl = (params?: CommitEntityRequestParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/requests/commit-entity?${stringifiedParams}` : `/api/requests/commit-entity`
+}
+
+/**
+ * @summary Requests an existing library entity (a wanted placeholder's Search-for-release): the server resolves its provider identity and starts the auto-grabbing acquisition.
+ */
+export const commitEntityRequest = async (requestEntityCommitRequest: RequestEntityCommitRequest,
+    params?: CommitEntityRequestParams, options?: RequestInit): Promise<commitEntityRequestResponse> => {
+
+  return orvalFetch<commitEntityRequestResponse>(getCommitEntityRequestUrl(params),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      requestEntityCommitRequest,)
+  }
+);}
+
+
+
 export type listIndexersResponse200 = {
   data: IndexerConfigSummary[]
   status: 200
@@ -12186,6 +12241,93 @@ export const startMonitor = async (monitorCreateRequest: MonitorCreateRequest, o
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       monitorCreateRequest,)
+  }
+);}
+
+
+
+export type startEntityMonitorResponse200 = {
+  data: MonitorView
+  status: 200
+}
+
+export type startEntityMonitorResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type startEntityMonitorResponseSuccess = (startEntityMonitorResponse200) & {
+  headers: Headers;
+};
+export type startEntityMonitorResponseError = (startEntityMonitorResponse400) & {
+  headers: Headers;
+};
+
+export type startEntityMonitorResponse = (startEntityMonitorResponseSuccess | startEntityMonitorResponseError)
+
+export const getStartEntityMonitorUrl = () => {
+
+
+
+
+  return `/api/monitors/entity`
+}
+
+/**
+ * @summary Monitors a library container entity (author, artist) for new works; the daily sweep surfaces missing works as wanted placeholders.
+ */
+export const startEntityMonitor = async (entityMonitorCreateRequest: EntityMonitorCreateRequest, options?: RequestInit): Promise<startEntityMonitorResponse> => {
+
+  return orvalFetch<startEntityMonitorResponse>(getStartEntityMonitorUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      entityMonitorCreateRequest,)
+  }
+);}
+
+
+
+export type getEntityMonitorResponse200 = {
+  data: MonitorView
+  status: 200
+}
+
+export type getEntityMonitorResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type getEntityMonitorResponseSuccess = (getEntityMonitorResponse200) & {
+  headers: Headers;
+};
+export type getEntityMonitorResponseError = (getEntityMonitorResponse404) & {
+  headers: Headers;
+};
+
+export type getEntityMonitorResponse = (getEntityMonitorResponseSuccess | getEntityMonitorResponseError)
+
+export const getGetEntityMonitorUrl = (entityId: string,) => {
+
+
+
+
+  return `/api/monitors/for-entity/${entityId}`
+}
+
+/**
+ * @summary Gets the container monitor watching a library entity, when one exists.
+ */
+export const getEntityMonitor = async (entityId: string, options?: RequestInit): Promise<getEntityMonitorResponse> => {
+
+  return orvalFetch<getEntityMonitorResponse>(getGetEntityMonitorUrl(entityId),
+  {
+    ...options,
+    method: 'GET'
+
+
   }
 );}
 

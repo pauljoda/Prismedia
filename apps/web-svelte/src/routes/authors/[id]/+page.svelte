@@ -29,6 +29,7 @@
     type EntityMetadataUpdateRequest,
   } from "$lib/components/entities/EntityDetail.svelte";
   import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
+  import { useEntityMonitorAction } from "$lib/components/acquisitions/use-entity-monitor-action.svelte";
   import { useIdentifyDetailAction } from "$lib/components/identify/use-identify-detail-action.svelte";
   import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
   import { useNsfw } from "$lib/nsfw/store.svelte";
@@ -58,8 +59,12 @@
   });
 
   const identifyAction = useIdentifyDetailAction(() => author?.id, () => author?.kind);
+  // Monitoring works for scanned-in and requested authors alike; it needs a provider identity, which
+  // Identify supplies for on-disk authors and a request commit supplies for wanted ones.
+  const monitorAction = useEntityMonitorAction(() => author?.id, () => author?.capabilities);
   const heroActions = $derived.by((): EntityDetailActionButton[] => {
     const actions: EntityDetailActionButton[] = [];
+    if (monitorAction.action) actions.push(monitorAction.action);
     if (identifyAction.action) actions.push(identifyAction.action);
     return actions;
   });

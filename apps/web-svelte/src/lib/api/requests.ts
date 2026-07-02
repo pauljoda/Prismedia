@@ -1,5 +1,6 @@
 import type { RequestMediaKindCode, RequestProviderKindCode } from "$lib/api/generated/codes";
 import {
+  commitEntityRequest as commitEntityRequestRequest,
   commitRequest as commitRequestRequest,
   getRequestDetail as getRequestDetailRequest,
   searchRequests as searchRequestsRequest,
@@ -43,6 +44,14 @@ export async function commitRequest(params: {
     }),
     "Failed to commit the request",
   );
+}
+
+/**
+ * Requests an existing library entity by id — a wanted placeholder's "Search for release". The server
+ * resolves the entity's kind and provider identity itself and starts the auto-grabbing acquisition.
+ */
+export async function commitEntityRequest(entityId: string): Promise<RequestCommitResponse> {
+  return unwrapGenerated(await commitEntityRequestRequest({ entityId }), "Failed to search for a release");
 }
 
 export async function fetchRequestDetail(params: {

@@ -33,6 +33,7 @@
     type EntityMetadataUpdateRequest,
   } from "$lib/components/entities/EntityDetail.svelte";
   import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
+  import { useEntityMonitorAction } from "$lib/components/acquisitions/use-entity-monitor-action.svelte";
   import { useIdentifyDetailAction } from "$lib/components/identify/use-identify-detail-action.svelte";
   import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
   import { useNsfw } from "$lib/nsfw/store.svelte";
@@ -70,8 +71,12 @@
   });
 
   const identifyAction = useIdentifyDetailAction(() => artist?.id, () => artist?.kind);
+  // Monitoring works for scanned-in and requested artists alike; it needs a provider identity, which
+  // Identify supplies for on-disk artists and a request commit supplies for wanted ones.
+  const monitorAction = useEntityMonitorAction(() => artist?.id, () => artist?.capabilities);
   const heroActions = $derived.by((): EntityDetailActionButton[] => {
     const actions: EntityDetailActionButton[] = [];
+    if (monitorAction.action) actions.push(monitorAction.action);
     if (albumCards.length > 0) {
       actions.push(
         {
