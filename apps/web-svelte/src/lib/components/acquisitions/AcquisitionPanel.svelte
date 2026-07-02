@@ -72,11 +72,22 @@
       status === ACQUISITION_STATUS.imported,
   );
 
-  async function load() {
-    if (!acquisitionId) return;
+  /** True while a load is in flight, so poll ticks never stack behind a slow transfer probe. */
+  let loading = false;
+  /** Consecutive background-refresh failures; transient blips stay silent, a persistent outage surfaces. */
+  let pollFailures = 0;
+
+  /**
+   * Loads the panel state. A background refresh (the 3s poll) must never flash an error banner for a
+   * transient network blip — the panel keeps showing the last good data and only surfaces a message
+   * once refreshes have failed repeatedly. Foreground loads (first paint, after an action) report
+   * failures immediately, because there is nothing good on screen to keep.
+   */
+  async function load(background = false) {
+    if (!acquisitionId || loading) return;
+    loading = true;
     try {
       detail = await fetchAcquisition(acquisitionId);
-      error = null;
       // Secondary surface: a monitor lookup failure must not break the acquisition view.
       monitor = (await fetchMonitors().catch(() => [])).find((m) => m.acquisitionId === acquisitionId) ?? null;
       // Pull the status-appropriate detail.
@@ -88,8 +99,19 @@
       if (isDownloading || isDone) {
         files = await fetchAcquisitionFiles(acquisitionId);
       }
+      pollFailures = 0;
+      error = null;
     } catch (err) {
-      error = err instanceof Error ? err.message : "Failed to load acquisition";
+      if (background) {
+        pollFailures += 1;
+        if (pollFailures >= 3) {
+          error = "Live updates are failing — retrying in the background.";
+        }
+      } else {
+        error = err instanceof Error ? err.message : "Failed to load acquisition";
+      }
+    } finally {
+      loading = false;
     }
   }
 
@@ -210,7 +232,7 @@
 
   async function pollTick() {
     if (reSearchPolls > 0) reSearchPolls -= 1;
-    await load();
+    await load(true);
   }
 
   $effect(() => {
