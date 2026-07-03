@@ -22,6 +22,18 @@ public sealed class MediaReleaseDecisionEnginesTests {
     }
 
     [Fact]
+    public void ConfiguredOtherRangeCategoriesPassThroughForEveryKind() {
+        // The default book config (7000,8000) keeps its Other pick — this was silently dropped before.
+        Assert.Equal([7000, 8000], TorznabCategories.ForKind(EntityKind.Book, [7000, 8000]));
+        // Other-range picks ride along with the kind narrowing for any kind…
+        Assert.Equal([2000, 8010], TorznabCategories.ForKind(EntityKind.Movie, [2000, 7000, 8010]));
+        // …and with the top-level fallback when nothing kind-specific is configured.
+        Assert.Equal([7000, 8000], TorznabCategories.ForKind(EntityKind.Book, [8000]));
+        // No Other picks configured → behavior unchanged.
+        Assert.Equal([5000, 5040], TorznabCategories.ForKind(EntityKind.Video, [5000, 5040]));
+    }
+
+    [Fact]
     public void MovieEngineRanksResolutionThenSourceThenSeeders() {
         var engine = new MovieReleaseDecisionEngine();
 

@@ -72,6 +72,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated documentation, README screenshots, branding assets, install metadata, and app copy to match the current Prismedia v1 surface.
 
 ### Fixed
+- Fixed release searches so an indexer's configured "Other" categories (8000s) are actually queried — book searches with the default 7000,8000 setup were silently dropping 8000, hiding releases indexers file under Other/Misc.
 - Fixed the Authors browse so a book is grouped under its real author from the file's embedded metadata (EPUB/PDF) — a series- or title-named folder like "Game of Thrones" no longer shows up as the author; the folder name is used only when the file carries no author.
 - Fixed fresh LAN setup so browsers opening Prismedia directly from another private-network device receive the web app authentication cookie automatically.
 - Fixed many playback reliability issues, including first-play failures, slow or inaccurate seeking, stalled transcodes, remux segment errors, HDR/Dolby Vision handling, subtitle rendering, audio-track selection, progress bars, cache cleanup, and high CPU spikes.

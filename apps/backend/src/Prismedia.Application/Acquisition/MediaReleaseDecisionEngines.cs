@@ -14,6 +14,7 @@ public static class TorznabCategories {
     private const int Audio = 3000;
     private const int Tv = 5000;
     private const int Books = 7000;
+    private const int Other = 8000;
     private const int RangeSize = 1000;
 
     /// <summary>The top of the Torznab category range for a media kind, or null for kinds with no mapping.</summary>
@@ -28,15 +29,18 @@ public static class TorznabCategories {
     /// <summary>
     /// The effective search categories for a kind: the configured categories that fall inside the
     /// kind's range (preserving the user's narrower picks, e.g. 7030 comics), else the range's
-    /// top-level category. Kinds with no mapping keep the configured list unchanged.
+    /// top-level category. Configured categories in the kind-neutral Other range (8000s) always
+    /// pass through — indexers file e-books and misc payloads there. Kinds with no mapping keep
+    /// the configured list unchanged.
     /// </summary>
     public static IReadOnlyList<int> ForKind(EntityKind kind, IReadOnlyList<int> configured) {
         if (RangeStartFor(kind) is not { } start) {
             return configured;
         }
 
-        var inRange = configured.Where(category => category >= start && category < start + RangeSize).ToArray();
-        return inRange.Length > 0 ? inRange : [start];
+        var kindPicks = configured.Where(category => category >= start && category < start + RangeSize).ToArray();
+        var otherPicks = configured.Where(category => category >= Other && category < Other + RangeSize);
+        return (kindPicks.Length > 0 ? kindPicks : [start]).Concat(otherPicks).ToArray();
     }
 }
 
