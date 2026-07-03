@@ -60,10 +60,13 @@
   const isActive = $derived(status ? ACTIVE_ACQUISITION_STATUSES.includes(status) : false);
   const canChoose = $derived(status === ACQUISITION_STATUS.awaitingSelection);
   // A release can still be (re)selected after a failed or cancelled attempt — picking one re-queues it.
+  // A manual-import hold (ambiguous payload or a dangerous file) also reopens the picker so the user
+  // can block the bad release and grab a different one.
   const canPickRelease = $derived(
     status === ACQUISITION_STATUS.awaitingSelection ||
       status === ACQUISITION_STATUS.failed ||
-      status === ACQUISITION_STATUS.cancelled,
+      status === ACQUISITION_STATUS.cancelled ||
+      status === ACQUISITION_STATUS.manualImportRequired,
   );
   const isDownloading = $derived(status === ACQUISITION_STATUS.queued || status === ACQUISITION_STATUS.downloading);
   const isDone = $derived(

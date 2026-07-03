@@ -7,13 +7,15 @@ namespace Prismedia.Application.Jobs.Handlers;
 
 /// <summary>
 /// Imports a completed acquisition by dispatching to the media kind's <see cref="IAcquisitionImportEngine"/>
-/// (books, movies, music — each owns its planning, placement, hint, and scan chaining). A kind with no
+/// (books, movies, music — each owns its planning, placement, hint, and scan chaining). A payload carrying
+/// an executable or dangerous file is held for manual review before any engine runs. A kind with no
 /// registered engine stays Downloaded (files intact in the client) with an honest status instead of being
 /// pushed through the wrong pipeline.
 /// </summary>
 public sealed class AcquisitionImportJobHandler(
     IAcquisitionStore acquisitions,
     IAcquisitionImportEngineFactory engines,
+    IDownloadPayloadReader payloads,
     ILogger<AcquisitionImportJobHandler> logger) : IJobHandler {
     public JobType Type => JobType.AcquisitionImport;
 
@@ -21,6 +23,21 @@ public sealed class AcquisitionImportJobHandler(
         var payload = AcquisitionJobPayload.Parse(context.Job.PayloadJson);
         var import = await acquisitions.GetImportContextAsync(payload.AcquisitionId, cancellationToken);
         if (import is null) {
+            return;
+        }
+
+        // The dangerous-file hold runs before ANY engine: a release whose payload carries an executable
+        // (the classic fake-release .scr) is never imported automatically and never silently skipped —
+        // it waits, visibly, for the user to review, blocklist, or import manually.
+        if (!string.IsNullOrWhiteSpace(import.ContentPath)
+            && payloads.Read(import.ContentPath) is { } downloadPayload
+            && DangerousFileDetection.FindDangerousFile(downloadPayload.Files.Select(file => file.RelativePath)) is { } dangerous) {
+            logger.LogWarning("AcquisitionImport: dangerous file {File} held for acquisition {Id}", dangerous, payload.AcquisitionId);
+            await acquisitions.SetStatusAsync(
+                payload.AcquisitionId,
+                AcquisitionStatus.ManualImportRequired,
+                $"The download contains a potentially dangerous file (\"{Path.GetFileName(dangerous)}\") and was not imported. Review it, or block this release and search again.",
+                cancellationToken);
             return;
         }
 
