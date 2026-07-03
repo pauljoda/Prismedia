@@ -123,6 +123,25 @@
   }
 
   // ── Indexers ────────────────────────────────────────────────
+  const indexerKindOptions = [
+    { value: INDEXER_KIND.prowlarr, label: "Prowlarr (aggregator)" },
+    { value: INDEXER_KIND.torznab, label: "Torznab (torrent indexer / Jackett)" },
+    { value: INDEXER_KIND.newznab, label: "Newznab (usenet indexer)" },
+  ];
+  const indexerKindDefaults: Record<string, string> = {
+    [INDEXER_KIND.prowlarr]: "Prowlarr",
+    [INDEXER_KIND.torznab]: "Torznab indexer",
+    [INDEXER_KIND.newznab]: "Newznab indexer",
+  };
+  function indexerKindLabel(kind: string): string {
+    return indexerKindOptions.find((option) => option.value === kind)?.label.split(" (")[0] ?? kind;
+  }
+  function setIndexerKind(kind: string) {
+    if (!indexerForm) return;
+    const untouched = indexerForm.displayName === indexerKindDefaults[indexerForm.kind];
+    indexerForm.kind = kind as typeof indexerForm.kind;
+    if (untouched) indexerForm.displayName = indexerKindDefaults[kind] ?? indexerForm.displayName;
+  }
   function newIndexer() {
     indexerForm = { id: null, kind: INDEXER_KIND.prowlarr, displayName: "Prowlarr", baseUrl: "", apiKey: null, enabled: true, priority: 25, categories: [7000, 8000] };
     indexerCategories = "7000,8000";
@@ -376,6 +395,7 @@
             <div class="flex items-center gap-2">
               <StatusLed status={item.enabled ? "active" : "idle"} />
               <span class="text-sm text-text-primary">{item.displayName}</span>
+              <Badge variant="default">{indexerKindLabel(item.kind)}</Badge>
               <span class="text-xs text-text-muted">{item.baseUrl}</span>
               {#if item.hasApiKey}<Badge variant="default">key set</Badge>{/if}
             </div>
@@ -388,10 +408,12 @@
         {#if indexerForm}
           <div class="space-y-2 rounded-sm border border-border-accent bg-surface-1 p-3">
             <div class="grid gap-2 sm:grid-cols-2">
+              <label class="space-y-1"><span class="text-label text-text-muted">Indexer type</span>
+                <Select size="sm" value={indexerForm.kind} options={indexerKindOptions} onchange={setIndexerKind} /></label>
               <label class="space-y-1"><span class="text-label text-text-muted">Name</span>
                 <TextInput size="sm" value={indexerForm.displayName} oninput={(e) => indexerForm && (indexerForm.displayName = e.currentTarget.value)} /></label>
               <label class="space-y-1"><span class="text-label text-text-muted">Base URL</span>
-                <TextInput size="sm" value={indexerForm.baseUrl} oninput={(e) => indexerForm && (indexerForm.baseUrl = e.currentTarget.value)} placeholder="https://prowlarr.example.com" /></label>
+                <TextInput size="sm" value={indexerForm.baseUrl} oninput={(e) => indexerForm && (indexerForm.baseUrl = e.currentTarget.value)} placeholder={indexerForm.kind === INDEXER_KIND.prowlarr ? "https://prowlarr.example.com" : "https://indexer.example.com (or a Jackett /api path)"} /></label>
               <label class="space-y-1"><span class="text-label text-text-muted">API key</span>
                 <TextInput size="sm" type="password" value={indexerForm.apiKey ?? ""} oninput={(e) => indexerForm && (indexerForm.apiKey = e.currentTarget.value)} placeholder={indexerForm.id ? "(unchanged)" : ""} /></label>
               <label class="space-y-1"><span class="text-label text-text-muted">Categories</span>

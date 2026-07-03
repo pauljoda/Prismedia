@@ -1,18 +1,26 @@
 namespace Prismedia.Domain.Entities;
 
 /// <summary>
-/// Closed set of indexer aggregator families Prismedia can search for releases.
-/// Prowlarr is the primary v1 target; the adapter shape is Torznab-compatible so
-/// Jackett can follow without changing the contract.
+/// Closed set of indexer families Prismedia can search for releases: the Prowlarr
+/// aggregator, or any individual indexer speaking the Torznab (torrent) / Newznab
+/// (usenet) XML API directly — which also covers Jackett's per-indexer endpoints.
 /// </summary>
 public enum IndexerKind {
-    /// <summary>Prowlarr indexer aggregator (Torznab-compatible search API).</summary>
+    /// <summary>Prowlarr indexer aggregator (JSON search API across all its indexers).</summary>
     [Code("prowlarr")]
     Prowlarr,
 
-    /// <summary>Jackett indexer proxy (Torznab/TorrentPotato results). Reserved for a later adapter.</summary>
+    /// <summary>Jackett indexer proxy. Configure its per-indexer Torznab endpoints as <see cref="Torznab"/> indexers instead.</summary>
     [Code("jackett")]
-    Jackett
+    Jackett,
+
+    /// <summary>A torrent indexer speaking the Torznab XML API directly (native tracker endpoints, Jackett, per-indexer Prowlarr URLs).</summary>
+    [Code("torznab")]
+    Torznab,
+
+    /// <summary>A usenet indexer speaking the Newznab XML API directly (DrunkenSlug, NZBgeek, …).</summary>
+    [Code("newznab")]
+    Newznab
 }
 
 /// <summary>

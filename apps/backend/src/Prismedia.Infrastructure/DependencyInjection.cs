@@ -336,6 +336,10 @@ public static class DependencyInjection {
         services.AddScoped<IMonitorStore, EfMonitorStore>();
         services.AddScoped(_ => new ProwlarrIndexerClient(new HttpClient()));
         services.AddScoped<IIndexerSearchClient>(provider => provider.GetRequiredService<ProwlarrIndexerClient>());
+        services.AddScoped(_ => new TorznabIndexerClient(new HttpClient()));
+        services.AddScoped<IIndexerSearchClient>(provider => provider.GetRequiredService<TorznabIndexerClient>());
+        services.AddScoped(_ => new NewznabIndexerClient(new HttpClient()));
+        services.AddScoped<IIndexerSearchClient>(provider => provider.GetRequiredService<NewznabIndexerClient>());
         services.AddScoped<IIndexerSearchClientFactory, IndexerSearchClientFactory>();
         // UseCookies=false keeps the default handler from swallowing qBittorrent's Set-Cookie SID,
         // so the client can read and re-send the session cookie explicitly.

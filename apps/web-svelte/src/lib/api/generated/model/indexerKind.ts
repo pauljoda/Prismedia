@@ -11,4 +11,6 @@ export type IndexerKind = typeof IndexerKind[keyof typeof IndexerKind];
 export const IndexerKind = {
   prowlarr: 'prowlarr',
   jackett: 'jackett',
+  torznab: 'torznab',
+  newznab: 'newznab',
 } as const;

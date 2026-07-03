@@ -313,6 +313,8 @@ export type RequestCommitOutcomeCode = (typeof REQUEST_COMMIT_OUTCOME)[keyof typ
 export const INDEXER_KIND = {
   prowlarr: "prowlarr",
   jackett: "jackett",
+  torznab: "torznab",
+  newznab: "newznab",
 } as const;
 
 export type IndexerKindCode = (typeof INDEXER_KIND)[keyof typeof INDEXER_KIND];
