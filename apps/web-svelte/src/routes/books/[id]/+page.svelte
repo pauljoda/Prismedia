@@ -3,14 +3,12 @@
   import { onMount } from "svelte";
   import { afterNavigate, goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { BookOpen, CloudDownload, Info, Play, Search, SlidersHorizontal, Users } from "@lucide/svelte";
+  import { BookOpen, Info, Play, SlidersHorizontal, Users } from "@lucide/svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import MediaProgressPanel from "$lib/components/MediaProgressPanel.svelte";
-  import AcquisitionPanel from "$lib/components/acquisitions/AcquisitionPanel.svelte";
-  import { firstProviderQualifiedId, getCapability, isWanted } from "$lib/api/capabilities";
-  import { fetchAcquisitionForEntity } from "$lib/api/acquisitions";
-  import { commitEntityRequest } from "$lib/api/requests";
-  import type { AcquisitionDetail } from "$lib/api/generated/model";
+  import EntityAcquisitionSection from "$lib/components/acquisitions/EntityAcquisitionSection.svelte";
+  import { useWantedRequest } from "$lib/components/acquisitions/use-wanted-request.svelte";
+  import { getCapability } from "$lib/api/capabilities";
   import { updateEntityProgress } from "$lib/api/playback";
   import { fetchBook, type BookDetail } from "$lib/api/media";
   import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
@@ -72,7 +70,6 @@
   let book = $state<BookDetail | null>(null);
   // The acquisition backing this book (wanted placeholder still searching/downloading, or the import
   // that produced it), so its state is managed right here instead of only under /request.
-  let acquisition = $state<AcquisitionDetail | null>(null);
   // The book's parent author grouping, when scanned under an Author/ folder, for a breadcrumb back-link.
   let authorLink = $state<{ id: string; title: string } | null>(null);
   let errorMessage: string | null = $state(null);
@@ -93,7 +90,9 @@
   const bookId = $derived(page.params.id ?? "");
   const bookType = $derived(book?.bookType ?? null);
   // A wanted placeholder has metadata but no file yet; reading is offered only once the file lands.
-  const entityWanted = $derived(!!book && isWanted(book.capabilities));
+  // Shared wanted-placeholder surface: the entity's acquisition and the "Search for release" action.
+  const wantedRequest = useWantedRequest(() => book?.id, () => book?.capabilities, loadBook);
+  const entityWanted = $derived(wantedRequest.wanted);
   // Single-file books (EPUB/PDF) are read straight from the source file with no chapter entities.
   const isSingleFileBook = $derived(!!book && book.format !== "image-archive");
   const singleFileProgress = $derived(book && isSingleFileBook ? getCapability(book.capabilities, "progress") : null);
@@ -148,15 +147,8 @@
       // No file yet. A phantom (discovered by a container monitor, no acquisition of its own) offers
       // Search here — committing it starts the auto-grabbing acquisition; otherwise the acquisition
       // section below owns the actionable state (releases, monitor, cancel).
-      if (!acquisition && firstProviderQualifiedId(book?.capabilities ?? [])) {
-        actions.push({
-          id: "search-release",
-          label: searchBusy ? "Searching…" : "Search for release",
-          icon: Search,
-          variant: "primary",
-          onClick: () => void searchForRelease(),
-          disabled: searchBusy,
-        });
+      if (wantedRequest.action) {
+        actions.push(wantedRequest.action);
       }
       return actions;
     }
@@ -249,12 +241,10 @@
     try {
       const nextBook = await fetchBook(targetBookId);
       const parentId = nextBook.parentEntityId;
-      const [relationships, chapters, parentThumbs, nextAcquisition] = await Promise.all([
+      const [relationships, chapters, parentThumbs] = await Promise.all([
         hydrateStandardRelationshipCards(nextBook),
         hydrateChapters(nextBook),
         parentId ? fetchOrderedEntityThumbnails([parentId]) : Promise.resolve([]),
-        // Best-effort: the acquisition section is secondary — its failure must not break the book page.
-        fetchAcquisitionForEntity(targetBookId).catch(() => null),
       ]);
       const progressSummary = await hydrateProgressChapterSummary(nextBook, chapters);
       if (token !== loadToken) return;
@@ -264,7 +254,6 @@
       authorLink = authorThumb ? { id: authorThumb.id, title: authorThumb.title } : null;
 
       book = nextBook;
-      acquisition = nextAcquisition;
       chapterDetails = chapters;
       progressChapterSummary = progressSummary;
       childBookCards = thumbnailsToCards(orderedBookChildren(nextBook, ENTITY_KIND.book), {
@@ -384,25 +373,6 @@
     await loadBook();
   }
 
-  let searchBusy = $state(false);
-
-  /**
-   * Requests this phantom: the commit finds the existing wanted entity by its provider id, starts an
-   * auto-grabbing, monitored acquisition for it, and the inline acquisition section takes over.
-   */
-  async function searchForRelease() {
-    if (!book || searchBusy) return;
-    searchBusy = true;
-    try {
-      // The server resolves which of the entity's external ids belongs to a plugin.
-      await commitEntityRequest(book.id);
-      await loadBook();
-    } catch {
-      // best-effort; the page reflects the last known state
-    } finally {
-      searchBusy = false;
-    }
-  }
 
   /**
    * Cancelling a wanted book's request deletes the placeholder entity, so this page no longer exists —
@@ -623,20 +593,10 @@
 
     </EntityDetail>
 
-    {#if acquisition}
+    {#if wantedRequest.acquisition}
       <!-- Wanted/tracking state lives on the entity itself: the same management surface as the
            acquisition route, inline — releases, live download, monitoring, cancel. -->
-      <section class="acquisition-section surface-panel">
-        <h2 class="flex items-center gap-2 text-kicker text-text-primary">
-          <CloudDownload class="h-3.5 w-3.5 text-text-accent" />
-          Acquisition
-        </h2>
-        <AcquisitionPanel
-          acquisitionId={acquisition.summary.id}
-          bind:detail={acquisition}
-          onCancelled={handleAcquisitionCancelled}
-        />
-      </section>
+      <EntityAcquisitionSection acquisition={wantedRequest.acquisition} onCancelled={handleAcquisitionCancelled} />
     {/if}
 
     {#if progressDisplay}
@@ -793,20 +753,6 @@
   .progress-section {
     display: block;
     min-width: 0;
-  }
-
-  .acquisition-section {
-    display: grid;
-    gap: 0.9rem;
-    padding: 1rem 1.1rem;
-    min-width: 0;
-  }
-
-  :global(.hero-badge.wanted) {
-    color: var(--color-text-accent, #c49a5a);
-    border-color: color-mix(in srgb, var(--color-text-accent, #c49a5a) 45%, transparent);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
   }
 
 </style>

@@ -25,6 +25,8 @@
   } from "$lib/entities/entity-relationship-thumbnails";
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
   import { ENTITY_KIND } from "$lib/entities/entity-codes";
+  import EntityAcquisitionSection from "$lib/components/acquisitions/EntityAcquisitionSection.svelte";
+  import { useWantedRequest } from "$lib/components/acquisitions/use-wanted-request.svelte";
   import EntityDetail, {
     type EntityMetadataUpdateRequest,
     type EntityDetailSection,
@@ -119,6 +121,10 @@
       { label: season.title },
     ]);
   });
+
+  // Shared wanted-placeholder surface: a phantom season offers "Search for release" (a season-pack
+  // acquisition) and the inline acquisition section, exactly like a wanted movie or book.
+  const wantedRequest = useWantedRequest(() => season?.id, () => season?.capabilities, loadSeason);
 
   async function loadSeason() {
     loadState = "loading";
@@ -215,6 +221,7 @@
       posterSize="large"
       tabs={detailTabs}
       sections={detailSections}
+      actionButtons={wantedRequest.action ? [wantedRequest.action] : []}
     >
       {#snippet heroMeta()}
         {#if parentSeries}
@@ -228,12 +235,19 @@
       {/snippet}
 
       {#snippet heroBadges()}
+        {#if wantedRequest.wanted}
+          <span class="hero-badge wanted">Wanted</span>
+        {/if}
         {#if seasonNumber != null}
           <span class="hero-badge">S{String(seasonNumber).padStart(2, "0")}</span>
         {/if}
       {/snippet}
 
     </EntityDetail>
+
+    {#if wantedRequest.acquisition}
+      <EntityAcquisitionSection acquisition={wantedRequest.acquisition} onCancelled={() => void loadSeason()} />
+    {/if}
 
     {#if episodeCards.length > 0}
       <section class="content-section">

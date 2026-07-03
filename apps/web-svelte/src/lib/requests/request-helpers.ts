@@ -29,16 +29,23 @@ export interface RequestKindInfo {
   profileKind: EntityKindCode | null;
   /** The library-root capability flag the acquired files need ("scanBooks" | "scanVideos" | "scanAudio"). */
   rootFlag: "scanBooks" | "scanVideos" | "scanAudio" | null;
+  /** Whether Discover offers the kind directly; unit kinds (season, episode) exist only inside their parent's flow. */
+  discoverable: boolean;
 }
 
 export const REQUEST_KINDS: RequestKindInfo[] = [
-  { kind: REQUEST_MEDIA_KIND.book, label: "Book", plural: "Books", committable: true, childNoun: "volume", entityKind: ENTITY_KIND.book, profileKind: ENTITY_KIND.book, rootFlag: "scanBooks" },
-  { kind: REQUEST_MEDIA_KIND.author, label: "Author", plural: "Authors", committable: true, childNoun: "book", entityKind: ENTITY_KIND.bookAuthor, profileKind: ENTITY_KIND.book, rootFlag: "scanBooks" },
-  { kind: REQUEST_MEDIA_KIND.movie, label: "Movie", plural: "Movies", committable: true, childNoun: null, entityKind: ENTITY_KIND.movie, profileKind: ENTITY_KIND.movie, rootFlag: "scanVideos" },
-  { kind: REQUEST_MEDIA_KIND.series, label: "Series", plural: "Series", committable: false, childNoun: null, entityKind: ENTITY_KIND.videoSeries, profileKind: null, rootFlag: null },
-  { kind: REQUEST_MEDIA_KIND.artist, label: "Artist", plural: "Artists", committable: true, childNoun: "album", entityKind: ENTITY_KIND.musicArtist, profileKind: ENTITY_KIND.audioLibrary, rootFlag: "scanAudio" },
-  { kind: REQUEST_MEDIA_KIND.album, label: "Album", plural: "Albums", committable: true, childNoun: null, entityKind: ENTITY_KIND.audioLibrary, profileKind: ENTITY_KIND.audioLibrary, rootFlag: "scanAudio" },
+  { kind: REQUEST_MEDIA_KIND.book, label: "Book", plural: "Books", committable: true, childNoun: "volume", entityKind: ENTITY_KIND.book, profileKind: ENTITY_KIND.book, rootFlag: "scanBooks", discoverable: true },
+  { kind: REQUEST_MEDIA_KIND.author, label: "Author", plural: "Authors", committable: true, childNoun: "book", entityKind: ENTITY_KIND.bookAuthor, profileKind: ENTITY_KIND.book, rootFlag: "scanBooks", discoverable: true },
+  { kind: REQUEST_MEDIA_KIND.movie, label: "Movie", plural: "Movies", committable: true, childNoun: null, entityKind: ENTITY_KIND.movie, profileKind: ENTITY_KIND.movie, rootFlag: "scanVideos", discoverable: true },
+  { kind: REQUEST_MEDIA_KIND.series, label: "Series", plural: "Series", committable: true, childNoun: "season", entityKind: ENTITY_KIND.videoSeries, profileKind: ENTITY_KIND.videoSeries, rootFlag: "scanVideos", discoverable: true },
+  { kind: REQUEST_MEDIA_KIND.season, label: "Season", plural: "Seasons", committable: true, childNoun: "episode", entityKind: ENTITY_KIND.videoSeason, profileKind: ENTITY_KIND.videoSeries, rootFlag: "scanVideos", discoverable: false },
+  { kind: REQUEST_MEDIA_KIND.episode, label: "Episode", plural: "Episodes", committable: true, childNoun: null, entityKind: ENTITY_KIND.video, profileKind: ENTITY_KIND.videoSeries, rootFlag: "scanVideos", discoverable: false },
+  { kind: REQUEST_MEDIA_KIND.artist, label: "Artist", plural: "Artists", committable: true, childNoun: "album", entityKind: ENTITY_KIND.musicArtist, profileKind: ENTITY_KIND.audioLibrary, rootFlag: "scanAudio", discoverable: true },
+  { kind: REQUEST_MEDIA_KIND.album, label: "Album", plural: "Albums", committable: true, childNoun: null, entityKind: ENTITY_KIND.audioLibrary, profileKind: ENTITY_KIND.audioLibrary, rootFlag: "scanAudio", discoverable: true },
 ];
+
+/** The kinds Discover's search and its kind chips offer. */
+export const DISCOVERABLE_REQUEST_KINDS: RequestKindInfo[] = REQUEST_KINDS.filter((info) => info.discoverable);
 
 /**
  * The library entity kind a request media kind renders as — the single mapping every request surface

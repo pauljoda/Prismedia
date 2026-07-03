@@ -22,7 +22,9 @@ describe("request helpers", () => {
   it("maps entity kinds back to request kinds for the review queue", () => {
     expect(requestKindForEntityKind(ENTITY_KIND.audioLibrary)).toBe(REQUEST_MEDIA_KIND.album);
     expect(requestKindForEntityKind(ENTITY_KIND.movie)).toBe(REQUEST_MEDIA_KIND.movie);
-    expect(requestKindForEntityKind(ENTITY_KIND.video)).toBeNull();
+    expect(requestKindForEntityKind(ENTITY_KIND.videoSeason)).toBe(REQUEST_MEDIA_KIND.season);
+    expect(requestKindForEntityKind(ENTITY_KIND.video)).toBe(REQUEST_MEDIA_KIND.episode);
+    expect(requestKindForEntityKind(ENTITY_KIND.gallery)).toBeNull();
   });
 
   it("coerces numeric values, returning null for blanks and non-numbers", () => {

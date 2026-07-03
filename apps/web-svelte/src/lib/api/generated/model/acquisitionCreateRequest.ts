@@ -32,4 +32,14 @@ export interface AcquisitionCreateRequest {
   profileId?: string | null;
   /** @nullable */
   targetLibraryRootId?: string | null;
+  /**
+     * @nullable
+     * @pattern ^-?(?:0|[1-9]\d*)$
+     */
+  seasonNumber?: number | string | null;
+  /**
+     * @nullable
+     * @pattern ^-?(?:0|[1-9]\d*)$
+     */
+  episodeNumber?: number | string | null;
 }

@@ -81,6 +81,7 @@
   const profileKindOptions = [
     { value: ENTITY_KIND.book, label: "Books" },
     { value: ENTITY_KIND.movie, label: "Movies" },
+    { value: ENTITY_KIND.videoSeries, label: "TV (series)" },
     { value: ENTITY_KIND.audioLibrary, label: "Music (albums)" },
   ];
   const profileKindLabels: Record<string, string> = Object.fromEntries(
@@ -88,7 +89,11 @@
   );
   function rootsForKind(kind: string): LibraryRoot[] {
     return allRoots.filter((r) =>
-      kind === ENTITY_KIND.movie ? r.scanVideos : kind === ENTITY_KIND.audioLibrary ? r.scanAudio : r.scanBooks);
+      kind === ENTITY_KIND.movie || kind === ENTITY_KIND.videoSeries
+        ? r.scanVideos
+        : kind === ENTITY_KIND.audioLibrary
+          ? r.scanAudio
+          : r.scanBooks);
   }
   const bookRoots = $derived(rootsForKind(ENTITY_KIND.book));
   const formRoots = $derived(profileForm ? rootsForKind(profileForm.kind) : []);
@@ -468,6 +473,7 @@
               {:else}
                 <p class="sm:col-span-2 text-[0.72rem] leading-relaxed text-text-muted">
                   Placement is fixed to match library scanning: movies land as <span class="font-mono">Title (Year)/Title (Year).ext</span>,
+                  episodes as <span class="font-mono">Series/Season NN/Series - SxxEyy.ext</span>,
                   albums as <span class="font-mono">Artist/Album/</span>.
                 </p>
               {/if}

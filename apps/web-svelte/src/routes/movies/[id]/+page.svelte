@@ -3,21 +3,16 @@
   import { page } from "$app/state";
   import {
     Captions,
-    CloudDownload,
     Info,
     MapPin,
     Play,
-    Search,
     SlidersHorizontal,
     Users,
   } from "@lucide/svelte";
   import { cn } from "@prismedia/ui-svelte";
   import { goto } from "$app/navigation";
-  import AcquisitionPanel from "$lib/components/acquisitions/AcquisitionPanel.svelte";
-  import { fetchAcquisitionForEntity } from "$lib/api/acquisitions";
-  import { commitEntityRequest } from "$lib/api/requests";
-  import type { AcquisitionDetail } from "$lib/api/generated/model";
-  import { firstProviderQualifiedId, isWanted } from "$lib/api/capabilities";
+  import EntityAcquisitionSection from "$lib/components/acquisitions/EntityAcquisitionSection.svelte";
+  import { useWantedRequest } from "$lib/components/acquisitions/use-wanted-request.svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import EntityDetailHeroDates from "$lib/components/entities/EntityDetailHeroDates.svelte";
   import { fetchMovie, fetchVideo, type MovieDetail, type VideoDetail } from "$lib/api/media";
@@ -88,7 +83,6 @@
   let video = $state<VideoDetail | null>(null);
   // The acquisition backing this movie (a wanted placeholder still searching/downloading, or the
   // import that produced it), so its state is managed right here instead of only under /request.
-  let acquisition = $state<AcquisitionDetail | null>(null);
   let playbackInfo = $state<JellyfinPlaybackInfoResponse | null>(null);
   let errorMessage: string | null = $state(null);
   let lastNsfwMode = $state(nsfw.mode);
@@ -131,19 +125,14 @@
     video ? entityCardToDetailCard(video) : null
   ));
   const identifyAction = useIdentifyDetailAction(() => card?.entity.id, () => card?.entity.kind);
+  // Shared wanted-placeholder surface: the entity's acquisition and the "Search for release" action.
+  const wantedRequest = useWantedRequest(() => movie?.id, () => movie?.capabilities, loadMovie);
   const heroActions = $derived.by((): EntityDetailActionButton[] => {
     const actions: EntityDetailActionButton[] = identifyAction.action ? [identifyAction.action] : [];
     // A phantom (wanted, no acquisition of its own) offers Search here — committing it starts the
     // auto-grabbing acquisition and the inline acquisition section takes over.
-    if (entityWanted && !acquisition && firstProviderQualifiedId(movie?.capabilities ?? [])) {
-      actions.push({
-        id: "search-release",
-        label: searchBusy ? "Searching…" : "Search for release",
-        icon: Search,
-        variant: "primary",
-        onClick: () => void searchForRelease(),
-        disabled: searchBusy,
-      });
+    if (wantedRequest.action) {
+      actions.push(wantedRequest.action);
     }
     return actions;
   });
@@ -413,11 +402,7 @@
         movie = nextMovie;
         video = null;
         playbackInfo = null;
-        // Best-effort: the acquisition section is secondary — its failure must not break the page.
-        [acquisition] = await Promise.all([
-          fetchAcquisitionForEntity(nextMovie.id).catch(() => null),
-          hydrateMovieRelationships(nextMovie),
-        ]);
+        await hydrateMovieRelationships(nextMovie);
         loadState = "ready";
         return;
       }
@@ -437,26 +422,7 @@
     }
   }
 
-  const entityWanted = $derived(!!movie && isWanted(movie.capabilities));
-  let searchBusy = $state(false);
-
-  /**
-   * Requests this phantom: the commit finds the existing wanted entity by its provider id, starts an
-   * auto-grabbing, monitored acquisition for it, and the inline acquisition section takes over.
-   */
-  async function searchForRelease() {
-    if (!movie || searchBusy) return;
-    searchBusy = true;
-    try {
-      // The server resolves which of the entity's external ids belongs to a plugin.
-      await commitEntityRequest(movie.id);
-      await loadMovie();
-    } catch {
-      // best-effort; the page reflects the last known state
-    } finally {
-      searchBusy = false;
-    }
-  }
+  const entityWanted = $derived(wantedRequest.wanted);
 
   /** Cancelling a wanted movie's request deletes the placeholder entity, so this page no longer exists. */
   function handleAcquisitionCancelled() {
@@ -854,18 +820,8 @@
       {/snippet}
     </EntityDetail>
 
-    {#if acquisition}
-      <section class="acquisition-section surface-panel">
-        <h2 class="flex items-center gap-2 text-kicker text-text-primary">
-          <CloudDownload class="h-3.5 w-3.5 text-text-accent" />
-          Acquisition
-        </h2>
-        <AcquisitionPanel
-          acquisitionId={acquisition.summary.id}
-          bind:detail={acquisition}
-          onCancelled={handleAcquisitionCancelled}
-        />
-      </section>
+    {#if wantedRequest.acquisition}
+      <EntityAcquisitionSection acquisition={wantedRequest.acquisition} onCancelled={handleAcquisitionCancelled} />
     {/if}
   {/if}
 </div>
@@ -883,20 +839,6 @@
     aspect-ratio: 16 / 9;
     background: #050508;
     animation: pulse 1.2s ease-in-out infinite;
-  }
-
-  .acquisition-section {
-    display: grid;
-    gap: 0.9rem;
-    padding: 1rem 1.1rem;
-    min-width: 0;
-  }
-
-  :global(.hero-badge.wanted) {
-    color: var(--color-text-accent, #c49a5a);
-    border-color: color-mix(in srgb, var(--color-text-accent, #c49a5a) 45%, transparent);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
   }
 
   .error-notice {

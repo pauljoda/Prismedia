@@ -2140,6 +2140,14 @@
     flex-wrap: wrap;
   }
 
+  /* A wanted placeholder's badge: brass accent, shared by every entity page. */
+  :global(.hero-badge.wanted) {
+    color: var(--color-text-accent, #c49a5a);
+    border-color: color-mix(in srgb, var(--color-text-accent, #c49a5a) 45%, transparent);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
   :global(.hero-badge) {
     display: inline-flex;
     align-items: center;

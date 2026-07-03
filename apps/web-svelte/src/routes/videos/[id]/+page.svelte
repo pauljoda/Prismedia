@@ -52,6 +52,9 @@
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import { useAppChrome } from "$lib/stores/app-chrome.svelte";
   import NsfwBlur from "$lib/components/nsfw/NsfwBlur.svelte";
+  import { isWanted } from "$lib/api/capabilities";
+  import EntityAcquisitionSection from "$lib/components/acquisitions/EntityAcquisitionSection.svelte";
+  import { useWantedRequest } from "$lib/components/acquisitions/use-wanted-request.svelte";
   import EntityDetail, {
     type EntityDetailActionButton,
     type EntityMetadataUpdateRequest,
@@ -125,11 +128,20 @@
     };
   });
   const identifyAction = useIdentifyDetailAction(() => card?.entity.id, () => card?.entity.kind);
-  const heroActions = $derived.by((): EntityDetailActionButton[] => identifyAction.action ? [identifyAction.action] : []);
+  // Shared wanted-placeholder surface: a phantom episode has no file to play — it offers "Search for
+  // release" and the inline acquisition section instead of the player.
+  const wantedRequest = useWantedRequest(() => video?.id, () => video?.capabilities, loadVideo);
+  const heroActions = $derived.by((): EntityDetailActionButton[] => {
+    const actions: EntityDetailActionButton[] = identifyAction.action ? [identifyAction.action] : [];
+    if (wantedRequest.action) {
+      actions.push(wantedRequest.action);
+    }
+    return actions;
+  });
   const videoId = $derived(video?.id ?? "");
 
   const playerProps = $derived.by(() => {
-    if (!video) return null;
+    if (!video || wantedRequest.wanted) return null;
     return extractVideoPlayerProps(video.id, video.capabilities, playbackInfo, selectedAudioStreamIndex);
   });
 
@@ -404,6 +416,13 @@
       const nextVideo = await fetchVideo(page.params.id ?? "");
       if (await redirectMovieChildVideo(nextVideo)) return;
       video = nextVideo;
+      if (isWanted(nextVideo.capabilities)) {
+        // A phantom episode has no stream to prepare; the page renders its wanted surface instead.
+        playbackInfo = null;
+        await hydrateVideoRelationships(nextVideo);
+        loadState = "ready";
+        return;
+      }
       const [nextPlaybackInfo] = await Promise.all([
         loadPlaybackInfo(nextVideo.id),
         hydrateVideoRelationships(nextVideo),
@@ -821,6 +840,18 @@
         />
       {/snippet}
     </EntityDetail>
+  {:else if card && video && wantedRequest.wanted}
+    <!-- A phantom episode: no file to play yet — metadata, Search for release, and the inline
+         acquisition surface, exactly like a wanted movie or book. -->
+    <EntityDetail {card} posterSize="medium" actionButtons={heroActions}>
+      {#snippet heroBadges()}
+        <span class="hero-badge wanted">Wanted</span>
+      {/snippet}
+    </EntityDetail>
+
+    {#if wantedRequest.acquisition}
+      <EntityAcquisitionSection acquisition={wantedRequest.acquisition} onCancelled={() => void loadVideo()} />
+    {/if}
   {/if}
 </div>
 

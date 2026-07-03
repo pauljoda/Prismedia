@@ -15,6 +15,7 @@
     toggleOptimisticEntityFlag,
     updateOptimisticEntityRating,
   } from "$lib/entities/entity-detail-state";
+  import { useEntityMonitorAction } from "$lib/components/acquisitions/use-entity-monitor-action.svelte";
   import { useIdentifyDetailAction } from "$lib/components/identify/use-identify-detail-action.svelte";
   import type { EntityDetailCredit, EntityDetailTag } from "$lib/entities/entity-detail";
   import { entityCardToDetailCard, type EntityDetailCardFull } from "$lib/entities/entity-detail";
@@ -67,7 +68,14 @@
   });
 
   const identifyAction = useIdentifyDetailAction(() => card?.entity.id, () => card?.entity.kind);
-  const heroActions = $derived.by((): EntityDetailActionButton[] => identifyAction.action ? [identifyAction.action] : []);
+  // Follow the series for new seasons/episodes — the same monitor control authors and artists carry.
+  const monitorAction = useEntityMonitorAction(() => series?.id, () => series?.capabilities, () => void loadSeries());
+  const heroActions = $derived.by((): EntityDetailActionButton[] => {
+    const actions: EntityDetailActionButton[] = identifyAction.action ? [identifyAction.action] : [];
+    if (monitorAction.action) actions.push(monitorAction.action);
+    if (monitorAction.syncAction) actions.push(monitorAction.syncAction);
+    return actions;
+  });
 
   const dates = $derived(card?.dates ?? []);
 

@@ -13,7 +13,7 @@
   import type { RequestSearchResult } from "$lib/requests/request-model";
   import { requestSearchResultToThumbnailCard } from "$lib/requests/review-cards";
   import {
-    REQUEST_KINDS,
+    DISCOVERABLE_REQUEST_KINDS,
     REQUEST_KIND_LABELS_PLURAL,
     numericValue,
   } from "$lib/requests/request-helpers";
@@ -32,7 +32,7 @@
   ];
 
   /** Order sections appear in mixed-kind results (the kind catalog's Discover order). */
-  const sectionOrder: RequestMediaKindCode[] = REQUEST_KINDS.map((info) => info.kind);
+  const sectionOrder: RequestMediaKindCode[] = DISCOVERABLE_REQUEST_KINDS.map((info) => info.kind);
 
   const nsfw = useNsfw();
 
@@ -54,7 +54,7 @@
   let lastSearchKey = "";
 
   // Kinds Prismedia searches via the plugin acquisition pipeline (from the shared kind catalog).
-  const availableKinds: RequestMediaKindCode[] = REQUEST_KINDS.map((info) => info.kind);
+  const availableKinds: RequestMediaKindCode[] = DISCOVERABLE_REQUEST_KINDS.map((info) => info.kind);
 
   const filteredResults = $derived(
     results.filter((result) =>

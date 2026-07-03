@@ -284,6 +284,8 @@ export const REQUEST_MEDIA_KIND = {
   author: "author",
   movie: "movie",
   series: "series",
+  season: "season",
+  episode: "episode",
   artist: "artist",
   album: "album",
   plugin: "plugin",
@@ -358,6 +360,7 @@ export const RELEASE_REJECTION_REASON = {
   qualityNotAllowed: "quality-not-allowed",
   notAnUpgrade: "not-an-upgrade",
   formatDowngrade: "format-downgrade",
+  wrongTvUnit: "wrong-tv-unit",
 } as const;
 
 export type ReleaseRejectionReasonCode = (typeof RELEASE_REJECTION_REASON)[keyof typeof RELEASE_REJECTION_REASON];

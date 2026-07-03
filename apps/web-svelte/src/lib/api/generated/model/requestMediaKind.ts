@@ -13,6 +13,8 @@ export const RequestMediaKind = {
   author: 'author',
   movie: 'movie',
   series: 'series',
+  season: 'season',
+  episode: 'episode',
   artist: 'artist',
   album: 'album',
   plugin: 'plugin',
