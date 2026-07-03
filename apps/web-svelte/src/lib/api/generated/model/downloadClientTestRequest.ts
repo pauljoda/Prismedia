@@ -15,4 +15,6 @@ export interface DownloadClientTestRequest {
   username: string | null;
   /** @nullable */
   password: string | null;
+  /** @nullable */
+  apiKey?: string | null;
 }

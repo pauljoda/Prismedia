@@ -16,4 +16,5 @@ export interface DownloadClientSummary {
   category: string;
   enabled: boolean;
   hasPassword: boolean;
+  hasApiKey?: boolean;
 }

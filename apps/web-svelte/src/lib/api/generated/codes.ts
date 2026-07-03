@@ -320,6 +320,7 @@ export type IndexerKindCode = (typeof INDEXER_KIND)[keyof typeof INDEXER_KIND];
 export const DOWNLOAD_CLIENT_KIND = {
   qBittorrent: "qbittorrent",
   transmission: "transmission",
+  sabnzbd: "sabnzbd",
 } as const;
 
 export type DownloadClientKindCode = (typeof DOWNLOAD_CLIENT_KIND)[keyof typeof DOWNLOAD_CLIENT_KIND];

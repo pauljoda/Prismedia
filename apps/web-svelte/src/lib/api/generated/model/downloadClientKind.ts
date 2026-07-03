@@ -11,4 +11,5 @@ export type DownloadClientKind = typeof DownloadClientKind[keyof typeof Download
 export const DownloadClientKind = {
   qbittorrent: 'qbittorrent',
   transmission: 'transmission',
+  sabnzbd: 'sabnzbd',
 } as const;

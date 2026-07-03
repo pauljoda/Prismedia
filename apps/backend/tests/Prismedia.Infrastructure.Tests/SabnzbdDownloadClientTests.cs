@@ -112,14 +112,37 @@ public sealed class SabnzbdDownloadClientTests {
         Assert.Contains("API Key Incorrect", ex.Message);
     }
 
-    /// <summary>Responds to every request with canned JSON chosen by the request URI; records the URIs seen.</summary>
+    [Fact]
+    public async Task AForbiddenResponseReadsAsARejectedApiKey() {
+        // SABnzbd 5.x answers a wrong API key with HTTP 403 instead of the in-band envelope (verified live).
+        var handler = new CannedHandler(_ => "denied") { StatusCode = HttpStatusCode.Forbidden };
+        var client = new SabnzbdDownloadClient(new HttpClient(handler));
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            client.AddAsync(Connection, new DownloadAddRequest("http://indexer/get.nzb", null, "prismedia"), CancellationToken.None));
+        Assert.Contains("rejected the API key", ex.Message);
+    }
+
+    [Fact]
+    public async Task APlainTextErrorBodyBecomesAReadableException() {
+        // Pre-5.x SABnzbd ignores output=json for auth errors and returns plain text with HTTP 200.
+        var handler = new CannedHandler(_ => "API Key Incorrect");
+        var client = new SabnzbdDownloadClient(new HttpClient(handler));
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            client.AddAsync(Connection, new DownloadAddRequest("http://indexer/get.nzb", null, "prismedia"), CancellationToken.None));
+        Assert.Contains("API Key Incorrect", ex.Message);
+    }
+
+    /// <summary>Responds to every request with a canned body chosen by the request URI; records the URIs seen.</summary>
     private sealed class CannedHandler(Func<string, string> bodyFor) : HttpMessageHandler {
         public List<string> Requests { get; } = [];
+        public HttpStatusCode StatusCode { get; init; } = HttpStatusCode.OK;
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) {
             var uri = request.RequestUri!.ToString();
             Requests.Add(uri);
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) {
+            return Task.FromResult(new HttpResponseMessage(StatusCode) {
                 Content = new StringContent(bodyFor(uri), Encoding.UTF8, "application/json")
             });
         }

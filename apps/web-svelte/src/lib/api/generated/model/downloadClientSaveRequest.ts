@@ -18,4 +18,6 @@ export interface DownloadClientSaveRequest {
   password: string | null;
   category: string;
   enabled: boolean;
+  /** @nullable */
+  apiKey?: string | null;
 }

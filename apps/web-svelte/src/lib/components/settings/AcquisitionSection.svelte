@@ -173,17 +173,35 @@
   }
 
   // ── Download clients ────────────────────────────────────────
+  const clientKindOptions = [
+    { value: DOWNLOAD_CLIENT_KIND.qBittorrent, label: "qBittorrent (torrent)" },
+    { value: DOWNLOAD_CLIENT_KIND.sabnzbd, label: "SABnzbd (usenet)" },
+  ];
+  const clientKindDefaults: Record<string, string> = {
+    [DOWNLOAD_CLIENT_KIND.qBittorrent]: "qBittorrent",
+    [DOWNLOAD_CLIENT_KIND.sabnzbd]: "SABnzbd",
+  };
+  function clientKindLabel(kind: string): string {
+    return clientKindDefaults[kind] ?? kind;
+  }
   function newClient() {
-    clientForm = { id: null, kind: DOWNLOAD_CLIENT_KIND.qBittorrent, displayName: "qBittorrent", baseUrl: "", username: null, password: null, category: "prismedia-books", enabled: true };
+    clientForm = { id: null, kind: DOWNLOAD_CLIENT_KIND.qBittorrent, displayName: "qBittorrent", baseUrl: "", username: null, password: null, apiKey: null, category: "prismedia-books", enabled: true };
+  }
+  function setClientKind(kind: string) {
+    if (!clientForm) return;
+    // A default display name tracks the kind switch; a user-edited one is left alone.
+    const untouched = clientForm.displayName === clientKindDefaults[clientForm.kind];
+    clientForm.kind = kind as DownloadClientSaveRequest["kind"];
+    if (untouched) clientForm.displayName = clientKindDefaults[kind] ?? clientForm.displayName;
   }
   function editClient(item: DownloadClientSummary) {
-    clientForm = { id: item.id, kind: item.kind, displayName: item.displayName, baseUrl: item.baseUrl, username: item.username, password: null, category: item.category, enabled: item.enabled };
+    clientForm = { id: item.id, kind: item.kind, displayName: item.displayName, baseUrl: item.baseUrl, username: item.username, password: null, apiKey: null, category: item.category, enabled: item.enabled };
   }
   async function testClient() {
     if (!clientForm) return;
     busy = true;
     try {
-      const res = await testDownloadClientConnection({ id: clientForm.id, kind: clientForm.kind, baseUrl: clientForm.baseUrl, username: clientForm.username, password: clientForm.password });
+      const res = await testDownloadClientConnection({ id: clientForm.id, kind: clientForm.kind, baseUrl: clientForm.baseUrl, username: clientForm.username, password: clientForm.password, apiKey: clientForm.apiKey });
       res.connected ? onMessage(res.message ?? "Connected") : onError(res.message ?? "Connection failed");
     } catch (err) {
       onError(err instanceof Error ? err.message : "Test failed");
@@ -399,6 +417,7 @@
             <div class="flex items-center gap-2">
               <StatusLed status={item.enabled ? "active" : "idle"} />
               <span class="text-sm text-text-primary">{item.displayName}</span>
+              <Badge variant="default">{clientKindLabel(item.kind)}</Badge>
               <span class="text-xs text-text-muted">{item.baseUrl}</span>
               <Badge variant="default">{item.category}</Badge>
             </div>
@@ -411,10 +430,16 @@
         {#if clientForm}
           <div class="space-y-2 rounded-sm border border-border-accent bg-surface-1 p-3">
             <div class="grid gap-2 sm:grid-cols-2">
+              <label class="space-y-1"><span class="text-label text-text-muted">Client</span>
+                <Select size="sm" value={clientForm.kind} options={clientKindOptions} onchange={setClientKind} /></label>
               <label class="space-y-1"><span class="text-label text-text-muted">Name</span>
                 <TextInput size="sm" value={clientForm.displayName} oninput={(e) => clientForm && (clientForm.displayName = e.currentTarget.value)} /></label>
               <label class="space-y-1"><span class="text-label text-text-muted">Base URL</span>
                 <TextInput size="sm" value={clientForm.baseUrl} oninput={(e) => clientForm && (clientForm.baseUrl = e.currentTarget.value)} placeholder="http://localhost:8080" /></label>
+              {#if clientForm.kind === DOWNLOAD_CLIENT_KIND.sabnzbd}
+                <label class="space-y-1"><span class="text-label text-text-muted">API key</span>
+                  <TextInput size="sm" type="password" value={clientForm.apiKey ?? ""} oninput={(e) => clientForm && (clientForm.apiKey = e.currentTarget.value)} placeholder={clientForm.id ? "(unchanged)" : "from SABnzbd Config → General"} /></label>
+              {/if}
               <label class="space-y-1"><span class="text-label text-text-muted">Username</span>
                 <TextInput size="sm" value={clientForm.username ?? ""} oninput={(e) => clientForm && (clientForm.username = e.currentTarget.value)} /></label>
               <label class="space-y-1"><span class="text-label text-text-muted">Password</span>

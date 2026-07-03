@@ -163,7 +163,8 @@ public sealed class SabnzbdDownloadClient(HttpClient http) : IDownloadClient {
             var version = Text(await GetAsync(connection, SabnzbdProtocol.ModeVersion, new Dictionary<string, string>(), cancellationToken), SabnzbdProtocol.Version);
             await QueueSlotsAsync(connection, nzoId: null, cancellationToken);
 
-            var categories = await CategoriesAsync(connection, cancellationToken);
+            // The pre-save connection test carries no category; only a configured one is worth checking.
+            var categories = string.IsNullOrWhiteSpace(connection.Category) ? [] : await CategoriesAsync(connection, cancellationToken);
             if (categories.Count > 0 && !categories.Contains(connection.Category, StringComparer.OrdinalIgnoreCase)) {
                 return new DownloadClientConnectionTest(true,
                     $"Connected to SABnzbd {version}, but the category \"{connection.Category}\" does not exist there — create it in SABnzbd so Prismedia downloads stay isolated and land in a predictable folder.");
@@ -279,8 +280,21 @@ public sealed class SabnzbdDownloadClient(HttpClient http) : IDownloadClient {
         CancellationToken cancellationToken,
         bool allowApiError = false) {
         using var response = await http.GetAsync(BuildUri(connection, mode, parameters), cancellationToken);
+        if (response.StatusCode is System.Net.HttpStatusCode.Unauthorized or System.Net.HttpStatusCode.Forbidden) {
+            throw new InvalidOperationException("SABnzbd rejected the API key or credentials.");
+        }
+
         response.EnsureSuccessStatusCode();
-        var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        JsonDocument document;
+        try {
+            document = JsonDocument.Parse(body);
+        } catch (JsonException) {
+            // Some SABnzbd errors ignore output=json and come back as plain text (e.g. "API Key Incorrect").
+            var text = body.Trim();
+            throw new InvalidOperationException($"SABnzbd: {(text.Length is > 0 and <= 200 ? text : "unexpected non-JSON response")}");
+        }
+
         if (!allowApiError) {
             EnsureApiSuccess(document.RootElement);
         }
