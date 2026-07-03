@@ -121,6 +121,7 @@ public sealed class PrismediaDbContext : DbContext {
     public DbSet<JobRunRow> JobRuns => Set<JobRunRow>();
 
     public DbSet<IndexerConfigRow> IndexerConfigs => Set<IndexerConfigRow>();
+    public DbSet<IndexerStatusRow> IndexerStatuses => Set<IndexerStatusRow>();
 
     public DbSet<IndexerCredentialRow> IndexerCredentials => Set<IndexerCredentialRow>();
 

@@ -21,6 +21,8 @@ public sealed class AcquisitionSearchRunnerTests {
             new FakeProfileStore(),
             new FakeBlocklistStore(ReleaseIdentity.For("blockedhash", null, null)),
             new FakeDownloadClientConfigStore(DownloadProtocol.Torrent),
+            new FakeIndexerStatusStore(),
+            new IndexerQueryWindow(),
             new AcquisitionDecisionEngineFactory([new BookReleaseDecisionEngine()]));
 
         var outcome = await runner.RunAsync(new AcquisitionSearchInput(Guid.NewGuid(), "Book", null), CancellationToken.None);
@@ -43,6 +45,8 @@ public sealed class AcquisitionSearchRunnerTests {
                 new FakeProfileStore(),
                 new FakeBlocklistStore("unrelated"),
                 new FakeDownloadClientConfigStore(protocols),
+                new FakeIndexerStatusStore(),
+                new IndexerQueryWindow(),
                 new AcquisitionDecisionEngineFactory([new BookReleaseDecisionEngine()]));
             var outcome = await runner.RunAsync(new AcquisitionSearchInput(Guid.NewGuid(), "Book", null), CancellationToken.None);
             return outcome.Candidates.Single();
@@ -76,6 +80,8 @@ public sealed class AcquisitionSearchRunnerTests {
             new FakeProfileStore(),
             new FakeBlocklistStore("unrelated"),
             new FakeDownloadClientConfigStore(DownloadProtocol.Torrent),
+            new FakeIndexerStatusStore(),
+            new IndexerQueryWindow(),
             new AcquisitionDecisionEngineFactory([new BookReleaseDecisionEngine()]));
 
         var outcome = await runner.RunAsync(new AcquisitionSearchInput(Guid.NewGuid(), "Book", "Author"), CancellationToken.None);
@@ -97,6 +103,8 @@ public sealed class AcquisitionSearchRunnerTests {
             new FakeProfileStore(),
             new FakeBlocklistStore("unrelated"),
             new FakeDownloadClientConfigStore(DownloadProtocol.Torrent),
+            new FakeIndexerStatusStore(),
+            new IndexerQueryWindow(),
             new AcquisitionDecisionEngineFactory([new BookReleaseDecisionEngine()]));
 
         await runner.RunAsync(new AcquisitionSearchInput(Guid.NewGuid(), "Book", "Author"), CancellationToken.None);
@@ -169,6 +177,13 @@ public sealed class AcquisitionSearchRunnerTests {
         public Task AddAsync(BlocklistAddRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<IReadOnlyList<AcquisitionBlocklistEntry>> ListAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private sealed class FakeIndexerStatusStore : IIndexerStatusStore {
+        public Task<IReadOnlyDictionary<Guid, IndexerHealth>> GetAllAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyDictionary<Guid, IndexerHealth>>(new Dictionary<Guid, IndexerHealth>());
+        public Task RecordFailureAsync(Guid indexerConfigId, string message, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task RecordSuccessAsync(Guid indexerConfigId, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     /// <summary>Supplies only the enabled-protocol set the runner consults; everything else is unused by the search path.</summary>

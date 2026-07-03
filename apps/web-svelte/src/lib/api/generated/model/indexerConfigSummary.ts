@@ -16,4 +16,13 @@ export interface IndexerConfigSummary {
   priority: number | string;
   categories: (number | string)[];
   hasApiKey: boolean;
+  /**
+     * @nullable
+     * @pattern ^-?(?:0|[1-9]\d*)$
+     */
+  queryLimitPerHour?: number | string | null;
+  /** @nullable */
+  disabledUntil?: string | null;
+  /** @nullable */
+  lastFailureMessage?: string | null;
 }

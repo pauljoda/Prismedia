@@ -143,11 +143,11 @@
     if (untouched) indexerForm.displayName = indexerKindDefaults[kind] ?? indexerForm.displayName;
   }
   function newIndexer() {
-    indexerForm = { id: null, kind: INDEXER_KIND.prowlarr, displayName: "Prowlarr", baseUrl: "", apiKey: null, enabled: true, priority: 25, categories: [7000, 8000] };
+    indexerForm = { id: null, kind: INDEXER_KIND.prowlarr, displayName: "Prowlarr", baseUrl: "", apiKey: null, enabled: true, priority: 25, categories: [7000, 8000], queryLimitPerHour: null };
     indexerCategories = "7000,8000";
   }
   function editIndexer(item: IndexerConfigSummary) {
-    indexerForm = { id: item.id, kind: item.kind, displayName: item.displayName, baseUrl: item.baseUrl, apiKey: null, enabled: item.enabled, priority: item.priority, categories: item.categories };
+    indexerForm = { id: item.id, kind: item.kind, displayName: item.displayName, baseUrl: item.baseUrl, apiKey: null, enabled: item.enabled, priority: item.priority, categories: item.categories, queryLimitPerHour: item.queryLimitPerHour ?? null };
     indexerCategories = item.categories.join(",");
   }
   function parseCategories(text: string): number[] {
@@ -398,6 +398,9 @@
               <Badge variant="default">{indexerKindLabel(item.kind)}</Badge>
               <span class="text-xs text-text-muted">{item.baseUrl}</span>
               {#if item.hasApiKey}<Badge variant="default">key set</Badge>{/if}
+              {#if item.disabledUntil}
+                <Badge variant="warning" title={item.lastFailureMessage ?? undefined}>backing off until {new Date(item.disabledUntil).toLocaleTimeString()}</Badge>
+              {/if}
             </div>
             <div class="flex items-center gap-1">
               <Button size="sm" variant="ghost" onclick={() => editIndexer(item)} disabled={busy}><Pencil class="h-3.5 w-3.5" /></Button>
@@ -418,6 +421,8 @@
                 <TextInput size="sm" type="password" value={indexerForm.apiKey ?? ""} oninput={(e) => indexerForm && (indexerForm.apiKey = e.currentTarget.value)} placeholder={indexerForm.id ? "(unchanged)" : ""} /></label>
               <label class="space-y-1"><span class="text-label text-text-muted">Categories</span>
                 <TextInput size="sm" value={indexerCategories} oninput={(e) => (indexerCategories = e.currentTarget.value)} placeholder="7000,8000" /></label>
+              <label class="space-y-1"><span class="text-label text-text-muted">Query limit / hour</span>
+                <TextInput size="sm" type="number" value={indexerForm.queryLimitPerHour == null ? "" : String(indexerForm.queryLimitPerHour)} oninput={(e) => indexerForm && (indexerForm.queryLimitPerHour = e.currentTarget.value ? Number(e.currentTarget.value) : null)} placeholder="unlimited" /></label>
             </div>
             <div class="flex items-center justify-between">
               <Button size="sm" variant="ghost" onclick={testIndexer} disabled={busy} class="gap-1.5"><PlugZap class="h-3.5 w-3.5" /> Test</Button>

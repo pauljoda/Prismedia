@@ -20,9 +20,21 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.Enabled).HasColumnName("enabled");
             entity.Property(row => row.Priority).HasColumnName("priority");
             entity.Property(row => row.Categories).HasColumnName("categories");
+            entity.Property(row => row.QueryLimitPerHour).HasColumnName("query_limit_per_hour");
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
             entity.HasIndex(row => new { row.Kind, row.Enabled });
+        });
+
+        modelBuilder.Entity<IndexerStatusRow>(entity => {
+            entity.ToTable("indexer_statuses");
+            entity.HasKey(row => row.IndexerConfigId);
+            entity.Property(row => row.IndexerConfigId).HasColumnName("indexer_config_id").ValueGeneratedNever();
+            entity.Property(row => row.EscalationLevel).HasColumnName("escalation_level");
+            entity.Property(row => row.DisabledUntil).HasColumnName("disabled_until");
+            entity.Property(row => row.LastFailureMessage).HasColumnName("last_failure_message").HasMaxLength(1024);
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            entity.HasOne<IndexerConfigRow>().WithOne().HasForeignKey<IndexerStatusRow>(row => row.IndexerConfigId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<IndexerCredentialRow>(entity => {

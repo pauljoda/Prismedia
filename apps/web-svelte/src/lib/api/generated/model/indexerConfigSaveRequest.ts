@@ -18,4 +18,9 @@ export interface IndexerConfigSaveRequest {
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
   priority: number | string;
   categories: (number | string)[];
+  /**
+     * @nullable
+     * @pattern ^-?(?:0|[1-9]\d*)$
+     */
+  queryLimitPerHour?: number | string | null;
 }

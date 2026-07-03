@@ -11,7 +11,10 @@ public sealed record IndexerConfigSummary(
     bool Enabled,
     int Priority,
     IReadOnlyList<int> Categories,
-    bool HasApiKey);
+    bool HasApiKey,
+    int? QueryLimitPerHour = null,
+    DateTimeOffset? DisabledUntil = null,
+    string? LastFailureMessage = null);
 
 /// <summary>Configured indexer aggregator with secret material for server-side use only.</summary>
 public sealed record IndexerConfigDetail(
@@ -23,7 +26,8 @@ public sealed record IndexerConfigDetail(
     int Priority,
     IReadOnlyList<int> Categories,
     bool HasApiKey,
-    string? ApiKey);
+    string? ApiKey,
+    int? QueryLimitPerHour = null);
 
 /// <summary>Request payload for creating or updating an indexer configuration.</summary>
 public sealed record IndexerConfigSaveRequest(
@@ -34,7 +38,8 @@ public sealed record IndexerConfigSaveRequest(
     string? ApiKey,
     bool Enabled,
     int Priority,
-    IReadOnlyList<int> Categories);
+    IReadOnlyList<int> Categories,
+    int? QueryLimitPerHour = null);
 
 /// <summary>Connection test payload for an indexer configuration that may not be saved yet.</summary>
 /// <param name="Id">Existing config id when editing; lets the server reuse the stored API key if none is supplied.</param>

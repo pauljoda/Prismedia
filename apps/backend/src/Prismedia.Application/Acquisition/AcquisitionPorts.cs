@@ -35,7 +35,8 @@ public sealed record IndexerConfigSaveCommand(
     string? ApiKey,
     bool Enabled,
     int Priority,
-    IReadOnlyList<int> Categories);
+    IReadOnlyList<int> Categories,
+    int? QueryLimitPerHour = null);
 
 /// <summary>Persistence port for configured indexers.</summary>
 public interface IIndexerConfigStore {

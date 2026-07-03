@@ -329,6 +329,8 @@ public static class DependencyInjection {
 
     private static void RegisterAcquisition(IServiceCollection services) {
         services.AddScoped<IIndexerConfigStore, EfIndexerConfigStore>();
+        services.AddScoped<IIndexerStatusStore, EfIndexerStatusStore>();
+        services.AddSingleton<IndexerQueryWindow>();
         services.AddScoped<IDownloadClientConfigStore, EfDownloadClientConfigStore>();
         services.AddScoped<IBookAcquisitionProfileStore, EfBookAcquisitionProfileStore>();
         services.AddScoped<IAcquisitionStore, EfAcquisitionStore>();

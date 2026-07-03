@@ -45,7 +45,8 @@ public sealed class IndexerConfigCommandService(
             request.ApiKey,
             request.Enabled,
             request.Priority,
-            request.Categories.Distinct().Order().ToArray());
+            request.Categories.Distinct().Order().ToArray(),
+            request.QueryLimitPerHour);
     }
 
     private static void ValidateBaseUrl(string baseUrl) {

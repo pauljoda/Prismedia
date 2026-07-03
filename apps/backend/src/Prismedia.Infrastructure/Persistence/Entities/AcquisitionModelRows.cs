@@ -19,7 +19,28 @@ public sealed class IndexerConfigRow {
     /// <summary>Torznab category ids constraining the search (e.g. 7000 books, 8010 comics). Empty searches all.</summary>
     public int[] Categories { get; set; } = [];
 
+    /// <summary>Optional hourly search-query budget for this indexer; null/0 means unlimited.</summary>
+    public int? QueryLimitPerHour { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
+/// <summary>
+/// Health of one indexer: its failure-escalation level and the suppression window it is inside.
+/// A row exists only after the indexer's first recorded failure; absence means healthy.
+/// </summary>
+public sealed class IndexerStatusRow {
+    /// <summary>The indexer this status belongs to (primary key; cascades with the config).</summary>
+    public Guid IndexerConfigId { get; set; }
+
+    /// <summary>Current escalation level on the backoff ladder (0 = healthy).</summary>
+    public int EscalationLevel { get; set; }
+
+    /// <summary>End of the current suppression window; searches skip the indexer until then.</summary>
+    public DateTimeOffset? DisabledUntil { get; set; }
+
+    public string? LastFailureMessage { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }
 

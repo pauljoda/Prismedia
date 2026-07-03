@@ -11,7 +11,15 @@ public sealed class AcquisitionSearchRunner(
     IBookAcquisitionProfileStore profiles,
     IAcquisitionBlocklistStore blocklist,
     IDownloadClientConfigStore downloadClients,
+    IIndexerStatusStore indexerStatuses,
+    IndexerQueryWindow queryWindow,
     IAcquisitionDecisionEngineFactory decisionEngines) {
+    /// <summary>
+    /// The per-priority-step score adjustment that breaks exact score ties in favor of the preferred
+    /// indexer. Orders of magnitude below any real score difference, so it can never reorder releases
+    /// the engine actually distinguished.
+    /// </summary>
+    private const double PriorityTieBreak = 1e-9;
     /// <param name="upgradeOwnedQuality">
     /// When set, runs this as an upgrade search: the engine accepts only releases that strictly beat this
     /// owned quality (and never downgrade the format). Null for an ordinary first-grab search.
@@ -22,8 +30,12 @@ public sealed class AcquisitionSearchRunner(
             return new AcquisitionSearchOutcome([], []);
         }
 
+        // An indexer inside its failure-backoff window is skipped for this search rather than
+        // contributing the same error to every pass; it rejoins automatically when the window closes.
+        var health = await indexerStatuses.GetAllAsync(cancellationToken);
+        var now = DateTimeOffset.UtcNow;
         var configs = (await indexers.ListDetailsAsync(cancellationToken))
-            .Where(config => config.Enabled)
+            .Where(config => config.Enabled && !(health.GetValueOrDefault(config.Id)?.IsDisabledAt(now) ?? false))
             .ToArray();
         if (configs.Length == 0) {
             return new AcquisitionSearchOutcome([], []);
@@ -57,20 +69,21 @@ public sealed class AcquisitionSearchRunner(
         AcquisitionSearchOutcome outcome = new([], []);
         foreach (var text in queries) {
             var searches = await Task.WhenAll(configs.Select(config => SearchIndexerAsync(config, text, input.Kind, cancellationToken)));
+            await RecordHealthAsync(searches, cancellationToken);
 
             var releases = new List<(IndexerRelease Release, Guid? IndexerConfigId, string IndexerName)>();
             var errors = new List<IndexerSearchError>();
-            foreach (var (config, found, error) in searches) {
-                foreach (var release in found) {
-                    releases.Add((release, config.Id, config.DisplayName));
+            foreach (var search in searches) {
+                foreach (var release in search.Found) {
+                    releases.Add((release, search.Config.Id, search.Config.DisplayName));
                 }
 
-                if (error is not null) {
-                    errors.Add(new IndexerSearchError(config.Id, config.DisplayName, error));
+                if (search.Error is not null) {
+                    errors.Add(new IndexerSearchError(search.Config.Id, search.Config.DisplayName, search.Error));
                 }
             }
 
-            outcome = new AcquisitionSearchOutcome(engine.Evaluate(releases, rules, blocklisted), errors);
+            outcome = new AcquisitionSearchOutcome(WithIndexerPriorityTieBreak(engine.Evaluate(releases, rules, blocklisted), configs), errors);
             if (outcome.Candidates.Any(candidate => candidate.Accepted)) {
                 return outcome;
             }
@@ -79,21 +92,70 @@ public sealed class AcquisitionSearchRunner(
         return outcome;
     }
 
-    private async Task<(Contracts.Acquisition.IndexerConfigDetail Config, IReadOnlyList<IndexerRelease> Found, string? Error)> SearchIndexerAsync(
+    /// <summary>
+    /// Folds indexer priority into the scalar score as an exact-tie break: identical releases from two
+    /// indexers rank the preferred (lower-priority-number) indexer first, and every downstream consumer
+    /// that sorts by score (auto-grab, the review list) inherits the ordering for free.
+    /// </summary>
+    private static IReadOnlyList<ScoredRelease> WithIndexerPriorityTieBreak(
+        IReadOnlyList<ScoredRelease> candidates,
+        IReadOnlyList<Contracts.Acquisition.IndexerConfigDetail> configs) {
+        var priorityById = configs.ToDictionary(config => config.Id, config => config.Priority);
+        return candidates
+            .Select(candidate => candidate.IndexerConfigId is { } id && priorityById.TryGetValue(id, out var priority)
+                ? candidate with { Score = candidate.Score - priority * PriorityTieBreak }
+                : candidate)
+            .OrderByDescending(candidate => candidate.Accepted)
+            .ThenByDescending(candidate => candidate.Score)
+            .ToArray();
+    }
+
+    /// <summary>One indexer's contribution to a search rung. A rate-limited skip carries a message but is not a failure.</summary>
+    private sealed record IndexerSearchResult(
+        Contracts.Acquisition.IndexerConfigDetail Config,
+        IReadOnlyList<IndexerRelease> Found,
+        string? Error,
+        bool RateLimited = false);
+
+    private async Task<IndexerSearchResult> SearchIndexerAsync(
         Contracts.Acquisition.IndexerConfigDetail config,
         string text,
         Domain.Entities.EntityKind kind,
         CancellationToken cancellationToken) {
+        // A rate-limited skip is surfaced (so a thin result set is explainable) but is NOT a failure —
+        // it must not climb the backoff ladder.
+        if (!queryWindow.TryRecordQuery(config.Id, config.QueryLimitPerHour)) {
+            return new IndexerSearchResult(config, [], "Hourly query limit reached; this indexer was skipped for this search.", RateLimited: true);
+        }
+
         try {
             // Narrow the indexer's configured categories to the acquisition kind's Torznab range, so a
             // movie or album search never queries the book categories the indexer was set up with.
             var categories = TorznabCategories.ForKind(kind, config.Categories);
             var connection = new IndexerConnection(config.Id, config.Kind, config.BaseUrl, config.ApiKey, categories);
             var found = await clients.Get(config.Kind).SearchAsync(connection, new IndexerQuery(text, categories), cancellationToken);
-            return (config, found, null);
+            return new IndexerSearchResult(config, found, null);
         } catch (Exception ex) when (ex is not OperationCanceledException) {
-            return (config, [], ex.Message);
+            return new IndexerSearchResult(config, [], ex.Message);
         }
     }
 
+    /// <summary>
+    /// Records each indexer's health outcome sequentially — the searches themselves fan out, but the
+    /// status store shares one DbContext, which must never see concurrent operations. A rate-limit skip
+    /// neither climbs nor descends the ladder.
+    /// </summary>
+    private async Task RecordHealthAsync(IEnumerable<IndexerSearchResult> searches, CancellationToken cancellationToken) {
+        foreach (var search in searches) {
+            if (search.RateLimited) {
+                continue;
+            }
+
+            if (search.Error is null) {
+                await indexerStatuses.RecordSuccessAsync(search.Config.Id, cancellationToken);
+            } else {
+                await indexerStatuses.RecordFailureAsync(search.Config.Id, search.Error, cancellationToken);
+            }
+        }
+    }
 }

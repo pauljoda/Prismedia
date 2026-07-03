@@ -10,7 +10,15 @@ namespace Prismedia.Infrastructure.Acquisition;
 public sealed class EfIndexerConfigStore(PrismediaDbContext db) : IIndexerConfigStore {
     public async Task<IReadOnlyList<IndexerConfigSummary>> ListAsync(CancellationToken cancellationToken) {
         var details = await ListDetailsAsync(cancellationToken);
-        return details.Select(ToSummary).ToArray();
+        // Health rides the summary so the settings list can flag a backed-off indexer at a glance.
+        var statuses = await db.IndexerStatuses.AsNoTracking().ToDictionaryAsync(row => row.IndexerConfigId, cancellationToken);
+        return details.Select(detail => {
+            var status = statuses.GetValueOrDefault(detail.Id);
+            return ToSummary(detail) with {
+                DisabledUntil = status?.DisabledUntil is { } until && until > DateTimeOffset.UtcNow ? until : null,
+                LastFailureMessage = status?.LastFailureMessage
+            };
+        }).ToArray();
     }
 
     public async Task<IReadOnlyList<IndexerConfigDetail>> ListDetailsAsync(CancellationToken cancellationToken) {
@@ -62,6 +70,7 @@ public sealed class EfIndexerConfigStore(PrismediaDbContext db) : IIndexerConfig
         row.Enabled = command.Enabled;
         row.Priority = command.Priority;
         row.Categories = command.Categories.ToArray();
+        row.QueryLimitPerHour = command.QueryLimitPerHour is > 0 ? command.QueryLimitPerHour : null;
         row.UpdatedAt = now;
 
         if (!string.IsNullOrWhiteSpace(command.ApiKey)) {
@@ -106,8 +115,8 @@ public sealed class EfIndexerConfigStore(PrismediaDbContext db) : IIndexerConfig
     }
 
     private static IndexerConfigSummary ToSummary(IndexerConfigDetail detail) =>
-        new(detail.Id, detail.Kind, detail.DisplayName, detail.BaseUrl, detail.Enabled, detail.Priority, detail.Categories, detail.HasApiKey);
+        new(detail.Id, detail.Kind, detail.DisplayName, detail.BaseUrl, detail.Enabled, detail.Priority, detail.Categories, detail.HasApiKey, detail.QueryLimitPerHour);
 
     private static IndexerConfigDetail ToDetail(IndexerConfigRow row, string? apiKey) =>
-        new(row.Id, row.Kind, row.DisplayName, row.BaseUrl, row.Enabled, row.Priority, row.Categories, !string.IsNullOrEmpty(apiKey), apiKey);
+        new(row.Id, row.Kind, row.DisplayName, row.BaseUrl, row.Enabled, row.Priority, row.Categories, !string.IsNullOrEmpty(apiKey), apiKey, row.QueryLimitPerHour);
 }
