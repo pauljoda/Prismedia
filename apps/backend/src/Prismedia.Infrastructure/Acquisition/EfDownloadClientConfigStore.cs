@@ -32,20 +32,30 @@ public sealed class EfDownloadClientConfigStore(PrismediaDbContext db) : IDownlo
         var row = await db.DownloadClientConfigs
             .AsNoTracking()
             .Where(client => client.Enabled)
-            .OrderBy(client => client.CreatedAt)
+            .OrderBy(client => client.Priority)
+            .ThenBy(client => client.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);
         return row is null ? null : ToDetail(row, await CredentialAsync(row.Id, cancellationToken));
     }
 
-    public async Task<DownloadClientDetail?> GetDefaultAsync(DownloadProtocol protocol, CancellationToken cancellationToken) {
+    public async Task<DownloadClientDetail?> GetDefaultAsync(DownloadProtocol protocol, CancellationToken cancellationToken) =>
+        (await ListEnabledAsync(protocol, cancellationToken)).FirstOrDefault();
+
+    public async Task<IReadOnlyList<DownloadClientDetail>> ListEnabledAsync(DownloadProtocol protocol, CancellationToken cancellationToken) {
         // The protocol is derived from the kind, which EF can't translate; the client table is tiny.
         var rows = await db.DownloadClientConfigs
             .AsNoTracking()
             .Where(client => client.Enabled)
-            .OrderBy(client => client.CreatedAt)
+            .OrderBy(client => client.Priority)
+            .ThenBy(client => client.CreatedAt)
             .ToArrayAsync(cancellationToken);
-        var row = rows.FirstOrDefault(client => client.Kind.Protocol() == protocol);
-        return row is null ? null : ToDetail(row, await CredentialAsync(row.Id, cancellationToken));
+        var matching = rows.Where(client => client.Kind.Protocol() == protocol).ToArray();
+        if (matching.Length == 0) {
+            return [];
+        }
+
+        var credentials = await CredentialsAsync(matching.Select(row => row.Id).ToArray(), cancellationToken);
+        return matching.Select(row => ToDetail(row, credentials.GetValueOrDefault(row.Id))).ToArray();
     }
 
     public async Task<IReadOnlyList<DownloadProtocol>> GetEnabledProtocolsAsync(CancellationToken cancellationToken) {
@@ -77,6 +87,7 @@ public sealed class EfDownloadClientConfigStore(PrismediaDbContext db) : IDownlo
         row.BaseUrl = command.BaseUrl;
         row.Username = command.Username;
         row.Category = command.Category;
+        row.Priority = command.Priority;
         row.Enabled = command.Enabled;
         row.UpdatedAt = now;
 
@@ -141,9 +152,9 @@ public sealed class EfDownloadClientConfigStore(PrismediaDbContext db) : IDownlo
         (await CredentialsAsync([id], cancellationToken)).GetValueOrDefault(id) ?? new ClientCredentials(null, null);
 
     private static DownloadClientSummary ToSummary(DownloadClientDetail detail) =>
-        new(detail.Id, detail.Kind, detail.DisplayName, detail.BaseUrl, detail.Username, detail.Category, detail.Enabled, detail.HasPassword, detail.ApiKey is not null and not "");
+        new(detail.Id, detail.Kind, detail.DisplayName, detail.BaseUrl, detail.Username, detail.Category, detail.Enabled, detail.HasPassword, detail.ApiKey is not null and not "", detail.Priority);
 
     private static DownloadClientDetail ToDetail(DownloadClientConfigRow row, ClientCredentials? credentials) =>
         new(row.Id, row.Kind, row.DisplayName, row.BaseUrl, row.Username, row.Category, row.Enabled,
-            !string.IsNullOrEmpty(credentials?.Password), credentials?.Password, credentials?.ApiKey);
+            !string.IsNullOrEmpty(credentials?.Password), credentials?.Password, credentials?.ApiKey, row.Priority);
 }

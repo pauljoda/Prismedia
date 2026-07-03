@@ -115,7 +115,8 @@ public sealed record DownloadClientSaveCommand(
     string? Password,
     string Category,
     bool Enabled,
-    string? ApiKey = null);
+    string? ApiKey = null,
+    int Priority = 25);
 
 /// <summary>Persistence port for configured download clients.</summary>
 public interface IDownloadClientConfigStore {
@@ -128,6 +129,9 @@ public interface IDownloadClientConfigStore {
 
     /// <summary>Returns the first enabled download client that speaks <paramref name="protocol"/>, or null when none does.</summary>
     Task<DownloadClientDetail?> GetDefaultAsync(DownloadProtocol protocol, CancellationToken cancellationToken);
+
+    /// <summary>Every enabled download client that speaks <paramref name="protocol"/>, in selection order (priority, then age).</summary>
+    Task<IReadOnlyList<DownloadClientDetail>> ListEnabledAsync(DownloadProtocol protocol, CancellationToken cancellationToken);
 
     /// <summary>The transfer protocols the enabled download clients collectively support.</summary>
     Task<IReadOnlyList<DownloadProtocol>> GetEnabledProtocolsAsync(CancellationToken cancellationToken);

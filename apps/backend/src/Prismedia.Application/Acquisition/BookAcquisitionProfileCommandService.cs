@@ -63,6 +63,7 @@ public sealed class BookAcquisitionProfileCommandService(IBookAcquisitionProfile
             request.AutoRedownload,
             request.UpgradeUntilCutoff,
             request.CutoffSourceTier,
-            request.CutoffFormatTier);
+            request.CutoffFormatTier,
+            request.DownloadCategory);
     }
 }

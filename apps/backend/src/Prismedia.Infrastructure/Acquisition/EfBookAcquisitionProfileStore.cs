@@ -30,6 +30,11 @@ public sealed class EfBookAcquisitionProfileStore(PrismediaDbContext db) : IBook
         return row?.AutoRedownload ?? false;
     }
 
+    public async Task<string?> GetDownloadCategoryAsync(Guid? profileId, EntityKind kind, CancellationToken cancellationToken) {
+        var row = await ResolveRowAsync(profileId, kind, cancellationToken);
+        return string.IsNullOrWhiteSpace(row?.DownloadCategory) ? null : row.DownloadCategory;
+    }
+
     public async Task<IReadOnlyList<BookAcquisitionProfileView>> ListAsync(CancellationToken cancellationToken) {
         var rows = await db.BookAcquisitionProfiles
             .AsNoTracking()
@@ -83,6 +88,7 @@ public sealed class EfBookAcquisitionProfileStore(PrismediaDbContext db) : IBook
         row.UpgradeUntilCutoff = command.UpgradeUntilCutoff;
         row.CutoffSourceTier = command.CutoffSourceTier;
         row.CutoffFormatTier = command.CutoffFormatTier;
+        row.DownloadCategory = string.IsNullOrWhiteSpace(command.DownloadCategory) ? null : command.DownloadCategory.Trim();
         row.IsDefault = shouldBeDefault;
         row.UpdatedAt = now;
 
@@ -183,7 +189,8 @@ public sealed class EfBookAcquisitionProfileStore(PrismediaDbContext db) : IBook
             row.AutoRedownload,
             row.UpgradeUntilCutoff,
             row.CutoffSourceTier,
-            row.CutoffFormatTier);
+            row.CutoffFormatTier,
+            row.DownloadCategory);
 
     private static IReadOnlyList<WeightedTerm> DecodeWeightedTerms(string json) {
         if (string.IsNullOrWhiteSpace(json)) {

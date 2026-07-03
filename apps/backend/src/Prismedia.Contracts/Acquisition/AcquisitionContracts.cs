@@ -144,7 +144,8 @@ public sealed record DownloadClientSummary(
     string Category,
     bool Enabled,
     bool HasPassword,
-    bool HasApiKey = false);
+    bool HasApiKey = false,
+    int Priority = 25);
 
 /// <summary>Configured download client with secret material for server-side use only.</summary>
 public sealed record DownloadClientDetail(
@@ -157,7 +158,8 @@ public sealed record DownloadClientDetail(
     bool Enabled,
     bool HasPassword,
     string? Password,
-    string? ApiKey = null);
+    string? ApiKey = null,
+    int Priority = 25);
 
 /// <summary>Request payload for creating or updating a download client configuration.</summary>
 /// <param name="ApiKey">API key for clients that authenticate with one (SABnzbd); blank keeps the stored key.</param>
@@ -170,7 +172,8 @@ public sealed record DownloadClientSaveRequest(
     string? Password,
     string Category,
     bool Enabled,
-    string? ApiKey = null);
+    string? ApiKey = null,
+    int Priority = 25);
 
 /// <summary>Connection test payload for a download client configuration that may not be saved yet.</summary>
 public sealed record DownloadClientTestRequest(
@@ -217,7 +220,8 @@ public sealed record BookAcquisitionProfileView(
     bool AutoRedownload,
     bool UpgradeUntilCutoff,
     BookSourceTier CutoffSourceTier,
-    BookFormatTier CutoffFormatTier);
+    BookFormatTier CutoffFormatTier,
+    string? DownloadCategory = null);
 
 /// <summary>Request payload for creating or updating an acquisition profile.</summary>
 public sealed record BookAcquisitionProfileSaveRequest(
@@ -241,7 +245,8 @@ public sealed record BookAcquisitionProfileSaveRequest(
     bool AutoRedownload,
     bool UpgradeUntilCutoff,
     BookSourceTier CutoffSourceTier,
-    BookFormatTier CutoffFormatTier);
+    BookFormatTier CutoffFormatTier,
+    string? DownloadCategory = null);
 
 /// <summary>A monitored wanted item: the standing intent plus the current state of the acquisition it keeps alive.</summary>
 public sealed record MonitorView(

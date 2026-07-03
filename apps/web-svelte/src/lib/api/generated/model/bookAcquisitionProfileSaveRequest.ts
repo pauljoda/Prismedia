@@ -42,4 +42,6 @@ export interface BookAcquisitionProfileSaveRequest {
   upgradeUntilCutoff: boolean;
   cutoffSourceTier: BookSourceTier;
   cutoffFormatTier: BookFormatTier;
+  /** @nullable */
+  downloadCategory?: string | null;
 }

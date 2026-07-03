@@ -343,6 +343,8 @@ public static class DependencyInjection {
         services.AddScoped<IDownloadClient>(provider => provider.GetRequiredService<QBittorrentDownloadClient>());
         services.AddScoped(_ => new SabnzbdDownloadClient(new HttpClient()));
         services.AddScoped<IDownloadClient>(provider => provider.GetRequiredService<SabnzbdDownloadClient>());
+        services.AddScoped(_ => new TransmissionDownloadClient(new HttpClient()));
+        services.AddScoped<IDownloadClient>(provider => provider.GetRequiredService<TransmissionDownloadClient>());
         services.AddScoped<IDownloadClientFactory, DownloadClientFactory>();
         services.AddScoped<IAcquisitionImportPlanner, AcquisitionImportPlanner>();
         services.AddScoped<IImportFileMover, ImportFileMover>();

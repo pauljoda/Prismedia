@@ -12,6 +12,62 @@ public static class AcquisitionHttp {
     public const string DownloadClientApiKeyCredential = "apiKey";
 }
 
+/// <summary>Transmission RPC wire vocabulary (RPC spec 15+/Transmission 3+). Referenced by the Transmission download client; never retyped.</summary>
+public static class TransmissionProtocol {
+    /// <summary>Default RPC endpoint path appended to a base URL that doesn't already point at the RPC.</summary>
+    public const string RpcPath = "transmission/rpc";
+    public const string SessionIdHeader = "X-Transmission-Session-Id";
+
+    // ── methods ─────────────────────────────────────────────────
+    public const string MethodSessionGet = "session-get";
+    public const string MethodTorrentAdd = "torrent-add";
+    public const string MethodTorrentGet = "torrent-get";
+    public const string MethodTorrentRemove = "torrent-remove";
+
+    // ── request/response fields ─────────────────────────────────
+    // prism-vocab: external — Transmission RPC field names, decoded only at this parse boundary.
+    public const string Method = "method";
+    public const string Arguments = "arguments";
+    public const string Result = "result";
+    public const string ResultSuccess = "success";
+    public const string Filename = "filename";
+    public const string Metainfo = "metainfo";
+    public const string Labels = "labels";
+    public const string Ids = "ids";
+    public const string Fields = "fields";
+    public const string DeleteLocalData = "delete-local-data";
+    public const string TorrentAdded = "torrent-added";
+    public const string TorrentDuplicate = "torrent-duplicate";
+    public const string Torrents = "torrents";
+    public const string Version = "version";
+    public const string HashString = "hashString";
+    public const string Name = "name";
+    public const string PercentDone = "percentDone";
+    public const string Status = "status";
+    public const string IsStalled = "isStalled";
+    public const string IsFinished = "isFinished";
+    public const string ErrorCode = "error";
+    public const string ErrorString = "errorString";
+    public const string DownloadDir = "downloadDir";
+    public const string TotalSize = "totalSize";
+    public const string RateDownload = "rateDownload";
+    public const string RateUpload = "rateUpload";
+    public const string Eta = "eta";
+    public const string PeersSendingToUs = "peersSendingToUs";
+    public const string PeersGettingFromUs = "peersGettingFromUs";
+    public const string Files = "files";
+    public const string FileLength = "length";
+    public const string FileBytesCompleted = "bytesCompleted";
+    public const string Pieces = "pieces";
+    public const string PieceCount = "pieceCount";
+
+    /// <summary>The torrent-get fields the status/properties projections need.</summary>
+    public static readonly string[] StatusFields = [
+        HashString, Name, PercentDone, Status, IsStalled, IsFinished, ErrorCode, ErrorString,
+        DownloadDir, TotalSize, RateDownload, RateUpload, Eta, PeersSendingToUs, PeersGettingFromUs, Labels
+    ];
+}
+
 /// <summary>SABnzbd JSON API wire vocabulary. Referenced by the SABnzbd download client; never retyped.</summary>
 public static class SabnzbdProtocol {
     public const string ApiEndpoint = "api";

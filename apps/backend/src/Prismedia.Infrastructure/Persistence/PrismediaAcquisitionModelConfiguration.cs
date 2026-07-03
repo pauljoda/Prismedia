@@ -51,6 +51,7 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.BaseUrl).HasColumnName("base_url").HasMaxLength(2048).IsRequired();
             entity.Property(row => row.Username).HasColumnName("username").HasMaxLength(256);
             entity.Property(row => row.Category).HasColumnName("category").HasMaxLength(256).IsRequired();
+            entity.Property(row => row.Priority).HasColumnName("priority").HasDefaultValue(25);
             entity.Property(row => row.Enabled).HasColumnName("enabled");
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
@@ -90,6 +91,7 @@ internal static partial class PrismediaModelConfiguration {
                 .HasConversion(value => value.ToCode(), value => value.DecodeAs<ImportMode>())
                 .HasDefaultValue(ImportMode.Move)
                 .IsRequired();
+            entity.Property(row => row.DownloadCategory).HasColumnName("download_category").HasMaxLength(256);
             entity.Property(row => row.AllowedFormats).HasColumnName("allowed_formats");
             entity.Property(row => row.PreferredLanguages).HasColumnName("preferred_languages");
             entity.Property(row => row.WeightedTermsJson).HasColumnName("weighted_terms_json").HasDefaultValue("[]").IsRequired();

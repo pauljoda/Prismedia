@@ -71,7 +71,8 @@ public sealed record BookAcquisitionProfileSaveCommand(
     bool AutoRedownload,
     bool UpgradeUntilCutoff,
     BookSourceTier CutoffSourceTier,
-    BookFormatTier CutoffFormatTier);
+    BookFormatTier CutoffFormatTier,
+    string? DownloadCategory = null);
 
 /// <summary>
 /// Persistence port for acquisition profiles (matching rules + import target), scoped per media kind.
@@ -92,6 +93,9 @@ public interface IBookAcquisitionProfileStore {
 
     /// <summary>True when the resolved profile auto-blocklists a failed download and grabs the next-best candidate.</summary>
     Task<bool> GetAutoRedownloadAsync(Guid? profileId, EntityKind kind, CancellationToken cancellationToken);
+
+    /// <summary>The resolved profile's download-client category override, or null to use the client's own category.</summary>
+    Task<string?> GetDownloadCategoryAsync(Guid? profileId, EntityKind kind, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<BookAcquisitionProfileView>> ListAsync(CancellationToken cancellationToken);
     Task<BookAcquisitionProfileView?> GetAsync(Guid id, CancellationToken cancellationToken);

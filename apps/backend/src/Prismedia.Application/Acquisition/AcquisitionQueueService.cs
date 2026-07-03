@@ -5,27 +5,30 @@ using Prismedia.Domain.Entities;
 namespace Prismedia.Application.Acquisition;
 
 /// <summary>
-/// Sends a chosen release to the download client. Resolves the candidate's server-side download URL,
-/// hands it to the default download client under the configured category, records the transfer, and
-/// moves the acquisition to <see cref="AcquisitionStatus.Queued"/> for the monitor to track.
+/// Sends a chosen release to a download client. Resolves the candidate's server-side download URL,
+/// picks the client by the release's protocol in priority order (falling back to the next client of
+/// that protocol when an add fails), hands it over under the profile's download category (else the
+/// client's), records the transfer, and moves the acquisition to
+/// <see cref="AcquisitionStatus.Queued"/> for the monitor to track.
 /// </summary>
 public sealed class AcquisitionQueueService(
     IAcquisitionStore acquisitions,
     IAcquisitionBlocklistStore blocklist,
     IDownloadClientConfigStore downloadClients,
     IDownloadClientFactory clients,
+    IBookAcquisitionProfileStore profiles,
     IReleaseLinkResolver linkResolver) : IAcquisitionQueueService {
-    /// <summary>Queues a chosen candidate: resolves a usable link (direct, magnet, or scraped from the info page) and hands it to the download client.</summary>
+    /// <summary>Queues a chosen candidate: resolves a usable link (direct, magnet, or scraped from the info page) and hands it to a download client.</summary>
     public async Task<AcquisitionDetail?> QueueAsync(Guid acquisitionId, Guid candidateId, CancellationToken cancellationToken) {
         var candidate = await acquisitions.GetQueueCandidateAsync(acquisitionId, candidateId, cancellationToken);
         if (candidate is null) {
             throw new AcquisitionConfigurationException(ApiProblemCodes.AcquisitionReleaseNotFound, "The selected release was not found for this acquisition.");
         }
 
-        // The release protocol picks the client: torrent releases go to a torrent client, usenet
-        // releases to a usenet client. Resolving up front keeps the error actionable ("configure a
+        // The release protocol picks the clients: torrent releases go to torrent clients, usenet
+        // releases to usenet clients. Resolving up front keeps the error actionable ("configure a
         // usenet client") instead of failing mid-add.
-        var (client, connection) = await ResolveClientAsync(candidate.Protocol, cancellationToken);
+        var eligible = await ResolveClientsAsync(candidate.Protocol, cancellationToken);
 
         // The blocklist is enforced at search time, but a stored candidate row can still carry a blocklisted
         // identity (e.g. the release that just failed). Refuse it here too so the manual "queue this release"
@@ -44,14 +47,15 @@ public sealed class AcquisitionQueueService(
                 "No download link could be found for this release. Open its page and upload the .torrent file manually.");
         }
 
-        var downloadClient = clients.Get(client.Kind);
+        var category = await ResolveCategoryAsync(acquisitionId, cancellationToken);
         // Re-queueing (after a failed/cancelled attempt) supersedes any prior download — drop the old
-        // torrent from the client first so it doesn't linger as an orphan or collide on re-add.
-        await RemovePriorTorrentAsync(acquisitionId, downloadClient, connection, cancellationToken);
+        // one from its client first so it doesn't linger as an orphan or collide on re-add.
+        await RemovePriorDownloadAsync(acquisitionId, eligible[0], cancellationToken);
         try {
-            var clientItemId = await downloadClient
-                .AddAsync(connection, new DownloadAddRequest(url, candidate.InfoHash, client.Category), cancellationToken);
-            await acquisitions.CreateTransferAsync(acquisitionId, client.Id, clientItemId, client.Category, cancellationToken);
+            var (client, clientItemId) = await AddWithFallbackAsync(
+                eligible,
+                (downloadClient, connection) => downloadClient.AddAsync(connection, new DownloadAddRequest(url, candidate.InfoHash, category ?? connection.Category), cancellationToken));
+            await acquisitions.CreateTransferAsync(acquisitionId, client.Id, clientItemId, category ?? client.Category, cancellationToken);
             // Snapshot the chosen release so a later failure can blocklist exactly it (and pick the next-best).
             await acquisitions.SetSelectedReleaseAsync(
                 acquisitionId,
@@ -74,12 +78,15 @@ public sealed class AcquisitionQueueService(
             return null;
         }
 
-        var (client, connection) = await ResolveClientAsync(DownloadProtocol.Torrent, cancellationToken);
-        var downloadClient = clients.Get(client.Kind);
-        await RemovePriorTorrentAsync(acquisitionId, downloadClient, connection, cancellationToken);
+        var eligible = await ResolveClientsAsync(DownloadProtocol.Torrent, cancellationToken);
+        var category = await ResolveCategoryAsync(acquisitionId, cancellationToken);
+        await RemovePriorDownloadAsync(acquisitionId, eligible[0], cancellationToken);
         try {
-            var clientItemId = await downloadClient.AddTorrentFileAsync(connection, fileName, torrent, cancellationToken);
-            await acquisitions.CreateTransferAsync(acquisitionId, client.Id, clientItemId, client.Category, cancellationToken);
+            var (client, clientItemId) = await AddWithFallbackAsync(
+                eligible,
+                (downloadClient, connection) => downloadClient.AddTorrentFileAsync(
+                    connection with { Category = category ?? connection.Category }, fileName, torrent, cancellationToken));
+            await acquisitions.CreateTransferAsync(acquisitionId, client.Id, clientItemId, category ?? client.Category, cancellationToken);
             await acquisitions.SetStatusAsync(acquisitionId, AcquisitionStatus.Queued, "Uploaded torrent sent to download client.", cancellationToken);
         } catch (Exception ex) when (ex is not OperationCanceledException) {
             await acquisitions.SetStatusAsync(acquisitionId, AcquisitionStatus.Failed, $"Failed to queue uploaded torrent: {ex.Message}", cancellationToken);
@@ -90,27 +97,44 @@ public sealed class AcquisitionQueueService(
     }
 
     /// <summary>
+    /// Tries each eligible client in priority order until one accepts the release. Only when every
+    /// client fails does the queue attempt fail, carrying the last client's error.
+    /// </summary>
+    private async Task<(DownloadClientDetail Client, string ClientItemId)> AddWithFallbackAsync(
+        IReadOnlyList<DownloadClientDetail> eligible,
+        Func<IDownloadClient, DownloadClientConnection, Task<string>> add) {
+        Exception? lastFailure = null;
+        foreach (var client in eligible) {
+            try {
+                var clientItemId = await add(clients.Get(client.Kind), ConnectionFor(client));
+                return (client, clientItemId);
+            } catch (OperationCanceledException) {
+                throw;
+            } catch (Exception ex) {
+                lastFailure = ex;
+            }
+        }
+
+        throw lastFailure ?? new InvalidOperationException("No download client accepted the release.");
+    }
+
+    /// <summary>
     /// Best-effort removal of an acquisition's prior download before a re-queue. The prior transfer may
     /// live in a different client than the new grab (e.g. a usenet retry after a torrent failure), so it
-    /// is removed through its own recorded client, falling back to the new one for legacy transfers that
-    /// recorded none. Never blocks the new download.
+    /// is removed through its own recorded client, falling back to the new grab's first candidate for
+    /// legacy transfers that recorded none. Never blocks the new download.
     /// </summary>
-    private async Task RemovePriorTorrentAsync(Guid acquisitionId, IDownloadClient downloadClient, DownloadClientConnection connection, CancellationToken cancellationToken) {
+    private async Task RemovePriorDownloadAsync(Guid acquisitionId, DownloadClientDetail fallbackClient, CancellationToken cancellationToken) {
         var prior = await acquisitions.GetTransferInfoAsync(acquisitionId, cancellationToken);
         if (prior is null || string.IsNullOrWhiteSpace(prior.ClientItemId)) {
             return;
         }
 
         try {
-            if (prior.DownloadClientConfigId is { } priorClientId && priorClientId != connection.Id
-                && await downloadClients.GetAsync(priorClientId, cancellationToken) is { } priorClient) {
-                await clients.Get(priorClient.Kind).RemoveAsync(
-                    new DownloadClientConnection(priorClient.Id, priorClient.Kind, priorClient.BaseUrl, priorClient.Username, priorClient.Password, priorClient.Category, priorClient.ApiKey),
-                    prior.ClientItemId, deleteData: true, cancellationToken);
-                return;
-            }
-
-            await downloadClient.RemoveAsync(connection, prior.ClientItemId, deleteData: true, cancellationToken);
+            var owner = prior.DownloadClientConfigId is { } priorClientId
+                ? await downloadClients.GetAsync(priorClientId, cancellationToken) ?? fallbackClient
+                : fallbackClient;
+            await clients.Get(owner.Kind).RemoveAsync(ConnectionFor(owner), prior.ClientItemId, deleteData: true, cancellationToken);
         } catch (OperationCanceledException) {
             throw;
         } catch (Exception) {
@@ -142,11 +166,23 @@ public sealed class AcquisitionQueueService(
         return null;
     }
 
-    private async Task<(Contracts.Acquisition.DownloadClientDetail Client, DownloadClientConnection Connection)> ResolveClientAsync(DownloadProtocol protocol, CancellationToken cancellationToken) {
-        var client = await downloadClients.GetDefaultAsync(protocol, cancellationToken)
-            ?? throw new AcquisitionConfigurationException(
+    private async Task<IReadOnlyList<DownloadClientDetail>> ResolveClientsAsync(DownloadProtocol protocol, CancellationToken cancellationToken) {
+        var eligible = await downloadClients.ListEnabledAsync(protocol, cancellationToken);
+        if (eligible.Count == 0) {
+            throw new AcquisitionConfigurationException(
                 ApiProblemCodes.DownloadClientInvalid,
                 $"No enabled download client supports {protocol.ToCode()} releases. Configure one under Settings → Acquisition.");
-        return (client, new DownloadClientConnection(client.Id, client.Kind, client.BaseUrl, client.Username, client.Password, client.Category, client.ApiKey));
+        }
+
+        return eligible;
     }
+
+    /// <summary>The profile's download-category override for this acquisition's kind, or null for the client default.</summary>
+    private async Task<string?> ResolveCategoryAsync(Guid acquisitionId, CancellationToken cancellationToken) {
+        var input = await acquisitions.GetSearchInputAsync(acquisitionId, cancellationToken);
+        return input is null ? null : await profiles.GetDownloadCategoryAsync(input.ProfileId, input.Kind, cancellationToken);
+    }
+
+    private static DownloadClientConnection ConnectionFor(DownloadClientDetail client) =>
+        new(client.Id, client.Kind, client.BaseUrl, client.Username, client.Password, client.Category, client.ApiKey);
 }

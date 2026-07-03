@@ -17,4 +17,6 @@ export interface DownloadClientSummary {
   enabled: boolean;
   hasPassword: boolean;
   hasApiKey?: boolean;
+  /** @pattern ^-?(?:0|[1-9]\d*)$ */
+  priority?: number | string;
 }

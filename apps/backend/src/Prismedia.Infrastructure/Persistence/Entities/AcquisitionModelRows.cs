@@ -47,6 +47,9 @@ public sealed class DownloadClientConfigRow {
     /// <summary>Category/label applied to torrents Prismedia adds, so they can be filtered and managed in isolation.</summary>
     public string Category { get; set; } = "prismedia-books";
 
+    /// <summary>Selection order among clients that speak the same protocol; lower is preferred (matches indexer priority convention).</summary>
+    public int Priority { get; set; } = 25;
+
     public bool Enabled { get; set; } = true;
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
@@ -82,6 +85,12 @@ public sealed class BookAcquisitionProfileRow {
     public string PathTemplate { get; set; } = "{Author}/{Title} ({Year})/{Title}{ - Volume}.{ext}";
 
     public ImportMode ImportMode { get; set; } = ImportMode.Move;
+
+    /// <summary>
+    /// Download-client category override for this profile's kind (e.g. <c>prismedia-movies</c>), so each
+    /// kind's downloads stay segregated in the client. Null/blank uses the client's configured category.
+    /// </summary>
+    public string? DownloadCategory { get; set; }
 
     /// <summary><see cref="BookFormat"/> codes acceptable for this profile. Empty allows all supported book formats.</summary>
     public string[] AllowedFormats { get; set; } = [];

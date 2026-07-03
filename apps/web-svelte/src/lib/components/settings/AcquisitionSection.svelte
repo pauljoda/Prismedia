@@ -175,17 +175,19 @@
   // ── Download clients ────────────────────────────────────────
   const clientKindOptions = [
     { value: DOWNLOAD_CLIENT_KIND.qBittorrent, label: "qBittorrent (torrent)" },
+    { value: DOWNLOAD_CLIENT_KIND.transmission, label: "Transmission (torrent)" },
     { value: DOWNLOAD_CLIENT_KIND.sabnzbd, label: "SABnzbd (usenet)" },
   ];
   const clientKindDefaults: Record<string, string> = {
     [DOWNLOAD_CLIENT_KIND.qBittorrent]: "qBittorrent",
+    [DOWNLOAD_CLIENT_KIND.transmission]: "Transmission",
     [DOWNLOAD_CLIENT_KIND.sabnzbd]: "SABnzbd",
   };
   function clientKindLabel(kind: string): string {
     return clientKindDefaults[kind] ?? kind;
   }
   function newClient() {
-    clientForm = { id: null, kind: DOWNLOAD_CLIENT_KIND.qBittorrent, displayName: "qBittorrent", baseUrl: "", username: null, password: null, apiKey: null, category: "prismedia-books", enabled: true };
+    clientForm = { id: null, kind: DOWNLOAD_CLIENT_KIND.qBittorrent, displayName: "qBittorrent", baseUrl: "", username: null, password: null, apiKey: null, category: "prismedia-books", enabled: true, priority: 25 };
   }
   function setClientKind(kind: string) {
     if (!clientForm) return;
@@ -195,7 +197,7 @@
     if (untouched) clientForm.displayName = clientKindDefaults[kind] ?? clientForm.displayName;
   }
   function editClient(item: DownloadClientSummary) {
-    clientForm = { id: item.id, kind: item.kind, displayName: item.displayName, baseUrl: item.baseUrl, username: item.username, password: null, apiKey: null, category: item.category, enabled: item.enabled };
+    clientForm = { id: item.id, kind: item.kind, displayName: item.displayName, baseUrl: item.baseUrl, username: item.username, password: null, apiKey: null, category: item.category, enabled: item.enabled, priority: item.priority ?? 25 };
   }
   async function testClient() {
     if (!clientForm) return;
@@ -244,6 +246,7 @@
       importMode: IMPORT_MODE.move, allowedFormats: [], preferredLanguages: ["English"], minSeeders: 1,
       minSizeBytes: null, maxSizeBytes: null, requiredTerms: [], ignoredTerms: [], preferredTerms: [], weightedTerms: [], autoPick: false, autoRedownload: false,
       upgradeUntilCutoff: false, cutoffSourceTier: BOOK_SOURCE_TIER.unknown, cutoffFormatTier: BOOK_FORMAT_TIER.unknown,
+      downloadCategory: null,
     };
     profileTerms = { preferred: "", required: "", ignored: "", weighted: "", languages: "English" };
   }
@@ -268,6 +271,7 @@
       requiredTerms: p.requiredTerms, ignoredTerms: p.ignoredTerms, preferredTerms: p.preferredTerms, weightedTerms: p.weightedTerms,
       autoPick: p.autoPick, autoRedownload: p.autoRedownload,
       upgradeUntilCutoff: p.upgradeUntilCutoff, cutoffSourceTier: p.cutoffSourceTier, cutoffFormatTier: p.cutoffFormatTier,
+      downloadCategory: p.downloadCategory ?? null,
     };
     profileTerms = {
       preferred: p.preferredTerms.join(", "),
@@ -446,6 +450,8 @@
                 <TextInput size="sm" type="password" value={clientForm.password ?? ""} oninput={(e) => clientForm && (clientForm.password = e.currentTarget.value)} placeholder={clientForm.id ? "(unchanged)" : ""} /></label>
               <label class="space-y-1"><span class="text-label text-text-muted">Category / label</span>
                 <TextInput size="sm" value={clientForm.category} oninput={(e) => clientForm && (clientForm.category = e.currentTarget.value)} /></label>
+              <label class="space-y-1"><span class="text-label text-text-muted">Priority (lower wins)</span>
+                <TextInput size="sm" type="number" value={String(clientForm.priority ?? 25)} oninput={(e) => clientForm && (clientForm.priority = Number(e.currentTarget.value) || 25)} /></label>
             </div>
             <div class="flex items-center justify-between">
               <Button size="sm" variant="ghost" onclick={testClient} disabled={busy} class="gap-1.5"><PlugZap class="h-3.5 w-3.5" /> Test</Button>
@@ -504,6 +510,8 @@
               {/if}
               <label class="space-y-1"><span class="text-label text-text-muted">Import mode</span>
                 <Select size="sm" value={profileForm.importMode} options={importModeOptions} onchange={(v) => profileForm && (profileForm.importMode = v as typeof profileForm.importMode)} /></label>
+              <label class="space-y-1"><span class="text-label text-text-muted">Download category</span>
+                <TextInput size="sm" value={profileForm.downloadCategory ?? ""} oninput={(e) => profileForm && (profileForm.downloadCategory = e.currentTarget.value || null)} placeholder="client default" /></label>
               <label class="space-y-1"><span class="text-label text-text-muted">Min seeders</span>
                 <TextInput size="sm" value={String(profileForm.minSeeders)} oninput={(e) => profileForm && (profileForm.minSeeders = Number(e.currentTarget.value) || 0)} /></label>
             </div>

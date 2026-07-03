@@ -20,4 +20,6 @@ export interface DownloadClientSaveRequest {
   enabled: boolean;
   /** @nullable */
   apiKey?: string | null;
+  /** @pattern ^-?(?:0|[1-9]\d*)$ */
+  priority?: number | string;
 }
