@@ -120,5 +120,13 @@ public enum ImportMode {
 
     /// <summary>Copy the payload into the library root, leaving the download in place.</summary>
     [Code("copy")]
-    Copy
+    Copy,
+
+    /// <summary>
+    /// Hardlink the payload into the library root when both share a filesystem (instant, no extra
+    /// space, the torrent keeps seeding from the download dir), transparently falling back to copy
+    /// across volumes. The Sonarr "copy using hardlinks" behavior.
+    /// </summary>
+    [Code("hardlink")]
+    Hardlink
 }

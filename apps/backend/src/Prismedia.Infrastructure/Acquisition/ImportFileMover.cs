@@ -4,9 +4,10 @@ using Prismedia.Domain.Entities;
 namespace Prismedia.Infrastructure.Acquisition;
 
 /// <summary>
-/// Places imported book files on disk. A move is a cheap rename when the download dir and library root
-/// share a filesystem and transparently falls back to copy+delete across volumes. Colliding targets get
-/// a stable numeric suffix so an import never overwrites existing library files.
+/// Places imported files on disk. A move is a cheap rename when the download dir and library root
+/// share a filesystem and transparently falls back to copy+delete across volumes; hardlink mode links
+/// the file (instant, no space, the download keeps seeding) and falls back to copy across volumes.
+/// Colliding targets get a stable numeric suffix so an import never overwrites existing library files.
 /// </summary>
 public sealed class ImportFileMover : IImportFileMover {
     public async Task<string> PlaceAsync(ResolvedImportItem item, ImportMode mode, CancellationToken cancellationToken) {
@@ -18,6 +19,16 @@ public sealed class ImportFileMover : IImportFileMover {
         var target = ResolveCollision(item.TargetAbsolutePath);
         if (mode == ImportMode.Copy) {
             await CopyAsync(item.SourceAbsolutePath, target, cancellationToken);
+            return target;
+        }
+
+        if (mode == ImportMode.Hardlink) {
+            // A hardlink only works within one filesystem; across volumes the copy fallback preserves
+            // the same observable behavior (source stays seeding, target lands in the library).
+            if (!HardLink.TryCreate(item.SourceAbsolutePath, target)) {
+                await CopyAsync(item.SourceAbsolutePath, target, cancellationToken);
+            }
+
             return target;
         }
 

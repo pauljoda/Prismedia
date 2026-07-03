@@ -221,9 +221,10 @@ public sealed class MovieAcquisitionImportEngine(
         }
 
         await context.ReportProgressAsync(40, "Moving files", cancellationToken);
+        var importMode = profile?.ImportMode ?? ImportMode.Move;
         var finalPaths = new List<string>(plan.Items.Count);
         foreach (var item in plan.Items) {
-            finalPaths.Add(await mover.PlaceAsync(item, ImportMode.Move, cancellationToken));
+            finalPaths.Add(await mover.PlaceAsync(item, importMode, cancellationToken));
         }
 
         // Quality axes are book vocabulary; movies record the floor. The upgrade loop is book-only, so
@@ -235,7 +236,11 @@ public sealed class MovieAcquisitionImportEngine(
         await context.ReportProgressAsync(80, "Scanning library", cancellationToken);
         await context.EnqueueIfNeededAsync(new EnqueueJobRequest(JobType.ScanLibrary, TargetLabel: "Imported movie scan"), cancellationToken);
 
-        await torrents.RemoveAsync(import, cancellationToken);
+        // Hardlink/copy imports leave the torrent seeding; only a move ends its life in the client.
+        if (importMode == ImportMode.Move) {
+            await torrents.RemoveAsync(import, cancellationToken);
+        }
+
         await acquisitions.MarkImportedWithQualityAsync(import.Id, BookQualityRank.Floor, "Imported into the library.", cancellationToken);
         await context.ReportProgressAsync(100, "Imported", cancellationToken);
     }
@@ -297,9 +302,10 @@ public sealed class TvAcquisitionImportEngine(
         }
 
         await context.ReportProgressAsync(40, "Moving files", cancellationToken);
+        var importMode = profile?.ImportMode ?? ImportMode.Move;
         var finalPaths = new List<string>(plan.Items.Count);
         foreach (var item in plan.Items) {
-            finalPaths.Add(await mover.PlaceAsync(item, ImportMode.Move, cancellationToken));
+            finalPaths.Add(await mover.PlaceAsync(item, importMode, cancellationToken));
         }
 
         // The hint keys on the most specific folder that covers every placed file: the season folder
@@ -318,7 +324,10 @@ public sealed class TvAcquisitionImportEngine(
         await context.ReportProgressAsync(80, "Scanning library", cancellationToken);
         await context.EnqueueIfNeededAsync(new EnqueueJobRequest(JobType.ScanLibrary, TargetLabel: "Imported episode scan"), cancellationToken);
 
-        await torrents.RemoveAsync(import, cancellationToken);
+        // Hardlink/copy imports leave the torrent seeding; only a move ends its life in the client.
+        if (importMode == ImportMode.Move) {
+            await torrents.RemoveAsync(import, cancellationToken);
+        }
         await acquisitions.MarkImportedWithQualityAsync(import.Id, BookQualityRank.Floor, "Imported into the library.", cancellationToken);
         await context.ReportProgressAsync(100, "Imported", cancellationToken);
     }
@@ -368,8 +377,9 @@ public sealed class MusicAcquisitionImportEngine(
         }
 
         await context.ReportProgressAsync(40, "Moving files", cancellationToken);
+        var importMode = profile?.ImportMode ?? ImportMode.Move;
         foreach (var item in plan.Items) {
-            await mover.PlaceAsync(item, ImportMode.Move, cancellationToken);
+            await mover.PlaceAsync(item, importMode, cancellationToken);
         }
 
         // The hint and final path key on the ALBUM folder (not a disc subfolder a track landed in), so
@@ -381,7 +391,10 @@ public sealed class MusicAcquisitionImportEngine(
         await context.ReportProgressAsync(80, "Scanning library", cancellationToken);
         await context.EnqueueIfNeededAsync(new EnqueueJobRequest(JobType.ScanAudio, TargetLabel: "Imported album scan"), cancellationToken);
 
-        await torrents.RemoveAsync(import, cancellationToken);
+        // Hardlink/copy imports leave the torrent seeding; only a move ends its life in the client.
+        if (importMode == ImportMode.Move) {
+            await torrents.RemoveAsync(import, cancellationToken);
+        }
         await acquisitions.MarkImportedWithQualityAsync(import.Id, BookQualityRank.Floor, "Imported into the library.", cancellationToken);
         await context.ReportProgressAsync(100, "Imported", cancellationToken);
     }

@@ -11,4 +11,5 @@ export type ImportMode = typeof ImportMode[keyof typeof ImportMode];
 export const ImportMode = {
   move: 'move',
   copy: 'copy',
+  hardlink: 'hardlink',
 } as const;

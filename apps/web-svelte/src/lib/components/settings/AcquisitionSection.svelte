@@ -61,6 +61,7 @@
 
   const importModeOptions = [
     { value: IMPORT_MODE.move, label: "Move (delete torrent after import)" },
+    { value: IMPORT_MODE.hardlink, label: "Hardlink (instant, keeps seeding)" },
     { value: IMPORT_MODE.copy, label: "Copy (keep seeding)" },
   ];
   // Cutoff tiers: the quality at which the upgrade loop stops searching. Ordered worst→best to match the ranks.

@@ -371,6 +371,7 @@ export type ReleaseRejectionReasonCode = (typeof RELEASE_REJECTION_REASON)[keyof
 export const IMPORT_MODE = {
   move: "move",
   copy: "copy",
+  hardlink: "hardlink",
 } as const;
 
 export type ImportModeCode = (typeof IMPORT_MODE)[keyof typeof IMPORT_MODE];
