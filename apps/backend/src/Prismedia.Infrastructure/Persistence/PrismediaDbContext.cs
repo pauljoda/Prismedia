@@ -126,6 +126,7 @@ public sealed class PrismediaDbContext : DbContext {
     public DbSet<IndexerCredentialRow> IndexerCredentials => Set<IndexerCredentialRow>();
 
     public DbSet<DownloadClientConfigRow> DownloadClientConfigs => Set<DownloadClientConfigRow>();
+    public DbSet<RemotePathMappingRow> RemotePathMappings => Set<RemotePathMappingRow>();
 
     public DbSet<DownloadClientCredentialRow> DownloadClientCredentials => Set<DownloadClientCredentialRow>();
 

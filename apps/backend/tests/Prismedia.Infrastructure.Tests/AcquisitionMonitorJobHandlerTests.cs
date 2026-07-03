@@ -159,6 +159,7 @@ public sealed class AcquisitionMonitorJobHandlerTests {
             new EfAcquisitionStore(db),
             new FakeDownloadClientConfigStore(),
             new FakeDownloadClientFactory(new FakeDownloadClient(listing, directLookup)),
+            new RemotePathMapper(new NoRemotePathMappings()),
             NullLogger<AcquisitionMonitorJobHandler>.Instance);
         var job = new JobRunSnapshot(
             Guid.NewGuid(), JobType.AcquisitionMonitor, JobRunStatus.Running, 0, null, "{}",
@@ -221,6 +222,14 @@ public sealed class AcquisitionMonitorJobHandlerTests {
         public Task<IReadOnlyList<DownloadClientSummary>> ListAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<IReadOnlyList<DownloadClientDetail>> ListDetailsAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<DownloadClientSummary> SaveAsync(DownloadClientSaveCommand command, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private sealed class NoRemotePathMappings : IRemotePathMappingStore {
+        public Task<IReadOnlyList<Prismedia.Contracts.Acquisition.RemotePathMappingView>> ListForClientAsync(Guid downloadClientConfigId, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<Prismedia.Contracts.Acquisition.RemotePathMappingView>>([]);
+        public Task<IReadOnlyList<Prismedia.Contracts.Acquisition.RemotePathMappingView>> ListAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<Prismedia.Contracts.Acquisition.RemotePathMappingView> SaveAsync(Prismedia.Contracts.Acquisition.RemotePathMappingSaveRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 

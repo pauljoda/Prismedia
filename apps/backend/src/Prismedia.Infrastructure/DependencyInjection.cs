@@ -331,6 +331,8 @@ public static class DependencyInjection {
         services.AddScoped<IIndexerConfigStore, EfIndexerConfigStore>();
         services.AddScoped<IIndexerStatusStore, EfIndexerStatusStore>();
         services.AddSingleton<IndexerQueryWindow>();
+        services.AddScoped<IRemotePathMappingStore, EfRemotePathMappingStore>();
+        services.AddScoped<RemotePathMapper>();
         services.AddScoped<IDownloadClientConfigStore, EfDownloadClientConfigStore>();
         services.AddScoped<IBookAcquisitionProfileStore, EfBookAcquisitionProfileStore>();
         services.AddScoped<IAcquisitionStore, EfAcquisitionStore>();

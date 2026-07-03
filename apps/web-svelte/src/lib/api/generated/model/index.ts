@@ -352,6 +352,8 @@ export * from './ratingUpdateRequest';
 export * from './readerMode';
 export * from './relationshipKind';
 export * from './releaseCandidateView';
+export * from './remotePathMappingSaveRequest';
+export * from './remotePathMappingView';
 export * from './removeFileExclusionParams';
 export * from './renameFileParams';
 export * from './requestCastMember';

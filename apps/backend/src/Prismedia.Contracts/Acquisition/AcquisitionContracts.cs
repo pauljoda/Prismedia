@@ -192,6 +192,20 @@ public sealed record DownloadClientTestRequest(
 /// <summary>Connection test result for a download client configuration.</summary>
 public sealed record DownloadClientTestResponse(bool Connected, string? Message);
 
+/// <summary>A path-prefix rewrite from a download client's filesystem view to Prismedia's.</summary>
+public sealed record RemotePathMappingView(
+    Guid Id,
+    Guid DownloadClientConfigId,
+    string RemotePath,
+    string LocalPath);
+
+/// <summary>Request payload for creating or updating a remote path mapping.</summary>
+public sealed record RemotePathMappingSaveRequest(
+    Guid? Id,
+    Guid DownloadClientConfigId,
+    string RemotePath,
+    string LocalPath);
+
 /// <summary>
 /// A custom scoring rule: when <paramref name="Term"/> appears in a release title, <paramref name="Weight"/>
 /// is added to the release's ranking score. Positive weights pull a release up, negative push it down;

@@ -76,6 +76,20 @@ public sealed class DownloadClientConfigRow {
     public DateTimeOffset UpdatedAt { get; set; }
 }
 
+/// <summary>
+/// A path prefix rewrite for one download client whose filesystem view differs from Prismedia's
+/// (split-host or container deployments): a client-reported path starting with <see cref="RemotePath"/>
+/// is rewritten to <see cref="LocalPath"/> before Prismedia touches the files.
+/// </summary>
+public sealed class RemotePathMappingRow {
+    public Guid Id { get; set; }
+    public Guid DownloadClientConfigId { get; set; }
+    public string RemotePath { get; set; } = string.Empty;
+    public string LocalPath { get; set; } = string.Empty;
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
 /// <summary>Secret for a <see cref="DownloadClientConfigRow"/> (e.g. the qBittorrent password). Stored verbatim.</summary>
 public sealed class DownloadClientCredentialRow {
     public Guid Id { get; set; }

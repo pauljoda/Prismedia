@@ -14,6 +14,7 @@ public sealed class AcquisitionMonitorJobHandler(
     IAcquisitionStore acquisitions,
     IDownloadClientConfigStore downloadClients,
     IDownloadClientFactory clients,
+    RemotePathMapper remotePaths,
     ILogger<AcquisitionMonitorJobHandler> logger) : IJobHandler {
     public JobType Type => JobType.AcquisitionMonitor;
 
@@ -103,7 +104,10 @@ public sealed class AcquisitionMonitorJobHandler(
                 status = direct;
             }
 
-            await acquisitions.UpdateTransferAsync(transfer.TransferId, status.Progress, status.State, status.ContentPath, cancellationToken);
+            // The client reports paths in ITS filesystem view; the remote path mapping translates them
+            // into Prismedia's before they are persisted, so the import reads real local paths.
+            var localContentPath = await remotePaths.ToLocalAsync(client.Id, status.ContentPath, cancellationToken);
+            await acquisitions.UpdateTransferAsync(transfer.TransferId, status.Progress, status.State, localContentPath, cancellationToken);
 
             if (status.IsFailed) {
                 // The client says this download is definitively dead (e.g. a SABnzbd Failed history entry:

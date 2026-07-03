@@ -356,6 +356,38 @@ public static class AcquisitionEndpoints {
             .Produces(StatusCodes.Status204NoContent)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
+        group.MapGet("/remote-path-mappings", (
+            IRemotePathMappingStore mappings,
+            CancellationToken cancellationToken) =>
+            mappings.ListAsync(cancellationToken))
+            .WithName("ListRemotePathMappings")
+            .WithSummary("Lists the path-prefix rewrites from download-client filesystem views to Prismedia's.")
+            .Produces<IReadOnlyList<RemotePathMappingView>>();
+
+        group.MapPost("/remote-path-mappings", async (
+            RemotePathMappingSaveRequest request,
+            IRemotePathMappingStore mappings,
+            CancellationToken cancellationToken) =>
+            string.IsNullOrWhiteSpace(request.RemotePath) || string.IsNullOrWhiteSpace(request.LocalPath)
+                ? Results.BadRequest(new ApiProblem(ApiProblemCodes.DownloadClientInvalid, "Both the remote and the local path are required."))
+                : Results.Ok(await mappings.SaveAsync(request, cancellationToken)))
+            .WithName("SaveRemotePathMapping")
+            .WithSummary("Creates or updates a remote path mapping for a download client.")
+            .Produces<RemotePathMappingView>()
+            .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
+
+        group.MapDelete("/remote-path-mappings/{id:guid}", async (
+            Guid id,
+            IRemotePathMappingStore mappings,
+            CancellationToken cancellationToken) =>
+            await mappings.DeleteAsync(id, cancellationToken)
+                ? Results.NoContent()
+                : Results.NotFound(new ApiProblem(ApiProblemCodes.NotFound, "Remote path mapping was not found.")))
+            .WithName("DeleteRemotePathMapping")
+            .WithSummary("Removes a remote path mapping.")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+
         return group;
     }
 

@@ -8,6 +8,9 @@ import {
   deleteDownloadClient,
   deleteIndexer,
   listAcquisitionBlocklist,
+  listRemotePathMappings,
+  saveRemotePathMapping as saveRemotePathMappingRequest,
+  deleteRemotePathMapping as deleteRemotePathMappingRequest,
   getAcquisition as getAcquisitionRequest,
   getAcquisitionFiles,
   getAcquisitionForEntity,
@@ -30,6 +33,8 @@ import {
 } from "$lib/api/generated/prismedia";
 import type {
   AcquisitionBlocklistEntry,
+  RemotePathMappingSaveRequest,
+  RemotePathMappingView,
   AcquisitionCreateRequest,
   AcquisitionDetail,
   AcquisitionFilesView,
@@ -161,4 +166,16 @@ export async function fetchBlocklist(): Promise<AcquisitionBlocklistEntry[]> {
 
 export async function deleteBlocklistEntry(id: string): Promise<void> {
   unwrapGenerated(await deleteAcquisitionBlocklistEntry(id), "Failed to remove blocklist entry", [204]);
+}
+
+export async function fetchRemotePathMappings(): Promise<RemotePathMappingView[]> {
+  return unwrapGenerated(await listRemotePathMappings(), "Failed to load remote path mappings");
+}
+
+export async function saveRemotePathMapping(request: RemotePathMappingSaveRequest): Promise<RemotePathMappingView> {
+  return unwrapGenerated(await saveRemotePathMappingRequest(request), "Failed to save remote path mapping");
+}
+
+export async function deleteRemotePathMapping(id: string): Promise<void> {
+  unwrapGenerated(await deleteRemotePathMappingRequest(id), "Failed to remove remote path mapping", [204]);
 }

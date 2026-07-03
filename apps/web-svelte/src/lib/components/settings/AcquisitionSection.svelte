@@ -12,6 +12,7 @@
     DownloadClientSummary,
     IndexerConfigSaveRequest,
     IndexerConfigSummary,
+    RemotePathMappingView,
     WeightedTerm,
   } from "$lib/api/generated/model";
   import {
@@ -23,6 +24,9 @@
     fetchBlocklist,
     fetchDownloadClients,
     fetchIndexers,
+    fetchRemotePathMappings,
+    saveRemotePathMapping,
+    deleteRemotePathMapping,
     saveAcquisitionProfile,
     saveDownloadClientConfig,
     saveIndexerConfig,
@@ -102,17 +106,19 @@
 
   async function load() {
     try {
-      const [idx, clients, profs, bl, config] = await Promise.all([
+      const [idx, clients, profs, bl, config, mappings] = await Promise.all([
         fetchIndexers(),
         fetchDownloadClients(),
         fetchAcquisitionProfiles(),
         // Secondary surface: a blocklist failure must not take down indexers/clients/profiles/config.
         fetchBlocklist().catch(() => [] as AcquisitionBlocklistEntry[]),
         fetchLibraryConfig(),
+        fetchRemotePathMappings().catch(() => [] as RemotePathMappingView[]),
       ]);
       indexers = idx;
       downloadClients = clients;
       profiles = profs;
+      pathMappings = mappings;
       blocklist = bl;
       allRoots = config.roots;
     } catch (err) {
@@ -254,6 +260,41 @@
     } finally {
       busy = false;
     }
+  }
+
+  // ── Remote path mappings ────────────────────────────────────
+  let pathMappings = $state<RemotePathMappingView[]>([]);
+  let mappingForm = $state<{ downloadClientConfigId: string; remotePath: string; localPath: string } | null>(null);
+  function newMapping() {
+    mappingForm = { downloadClientConfigId: downloadClients[0]?.id ?? "", remotePath: "", localPath: "" };
+  }
+  async function saveMapping() {
+    if (!mappingForm) return;
+    busy = true;
+    try {
+      await saveRemotePathMapping({ id: null, ...mappingForm });
+      mappingForm = null;
+      onMessage("Remote path mapping saved");
+      await load();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Failed to save mapping");
+    } finally {
+      busy = false;
+    }
+  }
+  async function removeMapping(id: string) {
+    busy = true;
+    try {
+      await deleteRemotePathMapping(id);
+      await load();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Failed to delete mapping");
+    } finally {
+      busy = false;
+    }
+  }
+  function clientNameOf(id: string): string {
+    return downloadClients.find((c) => c.id === id)?.displayName ?? "(removed client)";
   }
 
   // ── Acquisition profiles (kind-scoped) ──────────────────────
@@ -490,6 +531,49 @@
           </div>
         {/if}
       </section>
+
+      <!-- Remote path mappings -->
+      {#if downloadClients.length > 0}
+        <section class="space-y-2">
+          <div class="flex items-center justify-between">
+            <h3 class="text-kicker text-text-primary">Remote path mappings</h3>
+            {#if !mappingForm}
+              <Button size="sm" variant="secondary" onclick={newMapping} class="gap-1.5"><Plus class="h-3.5 w-3.5" /> Add</Button>
+            {/if}
+          </div>
+          <p class="text-[0.72rem] leading-relaxed text-text-muted">
+            When a download client runs on another host or in a container, its reported paths differ from Prismedia's.
+            Map the client's path prefix to where the same files are visible to Prismedia.
+          </p>
+          {#each pathMappings as mapping (mapping.id)}
+            <div class="flex items-center justify-between rounded-sm border border-border-subtle bg-surface-1 px-3 py-2">
+              <div class="flex items-center gap-2 text-sm">
+                <Badge variant="default">{clientNameOf(mapping.downloadClientConfigId)}</Badge>
+                <span class="font-mono text-xs text-text-muted">{mapping.remotePath}</span>
+                <span class="text-xs text-text-muted">→</span>
+                <span class="font-mono text-xs text-text-primary">{mapping.localPath}</span>
+              </div>
+              <Button size="sm" variant="ghost" onclick={() => removeMapping(mapping.id)} disabled={busy}><Trash2 class="h-3.5 w-3.5" /></Button>
+            </div>
+          {/each}
+          {#if mappingForm}
+            <div class="space-y-2 rounded-sm border border-border-accent bg-surface-1 p-3">
+              <div class="grid gap-2 sm:grid-cols-3">
+                <label class="space-y-1"><span class="text-label text-text-muted">Client</span>
+                  <Select size="sm" value={mappingForm.downloadClientConfigId} options={downloadClients.map((c) => ({ value: c.id, label: c.displayName }))} onchange={(v) => mappingForm && (mappingForm.downloadClientConfigId = v)} /></label>
+                <label class="space-y-1"><span class="text-label text-text-muted">Remote path (client's view)</span>
+                  <TextInput size="sm" value={mappingForm.remotePath} oninput={(e) => mappingForm && (mappingForm.remotePath = e.currentTarget.value)} placeholder="/downloads" /></label>
+                <label class="space-y-1"><span class="text-label text-text-muted">Local path (Prismedia's view)</span>
+                  <TextInput size="sm" value={mappingForm.localPath} oninput={(e) => mappingForm && (mappingForm.localPath = e.currentTarget.value)} placeholder="/mnt/media/downloads" /></label>
+              </div>
+              <div class="flex justify-end gap-1.5">
+                <Button size="sm" variant="ghost" onclick={() => (mappingForm = null)} disabled={busy}>Cancel</Button>
+                <Button size="sm" variant="primary" onclick={saveMapping} disabled={busy || !mappingForm.downloadClientConfigId || !mappingForm.remotePath || !mappingForm.localPath}>Save</Button>
+              </div>
+            </div>
+          {/if}
+        </section>
+      {/if}
 
       <!-- Acquisition profiles (per media kind) -->
       <section class="space-y-2">

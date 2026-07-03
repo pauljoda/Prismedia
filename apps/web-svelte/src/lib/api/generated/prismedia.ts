@@ -207,6 +207,8 @@ import type {
   PreviewCollectionRulesParams,
   ProblemDetails,
   RatingUpdateRequest,
+  RemotePathMappingSaveRequest,
+  RemotePathMappingView,
   RemoveFileExclusionParams,
   RenameFileParams,
   RequestCommitRequest,
@@ -12246,6 +12248,129 @@ export const getDeleteAcquisitionBlocklistEntryUrl = (id: string,) => {
 export const deleteAcquisitionBlocklistEntry = async (id: string, options?: RequestInit): Promise<deleteAcquisitionBlocklistEntryResponse> => {
 
   return orvalFetch<deleteAcquisitionBlocklistEntryResponse>(getDeleteAcquisitionBlocklistEntryUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type listRemotePathMappingsResponse200 = {
+  data: RemotePathMappingView[]
+  status: 200
+}
+
+export type listRemotePathMappingsResponseSuccess = (listRemotePathMappingsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listRemotePathMappingsResponse = (listRemotePathMappingsResponseSuccess)
+
+export const getListRemotePathMappingsUrl = () => {
+
+
+
+
+  return `/api/acquisitions/remote-path-mappings`
+}
+
+/**
+ * @summary Lists the path-prefix rewrites from download-client filesystem views to Prismedia's.
+ */
+export const listRemotePathMappings = async ( options?: RequestInit): Promise<listRemotePathMappingsResponse> => {
+
+  return orvalFetch<listRemotePathMappingsResponse>(getListRemotePathMappingsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type saveRemotePathMappingResponse200 = {
+  data: RemotePathMappingView
+  status: 200
+}
+
+export type saveRemotePathMappingResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type saveRemotePathMappingResponseSuccess = (saveRemotePathMappingResponse200) & {
+  headers: Headers;
+};
+export type saveRemotePathMappingResponseError = (saveRemotePathMappingResponse400) & {
+  headers: Headers;
+};
+
+export type saveRemotePathMappingResponse = (saveRemotePathMappingResponseSuccess | saveRemotePathMappingResponseError)
+
+export const getSaveRemotePathMappingUrl = () => {
+
+
+
+
+  return `/api/acquisitions/remote-path-mappings`
+}
+
+/**
+ * @summary Creates or updates a remote path mapping for a download client.
+ */
+export const saveRemotePathMapping = async (remotePathMappingSaveRequest: RemotePathMappingSaveRequest, options?: RequestInit): Promise<saveRemotePathMappingResponse> => {
+
+  return orvalFetch<saveRemotePathMappingResponse>(getSaveRemotePathMappingUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      remotePathMappingSaveRequest,)
+  }
+);}
+
+
+
+export type deleteRemotePathMappingResponse204 = {
+  data: void
+  status: 204
+}
+
+export type deleteRemotePathMappingResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type deleteRemotePathMappingResponseSuccess = (deleteRemotePathMappingResponse204) & {
+  headers: Headers;
+};
+export type deleteRemotePathMappingResponseError = (deleteRemotePathMappingResponse404) & {
+  headers: Headers;
+};
+
+export type deleteRemotePathMappingResponse = (deleteRemotePathMappingResponseSuccess | deleteRemotePathMappingResponseError)
+
+export const getDeleteRemotePathMappingUrl = (id: string,) => {
+
+
+
+
+  return `/api/acquisitions/remote-path-mappings/${id}`
+}
+
+/**
+ * @summary Removes a remote path mapping.
+ */
+export const deleteRemotePathMapping = async (id: string, options?: RequestInit): Promise<deleteRemotePathMappingResponse> => {
+
+  return orvalFetch<deleteRemotePathMappingResponse>(getDeleteRemotePathMappingUrl(id),
   {
     ...options,
     method: 'DELETE'

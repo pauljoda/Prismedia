@@ -70,6 +70,19 @@ internal static partial class PrismediaModelConfiguration {
             entity.HasIndex(row => new { row.Kind, row.Enabled });
         });
 
+        modelBuilder.Entity<RemotePathMappingRow>(entity => {
+            entity.ToTable("remote_path_mappings");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(row => row.DownloadClientConfigId).HasColumnName("download_client_config_id");
+            entity.Property(row => row.RemotePath).HasColumnName("remote_path").HasMaxLength(2048).IsRequired();
+            entity.Property(row => row.LocalPath).HasColumnName("local_path").HasMaxLength(2048).IsRequired();
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            entity.HasIndex(row => row.DownloadClientConfigId);
+            entity.HasOne<DownloadClientConfigRow>().WithMany().HasForeignKey(row => row.DownloadClientConfigId).OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<DownloadClientCredentialRow>(entity => {
             entity.ToTable("download_client_credentials");
             entity.HasKey(row => row.Id);
