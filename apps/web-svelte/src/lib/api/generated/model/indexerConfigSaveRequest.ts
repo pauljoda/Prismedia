@@ -23,4 +23,14 @@ export interface IndexerConfigSaveRequest {
      * @pattern ^-?(?:0|[1-9]\d*)$
      */
   queryLimitPerHour?: number | string | null;
+  /**
+     * @nullable
+     * @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$
+     */
+  seedRatio?: number | string | null;
+  /**
+     * @nullable
+     * @pattern ^-?(?:0|[1-9]\d*)$
+     */
+  seedTimeMinutes?: number | string | null;
 }

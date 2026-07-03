@@ -22,6 +22,12 @@ public sealed class IndexerConfigRow {
     /// <summary>Optional hourly search-query budget for this indexer; null/0 means unlimited.</summary>
     public int? QueryLimitPerHour { get; set; }
 
+    /// <summary>Seed-ratio goal for torrents grabbed from this indexer; null falls back to the client default.</summary>
+    public double? SeedRatio { get; set; }
+
+    /// <summary>Seed-time goal (minutes) for torrents grabbed from this indexer; null falls back to the client default.</summary>
+    public int? SeedTimeMinutes { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }
@@ -70,6 +76,12 @@ public sealed class DownloadClientConfigRow {
 
     /// <summary>Selection order among clients that speak the same protocol; lower is preferred (matches indexer priority convention).</summary>
     public int Priority { get; set; } = 25;
+
+    /// <summary>Default seed-ratio goal for torrents in this client when the grab's indexer sets none.</summary>
+    public double? SeedRatio { get; set; }
+
+    /// <summary>Default seed-time goal (minutes) when the grab's indexer sets none.</summary>
+    public int? SeedTimeMinutes { get; set; }
 
     public bool Enabled { get; set; } = true;
     public DateTimeOffset CreatedAt { get; set; }
@@ -308,6 +320,18 @@ public sealed class DownloadTransferRow {
 
     /// <summary>When the transfer was first observed stalled, or null when not currently stalled.</summary>
     public DateTimeOffset? StalledSince { get; set; }
+
+    /// <summary>Seed-ratio goal captured at grab time (indexer's, else client default); null means no ratio goal.</summary>
+    public double? SeedGoalRatio { get; set; }
+
+    /// <summary>Seed-time goal in minutes captured at grab time; null means no time goal.</summary>
+    public int? SeedGoalTimeMinutes { get; set; }
+
+    /// <summary>
+    /// Set when a hardlink/copy import handed the torrent to the seeding watch: the monitor keeps
+    /// polling it and removes it (with data) once a seed goal is met. Null when not under watch.
+    /// </summary>
+    public DateTimeOffset? SeedingSince { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }

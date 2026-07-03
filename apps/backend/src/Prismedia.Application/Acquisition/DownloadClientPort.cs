@@ -53,6 +53,8 @@ public sealed record DownloadClientConnectionTest(bool Connected, string? Messag
 public sealed record DownloadItemFile(string Name, long SizeBytes, double Progress);
 
 /// <summary>Live transfer telemetry for a download client item.</summary>
+/// <param name="Ratio">Share ratio (uploaded/downloaded) for torrents; null for usenet or when unknown.</param>
+/// <param name="SeedingTimeSeconds">How long the torrent has seeded; null for usenet or when unknown.</param>
 public sealed record DownloadItemProperties(
     long TotalSizeBytes,
     double DownloadSpeedBytesPerSecond,
@@ -60,7 +62,9 @@ public sealed record DownloadItemProperties(
     long EtaSeconds,
     int Seeds,
     int Peers,
-    string? SavePath);
+    string? SavePath,
+    double? Ratio = null,
+    long? SeedingTimeSeconds = null);
 
 /// <summary>Drives a download client. qBittorrent is the v1 implementation; the port stays client-agnostic.</summary>
 public interface IDownloadClient {
@@ -116,7 +120,9 @@ public sealed record DownloadClientSaveCommand(
     string Category,
     bool Enabled,
     string? ApiKey = null,
-    int Priority = 25);
+    int Priority = 25,
+    double? SeedRatio = null,
+    int? SeedTimeMinutes = null);
 
 /// <summary>Persistence port for configured download clients.</summary>
 public interface IDownloadClientConfigStore {

@@ -88,6 +88,8 @@ public sealed class EfDownloadClientConfigStore(PrismediaDbContext db) : IDownlo
         row.Username = command.Username;
         row.Category = command.Category;
         row.Priority = command.Priority;
+        row.SeedRatio = command.SeedRatio is > 0 ? command.SeedRatio : null;
+        row.SeedTimeMinutes = command.SeedTimeMinutes is > 0 ? command.SeedTimeMinutes : null;
         row.Enabled = command.Enabled;
         row.UpdatedAt = now;
 
@@ -152,9 +154,10 @@ public sealed class EfDownloadClientConfigStore(PrismediaDbContext db) : IDownlo
         (await CredentialsAsync([id], cancellationToken)).GetValueOrDefault(id) ?? new ClientCredentials(null, null);
 
     private static DownloadClientSummary ToSummary(DownloadClientDetail detail) =>
-        new(detail.Id, detail.Kind, detail.DisplayName, detail.BaseUrl, detail.Username, detail.Category, detail.Enabled, detail.HasPassword, detail.ApiKey is not null and not "", detail.Priority);
+        new(detail.Id, detail.Kind, detail.DisplayName, detail.BaseUrl, detail.Username, detail.Category, detail.Enabled, detail.HasPassword, detail.ApiKey is not null and not "", detail.Priority,
+            detail.SeedRatio, detail.SeedTimeMinutes);
 
     private static DownloadClientDetail ToDetail(DownloadClientConfigRow row, ClientCredentials? credentials) =>
         new(row.Id, row.Kind, row.DisplayName, row.BaseUrl, row.Username, row.Category, row.Enabled,
-            !string.IsNullOrEmpty(credentials?.Password), credentials?.Password, credentials?.ApiKey, row.Priority);
+            !string.IsNullOrEmpty(credentials?.Password), credentials?.Password, credentials?.ApiKey, row.Priority, row.SeedRatio, row.SeedTimeMinutes);
 }

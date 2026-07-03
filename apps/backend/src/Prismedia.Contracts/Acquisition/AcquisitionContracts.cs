@@ -14,7 +14,9 @@ public sealed record IndexerConfigSummary(
     bool HasApiKey,
     int? QueryLimitPerHour = null,
     DateTimeOffset? DisabledUntil = null,
-    string? LastFailureMessage = null);
+    string? LastFailureMessage = null,
+    double? SeedRatio = null,
+    int? SeedTimeMinutes = null);
 
 /// <summary>Configured indexer aggregator with secret material for server-side use only.</summary>
 public sealed record IndexerConfigDetail(
@@ -27,7 +29,9 @@ public sealed record IndexerConfigDetail(
     IReadOnlyList<int> Categories,
     bool HasApiKey,
     string? ApiKey,
-    int? QueryLimitPerHour = null);
+    int? QueryLimitPerHour = null,
+    double? SeedRatio = null,
+    int? SeedTimeMinutes = null);
 
 /// <summary>Request payload for creating or updating an indexer configuration.</summary>
 public sealed record IndexerConfigSaveRequest(
@@ -39,7 +43,9 @@ public sealed record IndexerConfigSaveRequest(
     bool Enabled,
     int Priority,
     IReadOnlyList<int> Categories,
-    int? QueryLimitPerHour = null);
+    int? QueryLimitPerHour = null,
+    double? SeedRatio = null,
+    int? SeedTimeMinutes = null);
 
 /// <summary>Connection test payload for an indexer configuration that may not be saved yet.</summary>
 /// <param name="Id">Existing config id when editing; lets the server reuse the stored API key if none is supplied.</param>
@@ -150,7 +156,9 @@ public sealed record DownloadClientSummary(
     bool Enabled,
     bool HasPassword,
     bool HasApiKey = false,
-    int Priority = 25);
+    int Priority = 25,
+    double? SeedRatio = null,
+    int? SeedTimeMinutes = null);
 
 /// <summary>Configured download client with secret material for server-side use only.</summary>
 public sealed record DownloadClientDetail(
@@ -164,7 +172,9 @@ public sealed record DownloadClientDetail(
     bool HasPassword,
     string? Password,
     string? ApiKey = null,
-    int Priority = 25);
+    int Priority = 25,
+    double? SeedRatio = null,
+    int? SeedTimeMinutes = null);
 
 /// <summary>Request payload for creating or updating a download client configuration.</summary>
 /// <param name="ApiKey">API key for clients that authenticate with one (SABnzbd); blank keeps the stored key.</param>
@@ -178,7 +188,9 @@ public sealed record DownloadClientSaveRequest(
     string Category,
     bool Enabled,
     string? ApiKey = null,
-    int Priority = 25);
+    int Priority = 25,
+    double? SeedRatio = null,
+    int? SeedTimeMinutes = null);
 
 /// <summary>Connection test payload for a download client configuration that may not be saved yet.</summary>
 public sealed record DownloadClientTestRequest(

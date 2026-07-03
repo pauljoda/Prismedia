@@ -150,11 +150,11 @@
     if (untouched) indexerForm.displayName = indexerKindDefaults[kind] ?? indexerForm.displayName;
   }
   function newIndexer() {
-    indexerForm = { id: null, kind: INDEXER_KIND.prowlarr, displayName: "Prowlarr", baseUrl: "", apiKey: null, enabled: true, priority: 25, categories: [7000, 8000], queryLimitPerHour: null };
+    indexerForm = { id: null, kind: INDEXER_KIND.prowlarr, displayName: "Prowlarr", baseUrl: "", apiKey: null, enabled: true, priority: 25, categories: [7000, 8000], queryLimitPerHour: null, seedRatio: null, seedTimeMinutes: null };
     indexerCategories = "7000,8000";
   }
   function editIndexer(item: IndexerConfigSummary) {
-    indexerForm = { id: item.id, kind: item.kind, displayName: item.displayName, baseUrl: item.baseUrl, apiKey: null, enabled: item.enabled, priority: item.priority, categories: item.categories, queryLimitPerHour: item.queryLimitPerHour ?? null };
+    indexerForm = { id: item.id, kind: item.kind, displayName: item.displayName, baseUrl: item.baseUrl, apiKey: null, enabled: item.enabled, priority: item.priority, categories: item.categories, queryLimitPerHour: item.queryLimitPerHour ?? null, seedRatio: item.seedRatio ?? null, seedTimeMinutes: item.seedTimeMinutes ?? null };
     indexerCategories = item.categories.join(",");
   }
   function parseCategories(text: string): number[] {
@@ -213,7 +213,7 @@
     return clientKindDefaults[kind] ?? kind;
   }
   function newClient() {
-    clientForm = { id: null, kind: DOWNLOAD_CLIENT_KIND.qBittorrent, displayName: "qBittorrent", baseUrl: "", username: null, password: null, apiKey: null, category: "prismedia-books", enabled: true, priority: 25 };
+    clientForm = { id: null, kind: DOWNLOAD_CLIENT_KIND.qBittorrent, displayName: "qBittorrent", baseUrl: "", username: null, password: null, apiKey: null, category: "prismedia-books", enabled: true, priority: 25, seedRatio: null, seedTimeMinutes: null };
   }
   function setClientKind(kind: string) {
     if (!clientForm) return;
@@ -223,7 +223,7 @@
     if (untouched) clientForm.displayName = clientKindDefaults[kind] ?? clientForm.displayName;
   }
   function editClient(item: DownloadClientSummary) {
-    clientForm = { id: item.id, kind: item.kind, displayName: item.displayName, baseUrl: item.baseUrl, username: item.username, password: null, apiKey: null, category: item.category, enabled: item.enabled, priority: item.priority ?? 25 };
+    clientForm = { id: item.id, kind: item.kind, displayName: item.displayName, baseUrl: item.baseUrl, username: item.username, password: null, apiKey: null, category: item.category, enabled: item.enabled, priority: item.priority ?? 25, seedRatio: item.seedRatio ?? null, seedTimeMinutes: item.seedTimeMinutes ?? null };
   }
   async function testClient() {
     if (!clientForm) return;
@@ -465,6 +465,10 @@
                 <TextInput size="sm" value={indexerCategories} oninput={(e) => (indexerCategories = e.currentTarget.value)} placeholder="7000,8000" /></label>
               <label class="space-y-1"><span class="text-label text-text-muted">Query limit / hour</span>
                 <TextInput size="sm" type="number" value={indexerForm.queryLimitPerHour == null ? "" : String(indexerForm.queryLimitPerHour)} oninput={(e) => indexerForm && (indexerForm.queryLimitPerHour = e.currentTarget.value ? Number(e.currentTarget.value) : null)} placeholder="unlimited" /></label>
+              <label class="space-y-1"><span class="text-label text-text-muted">Seed ratio goal</span>
+                <TextInput size="sm" type="number" value={indexerForm.seedRatio == null ? "" : String(indexerForm.seedRatio)} oninput={(e) => indexerForm && (indexerForm.seedRatio = e.currentTarget.value ? Number(e.currentTarget.value) : null)} placeholder="client default" /></label>
+              <label class="space-y-1"><span class="text-label text-text-muted">Seed time goal (minutes)</span>
+                <TextInput size="sm" type="number" value={indexerForm.seedTimeMinutes == null ? "" : String(indexerForm.seedTimeMinutes)} oninput={(e) => indexerForm && (indexerForm.seedTimeMinutes = e.currentTarget.value ? Number(e.currentTarget.value) : null)} placeholder="client default" /></label>
             </div>
             <div class="flex items-center justify-between">
               <Button size="sm" variant="ghost" onclick={testIndexer} disabled={busy} class="gap-1.5"><PlugZap class="h-3.5 w-3.5" /> Test</Button>
@@ -521,6 +525,12 @@
                 <TextInput size="sm" value={clientForm.category} oninput={(e) => clientForm && (clientForm.category = e.currentTarget.value)} /></label>
               <label class="space-y-1"><span class="text-label text-text-muted">Priority (lower wins)</span>
                 <TextInput size="sm" type="number" value={String(clientForm.priority ?? 25)} oninput={(e) => clientForm && (clientForm.priority = Number(e.currentTarget.value) || 25)} /></label>
+              {#if clientForm.kind !== DOWNLOAD_CLIENT_KIND.sabnzbd}
+                <label class="space-y-1"><span class="text-label text-text-muted">Default seed ratio goal</span>
+                  <TextInput size="sm" type="number" value={clientForm.seedRatio == null ? "" : String(clientForm.seedRatio)} oninput={(e) => clientForm && (clientForm.seedRatio = e.currentTarget.value ? Number(e.currentTarget.value) : null)} placeholder="none (client rules)" /></label>
+                <label class="space-y-1"><span class="text-label text-text-muted">Default seed time goal (minutes)</span>
+                  <TextInput size="sm" type="number" value={clientForm.seedTimeMinutes == null ? "" : String(clientForm.seedTimeMinutes)} oninput={(e) => clientForm && (clientForm.seedTimeMinutes = e.currentTarget.value ? Number(e.currentTarget.value) : null)} placeholder="none (client rules)" /></label>
+              {/if}
             </div>
             <div class="flex items-center justify-between">
               <Button size="sm" variant="ghost" onclick={testClient} disabled={busy} class="gap-1.5"><PlugZap class="h-3.5 w-3.5" /> Test</Button>

@@ -90,7 +90,9 @@ public sealed class TransmissionDownloadClient(HttpClient http) : IDownloadClien
             Math.Max(Long(torrent, TransmissionProtocol.Eta) ?? 0, 0),
             Int(torrent, TransmissionProtocol.PeersSendingToUs) ?? 0,
             Int(torrent, TransmissionProtocol.PeersGettingFromUs) ?? 0,
-            Text(torrent, TransmissionProtocol.DownloadDir));
+            Text(torrent, TransmissionProtocol.DownloadDir),
+            Double(torrent, TransmissionProtocol.UploadRatio),
+            Long(torrent, TransmissionProtocol.SecondsSeeding));
     }
 
     public async Task<byte[]> GetPieceStatesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) {

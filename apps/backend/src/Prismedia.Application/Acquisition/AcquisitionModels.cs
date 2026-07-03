@@ -143,7 +143,27 @@ public sealed record AcquisitionQueueCandidate(
     string? MagnetUrl,
     string? InfoHash,
     string? InfoUrl,
-    DownloadProtocol Protocol);
+    DownloadProtocol Protocol,
+    Guid? IndexerConfigId = null);
+
+/// <summary>
+/// The seed goal captured at grab time: the grab indexer's ratio/time settings, falling back to the
+/// download client's defaults. A torrent imported by hardlink/copy keeps seeding until EITHER goal is
+/// met (Sonarr semantics); a goal-less transfer is left to the client's own rules.
+/// </summary>
+public sealed record TransferSeedGoal(double? Ratio, int? TimeMinutes) {
+    public bool IsEmpty => Ratio is null && TimeMinutes is null;
+}
+
+/// <summary>A transfer under seeding watch, with the goal it must meet before removal.</summary>
+public sealed record SeedingTransfer(
+    Guid TransferId,
+    Guid AcquisitionId,
+    Guid? DownloadClientConfigId,
+    string ClientItemId,
+    double? GoalRatio,
+    int? GoalTimeMinutes,
+    DateTimeOffset SeedingSince);
 
 /// <summary>
 /// Snapshot of the release an acquisition was last sent to download, persisted so a later failure can

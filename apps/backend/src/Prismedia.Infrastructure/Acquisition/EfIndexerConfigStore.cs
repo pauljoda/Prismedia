@@ -71,6 +71,8 @@ public sealed class EfIndexerConfigStore(PrismediaDbContext db) : IIndexerConfig
         row.Priority = command.Priority;
         row.Categories = command.Categories.ToArray();
         row.QueryLimitPerHour = command.QueryLimitPerHour is > 0 ? command.QueryLimitPerHour : null;
+        row.SeedRatio = command.SeedRatio is > 0 ? command.SeedRatio : null;
+        row.SeedTimeMinutes = command.SeedTimeMinutes is > 0 ? command.SeedTimeMinutes : null;
         row.UpdatedAt = now;
 
         if (!string.IsNullOrWhiteSpace(command.ApiKey)) {
@@ -115,8 +117,9 @@ public sealed class EfIndexerConfigStore(PrismediaDbContext db) : IIndexerConfig
     }
 
     private static IndexerConfigSummary ToSummary(IndexerConfigDetail detail) =>
-        new(detail.Id, detail.Kind, detail.DisplayName, detail.BaseUrl, detail.Enabled, detail.Priority, detail.Categories, detail.HasApiKey, detail.QueryLimitPerHour);
+        new(detail.Id, detail.Kind, detail.DisplayName, detail.BaseUrl, detail.Enabled, detail.Priority, detail.Categories, detail.HasApiKey, detail.QueryLimitPerHour,
+            SeedRatio: detail.SeedRatio, SeedTimeMinutes: detail.SeedTimeMinutes);
 
     private static IndexerConfigDetail ToDetail(IndexerConfigRow row, string? apiKey) =>
-        new(row.Id, row.Kind, row.DisplayName, row.BaseUrl, row.Enabled, row.Priority, row.Categories, !string.IsNullOrEmpty(apiKey), apiKey, row.QueryLimitPerHour);
+        new(row.Id, row.Kind, row.DisplayName, row.BaseUrl, row.Enabled, row.Priority, row.Categories, !string.IsNullOrEmpty(apiKey), apiKey, row.QueryLimitPerHour, row.SeedRatio, row.SeedTimeMinutes);
 }

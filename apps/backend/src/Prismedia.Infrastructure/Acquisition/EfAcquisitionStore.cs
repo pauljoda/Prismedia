@@ -252,7 +252,7 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
             .FirstOrDefaultAsync(candidate => candidate.Id == candidateId && candidate.AcquisitionId == acquisitionId, cancellationToken);
         return row is null
             ? null
-            : new AcquisitionQueueCandidate(row.Id, row.Title, row.IndexerName, row.DownloadUrl, row.MagnetUrl, row.InfoHash, row.InfoUrl, row.Protocol);
+            : new AcquisitionQueueCandidate(row.Id, row.Title, row.IndexerName, row.DownloadUrl, row.MagnetUrl, row.InfoHash, row.InfoUrl, row.Protocol, row.IndexerConfigId);
     }
 
     public async Task<IReadOnlyList<AcquisitionCandidateRef>> ListAcceptedCandidatesAsync(Guid acquisitionId, CancellationToken cancellationToken) {
@@ -314,7 +314,7 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
         return string.IsNullOrWhiteSpace(json) ? null : JsonSerializer.Deserialize<SelectedRelease>(json);
     }
 
-    public async Task CreateTransferAsync(Guid acquisitionId, Guid? downloadClientConfigId, string clientItemId, string? category, CancellationToken cancellationToken) {
+    public async Task CreateTransferAsync(Guid acquisitionId, Guid? downloadClientConfigId, string clientItemId, string? category, CancellationToken cancellationToken, TransferSeedGoal? seedGoal = null) {
         var now = DateTimeOffset.UtcNow;
         // One in-flight transfer per acquisition: re-queueing (after a failed/cancelled attempt) supersedes
         // any prior transfer. Leaving stale rows would make the monitor poll torrents that no longer exist
@@ -331,9 +331,44 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
             ClientItemId = clientItemId,
             Category = category,
             Progress = 0,
+            SeedGoalRatio = seedGoal?.Ratio,
+            SeedGoalTimeMinutes = seedGoal?.TimeMinutes,
             CreatedAt = now,
             UpdatedAt = now
         });
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<SeedingTransfer>> ListSeedingTransfersAsync(CancellationToken cancellationToken) {
+        var rows = await db.DownloadTransfers.AsNoTracking()
+            .Where(transfer => transfer.SeedingSince != null)
+            .ToArrayAsync(cancellationToken);
+        return rows
+            .Select(row => new SeedingTransfer(row.Id, row.AcquisitionId, row.DownloadClientConfigId, row.ClientItemId, row.SeedGoalRatio, row.SeedGoalTimeMinutes, row.SeedingSince!.Value))
+            .ToArray();
+    }
+
+    public async Task<bool> MarkTransferSeedingAsync(Guid acquisitionId, DateTimeOffset since, CancellationToken cancellationToken) {
+        var row = await db.DownloadTransfers.FirstOrDefaultAsync(transfer => transfer.AcquisitionId == acquisitionId, cancellationToken);
+        // No goal captured at grab time means the client's own rules govern this torrent — no watch.
+        if (row is null || (row.SeedGoalRatio is null && row.SeedGoalTimeMinutes is null)) {
+            return false;
+        }
+
+        row.SeedingSince = since;
+        row.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    public async Task ClearTransferSeedingAsync(Guid transferId, CancellationToken cancellationToken) {
+        var row = await db.DownloadTransfers.FirstOrDefaultAsync(transfer => transfer.Id == transferId, cancellationToken);
+        if (row is null) {
+            return;
+        }
+
+        row.SeedingSince = null;
+        row.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
     }
 
@@ -352,10 +387,11 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
 
     public async Task<bool> HasActiveTransfersAsync(CancellationToken cancellationToken) {
         var active = new[] { AcquisitionStatus.Queued, AcquisitionStatus.Downloading };
+        // Seeding watches keep the monitor scheduled after import, so seed goals are actually enforced.
         return await (
             from transfer in db.DownloadTransfers.AsNoTracking()
             join acquisition in db.Acquisitions.AsNoTracking() on transfer.AcquisitionId equals acquisition.Id
-            where active.Contains(acquisition.Status)
+            where active.Contains(acquisition.Status) || transfer.SeedingSince != null
             select transfer.Id).AnyAsync(cancellationToken);
     }
 

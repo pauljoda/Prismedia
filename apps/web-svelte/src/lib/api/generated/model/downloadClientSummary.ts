@@ -19,4 +19,14 @@ export interface DownloadClientSummary {
   hasApiKey?: boolean;
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
   priority?: number | string;
+  /**
+     * @nullable
+     * @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$
+     */
+  seedRatio?: number | string | null;
+  /**
+     * @nullable
+     * @pattern ^-?(?:0|[1-9]\d*)$
+     */
+  seedTimeMinutes?: number | string | null;
 }

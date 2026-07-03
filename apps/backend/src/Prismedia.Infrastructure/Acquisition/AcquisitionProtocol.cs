@@ -55,6 +55,8 @@ public static class TransmissionProtocol {
     public const string Eta = "eta";
     public const string PeersSendingToUs = "peersSendingToUs";
     public const string PeersGettingFromUs = "peersGettingFromUs";
+    public const string UploadRatio = "uploadRatio";
+    public const string SecondsSeeding = "secondsSeeding";
     public const string Files = "files";
     public const string FileLength = "length";
     public const string FileBytesCompleted = "bytesCompleted";
@@ -64,7 +66,8 @@ public static class TransmissionProtocol {
     /// <summary>The torrent-get fields the status/properties projections need.</summary>
     public static readonly string[] StatusFields = [
         HashString, Name, PercentDone, Status, IsStalled, IsFinished, ErrorCode, ErrorString,
-        DownloadDir, TotalSize, RateDownload, RateUpload, Eta, PeersSendingToUs, PeersGettingFromUs, Labels
+        DownloadDir, TotalSize, RateDownload, RateUpload, Eta, PeersSendingToUs, PeersGettingFromUs, Labels,
+        UploadRatio, SecondsSeeding
     ];
 }
 
@@ -202,6 +205,8 @@ public static class QBittorrentProtocol {
     public const string Eta = "eta";
     public const string Seeds = "seeds";
     public const string Peers = "peers";
+    public const string ShareRatio = "share_ratio";
+    public const string SeedingTime = "seeding_time";
 
     // qBittorrent state values that mean a download is stuck and won't progress without intervention.
     // prism-vocab: external — qBittorrent state strings, matched only at this boundary.

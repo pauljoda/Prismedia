@@ -38,7 +38,8 @@ public sealed class AcquisitionMonitorJobHandler(
 
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var transfers = await acquisitions.ListActiveTransfersAsync(cancellationToken);
-        if (transfers.Count == 0) {
+        var seeding = await acquisitions.ListSeedingTransfersAsync(cancellationToken);
+        if (transfers.Count == 0 && seeding.Count == 0) {
             return;
         }
 
@@ -51,7 +52,58 @@ public sealed class AcquisitionMonitorJobHandler(
             cancellationToken.ThrowIfCancellationRequested();
             await AdvanceTransferAsync(context, transfer, clientCache, listingCache, cancellationToken);
             processed++;
-            await context.ReportProgressAsync(processed * 100 / transfers.Count, "Polling transfers", cancellationToken);
+            await context.ReportProgressAsync(processed * 100 / Math.Max(transfers.Count, 1), "Polling transfers", cancellationToken);
+        }
+
+        foreach (var watch in seeding) {
+            cancellationToken.ThrowIfCancellationRequested();
+            await AdvanceSeedingAsync(watch, clientCache, cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// Advances one imported-and-still-seeding torrent: once EITHER seed goal is met (ratio, or time —
+    /// from the client's own seeding clock when it reports one, else measured from the import), the
+    /// torrent and its download-dir data are removed; the library file is a separate hardlink/copy and
+    /// is untouched. A torrent the user already removed simply ends its watch.
+    /// </summary>
+    private async Task AdvanceSeedingAsync(
+        SeedingTransfer watch,
+        Dictionary<Guid, Contracts.Acquisition.DownloadClientDetail?> clientCache,
+        CancellationToken cancellationToken) {
+        var client = await ResolveClientAsync(watch.DownloadClientConfigId, clientCache, cancellationToken);
+        if (client is null) {
+            return;
+        }
+
+        try {
+            var connection = new DownloadClientConnection(client.Id, client.Kind, client.BaseUrl, client.Username, client.Password, client.Category, client.ApiKey);
+            var downloadClient = clients.Get(client.Kind);
+            var properties = await downloadClient.GetPropertiesAsync(connection, watch.ClientItemId, cancellationToken);
+            if (properties is null) {
+                logger.LogDebug("AcquisitionMonitor: seeding torrent {ItemId} is gone from the client; ending its watch.", watch.ClientItemId);
+                await acquisitions.ClearTransferSeedingAsync(watch.TransferId, cancellationToken);
+                return;
+            }
+
+            var ratioMet = watch.GoalRatio is { } goalRatio && properties.Ratio is { } ratio && ratio >= goalRatio;
+            var timeMet = watch.GoalTimeMinutes is { } goalMinutes
+                && (properties.SeedingTimeSeconds is { } seconds
+                    ? seconds >= goalMinutes * 60L
+                    : DateTimeOffset.UtcNow - watch.SeedingSince >= TimeSpan.FromMinutes(goalMinutes));
+            if (!ratioMet && !timeMet) {
+                return;
+            }
+
+            logger.LogInformation(
+                "AcquisitionMonitor: seed goal met for {ItemId} (ratio {Ratio}, seeded {Seconds}s); removing from the client.",
+                watch.ClientItemId, properties.Ratio, properties.SeedingTimeSeconds);
+            await downloadClient.RemoveAsync(connection, watch.ClientItemId, deleteData: true, cancellationToken);
+            await acquisitions.ClearTransferSeedingAsync(watch.TransferId, cancellationToken);
+        } catch (OperationCanceledException) {
+            throw;
+        } catch (Exception ex) {
+            logger.LogWarning(ex, "AcquisitionMonitor: failed to advance seeding watch for transfer {TransferId}", watch.TransferId);
         }
     }
 

@@ -37,14 +37,35 @@ public sealed class AcquisitionImportEngineFactory(IEnumerable<IAcquisitionImpor
 }
 
 /// <summary>
-/// Removes an imported acquisition's torrent (and its data) from the download client so nothing is left
-/// seeding after a move-mode import. Shared by every import engine; a cleanup failure never fails the
-/// import — the media is already in the library.
+/// Ends or hands off an imported acquisition's life in the download client. A move-mode import removes
+/// the torrent (and its data) — the payload left the download dir, so it cannot seed. A hardlink/copy
+/// import instead puts the transfer under seeding watch when a seed goal was captured at grab time; the
+/// monitor removes it once the goal is met. Shared by every import engine; a cleanup failure never
+/// fails the import — the media is already in the library.
 /// </summary>
 public sealed class ImportedTorrentRemover(
+    IAcquisitionStore acquisitions,
     IDownloadClientConfigStore downloadClients,
     IDownloadClientFactory clients,
     ILogger<ImportedTorrentRemover> logger) {
+    /// <summary>Move → remove now; hardlink/copy → seeding watch (or leave to the client's own rules when no goal is set).</summary>
+    public async Task HandleImportedAsync(AcquisitionImportContext import, ImportMode mode, CancellationToken cancellationToken) {
+        if (mode == ImportMode.Move) {
+            await RemoveAsync(import, cancellationToken);
+            return;
+        }
+
+        try {
+            if (await acquisitions.MarkTransferSeedingAsync(import.Id, DateTimeOffset.UtcNow, cancellationToken)) {
+                logger.LogDebug("AcquisitionImport: acquisition {Id} handed to seeding watch.", import.Id);
+            }
+        } catch (OperationCanceledException) {
+            throw;
+        } catch (Exception ex) {
+            logger.LogWarning(ex, "AcquisitionImport: failed to start seeding watch for acquisition {Id}", import.Id);
+        }
+    }
+
     public async Task RemoveAsync(AcquisitionImportContext import, CancellationToken cancellationToken) {
         if (string.IsNullOrWhiteSpace(import.ClientItemId)) {
             return;
@@ -132,9 +153,7 @@ public sealed class BookAcquisitionImportEngine(
         await context.ReportProgressAsync(80, "Scanning library", cancellationToken);
         await context.EnqueueIfNeededAsync(new EnqueueJobRequest(JobType.ScanBook, TargetLabel: "Imported book scan"), cancellationToken);
 
-        if (profile.ImportMode == ImportMode.Move) {
-            await torrents.RemoveAsync(import, cancellationToken);
-        }
+        await torrents.HandleImportedAsync(import, profile.ImportMode, cancellationToken);
 
         await acquisitions.MarkImportedWithQualityAsync(import.Id, ownedQuality, "Imported into the library.", cancellationToken);
         await context.ReportProgressAsync(100, "Imported", cancellationToken);
@@ -236,10 +255,7 @@ public sealed class MovieAcquisitionImportEngine(
         await context.ReportProgressAsync(80, "Scanning library", cancellationToken);
         await context.EnqueueIfNeededAsync(new EnqueueJobRequest(JobType.ScanLibrary, TargetLabel: "Imported movie scan"), cancellationToken);
 
-        // Hardlink/copy imports leave the torrent seeding; only a move ends its life in the client.
-        if (importMode == ImportMode.Move) {
-            await torrents.RemoveAsync(import, cancellationToken);
-        }
+        await torrents.HandleImportedAsync(import, importMode, cancellationToken);
 
         await acquisitions.MarkImportedWithQualityAsync(import.Id, BookQualityRank.Floor, "Imported into the library.", cancellationToken);
         await context.ReportProgressAsync(100, "Imported", cancellationToken);
@@ -324,10 +340,7 @@ public sealed class TvAcquisitionImportEngine(
         await context.ReportProgressAsync(80, "Scanning library", cancellationToken);
         await context.EnqueueIfNeededAsync(new EnqueueJobRequest(JobType.ScanLibrary, TargetLabel: "Imported episode scan"), cancellationToken);
 
-        // Hardlink/copy imports leave the torrent seeding; only a move ends its life in the client.
-        if (importMode == ImportMode.Move) {
-            await torrents.RemoveAsync(import, cancellationToken);
-        }
+        await torrents.HandleImportedAsync(import, importMode, cancellationToken);
         await acquisitions.MarkImportedWithQualityAsync(import.Id, BookQualityRank.Floor, "Imported into the library.", cancellationToken);
         await context.ReportProgressAsync(100, "Imported", cancellationToken);
     }
@@ -391,10 +404,7 @@ public sealed class MusicAcquisitionImportEngine(
         await context.ReportProgressAsync(80, "Scanning library", cancellationToken);
         await context.EnqueueIfNeededAsync(new EnqueueJobRequest(JobType.ScanAudio, TargetLabel: "Imported album scan"), cancellationToken);
 
-        // Hardlink/copy imports leave the torrent seeding; only a move ends its life in the client.
-        if (importMode == ImportMode.Move) {
-            await torrents.RemoveAsync(import, cancellationToken);
-        }
+        await torrents.HandleImportedAsync(import, importMode, cancellationToken);
         await acquisitions.MarkImportedWithQualityAsync(import.Id, BookQualityRank.Floor, "Imported into the library.", cancellationToken);
         await context.ReportProgressAsync(100, "Imported", cancellationToken);
     }

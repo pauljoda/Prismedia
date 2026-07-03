@@ -54,7 +54,10 @@ public sealed class DownloadClientCommandService(
             request.Password,
             request.Category.Trim(),
             request.Enabled,
-            request.ApiKey);
+            request.ApiKey,
+            request.Priority,
+            request.SeedRatio,
+            request.SeedTimeMinutes);
     }
 
     private static void ValidateBaseUrl(string baseUrl) {

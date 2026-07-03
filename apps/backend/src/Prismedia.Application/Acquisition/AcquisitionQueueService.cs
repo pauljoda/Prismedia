@@ -17,6 +17,7 @@ public sealed class AcquisitionQueueService(
     IDownloadClientConfigStore downloadClients,
     IDownloadClientFactory clients,
     IBookAcquisitionProfileStore profiles,
+    IIndexerConfigStore indexers,
     IReleaseLinkResolver linkResolver) : IAcquisitionQueueService {
     /// <summary>Queues a chosen candidate: resolves a usable link (direct, magnet, or scraped from the info page) and hands it to a download client.</summary>
     public async Task<AcquisitionDetail?> QueueAsync(Guid acquisitionId, Guid candidateId, CancellationToken cancellationToken) {
@@ -55,7 +56,8 @@ public sealed class AcquisitionQueueService(
             var (client, clientItemId) = await AddWithFallbackAsync(
                 eligible,
                 (downloadClient, connection) => downloadClient.AddAsync(connection, new DownloadAddRequest(url, candidate.InfoHash, category ?? connection.Category), cancellationToken));
-            await acquisitions.CreateTransferAsync(acquisitionId, client.Id, clientItemId, category ?? client.Category, cancellationToken);
+            var seedGoal = await ResolveSeedGoalAsync(candidate, client, cancellationToken);
+            await acquisitions.CreateTransferAsync(acquisitionId, client.Id, clientItemId, category ?? client.Category, cancellationToken, seedGoal);
             // Snapshot the chosen release so a later failure can blocklist exactly it (and pick the next-best).
             await acquisitions.SetSelectedReleaseAsync(
                 acquisitionId,
@@ -86,7 +88,9 @@ public sealed class AcquisitionQueueService(
                 eligible,
                 (downloadClient, connection) => downloadClient.AddTorrentFileAsync(
                     connection with { Category = category ?? connection.Category }, fileName, torrent, cancellationToken));
-            await acquisitions.CreateTransferAsync(acquisitionId, client.Id, clientItemId, category ?? client.Category, cancellationToken);
+            // A manual .torrent has no grab indexer; the client's default seed goal still applies.
+            var seedGoal = new TransferSeedGoal(client.SeedRatio, client.SeedTimeMinutes);
+            await acquisitions.CreateTransferAsync(acquisitionId, client.Id, clientItemId, category ?? client.Category, cancellationToken, seedGoal.IsEmpty ? null : seedGoal);
             await acquisitions.SetStatusAsync(acquisitionId, AcquisitionStatus.Queued, "Uploaded torrent sent to download client.", cancellationToken);
         } catch (Exception ex) when (ex is not OperationCanceledException) {
             await acquisitions.SetStatusAsync(acquisitionId, AcquisitionStatus.Failed, $"Failed to queue uploaded torrent: {ex.Message}", cancellationToken);
@@ -175,6 +179,24 @@ public sealed class AcquisitionQueueService(
         }
 
         return eligible;
+    }
+
+    /// <summary>
+    /// The seed goal captured for the grab: the release indexer's ratio/time settings win, the
+    /// client's defaults fill the gaps. Usenet transfers never seed, so they carry no goal.
+    /// </summary>
+    private async Task<TransferSeedGoal?> ResolveSeedGoalAsync(AcquisitionQueueCandidate candidate, DownloadClientDetail client, CancellationToken cancellationToken) {
+        if (candidate.Protocol != DownloadProtocol.Torrent) {
+            return null;
+        }
+
+        var indexer = candidate.IndexerConfigId is { } indexerId
+            ? await indexers.GetAsync(indexerId, cancellationToken)
+            : null;
+        var goal = new TransferSeedGoal(
+            indexer?.SeedRatio ?? client.SeedRatio,
+            indexer?.SeedTimeMinutes ?? client.SeedTimeMinutes);
+        return goal.IsEmpty ? null : goal;
     }
 
     /// <summary>The profile's download-category override for this acquisition's kind, or null for the client default.</summary>

@@ -21,6 +21,8 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.Priority).HasColumnName("priority");
             entity.Property(row => row.Categories).HasColumnName("categories");
             entity.Property(row => row.QueryLimitPerHour).HasColumnName("query_limit_per_hour");
+            entity.Property(row => row.SeedRatio).HasColumnName("seed_ratio");
+            entity.Property(row => row.SeedTimeMinutes).HasColumnName("seed_time_minutes");
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
             entity.HasIndex(row => new { row.Kind, row.Enabled });
@@ -64,6 +66,8 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.Username).HasColumnName("username").HasMaxLength(256);
             entity.Property(row => row.Category).HasColumnName("category").HasMaxLength(256).IsRequired();
             entity.Property(row => row.Priority).HasColumnName("priority").HasDefaultValue(25);
+            entity.Property(row => row.SeedRatio).HasColumnName("seed_ratio");
+            entity.Property(row => row.SeedTimeMinutes).HasColumnName("seed_time_minutes");
             entity.Property(row => row.Enabled).HasColumnName("enabled");
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
@@ -251,6 +255,9 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.Progress).HasColumnName("progress");
             entity.Property(row => row.State).HasColumnName("state").HasMaxLength(64);
             entity.Property(row => row.StalledSince).HasColumnName("stalled_since");
+            entity.Property(row => row.SeedGoalRatio).HasColumnName("seed_goal_ratio");
+            entity.Property(row => row.SeedGoalTimeMinutes).HasColumnName("seed_goal_time_minutes");
+            entity.Property(row => row.SeedingSince).HasColumnName("seeding_since");
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
             entity.HasIndex(row => row.AcquisitionId);

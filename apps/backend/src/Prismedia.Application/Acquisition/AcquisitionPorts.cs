@@ -36,7 +36,9 @@ public sealed record IndexerConfigSaveCommand(
     bool Enabled,
     int Priority,
     IReadOnlyList<int> Categories,
-    int? QueryLimitPerHour = null);
+    int? QueryLimitPerHour = null,
+    double? SeedRatio = null,
+    int? SeedTimeMinutes = null);
 
 /// <summary>Persistence port for configured indexers.</summary>
 public interface IIndexerConfigStore {
@@ -247,7 +249,16 @@ public interface IAcquisitionStore {
     Task<SelectedRelease?> GetSelectedReleaseAsync(Guid acquisitionId, CancellationToken cancellationToken);
 
     /// <summary>Records a started transfer linking an acquisition to its download-client item.</summary>
-    Task CreateTransferAsync(Guid acquisitionId, Guid? downloadClientConfigId, string clientItemId, string? category, CancellationToken cancellationToken);
+    Task CreateTransferAsync(Guid acquisitionId, Guid? downloadClientConfigId, string clientItemId, string? category, CancellationToken cancellationToken, TransferSeedGoal? seedGoal = null);
+
+    /// <summary>Transfers under seeding watch (imported by hardlink/copy, waiting for their seed goal).</summary>
+    Task<IReadOnlyList<SeedingTransfer>> ListSeedingTransfersAsync(CancellationToken cancellationToken);
+
+    /// <summary>Puts an imported acquisition's transfer under seeding watch (no-op when it carries no seed goal).</summary>
+    Task<bool> MarkTransferSeedingAsync(Guid acquisitionId, DateTimeOffset since, CancellationToken cancellationToken);
+
+    /// <summary>Ends a transfer's seeding watch (goal met or the torrent is gone).</summary>
+    Task ClearTransferSeedingAsync(Guid transferId, CancellationToken cancellationToken);
 
     /// <summary>Lists transfers whose acquisitions are still queued or downloading, for the monitor to advance.</summary>
     Task<IReadOnlyList<ActiveTransfer>> ListActiveTransfersAsync(CancellationToken cancellationToken);

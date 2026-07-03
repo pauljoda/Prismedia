@@ -203,7 +203,9 @@ public sealed class QBittorrentDownloadClient(HttpClient http) : IDownloadClient
             Long(item, QBittorrentProtocol.Eta) ?? 0,
             Int(item, QBittorrentProtocol.Seeds) ?? 0,
             Int(item, QBittorrentProtocol.Peers) ?? 0,
-            Text(item, QBittorrentProtocol.SavePathJson));
+            Text(item, QBittorrentProtocol.SavePathJson),
+            Double(item, QBittorrentProtocol.ShareRatio),
+            Long(item, QBittorrentProtocol.SeedingTime));
     }
 
     public async Task<byte[]> GetPieceStatesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) {
