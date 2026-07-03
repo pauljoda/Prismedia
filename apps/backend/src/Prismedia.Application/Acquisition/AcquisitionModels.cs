@@ -42,6 +42,13 @@ public sealed record BookAcquisitionRules(
     int? SeasonNumber = null,
     int? EpisodeNumber = null) {
     /// <summary>
+    /// The transfer protocols an enabled download client can acquire, set per search by the runner from
+    /// the configured clients (never by a profile). Defaults to torrent-only so rules built without a
+    /// client lookup keep the historical behavior.
+    /// </summary>
+    public IReadOnlyList<DownloadProtocol> AllowedProtocols { get; init; } = [DownloadProtocol.Torrent];
+
+    /// <summary>
     /// Permissive defaults used when no profile is configured yet (e.g. ad-hoc verification searches).
     /// <see cref="MinQuality"/> and <see cref="OwnedQuality"/> default to <see cref="BookQualityRank.Floor"/>
     /// (<c>default(BookQualityRank)</c>) and <see cref="IsUpgradeSearch"/> to false, so the quality and

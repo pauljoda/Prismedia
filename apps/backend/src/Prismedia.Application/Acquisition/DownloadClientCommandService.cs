@@ -16,17 +16,20 @@ public sealed class DownloadClientCommandService(
     public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken) =>
         store.DeleteAsync(id, cancellationToken);
 
-    /// <summary>Resolves the password (reusing the stored one when none is supplied for an existing client), then probes connectivity.</summary>
+    /// <summary>Resolves the secrets (reusing stored ones when none are supplied for an existing client), then probes connectivity.</summary>
     public async Task<DownloadClientTestResponse> TestAsync(DownloadClientTestRequest request, CancellationToken cancellationToken) {
         ValidateBaseUrl(request.BaseUrl);
 
         var password = request.Password;
-        if (string.IsNullOrWhiteSpace(password) && request.Id is { } id) {
-            password = (await store.GetAsync(id, cancellationToken))?.Password;
+        var apiKey = request.ApiKey;
+        if ((string.IsNullOrWhiteSpace(password) || string.IsNullOrWhiteSpace(apiKey)) && request.Id is { } id) {
+            var stored = await store.GetAsync(id, cancellationToken);
+            password = string.IsNullOrWhiteSpace(password) ? stored?.Password : password;
+            apiKey = string.IsNullOrWhiteSpace(apiKey) ? stored?.ApiKey : apiKey;
         }
 
         var connection = new DownloadClientConnection(
-            request.Id ?? Guid.Empty, request.Kind, request.BaseUrl.Trim().TrimEnd('/'), request.Username, password, string.Empty);
+            request.Id ?? Guid.Empty, request.Kind, request.BaseUrl.Trim().TrimEnd('/'), request.Username, password, string.Empty, apiKey);
         var result = await clients.Get(request.Kind).TestAsync(connection, cancellationToken);
         return new DownloadClientTestResponse(result.Connected, result.Message);
     }
@@ -50,7 +53,8 @@ public sealed class DownloadClientCommandService(
             string.IsNullOrWhiteSpace(request.Username) ? null : request.Username.Trim(),
             request.Password,
             request.Category.Trim(),
-            request.Enabled);
+            request.Enabled,
+            request.ApiKey);
     }
 
     private static void ValidateBaseUrl(string baseUrl) {

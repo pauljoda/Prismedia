@@ -66,7 +66,7 @@ public sealed class AcquisitionMonitorJobHandler(
         }
 
         try {
-            var connection = new DownloadClientConnection(client.Id, client.Kind, client.BaseUrl, client.Username, client.Password, client.Category);
+            var connection = new DownloadClientConnection(client.Id, client.Kind, client.BaseUrl, client.Username, client.Password, client.Category, client.ApiKey);
             var downloadClient = clients.Get(client.Kind);
             var listing = await GetListingAsync(client.Id, downloadClient, connection, listingCache, cancellationToken);
             if (listing is null) {
@@ -104,6 +104,21 @@ public sealed class AcquisitionMonitorJobHandler(
             }
 
             await acquisitions.UpdateTransferAsync(transfer.TransferId, status.Progress, status.State, status.ContentPath, cancellationToken);
+
+            if (status.IsFailed) {
+                // The client says this download is definitively dead (e.g. a SABnzbd Failed history entry:
+                // incomplete, unpack failed, or encrypted). Unlike a stall, it cannot recover, so it goes to
+                // failed-download recovery immediately instead of waiting out the stall grace window.
+                await EnqueueFailedHandleAsync(
+                    context,
+                    transfer.AcquisitionId,
+                    BlocklistReason.Failed,
+                    string.IsNullOrWhiteSpace(status.FailureMessage)
+                        ? "The download client reported the download failed."
+                        : $"The download client reported the download failed: {status.FailureMessage}",
+                    cancellationToken);
+                return;
+            }
 
             if (status.IsComplete) {
                 // An upgrade child does not import beside the owned book — it routes to the replace job, which

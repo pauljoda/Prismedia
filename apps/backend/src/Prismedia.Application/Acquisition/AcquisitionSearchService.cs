@@ -10,6 +10,7 @@ public sealed class AcquisitionSearchRunner(
     IIndexerSearchClientFactory clients,
     IBookAcquisitionProfileStore profiles,
     IAcquisitionBlocklistStore blocklist,
+    IDownloadClientConfigStore downloadClients,
     IAcquisitionDecisionEngineFactory decisionEngines) {
     /// <param name="upgradeOwnedQuality">
     /// When set, runs this as an upgrade search: the engine accepts only releases that strictly beat this
@@ -31,6 +32,13 @@ public sealed class AcquisitionSearchRunner(
         var rules = await profiles.GetRulesAsync(input.ProfileId, input.Kind, cancellationToken);
         if (upgradeOwnedQuality is { } owned) {
             rules = rules with { IsUpgradeSearch = true, OwnedQuality = owned };
+        }
+
+        // A release protocol is acceptable when an enabled download client can acquire it. With no
+        // client configured yet the torrent-only default stands, so candidates still surface for review.
+        var protocols = await downloadClients.GetEnabledProtocolsAsync(cancellationToken);
+        if (protocols.Count > 0) {
+            rules = rules with { AllowedProtocols = protocols };
         }
 
         // TV unit context rides the rules the same way the upgrade fields do: set per search from the

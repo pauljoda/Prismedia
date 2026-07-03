@@ -112,7 +112,7 @@ public sealed class AcquisitionService(
             : await downloadClients.GetDefaultAsync(cancellationToken);
 
     private static DownloadClientConnection ConnectionFor(Contracts.Acquisition.DownloadClientDetail client) =>
-        new(client.Id, client.Kind, client.BaseUrl, client.Username, client.Password, client.Category);
+        new(client.Id, client.Kind, client.BaseUrl, client.Username, client.Password, client.Category, client.ApiKey);
 
     private static AcquisitionFileItem ToFileItem(DownloadItemFile file) => new(file.Name, file.SizeBytes, file.Progress);
 
@@ -128,7 +128,7 @@ public sealed class AcquisitionService(
             var client = await downloadClients.GetDefaultAsync(cancellationToken);
             if (client is not null) {
                 try {
-                    var connection = new DownloadClientConnection(client.Id, client.Kind, client.BaseUrl, client.Username, client.Password, client.Category);
+                    var connection = new DownloadClientConnection(client.Id, client.Kind, client.BaseUrl, client.Username, client.Password, client.Category, client.ApiKey);
                     await clients.Get(client.Kind).RemoveAsync(connection, clientItemId, deleteData: true, cancellationToken);
                 } catch (OperationCanceledException) {
                     throw;

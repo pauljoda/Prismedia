@@ -7,6 +7,78 @@ public static class AcquisitionHttp {
 
     /// <summary>Credential key under which a download client's password is stored.</summary>
     public const string DownloadClientPasswordCredential = "password";
+
+    /// <summary>Credential key under which a download client's API key is stored (SABnzbd).</summary>
+    public const string DownloadClientApiKeyCredential = "apiKey";
+}
+
+/// <summary>SABnzbd JSON API wire vocabulary. Referenced by the SABnzbd download client; never retyped.</summary>
+public static class SabnzbdProtocol {
+    public const string ApiEndpoint = "api";
+
+    // ── request parameters ──────────────────────────────────────
+    public const string ModeParam = "mode";
+    public const string OutputParam = "output";
+    public const string OutputJson = "json";
+    public const string ApiKeyParam = "apikey";
+    public const string UsernameParam = "ma_username";
+    public const string PasswordParam = "ma_password";
+    public const string NameParam = "name";
+    public const string ValueParam = "value";
+    public const string CategoryParam = "cat";
+    public const string NzoIdsParam = "nzo_ids";
+    public const string LimitParam = "limit";
+    public const string DeleteFilesParam = "del_files";
+    public const string NzbFileField = "name";
+
+    // ── modes ───────────────────────────────────────────────────
+    public const string ModeVersion = "version";
+    public const string ModeQueue = "queue";
+    public const string ModeHistory = "history";
+    public const string ModeAddUrl = "addurl";
+    public const string ModeAddFile = "addfile";
+    public const string ModeGetFiles = "get_files";
+    public const string ModeGetCategories = "get_cats";
+    public const string OperationDelete = "delete";
+
+    // ── response fields ─────────────────────────────────────────
+    // prism-vocab: external — SABnzbd JSON field names, decoded only at this parse boundary.
+    public const string Version = "version";
+    public const string Status = "status";
+    public const string Error = "error";
+    public const string NzoIds = "nzo_ids";
+    public const string Queue = "queue";
+    public const string History = "history";
+    public const string Slots = "slots";
+    public const string Categories = "categories";
+    public const string Files = "files";
+    public const string NzoId = "nzo_id";
+    public const string Filename = "filename";
+    public const string HistoryName = "name";
+    public const string QueueCategory = "cat";
+    public const string HistoryCategory = "category";
+    public const string Mb = "mb";
+    public const string MbLeft = "mbleft";
+    public const string Bytes = "bytes";
+    public const string TimeLeft = "timeleft";
+    public const string KbPerSec = "kbpersec";
+    public const string SlotStatus = "status";
+    public const string Storage = "storage";
+    public const string FailMessage = "fail_message";
+
+    // ── slot status values ──────────────────────────────────────
+    // prism-vocab: external — SABnzbd status strings, matched only at this boundary.
+    public const string StatusCompleted = "Completed";
+    public const string StatusFailed = "Failed";
+    public const string StatusPaused = "Paused";
+
+    /// <summary>True when a history slot's status means the download finished and its payload is on disk.</summary>
+    public static bool IsCompletedStatus(string? status) =>
+        string.Equals(status, StatusCompleted, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>True when a history slot's status means the download definitively failed.</summary>
+    public static bool IsFailedStatus(string? status) =>
+        string.Equals(status, StatusFailed, StringComparison.OrdinalIgnoreCase);
 }
 
 /// <summary>Prowlarr REST API wire vocabulary (Prowlarr v1). Referenced by the Prowlarr indexer client; never retyped.</summary>

@@ -17,7 +17,8 @@ public enum IndexerKind {
 
 /// <summary>
 /// Closed set of download client families Prismedia can hand a release to.
-/// qBittorrent is the primary v1 target; additional clients share the same port.
+/// qBittorrent is the primary torrent client and SABnzbd the usenet client;
+/// additional clients share the same port.
 /// </summary>
 public enum DownloadClientKind {
     /// <summary>qBittorrent, driven through its Web API.</summary>
@@ -26,19 +27,34 @@ public enum DownloadClientKind {
 
     /// <summary>Transmission RPC client. Reserved for a later adapter.</summary>
     [Code("transmission")]
-    Transmission
+    Transmission,
+
+    /// <summary>SABnzbd usenet client, driven through its JSON API.</summary>
+    [Code("sabnzbd")]
+    Sabnzbd
 }
 
 /// <summary>
-/// Closed set of release transfer protocols. Prismedia v1 acquires over torrent only;
-/// usenet releases are decoded so they can be recognized and rejected rather than mishandled.
+/// Closed set of release transfer protocols. A protocol is acquirable when an enabled
+/// download client supports it; releases over unsupported protocols are decoded so they
+/// can be recognized and rejected rather than mishandled.
 /// </summary>
 public enum DownloadProtocol {
     /// <summary>BitTorrent release (magnet link or .torrent file).</summary>
     [Code("torrent")]
     Torrent,
 
-    /// <summary>Usenet (NZB) release. Not acquired in v1; rejected by the decision engine.</summary>
+    /// <summary>Usenet (NZB) release, acquired through a usenet client such as SABnzbd.</summary>
     [Code("usenet")]
     Usenet
+}
+
+/// <summary>Protocol capabilities of the download client families.</summary>
+public static class DownloadClientKindProtocol {
+    /// <summary>The transfer protocol a download client family speaks.</summary>
+    public static DownloadProtocol Protocol(this DownloadClientKind kind) => kind switch {
+        DownloadClientKind.QBittorrent or DownloadClientKind.Transmission => DownloadProtocol.Torrent,
+        DownloadClientKind.Sabnzbd => DownloadProtocol.Usenet,
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unmapped download client kind.")
+    };
 }

@@ -90,7 +90,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
         }
 
         try {
-            var connection = new DownloadClientConnection(client.Id, client.Kind, client.BaseUrl, client.Username, client.Password, client.Category);
+            var connection = new DownloadClientConnection(client.Id, client.Kind, client.BaseUrl, client.Username, client.Password, client.Category, client.ApiKey);
             await clients.Get(client.Kind).RemoveAsync(connection, target.ChildClientItemId, deleteData: true, cancellationToken);
         } catch (OperationCanceledException) {
             throw;

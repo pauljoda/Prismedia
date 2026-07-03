@@ -20,6 +20,7 @@ public sealed class AcquisitionSearchRunnerTests {
             new FakeClientFactory(new FakeIndexerSearchClient([blocked, clean])),
             new FakeProfileStore(),
             new FakeBlocklistStore(ReleaseIdentity.For("blockedhash", null, null)),
+            new FakeDownloadClientConfigStore(DownloadProtocol.Torrent),
             new AcquisitionDecisionEngineFactory([new BookReleaseDecisionEngine()]));
 
         var outcome = await runner.RunAsync(new AcquisitionSearchInput(Guid.NewGuid(), "Book", null), CancellationToken.None);
@@ -29,6 +30,36 @@ public sealed class AcquisitionSearchRunnerTests {
         Assert.False(blockedResult.Accepted);
         Assert.Contains(ReleaseRejectionReason.Blocklisted, blockedResult.Rejections);
         Assert.True(cleanResult.Accepted);
+    }
+
+    [Fact]
+    public async Task UsenetReleasesAreAcceptedOnlyWhenAUsenetClientIsEnabled() {
+        var usenet = new IndexerRelease("Usenet Book (epub)", 5_000_000, null, null, DownloadProtocol.Usenet, "http://dl/nzb", null, null, null, null, null);
+
+        async Task<ScoredRelease> SearchWith(params DownloadProtocol[] protocols) {
+            var runner = new AcquisitionSearchRunner(
+                new FakeIndexerConfigStore(),
+                new FakeClientFactory(new FakeIndexerSearchClient([usenet])),
+                new FakeProfileStore(),
+                new FakeBlocklistStore("unrelated"),
+                new FakeDownloadClientConfigStore(protocols),
+                new AcquisitionDecisionEngineFactory([new BookReleaseDecisionEngine()]));
+            var outcome = await runner.RunAsync(new AcquisitionSearchInput(Guid.NewGuid(), "Book", null), CancellationToken.None);
+            return outcome.Candidates.Single();
+        }
+
+        // Torrent-only setup: the usenet release is visible but rejected as the wrong protocol.
+        var torrentOnly = await SearchWith(DownloadProtocol.Torrent);
+        Assert.False(torrentOnly.Accepted);
+        Assert.Contains(ReleaseRejectionReason.WrongProtocol, torrentOnly.Rejections);
+
+        // A usenet client (e.g. SABnzbd) makes the same release acceptable.
+        var withUsenet = await SearchWith(DownloadProtocol.Torrent, DownloadProtocol.Usenet);
+        Assert.True(withUsenet.Accepted);
+
+        // No clients configured at all keeps the permissive torrent-only default (candidates still surface).
+        var noClients = await SearchWith();
+        Assert.Contains(ReleaseRejectionReason.WrongProtocol, noClients.Rejections);
     }
 
     [Fact]
@@ -44,6 +75,7 @@ public sealed class AcquisitionSearchRunnerTests {
             new FakeClientFactory(client),
             new FakeProfileStore(),
             new FakeBlocklistStore("unrelated"),
+            new FakeDownloadClientConfigStore(DownloadProtocol.Torrent),
             new AcquisitionDecisionEngineFactory([new BookReleaseDecisionEngine()]));
 
         var outcome = await runner.RunAsync(new AcquisitionSearchInput(Guid.NewGuid(), "Book", "Author"), CancellationToken.None);
@@ -64,6 +96,7 @@ public sealed class AcquisitionSearchRunnerTests {
             new FakeClientFactory(client),
             new FakeProfileStore(),
             new FakeBlocklistStore("unrelated"),
+            new FakeDownloadClientConfigStore(DownloadProtocol.Torrent),
             new AcquisitionDecisionEngineFactory([new BookReleaseDecisionEngine()]));
 
         await runner.RunAsync(new AcquisitionSearchInput(Guid.NewGuid(), "Book", "Author"), CancellationToken.None);
@@ -134,6 +167,19 @@ public sealed class AcquisitionSearchRunnerTests {
             Task.FromResult<IReadOnlySet<string>>(new HashSet<string> { identity });
         public Task AddAsync(BlocklistAddRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<IReadOnlyList<AcquisitionBlocklistEntry>> ListAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    /// <summary>Supplies only the enabled-protocol set the runner consults; everything else is unused by the search path.</summary>
+    private sealed class FakeDownloadClientConfigStore(params DownloadProtocol[] protocols) : IDownloadClientConfigStore {
+        public Task<IReadOnlyList<DownloadProtocol>> GetEnabledProtocolsAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<DownloadProtocol>>(protocols);
+        public Task<IReadOnlyList<DownloadClientSummary>> ListAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<DownloadClientDetail>> ListDetailsAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<DownloadClientDetail?> GetAsync(Guid id, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<DownloadClientDetail?> GetDefaultAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<DownloadClientDetail?> GetDefaultAsync(DownloadProtocol protocol, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<DownloadClientSummary> SaveAsync(DownloadClientSaveCommand command, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 }

@@ -143,7 +143,8 @@ public sealed record DownloadClientSummary(
     string? Username,
     string Category,
     bool Enabled,
-    bool HasPassword);
+    bool HasPassword,
+    bool HasApiKey = false);
 
 /// <summary>Configured download client with secret material for server-side use only.</summary>
 public sealed record DownloadClientDetail(
@@ -155,9 +156,11 @@ public sealed record DownloadClientDetail(
     string Category,
     bool Enabled,
     bool HasPassword,
-    string? Password);
+    string? Password,
+    string? ApiKey = null);
 
 /// <summary>Request payload for creating or updating a download client configuration.</summary>
+/// <param name="ApiKey">API key for clients that authenticate with one (SABnzbd); blank keeps the stored key.</param>
 public sealed record DownloadClientSaveRequest(
     Guid? Id,
     DownloadClientKind Kind,
@@ -166,7 +169,8 @@ public sealed record DownloadClientSaveRequest(
     string? Username,
     string? Password,
     string Category,
-    bool Enabled);
+    bool Enabled,
+    string? ApiKey = null);
 
 /// <summary>Connection test payload for a download client configuration that may not be saved yet.</summary>
 public sealed record DownloadClientTestRequest(
@@ -174,7 +178,8 @@ public sealed record DownloadClientTestRequest(
     DownloadClientKind Kind,
     string BaseUrl,
     string? Username,
-    string? Password);
+    string? Password,
+    string? ApiKey = null);
 
 /// <summary>Connection test result for a download client configuration.</summary>
 public sealed record DownloadClientTestResponse(bool Connected, string? Message);

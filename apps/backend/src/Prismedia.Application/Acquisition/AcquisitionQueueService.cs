@@ -22,9 +22,10 @@ public sealed class AcquisitionQueueService(
             throw new AcquisitionConfigurationException(ApiProblemCodes.AcquisitionReleaseNotFound, "The selected release was not found for this acquisition.");
         }
 
-        if (candidate.Protocol != DownloadProtocol.Torrent) {
-            throw new AcquisitionConfigurationException(ApiProblemCodes.AcquisitionInvalid, "Only torrent releases can be downloaded in this version.");
-        }
+        // The release protocol picks the client: torrent releases go to a torrent client, usenet
+        // releases to a usenet client. Resolving up front keeps the error actionable ("configure a
+        // usenet client") instead of failing mid-add.
+        var (client, connection) = await ResolveClientAsync(candidate.Protocol, cancellationToken);
 
         // The blocklist is enforced at search time, but a stored candidate row can still carry a blocklisted
         // identity (e.g. the release that just failed). Refuse it here too so the manual "queue this release"
@@ -43,7 +44,6 @@ public sealed class AcquisitionQueueService(
                 "No download link could be found for this release. Open its page and upload the .torrent file manually.");
         }
 
-        var (client, connection) = await ResolveClientAsync(cancellationToken);
         var downloadClient = clients.Get(client.Kind);
         // Re-queueing (after a failed/cancelled attempt) supersedes any prior download — drop the old
         // torrent from the client first so it doesn't linger as an orphan or collide on re-add.
@@ -74,7 +74,7 @@ public sealed class AcquisitionQueueService(
             return null;
         }
 
-        var (client, connection) = await ResolveClientAsync(cancellationToken);
+        var (client, connection) = await ResolveClientAsync(DownloadProtocol.Torrent, cancellationToken);
         var downloadClient = clients.Get(client.Kind);
         await RemovePriorTorrentAsync(acquisitionId, downloadClient, connection, cancellationToken);
         try {
@@ -89,26 +89,46 @@ public sealed class AcquisitionQueueService(
         return await acquisitions.GetAsync(acquisitionId, cancellationToken);
     }
 
-    /// <summary>Best-effort removal of an acquisition's prior torrent before a re-queue. Never blocks the new download.</summary>
+    /// <summary>
+    /// Best-effort removal of an acquisition's prior download before a re-queue. The prior transfer may
+    /// live in a different client than the new grab (e.g. a usenet retry after a torrent failure), so it
+    /// is removed through its own recorded client, falling back to the new one for legacy transfers that
+    /// recorded none. Never blocks the new download.
+    /// </summary>
     private async Task RemovePriorTorrentAsync(Guid acquisitionId, IDownloadClient downloadClient, DownloadClientConnection connection, CancellationToken cancellationToken) {
-        var priorItemId = await acquisitions.GetTransferClientItemIdAsync(acquisitionId, cancellationToken);
-        if (string.IsNullOrWhiteSpace(priorItemId)) {
+        var prior = await acquisitions.GetTransferInfoAsync(acquisitionId, cancellationToken);
+        if (prior is null || string.IsNullOrWhiteSpace(prior.ClientItemId)) {
             return;
         }
 
         try {
-            await downloadClient.RemoveAsync(connection, priorItemId, deleteData: true, cancellationToken);
+            if (prior.DownloadClientConfigId is { } priorClientId && priorClientId != connection.Id
+                && await downloadClients.GetAsync(priorClientId, cancellationToken) is { } priorClient) {
+                await clients.Get(priorClient.Kind).RemoveAsync(
+                    new DownloadClientConnection(priorClient.Id, priorClient.Kind, priorClient.BaseUrl, priorClient.Username, priorClient.Password, priorClient.Category, priorClient.ApiKey),
+                    prior.ClientItemId, deleteData: true, cancellationToken);
+                return;
+            }
+
+            await downloadClient.RemoveAsync(connection, prior.ClientItemId, deleteData: true, cancellationToken);
         } catch (OperationCanceledException) {
             throw;
         } catch (Exception) {
-            // The prior torrent may already be gone; the re-queue should still proceed.
+            // The prior download may already be gone; the re-queue should still proceed.
         }
     }
 
-    /// <summary>Direct link first, then magnet, then a magnet scraped from the release's info page.</summary>
+    /// <summary>
+    /// Direct link first, then magnet, then a magnet scraped from the release's info page. The magnet
+    /// fallbacks are torrent-only; a usenet release either carries its NZB link or cannot be queued.
+    /// </summary>
     private async Task<string?> ResolveUrlAsync(AcquisitionQueueCandidate candidate, CancellationToken cancellationToken) {
         if (!string.IsNullOrWhiteSpace(candidate.DownloadUrl)) {
             return candidate.DownloadUrl;
+        }
+
+        if (candidate.Protocol != DownloadProtocol.Torrent) {
+            return null;
         }
 
         if (!string.IsNullOrWhiteSpace(candidate.MagnetUrl)) {
@@ -122,9 +142,11 @@ public sealed class AcquisitionQueueService(
         return null;
     }
 
-    private async Task<(Contracts.Acquisition.DownloadClientDetail Client, DownloadClientConnection Connection)> ResolveClientAsync(CancellationToken cancellationToken) {
-        var client = await downloadClients.GetDefaultAsync(cancellationToken)
-            ?? throw new AcquisitionConfigurationException(ApiProblemCodes.DownloadClientInvalid, "No download client is configured.");
-        return (client, new DownloadClientConnection(client.Id, client.Kind, client.BaseUrl, client.Username, client.Password, client.Category));
+    private async Task<(Contracts.Acquisition.DownloadClientDetail Client, DownloadClientConnection Connection)> ResolveClientAsync(DownloadProtocol protocol, CancellationToken cancellationToken) {
+        var client = await downloadClients.GetDefaultAsync(protocol, cancellationToken)
+            ?? throw new AcquisitionConfigurationException(
+                ApiProblemCodes.DownloadClientInvalid,
+                $"No enabled download client supports {protocol.ToCode()} releases. Configure one under Settings → Acquisition.");
+        return (client, new DownloadClientConnection(client.Id, client.Kind, client.BaseUrl, client.Username, client.Password, client.Category, client.ApiKey));
     }
 }

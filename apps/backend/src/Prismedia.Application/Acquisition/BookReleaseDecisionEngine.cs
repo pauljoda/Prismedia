@@ -15,12 +15,16 @@ public interface IReleaseSpecification {
     ReleaseRejectionReason? Evaluate(IndexerRelease release, BookAcquisitionRules rules);
 }
 
-/// <summary>Rejects releases that use a protocol Prismedia does not acquire in v1 (anything but torrent).</summary>
+/// <summary>
+/// Rejects releases whose transfer protocol no enabled download client can acquire (e.g. a usenet
+/// release when no usenet client is configured). The allowed set is computed from the configured
+/// clients at search time and carried on the rules.
+/// </summary>
 public sealed class ProtocolSpecification : IReleaseSpecification {
     public ReleaseRejectionReason Reason => ReleaseRejectionReason.WrongProtocol;
 
     public ReleaseRejectionReason? Evaluate(IndexerRelease release, BookAcquisitionRules rules) =>
-        release.Protocol == DownloadProtocol.Torrent ? null : Reason;
+        rules.AllowedProtocols.Contains(release.Protocol) ? null : Reason;
 }
 
 /// <summary>

@@ -4,13 +4,15 @@ using Prismedia.Domain.Entities;
 namespace Prismedia.Application.Acquisition;
 
 /// <summary>Connection details a download client needs to act on a transfer.</summary>
+/// <param name="ApiKey">API key for clients that authenticate with one (SABnzbd); null for cookie/session clients.</param>
 public sealed record DownloadClientConnection(
     Guid Id,
     DownloadClientKind Kind,
     string BaseUrl,
     string? Username,
     string? Password,
-    string Category);
+    string Category,
+    string? ApiKey = null);
 
 /// <summary>A release to add to a download client.</summary>
 /// <param name="Url">The download/magnet URL (for Prowlarr, a self-authenticating proxy URL).</param>
@@ -33,7 +35,16 @@ public sealed record DownloadItemStatus(
     /// errored, or missing files). Normalized by the client adapter so callers stay free of client-specific
     /// state vocabulary. Distinct from <see cref="IsComplete"/>; a completed transfer is never stalled.
     /// </summary>
-    bool IsStalled = false);
+    bool IsStalled = false,
+    /// <summary>
+    /// True when the client reports the transfer definitively failed (e.g. a SABnzbd history entry in
+    /// Failed status — download incomplete, unpack failed, or encrypted). Unlike <see cref="IsStalled"/>,
+    /// a failed transfer cannot recover on its own, so the monitor hands it to failed-download recovery
+    /// immediately instead of waiting out the stall grace window.
+    /// </summary>
+    bool IsFailed = false,
+    /// <summary>The client's failure explanation when <see cref="IsFailed"/> is set, for the recovery record.</summary>
+    string? FailureMessage = null);
 
 /// <summary>Result of probing a download client connection.</summary>
 public sealed record DownloadClientConnectionTest(bool Connected, string? Message);
@@ -94,6 +105,7 @@ public interface IDownloadClientFactory {
 }
 
 /// <summary>Command for creating or updating a download client configuration.</summary>
+/// <param name="ApiKey">API key for clients that authenticate with one (SABnzbd); blank keeps the stored key.</param>
 public sealed record DownloadClientSaveCommand(
     Guid? Id,
     DownloadClientKind Kind,
@@ -102,7 +114,8 @@ public sealed record DownloadClientSaveCommand(
     string? Username,
     string? Password,
     string Category,
-    bool Enabled);
+    bool Enabled,
+    string? ApiKey = null);
 
 /// <summary>Persistence port for configured download clients.</summary>
 public interface IDownloadClientConfigStore {
@@ -112,6 +125,12 @@ public interface IDownloadClientConfigStore {
 
     /// <summary>Returns the default (first enabled) download client, or null when none is configured.</summary>
     Task<DownloadClientDetail?> GetDefaultAsync(CancellationToken cancellationToken);
+
+    /// <summary>Returns the first enabled download client that speaks <paramref name="protocol"/>, or null when none does.</summary>
+    Task<DownloadClientDetail?> GetDefaultAsync(DownloadProtocol protocol, CancellationToken cancellationToken);
+
+    /// <summary>The transfer protocols the enabled download clients collectively support.</summary>
+    Task<IReadOnlyList<DownloadProtocol>> GetEnabledProtocolsAsync(CancellationToken cancellationToken);
 
     Task<DownloadClientSummary> SaveAsync(DownloadClientSaveCommand command, CancellationToken cancellationToken);
     Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken);
