@@ -27,6 +27,7 @@ public sealed class JobScheduler(
                 await ScheduleRecurringBackupsAsync(stoppingToken);
                 await ScheduleAcquisitionMonitorAsync(stoppingToken);
                 await ScheduleMonitoredSearchAsync(stoppingToken);
+                await ScheduleRecycleBinCleanupAsync(stoppingToken);
             } catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) {
                 break;
             } catch (Exception ex) {
@@ -199,6 +200,30 @@ public sealed class JobScheduler(
 
         await queue.EnqueueAsync(
             new EnqueueJobRequest(JobType.AcquisitionMonitor, TargetLabel: "Monitor acquisition downloads"),
+            cancellationToken);
+    }
+
+    internal async Task ScheduleRecycleBinCleanupAsync(CancellationToken cancellationToken) {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var settings = scope.ServiceProvider.GetRequiredService<SettingsService>();
+        var recycleBin = await settings.GetRecycleBinSettingsAsync(cancellationToken);
+        if (recycleBin.Path is null) {
+            return;
+        }
+
+        var now = (timeProvider ?? TimeProvider.System).GetUtcNow();
+        var windowStart = GetWindowStart(now, TimeSpan.FromDays(1));
+        if (now - windowStart >= CheckInterval) {
+            return;
+        }
+
+        var queue = scope.ServiceProvider.GetRequiredService<IJobQueueService>();
+        if (await queue.HasPendingAsync(JobType.RecycleBinCleanup, null, cancellationToken)) {
+            return;
+        }
+
+        await queue.EnqueueAsync(
+            new EnqueueJobRequest(JobType.RecycleBinCleanup, TargetLabel: "Daily recycle-bin cleanup", Priority: -50),
             cancellationToken);
     }
 

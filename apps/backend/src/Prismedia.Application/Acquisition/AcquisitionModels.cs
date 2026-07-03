@@ -239,6 +239,17 @@ public sealed record BlocklistAddRequest(
     Guid? AcquisitionId,
     string? Message);
 
+/// <summary>
+/// The opt-in recycle bin for files Prismedia replaces. <see cref="TryMoveToBinAsync"/> returns the
+/// binned path, or null when the bin is off (or the move failed) so the caller keeps its fallback.
+/// </summary>
+public interface IRecycleBin {
+    Task<string?> TryMoveToBinAsync(string filePath, CancellationToken cancellationToken);
+
+    /// <summary>Purges bin entries older than the configured window; returns how many files were removed.</summary>
+    Task<int> CleanupAsync(CancellationToken cancellationToken);
+}
+
 /// <summary>Resolves an indexer release's info page into a usable magnet link when no direct link is provided.</summary>
 public interface IReleaseLinkResolver {
     /// <summary>Fetches <paramref name="infoUrl"/> and extracts the first magnet link on the page, or null when none is found.</summary>

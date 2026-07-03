@@ -333,6 +333,7 @@ public static class DependencyInjection {
         services.AddSingleton<IndexerQueryWindow>();
         services.AddScoped<IRemotePathMappingStore, EfRemotePathMappingStore>();
         services.AddScoped<RemotePathMapper>();
+        services.AddScoped<IRecycleBin, RecycleBin>();
         services.AddScoped<IDownloadClientConfigStore, EfDownloadClientConfigStore>();
         services.AddScoped<IBookAcquisitionProfileStore, EfBookAcquisitionProfileStore>();
         services.AddScoped<IAcquisitionStore, EfAcquisitionStore>();

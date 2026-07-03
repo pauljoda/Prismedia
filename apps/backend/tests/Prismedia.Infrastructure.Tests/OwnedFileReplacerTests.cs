@@ -11,7 +11,7 @@ namespace Prismedia.Infrastructure.Tests;
 /// </summary>
 public sealed class OwnedFileReplacerTests : IDisposable {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "prismedia-replacer-" + Guid.NewGuid().ToString("N"));
-    private readonly OwnedFileReplacer _replacer = new(NullLogger<OwnedFileReplacer>.Instance);
+    private readonly OwnedFileReplacer _replacer = new(new BinOff(), NullLogger<OwnedFileReplacer>.Instance);
 
     [Fact]
     public async Task SameExtensionUpgradeReplacesInPlaceAndKeepsABackup() {
@@ -83,5 +83,43 @@ public sealed class OwnedFileReplacerTests : IDisposable {
         if (Directory.Exists(_root)) {
             Directory.Delete(_root, recursive: true);
         }
+    }
+
+    [Fact]
+    public async Task WithARecycleBinTheBackupIsHandedOffInsteadOfLingering() {
+        var library = Dir("library");
+        var download = Dir("download");
+        var owned = Path.Combine(library, "book.epub");
+        await File.WriteAllTextAsync(owned, "old");
+        var incoming = Path.Combine(download, "book.epub");
+        await File.WriteAllTextAsync(incoming, "new-better");
+
+        var bin = new CapturingBin();
+        var replacer = new OwnedFileReplacer(bin, NullLogger<OwnedFileReplacer>.Instance);
+        var result = await replacer.ReplaceAsync(library, download, Prismedia.Domain.Entities.BookFormatTier.Unknown, CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("new-better", await File.ReadAllTextAsync(owned));
+        // The bin took the backup, so no .prismedia-bak lingers beside the upgraded file.
+        Assert.Single(bin.Binned);
+        Assert.False(File.Exists(owned + ".prismedia-bak"));
+        Assert.Equal("old", await File.ReadAllTextAsync(bin.Binned[0]));
+    }
+
+    /// <summary>A bin that accepts everything, moving files into a temp folder like the real one would.</summary>
+    private sealed class CapturingBin : Prismedia.Application.Acquisition.IRecycleBin {
+        public List<string> Binned { get; } = [];
+        public Task<string?> TryMoveToBinAsync(string filePath, CancellationToken cancellationToken) {
+            var target = Path.Combine(Path.GetTempPath(), "prismedia-bin-" + Guid.NewGuid().ToString("N") + Path.GetExtension(filePath));
+            File.Move(filePath, target);
+            Binned.Add(target);
+            return Task.FromResult<string?>(target);
+        }
+        public Task<int> CleanupAsync(CancellationToken cancellationToken) => Task.FromResult(0);
+    }
+
+    private sealed class BinOff : Prismedia.Application.Acquisition.IRecycleBin {
+        public Task<string?> TryMoveToBinAsync(string filePath, CancellationToken cancellationToken) => Task.FromResult<string?>(null);
+        public Task<int> CleanupAsync(CancellationToken cancellationToken) => Task.FromResult(0);
     }
 }

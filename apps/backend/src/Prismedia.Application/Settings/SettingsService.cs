@@ -184,6 +184,19 @@ public sealed partial class SettingsService {
             GetInt(values, AppSettingKeys.MonitoringIntervalMinutes));
     }
 
+    /// <summary>Returns the acquisition recycle-bin settings (a blank path disables the bin).</summary>
+    public async Task<RecycleBinSettings> GetRecycleBinSettingsAsync(CancellationToken cancellationToken) {
+        var values = await GetValueMapAsync([
+            AppSettingKeys.AcquisitionRecycleBinPath,
+            AppSettingKeys.AcquisitionRecycleBinCleanupDays,
+        ], cancellationToken);
+
+        var path = GetString(values, AppSettingKeys.AcquisitionRecycleBinPath);
+        return new RecycleBinSettings(
+            string.IsNullOrWhiteSpace(path) ? null : path.Trim(),
+            GetInt(values, AppSettingKeys.AcquisitionRecycleBinCleanupDays));
+    }
+
     /// <summary>
     /// Returns recurring collection refresh settings.
     /// </summary>

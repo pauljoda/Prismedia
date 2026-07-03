@@ -143,5 +143,9 @@ public enum JobType {
 
     /// <summary>Enriches a request's held metadata (cover, description, dates) from the provider before import.</summary>
     [Code("acquisition-enrich")]
-    AcquisitionEnrich
+    AcquisitionEnrich,
+
+    /// <summary>Purges recycle-bin entries older than the configured cleanup window.</summary>
+    [Code("recycle-bin-cleanup")]
+    RecycleBinCleanup
 }

@@ -16,24 +16,24 @@ namespace Prismedia.Infrastructure.Acquisition;
 /// handling. Any failure restores the original from the backup, so the owned file is never lost.
 /// </para>
 /// </summary>
-public sealed class OwnedFileReplacer(ILogger<OwnedFileReplacer> logger) : IOwnedFileReplacer {
+public sealed class OwnedFileReplacer(IRecycleBin recycleBin, ILogger<OwnedFileReplacer> logger) : IOwnedFileReplacer {
     private const string BackupSuffix = ".prismedia-bak";
     private const string StagedSuffix = ".prismedia-new";
 
-    public Task<OwnedFileReplaceResult> ReplaceAsync(string ownedFolder, string newContentPath, BookFormatTier ownedFormatTier, CancellationToken cancellationToken) {
+    public async Task<OwnedFileReplaceResult> ReplaceAsync(string ownedFolder, string newContentPath, BookFormatTier ownedFormatTier, CancellationToken cancellationToken) {
         var owned = FindBookFile(ownedFolder);
         if (owned is null) {
-            return Task.FromResult(OwnedFileReplaceResult.Failed("Could not find a single owned book file to replace."));
+            return (OwnedFileReplaceResult.Failed("Could not find a single owned book file to replace."));
         }
 
         var incoming = FindBookFile(newContentPath);
         if (incoming is null) {
-            return Task.FromResult(OwnedFileReplaceResult.Failed("The upgrade download has no single importable book file."));
+            return (OwnedFileReplaceResult.Failed("The upgrade download has no single importable book file."));
         }
 
         var incomingInfo = new FileInfo(incoming);
         if (!incomingInfo.Exists || incomingInfo.Length == 0) {
-            return Task.FromResult(OwnedFileReplaceResult.Failed("The upgrade file is missing or empty."));
+            return (OwnedFileReplaceResult.Failed("The upgrade file is missing or empty."));
         }
 
         var ownedExtension = Path.GetExtension(owned);
@@ -41,14 +41,14 @@ public sealed class OwnedFileReplacer(ILogger<OwnedFileReplacer> logger) : IOwne
         if (!string.Equals(ownedExtension, incomingExtension, StringComparison.OrdinalIgnoreCase)) {
             // A format change moves the file to a different extension/path, which would orphan the library
             // entity and the reader's progress. Refuse it here; the caller surfaces it for manual replacement.
-            return Task.FromResult(OwnedFileReplaceResult.Failed($"Upgrading the format ({ownedExtension} → {incomingExtension}) needs a manual replacement."));
+            return (OwnedFileReplaceResult.Failed($"Upgrading the format ({ownedExtension} → {incomingExtension}) needs a manual replacement."));
         }
 
         // Trust the actual extension, not free text in the path (a folder named "(epub)" must not make a PDF
         // look reflowable). Same-extension is already enforced above, so this equals the owned tier.
         var newFormat = BookFormatDetection.FormatTierFromExtension(incoming);
         if (newFormat < ownedFormatTier) {
-            return Task.FromResult(OwnedFileReplaceResult.Failed("The upgrade file's format is lower than the owned file's."));
+            return (OwnedFileReplaceResult.Failed("The upgrade file's format is lower than the owned file's."));
         }
 
         var backup = owned + BackupSuffix;
@@ -67,7 +67,7 @@ public sealed class OwnedFileReplacer(ILogger<OwnedFileReplacer> logger) : IOwne
         } catch (Exception ex) when (ex is not OperationCanceledException) {
             logger.LogWarning(ex, "OwnedFileReplacer: could not stage the upgrade for {Path}.", owned);
             TryDelete(staged);
-            return Task.FromResult(OwnedFileReplaceResult.Failed($"Could not stage the upgrade: {ex.Message}"));
+            return (OwnedFileReplaceResult.Failed($"Could not stage the upgrade: {ex.Message}"));
         }
 
         try {
@@ -77,7 +77,13 @@ public sealed class OwnedFileReplacer(ILogger<OwnedFileReplacer> logger) : IOwne
                 throw new IOException("The installed file is missing or empty after the move.");
             }
 
-            return Task.FromResult(OwnedFileReplaceResult.Ok(owned, newFormat));
+            // With a recycle bin configured the previous file moves there (purged after the cleanup window);
+            // otherwise it stays beside the new one as the recoverable .prismedia-bak sidecar.
+            if (await recycleBin.TryMoveToBinAsync(backup, cancellationToken) is { } binned) {
+                logger.LogDebug("OwnedFileReplacer: previous file recycled to {Binned}.", binned);
+            }
+
+            return OwnedFileReplaceResult.Ok(owned, newFormat);
         } catch (Exception ex) when (ex is not OperationCanceledException) {
             logger.LogWarning(ex, "OwnedFileReplacer: swap failed for {Path}; the original is intact (or restorable from backup).", owned);
             // The atomic replace either fully succeeded or left the owned file as it was; if it somehow left the
@@ -91,7 +97,7 @@ public sealed class OwnedFileReplacer(ILogger<OwnedFileReplacer> logger) : IOwne
             }
 
             TryDelete(staged);
-            return Task.FromResult(OwnedFileReplaceResult.Failed($"The swap failed and the original was kept: {ex.Message}"));
+            return (OwnedFileReplaceResult.Failed($"The swap failed and the original was kept: {ex.Message}"));
         }
     }
 

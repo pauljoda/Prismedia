@@ -144,6 +144,7 @@ public static class DependencyInjection {
         services.AddTransient<IJobHandler, AcquisitionSearchJobHandler>();
         services.AddTransient<IJobHandler, AcquisitionMonitorJobHandler>();
         services.AddTransient<IJobHandler, AcquisitionImportJobHandler>();
+        services.AddTransient<IJobHandler, RecycleBinCleanupJobHandler>();
         services.AddTransient<IJobHandler, AcquisitionFailedHandleJobHandler>();
         services.AddTransient<IJobHandler, MonitoredSearchJobHandler>();
         services.AddTransient<IJobHandler, AcquisitionUpgradeReplaceJobHandler>();
