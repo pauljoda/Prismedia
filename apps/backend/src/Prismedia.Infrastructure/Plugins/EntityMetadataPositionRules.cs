@@ -14,14 +14,14 @@ internal static class EntityMetadataPositionRules {
 
     public static int? SortOrderFor(string kindCode, IReadOnlyDictionary<string, int> positions) {
         if (kindCode.Equals(EntityKindRegistry.VideoSeason.Code, StringComparison.OrdinalIgnoreCase)) {
-            return PositionValue(positions, "season", "sort");
+            return PositionValue(positions, EntityPositionCodes.Season, EntityPositionCodes.Sort);
         }
 
         if (kindCode.Equals(EntityKindRegistry.Video.Code, StringComparison.OrdinalIgnoreCase)) {
-            return PositionValue(positions, "episode", "absolute-episode", "sort");
+            return PositionValue(positions, EntityPositionCodes.Episode, EntityPositionCodes.AbsoluteEpisode, EntityPositionCodes.Sort);
         }
 
-        return PositionValue(positions, "track", "page", "chapter", "volume", "sort");
+        return PositionValue(positions, EntityPositionCodes.Track, EntityPositionCodes.Page, EntityPositionCodes.Chapter, EntityPositionCodes.Volume, EntityPositionCodes.Sort);
     }
 
     private static int? PositionValue(IReadOnlyDictionary<string, int> positions, params string[] codes) {
@@ -35,14 +35,14 @@ internal static class EntityMetadataPositionRules {
     }
 
     private static string NormalizeCode(string code) => code.Trim() switch {
-        var value when value.Equals("seasonNumber", StringComparison.OrdinalIgnoreCase) => "season",
-        var value when value.Equals("episodeNumber", StringComparison.OrdinalIgnoreCase) => "episode",
-        var value when value.Equals("absoluteEpisodeNumber", StringComparison.OrdinalIgnoreCase) => "absolute-episode",
-        var value when value.Equals("volumeNumber", StringComparison.OrdinalIgnoreCase) => "volume",
-        var value when value.Equals("chapterNumber", StringComparison.OrdinalIgnoreCase) => "chapter",
-        var value when value.Equals("pageNumber", StringComparison.OrdinalIgnoreCase) => "page",
-        var value when value.Equals("trackNumber", StringComparison.OrdinalIgnoreCase) => "track",
-        var value when value.Equals("sortOrder", StringComparison.OrdinalIgnoreCase) => "sort",
+        var value when value.Equals("seasonNumber", StringComparison.OrdinalIgnoreCase) => EntityPositionCodes.Season,
+        var value when value.Equals("episodeNumber", StringComparison.OrdinalIgnoreCase) => EntityPositionCodes.Episode,
+        var value when value.Equals("absoluteEpisodeNumber", StringComparison.OrdinalIgnoreCase) => EntityPositionCodes.AbsoluteEpisode,
+        var value when value.Equals("volumeNumber", StringComparison.OrdinalIgnoreCase) => EntityPositionCodes.Volume,
+        var value when value.Equals("chapterNumber", StringComparison.OrdinalIgnoreCase) => EntityPositionCodes.Chapter,
+        var value when value.Equals("pageNumber", StringComparison.OrdinalIgnoreCase) => EntityPositionCodes.Page,
+        var value when value.Equals("trackNumber", StringComparison.OrdinalIgnoreCase) => EntityPositionCodes.Track,
+        var value when value.Equals("sortOrder", StringComparison.OrdinalIgnoreCase) => EntityPositionCodes.Sort,
         var value => value
     };
 }

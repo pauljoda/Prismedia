@@ -37,6 +37,11 @@ public sealed partial class LibraryScanPersistenceService {
             if (existingEntities.TryGetValue(item.FilePath, out var existing)) {
                 var tracked = await _db.Entities.FindAsync([existing.Id], cancellationToken);
                 if (tracked is not null) tracked.UpdatedAt = now;
+                // A found video may predate its detail row (a request-created wanted episode binds the
+                // file path before this upsert) — backfill so it carries its library-root association.
+                if (await _db.VideoDetails.FindAsync([existing.Id], cancellationToken) is null) {
+                    _db.VideoDetails.Add(new VideoDetailRow { EntityId = existing.Id, LibraryRootId = item.LibraryRootId });
+                }
                 await MaterializeVideoHierarchyAsync(
                     existing.Id,
                     item,
@@ -85,11 +90,11 @@ public sealed partial class LibraryScanPersistenceService {
         Dictionary<(Guid SeriesId, int SeasonNumber), Guid> seasonCache,
         CancellationToken cancellationToken) {
         if (item.EpisodeNumber is { } episodeNumber) {
-            await UpsertPositionAsync(videoId, "episode", episodeNumber, episodeNumber.ToString(), now, cancellationToken);
+            await UpsertPositionAsync(videoId, EntityPositionCodes.Episode, episodeNumber, episodeNumber.ToString(), now, cancellationToken);
         }
 
         if (item.AbsoluteEpisodeNumber is { } absoluteEpisodeNumber) {
-            await UpsertPositionAsync(videoId, "absolute-episode", absoluteEpisodeNumber, absoluteEpisodeNumber.ToString(), now, cancellationToken);
+            await UpsertPositionAsync(videoId, EntityPositionCodes.AbsoluteEpisode, absoluteEpisodeNumber, absoluteEpisodeNumber.ToString(), now, cancellationToken);
         }
 
         if (item.Movie is { } movie) {
@@ -122,7 +127,7 @@ public sealed partial class LibraryScanPersistenceService {
             cancellationToken);
 
         if (item.Season is { } season) {
-            await UpsertPositionAsync(videoId, "season", season.SeasonNumber, season.SeasonNumber.ToString(), now, cancellationToken);
+            await UpsertPositionAsync(videoId, EntityPositionCodes.Season, season.SeasonNumber, season.SeasonNumber.ToString(), now, cancellationToken);
             var seasonId = await UpsertVideoSeasonFromScanAsync(
                 seriesId,
                 season,
@@ -305,7 +310,7 @@ public sealed partial class LibraryScanPersistenceService {
 
         await EnsureEntityFileAsync(seasonId, EntityFileRole.Source, season.FolderPath, sizeBytes: null, now, cancellationToken);
         await EnsureEntitySourceAsync(seasonId, "folder", season.FolderPath, now, cancellationToken);
-        await UpsertPositionAsync(seasonId, "season", season.SeasonNumber, season.SeasonNumber.ToString(), now, cancellationToken);
+        await UpsertPositionAsync(seasonId, EntityPositionCodes.Season, season.SeasonNumber, season.SeasonNumber.ToString(), now, cancellationToken);
         await UpsertStructuralChildLinkAsync(
             seriesId,
             seasonId,

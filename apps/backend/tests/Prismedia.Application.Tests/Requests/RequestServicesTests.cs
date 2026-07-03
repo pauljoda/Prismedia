@@ -11,15 +11,28 @@ namespace Prismedia.Application.Tests.Requests;
 /// </summary>
 public sealed class RequestServicesTests {
     [Fact]
-    public async Task SearchWithNoKindFilterQueriesEveryRegisteredKind() {
+    public async Task SearchWithNoKindFilterQueriesEveryDiscoverableKind() {
         var source = new FakeSearchSource();
         var service = new RequestSearchService(source);
 
         await service.SearchAsync(Request("query", []), CancellationToken.None);
 
+        // Unit kinds (a season, an episode) exist only inside their parent's flow — never searched.
         Assert.Equal(
-            RequestKindRegistry.All.Select(descriptor => descriptor.Kind).ToArray(),
+            RequestKindRegistry.All.Where(descriptor => descriptor.Discoverable).Select(descriptor => descriptor.Kind).ToArray(),
             source.QueriedKinds.ToArray());
+        Assert.DoesNotContain(RequestMediaKind.Season, source.QueriedKinds);
+        Assert.DoesNotContain(RequestMediaKind.Episode, source.QueriedKinds);
+    }
+
+    [Fact]
+    public async Task SearchRefusesAnExplicitlyRequestedUnitKind() {
+        var source = new FakeSearchSource();
+        var service = new RequestSearchService(source);
+
+        await service.SearchAsync(Request("query", [RequestMediaKind.Season, RequestMediaKind.Episode]), CancellationToken.None);
+
+        Assert.Empty(source.QueriedKinds);
     }
 
     [Fact]

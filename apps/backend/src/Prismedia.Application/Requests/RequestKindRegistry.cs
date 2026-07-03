@@ -24,10 +24,22 @@ namespace Prismedia.Application.Requests;
 /// artist's albums, or a book's sibling series volumes. Null when children are not offered (yet).
 /// </param>
 /// <param name="Committable">
-/// Whether a commit is accepted for this kind. False while the kind's acquisition engine hasn't landed
-/// (TV series), in which case Discover/detail still work but Request is unavailable.
+/// Whether a commit is accepted for this kind. False while the kind's acquisition engine hasn't landed,
+/// in which case Discover/detail still work but Request is unavailable.
 /// </param>
 /// <param name="AcquisitionKind">Media kind stamped on acquisitions started for this kind's leaves.</param>
+/// <param name="Discoverable">
+/// Whether the kind is offered in Discover search directly. False for unit kinds that only exist inside
+/// a parent's flow (a season inside a series, an episode inside a season) — they are committed as
+/// children or from their own wanted-placeholder pages, never searched for standalone.
+/// </param>
+/// <param name="AcquireFromEntity">
+/// True when requesting an existing entity of this kind must build the acquisition from the entity
+/// graph (its positions and ancestor titles) instead of a provider round-trip — TV units, whose search
+/// context (the series name, S01E05) lives on their parents and whose providers cannot resolve them
+/// standalone. False kinds re-resolve through their provider and fall back to the graph only when no
+/// provider answers.
+/// </param>
 public sealed record RequestKindDescriptor(
     RequestMediaKind Kind,
     EntityKind PluginEntityKind,
@@ -35,7 +47,9 @@ public sealed record RequestKindDescriptor(
     bool IsContainer,
     RequestMediaKind? ChildKind,
     bool Committable,
-    EntityKind AcquisitionKind) {
+    EntityKind AcquisitionKind,
+    bool Discoverable = true,
+    bool AcquireFromEntity = false) {
     /// <summary>The plugin-protocol kind code for <see cref="PluginEntityKind"/>.</summary>
     public string PluginKindCode => PluginEntityKind.ToCode();
 }
@@ -58,10 +72,17 @@ public static class RequestKindRegistry {
         new(RequestMediaKind.Movie, EntityKind.Movie, EntityKind.Movie,
             IsContainer: false, ChildKind: null, Committable: true, AcquisitionKind: EntityKind.Movie),
 
-        // TV series: discoverable and browsable, but committing waits for the per-episode engine —
-        // the richest container case, deliberately last (see the Discover/Request roadmap).
+        // TV: the deepest container chain — a series fans out into per-season acquisitions (season
+        // packs), and each season materializes its episodes as wanted phantoms requested individually
+        // from their own pages. Seasons and episodes are unit kinds, not Discover entries.
         new(RequestMediaKind.Series, EntityKind.VideoSeries, EntityKind.VideoSeries,
-            IsContainer: true, ChildKind: null, Committable: false, AcquisitionKind: EntityKind.VideoSeries),
+            IsContainer: true, ChildKind: RequestMediaKind.Season, Committable: true, AcquisitionKind: EntityKind.VideoSeason),
+        new(RequestMediaKind.Season, EntityKind.VideoSeason, EntityKind.VideoSeason,
+            IsContainer: false, ChildKind: RequestMediaKind.Episode, Committable: true, AcquisitionKind: EntityKind.VideoSeason,
+            Discoverable: false, AcquireFromEntity: true),
+        new(RequestMediaKind.Episode, EntityKind.Video, EntityKind.Video,
+            IsContainer: false, ChildKind: null, Committable: true, AcquisitionKind: EntityKind.Video,
+            Discoverable: false, AcquireFromEntity: true),
 
         // Music: the album is the acquisition unit; an artist fans out into album acquisitions.
         new(RequestMediaKind.Artist, EntityKind.MusicArtist, EntityKind.MusicArtist,

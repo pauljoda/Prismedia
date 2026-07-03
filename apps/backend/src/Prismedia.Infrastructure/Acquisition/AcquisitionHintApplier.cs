@@ -122,19 +122,26 @@ public sealed class AcquisitionHintApplier(PrismediaDbContext db) : IAcquisition
             return false;
         }
 
-        // The hint links the wanted CHILD (a book, an album); the container is its parent — bind only a
-        // fileless container entity of the expected kind.
-        var parentId = await db.Entities
-            .Where(row => row.Id == entityId)
-            .Select(row => row.ParentEntityId)
-            .FirstOrDefaultAsync(cancellationToken);
-        if (parentId is not { } containerId) {
-            return false;
+        // The hint links the wanted LEAF (a book, an album, an episode); the grouping is an ancestor —
+        // walk up until the expected kind appears (an episode's series is two levels up) and bind only
+        // a fileless entity of that kind.
+        var parentKindCode = parentKind.ToCode();
+        var currentId = entityId;
+        EntityRow? container = null;
+        for (var depth = 0; currentId is { } id && depth < 4 && container is null; depth++) {
+            var current = await db.Entities.AsNoTracking()
+                .Where(row => row.Id == id)
+                .Select(row => new { row.ParentEntityId })
+                .FirstOrDefaultAsync(cancellationToken);
+            if (current?.ParentEntityId is not { } ancestorId) {
+                return false;
+            }
+
+            container = await db.Entities.FirstOrDefaultAsync(
+                row => row.Id == ancestorId && row.KindCode == parentKindCode, cancellationToken);
+            currentId = ancestorId;
         }
 
-        var parentKindCode = parentKind.ToCode();
-        var container = await db.Entities.FirstOrDefaultAsync(
-            row => row.Id == containerId && row.KindCode == parentKindCode, cancellationToken);
         if (container is null || await HasSourceFileAsync(container.Id, cancellationToken)) {
             return false;
         }
@@ -150,6 +157,48 @@ public sealed class AcquisitionHintApplier(PrismediaDbContext db) : IAcquisition
         });
         container.IsWanted = false;
         container.UpdatedAt = now;
+        await db.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    public async Task<bool> BindWantedChildBySortOrderAsync(
+        EntityKind childKind, string parentPath, int sortOrder, string childPath, CancellationToken cancellationToken) {
+        if (string.IsNullOrWhiteSpace(parentPath) || string.IsNullOrWhiteSpace(childPath)) {
+            return false;
+        }
+
+        // The parent is whichever entity owns the scanned parent folder — a wanted series bound moments
+        // earlier in this same scan, or a real on-disk one gaining new files under a monitored tree.
+        var parentId = await db.EntityFiles.AsNoTracking()
+            .Where(file => file.Role == EntityFileRole.Source && file.Path == parentPath)
+            .Select(file => (Guid?)file.EntityId)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (parentId is null) {
+            return false;
+        }
+
+        var childKindCode = childKind.ToCode();
+        var child = await db.Entities.FirstOrDefaultAsync(
+            row => row.ParentEntityId == parentId && row.KindCode == childKindCode && row.IsWanted && row.SortOrder == sortOrder,
+            cancellationToken);
+        if (child is null || await HasSourceFileAsync(child.Id, cancellationToken)) {
+            return false;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        // The path is written exactly as the scan keys it, so the following upsert finds this entity.
+        db.EntityFiles.Add(new EntityFileRow {
+            Id = Guid.NewGuid(),
+            EntityId = child.Id,
+            Role = EntityFileRole.Source,
+            Path = childPath,
+            MimeType = ContentTypeForPath(childPath),
+            SizeBytes = TryGetFileSize(childPath),
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        child.IsWanted = false;
+        child.UpdatedAt = now;
         await db.SaveChangesAsync(cancellationToken);
         return true;
     }

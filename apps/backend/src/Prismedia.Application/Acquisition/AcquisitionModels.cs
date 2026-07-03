@@ -36,7 +36,11 @@ public sealed record BookAcquisitionRules(
     IReadOnlyList<WeightedTerm> WeightedTerms,
     BookQualityRank MinQuality = default,
     BookQualityRank OwnedQuality = default,
-    bool IsUpgradeSearch = false) {
+    bool IsUpgradeSearch = false,
+    // TV unit context, set per search by the runner (like the upgrade fields), never by a profile:
+    // the season the unit belongs to, and the episode number when the unit is a single episode.
+    int? SeasonNumber = null,
+    int? EpisodeNumber = null) {
     /// <summary>
     /// Permissive defaults used when no profile is configured yet (e.g. ad-hoc verification searches).
     /// <see cref="MinQuality"/> and <see cref="OwnedQuality"/> default to <see cref="BookQualityRank.Floor"/>
@@ -79,6 +83,8 @@ public sealed record IndexerSearchError(Guid IndexerId, string IndexerName, stri
 /// <param name="EntityId">The wanted library entity this acquisition fulfils (request-created), or null for an ad-hoc acquisition.</param>
 /// <param name="ProfileId">The request-time profile choice whose rules govern this acquisition; null uses the kind's default.</param>
 /// <param name="TargetLibraryRootId">The request-time import-target choice; null uses the kind's default.</param>
+/// <param name="SeasonNumber">Season number for TV units (season pack or single episode); null elsewhere.</param>
+/// <param name="EpisodeNumber">Episode number for a single-episode acquisition; null elsewhere.</param>
 public sealed record AcquisitionMetadata(
     string Title,
     string? Author,
@@ -91,14 +97,21 @@ public sealed record AcquisitionMetadata(
     EntityKind Kind = EntityKind.Book,
     Guid? EntityId = null,
     Guid? ProfileId = null,
-    Guid? TargetLibraryRootId = null);
+    Guid? TargetLibraryRootId = null,
+    int? SeasonNumber = null,
+    int? EpisodeNumber = null);
 
 /// <summary>The minimal input the background search job needs to query indexers for an acquisition.</summary>
 /// <param name="Kind">The media kind being acquired; picks the decision engine and the Torznab category range.</param>
 /// <param name="EntityId">The wanted library entity this acquisition fulfils; a wanted-linked search auto-grabs its best accepted release.</param>
 /// <param name="Year">Release year context for the query ladder (year-disambiguated movie searches).</param>
 /// <param name="ProfileId">The acquisition's chosen profile; its rules score the search (null = the kind's default).</param>
-public sealed record AcquisitionSearchInput(Guid Id, string Title, string? Author, EntityKind Kind = EntityKind.Book, Guid? EntityId = null, int? Year = null, Guid? ProfileId = null);
+/// <param name="Series">Series context for TV units — the query ladder leads every rung with it.</param>
+/// <param name="SeasonNumber">Season number for TV units; builds the S01 / Season 1 rungs.</param>
+/// <param name="EpisodeNumber">Episode number for a single-episode acquisition; builds the S01E05 rungs.</param>
+public sealed record AcquisitionSearchInput(
+    Guid Id, string Title, string? Author, EntityKind Kind = EntityKind.Book, Guid? EntityId = null,
+    int? Year = null, Guid? ProfileId = null, string? Series = null, int? SeasonNumber = null, int? EpisodeNumber = null);
 
 /// <summary>
 /// Request-time acquisition choices (import target, profile) threaded from a commit to the acquisitions
@@ -239,6 +252,8 @@ public sealed record ActiveTransfer(
 /// <summary>Everything the import job needs: the captured metadata, the chosen profile, and the completed download's location.</summary>
 /// <param name="Kind">The media kind being acquired; drives per-kind enrichment and import dispatch.</param>
 /// <param name="TargetLibraryRootId">The request-time import-target choice; null uses the kind's default.</param>
+/// <param name="SeasonNumber">Season number for TV units; places files under the right season folder.</param>
+/// <param name="EpisodeNumber">Episode number for a single-episode acquisition; names files that carry no episode token.</param>
 public sealed record AcquisitionImportContext(
     Guid Id,
     string Title,
@@ -254,4 +269,6 @@ public sealed record AcquisitionImportContext(
     Guid? DownloadClientConfigId,
     string? Description = null,
     EntityKind Kind = EntityKind.Book,
-    Guid? TargetLibraryRootId = null);
+    Guid? TargetLibraryRootId = null,
+    int? SeasonNumber = null,
+    int? EpisodeNumber = null);

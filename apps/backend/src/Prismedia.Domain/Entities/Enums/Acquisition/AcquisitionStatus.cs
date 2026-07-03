@@ -103,7 +103,11 @@ public enum ReleaseRejectionReason {
 
     /// <summary>An upgrade search: the candidate would downgrade the format relative to the owned copy, even if another axis improves.</summary>
     [Code("format-downgrade")]
-    FormatDowngrade
+    FormatDowngrade,
+
+    /// <summary>A TV search: the release names a different unit than the one sought (wrong season/episode, or a single episode when a season pack is wanted).</summary>
+    [Code("wrong-tv-unit")]
+    WrongTvUnit
 }
 
 /// <summary>

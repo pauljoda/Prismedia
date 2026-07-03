@@ -66,24 +66,8 @@ public sealed class MovieReleaseDecisionEngine : IAcquisitionDecisionEngine {
         MediaReleaseEvaluation.Evaluate(releases, rules, blocklistedIdentities, Specifications, MovieScore);
 
     /// <summary>Profile preference (terms, custom weights, language) outranks everything; then resolution, then source provenance, then seeders.</summary>
-    private static double MovieScore(IndexerRelease release, BookAcquisitionRules rules) {
-        var title = release.Title;
-        var resolution =
-            MediaReleaseEvaluation.TitleHasAny(title, "2160p", "4k", "uhd") ? 4 :
-            MediaReleaseEvaluation.TitleHasAny(title, "1080p") ? 3 :
-            MediaReleaseEvaluation.TitleHasAny(title, "720p") ? 2 :
-            MediaReleaseEvaluation.TitleHasAny(title, "480p", "dvdrip") ? 1 : 0;
-        var source =
-            MediaReleaseEvaluation.TitleHasAny(title, "remux") ? 5 :
-            MediaReleaseEvaluation.TitleHasAny(title, "bluray", "blu-ray", "bdrip", "brrip") ? 4 :
-            MediaReleaseEvaluation.TitleHasAny(title, "web-dl", "webdl") ? 3 :
-            MediaReleaseEvaluation.TitleHasAny(title, "webrip", "web") ? 2 :
-            MediaReleaseEvaluation.TitleHasAny(title, "hdtv") ? 1 : 0;
-        return MediaReleaseEvaluation.PreferenceScore(release, rules) * 10_000
-            + resolution * 100_000
-            + source * 10_000
-            + Math.Min(release.Seeders ?? 0, 9_999);
-    }
+    private static double MovieScore(IndexerRelease release, BookAcquisitionRules rules) =>
+        MediaReleaseEvaluation.VideoReleaseScore(release, rules);
 }
 
 /// <summary>
@@ -121,6 +105,68 @@ public sealed class MusicReleaseDecisionEngine : IAcquisitionDecisionEngine {
             + codec * 100_000
             + Math.Min(release.Seeders ?? 0, 9_999);
     }
+}
+
+/// <summary>
+/// Rejects TV releases that name a different unit than the acquisition seeks. An episode search only
+/// accepts releases declaring its exact SxxEyy (or 1x05); a season-pack search rejects single-episode
+/// releases and other seasons' packs, while accepting complete-series packs (they contain the season)
+/// and marker-less titles (judged by the query match alone, mirroring the format rule for books).
+/// No-op outside TV searches — the unit fields are set per search by the runner, never by a profile.
+/// </summary>
+public sealed class TvUnitSpecification : IReleaseSpecification {
+    public ReleaseRejectionReason Reason => ReleaseRejectionReason.WrongTvUnit;
+
+    public ReleaseRejectionReason? Evaluate(IndexerRelease release, BookAcquisitionRules rules) {
+        if (rules.SeasonNumber is not { } season) {
+            return null;
+        }
+
+        var declaredEpisode = TvReleaseTokens.ParseEpisode(release.Title);
+        if (rules.EpisodeNumber is { } episode) {
+            // Single episode sought: only the exact unit qualifies.
+            return declaredEpisode == (season, episode) ? null : Reason;
+        }
+
+        // Season pack sought: a single-episode release can never fulfil it.
+        if (declaredEpisode is not null) {
+            return Reason;
+        }
+
+        if (TvReleaseTokens.NamesCompleteSeries(release.Title)) {
+            return null;
+        }
+
+        var declaredSeason = TvReleaseTokens.ParseSeason(release.Title);
+        return declaredSeason is null || declaredSeason == season ? null : Reason;
+    }
+}
+
+/// <summary>
+/// TV decision engine: the generic acceptance gates plus the unit-match rule, ranked like movies
+/// (resolution, then source provenance). One engine class serves both TV acquisition units — season
+/// packs (<see cref="EntityKind.VideoSeason"/>) and single episodes (<see cref="EntityKind.Video"/>) —
+/// registered once per kind, since the vocabulary of a TV release is the same at either granularity.
+/// </summary>
+public sealed class TvReleaseDecisionEngine(EntityKind kind) : IAcquisitionDecisionEngine {
+    public EntityKind Kind => kind;
+
+    private static readonly IReleaseSpecification[] Specifications = [
+        new ProtocolSpecification(),
+        new DownloadLinkSpecification(),
+        new MinSeedersSpecification(),
+        new SizeSpecification(),
+        new RequiredTermsSpecification(),
+        new IgnoredTermsSpecification(),
+        new LanguageSpecification(),
+        new TvUnitSpecification()
+    ];
+
+    public IReadOnlyList<ScoredRelease> Evaluate(
+        IReadOnlyList<(IndexerRelease Release, Guid? IndexerConfigId, string IndexerName)> releases,
+        BookAcquisitionRules rules,
+        IReadOnlySet<string>? blocklistedIdentities = null) =>
+        MediaReleaseEvaluation.Evaluate(releases, rules, blocklistedIdentities, Specifications, MediaReleaseEvaluation.VideoReleaseScore);
 }
 
 /// <summary>
@@ -162,6 +208,29 @@ internal static class MediaReleaseEvaluation {
     /// <summary>Case-insensitive whole-ish token match against a release title.</summary>
     public static bool TitleHasAny(string title, params string[] tokens) =>
         tokens.Any(token => title.Contains(token, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// The shared video release ranking (movies and TV alike): profile preference outranks everything,
+    /// then resolution, then source provenance, then seeders.
+    /// </summary>
+    public static double VideoReleaseScore(IndexerRelease release, BookAcquisitionRules rules) {
+        var title = release.Title;
+        var resolution =
+            TitleHasAny(title, "2160p", "4k", "uhd") ? 4 :
+            TitleHasAny(title, "1080p") ? 3 :
+            TitleHasAny(title, "720p") ? 2 :
+            TitleHasAny(title, "480p", "dvdrip") ? 1 : 0;
+        var source =
+            TitleHasAny(title, "remux") ? 5 :
+            TitleHasAny(title, "bluray", "blu-ray", "bdrip", "brrip") ? 4 :
+            TitleHasAny(title, "web-dl", "webdl") ? 3 :
+            TitleHasAny(title, "webrip", "web") ? 2 :
+            TitleHasAny(title, "hdtv") ? 1 : 0;
+        return PreferenceScore(release, rules) * 10_000
+            + resolution * 100_000
+            + source * 10_000
+            + Math.Min(release.Seeders ?? 0, 9_999);
+    }
 
     /// <summary>How many of the profile's preferred terms the title matches.</summary>
     public static int PreferredTermMatches(string title, BookAcquisitionRules rules) =>

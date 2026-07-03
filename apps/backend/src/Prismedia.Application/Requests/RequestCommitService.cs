@@ -25,7 +25,10 @@ public sealed record ProviderRef(string Provider, string ItemId);
 /// A library entity read for monitoring/removal: its kind, display title, the provider identities a
 /// discovery sync can re-resolve it from, and whether it owns a real source file.
 /// </summary>
-public sealed record MonitorableContainer(Guid EntityId, EntityKind Kind, string Title, IReadOnlyList<ProviderRef> ProviderIds, bool HasSourceFile = false, Guid? ParentEntityId = null);
+public sealed record MonitorableContainer(
+    Guid EntityId, EntityKind Kind, string Title, IReadOnlyList<ProviderRef> ProviderIds,
+    bool HasSourceFile = false, Guid? ParentEntityId = null,
+    IReadOnlyDictionary<string, int>? Positions = null);
 
 /// <summary>
 /// The discovery blacklist: provider work identities the user removed from Wanted. Container sweeps
@@ -126,7 +129,7 @@ public sealed class RequestCommitService(
 
         return await CommitContainerCoreAsync(
             descriptor, providerId, itemId, proposal, request.SelectedChildIds,
-            startAcquisitions: true, TargetingOf(request), cancellationToken);
+            startAcquisitions: true, TargetingOf(request), hideNsfw, cancellationToken);
     }
 
     /// <summary>The request-time acquisition choices (import target, profile) carried by a commit.</summary>
@@ -154,25 +157,106 @@ public sealed class RequestCommitService(
             return null;
         }
 
-        // No explicit choices: inherit the followed container's (a phantom episode of a monitored
-        // artist should land where the artist's request chose), else kind defaults apply downstream.
+        // No explicit choices: inherit the nearest followed ancestor's (a phantom episode of a
+        // monitored series should land where the series' request chose), else kind defaults apply.
         if (targeting is null || targeting.IsEmpty) {
-            targeting = entity.ParentEntityId is { } parentId
-                ? await monitors.GetTargetingByEntityAsync(parentId, cancellationToken) ?? AcquisitionTargeting.None
-                : AcquisitionTargeting.None;
+            targeting = await InheritedTargetingAsync(entity, cancellationToken);
         }
 
-        foreach (var providerRef in entity.ProviderIds) {
-            var request = new RequestCommitRequest(
-                descriptor.Kind, $"{providerRef.Provider}:{providerRef.ItemId}", [],
-                targeting.TargetLibraryRootId, targeting.ProfileId);
-            var response = await CommitLeafAsync(descriptor, request, providerRef.Provider, providerRef.ItemId, hideNsfw, cancellationToken);
-            if (response is not null) {
-                return response;
+        // TV units carry their search context on their ancestors (the series name, the season number),
+        // and their providers cannot resolve them standalone — they acquire from the entity graph
+        // directly. Every other kind re-resolves through its provider, degrading to the graph only
+        // when no provider answers, so a work whose provider vanished can still be fetched.
+        if (!descriptor.AcquireFromEntity) {
+            foreach (var providerRef in entity.ProviderIds) {
+                var request = new RequestCommitRequest(
+                    descriptor.Kind, $"{providerRef.Provider}:{providerRef.ItemId}", [],
+                    targeting.TargetLibraryRootId, targeting.ProfileId);
+                var response = await CommitLeafAsync(descriptor, request, providerRef.Provider, providerRef.ItemId, hideNsfw, cancellationToken);
+                if (response is not null) {
+                    return response;
+                }
             }
         }
 
-        return null;
+        return await RequestFromEntityGraphAsync(descriptor, entity, targeting, cancellationToken);
+    }
+
+    /// <summary>The stored library/profile choices of the entity's nearest monitored ancestor, or none.</summary>
+    private async Task<AcquisitionTargeting> InheritedTargetingAsync(MonitorableContainer entity, CancellationToken cancellationToken) {
+        var parentId = entity.ParentEntityId;
+        for (var depth = 0; parentId is { } id && depth < 3; depth++) {
+            if (await monitors.GetTargetingByEntityAsync(id, cancellationToken) is { } stored) {
+                return stored;
+            }
+
+            parentId = (await wanted.GetContainerAsync(id, cancellationToken))?.ParentEntityId;
+        }
+
+        return AcquisitionTargeting.None;
+    }
+
+    /// <summary>
+    /// Requests an entity from its own graph — no provider round-trip. The wanted entity is already
+    /// identified (that is the whole wanted design), so its title, positions (season/episode), and
+    /// ancestor titles (series, author, artist) are enough to search releases. Used for kinds whose
+    /// units cannot be provider-resolved standalone, and as the degrade path when providers fail.
+    /// </summary>
+    private async Task<RequestCommitResponse?> RequestFromEntityGraphAsync(
+        RequestKindDescriptor descriptor, MonitorableContainer entity, AcquisitionTargeting targeting, CancellationToken cancellationToken) {
+        var primaryId = entity.ProviderIds.FirstOrDefault();
+        if (entity.HasSourceFile) {
+            return new RequestCommitResponse(null, [Item(RequestCommitOutcome.AlreadyOwned, null)]);
+        }
+
+        if (await acquisitions.AnyForEntityAsync(entity.EntityId, cancellationToken)) {
+            return new RequestCommitResponse(null, [Item(RequestCommitOutcome.AlreadyRequested, null)]);
+        }
+
+        // Ancestor context: the nearest creator grouping names the author/artist, the nearest series
+        // names the TV context — the same drill-down rule the query ladder is built on.
+        string? creator = null;
+        string? series = null;
+        var parentId = entity.ParentEntityId;
+        for (var depth = 0; parentId is { } id && depth < 3; depth++) {
+            var ancestor = await wanted.GetContainerAsync(id, cancellationToken);
+            if (ancestor is null) {
+                break;
+            }
+
+            creator ??= ancestor.Kind is EntityKind.BookAuthor or EntityKind.MusicArtist ? ancestor.Title : null;
+            series ??= ancestor.Kind == EntityKind.VideoSeries ? ancestor.Title : null;
+            parentId = ancestor.ParentEntityId;
+        }
+
+        // A direct request un-blacklists the work, exactly like the provider path.
+        await suppressions.ClearAsync(entity.ProviderIds, cancellationToken);
+
+        var positions = entity.Positions ?? new Dictionary<string, int>();
+        var summary = await acquisitions.CreateAndSearchAsync(
+            new AcquisitionCreateRequest(
+                entity.Title,
+                creator,
+                series,
+                Year: null,
+                PosterUrl: null,
+                primaryId?.Provider,
+                primaryId?.ItemId,
+                Description: null,
+                descriptor.AcquisitionKind,
+                entity.EntityId,
+                targeting.ProfileId,
+                targeting.TargetLibraryRootId,
+                positions.TryGetValue(EntityPositionCodes.Season, out var season) ? season : null,
+                positions.TryGetValue(EntityPositionCodes.Episode, out var episode) ? episode : null),
+            cancellationToken);
+        await monitors.StartAsync(summary.Id, descriptor.AcquisitionKind, entity.Title, creator, cancellationToken);
+        return new RequestCommitResponse(null, [Item(RequestCommitOutcome.Requested, summary.Id)]);
+
+        RequestCommitItem Item(RequestCommitOutcome outcome, Guid? acquisitionId) =>
+            new(
+                primaryId is null ? entity.EntityId.ToString() : $"{primaryId.Provider}:{primaryId.ItemId}",
+                entity.Title, outcome, entity.EntityId, acquisitionId);
     }
 
     /// <summary>
@@ -211,7 +295,7 @@ public sealed class RequestCommitService(
                 .ToArray();
             await CommitContainerCoreAsync(
                 descriptor, providerRef.Provider, providerRef.ItemId, proposal, allChildIds,
-                startAcquisitions: false, AcquisitionTargeting.None, cancellationToken);
+                startAcquisitions: false, AcquisitionTargeting.None, hideNsfw: true, cancellationToken);
             return true;
         }
 
@@ -227,9 +311,14 @@ public sealed class RequestCommitService(
     /// </summary>
     private async Task<RequestCommitResponse> CommitContainerCoreAsync(
         RequestKindDescriptor descriptor, string providerId, string itemId, EntityMetadataProposal proposal,
-        IReadOnlyList<string> selectedChildIds, bool startAcquisitions, AcquisitionTargeting targeting, CancellationToken cancellationToken) {
+        IReadOnlyList<string> selectedChildIds, bool startAcquisitions, AcquisitionTargeting targeting, bool hideNsfw, CancellationToken cancellationToken) {
         var child = RequestKindRegistry.ChildOf(descriptor)!;
         var containerTitle = TitleOr(proposal.Patch.Title, itemId);
+        // The container's title is the child acquisitions' search context — creator context for an
+        // author's books or an artist's albums, series context for a series' season packs.
+        var (creatorContext, seriesContext) = descriptor.WantedEntityKind == EntityKind.VideoSeries
+            ? ((string?)null, (string?)containerTitle)
+            : (containerTitle, null);
         var container = await wanted.EnsureAsync(
             descriptor.WantedEntityKind, providerId, itemId, containerTitle,
             parentEntityId: null, matchTitleKindWide: true, cancellationToken);
@@ -278,11 +367,72 @@ public sealed class RequestCommitService(
         var items = new List<RequestCommitItem>();
         foreach (var pick in picks) {
             items.Add(startAcquisitions
-                ? await StartAcquisitionAsync(pick, providerId, child.AcquisitionKind, author: containerTitle, series: null, targeting, cancellationToken)
+                ? await StartAcquisitionAsync(pick, providerId, child.AcquisitionKind, creatorContext, seriesContext, targeting, cancellationToken)
                 : new RequestCommitItem($"{providerId}:{pick.WorkId}", pick.Title, pick.Outcome, pick.Entity.EntityId, null));
+
+            // A pick that nests further (a season's episodes) materializes its own children as wanted
+            // phantoms — discovery only, never acquisitions; each phantom is requested from its page.
+            await EnsurePhantomDescendantsAsync(child, providerId, pick, hideNsfw, cancellationToken);
         }
 
         return new RequestCommitResponse(container.EntityId, items);
+    }
+
+    /// <summary>
+    /// Materializes a pick's own structural children as wanted phantoms when its kind nests further —
+    /// the season→episode level of the TV chain, driven purely by the registry's child chain so a
+    /// deeper medium is a registry row, not a new flow. Phantoms honor the discovery blacklist and
+    /// never start acquisitions. A pick that already owns files is left alone (its children are real).
+    /// </summary>
+    private async Task EnsurePhantomDescendantsAsync(
+        RequestKindDescriptor pickDescriptor, string providerId, CommitPick pick, bool hideNsfw, CancellationToken cancellationToken) {
+        var grandchild = RequestKindRegistry.ChildOf(pickDescriptor);
+        if (grandchild is null || pick.Entity.HasFile) {
+            return;
+        }
+
+        // The pick's own detail carries its children (a series proposal ships season shells only; the
+        // season lookup ships the episodes), so resolve it with children included.
+        var proposal = await proposals.ResolveProposalAsync(
+            pickDescriptor, providerId, pick.WorkId, hideNsfw, includeChildren: true, cancellationToken);
+        if (proposal?.Patch is null) {
+            return;
+        }
+
+        var childProposals = proposal.Children.Where(node => !node.TargetKind.IsRelationship()).ToArray();
+        if (childProposals.Length == 0) {
+            return;
+        }
+
+        // Discovery honors the blacklist: a phantom the user removed from Wanted never reappears.
+        var candidates = childProposals
+            .Select(node => RequestProposalReading.WorkIdFor(providerId, node))
+            .Where(id => id is not null)
+            .Select(id => new ProviderRef(providerId, id!))
+            .ToArray();
+        var suppressed = await suppressions.FilterSuppressedAsync(candidates, cancellationToken);
+
+        var phantomPicks = new List<CommitPick>();
+        foreach (var childProposal in childProposals) {
+            var workId = RequestProposalReading.WorkIdFor(providerId, childProposal);
+            if (workId is null || suppressed.Contains($"{providerId}:{workId}")) {
+                continue;
+            }
+
+            var phantom = await EnsurePickAsync(grandchild, providerId, childProposal, pick.Entity.EntityId, cancellationToken);
+            if (phantom is not null) {
+                phantomPicks.Add(phantom);
+            }
+        }
+
+        // Enrich the pick and its fresh phantoms through the shared cascade (titles, positions,
+        // artwork); owned children are excluded so a request can't overwrite real metadata.
+        if (phantomPicks.Any(phantom => phantom.Outcome == RequestCommitOutcome.Requested)) {
+            var applyChildren = proposal.Children.Where(node => node.TargetKind.IsRelationship())
+                .Concat(phantomPicks.Where(phantom => !phantom.Entity.HasFile).Select(phantom => phantom.Proposal))
+                .ToArray();
+            await wanted.ApplyProposalAsync(pick.Entity.EntityId, proposal with { Children = applyChildren }, cancellationToken);
+        }
     }
 
     /// <summary>
@@ -371,20 +521,23 @@ public sealed class RequestCommitService(
 
         Guid? acquisitionId = null;
         if (pick.Outcome == RequestCommitOutcome.Requested) {
+            var patch = pick.Proposal.Patch;
             var summary = await acquisitions.CreateAndSearchAsync(
                 new AcquisitionCreateRequest(
                     pick.Title,
                     author,
                     series,
-                    RequestProposalReading.YearFromDates(pick.Proposal.Patch?.Dates ?? new Dictionary<string, string>()),
+                    RequestProposalReading.YearFromDates(patch?.Dates ?? new Dictionary<string, string>()),
                     RequestProposalReading.BestImage(pick.Proposal),
                     providerId,
                     pick.WorkId,
-                    pick.Proposal.Patch?.Description,
+                    patch?.Description,
                     acquisitionKind,
                     pick.Entity.EntityId,
                     targeting.ProfileId,
-                    targeting.TargetLibraryRootId),
+                    targeting.TargetLibraryRootId,
+                    patch is null ? null : RequestProposalReading.SeasonNumberOf(patch),
+                    patch is null ? null : RequestProposalReading.EpisodeNumberOf(patch)),
                 cancellationToken);
             acquisitionId = summary.Id;
             await monitors.StartAsync(summary.Id, acquisitionKind, pick.Title, author, cancellationToken);

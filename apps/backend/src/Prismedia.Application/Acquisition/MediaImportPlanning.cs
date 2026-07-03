@@ -162,6 +162,63 @@ public static class MusicImportPlanBuilder {
 }
 
 /// <summary>
+/// Pure TV import planning: places a release's episode files under
+/// <c>{Series}/Season {NN}/{Series} - SxxEyy.{ext}</c>, exactly the layout the video scan materializes
+/// a series hierarchy from. Episode identity comes from the SxxEyy / 1x05 tokens in each file name
+/// (via <see cref="TvReleaseTokens"/> — the same decode the decision engine uses); a single-episode
+/// acquisition whose file carries no token falls back to the unit stamped on the acquisition. Sample
+/// files are skipped, and a season pack whose files carry no tokens at all blocks for manual import
+/// rather than guessing episode order.
+/// </summary>
+public static partial class TvImportPlanBuilder {
+    /// <summary>Video extensions the TV importer accepts. Mirrors scan discovery's video set.</summary>
+    private static readonly IReadOnlySet<string> VideoExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
+        ".mp4", ".m4v", ".mkv", ".mov", ".webm", ".avi", ".wmv", ".flv", ".ts", ".m2ts", ".mpg", ".mpeg"
+    };
+
+    [GeneratedRegex(@"(?:^|[\s._\-\[(])sample(?:$|[\s._\-\])])", RegexOptions.IgnoreCase)]
+    private static partial Regex SampleTokenRegex();
+
+    /// <summary>
+    /// Plans the import of a downloaded TV release. <paramref name="series"/> names the series folder;
+    /// <paramref name="seasonNumber"/>/<paramref name="episodeNumber"/> are the acquisition's unit,
+    /// used when a file names no unit of its own.
+    /// </summary>
+    public static ImportPlan Plan(IReadOnlyList<ImportCandidateFile> files, string series, int? seasonNumber, int? episodeNumber) {
+        var videos = files
+            .Where(file => VideoExtensions.Contains(Path.GetExtension(file.RelativePath)))
+            .Where(file => !SampleTokenRegex().IsMatch(Path.GetFileNameWithoutExtension(file.RelativePath)))
+            .ToArray();
+        if (videos.Length == 0) {
+            return ImportPlan.Block(ImportBlockReason.NoSupportedPayload);
+        }
+
+        var seriesFolder = ImportPlanBuilder.SanitizeSegment(series);
+        var items = new List<ImportPlanItem>(videos.Length);
+        foreach (var video in videos.OrderBy(file => file.RelativePath, StringComparer.OrdinalIgnoreCase)) {
+            var unit = TvReleaseTokens.ParseEpisode(Path.GetFileNameWithoutExtension(video.RelativePath));
+            // A tokenless file is only placeable when the acquisition itself IS one episode.
+            if (unit is null && (videos.Length > 1 || seasonNumber is null || episodeNumber is null)) {
+                continue;
+            }
+
+            var (season, episode) = unit ?? (seasonNumber!.Value, episodeNumber!.Value);
+            var extension = Path.GetExtension(video.RelativePath);
+            items.Add(new ImportPlanItem(
+                video.RelativePath,
+                $"{seriesFolder}/Season {season:00}/{ImportPlanBuilder.SanitizeSegment($"{series} - S{season:00}E{episode:00}")}{extension}"));
+        }
+
+        // No file declared a placeable unit — importing by guesswork would scatter episodes; stop for
+        // a human instead.
+        return items.Count == 0 ? ImportPlan.Block(ImportBlockReason.AmbiguousMultiplePrimaries) : ImportPlan.For(items);
+    }
+
+    /// <summary>The sanitized series folder (relative to the library root) a plan places into.</summary>
+    public static string SeriesFolderRelative(string series) => ImportPlanBuilder.SanitizeSegment(series);
+}
+
+/// <summary>
 /// Resolves an <see cref="ImportPlan"/>'s relative moves to absolute paths under the library root,
 /// refusing any target that escapes it — the shared final step for every per-kind import engine.
 /// </summary>

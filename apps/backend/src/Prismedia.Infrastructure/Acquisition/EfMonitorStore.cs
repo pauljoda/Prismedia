@@ -273,6 +273,8 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
             Title = parent.Title,
             Author = parent.Author,
             Series = parent.Series,
+            SeasonNumber = parent.SeasonNumber,
+            EpisodeNumber = parent.EpisodeNumber,
             Year = parent.Year,
             PosterUrl = parent.PosterUrl,
             PluginId = parent.PluginId,

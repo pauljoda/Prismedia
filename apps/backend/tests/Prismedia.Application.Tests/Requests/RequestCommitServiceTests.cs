@@ -95,16 +95,38 @@ public sealed class RequestCommitServiceTests {
     }
 
     [Fact]
-    public async Task SeriesCommitIsRefusedWhileItsEngineHasNotLanded() {
-        var (service, writer, acquisitions) = Service(Container(ProposalKind.VideoSeries, "Andor", "TV1"));
+    public async Task SeriesCommitAcquiresSeasonPacksAndMaterializesEpisodePhantoms() {
+        // The season node carries its episodes (a season lookup ships them); positions ride the patch.
+        var episode1 = Leaf(ProposalKind.Video, "Pilot", "E1") with {
+            Patch = Patch("Pilot", "E1", new Dictionary<string, int> { ["seasonNumber"] = 1, ["episodeNumber"] = 1 }),
+        };
+        var episode2 = Leaf(ProposalKind.Video, "Aftermath", "E2") with {
+            Patch = Patch("Aftermath", "E2", new Dictionary<string, int> { ["seasonNumber"] = 1, ["episodeNumber"] = 2 }),
+        };
+        var season = Container(ProposalKind.VideoSeason, "Season 1", "S1", episode1, episode2) with {
+            Patch = Patch("Season 1", "S1", new Dictionary<string, int> { ["seasonNumber"] = 1 }),
+        };
+        var (service, writer, acquisitions) = Service(Container(ProposalKind.VideoSeries, "Andor", "TV1", season));
 
         var response = await service.CommitAsync(
-            new RequestCommitRequest(RequestMediaKind.Series, $"{Provider}:TV1", []),
+            new RequestCommitRequest(RequestMediaKind.Series, $"{Provider}:TV1", [$"{Provider}:S1"]),
             hideNsfw: false, CancellationToken.None);
 
-        Assert.Null(response);
-        Assert.Empty(writer.Ensured);
-        Assert.Empty(acquisitions.Created);
+        Assert.NotNull(response);
+        // One acquisition: the season pack, searched with series context and its season number.
+        var created = Assert.Single(acquisitions.Created);
+        Assert.Equal(EntityKind.VideoSeason, created.Kind);
+        Assert.Equal("Andor", created.Series);
+        Assert.Null(created.Author);
+        Assert.Equal(1, created.SeasonNumber);
+        Assert.Null(created.EpisodeNumber);
+
+        // The picked season's episodes materialize as wanted phantoms beneath it — never acquisitions.
+        var seasonEntityId = Assert.Single(writer.Ensured, call => call.Kind == EntityKind.VideoSeason);
+        var episodes = writer.Ensured.Where(call => call.Kind == EntityKind.Video).ToArray();
+        Assert.Equal(["E1", "E2"], episodes.Select(call => call.ItemId).ToArray());
+        Assert.All(episodes, call => Assert.Equal(
+            FakeWantedEntityWriter.EntityIdFor("S1"), call.ParentEntityId));
     }
 
     [Fact]
@@ -395,14 +417,29 @@ public sealed class RequestCommitServiceTests {
     private static EntityMetadataProposal Leaf(ProposalKind kind, string title, string workId) =>
         new($"p-{workId}", Provider, kind, null, null, Patch(title, workId), [], [], [], null, []);
 
-    private static EntityMetadataPatch Patch(string title, string workId) =>
+    private static EntityMetadataPatch Patch(string title, string workId, IReadOnlyDictionary<string, int>? positions = null) =>
         new(title, null, new Dictionary<string, string> { [Provider] = workId }, [], [], null, [],
-            new Dictionary<string, string>(), new Dictionary<string, int>(), new Dictionary<string, int>(), null);
+            new Dictionary<string, string>(), new Dictionary<string, int>(), positions ?? new Dictionary<string, int>(), null);
 
+    /// <summary>Resolves any node of the proposal tree by its provider item id — the shape of a plugin's per-item lookups.</summary>
     private sealed class FakeProposalSource(EntityMetadataProposal proposal) : IPluginRequestProposalSource {
         public Task<EntityMetadataProposal?> ResolveProposalAsync(
             RequestKindDescriptor descriptor, string providerId, string itemId, bool hideNsfw, bool includeChildren, CancellationToken cancellationToken) =>
-            Task.FromResult(proposal.Patch.ExternalIds.GetValueOrDefault(providerId) == itemId ? proposal : null);
+            Task.FromResult(FindByItemId(proposal, providerId, itemId));
+
+        private static EntityMetadataProposal? FindByItemId(EntityMetadataProposal node, string providerId, string itemId) {
+            if (node.Patch?.ExternalIds.GetValueOrDefault(providerId) == itemId) {
+                return node;
+            }
+
+            foreach (var child in node.Children) {
+                if (FindByItemId(child, providerId, itemId) is { } found) {
+                    return found;
+                }
+            }
+
+            return null;
+        }
     }
 
     private sealed class FakeWantedEntityWriter : IWantedEntityWriter {

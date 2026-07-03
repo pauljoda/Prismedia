@@ -251,6 +251,83 @@ public sealed class MovieAcquisitionImportEngine(
 }
 
 /// <summary>
+/// TV import engine: places a release's episode files as
+/// <c>{Series}/Season NN/{Series} - SxxEyy.{ext}</c> in the first video-enabled library root — the
+/// exact layout the video scan materializes a series hierarchy from, so the scan that follows binds
+/// the wanted series, season, and episodes by folder path and position. One engine class serves both
+/// TV acquisition units — season packs (<see cref="EntityKind.VideoSeason"/>) and single episodes
+/// (<see cref="EntityKind.Video"/>) — since placement rules are identical at either granularity.
+/// </summary>
+public sealed class TvAcquisitionImportEngine(
+    EntityKind kind,
+    IAcquisitionStore acquisitions,
+    IBookAcquisitionProfileStore profiles,
+    ILibraryScanRootPersistence roots,
+    IDownloadPayloadReader payloads,
+    IImportFileMover mover,
+    ImportedTorrentRemover torrents) : IAcquisitionImportEngine {
+    public EntityKind Kind => kind;
+
+    public async Task ImportAsync(JobContext context, AcquisitionImportContext import, CancellationToken cancellationToken) {
+        var profile = await profiles.GetImportProfileAsync(import.ProfileId, import.Kind, cancellationToken);
+        var root = await ImportRootResolution.ResolveAsync(
+            roots, import.TargetLibraryRootId, profile?.TargetLibraryRootId, static candidate => candidate.ScanVideos, cancellationToken);
+        if (root is null) {
+            await Fail(import.Id, "No enabled video library root exists to import the episodes into.", cancellationToken);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(import.ContentPath) || payloads.Read(import.ContentPath) is not { } payload) {
+            await Fail(import.Id, "The completed download reported no content path.", cancellationToken);
+            return;
+        }
+
+        var series = string.IsNullOrWhiteSpace(import.Series) ? import.Title : import.Series;
+        var plan = ImportTargetResolver.Resolve(
+            payload.ContentRoot, root.Path,
+            TvImportPlanBuilder.Plan(payload.Files, series, import.SeasonNumber, import.EpisodeNumber));
+        if (plan.Blocked) {
+            await acquisitions.SetStatusAsync(
+                import.Id, AcquisitionStatus.ManualImportRequired,
+                plan.BlockReason == ImportBlockReason.NoSupportedPayload
+                    ? "The download contains no supported video files."
+                    : "The download's files carry no recognizable episode numbering; import manually.",
+                cancellationToken);
+            return;
+        }
+
+        await context.ReportProgressAsync(40, "Moving files", cancellationToken);
+        var finalPaths = new List<string>(plan.Items.Count);
+        foreach (var item in plan.Items) {
+            finalPaths.Add(await mover.PlaceAsync(item, ImportMode.Move, cancellationToken));
+        }
+
+        // The hint keys on the most specific folder that covers every placed file: the season folder
+        // for a single-season payload, the series folder when a pack spans seasons — so the scan's
+        // wanted binds (series by ancestor, season and episodes by position) all fall under it.
+        var seasonFolders = finalPaths
+            .Select(path => Path.GetDirectoryName(path) ?? root.Path)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var hintFolder = seasonFolders.Length == 1
+            ? seasonFolders[0]
+            : Path.GetFullPath(Path.Combine(root.Path, TvImportPlanBuilder.SeriesFolderRelative(series)));
+        await acquisitions.WriteImportHintAsync(import.Id, hintFolder, import, BookQualityRank.Floor, cancellationToken);
+        await acquisitions.SetFinalSourcePathAsync(import.Id, hintFolder, cancellationToken);
+
+        await context.ReportProgressAsync(80, "Scanning library", cancellationToken);
+        await context.EnqueueIfNeededAsync(new EnqueueJobRequest(JobType.ScanLibrary, TargetLabel: "Imported episode scan"), cancellationToken);
+
+        await torrents.RemoveAsync(import, cancellationToken);
+        await acquisitions.MarkImportedWithQualityAsync(import.Id, BookQualityRank.Floor, "Imported into the library.", cancellationToken);
+        await context.ReportProgressAsync(100, "Imported", cancellationToken);
+    }
+
+    private Task Fail(Guid acquisitionId, string message, CancellationToken cancellationToken) =>
+        acquisitions.SetStatusAsync(acquisitionId, AcquisitionStatus.Failed, message, cancellationToken);
+}
+
+/// <summary>
 /// Music import engine: places the album release's audio files (and cover art) under
 /// <c>{Artist}/{Album}/</c> in the first audio-enabled library root, preserving disc-folder structure,
 /// writes the identify hint keyed on the album folder, and chains an audio scan — which binds the album

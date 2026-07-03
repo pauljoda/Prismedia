@@ -22,6 +22,8 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
             Title = metadata.Title,
             Author = metadata.Author,
             Series = metadata.Series,
+            SeasonNumber = metadata.SeasonNumber,
+            EpisodeNumber = metadata.EpisodeNumber,
             Year = metadata.Year,
             PosterUrl = metadata.PosterUrl,
             Description = metadata.Description,
@@ -68,9 +70,13 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
         var row = await db.Acquisitions
             .AsNoTracking()
             .Where(row => row.Id == id)
-            .Select(row => new { row.Id, row.Title, row.Author, row.Kind, row.EntityId, row.Year, row.ProfileId })
+            .Select(row => new { row.Id, row.Title, row.Author, row.Kind, row.EntityId, row.Year, row.ProfileId, row.Series, row.SeasonNumber, row.EpisodeNumber })
             .FirstOrDefaultAsync(cancellationToken);
-        return row is null ? null : new AcquisitionSearchInput(row.Id, row.Title, row.Author, row.Kind, row.EntityId, row.Year, row.ProfileId);
+        return row is null
+            ? null
+            : new AcquisitionSearchInput(
+                row.Id, row.Title, row.Author, row.Kind, row.EntityId, row.Year, row.ProfileId,
+                row.Series, row.SeasonNumber, row.EpisodeNumber);
     }
 
     public async Task<AcquisitionStatus?> GetStatusAsync(Guid id, CancellationToken cancellationToken) {
@@ -395,7 +401,7 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
         return new AcquisitionImportContext(
             row.Id, row.Title, row.Author, row.Series, row.Year, row.PosterUrl, row.PluginId, row.PluginItemId,
             row.ProfileId, transfer?.ContentPath, transfer?.ClientItemId, transfer?.DownloadClientConfigId, row.Description,
-            row.Kind, row.TargetLibraryRootId);
+            row.Kind, row.TargetLibraryRootId, row.SeasonNumber, row.EpisodeNumber);
     }
 
     public async Task<AcquisitionTransferInfo?> GetTransferInfoAsync(Guid acquisitionId, CancellationToken cancellationToken) {

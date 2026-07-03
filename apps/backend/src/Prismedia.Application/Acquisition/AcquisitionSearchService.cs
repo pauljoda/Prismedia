@@ -33,6 +33,12 @@ public sealed class AcquisitionSearchRunner(
             rules = rules with { IsUpgradeSearch = true, OwnedQuality = owned };
         }
 
+        // TV unit context rides the rules the same way the upgrade fields do: set per search from the
+        // acquisition, never by a profile, so the unit-match specification knows what is sought.
+        if (input.SeasonNumber is not null) {
+            rules = rules with { SeasonNumber = input.SeasonNumber, EpisodeNumber = input.EpisodeNumber };
+        }
+
         var blocklisted = await blocklist.GetIdentitiesAsync(cancellationToken);
         var engine = decisionEngines.Get(input.Kind);
 

@@ -57,11 +57,26 @@ public enum RequestMediaKind {
     Movie,
 
     /// <summary>
-    /// TV series request target: a container kind. Discover and detail are available; committing waits
-    /// for the per-episode acquisition engine (the richest container case, deliberately last).
+    /// TV series request target: a container kind that surfaces the series' seasons as toggleable
+    /// children, each fanned out into its own <see cref="Season"/> acquisition. The series itself is
+    /// never downloaded; it is monitored so new seasons keep appearing.
     /// </summary>
     [Code("series")]
     Series,
+
+    /// <summary>
+    /// TV season request target — the acquisition unit for TV (a season-pack download). Not offered in
+    /// Discover directly; seasons arrive as a series' children and as wanted placeholders.
+    /// </summary>
+    [Code("season")]
+    Season,
+
+    /// <summary>
+    /// TV episode request target — a single-episode acquisition, requested from a phantom episode's own
+    /// page. Not offered in Discover directly; episodes arrive as a season's phantom children.
+    /// </summary>
+    [Code("episode")]
+    Episode,
 
     /// <summary>
     /// Music artist request target: a container kind that surfaces the artist's albums as toggleable

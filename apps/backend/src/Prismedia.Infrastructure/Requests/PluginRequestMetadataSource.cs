@@ -34,6 +34,10 @@ public sealed class PluginRequestMetadataSource(PluginCatalogService catalog, Id
             .Where(provider => provider.Enabled && (!provider.IsNsfw || !hideNsfw))
             .Where(provider => provider.Supports.Any(support =>
                 PluginEntityKindCompatibility.SupportsKind(support, descriptor.PluginKindCode) && support.Actions.Contains(SearchAction)))
+            // Every result must be reviewable: its detail page resolves the item by id, so a provider
+            // that can search a kind but not look it up would only produce dead-end results.
+            .Where(provider => provider.Supports.Any(support =>
+                PluginEntityKindCompatibility.SupportsKind(support, descriptor.PluginKindCode) && support.Actions.Contains(LookupIdAction)))
             .Where(provider => requiredChildLookupKind is null || provider.Supports.Any(support =>
                 PluginEntityKindCompatibility.SupportsKind(support, requiredChildLookupKind) && support.Actions.Contains(LookupIdAction)))
             .ToArray();

@@ -72,7 +72,9 @@ public sealed record AcquisitionCreateRequest(
     EntityKind Kind = EntityKind.Book,
     Guid? EntityId = null,
     Guid? ProfileId = null,
-    Guid? TargetLibraryRootId = null);
+    Guid? TargetLibraryRootId = null,
+    int? SeasonNumber = null,
+    int? EpisodeNumber = null);
 
 /// <summary>A scored release candidate surfaced for review. Download links stay server-side; the id selects one to queue.</summary>
 public sealed record ReleaseCandidateView(

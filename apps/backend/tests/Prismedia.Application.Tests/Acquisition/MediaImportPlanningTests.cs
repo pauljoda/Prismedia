@@ -126,6 +126,66 @@ public sealed class MusicImportPlanBuilderTests {
     }
 }
 
+public sealed class TvImportPlanBuilderTests {
+    private static ImportCandidateFile File(string path, long size = 1_000_000) => new(path, size);
+
+    [Fact]
+    public void SeasonPackPlacesEachTokenedEpisodeUnderItsSeasonFolder() {
+        var plan = TvImportPlanBuilder.Plan([
+            File("Andor.S01.1080p/Andor.S01E01.1080p.mkv"),
+            File("Andor.S01.1080p/Andor.S01E02.1080p.mkv"),
+            File("Andor.S01.1080p/release.nfo"),
+        ], "Andor", seasonNumber: 1, episodeNumber: null);
+
+        Assert.False(plan.Blocked);
+        Assert.Equal(
+            ["Andor/Season 01/Andor - S01E01.mkv", "Andor/Season 01/Andor - S01E02.mkv"],
+            plan.Items.Select(item => item.TargetRelativePath).ToArray());
+    }
+
+    [Fact]
+    public void CompleteSeriesPackSpansSeasonFoldersByEachFilesToken() {
+        var plan = TvImportPlanBuilder.Plan([
+            File("pack/Andor.S01E01.mkv"),
+            File("pack/Andor.S02E01.mkv"),
+        ], "Andor", seasonNumber: 1, episodeNumber: null);
+
+        Assert.Equal(
+            ["Andor/Season 01/Andor - S01E01.mkv", "Andor/Season 02/Andor - S02E01.mkv"],
+            plan.Items.Select(item => item.TargetRelativePath).ToArray());
+    }
+
+    [Fact]
+    public void TokenlessSingleEpisodeFallsBackToTheAcquisitionsUnit() {
+        var plan = TvImportPlanBuilder.Plan(
+            [File("andor.pilot.recode.mkv")], "Andor", seasonNumber: 1, episodeNumber: 5);
+
+        Assert.Equal("Andor/Season 01/Andor - S01E05.mkv", Assert.Single(plan.Items).TargetRelativePath);
+    }
+
+    [Fact]
+    public void TokenlessSeasonPackBlocksInsteadOfGuessingOrder() {
+        var plan = TvImportPlanBuilder.Plan([
+            File("pack/episode one.mkv"),
+            File("pack/episode two.mkv"),
+        ], "Andor", seasonNumber: 1, episodeNumber: null);
+
+        Assert.True(plan.Blocked);
+        Assert.Equal(ImportBlockReason.AmbiguousMultiplePrimaries, plan.BlockReason);
+    }
+
+    [Fact]
+    public void SamplesAndNonVideoFilesAreSkipped() {
+        var plan = TvImportPlanBuilder.Plan([
+            File("pack/Andor.S01E01.sample.mkv"),
+            File("pack/Andor.S01E01.mkv"),
+            File("pack/artwork.jpg"),
+        ], "Andor", seasonNumber: 1, episodeNumber: null);
+
+        Assert.Equal("Andor/Season 01/Andor - S01E01.mkv", Assert.Single(plan.Items).TargetRelativePath);
+    }
+}
+
 public sealed class ImportTargetResolverTests {
     [Fact]
     public void ResolvesRelativeMovesUnderTheLibraryRoot() {

@@ -49,9 +49,13 @@ public sealed class RequestSearchService(IRequestMetadataSearchSource source) {
             return new RequestSearchResponse([], []);
         }
 
-        var kinds = request.Kinds.Count == 0
+        // Unit kinds (seasons, episodes) exist only inside their parent's flow — an "all kinds"
+        // search never queries them, and asking for one explicitly is refused the same way.
+        var kinds = (request.Kinds.Count == 0
             ? RequestKindRegistry.All
-            : request.Kinds.Select(RequestKindRegistry.Find).Where(d => d is not null).Select(d => d!).ToArray();
+            : request.Kinds.Select(RequestKindRegistry.Find).Where(d => d is not null).Select(d => d!).ToArray())
+            .Where(descriptor => descriptor.Discoverable)
+            .ToArray();
 
         var results = new List<RequestSearchResult>();
         var errors = new List<RequestProviderHealth>();

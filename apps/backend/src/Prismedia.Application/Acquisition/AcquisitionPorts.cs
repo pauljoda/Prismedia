@@ -153,14 +153,26 @@ public interface IAcquisitionHintApplier {
     Task<bool> BindWantedEntityAsync(EntityKind kind, string sourcePath, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Binds a request-created wanted container of <paramref name="parentKind"/> (an author, an artist)
-    /// to the grouping folder the scan is about to upsert: when an unconsumed hint under
-    /// <paramref name="folderPath"/> links a wanted child whose parent is a fileless container entity,
-    /// the folder becomes that container's source path and its Wanted state clears — so the scan reuses
-    /// the wanted container instead of creating a second one. Call BEFORE the container upsert.
-    /// Returns true when a wanted container was bound.
+    /// Binds a request-created wanted ancestor grouping of <paramref name="parentKind"/> (an author, an
+    /// artist, a series) to the folder the scan is about to upsert: when an unconsumed hint under
+    /// <paramref name="folderPath"/> links a wanted entity with a fileless ancestor of that kind, the
+    /// folder becomes the ancestor's source path and its Wanted state clears — so the scan reuses the
+    /// wanted grouping instead of creating a second one. Call BEFORE the grouping's upsert.
+    /// Returns true when a wanted ancestor was bound.
     /// </summary>
     Task<bool> BindWantedParentAsync(EntityKind parentKind, string folderPath, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Binds a wanted positioned child (a phantom season under its series, a phantom episode under its
+    /// season) to the path the scan is about to upsert: when the entity whose source path is
+    /// <paramref name="parentPath"/> has a fileless wanted child of <paramref name="childKind"/> at
+    /// sibling sort order <paramref name="sortOrder"/>, <paramref name="childPath"/> becomes that
+    /// child's source path and its Wanted state clears — so the scan's upsert finds the phantom instead
+    /// of creating a duplicate. Works with or without an import hint: a monitored on-disk series
+    /// gaining new episode files binds its phantoms the same way. Call BEFORE the child's upsert.
+    /// Returns true when a phantom was bound.
+    /// </summary>
+    Task<bool> BindWantedChildBySortOrderAsync(EntityKind childKind, string parentPath, int sortOrder, string childPath, CancellationToken cancellationToken);
 }
 
 /// <summary>Persistence port for acquisition records and their scored release candidates.</summary>

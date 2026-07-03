@@ -136,6 +136,25 @@ public static class RequestProposalReading {
         return char.ToUpperInvariant(role[0]) + role[1..];
     }
 
+    /// <summary>The season number a proposal declares (a season's own, or the season an episode belongs to), or null.</summary>
+    public static int? SeasonNumberOf(EntityMetadataPatch patch) =>
+        PositionOf(patch, EntityPositionCodes.Season, "seasonNumber");
+
+    /// <summary>The episode number an episode proposal declares, or null.</summary>
+    public static int? EpisodeNumberOf(EntityMetadataPatch patch) =>
+        PositionOf(patch, EntityPositionCodes.Episode, "episodeNumber");
+
+    /// <summary>Reads a position by its canonical code or its provider wire spelling. prism-vocab: external (plugin positions vocabulary).</summary>
+    private static int? PositionOf(EntityMetadataPatch patch, params string[] keys) {
+        foreach (var (code, value) in patch.Positions) {
+            if (keys.Any(key => key.Equals(code.Trim(), StringComparison.OrdinalIgnoreCase))) {
+                return value;
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>
     /// An album proposal's track children projected to review tracks: album-global number (provider
     /// sort order when present), title, and duration when known.

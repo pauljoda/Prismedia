@@ -87,6 +87,28 @@ public sealed class ScanLibraryJobHandler(
                         }
                     }
 
+                    // Bind the wanted TV tree BEFORE the upserts, top-down: the series grouping by
+                    // folder (the ancestor of an imported season/episode hint), then its phantom season
+                    // and episode by their sibling positions — so the path/position-keyed upserts find
+                    // the request-created entities instead of creating duplicates.
+                    if (acquisitionHints is not null && item.Series is { } seriesInfo) {
+                        await acquisitionHints.BindWantedParentAsync(EntityKind.VideoSeries, seriesInfo.FolderPath, cancellationToken);
+                        if (item.Season is { } seasonInfo) {
+                            // A season-pack hint names the wanted season directly; phantom seasons of a
+                            // bound series also match by their sibling position.
+                            await acquisitionHints.BindWantedEntityAsync(EntityKind.VideoSeason, seasonInfo.FolderPath, cancellationToken);
+                            await acquisitionHints.BindWantedChildBySortOrderAsync(
+                                EntityKind.VideoSeason, seriesInfo.FolderPath, seasonInfo.SeasonNumber, seasonInfo.FolderPath, cancellationToken);
+                            if (item.EpisodeNumber is { } episodeNumber) {
+                                await acquisitionHints.BindWantedChildBySortOrderAsync(
+                                    EntityKind.Video, seasonInfo.FolderPath, episodeNumber, filePath, cancellationToken);
+                            }
+                        }
+
+                        // A hint that names this exact file (a single-episode import) binds directly too.
+                        await acquisitionHints.BindWantedEntityAsync(EntityKind.Video, filePath, cancellationToken);
+                    }
+
                     batchItems.Add(item);
                 }
 

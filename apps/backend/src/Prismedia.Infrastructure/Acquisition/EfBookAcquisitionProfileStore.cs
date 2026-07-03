@@ -127,9 +127,12 @@ public sealed class EfBookAcquisitionProfileStore(PrismediaDbContext db) : IBook
     /// <summary>
     /// Resolves the effective profile row: an explicit id wins when it exists and is the right kind,
     /// else the kind's default profile, else any profile of the kind — a stale or wrong-kind request
-    /// choice degrades instead of failing the search or import.
+    /// choice degrades instead of failing the search or import. Acquisition kinds normalize to their
+    /// governing profile kind here (a season-pack or episode acquisition resolves the TV profile), so
+    /// no caller translates kinds itself.
     /// </summary>
     private async Task<BookAcquisitionProfileRow?> ResolveRowAsync(Guid? profileId, EntityKind kind, CancellationToken cancellationToken) {
+        kind = AcquisitionProfileKinds.For(kind);
         if (profileId is { } id) {
             var chosen = await db.BookAcquisitionProfiles.AsNoTracking()
                 .FirstOrDefaultAsync(profile => profile.Id == id && profile.Kind == kind, cancellationToken);

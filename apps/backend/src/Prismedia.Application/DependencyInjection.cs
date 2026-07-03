@@ -61,11 +61,17 @@ public static class DependencyInjection {
         services.AddSingleton<Acquisition.IAcquisitionDecisionEngine, Acquisition.BookReleaseDecisionEngine>();
         services.AddSingleton<Acquisition.IAcquisitionDecisionEngine, Acquisition.MovieReleaseDecisionEngine>();
         services.AddSingleton<Acquisition.IAcquisitionDecisionEngine, Acquisition.MusicReleaseDecisionEngine>();
+        // One TV engine class serves both acquisition units: season packs and single episodes.
+        services.AddSingleton<Acquisition.IAcquisitionDecisionEngine>(new Acquisition.TvReleaseDecisionEngine(EntityKind.VideoSeason));
+        services.AddSingleton<Acquisition.IAcquisitionDecisionEngine>(new Acquisition.TvReleaseDecisionEngine(EntityKind.Video));
         services.AddSingleton<Acquisition.IAcquisitionDecisionEngineFactory, Acquisition.AcquisitionDecisionEngineFactory>();
         services.AddScoped<ImportedTorrentRemover>();
         services.AddScoped<IAcquisitionImportEngine, BookAcquisitionImportEngine>();
         services.AddScoped<IAcquisitionImportEngine, MovieAcquisitionImportEngine>();
         services.AddScoped<IAcquisitionImportEngine, MusicAcquisitionImportEngine>();
+        // One TV engine class serves both acquisition units: season packs and single episodes.
+        services.AddScoped<IAcquisitionImportEngine>(provider => ActivatorUtilities.CreateInstance<TvAcquisitionImportEngine>(provider, EntityKind.VideoSeason));
+        services.AddScoped<IAcquisitionImportEngine>(provider => ActivatorUtilities.CreateInstance<TvAcquisitionImportEngine>(provider, EntityKind.Video));
         services.AddScoped<IAcquisitionImportEngineFactory, AcquisitionImportEngineFactory>();
         services.AddScoped<IAudioStreamService, AudioStreamService>();
         services.AddSingleton<IIdentifyApplyProgressStore, InMemoryIdentifyApplyProgressStore>();

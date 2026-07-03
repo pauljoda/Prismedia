@@ -31,8 +31,8 @@ public sealed class BookAcquisitionProfileCommandService(IBookAcquisitionProfile
             throw new AcquisitionConfigurationException(ApiProblemCodes.AcquisitionProfileInvalid, "Minimum seeders cannot be negative.");
         }
 
-        if (request.Kind is not (Domain.Entities.EntityKind.Book or Domain.Entities.EntityKind.Movie or Domain.Entities.EntityKind.AudioLibrary)) {
-            throw new AcquisitionConfigurationException(ApiProblemCodes.AcquisitionProfileInvalid, "Profiles support books, movies, and albums.");
+        if (!AcquisitionProfileKinds.All.Contains(request.Kind)) {
+            throw new AcquisitionConfigurationException(ApiProblemCodes.AcquisitionProfileInvalid, "Profiles support books, movies, TV series, and albums.");
         }
 
         return new BookAcquisitionProfileSaveCommand(

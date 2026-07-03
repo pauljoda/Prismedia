@@ -161,6 +161,13 @@ public sealed class AcquisitionRow {
     public string Title { get; set; } = string.Empty;
     public string? Author { get; set; }
     public string? Series { get; set; }
+
+    /// <summary>Season number for TV units (a season-pack or single-episode acquisition). Null elsewhere.</summary>
+    public int? SeasonNumber { get; set; }
+
+    /// <summary>Episode number for a single-episode acquisition. Null elsewhere (a season pack has only a season).</summary>
+    public int? EpisodeNumber { get; set; }
+
     public int? Year { get; set; }
     public string? PosterUrl { get; set; }
 

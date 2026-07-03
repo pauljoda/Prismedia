@@ -236,7 +236,9 @@ public sealed class AcquisitionService(
             request.Kind,
             request.EntityId,
             request.ProfileId,
-            request.TargetLibraryRootId);
+            request.TargetLibraryRootId,
+            request.SeasonNumber,
+            request.EpisodeNumber);
 
         var summary = await store.CreateAsync(metadata, cancellationToken);
         await queue.EnqueueAsync(
