@@ -129,12 +129,22 @@ public static partial class ImportPlanBuilder {
             .Replace("{Year}", context.Year?.ToString() ?? string.Empty, StringComparison.Ordinal)
             .Replace("{ext}", extension.TrimStart('.'), StringComparison.Ordinal);
 
-        // Drop connectors and brackets left empty by missing tokens (e.g. "()", trailing " - ", "[]").
-        result = Regex.Replace(result, @"\(\s*\)", string.Empty);
-        result = Regex.Replace(result, @"\[\s*\]", string.Empty);
-        result = CollapseWhitespaceRegex().Replace(result, " ");
-        result = result.Trim().Trim('-', '.', ' ').Trim();
-        return result;
+        return CleanEmptyDecorations(result);
+    }
+
+    /// <summary>
+    /// Cleans a token-substituted segment: drops connectors and brackets left empty by missing tokens
+    /// (e.g. "()", "[]", a trailing " - "), collapses whitespace, and trims stray connectors. Shared by
+    /// the book and media naming renderers so an absent token (a null year, an unknown quality) degrades
+    /// to a clean name rather than leaving literal punctuation behind.
+    /// </summary>
+    internal static string CleanEmptyDecorations(string value) {
+        value = Regex.Replace(value, @"\(\s*\)", string.Empty);
+        value = Regex.Replace(value, @"\[\s*\]", string.Empty);
+        value = CollapseWhitespaceRegex().Replace(value, " ");
+        // Whitespace left dangling before a dot (e.g. "Title .ext" after "()" vanished before ".ext").
+        value = Regex.Replace(value, @"\s+\.", ".");
+        return value.Trim().Trim('-', '.', ' ').Trim();
     }
 
     /// <summary>

@@ -19,10 +19,11 @@ public sealed record DownloadPayload(string ContentRoot, IReadOnlyList<ImportCan
 
 /// <summary>
 /// Pure movie import planning: picks the single primary video file out of a downloaded release and
-/// renders its target path as <c>{Title (Year)}/{Title (Year)}.{ext}</c> under the library root. Sample
-/// files are skipped, and a release carrying more than one full-size video (a multi-movie pack) blocks
-/// for manual import rather than guessing. Extras/subtitle sidecars are intentionally left behind in
-/// v1 — the scan derives everything from the primary video.
+/// renders its target path from the profile's naming template (default
+/// <c>{Title} ({Year})/{Title} ({Year}).{ext}</c>) under the library root. Sample files are skipped, and
+/// a release carrying more than one full-size video (a multi-movie pack) blocks for manual import rather
+/// than guessing. Extras/subtitle sidecars are intentionally left behind in v1 — the scan derives
+/// everything from the primary video.
 /// </summary>
 public static partial class MovieImportPlanBuilder {
     /// <summary>
@@ -37,8 +38,17 @@ public static partial class MovieImportPlanBuilder {
     [GeneratedRegex(@"(?:^|[\s._\-\[(])sample(?:$|[\s._\-\])])", RegexOptions.IgnoreCase)]
     private static partial Regex SampleTokenRegex();
 
-    /// <summary>Plans the import of a downloaded movie release given the acquisition's title/year metadata.</summary>
-    public static ImportPlan Plan(IReadOnlyList<ImportCandidateFile> files, ImportTemplateContext context) {
+    /// <summary>
+    /// Plans the import of a downloaded movie release given the acquisition's metadata and the profile's
+    /// naming template (<paramref name="template"/> defaults to <see cref="MediaNamingTemplates.MovieDefault"/>;
+    /// a blank or invalid template degrades to the default). <paramref name="quality"/> is the detected
+    /// quality code of the selected release for the optional <c>{Quality}</c> token.
+    /// </summary>
+    public static ImportPlan Plan(
+        IReadOnlyList<ImportCandidateFile> files,
+        ImportTemplateContext context,
+        string? template = null,
+        string? quality = null) {
         var videos = files
             .Where(file => VideoExtensions.Contains(Path.GetExtension(file.RelativePath)))
             .ToArray();
@@ -62,20 +72,25 @@ public static partial class MovieImportPlanBuilder {
             return ImportPlan.Block(ImportBlockReason.AmbiguousMultiplePrimaries);
         }
 
-        var folder = MovieFolderName(context);
-        var extension = Path.GetExtension(primary.RelativePath);
-        return ImportPlan.For([new ImportPlanItem(primary.RelativePath, $"{folder}/{folder}{extension}")]);
+        var naming = NamingContext(context, quality, Path.GetExtension(primary.RelativePath));
+        var target = MediaNamingTemplates.RenderMoviePath(template, naming);
+        return ImportPlan.For([new ImportPlanItem(primary.RelativePath, target)]);
     }
 
-    /// <summary>The sanitized movie folder (and file base) name: <c>Title (Year)</c>, or just the title when the year is unknown.</summary>
-    public static string MovieFolderName(ImportTemplateContext context) =>
-        ImportPlanBuilder.SanitizeSegment(context.Year is { } year ? $"{context.Title} ({year})" : context.Title);
+    /// <summary>The movie folder (and scan-hint folder) the template renders — derived from the SAME render as placement.</summary>
+    public static string MovieFolderRelative(ImportTemplateContext context, string? template = null, string? quality = null) =>
+        MediaNamingTemplates.RenderMovieFolder(template, NamingContext(context, quality, extension: string.Empty));
+
+    private static MediaNamingContext NamingContext(ImportTemplateContext context, string? quality, string extension) =>
+        new(context.Title, Year: context.Year, Quality: quality, Extension: extension);
 }
 
 /// <summary>
-/// Pure music import planning: places every audio file of a downloaded album release under
-/// <c>{Artist}/{Album}/</c>, preserving inner structure (disc folders) after stripping the release's
-/// single wrapper folder, plus any cover-art images flattened into the album folder. No ambiguity
+/// Pure music import planning: places every audio file of a downloaded album release under the album
+/// folder the profile's naming template renders (default <c>{Artist}/{Album}</c>), preserving inner
+/// structure (disc folders) after stripping the release's single wrapper folder, plus any cover-art
+/// images flattened into the album folder. Only the album FOLDER is templated — track files keep their
+/// release names and inner disc structure, so track renaming is intentionally out of scope. No ambiguity
 /// blocks — an album release maps wholesale.
 /// </summary>
 public static class MusicImportPlanBuilder {
@@ -90,8 +105,12 @@ public static class MusicImportPlanBuilder {
         ".jpg", ".jpeg", ".png", ".webp"
     };
 
-    /// <summary>Plans the import of a downloaded album release into <c>{artist}/{album}/</c>.</summary>
-    public static ImportPlan Plan(IReadOnlyList<ImportCandidateFile> files, string artist, string album) {
+    /// <summary>
+    /// Plans the import of a downloaded album release into the album folder the naming template renders
+    /// (<paramref name="template"/> defaults to <see cref="MediaNamingTemplates.MusicDefault"/>; a blank or
+    /// invalid template degrades to the default).
+    /// </summary>
+    public static ImportPlan Plan(IReadOnlyList<ImportCandidateFile> files, string artist, string album, string? template = null) {
         var audio = files
             .Where(file => AudioExtensions.Contains(Path.GetExtension(file.RelativePath)))
             .ToArray();
@@ -99,7 +118,7 @@ public static class MusicImportPlanBuilder {
             return ImportPlan.Block(ImportBlockReason.NoSupportedPayload);
         }
 
-        var folder = AlbumFolderRelative(artist, album);
+        var folder = AlbumFolderRelative(artist, album, template);
         var prefix = CommonDirectoryPrefix(audio.Select(file => file.RelativePath).ToArray());
         var items = new List<ImportPlanItem>(files.Count);
         foreach (var file in audio.OrderBy(file => file.RelativePath, StringComparer.OrdinalIgnoreCase)) {
@@ -116,9 +135,12 @@ public static class MusicImportPlanBuilder {
         return ImportPlan.For(items);
     }
 
-    /// <summary>The sanitized <c>{artist}/{album}</c> folder path relative to the library root.</summary>
-    public static string AlbumFolderRelative(string artist, string album) =>
-        $"{ImportPlanBuilder.SanitizeSegment(artist)}/{ImportPlanBuilder.SanitizeSegment(album)}";
+    /// <summary>
+    /// The album folder path (relative to the library root) the template renders — the SAME render used
+    /// for placement, so the scan hint keyed on this folder matches where tracks were placed.
+    /// </summary>
+    public static string AlbumFolderRelative(string artist, string album, string? template = null) =>
+        MediaNamingTemplates.RenderMusicAlbumFolder(template, new MediaNamingContext(album, Artist: artist, Album: album));
 
     /// <summary>Sanitizes every segment of a relative path, keeping its directory structure.</summary>
     private static string SanitizeRelative(string relativePath) =>
@@ -163,10 +185,11 @@ public static class MusicImportPlanBuilder {
 }
 
 /// <summary>
-/// Pure TV import planning: places a release's episode files under
-/// <c>{Series}/Season {NN}/{Series} - SxxEyy.{ext}</c>, exactly the layout the video scan materializes
-/// a series hierarchy from. Episode identity comes from the SxxEyy / 1x05 tokens in each file name
-/// (via <see cref="TvReleaseTokens"/> — the same decode the decision engine uses); a single-episode
+/// Pure TV import planning: places a release's episode files under the layout the profile's naming
+/// template renders (default <c>{Series}/Season {Season:00}/{Series} - S{Season:00}E{Episode:00}.{ext}</c>),
+/// exactly the three-segment series/season/episode layout the video scan materializes a series hierarchy
+/// from. Episode identity comes from the SxxEyy / 1x05 tokens in each file name (via
+/// <see cref="TvReleaseTokens"/> — the same decode the decision engine uses); a single-episode
 /// acquisition whose file carries no token falls back to the unit stamped on the acquisition. Sample
 /// files are skipped, and a season pack whose files carry no tokens at all blocks for manual import
 /// rather than guessing episode order.
@@ -183,9 +206,17 @@ public static partial class TvImportPlanBuilder {
     /// <summary>
     /// Plans the import of a downloaded TV release. <paramref name="series"/> names the series folder;
     /// <paramref name="seasonNumber"/>/<paramref name="episodeNumber"/> are the acquisition's unit,
-    /// used when a file names no unit of its own.
+    /// used when a file names no unit of its own. <paramref name="template"/> defaults to
+    /// <see cref="MediaNamingTemplates.TvDefault"/> (blank/invalid degrades to it); <paramref name="quality"/>
+    /// is the detected quality code for the optional <c>{Quality}</c> token.
     /// </summary>
-    public static ImportPlan Plan(IReadOnlyList<ImportCandidateFile> files, string series, int? seasonNumber, int? episodeNumber) {
+    public static ImportPlan Plan(
+        IReadOnlyList<ImportCandidateFile> files,
+        string series,
+        int? seasonNumber,
+        int? episodeNumber,
+        string? template = null,
+        string? quality = null) {
         var videos = files
             .Where(file => VideoExtensions.Contains(Path.GetExtension(file.RelativePath)))
             .Where(file => !SampleTokenRegex().IsMatch(Path.GetFileNameWithoutExtension(file.RelativePath)))
@@ -194,7 +225,6 @@ public static partial class TvImportPlanBuilder {
             return ImportPlan.Block(ImportBlockReason.NoSupportedPayload);
         }
 
-        var seriesFolder = ImportPlanBuilder.SanitizeSegment(series);
         var items = new List<ImportPlanItem>(videos.Length);
         foreach (var video in videos.OrderBy(file => file.RelativePath, StringComparer.OrdinalIgnoreCase)) {
             var unit = TvReleaseTokens.ParseEpisode(Path.GetFileNameWithoutExtension(video.RelativePath));
@@ -204,10 +234,8 @@ public static partial class TvImportPlanBuilder {
             }
 
             var (season, episode) = unit ?? (seasonNumber!.Value, episodeNumber!.Value);
-            var extension = Path.GetExtension(video.RelativePath);
-            items.Add(new ImportPlanItem(
-                video.RelativePath,
-                $"{seriesFolder}/Season {season:00}/{ImportPlanBuilder.SanitizeSegment($"{series} - S{season:00}E{episode:00}")}{extension}"));
+            var naming = NamingContext(series, season, episode, quality, Path.GetExtension(video.RelativePath));
+            items.Add(new ImportPlanItem(video.RelativePath, MediaNamingTemplates.RenderTvPath(template, naming)));
         }
 
         // No file declared a placeable unit — importing by guesswork would scatter episodes; stop for
@@ -215,8 +243,15 @@ public static partial class TvImportPlanBuilder {
         return items.Count == 0 ? ImportPlan.Block(ImportBlockReason.AmbiguousMultiplePrimaries) : ImportPlan.For(items);
     }
 
-    /// <summary>The sanitized series folder (relative to the library root) a plan places into.</summary>
-    public static string SeriesFolderRelative(string series) => ImportPlanBuilder.SanitizeSegment(series);
+    /// <summary>
+    /// The series folder (relative to the library root) a plan places into — the template's first segment,
+    /// derived from the SAME render as placement so the scan's series bind matches.
+    /// </summary>
+    public static string SeriesFolderRelative(string series, string? template = null) =>
+        MediaNamingTemplates.RenderTvSeriesFolder(template, NamingContext(series, season: null, episode: null, quality: null, extension: string.Empty));
+
+    private static MediaNamingContext NamingContext(string series, int? season, int? episode, string? quality, string extension) =>
+        new(series, Series: series, Season: season, Episode: episode, Quality: quality, Extension: extension);
 }
 
 /// <summary>

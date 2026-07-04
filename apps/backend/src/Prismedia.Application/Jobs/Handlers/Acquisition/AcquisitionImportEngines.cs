@@ -255,9 +255,15 @@ public sealed class MovieAcquisitionImportEngine(
             return;
         }
 
+        // The owned quality (and the {Quality} naming token) is the video-ladder code detected from the
+        // selected release title. Detected before planning so the template can render it into the path.
+        var selected = await acquisitions.GetSelectedReleaseAsync(import.Id, cancellationToken);
+        var ownedMediaQuality = selected is null ? null : MediaQualityLadder.Detect(EntityKind.Movie, selected.Title).Code;
+
         var templateContext = new ImportTemplateContext(import.Title, import.Author, import.Year);
         var plan = ImportTargetResolver.Resolve(
-            payload.ContentRoot, root.Path, MovieImportPlanBuilder.Plan(payload.Files, templateContext));
+            payload.ContentRoot, root.Path,
+            MovieImportPlanBuilder.Plan(payload.Files, templateContext, profile?.PathTemplate, ownedMediaQuality));
         if (plan.Blocked) {
             await acquisitions.SetStatusAsync(import.Id, AcquisitionStatus.ManualImportRequired, BlockMessage(plan.BlockReason), cancellationToken);
             return;
@@ -270,12 +276,7 @@ public sealed class MovieAcquisitionImportEngine(
             finalPaths.Add(await mover.PlaceAsync(item, importMode, cancellationToken));
         }
 
-        // Book quality axes don't apply to movies (they record the book floor); the owned quality that
-        // feeds the upgrade loop is the video-ladder code (and PROPER/REPACK revision) detected from the
-        // selected release title. Null-safe: no selected release → no media quality captured (the monitor
-        // then fulfills on import).
-        var selected = await acquisitions.GetSelectedReleaseAsync(import.Id, cancellationToken);
-        var ownedMediaQuality = selected is null ? null : MediaQualityLadder.Detect(EntityKind.Movie, selected.Title).Code;
+        // Book quality axes don't apply to movies (they record the book floor).
         var ownedMediaRevision = selected is null ? 1 : ReleaseRevisionDetection.Detect(selected.Title);
         var ownedFormatScore = await OwnedFormatScore.ComputeAsync(profiles, import.ProfileId, EntityKind.Movie, selected, cancellationToken);
 
@@ -334,10 +335,18 @@ public sealed class TvAcquisitionImportEngine(
             return;
         }
 
+        // The owned quality (and the {Quality} naming token) is the video-ladder code from the selected
+        // release; both TV units detect on the video ladder. Detected before planning so the template can
+        // render it into the path. A season pack captures it too, though its monitor fulfills on import —
+        // a multi-file pack can't be single-file swapped — so the code is recorded for display but never
+        // drives an upgrade.
+        var selected = await acquisitions.GetSelectedReleaseAsync(import.Id, cancellationToken);
+        var ownedMediaQuality = selected is null ? null : MediaQualityLadder.Detect(import.Kind, selected.Title).Code;
+
         var series = string.IsNullOrWhiteSpace(import.Series) ? import.Title : import.Series;
         var plan = ImportTargetResolver.Resolve(
             payload.ContentRoot, root.Path,
-            TvImportPlanBuilder.Plan(payload.Files, series, import.SeasonNumber, import.EpisodeNumber));
+            TvImportPlanBuilder.Plan(payload.Files, series, import.SeasonNumber, import.EpisodeNumber, profile?.PathTemplate, ownedMediaQuality));
         if (plan.Blocked) {
             await acquisitions.SetStatusAsync(
                 import.Id, AcquisitionStatus.ManualImportRequired,
@@ -364,13 +373,7 @@ public sealed class TvAcquisitionImportEngine(
             .ToArray();
         var hintFolder = seasonFolders.Length == 1
             ? seasonFolders[0]
-            : Path.GetFullPath(Path.Combine(root.Path, TvImportPlanBuilder.SeriesFolderRelative(series)));
-        // The owned quality is the video-ladder code (and PROPER/REPACK revision) from the selected release
-        // (both TV units detect on the video ladder). A season pack captures it too, though its monitor
-        // fulfills on import — a multi-file pack can't be single-file swapped — so the code is recorded for
-        // display but never drives an upgrade.
-        var selected = await acquisitions.GetSelectedReleaseAsync(import.Id, cancellationToken);
-        var ownedMediaQuality = selected is null ? null : MediaQualityLadder.Detect(import.Kind, selected.Title).Code;
+            : Path.GetFullPath(Path.Combine(root.Path, TvImportPlanBuilder.SeriesFolderRelative(series, profile?.PathTemplate)));
         var ownedMediaRevision = selected is null ? 1 : ReleaseRevisionDetection.Detect(selected.Title);
         var ownedFormatScore = await OwnedFormatScore.ComputeAsync(profiles, import.ProfileId, import.Kind, selected, cancellationToken);
 
@@ -421,7 +424,7 @@ public sealed class MusicAcquisitionImportEngine(
 
         var artist = string.IsNullOrWhiteSpace(import.Author) ? "Unknown Artist" : import.Author;
         var plan = ImportTargetResolver.Resolve(
-            payload.ContentRoot, root.Path, MusicImportPlanBuilder.Plan(payload.Files, artist, import.Title));
+            payload.ContentRoot, root.Path, MusicImportPlanBuilder.Plan(payload.Files, artist, import.Title, profile?.PathTemplate));
         if (plan.Blocked) {
             await acquisitions.SetStatusAsync(
                 import.Id, AcquisitionStatus.ManualImportRequired,
@@ -437,7 +440,7 @@ public sealed class MusicAcquisitionImportEngine(
 
         // The hint and final path key on the ALBUM folder (not a disc subfolder a track landed in), so
         // the audio scan's album upsert path matches the bind exactly.
-        var albumFolder = Path.GetFullPath(Path.Combine(root.Path, MusicImportPlanBuilder.AlbumFolderRelative(artist, import.Title)));
+        var albumFolder = Path.GetFullPath(Path.Combine(root.Path, MusicImportPlanBuilder.AlbumFolderRelative(artist, import.Title, profile?.PathTemplate)));
         // The owned quality is the audio-ladder code (and PROPER/REPACK revision) from the selected release.
         // An album is multi-file, so its monitor fulfills on import (no single-file swap); the code is captured
         // for display only.

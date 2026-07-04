@@ -49,6 +49,27 @@
   let { onError, onMessage }: Props = $props();
 
   const DEFAULT_PATH_TEMPLATE = "{Author}/{Title} ({Year})/{Title}{ - Volume}.{ext}";
+  // Per-kind naming templates, mirroring the backend MediaNamingTemplates defaults. Books own their own
+  // template; movies/TV/music each control names within a structure the scan binding depends on.
+  const NAMING_DEFAULTS: Record<string, string> = {
+    [ENTITY_KIND.book]: DEFAULT_PATH_TEMPLATE,
+    [ENTITY_KIND.movie]: "{Title} ({Year})/{Title} ({Year}).{ext}",
+    [ENTITY_KIND.videoSeries]: "{Series}/Season {Season:00}/{Series} - S{Season:00}E{Episode:00}.{ext}",
+    [ENTITY_KIND.audioLibrary]: "{Artist}/{Album}",
+  };
+  // A short per-kind token hint shown under the naming template input.
+  const NAMING_HINTS: Record<string, string> = {
+    [ENTITY_KIND.book]: "{Author} {Title} {Year} {ext} — folder/file layout for the book payload",
+    [ENTITY_KIND.movie]: "{Title} {Year} {Quality} {ext} — 2 segments: folder/file",
+    [ENTITY_KIND.videoSeries]: "{Series} {Season} {Season:00} {Episode:00} {Quality} {ext} — 3 segments: series/season/episode",
+    [ENTITY_KIND.audioLibrary]: "{Artist} {Album} {Year} — 2 segments: artist/album folder (track files keep their release names)",
+  };
+  function namingDefaultFor(kind: string): string {
+    return NAMING_DEFAULTS[kind] ?? DEFAULT_PATH_TEMPLATE;
+  }
+  function namingHintFor(kind: string): string {
+    return NAMING_HINTS[kind] ?? "";
+  }
 
   let indexers = $state<IndexerConfigSummary[]>([]);
   let downloadClients = $state<DownloadClientSummary[]>([]);
@@ -352,9 +373,10 @@
     };
     profileTerms = { preferred: "", required: "", ignored: "", weighted: "", languages: "English" };
   }
-  /** Switching the form's kind re-targets the root (each kind offers different libraries) and refreshes the suggested name. */
+  /** Switching the form's kind re-targets the root (each kind offers different libraries) and refreshes the suggested name and naming template. */
   function setProfileKind(kind: string) {
     if (!profileForm) return;
+    const previousKind = profileForm.kind;
     profileForm.kind = kind as typeof profileForm.kind;
     const suitable = rootsForKind(kind);
     if (!suitable.some((r) => r.id === profileForm?.targetLibraryRootId)) {
@@ -363,6 +385,11 @@
     if (!profileForm.id && /^Default /.test(profileForm.displayName)) {
       profileForm.displayName = `Default ${profileKindLabels[kind] ?? kind}`;
       profileForm.isDefault = !profiles.some((p) => p.kind === kind);
+    }
+    // A template still at the previous kind's default is "untouched" — track the kind switch; a
+    // user-edited one is left alone (mirrors how the display name tracks the kind switch).
+    if (profileForm.pathTemplate === namingDefaultFor(previousKind)) {
+      profileForm.pathTemplate = namingDefaultFor(kind);
     }
   }
   function editProfile(p: BookAcquisitionProfileView) {
@@ -773,16 +800,9 @@
                 <TextInput size="sm" value={profileForm.displayName} oninput={(e) => profileForm && (profileForm.displayName = e.currentTarget.value)} /></label>
               <label class="space-y-1"><span class="text-label text-text-muted">Target library root</span>
                 <Select size="sm" value={profileForm.targetLibraryRootId} options={rootOptions} onchange={(v) => profileForm && (profileForm.targetLibraryRootId = v)} /></label>
-              {#if formIsBookKind}
-                <label class="space-y-1 sm:col-span-2"><span class="text-label text-text-muted">Path template</span>
-                  <TextInput size="sm" value={profileForm.pathTemplate} oninput={(e) => profileForm && (profileForm.pathTemplate = e.currentTarget.value)} /></label>
-              {:else}
-                <p class="sm:col-span-2 text-[0.72rem] leading-relaxed text-text-muted">
-                  Placement is fixed to match library scanning: movies land as <span class="font-mono">Title (Year)/Title (Year).ext</span>,
-                  episodes as <span class="font-mono">Series/Season NN/Series - SxxEyy.ext</span>,
-                  albums as <span class="font-mono">Artist/Album/</span>.
-                </p>
-              {/if}
+              <label class="space-y-1 sm:col-span-2"><span class="text-label text-text-muted">Naming template</span>
+                <TextInput size="sm" value={profileForm.pathTemplate} placeholder={namingDefaultFor(profileForm.kind)} oninput={(e) => profileForm && (profileForm.pathTemplate = e.currentTarget.value)} />
+                <span class="block font-mono text-[0.68rem] leading-relaxed text-text-muted">{namingHintFor(profileForm.kind)}</span></label>
               <label class="space-y-1"><span class="text-label text-text-muted">Import mode</span>
                 <Select size="sm" value={profileForm.importMode} options={importModeOptions} onchange={(v) => profileForm && (profileForm.importMode = v as typeof profileForm.importMode)} /></label>
               <label class="space-y-1"><span class="text-label text-text-muted">Download category</span>

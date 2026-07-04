@@ -72,6 +72,21 @@ public sealed class MovieImportPlanBuilderTests {
 
         Assert.Equal("Face Off Redux (2015)/Face Off Redux (2015).mkv", Assert.Single(plan.Items).TargetRelativePath);
     }
+
+    [Fact]
+    public void CustomTemplateFlowsThroughToTheTargetPathAndHintFolder() {
+        var context = Context();
+        var plan = MovieImportPlanBuilder.Plan(
+            [File("The.Martian.2015.1080p/movie.mkv", 8_000_000_000)],
+            context, template: "{Title} [{Quality}]/{Title}.{ext}", quality: "bluray-1080p");
+
+        var item = Assert.Single(plan.Items);
+        Assert.Equal("The Martian [bluray-1080p]/The Martian.mkv", item.TargetRelativePath);
+        // The scan-hint folder helper derives from the same render, so it prefixes the placed path.
+        var folder = MovieImportPlanBuilder.MovieFolderRelative(context, template: "{Title} [{Quality}]/{Title}.{ext}", quality: "bluray-1080p");
+        Assert.Equal("The Martian [bluray-1080p]", folder);
+        Assert.StartsWith(folder + "/", item.TargetRelativePath);
+    }
 }
 
 public sealed class MusicImportPlanBuilderTests {
@@ -123,6 +138,23 @@ public sealed class MusicImportPlanBuilderTests {
     [Fact]
     public void ArtistAndAlbumNamesAreSanitized() {
         Assert.Equal("AC DC/Back In Black", MusicImportPlanBuilder.AlbumFolderRelative("AC/DC", "Back In Black"));
+    }
+
+    [Fact]
+    public void CustomAlbumTemplateFlowsThroughToTrackPathsAndTheHintFolder() {
+        const string template = "{Artist}/{Album} ({Year})";
+        var plan = MusicImportPlanBuilder.Plan([
+            File("Release/01 - One.flac"),
+            File("Release/02 - Two.flac")
+        ], "Daft Punk", "Discovery", template);
+
+        // The album folder helper (the scan hint) matches the folder tracks were placed under.
+        var folder = MusicImportPlanBuilder.AlbumFolderRelative("Daft Punk", "Discovery", template);
+        Assert.Equal("Daft Punk/Discovery", folder); // no {Year} supplied by the album-folder context → empty parens dropped
+        Assert.All(plan.Items, item => Assert.StartsWith(folder + "/", item.TargetRelativePath));
+        Assert.Equal(
+            ["Daft Punk/Discovery/01 - One.flac", "Daft Punk/Discovery/02 - Two.flac"],
+            plan.Items.Select(item => item.TargetRelativePath).ToArray());
     }
 }
 
@@ -181,6 +213,32 @@ public sealed class TvImportPlanBuilderTests {
             File("pack/Andor.S01E01.mkv"),
             File("pack/artwork.jpg"),
         ], "Andor", seasonNumber: 1, episodeNumber: null);
+
+        Assert.Equal("Andor/Season 01/Andor - S01E01.mkv", Assert.Single(plan.Items).TargetRelativePath);
+    }
+
+    [Fact]
+    public void CustomTemplateFlowsThroughToEpisodePathsAndTheSeriesFolderStaysConsistent() {
+        const string template = "{Series}/S{Season:00}/{Series} {Season:00}x{Episode:00} [{Quality}].{ext}";
+        var plan = TvImportPlanBuilder.Plan([
+            File("Andor.S01.1080p/Andor.S01E01.1080p.mkv"),
+            File("Andor.S01.1080p/Andor.S01E02.1080p.mkv"),
+        ], "Andor", seasonNumber: 1, episodeNumber: null, template: template, quality: "webdl-1080p");
+
+        Assert.Equal(
+            ["Andor/S01/Andor 01x01 [webdl-1080p].mkv", "Andor/S01/Andor 01x02 [webdl-1080p].mkv"],
+            plan.Items.Select(item => item.TargetRelativePath).ToArray());
+        // The series-folder hint helper is derived from the same template's first segment.
+        var seriesFolder = TvImportPlanBuilder.SeriesFolderRelative("Andor", template);
+        Assert.Equal("Andor", seriesFolder);
+        Assert.All(plan.Items, item => Assert.StartsWith(seriesFolder + "/", item.TargetRelativePath));
+    }
+
+    [Fact]
+    public void InvalidTemplateDegradesToTheDefaultLayout() {
+        // A wrong-segment-count template must not break placement — it falls back to the default.
+        var plan = TvImportPlanBuilder.Plan(
+            [File("Andor.S01E01.mkv")], "Andor", seasonNumber: 1, episodeNumber: 1, template: "{Series} S{Season:00}E{Episode:00}.{ext}");
 
         Assert.Equal("Andor/Season 01/Andor - S01E01.mkv", Assert.Single(plan.Items).TargetRelativePath);
     }

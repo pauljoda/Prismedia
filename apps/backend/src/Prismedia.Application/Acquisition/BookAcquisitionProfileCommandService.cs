@@ -1,5 +1,6 @@
 using Prismedia.Contracts.Acquisition;
 using Prismedia.Contracts.System;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Acquisition;
 
@@ -23,10 +24,6 @@ public sealed class BookAcquisitionProfileCommandService(IBookAcquisitionProfile
             throw new AcquisitionConfigurationException(ApiProblemCodes.AcquisitionProfileInvalid, "A target library root is required.");
         }
 
-        if (string.IsNullOrWhiteSpace(request.PathTemplate)) {
-            throw new AcquisitionConfigurationException(ApiProblemCodes.AcquisitionProfileInvalid, "A path template is required.");
-        }
-
         if (request.MinSeeders < 0) {
             throw new AcquisitionConfigurationException(ApiProblemCodes.AcquisitionProfileInvalid, "Minimum seeders cannot be negative.");
         }
@@ -35,13 +32,15 @@ public sealed class BookAcquisitionProfileCommandService(IBookAcquisitionProfile
             throw new AcquisitionConfigurationException(ApiProblemCodes.AcquisitionProfileInvalid, "Profiles support books, movies, TV series, and albums.");
         }
 
+        var pathTemplate = ResolvePathTemplate(request.Kind, request.PathTemplate);
+
         return new BookAcquisitionProfileSaveCommand(
             request.Id,
             request.DisplayName.Trim(),
             request.IsDefault,
             request.Kind,
             request.TargetLibraryRootId,
-            request.PathTemplate.Trim(),
+            pathTemplate,
             request.ImportMode,
             request.AllowedFormats.Distinct().ToArray(),
             request.PreferredLanguages
@@ -75,5 +74,33 @@ public sealed class BookAcquisitionProfileCommandService(IBookAcquisitionProfile
                 .ToDictionary(entry => entry.Key, entry => Math.Clamp(entry.Value, -10_000, 10_000)),
             Math.Clamp(request.MinFormatScore, -10_000, 10_000),
             request.CutoffFormatScore is { } cutoff ? Math.Clamp(cutoff, -10_000, 10_000) : null);
+    }
+
+    /// <summary>
+    /// Resolves and validates the path template a profile will store. A media kind (movie, TV, music)
+    /// stores its kind default when the incoming template is blank and validates a non-blank template with
+    /// <see cref="MediaNamingTemplates.Validate"/>; a book keeps its existing "a template is required" rule
+    /// (its own renderer needs no structural validation).
+    /// </summary>
+    private static string ResolvePathTemplate(EntityKind kind, string pathTemplate) {
+        if (MediaNamingTemplates.IsMediaKind(kind)) {
+            if (string.IsNullOrWhiteSpace(pathTemplate)) {
+                return MediaNamingTemplates.DefaultFor(kind)!;
+            }
+
+            var trimmed = pathTemplate.Trim();
+            var error = MediaNamingTemplates.Validate(kind, trimmed);
+            if (error is not null) {
+                throw new AcquisitionConfigurationException(ApiProblemCodes.AcquisitionProfileInvalid, error);
+            }
+
+            return trimmed;
+        }
+
+        if (string.IsNullOrWhiteSpace(pathTemplate)) {
+            throw new AcquisitionConfigurationException(ApiProblemCodes.AcquisitionProfileInvalid, "A path template is required.");
+        }
+
+        return pathTemplate.Trim();
     }
 }
