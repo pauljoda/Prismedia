@@ -5,30 +5,36 @@ using Prismedia.Domain.Entities;
 namespace Prismedia.Infrastructure.Acquisition;
 
 /// <summary>
-/// Default <see cref="IOwnedFileReplacer"/>: an in-place, same-path swap of an owned book file for a
-/// strictly-better one. The owned file is renamed aside to a <c>.prismedia-bak</c> (same directory → an
+/// Default <see cref="IOwnedFileReplacer"/>: an in-place, same-path swap of an owned single-file payload for
+/// a strictly-better one. The owned file is renamed aside to a <c>.prismedia-bak</c> (same directory → an
 /// atomic rename, and the previous file is kept so it is always recoverable; the scanner ignores it because
 /// the extension is not importable), then the new file is moved into the owned file's exact path.
 /// <para>
-/// v1 deliberately handles only same-extension upgrades (e.g. a web EPUB → a retail EPUB): installing at the
-/// exact owned path keeps the library's file row and the reader's progress valid with no entity surgery. A
-/// format change (different extension) would orphan the entity, so it is refused here and surfaced for manual
-/// handling. Any failure restores the original from the backup, so the owned file is never lost.
+/// It deliberately handles only same-extension upgrades (a web EPUB → a retail EPUB; an mkv → a better mkv):
+/// installing at the exact owned path keeps the library's file row and playback/reader progress valid with no
+/// entity surgery. A format change (different extension — e.g. mkv → mp4) would orphan the entity, so it is
+/// refused here and surfaced for manual handling. The kind selects which single file to find (a book file, or
+/// a video file for a movie/single episode) and whether the book format-tier guard applies. Any failure
+/// restores the original from the backup, so the owned file is never lost.
 /// </para>
 /// </summary>
 public sealed class OwnedFileReplacer(IRecycleBin recycleBin, ILogger<OwnedFileReplacer> logger) : IOwnedFileReplacer {
     private const string BackupSuffix = ".prismedia-bak";
     private const string StagedSuffix = ".prismedia-new";
 
-    public async Task<OwnedFileReplaceResult> ReplaceAsync(string ownedFolder, string newContentPath, BookFormatTier ownedFormatTier, CancellationToken cancellationToken) {
-        var owned = FindBookFile(ownedFolder);
+    public async Task<OwnedFileReplaceResult> ReplaceAsync(string ownedFolder, string newContentPath, BookFormatTier ownedFormatTier, CancellationToken cancellationToken, EntityKind kind = EntityKind.Book) {
+        var isVideo = MediaQualityLadder.IsUpgradeCapableKind(kind);
+        var extensions = isVideo ? MovieImportPlanBuilder.VideoExtensions : ImportPlanBuilder.SupportedExtensions;
+        var fileNoun = isVideo ? "video" : "book";
+
+        var owned = FindSingleFile(ownedFolder, extensions);
         if (owned is null) {
-            return (OwnedFileReplaceResult.Failed("Could not find a single owned book file to replace."));
+            return (OwnedFileReplaceResult.Failed($"Could not find a single owned {fileNoun} file to replace."));
         }
 
-        var incoming = FindBookFile(newContentPath);
+        var incoming = FindSingleFile(newContentPath, extensions);
         if (incoming is null) {
-            return (OwnedFileReplaceResult.Failed("The upgrade download has no single importable book file."));
+            return (OwnedFileReplaceResult.Failed($"The upgrade download has no single importable {fileNoun} file."));
         }
 
         var incomingInfo = new FileInfo(incoming);
@@ -40,14 +46,17 @@ public sealed class OwnedFileReplacer(IRecycleBin recycleBin, ILogger<OwnedFileR
         var incomingExtension = Path.GetExtension(incoming);
         if (!string.Equals(ownedExtension, incomingExtension, StringComparison.OrdinalIgnoreCase)) {
             // A format change moves the file to a different extension/path, which would orphan the library
-            // entity and the reader's progress. Refuse it here; the caller surfaces it for manual replacement.
+            // entity and its playback/reader progress. Refuse it here; the caller surfaces it for manual
+            // replacement. This applies to video (mkv → mp4) exactly as it does to books, for the same reason.
             return (OwnedFileReplaceResult.Failed($"Upgrading the format ({ownedExtension} → {incomingExtension}) needs a manual replacement."));
         }
 
-        // Trust the actual extension, not free text in the path (a folder named "(epub)" must not make a PDF
-        // look reflowable). Same-extension is already enforced above, so this equals the owned tier.
-        var newFormat = BookFormatDetection.FormatTierFromExtension(incoming);
-        if (newFormat < ownedFormatTier) {
+        // Books enforce a format-tier floor from the actual extension (a folder named "(epub)" must not make a
+        // PDF look reflowable). Video has no extension-derived format tier — same-extension is already enforced
+        // above and the video quality upgrade is judged from the release title by the caller — so it is a
+        // pass-through here (NewFormat stays Unknown; the caller records the media-quality code).
+        var newFormat = isVideo ? BookFormatTier.Unknown : BookFormatDetection.FormatTierFromExtension(incoming);
+        if (!isVideo && newFormat < ownedFormatTier) {
             return (OwnedFileReplaceResult.Failed("The upgrade file's format is lower than the owned file's."));
         }
 
@@ -111,10 +120,14 @@ public sealed class OwnedFileReplacer(IRecycleBin recycleBin, ILogger<OwnedFileR
         }
     }
 
-    /// <summary>Returns the single importable book file at or under a path, or null when there is none or more than one (ambiguous).</summary>
-    private static string? FindBookFile(string path) {
+    /// <summary>
+    /// Returns the single file at or under a path whose extension is in <paramref name="extensions"/>, or
+    /// null when there is none or more than one (ambiguous). Shared by the book and video replace paths;
+    /// only the extension set differs between kinds.
+    /// </summary>
+    private static string? FindSingleFile(string path, IReadOnlySet<string> extensions) {
         if (File.Exists(path)) {
-            return ImportPlanBuilder.SupportedExtensions.Contains(Path.GetExtension(path)) ? path : null;
+            return extensions.Contains(Path.GetExtension(path)) ? path : null;
         }
 
         if (!Directory.Exists(path)) {
@@ -122,7 +135,7 @@ public sealed class OwnedFileReplacer(IRecycleBin recycleBin, ILogger<OwnedFileR
         }
 
         var files = Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)
-            .Where(file => ImportPlanBuilder.SupportedExtensions.Contains(Path.GetExtension(file)))
+            .Where(file => extensions.Contains(Path.GetExtension(file)))
             .Take(2)
             .ToArray();
         return files.Length == 1 ? files[0] : null;

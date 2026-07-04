@@ -268,6 +268,14 @@ public sealed class AcquisitionRow {
     public BookFormatTier OwnedFormatTier { get; set; } = BookFormatTier.Unknown;
 
     /// <summary>
+    /// Detected media quality of the release this acquisition imported (the owned quality on the kind's
+    /// video/audio ladder — <see cref="VideoQuality"/> for movies and TV, <see cref="AudioQuality"/> for
+    /// music), captured from the selected release title. Null for book kinds (they use the source/format
+    /// tiers above) and for imports that recorded no selected release.
+    /// </summary>
+    public string? OwnedMediaQuality { get; set; }
+
+    /// <summary>
     /// For an upgrade child acquisition, the parent acquisition it replaces. Self-FK, nulled if the parent is
     /// hard-deleted. Null for an ordinary (non-upgrade) acquisition.
     /// </summary>

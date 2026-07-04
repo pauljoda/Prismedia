@@ -206,10 +206,24 @@ public sealed record AcquisitionCandidateRef(Guid CandidateId, string Title, str
 public sealed record DueMonitor(Guid MonitorId, Guid? AcquisitionId, string Title, bool IsUpgrade = false, Guid? EntityId = null);
 
 /// <summary>
-/// Everything the upgrade-replace job needs to swap a downloaded upgrade child's file in for the owned book:
-/// the parent it upgrades, where the owned payload lives, the current owned quality to re-confirm against,
-/// the new payload's download location, and the download-client item to clean up.
+/// The owned quality an upgrade child must beat, expressed in the vocabulary of the child's kind. A book
+/// child carries <see cref="BookRank"/> (the parent's source/format tiers); a movie or single-episode
+/// child carries <see cref="MediaQualityCode"/> (the parent's position on the video ladder). Exactly one
+/// axis is populated per kind; the search runner selects the matching gate. A null record (not this type)
+/// means the acquisition is not an upgrade child at all.
 /// </summary>
+/// <param name="BookRank">The parent's owned book quality for a book upgrade child; default for a media child.</param>
+/// <param name="MediaQualityCode">The parent's owned ladder code for a media upgrade child; null for a book child.</param>
+public sealed record UpgradeOwnedQuality(Domain.Entities.BookQualityRank? BookRank, string? MediaQualityCode);
+
+/// <summary>
+/// Everything the upgrade-replace job needs to swap a downloaded upgrade child's file in for the owned copy:
+/// the parent it upgrades, its kind (which owned-quality vocabulary and file finder to use), where the owned
+/// payload lives, the current owned quality to re-confirm against, the new payload's download location, and
+/// the download-client item to clean up.
+/// </summary>
+/// <param name="ParentKind">The parent acquisition's media kind; routes the handler between the book and media replace paths.</param>
+/// <param name="ParentOwnedMediaQuality">The parent's owned ladder code for a media parent; null for a book parent.</param>
 public sealed record UpgradeReplaceTarget(
     Guid ParentId,
     string? ParentFinalSourcePath,
@@ -217,7 +231,9 @@ public sealed record UpgradeReplaceTarget(
     string? ChildSelectedTitle,
     string? ChildContentPath,
     string? ChildClientItemId,
-    Guid? ChildDownloadClientConfigId);
+    Guid? ChildDownloadClientConfigId,
+    Domain.Entities.EntityKind ParentKind = Domain.Entities.EntityKind.Book,
+    string? ParentOwnedMediaQuality = null);
 
 /// <summary>
 /// Outcome of an in-place owned-file replacement. On success the owned file was atomically swapped for the
@@ -230,15 +246,28 @@ public sealed record OwnedFileReplaceResult(bool Succeeded, string? SwappedPath,
 }
 
 /// <summary>
-/// Replaces an owned book file in place with a strictly-better one. Finds the single importable book file
-/// under the owned folder and under the new download path, verifies the new file and that both live on the
-/// same filesystem (so the swap is an atomic rename), then renames the owned file aside to a
-/// <c>.prismedia-bak</c> and moves the new file into its exact path. The backup is intentionally kept (it is
-/// not an importable extension, so the scanner ignores it) so the previous file is always recoverable. On any
-/// failure the owned file is left exactly as it was.
+/// Replaces an owned single-file payload in place with a strictly-better one. Finds the single importable
+/// file for the kind (a book file for <see cref="Domain.Entities.EntityKind.Book"/>, a video file for a
+/// movie or single episode) under the owned folder and under the new download path, verifies the new file
+/// and that both live on the same filesystem (so the swap is an atomic rename), then renames the owned file
+/// aside to a <c>.prismedia-bak</c> and moves the new file into its exact path. The backup is intentionally
+/// kept (it is not an importable extension, so the scanner ignores it) so the previous file is always
+/// recoverable. On any failure the owned file is left exactly as it was.
 /// </summary>
 public interface IOwnedFileReplacer {
-    Task<OwnedFileReplaceResult> ReplaceAsync(string ownedFolder, string newContentPath, Domain.Entities.BookFormatTier ownedFormatTier, CancellationToken cancellationToken);
+    /// <summary>
+    /// Swaps the single owned file of <paramref name="kind"/> under <paramref name="ownedFolder"/> for the
+    /// single file under <paramref name="newContentPath"/>. A different extension is always refused (it would
+    /// orphan the library entity and playback/reader progress) and surfaced for manual handling.
+    /// <paramref name="ownedFormatTier"/> is enforced only for book kinds (the incoming file's format tier must
+    /// not regress); it is ignored for video, which re-confirms quality from the release title instead.
+    /// </summary>
+    Task<OwnedFileReplaceResult> ReplaceAsync(
+        string ownedFolder,
+        string newContentPath,
+        Domain.Entities.BookFormatTier ownedFormatTier,
+        CancellationToken cancellationToken,
+        Domain.Entities.EntityKind kind = Domain.Entities.EntityKind.Book);
 }
 
 /// <summary>Input for adding a release identity to the acquisition blocklist (idempotent on the identity).</summary>

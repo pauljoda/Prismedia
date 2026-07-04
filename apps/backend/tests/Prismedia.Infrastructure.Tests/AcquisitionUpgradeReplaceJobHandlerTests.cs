@@ -66,6 +66,63 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
         Assert.False(replacer.Called); // bailed before invoking the destructive swap
     }
 
+    [Fact]
+    public async Task MovieSuccessfulSwapRecordsOwnedLadderCodeAndConsumesTheChild() {
+        await using var db = CreateContext();
+        var (parentId, childId, monitorId) = await SeedMediaAsync(db, EntityKind.Movie, ownedCode: "webdl-720p", childSelectedTitle: "Movie 2020 1080p BluRay");
+        var queue = new RecordingJobQueue();
+        var replacer = new FakeReplacer(OwnedFileReplaceResult.Ok("/library/Movie (2020)/Movie (2020).mkv", BookFormatTier.Unknown));
+
+        await RunAsync(db, queue, replacer, childId);
+
+        Assert.Equal(EntityKind.Movie, replacer.CalledWithKind); // routed through the video replace path
+        var parent = await db.Acquisitions.AsNoTracking().FirstAsync(a => a.Id == parentId);
+        Assert.Equal("bluray-1080p", parent.OwnedMediaQuality); // upgraded ladder code recorded
+        Assert.False(await db.Acquisitions.AsNoTracking().AnyAsync(a => a.Id == childId)); // child consumed
+        var monitor = await db.Monitors.AsNoTracking().FirstAsync(m => m.Id == monitorId);
+        Assert.Null(monitor.UpgradeChildAcquisitionId);
+        Assert.Equal(1, monitor.UpgradeAttempts);
+        Assert.Contains(queue.Enqueued, job => job.Type == JobType.ScanLibrary);
+    }
+
+    [Fact]
+    public async Task MovieNoLongerAnUpgradeAbortsBeforeTouchingFiles() {
+        await using var db = CreateContext();
+        // The child's release is only equal to (not better than) the owned ladder code → must not swap.
+        var (_, childId, _) = await SeedMediaAsync(db, EntityKind.Movie, ownedCode: "bluray-1080p", childSelectedTitle: "Movie 2020 1080p BluRay");
+        var queue = new RecordingJobQueue();
+        var replacer = new FakeReplacer(OwnedFileReplaceResult.Ok("x", BookFormatTier.Unknown));
+
+        await RunAsync(db, queue, replacer, childId);
+
+        Assert.False(replacer.Called); // bailed before invoking the destructive swap
+    }
+
+    private static async Task<(Guid ParentId, Guid ChildId, Guid MonitorId)> SeedMediaAsync(PrismediaDbContext db, EntityKind kind, string ownedCode, string childSelectedTitle) {
+        var now = DateTimeOffset.UtcNow;
+        var parentId = Guid.NewGuid();
+        var childId = Guid.NewGuid();
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = parentId, Kind = kind, Status = AcquisitionStatus.Imported, Title = "Some Movie", ExternalIdsJson = "{}", SourceUrlsJson = "[]",
+            FinalSourcePath = "/library/Movie (2020)", OwnedMediaQuality = ownedCode, UpgradeQualityCaptured = true, CreatedAt = now, UpdatedAt = now
+        });
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = childId, Kind = kind, Status = AcquisitionStatus.Downloaded, Title = "Some Movie", ExternalIdsJson = "{}", SourceUrlsJson = "[]",
+            UpgradeOfAcquisitionId = parentId, SelectedReleaseJson = JsonSerializer.Serialize(new SelectedRelease(childSelectedTitle, "Indexer", "hash")),
+            CreatedAt = now, UpdatedAt = now
+        });
+        db.DownloadTransfers.Add(new DownloadTransferRow {
+            Id = Guid.NewGuid(), AcquisitionId = childId, ClientItemId = "hash", ContentPath = "/downloads/Movie", Progress = 1, CreatedAt = now, UpdatedAt = now
+        });
+        var monitorId = Guid.NewGuid();
+        db.Monitors.Add(new MonitorRow {
+            Id = monitorId, Kind = kind, AcquisitionId = parentId, Status = MonitorStatus.Active, Title = "Some Movie",
+            UpgradeChildAcquisitionId = childId, CreatedAt = now, UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+        return (parentId, childId, monitorId);
+    }
+
     private static async Task RunAsync(PrismediaDbContext db, RecordingJobQueue queue, FakeReplacer replacer, Guid childId) {
         var handler = new AcquisitionUpgradeReplaceJobHandler(
             new EfAcquisitionStore(db), new EfMonitorStore(db), replacer,
@@ -108,8 +165,10 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
 
     private sealed class FakeReplacer(OwnedFileReplaceResult result) : IOwnedFileReplacer {
         public bool Called { get; private set; }
-        public Task<OwnedFileReplaceResult> ReplaceAsync(string ownedFolder, string newContentPath, BookFormatTier ownedFormatTier, CancellationToken cancellationToken) {
+        public EntityKind CalledWithKind { get; private set; }
+        public Task<OwnedFileReplaceResult> ReplaceAsync(string ownedFolder, string newContentPath, BookFormatTier ownedFormatTier, CancellationToken cancellationToken, EntityKind kind = EntityKind.Book) {
             Called = true;
+            CalledWithKind = kind;
             return Task.FromResult(result);
         }
     }

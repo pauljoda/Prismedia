@@ -67,6 +67,38 @@ public sealed class OwnedFileReplacerTests : IDisposable {
         Assert.False(result.Succeeded);
     }
 
+    [Fact]
+    public async Task VideoSameExtensionUpgradeReplacesInPlaceAndKeepsABackup() {
+        var library = Dir("library");
+        var download = Dir("download");
+        var owned = WriteFile(library, "Movie (2020).mkv", "old 720p copy");
+        WriteFile(download, "Movie.2020.1080p.BluRay.mkv", "new 1080p copy, larger");
+
+        // Video passes a pass-through format tier; the kind selects the video file finder and swap rules.
+        var result = await _replacer.ReplaceAsync(library, download, BookFormatTier.Unknown, CancellationToken.None, EntityKind.Movie);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(owned, result.SwappedPath);
+        Assert.Equal("new 1080p copy, larger", File.ReadAllText(owned)); // the better file is now at the owned path
+        Assert.True(File.Exists(owned + ".prismedia-bak"));               // the original is preserved
+        Assert.Equal("old 720p copy", File.ReadAllText(owned + ".prismedia-bak"));
+    }
+
+    [Fact]
+    public async Task VideoFormatChangeIsRefusedAndOwnedFileUntouched() {
+        var library = Dir("library");
+        var download = Dir("download");
+        var owned = WriteFile(library, "Movie (2020).mkv", "owned mkv");
+        WriteFile(download, "Movie.2020.1080p.mp4", "incoming mp4");
+
+        // An mkv → mp4 upgrade is refused (same reason as books: entity/playback-progress continuity).
+        var result = await _replacer.ReplaceAsync(library, download, BookFormatTier.Unknown, CancellationToken.None, EntityKind.Video);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("owned mkv", File.ReadAllText(owned)); // untouched
+        Assert.False(File.Exists(owned + ".prismedia-bak"));
+    }
+
     private string Dir(string name) {
         var path = Path.Combine(_root, name);
         Directory.CreateDirectory(path);

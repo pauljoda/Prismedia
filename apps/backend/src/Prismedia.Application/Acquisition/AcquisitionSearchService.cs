@@ -22,9 +22,10 @@ public sealed class AcquisitionSearchRunner(
     private const double PriorityTieBreak = 1e-9;
     /// <param name="upgradeOwnedQuality">
     /// When set, runs this as an upgrade search: the engine accepts only releases that strictly beat this
-    /// owned quality (and never downgrade the format). Null for an ordinary first-grab search.
+    /// owned quality (in the kind's vocabulary — a book rank or a media ladder code) and never downgrade the
+    /// format. Null for an ordinary first-grab search.
     /// </param>
-    public async Task<AcquisitionSearchOutcome> RunAsync(AcquisitionSearchInput input, CancellationToken cancellationToken, Domain.Entities.BookQualityRank? upgradeOwnedQuality = null) {
+    public async Task<AcquisitionSearchOutcome> RunAsync(AcquisitionSearchInput input, CancellationToken cancellationToken, UpgradeOwnedQuality? upgradeOwnedQuality = null) {
         var queries = ReleaseQueryLadder.For(input);
         if (queries.Count == 0) {
             return new AcquisitionSearchOutcome([], []);
@@ -43,7 +44,15 @@ public sealed class AcquisitionSearchRunner(
 
         var rules = await profiles.GetRulesAsync(input.ProfileId, input.Kind, cancellationToken);
         if (upgradeOwnedQuality is { } owned) {
-            rules = rules with { IsUpgradeSearch = true, OwnedQuality = owned };
+            // IsUpgradeSearch is the single truth for whether the upgrade gates apply; a non-null record means
+            // this is an upgrade search regardless of which vocabulary axis carries the owned quality. The book
+            // gate reads OwnedQuality (default = Floor when the child is a media kind, harmlessly ignored) and
+            // the media gate reads OwnedMediaQuality.
+            rules = rules with {
+                IsUpgradeSearch = true,
+                OwnedQuality = owned.BookRank ?? default,
+                OwnedMediaQuality = owned.MediaQualityCode
+            };
         }
 
         // A release protocol is acceptable when an enabled download client can acquire it. With no

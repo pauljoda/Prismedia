@@ -246,8 +246,12 @@ public sealed class MovieAcquisitionImportEngine(
             finalPaths.Add(await mover.PlaceAsync(item, importMode, cancellationToken));
         }
 
-        // Quality axes are book vocabulary; movies record the floor. The upgrade loop is book-only, so
-        // the monitor fulfills on import for this kind.
+        // Book quality axes don't apply to movies (they record the book floor); the owned quality that
+        // feeds the upgrade loop is the video-ladder code detected from the selected release title. Null-safe:
+        // no selected release → no media quality captured (the monitor then fulfills on import).
+        var selected = await acquisitions.GetSelectedReleaseAsync(import.Id, cancellationToken);
+        var ownedMediaQuality = selected is null ? null : MediaQualityLadder.Detect(EntityKind.Movie, selected.Title).Code;
+
         var hintFolder = Path.GetDirectoryName(finalPaths[0]) ?? root.Path;
         await acquisitions.WriteImportHintAsync(import.Id, hintFolder, import, BookQualityRank.Floor, cancellationToken);
         await acquisitions.SetFinalSourcePathAsync(import.Id, hintFolder, cancellationToken);
@@ -257,7 +261,7 @@ public sealed class MovieAcquisitionImportEngine(
 
         await torrents.HandleImportedAsync(import, importMode, cancellationToken);
 
-        await acquisitions.MarkImportedWithQualityAsync(import.Id, BookQualityRank.Floor, "Imported into the library.", cancellationToken);
+        await acquisitions.MarkImportedWithQualityAsync(import.Id, BookQualityRank.Floor, "Imported into the library.", cancellationToken, ownedMediaQuality);
         await context.ReportProgressAsync(100, "Imported", cancellationToken);
     }
 
@@ -334,6 +338,12 @@ public sealed class TvAcquisitionImportEngine(
         var hintFolder = seasonFolders.Length == 1
             ? seasonFolders[0]
             : Path.GetFullPath(Path.Combine(root.Path, TvImportPlanBuilder.SeriesFolderRelative(series)));
+        // The owned quality is the video-ladder code from the selected release (both TV units detect on the
+        // video ladder). A season pack captures it too, though its monitor fulfills on import — a multi-file
+        // pack can't be single-file swapped — so the code is recorded for display but never drives an upgrade.
+        var selected = await acquisitions.GetSelectedReleaseAsync(import.Id, cancellationToken);
+        var ownedMediaQuality = selected is null ? null : MediaQualityLadder.Detect(import.Kind, selected.Title).Code;
+
         await acquisitions.WriteImportHintAsync(import.Id, hintFolder, import, BookQualityRank.Floor, cancellationToken);
         await acquisitions.SetFinalSourcePathAsync(import.Id, hintFolder, cancellationToken);
 
@@ -341,7 +351,7 @@ public sealed class TvAcquisitionImportEngine(
         await context.EnqueueIfNeededAsync(new EnqueueJobRequest(JobType.ScanLibrary, TargetLabel: "Imported episode scan"), cancellationToken);
 
         await torrents.HandleImportedAsync(import, importMode, cancellationToken);
-        await acquisitions.MarkImportedWithQualityAsync(import.Id, BookQualityRank.Floor, "Imported into the library.", cancellationToken);
+        await acquisitions.MarkImportedWithQualityAsync(import.Id, BookQualityRank.Floor, "Imported into the library.", cancellationToken, ownedMediaQuality);
         await context.ReportProgressAsync(100, "Imported", cancellationToken);
     }
 
@@ -398,6 +408,11 @@ public sealed class MusicAcquisitionImportEngine(
         // The hint and final path key on the ALBUM folder (not a disc subfolder a track landed in), so
         // the audio scan's album upsert path matches the bind exactly.
         var albumFolder = Path.GetFullPath(Path.Combine(root.Path, MusicImportPlanBuilder.AlbumFolderRelative(artist, import.Title)));
+        // The owned quality is the audio-ladder code from the selected release. An album is multi-file, so its
+        // monitor fulfills on import (no single-file swap); the code is captured for display only.
+        var selected = await acquisitions.GetSelectedReleaseAsync(import.Id, cancellationToken);
+        var ownedMediaQuality = selected is null ? null : MediaQualityLadder.Detect(EntityKind.AudioLibrary, selected.Title).Code;
+
         await acquisitions.WriteImportHintAsync(import.Id, albumFolder, import, BookQualityRank.Floor, cancellationToken);
         await acquisitions.SetFinalSourcePathAsync(import.Id, albumFolder, cancellationToken);
 
@@ -405,7 +420,7 @@ public sealed class MusicAcquisitionImportEngine(
         await context.EnqueueIfNeededAsync(new EnqueueJobRequest(JobType.ScanAudio, TargetLabel: "Imported album scan"), cancellationToken);
 
         await torrents.HandleImportedAsync(import, importMode, cancellationToken);
-        await acquisitions.MarkImportedWithQualityAsync(import.Id, BookQualityRank.Floor, "Imported into the library.", cancellationToken);
+        await acquisitions.MarkImportedWithQualityAsync(import.Id, BookQualityRank.Floor, "Imported into the library.", cancellationToken, ownedMediaQuality);
         await context.ReportProgressAsync(100, "Imported", cancellationToken);
     }
 

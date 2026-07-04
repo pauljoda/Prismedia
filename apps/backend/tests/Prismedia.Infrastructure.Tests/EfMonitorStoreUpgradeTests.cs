@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Application.Acquisition;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Acquisition;
 using Prismedia.Infrastructure.Persistence;
@@ -138,6 +139,98 @@ public sealed class EfMonitorStoreUpgradeTests {
         Assert.Null(monitor.UpgradeChildAcquisitionId);
         Assert.Equal(1, monitor.UpgradeAttempts);
         Assert.Equal(0, monitor.BarrenSearches); // a success resets the fruitless streak
+    }
+
+    [Fact]
+    public async Task ImportedMovieBelowCutoffWithUpgradeOnIsDueAsUpgrade() {
+        await using var db = CreateContext();
+        var store = await SeedMediaUpgradeMonitorAsync(db, EntityKind.Movie, owned: "webdl-720p", cutoff: "bluray-1080p");
+
+        var due = await store.ListDueMonitorsAsync(360, CancellationToken.None);
+
+        var monitor = Assert.Single(due);
+        Assert.True(monitor.IsUpgrade);
+    }
+
+    [Fact]
+    public async Task ImportedMovieAtOrAboveCutoffFulfills() {
+        await using var db = CreateContext();
+        // Owned exactly at cutoff → fulfilled.
+        var atCutoff = await SeedMediaUpgradeMonitorAsync(db, EntityKind.Movie, owned: "bluray-1080p", cutoff: "bluray-1080p");
+        Assert.Empty(await atCutoff.ListDueMonitorsAsync(360, CancellationToken.None));
+        Assert.Equal(MonitorStatus.Fulfilled, (await atCutoff.ListAsync(CancellationToken.None))[0].Status);
+
+        // Owned above cutoff → also fulfilled.
+        await using var db2 = CreateContext();
+        var aboveCutoff = await SeedMediaUpgradeMonitorAsync(db2, EntityKind.Movie, owned: "remux-2160p", cutoff: "bluray-1080p");
+        Assert.Empty(await aboveCutoff.ListDueMonitorsAsync(360, CancellationToken.None));
+        Assert.Equal(MonitorStatus.Fulfilled, (await aboveCutoff.ListAsync(CancellationToken.None))[0].Status);
+    }
+
+    [Fact]
+    public async Task ImportedMovieWithUpgradeOffFulfills() {
+        await using var db = CreateContext();
+        var store = await SeedMediaUpgradeMonitorAsync(db, EntityKind.Movie, owned: "webdl-720p", cutoff: "bluray-1080p", upgradeOn: false);
+
+        Assert.Empty(await store.ListDueMonitorsAsync(360, CancellationToken.None));
+        Assert.Equal(MonitorStatus.Fulfilled, (await store.ListAsync(CancellationToken.None))[0].Status);
+    }
+
+    [Fact]
+    public async Task ImportedSeasonPackAlwaysFulfillsEvenBelowCutoff() {
+        await using var db = CreateContext();
+        // A season pack is multi-file — it captures owned quality but never upgrades; it fulfills on import.
+        var store = await SeedMediaUpgradeMonitorAsync(db, EntityKind.VideoSeason, owned: "webdl-720p", cutoff: "bluray-1080p");
+
+        Assert.Empty(await store.ListDueMonitorsAsync(360, CancellationToken.None));
+        Assert.Equal(MonitorStatus.Fulfilled, (await store.ListAsync(CancellationToken.None))[0].Status);
+    }
+
+    [Fact]
+    public async Task ImportedAlbumAlwaysFulfillsEvenBelowCutoff() {
+        await using var db = CreateContext();
+        var store = await SeedMediaUpgradeMonitorAsync(db, EntityKind.AudioLibrary, owned: "lossy", cutoff: "lossless");
+
+        Assert.Empty(await store.ListDueMonitorsAsync(360, CancellationToken.None));
+        Assert.Equal(MonitorStatus.Fulfilled, (await store.ListAsync(CancellationToken.None))[0].Status);
+    }
+
+    [Fact]
+    public async Task ImportedMovieWithNoOwnedQualityCapturedStaysActive() {
+        await using var db = CreateContext();
+        // The captured flag is set but the ladder code was never recorded (no selected release) → the loop
+        // can't judge the owned copy yet, so it waits (Active) rather than fulfilling too early.
+        var store = await SeedMediaUpgradeMonitorAsync(db, EntityKind.Movie, owned: null, cutoff: "bluray-1080p");
+
+        Assert.Empty(await store.ListDueMonitorsAsync(360, CancellationToken.None));
+        Assert.Equal(MonitorStatus.Active, (await store.ListAsync(CancellationToken.None))[0].Status);
+    }
+
+    /// <summary>
+    /// Seeds an imported media (movie/TV/music) monitor: a governing profile for the kind's profile family
+    /// with the ladder cutoff-quality code, and an imported acquisition carrying the owned ladder code.
+    /// </summary>
+    private static async Task<EfMonitorStore> SeedMediaUpgradeMonitorAsync(
+        PrismediaDbContext db,
+        EntityKind kind,
+        string? owned,
+        string cutoff,
+        bool upgradeOn = true) {
+        var now = DateTimeOffset.UtcNow;
+        db.BookAcquisitionProfiles.Add(new BookAcquisitionProfileRow {
+            Id = Guid.NewGuid(), Kind = AcquisitionProfileKinds.For(kind), DisplayName = "Default", IsDefault = true,
+            TargetLibraryRootId = Guid.NewGuid(), AutoPick = true, UpgradeUntilCutoff = upgradeOn, CutoffQuality = cutoff,
+            CreatedAt = now, UpdatedAt = now
+        });
+        var acquisitionId = Guid.NewGuid();
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = acquisitionId, Kind = kind, Status = AcquisitionStatus.Imported, Title = "Some Media", ExternalIdsJson = "{}", SourceUrlsJson = "[]",
+            OwnedMediaQuality = owned, UpgradeQualityCaptured = true, CreatedAt = now, UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+        var store = new EfMonitorStore(db);
+        await store.StartAsync(acquisitionId, kind, "Some Media", null, CancellationToken.None);
+        return store;
     }
 
     private static async Task<EfMonitorStore> SeedUpgradeMonitorAsync(

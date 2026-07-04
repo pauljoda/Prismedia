@@ -87,6 +87,16 @@ public static class MediaQualityLadder {
     public static bool IsAudioKind(EntityKind kind) =>
         kind is EntityKind.AudioLibrary or EntityKind.AudioTrack or EntityKind.MusicArtist;
 
+    /// <summary>
+    /// True for the media kinds whose owned copy is a single file the upgrade loop can atomically swap in
+    /// place — a movie and a single TV episode (<see cref="EntityKind.Video"/>). Multi-file units
+    /// (<see cref="EntityKind.VideoSeason"/> season packs, <see cref="EntityKind.AudioLibrary"/> albums)
+    /// fulfill on import instead: a single-file replace can't safely swap a whole pack. Books have their
+    /// own upgrade path (source/format tiers) and are never routed here.
+    /// </summary>
+    public static bool IsUpgradeCapableKind(EntityKind kind) =>
+        kind is EntityKind.Movie or EntityKind.Video;
+
     /// <summary>A release title's ladder position for a kind, as (code, ordinal). Ordinal 0 = unknown.</summary>
     public static (string Code, int Position) Detect(EntityKind kind, string title) {
         if (IsVideoKind(kind)) {

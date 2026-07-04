@@ -27,9 +27,10 @@ public sealed record DownloadPayload(string ContentRoot, IReadOnlyList<ImportCan
 public static partial class MovieImportPlanBuilder {
     /// <summary>
     /// Video extensions the movie importer accepts. Mirrors scan discovery's video set — what the
-    /// importer places, the scanner must pick up.
+    /// importer places, the scanner must pick up. The single source of truth for the video file set;
+    /// the owned-file replacer references it so an upgrade swap finds the same files the importer placed.
     /// </summary>
-    private static readonly IReadOnlySet<string> VideoExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
+    public static readonly IReadOnlySet<string> VideoExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
         ".mp4", ".m4v", ".mkv", ".mov", ".webm", ".avi", ".wmv", ".flv", ".ts", ".m2ts", ".mpg", ".mpeg"
     };
 

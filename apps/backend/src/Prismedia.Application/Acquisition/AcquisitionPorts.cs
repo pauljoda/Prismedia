@@ -201,16 +201,21 @@ public interface IAcquisitionStore {
 
     /// <summary>
     /// When the given acquisition is an upgrade child (its <c>UpgradeOfAcquisitionId</c> is set), returns the
-    /// owned quality of the parent it must beat — used to run the child's search as an upgrade search. Returns
-    /// null for an ordinary acquisition, so callers can tell an upgrade grab apart from a first grab.
+    /// owned quality of the parent it must beat — used to run the child's search as an upgrade search. The
+    /// returned record carries the parent's quality in its kind's vocabulary (a book rank, or a media ladder
+    /// code). Returns null for an ordinary acquisition, so callers can tell an upgrade grab apart from a first
+    /// grab.
     /// </summary>
-    Task<BookQualityRank?> GetUpgradeOwnedQualityAsync(Guid acquisitionId, CancellationToken cancellationToken);
+    Task<UpgradeOwnedQuality?> GetUpgradeOwnedQualityAsync(Guid acquisitionId, CancellationToken cancellationToken);
 
     /// <summary>Assembles everything the upgrade-replace job needs from a downloaded upgrade child, or null when it is not a resolvable upgrade child.</summary>
     Task<UpgradeReplaceTarget?> GetUpgradeReplaceTargetAsync(Guid childId, CancellationToken cancellationToken);
 
-    /// <summary>Updates an acquisition's owned quality (e.g. after a successful upgrade swap) without changing its status.</summary>
+    /// <summary>Updates an acquisition's owned book quality (e.g. after a successful upgrade swap) without changing its status.</summary>
     Task UpdateOwnedQualityAsync(Guid acquisitionId, BookQualityRank ownedQuality, CancellationToken cancellationToken);
+
+    /// <summary>Updates an acquisition's owned media-quality ladder code (after a successful movie/episode upgrade swap) without changing its status.</summary>
+    Task UpdateOwnedMediaQualityAsync(Guid acquisitionId, string ownedMediaQuality, CancellationToken cancellationToken);
 
     /// <summary>
     /// Fills in held metadata from a provider enrichment, gap-only: a poster only when none is set, a year only
@@ -225,8 +230,10 @@ public interface IAcquisitionStore {
     /// Atomically marks an acquisition <see cref="AcquisitionStatus.Imported"/>, records the owned quality it
     /// imported, and flags the quality as captured — all in one commit, so the upgrade due-policy never sees a
     /// half-imported acquisition with a floor owned quality and mistakes it for "owns nothing".
+    /// <paramref name="ownedMediaQuality"/> is the code on the kind's video/audio ladder (movies, TV, music);
+    /// when non-null it is stored alongside the book tiers and the same captured flag is set.
     /// </summary>
-    Task MarkImportedWithQualityAsync(Guid id, BookQualityRank ownedQuality, string? message, CancellationToken cancellationToken);
+    Task MarkImportedWithQualityAsync(Guid id, BookQualityRank ownedQuality, string? message, CancellationToken cancellationToken, string? ownedMediaQuality = null);
 
     /// <summary>Replaces an acquisition's candidate set with a freshly scored search result.</summary>
     Task ReplaceCandidatesAsync(Guid id, IReadOnlyList<ScoredRelease> candidates, CancellationToken cancellationToken);

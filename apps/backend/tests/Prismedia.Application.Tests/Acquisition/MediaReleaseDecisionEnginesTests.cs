@@ -148,6 +148,48 @@ public sealed class MediaReleaseDecisionEnginesTests {
         Assert.Contains(ReleaseRejectionReason.Blocklisted, scored[0].Rejections);
     }
 
+    [Fact]
+    public void MediaUpgradeSearchAcceptsStrictlyBetterAndRejectsEqualOrLower() {
+        var spec = new MediaUpgradeSpecification(EntityKind.Movie);
+        var rules = BookAcquisitionRules.Default with { IsUpgradeSearch = true, OwnedMediaQuality = "webdl-1080p" };
+
+        // A strictly higher ladder position is an upgrade…
+        Assert.Null(spec.Evaluate(Release("Movie 1080p BluRay", seeders: 10), rules));
+        // …a lower same-resolution source is not…
+        Assert.Equal(ReleaseRejectionReason.NotAnUpgrade, spec.Evaluate(Release("Movie 1080p WEBRip", seeders: 10), rules));
+        // …and the exact same ladder position is not an upgrade either.
+        Assert.Equal(ReleaseRejectionReason.NotAnUpgrade, spec.Evaluate(Release("Movie 1080p WEB-DL", seeders: 10), rules));
+    }
+
+    [Fact]
+    public void MediaUpgradeSpecificationIsNoOpOnNonUpgradeSearches() {
+        var spec = new MediaUpgradeSpecification(EntityKind.Movie);
+        // Not an upgrade search → the gate never rejects, even for a weak release.
+        Assert.Null(spec.Evaluate(Release("Movie 1080p WEBRip", seeders: 10), BookAcquisitionRules.Default));
+        // Upgrade search but no owned code set → still a no-op (can't judge without an owned baseline).
+        var noOwned = BookAcquisitionRules.Default with { IsUpgradeSearch = true };
+        Assert.Null(spec.Evaluate(Release("Movie 1080p WEBRip", seeders: 10), noOwned));
+    }
+
+    [Fact]
+    public void MovieUpgradeSearchThroughTheEngineRejectsNonUpgradesAndAcceptsBetter() {
+        var engine = new MovieReleaseDecisionEngine();
+        var rules = BookAcquisitionRules.Default with { IsUpgradeSearch = true, OwnedMediaQuality = "webdl-1080p" };
+
+        var scored = engine.Evaluate([
+            (Release("Movie 1080p WEBRip", seeders: 100), null, "Idx"),
+            (Release("Movie 1080p WEB-DL", seeders: 100), null, "Idx"),
+            (Release("Movie 1080p BluRay", seeders: 100), null, "Idx"),
+        ], rules);
+
+        var verdicts = scored.ToDictionary(candidate => candidate.Release.Title, candidate => candidate);
+        Assert.False(verdicts["Movie 1080p WEBRip"].Accepted);
+        Assert.Contains(ReleaseRejectionReason.NotAnUpgrade, verdicts["Movie 1080p WEBRip"].Rejections);
+        Assert.False(verdicts["Movie 1080p WEB-DL"].Accepted);
+        Assert.Contains(ReleaseRejectionReason.NotAnUpgrade, verdicts["Movie 1080p WEB-DL"].Rejections);
+        Assert.True(verdicts["Movie 1080p BluRay"].Accepted);
+    }
+
     private static IndexerRelease Release(string title, int seeders) =>
         new(title, SizeBytes: 1_000_000_000, Seeders: seeders, Peers: seeders, DownloadProtocol.Torrent,
             DownloadUrl: "http://dl", MagnetUrl: null, InfoHash: null, InfoUrl: null, Language: null, PublishedAt: null);

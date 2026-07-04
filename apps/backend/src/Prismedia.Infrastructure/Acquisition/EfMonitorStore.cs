@@ -98,17 +98,34 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
     /// <summary>Most consecutive fruitless upgrade searches (or pre-download failures) before a monitor gives up.</summary>
     private const int MaxBarrenSearches = 6;
 
+    /// <summary>
+    /// The upgrade-relevant fields of one profile kind's governing profile, projected for the due sweep:
+    /// whether the loop is on (<see cref="UpgradeUntilCutoff"/> plus <see cref="AutoPick"/>) and the cutoff in
+    /// both vocabularies (the book source/format tiers, and the media ladder <see cref="CutoffQuality"/> code).
+    /// </summary>
+    private sealed record UpgradePolicy(
+        EntityKind Kind,
+        bool UpgradeUntilCutoff,
+        bool AutoPick,
+        BookSourceTier CutoffSourceTier,
+        BookFormatTier CutoffFormatTier,
+        string? CutoffQuality);
+
     public async Task<IReadOnlyList<DueMonitor>> ListDueMonitorsAsync(int defaultIntervalMinutes, CancellationToken cancellationToken) {
-        // The default BOOK profile's cutoff governs upgrades (the upgrade loop speaks book quality
-        // vocabulary). Upgrade-seeking is fully automatic, so it requires both the cutoff toggle and
-        // auto-grab; without auto-grab there is no path to act on a found upgrade.
-        var profile = await db.BookAcquisitionProfiles.AsNoTracking()
-            .Where(p => p.Kind == EntityKind.Book)
+        // The default profile of each kind governs its upgrades. Upgrade-seeking is fully automatic, so it
+        // requires both the cutoff toggle and auto-grab; without auto-grab there is no path to act on a found
+        // upgrade. Books gate on the source/format cutoff tiers; media kinds (movies, single episodes) gate on
+        // the ladder cutoff-quality code. Resolved per profile kind (default first, then oldest), the same way
+        // the profile store resolves rules.
+        var profiles = await db.BookAcquisitionProfiles.AsNoTracking()
             .OrderByDescending(p => p.IsDefault).ThenBy(p => p.CreatedAt)
-            .Select(p => new { p.UpgradeUntilCutoff, p.AutoPick, p.CutoffSourceTier, p.CutoffFormatTier })
-            .FirstOrDefaultAsync(cancellationToken);
-        var upgradeEnabled = profile is { UpgradeUntilCutoff: true, AutoPick: true };
-        var cutoff = profile is null ? BookQualityRank.Floor : new BookQualityRank(profile.CutoffSourceTier, profile.CutoffFormatTier);
+            .Select(p => new UpgradePolicy(p.Kind, p.UpgradeUntilCutoff, p.AutoPick, p.CutoffSourceTier, p.CutoffFormatTier, p.CutoffQuality))
+            .ToArrayAsync(cancellationToken);
+        // First row per profile kind wins (the ordering above put the default/oldest first).
+        var policyByKind = new Dictionary<EntityKind, UpgradePolicy>();
+        foreach (var policy in profiles) {
+            policyByKind.TryAdd(policy.Kind, policy);
+        }
 
         // Tracked load (we mutate statuses during reconciliation), joined to each acquisition's status and
         // accepted-candidate count, plus the in-flight upgrade child's status when the interlock is set.
@@ -121,6 +138,7 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
                 Monitor = monitor,
                 AcquisitionStatus = acquisition == null ? (AcquisitionStatus?)null : acquisition.Status,
                 OwnedQuality = acquisition == null ? (BookQualityRank?)null : new BookQualityRank(acquisition.OwnedSourceTier, acquisition.OwnedFormatTier),
+                OwnedMediaQuality = acquisition == null ? null : acquisition.OwnedMediaQuality,
                 Captured = acquisition != null && acquisition.UpgradeQualityCaptured,
                 AcceptedCount = acquisition == null ? 0 : db.ReleaseCandidates.Count(candidate => candidate.AcquisitionId == acquisition.Id && candidate.Accepted),
                 ChildStatus = monitor.UpgradeChildAcquisitionId == null ? (AcquisitionStatus?)null
@@ -192,23 +210,46 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
                     continue;
 
                 case AcquisitionStatus.Imported:
-                    // The wanted item is in hand. Books may keep seeking a higher-quality release (the
-                    // upgrade loop speaks book quality vocabulary); every other kind fulfills on import.
-                    var kindUpgrades = upgradeEnabled && monitor.Kind == EntityKind.Book;
-                    if (!kindUpgrades || !row.Captured || row.OwnedQuality is not { } owned) {
-                        // Upgrades off for this monitor, or quality not yet captured (a brief post-import
-                        // window — leave Active to retry next sweep rather than fulfilling before the loop
-                        // can ever run).
-                        if (!kindUpgrades) {
-                            monitor.Status = MonitorStatus.Fulfilled;
-                            monitor.UpdatedAt = now;
-                            changed = true;
-                        }
-
+                    // The wanted item is in hand. An upgrade-capable kind (a book, or a single-file movie/
+                    // episode) with its profile's upgrade loop on keeps seeking a higher-quality release; every
+                    // other kind — a season pack, an album, or any kind whose profile has upgrades off —
+                    // fulfills on import. The cutoff comparison speaks each kind's own vocabulary, but the caps,
+                    // backoff, and "leave Active until captured" semantics are identical, so both flow through
+                    // the same code below.
+                    var policy = policyByKind.GetValueOrDefault(AcquisitionProfileKinds.For(monitor.Kind));
+                    var upgradeEnabled = policy is { UpgradeUntilCutoff: true, AutoPick: true };
+                    var isBook = monitor.Kind == EntityKind.Book;
+                    var kindUpgrades = upgradeEnabled && (isBook || MediaQualityLadder.IsUpgradeCapableKind(monitor.Kind));
+                    if (!kindUpgrades) {
+                        // Upgrades off for this kind — fulfill immediately (the original on-import behavior).
+                        monitor.Status = MonitorStatus.Fulfilled;
+                        monitor.UpdatedAt = now;
+                        changed = true;
                         continue;
                     }
 
-                    var cutoffMet = owned.Source >= cutoff.Source && owned.Format >= cutoff.Format;
+                    // Quality must be captured before the loop can judge the owned copy. For a media kind the
+                    // captured owned quality must also be a real ladder code — the same brief post-import retry
+                    // window books use (leave Active, retry next sweep) rather than fulfilling too early.
+                    var mediaCaptured = row.Captured && !string.IsNullOrWhiteSpace(row.OwnedMediaQuality);
+                    var haveOwned = isBook ? row.Captured && row.OwnedQuality is not null : mediaCaptured;
+                    if (!haveOwned) {
+                        continue;
+                    }
+
+                    // cutoffMet: books compare per-axis tiers; media compares ladder position against the
+                    // profile cutoff code, where an unconfigured cutoff (position 0) fulfills at any owned copy.
+                    bool cutoffMet;
+                    if (isBook) {
+                        var owned = row.OwnedQuality!.Value;
+                        var cutoff = policy is null ? BookQualityRank.Floor : new BookQualityRank(policy.CutoffSourceTier, policy.CutoffFormatTier);
+                        cutoffMet = owned.Source >= cutoff.Source && owned.Format >= cutoff.Format;
+                    } else {
+                        var ownedPosition = MediaQualityLadder.PositionOf(monitor.Kind, row.OwnedMediaQuality);
+                        var cutoffPosition = MediaQualityLadder.PositionOf(monitor.Kind, policy?.CutoffQuality);
+                        cutoffMet = cutoffPosition == 0 || ownedPosition >= cutoffPosition;
+                    }
+
                     var capsHit = monitor.UpgradeAttempts >= MaxUpgradeAttempts || monitor.BarrenSearches >= MaxBarrenSearches;
                     if (cutoffMet || capsHit) {
                         monitor.Status = MonitorStatus.Fulfilled; // best quality reached, or best-effort exhausted
@@ -217,7 +258,7 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
                         continue;
                     }
 
-                    // Exponential backoff keyed on consecutive barren searches, capped, so a book that never
+                    // Exponential backoff keyed on consecutive barren searches, capped, so an item that never
                     // gets a better release does not hammer indexers.
                     var backoff = TimeSpan.FromMinutes(Math.Min(interval.TotalMinutes * Math.Pow(2, monitor.BarrenSearches), backoffCap.TotalMinutes));
                     if (monitor.LastSearchedAt is null || now - monitor.LastSearchedAt >= backoff) {
@@ -267,6 +308,10 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
         var childId = Guid.NewGuid();
         db.Acquisitions.Add(new AcquisitionRow {
             Id = childId,
+            // The child must inherit the parent's kind so its search runs the parent's decision engine and
+            // category range, and the replace/import paths speak the right vocabulary. (Books happened to work
+            // on the default kind; a movie/episode upgrade child would misbehave without this.)
+            Kind = parent.Kind,
             ProfileId = parent.ProfileId,
             TargetLibraryRootId = parent.TargetLibraryRootId,
             Status = AcquisitionStatus.Pending,

@@ -112,7 +112,7 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<BookQualityRank?> GetUpgradeOwnedQualityAsync(Guid acquisitionId, CancellationToken cancellationToken) {
+    public async Task<UpgradeOwnedQuality?> GetUpgradeOwnedQualityAsync(Guid acquisitionId, CancellationToken cancellationToken) {
         var parentId = await db.Acquisitions.AsNoTracking()
             .Where(row => row.Id == acquisitionId)
             .Select(row => row.UpgradeOfAcquisitionId)
@@ -121,10 +121,20 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
             return null;
         }
 
-        return await db.Acquisitions.AsNoTracking()
+        // The parent carries owned quality in its kind's vocabulary; the child inherits the parent's kind, so a
+        // media parent populates the ladder code and a book parent the source/format rank. Reading BOTH and
+        // discriminating by kind keeps this one query, symmetric with CreateUpgradeChildAsync copying the parent.
+        var parent = await db.Acquisitions.AsNoTracking()
             .Where(row => row.Id == id)
-            .Select(row => (BookQualityRank?)new BookQualityRank(row.OwnedSourceTier, row.OwnedFormatTier))
+            .Select(row => new { row.Kind, row.OwnedSourceTier, row.OwnedFormatTier, row.OwnedMediaQuality })
             .FirstOrDefaultAsync(cancellationToken);
+        if (parent is null) {
+            return null;
+        }
+
+        return MediaQualityLadder.IsUpgradeCapableKind(parent.Kind)
+            ? new UpgradeOwnedQuality(null, parent.OwnedMediaQuality)
+            : new UpgradeOwnedQuality(new BookQualityRank(parent.OwnedSourceTier, parent.OwnedFormatTier), null);
     }
 
     public async Task<UpgradeReplaceTarget?> GetUpgradeReplaceTargetAsync(Guid childId, CancellationToken cancellationToken) {
@@ -154,7 +164,9 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
             selectedTitle,
             transfer?.ContentPath,
             transfer?.ClientItemId,
-            transfer?.DownloadClientConfigId);
+            transfer?.DownloadClientConfigId,
+            parent.Kind,
+            parent.OwnedMediaQuality);
     }
 
     public async Task EnrichMetadataAsync(Guid acquisitionId, string? description, string? posterUrl, int? year, CancellationToken cancellationToken) {
@@ -199,7 +211,18 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task MarkImportedWithQualityAsync(Guid id, BookQualityRank ownedQuality, string? message, CancellationToken cancellationToken) {
+    public async Task UpdateOwnedMediaQualityAsync(Guid acquisitionId, string ownedMediaQuality, CancellationToken cancellationToken) {
+        var row = await db.Acquisitions.FirstOrDefaultAsync(row => row.Id == acquisitionId, cancellationToken);
+        if (row is null) {
+            return;
+        }
+
+        row.OwnedMediaQuality = ownedMediaQuality;
+        row.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task MarkImportedWithQualityAsync(Guid id, BookQualityRank ownedQuality, string? message, CancellationToken cancellationToken, string? ownedMediaQuality = null) {
         var row = await db.Acquisitions.FirstOrDefaultAsync(row => row.Id == id, cancellationToken);
         if (row is null) {
             return;
@@ -209,6 +232,11 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
         row.StatusMessage = message;
         row.OwnedSourceTier = ownedQuality.Source;
         row.OwnedFormatTier = ownedQuality.Format;
+        // A media kind (movie/TV/music) records its ladder code; book kinds leave it null and use the tiers.
+        if (ownedMediaQuality is not null) {
+            row.OwnedMediaQuality = ownedMediaQuality;
+        }
+
         row.UpgradeQualityCaptured = true;
         row.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(cancellationToken);

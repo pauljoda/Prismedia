@@ -5,11 +5,13 @@ using Prismedia.Domain.Entities;
 namespace Prismedia.Application.Jobs.Handlers;
 
 /// <summary>
-/// Applies a fully-downloaded upgrade child to the book it upgrades: re-confirms the downloaded release is
-/// still a strict improvement, atomically swaps the better file in for the owned one (keeping the original as
-/// a backup), updates the parent's owned quality, refreshes the book via a re-scan, cleans up the torrent, and
-/// releases the monitor's upgrade slot. The owned file is the only library file mutated, and only after every
-/// gate passes; any failure leaves the owned book untouched and surfaces the download for manual handling.
+/// Applies a fully-downloaded upgrade child to the single-file owned copy it upgrades — a book, or a movie
+/// or single TV episode: re-confirms the downloaded release is still a strict improvement (in the parent
+/// kind's quality vocabulary), atomically swaps the better file in for the owned one (keeping the original as
+/// a backup), updates the parent's owned quality, refreshes the entity via a re-scan, cleans up the torrent,
+/// and releases the monitor's upgrade slot. The owned file is the only library file mutated, and only after
+/// every gate passes; any failure leaves the owned copy untouched and surfaces the download for manual
+/// handling.
 /// </summary>
 public sealed class AcquisitionUpgradeReplaceJobHandler(
     IAcquisitionStore acquisitions,
@@ -41,16 +43,27 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
             return;
         }
 
+        // The parent kind decides which quality vocabulary the dominance check and the owned-quality update
+        // speak. A movie or single episode compares ladder positions; every other kind uses the book path.
+        if (MediaQualityLadder.IsUpgradeCapableKind(target.ParentKind)) {
+            await HandleMediaAsync(context, target, childId, cancellationToken);
+        } else {
+            await HandleBookAsync(context, target, childId, cancellationToken);
+        }
+    }
+
+    /// <summary>The book replace path: source/format Pareto dominance, an in-place same-extension book-file swap, and a book re-scan.</summary>
+    private async Task HandleBookAsync(JobContext context, UpgradeReplaceTarget target, Guid childId, CancellationToken cancellationToken) {
         // Last gate before touching the file: re-confirm the downloaded release still strictly beats the
         // parent's CURRENT owned quality (it may have changed since the search). The format axis is re-checked
         // against the actual file inside the replacer; here we guard overall dominance from the release title.
-        var candidate = BookFormatDetection.DetectQuality(target.ChildSelectedTitle);
+        var candidate = BookFormatDetection.DetectQuality(target.ChildSelectedTitle!);
         if (!candidate.StrictlyDominates(target.ParentOwnedQuality)) {
             await AbortAsync(childId, "The downloaded release is no longer an upgrade over the current copy.", cancellationToken);
             return;
         }
 
-        var result = await replacer.ReplaceAsync(target.ParentFinalSourcePath, target.ChildContentPath, target.ParentOwnedQuality.Format, cancellationToken);
+        var result = await replacer.ReplaceAsync(target.ParentFinalSourcePath!, target.ChildContentPath!, target.ParentOwnedQuality.Format, cancellationToken, EntityKind.Book);
         if (!result.Succeeded) {
             await AbortAsync(childId, result.FailureReason ?? "The upgrade could not be applied.", cancellationToken);
             return;
@@ -61,10 +74,40 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
         // doing it before the best-effort cleanup means a crash mid-completion leaves the loop seeing the
         // upgrade rather than retrying it. Then refresh metadata via a re-scan, clean up the torrent, release
         // the upgrade slot (counting the attempt), and remove the now-consumed child acquisition.
-        var newOwned = new BookQualityRank(BookFormatDetection.DetectSource(target.ChildSelectedTitle), result.NewFormat);
+        var newOwned = new BookQualityRank(BookFormatDetection.DetectSource(target.ChildSelectedTitle!), result.NewFormat);
         await acquisitions.UpdateOwnedQualityAsync(target.ParentId, newOwned, cancellationToken);
+        await FinishAsync(context, target, childId, JobType.ScanBook, "Upgraded book scan", cancellationToken);
+    }
+
+    /// <summary>The movie/single-episode replace path: ladder-position dominance, an in-place same-extension video-file swap, and a library re-scan.</summary>
+    private async Task HandleMediaAsync(JobContext context, UpgradeReplaceTarget target, Guid childId, CancellationToken cancellationToken) {
+        // Re-confirm the downloaded release still sits strictly above the parent's CURRENT owned ladder
+        // position (it may have changed since the search) before touching the file.
+        var ownedPosition = MediaQualityLadder.PositionOf(target.ParentKind, target.ParentOwnedMediaQuality);
+        var (candidateCode, candidatePosition) = MediaQualityLadder.Detect(target.ParentKind, target.ChildSelectedTitle!);
+        if (candidatePosition <= ownedPosition) {
+            await AbortAsync(childId, "The downloaded release is no longer an upgrade over the current copy.", cancellationToken);
+            return;
+        }
+
+        // Video has no book format tier; the replacer's format-tier guard is a pass-through for this kind. The
+        // same-extension rule still holds (an mkv → mp4 swap is refused, for entity/progress continuity).
+        var result = await replacer.ReplaceAsync(target.ParentFinalSourcePath!, target.ChildContentPath!, BookFormatTier.Unknown, cancellationToken, target.ParentKind);
+        if (!result.Succeeded) {
+            await AbortAsync(childId, result.FailureReason ?? "The upgrade could not be applied.", cancellationToken);
+            return;
+        }
+
+        // Record the parent's new owned ladder code (the child's detected quality) FIRST — the load-bearing
+        // bookkeeping — before the best-effort cleanup, mirroring the book path.
+        await acquisitions.UpdateOwnedMediaQualityAsync(target.ParentId, candidateCode, cancellationToken);
+        await FinishAsync(context, target, childId, JobType.ScanLibrary, "Upgraded video scan", cancellationToken);
+    }
+
+    /// <summary>Shared post-swap completion: release the monitor's slot (counting the attempt), re-scan, clean up the torrent, and remove the consumed child.</summary>
+    private async Task FinishAsync(JobContext context, UpgradeReplaceTarget target, Guid childId, JobType scanJob, string scanLabel, CancellationToken cancellationToken) {
         await monitors.ResolveUpgradeChildAsync(childId, succeeded: true, cancellationToken);
-        await context.EnqueueIfNeededAsync(new EnqueueJobRequest(JobType.ScanBook, TargetLabel: "Upgraded book scan"), cancellationToken);
+        await context.EnqueueIfNeededAsync(new EnqueueJobRequest(scanJob, TargetLabel: scanLabel), cancellationToken);
         await RemoveTorrentAsync(target, cancellationToken);
         await acquisitions.DeleteAsync(childId, cancellationToken);
         logger.LogInformation("AcquisitionUpgradeReplace: upgraded acquisition {Parent} via child {Child}.", target.ParentId, childId);
