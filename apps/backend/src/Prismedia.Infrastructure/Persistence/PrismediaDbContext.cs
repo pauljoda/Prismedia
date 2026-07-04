@@ -132,6 +132,8 @@ public sealed class PrismediaDbContext : DbContext {
 
     public DbSet<BookAcquisitionProfileRow> BookAcquisitionProfiles => Set<BookAcquisitionProfileRow>();
 
+    public DbSet<CustomFormatRow> CustomFormats => Set<CustomFormatRow>();
+
     public DbSet<AcquisitionRow> Acquisitions => Set<AcquisitionRow>();
 
     public DbSet<ReleaseCandidateRow> ReleaseCandidates => Set<ReleaseCandidateRow>();

@@ -107,7 +107,11 @@ public enum ReleaseRejectionReason {
 
     /// <summary>A TV search: the release names a different unit than the one sought (wrong season/episode, or a single episode when a season pack is wanted).</summary>
     [Code("wrong-tv-unit")]
-    WrongTvUnit
+    WrongTvUnit,
+
+    /// <summary>The release's total custom-format score is below the profile's minimum-format-score floor.</summary>
+    [Code("below-min-format-score")]
+    BelowMinFormatScore
 }
 
 /// <summary>

@@ -66,6 +66,14 @@ public sealed class BookAcquisitionProfileCommandService(IBookAcquisitionProfile
             request.CutoffFormatTier,
             request.DownloadCategory,
             (request.AllowedQualities ?? []).Where(code => !string.IsNullOrWhiteSpace(code)).Distinct(StringComparer.Ordinal).ToArray(),
-            request.CutoffQuality);
+            request.CutoffQuality,
+            // Per-format scores are clamped like weighted terms (±10_000); a 0 score means "not scored" and
+            // is dropped so it is never carried onto the rules. Malformed ids are the store's concern (a
+            // score keyed by a non-existent format simply resolves to nothing).
+            (request.FormatScores ?? new Dictionary<string, int>())
+                .Where(entry => entry.Value != 0)
+                .ToDictionary(entry => entry.Key, entry => Math.Clamp(entry.Value, -10_000, 10_000)),
+            Math.Clamp(request.MinFormatScore, -10_000, 10_000),
+            request.CutoffFormatScore is { } cutoff ? Math.Clamp(cutoff, -10_000, 10_000) : null);
     }
 }

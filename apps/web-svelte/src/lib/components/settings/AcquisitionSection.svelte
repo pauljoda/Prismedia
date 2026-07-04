@@ -2,12 +2,15 @@
   import { onMount } from "svelte";
   import { Boxes, Loader2, Pencil, PlugZap, Plus, Trash2 } from "@lucide/svelte";
   import { Badge, Button, Checkbox, Panel, Select, StatusLed, TextInput } from "@prismedia/ui-svelte";
-  import { INDEXER_KIND, DOWNLOAD_CLIENT_KIND, IMPORT_MODE, BLOCKLIST_REASON, BOOK_SOURCE_TIER, BOOK_FORMAT_TIER, ENTITY_KIND, VIDEO_QUALITY, AUDIO_QUALITY } from "$lib/api/generated/codes";
+  import { INDEXER_KIND, DOWNLOAD_CLIENT_KIND, IMPORT_MODE, BLOCKLIST_REASON, BOOK_SOURCE_TIER, BOOK_FORMAT_TIER, ENTITY_KIND, VIDEO_QUALITY, AUDIO_QUALITY, CUSTOM_FORMAT_CONDITION_TYPE } from "$lib/api/generated/codes";
   import { cn } from "@prismedia/ui-svelte";
   import type {
     AcquisitionBlocklistEntry,
     BookAcquisitionProfileSaveRequest,
     BookAcquisitionProfileView,
+    CustomFormatConditionView,
+    CustomFormatSaveRequest,
+    CustomFormatView,
     DownloadClientSaveRequest,
     DownloadClientSummary,
     IndexerConfigSaveRequest,
@@ -18,16 +21,19 @@
   import {
     deleteAcquisitionProfileConfig,
     deleteBlocklistEntry,
+    deleteCustomFormat,
     deleteDownloadClientConfig,
     deleteIndexerConfig,
     fetchAcquisitionProfiles,
     fetchBlocklist,
+    fetchCustomFormats,
     fetchDownloadClients,
     fetchIndexers,
     fetchRemotePathMappings,
     saveRemotePathMapping,
     deleteRemotePathMapping,
     saveAcquisitionProfile,
+    saveCustomFormat,
     saveDownloadClientConfig,
     saveIndexerConfig,
     testDownloadClientConnection,
@@ -47,6 +53,7 @@
   let indexers = $state<IndexerConfigSummary[]>([]);
   let downloadClients = $state<DownloadClientSummary[]>([]);
   let profiles = $state<BookAcquisitionProfileView[]>([]);
+  let customFormats = $state<CustomFormatView[]>([]);
   let blocklist = $state<AcquisitionBlocklistEntry[]>([]);
   let allRoots = $state<LibraryRoot[]>([]);
   let loading = $state(true);
@@ -118,10 +125,27 @@
   const formRoots = $derived(profileForm ? rootsForKind(profileForm.kind) : []);
   const rootOptions = $derived(formRoots.map((r) => ({ value: r.id, label: r.label || r.path })));
   const formIsBookKind = $derived(profileForm?.kind === ENTITY_KIND.book);
+  // Custom formats matching the profile form's current kind — the scorable set for this profile.
+  const formatsForKind = $derived.by(() => {
+    const kind = profileForm?.kind;
+    return kind ? customFormats.filter((f) => f.kind === kind) : [];
+  });
+  /** Sets (or clears, when blank) the per-format score on the open profile form. */
+  function setFormatScore(id: string, raw: string) {
+    if (!profileForm) return;
+    profileForm.formatScores ??= {};
+    const next = { ...profileForm.formatScores };
+    if (raw.trim() === "") {
+      delete next[id];
+    } else {
+      next[id] = Number(raw) || 0;
+    }
+    profileForm.formatScores = next;
+  }
 
   async function load() {
     try {
-      const [idx, clients, profs, bl, config, mappings] = await Promise.all([
+      const [idx, clients, profs, bl, config, mappings, formats] = await Promise.all([
         fetchIndexers(),
         fetchDownloadClients(),
         fetchAcquisitionProfiles(),
@@ -129,6 +153,7 @@
         fetchBlocklist().catch(() => [] as AcquisitionBlocklistEntry[]),
         fetchLibraryConfig(),
         fetchRemotePathMappings().catch(() => [] as RemotePathMappingView[]),
+        fetchCustomFormats().catch(() => [] as CustomFormatView[]),
       ]);
       indexers = idx;
       downloadClients = clients;
@@ -136,6 +161,7 @@
       pathMappings = mappings;
       blocklist = bl;
       allRoots = config.roots;
+      customFormats = formats;
     } catch (err) {
       onError(err instanceof Error ? err.message : "Failed to load acquisition settings");
     } finally {
@@ -322,6 +348,7 @@
       minSizeBytes: null, maxSizeBytes: null, requiredTerms: [], ignoredTerms: [], preferredTerms: [], weightedTerms: [], autoPick: false, autoRedownload: false,
       upgradeUntilCutoff: false, cutoffSourceTier: BOOK_SOURCE_TIER.unknown, cutoffFormatTier: BOOK_FORMAT_TIER.unknown,
       downloadCategory: null, allowedQualities: [], cutoffQuality: null,
+      formatScores: {}, minFormatScore: 0, cutoffFormatScore: null,
     };
     profileTerms = { preferred: "", required: "", ignored: "", weighted: "", languages: "English" };
   }
@@ -347,6 +374,7 @@
       autoPick: p.autoPick, autoRedownload: p.autoRedownload,
       upgradeUntilCutoff: p.upgradeUntilCutoff, cutoffSourceTier: p.cutoffSourceTier, cutoffFormatTier: p.cutoffFormatTier,
       downloadCategory: p.downloadCategory ?? null, allowedQualities: p.allowedQualities ?? [], cutoffQuality: p.cutoffQuality ?? null,
+      formatScores: { ...(p.formatScores ?? {}) }, minFormatScore: p.minFormatScore ?? 0, cutoffFormatScore: p.cutoffFormatScore ?? null,
     };
     profileTerms = {
       preferred: p.preferredTerms.join(", "),
@@ -399,6 +427,62 @@
       await load();
     } catch (err) {
       onError(err instanceof Error ? err.message : "Failed to delete profile");
+    } finally {
+      busy = false;
+    }
+  }
+
+  // ── Custom formats ──────────────────────────────────────────
+  let formatForm = $state<CustomFormatSaveRequest | null>(null);
+  const conditionTypeOptions = [
+    { value: CUSTOM_FORMAT_CONDITION_TYPE.releaseTitle, label: "Release title (regex)" },
+    { value: CUSTOM_FORMAT_CONDITION_TYPE.releaseGroup, label: "Release group (regex)" },
+    { value: CUSTOM_FORMAT_CONDITION_TYPE.language, label: "Language name" },
+    { value: CUSTOM_FORMAT_CONDITION_TYPE.quality, label: "Quality code" },
+  ];
+  function conditionPlaceholder(type: string): string {
+    if (type === CUSTOM_FORMAT_CONDITION_TYPE.language) return "english";
+    if (type === CUSTOM_FORMAT_CONDITION_TYPE.quality) return "bluray-1080p";
+    return "(?i)dual|eng|english";
+  }
+  function newFormat() {
+    formatForm = {
+      id: null, kind: ENTITY_KIND.book, name: "",
+      conditions: [{ type: CUSTOM_FORMAT_CONDITION_TYPE.releaseTitle, value: "", negate: false, required: false }],
+    };
+  }
+  function editFormat(f: CustomFormatView) {
+    formatForm = { id: f.id, kind: f.kind, name: f.name, conditions: f.conditions.map((c) => ({ ...c })) };
+  }
+  function addCondition() {
+    if (!formatForm) return;
+    formatForm.conditions = [...formatForm.conditions, { type: CUSTOM_FORMAT_CONDITION_TYPE.releaseTitle, value: "", negate: false, required: false }];
+  }
+  function removeCondition(index: number) {
+    if (!formatForm || formatForm.conditions.length <= 1) return;
+    formatForm.conditions = formatForm.conditions.filter((_, i) => i !== index);
+  }
+  async function saveFormat() {
+    if (!formatForm) return;
+    busy = true;
+    try {
+      await saveCustomFormat(formatForm);
+      formatForm = null;
+      onMessage("Custom format saved");
+      await load();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Failed to save custom format");
+    } finally {
+      busy = false;
+    }
+  }
+  async function removeFormat(id: string) {
+    busy = true;
+    try {
+      await deleteCustomFormat(id);
+      await load();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Failed to delete custom format");
     } finally {
       busy = false;
     }
@@ -600,6 +684,61 @@
         </section>
       {/if}
 
+      <!-- Custom formats -->
+      <section class="space-y-2">
+        <div class="flex items-center justify-between">
+          <h3 class="text-kicker text-text-primary">Custom formats</h3>
+          {#if !formatForm}
+            <Button size="sm" variant="secondary" onclick={newFormat} class="gap-1.5"><Plus class="h-3.5 w-3.5" /> Add</Button>
+          {/if}
+        </div>
+        <p class="text-[0.72rem] leading-relaxed text-text-muted">
+          Named, scored release classifiers. Define conditions here, then score each format per profile below.
+        </p>
+        {#each customFormats as f (f.id)}
+          <div class="flex items-center justify-between rounded-sm border border-border-subtle bg-surface-1 px-3 py-2">
+            <div class="flex items-center gap-2">
+              <Badge variant="default">{profileKindLabels[f.kind] ?? f.kind}</Badge>
+              <span class="text-sm text-text-primary">{f.name}</span>
+              <span class="text-xs text-text-muted">{f.conditions.length} condition(s)</span>
+            </div>
+            <div class="flex items-center gap-1">
+              <Button size="sm" variant="ghost" onclick={() => editFormat(f)} disabled={busy}><Pencil class="h-3.5 w-3.5" /></Button>
+              <Button size="sm" variant="ghost" onclick={() => removeFormat(f.id)} disabled={busy}><Trash2 class="h-3.5 w-3.5" /></Button>
+            </div>
+          </div>
+        {/each}
+        {#if formatForm}
+          <div class="space-y-2 rounded-sm border border-border-accent bg-surface-1 p-3">
+            <div class="grid gap-2 sm:grid-cols-2">
+              <label class="space-y-1"><span class="text-label text-text-muted">Media kind</span>
+                <Select size="sm" value={formatForm.kind} options={profileKindOptions} onchange={(v) => formatForm && (formatForm.kind = v as typeof formatForm.kind)} /></label>
+              <label class="space-y-1"><span class="text-label text-text-muted">Name</span>
+                <TextInput size="sm" value={formatForm.name} oninput={(e) => formatForm && (formatForm.name = e.currentTarget.value)} placeholder="Remux Tier" /></label>
+            </div>
+            <div class="space-y-1.5">
+              <span class="text-label text-text-muted">Conditions</span>
+              {#each formatForm.conditions as condition, i (i)}
+                <div class="flex flex-wrap items-center gap-2 rounded-sm border border-border-subtle bg-surface-1 px-2 py-1.5">
+                  <Select size="sm" value={condition.type} options={conditionTypeOptions} onchange={(v) => formatForm && (formatForm.conditions[i].type = v as CustomFormatConditionView["type"])} />
+                  <TextInput size="sm" value={condition.value} oninput={(e) => formatForm && (formatForm.conditions[i].value = e.currentTarget.value)} placeholder={conditionPlaceholder(condition.type)} class="flex-1" />
+                  <label class="flex items-center gap-1.5"><Checkbox checked={condition.negate} onchange={(e) => formatForm && (formatForm.conditions[i].negate = e.currentTarget.checked)} /><span class="text-[0.72rem] text-text-muted">Negate</span></label>
+                  <label class="flex items-center gap-1.5"><Checkbox checked={condition.required} onchange={(e) => formatForm && (formatForm.conditions[i].required = e.currentTarget.checked)} /><span class="text-[0.72rem] text-text-muted">Required</span></label>
+                  {#if formatForm.conditions.length > 1}
+                    <Button size="sm" variant="ghost" onclick={() => removeCondition(i)} disabled={busy}><Trash2 class="h-3.5 w-3.5" /></Button>
+                  {/if}
+                </div>
+              {/each}
+              <Button size="sm" variant="secondary" onclick={addCondition} disabled={busy} class="gap-1.5"><Plus class="h-3.5 w-3.5" /> Add condition</Button>
+            </div>
+            <div class="flex justify-end gap-1.5">
+              <Button size="sm" variant="ghost" onclick={() => (formatForm = null)} disabled={busy}>Cancel</Button>
+              <Button size="sm" variant="primary" onclick={saveFormat} disabled={busy || !formatForm.name || formatForm.conditions.some((c) => !c.value)}>Save</Button>
+            </div>
+          </div>
+        {/if}
+      </section>
+
       <!-- Acquisition profiles (per media kind) -->
       <section class="space-y-2">
         <div class="flex items-center justify-between">
@@ -682,6 +821,28 @@
               <label class="space-y-1"><span class="text-label text-text-muted">Preferred languages<span class="ml-1 text-text-muted">— in order of preference; releases tagged only with other languages are skipped, untagged ones count as the first entry</span></span>
                 <TextInput size="sm" value={profileTerms.languages} oninput={(e) => (profileTerms.languages = e.currentTarget.value)} placeholder="English" /></label>
             </div>
+            {#if formatsForKind.length > 0}
+              <div class="space-y-2">
+                <div class="space-y-0.5">
+                  <span class="text-label text-text-muted">Custom format scores</span>
+                  <p class="text-[0.72rem] leading-relaxed text-text-muted">100 points equals one preferred term; negatives act as a soft ban.</p>
+                </div>
+                <div class="space-y-1.5">
+                  {#each formatsForKind as f (f.id)}
+                    <div class="flex items-center justify-between gap-2 rounded-sm border border-border-subtle bg-surface-1 px-3 py-1.5">
+                      <span class="text-sm text-text-primary">{f.name}</span>
+                      <TextInput size="sm" type="number" class="w-24" value={String((profileForm.formatScores ?? {})[f.id] ?? 0)} oninput={(e) => setFormatScore(f.id, e.currentTarget.value)} placeholder="0" />
+                    </div>
+                  {/each}
+                </div>
+                <div class="grid gap-2 sm:grid-cols-2">
+                  <label class="space-y-1"><span class="text-label text-text-muted">Minimum format score<span class="ml-1 text-text-muted">— reject releases scoring below this</span></span>
+                    <TextInput size="sm" type="number" value={String(profileForm.minFormatScore)} oninput={(e) => profileForm && (profileForm.minFormatScore = Number(e.currentTarget.value) || 0)} /></label>
+                  <label class="space-y-1"><span class="text-label text-text-muted">Cutoff format score<span class="ml-1 text-text-muted">— keep upgrading until a release reaches this score</span></span>
+                    <TextInput size="sm" type="number" value={profileForm.cutoffFormatScore == null ? "" : String(profileForm.cutoffFormatScore)} oninput={(e) => profileForm && (profileForm.cutoffFormatScore = e.currentTarget.value ? Number(e.currentTarget.value) : null)} placeholder="none" /></label>
+                </div>
+              </div>
+            {/if}
             <label class="flex items-center gap-2"><Checkbox checked={profileForm.isDefault} onchange={(e) => profileForm && (profileForm.isDefault = e.currentTarget.checked)} /><span class="text-sm text-text-secondary">Default profile</span></label>
             <label class="flex items-start gap-2"><Checkbox checked={profileForm.autoPick} onchange={(e) => profileForm && (profileForm.autoPick = e.currentTarget.checked)} /><span class="text-sm text-text-secondary">Auto-grab<span class="block text-[0.72rem] text-text-muted">Download the best acceptable release automatically instead of waiting for manual review.</span></span></label>
             <label class="flex items-start gap-2"><Checkbox checked={profileForm.autoRedownload} onchange={(e) => profileForm && (profileForm.autoRedownload = e.currentTarget.checked)} /><span class="text-sm text-text-secondary">Auto-redownload on failure<span class="block text-[0.72rem] text-text-muted">When a download fails, blocklist that release and automatically grab the next-best candidate.</span></span></label>

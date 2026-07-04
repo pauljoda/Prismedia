@@ -145,6 +145,9 @@ public sealed class BookAcquisitionImportEngine(
         var ownedQuality = new BookQualityRank(
             selected is null ? BookSourceTier.Unknown : BookFormatDetection.DetectSource(selected.Title),
             BookFormatDetection.FormatTierFromExtension(finalPaths[0]));
+        // The owned custom-format score is the selected release scored against this profile's formats, so the
+        // upgrade loop's same-quality format-score cutoff has a baseline. Null-safe: no selected release → 0.
+        var ownedFormatScore = await OwnedFormatScore.ComputeAsync(profiles, import.ProfileId, EntityKind.Book, selected, cancellationToken);
 
         var hintFolder = Path.GetDirectoryName(finalPaths[0]) ?? root.Path;
         await acquisitions.WriteImportHintAsync(import.Id, hintFolder, import, ownedQuality, cancellationToken);
@@ -155,7 +158,7 @@ public sealed class BookAcquisitionImportEngine(
 
         await torrents.HandleImportedAsync(import, profile.ImportMode, cancellationToken);
 
-        await acquisitions.MarkImportedWithQualityAsync(import.Id, ownedQuality, "Imported into the library.", cancellationToken);
+        await acquisitions.MarkImportedWithQualityAsync(import.Id, ownedQuality, "Imported into the library.", cancellationToken, ownedFormatScore: ownedFormatScore);
         await context.ReportProgressAsync(100, "Imported", cancellationToken);
     }
 
@@ -168,6 +171,27 @@ public sealed class BookAcquisitionImportEngine(
         ImportBlockReason.MixedPayload => "The download mixes a book file with comic archives; import manually.",
         _ => "The download could not be imported automatically."
     };
+}
+
+/// <summary>
+/// Shared import-time custom-format scoring: scores the selected release against the acquisition's
+/// profile so the owned format score can be captured for the upgrade loop's format-score cutoff. Null-safe
+/// on every axis — no selected release, or a profile whose rules carry no formats, scores 0.
+/// </summary>
+internal static class OwnedFormatScore {
+    public static async Task<int> ComputeAsync(
+        IBookAcquisitionProfileStore profiles,
+        Guid? profileId,
+        EntityKind kind,
+        SelectedRelease? selected,
+        CancellationToken cancellationToken) {
+        if (selected is null) {
+            return 0;
+        }
+
+        var rules = await profiles.GetRulesAsync(profileId, kind, cancellationToken);
+        return CustomFormatEvaluation.Score(selected.Title, rules);
+    }
 }
 
 /// <summary>
@@ -253,6 +277,7 @@ public sealed class MovieAcquisitionImportEngine(
         var selected = await acquisitions.GetSelectedReleaseAsync(import.Id, cancellationToken);
         var ownedMediaQuality = selected is null ? null : MediaQualityLadder.Detect(EntityKind.Movie, selected.Title).Code;
         var ownedMediaRevision = selected is null ? 1 : ReleaseRevisionDetection.Detect(selected.Title);
+        var ownedFormatScore = await OwnedFormatScore.ComputeAsync(profiles, import.ProfileId, EntityKind.Movie, selected, cancellationToken);
 
         var hintFolder = Path.GetDirectoryName(finalPaths[0]) ?? root.Path;
         await acquisitions.WriteImportHintAsync(import.Id, hintFolder, import, BookQualityRank.Floor, cancellationToken);
@@ -263,7 +288,7 @@ public sealed class MovieAcquisitionImportEngine(
 
         await torrents.HandleImportedAsync(import, importMode, cancellationToken);
 
-        await acquisitions.MarkImportedWithQualityAsync(import.Id, BookQualityRank.Floor, "Imported into the library.", cancellationToken, ownedMediaQuality, ownedMediaRevision);
+        await acquisitions.MarkImportedWithQualityAsync(import.Id, BookQualityRank.Floor, "Imported into the library.", cancellationToken, ownedMediaQuality, ownedMediaRevision, ownedFormatScore);
         await context.ReportProgressAsync(100, "Imported", cancellationToken);
     }
 
@@ -347,6 +372,7 @@ public sealed class TvAcquisitionImportEngine(
         var selected = await acquisitions.GetSelectedReleaseAsync(import.Id, cancellationToken);
         var ownedMediaQuality = selected is null ? null : MediaQualityLadder.Detect(import.Kind, selected.Title).Code;
         var ownedMediaRevision = selected is null ? 1 : ReleaseRevisionDetection.Detect(selected.Title);
+        var ownedFormatScore = await OwnedFormatScore.ComputeAsync(profiles, import.ProfileId, import.Kind, selected, cancellationToken);
 
         await acquisitions.WriteImportHintAsync(import.Id, hintFolder, import, BookQualityRank.Floor, cancellationToken);
         await acquisitions.SetFinalSourcePathAsync(import.Id, hintFolder, cancellationToken);
@@ -355,7 +381,7 @@ public sealed class TvAcquisitionImportEngine(
         await context.EnqueueIfNeededAsync(new EnqueueJobRequest(JobType.ScanLibrary, TargetLabel: "Imported episode scan"), cancellationToken);
 
         await torrents.HandleImportedAsync(import, importMode, cancellationToken);
-        await acquisitions.MarkImportedWithQualityAsync(import.Id, BookQualityRank.Floor, "Imported into the library.", cancellationToken, ownedMediaQuality, ownedMediaRevision);
+        await acquisitions.MarkImportedWithQualityAsync(import.Id, BookQualityRank.Floor, "Imported into the library.", cancellationToken, ownedMediaQuality, ownedMediaRevision, ownedFormatScore);
         await context.ReportProgressAsync(100, "Imported", cancellationToken);
     }
 
@@ -418,6 +444,7 @@ public sealed class MusicAcquisitionImportEngine(
         var selected = await acquisitions.GetSelectedReleaseAsync(import.Id, cancellationToken);
         var ownedMediaQuality = selected is null ? null : MediaQualityLadder.Detect(EntityKind.AudioLibrary, selected.Title).Code;
         var ownedMediaRevision = selected is null ? 1 : ReleaseRevisionDetection.Detect(selected.Title);
+        var ownedFormatScore = await OwnedFormatScore.ComputeAsync(profiles, import.ProfileId, EntityKind.AudioLibrary, selected, cancellationToken);
 
         await acquisitions.WriteImportHintAsync(import.Id, albumFolder, import, BookQualityRank.Floor, cancellationToken);
         await acquisitions.SetFinalSourcePathAsync(import.Id, albumFolder, cancellationToken);
@@ -426,7 +453,7 @@ public sealed class MusicAcquisitionImportEngine(
         await context.EnqueueIfNeededAsync(new EnqueueJobRequest(JobType.ScanAudio, TargetLabel: "Imported album scan"), cancellationToken);
 
         await torrents.HandleImportedAsync(import, importMode, cancellationToken);
-        await acquisitions.MarkImportedWithQualityAsync(import.Id, BookQualityRank.Floor, "Imported into the library.", cancellationToken, ownedMediaQuality, ownedMediaRevision);
+        await acquisitions.MarkImportedWithQualityAsync(import.Id, BookQualityRank.Floor, "Imported into the library.", cancellationToken, ownedMediaQuality, ownedMediaRevision, ownedFormatScore);
         await context.ReportProgressAsync(100, "Imported", cancellationToken);
     }
 

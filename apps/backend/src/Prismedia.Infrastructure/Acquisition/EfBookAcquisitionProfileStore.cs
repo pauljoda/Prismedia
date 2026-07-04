@@ -12,7 +12,11 @@ namespace Prismedia.Infrastructure.Acquisition;
 public sealed class EfBookAcquisitionProfileStore(PrismediaDbContext db) : IBookAcquisitionProfileStore {
     public async Task<BookAcquisitionRules> GetRulesAsync(Guid? profileId, EntityKind kind, CancellationToken cancellationToken) {
         var row = await ResolveRowAsync(profileId, kind, cancellationToken);
-        return row is null ? BookAcquisitionRules.Default : ToRules(row);
+        if (row is null) {
+            return BookAcquisitionRules.Default;
+        }
+
+        return ToRules(row, await ResolveCustomFormatsAsync(row, cancellationToken));
     }
 
     public async Task<BookImportProfile?> GetImportProfileAsync(Guid? profileId, EntityKind kind, CancellationToken cancellationToken) {
@@ -85,6 +89,9 @@ public sealed class EfBookAcquisitionProfileStore(PrismediaDbContext db) : IBook
         row.IgnoredTerms = command.IgnoredTerms.ToArray();
         row.PreferredTerms = command.PreferredTerms.ToArray();
         row.WeightedTermsJson = JsonSerializer.Serialize(command.WeightedTerms);
+        row.FormatScoresJson = JsonSerializer.Serialize(command.FormatScores ?? new Dictionary<string, int>());
+        row.MinFormatScore = command.MinFormatScore;
+        row.CutoffFormatScore = command.CutoffFormatScore;
         row.AutoPick = command.AutoPick;
         row.AutoRedownload = command.AutoRedownload;
         row.UpgradeUntilCutoff = command.UpgradeUntilCutoff;
@@ -157,7 +164,7 @@ public sealed class EfBookAcquisitionProfileStore(PrismediaDbContext db) : IBook
             .FirstOrDefaultAsync(cancellationToken);
     }
 
-    private static BookAcquisitionRules ToRules(BookAcquisitionProfileRow row) =>
+    private static BookAcquisitionRules ToRules(BookAcquisitionProfileRow row, IReadOnlyList<ScoredCustomFormat> customFormats) =>
         new(
             row.AllowedFormats.Select(code => code.DecodeAs<BookFormat>()).ToArray(),
             row.PreferredLanguages,
@@ -168,9 +175,39 @@ public sealed class EfBookAcquisitionProfileStore(PrismediaDbContext db) : IBook
             row.IgnoredTerms,
             row.PreferredTerms,
             DecodeWeightedTerms(row.WeightedTermsJson)) {
+            Kind = row.Kind,
             AllowedQualities = row.AllowedQualities,
-            CutoffQuality = row.CutoffQuality
+            CutoffQuality = row.CutoffQuality,
+            CustomFormats = customFormats,
+            MinFormatScore = row.MinFormatScore,
+            CutoffFormatScore = row.CutoffFormatScore
         };
+
+    /// <summary>
+    /// Resolves a profile's format-score map against the custom-format table (one query, joined here):
+    /// every custom format of the profile's kind with a non-zero score in the profile's map becomes a
+    /// <see cref="ScoredCustomFormat"/> carrying its decoded conditions. Formats scored 0, missing from the
+    /// map, or of another kind are skipped, so the rules carry only the formats that actually matter.
+    /// </summary>
+    private async Task<IReadOnlyList<ScoredCustomFormat>> ResolveCustomFormatsAsync(BookAcquisitionProfileRow row, CancellationToken cancellationToken) {
+        var scores = DecodeFormatScores(row.FormatScoresJson);
+        if (scores.Count == 0) {
+            return [];
+        }
+
+        var formats = await db.CustomFormats.AsNoTracking()
+            .Where(format => format.Kind == row.Kind)
+            .ToArrayAsync(cancellationToken);
+
+        var resolved = new List<ScoredCustomFormat>(formats.Length);
+        foreach (var format in formats) {
+            if (scores.TryGetValue(format.Id.ToString(), out var score) && score != 0) {
+                resolved.Add(new ScoredCustomFormat(format.Name, score, CustomFormatConditionsJson.Deserialize(format.ConditionsJson)));
+            }
+        }
+
+        return resolved;
+    }
 
     private static BookAcquisitionProfileView ToView(BookAcquisitionProfileRow row) =>
         new(
@@ -197,7 +234,10 @@ public sealed class EfBookAcquisitionProfileStore(PrismediaDbContext db) : IBook
             row.CutoffFormatTier,
             row.DownloadCategory,
             row.AllowedQualities,
-            row.CutoffQuality);
+            row.CutoffQuality,
+            DecodeFormatScores(row.FormatScoresJson),
+            row.MinFormatScore,
+            row.CutoffFormatScore);
 
     private static IReadOnlyList<WeightedTerm> DecodeWeightedTerms(string json) {
         if (string.IsNullOrWhiteSpace(json)) {
@@ -208,6 +248,19 @@ public sealed class EfBookAcquisitionProfileStore(PrismediaDbContext db) : IBook
             return JsonSerializer.Deserialize<WeightedTerm[]>(json) ?? [];
         } catch (JsonException) {
             return [];
+        }
+    }
+
+    /// <summary>Decodes the profile's format-id → score map; a malformed blob resolves to no scores rather than throwing.</summary>
+    private static IReadOnlyDictionary<string, int> DecodeFormatScores(string json) {
+        if (string.IsNullOrWhiteSpace(json)) {
+            return new Dictionary<string, int>();
+        }
+
+        try {
+            return JsonSerializer.Deserialize<Dictionary<string, int>>(json) ?? new Dictionary<string, int>();
+        } catch (JsonException) {
+            return new Dictionary<string, int>();
         }
     }
 }

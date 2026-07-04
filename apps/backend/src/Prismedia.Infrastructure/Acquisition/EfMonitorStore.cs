@@ -109,7 +109,8 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
         bool AutoPick,
         BookSourceTier CutoffSourceTier,
         BookFormatTier CutoffFormatTier,
-        string? CutoffQuality);
+        string? CutoffQuality,
+        int? CutoffFormatScore);
 
     public async Task<IReadOnlyList<DueMonitor>> ListDueMonitorsAsync(int defaultIntervalMinutes, CancellationToken cancellationToken) {
         // The default profile of each kind governs its upgrades. Upgrade-seeking is fully automatic, so it
@@ -119,7 +120,7 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
         // the profile store resolves rules.
         var profiles = await db.BookAcquisitionProfiles.AsNoTracking()
             .OrderByDescending(p => p.IsDefault).ThenBy(p => p.CreatedAt)
-            .Select(p => new UpgradePolicy(p.Kind, p.UpgradeUntilCutoff, p.AutoPick, p.CutoffSourceTier, p.CutoffFormatTier, p.CutoffQuality))
+            .Select(p => new UpgradePolicy(p.Kind, p.UpgradeUntilCutoff, p.AutoPick, p.CutoffSourceTier, p.CutoffFormatTier, p.CutoffQuality, p.CutoffFormatScore))
             .ToArrayAsync(cancellationToken);
         // First row per profile kind wins (the ordering above put the default/oldest first).
         var policyByKind = new Dictionary<EntityKind, UpgradePolicy>();
@@ -139,6 +140,7 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
                 AcquisitionStatus = acquisition == null ? (AcquisitionStatus?)null : acquisition.Status,
                 OwnedQuality = acquisition == null ? (BookQualityRank?)null : new BookQualityRank(acquisition.OwnedSourceTier, acquisition.OwnedFormatTier),
                 OwnedMediaQuality = acquisition == null ? null : acquisition.OwnedMediaQuality,
+                OwnedFormatScore = acquisition == null ? 0 : acquisition.OwnedFormatScore,
                 Captured = acquisition != null && acquisition.UpgradeQualityCaptured,
                 AcceptedCount = acquisition == null ? 0 : db.ReleaseCandidates.Count(candidate => candidate.AcquisitionId == acquisition.Id && candidate.Accepted),
                 ChildStatus = monitor.UpgradeChildAcquisitionId == null ? (AcquisitionStatus?)null
@@ -247,13 +249,19 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
                     // bounded and avoiding late re-grabs of content the user has likely already consumed.
                     bool cutoffMet;
                     if (isBook) {
+                        // Books gate purely on the source/format tiers (custom-format cutoff is a media-ladder concept).
                         var owned = row.OwnedQuality!.Value;
                         var cutoff = policy is null ? BookQualityRank.Floor : new BookQualityRank(policy.CutoffSourceTier, policy.CutoffFormatTier);
                         cutoffMet = owned.Source >= cutoff.Source && owned.Format >= cutoff.Format;
                     } else {
+                        // Media is at cutoff only when BOTH the ladder cutoff AND the custom-format-score cutoff are
+                        // met: an unconfigured ladder cutoff (position 0) is met at any owned copy, and a null format
+                        // cutoff imposes no format-score requirement.
                         var ownedPosition = MediaQualityLadder.PositionOf(monitor.Kind, row.OwnedMediaQuality);
                         var cutoffPosition = MediaQualityLadder.PositionOf(monitor.Kind, policy?.CutoffQuality);
-                        cutoffMet = cutoffPosition == 0 || ownedPosition >= cutoffPosition;
+                        var ladderCutoffMet = cutoffPosition == 0 || ownedPosition >= cutoffPosition;
+                        var formatCutoffMet = policy?.CutoffFormatScore is not { } formatCutoff || row.OwnedFormatScore >= formatCutoff;
+                        cutoffMet = ladderCutoffMet && formatCutoffMet;
                     }
 
                     var capsHit = monitor.UpgradeAttempts >= MaxUpgradeAttempts || monitor.BarrenSearches >= MaxBarrenSearches;

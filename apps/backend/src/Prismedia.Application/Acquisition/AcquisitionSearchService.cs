@@ -62,7 +62,8 @@ public sealed class AcquisitionSearchRunner(
                 IsUpgradeSearch = true,
                 OwnedQuality = owned.BookRank ?? default,
                 OwnedMediaQuality = owned.MediaQualityCode,
-                OwnedMediaRevision = owned.MediaRevision
+                OwnedMediaRevision = owned.MediaRevision,
+                OwnedFormatScore = owned.FormatScore
             };
         }
 

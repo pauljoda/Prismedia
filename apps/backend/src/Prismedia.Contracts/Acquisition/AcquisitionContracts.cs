@@ -254,7 +254,10 @@ public sealed record BookAcquisitionProfileView(
     BookFormatTier CutoffFormatTier,
     string? DownloadCategory = null,
     IReadOnlyList<string>? AllowedQualities = null,
-    string? CutoffQuality = null);
+    string? CutoffQuality = null,
+    IReadOnlyDictionary<string, int>? FormatScores = null,
+    int MinFormatScore = 0,
+    int? CutoffFormatScore = null);
 
 /// <summary>Request payload for creating or updating an acquisition profile.</summary>
 public sealed record BookAcquisitionProfileSaveRequest(
@@ -281,7 +284,31 @@ public sealed record BookAcquisitionProfileSaveRequest(
     BookFormatTier CutoffFormatTier,
     string? DownloadCategory = null,
     IReadOnlyList<string>? AllowedQualities = null,
-    string? CutoffQuality = null);
+    string? CutoffQuality = null,
+    IReadOnlyDictionary<string, int>? FormatScores = null,
+    int MinFormatScore = 0,
+    int? CutoffFormatScore = null);
+
+/// <summary>One condition of a custom format for the API surface (see the application <c>CustomFormatCondition</c>).</summary>
+/// <param name="Type">The release axis this condition tests.</param>
+/// <param name="Value">The pattern/name/code the axis is tested against (a regex, a language name, or a quality code).</param>
+/// <param name="Negate">When true, the condition matches when its underlying test does NOT.</param>
+/// <param name="Required">When true, this condition must match for the format to match.</param>
+public sealed record CustomFormatConditionView(CustomFormatConditionType Type, string Value, bool Negate, bool Required);
+
+/// <summary>A named, scored release classifier (custom format), scoped to one profile kind.</summary>
+public sealed record CustomFormatView(
+    Guid Id,
+    EntityKind Kind,
+    string Name,
+    IReadOnlyList<CustomFormatConditionView> Conditions);
+
+/// <summary>Request payload for creating or updating a custom format (upsert; id null creates).</summary>
+public sealed record CustomFormatSaveRequest(
+    Guid? Id,
+    EntityKind Kind,
+    string Name,
+    IReadOnlyList<CustomFormatConditionView> Conditions);
 
 /// <summary>A monitored wanted item: the standing intent plus the current state of the acquisition it keeps alive.</summary>
 public sealed record MonitorView(

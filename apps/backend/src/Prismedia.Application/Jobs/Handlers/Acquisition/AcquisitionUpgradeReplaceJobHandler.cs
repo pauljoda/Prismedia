@@ -16,6 +16,7 @@ namespace Prismedia.Application.Jobs.Handlers;
 public sealed class AcquisitionUpgradeReplaceJobHandler(
     IAcquisitionStore acquisitions,
     IMonitorStore monitors,
+    IBookAcquisitionProfileStore profiles,
     IOwnedFileReplacer replacer,
     IDownloadClientConfigStore downloadClients,
     IDownloadClientFactory clients,
@@ -83,13 +84,21 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
     private async Task HandleMediaAsync(JobContext context, UpgradeReplaceTarget target, Guid childId, CancellationToken cancellationToken) {
         // Re-confirm the downloaded release still beats the parent's CURRENT owned copy (it may have changed
         // since the search) before touching the file: a strictly higher ladder position, OR the same position
-        // with a strictly higher PROPER/REPACK revision (the same accept rule the search's upgrade gate used).
+        // with a strictly higher PROPER/REPACK revision or custom-format score (the same accept rules the
+        // search's upgrade gate used). Re-scoring against the parent's profile keeps the gate honest even if
+        // the profile's formats changed since the search.
+        var rules = await profiles.GetRulesAsync(target.ParentProfileId, target.ParentKind, cancellationToken);
         var ownedPosition = MediaQualityLadder.PositionOf(target.ParentKind, target.ParentOwnedMediaQuality);
         var (candidateCode, candidatePosition) = MediaQualityLadder.Detect(target.ParentKind, target.ChildSelectedTitle!);
         var candidateRevision = ReleaseRevisionDetection.Detect(target.ChildSelectedTitle!);
+        var candidateFormatScore = CustomFormatEvaluation.Score(target.ChildSelectedTitle!, rules);
         var higherQuality = candidatePosition > ownedPosition;
         var sameQualityBetterRevision = candidatePosition == ownedPosition && candidateRevision > target.ParentOwnedMediaRevision;
-        if (!higherQuality && !sameQualityBetterRevision) {
+        var sameQualityBetterFormatScore = candidatePosition == ownedPosition
+            && rules.CutoffFormatScore is { } cutoff
+            && target.ParentOwnedFormatScore < cutoff
+            && candidateFormatScore > target.ParentOwnedFormatScore;
+        if (!higherQuality && !sameQualityBetterRevision && !sameQualityBetterFormatScore) {
             await AbortAsync(childId, "The downloaded release is no longer an upgrade over the current copy.", cancellationToken);
             return;
         }
@@ -102,10 +111,11 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
             return;
         }
 
-        // Record the parent's new owned ladder code AND revision (the child's detected quality/revision) FIRST
-        // — the load-bearing bookkeeping — before the best-effort cleanup, mirroring the book path. Advancing
-        // the revision alongside the code is what lets a same-quality proper upgrade settle instead of re-firing.
-        await acquisitions.UpdateOwnedMediaQualityAsync(target.ParentId, candidateCode, candidateRevision, cancellationToken);
+        // Record the parent's new owned ladder code, revision, AND custom-format score (all from the child
+        // release) FIRST — the load-bearing bookkeeping — before the best-effort cleanup, mirroring the book
+        // path. Advancing the revision and format score alongside the code is what lets a same-quality proper
+        // or format-score upgrade settle instead of re-firing.
+        await acquisitions.UpdateOwnedMediaQualityAsync(target.ParentId, candidateCode, candidateRevision, candidateFormatScore, cancellationToken);
         await FinishAsync(context, target, childId, JobType.ScanLibrary, "Upgraded video scan", cancellationToken);
     }
 

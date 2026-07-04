@@ -42,6 +42,8 @@ import type {
   CommitEntityRequestParams,
   CommitRequestParams,
   CreateFileFolderParams,
+  CustomFormatSaveRequest,
+  CustomFormatView,
   DatabaseBackupDto,
   DatabaseBackupListResponse,
   DatabaseRestoreRequest,
@@ -12169,6 +12171,129 @@ export const getDeleteAcquisitionProfileUrl = (id: string,) => {
 export const deleteAcquisitionProfile = async (id: string, options?: RequestInit): Promise<deleteAcquisitionProfileResponse> => {
 
   return orvalFetch<deleteAcquisitionProfileResponse>(getDeleteAcquisitionProfileUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type listCustomFormatsResponse200 = {
+  data: CustomFormatView[]
+  status: 200
+}
+
+export type listCustomFormatsResponseSuccess = (listCustomFormatsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listCustomFormatsResponse = (listCustomFormatsResponseSuccess)
+
+export const getListCustomFormatsUrl = () => {
+
+
+
+
+  return `/api/acquisitions/custom-formats`
+}
+
+/**
+ * @summary Lists custom formats (named, scored release classifiers) across all profile kinds.
+ */
+export const listCustomFormats = async ( options?: RequestInit): Promise<listCustomFormatsResponse> => {
+
+  return orvalFetch<listCustomFormatsResponse>(getListCustomFormatsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type saveCustomFormatResponse200 = {
+  data: CustomFormatView
+  status: 200
+}
+
+export type saveCustomFormatResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type saveCustomFormatResponseSuccess = (saveCustomFormatResponse200) & {
+  headers: Headers;
+};
+export type saveCustomFormatResponseError = (saveCustomFormatResponse400) & {
+  headers: Headers;
+};
+
+export type saveCustomFormatResponse = (saveCustomFormatResponseSuccess | saveCustomFormatResponseError)
+
+export const getSaveCustomFormatUrl = () => {
+
+
+
+
+  return `/api/acquisitions/custom-formats`
+}
+
+/**
+ * @summary Creates or updates a custom format (validates the name, conditions, and any regex patterns).
+ */
+export const saveCustomFormat = async (customFormatSaveRequest: CustomFormatSaveRequest, options?: RequestInit): Promise<saveCustomFormatResponse> => {
+
+  return orvalFetch<saveCustomFormatResponse>(getSaveCustomFormatUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      customFormatSaveRequest,)
+  }
+);}
+
+
+
+export type deleteCustomFormatResponse204 = {
+  data: void
+  status: 204
+}
+
+export type deleteCustomFormatResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type deleteCustomFormatResponseSuccess = (deleteCustomFormatResponse204) & {
+  headers: Headers;
+};
+export type deleteCustomFormatResponseError = (deleteCustomFormatResponse404) & {
+  headers: Headers;
+};
+
+export type deleteCustomFormatResponse = (deleteCustomFormatResponseSuccess | deleteCustomFormatResponseError)
+
+export const getDeleteCustomFormatUrl = (id: string,) => {
+
+
+
+
+  return `/api/acquisitions/custom-formats/${id}`
+}
+
+/**
+ * @summary Deletes a custom format.
+ */
+export const deleteCustomFormat = async (id: string, options?: RequestInit): Promise<deleteCustomFormatResponse> => {
+
+  return orvalFetch<deleteCustomFormatResponse>(getDeleteCustomFormatUrl(id),
   {
     ...options,
     method: 'DELETE'

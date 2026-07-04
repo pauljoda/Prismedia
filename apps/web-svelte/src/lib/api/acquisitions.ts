@@ -5,9 +5,12 @@ import {
   deleteAcquisition as deleteAcquisitionRequest,
   deleteAcquisitionBlocklistEntry,
   deleteAcquisitionProfile as deleteAcquisitionProfileRequest,
+  deleteCustomFormat as deleteCustomFormatRequest,
   deleteDownloadClient,
   deleteIndexer,
   listAcquisitionBlocklist,
+  listCustomFormats,
+  saveCustomFormat as saveCustomFormatRequest,
   listRemotePathMappings,
   saveRemotePathMapping as saveRemotePathMappingRequest,
   deleteRemotePathMapping as deleteRemotePathMappingRequest,
@@ -33,6 +36,8 @@ import {
 } from "$lib/api/generated/prismedia";
 import type {
   AcquisitionBlocklistEntry,
+  CustomFormatSaveRequest,
+  CustomFormatView,
   RemotePathMappingSaveRequest,
   RemotePathMappingView,
   AcquisitionCreateRequest,
@@ -178,4 +183,17 @@ export async function saveRemotePathMapping(request: RemotePathMappingSaveReques
 
 export async function deleteRemotePathMapping(id: string): Promise<void> {
   unwrapGenerated(await deleteRemotePathMappingRequest(id), "Failed to remove remote path mapping", [204]);
+}
+
+// ── Custom formats ────────────────────────────────────────────
+export async function fetchCustomFormats(): Promise<CustomFormatView[]> {
+  return unwrapGenerated(await listCustomFormats(), "Failed to load custom formats");
+}
+
+export async function saveCustomFormat(request: CustomFormatSaveRequest): Promise<CustomFormatView> {
+  return unwrapGenerated(await saveCustomFormatRequest(request), "Failed to save custom format");
+}
+
+export async function deleteCustomFormat(id: string): Promise<void> {
+  unwrapGenerated(await deleteCustomFormatRequest(id), "Failed to remove custom format", [204]);
 }

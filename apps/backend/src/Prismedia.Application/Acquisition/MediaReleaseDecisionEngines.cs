@@ -62,6 +62,7 @@ public sealed class MovieReleaseDecisionEngine : IAcquisitionDecisionEngine {
         new IgnoredTermsSpecification(),
         new LanguageSpecification(),
         new MediaQualityAllowedSpecification(EntityKind.Movie),
+        new MinFormatScoreSpecification(),
         new MediaUpgradeSpecification(EntityKind.Movie)
     ];
 
@@ -93,6 +94,7 @@ public sealed class MusicReleaseDecisionEngine : IAcquisitionDecisionEngine {
         new IgnoredTermsSpecification(),
         new LanguageSpecification(),
         new MediaQualityAllowedSpecification(EntityKind.AudioLibrary),
+        new MinFormatScoreSpecification(),
         new MediaUpgradeSpecification(EntityKind.AudioLibrary)
     ];
 
@@ -167,10 +169,14 @@ public sealed class MediaQualityAllowedSpecification(EntityKind kind) : IRelease
 
 /// <summary>
 /// Upgrade-search gate for ladder kinds. A candidate is an upgrade when it sits strictly above the owned
-/// ladder position, OR — only under <see cref="ProperDownloadPolicy.PreferAndUpgrade"/> — it sits at the
-/// same ladder position but carries a strictly higher revision than the owned copy (a proper/repack of the
-/// same quality). Under <see cref="ProperDownloadPolicy.DoNotUpgrade"/> / <see cref="ProperDownloadPolicy.DoNotPrefer"/>
-/// a same-quality higher revision is not an upgrade. No-op on ordinary first-grab searches.
+/// ladder position, OR — at the same ladder position and same revision — its custom-format score is
+/// strictly higher than the owned copy's while the owned score is below the profile's
+/// <see cref="BookAcquisitionRules.CutoffFormatScore"/>, OR — only under
+/// <see cref="ProperDownloadPolicy.PreferAndUpgrade"/> — it sits at the same ladder position but carries a
+/// strictly higher revision than the owned copy (a proper/repack of the same quality). Under
+/// <see cref="ProperDownloadPolicy.DoNotUpgrade"/> / <see cref="ProperDownloadPolicy.DoNotPrefer"/> a
+/// same-quality higher revision is not an upgrade. Ladder position always dominates: a lower position is
+/// never rescued by a revision or a format-score gain. No-op on ordinary first-grab searches.
 /// </summary>
 public sealed class MediaUpgradeSpecification(EntityKind kind) : IReleaseSpecification {
     public ReleaseRejectionReason Reason => ReleaseRejectionReason.NotAnUpgrade;
@@ -186,15 +192,43 @@ public sealed class MediaUpgradeSpecification(EntityKind kind) : IReleaseSpecifi
             return null;
         }
 
-        // Same-quality revision upgrade: a strictly-better proper/repack counts only when propers are
-        // preferred-and-upgradeable. A lower ladder position is never rescued by a revision.
-        if (candidate == owned
-            && rules.ProperPolicy == ProperDownloadPolicy.PreferAndUpgrade
-            && ReleaseRevisionDetection.Detect(release.Title) > rules.OwnedMediaRevision) {
-            return null;
+        if (candidate == owned) {
+            // Same-quality format-score upgrade: a strictly-better-scoring release counts only while a
+            // cutoff format score is configured and the owned score is still below it. Independent of the
+            // proper policy (custom-format scoring is not the PROPER/REPACK axis).
+            if (rules.CutoffFormatScore is { } cutoff
+                && rules.OwnedFormatScore < cutoff
+                && CustomFormatEvaluation.Score(release.Title, rules, release.Language) > rules.OwnedFormatScore) {
+                return null;
+            }
+
+            // Same-quality revision upgrade: a strictly-better proper/repack counts only when propers are
+            // preferred-and-upgradeable.
+            if (rules.ProperPolicy == ProperDownloadPolicy.PreferAndUpgrade
+                && ReleaseRevisionDetection.Detect(release.Title) > rules.OwnedMediaRevision) {
+                return null;
+            }
         }
 
         return Reason;
+    }
+}
+
+/// <summary>
+/// Rejects releases whose total custom-format score is below the profile's minimum-format-score floor
+/// (Sonarr's minimum custom format score gate). Off unless the profile has custom formats configured, so a
+/// profile with no formats never rejects on this axis. A negative-scoring release (a format tuned as a soft
+/// ban) is rejected when the floor is 0 or above.
+/// </summary>
+public sealed class MinFormatScoreSpecification : IReleaseSpecification {
+    public ReleaseRejectionReason Reason => ReleaseRejectionReason.BelowMinFormatScore;
+
+    public ReleaseRejectionReason? Evaluate(IndexerRelease release, BookAcquisitionRules rules) {
+        if (rules.CustomFormats.Count == 0) {
+            return null;
+        }
+
+        return CustomFormatEvaluation.Score(release.Title, rules, release.Language) >= rules.MinFormatScore ? null : Reason;
     }
 }
 
@@ -217,6 +251,7 @@ public sealed class TvReleaseDecisionEngine(EntityKind kind) : IAcquisitionDecis
         new LanguageSpecification(),
         new TvUnitSpecification(),
         new MediaQualityAllowedSpecification(kind),
+        new MinFormatScoreSpecification(),
         new MediaUpgradeSpecification(kind)
     ];
 
@@ -303,9 +338,10 @@ internal static class MediaReleaseEvaluation {
     /// <summary>
     /// The profile-preference component of a release's score, in shared preference points: each preferred
     /// term is worth 100, each matched custom weighted term contributes its own weight (so 100 equals one
-    /// preferred term, negatives push down), and the release's language earns up to 50 per step of the
-    /// ordered preferred-language list (an unmarked or multi release counts as the top preference). Every
-    /// engine multiplies this by its own boost so preference always compares the same way across kinds.
+    /// preferred term, negatives push down), the release's language earns up to 50 per step of the ordered
+    /// preferred-language list (an unmarked or multi release counts as the top preference), and every
+    /// matching custom format adds its score directly (so 100 custom-format points equal one preferred term).
+    /// Every engine multiplies this by its own boost so preference always compares the same way across kinds.
     /// </summary>
     public static double PreferenceScore(IndexerRelease release, BookAcquisitionRules rules) {
         var title = release.Title;
@@ -316,7 +352,9 @@ internal static class MediaReleaseEvaluation {
             }
         }
 
-        return score + LanguagePreferenceBonus(release, rules);
+        return score
+            + LanguagePreferenceBonus(release, rules)
+            + CustomFormatEvaluation.Score(title, rules, release.Language);
     }
 
     /// <summary>

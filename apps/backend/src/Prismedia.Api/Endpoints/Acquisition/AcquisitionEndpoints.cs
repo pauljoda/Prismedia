@@ -336,6 +336,41 @@ public static class AcquisitionEndpoints {
             .Produces(StatusCodes.Status204NoContent)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
+        group.MapGet("/custom-formats", (
+            ICustomFormatStore customFormats,
+            CancellationToken cancellationToken) =>
+            customFormats.ListAsync(cancellationToken))
+            .WithName("ListCustomFormats")
+            .WithSummary("Lists custom formats (named, scored release classifiers) across all profile kinds.")
+            .Produces<IReadOnlyList<CustomFormatView>>();
+
+        group.MapPost("/custom-formats", async (
+            CustomFormatSaveRequest request,
+            ICustomFormatStore customFormats,
+            CancellationToken cancellationToken) => {
+                try {
+                    return Results.Ok(await customFormats.SaveAsync(request, cancellationToken));
+                } catch (AcquisitionConfigurationException ex) {
+                    return Results.BadRequest(new ApiProblem(ex.Code, ex.Message));
+                }
+            })
+            .WithName("SaveCustomFormat")
+            .WithSummary("Creates or updates a custom format (validates the name, conditions, and any regex patterns).")
+            .Produces<CustomFormatView>()
+            .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
+
+        group.MapDelete("/custom-formats/{id:guid}", async (
+            Guid id,
+            ICustomFormatStore customFormats,
+            CancellationToken cancellationToken) =>
+            await customFormats.DeleteAsync(id, cancellationToken)
+                ? Results.NoContent()
+                : Results.NotFound(new ApiProblem(ApiProblemCodes.NotFound, "Custom format was not found.")))
+            .WithName("DeleteCustomFormat")
+            .WithSummary("Deletes a custom format.")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+
         group.MapGet("/blocklist", (
             IAcquisitionBlocklistStore blocklist,
             CancellationToken cancellationToken) =>

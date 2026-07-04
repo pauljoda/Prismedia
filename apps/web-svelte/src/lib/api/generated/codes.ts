@@ -397,9 +397,19 @@ export const RELEASE_REJECTION_REASON = {
   notAnUpgrade: "not-an-upgrade",
   formatDowngrade: "format-downgrade",
   wrongTvUnit: "wrong-tv-unit",
+  belowMinFormatScore: "below-min-format-score",
 } as const;
 
 export type ReleaseRejectionReasonCode = (typeof RELEASE_REJECTION_REASON)[keyof typeof RELEASE_REJECTION_REASON];
+
+export const CUSTOM_FORMAT_CONDITION_TYPE = {
+  releaseTitle: "release-title",
+  releaseGroup: "release-group",
+  language: "language",
+  quality: "quality",
+} as const;
+
+export type CustomFormatConditionTypeCode = (typeof CUSTOM_FORMAT_CONDITION_TYPE)[keyof typeof CUSTOM_FORMAT_CONDITION_TYPE];
 
 export const IMPORT_MODE = {
   move: "move",

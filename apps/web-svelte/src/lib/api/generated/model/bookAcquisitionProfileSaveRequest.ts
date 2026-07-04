@@ -4,6 +4,7 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { BookAcquisitionProfileSaveRequestFormatScores } from './bookAcquisitionProfileSaveRequestFormatScores';
 import type { BookFormatTier } from './bookFormatTier';
 import type { BookSourceTier } from './bookSourceTier';
 import type { EntityKind } from './entityKind';
@@ -48,4 +49,13 @@ export interface BookAcquisitionProfileSaveRequest {
   allowedQualities?: string[] | null;
   /** @nullable */
   cutoffQuality?: string | null;
+  /** @nullable */
+  formatScores?: BookAcquisitionProfileSaveRequestFormatScores;
+  /** @pattern ^-?(?:0|[1-9]\d*)$ */
+  minFormatScore?: number | string;
+  /**
+     * @nullable
+     * @pattern ^-?(?:0|[1-9]\d*)$
+     */
+  cutoffFormatScore?: number | string | null;
 }

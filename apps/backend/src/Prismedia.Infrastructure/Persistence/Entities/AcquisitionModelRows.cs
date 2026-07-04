@@ -113,6 +113,28 @@ public sealed class DownloadClientCredentialRow {
 }
 
 /// <summary>
+/// A named, scored release classifier (a Sonarr-style custom format): a set of conditions over a release's
+/// title/group/language/quality, scoped to one profile kind. The score a format is worth lives on the
+/// profile (in <see cref="BookAcquisitionProfileRow.FormatScoresJson"/>), so the same format can be worth
+/// different points in different profiles of its kind. Referenced by profiles of the same kind only.
+/// </summary>
+public sealed class CustomFormatRow {
+    public Guid Id { get; set; }
+
+    /// <summary>The profile kind this format applies to (book/movie/TV/music), matching the profile vocabulary.</summary>
+    public EntityKind Kind { get; set; } = EntityKind.Book;
+
+    /// <summary>User-facing name of the format (e.g. "English/Dual audio").</summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>JSON array of the format's conditions ([{"Type":"release-title","Value":"…","Negate":false,"Required":false}, …]).</summary>
+    public string ConditionsJson { get; set; } = "[]";
+
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
+/// <summary>
 /// Matching rules and import target for book acquisitions. The decision engine filters and ranks
 /// release candidates against these rules; the import planner uses the target root and path template.
 /// </summary>
@@ -192,6 +214,19 @@ public sealed class BookAcquisitionProfileRow {
 
     /// <summary>The format tier at or above which the upgrade loop stops searching. Half of the cutoff quality.</summary>
     public BookFormatTier CutoffFormatTier { get; set; } = BookFormatTier.Unknown;
+
+    /// <summary>
+    /// JSON map of custom-format id → score ({"&lt;guid&gt;":500, …}) for the formats of this profile's kind.
+    /// A matching format adds its score to a release's ranking; a format absent from the map (or scored 0) is
+    /// ignored. Scores are clamped to ±10_000 like weighted terms.
+    /// </summary>
+    public string FormatScoresJson { get; set; } = "{}";
+
+    /// <summary>The minimum total custom-format score a release must clear to be accepted (Sonarr's min format score). 0 by default.</summary>
+    public int MinFormatScore { get; set; }
+
+    /// <summary>The custom-format score at or above which the upgrade loop stops chasing better-scoring releases. Null = no format-score cutoff.</summary>
+    public int? CutoffFormatScore { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
@@ -282,6 +317,13 @@ public sealed class AcquisitionRow {
     /// counts as an upgrade. Defaults to 1 (a plain release); books ignore it.
     /// </summary>
     public int OwnedMediaRevision { get; set; } = 1;
+
+    /// <summary>
+    /// Total custom-format score of the release this acquisition imported (computed at import from the
+    /// selected release title against the profile's custom formats). Advanced by the upgrade replace handler
+    /// alongside the quality/revision. Feeds the upgrade loop's same-quality format-score cutoff. Defaults to 0.
+    /// </summary>
+    public int OwnedFormatScore { get; set; }
 
     /// <summary>
     /// For an upgrade child acquisition, the parent acquisition it replaces. Self-FK, nulled if the parent is

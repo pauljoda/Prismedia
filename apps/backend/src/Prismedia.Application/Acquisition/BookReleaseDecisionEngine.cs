@@ -266,7 +266,8 @@ public sealed class BookReleaseDecisionEngine : IAcquisitionDecisionEngine {
         new SizeSpecification(),
         new RequiredTermsSpecification(),
         new IgnoredTermsSpecification(),
-        new LanguageSpecification()
+        new LanguageSpecification(),
+        new MinFormatScoreSpecification()
     ];
 
     public IReadOnlyList<ScoredRelease> Evaluate(

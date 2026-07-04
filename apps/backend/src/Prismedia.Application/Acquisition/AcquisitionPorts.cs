@@ -77,7 +77,26 @@ public sealed record BookAcquisitionProfileSaveCommand(
     BookFormatTier CutoffFormatTier,
     string? DownloadCategory = null,
     IReadOnlyList<string>? AllowedQualities = null,
-    string? CutoffQuality = null);
+    string? CutoffQuality = null,
+    IReadOnlyDictionary<string, int>? FormatScores = null,
+    int MinFormatScore = 0,
+    int? CutoffFormatScore = null);
+
+/// <summary>
+/// Persistence port for custom formats (named, scored release classifiers), scoped per profile kind.
+/// A profile references formats of its own kind by id and assigns each a per-profile score; the profile
+/// store resolves those scores against this table when it builds the decision rules.
+/// </summary>
+public interface ICustomFormatStore {
+    /// <summary>Every custom format, kind then name ordered, for the settings surface.</summary>
+    Task<IReadOnlyList<Contracts.Acquisition.CustomFormatView>> ListAsync(CancellationToken cancellationToken);
+
+    /// <summary>Creates or updates a custom format (upsert on id). The store validates the conditions before persisting.</summary>
+    Task<Contracts.Acquisition.CustomFormatView> SaveAsync(Contracts.Acquisition.CustomFormatSaveRequest request, CancellationToken cancellationToken);
+
+    /// <summary>Deletes a custom format by id. Returns false when it no longer exists.</summary>
+    Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken);
+}
 
 /// <summary>
 /// Persistence port for acquisition profiles (matching rules + import target), scoped per media kind.
@@ -215,12 +234,13 @@ public interface IAcquisitionStore {
     Task UpdateOwnedQualityAsync(Guid acquisitionId, BookQualityRank ownedQuality, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Updates an acquisition's owned media-quality ladder code and revision (after a successful movie/episode
-    /// upgrade swap) without changing its status. <paramref name="ownedMediaRevision"/> is the PROPER/REPACK
-    /// revision detected from the release that replaced the owned copy, so the upgrade loop's same-quality
-    /// proper comparison sees the advance.
+    /// Updates an acquisition's owned media-quality ladder code, revision, and custom-format score (after a
+    /// successful movie/episode upgrade swap) without changing its status. <paramref name="ownedMediaRevision"/>
+    /// is the PROPER/REPACK revision detected from the release that replaced the owned copy, so the upgrade
+    /// loop's same-quality proper comparison sees the advance; <paramref name="ownedFormatScore"/> is that
+    /// release's total custom-format score, so the same-quality format-score comparison sees it too.
     /// </summary>
-    Task UpdateOwnedMediaQualityAsync(Guid acquisitionId, string ownedMediaQuality, int ownedMediaRevision, CancellationToken cancellationToken);
+    Task UpdateOwnedMediaQualityAsync(Guid acquisitionId, string ownedMediaQuality, int ownedMediaRevision, int ownedFormatScore, CancellationToken cancellationToken);
 
     /// <summary>
     /// Fills in held metadata from a provider enrichment, gap-only: a poster only when none is set, a year only
@@ -239,8 +259,11 @@ public interface IAcquisitionStore {
     /// when non-null it is stored alongside the book tiers and the same captured flag is set.
     /// <paramref name="ownedMediaRevision"/> is the PROPER/REPACK revision detected from the same selected
     /// release title, stored alongside the media quality (defaults to 1; ignored by book kinds).
+    /// <paramref name="ownedFormatScore"/> is the total custom-format score of the same selected release
+    /// (computed against the profile's formats), stored for every kind so the upgrade loop's same-quality
+    /// format-score cutoff can advance (defaults to 0).
     /// </summary>
-    Task MarkImportedWithQualityAsync(Guid id, BookQualityRank ownedQuality, string? message, CancellationToken cancellationToken, string? ownedMediaQuality = null, int ownedMediaRevision = 1);
+    Task MarkImportedWithQualityAsync(Guid id, BookQualityRank ownedQuality, string? message, CancellationToken cancellationToken, string? ownedMediaQuality = null, int ownedMediaRevision = 1, int ownedFormatScore = 0);
 
     /// <summary>Replaces an acquisition's candidate set with a freshly scored search result.</summary>
     Task ReplaceCandidatesAsync(Guid id, IReadOnlyList<ScoredRelease> candidates, CancellationToken cancellationToken);

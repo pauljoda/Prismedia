@@ -196,6 +196,43 @@ public sealed class EfMonitorStoreUpgradeTests {
     }
 
     [Fact]
+    public async Task ImportedMovieAtLadderCutoffButBelowFormatScoreCutoffStaysDue() {
+        await using var db = CreateContext();
+        // Ladder cutoff is met (owned == cutoff quality) but the format-score cutoff (500) is not — the
+        // monitor keeps chasing a better-scoring release at the same quality instead of fulfilling.
+        var store = await SeedMediaUpgradeMonitorAsync(
+            db, EntityKind.Movie, owned: "bluray-1080p", cutoff: "bluray-1080p", cutoffFormatScore: 500, ownedFormatScore: 0);
+
+        var due = await store.ListDueMonitorsAsync(360, CancellationToken.None);
+
+        var monitor = Assert.Single(due);
+        Assert.True(monitor.IsUpgrade);
+    }
+
+    [Fact]
+    public async Task ImportedMovieAtBothCutoffsFulfills() {
+        await using var db = CreateContext();
+        // Both the ladder cutoff AND the format-score cutoff are met → fulfilled.
+        var store = await SeedMediaUpgradeMonitorAsync(
+            db, EntityKind.Movie, owned: "bluray-1080p", cutoff: "bluray-1080p", cutoffFormatScore: 500, ownedFormatScore: 500);
+
+        Assert.Empty(await store.ListDueMonitorsAsync(360, CancellationToken.None));
+        Assert.Equal(MonitorStatus.Fulfilled, (await store.ListAsync(CancellationToken.None))[0].Status);
+    }
+
+    [Fact]
+    public async Task ImportedMovieWithNoFormatCutoffFulfillsAtLadderCutoff() {
+        await using var db = CreateContext();
+        // No format-score cutoff configured (null) → the format score imposes no requirement; the ladder
+        // cutoff alone decides, so an owned copy at the ladder cutoff fulfills even with a 0 format score.
+        var store = await SeedMediaUpgradeMonitorAsync(
+            db, EntityKind.Movie, owned: "bluray-1080p", cutoff: "bluray-1080p", cutoffFormatScore: null, ownedFormatScore: 0);
+
+        Assert.Empty(await store.ListDueMonitorsAsync(360, CancellationToken.None));
+        Assert.Equal(MonitorStatus.Fulfilled, (await store.ListAsync(CancellationToken.None))[0].Status);
+    }
+
+    [Fact]
     public async Task ImportedMovieWithNoOwnedQualityCapturedStaysActive() {
         await using var db = CreateContext();
         // The captured flag is set but the ladder code was never recorded (no selected release) → the loop
@@ -215,17 +252,19 @@ public sealed class EfMonitorStoreUpgradeTests {
         EntityKind kind,
         string? owned,
         string cutoff,
-        bool upgradeOn = true) {
+        bool upgradeOn = true,
+        int? cutoffFormatScore = null,
+        int ownedFormatScore = 0) {
         var now = DateTimeOffset.UtcNow;
         db.BookAcquisitionProfiles.Add(new BookAcquisitionProfileRow {
             Id = Guid.NewGuid(), Kind = AcquisitionProfileKinds.For(kind), DisplayName = "Default", IsDefault = true,
             TargetLibraryRootId = Guid.NewGuid(), AutoPick = true, UpgradeUntilCutoff = upgradeOn, CutoffQuality = cutoff,
-            CreatedAt = now, UpdatedAt = now
+            CutoffFormatScore = cutoffFormatScore, CreatedAt = now, UpdatedAt = now
         });
         var acquisitionId = Guid.NewGuid();
         db.Acquisitions.Add(new AcquisitionRow {
             Id = acquisitionId, Kind = kind, Status = AcquisitionStatus.Imported, Title = "Some Media", ExternalIdsJson = "{}", SourceUrlsJson = "[]",
-            OwnedMediaQuality = owned, UpgradeQualityCaptured = true, CreatedAt = now, UpdatedAt = now
+            OwnedMediaQuality = owned, OwnedFormatScore = ownedFormatScore, UpgradeQualityCaptured = true, CreatedAt = now, UpdatedAt = now
         });
         await db.SaveChangesAsync();
         var store = new EfMonitorStore(db);

@@ -147,10 +147,30 @@ internal static partial class PrismediaModelConfiguration {
                 .HasConversion(value => value.ToCode(), value => value.DecodeAs<BookFormatTier>())
                 .HasDefaultValue(BookFormatTier.Unknown)
                 .IsRequired();
+            entity.Property(row => row.FormatScoresJson).HasColumnName("format_scores_json").HasColumnType("jsonb").HasDefaultValue("{}").IsRequired();
+            entity.Property(row => row.MinFormatScore).HasColumnName("min_format_score").HasDefaultValue(0);
+            entity.Property(row => row.CutoffFormatScore).HasColumnName("cutoff_format_score");
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
             entity.HasIndex(row => row.IsDefault);
             entity.HasOne<LibraryRootRow>().WithMany().HasForeignKey(row => row.TargetLibraryRootId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<CustomFormatRow>(entity => {
+            entity.ToTable("custom_formats");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(row => row.Kind)
+                .HasColumnName("kind")
+                .HasMaxLength(64)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<EntityKind>())
+                .HasDefaultValue(EntityKind.Book)
+                .IsRequired();
+            entity.Property(row => row.Name).HasColumnName("name").HasMaxLength(256).IsRequired();
+            entity.Property(row => row.ConditionsJson).HasColumnName("conditions_json").HasColumnType("jsonb").HasDefaultValue("[]").IsRequired();
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            entity.HasIndex(row => row.Kind);
         });
 
         modelBuilder.Entity<AcquisitionRow>(entity => {
@@ -201,6 +221,7 @@ internal static partial class PrismediaModelConfiguration {
                 .IsRequired();
             entity.Property(row => row.OwnedMediaQuality).HasColumnName("owned_media_quality").HasMaxLength(64);
             entity.Property(row => row.OwnedMediaRevision).HasColumnName("owned_media_revision").HasDefaultValue(1);
+            entity.Property(row => row.OwnedFormatScore).HasColumnName("owned_format_score").HasDefaultValue(0);
             entity.Property(row => row.UpgradeOfAcquisitionId).HasColumnName("upgrade_of_acquisition_id");
             entity.Property(row => row.UpgradeQualityCaptured).HasColumnName("upgrade_quality_captured").HasDefaultValue(false);
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");

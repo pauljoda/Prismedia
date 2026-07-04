@@ -76,6 +76,44 @@ public sealed record BookAcquisitionRules(
     public ProperDownloadPolicy ProperPolicy { get; init; } = ProperDownloadPolicy.PreferAndUpgrade;
 
     /// <summary>
+    /// The profile kind these rules were resolved for, so <see cref="CustomFormatEvaluation"/> places a
+    /// release title on the correct quality ladder when a format carries a quality condition. Defaults to
+    /// <see cref="EntityKind.Book"/> so rules built without a profile (the permissive default) keep the
+    /// established book behavior.
+    /// </summary>
+    public EntityKind Kind { get; init; } = EntityKind.Book;
+
+    /// <summary>
+    /// The profile's scored custom formats (Sonarr-style named release classifiers). Each matching format
+    /// adds its score to a release's preference points (see <see cref="MediaReleaseEvaluation.PreferenceScore"/>).
+    /// Resolved by the profile store against the custom-format table; formats scored 0 are skipped. Empty
+    /// disables custom-format scoring and the min-format-score gate.
+    /// </summary>
+    public IReadOnlyList<ScoredCustomFormat> CustomFormats { get; init; } = [];
+
+    /// <summary>
+    /// The floor a release's total custom-format score must clear to be accepted (Sonarr's minimum custom
+    /// format score). Enforced by <see cref="MinFormatScoreSpecification"/> only when
+    /// <see cref="CustomFormats"/> is non-empty. Default 0 accepts any non-negative-scoring release.
+    /// </summary>
+    public int MinFormatScore { get; init; }
+
+    /// <summary>
+    /// The custom-format score at or above which the upgrade loop stops chasing better-scoring releases at
+    /// the same ladder position (parallel to <see cref="CutoffQuality"/> on the format axis). Null means
+    /// format score never keeps an item due for upgrade.
+    /// </summary>
+    public int? CutoffFormatScore { get; init; }
+
+    /// <summary>
+    /// The owned copy's custom-format score for an upgrade search (set per search by the runner from the
+    /// parent's stored score, like <see cref="OwnedMediaQuality"/>). A same-ladder-position, same-revision
+    /// candidate whose format score is strictly higher counts as an upgrade only while this is below
+    /// <see cref="CutoffFormatScore"/>. Defaults to 0.
+    /// </summary>
+    public int OwnedFormatScore { get; init; }
+
+    /// <summary>
     /// Permissive defaults used when no profile is configured yet (e.g. ad-hoc verification searches).
     /// <see cref="MinQuality"/> and <see cref="OwnedQuality"/> default to <see cref="BookQualityRank.Floor"/>
     /// (<c>default(BookQualityRank)</c>) and <see cref="IsUpgradeSearch"/> to false, so the quality and
@@ -234,7 +272,11 @@ public sealed record DueMonitor(Guid MonitorId, Guid? AcquisitionId, string Titl
 /// higher-revision candidate can be recognized as an upgrade. Defaults to 1 (a plain release); ignored on
 /// the book axis, which has no revision concept.
 /// </param>
-public sealed record UpgradeOwnedQuality(Domain.Entities.BookQualityRank? BookRank, string? MediaQualityCode, int MediaRevision = 1);
+/// <param name="FormatScore">
+/// The parent's owned custom-format score, so a same-quality candidate with a strictly higher format score
+/// (below the profile's cutoff) can be recognized as an upgrade. Defaults to 0.
+/// </param>
+public sealed record UpgradeOwnedQuality(Domain.Entities.BookQualityRank? BookRank, string? MediaQualityCode, int MediaRevision = 1, int FormatScore = 0);
 
 /// <summary>
 /// Everything the upgrade-replace job needs to swap a downloaded upgrade child's file in for the owned copy:
@@ -245,6 +287,8 @@ public sealed record UpgradeOwnedQuality(Domain.Entities.BookQualityRank? BookRa
 /// <param name="ParentKind">The parent acquisition's media kind; routes the handler between the book and media replace paths.</param>
 /// <param name="ParentOwnedMediaQuality">The parent's owned ladder code for a media parent; null for a book parent.</param>
 /// <param name="ParentOwnedMediaRevision">The parent's owned revision for a media parent, so a same-quality higher-revision child is recognized as an upgrade at the pre-swap re-confirm gate. Defaults to 1; ignored on the book path.</param>
+/// <param name="ParentProfileId">The parent's chosen profile, so the handler can re-score the child release against the same custom formats. Null uses the kind's default profile.</param>
+/// <param name="ParentOwnedFormatScore">The parent's owned custom-format score, re-confirmed against at the pre-swap gate for a same-quality format-score upgrade. Defaults to 0.</param>
 public sealed record UpgradeReplaceTarget(
     Guid ParentId,
     string? ParentFinalSourcePath,
@@ -255,7 +299,9 @@ public sealed record UpgradeReplaceTarget(
     Guid? ChildDownloadClientConfigId,
     Domain.Entities.EntityKind ParentKind = Domain.Entities.EntityKind.Book,
     string? ParentOwnedMediaQuality = null,
-    int ParentOwnedMediaRevision = 1);
+    int ParentOwnedMediaRevision = 1,
+    Guid? ParentProfileId = null,
+    int ParentOwnedFormatScore = 0);
 
 /// <summary>
 /// Outcome of an in-place owned-file replacement. On success the owned file was atomically swapped for the

@@ -52,6 +52,7 @@ const ENUM_EXPORTS = [
   ["DownloadProtocol", "DOWNLOAD_PROTOCOL", "DownloadProtocolCode"],
   ["AcquisitionStatus", "ACQUISITION_STATUS", "AcquisitionStatusCode"],
   ["ReleaseRejectionReason", "RELEASE_REJECTION_REASON", "ReleaseRejectionReasonCode"],
+  ["CustomFormatConditionType", "CUSTOM_FORMAT_CONDITION_TYPE", "CustomFormatConditionTypeCode"],
   ["ImportMode", "IMPORT_MODE", "ImportModeCode"],
   ["BlocklistReason", "BLOCKLIST_REASON", "BlocklistReasonCode"],
   ["MonitorStatus", "MONITOR_STATUS", "MonitorStatusCode"],
