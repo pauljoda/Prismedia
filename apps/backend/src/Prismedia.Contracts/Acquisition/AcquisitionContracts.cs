@@ -323,6 +323,45 @@ public sealed record MonitorView(
     DateTimeOffset UpdatedAt,
     Guid? EntityId = null);
 
+/// <summary>
+/// One row of a Wanted list (Missing or Cutoff Unmet): a monitored item that is not yet in hand, or is in
+/// hand but below its kind's cutoff. Carries the monitor/acquisition identity the row's bulk Search-now and
+/// Unmonitor actions target, the entity link (when set, the row links to its library detail page), both
+/// statuses, the search cadence, and the owned → cutoff quality strings the cutoff-unmet view renders.
+/// </summary>
+/// <param name="MonitorId">The monitor backing this row; the target of Search-now / Unmonitor.</param>
+/// <param name="AcquisitionId">The acquisition the monitor keeps alive, or null when it was removed.</param>
+/// <param name="EntityId">The library entity this item resolves to, or null; when set the row links to its detail page.</param>
+/// <param name="Kind">The media kind, for the kind badge and the kind filter.</param>
+/// <param name="Title">The wanted item's title.</param>
+/// <param name="MonitorStatus">The monitor's current status.</param>
+/// <param name="AcquisitionStatus">The linked acquisition's status, or null when it is gone.</param>
+/// <param name="LastSearchedAt">When the item was last re-searched; null means never.</param>
+/// <param name="NextSearchAt">When the item is next due for a re-search (last-searched plus the sweep's exponential backoff); null when never searched.</param>
+/// <param name="OwnedQuality">The owned quality string in the kind's vocabulary (a book's "source/format" tiers, or a media ladder code); null on the missing list.</param>
+/// <param name="CutoffQuality">The kind's cutoff quality, same vocabulary as <see cref="OwnedQuality"/>; null on the missing list.</param>
+/// <param name="BarrenSearches">Consecutive fruitless searches so far, surfaced so a stuck item is visible.</param>
+public sealed record WantedListItemView(
+    Guid MonitorId,
+    Guid? AcquisitionId,
+    Guid? EntityId,
+    EntityKind Kind,
+    string Title,
+    MonitorStatus MonitorStatus,
+    AcquisitionStatus? AcquisitionStatus,
+    DateTimeOffset? LastSearchedAt,
+    DateTimeOffset? NextSearchAt,
+    string? OwnedQuality,
+    string? CutoffQuality,
+    int BarrenSearches);
+
+/// <summary>
+/// One page of a Wanted list: the page's rows plus the total count of matching rows for the pagination
+/// controls. For Missing, <see cref="Total"/> is exact; for Cutoff Unmet it is an upper bound (the count of
+/// imported+active monitors, before the per-page cutoff refinement) — see the endpoint summary.
+/// </summary>
+public sealed record WantedPageView(IReadOnlyList<WantedListItemView> Items, int Total);
+
 /// <summary>Request to start monitoring (keep re-searching) an existing acquisition until it is acquired.</summary>
 public sealed record MonitorCreateRequest(Guid AcquisitionId);
 

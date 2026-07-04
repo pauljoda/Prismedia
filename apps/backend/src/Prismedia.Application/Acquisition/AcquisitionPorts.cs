@@ -371,6 +371,30 @@ public interface IMonitorStore {
     /// <summary>Lists all monitors (with each linked acquisition's status) for the monitored/wanted surface, newest first.</summary>
     Task<IReadOnlyList<Contracts.Acquisition.MonitorView>> ListAsync(CancellationToken cancellationToken);
 
+    /// <summary>
+    /// A page of the Wanted "Missing" list, newest-monitor-first: active per-item monitors (skipping
+    /// container discovery follows) whose acquisition is not yet <see cref="Domain.Entities.AcquisitionStatus.Imported"/>
+    /// (or whose acquisition is gone). The imported-vs-not filter is applied in SQL and the page is sliced in
+    /// SQL (<c>Skip</c>/<c>Take</c>), so the query stays cheap at Sonarr scale. <paramref name="pageSize"/> is
+    /// clamped (a floor of 1, a ceiling of 200); <paramref name="page"/> is 1-based. <paramref name="kind"/>
+    /// filters to one media kind when set. <see cref="WantedPage.Total"/> is the exact SQL count of matching
+    /// monitors. Each item's <c>NextSearchAt</c> reflects the same exponential backoff the due sweep uses.
+    /// </summary>
+    Task<WantedPage> ListMissingAsync(int page, int pageSize, Domain.Entities.EntityKind? kind, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// A page of the Wanted "Cutoff Unmet" list, newest-monitor-first: active monitors whose acquisition IS
+    /// imported but whose owned copy is still below its kind's cutoff (the same cutoff evaluation the due
+    /// sweep runs, so the two never disagree — books compare source/format tiers, media compares the ladder
+    /// position and the custom-format score). The imported+active filter and the page slice run in SQL; the
+    /// cutoff comparison then runs in memory over the materialized page, dropping rows that are actually at or
+    /// above cutoff (fulfilled-but-not-yet-swept). Because the cutoff refinement is per-page,
+    /// <see cref="WantedPage.Total"/> is the SQL count of the imported+active set — an UPPER BOUND on the true
+    /// unmet count, not an exact figure. <paramref name="pageSize"/> is clamped (floor 1, ceiling 200);
+    /// <paramref name="page"/> is 1-based; <paramref name="kind"/> filters to one media kind when set.
+    /// </summary>
+    Task<WantedPage> ListCutoffUnmetAsync(int page, int pageSize, Domain.Entities.EntityKind? kind, CancellationToken cancellationToken);
+
     /// <summary>Returns the monitor linked to an acquisition, or null when it is not monitored.</summary>
     Task<Contracts.Acquisition.MonitorView?> GetByAcquisitionAsync(Guid acquisitionId, CancellationToken cancellationToken);
 

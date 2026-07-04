@@ -173,6 +173,7 @@ import type {
   ListBooksParams,
   ListCollectionItemsParams,
   ListCollectionsParams,
+  ListCutoffUnmetWantedParams,
   ListEntitiesParams,
   ListFileChildrenParams,
   ListFileRootsParams,
@@ -181,6 +182,7 @@ import type {
   ListIdentifyQueueParams,
   ListImagesParams,
   ListJobsParams,
+  ListMissingWantedParams,
   ListMoviesParams,
   ListMusicArtistsParams,
   ListPeopleParams,
@@ -242,6 +244,7 @@ import type {
   VideoDetail,
   VideoSeasonDetail,
   VideoSeriesDetail,
+  WantedPageView,
   WantedRemovalRequest,
   WantedRemovalResponse,
   WorkerHealthResponse
@@ -12626,6 +12629,106 @@ export const startMonitor = async (monitorCreateRequest: MonitorCreateRequest, o
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       monitorCreateRequest,)
+  }
+);}
+
+
+
+export type listMissingWantedResponse200 = {
+  data: WantedPageView
+  status: 200
+}
+
+export type listMissingWantedResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type listMissingWantedResponseSuccess = (listMissingWantedResponse200) & {
+  headers: Headers;
+};
+export type listMissingWantedResponseError = (listMissingWantedResponse400) & {
+  headers: Headers;
+};
+
+export type listMissingWantedResponse = (listMissingWantedResponseSuccess | listMissingWantedResponseError)
+
+export const getListMissingWantedUrl = (params?: ListMissingWantedParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/monitors/missing?${stringifiedParams}` : `/api/monitors/missing`
+}
+
+/**
+ * @summary A page of the Wanted 'Missing' list — active monitored items not yet acquired, newest first. Paged (pageSize clamped 1–200) and optionally filtered by kind; the page total is exact.
+ */
+export const listMissingWanted = async (params?: ListMissingWantedParams, options?: RequestInit): Promise<listMissingWantedResponse> => {
+
+  return orvalFetch<listMissingWantedResponse>(getListMissingWantedUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type listCutoffUnmetWantedResponse200 = {
+  data: WantedPageView
+  status: 200
+}
+
+export type listCutoffUnmetWantedResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type listCutoffUnmetWantedResponseSuccess = (listCutoffUnmetWantedResponse200) & {
+  headers: Headers;
+};
+export type listCutoffUnmetWantedResponseError = (listCutoffUnmetWantedResponse400) & {
+  headers: Headers;
+};
+
+export type listCutoffUnmetWantedResponse = (listCutoffUnmetWantedResponseSuccess | listCutoffUnmetWantedResponseError)
+
+export const getListCutoffUnmetWantedUrl = (params?: ListCutoffUnmetWantedParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/monitors/cutoff-unmet?${stringifiedParams}` : `/api/monitors/cutoff-unmet`
+}
+
+/**
+ * @summary A page of the Wanted 'Cutoff Unmet' list — imported monitored items still below their kind's quality cutoff, newest first. Paged (pageSize clamped 1–200) and optionally filtered by kind. Note: the page total is an UPPER BOUND (the count of imported+active monitors before the per-page cutoff refinement), not an exact count.
+ */
+export const listCutoffUnmetWanted = async (params?: ListCutoffUnmetWantedParams, options?: RequestInit): Promise<listCutoffUnmetWantedResponse> => {
+
+  return orvalFetch<listCutoffUnmetWantedResponse>(getListCutoffUnmetWantedUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
   }
 );}
 

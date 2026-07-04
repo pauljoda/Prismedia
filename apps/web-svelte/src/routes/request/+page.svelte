@@ -1,14 +1,27 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { Compass, History, Inbox, Loader2, Search, Send, Settings } from "@lucide/svelte";
+  import {
+    AlertTriangle,
+    Compass,
+    History,
+    Inbox,
+    Loader2,
+    PackageSearch,
+    Search,
+    Send,
+    Settings,
+  } from "@lucide/svelte";
   import { Button, Select, TextInput, cn } from "@prismedia/ui-svelte";
+  import type { SelectOption } from "@prismedia/ui-svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
-  import type { RequestMediaKindCode } from "$lib/api/generated/codes";
+  import { ENTITY_KIND, type RequestMediaKindCode } from "$lib/api/generated/codes";
   import type { AcquisitionHistoryView } from "$lib/api/generated/model";
   import { fetchAcquisitionHistory } from "$lib/api/acquisitions";
   import { searchRequests } from "$lib/api/requests";
+  import { labelForEntityKind } from "$lib/entities/entity-codes";
   import AcquisitionHistoryList from "$lib/components/acquisitions/AcquisitionHistoryList.svelte";
+  import WantedList from "$lib/components/acquisitions/WantedList.svelte";
   import RequestsReview from "$lib/components/requests/RequestsReview.svelte";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
   import { usePageSnapshots } from "$lib/stores/page-snapshots.svelte";
@@ -42,10 +55,20 @@
   const tabs = [
     { id: "discover", label: "Discover", icon: Compass },
     { id: "requests", label: "Requests", icon: Inbox },
+    { id: "missing", label: "Missing", icon: PackageSearch },
+    { id: "cutoff", label: "Cutoff unmet", icon: AlertTriangle },
     { id: "history", label: "History", icon: History },
   ] as const;
   type RequestTab = (typeof tabs)[number]["id"];
   let activeTab = $state<RequestTab>("discover");
+
+  // Kind filter options for the Wanted lists — the acquisition-capable library kinds plus "All".
+  const wantedKindOptions: SelectOption[] = [
+    { value: "all", label: "All kinds" },
+    ...[ENTITY_KIND.book, ENTITY_KIND.movie, ENTITY_KIND.videoSeries, ENTITY_KIND.audioLibrary].map(
+      (kind) => ({ value: kind, label: labelForEntityKind(kind) }),
+    ),
+  ];
 
   // Durable acquisition activity log (global, newest-first), loaded lazily when the History tab opens.
   let history = $state<AcquisitionHistoryView[]>([]);
@@ -241,6 +264,10 @@
 
   {#if activeTab === "requests"}
     <RequestsReview />
+  {:else if activeTab === "missing"}
+    <WantedList variant="missing" kindOptions={wantedKindOptions} />
+  {:else if activeTab === "cutoff"}
+    <WantedList variant="cutoffUnmet" kindOptions={wantedKindOptions} />
   {:else if activeTab === "history"}
     <!-- ── Activity log (global, newest-first) ── -->
     {#if historyError}

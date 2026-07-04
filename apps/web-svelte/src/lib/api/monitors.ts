@@ -1,5 +1,7 @@
 import {
   getEntityMonitor,
+  listCutoffUnmetWanted,
+  listMissingWanted,
   listMonitors,
   pauseMonitor as pauseMonitorRequest,
   resumeMonitor as resumeMonitorRequest,
@@ -7,11 +9,35 @@ import {
   startMonitor as startMonitorRequest,
   stopMonitor as stopMonitorRequest,
 } from "$lib/api/generated/prismedia";
-import type { MonitorView } from "$lib/api/generated/model";
+import type { MonitorView, WantedPageView } from "$lib/api/generated/model";
 import { unwrapGenerated } from "$lib/api/generated-response";
 
 export async function fetchMonitors(): Promise<MonitorView[]> {
   return unwrapGenerated(await listMonitors(), "Failed to load monitors");
+}
+
+/** Query params shared by the two Wanted lists: 1-based page, clamped page size, optional kind filter. */
+export interface WantedListParams {
+  page?: number;
+  pageSize?: number;
+  /** An entity-kind code to filter to one kind, or undefined for all kinds. */
+  kind?: string;
+}
+
+/**
+ * A page of the Wanted "Missing" list: monitored items not yet acquired (an active monitor whose
+ * acquisition is not imported), newest-monitor-first. The page total is exact.
+ */
+export async function fetchMissingWanted(params: WantedListParams = {}): Promise<WantedPageView> {
+  return unwrapGenerated(await listMissingWanted(params), "Failed to load missing items");
+}
+
+/**
+ * A page of the Wanted "Cutoff Unmet" list: monitored items in hand but still below their kind's quality
+ * cutoff, newest-monitor-first. The page total is an upper bound (see the endpoint summary).
+ */
+export async function fetchCutoffUnmetWanted(params: WantedListParams = {}): Promise<WantedPageView> {
+  return unwrapGenerated(await listCutoffUnmetWanted(params), "Failed to load cutoff-unmet items");
 }
 
 /** Starts (or re-activates) monitoring of an acquisition so its release search is re-run until it is acquired. */

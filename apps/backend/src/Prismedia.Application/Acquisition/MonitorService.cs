@@ -13,6 +13,37 @@ public sealed class MonitorService(IMonitorStore monitors, IAcquisitionStore acq
     public Task<IReadOnlyList<MonitorView>> ListAsync(CancellationToken cancellationToken) =>
         monitors.ListAsync(cancellationToken);
 
+    /// <summary>
+    /// A page of the Wanted "Missing" list: monitored items not yet in hand (an active per-item monitor
+    /// whose acquisition is not imported, or whose acquisition is gone), newest-monitor-first. See
+    /// <see cref="IMonitorStore.ListMissingAsync"/> for the paging/filter/clamp semantics.
+    /// </summary>
+    public async Task<WantedPageView> ListMissingAsync(int page, int pageSize, EntityKind? kind, CancellationToken cancellationToken) =>
+        ToView(await monitors.ListMissingAsync(page, pageSize, kind, cancellationToken));
+
+    /// <summary>
+    /// A page of the Wanted "Cutoff Unmet" list: monitored items in hand but below their kind's cutoff,
+    /// newest-monitor-first. See <see cref="IMonitorStore.ListCutoffUnmetAsync"/> for the paging semantics
+    /// and why the page total is an upper bound.
+    /// </summary>
+    public async Task<WantedPageView> ListCutoffUnmetAsync(int page, int pageSize, EntityKind? kind, CancellationToken cancellationToken) =>
+        ToView(await monitors.ListCutoffUnmetAsync(page, pageSize, kind, cancellationToken));
+
+    private static WantedPageView ToView(WantedPage page) =>
+        new(page.Items.Select(item => new WantedListItemView(
+            item.MonitorId,
+            item.AcquisitionId,
+            item.EntityId,
+            item.Kind,
+            item.Title,
+            item.MonitorStatus,
+            item.AcquisitionStatus,
+            item.LastSearchedAt,
+            item.NextSearchAt,
+            item.OwnedQuality,
+            item.CutoffQuality,
+            item.BarrenSearches)).ToArray(), page.Total);
+
     /// <summary>Starts (or re-activates) monitoring of an existing acquisition. Returns null when the acquisition does not exist.</summary>
     public async Task<MonitorView?> StartAsync(Guid acquisitionId, CancellationToken cancellationToken) {
         var detail = await acquisitions.GetAsync(acquisitionId, cancellationToken);

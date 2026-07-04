@@ -1,6 +1,7 @@
 using Prismedia.Application.Acquisition;
 using Prismedia.Contracts.Acquisition;
 using Prismedia.Contracts.System;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Api.Endpoints;
 
@@ -449,6 +450,40 @@ public static class AcquisitionEndpoints {
             .WithSummary("Lists monitored items with the status of each linked acquisition.")
             .Produces<IReadOnlyList<MonitorView>>();
 
+        group.MapGet("/missing", async (
+            MonitorService monitors,
+            CancellationToken cancellationToken,
+            int page = 1,
+            int pageSize = 50,
+            string? kind = null) => {
+                if (!TryResolveKind(kind, out var resolvedKind, out var error)) {
+                    return error;
+                }
+
+                return Results.Ok(await monitors.ListMissingAsync(page, pageSize, resolvedKind, cancellationToken));
+            })
+            .WithName("ListMissingWanted")
+            .WithSummary("A page of the Wanted 'Missing' list — active monitored items not yet acquired, newest first. Paged (pageSize clamped 1–200) and optionally filtered by kind; the page total is exact.")
+            .Produces<WantedPageView>()
+            .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
+
+        group.MapGet("/cutoff-unmet", async (
+            MonitorService monitors,
+            CancellationToken cancellationToken,
+            int page = 1,
+            int pageSize = 50,
+            string? kind = null) => {
+                if (!TryResolveKind(kind, out var resolvedKind, out var error)) {
+                    return error;
+                }
+
+                return Results.Ok(await monitors.ListCutoffUnmetAsync(page, pageSize, resolvedKind, cancellationToken));
+            })
+            .WithName("ListCutoffUnmetWanted")
+            .WithSummary("A page of the Wanted 'Cutoff Unmet' list — imported monitored items still below their kind's quality cutoff, newest first. Paged (pageSize clamped 1–200) and optionally filtered by kind. Note: the page total is an UPPER BOUND (the count of imported+active monitors before the per-page cutoff refinement), not an exact count.")
+            .Produces<WantedPageView>()
+            .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
+
         group.MapPost("/", async (
             MonitorCreateRequest request,
             MonitorService monitors,
@@ -528,6 +563,27 @@ public static class AcquisitionEndpoints {
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
         return group;
+    }
+
+    /// <summary>
+    /// Resolves an optional media-kind query value for the Wanted lists: a blank/absent value means "all
+    /// kinds" (out null, success), a recognized code resolves to its <see cref="EntityKind"/>, and any other
+    /// value fails with a 400 so a typo does not silently list everything.
+    /// </summary>
+    private static bool TryResolveKind(string? value, out EntityKind? kind, out IResult error) {
+        kind = null;
+        error = Results.Empty;
+        if (string.IsNullOrWhiteSpace(value)) {
+            return true;
+        }
+
+        if (EntityKindRegistry.TryGet(value, out var resolved)) {
+            kind = resolved;
+            return true;
+        }
+
+        error = Results.BadRequest(new ApiProblem(ApiProblemCodes.InvalidEntityKind, $"Entity kind '{value}' is not recognized."));
+        return false;
     }
 
     private static async Task<IResult> SaveIndexerAsync(
