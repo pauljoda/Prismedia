@@ -7,6 +7,7 @@
 import type { AcquisitionStatus } from './acquisitionStatus';
 import type { EntityKind } from './entityKind';
 import type { MonitorStatus } from './monitorStatus';
+import type { MonitorViewPreset } from './monitorViewPreset';
 
 export interface MonitorView {
   id: string;
@@ -22,4 +23,5 @@ export interface MonitorView {
   updatedAt: string;
   /** @nullable */
   entityId?: string | null;
+  preset?: MonitorViewPreset;
 }

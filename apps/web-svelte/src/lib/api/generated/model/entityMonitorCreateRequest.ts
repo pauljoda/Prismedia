@@ -4,7 +4,9 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { EntityMonitorCreateRequestPreset } from './entityMonitorCreateRequestPreset';
 
 export interface EntityMonitorCreateRequest {
   entityId: string;
+  preset?: EntityMonitorCreateRequestPreset;
 }

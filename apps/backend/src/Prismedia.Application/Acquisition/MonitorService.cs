@@ -62,7 +62,7 @@ public sealed class MonitorService(IMonitorStore monitors, IAcquisitionStore acq
     /// gains one the moment Identify runs). Returns null when the entity is missing, isn't a monitorable
     /// container kind, or has no provider identity yet.
     /// </summary>
-    public async Task<MonitorView?> StartForEntityAsync(Guid entityId, CancellationToken cancellationToken) {
+    public async Task<MonitorView?> StartForEntityAsync(Guid entityId, MonitorPreset? preset, CancellationToken cancellationToken) {
         var container = await entities.GetContainerAsync(entityId, cancellationToken);
         if (container is null || container.ProviderIds.Count == 0) {
             return null;
@@ -74,7 +74,10 @@ public sealed class MonitorService(IMonitorStore monitors, IAcquisitionStore acq
             return null;
         }
 
-        return await monitors.StartForEntityAsync(entityId, container.Kind, container.Title, targeting: null, cancellationToken);
+        // A null preset (the bare monitor toggle) keeps whatever preset a prior request recorded, or the All
+        // default for a fresh container — so a hand toggle never narrows an author's discovery scope. A
+        // caller that passes a preset (choosing one on the series page) records it.
+        return await monitors.StartForEntityAsync(entityId, container.Kind, container.Title, targeting: null, preset, cancellationToken);
     }
 
     /// <summary>The container monitor watching an entity, or null when it is not monitored.</summary>

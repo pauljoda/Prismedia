@@ -127,10 +127,35 @@ public sealed class RequestCommitService(
             return null;
         }
 
+        // An explicit child selection wins; a preset with no selection derives one. The default preset is
+        // All, so an old client that sends neither behaves exactly as before (the endpoint requires at least
+        // one selected child for a container, so this derive path is only reached when a preset is sent).
+        var preset = request.Preset ?? MonitorPreset.All;
+        var selectedChildIds = request.SelectedChildIds.Count > 0
+            ? request.SelectedChildIds
+            : MonitorPresetSelection.Resolve(preset, ContainerCandidates(providerId, proposal));
+
         return await CommitContainerCoreAsync(
-            descriptor, providerId, itemId, proposal, request.SelectedChildIds,
-            startAcquisitions: true, TargetingOf(request), hideNsfw, cancellationToken);
+            descriptor, providerId, itemId, proposal, selectedChildIds,
+            startAcquisitions: true, TargetingOf(request), preset, hideNsfw, cancellationToken);
     }
+
+    /// <summary>
+    /// The container's structural children as preset candidates: each carries its provider-qualified id,
+    /// its season/volume number (when the provider declares one), and — at commit time — <c>Owned: false</c>
+    /// (ownership dedup happens downstream in <see cref="EnsurePickAsync"/>/<see cref="StartAcquisitionAsync"/>,
+    /// so All and Missing both pass every id here and differ only in the persisted preset's sync gate).
+    /// </summary>
+    private static IReadOnlyList<MonitorPresetCandidate> ContainerCandidates(string providerId, EntityMetadataProposal proposal) =>
+        proposal.Children
+            .Where(child => !child.TargetKind.IsRelationship())
+            .Select(child => (Id: RequestProposalReading.QualifiedIdFor(providerId, child), child.Patch))
+            .Where(candidate => candidate.Id is not null)
+            .Select(candidate => new MonitorPresetCandidate(
+                candidate.Id!,
+                candidate.Patch is null ? null : RequestProposalReading.SeasonNumberOf(candidate.Patch),
+                Owned: false))
+            .ToArray();
 
     /// <summary>The request-time acquisition choices (import target, profile) carried by a commit.</summary>
     private static AcquisitionTargeting TargetingOf(RequestCommitRequest request) =>
@@ -279,6 +304,14 @@ public sealed class RequestCommitService(
             return false;
         }
 
+        // The container monitor's preset gates auto-discovery: only All and Future keep materializing
+        // newly-discovered works as monitored wanted phantoms. Every other preset (Missing/FirstSeason/
+        // LatestSeason/Pilot/None) keeps monitoring the works committed up front but ignores new arrivals,
+        // so the sync re-resolves nothing new for them. A monitor with no stored preset is treated as All
+        // (the default), preserving the pre-preset "always mirror the container" behavior.
+        var preset = await monitors.GetPresetByEntityAsync(entityId, cancellationToken) ?? MonitorPreset.All;
+        var autoMonitorsNewWorks = preset is MonitorPreset.All or MonitorPreset.Future;
+
         foreach (var providerRef in container.ProviderIds) {
             // Conservative SFW default: the sweep has no user session (mirrors background enrichment).
             var proposal = await proposals.ResolveProposalAsync(
@@ -287,15 +320,19 @@ public sealed class RequestCommitService(
                 continue;
             }
 
-            var allChildIds = proposal.Children
-                .Where(child => !child.TargetKind.IsRelationship())
-                .Select(child => RequestProposalReading.QualifiedIdFor(providerRef.Provider, child))
-                .Where(id => id is not null)
-                .Select(id => id!)
-                .ToArray();
+            // Presets that do not auto-monitor new works pass no children, so a discovered work is never
+            // materialized as a phantom; the container is still touched (kept alive) but nothing new appears.
+            var childIds = autoMonitorsNewWorks
+                ? proposal.Children
+                    .Where(child => !child.TargetKind.IsRelationship())
+                    .Select(child => RequestProposalReading.QualifiedIdFor(providerRef.Provider, child))
+                    .Where(id => id is not null)
+                    .Select(id => id!)
+                    .ToArray()
+                : [];
             await CommitContainerCoreAsync(
-                descriptor, providerRef.Provider, providerRef.ItemId, proposal, allChildIds,
-                startAcquisitions: false, AcquisitionTargeting.None, hideNsfw: true, cancellationToken);
+                descriptor, providerRef.Provider, providerRef.ItemId, proposal, childIds,
+                startAcquisitions: false, AcquisitionTargeting.None, preset: null, hideNsfw: true, cancellationToken);
             return true;
         }
 
@@ -311,7 +348,8 @@ public sealed class RequestCommitService(
     /// </summary>
     private async Task<RequestCommitResponse> CommitContainerCoreAsync(
         RequestKindDescriptor descriptor, string providerId, string itemId, EntityMetadataProposal proposal,
-        IReadOnlyList<string> selectedChildIds, bool startAcquisitions, AcquisitionTargeting targeting, bool hideNsfw, CancellationToken cancellationToken) {
+        IReadOnlyList<string> selectedChildIds, bool startAcquisitions, AcquisitionTargeting targeting,
+        MonitorPreset? preset, bool hideNsfw, CancellationToken cancellationToken) {
         var child = RequestKindRegistry.ChildOf(descriptor)!;
         var containerTitle = TitleOr(proposal.Patch.Title, itemId);
         // The container's title is the child acquisitions' search context — creator context for an
@@ -358,11 +396,12 @@ public sealed class RequestCommitService(
 
         // The container keeps watching for new works either way — requesting an author/artist implies
         // following them; the daily sweep then surfaces future works as phantoms. The request's
-        // library/profile choices stick to the monitor so later phantom requests inherit them (a sync,
-        // carrying no choices, never clobbers what an explicit request stored).
+        // library/profile choices and monitoring preset stick to the monitor so later phantom requests
+        // inherit the choices and future syncs honor the preset (a sync, carrying neither, never clobbers
+        // what an explicit request stored).
         await monitors.StartForEntityAsync(
             container.EntityId, descriptor.WantedEntityKind, containerTitle,
-            startAcquisitions ? targeting : null, cancellationToken);
+            startAcquisitions ? targeting : null, startAcquisitions ? preset : null, cancellationToken);
 
         var items = new List<RequestCommitItem>();
         foreach (var pick in picks) {

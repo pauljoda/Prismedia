@@ -448,6 +448,18 @@ export const MONITOR_STATUS = {
 
 export type MonitorStatusCode = (typeof MONITOR_STATUS)[keyof typeof MONITOR_STATUS];
 
+export const MONITOR_PRESET = {
+  all: "all",
+  future: "future",
+  missing: "missing",
+  firstSeason: "first-season",
+  latestSeason: "latest-season",
+  pilot: "pilot",
+  none: "none",
+} as const;
+
+export type MonitorPresetCode = (typeof MONITOR_PRESET)[keyof typeof MONITOR_PRESET];
+
 export const BOOK_FORMAT_TIER = {
   unknown: "unknown",
   fixed: "fixed",

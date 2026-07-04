@@ -225,6 +225,126 @@ public sealed class RequestCommitServiceTests {
         Assert.Empty(monitors.AcquisitionMonitors);
     }
 
+    [Theory]
+    [InlineData(MonitorPreset.All)]
+    [InlineData(MonitorPreset.Future)]
+    public async Task ContainerSyncWithAnAutoMonitorPresetMaterializesNewWorks(MonitorPreset preset) {
+        var proposal = Container(ProposalKind.Person, "Author", "A1", Leaf(ProposalKind.Book, "Brand New", "W2"));
+        var (service, writer, acquisitions, monitors) = ServiceWithMonitors(proposal);
+        var authorEntityId = FakeWantedEntityWriter.EntityIdFor("A1");
+        writer.Container = new MonitorableContainer(authorEntityId, EntityKind.BookAuthor, "Author", [new ProviderRef(Provider, "A1")]);
+        monitors.StoredPreset = preset;
+
+        var synced = await service.SyncContainerAsync(authorEntityId, CancellationToken.None);
+
+        Assert.True(synced);
+        // All and Future both auto-monitor future works: the discovered work becomes a phantom (no download).
+        Assert.Contains(writer.Ensured, call => call.ItemId == "W2");
+        Assert.Empty(acquisitions.Created);
+    }
+
+    [Theory]
+    [InlineData(MonitorPreset.Missing)]
+    [InlineData(MonitorPreset.None)]
+    [InlineData(MonitorPreset.FirstSeason)]
+    [InlineData(MonitorPreset.LatestSeason)]
+    public async Task ContainerSyncWithANonAutoMonitorPresetSkipsNewWorks(MonitorPreset preset) {
+        var proposal = Container(ProposalKind.Person, "Author", "A1", Leaf(ProposalKind.Book, "Brand New", "W2"));
+        var (service, writer, acquisitions, monitors) = ServiceWithMonitors(proposal);
+        var authorEntityId = FakeWantedEntityWriter.EntityIdFor("A1");
+        writer.Container = new MonitorableContainer(authorEntityId, EntityKind.BookAuthor, "Author", [new ProviderRef(Provider, "A1")]);
+        monitors.StoredPreset = preset;
+
+        var synced = await service.SyncContainerAsync(authorEntityId, CancellationToken.None);
+
+        // The container is still touched (kept alive) but a newly discovered work is never materialized.
+        Assert.True(synced);
+        Assert.DoesNotContain(writer.Ensured, call => call.Kind == EntityKind.Book);
+        Assert.Empty(acquisitions.Created);
+    }
+
+    [Fact]
+    public async Task ContainerSyncNeverRecordsAPresetOnTheMonitor() {
+        // A sync must never clobber the preset an explicit request chose — it passes null through to the store.
+        var proposal = Container(ProposalKind.Person, "Author", "A1", Leaf(ProposalKind.Book, "Brand New", "W2"));
+        var (service, writer, _, monitors) = ServiceWithMonitors(proposal);
+        var authorEntityId = FakeWantedEntityWriter.EntityIdFor("A1");
+        writer.Container = new MonitorableContainer(authorEntityId, EntityKind.BookAuthor, "Author", [new ProviderRef(Provider, "A1")]);
+        monitors.StoredPreset = MonitorPreset.All;
+
+        await service.SyncContainerAsync(authorEntityId, CancellationToken.None);
+
+        Assert.Null(Assert.Single(monitors.EntityMonitorPresets));
+    }
+
+    [Fact]
+    public async Task ContainerCommitWithAPresetAndNoSelectionDerivesTheSelectionAndRecordsThePreset() {
+        // Season 2 already owned; a Missing preset requests only the unowned seasons and records Missing on
+        // the monitor so future syncs do not auto-monitor new seasons.
+        var season1 = Container(ProposalKind.VideoSeason, "Season 1", "S1") with {
+            Patch = Patch("Season 1", "S1", new Dictionary<string, int> { ["seasonNumber"] = 1 }),
+        };
+        var season2 = Container(ProposalKind.VideoSeason, "Season 2", "S2") with {
+            Patch = Patch("Season 2", "S2", new Dictionary<string, int> { ["seasonNumber"] = 2 }),
+        };
+        var season3 = Container(ProposalKind.VideoSeason, "Season 3", "S3") with {
+            Patch = Patch("Season 3", "S3", new Dictionary<string, int> { ["seasonNumber"] = 3 }),
+        };
+        var (service, writer, acquisitions, monitors) = ServiceWithMonitors(
+            Container(ProposalKind.VideoSeries, "Andor", "TV1", season1, season2, season3));
+        writer.ExistingWithFile.Add("S2"); // the library already owns season 2
+
+        var response = await service.CommitAsync(
+            new RequestCommitRequest(RequestMediaKind.Series, $"{Provider}:TV1", [], Preset: MonitorPreset.Missing),
+            hideNsfw: false, CancellationToken.None);
+
+        Assert.NotNull(response);
+        // Missing derives every not-yet-owned season: S1 and S3 acquire, S2 is skipped as already owned.
+        Assert.Equal([1, 3], acquisitions.Created.Select(request => request.SeasonNumber).ToArray());
+        Assert.All(acquisitions.Created, request => Assert.Equal(EntityKind.VideoSeason, request.Kind));
+        // The chosen preset sticks to the container monitor for future syncs.
+        Assert.Equal(MonitorPreset.Missing, Assert.Single(monitors.EntityMonitorPresets));
+    }
+
+    [Fact]
+    public async Task ContainerCommitWithAFuturePresetRequestsNothingNowButRecordsThePreset() {
+        var season1 = Container(ProposalKind.VideoSeason, "Season 1", "S1") with {
+            Patch = Patch("Season 1", "S1", new Dictionary<string, int> { ["seasonNumber"] = 1 }),
+        };
+        var (service, _, acquisitions, monitors) = ServiceWithMonitors(
+            Container(ProposalKind.VideoSeries, "Andor", "TV1", season1));
+
+        var response = await service.CommitAsync(
+            new RequestCommitRequest(RequestMediaKind.Series, $"{Provider}:TV1", [], Preset: MonitorPreset.Future),
+            hideNsfw: false, CancellationToken.None);
+
+        Assert.NotNull(response);
+        Assert.Empty(acquisitions.Created); // Future only establishes the container watch
+        Assert.Equal(MonitorPreset.Future, Assert.Single(monitors.EntityMonitorPresets));
+    }
+
+    [Fact]
+    public async Task ContainerCommitWithAnExplicitSelectionStillRecordsThePresetButKeepsTheSelection() {
+        var season1 = Container(ProposalKind.VideoSeason, "Season 1", "S1") with {
+            Patch = Patch("Season 1", "S1", new Dictionary<string, int> { ["seasonNumber"] = 1 }),
+        };
+        var season2 = Container(ProposalKind.VideoSeason, "Season 2", "S2") with {
+            Patch = Patch("Season 2", "S2", new Dictionary<string, int> { ["seasonNumber"] = 2 }),
+        };
+        var (service, _, acquisitions, monitors) = ServiceWithMonitors(
+            Container(ProposalKind.VideoSeries, "Andor", "TV1", season1, season2));
+
+        // An explicit pick of only S2 wins over the preset's derived selection; the preset is still recorded.
+        var response = await service.CommitAsync(
+            new RequestCommitRequest(RequestMediaKind.Series, $"{Provider}:TV1", [$"{Provider}:S2"], Preset: MonitorPreset.All),
+            hideNsfw: false, CancellationToken.None);
+
+        Assert.NotNull(response);
+        var created = Assert.Single(acquisitions.Created);
+        Assert.Equal(2, created.SeasonNumber);
+        Assert.Equal(MonitorPreset.All, Assert.Single(monitors.EntityMonitorPresets));
+    }
+
     [Fact]
     public async Task RequestEntitySkipsNonPluginIdentifiersAndReusesTheEntity() {
         var proposal = Leaf(ProposalKind.Book, "The Martian", "W1");
@@ -485,16 +605,21 @@ public sealed class RequestCommitServiceTests {
         public List<Guid> AcquisitionMonitors { get; } = [];
         public List<Guid> EntityMonitors { get; } = [];
         public List<AcquisitionTargeting?> EntityMonitorTargetings { get; } = [];
+        public List<MonitorPreset?> EntityMonitorPresets { get; } = [];
         public AcquisitionTargeting? StoredTargeting { get; set; }
+
+        /// <summary>Preset returned by GetPresetByEntityAsync, for sync-gating tests. Null models a monitor with no stored preset.</summary>
+        public MonitorPreset? StoredPreset { get; set; }
 
         public Task<MonitorView> StartAsync(Guid acquisitionId, EntityKind kind, string title, string? author, CancellationToken cancellationToken) {
             AcquisitionMonitors.Add(acquisitionId);
             return Task.FromResult(View(kind, title, acquisitionId: acquisitionId));
         }
 
-        public Task<MonitorView> StartForEntityAsync(Guid entityId, EntityKind kind, string title, AcquisitionTargeting? targeting, CancellationToken cancellationToken) {
+        public Task<MonitorView> StartForEntityAsync(Guid entityId, EntityKind kind, string title, AcquisitionTargeting? targeting, MonitorPreset? preset, CancellationToken cancellationToken) {
             EntityMonitors.Add(entityId);
             EntityMonitorTargetings.Add(targeting);
+            EntityMonitorPresets.Add(preset);
             return Task.FromResult(View(kind, title, entityId: entityId));
         }
 
@@ -503,6 +628,7 @@ public sealed class RequestCommitServiceTests {
 
         public Task<MonitorView?> GetByEntityAsync(Guid entityId, CancellationToken cancellationToken) => Task.FromResult<MonitorView?>(null);
         public Task<AcquisitionTargeting?> GetTargetingByEntityAsync(Guid entityId, CancellationToken cancellationToken) => Task.FromResult(StoredTargeting);
+        public Task<MonitorPreset?> GetPresetByEntityAsync(Guid entityId, CancellationToken cancellationToken) => Task.FromResult(StoredPreset);
         public Task<bool> DeleteAsync(Guid monitorId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<bool> SetStatusAsync(Guid monitorId, MonitorStatus status, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<IReadOnlyList<MonitorView>> ListAsync(CancellationToken cancellationToken) => throw new NotSupportedException();

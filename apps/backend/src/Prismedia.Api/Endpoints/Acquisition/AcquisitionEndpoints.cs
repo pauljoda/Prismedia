@@ -502,7 +502,7 @@ public static class AcquisitionEndpoints {
             EntityMonitorCreateRequest request,
             MonitorService monitors,
             CancellationToken cancellationToken) => {
-                var monitor = await monitors.StartForEntityAsync(request.EntityId, cancellationToken);
+                var monitor = await monitors.StartForEntityAsync(request.EntityId, request.Preset, cancellationToken);
                 return monitor is null
                     ? Results.BadRequest(new ApiProblem(ApiProblemCodes.RequestInvalid, "The entity can't be monitored: it must be an author/artist-style container with a provider identity (run Identify first for scanned-in items)."))
                     : Results.Ok(monitor);

@@ -69,9 +69,15 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
             join acquisition in db.Acquisitions.AsNoTracking() on monitor.AcquisitionId equals acquisition.Id into joined
             from acquisition in joined.DefaultIfEmpty()
             orderby monitor.CreatedAt descending
-            select new { Monitor = monitor, AcquisitionStatus = acquisition == null ? (AcquisitionStatus?)null : acquisition.Status })
+            select new {
+                Monitor = monitor,
+                AcquisitionStatus = acquisition == null ? (AcquisitionStatus?)null : acquisition.Status,
+                // A per-item monitor carries no EntityId of its own, but its acquisition targets the wanted
+                // entity — surfacing it lets clients (the Season Pass editor) index monitors by entity id.
+                AcquisitionEntityId = acquisition == null ? (Guid?)null : acquisition.EntityId
+            })
             .ToArrayAsync(cancellationToken);
-        return rows.Select(row => ToView(row.Monitor, row.AcquisitionStatus)).ToArray();
+        return rows.Select(row => ToView(row.Monitor, row.AcquisitionStatus, row.AcquisitionEntityId)).ToArray();
     }
 
     public async Task<MonitorView?> GetByAcquisitionAsync(Guid acquisitionId, CancellationToken cancellationToken) {
@@ -570,7 +576,7 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<MonitorView> StartForEntityAsync(Guid entityId, EntityKind kind, string title, AcquisitionTargeting? targeting, CancellationToken cancellationToken) {
+    public async Task<MonitorView> StartForEntityAsync(Guid entityId, EntityKind kind, string title, AcquisitionTargeting? targeting, MonitorPreset? preset, CancellationToken cancellationToken) {
         var now = DateTimeOffset.UtcNow;
         var row = await db.Monitors.FirstOrDefaultAsync(monitor => monitor.EntityId == entityId, cancellationToken);
         if (row is null) {
@@ -598,6 +604,12 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
             row.ProfileId = targeting.ProfileId;
         }
 
+        // Likewise the monitoring preset: an explicit request records the chosen preset (governing whether
+        // future syncs auto-monitor new works); a sync passes null and never overwrites what was chosen.
+        if (preset is { } chosenPreset) {
+            row.Preset = chosenPreset;
+        }
+
         await db.SaveChangesAsync(cancellationToken);
         return ToView(row, null);
     }
@@ -615,6 +627,20 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
         return row is null ? null : new AcquisitionTargeting(row.TargetLibraryRootId, row.ProfileId);
     }
 
-    private static MonitorView ToView(MonitorRow row, AcquisitionStatus? acquisitionStatus) =>
-        new(row.Id, row.Kind, row.AcquisitionId, row.Status, row.Title, row.Author, acquisitionStatus, row.CreatedAt, row.UpdatedAt, row.EntityId);
+    public async Task<MonitorPreset?> GetPresetByEntityAsync(Guid entityId, CancellationToken cancellationToken) {
+        var row = await db.Monitors.AsNoTracking()
+            .Where(monitor => monitor.EntityId == entityId)
+            .Select(monitor => new { monitor.Preset })
+            .FirstOrDefaultAsync(cancellationToken);
+        return row?.Preset;
+    }
+
+    /// <summary>
+    /// Projects a monitor row to its view. <paramref name="acquisitionEntityId"/> is the wanted entity the
+    /// monitor's acquisition targets (a per-item monitor has none of its own): the view's EntityId prefers
+    /// the container monitor's own EntityId, then the acquisition's, so both container and per-item monitors
+    /// surface an entity id clients can index by.
+    /// </summary>
+    private static MonitorView ToView(MonitorRow row, AcquisitionStatus? acquisitionStatus, Guid? acquisitionEntityId = null) =>
+        new(row.Id, row.Kind, row.AcquisitionId, row.Status, row.Title, row.Author, acquisitionStatus, row.CreatedAt, row.UpdatedAt, row.EntityId ?? acquisitionEntityId, row.Preset);
 }

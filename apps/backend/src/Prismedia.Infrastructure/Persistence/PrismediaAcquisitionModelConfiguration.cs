@@ -412,6 +412,12 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.EntityId).HasColumnName("entity_id");
             entity.Property(row => row.TargetLibraryRootId).HasColumnName("target_library_root_id");
             entity.Property(row => row.ProfileId).HasColumnName("profile_id");
+            entity.Property(row => row.Preset)
+                .HasColumnName("monitor_preset")
+                .HasMaxLength(32)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<MonitorPreset>())
+                .HasDefaultValue(MonitorPreset.All)
+                .IsRequired();
             entity.Property(row => row.Status)
                 .HasColumnName("status")
                 .HasMaxLength(32)

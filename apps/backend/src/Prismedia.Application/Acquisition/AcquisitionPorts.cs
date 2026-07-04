@@ -352,15 +352,26 @@ public interface IMonitorStore {
     /// Starts (or re-activates) a container monitor watching a library entity (an author, an artist) for
     /// new works. Idempotent on the entity — returns the existing monitor if one exists. A non-null
     /// <paramref name="targeting"/> stores the request-time library/profile choices on the monitor
-    /// (phantom requests inherit them later); null leaves any stored choices untouched.
+    /// (phantom requests inherit them later); null leaves any stored choices untouched. A non-null
+    /// <paramref name="preset"/> records the monitoring preset that governs whether future syncs
+    /// auto-monitor newly discovered works; null leaves any stored preset untouched (a sync never clobbers
+    /// what an explicit request chose).
     /// </summary>
-    Task<Contracts.Acquisition.MonitorView> StartForEntityAsync(Guid entityId, Domain.Entities.EntityKind kind, string title, AcquisitionTargeting? targeting, CancellationToken cancellationToken);
+    Task<Contracts.Acquisition.MonitorView> StartForEntityAsync(Guid entityId, Domain.Entities.EntityKind kind, string title, AcquisitionTargeting? targeting, Domain.Entities.MonitorPreset? preset, CancellationToken cancellationToken);
 
     /// <summary>Returns the container monitor watching an entity, or null when the entity is not monitored.</summary>
     Task<Contracts.Acquisition.MonitorView?> GetByEntityAsync(Guid entityId, CancellationToken cancellationToken);
 
     /// <summary>The request-time library/profile choices stored on an entity's container monitor, or null when it has none.</summary>
     Task<AcquisitionTargeting?> GetTargetingByEntityAsync(Guid entityId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// The monitoring preset stored on an entity's container monitor, or null when the entity is not
+    /// monitored. The discovery sync consults it to decide whether newly discovered works are
+    /// auto-monitored (only <see cref="Domain.Entities.MonitorPreset.All"/> and
+    /// <see cref="Domain.Entities.MonitorPreset.Future"/> materialize them).
+    /// </summary>
+    Task<Domain.Entities.MonitorPreset?> GetPresetByEntityAsync(Guid entityId, CancellationToken cancellationToken);
 
     /// <summary>Stops monitoring by hard-deleting the monitor row (the acquisition is left untouched). Returns false when it no longer exists.</summary>
     Task<bool> DeleteAsync(Guid monitorId, CancellationToken cancellationToken);

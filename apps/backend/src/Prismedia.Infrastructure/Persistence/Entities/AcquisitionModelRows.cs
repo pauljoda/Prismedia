@@ -590,6 +590,17 @@ public sealed class MonitorRow {
     /// <summary>Request-time profile choice stored by an explicit container request; phantom requests inherit it. Loose link.</summary>
     public Guid? ProfileId { get; set; }
 
+    /// <summary>
+    /// The monitoring preset chosen when the container was requested. Only consulted for container
+    /// monitors (an author/artist/series watch, <see cref="EntityId"/> set): it governs whether the
+    /// discovery sync auto-monitors newly-discovered works — <see cref="MonitorPreset.All"/> and
+    /// <see cref="MonitorPreset.Future"/> do; every other preset keeps monitoring the works committed up
+    /// front but ignores new arrivals. Per-item monitors ignore this. Defaults to
+    /// <see cref="MonitorPreset.All"/> so a container created without an explicit preset (an older row, a
+    /// bare monitor toggle) keeps mirroring the container.
+    /// </summary>
+    public MonitorPreset Preset { get; set; } = MonitorPreset.All;
+
     public MonitorStatus Status { get; set; } = MonitorStatus.Active;
 
     /// <summary>Denormalized title of the wanted item, for the monitored list and job labels.</summary>

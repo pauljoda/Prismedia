@@ -1,12 +1,21 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { BookOpen, ChevronLeft, ListMusic, Loader2, Send } from "@lucide/svelte";
-  import { Button, dur, ease, flyUp } from "@prismedia/ui-svelte";
+  import { Button, Select, dur, ease, flyUp } from "@prismedia/ui-svelte";
   import { fade } from "svelte/transition";
   import { goto } from "$app/navigation";
   import { commitRequest, fetchRequestDetail } from "$lib/api/requests";
   import { REQUEST_COMMIT_OUTCOME } from "$lib/api/generated/codes";
-  import type { RequestMediaKindCode, RequestProviderKindCode } from "$lib/api/generated/codes";
+  import type { MonitorPresetCode, RequestMediaKindCode, RequestProviderKindCode } from "$lib/api/generated/codes";
+  import {
+    DEFAULT_MONITOR_PRESET,
+    MONITOR_PRESET_CUSTOM,
+    MONITOR_PRESET_OPTIONS,
+    presetForSelection,
+    resolvePresetSelection,
+    type MonitorPresetChild,
+    type MonitorPresetSelectValue,
+  } from "$lib/requests/monitor-presets";
   import EntityCastAndCrewSection from "$lib/components/entities/EntityCastAndCrewSection.svelte";
   import EntityDetail from "$lib/components/entities/EntityDetail.svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
@@ -50,6 +59,46 @@
   const childCards = $derived(children.map(requestChildToThumbnailCard));
   const selectableChildIds = $derived(children.filter((child) => child.requestable).map((child) => child.id));
 
+  // ── Monitoring preset (container kinds only) ──
+  // The preset Select drives the pre-checked child selection; a manual checkbox edit flips the Select to
+  // the UI-only "Custom" state, and choosing a preset again snaps the checkboxes back. The chosen preset
+  // rides along with the commit so it is recorded on the container monitor (governing future syncs).
+  const presetChildren = $derived<MonitorPresetChild[]>(
+    // The generated `number` is `number | string | null` (orval emits int + string for the pattern); coerce.
+    children.map((child) => ({ id: child.id, number: toNumberOrNull(child.number), requestable: child.requestable })),
+  );
+
+  function toNumberOrNull(value: number | string | null | undefined): number | null {
+    const parsed = typeof value === "string" ? Number(value) : value;
+    return typeof parsed === "number" && Number.isFinite(parsed) ? parsed : null;
+  }
+  /** The last real preset chosen (never "Custom"): what the commit sends even after manual edits. */
+  let chosenPreset = $state<MonitorPresetCode>(DEFAULT_MONITOR_PRESET);
+  /** The Select's displayed value — the chosen preset, or "Custom" when the checkboxes diverge from it. */
+  const presetDisplay = $derived<MonitorPresetSelectValue>(
+    hasChildren ? presetForSelection(presetChildren, selectedChildIds) : chosenPreset,
+  );
+  const presetOptions = $derived([
+    ...MONITOR_PRESET_OPTIONS.map((option) => ({ value: option.value, label: option.label })),
+    // "Custom" is only ever a display state; it is disabled so the user cannot pick it directly.
+    ...(presetDisplay === MONITOR_PRESET_CUSTOM ? [{ value: MONITOR_PRESET_CUSTOM, label: "Custom", disabled: true }] : []),
+  ]);
+
+  function applyPreset(value: string) {
+    if (value === MONITOR_PRESET_CUSTOM) return;
+    chosenPreset = value as MonitorPresetCode;
+    selectedChildIds = resolvePresetSelection(chosenPreset, presetChildren);
+  }
+
+  // Seed the pre-checked selection from the default preset once children are known (once per load).
+  let seededPreset = $state(false);
+  $effect(() => {
+    if (!seededPreset && hasChildren) {
+      seededPreset = true;
+      selectedChildIds = resolvePresetSelection(chosenPreset, presetChildren);
+    }
+  });
+
   const backHref = $derived(backQuery ? `/request?${backQuery}` : "/request");
 
   // Rich provider metadata rendered through the same shared blocks a real (identified) entity uses.
@@ -83,6 +132,8 @@
     detail = null;
     error = null;
     selectedChildIds = [];
+    seededPreset = false;
+    chosenPreset = DEFAULT_MONITOR_PRESET;
     targetLibraryRootId = null;
     profileId = null;
     infoChild = null;
@@ -133,6 +184,8 @@
         selectedChildIds: picked,
         targetLibraryRootId,
         profileId,
+        // The chosen preset (never "Custom") is recorded on the container monitor; for containers only.
+        preset: hasChildren ? chosenPreset : null,
       });
 
       const items = response.items ?? [];
@@ -203,6 +256,16 @@
                 Select the {childNoun}s below — Prismedia searches your indexers and downloads each one,
                 then imports it into the library you choose here.
               </p>
+              <!-- Monitoring preset: drives the pre-checked selection and records the discovery scope. -->
+              <label class="flex flex-col gap-1">
+                <span class="font-mono text-[0.66rem] font-semibold uppercase tracking-[0.04em] text-text-secondary">Monitor</span>
+                <Select
+                  options={presetOptions}
+                  value={presetDisplay}
+                  size="sm"
+                  onchange={applyPreset}
+                />
+              </label>
               {#if kindInfo}
                 <RequestTargetOptions {kindInfo} bind:targetLibraryRootId bind:profileId>
                   {#snippet actions()}

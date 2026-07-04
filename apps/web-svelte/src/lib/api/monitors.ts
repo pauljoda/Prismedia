@@ -10,6 +10,7 @@ import {
   stopMonitor as stopMonitorRequest,
 } from "$lib/api/generated/prismedia";
 import type { MonitorView, WantedPageView } from "$lib/api/generated/model";
+import type { MonitorPresetCode } from "$lib/api/generated/codes";
 import { unwrapGenerated } from "$lib/api/generated-response";
 
 export async function fetchMonitors(): Promise<MonitorView[]> {
@@ -46,12 +47,14 @@ export async function startMonitor(acquisitionId: string): Promise<MonitorView> 
 }
 
 /**
- * Monitors a library container entity (an author, an artist) for new works: the daily sweep surfaces
- * missing works as wanted placeholders under it. Requires the entity to carry a provider identity
- * (a scanned-in container gains one the moment Identify runs).
+ * Monitors a library container entity (an author, an artist, a series) for new works: the daily sweep
+ * surfaces missing works as wanted placeholders under it. Requires the entity to carry a provider
+ * identity (a scanned-in container gains one the moment Identify runs). An optional preset records the
+ * monitoring scope (whether future syncs auto-monitor new works); omitting it keeps any preset a prior
+ * request recorded, so a bare toggle never narrows the scope.
  */
-export async function startEntityMonitor(entityId: string): Promise<MonitorView> {
-  return unwrapGenerated(await startEntityMonitorRequest({ entityId }), "Failed to monitor this item");
+export async function startEntityMonitor(entityId: string, preset?: MonitorPresetCode | null): Promise<MonitorView> {
+  return unwrapGenerated(await startEntityMonitorRequest({ entityId, preset: preset ?? undefined }), "Failed to monitor this item");
 }
 
 /** The container monitor watching an entity, or null when it is not monitored. */

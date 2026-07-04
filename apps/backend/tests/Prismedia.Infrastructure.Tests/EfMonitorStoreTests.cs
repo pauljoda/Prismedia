@@ -159,6 +159,46 @@ public sealed class EfMonitorStoreTests {
         Assert.True(await db.Acquisitions.AnyAsync(a => a.Id == acquisitionId)); // acquisition untouched
     }
 
+    [Fact]
+    public async Task StartForEntityDefaultsToTheAllPresetAndRecordsAnExplicitOne() {
+        await using var db = CreateContext();
+        var store = new EfMonitorStore(db);
+        var defaultEntity = Guid.NewGuid();
+        var presetEntity = Guid.NewGuid();
+
+        // No preset passed: the container monitor keeps the All default (the pre-preset "mirror" behavior).
+        var withoutPreset = await store.StartForEntityAsync(defaultEntity, EntityKind.BookAuthor, "Author", targeting: null, preset: null, CancellationToken.None);
+        // An explicit request records its chosen preset on the row.
+        var withPreset = await store.StartForEntityAsync(presetEntity, EntityKind.VideoSeries, "Series", targeting: null, preset: MonitorPreset.FirstSeason, CancellationToken.None);
+
+        Assert.Equal(MonitorPreset.All, withoutPreset.Preset);
+        Assert.Equal(MonitorPreset.FirstSeason, withPreset.Preset);
+        Assert.Equal(MonitorPreset.All, await store.GetPresetByEntityAsync(defaultEntity, CancellationToken.None));
+        Assert.Equal(MonitorPreset.FirstSeason, await store.GetPresetByEntityAsync(presetEntity, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task StartForEntityWithNullPresetNeverClobbersAStoredPreset() {
+        // A discovery sync re-touches the container with preset: null, which must keep the recorded preset.
+        await using var db = CreateContext();
+        var store = new EfMonitorStore(db);
+        var entityId = Guid.NewGuid();
+
+        await store.StartForEntityAsync(entityId, EntityKind.VideoSeries, "Series", targeting: null, preset: MonitorPreset.LatestSeason, CancellationToken.None);
+        var synced = await store.StartForEntityAsync(entityId, EntityKind.VideoSeries, "Series", targeting: null, preset: null, CancellationToken.None);
+
+        Assert.Equal(MonitorPreset.LatestSeason, synced.Preset);
+        Assert.Equal(MonitorPreset.LatestSeason, await store.GetPresetByEntityAsync(entityId, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task GetPresetByEntityReturnsNullForAnUnmonitoredEntity() {
+        await using var db = CreateContext();
+        var store = new EfMonitorStore(db);
+
+        Assert.Null(await store.GetPresetByEntityAsync(Guid.NewGuid(), CancellationToken.None));
+    }
+
     private static async Task<EfMonitorStore> SeedMonitorAsync(PrismediaDbContext db, AcquisitionStatus acquisitionStatus) {
         var acquisitionId = SeedAcquisition(db, acquisitionStatus);
         await db.SaveChangesAsync();

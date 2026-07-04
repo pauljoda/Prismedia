@@ -73,8 +73,11 @@ public static class RequestEndpoints {
                     return Results.BadRequest(new ApiProblem(ApiProblemCodes.RequestInvalid, "This kind can't be requested yet."));
                 }
 
-                if (descriptor.IsContainer && request.SelectedChildIds.Count == 0) {
-                    return Results.BadRequest(new ApiProblem(ApiProblemCodes.RequestInvalid, "Select at least one item to request."));
+                // A container commit needs either an explicit child selection or a monitoring preset that
+                // derives one (Future/None legitimately select nothing now — the container watch handles
+                // the rest). Only an empty selection with no preset is a mistake to reject.
+                if (descriptor.IsContainer && request.SelectedChildIds.Count == 0 && request.Preset is null) {
+                    return Results.BadRequest(new ApiProblem(ApiProblemCodes.RequestInvalid, "Select at least one item to request, or choose a monitoring preset."));
                 }
 
                 var response = await commits.CommitAsync(request, NsfwVisibility.ShouldHide(hideNsfw, httpContext), cancellationToken);

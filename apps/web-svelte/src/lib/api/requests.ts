@@ -1,4 +1,4 @@
-import type { RequestMediaKindCode, RequestProviderKindCode } from "$lib/api/generated/codes";
+import type { MonitorPresetCode, RequestMediaKindCode, RequestProviderKindCode } from "$lib/api/generated/codes";
 import {
   commitEntityRequest as commitEntityRequestRequest,
   commitRequest as commitRequestRequest,
@@ -41,6 +41,12 @@ export async function commitRequest(params: {
   selectedChildIds: string[];
   targetLibraryRootId?: string | null;
   profileId?: string | null;
+  /**
+   * The monitoring preset for a container request (a series, an author, an artist). Recorded on the
+   * container monitor to govern whether future syncs auto-monitor newly discovered works; when
+   * selectedChildIds is empty it also derives which existing children to request now.
+   */
+  preset?: MonitorPresetCode | null;
 }): Promise<RequestCommitResponse> {
   return unwrapGenerated(
     await commitRequestRequest({
@@ -49,6 +55,7 @@ export async function commitRequest(params: {
       selectedChildIds: params.selectedChildIds,
       targetLibraryRootId: params.targetLibraryRootId ?? null,
       profileId: params.profileId ?? null,
+      preset: params.preset ?? undefined,
     }),
     "Failed to commit the request",
   );

@@ -4,6 +4,7 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { RequestCommitRequestPreset } from './requestCommitRequestPreset';
 import type { RequestMediaKind } from './requestMediaKind';
 
 export interface RequestCommitRequest {
@@ -14,4 +15,5 @@ export interface RequestCommitRequest {
   targetLibraryRootId?: string | null;
   /** @nullable */
   profileId?: string | null;
+  preset?: RequestCommitRequestPreset;
 }

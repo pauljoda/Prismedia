@@ -311,6 +311,11 @@ public sealed record CustomFormatSaveRequest(
     IReadOnlyList<CustomFormatConditionView> Conditions);
 
 /// <summary>A monitored wanted item: the standing intent plus the current state of the acquisition it keeps alive.</summary>
+/// <param name="Preset">
+/// The monitoring preset on a container monitor (an author/artist/series watch): it governs whether the
+/// discovery sync auto-monitors newly discovered works. Meaningful only for container monitors
+/// (<see cref="EntityId"/> set); per-item monitors carry the default <see cref="MonitorPreset.All"/>.
+/// </param>
 public sealed record MonitorView(
     Guid Id,
     EntityKind Kind,
@@ -321,7 +326,8 @@ public sealed record MonitorView(
     AcquisitionStatus? AcquisitionStatus,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
-    Guid? EntityId = null);
+    Guid? EntityId = null,
+    MonitorPreset Preset = MonitorPreset.All);
 
 /// <summary>
 /// One row of a Wanted list (Missing or Cutoff Unmet): a monitored item that is not yet in hand, or is in
@@ -366,11 +372,16 @@ public sealed record WantedPageView(IReadOnlyList<WantedListItemView> Items, int
 public sealed record MonitorCreateRequest(Guid AcquisitionId);
 
 /// <summary>
-/// Request to monitor a library container entity (an author, an artist) for new works: the daily sweep
-/// re-resolves the container from its provider and requests any works the library doesn't have yet,
-/// which appear as clearly-badged Wanted placeholders under the container.
+/// Request to monitor a library container entity (an author, an artist, a series) for new works: the
+/// daily sweep re-resolves the container from its provider and requests any works the library doesn't
+/// have yet, which appear as clearly-badged Wanted placeholders under the container.
 /// </summary>
-public sealed record EntityMonitorCreateRequest(Guid EntityId);
+/// <param name="Preset">
+/// The monitoring preset governing whether future syncs auto-monitor newly discovered works. Null leaves
+/// any preset a prior request recorded untouched (and defaults to <see cref="MonitorPreset.All"/> for a
+/// fresh container), so a plain monitor toggle never narrows the discovery scope.
+/// </param>
+public sealed record EntityMonitorCreateRequest(Guid EntityId, MonitorPreset? Preset = null);
 
 /// <summary>
 /// One entry in the durable acquisition activity log, surfaced newest-first for the history surface.

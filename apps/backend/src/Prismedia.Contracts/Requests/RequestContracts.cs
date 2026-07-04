@@ -122,12 +122,21 @@ public sealed record RequestTrack(int Number, string Title, int? DurationSeconds
 /// The acquisition profile whose rules score this request's release searches. Null uses the kind's
 /// default profile. A profile of the wrong kind is ignored.
 /// </param>
+/// <param name="Preset">
+/// The monitoring preset for a container request (a series, an author, an artist). When
+/// <see cref="SelectedChildIds"/> is non-empty the explicit selection wins and the preset is only recorded
+/// on the container monitor (governing whether future syncs auto-monitor newly discovered works). When the
+/// selection is empty the preset also derives which existing children to request now (see
+/// <c>MonitorPresetSelection.Resolve</c>). Null defaults to <see cref="MonitorPreset.All"/>, matching the
+/// pre-preset behavior. Ignored for leaf requests.
+/// </param>
 public sealed record RequestCommitRequest(
     RequestMediaKind Kind,
     string ExternalId,
     IReadOnlyList<string> SelectedChildIds,
     Guid? TargetLibraryRootId = null,
-    Guid? ProfileId = null);
+    Guid? ProfileId = null,
+    MonitorPreset? Preset = null);
 
 /// <summary>Per-item outcome of a request commit, linking the created wanted entity and its acquisition.</summary>
 /// <param name="ExternalId">Provider-qualified id of the item this outcome describes.</param>

@@ -16,6 +16,7 @@
     updateOptimisticEntityRating,
   } from "$lib/entities/entity-detail-state";
   import { useEntityMonitorAction } from "$lib/components/acquisitions/use-entity-monitor-action.svelte";
+  import SeasonPassEditor from "$lib/components/acquisitions/SeasonPassEditor.svelte";
   import { useIdentifyDetailAction } from "$lib/components/identify/use-identify-detail-action.svelte";
   import type { EntityDetailCredit, EntityDetailTag } from "$lib/entities/entity-detail";
   import { entityCardToDetailCard, type EntityDetailCardFull } from "$lib/entities/entity-detail";
@@ -271,6 +272,8 @@
     </EntityDetail>
 
     {#if hasSeasons}
+      <SeasonPassEditor {seasonCards} {seasonEpisodeCounts} />
+
       <EntityGridSection
         title="Seasons"
         count={seasonCards.length}
