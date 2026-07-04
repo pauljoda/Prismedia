@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Prismedia.Application.Jobs;
 using Prismedia.Contracts.Settings;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Settings;
 
@@ -195,6 +196,18 @@ public sealed partial class SettingsService {
         return new RecycleBinSettings(
             string.IsNullOrWhiteSpace(path) ? null : path.Trim(),
             GetInt(values, AppSettingKeys.AcquisitionRecycleBinCleanupDays));
+    }
+
+    /// <summary>
+    /// Returns the proper/repack download policy. Decodes the stored
+    /// <see cref="ProperDownloadPolicy"/> code, falling back to
+    /// <see cref="ProperDownloadPolicy.PreferAndUpgrade"/> when the value is missing or unknown.
+    /// </summary>
+    public async Task<ProperDownloadSettings> GetProperDownloadSettingsAsync(CancellationToken cancellationToken) {
+        var values = await GetValueMapAsync([AppSettingKeys.AcquisitionDownloadPropers], cancellationToken);
+        var code = GetString(values, AppSettingKeys.AcquisitionDownloadPropers);
+        var policy = code.TryDecodeAs<ProperDownloadPolicy>(out var decoded) ? decoded : ProperDownloadPolicy.PreferAndUpgrade;
+        return new ProperDownloadSettings(policy);
     }
 
     /// <summary>

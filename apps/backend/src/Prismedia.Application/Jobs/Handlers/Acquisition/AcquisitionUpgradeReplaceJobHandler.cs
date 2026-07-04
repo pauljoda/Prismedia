@@ -79,13 +79,17 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
         await FinishAsync(context, target, childId, JobType.ScanBook, "Upgraded book scan", cancellationToken);
     }
 
-    /// <summary>The movie/single-episode replace path: ladder-position dominance, an in-place same-extension video-file swap, and a library re-scan.</summary>
+    /// <summary>The movie/single-episode replace path: ladder-position (or same-quality revision) dominance, an in-place same-extension video-file swap, and a library re-scan.</summary>
     private async Task HandleMediaAsync(JobContext context, UpgradeReplaceTarget target, Guid childId, CancellationToken cancellationToken) {
-        // Re-confirm the downloaded release still sits strictly above the parent's CURRENT owned ladder
-        // position (it may have changed since the search) before touching the file.
+        // Re-confirm the downloaded release still beats the parent's CURRENT owned copy (it may have changed
+        // since the search) before touching the file: a strictly higher ladder position, OR the same position
+        // with a strictly higher PROPER/REPACK revision (the same accept rule the search's upgrade gate used).
         var ownedPosition = MediaQualityLadder.PositionOf(target.ParentKind, target.ParentOwnedMediaQuality);
         var (candidateCode, candidatePosition) = MediaQualityLadder.Detect(target.ParentKind, target.ChildSelectedTitle!);
-        if (candidatePosition <= ownedPosition) {
+        var candidateRevision = ReleaseRevisionDetection.Detect(target.ChildSelectedTitle!);
+        var higherQuality = candidatePosition > ownedPosition;
+        var sameQualityBetterRevision = candidatePosition == ownedPosition && candidateRevision > target.ParentOwnedMediaRevision;
+        if (!higherQuality && !sameQualityBetterRevision) {
             await AbortAsync(childId, "The downloaded release is no longer an upgrade over the current copy.", cancellationToken);
             return;
         }
@@ -98,9 +102,10 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
             return;
         }
 
-        // Record the parent's new owned ladder code (the child's detected quality) FIRST — the load-bearing
-        // bookkeeping — before the best-effort cleanup, mirroring the book path.
-        await acquisitions.UpdateOwnedMediaQualityAsync(target.ParentId, candidateCode, cancellationToken);
+        // Record the parent's new owned ladder code AND revision (the child's detected quality/revision) FIRST
+        // — the load-bearing bookkeeping — before the best-effort cleanup, mirroring the book path. Advancing
+        // the revision alongside the code is what lets a same-quality proper upgrade settle instead of re-firing.
+        await acquisitions.UpdateOwnedMediaQualityAsync(target.ParentId, candidateCode, candidateRevision, cancellationToken);
         await FinishAsync(context, target, childId, JobType.ScanLibrary, "Upgraded video scan", cancellationToken);
     }
 

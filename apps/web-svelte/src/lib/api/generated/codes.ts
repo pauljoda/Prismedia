@@ -443,6 +443,14 @@ export const BOOK_SOURCE_TIER = {
 
 export type BookSourceTierCode = (typeof BOOK_SOURCE_TIER)[keyof typeof BOOK_SOURCE_TIER];
 
+export const PROPER_DOWNLOAD_POLICY = {
+  preferAndUpgrade: "prefer-and-upgrade",
+  doNotUpgrade: "do-not-upgrade",
+  doNotPrefer: "do-not-prefer",
+} as const;
+
+export type ProperDownloadPolicyCode = (typeof PROPER_DOWNLOAD_POLICY)[keyof typeof PROPER_DOWNLOAD_POLICY];
+
 export const CAPABILITY_KIND = {
   classification: "classification",
   dates: "dates",
@@ -477,6 +485,7 @@ export const EXTERNAL_ID_PROVIDER = {
 export type ExternalIdProviderCode = (typeof EXTERNAL_ID_PROVIDER)[keyof typeof EXTERNAL_ID_PROVIDER];
 
 export const SETTING_KEYS = {
+  acquisitionDownloadPropers: "acquisition.downloadPropers",
   acquisitionRecycleBinCleanupDays: "acquisition.recycleBinCleanupDays",
   acquisitionRecycleBinPath: "acquisition.recycleBinPath",
   autoIdentifyConfidenceThreshold: "autoIdentify.confidenceThreshold",

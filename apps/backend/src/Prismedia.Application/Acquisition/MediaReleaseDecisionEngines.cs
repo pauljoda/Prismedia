@@ -102,11 +102,12 @@ public sealed class MusicReleaseDecisionEngine : IAcquisitionDecisionEngine {
         IReadOnlySet<string>? blocklistedIdentities = null) =>
         MediaReleaseEvaluation.Evaluate(releases, rules, blocklistedIdentities, Specifications, MusicScore);
 
-    /// <summary>Profile preference (terms, custom weights, language) outranks everything; then the codec-quality ladder (hi-res and lossless first), then seeders.</summary>
+    /// <summary>Profile preference (terms, custom weights, language) outranks everything; then the codec-quality ladder (hi-res and lossless first), then the revision boost (a proper/repack at the same quality outranks a plain release unless propers are not preferred), then seeders.</summary>
     private static double MusicScore(IndexerRelease release, BookAcquisitionRules rules) {
         var quality = (int)AudioQualityDetection.Detect(release.Title);
         return MediaReleaseEvaluation.PreferenceScore(release, rules) * 10_000
             + quality * 100_000
+            + MediaReleaseEvaluation.RevisionBoost(release.Title, rules)
             + Math.Min(release.Seeders ?? 0, 9_999);
     }
 }
@@ -165,8 +166,11 @@ public sealed class MediaQualityAllowedSpecification(EntityKind kind) : IRelease
 }
 
 /// <summary>
-/// Upgrade-search gate for ladder kinds: a candidate must sit strictly above the owned ladder
-/// position or it is not an upgrade. No-op on ordinary first-grab searches.
+/// Upgrade-search gate for ladder kinds. A candidate is an upgrade when it sits strictly above the owned
+/// ladder position, OR — only under <see cref="ProperDownloadPolicy.PreferAndUpgrade"/> — it sits at the
+/// same ladder position but carries a strictly higher revision than the owned copy (a proper/repack of the
+/// same quality). Under <see cref="ProperDownloadPolicy.DoNotUpgrade"/> / <see cref="ProperDownloadPolicy.DoNotPrefer"/>
+/// a same-quality higher revision is not an upgrade. No-op on ordinary first-grab searches.
 /// </summary>
 public sealed class MediaUpgradeSpecification(EntityKind kind) : IReleaseSpecification {
     public ReleaseRejectionReason Reason => ReleaseRejectionReason.NotAnUpgrade;
@@ -178,7 +182,19 @@ public sealed class MediaUpgradeSpecification(EntityKind kind) : IReleaseSpecifi
 
         var owned = MediaQualityLadder.PositionOf(kind, rules.OwnedMediaQuality);
         var (_, candidate) = MediaQualityLadder.Detect(kind, release.Title);
-        return candidate > owned ? null : Reason;
+        if (candidate > owned) {
+            return null;
+        }
+
+        // Same-quality revision upgrade: a strictly-better proper/repack counts only when propers are
+        // preferred-and-upgradeable. A lower ladder position is never rescued by a revision.
+        if (candidate == owned
+            && rules.ProperPolicy == ProperDownloadPolicy.PreferAndUpgrade
+            && ReleaseRevisionDetection.Detect(release.Title) > rules.OwnedMediaRevision) {
+            return null;
+        }
+
+        return Reason;
     }
 }
 
@@ -253,13 +269,31 @@ internal static class MediaReleaseEvaluation {
 
     /// <summary>
     /// The shared video release ranking (movies and TV alike): profile preference outranks everything,
-    /// then the position on the combined source × resolution quality ladder, then seeders.
+    /// then the position on the combined source × resolution quality ladder, then the revision boost
+    /// (a proper/repack outranks a plain release at the same quality, unless propers are not preferred),
+    /// then seeders.
     /// </summary>
     public static double VideoReleaseScore(IndexerRelease release, BookAcquisitionRules rules) {
         var quality = (int)VideoQualityDetection.Detect(release.Title);
         return PreferenceScore(release, rules) * 10_000
             + quality * 100_000
+            + RevisionBoost(release.Title, rules)
             + Math.Min(release.Seeders ?? 0, 9_999);
+    }
+
+    /// <summary>
+    /// The revision component of a release's score, in raw score points. When the policy is not
+    /// <see cref="ProperDownloadPolicy.DoNotPrefer"/>, each revision step above a plain release is worth
+    /// 10_000 — below one ladder step (100_000, so it can never outrank a genuinely higher quality) and
+    /// above the seeders tie-break (max 9_999, so a proper always beats a plain release of the same
+    /// quality regardless of seed counts). Under <c>DoNotPrefer</c> revisions carry no weight at all.
+    /// </summary>
+    public static double RevisionBoost(string title, BookAcquisitionRules rules) {
+        if (rules.ProperPolicy == ProperDownloadPolicy.DoNotPrefer) {
+            return 0;
+        }
+
+        return (ReleaseRevisionDetection.Detect(title) - 1) * 10_000;
     }
 
     /// <summary>How many of the profile's preferred terms the title matches.</summary>

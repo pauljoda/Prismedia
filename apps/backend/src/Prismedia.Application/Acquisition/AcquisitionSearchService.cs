@@ -1,3 +1,5 @@
+using Prismedia.Application.Settings;
+
 namespace Prismedia.Application.Acquisition;
 
 /// <summary>
@@ -13,7 +15,8 @@ public sealed class AcquisitionSearchRunner(
     IDownloadClientConfigStore downloadClients,
     IIndexerStatusStore indexerStatuses,
     IndexerQueryWindow queryWindow,
-    IAcquisitionDecisionEngineFactory decisionEngines) {
+    IAcquisitionDecisionEngineFactory decisionEngines,
+    SettingsService settings) {
     /// <summary>
     /// The per-priority-step score adjustment that breaks exact score ties in favor of the preferred
     /// indexer. Orders of magnitude below any real score difference, so it can never reorder releases
@@ -43,15 +46,23 @@ public sealed class AcquisitionSearchRunner(
         }
 
         var rules = await profiles.GetRulesAsync(input.ProfileId, input.Kind, cancellationToken);
+
+        // The proper/repack policy is an app-global fact set per search (never by a profile), the same way
+        // the protocol and TV-unit facts ride the rules: it feeds the pure scoring/upgrade functions so a
+        // proper ranks (and upgrades) exactly as the setting dictates.
+        var properPolicy = (await settings.GetProperDownloadSettingsAsync(cancellationToken)).Policy;
+        rules = rules with { ProperPolicy = properPolicy };
+
         if (upgradeOwnedQuality is { } owned) {
             // IsUpgradeSearch is the single truth for whether the upgrade gates apply; a non-null record means
             // this is an upgrade search regardless of which vocabulary axis carries the owned quality. The book
             // gate reads OwnedQuality (default = Floor when the child is a media kind, harmlessly ignored) and
-            // the media gate reads OwnedMediaQuality.
+            // the media gate reads OwnedMediaQuality (+ OwnedMediaRevision for the same-quality proper case).
             rules = rules with {
                 IsUpgradeSearch = true,
                 OwnedQuality = owned.BookRank ?? default,
-                OwnedMediaQuality = owned.MediaQualityCode
+                OwnedMediaQuality = owned.MediaQualityCode,
+                OwnedMediaRevision = owned.MediaRevision
             };
         }
 

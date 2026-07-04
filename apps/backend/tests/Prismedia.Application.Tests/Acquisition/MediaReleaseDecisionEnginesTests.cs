@@ -190,6 +190,63 @@ public sealed class MediaReleaseDecisionEnginesTests {
         Assert.True(verdicts["Movie 1080p BluRay"].Accepted);
     }
 
+    [Fact]
+    public void SameQualityHigherRevisionIsAnUpgradeOnlyUnderPreferAndUpgrade() {
+        var spec = new MediaUpgradeSpecification(EntityKind.Movie);
+        // Owned: a plain webdl-1080p (revision 1). Candidate: a PROPER of the same quality (revision 2).
+        var proper = Release("Movie 1080p WEB-DL PROPER", seeders: 10);
+
+        // PreferAndUpgrade → a same-quality higher revision counts as an upgrade.
+        var prefer = BookAcquisitionRules.Default with {
+            IsUpgradeSearch = true, OwnedMediaQuality = "webdl-1080p", OwnedMediaRevision = 1,
+            ProperPolicy = ProperDownloadPolicy.PreferAndUpgrade
+        };
+        Assert.Null(spec.Evaluate(proper, prefer));
+
+        // DoNotUpgrade → a same-quality higher revision is NOT an upgrade.
+        var doNotUpgrade = prefer with { ProperPolicy = ProperDownloadPolicy.DoNotUpgrade };
+        Assert.Equal(ReleaseRejectionReason.NotAnUpgrade, spec.Evaluate(proper, doNotUpgrade));
+
+        // DoNotPrefer → also not an upgrade.
+        var doNotPrefer = prefer with { ProperPolicy = ProperDownloadPolicy.DoNotPrefer };
+        Assert.Equal(ReleaseRejectionReason.NotAnUpgrade, spec.Evaluate(proper, doNotPrefer));
+
+        // A same-quality PLAIN release (no higher revision) is never an upgrade, even under PreferAndUpgrade.
+        Assert.Equal(ReleaseRejectionReason.NotAnUpgrade, spec.Evaluate(Release("Movie 1080p WEB-DL", seeders: 10), prefer));
+    }
+
+    [Fact]
+    public void HigherLadderPositionIsAnUpgradeUnderEveryProperPolicy() {
+        var spec = new MediaUpgradeSpecification(EntityKind.Movie);
+        var better = Release("Movie 1080p BluRay", seeders: 10); // strictly above webdl-1080p on the ladder
+        foreach (var policy in new[] { ProperDownloadPolicy.PreferAndUpgrade, ProperDownloadPolicy.DoNotUpgrade, ProperDownloadPolicy.DoNotPrefer }) {
+            var rules = BookAcquisitionRules.Default with {
+                IsUpgradeSearch = true, OwnedMediaQuality = "webdl-1080p", OwnedMediaRevision = 1, ProperPolicy = policy
+            };
+            Assert.Null(spec.Evaluate(better, rules));
+        }
+    }
+
+    [Fact]
+    public void ProperOutranksPlainAtEqualQualityUnlessDoNotPrefer() {
+        var engine = new MovieReleaseDecisionEngine();
+        // The plain release has far more seeders; only the revision boost can float the PROPER above it.
+        var releases = new[] {
+            (Release("Movie 1080p BluRay PROPER", seeders: 10), (Guid?)null, "Idx"),
+            (Release("Movie 1080p BluRay", seeders: 9_000), (Guid?)null, "Idx"),
+        };
+
+        // PreferAndUpgrade (the default) and DoNotUpgrade both keep the revision ranking boost.
+        foreach (var policy in new[] { ProperDownloadPolicy.PreferAndUpgrade, ProperDownloadPolicy.DoNotUpgrade }) {
+            var scored = engine.Evaluate(releases, BookAcquisitionRules.Default with { ProperPolicy = policy });
+            Assert.Equal("Movie 1080p BluRay PROPER", scored[0].Release.Title);
+        }
+
+        // DoNotPrefer drops the boost entirely, so seeders decide the same-quality tie for the plain release.
+        var ignored = engine.Evaluate(releases, BookAcquisitionRules.Default with { ProperPolicy = ProperDownloadPolicy.DoNotPrefer });
+        Assert.Equal("Movie 1080p BluRay", ignored[0].Release.Title);
+    }
+
     private static IndexerRelease Release(string title, int seeders) =>
         new(title, SizeBytes: 1_000_000_000, Seeders: seeders, Peers: seeders, DownloadProtocol.Torrent,
             DownloadUrl: "http://dl", MagnetUrl: null, InfoHash: null, InfoUrl: null, Language: null, PublishedAt: null);

@@ -276,6 +276,14 @@ public sealed class AcquisitionRow {
     public string? OwnedMediaQuality { get; set; }
 
     /// <summary>
+    /// Detected revision of the release this acquisition imported (the PROPER/REPACK/RERIP and anime-version
+    /// axis, parsed from the selected release title). Pairs with <see cref="OwnedMediaQuality"/>: under the
+    /// prefer-and-upgrade proper policy a same-quality release with a strictly higher revision than this
+    /// counts as an upgrade. Defaults to 1 (a plain release); books ignore it.
+    /// </summary>
+    public int OwnedMediaRevision { get; set; } = 1;
+
+    /// <summary>
     /// For an upgrade child acquisition, the parent acquisition it replaces. Self-FK, nulled if the parent is
     /// hard-deleted. Null for an ordinary (non-upgrade) acquisition.
     /// </summary>

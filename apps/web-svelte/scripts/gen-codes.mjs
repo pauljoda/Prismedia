@@ -57,6 +57,7 @@ const ENUM_EXPORTS = [
   ["MonitorStatus", "MONITOR_STATUS", "MonitorStatusCode"],
   ["BookFormatTier", "BOOK_FORMAT_TIER", "BookFormatTierCode"],
   ["BookSourceTier", "BOOK_SOURCE_TIER", "BookSourceTierCode"],
+  ["ProperDownloadPolicy", "PROPER_DOWNLOAD_POLICY", "ProperDownloadPolicyCode"],
 ];
 
 const camel = (name) => (name.length === 0 ? name : name[0].toLowerCase() + name.slice(1));

@@ -214,8 +214,13 @@ public interface IAcquisitionStore {
     /// <summary>Updates an acquisition's owned book quality (e.g. after a successful upgrade swap) without changing its status.</summary>
     Task UpdateOwnedQualityAsync(Guid acquisitionId, BookQualityRank ownedQuality, CancellationToken cancellationToken);
 
-    /// <summary>Updates an acquisition's owned media-quality ladder code (after a successful movie/episode upgrade swap) without changing its status.</summary>
-    Task UpdateOwnedMediaQualityAsync(Guid acquisitionId, string ownedMediaQuality, CancellationToken cancellationToken);
+    /// <summary>
+    /// Updates an acquisition's owned media-quality ladder code and revision (after a successful movie/episode
+    /// upgrade swap) without changing its status. <paramref name="ownedMediaRevision"/> is the PROPER/REPACK
+    /// revision detected from the release that replaced the owned copy, so the upgrade loop's same-quality
+    /// proper comparison sees the advance.
+    /// </summary>
+    Task UpdateOwnedMediaQualityAsync(Guid acquisitionId, string ownedMediaQuality, int ownedMediaRevision, CancellationToken cancellationToken);
 
     /// <summary>
     /// Fills in held metadata from a provider enrichment, gap-only: a poster only when none is set, a year only
@@ -232,8 +237,10 @@ public interface IAcquisitionStore {
     /// half-imported acquisition with a floor owned quality and mistakes it for "owns nothing".
     /// <paramref name="ownedMediaQuality"/> is the code on the kind's video/audio ladder (movies, TV, music);
     /// when non-null it is stored alongside the book tiers and the same captured flag is set.
+    /// <paramref name="ownedMediaRevision"/> is the PROPER/REPACK revision detected from the same selected
+    /// release title, stored alongside the media quality (defaults to 1; ignored by book kinds).
     /// </summary>
-    Task MarkImportedWithQualityAsync(Guid id, BookQualityRank ownedQuality, string? message, CancellationToken cancellationToken, string? ownedMediaQuality = null);
+    Task MarkImportedWithQualityAsync(Guid id, BookQualityRank ownedQuality, string? message, CancellationToken cancellationToken, string? ownedMediaQuality = null, int ownedMediaRevision = 1);
 
     /// <summary>Replaces an acquisition's candidate set with a freshly scored search result.</summary>
     Task ReplaceCandidatesAsync(Guid id, IReadOnlyList<ScoredRelease> candidates, CancellationToken cancellationToken);

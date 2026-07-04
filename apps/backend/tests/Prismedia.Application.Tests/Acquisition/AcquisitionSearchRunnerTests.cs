@@ -1,4 +1,6 @@
 using Prismedia.Application.Acquisition;
+using Prismedia.Application.Settings;
+using Prismedia.Contracts.Settings;
 using Prismedia.Contracts.Acquisition;
 using Prismedia.Domain.Entities;
 
@@ -23,7 +25,8 @@ public sealed class AcquisitionSearchRunnerTests {
             new FakeDownloadClientConfigStore(DownloadProtocol.Torrent),
             new FakeIndexerStatusStore(),
             new IndexerQueryWindow(),
-            new AcquisitionDecisionEngineFactory([new BookReleaseDecisionEngine()]));
+            new AcquisitionDecisionEngineFactory([new BookReleaseDecisionEngine()]),
+            Settings());
 
         var outcome = await runner.RunAsync(new AcquisitionSearchInput(Guid.NewGuid(), "Book", null), CancellationToken.None);
 
@@ -47,7 +50,8 @@ public sealed class AcquisitionSearchRunnerTests {
                 new FakeDownloadClientConfigStore(protocols),
                 new FakeIndexerStatusStore(),
                 new IndexerQueryWindow(),
-                new AcquisitionDecisionEngineFactory([new BookReleaseDecisionEngine()]));
+                new AcquisitionDecisionEngineFactory([new BookReleaseDecisionEngine()]),
+                Settings());
             var outcome = await runner.RunAsync(new AcquisitionSearchInput(Guid.NewGuid(), "Book", null), CancellationToken.None);
             return outcome.Candidates.Single();
         }
@@ -82,7 +86,8 @@ public sealed class AcquisitionSearchRunnerTests {
             new FakeDownloadClientConfigStore(DownloadProtocol.Torrent),
             new FakeIndexerStatusStore(),
             new IndexerQueryWindow(),
-            new AcquisitionDecisionEngineFactory([new BookReleaseDecisionEngine()]));
+            new AcquisitionDecisionEngineFactory([new BookReleaseDecisionEngine()]),
+            Settings());
 
         var outcome = await runner.RunAsync(new AcquisitionSearchInput(Guid.NewGuid(), "Book", "Author"), CancellationToken.None);
 
@@ -105,7 +110,8 @@ public sealed class AcquisitionSearchRunnerTests {
             new FakeDownloadClientConfigStore(DownloadProtocol.Torrent),
             new FakeIndexerStatusStore(),
             new IndexerQueryWindow(),
-            new AcquisitionDecisionEngineFactory([new BookReleaseDecisionEngine()]));
+            new AcquisitionDecisionEngineFactory([new BookReleaseDecisionEngine()]),
+            Settings());
 
         await runner.RunAsync(new AcquisitionSearchInput(Guid.NewGuid(), "Book", "Author"), CancellationToken.None);
 
@@ -125,6 +131,55 @@ public sealed class AcquisitionSearchRunnerTests {
             ReleaseQueryLadder.For(new AcquisitionSearchInput(Guid.NewGuid(), "Dune", null, EntityKind.Movie, Year: 2021)).ToArray());
         Assert.Equal(["Dune"],
             ReleaseQueryLadder.For(new AcquisitionSearchInput(Guid.NewGuid(), "Dune", null, EntityKind.Movie)).ToArray());
+    }
+
+    [Fact]
+    public async Task ProperPolicyFromSettingsReachesScoring() {
+        // A movie search with two same-quality releases — one a PROPER — under a DoNotPrefer override: the
+        // revision boost is suppressed, so the higher-seeded plain release wins. Proves the app setting is
+        // decoded and threaded into the pure scoring functions via the rules.
+        var proper = new IndexerRelease("Movie 1080p BluRay PROPER", 5_000_000_000, 50, 5, DownloadProtocol.Torrent, "http://dl", null, "properhash", "http://i", null, null);
+        var plain = new IndexerRelease("Movie 1080p BluRay", 5_000_000_000, 900, 5, DownloadProtocol.Torrent, "http://dl", null, "plainhash", "http://i", null, null);
+
+        var runner = new AcquisitionSearchRunner(
+            new FakeIndexerConfigStore(),
+            new FakeClientFactory(new FakeIndexerSearchClient([proper, plain])),
+            new FakeProfileStore(),
+            new FakeBlocklistStore("unrelated"),
+            new FakeDownloadClientConfigStore(DownloadProtocol.Torrent),
+            new FakeIndexerStatusStore(),
+            new IndexerQueryWindow(),
+            new AcquisitionDecisionEngineFactory([new MovieReleaseDecisionEngine()]),
+            Settings(ProperDownloadPolicy.DoNotPrefer));
+
+        var outcome = await runner.RunAsync(new AcquisitionSearchInput(Guid.NewGuid(), "Movie", null, EntityKind.Movie), CancellationToken.None);
+
+        // DoNotPrefer drops the proper's revision boost, so seeders break the same-quality tie for the plain release.
+        Assert.Equal("Movie 1080p BluRay", outcome.Candidates.First(c => c.Accepted).Release.Title);
+    }
+
+    /// <summary>Builds a real SettingsService over an in-memory override map; an unset AcquisitionDownloadPropers defaults to prefer-and-upgrade.</summary>
+    private static SettingsService Settings(ProperDownloadPolicy? policy = null) {
+        var overrides = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (policy is { } chosen) {
+            overrides[AppSettingKeys.AcquisitionDownloadPropers] = System.Text.Json.JsonSerializer.Serialize(chosen.ToCode());
+        }
+
+        return new SettingsService(new FakeSettingsPersistence(overrides));
+    }
+
+    private sealed class FakeSettingsPersistence(IReadOnlyDictionary<string, string> overrides) : ISettingsPersistence {
+        public Task<IReadOnlyDictionary<string, string>> LoadSettingOverridesAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(overrides);
+        public Task SaveSettingOverrideAsync(string key, string valueJson, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task SaveSettingOverridesAsync(IReadOnlyDictionary<string, string> values, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task ReplaceSettingOverridesAsync(IReadOnlyDictionary<string, string> upserts, IReadOnlyCollection<string> deletes, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task DeleteSettingOverrideAsync(string key, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<LibraryRoot>> ListLibraryRootsAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<LibraryRoot?> GetLibraryRootAsync(Guid id, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<LibraryRoot> AddLibraryRootAsync(LibraryRoot state, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<LibraryRoot> SaveLibraryRootAsync(LibraryRoot state, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> DeleteLibraryRootAsync(Guid id, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
     private sealed class QueryAwareIndexerSearchClient(IReadOnlyDictionary<string, IReadOnlyList<IndexerRelease>> byQuery) : IIndexerSearchClient {

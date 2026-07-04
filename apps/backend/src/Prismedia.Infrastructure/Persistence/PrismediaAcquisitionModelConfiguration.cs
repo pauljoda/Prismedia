@@ -200,6 +200,7 @@ internal static partial class PrismediaModelConfiguration {
                 .HasDefaultValue(BookFormatTier.Unknown)
                 .IsRequired();
             entity.Property(row => row.OwnedMediaQuality).HasColumnName("owned_media_quality").HasMaxLength(64);
+            entity.Property(row => row.OwnedMediaRevision).HasColumnName("owned_media_revision").HasDefaultValue(1);
             entity.Property(row => row.UpgradeOfAcquisitionId).HasColumnName("upgrade_of_acquisition_id");
             entity.Property(row => row.UpgradeQualityCaptured).HasColumnName("upgrade_quality_captured").HasDefaultValue(false);
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");

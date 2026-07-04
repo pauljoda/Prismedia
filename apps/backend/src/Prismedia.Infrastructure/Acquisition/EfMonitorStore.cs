@@ -239,6 +239,12 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
 
                     // cutoffMet: books compare per-axis tiers; media compares ladder position against the
                     // profile cutoff code, where an unconfigured cutoff (position 0) fulfills at any owned copy.
+                    // DIVERGENCE FROM SONARR (deliberate): once cutoff is met this monitor fulfills, so a
+                    // PROPER/REPACK revision upgrade only ever happens while the owned copy is still BELOW
+                    // cutoff (via MediaUpgradeSpecification's same-quality-higher-revision accept). Sonarr keeps
+                    // chasing propers even past cutoff (its cutoff gates quality, not revision); Prismedia does
+                    // not re-open a fulfilled monitor purely to acquire a better revision, keeping the loop
+                    // bounded and avoiding late re-grabs of content the user has likely already consumed.
                     bool cutoffMet;
                     if (isBook) {
                         var owned = row.OwnedQuality!.Value;

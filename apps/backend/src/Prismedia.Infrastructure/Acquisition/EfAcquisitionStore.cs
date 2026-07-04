@@ -126,14 +126,14 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
         // discriminating by kind keeps this one query, symmetric with CreateUpgradeChildAsync copying the parent.
         var parent = await db.Acquisitions.AsNoTracking()
             .Where(row => row.Id == id)
-            .Select(row => new { row.Kind, row.OwnedSourceTier, row.OwnedFormatTier, row.OwnedMediaQuality })
+            .Select(row => new { row.Kind, row.OwnedSourceTier, row.OwnedFormatTier, row.OwnedMediaQuality, row.OwnedMediaRevision })
             .FirstOrDefaultAsync(cancellationToken);
         if (parent is null) {
             return null;
         }
 
         return MediaQualityLadder.IsUpgradeCapableKind(parent.Kind)
-            ? new UpgradeOwnedQuality(null, parent.OwnedMediaQuality)
+            ? new UpgradeOwnedQuality(null, parent.OwnedMediaQuality, parent.OwnedMediaRevision)
             : new UpgradeOwnedQuality(new BookQualityRank(parent.OwnedSourceTier, parent.OwnedFormatTier), null);
     }
 
@@ -166,7 +166,8 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
             transfer?.ClientItemId,
             transfer?.DownloadClientConfigId,
             parent.Kind,
-            parent.OwnedMediaQuality);
+            parent.OwnedMediaQuality,
+            parent.OwnedMediaRevision);
     }
 
     public async Task EnrichMetadataAsync(Guid acquisitionId, string? description, string? posterUrl, int? year, CancellationToken cancellationToken) {
@@ -211,18 +212,19 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task UpdateOwnedMediaQualityAsync(Guid acquisitionId, string ownedMediaQuality, CancellationToken cancellationToken) {
+    public async Task UpdateOwnedMediaQualityAsync(Guid acquisitionId, string ownedMediaQuality, int ownedMediaRevision, CancellationToken cancellationToken) {
         var row = await db.Acquisitions.FirstOrDefaultAsync(row => row.Id == acquisitionId, cancellationToken);
         if (row is null) {
             return;
         }
 
         row.OwnedMediaQuality = ownedMediaQuality;
+        row.OwnedMediaRevision = ownedMediaRevision;
         row.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task MarkImportedWithQualityAsync(Guid id, BookQualityRank ownedQuality, string? message, CancellationToken cancellationToken, string? ownedMediaQuality = null) {
+    public async Task MarkImportedWithQualityAsync(Guid id, BookQualityRank ownedQuality, string? message, CancellationToken cancellationToken, string? ownedMediaQuality = null, int ownedMediaRevision = 1) {
         var row = await db.Acquisitions.FirstOrDefaultAsync(row => row.Id == id, cancellationToken);
         if (row is null) {
             return;
@@ -232,9 +234,11 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
         row.StatusMessage = message;
         row.OwnedSourceTier = ownedQuality.Source;
         row.OwnedFormatTier = ownedQuality.Format;
-        // A media kind (movie/TV/music) records its ladder code; book kinds leave it null and use the tiers.
+        // A media kind (movie/TV/music) records its ladder code and revision; book kinds leave both at the
+        // default (null code, revision 1) and use the source/format tiers.
         if (ownedMediaQuality is not null) {
             row.OwnedMediaQuality = ownedMediaQuality;
+            row.OwnedMediaRevision = ownedMediaRevision;
         }
 
         row.UpgradeQualityCaptured = true;

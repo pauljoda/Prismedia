@@ -17,6 +17,7 @@ public static class AppSettingKeys {
 
     public const string AcquisitionRecycleBinPath = "acquisition.recycleBinPath";
     public const string AcquisitionRecycleBinCleanupDays = "acquisition.recycleBinCleanupDays";
+    public const string AcquisitionDownloadPropers = "acquisition.downloadPropers";
 
     public const string AutoIdentifyEnabled = "autoIdentify.enabled";
     public const string AutoIdentifyProviders = "autoIdentify.providers";

@@ -148,6 +148,21 @@ public static class AppSettingsRegistry {
                 min: 1,
                 max: 365,
                 step: 1),
+            Select(
+                AppSettingKeys.AcquisitionDownloadPropers,
+                Monitoring,
+                "Monitoring",
+                "Keep searching for monitored items until they are acquired.",
+                22,
+                "Download propers and repacks",
+                "How PROPER, REPACK, RERIP and anime v2+ re-releases are treated. Stores a ProperDownloadPolicy code: prefer-and-upgrade (default) ranks them higher AND upgrades an owned copy to a better revision at the same quality; do-not-upgrade ranks them higher but never upgrades an owned copy for revision alone; do-not-prefer ignores revisions entirely.",
+                "prefer-and-upgrade",
+                50,
+                [
+                    new SettingOption("prefer-and-upgrade", "Prefer and upgrade", "Rank revisions higher and upgrade an owned copy to a better same-quality revision."),
+                    new SettingOption("do-not-upgrade", "Prefer, do not upgrade", "Rank revisions higher on first grab, but never upgrade an owned copy for revision alone."),
+                    new SettingOption("do-not-prefer", "Do not prefer", "Ignore revisions entirely; only the quality ladder decides.")
+                ]),
 
             Boolean(
                 AppSettingKeys.TaxonomyRemoveOrphanTags,

@@ -22,6 +22,13 @@ public sealed record MonitoredSearchSettings(bool Enabled, int IntervalMinutes);
 public sealed record RecycleBinSettings(string? Path, int CleanupDays);
 
 /// <summary>
+/// How PROPER/REPACK/RERIP and anime v2+ revisions are treated in ranking and upgrades. Decoded from the
+/// stored <see cref="Prismedia.Domain.Entities.ProperDownloadPolicy"/> code; defaults to
+/// <see cref="Prismedia.Domain.Entities.ProperDownloadPolicy.PreferAndUpgrade"/> on a missing/unknown value.
+/// </summary>
+public sealed record ProperDownloadSettings(Prismedia.Domain.Entities.ProperDownloadPolicy Policy);
+
+/// <summary>
 /// Auto-identify settings that drive plugin-based identification during library scans.
 /// </summary>
 /// <param name="Enabled">Whether scanned media is auto-identified through enabled plugins.</param>

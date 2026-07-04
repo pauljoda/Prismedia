@@ -61,6 +61,21 @@ public sealed record BookAcquisitionRules(
     public string? OwnedMediaQuality { get; init; }
 
     /// <summary>
+    /// Owned media revision for an upgrade search (set per search by the runner from the parent's stored
+    /// revision, like <see cref="OwnedMediaQuality"/>). Under <see cref="ProperDownloadPolicy.PreferAndUpgrade"/>
+    /// a same-quality candidate with a strictly higher revision than this counts as an upgrade. Defaults to 1.
+    /// </summary>
+    public int OwnedMediaRevision { get; init; } = 1;
+
+    /// <summary>
+    /// How PROPER/REPACK/RERIP and anime v2+ revisions affect ranking and upgrades. Set per search by the
+    /// runner from the app setting, never by a profile (like the protocol and TV-unit facts). Defaults to
+    /// <see cref="ProperDownloadPolicy.PreferAndUpgrade"/> so rules built without the settings reader keep
+    /// the preferring behavior.
+    /// </summary>
+    public ProperDownloadPolicy ProperPolicy { get; init; } = ProperDownloadPolicy.PreferAndUpgrade;
+
+    /// <summary>
     /// Permissive defaults used when no profile is configured yet (e.g. ad-hoc verification searches).
     /// <see cref="MinQuality"/> and <see cref="OwnedQuality"/> default to <see cref="BookQualityRank.Floor"/>
     /// (<c>default(BookQualityRank)</c>) and <see cref="IsUpgradeSearch"/> to false, so the quality and
@@ -214,7 +229,12 @@ public sealed record DueMonitor(Guid MonitorId, Guid? AcquisitionId, string Titl
 /// </summary>
 /// <param name="BookRank">The parent's owned book quality for a book upgrade child; default for a media child.</param>
 /// <param name="MediaQualityCode">The parent's owned ladder code for a media upgrade child; null for a book child.</param>
-public sealed record UpgradeOwnedQuality(Domain.Entities.BookQualityRank? BookRank, string? MediaQualityCode);
+/// <param name="MediaRevision">
+/// The parent's owned revision for a media upgrade child (PROPER/REPACK axis), so a same-quality
+/// higher-revision candidate can be recognized as an upgrade. Defaults to 1 (a plain release); ignored on
+/// the book axis, which has no revision concept.
+/// </param>
+public sealed record UpgradeOwnedQuality(Domain.Entities.BookQualityRank? BookRank, string? MediaQualityCode, int MediaRevision = 1);
 
 /// <summary>
 /// Everything the upgrade-replace job needs to swap a downloaded upgrade child's file in for the owned copy:
@@ -224,6 +244,7 @@ public sealed record UpgradeOwnedQuality(Domain.Entities.BookQualityRank? BookRa
 /// </summary>
 /// <param name="ParentKind">The parent acquisition's media kind; routes the handler between the book and media replace paths.</param>
 /// <param name="ParentOwnedMediaQuality">The parent's owned ladder code for a media parent; null for a book parent.</param>
+/// <param name="ParentOwnedMediaRevision">The parent's owned revision for a media parent, so a same-quality higher-revision child is recognized as an upgrade at the pre-swap re-confirm gate. Defaults to 1; ignored on the book path.</param>
 public sealed record UpgradeReplaceTarget(
     Guid ParentId,
     string? ParentFinalSourcePath,
@@ -233,7 +254,8 @@ public sealed record UpgradeReplaceTarget(
     string? ChildClientItemId,
     Guid? ChildDownloadClientConfigId,
     Domain.Entities.EntityKind ParentKind = Domain.Entities.EntityKind.Book,
-    string? ParentOwnedMediaQuality = null);
+    string? ParentOwnedMediaQuality = null,
+    int ParentOwnedMediaRevision = 1);
 
 /// <summary>
 /// Outcome of an in-place owned-file replacement. On success the owned file was atomically swapped for the
