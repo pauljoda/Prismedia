@@ -75,7 +75,9 @@ public sealed record BookAcquisitionProfileSaveCommand(
     bool UpgradeUntilCutoff,
     BookSourceTier CutoffSourceTier,
     BookFormatTier CutoffFormatTier,
-    string? DownloadCategory = null);
+    string? DownloadCategory = null,
+    IReadOnlyList<string>? AllowedQualities = null,
+    string? CutoffQuality = null);
 
 /// <summary>
 /// Persistence port for acquisition profiles (matching rules + import target), scoped per media kind.

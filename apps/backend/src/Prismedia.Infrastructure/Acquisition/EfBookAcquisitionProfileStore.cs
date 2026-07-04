@@ -75,6 +75,8 @@ public sealed class EfBookAcquisitionProfileStore(PrismediaDbContext db) : IBook
         row.PathTemplate = command.PathTemplate;
         row.ImportMode = command.ImportMode;
         row.AllowedFormats = command.AllowedFormats.Select(format => format.ToCode()).ToArray();
+        row.AllowedQualities = command.AllowedQualities.ToArray();
+        row.CutoffQuality = string.IsNullOrWhiteSpace(command.CutoffQuality) ? null : command.CutoffQuality;
         row.PreferredLanguages = command.PreferredLanguages.ToArray();
         row.MinSeeders = command.MinSeeders;
         row.MinSizeBytes = command.MinSizeBytes;
@@ -165,7 +167,10 @@ public sealed class EfBookAcquisitionProfileStore(PrismediaDbContext db) : IBook
             row.RequiredTerms,
             row.IgnoredTerms,
             row.PreferredTerms,
-            DecodeWeightedTerms(row.WeightedTermsJson));
+            DecodeWeightedTerms(row.WeightedTermsJson)) {
+            AllowedQualities = row.AllowedQualities,
+            CutoffQuality = row.CutoffQuality
+        };
 
     private static BookAcquisitionProfileView ToView(BookAcquisitionProfileRow row) =>
         new(
@@ -190,7 +195,9 @@ public sealed class EfBookAcquisitionProfileStore(PrismediaDbContext db) : IBook
             row.UpgradeUntilCutoff,
             row.CutoffSourceTier,
             row.CutoffFormatTier,
-            row.DownloadCategory);
+            row.DownloadCategory,
+            row.AllowedQualities,
+            row.CutoffQuality);
 
     private static IReadOnlyList<WeightedTerm> DecodeWeightedTerms(string json) {
         if (string.IsNullOrWhiteSpace(json)) {

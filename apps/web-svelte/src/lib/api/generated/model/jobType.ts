@@ -42,4 +42,5 @@ export const JobType = {
   'monitored-search': 'monitored-search',
   'acquisition-upgrade-replace': 'acquisition-upgrade-replace',
   'acquisition-enrich': 'acquisition-enrich',
+  'recycle-bin-cleanup': 'recycle-bin-cleanup',
 } as const;

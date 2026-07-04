@@ -64,6 +64,8 @@ public sealed class BookAcquisitionProfileCommandService(IBookAcquisitionProfile
             request.UpgradeUntilCutoff,
             request.CutoffSourceTier,
             request.CutoffFormatTier,
-            request.DownloadCategory);
+            request.DownloadCategory,
+            (request.AllowedQualities ?? []).Where(code => !string.IsNullOrWhiteSpace(code)).Distinct(StringComparer.Ordinal).ToArray(),
+            request.CutoffQuality);
     }
 }

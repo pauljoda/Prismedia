@@ -24,6 +24,8 @@ const ENUM_EXPORTS = [
   ["EntityFileRole", "ENTITY_FILE_ROLE", "EntityFileRoleCode"],
   ["CreditRole", "CREDIT_ROLE", "CreditRoleCode"],
   ["JobType", "JOB_TYPE", "JobTypeCode"],
+  ["VideoQuality", "VIDEO_QUALITY", "VideoQualityCode"],
+  ["AudioQuality", "AUDIO_QUALITY", "AudioQualityCode"],
   ["JobRunStatus", "JOB_RUN_STATUS", "JobRunStatusCode"],
   ["DatabaseBackupStatus", "DATABASE_BACKUP_STATUS", "DatabaseBackupStatusCode"],
   ["PlaybackMode", "PLAYBACK_MODE", "PlaybackModeCode"],

@@ -60,7 +60,9 @@ public sealed class MovieReleaseDecisionEngine : IAcquisitionDecisionEngine {
         new SizeSpecification(),
         new RequiredTermsSpecification(),
         new IgnoredTermsSpecification(),
-        new LanguageSpecification()
+        new LanguageSpecification(),
+        new MediaQualityAllowedSpecification(EntityKind.Movie),
+        new MediaUpgradeSpecification(EntityKind.Movie)
     ];
 
     public IReadOnlyList<ScoredRelease> Evaluate(
@@ -89,7 +91,9 @@ public sealed class MusicReleaseDecisionEngine : IAcquisitionDecisionEngine {
         new SizeSpecification(),
         new RequiredTermsSpecification(),
         new IgnoredTermsSpecification(),
-        new LanguageSpecification()
+        new LanguageSpecification(),
+        new MediaQualityAllowedSpecification(EntityKind.AudioLibrary),
+        new MediaUpgradeSpecification(EntityKind.AudioLibrary)
     ];
 
     public IReadOnlyList<ScoredRelease> Evaluate(
@@ -98,15 +102,11 @@ public sealed class MusicReleaseDecisionEngine : IAcquisitionDecisionEngine {
         IReadOnlySet<string>? blocklistedIdentities = null) =>
         MediaReleaseEvaluation.Evaluate(releases, rules, blocklistedIdentities, Specifications, MusicScore);
 
-    /// <summary>Profile preference (terms, custom weights, language) outranks everything; then codec quality (lossless first), then seeders.</summary>
+    /// <summary>Profile preference (terms, custom weights, language) outranks everything; then the codec-quality ladder (hi-res and lossless first), then seeders.</summary>
     private static double MusicScore(IndexerRelease release, BookAcquisitionRules rules) {
-        var title = release.Title;
-        var codec =
-            MediaReleaseEvaluation.TitleHasAny(title, "flac", "alac", "lossless") ? 3 :
-            MediaReleaseEvaluation.TitleHasAny(title, "320", "v0") ? 2 :
-            MediaReleaseEvaluation.TitleHasAny(title, "mp3", "aac", "opus", "ogg") ? 1 : 0;
+        var quality = (int)AudioQualityDetection.Detect(release.Title);
         return MediaReleaseEvaluation.PreferenceScore(release, rules) * 10_000
-            + codec * 100_000
+            + quality * 100_000
             + Math.Min(release.Seeders ?? 0, 9_999);
     }
 }
@@ -147,6 +147,42 @@ public sealed class TvUnitSpecification : IReleaseSpecification {
 }
 
 /// <summary>
+/// Rejects releases whose detected ladder quality falls outside the profile's allowed set. An empty
+/// allowed set accepts everything (including titles the detector can't place), mirroring the book
+/// format rule's permissive default.
+/// </summary>
+public sealed class MediaQualityAllowedSpecification(EntityKind kind) : IReleaseSpecification {
+    public ReleaseRejectionReason Reason => ReleaseRejectionReason.QualityNotAllowed;
+
+    public ReleaseRejectionReason? Evaluate(IndexerRelease release, BookAcquisitionRules rules) {
+        if (rules.AllowedQualities.Count == 0) {
+            return null;
+        }
+
+        var (code, _) = MediaQualityLadder.Detect(kind, release.Title);
+        return rules.AllowedQualities.Contains(code, StringComparer.Ordinal) ? null : Reason;
+    }
+}
+
+/// <summary>
+/// Upgrade-search gate for ladder kinds: a candidate must sit strictly above the owned ladder
+/// position or it is not an upgrade. No-op on ordinary first-grab searches.
+/// </summary>
+public sealed class MediaUpgradeSpecification(EntityKind kind) : IReleaseSpecification {
+    public ReleaseRejectionReason Reason => ReleaseRejectionReason.NotAnUpgrade;
+
+    public ReleaseRejectionReason? Evaluate(IndexerRelease release, BookAcquisitionRules rules) {
+        if (!rules.IsUpgradeSearch || rules.OwnedMediaQuality is null) {
+            return null;
+        }
+
+        var owned = MediaQualityLadder.PositionOf(kind, rules.OwnedMediaQuality);
+        var (_, candidate) = MediaQualityLadder.Detect(kind, release.Title);
+        return candidate > owned ? null : Reason;
+    }
+}
+
+/// <summary>
 /// TV decision engine: the generic acceptance gates plus the unit-match rule, ranked like movies
 /// (resolution, then source provenance). One engine class serves both TV acquisition units — season
 /// packs (<see cref="EntityKind.VideoSeason"/>) and single episodes (<see cref="EntityKind.Video"/>) —
@@ -155,7 +191,7 @@ public sealed class TvUnitSpecification : IReleaseSpecification {
 public sealed class TvReleaseDecisionEngine(EntityKind kind) : IAcquisitionDecisionEngine {
     public EntityKind Kind => kind;
 
-    private static readonly IReleaseSpecification[] Specifications = [
+    private readonly IReleaseSpecification[] _specifications = [
         new ProtocolSpecification(),
         new DownloadLinkSpecification(),
         new MinSeedersSpecification(),
@@ -163,14 +199,16 @@ public sealed class TvReleaseDecisionEngine(EntityKind kind) : IAcquisitionDecis
         new RequiredTermsSpecification(),
         new IgnoredTermsSpecification(),
         new LanguageSpecification(),
-        new TvUnitSpecification()
+        new TvUnitSpecification(),
+        new MediaQualityAllowedSpecification(kind),
+        new MediaUpgradeSpecification(kind)
     ];
 
     public IReadOnlyList<ScoredRelease> Evaluate(
         IReadOnlyList<(IndexerRelease Release, Guid? IndexerConfigId, string IndexerName)> releases,
         BookAcquisitionRules rules,
         IReadOnlySet<string>? blocklistedIdentities = null) =>
-        MediaReleaseEvaluation.Evaluate(releases, rules, blocklistedIdentities, Specifications, MediaReleaseEvaluation.VideoReleaseScore);
+        MediaReleaseEvaluation.Evaluate(releases, rules, blocklistedIdentities, _specifications, MediaReleaseEvaluation.VideoReleaseScore);
 }
 
 /// <summary>
@@ -215,24 +253,12 @@ internal static class MediaReleaseEvaluation {
 
     /// <summary>
     /// The shared video release ranking (movies and TV alike): profile preference outranks everything,
-    /// then resolution, then source provenance, then seeders.
+    /// then the position on the combined source × resolution quality ladder, then seeders.
     /// </summary>
     public static double VideoReleaseScore(IndexerRelease release, BookAcquisitionRules rules) {
-        var title = release.Title;
-        var resolution =
-            TitleHasAny(title, "2160p", "4k", "uhd") ? 4 :
-            TitleHasAny(title, "1080p") ? 3 :
-            TitleHasAny(title, "720p") ? 2 :
-            TitleHasAny(title, "480p", "dvdrip") ? 1 : 0;
-        var source =
-            TitleHasAny(title, "remux") ? 5 :
-            TitleHasAny(title, "bluray", "blu-ray", "bdrip", "brrip") ? 4 :
-            TitleHasAny(title, "web-dl", "webdl") ? 3 :
-            TitleHasAny(title, "webrip", "web") ? 2 :
-            TitleHasAny(title, "hdtv") ? 1 : 0;
+        var quality = (int)VideoQualityDetection.Detect(release.Title);
         return PreferenceScore(release, rules) * 10_000
-            + resolution * 100_000
-            + source * 10_000
+            + quality * 100_000
             + Math.Min(release.Seeders ?? 0, 9_999);
     }
 

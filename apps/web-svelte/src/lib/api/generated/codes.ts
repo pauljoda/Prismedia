@@ -126,9 +126,42 @@ export const JOB_TYPE = {
   monitoredSearch: "monitored-search",
   acquisitionUpgradeReplace: "acquisition-upgrade-replace",
   acquisitionEnrich: "acquisition-enrich",
+  recycleBinCleanup: "recycle-bin-cleanup",
 } as const;
 
 export type JobTypeCode = (typeof JOB_TYPE)[keyof typeof JOB_TYPE];
+
+export const VIDEO_QUALITY = {
+  unknown: "unknown",
+  sdtv: "sdtv",
+  dvd: "dvd",
+  hdtv720p: "hdtv-720p",
+  webrip720p: "webrip-720p",
+  webdl720p: "webdl-720p",
+  bluray720p: "bluray-720p",
+  hdtv1080p: "hdtv-1080p",
+  webrip1080p: "webrip-1080p",
+  webdl1080p: "webdl-1080p",
+  bluray1080p: "bluray-1080p",
+  remux1080p: "remux-1080p",
+  hdtv2160p: "hdtv-2160p",
+  webrip2160p: "webrip-2160p",
+  webdl2160p: "webdl-2160p",
+  bluray2160p: "bluray-2160p",
+  remux2160p: "remux-2160p",
+} as const;
+
+export type VideoQualityCode = (typeof VIDEO_QUALITY)[keyof typeof VIDEO_QUALITY];
+
+export const AUDIO_QUALITY = {
+  unknown: "unknown",
+  lossy: "lossy",
+  lossyHigh: "lossy-high",
+  lossless: "lossless",
+  losslessHiRes: "lossless-hires",
+} as const;
+
+export type AudioQualityCode = (typeof AUDIO_QUALITY)[keyof typeof AUDIO_QUALITY];
 
 export const JOB_RUN_STATUS = {
   queued: "queued",
@@ -444,6 +477,8 @@ export const EXTERNAL_ID_PROVIDER = {
 export type ExternalIdProviderCode = (typeof EXTERNAL_ID_PROVIDER)[keyof typeof EXTERNAL_ID_PROVIDER];
 
 export const SETTING_KEYS = {
+  acquisitionRecycleBinCleanupDays: "acquisition.recycleBinCleanupDays",
+  acquisitionRecycleBinPath: "acquisition.recycleBinPath",
   autoIdentifyConfidenceThreshold: "autoIdentify.confidenceThreshold",
   autoIdentifyEnabled: "autoIdentify.enabled",
   autoIdentifyEntityKinds: "autoIdentify.entityKinds",

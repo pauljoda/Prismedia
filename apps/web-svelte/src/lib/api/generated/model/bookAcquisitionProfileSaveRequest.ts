@@ -44,4 +44,8 @@ export interface BookAcquisitionProfileSaveRequest {
   cutoffFormatTier: BookFormatTier;
   /** @nullable */
   downloadCategory?: string | null;
+  /** @nullable */
+  allowedQualities?: string[] | null;
+  /** @nullable */
+  cutoffQuality?: string | null;
 }

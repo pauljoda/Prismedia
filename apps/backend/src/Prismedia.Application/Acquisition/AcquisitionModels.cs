@@ -49,6 +49,18 @@ public sealed record BookAcquisitionRules(
     public IReadOnlyList<DownloadProtocol> AllowedProtocols { get; init; } = [DownloadProtocol.Torrent];
 
     /// <summary>
+    /// Media quality codes (the kind's video/audio ladder) the profile accepts; empty allows all.
+    /// Book kinds ignore this (they gate on <see cref="AllowedFormats"/> + <see cref="MinQuality"/>).
+    /// </summary>
+    public IReadOnlyList<string> AllowedQualities { get; init; } = [];
+
+    /// <summary>Media quality code at/above which upgrades stop; null = fulfill at any allowed quality.</summary>
+    public string? CutoffQuality { get; init; }
+
+    /// <summary>Owned media quality code for an upgrade search (set per search by the runner, like the book owned rank).</summary>
+    public string? OwnedMediaQuality { get; init; }
+
+    /// <summary>
     /// Permissive defaults used when no profile is configured yet (e.g. ad-hoc verification searches).
     /// <see cref="MinQuality"/> and <see cref="OwnedQuality"/> default to <see cref="BookQualityRank.Floor"/>
     /// (<c>default(BookQualityRank)</c>) and <see cref="IsUpgradeSearch"/> to false, so the quality and

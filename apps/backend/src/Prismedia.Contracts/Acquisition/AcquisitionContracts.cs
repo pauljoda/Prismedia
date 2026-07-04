@@ -252,7 +252,9 @@ public sealed record BookAcquisitionProfileView(
     bool UpgradeUntilCutoff,
     BookSourceTier CutoffSourceTier,
     BookFormatTier CutoffFormatTier,
-    string? DownloadCategory = null);
+    string? DownloadCategory = null,
+    IReadOnlyList<string>? AllowedQualities = null,
+    string? CutoffQuality = null);
 
 /// <summary>Request payload for creating or updating an acquisition profile.</summary>
 public sealed record BookAcquisitionProfileSaveRequest(
@@ -277,7 +279,9 @@ public sealed record BookAcquisitionProfileSaveRequest(
     bool UpgradeUntilCutoff,
     BookSourceTier CutoffSourceTier,
     BookFormatTier CutoffFormatTier,
-    string? DownloadCategory = null);
+    string? DownloadCategory = null,
+    IReadOnlyList<string>? AllowedQualities = null,
+    string? CutoffQuality = null);
 
 /// <summary>A monitored wanted item: the standing intent plus the current state of the acquisition it keeps alive.</summary>
 public sealed record MonitorView(

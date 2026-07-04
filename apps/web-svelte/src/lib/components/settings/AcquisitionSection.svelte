@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { Boxes, Loader2, Pencil, PlugZap, Plus, Trash2 } from "@lucide/svelte";
   import { Badge, Button, Checkbox, Panel, Select, StatusLed, TextInput } from "@prismedia/ui-svelte";
-  import { INDEXER_KIND, DOWNLOAD_CLIENT_KIND, IMPORT_MODE, BLOCKLIST_REASON, BOOK_SOURCE_TIER, BOOK_FORMAT_TIER, ENTITY_KIND } from "$lib/api/generated/codes";
+  import { INDEXER_KIND, DOWNLOAD_CLIENT_KIND, IMPORT_MODE, BLOCKLIST_REASON, BOOK_SOURCE_TIER, BOOK_FORMAT_TIER, ENTITY_KIND, VIDEO_QUALITY, AUDIO_QUALITY } from "$lib/api/generated/codes";
   import { cn } from "@prismedia/ui-svelte";
   import type {
     AcquisitionBlocklistEntry,
@@ -58,6 +58,20 @@
   let clientForm = $state<DownloadClientSaveRequest | null>(null);
   let profileForm = $state<BookAcquisitionProfileSaveRequest | null>(null);
   let profileTerms = $state({ preferred: "", required: "", ignored: "", weighted: "", languages: "" });
+
+  // The quality ladders per profile kind, worst → best, for the allowed-set picker and cutoff select.
+  const videoQualityLadder = Object.values(VIDEO_QUALITY).filter((code) => code !== VIDEO_QUALITY.unknown);
+  const audioQualityLadder = Object.values(AUDIO_QUALITY).filter((code) => code !== AUDIO_QUALITY.unknown);
+  function qualityLadderFor(kind: string): string[] {
+    if (kind === ENTITY_KIND.movie || kind === ENTITY_KIND.videoSeries) return videoQualityLadder;
+    if (kind === ENTITY_KIND.audioLibrary) return audioQualityLadder;
+    return [];
+  }
+  function toggleAllowedQuality(code: string) {
+    if (!profileForm) return;
+    const current = profileForm.allowedQualities ?? [];
+    profileForm.allowedQualities = current.includes(code) ? current.filter((c) => c !== code) : [...current, code];
+  }
 
   const importModeOptions = [
     { value: IMPORT_MODE.move, label: "Move (delete torrent after import)" },
@@ -307,7 +321,7 @@
       importMode: IMPORT_MODE.move, allowedFormats: [], preferredLanguages: ["English"], minSeeders: 1,
       minSizeBytes: null, maxSizeBytes: null, requiredTerms: [], ignoredTerms: [], preferredTerms: [], weightedTerms: [], autoPick: false, autoRedownload: false,
       upgradeUntilCutoff: false, cutoffSourceTier: BOOK_SOURCE_TIER.unknown, cutoffFormatTier: BOOK_FORMAT_TIER.unknown,
-      downloadCategory: null,
+      downloadCategory: null, allowedQualities: [], cutoffQuality: null,
     };
     profileTerms = { preferred: "", required: "", ignored: "", weighted: "", languages: "English" };
   }
@@ -332,7 +346,7 @@
       requiredTerms: p.requiredTerms, ignoredTerms: p.ignoredTerms, preferredTerms: p.preferredTerms, weightedTerms: p.weightedTerms,
       autoPick: p.autoPick, autoRedownload: p.autoRedownload,
       upgradeUntilCutoff: p.upgradeUntilCutoff, cutoffSourceTier: p.cutoffSourceTier, cutoffFormatTier: p.cutoffFormatTier,
-      downloadCategory: p.downloadCategory ?? null,
+      downloadCategory: p.downloadCategory ?? null, allowedQualities: p.allowedQualities ?? [], cutoffQuality: p.cutoffQuality ?? null,
     };
     profileTerms = {
       preferred: p.preferredTerms.join(", "),
@@ -634,6 +648,25 @@
                 <Select size="sm" value={profileForm.importMode} options={importModeOptions} onchange={(v) => profileForm && (profileForm.importMode = v as typeof profileForm.importMode)} /></label>
               <label class="space-y-1"><span class="text-label text-text-muted">Download category</span>
                 <TextInput size="sm" value={profileForm.downloadCategory ?? ""} oninput={(e) => profileForm && (profileForm.downloadCategory = e.currentTarget.value || null)} placeholder="client default" /></label>
+              {#if qualityLadderFor(profileForm.kind).length > 0}
+                <div class="space-y-1 sm:col-span-2">
+                  <span class="text-label text-text-muted">Allowed qualities (none = all)</span>
+                  <div class="flex flex-wrap gap-1.5">
+                    {#each qualityLadderFor(profileForm.kind) as code (code)}
+                      <button type="button"
+                        class={cn(
+                          "rounded-xs border px-2 py-0.5 font-mono text-[0.7rem] transition-colors",
+                          (profileForm.allowedQualities ?? []).includes(code)
+                            ? "border-border-accent bg-surface-2 text-text-primary"
+                            : "border-border-subtle bg-surface-1 text-text-muted hover:text-text-primary",
+                        )}
+                        onclick={() => toggleAllowedQuality(code)}>{code}</button>
+                    {/each}
+                  </div>
+                </div>
+                <label class="space-y-1"><span class="text-label text-text-muted">Upgrade cutoff quality</span>
+                  <Select size="sm" value={profileForm.cutoffQuality ?? ""} options={[{ value: "", label: "None (fulfill at any allowed quality)" }, ...qualityLadderFor(profileForm.kind).map((code) => ({ value: code, label: code }))]} onchange={(v) => profileForm && (profileForm.cutoffQuality = v || null)} /></label>
+              {/if}
               <label class="space-y-1"><span class="text-label text-text-muted">Min seeders</span>
                 <TextInput size="sm" value={String(profileForm.minSeeders)} oninput={(e) => profileForm && (profileForm.minSeeders = Number(e.currentTarget.value) || 0)} /></label>
             </div>

@@ -143,6 +143,19 @@ public sealed class BookAcquisitionProfileRow {
     public string[] AllowedFormats { get; set; } = [];
 
     /// <summary>
+    /// Media quality codes (video or audio ladder, by the profile's kind) this profile accepts.
+    /// Empty allows every quality — including unrecognized ones. Lets a profile pin exact tiers
+    /// ("only bluray-1080p") or cap a ladder (exclude the 2160p rungs).
+    /// </summary>
+    public string[] AllowedQualities { get; set; } = [];
+
+    /// <summary>
+    /// Media quality code (video/audio ladder) at or above which the upgrade loop stops for this
+    /// profile's kind. Null means any allowed quality fulfills immediately.
+    /// </summary>
+    public string? CutoffQuality { get; set; }
+
+    /// <summary>
     /// Ordered preferred release languages (canonicalized case-insensitively against title tokens and the
     /// indexer language attribute). A release declaring only other languages is rejected; earlier entries
     /// rank higher. Empty disables the language gate.
