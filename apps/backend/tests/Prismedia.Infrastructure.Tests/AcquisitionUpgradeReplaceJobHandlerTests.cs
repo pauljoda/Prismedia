@@ -125,8 +125,9 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
 
     private static async Task RunAsync(PrismediaDbContext db, RecordingJobQueue queue, FakeReplacer replacer, Guid childId) {
         var handler = new AcquisitionUpgradeReplaceJobHandler(
-            new EfAcquisitionStore(db), new EfMonitorStore(db), new EfBookAcquisitionProfileStore(db), replacer,
+            AcquisitionTestFactory.Store(db), new EfMonitorStore(db), new EfBookAcquisitionProfileStore(db), replacer,
             new NullDownloadClientConfigStore(), new ThrowingDownloadClientFactory(),
+            new EfAcquisitionHistoryStore(db),
             NullLogger<AcquisitionUpgradeReplaceJobHandler>.Instance);
         var job = new JobRunSnapshot(
             Guid.NewGuid(), JobType.AcquisitionUpgradeReplace, JobRunStatus.Running, 0, null,

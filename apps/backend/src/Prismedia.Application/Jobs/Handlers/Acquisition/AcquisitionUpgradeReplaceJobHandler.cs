@@ -20,6 +20,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
     IOwnedFileReplacer replacer,
     IDownloadClientConfigStore downloadClients,
     IDownloadClientFactory clients,
+    IAcquisitionHistoryStore history,
     ILogger<AcquisitionUpgradeReplaceJobHandler> logger) : IJobHandler {
     public JobType Type => JobType.AcquisitionUpgradeReplace;
 
@@ -77,6 +78,12 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
         // the upgrade slot (counting the attempt), and remove the now-consumed child acquisition.
         var newOwned = new BookQualityRank(BookFormatDetection.DetectSource(target.ChildSelectedTitle!), result.NewFormat);
         await acquisitions.UpdateOwnedQualityAsync(target.ParentId, newOwned, cancellationToken);
+        await RecordUpgradedAsync(
+            target,
+            newCode: $"{newOwned.Source.ToCode()}/{newOwned.Format.ToCode()}",
+            oldQuality: $"{target.ParentOwnedQuality.Source.ToCode()}/{target.ParentOwnedQuality.Format.ToCode()}",
+            newQuality: $"{newOwned.Source.ToCode()}/{newOwned.Format.ToCode()}",
+            cancellationToken);
         await FinishAsync(context, target, childId, JobType.ScanBook, "Upgraded book scan", cancellationToken);
     }
 
@@ -116,6 +123,12 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
         // path. Advancing the revision and format score alongside the code is what lets a same-quality proper
         // or format-score upgrade settle instead of re-firing.
         await acquisitions.UpdateOwnedMediaQualityAsync(target.ParentId, candidateCode, candidateRevision, candidateFormatScore, cancellationToken);
+        await RecordUpgradedAsync(
+            target,
+            newCode: candidateCode,
+            oldQuality: string.IsNullOrWhiteSpace(target.ParentOwnedMediaQuality) ? VideoQuality.Unknown.ToCode() : target.ParentOwnedMediaQuality!,
+            newQuality: candidateCode,
+            cancellationToken);
         await FinishAsync(context, target, childId, JobType.ScanLibrary, "Upgraded video scan", cancellationToken);
     }
 
@@ -133,6 +146,29 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
         logger.LogInformation("AcquisitionUpgradeReplace: not applying child {Child}: {Reason}", childId, reason);
         await acquisitions.SetStatusAsync(childId, AcquisitionStatus.Failed, reason, cancellationToken);
         await monitors.ResolveUpgradeChildAsync(childId, succeeded: false, cancellationToken);
+    }
+
+    /// <summary>
+    /// Records a durable Upgraded event against the PARENT acquisition (the owned copy that was replaced),
+    /// carrying the new quality code and an old→new summary in the message. Best-effort: a history hiccup
+    /// must never undo the applied upgrade. The parent's title/kind/entity come from its search input.
+    /// </summary>
+    private async Task RecordUpgradedAsync(UpgradeReplaceTarget target, string newCode, string oldQuality, string newQuality, CancellationToken cancellationToken) {
+        var input = await acquisitions.GetSearchInputAsync(target.ParentId, cancellationToken);
+        if (input is null) {
+            return;
+        }
+
+        await history.SafeAddAsync(logger, new AcquisitionHistoryEntry(
+            target.ParentId,
+            input.EntityId,
+            input.Kind,
+            AcquisitionHistoryEvent.Upgraded,
+            input.Title,
+            ReleaseTitle: target.ChildSelectedTitle,
+            QualityCode: newCode,
+            Message: $"Upgraded {oldQuality} → {newQuality}"),
+            cancellationToken);
     }
 
     private async Task RemoveTorrentAsync(UpgradeReplaceTarget target, CancellationToken cancellationToken) {

@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onDestroy } from "svelte";
-  import { Bell, BellRing, CloudDownload, FileText, Loader2, RefreshCw, Search, SearchX, Upload, X } from "@lucide/svelte";
+  import { Bell, BellRing, CloudDownload, FileText, History, Loader2, RefreshCw, Search, SearchX, Upload, X } from "@lucide/svelte";
   import { Badge, Button } from "@prismedia/ui-svelte";
+  import AcquisitionHistoryList from "$lib/components/acquisitions/AcquisitionHistoryList.svelte";
   import PieceStateBar from "$lib/components/acquisitions/PieceStateBar.svelte";
   import ReleaseTable from "$lib/components/acquisitions/ReleaseTable.svelte";
   import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
@@ -10,6 +11,7 @@
   import type {
     AcquisitionDetail,
     AcquisitionFilesView,
+    AcquisitionHistoryView,
     AcquisitionTransferView,
     MonitorView,
     ReleaseCandidateView,
@@ -20,6 +22,7 @@
     reSearchAcquisition,
     fetchAcquisition,
     fetchAcquisitionFiles,
+    fetchAcquisitionHistory,
     fetchAcquisitionTransfer,
     queueAcquisitionCandidate,
     uploadManualTorrent,
@@ -51,6 +54,7 @@
   let transfer = $state<AcquisitionTransferView | null>(null);
   let files = $state<AcquisitionFilesView | null>(null);
   let monitor = $state<MonitorView | null>(null);
+  let history = $state<AcquisitionHistoryView[]>([]);
   let error = $state<string | null>(null);
   let busy = $state(false);
   let pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -116,6 +120,16 @@
     } finally {
       loading = false;
     }
+  }
+
+  /**
+   * Loads the entity's durable activity log. Secondary surface: a history-load failure must never break
+   * the acquisition view, so it silently degrades to whatever is already shown. Scoped by entity id when
+   * the acquisition targets one, so the section shows every grab/import/failure for that wanted item —
+   * including events from acquisitions that were since removed.
+   */
+  async function loadHistory(entityId: string) {
+    history = await fetchAcquisitionHistory({ entityId, limit: 50 }).catch(() => history);
   }
 
   async function queue(candidate: ReleaseCandidateView) {
@@ -240,6 +254,12 @@
 
   $effect(() => {
     if (acquisitionId) void load();
+  });
+  // Load the durable activity log once the acquisition (and thus its entity id) is known. Re-runs when the
+  // entity changes, and after the poll advances the status (a fresh grab/import lands a new event).
+  $effect(() => {
+    const entityId = detail?.summary.entityId;
+    if (entityId) void loadHistory(entityId);
   });
   $effect(() => {
     if (shouldPoll && !pollTimer) {
@@ -413,6 +433,20 @@
           </div>
         {/if}
       </section>
+    {/if}
+
+    <!-- ── History (durable activity log for this item) ── -->
+    {#if history.length > 0}
+      <details class="group rounded-sm border border-border-subtle bg-surface-1">
+        <summary class="flex cursor-pointer items-center gap-2 px-3 py-2 text-kicker text-text-primary select-none">
+          <History class="h-3.5 w-3.5 text-text-muted" />
+          History
+          <span class="font-mono text-[0.68rem] font-normal text-text-muted">{history.length}</span>
+        </summary>
+        <div class="px-3 pb-3">
+          <AcquisitionHistoryList entries={history} />
+        </div>
+      </details>
     {/if}
   </div>
 {/if}

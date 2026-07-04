@@ -15,7 +15,7 @@ public sealed class EfAcquisitionStoreSeedingTests {
     [Fact]
     public async Task ATransferWithAGoalEntersAndLeavesTheSeedingWatch() {
         await using var db = CreateContext();
-        var store = new EfAcquisitionStore(db);
+        var store = AcquisitionTestFactory.Store(db);
         var acquisition = await store.CreateAsync(new AcquisitionMetadata("Book", null, null, null, null, null, null), CancellationToken.None);
         await store.CreateTransferAsync(acquisition.Id, Guid.NewGuid(), "hash1", "prismedia", CancellationToken.None, new TransferSeedGoal(1.5, 4320));
 
@@ -36,7 +36,7 @@ public sealed class EfAcquisitionStoreSeedingTests {
     [Fact]
     public async Task AGoalLessTransferNeverEntersTheWatch() {
         await using var db = CreateContext();
-        var store = new EfAcquisitionStore(db);
+        var store = AcquisitionTestFactory.Store(db);
         var acquisition = await store.CreateAsync(new AcquisitionMetadata("Book", null, null, null, null, null, null), CancellationToken.None);
         await store.CreateTransferAsync(acquisition.Id, Guid.NewGuid(), "hash1", "prismedia", CancellationToken.None);
 

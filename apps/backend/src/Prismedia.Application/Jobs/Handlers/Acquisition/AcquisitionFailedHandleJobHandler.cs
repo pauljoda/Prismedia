@@ -15,6 +15,7 @@ public sealed class AcquisitionFailedHandleJobHandler(
     IAcquisitionBlocklistStore blocklist,
     IBookAcquisitionProfileStore profiles,
     IAcquisitionQueueService queueService,
+    IAcquisitionHistoryStore history,
     ILogger<AcquisitionFailedHandleJobHandler> logger) : IJobHandler {
     public JobType Type => JobType.AcquisitionFailedHandle;
 
@@ -22,6 +23,11 @@ public sealed class AcquisitionFailedHandleJobHandler(
         var payload = AcquisitionFailedPayload.Parse(context.Job.PayloadJson);
         var acquisitionId = payload.AcquisitionId;
         var selected = payload.Selected;
+
+        // The search input backs every history event here (title/kind/entity). Read it once up front so both
+        // the no-snapshot early return and the blocklist path can record against it.
+        var input = await acquisitions.GetSearchInputAsync(acquisitionId, cancellationToken);
+        await RecordFailedAsync(acquisitionId, input, AcquisitionHistoryEvent.DownloadFailed, selected?.Title, selected?.IndexerName, payload.Message ?? "Download failed.", cancellationToken);
 
         if (selected is null) {
             // No snapshot of what was downloading (e.g. a manually-uploaded torrent), so there is nothing
@@ -34,8 +40,8 @@ public sealed class AcquisitionFailedHandleJobHandler(
         await blocklist.AddAsync(
             new BlocklistAddRequest(selected.Identity, payload.Reason, selected.Title, selected.IndexerName, selected.InfoHash, acquisitionId, payload.Message),
             cancellationToken);
+        await RecordFailedAsync(acquisitionId, input, AcquisitionHistoryEvent.Blocklisted, selected.Title, selected.IndexerName, $"Blocklisted ({payload.Reason.ToCode()}).", cancellationToken);
 
-        var input = await acquisitions.GetSearchInputAsync(acquisitionId, cancellationToken);
         if (!await profiles.GetAutoRedownloadAsync(input?.ProfileId, input?.Kind ?? EntityKind.Book, cancellationToken)) {
             // Release blocklisted, but the profile leaves recovery to the user. This handler owns the
             // terminal Failed transition (the monitor only enqueues), so record it here.
@@ -61,4 +67,23 @@ public sealed class AcquisitionFailedHandleJobHandler(
             await acquisitions.SetStatusAsync(acquisitionId, AcquisitionStatus.Failed, $"Auto-redownload failed: {ex.Message}", cancellationToken);
         }
     }
+
+    /// <summary>
+    /// Records a durable failure event (DownloadFailed or Blocklisted) against the acquisition. Best-effort:
+    /// a history hiccup must never break failure recovery. Title/kind/entity come from the acquisition's
+    /// search input when it still exists; otherwise the release title stands in and the kind defaults to book.
+    /// </summary>
+    private Task RecordFailedAsync(
+        Guid acquisitionId, AcquisitionSearchInput? input, AcquisitionHistoryEvent kind,
+        string? releaseTitle, string? indexerName, string message, CancellationToken cancellationToken) =>
+        history.SafeAddAsync(logger, new AcquisitionHistoryEntry(
+            acquisitionId,
+            input?.EntityId,
+            input?.Kind ?? EntityKind.Book,
+            kind,
+            input?.Title ?? releaseTitle ?? "(removed acquisition)",
+            releaseTitle,
+            indexerName,
+            Message: message),
+            cancellationToken);
 }

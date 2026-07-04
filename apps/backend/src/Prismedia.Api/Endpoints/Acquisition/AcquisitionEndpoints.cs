@@ -371,6 +371,16 @@ public static class AcquisitionEndpoints {
             .Produces(StatusCodes.Status204NoContent)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
+        group.MapGet("/history", (
+            AcquisitionService acquisitions,
+            CancellationToken cancellationToken,
+            int? limit = null,
+            Guid? entityId = null) =>
+            acquisitions.ListHistoryAsync(limit ?? 0, entityId, cancellationToken))
+            .WithName("ListAcquisitionHistory")
+            .WithSummary("Lists the durable acquisition activity log (grabbed/imported/failed/removed), newest first; optionally filtered to one entity.")
+            .Produces<IReadOnlyList<AcquisitionHistoryView>>();
+
         group.MapGet("/blocklist", (
             IAcquisitionBlocklistStore blocklist,
             CancellationToken cancellationToken) =>

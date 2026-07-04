@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Prismedia.Contracts.Acquisition;
 using Prismedia.Contracts.System;
 using Prismedia.Domain.Entities;
@@ -18,7 +19,9 @@ public sealed class AcquisitionQueueService(
     IDownloadClientFactory clients,
     IBookAcquisitionProfileStore profiles,
     IIndexerConfigStore indexers,
-    IReleaseLinkResolver linkResolver) : IAcquisitionQueueService {
+    IReleaseLinkResolver linkResolver,
+    IAcquisitionHistoryStore history,
+    ILogger<AcquisitionQueueService> logger) : IAcquisitionQueueService {
     /// <summary>Queues a chosen candidate: resolves a usable link (direct, magnet, or scraped from the info page) and hands it to a download client.</summary>
     public async Task<AcquisitionDetail?> QueueAsync(Guid acquisitionId, Guid candidateId, CancellationToken cancellationToken) {
         var candidate = await acquisitions.GetQueueCandidateAsync(acquisitionId, candidateId, cancellationToken);
@@ -64,6 +67,7 @@ public sealed class AcquisitionQueueService(
                 new SelectedRelease(candidate.Title, candidate.IndexerName, candidate.InfoHash),
                 cancellationToken);
             await acquisitions.SetStatusAsync(acquisitionId, AcquisitionStatus.Queued, "Sent to download client.", cancellationToken);
+            await RecordGrabbedAsync(acquisitionId, candidate.Title, candidate.IndexerName, client.DisplayName, cancellationToken);
         } catch (AcquisitionConfigurationException) {
             throw;
         } catch (Exception ex) when (ex is not OperationCanceledException) {
@@ -92,6 +96,8 @@ public sealed class AcquisitionQueueService(
             var seedGoal = new TransferSeedGoal(client.SeedRatio, client.SeedTimeMinutes);
             await acquisitions.CreateTransferAsync(acquisitionId, client.Id, clientItemId, category ?? client.Category, cancellationToken, seedGoal.IsEmpty ? null : seedGoal);
             await acquisitions.SetStatusAsync(acquisitionId, AcquisitionStatus.Queued, "Uploaded torrent sent to download client.", cancellationToken);
+            // A manual .torrent has no grab indexer; the uploaded file name stands in for the release title.
+            await RecordGrabbedAsync(acquisitionId, fileName, indexerName: null, client.DisplayName, cancellationToken);
         } catch (Exception ex) when (ex is not OperationCanceledException) {
             await acquisitions.SetStatusAsync(acquisitionId, AcquisitionStatus.Failed, $"Failed to queue uploaded torrent: {ex.Message}", cancellationToken);
             throw new AcquisitionConfigurationException(ApiProblemCodes.DownloadClientUnreachable, $"Failed to queue uploaded torrent: {ex.Message}");
@@ -204,6 +210,38 @@ public sealed class AcquisitionQueueService(
         var input = await acquisitions.GetSearchInputAsync(acquisitionId, cancellationToken);
         return input is null ? null : await profiles.GetDownloadCategoryAsync(input.ProfileId, input.Kind, cancellationToken);
     }
+
+    /// <summary>
+    /// Records a durable Grabbed event for a just-queued release. Best-effort (a history hiccup must never
+    /// fail the grab): the acquisition's title/kind/entity come from the search input it already reads for
+    /// the category, and the quality code is detected from the release title in the kind's own vocabulary —
+    /// a video/audio ladder code for media, the source tier for books (the format tier is only known once
+    /// the file lands, so it is left to the Imported event).
+    /// </summary>
+    private async Task RecordGrabbedAsync(Guid acquisitionId, string releaseTitle, string? indexerName, string downloadClientName, CancellationToken cancellationToken) {
+        var input = await acquisitions.GetSearchInputAsync(acquisitionId, cancellationToken);
+        if (input is null) {
+            return;
+        }
+
+        await history.SafeAddAsync(logger, new AcquisitionHistoryEntry(
+            acquisitionId,
+            input.EntityId,
+            input.Kind,
+            AcquisitionHistoryEvent.Grabbed,
+            input.Title,
+            releaseTitle,
+            indexerName,
+            downloadClientName,
+            DetectGrabbedQualityCode(input.Kind, releaseTitle)),
+            cancellationToken);
+    }
+
+    /// <summary>The release title's detected quality code for the log: a video/audio ladder code for media kinds, the source tier code for books.</summary>
+    private static string DetectGrabbedQualityCode(EntityKind kind, string releaseTitle) =>
+        MediaQualityLadder.IsVideoKind(kind) || MediaQualityLadder.IsAudioKind(kind)
+            ? MediaQualityLadder.Detect(kind, releaseTitle).Code
+            : BookFormatDetection.DetectSource(releaseTitle).ToCode();
 
     private static DownloadClientConnection ConnectionFor(DownloadClientDetail client) =>
         new(client.Id, client.Kind, client.BaseUrl, client.Username, client.Password, client.Category, client.ApiKey);

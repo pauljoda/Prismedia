@@ -383,6 +383,18 @@ export const ACQUISITION_STATUS = {
 
 export type AcquisitionStatusCode = (typeof ACQUISITION_STATUS)[keyof typeof ACQUISITION_STATUS];
 
+export const ACQUISITION_HISTORY_EVENT = {
+  grabbed: "grabbed",
+  imported: "imported",
+  importFailed: "import-failed",
+  downloadFailed: "download-failed",
+  blocklisted: "blocklisted",
+  upgraded: "upgraded",
+  removed: "removed",
+} as const;
+
+export type AcquisitionHistoryEventCode = (typeof ACQUISITION_HISTORY_EVENT)[keyof typeof ACQUISITION_HISTORY_EVENT];
+
 export const RELEASE_REJECTION_REASON = {
   unsupportedFormat: "unsupported-format",
   belowMinSeeders: "below-min-seeders",

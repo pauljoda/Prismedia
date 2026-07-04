@@ -510,6 +510,57 @@ public sealed class AcquisitionBlocklistRow {
 }
 
 /// <summary>
+/// One durable entry in the acquisition activity log — a grabbed/imported/failed/removed event for an
+/// acquisition. The log OUTLIVES the acquisition it describes: <see cref="AcquisitionId"/> is a loose FK
+/// with SetNull delete behavior, so hard-deleting an acquisition (cancel/delete) leaves its history intact
+/// with a null acquisition id. The row denormalizes the acquisition's title/kind/entity and the release
+/// context available at the moment of the event, so the log reads without re-joining a possibly-gone
+/// acquisition. Append-only: rows are only ever inserted.
+/// </summary>
+public sealed class AcquisitionHistoryRow {
+    public Guid Id { get; set; }
+
+    /// <summary>
+    /// The acquisition this event belongs to. Loose FK (SetNull): survives the acquisition's hard delete
+    /// as a null so the audit trail is permanent. Null once the acquisition is gone, or for an event
+    /// recorded without a resolvable acquisition.
+    /// </summary>
+    public Guid? AcquisitionId { get; set; }
+
+    /// <summary>The library entity the acquisition targeted, denormalized so history can be filtered per entity even after the acquisition is deleted. Loose link (no FK).</summary>
+    public Guid? EntityId { get; set; }
+
+    /// <summary>Media kind the event concerns, for the log's kind badge.</summary>
+    public EntityKind Kind { get; set; } = EntityKind.Book;
+
+    /// <summary>Which lifecycle event this row records.</summary>
+    public AcquisitionHistoryEvent Event { get; set; } = AcquisitionHistoryEvent.Grabbed;
+
+    /// <summary>The acquisition's display title at the time of the event.</summary>
+    public string Title { get; set; } = string.Empty;
+
+    /// <summary>The release title the event concerned (the grabbed/imported/failed release), when known.</summary>
+    public string? ReleaseTitle { get; set; }
+
+    /// <summary>Indexer the release came from, when known.</summary>
+    public string? IndexerName { get; set; }
+
+    /// <summary>Download client the release was handed to, when known.</summary>
+    public string? DownloadClientName { get; set; }
+
+    /// <summary>Detected quality code (a video/audio ladder code, or a book source/format rank) at the event, when known.</summary>
+    public string? QualityCode { get; set; }
+
+    /// <summary>Total custom-format score of the release at the event, when computed.</summary>
+    public int? FormatScore { get; set; }
+
+    /// <summary>Human-readable detail (a failure reason, an old→new upgrade summary), when relevant.</summary>
+    public string? Message { get; set; }
+
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
+/// <summary>
 /// A standing intent that Prismedia keeps acting on — the persistent counterpart to a one-and-done
 /// acquisition. In this version a monitor keeps a wanted book's acquisition alive: while
 /// <see cref="MonitorStatus.Active"/> the scheduler periodically re-runs its release search until the

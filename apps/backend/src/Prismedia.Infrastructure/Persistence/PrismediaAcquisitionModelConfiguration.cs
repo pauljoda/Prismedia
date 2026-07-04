@@ -364,6 +364,40 @@ internal static partial class PrismediaModelConfiguration {
             entity.HasOne<AcquisitionRow>().WithMany().HasForeignKey(row => row.AcquisitionId).OnDelete(DeleteBehavior.SetNull);
         });
 
+        modelBuilder.Entity<AcquisitionHistoryRow>(entity => {
+            entity.ToTable("acquisition_history");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(row => row.AcquisitionId).HasColumnName("acquisition_id");
+            entity.Property(row => row.EntityId).HasColumnName("entity_id");
+            entity.Property(row => row.Kind)
+                .HasColumnName("kind")
+                .HasMaxLength(64)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<EntityKind>())
+                .HasDefaultValue(EntityKind.Book)
+                .IsRequired();
+            entity.Property(row => row.Event)
+                .HasColumnName("event")
+                .HasMaxLength(32)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<AcquisitionHistoryEvent>())
+                .HasDefaultValue(AcquisitionHistoryEvent.Grabbed)
+                .IsRequired();
+            entity.Property(row => row.Title).HasColumnName("title").HasMaxLength(1024).IsRequired();
+            entity.Property(row => row.ReleaseTitle).HasColumnName("release_title").HasMaxLength(2048);
+            entity.Property(row => row.IndexerName).HasColumnName("indexer_name").HasMaxLength(256);
+            entity.Property(row => row.DownloadClientName).HasColumnName("download_client_name").HasMaxLength(256);
+            entity.Property(row => row.QualityCode).HasColumnName("quality_code").HasMaxLength(64);
+            entity.Property(row => row.FormatScore).HasColumnName("format_score");
+            entity.Property(row => row.Message).HasColumnName("message").HasMaxLength(2048);
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.HasIndex(row => row.AcquisitionId);
+            entity.HasIndex(row => row.EntityId);
+            entity.HasIndex(row => row.CreatedAt).IsDescending();
+            // SetNull (not Cascade): the activity log must survive the hard delete of its acquisition —
+            // the whole point of a durable history is that a grabbed/failed record outlives the item.
+            entity.HasOne<AcquisitionRow>().WithMany().HasForeignKey(row => row.AcquisitionId).OnDelete(DeleteBehavior.SetNull);
+        });
+
         modelBuilder.Entity<MonitorRow>(entity => {
             entity.ToTable("monitors");
             entity.HasKey(row => row.Id);

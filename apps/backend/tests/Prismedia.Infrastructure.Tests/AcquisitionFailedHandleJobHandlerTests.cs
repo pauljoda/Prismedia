@@ -108,6 +108,32 @@ public sealed class AcquisitionFailedHandleJobHandlerTests {
     }
 
     [Fact]
+    public async Task RecordsDownloadFailedAndBlocklistedHistoryEvents() {
+        await using var db = CreateContext();
+        var (acquisitionId, candidateA, _) = await SeedTwoCandidatesAsync(db, autoRedownload: false);
+
+        await RunAsync(db, new RecordingQueueService(), acquisitionId, Selected(candidateA));
+
+        var events = await new EfAcquisitionHistoryStore(db).ListAsync(200, entityId: null, CancellationToken.None);
+        // A failed download with a snapshot records BOTH the failure and the resulting blocklist.
+        Assert.Contains(events, e => e.Event == AcquisitionHistoryEvent.DownloadFailed && e.AcquisitionId == acquisitionId);
+        Assert.Contains(events, e => e.Event == AcquisitionHistoryEvent.Blocklisted && e.ReleaseTitle == candidateA.Title);
+    }
+
+    [Fact]
+    public async Task NoSelectedReleaseStillRecordsDownloadFailedButNotBlocklisted() {
+        await using var db = CreateContext();
+        var (acquisitionId, _, _) = await SeedTwoCandidatesAsync(db, autoRedownload: true);
+
+        // A manually-uploaded torrent has no snapshot: the failure is still logged, but nothing is blocklisted.
+        await RunAsync(db, new RecordingQueueService(), acquisitionId, selected: null);
+
+        var events = await new EfAcquisitionHistoryStore(db).ListAsync(200, entityId: null, CancellationToken.None);
+        Assert.Contains(events, e => e.Event == AcquisitionHistoryEvent.DownloadFailed);
+        Assert.DoesNotContain(events, e => e.Event == AcquisitionHistoryEvent.Blocklisted);
+    }
+
+    [Fact]
     public async Task ListAcceptedCandidatesReturnsAcceptedOnlyBestFirst() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;
@@ -120,7 +146,7 @@ public sealed class AcquisitionFailedHandleJobHandlerTests {
             Candidate(acquisitionId, "rejected", accepted: false, score: 999));
         await db.SaveChangesAsync();
 
-        var accepted = await new EfAcquisitionStore(db).ListAcceptedCandidatesAsync(acquisitionId, CancellationToken.None);
+        var accepted = await AcquisitionTestFactory.Store(db).ListAcceptedCandidatesAsync(acquisitionId, CancellationToken.None);
 
         Assert.Equal(["high", "mid", "low"], accepted.Select(candidate => candidate.Title));
     }
@@ -133,10 +159,11 @@ public sealed class AcquisitionFailedHandleJobHandlerTests {
 
     private static async Task RunAsync(PrismediaDbContext db, IAcquisitionQueueService queue, Guid acquisitionId, SelectedRelease? selected) {
         var handler = new AcquisitionFailedHandleJobHandler(
-            new EfAcquisitionStore(db),
+            AcquisitionTestFactory.Store(db),
             new EfAcquisitionBlocklistStore(db),
             new EfBookAcquisitionProfileStore(db),
             queue,
+            new EfAcquisitionHistoryStore(db),
             NullLogger<AcquisitionFailedHandleJobHandler>.Instance);
         await handler.HandleAsync(new JobContext(Job(acquisitionId, selected), new ThrowingJobQueue()), CancellationToken.None);
     }

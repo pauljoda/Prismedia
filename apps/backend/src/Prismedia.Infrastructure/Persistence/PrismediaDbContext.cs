@@ -144,6 +144,8 @@ public sealed class PrismediaDbContext : DbContext {
 
     public DbSet<AcquisitionBlocklistRow> AcquisitionBlocklist => Set<AcquisitionBlocklistRow>();
 
+    public DbSet<AcquisitionHistoryRow> AcquisitionHistory => Set<AcquisitionHistoryRow>();
+
     public DbSet<WantedSuppressionRow> WantedSuppressions => Set<WantedSuppressionRow>();
 
     public DbSet<MonitorRow> Monitors => Set<MonitorRow>();

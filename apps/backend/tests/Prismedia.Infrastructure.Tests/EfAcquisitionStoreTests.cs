@@ -14,7 +14,7 @@ public sealed class EfAcquisitionStoreTests {
         var acquisitionId = Guid.NewGuid();
         AddCandidate(db, acquisitionId, infoHash: "hash", indexer: "Indexer", title: "Some Book (epub)", score: 100);
         await db.SaveChangesAsync();
-        var store = new EfAcquisitionStore(db);
+        var store = AcquisitionTestFactory.Store(db);
 
         await store.MarkCandidatesBlocklistedAsync(acquisitionId, ReleaseIdentity.For("hash", "Indexer", "Some Book (epub)"), CancellationToken.None);
 
@@ -33,7 +33,7 @@ public sealed class EfAcquisitionStoreTests {
         AddCandidate(db, acquisitionId, infoHash: "dup", indexer: "Indexer B", title: "Some Book B", score: 50);
         AddCandidate(db, acquisitionId, infoHash: "other", indexer: "Indexer C", title: "Different Book", score: 10);
         await db.SaveChangesAsync();
-        var store = new EfAcquisitionStore(db);
+        var store = AcquisitionTestFactory.Store(db);
 
         // Identity is info-hash-first and case-insensitive, so "DUP"/"dup" collapse to the same identity.
         await store.MarkCandidatesBlocklistedAsync(acquisitionId, ReleaseIdentity.For("dup", null, null), CancellationToken.None);
@@ -49,7 +49,7 @@ public sealed class EfAcquisitionStoreTests {
         var acquisitionId = Guid.NewGuid();
         AddCandidate(db, acquisitionId, infoHash: null, indexer: "Indexer", title: "Some Book", score: 1);
         await db.SaveChangesAsync();
-        var store = new EfAcquisitionStore(db);
+        var store = AcquisitionTestFactory.Store(db);
         var identity = ReleaseIdentity.For(null, "Indexer", "Some Book");
 
         await store.MarkCandidatesBlocklistedAsync(acquisitionId, identity, CancellationToken.None);
@@ -66,7 +66,7 @@ public sealed class EfAcquisitionStoreTests {
         var id = Guid.NewGuid();
         db.Acquisitions.Add(new AcquisitionRow { Id = id, Status = AcquisitionStatus.Importing, Title = "B", ExternalIdsJson = "{}", SourceUrlsJson = "[]", CreatedAt = now, UpdatedAt = now });
         await db.SaveChangesAsync();
-        var store = new EfAcquisitionStore(db);
+        var store = AcquisitionTestFactory.Store(db);
 
         await store.MarkImportedWithQualityAsync(id, new BookQualityRank(BookSourceTier.Retail, BookFormatTier.Reflowable), "Imported.", CancellationToken.None);
 
@@ -87,7 +87,7 @@ public sealed class EfAcquisitionStoreTests {
             PosterUrl = null, Year = null, Description = null, CreatedAt = now, UpdatedAt = now
         });
         await db.SaveChangesAsync();
-        var store = new EfAcquisitionStore(db);
+        var store = AcquisitionTestFactory.Store(db);
 
         await store.EnrichMetadataAsync(id, "a provider description", "http://cover", 2024, CancellationToken.None);
         var row = await db.Acquisitions.AsNoTracking().FirstAsync(a => a.Id == id);

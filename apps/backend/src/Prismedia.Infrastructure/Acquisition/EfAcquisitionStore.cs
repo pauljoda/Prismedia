@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Prismedia.Application.Acquisition;
 using Prismedia.Contracts.Acquisition;
 using Prismedia.Domain.Entities;
@@ -9,7 +10,7 @@ using Prismedia.Infrastructure.Persistence.Entities;
 namespace Prismedia.Infrastructure.Acquisition;
 
 /// <summary>EF-backed store for acquisition records and their scored release candidates.</summary>
-public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStore {
+public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistoryStore history, ILogger<EfAcquisitionStore> logger) : IAcquisitionStore {
     public async Task<AcquisitionSummary> CreateAsync(AcquisitionMetadata metadata, CancellationToken cancellationToken) {
         var now = DateTimeOffset.UtcNow;
         var row = new AcquisitionRow {
@@ -249,6 +250,25 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db) : IAcquisitionStor
         row.UpgradeQualityCaptured = true;
         row.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
+
+        // Durable Imported event: the single choke point for all four import engines. Record the quality in
+        // the kind's vocabulary (the media ladder code for movies/TV/music, the source/format rank for books)
+        // and the release that landed. Best-effort — a history hiccup must never fail the import.
+        var selectedTitle = row.SelectedReleaseJson is { Length: > 0 } json
+            ? JsonSerializer.Deserialize<SelectedRelease>(json)?.Title
+            : null;
+        var qualityCode = ownedMediaQuality ?? $"{ownedQuality.Source.ToCode()}/{ownedQuality.Format.ToCode()}";
+        await history.SafeAddAsync(logger, new AcquisitionHistoryEntry(
+            row.Id,
+            row.EntityId,
+            row.Kind,
+            AcquisitionHistoryEvent.Imported,
+            row.Title,
+            selectedTitle,
+            QualityCode: qualityCode,
+            FormatScore: ownedFormatScore,
+            Message: message),
+            cancellationToken);
     }
 
     public async Task ReplaceCandidatesAsync(Guid id, IReadOnlyList<ScoredRelease> candidates, CancellationToken cancellationToken) {

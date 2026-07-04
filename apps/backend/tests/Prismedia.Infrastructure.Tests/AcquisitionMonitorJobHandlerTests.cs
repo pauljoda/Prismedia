@@ -156,7 +156,7 @@ public sealed class AcquisitionMonitorJobHandlerTests {
     private static async Task RunAsync(
         PrismediaDbContext db, RecordingJobQueue queue, IReadOnlyList<DownloadItemStatus> listing, DownloadItemStatus? directLookup, Guid acquisitionId) {
         var handler = new AcquisitionMonitorJobHandler(
-            new EfAcquisitionStore(db),
+            AcquisitionTestFactory.Store(db),
             new FakeDownloadClientConfigStore(),
             new FakeDownloadClientFactory(new FakeDownloadClient(listing, directLookup)),
             new RemotePathMapper(new NoRemotePathMappings()),
@@ -178,7 +178,7 @@ public sealed class AcquisitionMonitorJobHandlerTests {
             ClientItemId = "hashX", Progress = 0.5, StalledSince = stalledSince, CreatedAt = lastSeen, UpdatedAt = lastSeen
         });
         await db.SaveChangesAsync();
-        await new EfAcquisitionStore(db).SetSelectedReleaseAsync(
+        await AcquisitionTestFactory.Store(db).SetSelectedReleaseAsync(
             acquisitionId, new SelectedRelease("Book (epub)", "Indexer", "hashX"), CancellationToken.None);
         return acquisitionId;
     }

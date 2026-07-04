@@ -1,11 +1,14 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { Compass, Inbox, Loader2, Search, Send, Settings } from "@lucide/svelte";
+  import { Compass, History, Inbox, Loader2, Search, Send, Settings } from "@lucide/svelte";
   import { Button, Select, TextInput, cn } from "@prismedia/ui-svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import type { RequestMediaKindCode } from "$lib/api/generated/codes";
+  import type { AcquisitionHistoryView } from "$lib/api/generated/model";
+  import { fetchAcquisitionHistory } from "$lib/api/acquisitions";
   import { searchRequests } from "$lib/api/requests";
+  import AcquisitionHistoryList from "$lib/components/acquisitions/AcquisitionHistoryList.svelte";
   import RequestsReview from "$lib/components/requests/RequestsReview.svelte";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
   import { usePageSnapshots } from "$lib/stores/page-snapshots.svelte";
@@ -39,8 +42,34 @@
   const tabs = [
     { id: "discover", label: "Discover", icon: Compass },
     { id: "requests", label: "Requests", icon: Inbox },
+    { id: "history", label: "History", icon: History },
   ] as const;
-  let activeTab = $state<"discover" | "requests">("discover");
+  type RequestTab = (typeof tabs)[number]["id"];
+  let activeTab = $state<RequestTab>("discover");
+
+  // Durable acquisition activity log (global, newest-first), loaded lazily when the History tab opens.
+  let history = $state<AcquisitionHistoryView[]>([]);
+  let historyLoading = $state(false);
+  let historyError = $state<string | null>(null);
+  let historyLoaded = false;
+
+  async function loadHistory() {
+    if (historyLoaded) return;
+    historyLoading = true;
+    historyError = null;
+    try {
+      history = await fetchAcquisitionHistory({ limit: 200 });
+      historyLoaded = true;
+    } catch (err) {
+      historyError = err instanceof Error ? err.message : "Failed to load history";
+    } finally {
+      historyLoading = false;
+    }
+  }
+
+  $effect(() => {
+    if (activeTab === "history") void loadHistory();
+  });
 
   let query = $state("");
   let selectedKind = $state<RequestMediaKindCode | "all">("all");
@@ -74,7 +103,7 @@
   // rather than resetting to Discover. (Discover's search state already restores from the URL.)
   const pageSnapshots = usePageSnapshots();
   onMount(() =>
-    pageSnapshots.registerSurface<{ tab: "discover" | "requests" }>("request-view", {
+    pageSnapshots.registerSurface<{ tab: RequestTab }>("request-view", {
       capture: () => ({ tab: activeTab }),
       restore: (snapshot) => {
         activeTab = snapshot.tab;
@@ -212,6 +241,27 @@
 
   {#if activeTab === "requests"}
     <RequestsReview />
+  {:else if activeTab === "history"}
+    <!-- ── Activity log (global, newest-first) ── -->
+    {#if historyError}
+      <div class="surface-panel border-l-2 border-error px-4 py-2.5 text-sm text-error-text">
+        {historyError}
+      </div>
+    {/if}
+    {#if history.length > 0}
+      <AcquisitionHistoryList entries={history} showKind />
+    {:else if historyLoading}
+      <div class="flex items-center justify-center gap-2.5 p-10 text-text-muted">
+        <Loader2 class="h-4 w-4 animate-spin" />
+        <span class="text-sm">Loading history…</span>
+      </div>
+    {:else}
+      <div class="empty-rack-slot p-8 text-center">
+        <p class="text-sm text-text-muted">
+          No acquisition activity yet. Grabs, imports, failures, and removals will appear here.
+        </p>
+      </div>
+    {/if}
   {:else}
     <!-- ── Search ── -->
     <form

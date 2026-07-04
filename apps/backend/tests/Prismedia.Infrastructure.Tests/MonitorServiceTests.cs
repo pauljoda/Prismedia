@@ -12,7 +12,7 @@ public sealed class MonitorServiceTests {
     [Fact]
     public async Task StartReturnsNullWhenAcquisitionDoesNotExist() {
         await using var db = CreateContext();
-        var service = new MonitorService(new EfMonitorStore(db), new EfAcquisitionStore(db), new Prismedia.Infrastructure.Requests.WantedEntityWriter(db, new Prismedia.Infrastructure.Plugins.EntityMetadataApplyService(db, new Prismedia.Infrastructure.Plugins.PluginArtworkServiceOptions(Path.GetTempPath()))));
+        var service = new MonitorService(new EfMonitorStore(db), AcquisitionTestFactory.Store(db), new Prismedia.Infrastructure.Requests.WantedEntityWriter(db, new Prismedia.Infrastructure.Plugins.EntityMetadataApplyService(db, new Prismedia.Infrastructure.Plugins.PluginArtworkServiceOptions(Path.GetTempPath()))));
 
         Assert.Null(await service.StartAsync(Guid.NewGuid(), CancellationToken.None));
     }
@@ -22,7 +22,7 @@ public sealed class MonitorServiceTests {
         await using var db = CreateContext();
         var acquisitionId = SeedAcquisition(db, "The Anxious Generation", "Jonathan Haidt");
         await db.SaveChangesAsync();
-        var service = new MonitorService(new EfMonitorStore(db), new EfAcquisitionStore(db), new Prismedia.Infrastructure.Requests.WantedEntityWriter(db, new Prismedia.Infrastructure.Plugins.EntityMetadataApplyService(db, new Prismedia.Infrastructure.Plugins.PluginArtworkServiceOptions(Path.GetTempPath()))));
+        var service = new MonitorService(new EfMonitorStore(db), AcquisitionTestFactory.Store(db), new Prismedia.Infrastructure.Requests.WantedEntityWriter(db, new Prismedia.Infrastructure.Plugins.EntityMetadataApplyService(db, new Prismedia.Infrastructure.Plugins.PluginArtworkServiceOptions(Path.GetTempPath()))));
 
         var first = await service.StartAsync(acquisitionId, CancellationToken.None);
         var second = await service.StartAsync(acquisitionId, CancellationToken.None);
@@ -38,7 +38,7 @@ public sealed class MonitorServiceTests {
     [Fact]
     public async Task PauseResumeStopReturnFalseForUnknownMonitor() {
         await using var db = CreateContext();
-        var service = new MonitorService(new EfMonitorStore(db), new EfAcquisitionStore(db), new Prismedia.Infrastructure.Requests.WantedEntityWriter(db, new Prismedia.Infrastructure.Plugins.EntityMetadataApplyService(db, new Prismedia.Infrastructure.Plugins.PluginArtworkServiceOptions(Path.GetTempPath()))));
+        var service = new MonitorService(new EfMonitorStore(db), AcquisitionTestFactory.Store(db), new Prismedia.Infrastructure.Requests.WantedEntityWriter(db, new Prismedia.Infrastructure.Plugins.EntityMetadataApplyService(db, new Prismedia.Infrastructure.Plugins.PluginArtworkServiceOptions(Path.GetTempPath()))));
         var unknown = Guid.NewGuid();
 
         Assert.False(await service.PauseAsync(unknown, CancellationToken.None));
@@ -51,7 +51,7 @@ public sealed class MonitorServiceTests {
         await using var db = CreateContext();
         var acquisitionId = SeedAcquisition(db, "Book", null);
         await db.SaveChangesAsync();
-        var service = new MonitorService(new EfMonitorStore(db), new EfAcquisitionStore(db), new Prismedia.Infrastructure.Requests.WantedEntityWriter(db, new Prismedia.Infrastructure.Plugins.EntityMetadataApplyService(db, new Prismedia.Infrastructure.Plugins.PluginArtworkServiceOptions(Path.GetTempPath()))));
+        var service = new MonitorService(new EfMonitorStore(db), AcquisitionTestFactory.Store(db), new Prismedia.Infrastructure.Requests.WantedEntityWriter(db, new Prismedia.Infrastructure.Plugins.EntityMetadataApplyService(db, new Prismedia.Infrastructure.Plugins.PluginArtworkServiceOptions(Path.GetTempPath()))));
         var monitor = await service.StartAsync(acquisitionId, CancellationToken.None);
 
         Assert.True(await service.PauseAsync(monitor!.Id, CancellationToken.None));

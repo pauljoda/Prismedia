@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Prismedia.Application.Jobs;
 using Prismedia.Contracts.Acquisition;
 using Prismedia.Contracts.System;
@@ -35,6 +36,8 @@ public sealed class AcquisitionService(
     IDownloadClientConfigStore downloadClients,
     IDownloadClientFactory clients,
     IImportedFilesReader importedFiles,
+    IAcquisitionHistoryStore history,
+    ILogger<AcquisitionService> logger,
     Requests.IWantedEntityWriter wantedEntities) : IAcquisitionRequestService {
     public Task<IReadOnlyList<AcquisitionSummary>> ListAsync(CancellationToken cancellationToken) =>
         store.ListAsync(cancellationToken);
@@ -139,6 +142,7 @@ public sealed class AcquisitionService(
         }
 
         await store.SetStatusAsync(id, AcquisitionStatus.Cancelled, "Cancelled.", cancellationToken);
+        await RecordRemovedAsync(detail.Summary, "Cancelled by user.", cancellationToken);
 
         // Cancelling a request removes the wanted placeholder it created (locked decision: cancel deletes).
         // A no-op when the entity already imported a file or the user deleted it from the library first.
@@ -154,7 +158,15 @@ public sealed class AcquisitionService(
     /// hard-deletes the record — and, like cancel, removes the wanted placeholder entity it created.
     /// </summary>
     public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken) {
-        var wantedEntityId = (await store.GetAsync(id, cancellationToken))?.Summary.EntityId;
+        var summary = (await store.GetAsync(id, cancellationToken))?.Summary;
+        var wantedEntityId = summary?.EntityId;
+        // Record the Removed event BEFORE the hard delete so the entry still carries a live acquisition id;
+        // the acquisition_history FK is SetNull, so once the row is deleted the entry's acquisition id nulls
+        // out but the entry (and its denormalized title/kind/entity) survives — the durable audit trail.
+        if (summary is not null) {
+            await RecordRemovedAsync(summary, "Removed by user.", cancellationToken);
+        }
+
         var clientItemId = await store.GetTransferClientItemIdAsync(id, cancellationToken);
         if (!string.IsNullOrWhiteSpace(clientItemId)) {
             var client = await downloadClients.GetDefaultAsync(cancellationToken);
@@ -272,4 +284,22 @@ public sealed class AcquisitionService(
     /// <inheritdoc />
     public Task<IReadOnlyList<Guid>> ListIdsForEntityAsync(Guid entityId, CancellationToken cancellationToken) =>
         store.ListIdsForEntityAsync(entityId, cancellationToken);
+
+    /// <summary>
+    /// The durable acquisition activity log, newest-first. <paramref name="limit"/> is clamped by the store
+    /// (default 200, max 500); <paramref name="entityId"/> optionally restricts it to one entity's events.
+    /// </summary>
+    public Task<IReadOnlyList<AcquisitionHistoryView>> ListHistoryAsync(int limit, Guid? entityId, CancellationToken cancellationToken) =>
+        history.ListAsync(limit, entityId, cancellationToken);
+
+    /// <summary>Records a durable Removed event for an acquisition being cancelled or deleted. Best-effort.</summary>
+    private Task RecordRemovedAsync(AcquisitionSummary summary, string message, CancellationToken cancellationToken) =>
+        history.SafeAddAsync(logger, new AcquisitionHistoryEntry(
+            summary.Id,
+            summary.EntityId,
+            summary.Kind,
+            AcquisitionHistoryEvent.Removed,
+            summary.Title,
+            Message: message),
+            cancellationToken);
 }

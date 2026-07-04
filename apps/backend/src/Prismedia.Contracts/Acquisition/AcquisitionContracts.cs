@@ -333,6 +333,26 @@ public sealed record MonitorCreateRequest(Guid AcquisitionId);
 /// </summary>
 public sealed record EntityMonitorCreateRequest(Guid EntityId);
 
+/// <summary>
+/// One entry in the durable acquisition activity log, surfaced newest-first for the history surface.
+/// Outlives its acquisition: <see cref="AcquisitionId"/> is null once the acquisition has been removed,
+/// but the denormalized title/kind/entity and release context keep the entry meaningful.
+/// </summary>
+public sealed record AcquisitionHistoryView(
+    Guid Id,
+    Guid? AcquisitionId,
+    Guid? EntityId,
+    EntityKind Kind,
+    AcquisitionHistoryEvent Event,
+    string Title,
+    string? ReleaseTitle,
+    string? IndexerName,
+    string? DownloadClientName,
+    string? QualityCode,
+    int? FormatScore,
+    string? Message,
+    DateTimeOffset CreatedAt);
+
 /// <summary>A blocklisted release identity, surfaced for the blocklist management surface.</summary>
 public sealed record AcquisitionBlocklistEntry(
     Guid Id,

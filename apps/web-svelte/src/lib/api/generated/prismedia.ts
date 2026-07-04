@@ -9,6 +9,7 @@ import type {
   AcquisitionCreateRequest,
   AcquisitionDetail,
   AcquisitionFilesView,
+  AcquisitionHistoryView,
   AcquisitionQueueRequest,
   AcquisitionSummary,
   AcquisitionTransferView,
@@ -165,6 +166,7 @@ import type {
   LibraryRoot,
   LibraryRootCreateRequest,
   LibraryRootUpdateRequest,
+  ListAcquisitionHistoryParams,
   ListAudioLibrariesParams,
   ListAudioTracksParams,
   ListBookAuthorsParams,
@@ -12297,6 +12299,49 @@ export const deleteCustomFormat = async (id: string, options?: RequestInit): Pro
   {
     ...options,
     method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type listAcquisitionHistoryResponse200 = {
+  data: AcquisitionHistoryView[]
+  status: 200
+}
+
+export type listAcquisitionHistoryResponseSuccess = (listAcquisitionHistoryResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listAcquisitionHistoryResponse = (listAcquisitionHistoryResponseSuccess)
+
+export const getListAcquisitionHistoryUrl = (params?: ListAcquisitionHistoryParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/acquisitions/history?${stringifiedParams}` : `/api/acquisitions/history`
+}
+
+/**
+ * @summary Lists the durable acquisition activity log (grabbed/imported/failed/removed), newest first; optionally filtered to one entity.
+ */
+export const listAcquisitionHistory = async (params?: ListAcquisitionHistoryParams, options?: RequestInit): Promise<listAcquisitionHistoryResponse> => {
+
+  return orvalFetch<listAcquisitionHistoryResponse>(getListAcquisitionHistoryUrl(params),
+  {
+    ...options,
+    method: 'GET'
 
 
   }

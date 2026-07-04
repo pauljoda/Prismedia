@@ -56,7 +56,7 @@ public sealed class AcquisitionEnrichJobHandlerTests {
     }
 
     private static async Task RunAsync(PrismediaDbContext db, FakeEnricher enricher, Guid id) {
-        var handler = new AcquisitionEnrichJobHandler(new EfAcquisitionStore(db), enricher, NullLogger<AcquisitionEnrichJobHandler>.Instance);
+        var handler = new AcquisitionEnrichJobHandler(AcquisitionTestFactory.Store(db), enricher, NullLogger<AcquisitionEnrichJobHandler>.Instance);
         var job = new JobRunSnapshot(
             Guid.NewGuid(), JobType.AcquisitionEnrich, JobRunStatus.Running, 0, null,
             AcquisitionJobPayload.Serialize(id), null, null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null);

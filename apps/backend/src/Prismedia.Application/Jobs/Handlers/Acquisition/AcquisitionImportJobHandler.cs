@@ -16,6 +16,7 @@ public sealed class AcquisitionImportJobHandler(
     IAcquisitionStore acquisitions,
     IAcquisitionImportEngineFactory engines,
     IDownloadPayloadReader payloads,
+    IAcquisitionHistoryStore history,
     ILogger<AcquisitionImportJobHandler> logger) : IJobHandler {
     public JobType Type => JobType.AcquisitionImport;
 
@@ -33,11 +34,9 @@ public sealed class AcquisitionImportJobHandler(
             && payloads.Read(import.ContentPath) is { } downloadPayload
             && DangerousFileDetection.FindDangerousFile(downloadPayload.Files.Select(file => file.RelativePath)) is { } dangerous) {
             logger.LogWarning("AcquisitionImport: dangerous file {File} held for acquisition {Id}", dangerous, payload.AcquisitionId);
-            await acquisitions.SetStatusAsync(
-                payload.AcquisitionId,
-                AcquisitionStatus.ManualImportRequired,
-                $"The download contains a potentially dangerous file (\"{Path.GetFileName(dangerous)}\") and was not imported. Review it, or block this release and search again.",
-                cancellationToken);
+            var holdMessage = $"The download contains a potentially dangerous file (\"{Path.GetFileName(dangerous)}\") and was not imported. Review it, or block this release and search again.";
+            await acquisitions.SetStatusAsync(payload.AcquisitionId, AcquisitionStatus.ManualImportRequired, holdMessage, cancellationToken);
+            await RecordImportFailedAsync(import, holdMessage, cancellationToken);
             return;
         }
 
@@ -60,7 +59,19 @@ public sealed class AcquisitionImportJobHandler(
         } catch (Exception ex) {
             logger.LogWarning(ex, "AcquisitionImport: failed for acquisition {Id}", payload.AcquisitionId);
             await acquisitions.SetStatusAsync(payload.AcquisitionId, AcquisitionStatus.Failed, $"Import failed: {ex.Message}", CancellationToken.None);
+            await RecordImportFailedAsync(import, $"Import failed: {ex.Message}", CancellationToken.None);
             throw;
         }
     }
+
+    /// <summary>Records a durable ImportFailed event (a manual-import hold or an import exception) against the acquisition. Best-effort.</summary>
+    private Task RecordImportFailedAsync(AcquisitionImportContext import, string message, CancellationToken cancellationToken) =>
+        history.SafeAddAsync(logger, new AcquisitionHistoryEntry(
+            import.Id,
+            EntityId: null,
+            import.Kind,
+            AcquisitionHistoryEvent.ImportFailed,
+            import.Title,
+            Message: message),
+            cancellationToken);
 }

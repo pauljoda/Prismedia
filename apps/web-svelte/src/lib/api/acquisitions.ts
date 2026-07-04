@@ -18,6 +18,7 @@ import {
   getAcquisitionFiles,
   getAcquisitionForEntity,
   getAcquisitionTransfer,
+  listAcquisitionHistory,
   listAcquisitionProfiles,
   listAcquisitions,
   listDownloadClients,
@@ -43,6 +44,7 @@ import type {
   AcquisitionCreateRequest,
   AcquisitionDetail,
   AcquisitionFilesView,
+  AcquisitionHistoryView,
   AcquisitionSummary,
   AcquisitionTransferView,
   BookAcquisitionProfileSaveRequest,
@@ -162,6 +164,20 @@ export async function fetchAcquisitionFiles(id: string): Promise<AcquisitionFile
 export async function uploadManualTorrent(id: string, file: File): Promise<AcquisitionDetail> {
   const body = { file } as unknown as UploadAcquisitionTorrentBody;
   return unwrapGenerated(await uploadAcquisitionTorrent(id, body), "Failed to upload torrent");
+}
+
+// ── History (durable activity log) ────────────────────────────
+/**
+ * The durable acquisition activity log (grabbed/imported/failed/removed), newest-first. Survives the
+ * acquisitions it describes. Pass `entityId` to scope it to one library entity's events.
+ */
+export async function fetchAcquisitionHistory(
+  options: { limit?: number; entityId?: string } = {},
+): Promise<AcquisitionHistoryView[]> {
+  return unwrapGenerated(
+    await listAcquisitionHistory({ limit: options.limit, entityId: options.entityId }),
+    "Failed to load acquisition history",
+  );
 }
 
 // ── Blocklist ─────────────────────────────────────────────────
