@@ -11,6 +11,7 @@
   import { Select } from "@prismedia/ui-svelte";
   import { fetchAcquisitionProfiles } from "$lib/api/acquisitions";
   import { fetchLibraryRoots, type LibraryRoot } from "$lib/api/settings";
+  import { ENTITY_KIND } from "$lib/api/generated/codes";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import type { BookAcquisitionProfileView } from "$lib/api/generated/model";
   import type { RequestKindInfo } from "$lib/requests/request-helpers";
@@ -41,9 +42,19 @@
         (nsfw.mode === "show" || !root.isNsfw),
     ),
   );
-  /** Profiles are named by what they govern (a "music" profile covers an artist's album requests). */
+  /**
+   * Profiles are named by what they govern (a "music" profile covers an artist's album requests).
+   * Keyed on the profile kind, not the root flag — movies and TV share the video root but have
+   * separate profiles, so a series must read "TV", not "movie".
+   */
   const profileNoun = $derived(
-    kindInfo.rootFlag === "scanVideos" ? "movie" : kindInfo.rootFlag === "scanAudio" ? "music" : "book",
+    kindInfo.profileKind === ENTITY_KIND.movie
+      ? "movie"
+      : kindInfo.profileKind === ENTITY_KIND.videoSeries
+        ? "TV"
+        : kindInfo.profileKind === ENTITY_KIND.audioLibrary
+          ? "music"
+          : "book",
   );
   const kindProfiles = $derived(profiles.filter((profile) => profile.kind === kindInfo.profileKind));
   const rootOptions = $derived(suitableRoots.map((root) => ({ value: root.id, label: root.label || root.path })));
