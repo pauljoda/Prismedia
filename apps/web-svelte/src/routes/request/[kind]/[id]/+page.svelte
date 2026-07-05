@@ -1,8 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state";
   import { BookOpen, ChevronLeft, ListMusic, Loader2, Send } from "@lucide/svelte";
-  import { Button, Select, dur, ease, flyUp } from "@prismedia/ui-svelte";
-  import { fade } from "svelte/transition";
+  import { Button, Select } from "@prismedia/ui-svelte";
   import { goto } from "$app/navigation";
   import { commitRequest, fetchRequestDetail } from "$lib/api/requests";
   import { REQUEST_COMMIT_OUTCOME } from "$lib/api/generated/codes";
@@ -30,7 +29,7 @@
   } from "$lib/requests/review-cards";
   import { formatDurationString } from "$lib/utils/format";
   import { inferRequestSourceForKind, requestKindInfo } from "$lib/requests/request-helpers";
-  import type { RequestChildOption, RequestDetailResponse } from "$lib/requests/request-model";
+  import type { RequestDetailResponse } from "$lib/requests/request-model";
 
   const params = $derived(page.params as { kind: RequestMediaKindCode; id: string });
   const sourceQuery = $derived(page.url.searchParams.get("source") as RequestProviderKindCode | null);
@@ -45,8 +44,6 @@
   let loading = $state(true);
   let submitting = $state(false);
   let error = $state<string | null>(null);
-  /** The child whose info preview popup is open (body-click on a card), null when closed. */
-  let infoChild = $state<RequestChildOption | null>(null);
 
   const requestCard = $derived(detail ? requestDetailToEntityCard(detail) : null);
   // Per-kind flow hints from the shared kind catalog: containers (author, artist) select children and
@@ -136,7 +133,6 @@
     chosenPreset = DEFAULT_MONITOR_PRESET;
     targetLibraryRootId = null;
     profileId = null;
-    infoChild = null;
     try {
       const resolvedSource = sourceQuery ?? inferRequestSourceForKind(params.kind);
       if (!resolvedSource) {
@@ -213,9 +209,6 @@
     }
   }
 
-  function openInfo(cardId: string) {
-    infoChild = children.find((child) => child.id === cardId) ?? null;
-  }
 </script>
 
 <svelte:head><title>{detail?.title ?? "Request"} · Prismedia</title></svelte:head>
@@ -298,13 +291,12 @@
 
             <SelectableCardSection
               panelId="request-works"
-              title={childNoun === "album" ? "Albums" : childNoun === "book" ? "Books" : "Volumes"}
+              title={`${childNoun.charAt(0).toUpperCase()}${childNoun.slice(1)}s`}
               cards={childCards}
               selectedIds={selectedChildIds}
               selectableIds={selectableChildIds}
               onToggle={toggleChild}
               onToggleAll={toggleAll}
-              onActivate={(card) => openInfo(card.entity.id)}
             >
               {#snippet icon()}<BookOpen class="h-3.5 w-3.5 text-text-accent" />{/snippet}
             </SelectableCardSection>
@@ -373,56 +365,3 @@
     </EntityDetail>
   {/if}
 </div>
-
-<!-- ── Book info preview (opened by clicking a work card; selection is preserved underneath) ── -->
-{#if infoChild}
-  {@const child = infoChild}
-  {@const selected = selectedChildIds.includes(child.id)}
-  <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
-    <button
-      type="button"
-      class="absolute inset-0 bg-black/80 backdrop-blur-sm"
-      aria-label="Close preview"
-      onclick={() => (infoChild = null)}
-      transition:fade={{ duration: dur.normal, easing: ease.enter }}
-    ></button>
-
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={child.title}
-      class="relative z-10 flex w-full max-w-lg gap-4 surface-elevated p-5"
-      transition:flyUp
-    >
-      {#if child.posterUrl}
-        <img
-          src={child.posterUrl}
-          alt={child.title}
-          referrerpolicy="no-referrer"
-          class="h-44 w-28 shrink-0 rounded-sm border border-border-subtle object-cover"
-        />
-      {/if}
-      <div class="flex min-w-0 flex-1 flex-col">
-        <h2 class="font-heading text-base font-semibold text-text-primary">{child.title}</h2>
-        {#if child.year}<span class="mt-0.5 font-mono text-[0.7rem] text-text-muted">{child.year}</span>{/if}
-        {#if child.overview}
-          <p class="mt-2 max-h-40 overflow-y-auto text-[0.78rem] leading-relaxed text-text-secondary">
-            {child.overview}
-          </p>
-        {/if}
-        <div class="mt-auto flex justify-end gap-2 pt-3">
-          <Button type="button" variant="ghost" onclick={() => (infoChild = null)}>Close</Button>
-          {#if child.requestable}
-            <Button
-              type="button"
-              variant={selected ? "secondary" : "primary"}
-              onclick={() => toggleChild(child.id, !selected)}
-            >
-              {selected ? "Deselect" : "Select"}
-            </Button>
-          {/if}
-        </div>
-      </div>
-    </div>
-  </div>
-{/if}
