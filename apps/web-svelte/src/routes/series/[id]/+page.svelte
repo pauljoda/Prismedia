@@ -270,6 +270,7 @@
     <EntityAcquisitionCard
       entityId={series?.id}
       capabilities={series?.capabilities}
+      childCards={seasonCards}
       onChanged={() => void loadSeries()}
     />
 

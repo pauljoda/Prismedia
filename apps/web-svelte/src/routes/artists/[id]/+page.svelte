@@ -250,6 +250,7 @@
     <EntityAcquisitionCard
       entityId={artist?.id}
       capabilities={artist?.capabilities}
+      childCards={albumCards}
       onChanged={() => void loadArtist()}
     />
 

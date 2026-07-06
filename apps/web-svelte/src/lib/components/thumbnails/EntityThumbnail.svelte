@@ -1,31 +1,26 @@
 <script lang="ts">
-  import { ACQUISITION_STATUS, THUMBNAIL_HOVER_KIND } from "$lib/api/generated/codes";
-  import { onDestroy, type Component, type Snippet } from "svelte";
+  import { THUMBNAIL_HOVER_KIND } from "$lib/api/generated/codes";
+  import { onDestroy, type Snippet } from "svelte";
   import {
     Album,
-    Bookmark,
     BookOpen,
     Building2,
     Calendar,
-    CircleAlert,
     Clock3,
-    CloudDownload,
     Disc3,
     Film,
     Flame,
     FolderOpen,
     Hash,
-    Hourglass,
     Image,
     Images,
     Layers,
     Music,
-    Search,
     Star,
     Tag,
-    TriangleAlert,
     Users,
   } from "@lucide/svelte";
+  import { acquisitionStatusDisplay } from "$lib/requests/acquisition-status-display";
   import { getRatingValue, isNsfw, isWanted } from "$lib/api/capabilities";
   import OverflowTicker from "$lib/components/OverflowTicker.svelte";
   import {
@@ -308,7 +303,7 @@
   const wanted = $derived(isWanted(card.entity.capabilities));
   // A wanted item's badge reflects what its acquisition is doing (icon + short label + tone), so its
   // state reads from the grid — falling back to a plain "Wanted" when no acquisition status is known.
-  const wantedDisplay = $derived.by(() => wantedStatusDisplay(card.wantedStatus));
+  const wantedDisplay = $derived(acquisitionStatusDisplay(card.wantedStatus));
   const rating = $derived(getRatingValue(card.entity.capabilities));
   const bottomLeft = $derived(card.custom?.bottomLeft);
   // Playback/reading progress meter percentage, only when there is something to show.
@@ -491,28 +486,6 @@
     return String(Math.round(value));
   }
 
-  /** Icon + short label + tone class for a wanted item's badge, derived from its acquisition status. */
-  function wantedStatusDisplay(status: string | null | undefined): { label: string; icon: Component; cls: string } {
-    switch (status) {
-      case ACQUISITION_STATUS.searching:
-      case ACQUISITION_STATUS.pending:
-        return { label: "Searching", icon: Search, cls: "wb-searching" };
-      case ACQUISITION_STATUS.awaitingSelection:
-        return { label: "Review", icon: Search, cls: "wb-attention" };
-      case ACQUISITION_STATUS.queued:
-        return { label: "Queued", icon: Hourglass, cls: "wb-queued" };
-      case ACQUISITION_STATUS.downloading:
-      case ACQUISITION_STATUS.downloaded:
-      case ACQUISITION_STATUS.importing:
-        return { label: "Downloading", icon: CloudDownload, cls: "wb-downloading" };
-      case ACQUISITION_STATUS.failed:
-        return { label: "Failed", icon: CircleAlert, cls: "wb-failed" };
-      case ACQUISITION_STATUS.manualImportRequired:
-        return { label: "Action", icon: TriangleAlert, cls: "wb-attention" };
-      default:
-        return { label: "Wanted", icon: Bookmark, cls: "wb-wanted" };
-    }
-  }
 
   // touchmove must be non-passive so preventDefault can cancel scrolling while scrubbing; Svelte's
   // inline handlers can register as passive, so attach the listeners explicitly.
@@ -680,7 +653,7 @@
       <div class="badges top-badges">
         {#if wanted && showWantedBadge}
           {@const WantedIcon = wantedDisplay.icon}
-          <span class={`badge wanted-badge ${wantedDisplay.cls}`} title={`Wanted — ${wantedDisplay.label}`} aria-label={`Wanted — ${wantedDisplay.label}`}>
+          <span class={`badge wanted-badge wb-${wantedDisplay.tone}`} title={`Wanted — ${wantedDisplay.label}`} aria-label={`Wanted — ${wantedDisplay.label}`}>
             <WantedIcon size={11} />
             <span class="wanted-label">{wantedDisplay.label}</span>
           </span>
@@ -1141,18 +1114,18 @@
     top: 0.45rem;
   }
 
-  .bottom-left-badges,
-  .bottom-right-badges {
-    bottom: 0.45rem;
-  }
-
+  /* Position / episode chip: pinned to the TOP-left corner so it balances the wanted/NSFW badges on
+     the top-right and reads evenly across a grid. (The selection checkbox shares this corner but only
+     appears on hover / in select mode, when it takes over.) */
   .bottom-left-badges {
-    right: auto;
+    top: 0.45rem;
     left: 0.45rem;
+    right: auto;
     justify-content: flex-start;
   }
 
   .bottom-right-badges {
+    bottom: 0.45rem;
     right: 0.45rem;
     left: auto;
     justify-content: flex-end;
@@ -1510,10 +1483,23 @@
      wins over the mobile @media badge sizing above for genuinely small thumbnails. */
   @container (max-width: 112px) {
     .badges {
+      gap: 0.18rem;
+    }
+
+    .top-badges {
       top: 0.3rem;
       left: 0.3rem;
       right: 0.3rem;
-      gap: 0.18rem;
+    }
+
+    .bottom-left-badges {
+      top: 0.3rem;
+      left: 0.3rem;
+    }
+
+    .bottom-right-badges {
+      bottom: 0.3rem;
+      right: 0.3rem;
     }
 
     .badge {

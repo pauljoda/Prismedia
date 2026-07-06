@@ -186,6 +186,7 @@
     <EntityAcquisitionCard
       entityId={author?.id}
       capabilities={author?.capabilities}
+      childCards={bookCards}
       onChanged={() => void loadAuthor()}
     />
 

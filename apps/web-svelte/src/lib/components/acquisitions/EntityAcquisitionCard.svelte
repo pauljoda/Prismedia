@@ -28,15 +28,25 @@
   } from "$lib/api/monitors";
   import { commitEntityRequest, syncContainerRequest } from "$lib/api/requests";
   import AcquisitionPanel from "$lib/components/acquisitions/AcquisitionPanel.svelte";
+  import { labelForEntityKind } from "$lib/entities/entity-codes";
+  import { resolveEntityThumbnailHref, type EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
+  import { acquisitionStatusDisplay } from "$lib/requests/acquisition-status-display";
 
   let {
     entityId,
     capabilities,
+    childCards,
     onChanged,
     onCancelled,
   }: {
     entityId: string | null | undefined;
     capabilities?: EntityCapability[];
+    /**
+     * The container's child thumbnails (seasons, books, albums). Any that are wanted/in-acquisition are
+     * rolled up as a per-child status list, so a series' season states read from the top level without
+     * opening each one. Owned children are ignored here (they show in the grid below).
+     */
+    childCards?: EntityThumbnailCard[];
     /** Called after a state change (request started, monitor toggled, sync run) so the page can reload. */
     onChanged?: () => void | Promise<void>;
     /**
@@ -45,6 +55,23 @@
      */
     onCancelled?: () => void;
   } = $props();
+
+  // Child status roll-up: the wanted/in-acquisition children, each mapped to a compact status row.
+  const childStatuses = $derived.by(() =>
+    (childCards ?? [])
+      .filter((card) => isWanted(card.entity.capabilities))
+      .map((card) => ({
+        id: card.entity.id,
+        title: card.entity.title,
+        kind: card.entity.kind,
+        href: resolveEntityThumbnailHref(card),
+        display: acquisitionStatusDisplay(card.wantedStatus),
+      })),
+  );
+  // The kind label is already plural (Seasons, Books, Audio Libraries), so it is used as-is.
+  const childKindLabel = $derived(
+    childStatuses.length > 0 ? labelForEntityKind(childStatuses[0].kind) : "",
+  );
 
   let acquisition = $state<AcquisitionDetail | null>(null);
   let monitor = $state<MonitorView | null>(null);
@@ -66,7 +93,9 @@
   const showSearch = $derived(
     wanted && acquisition === null && !!capabilities && !!firstProviderQualifiedId(capabilities),
   );
-  const visible = $derived(loadedId !== null && (showMonitor || showSearch || acquisition !== null));
+  const visible = $derived(
+    (loadedId !== null && (showMonitor || showSearch || acquisition !== null)) || childStatuses.length > 0,
+  );
 
   async function refresh(): Promise<void> {
     const id = entityId;
@@ -247,6 +276,27 @@
       </p>
     {/if}
 
+    {#if childStatuses.length > 0}
+      <div class="child-roll">
+        <h3 class="child-roll-title">{childKindLabel} in progress</h3>
+        <ul class="child-list">
+          {#each childStatuses as child (child.id)}
+            {@const Icon = child.display.icon}
+            <svelte:element
+              this={child.href ? "a" : "div"}
+              href={child.href}
+              role={child.href ? "link" : undefined}
+              class={`child-row tone-${child.display.tone}`}
+            >
+              <span class="child-status" aria-hidden="true"><Icon size={13} /></span>
+              <span class="child-title">{child.title}</span>
+              <span class="child-label">{child.display.label}</span>
+            </svelte:element>
+          {/each}
+        </ul>
+      </div>
+    {/if}
+
     {#if acquisition}
       <AcquisitionPanel acquisitionId={acquisition.summary.id} bind:detail={acquisition} {onCancelled} />
     {/if}
@@ -260,4 +310,76 @@
     padding: 1rem 1.1rem;
     min-width: 0;
   }
+
+  .child-roll {
+    display: grid;
+    gap: 0.4rem;
+  }
+  .child-roll-title {
+    font-size: 0.66rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-text-muted, rgb(196 201 212 / 0.6));
+  }
+  .child-list {
+    display: grid;
+    gap: 0.3rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .child-row {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.4rem 0.55rem;
+    border: 1px solid rgb(255 255 255 / 0.07);
+    border-radius: var(--radius-sm, 6px);
+    background: rgb(255 255 255 / 0.02);
+    text-decoration: none;
+    color: inherit;
+    transition: background 120ms ease, border-color 120ms ease;
+  }
+  a.child-row:hover {
+    background: rgb(255 255 255 / 0.05);
+    border-color: rgb(255 255 255 / 0.14);
+  }
+  .child-status {
+    display: grid;
+    place-items: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    flex: 0 0 auto;
+    border-radius: var(--radius-xs, 4px);
+  }
+  .child-title {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: rgb(244 239 230 / 0.92);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .child-label {
+    flex: 0 0 auto;
+    font-family: var(--font-mono, "JetBrains Mono", monospace);
+    font-size: 0.66rem;
+    font-weight: 600;
+  }
+  /* Tone the status glyph + label per state, matching the thumbnail badge vocabulary. */
+  .tone-downloading .child-status { color: #f2c26a; background: rgb(60 44 16 / 0.5); }
+  .tone-downloading .child-label { color: #f2c26a; }
+  .tone-searching .child-status { color: #e7d3af; background: rgb(48 40 22 / 0.5); }
+  .tone-searching .child-label { color: #e7d3af; }
+  .tone-queued .child-status { color: rgb(214 219 228 / 0.85); background: rgb(255 255 255 / 0.05); }
+  .tone-queued .child-label { color: rgb(214 219 228 / 0.85); }
+  .tone-attention .child-status { color: #f2c26a; background: rgb(58 38 12 / 0.5); }
+  .tone-attention .child-label { color: #f2c26a; }
+  .tone-failed .child-status { color: #ff9a86; background: rgb(48 18 14 / 0.5); }
+  .tone-failed .child-label { color: #ff9a86; }
+  .tone-wanted .child-status { color: rgb(242 194 106 / 0.9); background: rgb(39 29 12 / 0.6); }
+  .tone-wanted .child-label { color: rgb(242 194 106 / 0.9); }
 </style>
