@@ -76,6 +76,35 @@ public static partial class JellyfinCompatibilityEndpoints {
         return Results.Ok(result);
     }
 
+    private static async Task<IResult> GetPlaylistItemsAsync(
+        string playlistId,
+        HttpContext httpContext,
+        PrismediaSecurityService security,
+        JellyfinCatalogService catalog,
+        CancellationToken cancellationToken) {
+        if (TryGuid(playlistId) is not { } parsedPlaylistId) {
+            return Results.NotFound(new ApiProblem(ApiProblemCodes.JellyfinItemNotFound, $"Playlist '{playlistId}' was not found."));
+        }
+
+        var state = await security.EnsureSecurityAsync(cancellationToken);
+        var query = ItemQueryFrom(httpContext.Request) with {
+            ParentId = parsedPlaylistId,
+            // Real Jellyfin's /Playlists/{id}/Items endpoint does not accept IncludeItemTypes;
+            // clients such as Manet send IncludeItemTypes=PlaylistItem, which is not the Type of the
+            // returned audio rows. Ignore the query filter here and return the playlist's contents.
+            IncludeItemTypes = []
+        };
+        var result = await catalog.GetItemsAsync(
+            query,
+            state.ServerId.ToString("N"),
+            NsfwVisibility.JellyfinContent(httpContext),
+            cancellationToken);
+        var items = result.Items
+            .Select(item => item with { PlaylistItemId = item.PlaylistItemId ?? item.Id.ToString("N") })
+            .ToArray();
+        return Results.Ok(new JellyfinQueryResult<JellyfinBaseItemDto>(items, result.TotalRecordCount, result.StartIndex));
+    }
+
     private static async Task<IResult> GetItemAsync(
         Guid itemId,
         HttpContext httpContext,

@@ -33,6 +33,7 @@ internal static class JellyfinRoutes {
         "/Sessions",
         "/UserPlayedItems",
         "/UserItems",
+        "/Playlists",
         "/MediaSegments",
         LibraryPrefix,
         "/Branding",

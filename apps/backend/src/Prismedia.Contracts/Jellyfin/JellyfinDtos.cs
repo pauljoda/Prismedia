@@ -166,6 +166,9 @@ public sealed record JellyfinBaseItemDto {
     [JsonConverter(typeof(JellyfinNullableGuidConverter))]
     public Guid? ParentId { get; init; }
 
+    [JsonPropertyName("PlaylistItemId")]
+    public string? PlaylistItemId { get; init; }
+
     [JsonPropertyName("IsFolder")]
     public bool IsFolder { get; init; }
 

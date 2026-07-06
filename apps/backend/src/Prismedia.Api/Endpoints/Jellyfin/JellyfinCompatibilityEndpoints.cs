@@ -261,6 +261,12 @@ public static partial class JellyfinCompatibilityEndpoints {
             .ExcludeFromDescription()
             .Produces<JellyfinQueryResult<JellyfinBaseItemDto>>();
 
+        routes.MapGet("/Playlists/{playlistId}/Items", GetPlaylistItemsAsync)
+            .WithTags("Jellyfin Playlists")
+            .WithName("GetJellyfinPlaylistItems")
+            .Produces<JellyfinQueryResult<JellyfinBaseItemDto>>()
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+
         routes.MapGet("/Items/{itemId:guid}", GetItemAsync)
             .WithTags("Jellyfin Catalog")
             .WithName("GetJellyfinItem")
