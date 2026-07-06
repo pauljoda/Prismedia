@@ -21,7 +21,7 @@
   import { searchRequests } from "$lib/api/requests";
   import { labelForEntityKind } from "$lib/entities/entity-codes";
   import AcquisitionHistoryList from "$lib/components/acquisitions/AcquisitionHistoryList.svelte";
-  import DownloadsTable from "$lib/components/acquisitions/DownloadsTable.svelte";
+  import DownloadsPanel from "$lib/components/acquisitions/DownloadsPanel.svelte";
   import WantedList from "$lib/components/acquisitions/WantedList.svelte";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
   import { usePageSnapshots } from "$lib/stores/page-snapshots.svelte";
@@ -266,8 +266,8 @@
   </div>
 
   {#if activeTab === "downloads"}
-    <!-- ── Global downloads: every active acquisition in one table, live telemetry included ── -->
-    <DownloadsTable />
+    <!-- ── Global downloads: every active acquisition in one shared card list, live telemetry included ── -->
+    <DownloadsPanel />
   {:else if activeTab === "missing"}
     <WantedList variant="missing" kindOptions={wantedKindOptions} />
   {:else if activeTab === "cutoff"}

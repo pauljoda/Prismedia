@@ -28,4 +28,6 @@ export interface WantedListItemView {
   cutoffQuality: string | null;
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
   barrenSearches: number | string;
+  /** @nullable */
+  posterUrl?: string | null;
 }

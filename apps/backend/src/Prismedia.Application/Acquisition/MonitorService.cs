@@ -42,7 +42,8 @@ public sealed class MonitorService(IMonitorStore monitors, IAcquisitionStore acq
             item.NextSearchAt,
             item.OwnedQuality,
             item.CutoffQuality,
-            item.BarrenSearches)).ToArray(), page.Total);
+            item.BarrenSearches,
+            item.PosterUrl)).ToArray(), page.Total);
 
     /// <summary>Starts (or re-activates) monitoring of an existing acquisition. Returns null when the acquisition does not exist.</summary>
     public async Task<MonitorView?> StartAsync(Guid acquisitionId, CancellationToken cancellationToken) {

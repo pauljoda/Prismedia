@@ -405,7 +405,8 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
                 MonitorStatus = monitor.Status,
                 monitor.LastSearchedAt,
                 monitor.BarrenSearches,
-                AcquisitionStatus = acquisition == null ? (AcquisitionStatus?)null : acquisition.Status
+                AcquisitionStatus = acquisition == null ? (AcquisitionStatus?)null : acquisition.Status,
+                PosterUrl = acquisition == null ? null : acquisition.PosterUrl
             };
 
         var total = await query.CountAsync(cancellationToken);
@@ -426,7 +427,8 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
             NextSearchAt: row.LastSearchedAt is { } last ? last + BackoffFor(WantedBaseInterval, row.BarrenSearches) : null,
             OwnedQuality: null,
             CutoffQuality: null,
-            row.BarrenSearches)).ToArray();
+            row.BarrenSearches,
+            row.PosterUrl)).ToArray();
 
         return new WantedPage(items, total);
     }
@@ -463,7 +465,8 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
                 acquisition.OwnedFormatTier,
                 acquisition.OwnedMediaQuality,
                 acquisition.OwnedFormatScore,
-                acquisition.UpgradeQualityCaptured
+                acquisition.UpgradeQualityCaptured,
+                acquisition.PosterUrl
             };
 
         var total = await query.CountAsync(cancellationToken);
@@ -496,7 +499,8 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
                 NextSearchAt: row.LastSearchedAt is { } last ? last + BackoffFor(WantedBaseInterval, row.BarrenSearches) : null,
                 verdict.OwnedQuality,
                 verdict.CutoffQuality,
-                row.BarrenSearches));
+                row.BarrenSearches,
+                row.PosterUrl));
         }
 
         return new WantedPage(items, total);

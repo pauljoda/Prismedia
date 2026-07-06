@@ -374,6 +374,7 @@ public sealed record MonitorView(
 /// <param name="OwnedQuality">The owned quality string in the kind's vocabulary (a book's "source/format" tiers, or a media ladder code); null on the missing list.</param>
 /// <param name="CutoffQuality">The kind's cutoff quality, same vocabulary as <see cref="OwnedQuality"/>; null on the missing list.</param>
 /// <param name="BarrenSearches">Consecutive fruitless searches so far, surfaced so a stuck item is visible.</param>
+/// <param name="PosterUrl">Cover art for the row's thumbnail (the acquisition's captured poster), or null when none was captured.</param>
 public sealed record WantedListItemView(
     Guid MonitorId,
     Guid? AcquisitionId,
@@ -386,7 +387,8 @@ public sealed record WantedListItemView(
     DateTimeOffset? NextSearchAt,
     string? OwnedQuality,
     string? CutoffQuality,
-    int BarrenSearches);
+    int BarrenSearches,
+    string? PosterUrl = null);
 
 /// <summary>
 /// One page of a Wanted list: the page's rows plus the total count of matching rows for the pagination

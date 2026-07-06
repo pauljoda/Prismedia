@@ -28,6 +28,7 @@ namespace Prismedia.Application.Acquisition;
 /// </param>
 /// <param name="CutoffQuality">The kind's cutoff quality, in the same vocabulary as <see cref="OwnedQuality"/>; null on the missing view.</param>
 /// <param name="BarrenSearches">Consecutive fruitless searches so far, surfaced so the user sees a stuck item.</param>
+/// <param name="PosterUrl">The wanted item's cover art (the acquisition's captured poster), for the list's thumbnail; null when none was captured.</param>
 public sealed record WantedListItem(
     Guid MonitorId,
     Guid? AcquisitionId,
@@ -40,7 +41,8 @@ public sealed record WantedListItem(
     DateTimeOffset? NextSearchAt,
     string? OwnedQuality,
     string? CutoffQuality,
-    int BarrenSearches);
+    int BarrenSearches,
+    string? PosterUrl = null);
 
 /// <summary>
 /// One page of a Wanted list: the page's items plus the total count of matching rows, so the surface can
