@@ -1,3 +1,4 @@
+using Prismedia.Application.Acquisition;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Infrastructure.Persistence.Entities;
@@ -151,7 +152,7 @@ public sealed class BookAcquisitionProfileRow {
     public Guid TargetLibraryRootId { get; set; }
 
     /// <summary>Relative path template for the imported payload, with tokens like {Author}, {Title}, {Year}, {Volume}, {ext}.</summary>
-    public string PathTemplate { get; set; } = "{Author}/{Title} ({Year})/{Title}{ - Volume}.{ext}";
+    public string PathTemplate { get; set; } = MediaNamingTemplates.BookDefault;
 
     public ImportMode ImportMode { get; set; } = ImportMode.Move;
 

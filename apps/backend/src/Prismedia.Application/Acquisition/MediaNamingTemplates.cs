@@ -46,6 +46,13 @@ public static partial class MediaNamingTemplates {
     /// <summary>The music default: <c>{Artist}/{Album}</c> — the album folder only (track files keep their release names).</summary>
     public const string MusicDefault = "{Artist}/{Album}";
 
+    /// <summary>
+    /// The book default: <c>{Author}/{Title} ({Year})/{Title}{ - Volume}.{ext}</c>. Books have their own
+    /// renderer (this class does not validate book templates), but the default lives here with the other
+    /// kinds so a profileless import and a new profile row share one definition.
+    /// </summary>
+    public const string BookDefault = "{Author}/{Title} ({Year})/{Title}{ - Volume}.{ext}";
+
     [GeneratedRegex(@"\{Season(?::0+)?\}|\{Season\}", RegexOptions.IgnoreCase)]
     private static partial Regex SeasonTokenRegex();
 

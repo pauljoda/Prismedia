@@ -106,18 +106,19 @@ public sealed class BookAcquisitionImportEngine(
 
     public async Task ImportAsync(JobContext context, AcquisitionImportContext import, CancellationToken cancellationToken) {
         var profile = await profiles.GetImportProfileAsync(import.ProfileId, EntityKind.Book, cancellationToken);
-        if (profile is null) {
-            await Fail(import.Id, "No book acquisition profile is configured for import.", cancellationToken);
-            return;
-        }
 
         // A request-time library choice overrides the profile's target; an unsuitable choice falls back.
         var root = await ImportRootResolution.ResolveAsync(
-            roots, import.TargetLibraryRootId, profile.TargetLibraryRootId, static candidate => candidate.ScanBooks, cancellationToken);
+            roots, import.TargetLibraryRootId, profile?.TargetLibraryRootId, static candidate => candidate.ScanBooks, cancellationToken);
         if (root is null) {
             await Fail(import.Id, "The target library root is missing or not book-enabled.", cancellationToken);
             return;
         }
+
+        // No profile configured: degrade to the defaults the request UI promises ("permissive defaults
+        // apply") — the resolved library, the default naming template, and a move import — matching how
+        // the movie/TV/music engines already behave instead of failing the import.
+        profile ??= new BookImportProfile(root.Id, MediaNamingTemplates.BookDefault, ImportMode.Move);
 
         if (string.IsNullOrWhiteSpace(import.ContentPath)) {
             await Fail(import.Id, "The completed download reported no content path.", cancellationToken);
