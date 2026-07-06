@@ -55,6 +55,7 @@ import type {
   DownloadClientSummary,
   DownloadClientTestRequest,
   DownloadClientTestResponse,
+  DownloadQueueItemView,
   EntityCard,
   EntityCreateRequest,
   EntityFlagsUpdateRequest,
@@ -191,6 +192,7 @@ import type {
   ListVideoSeriesParams,
   ListVideosParams,
   MonitorCreateRequest,
+  MonitorEligibilityView,
   MonitorView,
   MoveFileParams,
   MovieDetail,
@@ -11367,6 +11369,42 @@ export const listAcquisitions = async ( options?: RequestInit): Promise<listAcqu
 
 
 
+export type listDownloadQueueResponse200 = {
+  data: DownloadQueueItemView[]
+  status: 200
+}
+
+export type listDownloadQueueResponseSuccess = (listDownloadQueueResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listDownloadQueueResponse = (listDownloadQueueResponseSuccess)
+
+export const getListDownloadQueueUrl = () => {
+
+
+
+
+  return `/api/acquisitions/downloads`
+}
+
+/**
+ * @summary The global Downloads view: every active acquisition across all kinds with live download-client telemetry (progress, speed, ETA, peers) where a transfer is in flight.
+ */
+export const listDownloadQueue = async ( options?: RequestInit): Promise<listDownloadQueueResponse> => {
+
+  return orvalFetch<listDownloadQueueResponse>(getListDownloadQueueUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
 export type getAcquisitionResponse200 = {
   data: AcquisitionDetail
   status: 200
@@ -12811,6 +12849,42 @@ export const getGetEntityMonitorUrl = (entityId: string,) => {
 export const getEntityMonitor = async (entityId: string, options?: RequestInit): Promise<getEntityMonitorResponse> => {
 
   return orvalFetch<getEntityMonitorResponse>(getGetEntityMonitorUrl(entityId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getEntityMonitorEligibilityResponse200 = {
+  data: MonitorEligibilityView
+  status: 200
+}
+
+export type getEntityMonitorEligibilityResponseSuccess = (getEntityMonitorEligibilityResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getEntityMonitorEligibilityResponse = (getEntityMonitorEligibilityResponseSuccess)
+
+export const getGetEntityMonitorEligibilityUrl = (entityId: string,) => {
+
+
+
+
+  return `/api/monitors/for-entity/${entityId}/eligibility`
+}
+
+/**
+ * @summary Whether the entity can carry a standing container monitor: it must be a monitorable container kind holding a provider identity an enabled metadata plugin can track (re-resolve by id).
+ */
+export const getEntityMonitorEligibility = async (entityId: string, options?: RequestInit): Promise<getEntityMonitorEligibilityResponse> => {
+
+  return orvalFetch<getEntityMonitorEligibilityResponse>(getGetEntityMonitorEligibilityUrl(entityId),
   {
     ...options,
     method: 'GET'
