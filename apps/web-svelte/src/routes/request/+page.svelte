@@ -129,7 +129,10 @@
     pageSnapshots.registerSurface<{ tab: RequestTab }>("request-view", {
       capture: () => ({ tab: activeTab }),
       restore: (snapshot) => {
-        activeTab = snapshot.tab;
+        // Ignore a snapshot naming a tab that no longer exists (e.g. the retired "requests" tab).
+        if (tabs.some((tab) => tab.id === snapshot.tab)) {
+          activeTab = snapshot.tab;
+        }
       },
     }),
   );
