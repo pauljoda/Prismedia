@@ -49,7 +49,7 @@
     class="poster"
     aria-label={item.href ? `Open ${item.title}` : undefined}
   >
-    <EntityThumbnail card={item.thumbnail} mediaOnly interactive={false} linkable={false} hoverPreviewsEnabled={false} imageLoading="lazy" />
+    <EntityThumbnail card={item.thumbnail} mediaOnly interactive={false} linkable={false} hoverPreviewsEnabled={false} showWantedBadge={false} imageLoading="lazy" />
   </svelte:element>
 
   <!-- Title block -->

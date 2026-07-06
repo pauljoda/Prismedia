@@ -53,6 +53,13 @@ public sealed record EntityThumbnail(
     public bool IsWanted { get; init; }
 
     /// <summary>
+    /// For a wanted placeholder, the status of its latest acquisition — so a grid can show what the
+    /// item is doing (searching, downloading, failed) on its thumbnail, not just that it is wanted.
+    /// Null when the entity is not wanted, or is wanted but has no acquisition yet.
+    /// </summary>
+    public AcquisitionStatus? WantedStatus { get; init; }
+
+    /// <summary>
     /// When the entity was added to the library. Surfaced so compatibility layers (e.g. the Jellyfin
     /// surface) can populate the always-present <c>DateCreated</c> field that clients sort by.
     /// </summary>

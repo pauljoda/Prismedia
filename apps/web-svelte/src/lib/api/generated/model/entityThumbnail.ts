@@ -4,6 +4,7 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { AcquisitionStatus } from './acquisitionStatus';
 import type { EntityKind } from './entityKind';
 import type { EntityKindCount } from './entityKindCount';
 import type { EntityThumbnailHoverImage } from './entityThumbnailHoverImage';
@@ -40,6 +41,7 @@ export interface EntityThumbnail {
   isOrganized: boolean;
   parentKind?: null | EntityKind;
   isWanted?: boolean;
+  wantedStatus?: null | AcquisitionStatus;
   /** @nullable */
   createdAt?: string | null;
   /**

@@ -104,6 +104,11 @@ export interface EntityThumbnailCard {
   meta?: EntityThumbnailMetaItem[];
   /** Fraction watched/read in 0..1 for the thumbnail progress meter, when meaningful. */
   progress?: number | null;
+  /**
+   * For a wanted placeholder, its latest acquisition status code (an AcquisitionStatus value), so the
+   * thumbnail's wanted badge shows what the item is doing. Null/undefined when not wanted or unknown.
+   */
+  wantedStatus?: string | null;
   routeContext?: EntityRouteContext;
   subtitle?: string;
 }

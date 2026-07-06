@@ -1,23 +1,29 @@
 <script lang="ts">
-  import { THUMBNAIL_HOVER_KIND } from "$lib/api/generated/codes";
-  import { onDestroy, type Snippet } from "svelte";
+  import { ACQUISITION_STATUS, THUMBNAIL_HOVER_KIND } from "$lib/api/generated/codes";
+  import { onDestroy, type Component, type Snippet } from "svelte";
   import {
     Album,
+    Bookmark,
     BookOpen,
     Building2,
     Calendar,
+    CircleAlert,
     Clock3,
+    CloudDownload,
     Disc3,
     Film,
     Flame,
     FolderOpen,
     Hash,
+    Hourglass,
     Image,
     Images,
     Layers,
     Music,
+    Search,
     Star,
     Tag,
+    TriangleAlert,
     Users,
   } from "@lucide/svelte";
   import { getRatingValue, isNsfw, isWanted } from "$lib/api/capabilities";
@@ -55,6 +61,8 @@
     selectable?: boolean;
     selectMode?: boolean;
     selected?: boolean;
+    /** Show the wanted/status badge on the artwork. Off where a host surface renders status itself. */
+    showWantedBadge?: boolean;
     subtitleContent?: Snippet<[EntityThumbnailCard]>;
     titleAlign?: EntityThumbnailTitleAlign;
     titleSize?: EntityThumbnailTitleSize;
@@ -76,6 +84,7 @@
     selectable = false,
     selectMode = false,
     selected = false,
+    showWantedBadge = true,
     subtitleContent,
     titleAlign = "left",
     titleSize = "default",
@@ -297,6 +306,9 @@
   const hoverable = $derived(hasHoverPreview(card) && !hoverBroken && !spriteError);
   const nsfw = $derived(isNsfw(card.entity.capabilities));
   const wanted = $derived(isWanted(card.entity.capabilities));
+  // A wanted item's badge reflects what its acquisition is doing (icon + short label + tone), so its
+  // state reads from the grid — falling back to a plain "Wanted" when no acquisition status is known.
+  const wantedDisplay = $derived.by(() => wantedStatusDisplay(card.wantedStatus));
   const rating = $derived(getRatingValue(card.entity.capabilities));
   const bottomLeft = $derived(card.custom?.bottomLeft);
   // Playback/reading progress meter percentage, only when there is something to show.
@@ -479,6 +491,29 @@
     return String(Math.round(value));
   }
 
+  /** Icon + short label + tone class for a wanted item's badge, derived from its acquisition status. */
+  function wantedStatusDisplay(status: string | null | undefined): { label: string; icon: Component; cls: string } {
+    switch (status) {
+      case ACQUISITION_STATUS.searching:
+      case ACQUISITION_STATUS.pending:
+        return { label: "Searching", icon: Search, cls: "wb-searching" };
+      case ACQUISITION_STATUS.awaitingSelection:
+        return { label: "Review", icon: Search, cls: "wb-attention" };
+      case ACQUISITION_STATUS.queued:
+        return { label: "Queued", icon: Hourglass, cls: "wb-queued" };
+      case ACQUISITION_STATUS.downloading:
+      case ACQUISITION_STATUS.downloaded:
+      case ACQUISITION_STATUS.importing:
+        return { label: "Downloading", icon: CloudDownload, cls: "wb-downloading" };
+      case ACQUISITION_STATUS.failed:
+        return { label: "Failed", icon: CircleAlert, cls: "wb-failed" };
+      case ACQUISITION_STATUS.manualImportRequired:
+        return { label: "Action", icon: TriangleAlert, cls: "wb-attention" };
+      default:
+        return { label: "Wanted", icon: Bookmark, cls: "wb-wanted" };
+    }
+  }
+
   // touchmove must be non-passive so preventDefault can cancel scrolling while scrubbing; Svelte's
   // inline handlers can register as passive, so attach the listeners explicitly.
   $effect(() => {
@@ -641,11 +676,13 @@
       />
     {/if}
 
-    {#if nsfw || wanted}
+    {#if (wanted && showWantedBadge) || nsfw}
       <div class="badges top-badges">
-        {#if wanted}
-          <span class="badge wanted-badge" title="Wanted — requested, not downloaded yet" aria-label="Wanted">
-            Wanted
+        {#if wanted && showWantedBadge}
+          {@const WantedIcon = wantedDisplay.icon}
+          <span class={`badge wanted-badge ${wantedDisplay.cls}`} title={`Wanted — ${wantedDisplay.label}`} aria-label={`Wanted — ${wantedDisplay.label}`}>
+            <WantedIcon size={11} />
+            <span class="wanted-label">{wantedDisplay.label}</span>
           </span>
         {/if}
         {#if nsfw}
@@ -1163,16 +1200,25 @@
     box-shadow: 0 0 16px rgb(242 194 106 / 0.18);
   }
 
-  /* Wanted placeholder: requested but not downloaded yet. Brass glow marks the pending state. */
+  /* Wanted placeholder: icon + short status, tone-keyed to what the acquisition is doing. */
   .wanted-badge {
+    gap: 0.28rem;
     color: rgb(242 194 106 / 0.96);
     border-color: rgb(242 194 106 / 0.42);
-    background: rgb(39 29 12 / 0.78);
-    box-shadow: 0 0 16px rgb(242 194 106 / 0.22);
+    background: rgb(39 29 12 / 0.82);
+    box-shadow: 0 0 14px rgb(0 0 0 / 0.3);
     text-transform: uppercase;
-    letter-spacing: 0.06em;
-    font-size: 0.6rem;
+    letter-spacing: 0.05em;
+    font-size: 0.58rem;
+    font-weight: 600;
   }
+  .wanted-badge :global(svg) { flex: 0 0 auto; }
+  .wb-downloading { color: #f2c26a; border-color: rgb(242 194 106 / 0.5); background: rgb(52 38 14 / 0.85); box-shadow: 0 0 14px rgb(242 194 106 / 0.18); }
+  .wb-searching { color: #e7d3af; border-color: rgb(211 176 106 / 0.4); background: rgb(40 33 18 / 0.85); }
+  .wb-attention { color: #f2c26a; border-color: rgb(242 194 106 / 0.48); background: rgb(52 36 12 / 0.85); }
+  .wb-queued { color: rgb(224 228 236 / 0.9); border-color: rgb(255 255 255 / 0.22); background: rgb(18 20 24 / 0.85); }
+  .wb-failed { color: #ff9a86; border-color: rgb(255 122 92 / 0.46); background: rgb(44 16 12 / 0.85); box-shadow: 0 0 14px rgb(255 92 67 / 0.14); }
+  .wb-wanted { color: rgb(242 194 106 / 0.96); border-color: rgb(242 194 106 / 0.42); background: rgb(39 29 12 / 0.82); }
 
   .rating-badge :global(svg) {
     fill: currentColor;
@@ -1455,6 +1501,74 @@
   @media (max-width: 640px) {
     .badge {
       font-size: 0.61rem;
+    }
+  }
+
+  /* Small thumbnails (list rows, dense rails): overlays are absolutely sized, so scale the badges,
+     placeholder icons, and progress meter down with the artwork and pull the badge cluster back to the
+     edge — at these widths there is no selection checkbox occupying the top-left inset. Kept last so it
+     wins over the mobile @media badge sizing above for genuinely small thumbnails. */
+  @container (max-width: 112px) {
+    .badges {
+      top: 0.3rem;
+      left: 0.3rem;
+      right: 0.3rem;
+      gap: 0.18rem;
+    }
+
+    .badge {
+      font-size: 0.5rem;
+      min-height: 0;
+      line-height: 1;
+      gap: 0.15rem;
+      padding: 0.15rem 0.26rem;
+    }
+
+    .wanted-badge {
+      gap: 0;
+      padding: 0.2rem;
+    }
+
+    /* Icon-only on tiny artwork — the status still reads by icon + colour without crowding the poster. */
+    .wanted-label {
+      display: none;
+    }
+
+    .rating-badge {
+      display: none;
+    }
+
+    .icon-only {
+      inline-size: 1.05rem;
+    }
+
+    .placeholder :global(.placeholder-icon) {
+      width: 1.35rem;
+      height: 1.35rem;
+    }
+
+    .placeholder-frame {
+      width: 2rem;
+      height: 2rem;
+    }
+
+    .placeholder :global(.placeholder-icon-framed) {
+      width: 1.05rem;
+      height: 1.05rem;
+    }
+
+    .placeholder :global(.placeholder-disc) {
+      width: 2.1rem;
+      height: 2.1rem;
+    }
+
+    .placeholder :global(.placeholder-note) {
+      width: 0.95rem;
+      height: 0.95rem;
+    }
+
+    .progress-meter {
+      height: 2px;
     }
   }
 </style>

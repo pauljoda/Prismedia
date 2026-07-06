@@ -447,6 +447,8 @@ export function entityCardToThumbnailCard(
     href,
     meta: metaForEntity(entity),
     progress: progressForEntity(entity),
+    // Only the thumbnail read model carries the wanted acquisition status; detail cards don't.
+    wantedStatus: isFullEntityCard(entity) ? null : entity.wantedStatus ?? null,
   };
 }
 
