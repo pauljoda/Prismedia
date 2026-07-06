@@ -1,6 +1,8 @@
 using Prismedia.Application.Jobs;
 using Prismedia.Domain.Entities;
 
+using Prismedia.Api.Security;
+
 namespace Prismedia.Api.Endpoints;
 
 /// <summary>
@@ -28,6 +30,7 @@ internal static class EntityRefreshEndpoint {
 
             return Results.Ok(new EntityRefreshResponse(job.Id, AlreadyPending: false));
         })
+            .RequireAdmin()
             .WithName("RefreshEntity")
             .WithSummary("Refresh Entity.")
             .Produces<EntityRefreshResponse>();

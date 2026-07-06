@@ -25,6 +25,12 @@ public sealed partial class SettingsService {
         _persistence.ListLibraryRootsAsync(cancellationToken);
 
     /// <summary>
+    /// Finds one watched library root, or null when it does not exist.
+    /// </summary>
+    public Task<LibraryRoot?> GetLibraryRootAsync(Guid id, CancellationToken cancellationToken) =>
+        _persistence.GetLibraryRootAsync(id, cancellationToken);
+
+    /// <summary>
     /// Lists subdirectories under <paramref name="path"/> for the watched-root folder picker.
     /// Falls back to the user profile directory or the filesystem root when no readable path is
     /// supplied.
@@ -60,7 +66,8 @@ public sealed partial class SettingsService {
     /// </summary>
     public async Task<LibraryRoot> CreateLibraryRootAsync(
         LibraryRootCreateRequest request,
-        CancellationToken cancellationToken) {
+        CancellationToken cancellationToken,
+        Guid? createdByUserId = null) {
         ArgumentException.ThrowIfNullOrWhiteSpace(request.Path);
 
         var now = DateTimeOffset.UtcNow;
@@ -85,7 +92,8 @@ public sealed partial class SettingsService {
             LastScannedAt: null,
             CreatedAt: now,
             UpdatedAt: now,
-            AutoIdentify: request.AutoIdentify ?? true);
+            AutoIdentify: request.AutoIdentify ?? true,
+            CreatedByUserId: createdByUserId);
 
         var created = await _persistence.AddLibraryRootAsync(state, cancellationToken);
 

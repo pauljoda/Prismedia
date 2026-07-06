@@ -1,11 +1,12 @@
 using Prismedia.Api.Security;
 using Prismedia.Application.Security;
 using Prismedia.Contracts.Security;
+using Prismedia.Contracts.Settings;
 using Prismedia.Contracts.System;
 
 namespace Prismedia.Api.Endpoints;
 
-/// <summary>Admin-only user account management: CRUD, password resets, and role/permission flags.</summary>
+/// <summary>Admin-only user account management: CRUD, password resets, role/permission flags, and library access.</summary>
 public static class UserEndpoints {
     public static RouteGroupBuilder MapUserEndpoints(this IEndpointRouteBuilder routes) {
         var group = routes.MapGroup("/api/users")
@@ -14,12 +15,16 @@ public static class UserEndpoints {
 
         group.MapGet("", async (
             UserAdminService users,
+            ILibraryAccessStore access,
             CancellationToken cancellationToken) => {
             var items = await users.ListUsersAsync(cancellationToken);
-            return Results.Ok(new UsersResponse(items.Select(user => user.ToResponse()).ToArray()));
+            var accessByUser = await access.GetAccessByUserAsync(cancellationToken);
+            return Results.Ok(new UsersResponse(items
+                .Select(user => user.ToResponse(accessByUser.GetValueOrDefault(user.Id) ?? []))
+                .ToArray()));
         })
             .WithName("ListUsers")
-            .WithSummary("Lists all user accounts.")
+            .WithSummary("Lists all user accounts with their library access.")
             .Produces<UsersResponse>();
 
         group.MapGet("/{userId:guid}", async (
@@ -104,6 +109,24 @@ public static class UserEndpoints {
             .WithSummary("Resets a user's password and signs them out everywhere.")
             .Produces(StatusCodes.Status204NoContent)
             .Produces<ApiProblem>(StatusCodes.Status400BadRequest)
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+
+        group.MapPut("/{userId:guid}/library-access", async (
+            Guid userId,
+            UserLibraryAccessUpdateRequest request,
+            UserAdminService users,
+            ILibraryAccessStore access,
+            CancellationToken cancellationToken) => {
+            if (await users.GetUserAsync(userId, cancellationToken) is null) {
+                return UserNotFound(userId);
+            }
+
+            await access.ReplaceUserAccessAsync(userId, request.LibraryRootIds, cancellationToken);
+            return Results.NoContent();
+        })
+            .WithName("ReplaceUserLibraryAccess")
+            .WithSummary("Replaces the library roots a member user can access.")
+            .Produces(StatusCodes.Status204NoContent)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
         group.MapDelete("/{userId:guid}", async (

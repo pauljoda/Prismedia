@@ -4,11 +4,14 @@ using Prismedia.Contracts.Requests;
 using Prismedia.Contracts.System;
 using Prismedia.Domain.Entities;
 
+using Prismedia.Api.Security;
+
 namespace Prismedia.Api.Endpoints;
 
 public static class RequestEndpoints {
     public static RouteGroupBuilder MapRequestEndpoints(this IEndpointRouteBuilder routes) {
         var group = routes.MapGroup("/api/requests")
+            .RequireAdmin()
             .WithTags("Requests");
 
         group.MapGet("/search", (

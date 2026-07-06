@@ -127,6 +127,7 @@ public sealed class EfSettingsPersistence : ISettingsPersistence {
             IsNsfw = state.IsNsfw,
             AutoIdentify = state.AutoIdentify,
             LastScannedAt = state.LastScannedAt,
+            CreatedByUserId = state.CreatedByUserId,
             CreatedAt = state.CreatedAt,
             UpdatedAt = state.UpdatedAt,
         };
@@ -307,5 +308,6 @@ public sealed class EfSettingsPersistence : ISettingsPersistence {
             row.LastScannedAt,
             row.CreatedAt,
             row.UpdatedAt,
-            row.AutoIdentify);
+            row.AutoIdentify,
+            row.CreatedByUserId);
 }

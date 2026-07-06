@@ -2,11 +2,14 @@ using Prismedia.Application.Files;
 using Prismedia.Contracts.Files;
 using Prismedia.Contracts.System;
 
+using Prismedia.Api.Security;
+
 namespace Prismedia.Api.Endpoints;
 
 public static class FilesEndpoints {
     public static RouteGroupBuilder MapFilesEndpoints(this IEndpointRouteBuilder routes) {
         var group = routes.MapGroup("/api/files")
+            .RequireAdmin()
             .WithTags("Files");
 
         group.MapFilesListEndpoints();

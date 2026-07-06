@@ -2,11 +2,14 @@ using Prismedia.Application.Plugins;
 using Prismedia.Contracts.Plugins;
 using Prismedia.Contracts.System;
 
+using Prismedia.Api.Security;
+
 namespace Prismedia.Api.Endpoints;
 
 public static class PluginEndpoints {
     public static RouteGroupBuilder MapPluginEndpoints(this IEndpointRouteBuilder routes) {
         var group = routes.MapGroup("/api/plugins")
+            .RequireAdmin()
             .WithTags("Plugins");
 
         group.MapGet("/", async (

@@ -1,11 +1,14 @@
 using Prismedia.Application.Organization;
 using Prismedia.Contracts.Organize;
 
+using Prismedia.Api.Security;
+
 namespace Prismedia.Api.Endpoints;
 
 public static class OrganizeEndpoints {
     public static RouteGroupBuilder MapOrganizeEndpoints(this IEndpointRouteBuilder routes) {
         var group = routes.MapGroup("/api/organize")
+            .RequireAdmin()
             .WithTags("Organize");
 
         group.MapGet("/plan", (

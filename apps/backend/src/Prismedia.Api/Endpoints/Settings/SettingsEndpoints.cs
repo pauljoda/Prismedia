@@ -8,6 +8,8 @@ using Prismedia.Application.Videos;
 using Prismedia.Contracts.Settings;
 using Prismedia.Contracts.System;
 
+using Prismedia.Api.Security;
+
 namespace Prismedia.Api.Endpoints;
 
 public static class SettingsEndpoints {
@@ -26,6 +28,7 @@ public static class SettingsEndpoints {
                 cache.ComputeSizeBytes(),
                 ITranscodeCacheService.GigabytesToBytes(hls.MaxCacheSizeGb)));
         })
+            .RequireAdmin()
             .WithName("GetTranscodeCacheStatus")
             .WithSummary("Gets the current transcode cache size and configured limit.")
             .Produces<TranscodeCacheStatusResponse>();
@@ -40,6 +43,7 @@ public static class SettingsEndpoints {
                 cache.ComputeSizeBytes(),
                 ITranscodeCacheService.GigabytesToBytes(hls.MaxCacheSizeGb)));
         })
+            .RequireAdmin()
             .WithName("ClearTranscodeCache")
             .WithSummary("Clears the on-disk transcode cache.")
             .Produces<TranscodeCacheStatusResponse>();
@@ -48,6 +52,7 @@ public static class SettingsEndpoints {
             IDatabaseBackupService backups,
             CancellationToken cancellationToken) =>
             backups.ListAsync(cancellationToken))
+            .RequireAdmin()
             .WithName("ListDatabaseBackups")
             .WithSummary("Lists database backups and automatic backup retention metadata.")
             .Produces<DatabaseBackupListResponse>();
@@ -61,6 +66,7 @@ public static class SettingsEndpoints {
                 return BackupFailure(ex);
             }
         })
+            .RequireAdmin()
             .WithName("CreateDatabaseBackupNow")
             .WithSummary("Creates a permanent manual database backup.")
             .Produces<DatabaseBackupDto>()
@@ -97,6 +103,7 @@ public static class SettingsEndpoints {
                 return BackupFailure(ex);
             }
         })
+            .RequireAdmin()
             .WithName("RestoreDatabaseBackup")
             .WithSummary("Schedules a destructive database restore from a selected backup.")
             .Produces<DatabaseRestoreScheduledResponse>()
@@ -107,6 +114,7 @@ public static class SettingsEndpoints {
             SettingsService settings,
             CancellationToken cancellationToken) =>
             settings.GetCatalogAsync(cancellationToken))
+            .RequireAdmin()
             .WithName("GetSettings")
             .WithSummary("Gets the app-global settings catalog.");
 
@@ -122,6 +130,7 @@ public static class SettingsEndpoints {
             SettingsService settings,
             CancellationToken cancellationToken) =>
             settings.GetLibraryConfigAsync(cancellationToken))
+            .RequireAdmin()
             .WithName("GetLibraryConfig")
             .WithSummary("Gets the settings catalog and watched roots for the settings page.");
 
@@ -135,6 +144,7 @@ public static class SettingsEndpoints {
                 return SettingNotFound(ex);
             }
         })
+            .RequireAdmin()
             .WithName("GetSetting")
             .WithSummary("Gets one app-global setting descriptor.")
             .Produces<SettingDescriptor>()
@@ -152,6 +162,7 @@ public static class SettingsEndpoints {
                 return InvalidSetting(ex);
             }
         })
+            .RequireAdmin()
             .WithName("UpdateSettings")
             .WithSummary("Updates multiple app-global settings.")
             .Produces<SettingsCatalogResponse>()
@@ -171,6 +182,7 @@ public static class SettingsEndpoints {
                 return InvalidSetting(ex);
             }
         })
+            .RequireAdmin()
             .WithName("UpdateSetting")
             .WithSummary("Updates one app-global setting.")
             .Produces<SettingDescriptor>()
@@ -187,6 +199,7 @@ public static class SettingsEndpoints {
                 return SettingNotFound(ex);
             }
         })
+            .RequireAdmin()
             .WithName("ResetSetting")
             .WithSummary("Removes one app-global setting override.")
             .Produces<SettingDescriptor>()

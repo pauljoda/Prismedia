@@ -3,6 +3,8 @@ using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.System;
 using Prismedia.Domain.Entities;
 
+using Prismedia.Api.Security;
+
 namespace Prismedia.Api.Endpoints;
 
 internal static class EntityKindRouteEndpoints {
@@ -83,6 +85,7 @@ internal static class EntityKindRouteEndpoints {
             IEntityReadService entities,
             CancellationToken cancellationToken) =>
             await EntityDetailEndpoint.PatchEntityAsync(id, kind, request, metadata, entities, cancellationToken))
+            .RequireAdmin()
             .WithName($"{detailName}Patch")
             .WithSummary($"Update {tag} detail.")
             .Produces(StatusCodes.Status200OK, detailResponseType)
@@ -121,6 +124,7 @@ internal static class EntityKindRouteEndpoints {
                     _ => Results.BadRequest(new ApiProblem(ApiProblemCodes.EntityNotCreatable, $"{tag} cannot be created.")),
                 };
             })
+            .RequireAdmin()
             .WithName($"Create{baseName}")
             .WithSummary($"Create {tag}.")
             .Produces(StatusCodes.Status201Created, detailResponseType)
@@ -138,6 +142,7 @@ internal static class EntityKindRouteEndpoints {
                     _ => Results.BadRequest(new ApiProblem(ApiProblemCodes.EntityNotDeletable, $"{tag} cannot be deleted.")),
                 };
             })
+            .RequireAdmin()
             .WithName($"Delete{baseName}")
             .WithSummary($"Delete {tag}.")
             .Produces(StatusCodes.Status204NoContent)

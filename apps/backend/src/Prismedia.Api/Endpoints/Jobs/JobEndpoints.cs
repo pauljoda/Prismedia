@@ -1,10 +1,13 @@
 using Prismedia.Domain.Entities;
 
+using Prismedia.Api.Security;
+
 namespace Prismedia.Api.Endpoints;
 
 public static class JobEndpoints {
     public static RouteGroupBuilder MapJobEndpoints(this IEndpointRouteBuilder routes) {
         var group = routes.MapGroup("/api/jobs")
+            .RequireAdmin()
             .WithTags("Jobs");
 
         group.MapJobListEndpoint();

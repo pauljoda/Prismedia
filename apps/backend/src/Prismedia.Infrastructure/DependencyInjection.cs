@@ -222,7 +222,9 @@ public static class DependencyInjection {
         services.AddScoped<EfEntityReadService>();
         services.AddScoped<IEntityReadService>(provider => provider.GetRequiredService<EfEntityReadService>());
         services.AddScoped<IEntityVisibilityChecker, EfEntityVisibilityChecker>();
-        services.AddScoped<ILibraryAccessReader, EfLibraryAccessReader>();
+        services.AddScoped<EfLibraryAccessReader>();
+        services.AddScoped<ILibraryAccessReader>(provider => provider.GetRequiredService<EfLibraryAccessReader>());
+        services.AddScoped<ILibraryAccessStore>(provider => provider.GetRequiredService<EfLibraryAccessReader>());
         services.AddScoped<IEntityFileContentService, EfEntityFileContentService>();
         services.AddScoped<IGridThumbnailService>(provider =>
             new GridThumbnailService(

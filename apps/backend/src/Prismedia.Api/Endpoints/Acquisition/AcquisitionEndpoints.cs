@@ -3,11 +3,14 @@ using Prismedia.Contracts.Acquisition;
 using Prismedia.Contracts.System;
 using Prismedia.Domain.Entities;
 
+using Prismedia.Api.Security;
+
 namespace Prismedia.Api.Endpoints;
 
 public static class AcquisitionEndpoints {
     public static RouteGroupBuilder MapAcquisitionEndpoints(this IEndpointRouteBuilder routes) {
         var group = routes.MapGroup("/api/acquisitions")
+            .RequireAdmin()
             .WithTags("Acquisitions");
 
         group.MapGet("/indexers", (
@@ -448,6 +451,7 @@ public static class AcquisitionEndpoints {
     /// <summary>Maps the monitor endpoints (start/stop/pause/resume + list) for keeping a wanted item's search alive.</summary>
     public static RouteGroupBuilder MapMonitorEndpoints(this IEndpointRouteBuilder routes) {
         var group = routes.MapGroup("/api/monitors")
+            .RequireAdmin()
             .WithTags("Monitors");
 
         group.MapGet("/", (

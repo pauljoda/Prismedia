@@ -2,6 +2,8 @@ using Prismedia.Application.Entities;
 using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.System;
 
+using Prismedia.Api.Security;
+
 namespace Prismedia.Api.Endpoints;
 
 internal static class EntityImageAssetEndpoint {
@@ -27,6 +29,7 @@ internal static class EntityImageAssetEndpoint {
             var result = await assets.UploadAsync(id, role, file.FileName, file.ContentType, stream, cancellationToken);
             return await ToResultAsync(id, result, entities, cancellationToken);
         })
+            .RequireAdmin()
             .WithName("UploadEntityImageAsset")
             .WithSummary("Uploads user-managed artwork for an entity image role.")
             .DisableAntiforgery()
@@ -43,6 +46,7 @@ internal static class EntityImageAssetEndpoint {
             var result = await assets.ClearAsync(id, role, cancellationToken);
             return await ToResultAsync(id, result, entities, cancellationToken);
         })
+            .RequireAdmin()
             .WithName("ClearEntityImageAsset")
             .WithSummary("Clears user-managed artwork for an entity image role.")
             .Produces<EntityCard>()

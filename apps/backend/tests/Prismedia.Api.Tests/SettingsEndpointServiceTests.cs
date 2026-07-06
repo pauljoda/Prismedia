@@ -95,6 +95,35 @@ public sealed class SettingsEndpointServiceTests {
         Assert.True(root.IsSuccessStatusCode);
     }
 
+    [Fact]
+    public async Task MembersReadAccessibleLibrarySummariesButNotFullRoots() {
+        using var factory = CreateFactory();
+        using var admin = factory.CreateAuthenticatedClient();
+        using var createUser = await admin.PostAsJsonAsync(
+            "/api/users",
+            new { Username = "reader", Password = "reader-password" });
+        createUser.EnsureSuccessStatusCode();
+
+        using var client = factory.CreateClient();
+        using var login = await client.PostAsJsonAsync(
+            "/api/auth/login",
+            new { Username = "reader", Password = "reader-password" });
+        var token = (await login.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("accessToken").GetString();
+
+        using var accessibleRequest = new HttpRequestMessage(HttpMethod.Get, "/api/libraries/accessible");
+        accessibleRequest.Headers.Authorization = new("Bearer", token);
+        using var accessible = await client.SendAsync(accessibleRequest);
+        using var fullRequest = new HttpRequestMessage(HttpMethod.Get, "/api/libraries");
+        fullRequest.Headers.Authorization = new("Bearer", token);
+        using var full = await client.SendAsync(fullRequest);
+
+        Assert.Equal(HttpStatusCode.OK, accessible.StatusCode);
+        // No grants yet: the member sees an empty summary list, never host paths.
+        Assert.Empty((await accessible.Content.ReadFromJsonAsync<JsonElement>()).EnumerateArray());
+        Assert.Equal(HttpStatusCode.Forbidden, full.StatusCode);
+    }
+
     private static WebApplicationFactory<Program> CreateFactory() =>
         new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder => {

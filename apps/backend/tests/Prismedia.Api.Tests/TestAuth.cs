@@ -35,6 +35,11 @@ internal static class TestAuth {
                 // library-visibility guard would otherwise 404 every mutation.
                 services.RemoveAll<IEntityVisibilityChecker>();
                 services.AddSingleton<IEntityVisibilityChecker>(new AllVisibleEntityChecker());
+                var libraryAccess = new FakeLibraryAccessStore();
+                services.RemoveAll<ILibraryAccessReader>();
+                services.RemoveAll<ILibraryAccessStore>();
+                services.AddSingleton<ILibraryAccessReader>(libraryAccess);
+                services.AddSingleton<ILibraryAccessStore>(libraryAccess);
             });
         });
 
@@ -47,6 +52,73 @@ internal static class TestAuth {
     internal sealed class AllVisibleEntityChecker : IEntityVisibilityChecker {
         public Task<bool> IsVisibleAsync(Guid entityId, CancellationToken cancellationToken) =>
             Task.FromResult(true);
+    }
+
+    /// <summary>In-memory per-user library grants for endpoint tests.</summary>
+    internal sealed class FakeLibraryAccessStore : ILibraryAccessStore {
+        private readonly object _gate = new();
+        private readonly HashSet<(Guid UserId, Guid RootId)> _grants = [];
+
+        public Task<IReadOnlySet<Guid>> GetAllowedRootIdsAsync(Guid userId, CancellationToken cancellationToken) {
+            lock (_gate) {
+                return Task.FromResult<IReadOnlySet<Guid>>(_grants
+                    .Where(grant => grant.UserId == userId)
+                    .Select(grant => grant.RootId)
+                    .ToHashSet());
+            }
+        }
+
+        public Task<IReadOnlyDictionary<Guid, IReadOnlyList<Guid>>> GetAccessByRootAsync(CancellationToken cancellationToken) {
+            lock (_gate) {
+                return Task.FromResult<IReadOnlyDictionary<Guid, IReadOnlyList<Guid>>>(_grants
+                    .GroupBy(grant => grant.RootId)
+                    .ToDictionary(
+                        group => group.Key,
+                        group => (IReadOnlyList<Guid>)group.Select(grant => grant.UserId).ToArray()));
+            }
+        }
+
+        public Task<IReadOnlyDictionary<Guid, IReadOnlyList<Guid>>> GetAccessByUserAsync(CancellationToken cancellationToken) {
+            lock (_gate) {
+                return Task.FromResult<IReadOnlyDictionary<Guid, IReadOnlyList<Guid>>>(_grants
+                    .GroupBy(grant => grant.UserId)
+                    .ToDictionary(
+                        group => group.Key,
+                        group => (IReadOnlyList<Guid>)group.Select(grant => grant.RootId).ToArray()));
+            }
+        }
+
+        public Task ReplaceRootAccessAsync(Guid libraryRootId, IReadOnlyCollection<Guid> userIds, CancellationToken cancellationToken) {
+            lock (_gate) {
+                _grants.RemoveWhere(grant => grant.RootId == libraryRootId);
+                foreach (var userId in userIds) {
+                    _grants.Add((userId, libraryRootId));
+                }
+
+                return Task.CompletedTask;
+            }
+        }
+
+        public Task ReplaceUserAccessAsync(Guid userId, IReadOnlyCollection<Guid> libraryRootIds, CancellationToken cancellationToken) {
+            lock (_gate) {
+                _grants.RemoveWhere(grant => grant.UserId == userId);
+                foreach (var rootId in libraryRootIds) {
+                    _grants.Add((userId, rootId));
+                }
+
+                return Task.CompletedTask;
+            }
+        }
+
+        public Task GrantRootAccessAsync(Guid libraryRootId, IReadOnlyCollection<Guid> userIds, CancellationToken cancellationToken) {
+            lock (_gate) {
+                foreach (var userId in userIds) {
+                    _grants.Add((userId, libraryRootId));
+                }
+
+                return Task.CompletedTask;
+            }
+        }
     }
 
     internal sealed class VisibleEntityReadService : IEntityReadService {

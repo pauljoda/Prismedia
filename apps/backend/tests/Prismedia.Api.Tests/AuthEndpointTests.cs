@@ -220,6 +220,34 @@ public sealed class AuthEndpointTests {
         Assert.Equal(ApiProblemCodes.PasswordInvalid, weakProblem!.Code);
     }
 
+    [Theory]
+    [InlineData("/api/jobs")]
+    [InlineData("/api/settings")]
+    [InlineData("/api/files/detail?rootId=00000000-0000-0000-0000-000000000001")]
+    [InlineData("/api/identify/queue")]
+    [InlineData("/api/plugins")]
+    [InlineData("/api/libraries")]
+    public async Task AdminSurfacesRejectMembersWithForbidden(string path) {
+        using var factory = CreateFactory();
+        using var admin = factory.CreateAuthenticatedClient();
+        using var createResponse = await admin.PostAsJsonAsync(
+            "/api/users",
+            new UserCreateRequest("member", "member-password"), CodecJson);
+        createResponse.EnsureSuccessStatusCode();
+
+        using var client = factory.CreateClient();
+        using var login = await client.PostAsJsonAsync(
+            "/api/auth/login",
+            new LoginRequest("member", "member-password"));
+        var auth = await login.Content.ReadFromJsonAsync<LoginResponse>(CodecJson);
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, path);
+        request.Headers.Authorization = new("Bearer", auth!.AccessToken);
+        using var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
     private static WebApplicationFactory<Program> CreateFactory() =>
         new WebApplicationFactory<Program>().WithTestAuth();
 }
