@@ -18,21 +18,33 @@ public static class LibraryEndpoints {
             .WithTags("Settings");
 
         group.MapGet("", async (
+            HttpContext httpContext,
             SettingsService settings,
             ILibraryAccessStore access,
             CancellationToken cancellationToken) => {
+            var user = httpContext.GetCurrentUser()!;
             var roots = await settings.ListLibraryRootsAsync(cancellationToken);
-            var accessByRoot = await access.GetAccessByRootAsync(cancellationToken);
-            return Results.Ok(roots
-                .Select(root => root with {
-                    AccessUserIds = accessByRoot.GetValueOrDefault(root.Id) ?? []
-                })
-                .ToArray());
+            if (user.Role == UserRole.Admin) {
+                var accessByRoot = await access.GetAccessByRootAsync(cancellationToken);
+                return Results.Ok(roots
+                    .Select(root => root with {
+                        AccessUserIds = accessByRoot.GetValueOrDefault(root.Id) ?? []
+                    })
+                    .ToArray());
+            }
+
+            if (!user.CanCreateLibraries) {
+                return LibraryManagementForbidden();
+            }
+
+            // Members with the create permission manage only the roots they created
+            // and never see per-user access lists.
+            return Results.Ok(roots.Where(root => root.CreatedByUserId == user.Id).ToArray());
         })
-            .RequireAdmin()
             .WithName("ListLibraryRoots")
-            .WithSummary("Lists watched media roots with per-user access (admin).")
-            .Produces<LibraryRoot[]>();
+            .WithSummary("Lists watched media roots: every root with per-user access for admins, own-created roots for library creators.")
+            .Produces<LibraryRoot[]>()
+            .Produces<ApiProblem>(StatusCodes.Status403Forbidden);
 
         group.MapGet("/accessible", async (
             HttpContext httpContext,

@@ -124,6 +124,36 @@ public sealed class SettingsEndpointServiceTests {
         Assert.Equal(HttpStatusCode.Forbidden, full.StatusCode);
     }
 
+    [Fact]
+    public async Task LibraryCreatorsListOnlyTheRootsTheyCreated() {
+        using var factory = CreateFactory();
+        using var admin = factory.CreateAuthenticatedClient();
+        using var createUser = await admin.PostAsJsonAsync(
+            "/api/users",
+            new { Username = "creator", Password = "creator-password", CanCreateLibraries = true });
+        createUser.EnsureSuccessStatusCode();
+
+        using var client = factory.CreateClient();
+        using var login = await client.PostAsJsonAsync(
+            "/api/auth/login",
+            new { Username = "creator", Password = "creator-password" });
+        var token = (await login.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("accessToken").GetString();
+        client.DefaultRequestHeaders.Authorization = new("Bearer", token);
+
+        using var created = await client.PostAsJsonAsync(
+            "/api/libraries",
+            new LibraryRootCreateRequest("/media/mine", "Mine", false, null, null, null, null, null, null));
+        var listed = await client.GetFromJsonAsync<IReadOnlyList<LibraryRoot>>("/api/libraries");
+
+        Assert.True(created.IsSuccessStatusCode);
+        Assert.NotNull(listed);
+        // The pre-seeded admin root is invisible; only the member's own creation lists.
+        var own = Assert.Single(listed);
+        Assert.Equal("Mine", own.Label);
+        Assert.NotNull(own.CreatedByUserId);
+    }
+
     private static WebApplicationFactory<Program> CreateFactory() =>
         new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder => {
