@@ -7,6 +7,7 @@
    * Renders nothing for an ordinary owned entity with no acquisition story, so every entity page can
    * mount it unconditionally. Replaces the old hero-action hooks and EntityAcquisitionSection.
    */
+  import { onDestroy } from "svelte";
   import { Bell, BellRing, CloudDownload, RefreshCw, Search } from "@lucide/svelte";
   import { Button } from "@prismedia/ui-svelte";
   import { MONITOR_STATUS } from "$lib/api/generated/codes";
@@ -96,6 +97,26 @@
     if (id === lastRequestedId) return;
     lastRequestedId = id;
     void refresh();
+  });
+
+  // Acquisition state changes outside this page too — the Downloads table re-searches, a monitor
+  // sweep starts a grab for a phantom, a request commits from Discover. Poll while the entity has an
+  // acquisition story (wanted, monitored, monitorable, or an acquisition in hand) so the card stays
+  // lock-step with the global Downloads view; an ordinary owned entity never polls. AcquisitionPanel
+  // separately polls the fine-grained transfer state while a download is live.
+  let pollTimer: ReturnType<typeof setInterval> | null = null;
+  $effect(() => {
+    const shouldPoll =
+      !!entityId && loadedId !== null && (wanted || monitor !== null || !!eligibility?.canMonitor || acquisition !== null);
+    if (shouldPoll && !pollTimer) {
+      pollTimer = setInterval(() => void refresh(), 5000);
+    } else if (!shouldPoll && pollTimer) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+    }
+  });
+  onDestroy(() => {
+    if (pollTimer) clearInterval(pollTimer);
   });
 
   /** Toggle semantics mirror the acquisition panel: not monitored → start; paused → resume; active → stop. */
