@@ -1302,7 +1302,7 @@ Directory: `NzbDrone.Core/Profiles/Releases/` (8 files) +
   "Required"/"Ignored" as the entire current surface of this feature and route
   any preferred/weighted-term concept through its Custom-Format-equivalent
   system instead of resurrecting a `Preferred` list here.
-- `ReleaseProfileService.cs` — `EnabledForTags(tagIds, indexerId)` = 
+- `ReleaseProfileService.cs` — `EnabledForTags(tagIds, indexerId)` =
   `AllForTags(tagIds)` (tag-match-or-untagged, minus anything in
   `ExcludedTags` for those tags) filtered to `Enabled == true` and
   (`IndexerIds` contains this indexer OR `IndexerIds` is empty).

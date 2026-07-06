@@ -337,12 +337,14 @@ public sealed partial class HlsAssetService : IHlsAssetService {
                 return outputPath;
             }
 
-            generation = FindActiveRenditionGeneration(id, rendition, audioCacheKey, segmentIndex);
-            if (generation is null) {
+            var activeGeneration = FindActiveRenditionGeneration(id, rendition, audioCacheKey, segmentIndex);
+            if (activeGeneration is null) {
                 CancelActiveRenditionGenerations(id, audioCacheKey, rendition);
-                generation = StartVirtualRenditionGeneration(
+                activeGeneration = StartVirtualRenditionGeneration(
                     id, source, rendition, audioCacheKey, audioStreamIndex, PrerollSegmentIndex(segmentIndex));
             }
+
+            generation = activeGeneration;
         } finally {
             generationLock.Release();
         }

@@ -592,14 +592,6 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
         return id is { } acquisitionId ? await GetAsync(acquisitionId, cancellationToken) : null;
     }
 
-    public async Task<string?> GetTransferClientItemIdAsync(Guid acquisitionId, CancellationToken cancellationToken) =>
-        await db.DownloadTransfers
-            .AsNoTracking()
-            .Where(transfer => transfer.AcquisitionId == acquisitionId)
-            .OrderByDescending(transfer => transfer.CreatedAt)
-            .Select(transfer => transfer.ClientItemId)
-            .FirstOrDefaultAsync(cancellationToken);
-
     private async Task<Dictionary<Guid, double?>> LatestProgressAsync(IReadOnlyList<Guid> acquisitionIds, CancellationToken cancellationToken) {
         if (acquisitionIds.Count == 0) {
             return [];

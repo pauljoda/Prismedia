@@ -229,8 +229,8 @@ internal static class ImportRootResolution {
 /// Movie import engine: places the release's primary video file at
 /// <c>{Title (Year)}/{Title (Year)}.{ext}</c> under the first video-enabled library root, writes the
 /// identify hint keyed on the movie folder, and chains a video scan — which binds the folder to the
-/// wanted Movie entity via the acquisition hint. Move-mode only (the torrent is removed after import);
-/// per-kind import profiles land later.
+/// wanted Movie entity via the acquisition hint. The profile's import mode controls whether the payload is
+/// moved, copied, or hardlinked before the completed download is cleaned up or left to seed.
 /// </summary>
 public sealed class MovieAcquisitionImportEngine(
     IAcquisitionStore acquisitions,
@@ -396,8 +396,8 @@ public sealed class TvAcquisitionImportEngine(
 /// Music import engine: places the album release's audio files (and cover art) under
 /// <c>{Artist}/{Album}/</c> in the first audio-enabled library root, preserving disc-folder structure,
 /// writes the identify hint keyed on the album folder, and chains an audio scan — which binds the album
-/// and artist folders to their wanted entities via the acquisition hint. Move-mode only; per-kind import
-/// profiles land later.
+/// and artist folders to their wanted entities via the acquisition hint. The profile's import mode controls
+/// whether the payload is moved, copied, or hardlinked before cleanup or seeding watch.
 /// </summary>
 public sealed class MusicAcquisitionImportEngine(
     IAcquisitionStore acquisitions,
@@ -424,7 +424,7 @@ public sealed class MusicAcquisitionImportEngine(
 
         var artist = string.IsNullOrWhiteSpace(import.Author) ? "Unknown Artist" : import.Author;
         var plan = ImportTargetResolver.Resolve(
-            payload.ContentRoot, root.Path, MusicImportPlanBuilder.Plan(payload.Files, artist, import.Title, profile?.PathTemplate));
+            payload.ContentRoot, root.Path, MusicImportPlanBuilder.Plan(payload.Files, artist, import.Title, profile?.PathTemplate, import.Year));
         if (plan.Blocked) {
             await acquisitions.SetStatusAsync(
                 import.Id, AcquisitionStatus.ManualImportRequired,
@@ -440,7 +440,7 @@ public sealed class MusicAcquisitionImportEngine(
 
         // The hint and final path key on the ALBUM folder (not a disc subfolder a track landed in), so
         // the audio scan's album upsert path matches the bind exactly.
-        var albumFolder = Path.GetFullPath(Path.Combine(root.Path, MusicImportPlanBuilder.AlbumFolderRelative(artist, import.Title, profile?.PathTemplate)));
+        var albumFolder = Path.GetFullPath(Path.Combine(root.Path, MusicImportPlanBuilder.AlbumFolderRelative(artist, import.Title, profile?.PathTemplate, import.Year)));
         // The owned quality is the audio-ladder code (and PROPER/REPACK revision) from the selected release.
         // An album is multi-file, so its monitor fulfills on import (no single-file swap); the code is captured
         // for display only.

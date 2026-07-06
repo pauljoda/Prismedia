@@ -146,15 +146,24 @@ public sealed class MusicImportPlanBuilderTests {
         var plan = MusicImportPlanBuilder.Plan([
             File("Release/01 - One.flac"),
             File("Release/02 - Two.flac")
-        ], "Daft Punk", "Discovery", template);
+        ], "Daft Punk", "Discovery", template, year: 2001);
 
         // The album folder helper (the scan hint) matches the folder tracks were placed under.
-        var folder = MusicImportPlanBuilder.AlbumFolderRelative("Daft Punk", "Discovery", template);
-        Assert.Equal("Daft Punk/Discovery", folder); // no {Year} supplied by the album-folder context → empty parens dropped
+        var folder = MusicImportPlanBuilder.AlbumFolderRelative("Daft Punk", "Discovery", template, year: 2001);
+        Assert.Equal("Daft Punk/Discovery (2001)", folder);
         Assert.All(plan.Items, item => Assert.StartsWith(folder + "/", item.TargetRelativePath));
         Assert.Equal(
-            ["Daft Punk/Discovery/01 - One.flac", "Daft Punk/Discovery/02 - Two.flac"],
+            ["Daft Punk/Discovery (2001)/01 - One.flac", "Daft Punk/Discovery (2001)/02 - Two.flac"],
             plan.Items.Select(item => item.TargetRelativePath).ToArray());
+    }
+
+    [Fact]
+    public void CustomAlbumTemplateDropsEmptyYearWhenNoYearIsKnown() {
+        const string template = "{Artist}/{Album} ({Year})";
+
+        var folder = MusicImportPlanBuilder.AlbumFolderRelative("Daft Punk", "Discovery", template);
+
+        Assert.Equal("Daft Punk/Discovery", folder);
     }
 }
 

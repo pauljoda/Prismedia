@@ -46,3 +46,9 @@ content and uses indexer/usenet quota, so it's left to run by hand. Checklist:
 Tasks #1–#17 implemented, tested (Domain 104 / Application 248 / Infrastructure 1013 /
 Api 257), and pushed to PR #44. Task #18 verified non-destructively as above; the live
 grab is owned by the maintainer.
+
+2026-07-06 quality pass: code/test gates remain green after the final audit, and the
+live grab/import remains the release blocker. Before shipping, run one torrent
+grab/import and one usenet grab/import through Prismedia at `http://localhost:8008`,
+including category/routing, scan binding without duplicates, history entries,
+cancel/remove behavior, and seed-goal cleanup.

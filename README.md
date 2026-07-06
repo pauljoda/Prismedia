@@ -150,7 +150,7 @@ Plugins can be native TypeScript or Python, and Stash community scrapers can be 
 
 ### Requests
 
-Connect your **Radarr, Sonarr, and Lidarr** instances and request new media without leaving Prismedia. One search fans out across every connected service and comes back as a poster grid with filters and sort — items you already track carry an "In Radarr/Sonarr/Lidarr" badge, and requesting them becomes an update (monitor more seasons, kick off a search) instead of a re-add. Detail pages show cast, multi-source ratings, season pickers, full artist discographies, and album track lists; with a TMDB provider configured, NSFW mode also surfaces TMDB's adult catalog. A request history page tracks everything you've asked for with live status from each service — pending, downloading, partial, or available.
+Request is Prismedia's first-party acquisition workspace. Search for books, authors, movies, series, artists, and albums, then let Prismedia create Wanted library entities, search Prowlarr or direct Torznab/Newznab indexers, route releases to qBittorrent, Transmission, or SABnzbd, monitor the download, import the result into the right library, and keep durable History for every grab, import, failure, blocklist, and removal. Wanted and acquired items live on the same library pages with release picking, live progress, monitoring, Missing/Cutoff Unmet lists, and detail metadata from providers such as OpenLibrary, TMDB, and MusicBrainz.
 
 <p align="center">
   <img src="docs/screenshots/requests.png" alt="Request search" width="49%" />

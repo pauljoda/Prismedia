@@ -221,29 +221,35 @@ public sealed class AcquisitionService(
             ? await downloadClients.GetAsync(id, cancellationToken) ?? await downloadClients.GetDefaultAsync(cancellationToken)
             : await downloadClients.GetDefaultAsync(cancellationToken);
 
+    private async Task<Contracts.Acquisition.DownloadClientDetail?> ResolveRemovalClientAsync(
+        AcquisitionTransferInfo transfer,
+        CancellationToken cancellationToken) =>
+        transfer.DownloadClientConfigId is { } id
+            ? await downloadClients.GetAsync(id, cancellationToken)
+            : await downloadClients.GetDefaultAsync(cancellationToken);
+
     private static DownloadClientConnection ConnectionFor(Contracts.Acquisition.DownloadClientDetail client) =>
         new(client.Id, client.Kind, client.BaseUrl, client.Username, client.Password, client.Category, client.ApiKey);
 
     private static AcquisitionFileItem ToFileItem(DownloadItemFile file) => new(file.Name, file.SizeBytes, file.Progress);
 
-    /// <summary>Cancels an acquisition: best-effort removes the torrent (and its data) from the client, then marks it cancelled.</summary>
+    /// <summary>Cancels an acquisition: best-effort removes the download (and its data) from the owning client, then marks it cancelled.</summary>
     public async Task<AcquisitionDetail?> CancelAsync(Guid id, CancellationToken cancellationToken) {
         var detail = await store.GetAsync(id, cancellationToken);
         if (detail is null) {
             return null;
         }
 
-        var clientItemId = await store.GetTransferClientItemIdAsync(id, cancellationToken);
-        if (!string.IsNullOrWhiteSpace(clientItemId)) {
-            var client = await downloadClients.GetDefaultAsync(cancellationToken);
+        var transfer = await store.GetTransferInfoAsync(id, cancellationToken);
+        if (!string.IsNullOrWhiteSpace(transfer?.ClientItemId)) {
+            var client = await ResolveRemovalClientAsync(transfer, cancellationToken);
             if (client is not null) {
                 try {
-                    var connection = new DownloadClientConnection(client.Id, client.Kind, client.BaseUrl, client.Username, client.Password, client.Category, client.ApiKey);
-                    await clients.Get(client.Kind).RemoveAsync(connection, clientItemId, deleteData: true, cancellationToken);
+                    await clients.Get(client.Kind).RemoveAsync(ConnectionFor(client), transfer.ClientItemId, deleteData: true, cancellationToken);
                 } catch (OperationCanceledException) {
                     throw;
                 } catch (Exception) {
-                    // The torrent may already be gone; cancellation should still succeed locally.
+                    // The download may already be gone; cancellation should still succeed locally.
                 }
             }
         }
@@ -261,7 +267,7 @@ public sealed class AcquisitionService(
     }
 
     /// <summary>
-    /// Removes an acquisition entirely: best-effort deletes its torrent (and data) from the client, then
+    /// Removes an acquisition entirely: best-effort deletes its download (and data) from the owning client, then
     /// hard-deletes the record — and, like cancel, removes the wanted placeholder entity it created.
     /// </summary>
     public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken) {
@@ -274,16 +280,16 @@ public sealed class AcquisitionService(
             await RecordRemovedAsync(summary, "Removed by user.", cancellationToken);
         }
 
-        var clientItemId = await store.GetTransferClientItemIdAsync(id, cancellationToken);
-        if (!string.IsNullOrWhiteSpace(clientItemId)) {
-            var client = await downloadClients.GetDefaultAsync(cancellationToken);
+        var transfer = await store.GetTransferInfoAsync(id, cancellationToken);
+        if (!string.IsNullOrWhiteSpace(transfer?.ClientItemId)) {
+            var client = await ResolveRemovalClientAsync(transfer, cancellationToken);
             if (client is not null) {
                 try {
-                    await clients.Get(client.Kind).RemoveAsync(ConnectionFor(client), clientItemId, deleteData: true, cancellationToken);
+                    await clients.Get(client.Kind).RemoveAsync(ConnectionFor(client), transfer.ClientItemId, deleteData: true, cancellationToken);
                 } catch (OperationCanceledException) {
                     throw;
                 } catch (Exception) {
-                    // The torrent may already be gone; removal should still delete the record.
+                    // The download may already be gone; removal should still delete the record.
                 }
             }
         }

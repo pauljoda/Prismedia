@@ -79,7 +79,7 @@ public sealed class EfBookAcquisitionProfileStore(PrismediaDbContext db) : IBook
         row.PathTemplate = command.PathTemplate;
         row.ImportMode = command.ImportMode;
         row.AllowedFormats = command.AllowedFormats.Select(format => format.ToCode()).ToArray();
-        row.AllowedQualities = command.AllowedQualities.ToArray();
+        row.AllowedQualities = (command.AllowedQualities ?? []).ToArray();
         row.CutoffQuality = string.IsNullOrWhiteSpace(command.CutoffQuality) ? null : command.CutoffQuality;
         row.PreferredLanguages = command.PreferredLanguages.ToArray();
         row.MinSeeders = command.MinSeeders;

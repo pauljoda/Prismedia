@@ -25,31 +25,80 @@ public sealed partial class HlsAssetService {
         int startSegment) {
         var endSegment = SegmentCount(source.DurationSeconds!.Value) - 1;
         var key = $"{id}/{audioCacheKey}/{rendition.Name}/{startSegment}";
-        return ActiveRenditions.GetOrAdd(key, _ => {
-            var stagingDirectory = VirtualPath(id, audioCacheKey, "v", rendition.Name, $".gen_{startSegment:00000}_{Guid.NewGuid():N}");
-            var cancellation = new CancellationTokenSource();
-            var generation = new VirtualRenditionGeneration(
+        if (ActiveRenditions.TryGetValue(key, out var activeGeneration)) {
+            return activeGeneration;
+        }
+
+        var stagingDirectory = VirtualPath(id, audioCacheKey, "v", rendition.Name, $".gen_{startSegment:00000}_{Guid.NewGuid():N}");
+        var cancellation = new CancellationTokenSource();
+        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var generation = new VirtualRenditionGeneration(
+            startSegment,
+            endSegment,
+            stagingDirectory,
+            cancellation,
+            completion.Task,
+            EntityId: id,
+            StartedAtUtc: DateTimeOffset.UtcNow);
+
+        if (!ActiveRenditions.TryAdd(key, generation)) {
+            cancellation.Dispose();
+            if (ActiveRenditions.TryGetValue(key, out activeGeneration)) {
+                return activeGeneration;
+            }
+
+            return StartVirtualRenditionGeneration(
+                id,
+                source,
+                rendition,
+                audioCacheKey,
+                audioStreamIndex,
+                startSegment);
+        }
+
+        _ = CompleteVirtualRenditionGenerationAsync(
+            completion,
+            id,
+            source,
+            rendition,
+            audioCacheKey,
+            audioStreamIndex,
+            startSegment,
+            stagingDirectory,
+            key,
+            cancellation.Token);
+
+        return generation;
+    }
+
+    private async Task CompleteVirtualRenditionGenerationAsync(
+        TaskCompletionSource completion,
+        Guid id,
+        VideoSourceFile source,
+        VirtualHlsRendition rendition,
+        string audioCacheKey,
+        int? audioStreamIndex,
+        int startSegment,
+        string stagingDirectory,
+        string generationKey,
+        CancellationToken cancellationToken) {
+        try {
+            await GenerateVirtualRenditionAsync(
+                id,
+                source,
+                rendition,
+                audioCacheKey,
+                audioStreamIndex,
                 startSegment,
-                endSegment,
                 stagingDirectory,
-                cancellation,
-                Task.CompletedTask,
-                EntityId: id,
-                StartedAtUtc: DateTimeOffset.UtcNow);
-            generation = generation with {
-                Task = GenerateVirtualRenditionAsync(
-                    id,
-                    source,
-                    rendition,
-                    audioCacheKey,
-                    audioStreamIndex,
-                    startSegment,
-                    stagingDirectory,
-                    key,
-                    cancellation.Token)
-            };
-            return generation;
-        });
+                generationKey,
+                cancellationToken);
+            completion.TrySetResult();
+        } catch (OperationCanceledException) {
+            completion.TrySetCanceled(cancellationToken);
+        } catch (Exception ex) {
+            completion.TrySetException(ex);
+        }
     }
 
     private async Task GenerateVirtualRenditionAsync(

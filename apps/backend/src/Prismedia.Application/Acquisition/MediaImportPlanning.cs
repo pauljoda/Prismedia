@@ -110,7 +110,7 @@ public static class MusicImportPlanBuilder {
     /// (<paramref name="template"/> defaults to <see cref="MediaNamingTemplates.MusicDefault"/>; a blank or
     /// invalid template degrades to the default).
     /// </summary>
-    public static ImportPlan Plan(IReadOnlyList<ImportCandidateFile> files, string artist, string album, string? template = null) {
+    public static ImportPlan Plan(IReadOnlyList<ImportCandidateFile> files, string artist, string album, string? template = null, int? year = null) {
         var audio = files
             .Where(file => AudioExtensions.Contains(Path.GetExtension(file.RelativePath)))
             .ToArray();
@@ -118,7 +118,7 @@ public static class MusicImportPlanBuilder {
             return ImportPlan.Block(ImportBlockReason.NoSupportedPayload);
         }
 
-        var folder = AlbumFolderRelative(artist, album, template);
+        var folder = AlbumFolderRelative(artist, album, template, year);
         var prefix = CommonDirectoryPrefix(audio.Select(file => file.RelativePath).ToArray());
         var items = new List<ImportPlanItem>(files.Count);
         foreach (var file in audio.OrderBy(file => file.RelativePath, StringComparer.OrdinalIgnoreCase)) {
@@ -139,8 +139,8 @@ public static class MusicImportPlanBuilder {
     /// The album folder path (relative to the library root) the template renders — the SAME render used
     /// for placement, so the scan hint keyed on this folder matches where tracks were placed.
     /// </summary>
-    public static string AlbumFolderRelative(string artist, string album, string? template = null) =>
-        MediaNamingTemplates.RenderMusicAlbumFolder(template, new MediaNamingContext(album, Artist: artist, Album: album));
+    public static string AlbumFolderRelative(string artist, string album, string? template = null, int? year = null) =>
+        MediaNamingTemplates.RenderMusicAlbumFolder(template, new MediaNamingContext(album, Artist: artist, Album: album, Year: year));
 
     /// <summary>Sanitizes every segment of a relative path, keeping its directory structure.</summary>
     private static string SanitizeRelative(string relativePath) =>

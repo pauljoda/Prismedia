@@ -19,6 +19,14 @@ series, music) via plugins.
 > generators, not a real path component; the real Sonarr source lives at
 > `/Users/pauldavis/Dev/_ARCHIVE/Sonarr`.
 
+> **Status note (2026-07-06):** this matrix is the pre-build gap snapshot used to
+> plan the branch. The P0/P1 build-plan items have since landed in code, including
+> SABnzbd/usenet, Transmission/client routing, direct Torznab/Newznab, remote path
+> mappings, seed goals, hardlink import, quality ladders, custom formats, history,
+> Wanted lists, and multi-kind imports. Use `BUILD-PLAN.md` and
+> `E2E-VERIFICATION.md` for current ship-readiness; the final live grab/import
+> gate is still intentionally called out there.
+
 **Severity key for the drop-in goal:**
 - **P0** — the core request→search→grab→import→monitor loop is broken or a real Sonarr user's data
   can't come across without it.

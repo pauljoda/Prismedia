@@ -314,9 +314,6 @@ public interface IAcquisitionStore {
     /// </summary>
     Task MarkTransferStalledAsync(Guid transferId, DateTimeOffset? stalledSince, CancellationToken cancellationToken);
 
-    /// <summary>Returns the most recent transfer's client item id for an acquisition, or null when none exists.</summary>
-    Task<string?> GetTransferClientItemIdAsync(Guid acquisitionId, CancellationToken cancellationToken);
-
     /// <summary>Loads the full import context (metadata + profile + completed download path) for an acquisition.</summary>
     Task<AcquisitionImportContext?> GetImportContextAsync(Guid acquisitionId, CancellationToken cancellationToken);
 
