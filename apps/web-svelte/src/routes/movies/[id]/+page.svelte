@@ -11,8 +11,7 @@
   } from "@lucide/svelte";
   import { cn } from "@prismedia/ui-svelte";
   import { goto } from "$app/navigation";
-  import EntityAcquisitionSection from "$lib/components/acquisitions/EntityAcquisitionSection.svelte";
-  import { useWantedRequest } from "$lib/components/acquisitions/use-wanted-request.svelte";
+  import EntityAcquisitionCard from "$lib/components/acquisitions/EntityAcquisitionCard.svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import EntityDetailHeroDates from "$lib/components/entities/EntityDetailHeroDates.svelte";
   import { fetchMovie, fetchVideo, type MovieDetail, type VideoDetail } from "$lib/api/media";
@@ -34,7 +33,7 @@
     updateEntityMetadata,
   } from "$lib/api/entity-mutations";
   import { settingKeys, valuesToLibrarySettings } from "$lib/settings/app-settings";
-  import { getCapability } from "$lib/api/capabilities";
+  import { getCapability, isWanted } from "$lib/api/capabilities";
   import {
     toggleOptimisticEntityFlag,
     updateOptimisticEntityRating,
@@ -125,17 +124,10 @@
     video ? entityCardToDetailCard(video) : null
   ));
   const identifyAction = useIdentifyDetailAction(() => card?.entity.id, () => card?.entity.kind);
-  // Shared wanted-placeholder surface: the entity's acquisition and the "Search for release" action.
-  const wantedRequest = useWantedRequest(() => movie?.id, () => movie?.capabilities, loadMovie);
-  const heroActions = $derived.by((): EntityDetailActionButton[] => {
-    const actions: EntityDetailActionButton[] = identifyAction.action ? [identifyAction.action] : [];
-    // A phantom (wanted, no acquisition of its own) offers Search here — committing it starts the
-    // auto-grabbing acquisition and the inline acquisition section takes over.
-    if (wantedRequest.action) {
-      actions.push(wantedRequest.action);
-    }
-    return actions;
-  });
+  // Wanted/tracking state (Search for release, releases, live download, monitoring) lives in the
+  // EntityAcquisitionCard mounted below the detail.
+  const heroActions = $derived.by((): EntityDetailActionButton[] =>
+    identifyAction.action ? [identifyAction.action] : []);
   const videoId = $derived(video?.id ?? "");
 
   const playerProps = $derived.by(() => {
@@ -422,7 +414,7 @@
     }
   }
 
-  const entityWanted = $derived(wantedRequest.wanted);
+  const entityWanted = $derived(!!movie && isWanted(movie.capabilities));
 
   /** Cancelling a wanted movie's request deletes the placeholder entity, so this page no longer exists. */
   function handleAcquisitionCancelled() {
@@ -820,9 +812,12 @@
       {/snippet}
     </EntityDetail>
 
-    {#if wantedRequest.acquisition}
-      <EntityAcquisitionSection acquisition={wantedRequest.acquisition} onCancelled={handleAcquisitionCancelled} />
-    {/if}
+    <EntityAcquisitionCard
+      entityId={movie?.id}
+      capabilities={movie?.capabilities}
+      onChanged={loadMovie}
+      onCancelled={handleAcquisitionCancelled}
+    />
   {/if}
 </div>
 

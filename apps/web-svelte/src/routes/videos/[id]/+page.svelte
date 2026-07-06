@@ -53,8 +53,7 @@
   import { useAppChrome } from "$lib/stores/app-chrome.svelte";
   import NsfwBlur from "$lib/components/nsfw/NsfwBlur.svelte";
   import { isWanted } from "$lib/api/capabilities";
-  import EntityAcquisitionSection from "$lib/components/acquisitions/EntityAcquisitionSection.svelte";
-  import { useWantedRequest } from "$lib/components/acquisitions/use-wanted-request.svelte";
+  import EntityAcquisitionCard from "$lib/components/acquisitions/EntityAcquisitionCard.svelte";
   import EntityDetail, {
     type EntityDetailActionButton,
     type EntityMetadataUpdateRequest,
@@ -128,20 +127,15 @@
     };
   });
   const identifyAction = useIdentifyDetailAction(() => card?.entity.id, () => card?.entity.kind);
-  // Shared wanted-placeholder surface: a phantom episode has no file to play — it offers "Search for
-  // release" and the inline acquisition section instead of the player.
-  const wantedRequest = useWantedRequest(() => video?.id, () => video?.capabilities, loadVideo);
-  const heroActions = $derived.by((): EntityDetailActionButton[] => {
-    const actions: EntityDetailActionButton[] = identifyAction.action ? [identifyAction.action] : [];
-    if (wantedRequest.action) {
-      actions.push(wantedRequest.action);
-    }
-    return actions;
-  });
+  // A phantom episode has no file to play — the acquisition card below the detail offers "Search for
+  // release" and the acquisition management surface instead of the player.
+  const entityWanted = $derived(!!video && isWanted(video.capabilities));
+  const heroActions = $derived.by((): EntityDetailActionButton[] =>
+    identifyAction.action ? [identifyAction.action] : []);
   const videoId = $derived(video?.id ?? "");
 
   const playerProps = $derived.by(() => {
-    if (!video || wantedRequest.wanted) return null;
+    if (!video || entityWanted) return null;
     return extractVideoPlayerProps(video.id, video.capabilities, playbackInfo, selectedAudioStreamIndex);
   });
 
@@ -840,18 +834,21 @@
         />
       {/snippet}
     </EntityDetail>
-  {:else if card && video && wantedRequest.wanted}
-    <!-- A phantom episode: no file to play yet — metadata, Search for release, and the inline
-         acquisition surface, exactly like a wanted movie or book. -->
+  {:else if card && video && entityWanted}
+    <!-- A phantom episode: no file to play yet — metadata plus the acquisition card (search,
+         releases, live download, monitoring, cancel), exactly like a wanted movie or book. -->
     <EntityDetail {card} posterSize="medium" actionButtons={heroActions}>
       {#snippet heroBadges()}
         <span class="hero-badge wanted">Wanted</span>
       {/snippet}
     </EntityDetail>
 
-    {#if wantedRequest.acquisition}
-      <EntityAcquisitionSection acquisition={wantedRequest.acquisition} onCancelled={() => void loadVideo()} />
-    {/if}
+    <EntityAcquisitionCard
+      entityId={video?.id}
+      capabilities={video?.capabilities}
+      onChanged={loadVideo}
+      onCancelled={() => void loadVideo()}
+    />
   {/if}
 </div>
 

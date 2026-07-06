@@ -21,6 +21,7 @@ import {
   listAcquisitionHistory,
   listAcquisitionProfiles,
   listAcquisitions,
+  listDownloadQueue,
   listDownloadClients,
   listIndexers,
   queueAcquisition as queueAcquisitionRequest,
@@ -51,6 +52,7 @@ import type {
   BookAcquisitionProfileView,
   DownloadClientSaveRequest,
   DownloadClientSummary,
+  DownloadQueueItemView,
   DownloadClientTestRequest,
   DownloadClientTestResponse,
   IndexerConfigSaveRequest,
@@ -114,6 +116,14 @@ export async function deleteAcquisitionProfileConfig(id: string): Promise<void> 
 // ── Acquisitions ──────────────────────────────────────────────
 export async function fetchAcquisitions(): Promise<AcquisitionSummary[]> {
   return unwrapGenerated(await listAcquisitions(), "Failed to load acquisitions");
+}
+
+/**
+ * The global Downloads view: every active acquisition across all kinds, with live download-client
+ * telemetry (progress, speed, ETA, peers, client) where a transfer is in flight.
+ */
+export async function fetchDownloadQueue(): Promise<DownloadQueueItemView[]> {
+  return unwrapGenerated(await listDownloadQueue(), "Failed to load downloads");
 }
 
 export async function fetchAcquisition(id: string): Promise<AcquisitionDetail> {

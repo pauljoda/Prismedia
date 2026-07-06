@@ -1,5 +1,6 @@
 import {
   getEntityMonitor,
+  getEntityMonitorEligibility,
   listCutoffUnmetWanted,
   listMissingWanted,
   listMonitors,
@@ -9,7 +10,7 @@ import {
   startMonitor as startMonitorRequest,
   stopMonitor as stopMonitorRequest,
 } from "$lib/api/generated/prismedia";
-import type { MonitorView, WantedPageView } from "$lib/api/generated/model";
+import type { MonitorEligibilityView, MonitorView, WantedPageView } from "$lib/api/generated/model";
 import type { MonitorPresetCode } from "$lib/api/generated/codes";
 import { unwrapGenerated } from "$lib/api/generated-response";
 
@@ -55,6 +56,15 @@ export async function startMonitor(acquisitionId: string): Promise<MonitorView> 
  */
 export async function startEntityMonitor(entityId: string, preset?: MonitorPresetCode | null): Promise<MonitorView> {
   return unwrapGenerated(await startEntityMonitorRequest({ entityId, preset: preset ?? undefined }), "Failed to monitor this item");
+}
+
+/**
+ * Whether the entity can carry a standing container monitor: it must be a monitorable container kind
+ * holding a provider identity an enabled metadata plugin can track (re-resolve by id). The trackable
+ * provider ids come along so the UI can name what the watch rides on.
+ */
+export async function fetchMonitorEligibility(entityId: string): Promise<MonitorEligibilityView> {
+  return unwrapGenerated(await getEntityMonitorEligibility(entityId), "Failed to load monitoring eligibility");
 }
 
 /** The container monitor watching an entity, or null when it is not monitored. */

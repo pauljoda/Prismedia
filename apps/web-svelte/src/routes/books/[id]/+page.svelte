@@ -6,9 +6,8 @@
   import { BookOpen, Info, Play, SlidersHorizontal, Users } from "@lucide/svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import MediaProgressPanel from "$lib/components/MediaProgressPanel.svelte";
-  import EntityAcquisitionSection from "$lib/components/acquisitions/EntityAcquisitionSection.svelte";
-  import { useWantedRequest } from "$lib/components/acquisitions/use-wanted-request.svelte";
-  import { getCapability } from "$lib/api/capabilities";
+  import EntityAcquisitionCard from "$lib/components/acquisitions/EntityAcquisitionCard.svelte";
+  import { getCapability, isWanted } from "$lib/api/capabilities";
   import { updateEntityProgress } from "$lib/api/playback";
   import { fetchBook, type BookDetail } from "$lib/api/media";
   import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
@@ -90,9 +89,8 @@
   const bookId = $derived(page.params.id ?? "");
   const bookType = $derived(book?.bookType ?? null);
   // A wanted placeholder has metadata but no file yet; reading is offered only once the file lands.
-  // Shared wanted-placeholder surface: the entity's acquisition and the "Search for release" action.
-  const wantedRequest = useWantedRequest(() => book?.id, () => book?.capabilities, loadBook);
-  const entityWanted = $derived(wantedRequest.wanted);
+  // Its acquisition/monitoring surface is the EntityAcquisitionCard mounted below the detail.
+  const entityWanted = $derived(!!book && isWanted(book.capabilities));
   // Single-file books (EPUB/PDF) are read straight from the source file with no chapter entities.
   const isSingleFileBook = $derived(!!book && book.format !== "image-archive");
   const singleFileProgress = $derived(book && isSingleFileBook ? getCapability(book.capabilities, "progress") : null);
@@ -144,12 +142,8 @@
     const actions: EntityDetailActionButton[] = [];
     if (identifyAction.action) actions.push(identifyAction.action);
     if (entityWanted) {
-      // No file yet. A phantom (discovered by a container monitor, no acquisition of its own) offers
-      // Search here — committing it starts the auto-grabbing acquisition; otherwise the acquisition
-      // section below owns the actionable state (releases, monitor, cancel).
-      if (wantedRequest.action) {
-        actions.push(wantedRequest.action);
-      }
+      // No file yet — the acquisition card below owns the actionable state (search for release,
+      // release picker, live download, monitoring, cancel).
       return actions;
     }
     if (isSingleFileBook) {
@@ -593,11 +587,14 @@
 
     </EntityDetail>
 
-    {#if wantedRequest.acquisition}
-      <!-- Wanted/tracking state lives on the entity itself: the same management surface as the
-           acquisition route, inline — releases, live download, monitoring, cancel. -->
-      <EntityAcquisitionSection acquisition={wantedRequest.acquisition} onCancelled={handleAcquisitionCancelled} />
-    {/if}
+    <!-- Wanted/tracking state lives on the entity itself: search, releases, live download,
+         monitoring, cancel — one card, hidden entirely for an ordinary owned book. -->
+    <EntityAcquisitionCard
+      entityId={book?.id}
+      capabilities={book?.capabilities}
+      onChanged={loadBook}
+      onCancelled={handleAcquisitionCancelled}
+    />
 
     {#if progressDisplay}
       <section class="progress-section">

@@ -10,7 +10,7 @@
     updateEntityFlags,
     updateEntityMetadata,
   } from "$lib/api/entity-mutations";
-  import { getCapability } from "$lib/api/capabilities";
+  import { getCapability, isWanted } from "$lib/api/capabilities";
   import {
     toggleOptimisticEntityFlag,
     updateOptimisticEntityRating,
@@ -25,8 +25,7 @@
   } from "$lib/entities/entity-relationship-thumbnails";
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
   import { ENTITY_KIND } from "$lib/entities/entity-codes";
-  import EntityAcquisitionSection from "$lib/components/acquisitions/EntityAcquisitionSection.svelte";
-  import { useWantedRequest } from "$lib/components/acquisitions/use-wanted-request.svelte";
+  import EntityAcquisitionCard from "$lib/components/acquisitions/EntityAcquisitionCard.svelte";
   import EntityDetail, {
     type EntityMetadataUpdateRequest,
     type EntityDetailSection,
@@ -122,9 +121,9 @@
     ]);
   });
 
-  // Shared wanted-placeholder surface: a phantom season offers "Search for release" (a season-pack
-  // acquisition) and the inline acquisition section, exactly like a wanted movie or book.
-  const wantedRequest = useWantedRequest(() => season?.id, () => season?.capabilities, loadSeason);
+  // A phantom season's "Search for release" (a season-pack acquisition) and its acquisition
+  // management live in the EntityAcquisitionCard below the detail, exactly like a wanted movie.
+  const seasonWanted = $derived(!!season && isWanted(season.capabilities));
 
   async function loadSeason() {
     loadState = "loading";
@@ -221,7 +220,7 @@
       posterSize="large"
       tabs={detailTabs}
       sections={detailSections}
-      actionButtons={wantedRequest.action ? [wantedRequest.action] : []}
+      actionButtons={[]}
     >
       {#snippet heroMeta()}
         {#if parentSeries}
@@ -235,7 +234,7 @@
       {/snippet}
 
       {#snippet heroBadges()}
-        {#if wantedRequest.wanted}
+        {#if seasonWanted}
           <span class="hero-badge wanted">Wanted</span>
         {/if}
         {#if seasonNumber != null}
@@ -245,9 +244,12 @@
 
     </EntityDetail>
 
-    {#if wantedRequest.acquisition}
-      <EntityAcquisitionSection acquisition={wantedRequest.acquisition} onCancelled={() => void loadSeason()} />
-    {/if}
+    <EntityAcquisitionCard
+      entityId={season?.id}
+      capabilities={season?.capabilities}
+      onChanged={loadSeason}
+      onCancelled={() => void loadSeason()}
+    />
 
     {#if episodeCards.length > 0}
       <section class="content-section">
