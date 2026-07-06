@@ -6,11 +6,22 @@ using Prismedia.Application.Entities;
 using Prismedia.Application.Security;
 using Prismedia.Contracts.Entities;
 using Prismedia.Domain.Entities;
+using Prismedia.Infrastructure.Security;
 
 namespace Prismedia.Api.Tests;
 
 internal static class TestAuth {
-    internal const string ApiKey = "bava-cada-dafa";
+    /// <summary>Seeded admin account used by authenticated test clients.</summary>
+    internal const string Username = "Prismedia";
+
+    /// <summary>Password of the seeded admin account.</summary>
+    internal const string Password = "prismedia-test-password";
+
+    /// <summary>Pre-issued session token sent by <see cref="CreateAuthenticatedClient"/>.</summary>
+    internal const string Token = "prismedia-test-session-token";
+
+    private static readonly Lazy<string> PasswordHash =
+        new(() => new IdentityPasswordHasher().Hash(Password));
 
     internal static WebApplicationFactory<Program> WithTestAuth(
         this WebApplicationFactory<Program> factory,
@@ -25,7 +36,7 @@ internal static class TestAuth {
 
     internal static HttpClient CreateAuthenticatedClient(this WebApplicationFactory<Program> factory) {
         var client = factory.CreateClient();
-        client.DefaultRequestHeaders.Add("X-Prismedia-Api-Key", ApiKey);
+        client.DefaultRequestHeaders.Add("X-Prismedia-Api-Key", Token);
         return client;
     }
 
@@ -82,116 +93,281 @@ internal static class TestAuth {
             };
     }
 
+    /// <summary>
+    /// In-memory user/session store seeded with one enabled admin (<see cref="Username"/> /
+    /// <see cref="Password"/>) and one active session for <see cref="Token"/>.
+    /// </summary>
     private sealed class FakeSecurityPersistence : ISecurityPersistence {
         private static readonly Guid ServerId = Guid.Parse("99999999-9999-9999-9999-999999999999");
-        private static readonly Guid ProfileId = Guid.Parse("88888888-8888-8888-8888-888888888888");
-        private readonly Dictionary<string, JellyfinSession> _sessions = new(StringComparer.Ordinal);
-        private string _apiKey = ApiKey;
-        private JellyfinProfile _profile;
+        internal static readonly Guid AdminUserId = Guid.Parse("88888888-8888-8888-8888-888888888888");
 
-        public FakeSecurityPersistence(bool allowSfw, bool allowNsfw) =>
-            _profile = Profile(DateTimeOffset.UtcNow, allowSfw, allowNsfw);
+        private readonly object _gate = new();
+        private readonly Dictionary<Guid, UserRow> _users = [];
+        private readonly Dictionary<string, UserSession> _sessions = new(StringComparer.Ordinal);
 
-        public Task<AppSecurityState> EnsureSecurityAsync(Func<string> keyFactory, CancellationToken cancellationToken) =>
-            Task.FromResult(State());
+        private sealed record UserRow(User User, string? PasswordHash);
 
-        public Task<AppSecurityState> GetSecurityAsync(Func<string> keyFactory, CancellationToken cancellationToken) =>
-            Task.FromResult(State());
-
-        public Task<ApiKeyRotationResult> RotateApiKeyAsync(string apiKey, CancellationToken cancellationToken) {
-            var invalidated = _sessions.Count;
-            _sessions.Clear();
-            _apiKey = apiKey;
-            return Task.FromResult(new ApiKeyRotationResult(State(), invalidated));
-        }
-
-        public Task<IReadOnlyList<JellyfinProfile>> ListProfilesAsync(bool includeDisabled, CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<JellyfinProfile>>([_profile]);
-
-        public Task<JellyfinProfile?> GetProfileAsync(Guid profileId, CancellationToken cancellationToken) =>
-            Task.FromResult<JellyfinProfile?>(profileId == ProfileId ? _profile : null);
-
-        public Task<JellyfinProfile?> FindProfileByUsernameAsync(string username, CancellationToken cancellationToken) =>
-            Task.FromResult<JellyfinProfile?>(username.Equals(_profile.Username, StringComparison.OrdinalIgnoreCase) ? _profile : null);
-
-        public Task<JellyfinProfile> CreateProfileAsync(
-            string username,
-            string displayName,
-            bool allowSfw,
-            bool allowNsfw,
-            bool enabled,
-            CancellationToken cancellationToken) {
+        public FakeSecurityPersistence(bool allowSfw, bool allowNsfw) {
             var now = DateTimeOffset.UtcNow;
-            _profile = new JellyfinProfile(Guid.NewGuid(), username, displayName, allowSfw, allowNsfw, enabled, null, now, now);
-            return Task.FromResult(_profile);
-        }
-
-        public Task<JellyfinProfile?> UpdateProfileAsync(
-            Guid profileId,
-            string? username,
-            string? displayName,
-            bool? allowSfw,
-            bool? allowNsfw,
-            bool? enabled,
-            CancellationToken cancellationToken) {
-            if (profileId != _profile.Id) {
-                return Task.FromResult<JellyfinProfile?>(null);
-            }
-
-            _profile = _profile with {
-                Username = username ?? _profile.Username,
-                DisplayName = displayName ?? _profile.DisplayName,
-                AllowSfw = allowSfw ?? _profile.AllowSfw,
-                AllowNsfw = allowNsfw ?? _profile.AllowNsfw,
-                Enabled = enabled ?? _profile.Enabled,
-                UpdatedAt = DateTimeOffset.UtcNow
-            };
-            return Task.FromResult<JellyfinProfile?>(_profile);
-        }
-
-        public Task<bool> DeleteProfileAsync(Guid profileId, CancellationToken cancellationToken) =>
-            Task.FromResult(profileId == _profile.Id);
-
-        public Task<JellyfinSession> CreateSessionAsync(
-            Guid profileId,
-            string tokenHash,
-            JellyfinClientIdentity client,
-            CancellationToken cancellationToken) {
-            var now = DateTimeOffset.UtcNow;
-            var session = new JellyfinSession(
-                Guid.NewGuid(),
-                profileId,
+            var admin = new User(
+                AdminUserId,
+                Username,
+                Username,
+                UserRole.Admin,
+                allowSfw,
+                allowNsfw,
+                CanCreateLibraries: true,
+                Enabled: true,
+                HasPassword: true,
+                LastLoginAt: null,
+                CreatedAt: now,
+                UpdatedAt: now);
+            _users[admin.Id] = new UserRow(admin, PasswordHash.Value);
+            var tokenHash = UserAuthService.HashToken(Token);
+            _sessions[tokenHash] = new UserSession(
+                Guid.Parse("77777777-7777-7777-7777-777777777777"),
+                admin.Id,
                 tokenHash,
-                client.Client,
-                client.DeviceName,
-                client.DeviceId,
-                client.ApplicationVersion,
+                "Tests",
+                "Test Device",
+                "test-device",
+                "1.0",
                 now,
                 now,
                 null);
-            _sessions[tokenHash] = session;
-            return Task.FromResult(session);
         }
 
-        public Task<JellyfinSessionResolution?> ResolveSessionAsync(string tokenHash, CancellationToken cancellationToken) =>
-            Task.FromResult(_sessions.TryGetValue(tokenHash, out var session)
-                ? new JellyfinSessionResolution(session, _profile)
-                : null);
+        public Task<AppSecurityState> EnsureAppSecurityAsync(CancellationToken cancellationToken) {
+            var now = DateTimeOffset.UtcNow;
+            return Task.FromResult(new AppSecurityState(1, ServerId, now, now));
+        }
 
-        public Task TouchProfileLoginAsync(Guid profileId, CancellationToken cancellationToken) {
-            if (profileId == _profile.Id) {
-                _profile = _profile with { LastLoginAt = DateTimeOffset.UtcNow };
+        public Task<IReadOnlyList<User>> ListUsersAsync(bool includeDisabled, CancellationToken cancellationToken) {
+            lock (_gate) {
+                return Task.FromResult<IReadOnlyList<User>>(_users.Values
+                    .Select(row => row.User)
+                    .Where(user => includeDisabled || user.Enabled)
+                    .OrderBy(user => user.Username, StringComparer.OrdinalIgnoreCase)
+                    .ToArray());
+            }
+        }
+
+        public Task<User?> GetUserAsync(Guid userId, CancellationToken cancellationToken) {
+            lock (_gate) {
+                return Task.FromResult(_users.TryGetValue(userId, out var row) ? row.User : null);
+            }
+        }
+
+        public Task<User?> FindUserByUsernameAsync(string username, CancellationToken cancellationToken) {
+            lock (_gate) {
+                return Task.FromResult(FindRow(username)?.User);
+            }
+        }
+
+        public Task<UserWithPasswordHash?> FindUserWithPasswordHashByUsernameAsync(string username, CancellationToken cancellationToken) {
+            lock (_gate) {
+                var row = FindRow(username);
+                return Task.FromResult(row is null ? null : new UserWithPasswordHash(row.User, row.PasswordHash));
+            }
+        }
+
+        public Task<bool> AnyEnabledAdminAsync(CancellationToken cancellationToken) {
+            lock (_gate) {
+                return Task.FromResult(_users.Values.Any(row =>
+                    row.User is { Role: UserRole.Admin, Enabled: true } && row.PasswordHash != null));
+            }
+        }
+
+        public Task<bool> AnyUsersAsync(CancellationToken cancellationToken) {
+            lock (_gate) {
+                return Task.FromResult(_users.Count > 0);
+            }
+        }
+
+        public Task<int> CountEnabledAdminsAsync(CancellationToken cancellationToken) {
+            lock (_gate) {
+                return Task.FromResult(_users.Values.Count(row =>
+                    row.User is { Role: UserRole.Admin, Enabled: true } && row.PasswordHash != null));
+            }
+        }
+
+        public Task<User> CreateUserAsync(
+            string username,
+            string displayName,
+            string? passwordHash,
+            UserRole role,
+            bool allowSfw,
+            bool allowNsfw,
+            bool canCreateLibraries,
+            bool enabled,
+            CancellationToken cancellationToken) {
+            lock (_gate) {
+                if (FindRow(username) is not null) {
+                    throw new InvalidOperationException("A user with that username already exists.");
+                }
+
+                var now = DateTimeOffset.UtcNow;
+                var user = new User(
+                    Guid.NewGuid(), username, displayName, role, allowSfw, allowNsfw,
+                    canCreateLibraries, enabled, passwordHash != null, null, now, now);
+                _users[user.Id] = new UserRow(user, passwordHash);
+                return Task.FromResult(user);
+            }
+        }
+
+        public Task<User?> UpdateUserAsync(
+            Guid userId,
+            string? username,
+            string? displayName,
+            UserRole? role,
+            bool? allowSfw,
+            bool? allowNsfw,
+            bool? canCreateLibraries,
+            bool? enabled,
+            CancellationToken cancellationToken) {
+            lock (_gate) {
+                if (!_users.TryGetValue(userId, out var row)) {
+                    return Task.FromResult<User?>(null);
+                }
+
+                var user = row.User with {
+                    Username = username ?? row.User.Username,
+                    DisplayName = displayName ?? row.User.DisplayName,
+                    Role = role ?? row.User.Role,
+                    AllowSfw = allowSfw ?? row.User.AllowSfw,
+                    AllowNsfw = allowNsfw ?? row.User.AllowNsfw,
+                    CanCreateLibraries = canCreateLibraries ?? row.User.CanCreateLibraries,
+                    Enabled = enabled ?? row.User.Enabled,
+                    UpdatedAt = DateTimeOffset.UtcNow
+                };
+                _users[userId] = row with { User = user };
+                if (enabled == false) {
+                    InvalidateSessions(userId, keepSessionId: null);
+                }
+
+                return Task.FromResult<User?>(user);
+            }
+        }
+
+        public Task<bool> SetPasswordHashAsync(Guid userId, string passwordHash, CancellationToken cancellationToken) {
+            lock (_gate) {
+                if (!_users.TryGetValue(userId, out var row)) {
+                    return Task.FromResult(false);
+                }
+
+                _users[userId] = row with {
+                    PasswordHash = passwordHash,
+                    User = row.User with { HasPassword = true, UpdatedAt = DateTimeOffset.UtcNow }
+                };
+                return Task.FromResult(true);
+            }
+        }
+
+        public Task<bool> DeleteUserAsync(Guid userId, CancellationToken cancellationToken) {
+            lock (_gate) {
+                if (!_users.Remove(userId)) {
+                    return Task.FromResult(false);
+                }
+
+                InvalidateSessions(userId, keepSessionId: null);
+                return Task.FromResult(true);
+            }
+        }
+
+        public Task<UserSession> CreateSessionAsync(
+            Guid userId,
+            string tokenHash,
+            JellyfinClientIdentity client,
+            CancellationToken cancellationToken) {
+            lock (_gate) {
+                var now = DateTimeOffset.UtcNow;
+                var session = new UserSession(
+                    Guid.NewGuid(),
+                    userId,
+                    tokenHash,
+                    client.Client,
+                    client.DeviceName,
+                    client.DeviceId,
+                    client.ApplicationVersion,
+                    now,
+                    now,
+                    null);
+                _sessions[tokenHash] = session;
+                return Task.FromResult(session);
+            }
+        }
+
+        public Task<UserSessionResolution?> ResolveSessionAsync(
+            string tokenHash,
+            TimeSpan slidingWindow,
+            TimeSpan touchStaleness,
+            CancellationToken cancellationToken) {
+            lock (_gate) {
+                if (!_sessions.TryGetValue(tokenHash, out var session) ||
+                    session.InvalidatedAt is not null ||
+                    !_users.TryGetValue(session.UserId, out var row) ||
+                    !row.User.Enabled) {
+                    return Task.FromResult<UserSessionResolution?>(null);
+                }
+
+                return Task.FromResult<UserSessionResolution?>(
+                    new UserSessionResolution(session, row.User, Touched: false));
+            }
+        }
+
+        public Task<IReadOnlyList<UserSession>> ListSessionsAsync(Guid userId, CancellationToken cancellationToken) {
+            lock (_gate) {
+                return Task.FromResult<IReadOnlyList<UserSession>>(_sessions.Values
+                    .Where(session => session.UserId == userId && session.InvalidatedAt is null)
+                    .OrderByDescending(session => session.LastSeenAt)
+                    .ToArray());
+            }
+        }
+
+        public Task<bool> InvalidateSessionAsync(Guid sessionId, Guid userId, CancellationToken cancellationToken) {
+            lock (_gate) {
+                var entry = _sessions.FirstOrDefault(pair =>
+                    pair.Value.Id == sessionId && pair.Value.UserId == userId && pair.Value.InvalidatedAt is null);
+                if (entry.Key is null) {
+                    return Task.FromResult(false);
+                }
+
+                _sessions[entry.Key] = entry.Value with { InvalidatedAt = DateTimeOffset.UtcNow };
+                return Task.FromResult(true);
+            }
+        }
+
+        public Task<int> InvalidateSessionsAsync(Guid userId, Guid? keepSessionId, CancellationToken cancellationToken) {
+            lock (_gate) {
+                return Task.FromResult(InvalidateSessions(userId, keepSessionId));
+            }
+        }
+
+        public Task TouchUserLoginAsync(Guid userId, CancellationToken cancellationToken) {
+            lock (_gate) {
+                if (_users.TryGetValue(userId, out var row)) {
+                    _users[userId] = row with { User = row.User with { LastLoginAt = DateTimeOffset.UtcNow } };
+                }
+
+                return Task.CompletedTask;
+            }
+        }
+
+        private int InvalidateSessions(Guid userId, Guid? keepSessionId) {
+            var now = DateTimeOffset.UtcNow;
+            var invalidated = 0;
+            foreach (var (key, session) in _sessions.ToArray()) {
+                if (session.UserId == userId && session.InvalidatedAt is null && session.Id != keepSessionId) {
+                    _sessions[key] = session with { InvalidatedAt = now };
+                    invalidated++;
+                }
             }
 
-            return Task.CompletedTask;
+            return invalidated;
         }
 
-        private AppSecurityState State() {
-            var now = DateTimeOffset.UtcNow;
-            return new AppSecurityState(1, ServerId, _apiKey, true, now, now, now, now);
-        }
-
-        private static JellyfinProfile Profile(DateTimeOffset now, bool allowSfw, bool allowNsfw) =>
-            new(ProfileId, "Prismedia", "Prismedia", allowSfw, allowNsfw, true, null, now, now);
+        private UserRow? FindRow(string username) =>
+            _users.Values.FirstOrDefault(row =>
+                string.Equals(row.User.Username, username.Trim(), StringComparison.OrdinalIgnoreCase));
     }
 }

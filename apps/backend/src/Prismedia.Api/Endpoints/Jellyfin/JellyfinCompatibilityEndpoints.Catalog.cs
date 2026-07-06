@@ -13,10 +13,10 @@ namespace Prismedia.Api.Endpoints;
 public static partial class JellyfinCompatibilityEndpoints {
     private static async Task<IResult> GetUserViewsAsync(
         HttpContext httpContext,
-        PrismediaSecurityService security,
+        UserAuthService auth,
         JellyfinCatalogService catalog,
         CancellationToken cancellationToken) {
-        var state = await security.EnsureSecurityAsync(cancellationToken);
+        var state = await auth.GetServerInfoAsync(cancellationToken);
         var views = await catalog.GetUserViewsWithArtworkAsync(
             state.ServerId.ToString("N"),
             NsfwVisibility.JellyfinContent(httpContext),
@@ -25,20 +25,20 @@ public static partial class JellyfinCompatibilityEndpoints {
     }
 
     private static async Task<IResult> GetRootAsync(
-        PrismediaSecurityService security,
+        UserAuthService auth,
         JellyfinCatalogService catalog,
         CancellationToken cancellationToken) {
-        var state = await security.EnsureSecurityAsync(cancellationToken);
+        var state = await auth.GetServerInfoAsync(cancellationToken);
         return Results.Ok(catalog.GetRoot(state.ServerId.ToString("N")));
     }
 
     private static async Task<IResult> GetGroupingOptionsAsync(
         Guid? userId,
         HttpContext httpContext,
-        PrismediaSecurityService security,
+        UserAuthService auth,
         JellyfinCatalogService catalog,
         CancellationToken cancellationToken) {
-        var user = await ResolveUserAsync(httpContext, security, userId, cancellationToken);
+        var user = await ResolveUserAsync(httpContext, auth, userId, cancellationToken);
         if (user is null) {
             return Results.NotFound(new ApiProblem(ApiProblemCodes.JellyfinUserNotFound, "No Jellyfin user was found."));
         }
@@ -64,10 +64,10 @@ public static partial class JellyfinCompatibilityEndpoints {
 
     private static async Task<IResult> GetItemsAsync(
         HttpContext httpContext,
-        PrismediaSecurityService security,
+        UserAuthService auth,
         JellyfinCatalogService catalog,
         CancellationToken cancellationToken) {
-        var state = await security.EnsureSecurityAsync(cancellationToken);
+        var state = await auth.GetServerInfoAsync(cancellationToken);
         var result = await catalog.GetItemsAsync(
             ItemQueryFrom(httpContext.Request),
             state.ServerId.ToString("N"),
@@ -79,14 +79,14 @@ public static partial class JellyfinCompatibilityEndpoints {
     private static async Task<IResult> GetPlaylistItemsAsync(
         string playlistId,
         HttpContext httpContext,
-        PrismediaSecurityService security,
+        UserAuthService auth,
         JellyfinCatalogService catalog,
         CancellationToken cancellationToken) {
         if (TryGuid(playlistId) is not { } parsedPlaylistId) {
             return Results.NotFound(new ApiProblem(ApiProblemCodes.JellyfinItemNotFound, $"Playlist '{playlistId}' was not found."));
         }
 
-        var state = await security.EnsureSecurityAsync(cancellationToken);
+        var state = await auth.GetServerInfoAsync(cancellationToken);
         var query = ItemQueryFrom(httpContext.Request) with {
             ParentId = parsedPlaylistId,
             // Real Jellyfin's /Playlists/{id}/Items endpoint does not accept IncludeItemTypes;
@@ -108,10 +108,10 @@ public static partial class JellyfinCompatibilityEndpoints {
     private static async Task<IResult> GetItemAsync(
         Guid itemId,
         HttpContext httpContext,
-        PrismediaSecurityService security,
+        UserAuthService auth,
         JellyfinCatalogService catalog,
         CancellationToken cancellationToken) {
-        var state = await security.EnsureSecurityAsync(cancellationToken);
+        var state = await auth.GetServerInfoAsync(cancellationToken);
         var item = await catalog.GetItemAsync(
             itemId,
             state.ServerId.ToString("N"),
@@ -124,10 +124,10 @@ public static partial class JellyfinCompatibilityEndpoints {
 
     private static async Task<IResult> GetLatestAsync(
         HttpContext httpContext,
-        PrismediaSecurityService security,
+        UserAuthService auth,
         JellyfinCatalogService catalog,
         CancellationToken cancellationToken) {
-        var state = await security.EnsureSecurityAsync(cancellationToken);
+        var state = await auth.GetServerInfoAsync(cancellationToken);
         var limit = TryInt(httpContext.Request.Query["Limit"].FirstOrDefault()) ?? 20;
         var parentId = TryGuid(httpContext.Request.Query["ParentId"].FirstOrDefault());
         var result = await catalog.GetLatestAsync(
@@ -141,10 +141,10 @@ public static partial class JellyfinCompatibilityEndpoints {
 
     private static async Task<IResult> GetResumeAsync(
         HttpContext httpContext,
-        PrismediaSecurityService security,
+        UserAuthService auth,
         JellyfinCatalogService catalog,
         CancellationToken cancellationToken) {
-        var state = await security.EnsureSecurityAsync(cancellationToken);
+        var state = await auth.GetServerInfoAsync(cancellationToken);
         var start = TryInt(httpContext.Request.Query["StartIndex"].FirstOrDefault()) ?? 0;
         var limit = TryInt(httpContext.Request.Query["Limit"].FirstOrDefault()) ?? 20;
         var result = await catalog.GetResumeAsync(
@@ -158,10 +158,10 @@ public static partial class JellyfinCompatibilityEndpoints {
 
     private static async Task<IResult> GetNextUpAsync(
         HttpContext httpContext,
-        PrismediaSecurityService security,
+        UserAuthService auth,
         JellyfinCatalogService catalog,
         CancellationToken cancellationToken) {
-        var state = await security.EnsureSecurityAsync(cancellationToken);
+        var state = await auth.GetServerInfoAsync(cancellationToken);
         var start = TryInt(httpContext.Request.Query["StartIndex"].FirstOrDefault()) ?? 0;
         var limit = TryInt(httpContext.Request.Query["Limit"].FirstOrDefault()) ?? 20;
         var result = await catalog.GetNextUpAsync(
@@ -193,10 +193,10 @@ public static partial class JellyfinCompatibilityEndpoints {
     /// </summary>
     private static async Task<IResult> GetArtistsAsync(
         HttpContext httpContext,
-        PrismediaSecurityService security,
+        UserAuthService auth,
         JellyfinCatalogService catalog,
         CancellationToken cancellationToken) {
-        var state = await security.EnsureSecurityAsync(cancellationToken);
+        var state = await auth.GetServerInfoAsync(cancellationToken);
         var baseQuery = ItemQueryFrom(httpContext.Request);
         var query = baseQuery with {
             ParentId = baseQuery.ParentId ?? JellyfinCatalogService.MusicViewId,
@@ -213,10 +213,10 @@ public static partial class JellyfinCompatibilityEndpoints {
     private static async Task<IResult> GetSeriesSeasonsAsync(
         Guid seriesId,
         HttpContext httpContext,
-        PrismediaSecurityService security,
+        UserAuthService auth,
         JellyfinCatalogService catalog,
         CancellationToken cancellationToken) {
-        var state = await security.EnsureSecurityAsync(cancellationToken);
+        var state = await auth.GetServerInfoAsync(cancellationToken);
         var query = ItemQueryFrom(httpContext.Request) with {
             ParentId = seriesId,
             Recursive = false,
@@ -233,10 +233,10 @@ public static partial class JellyfinCompatibilityEndpoints {
     private static async Task<IResult> GetSeriesEpisodesAsync(
         Guid seriesId,
         HttpContext httpContext,
-        PrismediaSecurityService security,
+        UserAuthService auth,
         JellyfinCatalogService catalog,
         CancellationToken cancellationToken) {
-        var state = await security.EnsureSecurityAsync(cancellationToken);
+        var state = await auth.GetServerInfoAsync(cancellationToken);
         var seasonId = TryGuid(httpContext.Request.Query["SeasonId"].FirstOrDefault());
         var query = ItemQueryFrom(httpContext.Request) with {
             ParentId = seasonId ?? seriesId,

@@ -6,7 +6,8 @@ namespace Prismedia.Api.Endpoints;
 public static class EndpointRouteBuilderExtensions {
     public static IEndpointRouteBuilder MapPrismediaEndpoints(this IEndpointRouteBuilder routes) {
         routes.MapHealthEndpoints();
-        routes.MapSecurityEndpoints();
+        routes.MapAuthEndpoints();
+        routes.MapUserEndpoints();
         routes.MapEntityEndpoints();
         routes.MapVideoEndpoints();
         routes.MapMovieEndpoints();
@@ -46,20 +47,29 @@ public static class EndpointRouteBuilderExtensions {
 }
 
 /// <summary>
-/// Resolves the caller's NSFW visibility preference at the HTTP edge. Content is
-/// hidden unless the request explicitly opts into show mode by query or cookie.
+/// Resolves the caller's NSFW visibility preference at the HTTP edge. The user's
+/// <c>AllowNsfw</c> flag is a server-enforced ceiling. Within it, web-browser sessions
+/// (authenticated via the session cookie) opt into show mode by query or cookie, while
+/// protocol clients (Jellyfin/OPDS tokens, Basic auth) have no toggle — the permission
+/// alone decides.
 /// </summary>
 internal static class NsfwVisibility {
     private const string CookieName = "prismedia-nsfw-mode";
+    private const string ShowMode = "show";
 
     /// <summary>
     /// Returns true when NSFW rows should be withheld from this response.
     /// </summary>
-    /// <param name="explicitHide">Optional route query override.</param>
+    /// <param name="explicitHide">Optional route query override (only widens hiding within the user cap).</param>
     /// <param name="httpContext">Current HTTP context used to inspect the NSFW mode cookie.</param>
     public static bool ShouldHide(bool? explicitHide, HttpContext httpContext) {
-        if (httpContext.GetJellyfinProfile() is { } profile) {
-            return !profile.AllowNsfw;
+        var auth = httpContext.GetPrismediaAuth();
+        if (auth is not null && !auth.User.AllowNsfw) {
+            return true;
+        }
+
+        if (auth is { ViaCookie: false }) {
+            return false;
         }
 
         if (explicitHide is { } hide) {
@@ -67,12 +77,12 @@ internal static class NsfwVisibility {
         }
 
         return !httpContext.Request.Cookies.TryGetValue(CookieName, out var mode) ||
-            !string.Equals(mode, "show", StringComparison.OrdinalIgnoreCase);
+            !string.Equals(mode, ShowMode, StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>Returns the Jellyfin profile's explicit content visibility toggles, or the web portal cookie mode for app-key requests.</summary>
+    /// <summary>Returns the caller's content visibility toggles for Jellyfin projections.</summary>
     public static JellyfinContentVisibility JellyfinContent(HttpContext httpContext) =>
-        httpContext.GetJellyfinProfile() is { } profile
-            ? new JellyfinContentVisibility(profile.AllowSfw, profile.AllowNsfw)
+        httpContext.GetCurrentUser() is { } user
+            ? new JellyfinContentVisibility(user.AllowSfw, !ShouldHide(null, httpContext))
             : JellyfinContentVisibility.FromHideNsfw(ShouldHide(null, httpContext));
 }

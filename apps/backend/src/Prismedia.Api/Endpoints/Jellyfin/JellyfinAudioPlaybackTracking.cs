@@ -9,19 +9,18 @@ internal static class JellyfinAudioPlaybackTracking {
         var auth = httpContext.GetPrismediaAuth();
         var client = httpContext.Request.GetJellyfinClientIdentity();
         var deviceId = Normalized(client.DeviceId) ??
-            Normalized(auth?.JellyfinSession?.Session.DeviceId);
+            Normalized(auth?.Session?.DeviceId);
 
-        if (auth?.Kind == PrismediaAuthKind.JellyfinSession &&
-            auth.JellyfinSession is { } session) {
+        if (auth is { Session: { } session, User: { } user }) {
             return deviceId is not null
-                ? $"jellyfin:{session.Profile.Id:N}:device:{Hash(deviceId)}"
-                : $"jellyfin:{session.Profile.Id:N}:session:{session.Session.Id:N}";
+                ? $"user:{user.Id:N}:device:{Hash(deviceId)}"
+                : $"user:{user.Id:N}:session:{session.Id:N}";
         }
 
         if (auth is not null) {
             return deviceId is not null
-                ? $"{auth.Kind}:token:{Hash(auth.Token)}:device:{Hash(deviceId)}"
-                : $"{auth.Kind}:token:{Hash(auth.Token)}";
+                ? $"user:{auth.User.Id:N}:device:{Hash(deviceId)}"
+                : $"user:{auth.User.Id:N}";
         }
 
         var remote = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";

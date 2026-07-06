@@ -312,6 +312,7 @@ public static class DependencyInjection {
         services.AddScoped<ISettingsPersistence, EfSettingsPersistence>();
         services.AddScoped<IBrowserSessionPersistence, EfBrowserSessionPersistence>();
         services.AddScoped<ISecurityPersistence, EfSecurityPersistence>();
+        services.AddSingleton<IPasswordHasher, IdentityPasswordHasher>();
         services.AddScoped<IJellyfinImageFileService, JellyfinImageFileService>();
     }
 

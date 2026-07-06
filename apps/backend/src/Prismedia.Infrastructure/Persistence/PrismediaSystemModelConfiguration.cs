@@ -95,23 +95,29 @@ internal static partial class PrismediaModelConfiguration {
             entity.HasKey(row => row.Id);
             entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
             entity.Property(row => row.ServerId).HasColumnName("server_id");
-            entity.Property(row => row.ApiKey).HasColumnName("api_key").HasMaxLength(128).IsRequired();
-            entity.Property(row => row.DefaultProfileSeeded).HasColumnName("default_profile_seeded");
-            entity.Property(row => row.ApiKeyCreatedAt).HasColumnName("api_key_created_at");
-            entity.Property(row => row.ApiKeyUpdatedAt).HasColumnName("api_key_updated_at");
+            entity.Property(row => row.LegacyApiKey).HasColumnName("legacy_api_key").HasMaxLength(128);
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
         });
 
-        modelBuilder.Entity<JellyfinProfileRow>(entity => {
-            entity.ToTable("jellyfin_profiles");
+        modelBuilder.Entity<UserRow>(entity => {
+            entity.ToTable("users");
             entity.HasKey(row => row.Id);
             entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
             entity.Property(row => row.Username).HasColumnName("username").HasMaxLength(64).IsRequired();
             entity.Property(row => row.NormalizedUsername).HasColumnName("normalized_username").HasMaxLength(64).IsRequired();
             entity.Property(row => row.DisplayName).HasColumnName("display_name").HasMaxLength(128).IsRequired();
+            entity.Property(row => row.PasswordHash).HasColumnName("password_hash");
+            entity.Property(row => row.PasswordUpdatedAt).HasColumnName("password_updated_at");
+            entity.Property(row => row.Role)
+                .HasColumnName("role")
+                .HasMaxLength(32)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<UserRole>())
+                .HasDefaultValue(UserRole.Member)
+                .IsRequired();
             entity.Property(row => row.AllowSfw).HasColumnName("allow_sfw").HasDefaultValue(true);
             entity.Property(row => row.AllowNsfw).HasColumnName("allow_nsfw");
+            entity.Property(row => row.CanCreateLibraries).HasColumnName("can_create_libraries");
             entity.Property(row => row.Enabled).HasColumnName("enabled");
             entity.Property(row => row.LastLoginAt).HasColumnName("last_login_at");
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");
@@ -119,11 +125,11 @@ internal static partial class PrismediaModelConfiguration {
             entity.HasIndex(row => row.NormalizedUsername).IsUnique();
         });
 
-        modelBuilder.Entity<JellyfinSessionRow>(entity => {
-            entity.ToTable("jellyfin_sessions");
+        modelBuilder.Entity<UserSessionRow>(entity => {
+            entity.ToTable("user_sessions");
             entity.HasKey(row => row.Id);
             entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
-            entity.Property(row => row.ProfileId).HasColumnName("profile_id");
+            entity.Property(row => row.UserId).HasColumnName("user_id");
             entity.Property(row => row.TokenHash).HasColumnName("token_hash").HasMaxLength(64).IsRequired();
             entity.Property(row => row.Client).HasColumnName("client").HasMaxLength(128);
             entity.Property(row => row.DeviceName).HasColumnName("device_name").HasMaxLength(128);
@@ -133,8 +139,8 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.LastSeenAt).HasColumnName("last_seen_at");
             entity.Property(row => row.InvalidatedAt).HasColumnName("invalidated_at");
             entity.HasIndex(row => row.TokenHash).IsUnique();
-            entity.HasIndex(row => new { row.ProfileId, row.InvalidatedAt });
-            entity.HasOne<JellyfinProfileRow>().WithMany().HasForeignKey(row => row.ProfileId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(row => new { row.UserId, row.InvalidatedAt });
+            entity.HasOne<UserRow>().WithMany().HasForeignKey(row => row.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ProviderConfigRow>(entity => {

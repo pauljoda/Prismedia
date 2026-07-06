@@ -417,7 +417,7 @@ public sealed class JellyfinPlaybackEndpointTests : IDisposable {
         var request = new HttpRequestMessage(HttpMethod.Get, path);
         request.Headers.Add(
             JellyfinProtocol.Headers.EmbyAuthorization,
-            $"MediaBrowser Client=\"Prismedia Test\", Device=\"Test\", DeviceId=\"{deviceId}\", Version=\"1.0\", Token=\"{TestAuth.ApiKey}\"");
+            $"MediaBrowser Client=\"Prismedia Test\", Device=\"Test\", DeviceId=\"{deviceId}\", Version=\"1.0\", Token=\"{TestAuth.Token}\"");
         return request;
     }
 

@@ -42,30 +42,40 @@ public sealed class AppSettingRow {
 public sealed class AppSecurityRow {
     public int Id { get; set; }
     public Guid ServerId { get; set; }
-    public string ApiKey { get; set; } = string.Empty;
-    public bool DefaultProfileSeeded { get; set; }
-    public DateTimeOffset ApiKeyCreatedAt { get; set; }
-    public DateTimeOffset ApiKeyUpdatedAt { get; set; }
+
+    /// <summary>
+    /// Pre-multi-user app API key, staged here by the auth migration so startup
+    /// bootstrap can hash it into migrated users' passwords; nulled once consumed.
+    /// </summary>
+    public string? LegacyApiKey { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }
 
-public sealed class JellyfinProfileRow {
+public sealed class UserRow {
     public Guid Id { get; set; }
     public string Username { get; set; } = string.Empty;
     public string NormalizedUsername { get; set; } = string.Empty;
     public string DisplayName { get; set; } = string.Empty;
+
+    /// <summary>Null means the account cannot log in (pre-bootstrap only).</summary>
+    public string? PasswordHash { get; set; }
+
+    public DateTimeOffset? PasswordUpdatedAt { get; set; }
+    public UserRole Role { get; set; } = UserRole.Member;
     public bool AllowSfw { get; set; } = true;
     public bool AllowNsfw { get; set; }
+    public bool CanCreateLibraries { get; set; }
     public bool Enabled { get; set; } = true;
     public DateTimeOffset? LastLoginAt { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }
 
-public sealed class JellyfinSessionRow {
+public sealed class UserSessionRow {
     public Guid Id { get; set; }
-    public Guid ProfileId { get; set; }
+    public Guid UserId { get; set; }
     public string TokenHash { get; set; } = string.Empty;
     public string? Client { get; set; }
     public string? DeviceName { get; set; }

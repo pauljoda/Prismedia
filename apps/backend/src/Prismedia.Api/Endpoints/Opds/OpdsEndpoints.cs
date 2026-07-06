@@ -844,9 +844,7 @@ public static class OpdsEndpoints {
     }
 
     private static bool ShouldHideNsfw(HttpContext httpContext) =>
-        httpContext.GetJellyfinProfile() is { } profile
-            ? !profile.AllowNsfw
-            : true;
+        NsfwVisibility.ShouldHide(null, httpContext);
 
     private static IResult OpdsNotFound() =>
         Results.NotFound(new ApiProblem(ApiProblemCodes.EntityNotFound, "The requested OPDS resource was not found."));

@@ -1,11 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
-using System.Text.RegularExpressions;
+using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
-using Prismedia.Api.Security;
 using Prismedia.Application.Collections;
 using Prismedia.Application.Entities;
 using Prismedia.Application.Jellyfin;
@@ -15,10 +13,14 @@ using Prismedia.Contracts.Jellyfin;
 using Prismedia.Contracts.Security;
 using Prismedia.Domain.Entities;
 using Prismedia.Contracts.Videos;
+using Prismedia.Infrastructure.Serialization;
 
 namespace Prismedia.Api.Tests;
 
-public sealed partial class SecurityEndpointTests : IDisposable {
+public sealed class SecurityEndpointTests : IDisposable {
+    private static readonly JsonSerializerOptions CodecJson =
+        new(JsonSerializerDefaults.Web) { Converters = { new CodecJsonConverterFactory() } };
+
     private static readonly Guid SfwVideoId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid NsfwVideoId = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private readonly string _webRoot = Path.Combine(Path.GetTempPath(), $"prismedia-security-static-{Guid.NewGuid():N}");
@@ -55,176 +57,31 @@ public sealed partial class SecurityEndpointTests : IDisposable {
     }
 
     [Fact]
-    public async Task BootstrapNavigationSetsHttpOnlyApiKeyCookie() {
-        using var factory = new WebApplicationFactory<Program>()
-            .WithWebHostBuilder(builder => builder.UseSetting("Prismedia:StaticWebRoot", _webRoot))
-            .WithTestAuth();
-        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions {
-            HandleCookies = false
-        });
-        using var request = new HttpRequestMessage(HttpMethod.Get, "/library");
-        request.Headers.Accept.ParseAdd("text/html");
-
-        using var response = await client.SendAsync(request);
-
-        response.EnsureSuccessStatusCode();
-        var cookie = Assert.Single(response.Headers.GetValues("Set-Cookie"), value =>
-            value.StartsWith("prismedia-api-key=", StringComparison.Ordinal));
-        Assert.Contains("HttpOnly", cookie, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("SameSite=Lax", cookie, StringComparison.OrdinalIgnoreCase);
-    }
-
-    [Fact]
-    public void BootstrapNavigationRefusesNonLoopbackClients() {
-        var context = new DefaultHttpContext();
-        context.Connection.RemoteIpAddress = IPAddress.Parse("192.0.2.24");
-        context.Request.Method = HttpMethods.Get;
-        context.Request.Path = "/library";
-        context.Request.Headers.Accept = "text/html";
-
-        var shouldBootstrap = PrismediaAuthentication.ShouldBootstrapCookie(context.Request);
-
-        Assert.False(shouldBootstrap);
-    }
-
-    [Fact]
-    public void BootstrapNavigationAllowsDirectPrivateLanNavigation() {
-        var context = new DefaultHttpContext();
-        context.Connection.RemoteIpAddress = IPAddress.Parse("192.168.1.44");
-        context.Request.Method = HttpMethods.Get;
-        context.Request.Path = "/library";
-        context.Request.Host = new HostString("192.168.1.10:8008");
-        context.Request.Headers.Accept = "text/html";
-
-        var shouldBootstrap = PrismediaAuthentication.ShouldBootstrapCookie(context.Request);
-
-        Assert.True(shouldBootstrap);
-    }
-
-    [Fact]
-    public void BootstrapNavigationAllowsProxiedUiNavigationFromPrivateProxyNetwork() {
-        var context = new DefaultHttpContext();
-        context.Connection.RemoteIpAddress = IPAddress.Parse("172.22.0.5");
-        context.Request.Method = HttpMethods.Get;
-        context.Request.Path = "/library";
-        context.Request.Host = new HostString("dev-prismedia.pauljoda.com");
-        context.Request.Headers.Accept = "text/html";
-        context.Request.Headers["X-Forwarded-For"] = "203.0.113.8";
-        context.Request.Headers["X-Forwarded-Proto"] = "https";
-        context.Request.Headers["X-Forwarded-Host"] = "dev-prismedia.pauljoda.com";
-
-        var shouldBootstrap = PrismediaAuthentication.ShouldBootstrapCookie(context.Request);
-
-        Assert.True(shouldBootstrap);
-    }
-
-    [Fact]
-    public void BootstrapNavigationRefusesPrivateProxyTrafficWithoutForwardedOrigin() {
-        var context = new DefaultHttpContext();
-        context.Connection.RemoteIpAddress = IPAddress.Parse("172.22.0.5");
-        context.Request.Method = HttpMethods.Get;
-        context.Request.Path = "/library";
-        context.Request.Host = new HostString("dev-prismedia.pauljoda.com");
-        context.Request.Headers.Accept = "text/html";
-        context.Request.Headers["X-Forwarded-For"] = "203.0.113.8";
-
-        var shouldBootstrap = PrismediaAuthentication.ShouldBootstrapCookie(context.Request);
-
-        Assert.False(shouldBootstrap);
-    }
-
-    [Theory]
-    [InlineData("/api/settings")]
-    [InlineData("/assets/videos/thumb.jpg")]
-    [InlineData("/openapi/v1.json")]
-    [InlineData("/Items/11111111-1111-1111-1111-111111111111")]
-    public void BootstrapNavigationRefusesNonUiRoutesBehindProxy(string path) {
-        var context = new DefaultHttpContext();
-        context.Connection.RemoteIpAddress = IPAddress.Parse("172.22.0.5");
-        context.Request.Method = HttpMethods.Get;
-        context.Request.Path = path;
-        context.Request.Host = new HostString("dev-prismedia.pauljoda.com");
-        context.Request.Headers.Accept = "text/html";
-        context.Request.Headers["X-Forwarded-For"] = "203.0.113.8";
-        context.Request.Headers["X-Forwarded-Proto"] = "https";
-        context.Request.Headers["X-Forwarded-Host"] = "dev-prismedia.pauljoda.com";
-
-        var shouldBootstrap = PrismediaAuthentication.ShouldBootstrapCookie(context.Request);
-
-        Assert.False(shouldBootstrap);
-    }
-
-    [Fact]
-    public void BootstrapNavigationRefusesForwardedHeadersFromPublicRemoteClient() {
-        var context = new DefaultHttpContext();
-        context.Connection.RemoteIpAddress = IPAddress.Parse("203.0.113.24");
-        context.Request.Method = HttpMethods.Get;
-        context.Request.Path = "/library";
-        context.Request.Host = new HostString("dev-prismedia.pauljoda.com");
-        context.Request.Headers.Accept = "text/html";
-        context.Request.Headers["X-Forwarded-For"] = "198.51.100.8";
-        context.Request.Headers["X-Forwarded-Proto"] = "https";
-        context.Request.Headers["X-Forwarded-Host"] = "dev-prismedia.pauljoda.com";
-
-        var shouldBootstrap = PrismediaAuthentication.ShouldBootstrapCookie(context.Request);
-
-        Assert.False(shouldBootstrap);
-    }
-
-    [Fact]
-    public async Task ApiKeyHeaderAcceptsHumanNormalizedInput() {
-        using var factory = CreateFactory();
-        using var client = factory.CreateClient();
-        client.DefaultRequestHeaders.Add("X-Prismedia-Api-Key", " BAVA CADA DAFA ");
-
-        var response = await client.GetFromJsonAsync<ApiKeyResponse>("/api/security/api-key");
-
-        Assert.NotNull(response);
-        Assert.Equal(TestAuth.ApiKey, response.ApiKey);
-    }
-
-    [Fact]
-    public async Task InvalidApiKeyAttemptsAreThrottled() {
-        using var factory = CreateFactory();
-        using var client = factory.CreateClient();
-        HttpResponseMessage? response = null;
-
-        for (var i = 0; i < 9; i++) {
-            response?.Dispose();
-            using var request = new HttpRequestMessage(HttpMethod.Get, "/api/security/api-key");
-            request.Headers.Add("X-Prismedia-Api-Key", $"bad-key-{i}");
-            response = await client.SendAsync(request);
-        }
-
-        using (response) {
-            Assert.NotNull(response);
-            Assert.Equal(HttpStatusCode.TooManyRequests, response!.StatusCode);
-        }
-    }
-
-    [Fact]
-    public async Task JellyfinAuthenticationCreatesSessionAndRegenerationInvalidatesIt() {
+    public async Task JellyfinAuthenticationCreatesUnifiedSessionAndPasswordChangeInvalidatesIt() {
         using var factory = CreateFactory();
         using var client = factory.CreateClient();
 
-        var auth = await AuthenticateAsync(client, "Prismedia", TestAuth.ApiKey);
+        var auth = await AuthenticateAsync(client, TestAuth.Username, TestAuth.Password);
         using var me = await JellyfinGetAsync(client, "/Users/Me", auth.AccessToken);
-
         Assert.Equal(HttpStatusCode.OK, me.StatusCode);
-        using var nativeTokenRequest = new HttpRequestMessage(HttpMethod.Get, "/api/security/api-key");
-        nativeTokenRequest.Headers.Add("X-Emby-Token", auth.AccessToken);
-        using var nativeTokenResponse = await client.SendAsync(nativeTokenRequest);
-        Assert.Equal(HttpStatusCode.Unauthorized, nativeTokenResponse.StatusCode);
 
+        // Sessions are unified: a Jellyfin-issued token also authenticates /api routes.
+        using var apiRequest = new HttpRequestMessage(HttpMethod.Get, "/api/auth/me");
+        apiRequest.Headers.Add("X-Emby-Token", auth.AccessToken);
+        using var apiResponse = await client.SendAsync(apiRequest);
+        Assert.Equal(HttpStatusCode.OK, apiResponse.StatusCode);
+
+        // Changing the password from the web session invalidates the other (Jellyfin) session.
         using var appClient = factory.CreateAuthenticatedClient();
-        using var rotationResponse = await appClient.PostAsJsonAsync("/api/security/api-key/regenerate", new { });
-        var rotation = await rotationResponse.Content.ReadFromJsonAsync<ApiKeyRegenerateResponse>();
+        using var changeResponse = await appClient.PostAsJsonAsync(
+            "/api/auth/password",
+            new ChangeOwnPasswordRequest(TestAuth.Password, "a-brand-new-password"));
+        Assert.Equal(HttpStatusCode.NoContent, changeResponse.StatusCode);
 
-        Assert.NotNull(rotation);
-        Assert.Matches(HumanKeyRegex(), rotation.ApiKey);
-        Assert.Equal(1, rotation.InvalidatedSessions);
         using var invalidated = await JellyfinGetAsync(client, "/Users/Me", auth.AccessToken);
         Assert.Equal(HttpStatusCode.Unauthorized, invalidated.StatusCode);
+        using var stillSignedIn = await appClient.GetAsync("/api/auth/me");
+        Assert.Equal(HttpStatusCode.OK, stillSignedIn.StatusCode);
     }
 
     [Fact]
@@ -239,9 +96,9 @@ public sealed partial class SecurityEndpointTests : IDisposable {
         using var splashscreen = await client.GetAsync("/Branding/Splashscreen");
         using var passwordFieldResponse = await client.PostAsJsonAsync(
             "/Users/AuthenticateByName",
-            new { Username = "Prismedia", Password = TestAuth.ApiKey });
+            new { Username = TestAuth.Username, Password = TestAuth.Password });
         using var legacyResponse = await client.PostAsync(
-            $"/Users/{user.Id:D}/Authenticate?pw={Uri.EscapeDataString(TestAuth.ApiKey)}",
+            $"/Users/{user.Id:D}/Authenticate?pw={Uri.EscapeDataString(TestAuth.Password)}",
             null);
 
         Assert.Equal(HttpStatusCode.OK, ping.StatusCode);
@@ -342,11 +199,11 @@ public sealed partial class SecurityEndpointTests : IDisposable {
     }
 
     [Fact]
-    public async Task JellyfinProfileControlsSfwAndNsfwCatalogVisibility() {
+    public async Task UserPermissionsControlSfwAndNsfwCatalogVisibility() {
         using var factory = CreateFactory(new CatalogEntityReadService());
         using var client = factory.CreateClient();
 
-        var sfwAuth = await AuthenticateAsync(client, "Prismedia", TestAuth.ApiKey);
+        var sfwAuth = await AuthenticateAsync(client, TestAuth.Username, TestAuth.Password);
         var sfwVisible = await JellyfinGetFromJsonAsync<JellyfinBaseItemDto>(
             client,
             $"/Items/{SfwVideoId:D}",
@@ -356,12 +213,12 @@ public sealed partial class SecurityEndpointTests : IDisposable {
         Assert.Equal(HttpStatusCode.NotFound, sfwHidden.StatusCode);
 
         using var appClient = factory.CreateAuthenticatedClient();
-        using var adultProfileResponse = await appClient.PostAsJsonAsync(
-            "/api/security/jellyfin-profiles",
-            new JellyfinProfileCreateRequest("Adult", null, AllowNsfw: true));
-        adultProfileResponse.EnsureSuccessStatusCode();
+        using var adultUserResponse = await appClient.PostAsJsonAsync(
+            "/api/users",
+            new UserCreateRequest("Adult", TestAuth.Password, AllowNsfw: true), CodecJson);
+        adultUserResponse.EnsureSuccessStatusCode();
 
-        var adultAuth = await AuthenticateAsync(client, "Adult", TestAuth.ApiKey);
+        var adultAuth = await AuthenticateAsync(client, "Adult", TestAuth.Password);
         var bothSfw = await JellyfinGetFromJsonAsync<JellyfinBaseItemDto>(
             client,
             $"/Items/{SfwVideoId:D}",
@@ -374,12 +231,12 @@ public sealed partial class SecurityEndpointTests : IDisposable {
         Assert.NotNull(bothSfw);
         Assert.NotNull(bothNsfw);
 
-        using var nsfwOnlyProfileResponse = await appClient.PostAsJsonAsync(
-            "/api/security/jellyfin-profiles",
-            new JellyfinProfileCreateRequest("AdultOnly", null, AllowSfw: false, AllowNsfw: true));
-        nsfwOnlyProfileResponse.EnsureSuccessStatusCode();
+        using var nsfwOnlyUserResponse = await appClient.PostAsJsonAsync(
+            "/api/users",
+            new UserCreateRequest("AdultOnly", TestAuth.Password, AllowSfw: false, AllowNsfw: true), CodecJson);
+        nsfwOnlyUserResponse.EnsureSuccessStatusCode();
 
-        var nsfwOnlyAuth = await AuthenticateAsync(client, "AdultOnly", TestAuth.ApiKey);
+        var nsfwOnlyAuth = await AuthenticateAsync(client, "AdultOnly", TestAuth.Password);
         using var nsfwOnlySfwHidden = await JellyfinGetAsync(client, $"/Items/{SfwVideoId:D}", nsfwOnlyAuth.AccessToken);
         var nsfwOnlyNsfwVisible = await JellyfinGetFromJsonAsync<JellyfinBaseItemDto>(
             client,
@@ -394,12 +251,12 @@ public sealed partial class SecurityEndpointTests : IDisposable {
         Assert.NotNull(nsfwOnlyNsfwVisible);
         Assert.Equal([NsfwVideoId], nsfwOnlyBrowse!.Items.Select(item => item.Id).ToArray());
 
-        using var emptyProfileResponse = await appClient.PostAsJsonAsync(
-            "/api/security/jellyfin-profiles",
-            new JellyfinProfileCreateRequest("Empty", null, AllowSfw: false, AllowNsfw: false));
-        emptyProfileResponse.EnsureSuccessStatusCode();
+        using var emptyUserResponse = await appClient.PostAsJsonAsync(
+            "/api/users",
+            new UserCreateRequest("Empty", TestAuth.Password, AllowSfw: false, AllowNsfw: false), CodecJson);
+        emptyUserResponse.EnsureSuccessStatusCode();
 
-        var emptyAuth = await AuthenticateAsync(client, "Empty", TestAuth.ApiKey);
+        var emptyAuth = await AuthenticateAsync(client, "Empty", TestAuth.Password);
         using var emptySfwHidden = await JellyfinGetAsync(client, $"/Items/{SfwVideoId:D}", emptyAuth.AccessToken);
         using var emptyNsfwHidden = await JellyfinGetAsync(client, $"/Items/{NsfwVideoId:D}", emptyAuth.AccessToken);
         var emptyBrowse = await JellyfinGetFromJsonAsync<JellyfinQueryResult<JellyfinBaseItemDto>>(
@@ -416,7 +273,7 @@ public sealed partial class SecurityEndpointTests : IDisposable {
     public async Task JellyfinRootCatalogRoutesReturnVirtualLibraries() {
         using var factory = CreateFactory();
         using var client = factory.CreateClient();
-        var auth = await AuthenticateAsync(client, "Prismedia", TestAuth.ApiKey);
+        var auth = await AuthenticateAsync(client, TestAuth.Username, TestAuth.Password);
 
         var views = await JellyfinGetFromJsonAsync<JellyfinQueryResult<JellyfinBaseItemDto>>(
             client,
@@ -439,7 +296,7 @@ public sealed partial class SecurityEndpointTests : IDisposable {
     public async Task JellyfinBrowseItemsExposePlayableCatalogShapeForInfuse() {
         using var factory = CreateFactory(new InfuseBrowseEntityReadService());
         using var client = factory.CreateClient();
-        var auth = await AuthenticateAsync(client, "Prismedia", TestAuth.ApiKey);
+        var auth = await AuthenticateAsync(client, TestAuth.Username, TestAuth.Password);
 
         var videos = await JellyfinGetFromJsonAsync<JellyfinQueryResult<JellyfinBaseItemDto>>(
             client,
@@ -509,7 +366,7 @@ public sealed partial class SecurityEndpointTests : IDisposable {
             new DirectChildEpisodeArtworkEntityReadService(),
             cacheRoot: _cacheRoot);
         using var client = factory.CreateClient();
-        var auth = await AuthenticateAsync(client, "Prismedia", TestAuth.ApiKey);
+        var auth = await AuthenticateAsync(client, TestAuth.Username, TestAuth.Password);
 
         var episodes = await JellyfinGetFromJsonAsync<JellyfinQueryResult<JellyfinBaseItemDto>>(
             client,
@@ -532,7 +389,7 @@ public sealed partial class SecurityEndpointTests : IDisposable {
     public async Task JellyfinItemDetailExposesPrismediaMetadataFields() {
         using var factory = CreateFactory(new JellyfinMetadataEntityReadService());
         using var client = factory.CreateClient();
-        var auth = await AuthenticateAsync(client, "Prismedia", TestAuth.ApiKey);
+        var auth = await AuthenticateAsync(client, TestAuth.Username, TestAuth.Password);
 
         var item = await JellyfinGetFromJsonAsync<JellyfinBaseItemDto>(
             client,
@@ -657,9 +514,6 @@ public sealed partial class SecurityEndpointTests : IDisposable {
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<T>();
     }
-
-    [GeneratedRegex("^[a-z]{3,5}-[a-z]{3,5}-[a-z]{3,5}$", RegexOptions.CultureInvariant)]
-    private static partial Regex HumanKeyRegex();
 
     private sealed class CatalogEntityReadService : IEntityReadService {
         public Task<EntityListResponse> ListAsync(

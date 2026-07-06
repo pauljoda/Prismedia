@@ -22,8 +22,14 @@ public static class ApiProblemCodes {
     /// <summary>Problem code <c>acquisition_release_not_found</c>.</summary>
     public const string AcquisitionReleaseNotFound = "acquisition_release_not_found";
 
+    /// <summary>Problem code <c>admin_required</c>.</summary>
+    public const string AdminRequired = "admin_required";
+
     /// <summary>Problem code <c>audio_stream_not_found</c>.</summary>
     public const string AudioStreamNotFound = "audio_stream_not_found";
+
+    /// <summary>Problem code <c>authentication_required</c>.</summary>
+    public const string AuthenticationRequired = "authentication_required";
 
     /// <summary>Problem code <c>download_client_invalid</c>.</summary>
     public const string DownloadClientInvalid = "download_client_invalid";
@@ -88,8 +94,8 @@ public static class ApiProblemCodes {
     /// <summary>Problem code <c>identify_queue_proposal_invalid</c>.</summary>
     public const string IdentifyQueueProposalInvalid = "identify_queue_proposal_invalid";
 
-    /// <summary>Problem code <c>invalid_api_key</c>.</summary>
-    public const string InvalidApiKey = "invalid_api_key";
+    /// <summary>Problem code <c>invalid_credentials</c>.</summary>
+    public const string InvalidCredentials = "invalid_credentials";
 
     /// <summary>Problem code <c>invalid_collection</c>.</summary>
     public const string InvalidCollection = "invalid_collection";
@@ -142,12 +148,6 @@ public static class ApiProblemCodes {
     /// <summary>Problem code <c>jellyfin_item_not_found</c>.</summary>
     public const string JellyfinItemNotFound = "jellyfin_item_not_found";
 
-    /// <summary>Problem code <c>jellyfin_profile_invalid</c>.</summary>
-    public const string JellyfinProfileInvalid = "jellyfin_profile_invalid";
-
-    /// <summary>Problem code <c>jellyfin_profile_not_found</c>.</summary>
-    public const string JellyfinProfileNotFound = "jellyfin_profile_not_found";
-
     /// <summary>Problem code <c>jellyfin_quick_connect_disabled</c>.</summary>
     public const string JellyfinQuickConnectDisabled = "jellyfin_quick_connect_disabled";
 
@@ -157,11 +157,14 @@ public static class ApiProblemCodes {
     /// <summary>Problem code <c>jellyfin_user_not_found</c>.</summary>
     public const string JellyfinUserNotFound = "jellyfin_user_not_found";
 
-    /// <summary>Problem code <c>missing_api_key</c>.</summary>
-    public const string MissingApiKey = "missing_api_key";
+    /// <summary>Problem code <c>last_admin_required</c>.</summary>
+    public const string LastAdminRequired = "last_admin_required";
 
     /// <summary>Problem code <c>not_found</c>.</summary>
     public const string NotFound = "not_found";
+
+    /// <summary>Problem code <c>password_invalid</c>.</summary>
+    public const string PasswordInvalid = "password_invalid";
 
     /// <summary>Problem code <c>playback_item_not_found</c>.</summary>
     public const string PlaybackItemNotFound = "playback_item_not_found";
@@ -184,14 +187,26 @@ public static class ApiProblemCodes {
     /// <summary>Problem code <c>root_not_found</c>.</summary>
     public const string RootNotFound = "root_not_found";
 
+    /// <summary>Problem code <c>session_not_found</c>.</summary>
+    public const string SessionNotFound = "session_not_found";
+
     /// <summary>Problem code <c>setting_invalid</c>.</summary>
     public const string SettingInvalid = "setting_invalid";
 
     /// <summary>Problem code <c>setting_not_found</c>.</summary>
     public const string SettingNotFound = "setting_not_found";
 
+    /// <summary>Problem code <c>setup_already_completed</c>.</summary>
+    public const string SetupAlreadyCompleted = "setup_already_completed";
+
     /// <summary>Problem code <c>unknown_job_type</c>.</summary>
     public const string UnknownJobType = "unknown_job_type";
+
+    /// <summary>Problem code <c>user_invalid</c>.</summary>
+    public const string UserInvalid = "user_invalid";
+
+    /// <summary>Problem code <c>user_not_found</c>.</summary>
+    public const string UserNotFound = "user_not_found";
 
     /// <summary>Problem code <c>unsupported_entity_image_role</c>.</summary>
     public const string UnsupportedEntityImageRole = "unsupported_entity_image_role";

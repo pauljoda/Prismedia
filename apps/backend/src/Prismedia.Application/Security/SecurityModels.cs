@@ -1,32 +1,33 @@
+using Prismedia.Domain.Entities;
+
 namespace Prismedia.Application.Security;
 
-/// <summary>Singleton app security state persisted by infrastructure.</summary>
+/// <summary>Singleton app security state persisted by infrastructure (server identity).</summary>
 public sealed record AppSecurityState(
     int Id,
     Guid ServerId,
-    string ApiKey,
-    bool DefaultProfileSeeded,
-    DateTimeOffset ApiKeyCreatedAt,
-    DateTimeOffset ApiKeyUpdatedAt,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);
 
-/// <summary>Application model for a Jellyfin-compatible fake user profile.</summary>
-public sealed record JellyfinProfile(
+/// <summary>Application model for a Prismedia user account.</summary>
+public sealed record User(
     Guid Id,
     string Username,
     string DisplayName,
+    UserRole Role,
     bool AllowSfw,
     bool AllowNsfw,
+    bool CanCreateLibraries,
     bool Enabled,
+    bool HasPassword,
     DateTimeOffset? LastLoginAt,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);
 
-/// <summary>Application model for one authenticated Jellyfin-compatible session.</summary>
-public sealed record JellyfinSession(
+/// <summary>Application model for one authenticated user session (web, native, Jellyfin, or OPDS).</summary>
+public sealed record UserSession(
     Guid Id,
-    Guid ProfileId,
+    Guid UserId,
     string TokenHash,
     string? Client,
     string? DeviceName,
@@ -36,26 +37,24 @@ public sealed record JellyfinSession(
     DateTimeOffset LastSeenAt,
     DateTimeOffset? InvalidatedAt);
 
-/// <summary>Resolved Jellyfin session plus the profile that owns it.</summary>
-public sealed record JellyfinSessionResolution(JellyfinSession Session, JellyfinProfile Profile);
+/// <summary>
+/// Resolved session plus its owning user. <paramref name="Touched"/> is true when this
+/// resolution refreshed the session's sliding last-seen timestamp, which signals the
+/// middleware to re-issue the browser cookie.
+/// </summary>
+public sealed record UserSessionResolution(UserSession Session, User User, bool Touched);
 
-/// <summary>Device/client metadata supplied by Jellyfin-compatible clients during login.</summary>
+/// <summary>Device/client metadata supplied during login (Jellyfin wire concept, reused for web logins).</summary>
 public sealed record JellyfinClientIdentity(
     string? Client,
     string? DeviceName,
     string? DeviceId,
     string? ApplicationVersion);
 
-/// <summary>Result returned when rotating the app key.</summary>
-public sealed record ApiKeyRotationResult(AppSecurityState State, int InvalidatedSessions);
-
-/// <summary>Result for validating an app API key attempt.</summary>
-public sealed record ApiKeyValidationResult(bool IsValid, bool IsThrottled);
-
-/// <summary>Result for Jellyfin username/password authentication.</summary>
-public sealed record JellyfinProfileAuthenticationResult(
+/// <summary>Result for username/password authentication across web, Jellyfin, and OPDS.</summary>
+public sealed record UserAuthenticationResult(
     bool Succeeded,
     bool IsThrottled,
-    JellyfinProfile? Profile,
-    JellyfinSession? Session,
+    User? User,
+    UserSession? Session,
     string? AccessToken);

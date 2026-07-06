@@ -39,7 +39,10 @@ public static class DependencyInjection {
         services.AddSingleton(TimeProvider.System);
         services.AddScoped<SettingsService>();
         services.AddScoped<NavLayoutService>();
-        services.AddScoped<PrismediaSecurityService>();
+        services.AddScoped<UserAuthService>();
+        services.AddScoped<UserAdminService>();
+        services.AddScoped<CurrentUserContextHolder>();
+        services.AddScoped<ICurrentUserContext>(sp => sp.GetRequiredService<CurrentUserContextHolder>());
         services.AddScoped<BrowserSessionService>();
         services.AddScoped<MusicPlayerStateService>();
         services.AddSingleton<IJellyfinAudioPlaybackTracker, JellyfinAudioPlaybackTracker>();

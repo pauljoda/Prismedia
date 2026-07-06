@@ -11,6 +11,7 @@ using Prismedia.Contracts.System;
 using Prismedia.Infrastructure;
 using Prismedia.Infrastructure.Database;
 using Prismedia.Infrastructure.Persistence;
+using Prismedia.Infrastructure.Security;
 using Prismedia.Infrastructure.Serialization;
 using Prismedia.Infrastructure.Videos;
 using Microsoft.Extensions.FileProviders;
@@ -84,8 +85,6 @@ builder.Services.AddHostedService<TranscodeReaperService>();
 
 var app = builder.Build();
 
-app.UsePrismediaUiApiKeyCookie();
-
 if (app.Environment.IsDevelopment()) {
     app.MapOpenApi();
     app.MapPrismediaCodegen();
@@ -133,6 +132,7 @@ if (File.Exists(staticIndexPath)) {
 
 await DatabaseRestoreRunner.ApplyPendingRestoreAsync(app.Services, app.Configuration);
 await PrismediaMigrationRunner.ApplyPrismediaMigrationsAsync(app.Services, app.Configuration);
+await UserBootstrapRunner.RunUserBootstrapAsync(app.Services, app.Configuration);
 
 app.Run();
 

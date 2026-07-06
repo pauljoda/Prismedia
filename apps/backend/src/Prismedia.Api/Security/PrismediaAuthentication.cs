@@ -1,5 +1,4 @@
 using System.Text;
-using System.Net;
 using Prismedia.Api.Jellyfin;
 using Prismedia.Application.Security;
 using Prismedia.Contracts.Jellyfin;
@@ -8,40 +7,29 @@ using Prismedia.Contracts.System;
 
 namespace Prismedia.Api.Security;
 
-internal enum PrismediaAuthKind {
-    AppKey,
-    JellyfinSession
-}
-
+/// <summary>
+/// Authenticated identity attached to the request: the presented token, the resolved
+/// user, and the session when the token maps to one (OPDS Basic auth verifies
+/// credentials per request without a persisted session). <paramref name="ViaCookie"/>
+/// distinguishes web-browser sessions (session cookie) from protocol clients
+/// (header/query token or Basic auth), which changes NSFW toggle semantics.
+/// </summary>
 internal sealed record PrismediaAuthContext(
-    PrismediaAuthKind Kind,
     string Token,
-    JellyfinSessionResolution? JellyfinSession);
+    User User,
+    UserSession? Session,
+    bool ViaCookie);
 
 internal static class PrismediaAuthentication {
-    internal const string CookieName = "prismedia-api-key";
+    /// <summary>HttpOnly cookie carrying the web portal's session token.</summary>
+    internal const string SessionCookieName = "prismedia-session";
+
+    /// <summary>Pre-multi-user api-key cookie; expired once at login for cleanup.</summary>
+    internal const string LegacyApiKeyCookieName = "prismedia-api-key";
+
     private const string AuthContextKey = "PrismediaAuth";
-    private static readonly string[] ForwardedHeaderNames = [
-        "Forwarded",
-        "X-Forwarded-For"
-    ];
-
-    internal static IApplicationBuilder UsePrismediaUiApiKeyCookie(this IApplicationBuilder app) =>
-        app.Use(async (context, next) => {
-            if (ShouldBootstrapCookie(context.Request)) {
-                var security = context.RequestServices.GetRequiredService<PrismediaSecurityService>();
-                var state = await security.EnsureSecurityAsync(context.RequestAborted);
-                if (!context.Request.Cookies.TryGetValue(CookieName, out var existing) ||
-                    !string.Equals(
-                        PrismediaSecurityService.NormalizeApiKey(existing),
-                        state.ApiKey,
-                        StringComparison.Ordinal)) {
-                    context.Response.Cookies.Append(CookieName, state.ApiKey, CookieOptions(context));
-                }
-            }
-
-            await next();
-        });
+    private const string SecFetchSiteHeader = "Sec-Fetch-Site";
+    private const string CrossSiteFetch = "cross-site";
 
     internal static IApplicationBuilder UsePrismediaApiAuthentication(this IApplicationBuilder app) =>
         app.Use(async (context, next) => {
@@ -50,16 +38,13 @@ internal static class PrismediaAuthentication {
                 return;
             }
 
-            var security = context.RequestServices.GetRequiredService<PrismediaSecurityService>();
-            var bucket = BucketFor(context);
-            var isJellyfin = IsJellyfinRequest(context.Request.Path);
+            var auth = context.RequestServices.GetRequiredService<UserAuthService>();
             var isOpds = IsOpdsRequest(context.Request.Path);
 
             if (isOpds && TryExtractBasicCredentials(context.Request, out var username, out var password)) {
-                var basicResult = await security.AuthenticateJellyfinProfileAsync(
+                var basicResult = await auth.VerifyCredentialsAsync(
                     username,
                     password,
-                    new JellyfinClientIdentity("OPDS", context.Request.Headers.UserAgent.FirstOrDefault(), null, null),
                     BucketFor(context, username),
                     context.RequestAborted);
                 if (basicResult.IsThrottled) {
@@ -67,69 +52,64 @@ internal static class PrismediaAuthentication {
                     return;
                 }
 
-                if (!basicResult.Succeeded ||
-                    basicResult.Profile is null ||
-                    basicResult.Session is null ||
-                    basicResult.AccessToken is null) {
-                    await WriteUnauthorizedAsync(context, ApiProblemCodes.InvalidApiKey);
+                if (basicResult.User is null) {
+                    await WriteUnauthorizedAsync(context);
                     return;
                 }
 
-                context.Items[AuthContextKey] = new PrismediaAuthContext(
-                    PrismediaAuthKind.JellyfinSession,
-                    basicResult.AccessToken,
-                    new JellyfinSessionResolution(basicResult.Session, basicResult.Profile));
+                SetAuthContext(context, new PrismediaAuthContext(string.Empty, basicResult.User, null, ViaCookie: false));
                 await next();
                 return;
             }
 
-            var token = ExtractToken(context.Request);
+            var (token, fromCookie) = ExtractToken(context.Request);
             if (string.IsNullOrWhiteSpace(token)) {
-                await WriteUnauthorizedAsync(context, ApiProblemCodes.MissingApiKey);
+                await WriteUnauthorizedAsync(context);
                 return;
             }
 
-            if (isJellyfin || isOpds) {
-                var session = await security.ResolveJellyfinSessionAsync(token, context.RequestAborted);
-                if (session is not null) {
-                    context.Items[AuthContextKey] = new PrismediaAuthContext(
-                        PrismediaAuthKind.JellyfinSession,
-                        token,
-                        session);
-                    await next();
-                    return;
-                }
-            }
-
-            var validation = await security.ValidateApiKeyAsync(token, bucket, context.RequestAborted);
-            if (validation.IsThrottled) {
-                await WriteThrottledAsync(context);
+            var resolution = await auth.ResolveSessionAsync(token, context.RequestAborted);
+            if (resolution is null) {
+                await WriteUnauthorizedAsync(context);
                 return;
             }
 
-            if (!validation.IsValid) {
-                await WriteUnauthorizedAsync(context, ApiProblemCodes.InvalidApiKey);
-                return;
+            SetAuthContext(context, new PrismediaAuthContext(token, resolution.User, resolution.Session, fromCookie));
+            if (resolution.Touched && fromCookie) {
+                context.AppendSessionCookie(token);
             }
 
-            context.Items[AuthContextKey] = new PrismediaAuthContext(
-                PrismediaAuthKind.AppKey,
-                PrismediaSecurityService.NormalizeApiKey(token),
-                null);
             await next();
         });
 
     internal static PrismediaAuthContext? GetPrismediaAuth(this HttpContext context) =>
         context.Items.TryGetValue(AuthContextKey, out var value) ? value as PrismediaAuthContext : null;
 
-    internal static bool IsJellyfinSession(this HttpContext context) =>
-        context.GetPrismediaAuth()?.Kind == PrismediaAuthKind.JellyfinSession;
+    /// <summary>The authenticated user for this request, or null on public routes.</summary>
+    internal static User? GetCurrentUser(this HttpContext context) =>
+        context.GetPrismediaAuth()?.User;
 
-    internal static JellyfinProfile? GetJellyfinProfile(this HttpContext context) =>
-        context.GetPrismediaAuth()?.JellyfinSession?.Profile;
+    /// <summary>Issues the sliding web session cookie.</summary>
+    internal static void AppendSessionCookie(this HttpContext context, string token) =>
+        context.Response.Cookies.Append(SessionCookieName, token, new CookieOptions {
+            HttpOnly = true,
+            IsEssential = true,
+            Path = "/",
+            SameSite = SameSiteMode.Lax,
+            Secure = context.Request.IsHttps,
+            MaxAge = UserAuthService.SessionSlidingWindow
+        });
 
-    internal static void AppendUiApiKeyCookie(this HttpContext context, string apiKey) =>
-        context.Response.Cookies.Append(CookieName, apiKey, CookieOptions(context));
+    /// <summary>Expires the web session cookie (sign out).</summary>
+    internal static void ExpireSessionCookie(this HttpContext context) =>
+        context.Response.Cookies.Delete(SessionCookieName, new CookieOptions { Path = "/" });
+
+    /// <summary>Expires the obsolete pre-multi-user api-key cookie.</summary>
+    internal static void ExpireLegacyApiKeyCookie(this HttpContext context) {
+        if (context.Request.Cookies.ContainsKey(LegacyApiKeyCookieName)) {
+            context.Response.Cookies.Delete(LegacyApiKeyCookieName, new CookieOptions { Path = "/" });
+        }
+    }
 
     internal static JellyfinClientIdentity GetJellyfinClientIdentity(this HttpRequest request) {
         var values = ParseJellyfinHeaderValues(request);
@@ -145,85 +125,10 @@ internal static class PrismediaAuthentication {
         return string.IsNullOrWhiteSpace(extra) ? remote : $"{remote}:{extra.Trim().ToLowerInvariant()}";
     }
 
-    private static CookieOptions CookieOptions(HttpContext context) =>
-        new() {
-            HttpOnly = true,
-            IsEssential = true,
-            Path = "/",
-            SameSite = SameSiteMode.Lax,
-            Secure = context.Request.IsHttps
-        };
-
-    internal static bool ShouldBootstrapCookie(HttpRequest request) {
-        if (!IsTrustedUiBootstrapClient(request.HttpContext)) {
-            return false;
-        }
-
-        if (!HttpMethods.IsGet(request.Method) && !HttpMethods.IsHead(request.Method)) {
-            return false;
-        }
-
-        var path = request.Path.Value ?? string.Empty;
-        if (path.StartsWith("/api", StringComparison.OrdinalIgnoreCase) ||
-            path.StartsWith("/assets", StringComparison.OrdinalIgnoreCase) ||
-            path.StartsWith("/openapi", StringComparison.OrdinalIgnoreCase) ||
-            IsOpdsRequest(request.Path) ||
-            IsJellyfinRequest(request.Path)) {
-            return false;
-        }
-
-        if (Path.HasExtension(path)) {
-            return false;
-        }
-
-        return request.Headers.Accept.Count == 0 ||
-            request.Headers.Accept.Any(value => value?.Contains("text/html", StringComparison.OrdinalIgnoreCase) == true);
-    }
-
-    private static bool IsTrustedUiBootstrapClient(HttpContext context) {
-        var remoteAddress = context.Connection.RemoteIpAddress;
-        if (remoteAddress is null || IPAddress.IsLoopback(remoteAddress)) {
-            return true;
-        }
-
-        if (!IsPrivateNetworkAddress(remoteAddress)) {
-            return false;
-        }
-
-        return !HasForwardedHeaders(context.Request) ||
-            (HasForwardedClient(context.Request) && HasForwardedOrigin(context.Request));
-    }
-
-    private static bool HasForwardedHeaders(HttpRequest request) =>
-        HasForwardedClient(request) ||
-        request.Headers.ContainsKey("X-Forwarded-Host") ||
-        request.Headers.ContainsKey("X-Forwarded-Proto");
-
-    private static bool HasForwardedClient(HttpRequest request) =>
-        ForwardedHeaderNames.Any(name => request.Headers.ContainsKey(name));
-
-    private static bool HasForwardedOrigin(HttpRequest request) =>
-        request.Headers["X-Forwarded-Host"].Any(value =>
-            string.Equals(value, request.Host.Value, StringComparison.OrdinalIgnoreCase)) &&
-        request.Headers["X-Forwarded-Proto"].Any(value =>
-            value is not null &&
-            (value.Equals("http", StringComparison.OrdinalIgnoreCase) ||
-             value.Equals("https", StringComparison.OrdinalIgnoreCase)));
-
-    private static bool IsPrivateNetworkAddress(IPAddress address) {
-        if (address.IsIPv4MappedToIPv6) {
-            address = address.MapToIPv4();
-        }
-
-        if (address.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork) {
-            return address.IsIPv6LinkLocal || address.IsIPv6SiteLocal || address.IsIPv6UniqueLocal;
-        }
-
-        var bytes = address.GetAddressBytes();
-        return bytes[0] == 10 ||
-            (bytes[0] == 172 && bytes[1] is >= 16 and <= 31) ||
-            (bytes[0] == 192 && bytes[1] == 168) ||
-            (bytes[0] == 169 && bytes[1] == 254);
+    private static void SetAuthContext(HttpContext context, PrismediaAuthContext auth) {
+        context.Items[AuthContextKey] = auth;
+        context.RequestServices.GetRequiredService<CurrentUserContextHolder>()
+            .Set(auth.User, auth.Session?.Id ?? Guid.Empty);
     }
 
     private static bool RequiresAuthentication(HttpRequest request) {
@@ -235,6 +140,10 @@ internal static class PrismediaAuthentication {
         // Development-only codegen manifest endpoint; mapped only in Development and never
         // exposed in production, so treating it as public here is safe.
         if (path.StartsWithSegments(Codegen.CodegenEndpoints.CodegenPrefix)) {
+            return false;
+        }
+
+        if (IsPublicAuthRoute(request)) {
             return false;
         }
 
@@ -251,6 +160,15 @@ internal static class PrismediaAuthentication {
         }
 
         return !IsPublicJellyfinRoute(request);
+    }
+
+    private static bool IsPublicAuthRoute(HttpRequest request) {
+        var path = request.Path.Value ?? string.Empty;
+        return (HttpMethods.IsGet(request.Method) &&
+                path.Equals("/api/auth/setup-status", StringComparison.OrdinalIgnoreCase)) ||
+            (HttpMethods.IsPost(request.Method) &&
+                (path.Equals("/api/auth/setup", StringComparison.OrdinalIgnoreCase) ||
+                 path.Equals("/api/auth/login", StringComparison.OrdinalIgnoreCase)));
     }
 
     private static bool IsJellyfinRequest(PathString requestPath) =>
@@ -287,15 +205,32 @@ internal static class PrismediaAuthentication {
                 path.EndsWith(JellyfinRoutes.AuthenticateSuffix, StringComparison.OrdinalIgnoreCase));
     }
 
-    private static string? ExtractToken(HttpRequest request) =>
-        TokenFromAuthorizationHeader(request.Headers.Authorization.FirstOrDefault()) ??
-        TokenFromAuthorizationHeader(request.Headers[JellyfinProtocol.Headers.EmbyAuthorization].FirstOrDefault()) ??
-        request.Headers[JellyfinProtocol.Headers.EmbyToken].FirstOrDefault() ??
-        request.Headers[JellyfinProtocol.Headers.MediaBrowserToken].FirstOrDefault() ??
-        request.Headers[JellyfinProtocol.Headers.PrismediaApiKey].FirstOrDefault() ??
-        request.Cookies[CookieName] ??
-        request.Query[JellyfinProtocol.QueryKeys.ApiKey].FirstOrDefault() ??
-        request.Query[JellyfinProtocol.QueryKeys.ApiKeySnake].FirstOrDefault();
+    private static (string? Token, bool FromCookie) ExtractToken(HttpRequest request) {
+        var headerToken =
+            TokenFromAuthorizationHeader(request.Headers.Authorization.FirstOrDefault()) ??
+            TokenFromAuthorizationHeader(request.Headers[JellyfinProtocol.Headers.EmbyAuthorization].FirstOrDefault()) ??
+            request.Headers[JellyfinProtocol.Headers.EmbyToken].FirstOrDefault() ??
+            request.Headers[JellyfinProtocol.Headers.MediaBrowserToken].FirstOrDefault() ??
+            request.Headers[JellyfinProtocol.Headers.PrismediaApiKey].FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(headerToken)) {
+            return (headerToken, false);
+        }
+
+        // Ignore the session cookie on cross-site sends as CSRF belt-and-braces on top of
+        // SameSite=Lax; explicit header/query tokens above are unaffected.
+        var crossSite = string.Equals(
+            request.Headers[SecFetchSiteHeader].FirstOrDefault(),
+            CrossSiteFetch,
+            StringComparison.OrdinalIgnoreCase);
+        if (!crossSite && request.Cookies[SessionCookieName] is { Length: > 0 } cookieToken) {
+            return (cookieToken, true);
+        }
+
+        var queryToken =
+            request.Query[JellyfinProtocol.QueryKeys.ApiKey].FirstOrDefault() ??
+            request.Query[JellyfinProtocol.QueryKeys.ApiKeySnake].FirstOrDefault();
+        return (queryToken, false);
+    }
 
     private static string? TokenFromAuthorizationHeader(string? header) {
         if (string.IsNullOrWhiteSpace(header)) {
@@ -382,13 +317,15 @@ internal static class PrismediaAuthentication {
         return values;
     }
 
-    private static async Task WriteUnauthorizedAsync(HttpContext context, string code) {
+    private static async Task WriteUnauthorizedAsync(HttpContext context) {
         context.Response.StatusCode = StatusCodes.Status401Unauthorized;
         if (IsOpdsRequest(context.Request.Path)) {
             context.Response.Headers.WWWAuthenticate = OpdsProtocol.BasicChallenge;
         }
 
-        await context.Response.WriteAsJsonAsync(new ApiProblem(code, "Authentication is required."), context.RequestAborted);
+        await context.Response.WriteAsJsonAsync(
+            new ApiProblem(ApiProblemCodes.AuthenticationRequired, "Authentication is required."),
+            context.RequestAborted);
     }
 
     private static async Task WriteThrottledAsync(HttpContext context) {

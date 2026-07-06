@@ -64,7 +64,7 @@ public sealed class OpdsEndpointTests : IDisposable {
         using var client = factory.CreateClient();
 
         using var goodRequest = new HttpRequestMessage(HttpMethod.Get, OpdsProtocol.Prefix);
-        goodRequest.Headers.Authorization = Basic(TestAuth.ApiKey);
+        goodRequest.Headers.Authorization = Basic(TestAuth.Password);
         using var goodResponse = await client.SendAsync(goodRequest);
 
         using var badRequest = new HttpRequestMessage(HttpMethod.Get, OpdsProtocol.Prefix);
@@ -93,7 +93,7 @@ public sealed class OpdsEndpointTests : IDisposable {
         using var factory = CreateFactory();
         using var client = factory.CreateClient();
 
-        using var response = await client.GetAsync($"{OpdsProtocol.Routes.OpenSearch}?api_key={TestAuth.ApiKey}");
+        using var response = await client.GetAsync($"{OpdsProtocol.Routes.OpenSearch}?api_key={TestAuth.Token}");
         var document = await ReadXmlAsync(response);
         var url = Assert.Single(document.Descendants(XName.Get("Url", OpdsProtocol.OpenSearchNamespace)));
         var template = (string?)url.Attribute("template");
@@ -134,7 +134,7 @@ public sealed class OpdsEndpointTests : IDisposable {
         using var factory = CreateFactory();
         using var client = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Get, OpdsProtocol.Routes.Recent);
-        request.Headers.Authorization = Basic(TestAuth.ApiKey);
+        request.Headers.Authorization = Basic(TestAuth.Password);
         request.Headers.Host = "127.0.0.1:8008";
         request.Headers.Add("X-Forwarded-Proto", "https");
         request.Headers.Add("X-Forwarded-Host", "prismedia.example.com");
@@ -196,15 +196,15 @@ public sealed class OpdsEndpointTests : IDisposable {
         using var factory = CreateFactory();
         using var client = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Get, $"{OpdsProtocol.Routes.Search}?q=Hidden");
-        request.Headers.Authorization = Basic(TestAuth.ApiKey);
+        request.Headers.Authorization = Basic(TestAuth.Password);
 
         using var response = await client.SendAsync(request);
         var document = await ReadXmlAsync(response);
         using var hiddenDetailRequest = new HttpRequestMessage(HttpMethod.Get, OpdsProtocol.Routes.Book(HiddenBookId));
-        hiddenDetailRequest.Headers.Authorization = Basic(TestAuth.ApiKey);
+        hiddenDetailRequest.Headers.Authorization = Basic(TestAuth.Password);
         using var hiddenDetail = await client.SendAsync(hiddenDetailRequest);
         using var hiddenCoverRequest = new HttpRequestMessage(HttpMethod.Get, OpdsProtocol.Routes.BookCover(HiddenBookId));
-        hiddenCoverRequest.Headers.Authorization = Basic(TestAuth.ApiKey);
+        hiddenCoverRequest.Headers.Authorization = Basic(TestAuth.Password);
         using var hiddenCover = await client.SendAsync(hiddenCoverRequest);
 
         var resultTitles = document.Descendants(Atom("entry"))
@@ -222,7 +222,7 @@ public sealed class OpdsEndpointTests : IDisposable {
         using var factory = CreateFactory(allowNsfw: true);
         using var client = factory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Get, $"{OpdsProtocol.Routes.Search}?q=Hidden");
-        request.Headers.Authorization = Basic(TestAuth.ApiKey);
+        request.Headers.Authorization = Basic(TestAuth.Password);
 
         using var response = await client.SendAsync(request);
         var document = await ReadXmlAsync(response);
@@ -277,7 +277,7 @@ public sealed class OpdsEndpointTests : IDisposable {
             "/Users/AuthenticateByName",
             new JellyfinAuthenticateByNameRequest {
                 Username = "Prismedia",
-                Password = TestAuth.ApiKey
+                Password = TestAuth.Password
             });
         response.EnsureSuccessStatusCode();
         var result = await response.Content.ReadFromJsonAsync<JellyfinAuthenticationResult>();

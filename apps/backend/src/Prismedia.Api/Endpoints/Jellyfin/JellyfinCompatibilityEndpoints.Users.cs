@@ -1,9 +1,7 @@
 using Prismedia.Api.Security;
-using Prismedia.Application.Jellyfin;
 using Prismedia.Application.Security;
 using Prismedia.Contracts.Jellyfin;
-using Prismedia.Contracts.Security;
-using Prismedia.Contracts.System;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Api.Endpoints;
 
@@ -33,86 +31,62 @@ public static partial class JellyfinCompatibilityEndpoints {
             .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
 
     private static async Task<IReadOnlyList<JellyfinUserDto>> JellyfinUsersAsync(
-        PrismediaSecurityService security,
-        bool enabledOnly,
+        UserAuthService auth,
         CancellationToken cancellationToken) {
-        var state = await security.EnsureSecurityAsync(cancellationToken);
-        var profiles = (await security.ListProfilesAsync(cancellationToken)).Items
-            .Where(profile => !enabledOnly || profile.Enabled)
-            .Select(profile => ToUserDto(profile, state))
+        var state = await auth.GetServerInfoAsync(cancellationToken);
+        return (await auth.ListEnabledUsersAsync(cancellationToken))
+            .Select(user => ToUserDto(user, state))
             .ToArray();
-        return profiles;
     }
 
     private static async Task<JellyfinUserDto?> ResolveUserAsync(
         HttpContext httpContext,
-        PrismediaSecurityService security,
+        UserAuthService auth,
         Guid? userId,
         CancellationToken cancellationToken) {
-        var state = await security.EnsureSecurityAsync(cancellationToken);
-        if (httpContext.GetJellyfinProfile() is { } activeProfile && (userId is null || activeProfile.Id == userId)) {
-            return ToUserDto(activeProfile, state);
+        var state = await auth.GetServerInfoAsync(cancellationToken);
+        if (httpContext.GetCurrentUser() is { } activeUser && (userId is null || activeUser.Id == userId)) {
+            return ToUserDto(activeUser, state);
         }
 
-        var profiles = (await security.ListProfilesAsync(cancellationToken)).Items;
-        var profile = userId is null
-            ? profiles.FirstOrDefault(item => item.Enabled)
-            : profiles.FirstOrDefault(item => item.Id == userId && item.Enabled);
-        return profile is null ? null : ToUserDto(profile, state);
+        var users = await auth.ListEnabledUsersAsync(cancellationToken);
+        var user = userId is null
+            ? users.FirstOrDefault()
+            : users.FirstOrDefault(item => item.Id == userId);
+        return user is null ? null : ToUserDto(user, state);
     }
 
-    private static JellyfinUserDto ToUserDto(JellyfinProfileResponse profile, AppSecurityState state) =>
+    private static JellyfinUserDto ToUserDto(User user, AppSecurityState state) =>
         new(
-            profile.DisplayName,
+            user.DisplayName,
             state.ServerId.ToString("N"),
             "Prismedia",
-            profile.Id,
+            user.Id,
             HasPassword: true,
             HasConfiguredPassword: true,
             HasConfiguredEasyPassword: true,
             EnableAutoLogin: false,
-            profile.LastLoginAt,
-            profile.LastLoginAt,
-            UserPolicy(profile),
+            user.LastLoginAt,
+            user.LastLoginAt,
+            UserPolicy(user),
             UserConfiguration());
 
-    private static JellyfinUserDto ToUserDto(JellyfinProfile profile, AppSecurityState state) =>
-        new(
-            profile.DisplayName,
-            state.ServerId.ToString("N"),
-            "Prismedia",
-            profile.Id,
-            HasPassword: true,
-            HasConfiguredPassword: true,
-            HasConfiguredEasyPassword: true,
-            EnableAutoLogin: false,
-            profile.LastLoginAt,
-            profile.LastLoginAt,
-            UserPolicy(profile),
-            UserConfiguration());
-
-    private static JellyfinSessionInfoDto ToSessionDto(JellyfinProfile profile, JellyfinSession session) =>
+    private static JellyfinSessionInfoDto ToSessionDto(User user, UserSession session) =>
         new(
             session.Id.ToString("N"),
-            profile.Id,
-            profile.DisplayName,
+            user.Id,
+            user.DisplayName,
             session.Client,
             session.DeviceName,
             session.DeviceId,
             session.ApplicationVersion,
             IsActive: true);
 
-    private static JellyfinUserPolicyDto UserPolicy(JellyfinProfileResponse profile) =>
-        UserPolicy(profile.Enabled);
-
-    private static JellyfinUserPolicyDto UserPolicy(JellyfinProfile profile) =>
-        UserPolicy(profile.Enabled);
-
-    private static JellyfinUserPolicyDto UserPolicy(bool enabled) =>
+    private static JellyfinUserPolicyDto UserPolicy(User user) =>
         new(
-            IsAdministrator: false,
+            IsAdministrator: user.Role == UserRole.Admin,
             IsHidden: false,
-            IsDisabled: !enabled,
+            IsDisabled: !user.Enabled,
             AuthenticationProviderId: JellyfinProtocol.UserPolicyProviders.DefaultAuthentication,
             PasswordResetProviderId: JellyfinProtocol.UserPolicyProviders.DefaultPasswordReset,
             EnableRemoteControlOfOtherUsers: false,

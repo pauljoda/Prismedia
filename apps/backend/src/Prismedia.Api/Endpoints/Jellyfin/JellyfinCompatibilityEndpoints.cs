@@ -31,18 +31,18 @@ public static partial class JellyfinCompatibilityEndpoints {
 
         routes.MapGet("/System/Info/Public", async (
             HttpContext httpContext,
-            PrismediaSecurityService security,
+            UserAuthService auth,
             CancellationToken cancellationToken) =>
-            Results.Ok(ToPublicSystemInfo(httpContext, await security.EnsureSecurityAsync(cancellationToken))))
+            Results.Ok(ToPublicSystemInfo(httpContext, await auth.GetServerInfoAsync(cancellationToken))))
             .WithTags("Jellyfin System")
             .WithName("GetJellyfinPublicSystemInfo")
             .Produces<JellyfinPublicSystemInfo>();
 
         routes.MapGet("/System/Info", async (
             HttpContext httpContext,
-            PrismediaSecurityService security,
+            UserAuthService auth,
             CancellationToken cancellationToken) => {
-            var publicInfo = ToPublicSystemInfo(httpContext, await security.EnsureSecurityAsync(cancellationToken));
+            var publicInfo = ToPublicSystemInfo(httpContext, await auth.GetServerInfoAsync(cancellationToken));
             return Results.Ok(new JellyfinSystemInfo(
                 publicInfo.LocalAddress,
                 publicInfo.ServerName,
@@ -116,26 +116,26 @@ public static partial class JellyfinCompatibilityEndpoints {
 
     private static void MapJellyfinUserEndpoints(this IEndpointRouteBuilder routes) {
         routes.MapGet("/Users/Public", async (
-            PrismediaSecurityService security,
+            UserAuthService auth,
             CancellationToken cancellationToken) =>
-            Results.Ok(await JellyfinUsersAsync(security, enabledOnly: true, cancellationToken)))
+            Results.Ok(await JellyfinUsersAsync(auth, cancellationToken)))
             .WithTags("Jellyfin Users")
             .WithName("GetJellyfinPublicUsers")
             .Produces<IReadOnlyList<JellyfinUserDto>>();
 
         routes.MapGet("/Users", async (
-            PrismediaSecurityService security,
+            UserAuthService auth,
             CancellationToken cancellationToken) =>
-            Results.Ok(await JellyfinUsersAsync(security, enabledOnly: true, cancellationToken)))
+            Results.Ok(await JellyfinUsersAsync(auth, cancellationToken)))
             .WithTags("Jellyfin Users")
             .WithName("GetJellyfinUsers")
             .Produces<IReadOnlyList<JellyfinUserDto>>();
 
         routes.MapGet("/Users/Me", async (
             HttpContext httpContext,
-            PrismediaSecurityService security,
+            UserAuthService auth,
             CancellationToken cancellationToken) => {
-            var user = await ResolveUserAsync(httpContext, security, null, cancellationToken);
+            var user = await ResolveUserAsync(httpContext, auth, null, cancellationToken);
             return user is null
                 ? Results.NotFound(new ApiProblem(ApiProblemCodes.JellyfinUserNotFound, "No Jellyfin user was found."))
                 : Results.Ok(user);
@@ -148,9 +148,9 @@ public static partial class JellyfinCompatibilityEndpoints {
         routes.MapGet("/Users/{userId:guid}", async (
             Guid userId,
             HttpContext httpContext,
-            PrismediaSecurityService security,
+            UserAuthService auth,
             CancellationToken cancellationToken) => {
-            var user = await ResolveUserAsync(httpContext, security, userId, cancellationToken);
+            var user = await ResolveUserAsync(httpContext, auth, userId, cancellationToken);
             return user is null
                 ? Results.NotFound(new ApiProblem(ApiProblemCodes.JellyfinUserNotFound, $"User '{userId}' was not found."))
                 : Results.Ok(user);
@@ -163,13 +163,13 @@ public static partial class JellyfinCompatibilityEndpoints {
         routes.MapPost("/Users/AuthenticateByName", async (
             JellyfinAuthenticateByNameRequest request,
             HttpContext httpContext,
-            PrismediaSecurityService security,
+            UserAuthService auth,
             CancellationToken cancellationToken) => {
             return await AuthenticateAsync(
                 request.Username,
                 request.EffectivePassword,
                 httpContext,
-                security,
+                auth,
                 cancellationToken);
         })
             .WithTags("Jellyfin Users")
@@ -190,13 +190,12 @@ public static partial class JellyfinCompatibilityEndpoints {
             Guid userId,
             string? pw,
             HttpContext httpContext,
-            PrismediaSecurityService security,
+            UserAuthService auth,
             CancellationToken cancellationToken) => {
-            var profile = (await security.ListProfilesAsync(cancellationToken)).Items
-                .FirstOrDefault(item => item.Id == userId && item.Enabled);
-            return profile is null
+            var user = await auth.FindUserAsync(userId, cancellationToken);
+            return user is null || !user.Enabled
                 ? Results.NotFound(new ApiProblem(ApiProblemCodes.JellyfinUserNotFound, $"User '{userId}' was not found."))
-                : await AuthenticateAsync(profile.Username, pw, httpContext, security, cancellationToken);
+                : await AuthenticateAsync(user.Username, pw, httpContext, auth, cancellationToken);
         })
             .WithTags("Jellyfin Users")
             .WithName("AuthenticateJellyfinUserLegacy")
@@ -218,10 +217,10 @@ public static partial class JellyfinCompatibilityEndpoints {
         routes.MapGet("/UserViews/GroupingOptions", async (
             Guid? userId,
             HttpContext httpContext,
-            PrismediaSecurityService security,
+            UserAuthService auth,
             JellyfinCatalogService catalog,
             CancellationToken cancellationToken) =>
-            await GetGroupingOptionsAsync(userId, httpContext, security, catalog, cancellationToken))
+            await GetGroupingOptionsAsync(userId, httpContext, auth, catalog, cancellationToken))
             .WithTags("Jellyfin Catalog")
             .WithName("GetJellyfinUserViewGroupingOptions")
             .Produces<IReadOnlyList<JellyfinSpecialViewOptionDto>>()
@@ -230,10 +229,10 @@ public static partial class JellyfinCompatibilityEndpoints {
         routes.MapGet("/Users/{userId:guid}/GroupingOptions", async (
             Guid userId,
             HttpContext httpContext,
-            PrismediaSecurityService security,
+            UserAuthService auth,
             JellyfinCatalogService catalog,
             CancellationToken cancellationToken) =>
-            await GetGroupingOptionsAsync(userId, httpContext, security, catalog, cancellationToken))
+            await GetGroupingOptionsAsync(userId, httpContext, auth, catalog, cancellationToken))
             .WithTags("Jellyfin Catalog")
             .WithName("GetJellyfinUserViewGroupingOptionsLegacy")
             .Produces<IReadOnlyList<JellyfinSpecialViewOptionDto>>()
@@ -438,10 +437,10 @@ public static partial class JellyfinCompatibilityEndpoints {
 
     private static void MapJellyfinLibraryEndpoints(this IEndpointRouteBuilder routes) {
         routes.MapGet("/Library/VirtualFolders", async (
-            PrismediaSecurityService security,
+            UserAuthService auth,
             JellyfinCatalogService catalog,
             CancellationToken cancellationToken) => {
-            var state = await security.EnsureSecurityAsync(cancellationToken);
+            var state = await auth.GetServerInfoAsync(cancellationToken);
             var folders = catalog.GetUserViews(state.ServerId.ToString("N"))
                 .Items
                 .Select(ToVirtualFolder)
@@ -457,10 +456,10 @@ public static partial class JellyfinCompatibilityEndpoints {
         // same top-level library views so either entry point discovers the Music (and video) libraries.
         routes.MapGet("/Library/MediaFolders", async (
             HttpContext httpContext,
-            PrismediaSecurityService security,
+            UserAuthService auth,
             JellyfinCatalogService catalog,
             CancellationToken cancellationToken) => {
-            var state = await security.EnsureSecurityAsync(cancellationToken);
+            var state = await auth.GetServerInfoAsync(cancellationToken);
             var views = await catalog.GetUserViewsWithArtworkAsync(
                 state.ServerId.ToString("N"),
                 NsfwVisibility.JellyfinContent(httpContext),
@@ -522,9 +521,9 @@ public static partial class JellyfinCompatibilityEndpoints {
         string? username,
         string? password,
         HttpContext httpContext,
-        PrismediaSecurityService security,
+        UserAuthService auth,
         CancellationToken cancellationToken) {
-        var result = await security.AuthenticateJellyfinProfileAsync(
+        var result = await auth.AuthenticateAsync(
             username,
             password,
             httpContext.Request.GetJellyfinClientIdentity(),
@@ -537,24 +536,24 @@ public static partial class JellyfinCompatibilityEndpoints {
                 statusCode: StatusCodes.Status429TooManyRequests);
         }
 
-        if (!result.Succeeded || result.Profile is null || result.Session is null || result.AccessToken is null) {
+        if (!result.Succeeded || result.User is null || result.Session is null || result.AccessToken is null) {
             return Results.Json(
-                new ApiProblem(ApiProblemCodes.JellyfinAuthFailed, "Invalid username or API key."),
+                new ApiProblem(ApiProblemCodes.JellyfinAuthFailed, "Invalid username or password."),
                 statusCode: StatusCodes.Status401Unauthorized);
         }
 
-        var state = await security.EnsureSecurityAsync(cancellationToken);
-        var user = ToUserDto(result.Profile, state);
+        var state = await auth.GetServerInfoAsync(cancellationToken);
+        var user = ToUserDto(result.User, state);
         return Results.Ok(new JellyfinAuthenticationResult(
             user,
-            ToSessionDto(result.Profile, result.Session),
+            ToSessionDto(result.User, result.Session),
             result.AccessToken,
             state.ServerId.ToString("N")));
     }
 
     private static IReadOnlyList<JellyfinSessionInfoDto> CurrentSessions(HttpContext httpContext) =>
-        httpContext.GetPrismediaAuth()?.JellyfinSession is { } resolution
-            ? [ToSessionDto(resolution.Profile, resolution.Session)]
+        httpContext.GetPrismediaAuth() is { Session: { } session, User: { } user }
+            ? [ToSessionDto(user, session)]
             : [];
 
     private static JellyfinEndpointInfo ToEndpointInfo(HttpContext httpContext) {

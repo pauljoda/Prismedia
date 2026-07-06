@@ -22,7 +22,7 @@ internal static class JellyfinPlaybackResults {
         }
 
         var appRequest = request?.ToApplication() ?? new PlaybackInfoQuery();
-        if (httpContext.GetPrismediaAuth() is { Kind: PrismediaAuthKind.JellyfinSession } auth) {
+        if (httpContext.GetPrismediaAuth() is { Token.Length: > 0 } auth) {
             appRequest = appRequest with { AccessToken = auth.Token };
         }
 
