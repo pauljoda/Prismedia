@@ -36,7 +36,7 @@
   }
 </script>
 
-<article class={`acq-card tone-${item.tone}`} class:is-selected={selected}>
+<article class="acq-card" class:is-selected={selected}>
   {#if selectable}
     <div class="select">
       <Checkbox size="md" checked={selected} onchange={() => onToggleSelected?.(item.id)} aria-label={`Select ${item.title}`} />
@@ -190,23 +190,6 @@
     border-color: rgb(242 194 106 / 0.6);
     box-shadow: var(--shadow-glow-accent, 0 0 16px rgb(242 194 106 / 0.18));
   }
-
-  /* Thin left accent rail keyed to the row's tone. */
-  .acq-card::before {
-    content: "";
-    position: absolute;
-    inset: 0.7rem auto 0.7rem 0;
-    width: 3px;
-    border-radius: 3px;
-    background: var(--tone-accent, rgb(255 255 255 / 0.14));
-  }
-  .tone-downloading { --tone-accent: linear-gradient(180deg, #d59a2a, #f2c26a); }
-  .tone-searching { --tone-accent: linear-gradient(180deg, #8a6f3a, #d3b06a); }
-  .tone-queued { --tone-accent: rgb(255 255 255 / 0.2); }
-  .tone-attention { --tone-accent: linear-gradient(180deg, #b8862e, #f2c26a); }
-  .tone-failed { --tone-accent: linear-gradient(180deg, #a3402f, #e46a5a); }
-  .tone-done { --tone-accent: linear-gradient(180deg, #2f7d4f, #57c98a); }
-  .tone-muted { --tone-accent: rgb(255 255 255 / 0.14); }
 
   .select { grid-area: select; display: flex; align-items: center; padding-left: 0.25rem; }
 
@@ -436,5 +419,14 @@
     .action-label { display: none; }
     .action { padding: 0 0.65rem; }
     .progress { max-width: none; }
+
+    /* Let the title, subtitle, and status description wrap to full text instead of truncating — on a
+       narrow screen the row has the vertical room, and the failure reason especially must read in full. */
+    .title,
+    .subtitle,
+    .description {
+      white-space: normal;
+      overflow: visible;
+    }
   }
 </style>
