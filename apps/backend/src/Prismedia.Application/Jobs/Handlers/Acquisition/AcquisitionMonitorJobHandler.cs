@@ -15,6 +15,7 @@ public sealed class AcquisitionMonitorJobHandler(
     IDownloadClientConfigStore downloadClients,
     IDownloadClientFactory clients,
     RemotePathMapper remotePaths,
+    IAcquisitionHistoryStore history,
     ILogger<AcquisitionMonitorJobHandler> logger) : IJobHandler {
     public JobType Type => JobType.AcquisitionMonitor;
 
@@ -134,17 +135,13 @@ public sealed class AcquisitionMonitorJobHandler(
                 // recategorized but perfectly healthy download would be failed and permanently blocklisted.
                 var direct = await downloadClient.GetItemAsync(connection, transfer.ClientItemId, cancellationToken);
                 if (direct is null) {
-                    // Genuinely gone. Only declare removal after the grace window so a brief client outage
-                    // doesn't fail an otherwise-healthy download. The failed-handle job (not the monitor)
-                    // owns the terminal Failed transition, so the acquisition stays active — deduped by
-                    // target — until that job resolves it to Failed or a re-grab.
+                    // Genuinely gone — the user (or another tool) removed the download from the client. That
+                    // is not evidence the release was bad, so nothing is blocklisted or failed; the
+                    // acquisition falls back to a fresh release search instead, so it can never sit orphaned
+                    // in Downloading against a torrent that no longer exists. Removal is only declared after
+                    // the grace window so a brief client outage doesn't restart a healthy download.
                     if (DateTimeOffset.UtcNow - transfer.UpdatedAt >= RemovalGrace) {
-                        await EnqueueFailedHandleAsync(
-                            context,
-                            transfer.AcquisitionId,
-                            BlocklistReason.Failed,
-                            "The download was removed from the client.",
-                            cancellationToken);
+                        await FallBackToSearchAsync(context, transfer.AcquisitionId, cancellationToken);
                     } else {
                         logger.LogDebug("AcquisitionMonitor: transfer {TransferId} not in client listing; within grace window.", transfer.TransferId);
                     }
@@ -255,7 +252,43 @@ public sealed class AcquisitionMonitorJobHandler(
     }
 
     /// <summary>
-    /// Hands a failed download (vanished or stalled past its grace window) off to failed-download recovery.
+    /// Falls an acquisition whose download vanished from the client back to the searching state: records a
+    /// durable history event, moves the status out of Downloading (which retires the orphaned transfer from
+    /// the active set and makes the acquisition searchable again), and enqueues the standard release search —
+    /// which auto-grabs the best accepted release for wanted-entity acquisitions. The removed release is NOT
+    /// blocklisted: a user delete says nothing about release quality, and the release picker's explicit
+    /// blocklist action covers the "never grab that one again" case.
+    /// </summary>
+    private async Task FallBackToSearchAsync(JobContext context, Guid acquisitionId, CancellationToken cancellationToken) {
+        const string message = "The download was removed from the client; searching for a release again.";
+        var input = await acquisitions.GetSearchInputAsync(acquisitionId, cancellationToken);
+        var selected = await acquisitions.GetSelectedReleaseAsync(acquisitionId, cancellationToken);
+        await history.SafeAddAsync(logger, new AcquisitionHistoryEntry(
+            acquisitionId,
+            input?.EntityId,
+            input?.Kind ?? EntityKind.Book,
+            AcquisitionHistoryEvent.DownloadFailed,
+            input?.Title ?? selected?.Title ?? "(removed acquisition)",
+            selected?.Title,
+            selected?.IndexerName,
+            Message: message),
+            cancellationToken);
+
+        // The status change must precede the enqueue: the search handler skips non-searchable statuses
+        // (Queued/Downloading among them), exactly to protect live grabs from stale monitor searches.
+        await acquisitions.SetStatusAsync(acquisitionId, AcquisitionStatus.Searching, message, cancellationToken);
+        await context.EnqueueIfNeededAsync(
+            new EnqueueJobRequest(
+                JobType.AcquisitionSearch,
+                PayloadJson: AcquisitionJobPayload.Serialize(acquisitionId),
+                TargetEntityId: acquisitionId.ToString(),
+                TargetLabel: input?.Title ?? "Search again after client removal"),
+            cancellationToken);
+        logger.LogInformation("AcquisitionMonitor: download for acquisition {AcquisitionId} is gone from the client; falling back to a new release search.", acquisitionId);
+    }
+
+    /// <summary>
+    /// Hands a failed download (stalled past its grace window, or reported failed by the client) off to failed-download recovery.
     /// The release that was downloading is snapshotted into the payload here (before any manual re-queue can
     /// overwrite the acquisition's selected-release field) so the recovery job blocklists exactly the release
     /// that failed. Enqueue is deduped by target, so repeated passes while the job is pending enqueue it at

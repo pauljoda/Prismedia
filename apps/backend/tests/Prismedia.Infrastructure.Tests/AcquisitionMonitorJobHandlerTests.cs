@@ -12,11 +12,11 @@ using Prismedia.Infrastructure.Persistence.Entities;
 namespace Prismedia.Infrastructure.Tests;
 
 /// <summary>
-/// Verifies the monitor's vanished-download handling: it hands off to failed-recovery only when the
-/// torrent is truly gone past the grace window, does NOT fail a healthy torrent whose category drifted,
-/// and leaves the terminal Failed transition to the recovery job (it only enqueues). Also covers stalled
-/// downloads: a stall is anchored on first observation and abandoned only after it persists past the
-/// grace window, while a recovered transfer clears its anchor.
+/// Verifies the monitor's vanished-download handling: a download truly gone from the client past the
+/// grace window falls back to the searching state (no blocklist, no Failed — the user removing a torrent
+/// is not a release failure), while a healthy torrent whose category drifted is never touched. Also
+/// covers stalled downloads: a stall is anchored on first observation and abandoned to failed-recovery
+/// only after it persists past the grace window, while a recovered transfer clears its anchor.
 /// </summary>
 public sealed class AcquisitionMonitorJobHandlerTests {
     private static readonly Guid ClientId = Guid.NewGuid();
@@ -107,22 +107,41 @@ public sealed class AcquisitionMonitorJobHandlerTests {
     }
 
     [Fact]
-    public async Task VanishedPastGraceEnqueuesFailedHandleWithoutSettingFailed() {
+    public async Task VanishedPastGraceFallsBackToSearching() {
         await using var db = CreateContext();
         var acquisitionId = await SeedDownloadingAsync(db, lastSeen: DateTimeOffset.UtcNow.AddMinutes(-10));
         var queue = new RecordingJobQueue();
 
-        // Absent from the category listing AND absent on a per-hash lookup → genuinely gone.
+        // Absent from the category listing AND absent on a per-hash lookup → genuinely gone (e.g. the
+        // user deleted the torrent in the client). The acquisition must not sit orphaned in Downloading,
+        // and the removed release must not be blocklisted — it falls back to a fresh search instead.
         await RunAsync(db, queue, listing: [], directLookup: null, acquisitionId);
 
         var enqueued = Assert.Single(queue.Enqueued);
-        Assert.Equal(JobType.AcquisitionFailedHandle, enqueued.Type);
+        Assert.Equal(JobType.AcquisitionSearch, enqueued.Type);
         Assert.Equal(acquisitionId.ToString(), enqueued.TargetEntityId);
-        var payload = AcquisitionFailedPayload.Parse(enqueued.PayloadJson!);
-        Assert.Equal(BlocklistReason.Failed, payload.Reason);
-        Assert.Equal("hashX", payload.Selected!.InfoHash);
-        // The monitor does NOT set Failed; the recovery job owns that transition.
-        Assert.Equal(AcquisitionStatus.Downloading, await StatusOf(db, acquisitionId));
+        Assert.Equal(AcquisitionStatus.Searching, await StatusOf(db, acquisitionId));
+
+        // Durable record of what happened, so the History surface explains the restart.
+        var events = await new EfAcquisitionHistoryStore(db).ListAsync(200, entityId: null, CancellationToken.None);
+        var entry = Assert.Single(events, item => item.Event == AcquisitionHistoryEvent.DownloadFailed);
+        Assert.Contains("removed from the client", entry.Message ?? "");
+    }
+
+    [Fact]
+    public async Task VanishedFallbackFiresOnceAcrossPasses() {
+        await using var db = CreateContext();
+        var acquisitionId = await SeedDownloadingAsync(db, lastSeen: DateTimeOffset.UtcNow.AddMinutes(-10));
+        var queue = new RecordingJobQueue();
+
+        // The first pass flips the acquisition to Searching, which retires the orphaned transfer from the
+        // active set — a second pass must find nothing to advance and enqueue nothing new.
+        await RunAsync(db, queue, listing: [], directLookup: null, acquisitionId);
+        await RunAsync(db, queue, listing: [], directLookup: null, acquisitionId);
+
+        var enqueued = Assert.Single(queue.Enqueued);
+        Assert.Equal(JobType.AcquisitionSearch, enqueued.Type);
+        Assert.Equal(AcquisitionStatus.Searching, await StatusOf(db, acquisitionId));
     }
 
     [Fact]
@@ -160,6 +179,7 @@ public sealed class AcquisitionMonitorJobHandlerTests {
             new FakeDownloadClientConfigStore(),
             new FakeDownloadClientFactory(new FakeDownloadClient(listing, directLookup)),
             new RemotePathMapper(new NoRemotePathMappings()),
+            new EfAcquisitionHistoryStore(db),
             NullLogger<AcquisitionMonitorJobHandler>.Instance);
         var job = new JobRunSnapshot(
             Guid.NewGuid(), JobType.AcquisitionMonitor, JobRunStatus.Running, 0, null, "{}",

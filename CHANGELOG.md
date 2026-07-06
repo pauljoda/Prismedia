@@ -93,6 +93,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated documentation, README screenshots, branding assets, install metadata, and app copy to match the current Prismedia v1 surface.
 
 ### Fixed
+- Fixed a download deleted directly in the download client (e.g. removing the torrent from qBittorrent by hand) so its acquisition no longer strands in Downloading or gets blocklisted as a failed release: once the download is confirmed gone, the item falls back to searching, records what happened in History, and re-runs its release search automatically. A brief client outage is still tolerated by the existing grace window, and a genuinely failed or stalled download keeps going to failed-download recovery (blocklist + next-best release) as before.
 - Fixed the request page's children section so it labels them by kind — a series shows "Seasons" (and a season's request shows "Episodes") instead of the generic "Volumes"; clicking a season/book/album card now toggles its selection directly rather than opening a preview popup.
 - Fixed release searches so an indexer's configured "Other" categories (8000s) are actually queried — book searches with the default 7000,8000 setup were silently dropping 8000, hiding releases indexers file under Other/Misc.
 - Fixed the Authors browse so a book is grouped under its real author from the file's embedded metadata (EPUB/PDF) — a series- or title-named folder like "Game of Thrones" no longer shows up as the author; the folder name is used only when the file carries no author.
