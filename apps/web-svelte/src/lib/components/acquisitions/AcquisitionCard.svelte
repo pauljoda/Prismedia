@@ -7,7 +7,7 @@
    * chips, and the row's action buttons. Downloads, Missing, and Cutoff Unmet all render through this,
    * so the design lives in one place.
    */
-  import { Check } from "@lucide/svelte";
+  import { Checkbox } from "@prismedia/ui-svelte";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
   import { labelForEntityKind } from "$lib/entities/entity-codes";
   import type { AcquisitionListItem } from "$lib/requests/acquisition-list-item";
@@ -29,10 +29,9 @@
 
 <article class={`acq-card tone-${item.tone}`} class:is-selected={selected}>
   {#if selectable}
-    <label class="select" title={`Select ${item.title}`}>
-      <input type="checkbox" checked={selected} onchange={() => onToggleSelected?.(item.id)} />
-      <span class="select-box" aria-hidden="true"><Check size={13} /></span>
-    </label>
+    <div class="select">
+      <Checkbox size="md" checked={selected} onchange={() => onToggleSelected?.(item.id)} aria-label={`Select ${item.title}`} />
+    </div>
   {/if}
 
   <svelte:element
@@ -157,54 +156,27 @@
     display: flex;
     align-items: center;
     padding-left: 0.35rem;
-    cursor: pointer;
-  }
-  .select input {
-    position: absolute;
-    opacity: 0;
-    pointer-events: none;
-  }
-  .select-box {
-    display: grid;
-    place-items: center;
-    width: 1.35rem;
-    height: 1.35rem;
-    border: 1px solid rgb(255 255 255 / 0.2);
-    border-radius: var(--radius-xs, 4px);
-    background: rgb(11 11 12 / 0.6);
-    color: transparent;
-    transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
-  }
-  .select input:checked + .select-box {
-    border-color: rgb(242 194 106 / 0.9);
-    background: linear-gradient(135deg, #f2c26a, #b8862e);
-    color: #0b0b0c;
-  }
-  .select input:focus-visible + .select-box {
-    outline: 2px solid rgb(242 194 106 / 0.6);
-    outline-offset: 2px;
   }
 
   .poster {
     grid-area: poster;
     display: block;
-    width: 3.25rem;
+    width: 3.5rem;
     align-self: center;
     border-radius: var(--radius-sm, 6px);
     overflow: hidden;
     text-decoration: none;
     box-shadow: 0 2px 8px rgb(0 0 0 / 0.4);
   }
-  /* Force a uniform poster frame regardless of the thumbnail's natural aspect. */
+  /* Reuse EntityThumbnail's own per-kind frame (a book is tall, an album square, a video wide) —
+     only strip its standalone border/shadow so it sits flush as the card's artwork anchor. */
   .poster :global(.entity-thumbnail) {
-    aspect-ratio: 2 / 3;
     border: none;
     border-radius: inherit;
     box-shadow: none;
   }
   .poster :global(.entity-thumbnail .media) {
     border-radius: inherit;
-    aspect-ratio: 2 / 3;
   }
 
   .body {

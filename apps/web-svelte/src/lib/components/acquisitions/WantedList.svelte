@@ -2,10 +2,11 @@
   import { BellOff, ChevronLeft, ChevronRight, PackageSearch, RotateCw } from "@lucide/svelte";
   import { Button, Select } from "@prismedia/ui-svelte";
   import type { SelectOption } from "@prismedia/ui-svelte";
-  import type { WantedListItemView } from "$lib/api/generated/model";
+  import type { EntityThumbnail, WantedListItemView } from "$lib/api/generated/model";
   import type { WantedListParams } from "$lib/api/monitors";
   import { fetchCutoffUnmetWanted, fetchMissingWanted, stopMonitor } from "$lib/api/monitors";
   import { reSearchAcquisition } from "$lib/api/acquisitions";
+  import { fetchEntityThumbnails } from "$lib/api/entities";
   import AcquisitionListShell from "$lib/components/acquisitions/AcquisitionListShell.svelte";
   import {
     wantedToListItem,
@@ -33,6 +34,7 @@
   const PAGE_SIZE = 50;
 
   let rows = $state<WantedListItemView[]>([]);
+  let thumbs = $state<Map<string, EntityThumbnail>>(new Map());
   let total = $state(0);
   let page = $state(1);
   let kind = $state<string>("all");
@@ -49,7 +51,9 @@
     onUnmonitor: (row: WantedListItemView) => void unmonitor([row]),
   };
 
-  const items = $derived<AcquisitionListItem[]>(rows.map((row) => wantedToListItem(row, variant, callbacks, acting)));
+  const items = $derived<AcquisitionListItem[]>(
+    rows.map((row) => wantedToListItem(row, variant, row.entityId ? thumbs.get(row.entityId) ?? null : null, callbacks, acting)),
+  );
 
   const bulkActions: AcquisitionBulkAction[] = [
     {
@@ -75,6 +79,10 @@
       const result = await fetcher(params);
       rows = result.items;
       total = Number(result.total);
+      // Real entity thumbnails (proper cover + kind shape), same path as the library grid.
+      const ids = rows.map((row) => row.entityId).filter((id): id is string => !!id);
+      const fetched = await fetchEntityThumbnails(ids).catch(() => []);
+      thumbs = new Map(fetched.map((thumbnail) => [thumbnail.id, thumbnail]));
     } catch (err) {
       error = err instanceof Error ? err.message : "Failed to load";
     } finally {

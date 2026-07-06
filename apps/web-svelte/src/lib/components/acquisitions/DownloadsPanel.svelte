@@ -1,9 +1,10 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
   import { HardDriveDownload } from "@lucide/svelte";
-  import type { DownloadQueueItemView } from "$lib/api/generated/model";
+  import type { DownloadQueueItemView, EntityThumbnail } from "$lib/api/generated/model";
   import type { AcquisitionStatusCode } from "$lib/api/generated/codes";
   import { deleteAcquisition, fetchDownloadQueue, reSearchAcquisition } from "$lib/api/acquisitions";
+  import { fetchEntityThumbnails } from "$lib/api/entities";
   import ConfirmDialog from "$lib/components/entities/ConfirmDialog.svelte";
   import AcquisitionListShell, {
     type AcquisitionStatusFilter,
@@ -23,6 +24,7 @@
    */
 
   let rows = $state<DownloadQueueItemView[]>([]);
+  let thumbs = $state<Map<string, EntityThumbnail>>(new Map());
   let loading = $state(true);
   let error = $state<string | null>(null);
   let acting = $state(false);
@@ -39,7 +41,9 @@
     },
   };
 
-  const items = $derived<AcquisitionListItem[]>(rows.map((row) => downloadToListItem(row, callbacks, acting)));
+  const items = $derived<AcquisitionListItem[]>(
+    rows.map((row) => downloadToListItem(row, row.entityId ? thumbs.get(row.entityId) ?? null : null, callbacks, acting)),
+  );
 
   // Status pills over the presentation tone, so the labels stay meaningful without leaking status codes.
   const statusFilters: AcquisitionStatusFilter[] = [
@@ -64,6 +68,10 @@
   async function load() {
     try {
       rows = await fetchDownloadQueue();
+      // Real entity thumbnails, resolved the same way the library grid does — proper cover + kind shape.
+      const ids = rows.map((row) => row.entityId).filter((id): id is string => !!id);
+      const fetched = await fetchEntityThumbnails(ids).catch(() => []);
+      thumbs = new Map(fetched.map((thumbnail) => [thumbnail.id, thumbnail]));
       error = null;
     } catch (err) {
       error = err instanceof Error ? err.message : "Failed to load downloads";

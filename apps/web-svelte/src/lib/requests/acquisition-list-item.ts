@@ -5,8 +5,13 @@ import {
   type AcquisitionStatusCode,
   type EntityKindCode,
 } from "$lib/api/generated/codes";
-import type { DownloadQueueItemView, WantedListItemView } from "$lib/api/generated/model";
+import type {
+  DownloadQueueItemView,
+  EntityThumbnail,
+  WantedListItemView,
+} from "$lib/api/generated/model";
 import { resolveEntityHref } from "$lib/entities/entity-codes";
+import { entityCardToThumbnailCard } from "$lib/entities/entity-grid";
 import {
   entityReferenceToThumbnailCard,
   type EntityThumbnailCard,
@@ -99,17 +104,26 @@ function isIndeterminate(status: AcquisitionStatusCode): boolean {
   );
 }
 
+/**
+ * Resolves the row's thumbnail card. When the real library entity's thumbnail has been fetched, its
+ * card is used exactly as the grid builds it — proper cover art and the kind's own frame shape (a book
+ * is tall, an album square, a video wide). Only a row with no library entity yet (a bare ad-hoc
+ * acquisition) falls back to a poster reference from the acquisition's captured art.
+ */
 function thumbnailFor(
-  id: string,
+  fallbackId: string,
   kind: EntityKindCode,
   title: string,
   posterUrl: string | null | undefined,
   href: string | undefined,
+  resolved: EntityThumbnail | null | undefined,
 ): EntityThumbnailCard {
+  if (resolved) {
+    return entityCardToThumbnailCard(resolved, href);
+  }
   return entityReferenceToThumbnailCard(
-    { id, kind, title, thumbnailUrl: posterUrl ? assetUrl(posterUrl) : null },
-    // A uniform poster frame keeps the list tidy across kinds (books, seasons, albums).
-    { aspectRatio: "poster", href },
+    { id: fallbackId, kind, title, thumbnailUrl: posterUrl ? assetUrl(posterUrl) : null },
+    { href },
   );
 }
 
@@ -122,6 +136,7 @@ export interface DownloadItemCallbacks {
 /** Maps a global Downloads row into the shared list item, wiring its per-status actions and telemetry chips. */
 export function downloadToListItem(
   row: DownloadQueueItemView,
+  thumbnail: EntityThumbnail | null,
   callbacks: DownloadItemCallbacks,
   acting: boolean,
 ): AcquisitionListItem {
@@ -174,7 +189,7 @@ export function downloadToListItem(
     entityId: row.entityId,
     kind: row.kind as EntityKindCode,
     title: row.title,
-    thumbnail: thumbnailFor(row.entityId ?? row.acquisitionId, row.kind as EntityKindCode, row.title, row.posterUrl, href),
+    thumbnail: thumbnailFor(row.entityId ?? row.acquisitionId, row.kind as EntityKindCode, row.title, row.posterUrl, href, thumbnail),
     href,
     statusLabel: acquisitionStatusLabel(status),
     tone: toneForStatus(status),
@@ -212,6 +227,7 @@ function nextSearchLabel(value: string | null | undefined): string {
 export function wantedToListItem(
   row: WantedListItemView,
   variant: "missing" | "cutoffUnmet",
+  thumbnail: EntityThumbnail | null,
   callbacks: WantedItemCallbacks,
   acting: boolean,
 ): AcquisitionListItem {
@@ -239,7 +255,7 @@ export function wantedToListItem(
     entityId: row.entityId,
     kind: row.kind as EntityKindCode,
     title: row.title,
-    thumbnail: thumbnailFor(row.entityId ?? row.monitorId, row.kind as EntityKindCode, row.title, row.posterUrl, href),
+    thumbnail: thumbnailFor(row.entityId ?? row.monitorId, row.kind as EntityKindCode, row.title, row.posterUrl, href, thumbnail),
     href,
     statusLabel,
     // Missing items are being actively re-searched; cutoff items own a copy and upgrade quietly.

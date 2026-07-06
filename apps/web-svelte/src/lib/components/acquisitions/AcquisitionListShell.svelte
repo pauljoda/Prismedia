@@ -8,7 +8,7 @@
    */
   import type { Snippet } from "svelte";
   import { Loader2, Search, X } from "@lucide/svelte";
-  import { cn } from "@prismedia/ui-svelte";
+  import { Checkbox, cn } from "@prismedia/ui-svelte";
   import { labelForEntityKind } from "$lib/entities/entity-codes";
   import AcquisitionCard from "$lib/components/acquisitions/AcquisitionCard.svelte";
   import type {
@@ -173,7 +173,13 @@
   {#if selectable && filtered.length > 0}
     <div class="bulk-bar" class:has-selection={selected.size > 0}>
       <label class="bulk-all">
-        <input type="checkbox" checked={allFilteredSelected} onchange={toggleAll} aria-label="Select all shown" />
+        <Checkbox
+          size="md"
+          checked={allFilteredSelected}
+          indeterminate={selected.size > 0 && !allFilteredSelected}
+          onchange={toggleAll}
+          aria-label="Select all shown"
+        />
         <span>{selected.size > 0 ? `${selected.size} selected` : `Select all (${filtered.length})`}</span>
       </label>
       {#if selected.size > 0}
@@ -319,7 +325,6 @@
     color: rgb(196 201 212 / 0.82);
     cursor: pointer;
   }
-  .bulk-all input { accent-color: #d59a2a; width: 0.95rem; height: 0.95rem; }
   .bulk-actions { display: flex; align-items: center; gap: 0.4rem; }
   .bulk-action {
     display: inline-flex;
