@@ -93,6 +93,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Refreshed release workflows so validation, documentation publishing, and alpha/beta/release channel images are manual while `main` publishes only the dev image.
 - Updated documentation, README screenshots, branding assets, install metadata, and app copy to match the current Prismedia v1 surface.
 
+### Added
+- The release picker gains a "Show only relevant" toggle (on by default) that hides rejected releases — wrong season/episode, below minimum seeders, and the like — so the acceptable grabs stand alone; turn it off to review every candidate the search returned.
+
+### Changed
+- A series, author, or artist page now rolls up its children's acquisition status at the top: the Acquisition card lists each wanted season/book/album with what it's doing (Failed, Searching, Review…), so per-child progress reads from the container without opening each one.
+
 ### Fixed
 - Fixed oversized badges and placeholder icons on small thumbnails (the acquisition list rows and other dense surfaces): the Wanted badge, rating/NSFW badges, and the fallback kind icons now scale down with the artwork instead of overflowing it.
 - The Wanted badge now shows what a placeholder is doing — Searching, Downloading, Queued, or Failed — as a tone-coloured status (with the label on roomy cards and an icon on dense ones), so a wanted item's progress reads straight from the library grid, not just the Request tab.

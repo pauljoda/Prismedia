@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ArrowDown, ArrowUp, Ban, BookOpen, ChevronsUpDown, Download, ExternalLink, FileText, Film, Headphones, Tag } from "@lucide/svelte";
-  import { Button, Select, cn } from "@prismedia/ui-svelte";
+  import { Button, Select, Toggle, cn } from "@prismedia/ui-svelte";
   import type { Component } from "svelte";
   import type { ReleaseCandidateView } from "$lib/api/generated/model";
 
@@ -48,9 +48,19 @@
 
   let sortKey = $state<SortKey>("score");
   let sortDir = $state<"asc" | "desc">("desc");
+  // Rejected releases (wrong unit, below min seeders, etc.) are noise most of the time, so they're
+  // hidden by default; the user can reveal every candidate to override a scoring decision by hand.
+  let showOnlyRelevant = $state(true);
+
+  const acceptedCount = $derived(candidates.filter((candidate) => candidate.accepted).length);
+  const hiddenCount = $derived(candidates.length - acceptedCount);
+  // With nothing acceptable, filtering would empty the table — show everything so the picker still works.
+  const filtering = $derived(showOnlyRelevant && acceptedCount > 0);
 
   const rows = $derived(
-    candidates.map((candidate) => ({ candidate, ...splitCategory(candidate.title) })),
+    candidates
+      .filter((candidate) => !filtering || candidate.accepted)
+      .map((candidate) => ({ candidate, ...splitCategory(candidate.title) })),
   );
 
   const sorted = $derived(
@@ -109,11 +119,29 @@
   }
 </script>
 
-<!-- Mobile sort toggle (column headers are hidden on cards) -->
-<label class="flex items-center justify-end gap-2 sm:hidden">
-  <span class="text-label text-text-muted">Sort</span>
-  <Select size="sm" value={mobileSortValue} options={mobileSortOptions} onchange={setMobileSort} />
-</label>
+<!-- Controls: relevance filter (hides rejected releases) + mobile sort (headers hidden on cards). -->
+<div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+  {#if hiddenCount > 0}
+    <label class="flex items-center gap-2 text-[0.78rem] text-text-secondary">
+      <Toggle
+        size="sm"
+        checked={showOnlyRelevant}
+        onchange={(value) => (showOnlyRelevant = value)}
+        ariaLabel="Show only relevant releases"
+      />
+      <span>Show only relevant</span>
+      <span class="font-mono text-[0.68rem] text-text-muted">
+        {filtering ? `${hiddenCount} hidden` : `${hiddenCount} rejected`}
+      </span>
+    </label>
+  {:else}
+    <span></span>
+  {/if}
+  <label class="flex items-center gap-2 sm:hidden">
+    <span class="text-label text-text-muted">Sort</span>
+    <Select size="sm" value={mobileSortValue} options={mobileSortOptions} onchange={setMobileSort} />
+  </label>
+</div>
 
 <!-- ── Desktop: sortable table ── -->
 <!-- Fixed layout so a long release title truncates to its column rather than widening the table into a
