@@ -3476,9 +3476,7 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         .HasColumnName("allow_nsfw");
 
                     b.Property<bool>("AllowSfw")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
-                        .HasDefaultValue(true)
                         .HasColumnName("allow_sfw");
 
                     b.Property<bool>("CanCreateLibraries")
@@ -3519,10 +3517,8 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("Role")
                         .IsRequired()
-                        .ValueGeneratedOnAdd()
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
-                        .HasDefaultValue("member")
                         .HasColumnName("role");
 
                     b.Property<DateTimeOffset>("UpdatedAt")

@@ -237,6 +237,21 @@ public sealed class PrismediaDbContextModelTests {
         Assert.Equal(clrType, property.ClrType);
     }
 
+    [Theory]
+    [InlineData(nameof(UserRow.Role))]
+    [InlineData(nameof(UserRow.AllowSfw))]
+    public void UserPermissionColumnsAreAlwaysWrittenExplicitly(string propertyName) {
+        // Regression guard: UserRole.Admin is enum value 0, so a database default on these
+        // columns makes EF treat the intended value as the "unset" sentinel and skip the
+        // column on insert — the first admin was silently persisted as a member.
+        using var db = CreateContext();
+        var property = db.Model.FindEntityType(typeof(UserRow))!.FindProperty(propertyName);
+
+        Assert.NotNull(property);
+        Assert.Equal(ValueGenerated.Never, property!.ValueGenerated);
+        Assert.False(property.TryGetDefaultValue(out _));
+    }
+
     private static PrismediaDbContext CreateContext() {
         var options = new DbContextOptionsBuilder<PrismediaDbContext>()
             .UseNpgsql("Host=localhost;Database=prismedia;Username=prismedia;Password=prismedia")

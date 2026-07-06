@@ -85,6 +85,12 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                 nullable: false,
                 defaultValue: false);
 
+            // The defaults above only backfill existing rows. The model writes role and
+            // allow_sfw explicitly (a lingering default would mask sentinel-value inserts),
+            // so drop the column defaults once the backfill is done.
+            migrationBuilder.Sql("""ALTER TABLE users ALTER COLUMN role DROP DEFAULT;""");
+            migrationBuilder.Sql("""ALTER TABLE users ALTER COLUMN allow_sfw DROP DEFAULT;""");
+
             // jellyfin_sessions -> user_sessions (token hashes survive: clients stay signed in).
             migrationBuilder.RenameTable(
                 name: "jellyfin_sessions",
@@ -112,6 +118,9 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            // The pre-auth model declared a database default for allow_sfw.
+            migrationBuilder.Sql("""ALTER TABLE users ALTER COLUMN allow_sfw SET DEFAULT true;""");
+
             migrationBuilder.RenameIndex(
                 name: "IX_user_sessions_user_id_invalidated_at",
                 table: "user_sessions",
