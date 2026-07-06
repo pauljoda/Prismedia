@@ -78,9 +78,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         if (!string.IsNullOrWhiteSpace(kind)) {
             var kindCode = kind.Trim();
             entityQuery = entityQuery.Where(entity => entity.KindCode == kindCode);
-            if (ListBrowseShowsOnlyTopLevel(kindCode)) {
-                entityQuery = entityQuery.Where(entity => entity.ParentEntityId == null);
-            }
+            entityQuery = ApplyBrowseHierarchyFilter(entityQuery, kindCode);
         }
 
         if (!string.IsNullOrWhiteSpace(query)) {
@@ -730,12 +728,23 @@ public sealed partial class EfEntityReadService : IEntityReadService {
                         rootParent.Id == grandparent.ParentEntityId &&
                         disabledRootedEntityIds.Contains(rootParent.Id)))));
 
-    // Audio libraries (albums) are intentionally excluded: an album's only parent is now its
-    // artist grouping (a different kind), so every album is a browsable top-level item in the
-    // Audio view — filtering to ParentEntityId == null would hide every album that has an artist.
-    private static bool ListBrowseShowsOnlyTopLevel(string kind) =>
-        kind.Equals(EntityKindRegistry.Gallery.Code, StringComparison.OrdinalIgnoreCase) ||
-        kind.Equals(EntityKindRegistry.Book.Code, StringComparison.OrdinalIgnoreCase);
+    private IQueryable<EntityRow> ApplyBrowseHierarchyFilter(IQueryable<EntityRow> query, string kind) {
+        if (kind.Equals(EntityKindRegistry.Gallery.Code, StringComparison.OrdinalIgnoreCase)) {
+            return query.Where(entity => entity.ParentEntityId == null);
+        }
+
+        if (kind.Equals(EntityKindRegistry.Book.Code, StringComparison.OrdinalIgnoreCase)) {
+            // Books parented to authors are still first-class browse rows, but same-kind book children
+            // represent nested series/volume structure and should stay under their parent detail page.
+            return query.Where(entity =>
+                entity.ParentEntityId == null ||
+                !_db.Entities.Any(parent =>
+                    parent.Id == entity.ParentEntityId &&
+                    parent.KindCode == EntityKindRegistry.Book.Code));
+        }
+
+        return query;
+    }
 
     private static bool ShouldSuppressMovieChildVideos(string? kind, string? query, Guid? referencedBy) =>
         kind is null ||

@@ -97,6 +97,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated documentation, README screenshots, branding assets, install metadata, and app copy to match the current Prismedia v1 surface.
 
 ### Fixed
+- Fixed the Books/eBooks library grid so books grouped under an author still appear in the main Books view while true nested book children stay on their parent detail page.
 - Fixed fresh LAN setup so browsers opening Prismedia directly from another private-network device receive the web app authentication cookie automatically.
 - Fixed many playback reliability issues, including first-play failures, slow or inaccurate seeking, stalled transcodes, remux segment errors, HDR/Dolby Vision handling, subtitle rendering, audio-track selection, progress bars, cache cleanup, and high CPU spikes.
 - Fixed progress and history consistency so Prismedia and Jellyfin-compatible clients agree on resume points, completion, play counts, skips, watched/read state, and Start Over behavior.

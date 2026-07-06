@@ -175,6 +175,49 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
+    public async Task ListAsyncBookBrowseIncludesBooksParentedToAuthors() {
+        await using var db = CreateContext();
+        var authorId = Guid.Parse("aaaaaaaa-1111-4444-8888-aaaaaaaaaaaa");
+        var parentedBookId = Guid.Parse("bbbbbbbb-1111-4444-8888-bbbbbbbbbbbb");
+        var wantedBookId = Guid.Parse("cccccccc-1111-4444-8888-cccccccccccc");
+        var now = DateTimeOffset.UtcNow;
+        db.Entities.AddRange(
+            new EntityRow {
+                Id = authorId,
+                KindCode = EntityKindRegistry.BookAuthor.Code,
+                Title = "George R. R. Martin",
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new EntityRow {
+                Id = parentedBookId,
+                KindCode = EntityKindRegistry.Book.Code,
+                Title = "A Game of Thrones",
+                ParentEntityId = authorId,
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new EntityRow {
+                Id = wantedBookId,
+                KindCode = EntityKindRegistry.Book.Code,
+                Title = "The Anxious Generation",
+                IsWanted = true,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+        db.BookDetails.AddRange(
+            new BookDetailRow { EntityId = parentedBookId, BookType = BookType.Book, Format = BookFormat.Epub },
+            new BookDetailRow { EntityId = wantedBookId, BookType = BookType.Book, Format = BookFormat.Epub });
+        await db.SaveChangesAsync();
+
+        var result = await CreateService(db).ListAsync(EntityKindRegistry.Book.Code, null, null, hideNsfw: true, null, CancellationToken.None);
+
+        Assert.Equal(2, result.TotalCount);
+        Assert.Contains(result.Items, item => item.Id == parentedBookId && item.ParentEntityId == authorId);
+        Assert.Contains(result.Items, item => item.Id == wantedBookId && item.ParentEntityId is null);
+    }
+
+    [Fact]
     public async Task ListAsyncSearchSuppressesMovieChildVideoButKeepsVideoBrowse() {
         await using var db = CreateContext();
         var movieId = Guid.Parse("aaaaaaaa-aaaa-4444-8888-aaaaaaaaaaaa");
