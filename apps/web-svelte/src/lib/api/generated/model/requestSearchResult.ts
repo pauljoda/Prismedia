@@ -50,4 +50,6 @@ export interface RequestSearchResult {
   /** @nullable */
   monitored: boolean | null;
   requestable: boolean;
+  /** @nullable */
+  providerName?: string | null;
 }

@@ -75,12 +75,21 @@ export function requestSearchResultToThumbnailCard(result: RequestSearchResult, 
     meta.push({ icon: "count", label: rating.toFixed(1) });
   }
 
+  // Corner overlays: "already in library" top-left when tracked, plus the sourcing plugin's name
+  // bottom-left so multi-provider results stay attributable at a glance.
+  const custom: NonNullable<EntityThumbnailCard["custom"]> = {};
+  if (result.tracked) {
+    custom.bottomLeft = { label: trackedLabel(result.source) };
+  }
+  if (result.providerName) {
+    custom.sourceTag = { label: result.providerName, title: `Sourced by ${result.providerName}` };
+  }
+
   return {
     ...card,
     subtitle: result.subtitle ?? undefined,
     meta: meta.length > 0 ? meta : undefined,
-    // Surface an "already in library" indicator as the corner overlay when the result is tracked.
-    custom: result.tracked ? { bottomLeft: { label: trackedLabel(result.source) } } : undefined,
+    custom: Object.keys(custom).length > 0 ? custom : undefined,
   };
 }
 

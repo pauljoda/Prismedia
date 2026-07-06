@@ -306,6 +306,7 @@
   const wantedDisplay = $derived(acquisitionStatusDisplay(card.wantedStatus));
   const rating = $derived(getRatingValue(card.entity.capabilities));
   const bottomLeft = $derived(card.custom?.bottomLeft);
+  const sourceTag = $derived(card.custom?.sourceTag);
   // Playback/reading progress meter percentage, only when there is something to show.
   const progressPercent = $derived(
     card.progress != null && card.progress > 0
@@ -670,6 +671,14 @@
       <div class="badges bottom-left-badges">
         <span class="badge position-badge" title={bottomLeft.title ?? bottomLeft.label}>
           {bottomLeft.label}
+        </span>
+      </div>
+    {/if}
+
+    {#if sourceTag}
+      <div class="badges source-badges">
+        <span class="badge source-badge" title={sourceTag.title ?? sourceTag.label}>
+          {sourceTag.label}
         </span>
       </div>
     {/if}
@@ -1129,6 +1138,25 @@
     right: 0.45rem;
     left: auto;
     justify-content: flex-end;
+  }
+
+  /* Attribution chip (e.g. the sourcing plugin on discover results): true bottom-left, opposite the
+     rating badge, above the progress meter's edge strip. */
+  .source-badges {
+    bottom: 0.45rem;
+    left: 0.45rem;
+    right: auto;
+    justify-content: flex-start;
+  }
+
+  .source-badge {
+    color: rgb(224 228 236 / 0.82);
+    border-color: rgb(255 255 255 / 0.16);
+    background: rgb(11 11 12 / 0.78);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 0.56rem;
+    font-weight: 600;
   }
 
   .badge {

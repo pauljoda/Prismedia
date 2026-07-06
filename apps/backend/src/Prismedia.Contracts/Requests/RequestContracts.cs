@@ -21,6 +21,7 @@ public sealed record RequestProviderHealth(Guid ServiceId, RequestProviderKind K
 /// <summary>Normalized external search result.</summary>
 /// <param name="Subtitle">Short secondary line for review context (e.g. the author for a book, work count for an author).</param>
 /// <param name="Requestable">True when the item can be requested.</param>
+/// <param name="ProviderName">Display name of the plugin/provider that sourced this result (e.g. "OpenLibrary"), for attribution in the results grid.</param>
 public sealed record RequestSearchResult(
     Guid ServiceId,
     RequestProviderKind Source,
@@ -40,7 +41,8 @@ public sealed record RequestSearchResult(
     bool Tracked,
     string? UpstreamId,
     bool? Monitored,
-    bool Requestable);
+    bool Requestable,
+    string? ProviderName = null);
 
 /// <summary>Normalized external detail record for a requestable item.</summary>
 /// <param name="Subtitle">Short secondary line for review context (e.g. the author for a book, the book count for an author).</param>

@@ -77,6 +77,11 @@ export interface EntityThumbnailCustomOverlay {
     label: string;
     title?: string;
   };
+  /** Attribution chip pinned to the artwork's bottom-left (e.g. the plugin that sourced a discover result). */
+  sourceTag?: {
+    label: string;
+    title?: string;
+  };
 }
 
 /** Entity payload consumed by the shared thumbnail surface. */

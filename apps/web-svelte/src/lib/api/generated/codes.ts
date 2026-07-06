@@ -410,6 +410,7 @@ export const RELEASE_REJECTION_REASON = {
   formatDowngrade: "format-downgrade",
   wrongTvUnit: "wrong-tv-unit",
   belowMinFormatScore: "below-min-format-score",
+  dangerousContent: "dangerous-content",
 } as const;
 
 export type ReleaseRejectionReasonCode = (typeof RELEASE_REJECTION_REASON)[keyof typeof RELEASE_REJECTION_REASON];

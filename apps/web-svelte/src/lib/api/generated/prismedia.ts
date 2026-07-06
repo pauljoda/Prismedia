@@ -9594,12 +9594,19 @@ export type listLibraryRootsResponse200 = {
   status: 200
 }
 
+export type listLibraryRootsResponse403 = {
+  data: ApiProblem
+  status: 403
+}
+
 export type listLibraryRootsResponseSuccess = (listLibraryRootsResponse200) & {
   headers: Headers;
 };
-;
+export type listLibraryRootsResponseError = (listLibraryRootsResponse403) & {
+  headers: Headers;
+};
 
-export type listLibraryRootsResponse = (listLibraryRootsResponseSuccess)
+export type listLibraryRootsResponse = (listLibraryRootsResponseSuccess | listLibraryRootsResponseError)
 
 export const getListLibraryRootsUrl = () => {
 
@@ -9610,7 +9617,7 @@ export const getListLibraryRootsUrl = () => {
 }
 
 /**
- * @summary Lists watched media roots with per-user access (admin).
+ * @summary Lists watched media roots: every root with per-user access for admins, own-created roots for library creators.
  */
 export const listLibraryRoots = async ( options?: RequestInit): Promise<listLibraryRootsResponse> => {
 

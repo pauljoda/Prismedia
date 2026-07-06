@@ -68,7 +68,7 @@ public sealed class PluginRequestMetadataSource(PluginCatalogService catalog, Id
 
             var response = await runners.Resolve(descriptorForProvider).IdentifyAsync(descriptorForProvider, request, cancellationToken);
             foreach (var candidate in response.Result?.Candidates ?? []) {
-                if (MapCandidate(provider.Id, candidate, descriptor) is { } result) {
+                if (MapCandidate(provider.Id, provider.Name, candidate, descriptor) is { } result) {
                     results.Add(result);
                 }
             }
@@ -226,7 +226,7 @@ public sealed class PluginRequestMetadataSource(PluginCatalogService catalog, Id
         return count == 1 ? noun : $"{noun}s";
     }
 
-    private static RequestSearchResult? MapCandidate(string providerId, EntitySearchCandidate candidate, RequestKindDescriptor descriptor) {
+    private static RequestSearchResult? MapCandidate(string providerId, string providerName, EntitySearchCandidate candidate, RequestKindDescriptor descriptor) {
         var externalId = candidate.ExternalIds.GetValueOrDefault(providerId) ?? candidate.ExternalIds.Values.FirstOrDefault();
         if (string.IsNullOrWhiteSpace(externalId)) {
             return null;
@@ -252,6 +252,7 @@ public sealed class PluginRequestMetadataSource(PluginCatalogService catalog, Id
             Tracked: false,
             UpstreamId: null,
             Monitored: null,
-            Requestable: descriptor.Committable);
+            Requestable: descriptor.Committable,
+            ProviderName: providerName);
     }
 }
