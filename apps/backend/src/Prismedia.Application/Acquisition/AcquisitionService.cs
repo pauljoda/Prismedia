@@ -267,12 +267,15 @@ public sealed class AcquisitionService(
     }
 
     /// <summary>
-    /// Removes an acquisition entirely: best-effort deletes its download (and data) from the owning client, then
-    /// hard-deletes the record — and, like cancel, removes the wanted placeholder entity it created.
+    /// Removes an acquisition (the download pipeline record): best-effort deletes its download (and data)
+    /// from the owning client, then hard-deletes the record. Unlike cancel, the wanted placeholder entity
+    /// is KEPT — removing a (typically failed) download from the Downloads view cleans up the transfer,
+    /// it does not un-want the item; the entity page's Cancel and the grid's "Remove wanted" are the
+    /// explicit give-up paths. The item's monitor auto-pauses via the orphan reconciliation; searching
+    /// again from the entity page restarts the loop.
     /// </summary>
     public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken) {
         var summary = (await store.GetAsync(id, cancellationToken))?.Summary;
-        var wantedEntityId = summary?.EntityId;
         // Record the Removed event BEFORE the hard delete so the entry still carries a live acquisition id;
         // the acquisition_history FK is SetNull, so once the row is deleted the entry's acquisition id nulls
         // out but the entry (and its denormalized title/kind/entity) survives — the durable audit trail.
@@ -294,12 +297,7 @@ public sealed class AcquisitionService(
             }
         }
 
-        var deleted = await store.DeleteAsync(id, cancellationToken);
-        if (deleted && wantedEntityId is { } entityId) {
-            await wantedEntities.DeleteIfWantedAsync(entityId, cancellationToken);
-        }
-
-        return deleted;
+        return await store.DeleteAsync(id, cancellationToken);
     }
 
     /// <summary>

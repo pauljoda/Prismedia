@@ -602,8 +602,9 @@ public sealed class RequestCommitService(
 
             await suppressions.SuppressAsync(entity.ProviderIds, entity.Kind, entity.Title, cancellationToken);
 
-            // Deleting an acquisition removes its torrent/data and (being wanted-linked) the entity;
-            // the direct delete below covers acquisition-less phantoms.
+            // Deleting an acquisition removes its torrent/data but deliberately keeps the wanted entity
+            // (a Downloads-view remove is not a give-up); this bulk remove IS the give-up, so the direct
+            // delete below tears the placeholder down for both acquisition-linked and phantom entities.
             foreach (var acquisitionId in await acquisitions.ListIdsForEntityAsync(entityId, cancellationToken)) {
                 await acquisitions.DeleteAsync(acquisitionId, cancellationToken);
             }
