@@ -365,9 +365,11 @@ public sealed partial class EfEntityReadService : IEntityReadService {
 
         if (hasFile is { } wantsFile) {
             var files = _db.EntityFiles;
+            // "Has file" means a content (source) file. Generated/downloaded artwork rows (covers,
+            // thumbnails) don't count — wanted placeholders carry request-time cover art but no content.
             query = wantsFile
-                ? query.Where(entity => files.Any(file => file.EntityId == entity.Id))
-                : query.Where(entity => !files.Any(file => file.EntityId == entity.Id));
+                ? query.Where(entity => files.Any(file => file.EntityId == entity.Id && file.Role == EntityFileRole.Source))
+                : query.Where(entity => !files.Any(file => file.EntityId == entity.Id && file.Role == EntityFileRole.Source));
         }
 
         if (played is { } wantsPlayed) {
