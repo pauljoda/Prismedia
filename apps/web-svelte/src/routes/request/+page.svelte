@@ -249,20 +249,22 @@
   </div>
 
   <!-- ── Tabs ── -->
-  <div class="primary-tabs" role="tablist" aria-label="Request views">
-    {#each tabs as tab (tab.id)}
-      {@const TabIcon = tab.icon}
-      <button
-        type="button"
-        role="tab"
-        aria-selected={activeTab === tab.id}
-        onclick={() => (activeTab = tab.id)}
-        class={cn("primary-tab", activeTab === tab.id && "is-active")}
-      >
-        <TabIcon class="h-4 w-4" />
-        {tab.label}
-      </button>
-    {/each}
+  <div class="primary-tabs-rail">
+    <div class="primary-tabs" role="tablist" aria-label="Request views">
+      {#each tabs as tab (tab.id)}
+        {@const TabIcon = tab.icon}
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === tab.id}
+          onclick={() => (activeTab = tab.id)}
+          class={cn("primary-tab", activeTab === tab.id && "is-active")}
+        >
+          <TabIcon class="h-4 w-4" />
+          {tab.label}
+        </button>
+      {/each}
+    </div>
   </div>
 
   {#if activeTab === "downloads"}
@@ -435,14 +437,26 @@
 
 <style>
   /* Primary mode tabs (Discover / Requests): the app's underline-glow tab treatment, scaled up for
-     top-level navigation. */
-  .primary-tabs {
+     top-level navigation. The tab row scrolls within itself on narrow screens (five tabs overflow a
+     phone) so the page never scrolls horizontally; the scrollbar is hidden — the cut-off tab affords
+     the swipe. The baseline underline lives on the non-scrolling rail so it always spans the row. */
+  .primary-tabs-rail {
     position: relative;
-    display: flex;
-    gap: 0.25rem;
   }
 
-  .primary-tabs::after {
+  .primary-tabs {
+    display: flex;
+    gap: 0.25rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .primary-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .primary-tabs-rail::after {
     content: "";
     position: absolute;
     inset: auto 0 0 0;
@@ -460,6 +474,8 @@
   .primary-tab {
     position: relative;
     display: inline-flex;
+    flex: 0 0 auto;
+    white-space: nowrap;
     align-items: center;
     gap: 0.5rem;
     background: transparent;
