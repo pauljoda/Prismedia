@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { Boxes, Loader2, Pencil, PlugZap, Plus, Trash2 } from "@lucide/svelte";
+  import { Boxes, CircleAlert, CircleCheck, Loader2, Pencil, PlugZap, Plus, Trash2 } from "@lucide/svelte";
   import { Badge, Button, Checkbox, Panel, Select, StatusLed, TextInput } from "@prismedia/ui-svelte";
   import { INDEXER_KIND, DOWNLOAD_CLIENT_KIND, IMPORT_MODE, BLOCKLIST_REASON, BOOK_SOURCE_TIER, BOOK_FORMAT_TIER, ENTITY_KIND, VIDEO_QUALITY, AUDIO_QUALITY, CUSTOM_FORMAT_CONDITION_TYPE } from "$lib/api/generated/codes";
   import { cn } from "@prismedia/ui-svelte";
@@ -84,6 +84,11 @@
   let indexerForm = $state<IndexerConfigSaveRequest | null>(null);
   let indexerCategories = $state("7000,8000");
   let clientForm = $state<DownloadClientSaveRequest | null>(null);
+  // Inline connection-test result, shown in the form next to the Test button (a top-of-page banner is
+  // off-screen while editing a section deep in the list). null = not tested since the form opened.
+  type TestResult = { state: "testing" | "ok" | "fail"; message: string };
+  let indexerTest = $state<TestResult | null>(null);
+  let clientTest = $state<TestResult | null>(null);
   let profileForm = $state<BookAcquisitionProfileSaveRequest | null>(null);
   let profileTerms = $state({ preferred: "", required: "", ignored: "", weighted: "", languages: "" });
 
@@ -213,24 +218,26 @@
   function newIndexer() {
     indexerForm = { id: null, kind: INDEXER_KIND.prowlarr, displayName: "Prowlarr", baseUrl: "", apiKey: null, enabled: true, priority: 25, categories: [7000, 8000], queryLimitPerHour: null, seedRatio: null, seedTimeMinutes: null };
     indexerCategories = "7000,8000";
+    indexerTest = null;
   }
   function editIndexer(item: IndexerConfigSummary) {
     indexerForm = { id: item.id, kind: item.kind, displayName: item.displayName, baseUrl: item.baseUrl, apiKey: null, enabled: item.enabled, priority: item.priority, categories: item.categories, queryLimitPerHour: item.queryLimitPerHour ?? null, seedRatio: item.seedRatio ?? null, seedTimeMinutes: item.seedTimeMinutes ?? null };
     indexerCategories = item.categories.join(",");
+    indexerTest = null;
   }
   function parseCategories(text: string): number[] {
     return text.split(",").map((s) => Number(s.trim())).filter((n) => Number.isFinite(n) && n > 0);
   }
   async function testIndexer() {
     if (!indexerForm) return;
-    busy = true;
+    indexerTest = { state: "testing", message: "Testing connection…" };
     try {
       const res = await testIndexerConnection({ id: indexerForm.id, kind: indexerForm.kind, baseUrl: indexerForm.baseUrl, apiKey: indexerForm.apiKey });
-      res.connected ? onMessage(res.message ?? "Connected") : onError(res.message ?? "Connection failed");
+      indexerTest = res.connected
+        ? { state: "ok", message: res.message ?? "Connected." }
+        : { state: "fail", message: res.message ?? "Connection failed." };
     } catch (err) {
-      onError(err instanceof Error ? err.message : "Test failed");
-    } finally {
-      busy = false;
+      indexerTest = { state: "fail", message: err instanceof Error ? err.message : "Test failed." };
     }
   }
   async function saveIndexer() {
@@ -275,6 +282,7 @@
   }
   function newClient() {
     clientForm = { id: null, kind: DOWNLOAD_CLIENT_KIND.qBittorrent, displayName: "qBittorrent", baseUrl: "", username: null, password: null, apiKey: null, category: "prismedia-books", enabled: true, priority: 25, seedRatio: null, seedTimeMinutes: null };
+    clientTest = null;
   }
   function setClientKind(kind: string) {
     if (!clientForm) return;
@@ -285,17 +293,18 @@
   }
   function editClient(item: DownloadClientSummary) {
     clientForm = { id: item.id, kind: item.kind, displayName: item.displayName, baseUrl: item.baseUrl, username: item.username, password: null, apiKey: null, category: item.category, enabled: item.enabled, priority: item.priority ?? 25, seedRatio: item.seedRatio ?? null, seedTimeMinutes: item.seedTimeMinutes ?? null };
+    clientTest = null;
   }
   async function testClient() {
     if (!clientForm) return;
-    busy = true;
+    clientTest = { state: "testing", message: "Testing connection…" };
     try {
       const res = await testDownloadClientConnection({ id: clientForm.id, kind: clientForm.kind, baseUrl: clientForm.baseUrl, username: clientForm.username, password: clientForm.password, apiKey: clientForm.apiKey });
-      res.connected ? onMessage(res.message ?? "Connected") : onError(res.message ?? "Connection failed");
+      clientTest = res.connected
+        ? { state: "ok", message: res.message ?? "Connected." }
+        : { state: "fail", message: res.message ?? "Connection failed." };
     } catch (err) {
-      onError(err instanceof Error ? err.message : "Test failed");
-    } finally {
-      busy = false;
+      clientTest = { state: "fail", message: err instanceof Error ? err.message : "Test failed." };
     }
   }
   async function saveClient() {
@@ -549,6 +558,18 @@
     {#if loading}
       <div class="flex items-center gap-2 text-sm text-text-muted"><Loader2 class="h-4 w-4 animate-spin" /> Loading…</div>
     {:else}
+      <!-- Inline connection-test feedback, shown right next to a form's Test button. -->
+      {#snippet testResult(result: TestResult | null)}
+        {#if result}
+          <span class={cn("inline-flex items-center gap-1.5 text-xs", result.state === "ok" ? "text-[#6fd39a]" : result.state === "fail" ? "text-[#ff9a86]" : "text-text-muted")}>
+            {#if result.state === "testing"}<Loader2 class="h-3.5 w-3.5 animate-spin" />
+            {:else if result.state === "ok"}<CircleCheck class="h-3.5 w-3.5" />
+            {:else}<CircleAlert class="h-3.5 w-3.5" />{/if}
+            <span>{result.message}</span>
+          </span>
+        {/if}
+      {/snippet}
+
       <!-- Indexers -->
       <section class="space-y-2">
         <div class="flex items-center justify-between">
@@ -557,52 +578,64 @@
             <Button size="sm" variant="secondary" onclick={newIndexer} class="gap-1.5"><Plus class="h-3.5 w-3.5" /> Add</Button>
           {/if}
         </div>
-        {#each indexers as item (item.id)}
-          <div class="flex items-center justify-between rounded-sm border border-border-subtle bg-surface-1 px-3 py-2">
-            <div class="flex items-center gap-2">
-              <StatusLed status={item.enabled ? "active" : "idle"} />
-              <span class="text-sm text-text-primary">{item.displayName}</span>
-              <Badge variant="default">{indexerKindLabel(item.kind)}</Badge>
-              <span class="text-xs text-text-muted">{item.baseUrl}</span>
-              {#if item.hasApiKey}<Badge variant="default">key set</Badge>{/if}
-              {#if item.disabledUntil}
-                <Badge variant="warning" title={item.lastFailureMessage ?? undefined}>backing off until {new Date(item.disabledUntil).toLocaleTimeString()}</Badge>
-              {/if}
-            </div>
-            <div class="flex items-center gap-1">
-              <Button size="sm" variant="ghost" onclick={() => editIndexer(item)} disabled={busy}><Pencil class="h-3.5 w-3.5" /></Button>
-              <Button size="sm" variant="ghost" onclick={() => removeIndexer(item.id)} disabled={busy}><Trash2 class="h-3.5 w-3.5" /></Button>
-            </div>
-          </div>
-        {/each}
-        {#if indexerForm}
-          <div class="space-y-2 rounded-sm border border-border-accent bg-surface-1 p-3">
-            <div class="grid gap-2 sm:grid-cols-2">
-              <label class="space-y-1"><span class="text-label text-text-muted">Indexer type</span>
-                <Select size="sm" value={indexerForm.kind} options={indexerKindOptions} onchange={setIndexerKind} /></label>
-              <label class="space-y-1"><span class="text-label text-text-muted">Name</span>
-                <TextInput size="sm" value={indexerForm.displayName} oninput={(e) => indexerForm && (indexerForm.displayName = e.currentTarget.value)} /></label>
-              <label class="space-y-1"><span class="text-label text-text-muted">Base URL</span>
-                <TextInput size="sm" value={indexerForm.baseUrl} oninput={(e) => indexerForm && (indexerForm.baseUrl = e.currentTarget.value)} placeholder={indexerForm.kind === INDEXER_KIND.prowlarr ? "https://prowlarr.example.com" : "https://indexer.example.com (or a Jackett /api path)"} /></label>
-              <label class="space-y-1"><span class="text-label text-text-muted">API key</span>
-                <TextInput size="sm" type="password" value={indexerForm.apiKey ?? ""} oninput={(e) => indexerForm && (indexerForm.apiKey = e.currentTarget.value)} placeholder={indexerForm.id ? "(unchanged)" : ""} /></label>
-              <label class="space-y-1"><span class="text-label text-text-muted">Categories</span>
-                <TextInput size="sm" value={indexerCategories} oninput={(e) => (indexerCategories = e.currentTarget.value)} placeholder="7000,8000" /></label>
-              <label class="space-y-1"><span class="text-label text-text-muted">Query limit / hour</span>
-                <TextInput size="sm" type="number" value={indexerForm.queryLimitPerHour == null ? "" : String(indexerForm.queryLimitPerHour)} oninput={(e) => indexerForm && (indexerForm.queryLimitPerHour = e.currentTarget.value ? Number(e.currentTarget.value) : null)} placeholder="unlimited" /></label>
-              <label class="space-y-1"><span class="text-label text-text-muted">Seed ratio goal</span>
-                <TextInput size="sm" type="number" value={indexerForm.seedRatio == null ? "" : String(indexerForm.seedRatio)} oninput={(e) => indexerForm && (indexerForm.seedRatio = e.currentTarget.value ? Number(e.currentTarget.value) : null)} placeholder="client default" /></label>
-              <label class="space-y-1"><span class="text-label text-text-muted">Seed time goal (minutes)</span>
-                <TextInput size="sm" type="number" value={indexerForm.seedTimeMinutes == null ? "" : String(indexerForm.seedTimeMinutes)} oninput={(e) => indexerForm && (indexerForm.seedTimeMinutes = e.currentTarget.value ? Number(e.currentTarget.value) : null)} placeholder="client default" /></label>
-            </div>
-            <div class="flex items-center justify-between">
-              <Button size="sm" variant="ghost" onclick={testIndexer} disabled={busy} class="gap-1.5"><PlugZap class="h-3.5 w-3.5" /> Test</Button>
-              <div class="flex gap-1.5">
-                <Button size="sm" variant="ghost" onclick={() => (indexerForm = null)} disabled={busy}>Cancel</Button>
-                <Button size="sm" variant="primary" onclick={saveIndexer} disabled={busy || !indexerForm.displayName || !indexerForm.baseUrl}>Save</Button>
+        {#snippet indexerEditor()}
+          {#if indexerForm}
+            <div class="space-y-2 rounded-sm border border-border-accent bg-surface-1 p-3">
+              <div class="grid gap-2 sm:grid-cols-2">
+                <label class="space-y-1"><span class="text-label text-text-muted">Indexer type</span>
+                  <Select size="sm" value={indexerForm.kind} options={indexerKindOptions} onchange={setIndexerKind} /></label>
+                <label class="space-y-1"><span class="text-label text-text-muted">Name</span>
+                  <TextInput size="sm" value={indexerForm.displayName} oninput={(e) => indexerForm && (indexerForm.displayName = e.currentTarget.value)} /></label>
+                <label class="space-y-1"><span class="text-label text-text-muted">Base URL</span>
+                  <TextInput size="sm" value={indexerForm.baseUrl} oninput={(e) => indexerForm && (indexerForm.baseUrl = e.currentTarget.value)} placeholder={indexerForm.kind === INDEXER_KIND.prowlarr ? "https://prowlarr.example.com" : "https://indexer.example.com (or a Jackett /api path)"} /></label>
+                <label class="space-y-1"><span class="text-label text-text-muted">API key</span>
+                  <TextInput size="sm" type="password" value={indexerForm.apiKey ?? ""} oninput={(e) => indexerForm && (indexerForm.apiKey = e.currentTarget.value)} placeholder={indexerForm.id ? "(unchanged)" : ""} /></label>
+                <label class="space-y-1"><span class="text-label text-text-muted">Categories</span>
+                  <TextInput size="sm" value={indexerCategories} oninput={(e) => (indexerCategories = e.currentTarget.value)} placeholder="7000,8000" /></label>
+                <label class="space-y-1"><span class="text-label text-text-muted">Query limit / hour</span>
+                  <TextInput size="sm" type="number" value={indexerForm.queryLimitPerHour == null ? "" : String(indexerForm.queryLimitPerHour)} oninput={(e) => indexerForm && (indexerForm.queryLimitPerHour = e.currentTarget.value ? Number(e.currentTarget.value) : null)} placeholder="unlimited" /></label>
+                <label class="space-y-1"><span class="text-label text-text-muted">Seed ratio goal</span>
+                  <TextInput size="sm" type="number" value={indexerForm.seedRatio == null ? "" : String(indexerForm.seedRatio)} oninput={(e) => indexerForm && (indexerForm.seedRatio = e.currentTarget.value ? Number(e.currentTarget.value) : null)} placeholder="client default" /></label>
+                <label class="space-y-1"><span class="text-label text-text-muted">Seed time goal (minutes)</span>
+                  <TextInput size="sm" type="number" value={indexerForm.seedTimeMinutes == null ? "" : String(indexerForm.seedTimeMinutes)} oninput={(e) => indexerForm && (indexerForm.seedTimeMinutes = e.currentTarget.value ? Number(e.currentTarget.value) : null)} placeholder="client default" /></label>
+              </div>
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="flex items-center gap-2">
+                  <Button size="sm" variant="ghost" onclick={testIndexer} disabled={busy || indexerTest?.state === "testing"} class="gap-1.5"><PlugZap class="h-3.5 w-3.5" /> Test</Button>
+                  {@render testResult(indexerTest)}
+                </div>
+                <div class="flex gap-1.5">
+                  <Button size="sm" variant="ghost" onclick={() => (indexerForm = null)} disabled={busy}>Cancel</Button>
+                  <Button size="sm" variant="primary" onclick={saveIndexer} disabled={busy || !indexerForm.displayName || !indexerForm.baseUrl}>Save</Button>
+                </div>
               </div>
             </div>
-          </div>
+          {/if}
+        {/snippet}
+        {#each indexers as item (item.id)}
+          {#if indexerForm && indexerForm.id === item.id}
+            {@render indexerEditor()}
+          {:else}
+            <div class="flex items-center justify-between rounded-sm border border-border-subtle bg-surface-1 px-3 py-2">
+              <div class="flex items-center gap-2">
+                <StatusLed status={item.enabled ? "active" : "idle"} />
+                <span class="text-sm text-text-primary">{item.displayName}</span>
+                <Badge variant="default">{indexerKindLabel(item.kind)}</Badge>
+                <span class="text-xs text-text-muted">{item.baseUrl}</span>
+                {#if item.hasApiKey}<Badge variant="default">key set</Badge>{/if}
+                {#if item.disabledUntil}
+                  <Badge variant="warning" title={item.lastFailureMessage ?? undefined}>backing off until {new Date(item.disabledUntil).toLocaleTimeString()}</Badge>
+                {/if}
+              </div>
+              <div class="flex items-center gap-1">
+                <Button size="sm" variant="ghost" onclick={() => editIndexer(item)} disabled={busy}><Pencil class="h-3.5 w-3.5" /></Button>
+                <Button size="sm" variant="ghost" onclick={() => removeIndexer(item.id)} disabled={busy}><Trash2 class="h-3.5 w-3.5" /></Button>
+              </div>
+            </div>
+          {/if}
+        {/each}
+        {#if indexerForm && !indexerForm.id}
+          {@render indexerEditor()}
         {/if}
       </section>
 
@@ -614,57 +647,69 @@
             <Button size="sm" variant="secondary" onclick={newClient} class="gap-1.5"><Plus class="h-3.5 w-3.5" /> Add</Button>
           {/if}
         </div>
-        {#each downloadClients as item (item.id)}
-          <div class="flex items-center justify-between rounded-sm border border-border-subtle bg-surface-1 px-3 py-2">
-            <div class="flex items-center gap-2">
-              <StatusLed status={item.enabled ? "active" : "idle"} />
-              <span class="text-sm text-text-primary">{item.displayName}</span>
-              <Badge variant="default">{clientKindLabel(item.kind)}</Badge>
-              <span class="text-xs text-text-muted">{item.baseUrl}</span>
-              <Badge variant="default">{item.category}</Badge>
-            </div>
-            <div class="flex items-center gap-1">
-              <Button size="sm" variant="ghost" onclick={() => editClient(item)} disabled={busy}><Pencil class="h-3.5 w-3.5" /></Button>
-              <Button size="sm" variant="ghost" onclick={() => removeClient(item.id)} disabled={busy}><Trash2 class="h-3.5 w-3.5" /></Button>
-            </div>
-          </div>
-        {/each}
-        {#if clientForm}
-          <div class="space-y-2 rounded-sm border border-border-accent bg-surface-1 p-3">
-            <div class="grid gap-2 sm:grid-cols-2">
-              <label class="space-y-1"><span class="text-label text-text-muted">Client</span>
-                <Select size="sm" value={clientForm.kind} options={clientKindOptions} onchange={setClientKind} /></label>
-              <label class="space-y-1"><span class="text-label text-text-muted">Name</span>
-                <TextInput size="sm" value={clientForm.displayName} oninput={(e) => clientForm && (clientForm.displayName = e.currentTarget.value)} /></label>
-              <label class="space-y-1"><span class="text-label text-text-muted">Base URL</span>
-                <TextInput size="sm" value={clientForm.baseUrl} oninput={(e) => clientForm && (clientForm.baseUrl = e.currentTarget.value)} placeholder="http://localhost:8080" /></label>
-              {#if clientForm.kind === DOWNLOAD_CLIENT_KIND.sabnzbd}
-                <label class="space-y-1"><span class="text-label text-text-muted">API key</span>
-                  <TextInput size="sm" type="password" value={clientForm.apiKey ?? ""} oninput={(e) => clientForm && (clientForm.apiKey = e.currentTarget.value)} placeholder={clientForm.id ? "(unchanged)" : "from SABnzbd Config → General"} /></label>
-              {/if}
-              <label class="space-y-1"><span class="text-label text-text-muted">Username</span>
-                <TextInput size="sm" value={clientForm.username ?? ""} oninput={(e) => clientForm && (clientForm.username = e.currentTarget.value)} /></label>
-              <label class="space-y-1"><span class="text-label text-text-muted">Password</span>
-                <TextInput size="sm" type="password" value={clientForm.password ?? ""} oninput={(e) => clientForm && (clientForm.password = e.currentTarget.value)} placeholder={clientForm.id ? "(unchanged)" : ""} /></label>
-              <label class="space-y-1"><span class="text-label text-text-muted">Category / label</span>
-                <TextInput size="sm" value={clientForm.category} oninput={(e) => clientForm && (clientForm.category = e.currentTarget.value)} /></label>
-              <label class="space-y-1"><span class="text-label text-text-muted">Priority (lower wins)</span>
-                <TextInput size="sm" type="number" value={String(clientForm.priority ?? 25)} oninput={(e) => clientForm && (clientForm.priority = Number(e.currentTarget.value) || 25)} /></label>
-              {#if clientForm.kind !== DOWNLOAD_CLIENT_KIND.sabnzbd}
-                <label class="space-y-1"><span class="text-label text-text-muted">Default seed ratio goal</span>
-                  <TextInput size="sm" type="number" value={clientForm.seedRatio == null ? "" : String(clientForm.seedRatio)} oninput={(e) => clientForm && (clientForm.seedRatio = e.currentTarget.value ? Number(e.currentTarget.value) : null)} placeholder="none (client rules)" /></label>
-                <label class="space-y-1"><span class="text-label text-text-muted">Default seed time goal (minutes)</span>
-                  <TextInput size="sm" type="number" value={clientForm.seedTimeMinutes == null ? "" : String(clientForm.seedTimeMinutes)} oninput={(e) => clientForm && (clientForm.seedTimeMinutes = e.currentTarget.value ? Number(e.currentTarget.value) : null)} placeholder="none (client rules)" /></label>
-              {/if}
-            </div>
-            <div class="flex items-center justify-between">
-              <Button size="sm" variant="ghost" onclick={testClient} disabled={busy} class="gap-1.5"><PlugZap class="h-3.5 w-3.5" /> Test</Button>
-              <div class="flex gap-1.5">
-                <Button size="sm" variant="ghost" onclick={() => (clientForm = null)} disabled={busy}>Cancel</Button>
-                <Button size="sm" variant="primary" onclick={saveClient} disabled={busy || !clientForm.displayName || !clientForm.baseUrl || !clientForm.category}>Save</Button>
+        {#snippet clientEditor()}
+          {#if clientForm}
+            <div class="space-y-2 rounded-sm border border-border-accent bg-surface-1 p-3">
+              <div class="grid gap-2 sm:grid-cols-2">
+                <label class="space-y-1"><span class="text-label text-text-muted">Client</span>
+                  <Select size="sm" value={clientForm.kind} options={clientKindOptions} onchange={setClientKind} /></label>
+                <label class="space-y-1"><span class="text-label text-text-muted">Name</span>
+                  <TextInput size="sm" value={clientForm.displayName} oninput={(e) => clientForm && (clientForm.displayName = e.currentTarget.value)} /></label>
+                <label class="space-y-1"><span class="text-label text-text-muted">Base URL</span>
+                  <TextInput size="sm" value={clientForm.baseUrl} oninput={(e) => clientForm && (clientForm.baseUrl = e.currentTarget.value)} placeholder="http://localhost:8080" /></label>
+                {#if clientForm.kind === DOWNLOAD_CLIENT_KIND.sabnzbd}
+                  <label class="space-y-1"><span class="text-label text-text-muted">API key</span>
+                    <TextInput size="sm" type="password" value={clientForm.apiKey ?? ""} oninput={(e) => clientForm && (clientForm.apiKey = e.currentTarget.value)} placeholder={clientForm.id ? "(unchanged)" : "from SABnzbd Config → General"} /></label>
+                {/if}
+                <label class="space-y-1"><span class="text-label text-text-muted">Username</span>
+                  <TextInput size="sm" value={clientForm.username ?? ""} oninput={(e) => clientForm && (clientForm.username = e.currentTarget.value)} /></label>
+                <label class="space-y-1"><span class="text-label text-text-muted">Password</span>
+                  <TextInput size="sm" type="password" value={clientForm.password ?? ""} oninput={(e) => clientForm && (clientForm.password = e.currentTarget.value)} placeholder={clientForm.id ? "(unchanged)" : ""} /></label>
+                <label class="space-y-1"><span class="text-label text-text-muted">Category / label</span>
+                  <TextInput size="sm" value={clientForm.category} oninput={(e) => clientForm && (clientForm.category = e.currentTarget.value)} /></label>
+                <label class="space-y-1"><span class="text-label text-text-muted">Priority (lower wins)</span>
+                  <TextInput size="sm" type="number" value={String(clientForm.priority ?? 25)} oninput={(e) => clientForm && (clientForm.priority = Number(e.currentTarget.value) || 25)} /></label>
+                {#if clientForm.kind !== DOWNLOAD_CLIENT_KIND.sabnzbd}
+                  <label class="space-y-1"><span class="text-label text-text-muted">Default seed ratio goal</span>
+                    <TextInput size="sm" type="number" value={clientForm.seedRatio == null ? "" : String(clientForm.seedRatio)} oninput={(e) => clientForm && (clientForm.seedRatio = e.currentTarget.value ? Number(e.currentTarget.value) : null)} placeholder="none (client rules)" /></label>
+                  <label class="space-y-1"><span class="text-label text-text-muted">Default seed time goal (minutes)</span>
+                    <TextInput size="sm" type="number" value={clientForm.seedTimeMinutes == null ? "" : String(clientForm.seedTimeMinutes)} oninput={(e) => clientForm && (clientForm.seedTimeMinutes = e.currentTarget.value ? Number(e.currentTarget.value) : null)} placeholder="none (client rules)" /></label>
+                {/if}
+              </div>
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="flex items-center gap-2">
+                  <Button size="sm" variant="ghost" onclick={testClient} disabled={busy || clientTest?.state === "testing"} class="gap-1.5"><PlugZap class="h-3.5 w-3.5" /> Test</Button>
+                  {@render testResult(clientTest)}
+                </div>
+                <div class="flex gap-1.5">
+                  <Button size="sm" variant="ghost" onclick={() => (clientForm = null)} disabled={busy}>Cancel</Button>
+                  <Button size="sm" variant="primary" onclick={saveClient} disabled={busy || !clientForm.displayName || !clientForm.baseUrl || !clientForm.category}>Save</Button>
+                </div>
               </div>
             </div>
-          </div>
+          {/if}
+        {/snippet}
+        {#each downloadClients as item (item.id)}
+          {#if clientForm && clientForm.id === item.id}
+            {@render clientEditor()}
+          {:else}
+            <div class="flex items-center justify-between rounded-sm border border-border-subtle bg-surface-1 px-3 py-2">
+              <div class="flex items-center gap-2">
+                <StatusLed status={item.enabled ? "active" : "idle"} />
+                <span class="text-sm text-text-primary">{item.displayName}</span>
+                <Badge variant="default">{clientKindLabel(item.kind)}</Badge>
+                <span class="text-xs text-text-muted">{item.baseUrl}</span>
+                <Badge variant="default">{item.category}</Badge>
+              </div>
+              <div class="flex items-center gap-1">
+                <Button size="sm" variant="ghost" onclick={() => editClient(item)} disabled={busy}><Pencil class="h-3.5 w-3.5" /></Button>
+                <Button size="sm" variant="ghost" onclick={() => removeClient(item.id)} disabled={busy}><Trash2 class="h-3.5 w-3.5" /></Button>
+              </div>
+            </div>
+          {/if}
+        {/each}
+        {#if clientForm && !clientForm.id}
+          {@render clientEditor()}
         {/if}
       </section>
 
