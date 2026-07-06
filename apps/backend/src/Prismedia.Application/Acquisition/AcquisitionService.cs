@@ -86,6 +86,110 @@ public sealed class AcquisitionService(
             Array.ConvertAll(pieces, piece => (int)piece));
     }
 
+    /// <summary>
+    /// The global Downloads view: every active acquisition (not imported, not cancelled) with live
+    /// download-client telemetry where a transfer is in flight. Telemetry is collected with one item
+    /// listing per download client plus one properties read per transfer; an unreachable client degrades
+    /// its rows to the last persisted progress instead of failing the view.
+    /// </summary>
+    public async Task<IReadOnlyList<DownloadQueueItemView>> ListDownloadsAsync(CancellationToken cancellationToken) {
+        var summaries = await store.ListAsync(cancellationToken);
+        var active = summaries
+            .Where(summary => summary.Status is not (AcquisitionStatus.Imported or AcquisitionStatus.Cancelled))
+            .ToArray();
+        if (active.Length == 0) {
+            return [];
+        }
+
+        var telemetry = await CollectLiveTelemetryAsync(cancellationToken);
+        return active
+            .Select(summary => {
+                var live = telemetry.GetValueOrDefault(summary.Id);
+                return new DownloadQueueItemView(
+                    summary.Id,
+                    summary.Kind,
+                    summary.Title,
+                    summary.Status,
+                    summary.StatusMessage,
+                    live?.Progress ?? summary.Progress,
+                    summary.UpdatedAt,
+                    summary.EntityId,
+                    summary.PosterUrl,
+                    live?.State,
+                    live?.TotalSizeBytes,
+                    live?.DownloadSpeedBytesPerSecond,
+                    live?.EtaSeconds,
+                    live?.Seeds,
+                    live?.Peers,
+                    live?.ClientName);
+            })
+            .ToArray();
+    }
+
+    /// <summary>Live telemetry per acquisition id, grouped so each download client is listed once.</summary>
+    private async Task<IReadOnlyDictionary<Guid, LiveTransferTelemetry>> CollectLiveTelemetryAsync(CancellationToken cancellationToken) {
+        var transfers = await store.ListActiveTransfersAsync(cancellationToken);
+        var telemetry = new Dictionary<Guid, LiveTransferTelemetry>();
+        foreach (var clientTransfers in transfers.GroupBy(transfer => transfer.DownloadClientConfigId)) {
+            var client = await ResolveClientAsync(clientTransfers.Key, cancellationToken);
+            if (client is null) {
+                continue;
+            }
+
+            var connection = ConnectionFor(client);
+            var download = clients.Get(client.Kind);
+            IReadOnlyDictionary<string, DownloadItemStatus> items;
+            try {
+                items = (await download.ListItemsAsync(connection, cancellationToken))
+                    .ToDictionary(item => item.ClientItemId, StringComparer.OrdinalIgnoreCase);
+            } catch (OperationCanceledException) {
+                throw;
+            } catch (Exception ex) {
+                // The client being down must not take the whole Downloads view with it.
+                logger.LogWarning(ex, "Download client {Client} unreachable while building the downloads view.", client.DisplayName);
+                continue;
+            }
+
+            foreach (var transfer in clientTransfers) {
+                if (!items.TryGetValue(transfer.ClientItemId, out var status)) {
+                    continue;
+                }
+
+                DownloadItemProperties? properties = null;
+                try {
+                    properties = await download.GetPropertiesAsync(connection, transfer.ClientItemId, cancellationToken);
+                } catch (OperationCanceledException) {
+                    throw;
+                } catch (Exception) {
+                    // Properties are enrichment; the listing's progress/state still renders the row.
+                }
+
+                telemetry[transfer.AcquisitionId] = new LiveTransferTelemetry(
+                    status.Progress,
+                    status.State,
+                    properties?.TotalSizeBytes,
+                    properties?.DownloadSpeedBytesPerSecond,
+                    properties?.EtaSeconds,
+                    properties?.Seeds,
+                    properties?.Peers,
+                    client.DisplayName);
+            }
+        }
+
+        return telemetry;
+    }
+
+    /// <summary>Live client telemetry for one acquisition's transfer, shaped for the Downloads view.</summary>
+    private sealed record LiveTransferTelemetry(
+        double Progress,
+        string? State,
+        long? TotalSizeBytes,
+        double? DownloadSpeedBytesPerSecond,
+        long? EtaSeconds,
+        int? Seeds,
+        int? Peers,
+        string ClientName);
+
     /// <summary>The acquisition's files: the imported library files once imported, otherwise the in-progress download files.</summary>
     public async Task<AcquisitionFilesView> GetFilesAsync(Guid id, CancellationToken cancellationToken) {
         var info = await store.GetTransferInfoAsync(id, cancellationToken);

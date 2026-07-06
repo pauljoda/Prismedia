@@ -325,6 +325,7 @@ public static class DependencyInjection {
         services.AddScoped<IPluginRequestProposalSource, PluginRequestMetadataSource>();
         services.AddScoped<IWantedEntityWriter, WantedEntityWriter>();
         services.AddScoped<IWantedSuppressionStore, EfWantedSuppressionStore>();
+        services.AddScoped<IProviderTrackingCatalog, PluginProviderTrackingCatalog>();
     }
 
     private static void RegisterAcquisition(IServiceCollection services) {

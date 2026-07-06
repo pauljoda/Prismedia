@@ -9,7 +9,7 @@ namespace Prismedia.Application.Acquisition;
 /// library container entity, and list the monitored items. Starting a monitor denormalizes the target's
 /// title onto the monitor so the monitored list and re-search labels stand alone.
 /// </summary>
-public sealed class MonitorService(IMonitorStore monitors, IAcquisitionStore acquisitions, IWantedEntityWriter entities) {
+public sealed class MonitorService(IMonitorStore monitors, IAcquisitionStore acquisitions, IWantedEntityWriter entities, IProviderTrackingCatalog tracking) {
     public Task<IReadOnlyList<MonitorView>> ListAsync(CancellationToken cancellationToken) =>
         monitors.ListAsync(cancellationToken);
 
@@ -58,19 +58,13 @@ public sealed class MonitorService(IMonitorStore monitors, IAcquisitionStore acq
     /// <summary>
     /// Starts (or re-activates) a container monitor watching a library entity (an author, an artist) for
     /// new works. Works for wanted placeholders and real scanned-in entities alike, as long as the
-    /// entity carries a provider identity the daily sync can re-resolve it from (a scanned-in author
-    /// gains one the moment Identify runs). Returns null when the entity is missing, isn't a monitorable
-    /// container kind, or has no provider identity yet.
+    /// entity carries a provider identity an enabled metadata plugin can track — re-resolve by id on the
+    /// daily sync (a scanned-in author gains one the moment Identify runs). Returns null when the entity
+    /// is missing, isn't a monitorable container kind, or no plugin can track its provider identities.
     /// </summary>
     public async Task<MonitorView?> StartForEntityAsync(Guid entityId, MonitorPreset? preset, CancellationToken cancellationToken) {
-        var container = await entities.GetContainerAsync(entityId, cancellationToken);
-        if (container is null || container.ProviderIds.Count == 0) {
-            return null;
-        }
-
-        var monitorable = RequestKindRegistry.All.Any(descriptor =>
-            descriptor is { IsContainer: true, Committable: true } && descriptor.WantedEntityKind == container.Kind);
-        if (!monitorable) {
+        var (container, trackable) = await ResolveEligibilityAsync(entityId, cancellationToken);
+        if (container is null || trackable.Count == 0) {
             return null;
         }
 
@@ -78,6 +72,38 @@ public sealed class MonitorService(IMonitorStore monitors, IAcquisitionStore acq
         // default for a fresh container — so a hand toggle never narrows an author's discovery scope. A
         // caller that passes a preset (choosing one on the series page) records it.
         return await monitors.StartForEntityAsync(entityId, container.Kind, container.Title, targeting: null, preset, cancellationToken);
+    }
+
+    /// <summary>
+    /// Whether the entity can carry a standing container monitor: it must be a monitorable container kind
+    /// and hold a provider identity some enabled plugin can track (lookup by id). The trackable provider
+    /// ids are surfaced so the UI can say which plugin identity the watch would ride on.
+    /// </summary>
+    public async Task<MonitorEligibilityView> GetEligibilityAsync(Guid entityId, CancellationToken cancellationToken) {
+        var (_, trackable) = await ResolveEligibilityAsync(entityId, cancellationToken);
+        return new MonitorEligibilityView(trackable.Count > 0, trackable);
+    }
+
+    /// <summary>
+    /// Loads the entity as a monitorable container and the subset of its provider identities an enabled
+    /// plugin can track. The container is null (and the list empty) when the entity is missing or isn't
+    /// a monitorable container kind.
+    /// </summary>
+    private async Task<(MonitorableContainer? Container, IReadOnlyList<string> Trackable)> ResolveEligibilityAsync(
+        Guid entityId, CancellationToken cancellationToken) {
+        var container = await entities.GetContainerAsync(entityId, cancellationToken);
+        if (container is null || container.ProviderIds.Count == 0) {
+            return (null, []);
+        }
+
+        var descriptor = RequestKindRegistry.All.FirstOrDefault(candidate =>
+            candidate is { IsContainer: true, Committable: true } && candidate.WantedEntityKind == container.Kind);
+        if (descriptor is null) {
+            return (null, []);
+        }
+
+        var trackable = await tracking.TrackableProvidersAsync(descriptor.PluginKindCode, container.ProviderIds, cancellationToken);
+        return (container, trackable);
     }
 
     /// <summary>The container monitor watching an entity, or null when it is not monitored.</summary>

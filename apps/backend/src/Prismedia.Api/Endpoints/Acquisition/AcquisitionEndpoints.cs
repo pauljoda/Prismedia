@@ -89,6 +89,14 @@ public static class AcquisitionEndpoints {
             .WithSummary("Lists acquisitions with their current status.")
             .Produces<IReadOnlyList<AcquisitionSummary>>();
 
+        group.MapGet("/downloads", (
+            AcquisitionService acquisitions,
+            CancellationToken cancellationToken) =>
+            acquisitions.ListDownloadsAsync(cancellationToken))
+            .WithName("ListDownloadQueue")
+            .WithSummary("The global Downloads view: every active acquisition across all kinds with live download-client telemetry (progress, speed, ETA, peers) where a transfer is in flight.")
+            .Produces<IReadOnlyList<DownloadQueueItemView>>();
+
         group.MapGet("/{id:guid}", async (
             Guid id,
             AcquisitionService acquisitions,
@@ -525,6 +533,15 @@ public static class AcquisitionEndpoints {
             .WithSummary("Gets the container monitor watching a library entity, when one exists.")
             .Produces<MonitorView>()
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+
+        group.MapGet("/for-entity/{entityId:guid}/eligibility", (
+            Guid entityId,
+            MonitorService monitors,
+            CancellationToken cancellationToken) =>
+            monitors.GetEligibilityAsync(entityId, cancellationToken))
+            .WithName("GetEntityMonitorEligibility")
+            .WithSummary("Whether the entity can carry a standing container monitor: it must be a monitorable container kind holding a provider identity an enabled metadata plugin can track (re-resolve by id).")
+            .Produces<MonitorEligibilityView>();
 
         group.MapDelete("/{id:guid}", async (
             Guid id,

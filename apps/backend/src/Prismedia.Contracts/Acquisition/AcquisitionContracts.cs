@@ -145,6 +145,33 @@ public sealed record AcquisitionFileItem(string Name, long SizeBytes, double Pro
 /// <summary>The files of an acquisition; <see cref="Imported"/> distinguishes library files from in-progress download files.</summary>
 public sealed record AcquisitionFilesView(bool Imported, IReadOnlyList<AcquisitionFileItem> Files);
 
+/// <summary>
+/// One row of the global Downloads view: an active (not yet imported, not cancelled) acquisition with
+/// live download-client telemetry when a transfer is in flight. Telemetry fields are null for rows
+/// without a live transfer (still searching, awaiting selection, importing) and when the download
+/// client is unreachable; <see cref="Progress"/> then falls back to the last persisted progress.
+/// </summary>
+/// <param name="EntityId">The wanted library entity the acquisition targets; rows link to its detail page.</param>
+/// <param name="TransferState">The client's raw transfer state label, normalized casing left to the UI.</param>
+/// <param name="ClientName">Display name of the download client carrying the transfer.</param>
+public sealed record DownloadQueueItemView(
+    Guid AcquisitionId,
+    EntityKind Kind,
+    string Title,
+    AcquisitionStatus Status,
+    string? StatusMessage,
+    double? Progress,
+    DateTimeOffset UpdatedAt,
+    Guid? EntityId = null,
+    string? PosterUrl = null,
+    string? TransferState = null,
+    long? TotalSizeBytes = null,
+    double? DownloadSpeedBytesPerSecond = null,
+    long? EtaSeconds = null,
+    int? Seeds = null,
+    int? Peers = null,
+    string? ClientName = null);
+
 /// <summary>Configured download client safe for list displays (no secret material).</summary>
 public sealed record DownloadClientSummary(
     Guid Id,
@@ -367,6 +394,15 @@ public sealed record WantedListItemView(
 /// imported+active monitors, before the per-page cutoff refinement) — see the endpoint summary.
 /// </summary>
 public sealed record WantedPageView(IReadOnlyList<WantedListItemView> Items, int Total);
+
+/// <summary>
+/// Whether a library entity can carry a standing container monitor. Monitoring rides on plugin
+/// trackability: the entity must be a monitorable container kind AND hold a provider identity some
+/// enabled metadata plugin can re-resolve by id (the lookup-id action) — otherwise the daily discovery
+/// sweep could never notice new works. <see cref="TrackableProviders"/> lists the provider ids the
+/// watch would ride on, so the UI can name them.
+/// </summary>
+public sealed record MonitorEligibilityView(bool CanMonitor, IReadOnlyList<string> TrackableProviders);
 
 /// <summary>Request to start monitoring (keep re-searching) an existing acquisition until it is acquired.</summary>
 public sealed record MonitorCreateRequest(Guid AcquisitionId);
