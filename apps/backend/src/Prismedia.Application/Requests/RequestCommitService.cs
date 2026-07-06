@@ -137,6 +137,7 @@ public sealed class RequestCommitService(
 
         return await CommitContainerCoreAsync(
             descriptor, providerId, itemId, proposal, selectedChildIds,
+            requestOwnedChildren: request.SelectedChildIds.Count > 0,
             startAcquisitions: true, TargetingOf(request), preset, hideNsfw, cancellationToken);
     }
 
@@ -204,7 +205,7 @@ public sealed class RequestCommitService(
             }
         }
 
-        return await RequestFromEntityGraphAsync(descriptor, entity, targeting, cancellationToken);
+        return await RequestFromEntityGraphAsync(descriptor, entity, targeting, hideNsfw, cancellationToken);
     }
 
     /// <summary>The stored library/profile choices of the entity's nearest monitored ancestor, or none.</summary>
@@ -228,13 +229,21 @@ public sealed class RequestCommitService(
     /// units cannot be provider-resolved standalone, and as the degrade path when providers fail.
     /// </summary>
     private async Task<RequestCommitResponse?> RequestFromEntityGraphAsync(
-        RequestKindDescriptor descriptor, MonitorableContainer entity, AcquisitionTargeting targeting, CancellationToken cancellationToken) {
+        RequestKindDescriptor descriptor, MonitorableContainer entity, AcquisitionTargeting targeting, bool hideNsfw, CancellationToken cancellationToken) {
         var primaryId = entity.ProviderIds.FirstOrDefault();
-        if (entity.HasSourceFile) {
+        // Ordinary owned leaves are already satisfied. TV units are different: an existing season/episode
+        // can still be explicitly monitored so the acquisition loop searches for missing files or cutoff
+        // upgrades. That is the Season Pass toggle path for already-scanned series.
+        var requestOwnedEntity = descriptor.AcquireFromEntity;
+        if (entity.HasSourceFile && !requestOwnedEntity) {
             return new RequestCommitResponse(null, [Item(RequestCommitOutcome.AlreadyOwned, null)]);
         }
 
         if (await acquisitions.AnyForEntityAsync(entity.EntityId, cancellationToken)) {
+            if (primaryId is not null) {
+                await EnsurePhantomDescendantsAsync(
+                    descriptor, primaryId.Provider, primaryId.ItemId, entity.EntityId, hideNsfw, cancellationToken);
+            }
             return new RequestCommitResponse(null, [Item(RequestCommitOutcome.AlreadyRequested, null)]);
         }
 
@@ -276,6 +285,10 @@ public sealed class RequestCommitService(
                 positions.TryGetValue(EntityPositionCodes.Episode, out var episode) ? episode : null),
             cancellationToken);
         await monitors.StartAsync(summary.Id, descriptor.AcquisitionKind, entity.Title, creator, cancellationToken);
+        if (primaryId is not null) {
+            await EnsurePhantomDescendantsAsync(
+                descriptor, primaryId.Provider, primaryId.ItemId, entity.EntityId, hideNsfw, cancellationToken);
+        }
         return new RequestCommitResponse(null, [Item(RequestCommitOutcome.Requested, summary.Id)]);
 
         RequestCommitItem Item(RequestCommitOutcome outcome, Guid? acquisitionId) =>
@@ -332,6 +345,7 @@ public sealed class RequestCommitService(
                 : [];
             await CommitContainerCoreAsync(
                 descriptor, providerRef.Provider, providerRef.ItemId, proposal, childIds,
+                requestOwnedChildren: false,
                 startAcquisitions: false, AcquisitionTargeting.None, preset: null, hideNsfw: true, cancellationToken);
             return true;
         }
@@ -348,7 +362,7 @@ public sealed class RequestCommitService(
     /// </summary>
     private async Task<RequestCommitResponse> CommitContainerCoreAsync(
         RequestKindDescriptor descriptor, string providerId, string itemId, EntityMetadataProposal proposal,
-        IReadOnlyList<string> selectedChildIds, bool startAcquisitions, AcquisitionTargeting targeting,
+        IReadOnlyList<string> selectedChildIds, bool requestOwnedChildren, bool startAcquisitions, AcquisitionTargeting targeting,
         MonitorPreset? preset, bool hideNsfw, CancellationToken cancellationToken) {
         var child = RequestKindRegistry.ChildOf(descriptor)!;
         var containerTitle = TitleOr(proposal.Patch.Title, itemId);
@@ -376,7 +390,9 @@ public sealed class RequestCommitService(
 
         var picks = new List<CommitPick>();
         foreach (var childProposal in selectedChildren) {
-            var pick = await EnsurePickAsync(child, providerId, childProposal, container.EntityId, cancellationToken);
+            var pick = await EnsurePickAsync(
+                child, providerId, childProposal, container.EntityId, cancellationToken,
+                requestOwnedEntity: startAcquisitions && requestOwnedChildren && child.AcquireFromEntity);
             if (pick is not null) {
                 picks.Add(pick);
             }
@@ -421,19 +437,25 @@ public sealed class RequestCommitService(
     /// Materializes a pick's own structural children as wanted phantoms when its kind nests further —
     /// the season→episode level of the TV chain, driven purely by the registry's child chain so a
     /// deeper medium is a registry row, not a new flow. Phantoms honor the discovery blacklist and
-    /// never start acquisitions. A pick that already owns files is left alone (its children are real).
+    /// never start acquisitions; owned children are skipped individually, so a partially-owned season
+    /// still gets wanted placeholders for the missing episodes.
     /// </summary>
+    private Task EnsurePhantomDescendantsAsync(
+        RequestKindDescriptor pickDescriptor, string providerId, CommitPick pick, bool hideNsfw, CancellationToken cancellationToken) =>
+        EnsurePhantomDescendantsAsync(
+            pickDescriptor, providerId, pick.WorkId, pick.Entity.EntityId, hideNsfw, cancellationToken);
+
     private async Task EnsurePhantomDescendantsAsync(
-        RequestKindDescriptor pickDescriptor, string providerId, CommitPick pick, bool hideNsfw, CancellationToken cancellationToken) {
+        RequestKindDescriptor pickDescriptor, string providerId, string itemId, Guid parentEntityId, bool hideNsfw, CancellationToken cancellationToken) {
         var grandchild = RequestKindRegistry.ChildOf(pickDescriptor);
-        if (grandchild is null || pick.Entity.HasFile) {
+        if (grandchild is null) {
             return;
         }
 
         // The pick's own detail carries its children (a series proposal ships season shells only; the
         // season lookup ships the episodes), so resolve it with children included.
         var proposal = await proposals.ResolveProposalAsync(
-            pickDescriptor, providerId, pick.WorkId, hideNsfw, includeChildren: true, cancellationToken);
+            pickDescriptor, providerId, itemId, hideNsfw, includeChildren: true, cancellationToken);
         if (proposal?.Patch is null) {
             return;
         }
@@ -458,7 +480,7 @@ public sealed class RequestCommitService(
                 continue;
             }
 
-            var phantom = await EnsurePickAsync(grandchild, providerId, childProposal, pick.Entity.EntityId, cancellationToken);
+            var phantom = await EnsurePickAsync(grandchild, providerId, childProposal, parentEntityId, cancellationToken);
             if (phantom is not null) {
                 phantomPicks.Add(phantom);
             }
@@ -470,7 +492,7 @@ public sealed class RequestCommitService(
             var applyChildren = proposal.Children.Where(node => node.TargetKind.IsRelationship())
                 .Concat(phantomPicks.Where(phantom => !phantom.Entity.HasFile).Select(phantom => phantom.Proposal))
                 .ToArray();
-            await wanted.ApplyProposalAsync(pick.Entity.EntityId, proposal with { Children = applyChildren }, cancellationToken);
+            await wanted.ApplyProposalAsync(parentEntityId, proposal with { Children = applyChildren }, cancellationToken);
         }
     }
 
@@ -528,7 +550,8 @@ public sealed class RequestCommitService(
 
     /// <summary>Ensures the wanted entity for a picked work and decides its outcome, or null when the proposal carries no work id.</summary>
     private async Task<CommitPick?> EnsurePickAsync(
-        RequestKindDescriptor descriptor, string providerId, EntityMetadataProposal proposal, Guid? parentEntityId, CancellationToken cancellationToken) {
+        RequestKindDescriptor descriptor, string providerId, EntityMetadataProposal proposal, Guid? parentEntityId,
+        CancellationToken cancellationToken, bool requestOwnedEntity = false) {
         if (RequestProposalReading.WorkIdFor(providerId, proposal) is not { } workId) {
             return null;
         }
@@ -537,7 +560,7 @@ public sealed class RequestCommitService(
         var entity = await wanted.EnsureAsync(
             descriptor.WantedEntityKind, providerId, workId, title, parentEntityId,
             matchTitleKindWide: descriptor.IsContainer, cancellationToken);
-        var outcome = entity.HasFile
+        var outcome = entity.HasFile && !requestOwnedEntity
             ? RequestCommitOutcome.AlreadyOwned
             : !entity.Created && await acquisitions.AnyForEntityAsync(entity.EntityId, cancellationToken)
                 ? RequestCommitOutcome.AlreadyRequested
