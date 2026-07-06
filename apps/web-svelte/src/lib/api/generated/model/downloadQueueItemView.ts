@@ -53,4 +53,13 @@ export interface DownloadQueueItemView {
   peers?: number | string | null;
   /** @nullable */
   clientName?: string | null;
+  /** @nullable */
+  author?: string | null;
+  /** @nullable */
+  series?: string | null;
+  /**
+     * @nullable
+     * @pattern ^-?(?:0|[1-9]\d*)$
+     */
+  year?: number | string | null;
 }

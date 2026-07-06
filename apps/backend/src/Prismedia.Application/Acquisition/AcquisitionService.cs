@@ -121,7 +121,10 @@ public sealed class AcquisitionService(
                     live?.EtaSeconds,
                     live?.Seeds,
                     live?.Peers,
-                    live?.ClientName);
+                    live?.ClientName,
+                    summary.Author,
+                    summary.Series,
+                    summary.Year);
             })
             .ToArray();
     }

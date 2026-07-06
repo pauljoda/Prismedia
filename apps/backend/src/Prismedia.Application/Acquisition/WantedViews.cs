@@ -42,7 +42,8 @@ public sealed record WantedListItem(
     string? OwnedQuality,
     string? CutoffQuality,
     int BarrenSearches,
-    string? PosterUrl = null);
+    string? PosterUrl = null,
+    string? Author = null);
 
 /// <summary>
 /// One page of a Wanted list: the page's items plus the total count of matching rows, so the surface can

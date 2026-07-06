@@ -154,6 +154,9 @@ public sealed record AcquisitionFilesView(bool Imported, IReadOnlyList<Acquisiti
 /// <param name="EntityId">The wanted library entity the acquisition targets; rows link to its detail page.</param>
 /// <param name="TransferState">The client's raw transfer state label, normalized casing left to the UI.</param>
 /// <param name="ClientName">Display name of the download client carrying the transfer.</param>
+/// <param name="Author">Creator context (author/artist), for the row's subtitle line.</param>
+/// <param name="Series">Series name (for TV seasons/episodes), for the row's subtitle line.</param>
+/// <param name="Year">Release year, appended to the subtitle when present.</param>
 public sealed record DownloadQueueItemView(
     Guid AcquisitionId,
     EntityKind Kind,
@@ -170,7 +173,10 @@ public sealed record DownloadQueueItemView(
     long? EtaSeconds = null,
     int? Seeds = null,
     int? Peers = null,
-    string? ClientName = null);
+    string? ClientName = null,
+    string? Author = null,
+    string? Series = null,
+    int? Year = null);
 
 /// <summary>Configured download client safe for list displays (no secret material).</summary>
 public sealed record DownloadClientSummary(
@@ -388,7 +394,8 @@ public sealed record WantedListItemView(
     string? OwnedQuality,
     string? CutoffQuality,
     int BarrenSearches,
-    string? PosterUrl = null);
+    string? PosterUrl = null,
+    string? Author = null);
 
 /// <summary>
 /// One page of a Wanted list: the page's rows plus the total count of matching rows for the pagination

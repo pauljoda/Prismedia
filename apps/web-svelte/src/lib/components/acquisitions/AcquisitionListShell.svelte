@@ -7,8 +7,8 @@
    * snippets, so the shell stays generic and no tab needs a bespoke layout.
    */
   import type { Snippet } from "svelte";
-  import { Loader2, Search, X } from "@lucide/svelte";
-  import { Checkbox, cn } from "@prismedia/ui-svelte";
+  import { ArrowUpDown, Loader2, Search, X } from "@lucide/svelte";
+  import { Checkbox, Select, cn } from "@prismedia/ui-svelte";
   import { labelForEntityKind } from "$lib/entities/entity-codes";
   import AcquisitionCard from "$lib/components/acquisitions/AcquisitionCard.svelte";
   import type {
@@ -56,9 +56,18 @@
   let query = $state("");
   let activeStatus = $state("all");
   let activeKind = $state("all");
+  let sortBy = $state("recent");
   let selected = $state<Set<string>>(new Set());
 
   const selectable = $derived(bulkActions.length > 0);
+
+  // Sort options are generic: preserve the server's order ("Recent activity"), sort by title, and — when
+  // any row reports progress — by progress. Kept here so every tab gets the control for free.
+  const sortOptions = $derived([
+    { value: "recent", label: "Recent activity" },
+    { value: "title", label: "Title A–Z" },
+    ...(items.some((item) => item.progress != null) ? [{ value: "progress", label: "Progress" }] : []),
+  ]);
 
   // Kind chips are derived from what's actually present, so a tab opts in without listing kinds.
   const kindOptions = $derived.by(() => {
@@ -69,12 +78,19 @@
   const filtered = $derived.by(() => {
     const q = query.trim().toLowerCase();
     const statusFilter = statusFilters.find((filter) => filter.value === activeStatus);
-    return items.filter((item) => {
+    const matched = items.filter((item) => {
       if (q && !item.title.toLowerCase().includes(q)) return false;
       if (kindChips && activeKind !== "all" && item.kind !== activeKind) return false;
       if (statusFilter && !statusFilter.match(item)) return false;
       return true;
     });
+    if (sortBy === "title") {
+      return [...matched].sort((a, b) => a.title.localeCompare(b.title));
+    }
+    if (sortBy === "progress") {
+      return [...matched].sort((a, b) => (b.progress ?? -1) - (a.progress ?? -1));
+    }
+    return matched; // "recent" keeps the server's order
   });
 
   // Prune selection to ids that still exist as the list refreshes (polling, pagination).
@@ -162,6 +178,11 @@
           {/each}
         </div>
       {/if}
+
+      <label class="sort">
+        <ArrowUpDown size={14} />
+        <Select size="sm" value={sortBy} options={sortOptions} onchange={(value) => (sortBy = value)} />
+      </label>
     </div>
   {/if}
 
@@ -299,6 +320,14 @@
     font-family: var(--font-mono, "JetBrains Mono", monospace);
     font-size: 0.62rem;
     opacity: 0.7;
+  }
+
+  .sort {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-left: auto;
+    color: var(--color-text-muted, rgb(196 201 212 / 0.6));
   }
 
   .bulk-bar {

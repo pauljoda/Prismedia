@@ -405,6 +405,7 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
                 MonitorStatus = monitor.Status,
                 monitor.LastSearchedAt,
                 monitor.BarrenSearches,
+                monitor.Author,
                 AcquisitionStatus = acquisition == null ? (AcquisitionStatus?)null : acquisition.Status,
                 PosterUrl = acquisition == null ? null : acquisition.PosterUrl
             };
@@ -428,7 +429,8 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
             OwnedQuality: null,
             CutoffQuality: null,
             row.BarrenSearches,
-            row.PosterUrl)).ToArray();
+            row.PosterUrl,
+            row.Author)).ToArray();
 
         return new WantedPage(items, total);
     }
@@ -461,6 +463,7 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
                 MonitorStatus = monitor.Status,
                 monitor.LastSearchedAt,
                 monitor.BarrenSearches,
+                monitor.Author,
                 acquisition.OwnedSourceTier,
                 acquisition.OwnedFormatTier,
                 acquisition.OwnedMediaQuality,
@@ -500,7 +503,8 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
                 verdict.OwnedQuality,
                 verdict.CutoffQuality,
                 row.BarrenSearches,
-                row.PosterUrl));
+                row.PosterUrl,
+                row.Author));
         }
 
         return new WantedPage(items, total);

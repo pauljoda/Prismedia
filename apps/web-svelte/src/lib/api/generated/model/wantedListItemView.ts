@@ -30,4 +30,6 @@ export interface WantedListItemView {
   barrenSearches: number | string;
   /** @nullable */
   posterUrl?: string | null;
+  /** @nullable */
+  author?: string | null;
 }
