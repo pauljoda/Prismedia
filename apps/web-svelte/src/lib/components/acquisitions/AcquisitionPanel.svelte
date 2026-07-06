@@ -29,6 +29,7 @@
   } from "$lib/api/acquisitions";
   import { fetchMonitors, resumeMonitor, startMonitor, stopMonitor } from "$lib/api/monitors";
   import { ACTIVE_ACQUISITION_STATUSES, acquisitionStatusLabel } from "$lib/requests/review-cards";
+  import { formatBytes, formatEta, formatSpeed } from "$lib/utils/format";
 
   /**
    * The one acquisition management surface: status, live transfer, imported files, release review,
@@ -219,21 +220,6 @@
       busy = false;
       input.value = "";
     }
-  }
-
-  function formatBytes(bytes: number): string {
-    if (!bytes || bytes <= 0) return "—";
-    const mb = bytes / 1_000_000;
-    return mb >= 1000 ? `${(mb / 1000).toFixed(2)} GB` : `${mb.toFixed(1)} MB`;
-  }
-  function formatSpeed(bps: number): string {
-    return bps > 0 ? `${formatBytes(bps)}/s` : "—";
-  }
-  function formatEta(seconds: number): string {
-    if (!seconds || seconds <= 0 || seconds >= 8640000) return "—";
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    return h > 0 ? `${h}h ${m}m` : `${m}m`;
   }
 
   // Monitoring is offered for any not-yet-acquired book; an imported book has nothing left to search for.

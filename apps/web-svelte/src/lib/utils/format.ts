@@ -63,6 +63,26 @@ export function formatRelativeTime(value: string | null, short = false): string 
   return short ? `${diffDays}d` : `${diffDays}d ago`;
 }
 
+/** A compact size label ("512.0 MB", "1.20 GB"); em dash when unknown or zero. */
+export function formatBytes(bytes: number): string {
+  if (!bytes || bytes <= 0) return "—";
+  const mb = bytes / 1_000_000;
+  return mb >= 1000 ? `${(mb / 1000).toFixed(2)} GB` : `${mb.toFixed(1)} MB`;
+}
+
+/** A transfer speed label ("2.5 MB/s"); em dash when idle. */
+export function formatSpeed(bps: number): string {
+  return bps > 0 ? `${formatBytes(bps)}/s` : "—";
+}
+
+/** A compact ETA label ("1h 12m"); em dash for unknown or the client's "infinite" sentinel. */
+export function formatEta(seconds: number): string {
+  if (!seconds || seconds <= 0 || seconds >= 8640000) return "—";
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
 /** Map a video height to a short resolution label ("4K", "1080p", etc.). */
 export function formatResolutionLabel(height: number): string | null {
   if (!Number.isFinite(height) || height <= 0) return null;

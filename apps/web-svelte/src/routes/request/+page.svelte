@@ -3,8 +3,8 @@
   import {
     AlertTriangle,
     Compass,
+    HardDriveDownload,
     History,
-    Inbox,
     Loader2,
     PackageSearch,
     Search,
@@ -21,8 +21,8 @@
   import { searchRequests } from "$lib/api/requests";
   import { labelForEntityKind } from "$lib/entities/entity-codes";
   import AcquisitionHistoryList from "$lib/components/acquisitions/AcquisitionHistoryList.svelte";
+  import DownloadsTable from "$lib/components/acquisitions/DownloadsTable.svelte";
   import WantedList from "$lib/components/acquisitions/WantedList.svelte";
-  import RequestsReview from "$lib/components/requests/RequestsReview.svelte";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
   import { usePageSnapshots } from "$lib/stores/page-snapshots.svelte";
   import { useNsfw } from "$lib/nsfw/store.svelte";
@@ -54,7 +54,7 @@
 
   const tabs = [
     { id: "discover", label: "Discover", icon: Compass },
-    { id: "requests", label: "Requests", icon: Inbox },
+    { id: "downloads", label: "Downloads", icon: HardDriveDownload },
     { id: "missing", label: "Missing", icon: PackageSearch },
     { id: "cutoff", label: "Cutoff unmet", icon: AlertTriangle },
     { id: "history", label: "History", icon: History },
@@ -262,8 +262,9 @@
     {/each}
   </div>
 
-  {#if activeTab === "requests"}
-    <RequestsReview />
+  {#if activeTab === "downloads"}
+    <!-- ── Global downloads: every active acquisition in one table, live telemetry included ── -->
+    <DownloadsTable />
   {:else if activeTab === "missing"}
     <WantedList variant="missing" kindOptions={wantedKindOptions} />
   {:else if activeTab === "cutoff"}

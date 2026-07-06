@@ -28,7 +28,8 @@
     requestStudiosToThumbnailCards,
   } from "$lib/requests/review-cards";
   import { formatDurationString } from "$lib/utils/format";
-  import { inferRequestSourceForKind, requestKindInfo } from "$lib/requests/request-helpers";
+  import { entityKindForRequest, inferRequestSourceForKind, requestKindInfo } from "$lib/requests/request-helpers";
+  import { resolveEntityHref } from "$lib/entities/entity-codes";
   import type { RequestDetailResponse } from "$lib/requests/request-model";
 
   const params = $derived(page.params as { kind: RequestMediaKindCode; id: string });
@@ -196,12 +197,14 @@
         return;
       }
 
-      // Single new acquisition → its progress page; multiple → the request queue where all of them show.
-      await goto(
-        requested.length === 1 && requested[0].acquisitionId
-          ? `/request/acquisition/${requested[0].acquisitionId}`
-          : "/request",
-      );
+      // Single new acquisition → the wanted entity's own page, where its acquisition card shows the
+      // live progress; multiple → the request hub's Downloads view where all of them show.
+      const single = requested.length === 1 ? requested[0] : null;
+      const requestedChild = single ? children.find((child) => child.id === single.externalId) : null;
+      const singleHref = single?.entityId
+        ? resolveEntityHref(entityKindForRequest(requestedChild?.kind ?? detail.kind), single.entityId)
+        : null;
+      await goto(singleHref ?? "/request");
     } catch (err) {
       error = err instanceof Error ? err.message : "Request failed";
     } finally {
