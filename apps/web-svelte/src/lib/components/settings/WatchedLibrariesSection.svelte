@@ -15,6 +15,7 @@
     ToggleLeft,
     ToggleRight,
     Trash2,
+    UsersRound,
   } from "@lucide/svelte";
   import { Button, Panel, StatusLed, cn } from "@prismedia/ui-svelte";
   import {
@@ -27,6 +28,8 @@
   } from "$lib/api/settings";
   import { createJob } from "$lib/api/jobs";
   import { useNsfw } from "$lib/nsfw/store.svelte";
+  import { useSession } from "$lib/stores/session.svelte";
+  import LibraryAccessDialog from "./LibraryAccessDialog.svelte";
   import { entityTerms } from "$lib/terminology";
   import ToggleCard from "./ToggleCard.svelte";
 
@@ -38,6 +41,9 @@
   }
 
   let { roots = $bindable(), onRootsChanged, onError, onMessage }: Props = $props();
+
+  const session = useSession();
+  let accessDialogRoot = $state<LibraryRoot | null>(null);
 
   const nsfw = useNsfw();
 
@@ -282,12 +288,14 @@
               checked={newRootScanBooks}
               onChange={(v) => (newRootScanBooks = v)}
             />
-            <ToggleCard
-              label="NSFW"
-              description="Mark content as adult"
-              checked={newRootIsNsfw}
-              onChange={(v) => (newRootIsNsfw = v)}
-            />
+            {#if session.allowNsfw}
+              <ToggleCard
+                label="NSFW"
+                description="Mark content as adult"
+                checked={newRootIsNsfw}
+                onChange={(v) => (newRootIsNsfw = v)}
+              />
+            {/if}
             <ToggleCard
               label="Auto Identify"
               description="Include in automatic identification"
@@ -382,6 +390,16 @@
               </div>
             </div>
             <div class="flex items-center gap-1 shrink-0">
+              {#if session.isAdmin}
+                <button
+                  type="button"
+                  onclick={() => (accessDialogRoot = root)}
+                  class="rounded-xs p-1.5 text-text-muted hover:text-text-primary hover:bg-surface-2 transition-colors"
+                  title="Library access"
+                >
+                  <UsersRound class="h-4 w-4" />
+                </button>
+              {/if}
               <button
                 type="button"
                 onclick={() => void handleToggleRoot(root)}
@@ -483,20 +501,22 @@
 
               <div class="w-px h-4 bg-border-subtle mx-1 hidden sm:block"></div>
 
-              <button
-                type="button"
-                onclick={() => void handleToggleNsfw(root)}
-                title={root.isNsfw ? "NSFW library: on" : "NSFW library: off"}
-                class={cn(
-                  "flex items-center gap-1.5 rounded-xs px-2 py-1 text-[0.68rem] font-medium border transition-all duration-fast",
-                  root.isNsfw
-                    ? "bg-accent-950/30 border-border-accent text-text-accent shadow-[var(--shadow-glow-accent)]"
-                    : "bg-surface-1 border-border-subtle text-text-disabled hover:text-text-muted hover:border-border-default",
-                )}
-              >
-                <Eye class="h-3.5 w-3.5" />
-                NSFW
-              </button>
+              {#if session.allowNsfw}
+                <button
+                  type="button"
+                  onclick={() => void handleToggleNsfw(root)}
+                  title={root.isNsfw ? "NSFW library: on" : "NSFW library: off"}
+                  class={cn(
+                    "flex items-center gap-1.5 rounded-xs px-2 py-1 text-[0.68rem] font-medium border transition-all duration-fast",
+                    root.isNsfw
+                      ? "bg-accent-950/30 border-border-accent text-text-accent shadow-[var(--shadow-glow-accent)]"
+                      : "bg-surface-1 border-border-subtle text-text-disabled hover:text-text-muted hover:border-border-default",
+                  )}
+                >
+                  <Eye class="h-3.5 w-3.5" />
+                  NSFW
+                </button>
+              {/if}
 
               <button
                 type="button"
@@ -527,3 +547,16 @@
   {/if}
   </div>
 </Panel>
+
+{#if accessDialogRoot}
+  <LibraryAccessDialog
+    open={accessDialogRoot !== null}
+    rootId={accessDialogRoot.id}
+    rootLabel={accessDialogRoot.label}
+    onSaved={() => {
+      onMessage("Library access saved.");
+      accessDialogRoot = null;
+    }}
+    onClose={() => (accessDialogRoot = null)}
+  />
+{/if}
