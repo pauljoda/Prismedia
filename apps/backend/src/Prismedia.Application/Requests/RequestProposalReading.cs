@@ -140,9 +140,29 @@ public static class RequestProposalReading {
     public static int? SeasonNumberOf(EntityMetadataPatch patch) =>
         PositionOf(patch, EntityPositionCodes.Season, "seasonNumber");
 
+    /// <summary>The volume number a proposal declares, or null.</summary>
+    public static int? VolumeNumberOf(EntityMetadataPatch patch) =>
+        PositionOf(patch, EntityPositionCodes.Volume, "volumeNumber");
+
     /// <summary>The episode number an episode proposal declares, or null.</summary>
     public static int? EpisodeNumberOf(EntityMetadataPatch patch) =>
         PositionOf(patch, EntityPositionCodes.Episode, "episodeNumber");
+
+    /// <summary>
+    /// Ordering number for a request child option in the vocabulary its parent selector understands:
+    /// season children use seasonNumber (but season 0 / Specials is unnumbered for presets), book
+    /// children use volumeNumber, episodes use episodeNumber, and generic children fall back to sortOrder.
+    /// </summary>
+    public static int? ChildNumberOf(RequestMediaKind childKind, EntityMetadataPatch patch) {
+        var value = childKind switch {
+            RequestMediaKind.Season => SeasonNumberOf(patch),
+            RequestMediaKind.Episode => EpisodeNumberOf(patch),
+            RequestMediaKind.Book => VolumeNumberOf(patch),
+            _ => PositionOf(patch, EntityPositionCodes.Sort, "sortOrder"),
+        };
+
+        return childKind == RequestMediaKind.Season && value <= 0 ? null : value;
+    }
 
     /// <summary>Reads a position by its canonical code or its provider wire spelling. prism-vocab: external (plugin positions vocabulary).</summary>
     private static int? PositionOf(EntityMetadataPatch patch, params string[] keys) {

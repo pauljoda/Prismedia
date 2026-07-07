@@ -1,10 +1,15 @@
 <script lang="ts">
   import { ChevronDown, Layers, Loader2 } from "@lucide/svelte";
   import { Button, Toggle, cn } from "@prismedia/ui-svelte";
-  import { MONITOR_STATUS } from "$lib/api/generated/codes";
+  import { MONITOR_STATUS, REQUEST_MEDIA_KIND } from "$lib/api/generated/codes";
   import { fetchMonitors, stopMonitor } from "$lib/api/monitors";
-  import { commitEntityRequest } from "$lib/api/requests";
+  import { commitEntityRequest, commitRequest } from "$lib/api/requests";
+  import type { RequestChildOption } from "$lib/api/generated/model";
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
+  import {
+    buildSeasonPassRows,
+    type SeasonPassRow,
+  } from "$lib/requests/season-pass-options";
   import { MONITOR_PRESET_OPTIONS, resolvePresetSelection, type MonitorPresetChild } from "$lib/requests/monitor-presets";
   import type { MonitorPresetCode } from "$lib/api/generated/codes";
 
@@ -18,11 +23,23 @@
   let {
     seasonCards,
     seasonEpisodeCounts,
+    providerChildren = [],
+    seriesEntityId = null,
+    seriesExternalId = null,
+    onChanged,
   }: {
-    /** The series' season thumbnail cards (entity id, title, season number in sortOrder). */
+    /** The series' local season thumbnail cards (entity id, title, season number in sortOrder). */
     seasonCards: EntityThumbnailCard[];
-    /** Episode counts per season entity id, when the page has them. */
+    /** Episode counts per local season entity id, when the page has them. */
     seasonEpisodeCounts: Record<string, number>;
+    /** Provider-side season options, including seasons not materialized locally yet. */
+    providerChildren?: RequestChildOption[];
+    /** The series entity id, used to preserve its current monitor preset when requesting provider-only seasons. */
+    seriesEntityId?: string | null;
+    /** Provider-qualified series id used to request provider-only seasons. */
+    seriesExternalId?: string | null;
+    /** Refreshes the parent detail without remounting the whole page. */
+    onChanged?: () => void | Promise<void>;
   } = $props();
 
   let open = $state(false);
@@ -31,21 +48,19 @@
   let error = $state<string | null>(null);
   /** Entity ids of seasons currently actively monitored (indexed from /api/monitors). */
   let monitoredIds = $state<Set<string>>(new Set());
+  let seriesMonitorPreset = $state<MonitorPresetCode | null>(null);
 
   // Seasons ordered by their number, reduced to the fields the rows and preset shortcuts need.
   const seasons = $derived(
-    seasonCards
-      .map((card) => ({
-        id: card.entity.id,
-        title: card.entity.title,
-        number: typeof card.entity.sortOrder === "number" ? card.entity.sortOrder : null,
-        episodes: seasonEpisodeCounts[card.entity.id] ?? null,
-      }))
-      .sort((a, b) => (a.number ?? Number.MAX_SAFE_INTEGER) - (b.number ?? Number.MAX_SAFE_INTEGER)),
+    buildSeasonPassRows({
+      localSeasons: seasonCards,
+      episodeCounts: seasonEpisodeCounts,
+      providerChildren,
+    }),
   );
   const presetChildren = $derived<MonitorPresetChild[]>(
-    // Every season is "requestable" for preset purposes here — a season already monitored is simply left on.
-    seasons.map((season) => ({ id: season.id, number: season.number, requestable: true })),
+    // Every row is requestable for preset purposes here — an already monitored season is simply left on.
+    seasons.map((season) => ({ id: season.key, number: season.number, requestable: true })),
   );
   // The bulk preset shortcuts offered as buttons — the actionable subset (All/Future/First/Latest/None).
   const presetShortcuts = $derived(
@@ -59,11 +74,15 @@
     error = null;
     try {
       const monitors = await fetchMonitors();
+      const active = monitors.filter((monitor) => monitor.status === MONITOR_STATUS.active);
       monitoredIds = new Set(
-        monitors
-          .filter((monitor) => monitor.status === MONITOR_STATUS.active && monitor.entityId)
+        active
+          .filter((monitor) => monitor.entityId)
           .map((monitor) => monitor.entityId as string),
       );
+      seriesMonitorPreset = seriesEntityId
+        ? (active.find((monitor) => monitor.entityId === seriesEntityId)?.preset as MonitorPresetCode | undefined) ?? null
+        : null;
     } catch (err) {
       error = err instanceof Error ? err.message : "Failed to load monitoring state";
     } finally {
@@ -73,31 +92,53 @@
 
   function expand() {
     open = !open;
-    if (open && monitoredIds.size === 0 && !loading) void loadMonitors();
+    if (open && !loading) void loadMonitors();
+  }
+
+  function rowMonitored(season: SeasonPassRow): boolean {
+    return !!season.entityId && monitoredIds.has(season.entityId);
   }
 
   /** Monitor a season by requesting it (creates its acquisition + per-item monitor), or stop its monitor. */
-  async function setSeasonMonitored(seasonId: string, monitored: boolean) {
+  async function setSeasonMonitored(season: SeasonPassRow, monitored: boolean) {
     if (monitored) {
-      await commitEntityRequest(seasonId);
-    } else {
-      // Stop every active monitor whose acquisition targets this season (usually one).
-      const monitors = await fetchMonitors();
-      const targets = monitors.filter(
-        (monitor) => monitor.entityId === seasonId && monitor.status === MONITOR_STATUS.active,
-      );
-      for (const monitor of targets) {
-        await stopMonitor(monitor.id);
+      if (season.entityId) {
+        await commitEntityRequest(season.entityId);
+        return;
       }
+
+      if (!seriesExternalId || !season.externalId) {
+        throw new Error("This provider season cannot be requested from the current series.");
+      }
+
+      await commitRequest({
+        kind: REQUEST_MEDIA_KIND.series,
+        externalId: seriesExternalId,
+        selectedChildIds: [season.externalId],
+        preset: seriesMonitorPreset,
+      });
+      return;
+    }
+
+    if (!season.entityId) return;
+
+    // Stop every active monitor whose acquisition targets this season (usually one).
+    const monitors = await fetchMonitors();
+    const targets = monitors.filter(
+      (monitor) => monitor.entityId === season.entityId && monitor.status === MONITOR_STATUS.active,
+    );
+    for (const monitor of targets) {
+      await stopMonitor(monitor.id);
     }
   }
 
-  async function toggleSeason(seasonId: string, monitored: boolean) {
+  async function toggleSeason(season: SeasonPassRow, monitored: boolean) {
     if (acting) return;
     acting = true;
     error = null;
     try {
-      await setSeasonMonitored(seasonId, monitored);
+      await setSeasonMonitored(season, monitored);
+      await onChanged?.();
       await loadMonitors();
     } catch (err) {
       error = err instanceof Error ? err.message : "Failed to update monitoring";
@@ -115,12 +156,13 @@
       const wanted = new Set(resolvePresetSelection(preset, presetChildren));
       // Sequentially — like WantedList's bulk actions — so a large series never floods the search queue.
       for (const season of seasons) {
-        const shouldMonitor = wanted.has(season.id);
-        const isMonitored = monitoredIds.has(season.id);
+        const shouldMonitor = wanted.has(season.key);
+        const isMonitored = rowMonitored(season);
         if (shouldMonitor !== isMonitored) {
-          await setSeasonMonitored(season.id, shouldMonitor);
+          await setSeasonMonitored(season, shouldMonitor);
         }
       }
+      await onChanged?.();
       await loadMonitors();
     } catch (err) {
       error = err instanceof Error ? err.message : "Failed to apply preset";
@@ -167,18 +209,18 @@
           <p class="loading"><Loader2 class="h-4 w-4 animate-spin" /> Loading monitoring state…</p>
         {:else}
           <ul class="rows">
-            {#each seasons as season (season.id)}
-              {@const monitored = monitoredIds.has(season.id)}
+            {#each seasons as season (season.key)}
+              {@const monitored = rowMonitored(season)}
               <li class="row">
-                <span class="row-number">{season.number !== null ? `Season ${season.number}` : season.title}</span>
+                <span class="row-number">Season {season.number}</span>
                 {#if season.episodes !== null}
                   <span class="row-episodes">{season.episodes} {season.episodes === 1 ? "episode" : "episodes"}</span>
                 {/if}
                 <Toggle
                   checked={monitored}
                   disabled={acting}
-                  ariaLabel={`Monitor ${season.number !== null ? `season ${season.number}` : season.title}`}
-                  onchange={(value) => void toggleSeason(season.id, value)}
+                  ariaLabel={`Monitor season ${season.number}`}
+                  onchange={(value) => void toggleSeason(season, value)}
                 />
               </li>
             {/each}

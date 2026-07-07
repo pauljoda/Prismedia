@@ -5,12 +5,13 @@
   import { Users, Building2, Calendar, Info, SlidersHorizontal } from "@lucide/svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import { fetchSeason, fetchSeries, type VideoSeasonDetail, type VideoSeriesDetail } from "$lib/api/media";
+  import { fetchRequestDetail } from "$lib/api/requests";
   import {
     updateEntityRating,
     updateEntityFlags,
     updateEntityMetadata,
   } from "$lib/api/entity-mutations";
-  import { getCapability } from "$lib/api/capabilities";
+  import { firstProviderQualifiedId } from "$lib/api/capabilities";
   import {
     toggleOptimisticEntityFlag,
     updateOptimisticEntityRating,
@@ -27,6 +28,8 @@
     thumbnailsToCards,
   } from "$lib/entities/entity-relationship-thumbnails";
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
+  import { REQUEST_MEDIA_KIND, REQUEST_PROVIDER_KIND } from "$lib/api/generated/codes";
+  import type { RequestChildOption } from "$lib/api/generated/model";
   import { CREDIT_ROLE, ENTITY_KIND } from "$lib/entities/entity-codes";
   import EntityDetail, {
     type EntityDetailActionButton,
@@ -52,6 +55,7 @@
   let lastNsfwMode = $state(nsfw.mode);
   let ratingBusy = $state(false);
   let seasonCards = $state<EntityThumbnailCard[]>([]);
+  let providerSeasonOptions = $state<RequestChildOption[]>([]);
   let childSeriesCards = $state<EntityThumbnailCard[]>([]);
   let videoCards = $state<EntityThumbnailCard[]>([]);
   let relationshipCredits = $state<EntityDetailCredit[]>([]);
@@ -74,6 +78,7 @@
     identifyAction.action ? [identifyAction.action] : []);
 
   const dates = $derived(card?.dates ?? []);
+  const seriesExternalId = $derived(series ? firstProviderQualifiedId(series.capabilities) : null);
 
   const airedDate = $derived(
     dates.find((item) => item.code.toLowerCase().replaceAll("-", "") === "firstair") ?? dates[0] ?? null,
@@ -132,13 +137,19 @@
     ]);
   });
 
-  async function loadSeries() {
-    loadState = "loading";
+  async function loadSeries(options: { showLoading?: boolean } = {}) {
+    const showLoading = options.showLoading ?? true;
+    if (showLoading || !series) loadState = "loading";
     errorMessage = null;
     try {
       const nextSeries = await fetchSeries(page.params.id ?? "");
       await hydrateSeriesThumbnails(nextSeries);
-      seasonEpisodeCounts = await loadSeasonEpisodeCounts(nextSeries);
+      const [nextSeasonEpisodeCounts, nextProviderSeasonOptions] = await Promise.all([
+        loadSeasonEpisodeCounts(nextSeries),
+        loadProviderSeasonOptions(nextSeries),
+      ]);
+      seasonEpisodeCounts = nextSeasonEpisodeCounts;
+      providerSeasonOptions = nextProviderSeasonOptions;
       series = nextSeries;
       loadState = "ready";
     } catch (err) {
@@ -146,6 +157,10 @@
       errorMessage = err instanceof Error ? err.message : String(err);
       loadState = "error";
     }
+  }
+
+  async function refreshSeries() {
+    await loadSeries({ showLoading: false });
   }
 
   async function handleRatingChange(value: number | null) {
@@ -186,6 +201,23 @@
       detail.id,
       getChildIds(detail, ENTITY_KIND.video).length,
     ]));
+  }
+
+  async function loadProviderSeasonOptions(nextSeries: VideoSeriesDetail): Promise<RequestChildOption[]> {
+    const externalId = firstProviderQualifiedId(nextSeries.capabilities);
+    if (!externalId) return [];
+
+    try {
+      const detail = await fetchRequestDetail({
+        source: REQUEST_PROVIDER_KIND.plugin,
+        kind: REQUEST_MEDIA_KIND.series,
+        externalId,
+      });
+      return detail.children ?? [];
+    } catch {
+      // Provider lookup is enrichment for the Season Pass; local seasons still render when it is down.
+      return [];
+    }
   }
 
   async function hydrateSeriesThumbnails(nextSeries: VideoSeriesDetail) {
@@ -271,26 +303,35 @@
       entityId={series?.id}
       capabilities={series?.capabilities}
       childCards={seasonCards}
-      onChanged={() => void loadSeries()}
+      onChanged={refreshSeries}
     />
 
-    {#if hasSeasons}
-      <SeasonPassEditor {seasonCards} {seasonEpisodeCounts} />
+    {#if hasSeasons || providerSeasonOptions.length > 0}
+      <SeasonPassEditor
+        {seasonCards}
+        {seasonEpisodeCounts}
+        providerChildren={providerSeasonOptions}
+        seriesEntityId={series.id}
+        {seriesExternalId}
+        onChanged={refreshSeries}
+      />
 
-      <EntityGridSection
-        title="Seasons"
-        count={seasonCards.length}
-        icon={Calendar}
-        prefsKey={`series-${series?.id}-seasons-section`}
-      >
-        <EntityGrid
-          cards={seasonCards}
-          prefsKey={`series-${series?.id}-seasons`}
-          initialSortBy="position"
-          emptyTitle="No seasons"
-          emptyMessage="This series has no seasons."
-        />
-      </EntityGridSection>
+      {#if hasSeasons}
+        <EntityGridSection
+          title="Seasons"
+          count={seasonCards.length}
+          icon={Calendar}
+          prefsKey={`series-${series?.id}-seasons-section`}
+        >
+          <EntityGrid
+            cards={seasonCards}
+            prefsKey={`series-${series?.id}-seasons`}
+            initialSortBy="position"
+            emptyTitle="No seasons"
+            emptyMessage="This series has no seasons."
+          />
+        </EntityGridSection>
+      {/if}
     {/if}
 
     {#if hasChildSeries}
@@ -325,7 +366,7 @@
       </EntityGridSection>
     {/if}
 
-    {#if !hasSeasons && !hasChildSeries && !hasVideos}
+    {#if !hasSeasons && providerSeasonOptions.length === 0 && !hasChildSeries && !hasVideos}
       <div class="empty-children">
         <p>No seasons, episodes, or sub-series linked to this series yet.</p>
       </div>

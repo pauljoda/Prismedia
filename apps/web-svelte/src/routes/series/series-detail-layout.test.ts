@@ -76,6 +76,16 @@ describe("series detail layout", () => {
     expect(source).not.toContain("item\" : \"items\"");
   });
 
+  it("refreshes acquisition and season-pass changes without dropping the page back to the skeleton", () => {
+    const source = readLocalSource("./[id]/+page.svelte");
+
+    expect(source).toContain("async function refreshSeries()");
+    expect(source).toContain("loadSeries({ showLoading: false })");
+    expect(source).toContain("onChanged={refreshSeries}");
+    expect(source).not.toContain("onChanged={() => void loadSeries()}");
+    expect(source).not.toContain("onChanged={() => void refreshSeries()}");
+  });
+
   it("moves season links out of the main details tab and keeps inherited sections read-only", () => {
     const source = readLocalSource("./[id]/seasons/[seasonId]/+page.svelte");
 

@@ -130,6 +130,76 @@ public sealed class RequestCommitServiceTests {
     }
 
     [Fact]
+    public async Task ExistingSeasonPickStillStartsAnAcquisitionAndMaterializesMissingEpisodes() {
+        var episode1 = Leaf(ProposalKind.Video, "Pilot", "E1") with {
+            Patch = Patch("Pilot", "E1", new Dictionary<string, int> { ["seasonNumber"] = 1, ["episodeNumber"] = 1 }),
+        };
+        var episode2 = Leaf(ProposalKind.Video, "Aftermath", "E2") with {
+            Patch = Patch("Aftermath", "E2", new Dictionary<string, int> { ["seasonNumber"] = 1, ["episodeNumber"] = 2 }),
+        };
+        var season = Container(ProposalKind.VideoSeason, "Season 1", "S1", episode1, episode2) with {
+            Patch = Patch("Season 1", "S1", new Dictionary<string, int> { ["seasonNumber"] = 1 }),
+        };
+        var (service, writer, acquisitions, monitors) = ServiceWithMonitors(
+            Container(ProposalKind.VideoSeries, "Andor", "TV1", season));
+        writer.ExistingWithFile.Add("S1"); // existing series/season folder with missing children
+        writer.ExistingWithFile.Add("E1"); // episode already present; E2 is missing
+
+        var response = await service.CommitAsync(
+            new RequestCommitRequest(RequestMediaKind.Series, $"{Provider}:TV1", [$"{Provider}:S1"], Preset: MonitorPreset.All),
+            hideNsfw: false, CancellationToken.None);
+
+        Assert.NotNull(response);
+        var created = Assert.Single(acquisitions.Created);
+        Assert.Equal(EntityKind.VideoSeason, created.Kind);
+        Assert.Equal(FakeWantedEntityWriter.EntityIdFor("S1"), created.EntityId);
+        Assert.Equal("Andor", created.Series);
+        Assert.Equal(1, created.SeasonNumber);
+        Assert.Single(monitors.AcquisitionMonitors);
+
+        Assert.Contains(writer.Ensured, call => call.Kind == EntityKind.Video && call.ItemId == "E2");
+        Assert.Contains(writer.Applied, call =>
+            call.EntityId == FakeWantedEntityWriter.EntityIdFor("S1") &&
+            call.Proposal.Children.Any(child => child.Patch?.ExternalIds.GetValueOrDefault(Provider) == "E2") &&
+            !call.Proposal.Children.Any(child => child.Patch?.ExternalIds.GetValueOrDefault(Provider) == "E1"));
+    }
+
+    [Fact]
+    public async Task RequestingExistingOwnedSeasonStartsSeasonMonitorAndMaterializesMissingEpisodes() {
+        var episode1 = Leaf(ProposalKind.Video, "Pilot", "E1") with {
+            Patch = Patch("Pilot", "E1", new Dictionary<string, int> { ["seasonNumber"] = 1, ["episodeNumber"] = 1 }),
+        };
+        var episode2 = Leaf(ProposalKind.Video, "Aftermath", "E2") with {
+            Patch = Patch("Aftermath", "E2", new Dictionary<string, int> { ["seasonNumber"] = 1, ["episodeNumber"] = 2 }),
+        };
+        var season = Container(ProposalKind.VideoSeason, "Season 1", "S1", episode1, episode2) with {
+            Patch = Patch("Season 1", "S1", new Dictionary<string, int> { ["seasonNumber"] = 1 }),
+        };
+        var (service, writer, acquisitions, monitors) = ServiceWithMonitors(
+            Container(ProposalKind.VideoSeries, "Andor", "TV1", season));
+        var seriesId = FakeWantedEntityWriter.EntityIdFor("TV1");
+        var seasonId = FakeWantedEntityWriter.EntityIdFor("S1");
+        writer.Containers[seriesId] = new MonitorableContainer(seriesId, EntityKind.VideoSeries, "Andor", [new ProviderRef(Provider, "TV1")]);
+        writer.Containers[seasonId] = new MonitorableContainer(
+            seasonId, EntityKind.VideoSeason, "Season 1", [new ProviderRef(Provider, "S1")],
+            HasSourceFile: true, ParentEntityId: seriesId,
+            Positions: new Dictionary<string, int> { [EntityPositionCodes.Season] = 1 });
+        writer.ExistingWithFile.Add("E1");
+
+        var response = await service.RequestEntityAsync(seasonId, hideNsfw: false, CancellationToken.None);
+
+        Assert.NotNull(response);
+        Assert.Equal(RequestCommitOutcome.Requested, Assert.Single(response!.Items).Outcome);
+        var created = Assert.Single(acquisitions.Created);
+        Assert.Equal(EntityKind.VideoSeason, created.Kind);
+        Assert.Equal(seasonId, created.EntityId);
+        Assert.Equal("Andor", created.Series);
+        Assert.Equal(1, created.SeasonNumber);
+        Assert.Single(monitors.AcquisitionMonitors);
+        Assert.Contains(writer.Ensured, call => call.Kind == EntityKind.Video && call.ItemId == "E2" && call.ParentEntityId == seasonId);
+    }
+
+    [Fact]
     public async Task OwnedPickIsReportedAlreadyOwnedAndNeitherAppliedNorAcquired() {
         var proposal = Container(ProposalKind.Person, "Author", "A1",
             Leaf(ProposalKind.Book, "Owned", "W1"), Leaf(ProposalKind.Book, "New", "W2"));
@@ -594,11 +664,19 @@ public sealed class RequestCommitServiceTests {
         public Task<bool> DeleteIfWantedAsync(Guid entityId, CancellationToken cancellationToken) =>
             Task.FromResult(false);
 
-        /// <summary>Container ref returned by GetContainerAsync, for sync tests.</summary>
+        /// <summary>Container refs returned by GetContainerAsync, for sync/entity-request tests.</summary>
+        public Dictionary<Guid, MonitorableContainer> Containers { get; } = [];
+
+        /// <summary>Legacy single container slot kept for simple sync tests.</summary>
         public MonitorableContainer? Container { get; set; }
 
-        public Task<MonitorableContainer?> GetContainerAsync(Guid entityId, CancellationToken cancellationToken) =>
-            Task.FromResult(Container?.EntityId == entityId ? Container : null);
+        public Task<MonitorableContainer?> GetContainerAsync(Guid entityId, CancellationToken cancellationToken) {
+            if (Containers.TryGetValue(entityId, out var container)) {
+                return Task.FromResult<MonitorableContainer?>(container);
+            }
+
+            return Task.FromResult(Container?.EntityId == entityId ? Container : null);
+        }
     }
 
     private sealed class FakeMonitorStore : Prismedia.Application.Acquisition.IMonitorStore {
