@@ -931,6 +931,7 @@ public sealed class SecurityEndpointTests : IDisposable {
                         new EntityImageAsset("logo", "/assets/logo.png", "image/png")
                     ],
                     "/assets/poster-thumb.jpg",
+                    null,
                     "/assets/poster.jpg"),
                 new FilesCapability([new Contracts.Entities.EntityFile("source", "/media/rich-movie.mkv", "video/x-matroska")]),
                 new MarkersCapability([new EntityMarker(Guid.Parse("99999999-9999-9999-9999-999999999999"), "Opening", 12, null)]),

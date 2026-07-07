@@ -9,6 +9,9 @@ namespace Prismedia.Api.Tests;
 /// <summary>Test stub: grid-thumbnail generation is not exercised by these handler tests.</summary>
 internal sealed class NoopGridThumbnailService : IGridThumbnailService {
     public Task EnsureAsync(Guid entityId, CancellationToken cancellationToken) => Task.CompletedTask;
+
+    public Task<IReadOnlyList<Guid>> ListEntitiesNeedingRefreshAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<Guid>>([]);
 }
 
 public sealed class GeneratePreviewJobHandlerTests : IDisposable {

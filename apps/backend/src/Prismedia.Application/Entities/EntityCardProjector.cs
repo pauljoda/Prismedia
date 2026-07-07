@@ -219,7 +219,18 @@ public static class EntityCardProjector {
             return null;
         }
 
-        return new ImagesCapability(supportedKinds, assets, assets.FirstOrDefault()?.Path, assets.FirstOrDefault()?.Path);
+        // Cards and rows get the small grid variants when they exist; the full-resolution
+        // asset stays on CoverUrl for detail surfaces and the lightbox.
+        var gridThumb = entity.EntityFiles
+            .FirstOrDefault(file => file.Role == EntityFileRole.GridThumbnail)?.Path;
+        var gridThumb2x = entity.EntityFiles
+            .FirstOrDefault(file => file.Role == EntityFileRole.GridThumbnail2x)?.Path;
+        return new ImagesCapability(
+            supportedKinds,
+            assets,
+            gridThumb ?? assets.FirstOrDefault()?.Path,
+            gridThumb2x,
+            assets.FirstOrDefault()?.Path);
     }
 
     private static IReadOnlyList<EntityGroup> ToGroups(
@@ -268,6 +279,8 @@ public static class EntityCardProjector {
             entity.IsFavorite ?? false,
             entity.IsNsfw ?? false,
             entity.IsOrganized ?? false) {
+            CoverThumb2xUrl = entity.EntityFiles
+                .FirstOrDefault(file => file.Role == EntityFileRole.GridThumbnail2x)?.Path,
             IsWanted = entity.IsWanted ?? false,
             Progress = ResolveThumbnailProgress(entity)
         };

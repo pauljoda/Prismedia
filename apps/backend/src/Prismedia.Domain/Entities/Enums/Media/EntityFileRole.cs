@@ -20,6 +20,13 @@ public enum EntityFileRole {
     [Code("grid-thumbnail")]
     GridThumbnail,
 
+    /// <summary>
+    /// Double-density companion of <see cref="GridThumbnail"/> for high-DPI grid
+    /// cards. Generated from the same resolved cover so the srcset pair never drifts.
+    /// </summary>
+    [Code("grid-thumbnail-2x")]
+    GridThumbnail2x,
+
     /// <summary>Primary poster or cover artwork.</summary>
     [Code("poster")]
     Poster,

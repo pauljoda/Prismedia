@@ -11,6 +11,9 @@ namespace Prismedia.Infrastructure.Tests;
 /// <summary>Test stub: grid-thumbnail regeneration is a side effect not asserted here.</summary>
 internal sealed class NoopGridThumbnailService : IGridThumbnailService {
     public Task EnsureAsync(Guid entityId, CancellationToken cancellationToken) => Task.CompletedTask;
+
+    public Task<IReadOnlyList<Guid>> ListEntitiesNeedingRefreshAsync(CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<Guid>>([]);
 }
 
 public sealed class EntityImageAssetMutationServiceTests : IDisposable {

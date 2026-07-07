@@ -941,6 +941,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
                 ],
                 [],
                 coverUrl,
+                null,
                 coverUrl))
             .ToArray();
     }

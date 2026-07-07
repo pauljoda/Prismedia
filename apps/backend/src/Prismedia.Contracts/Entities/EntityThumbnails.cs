@@ -41,6 +41,12 @@ public sealed record EntityThumbnail(
     bool IsNsfw,
     bool IsOrganized) {
     /// <summary>
+    /// Double-density companion of <see cref="CoverThumbUrl"/> for high-DPI displays.
+    /// Null when the 2x grid variant has not been generated yet.
+    /// </summary>
+    public string? CoverThumb2xUrl { get; init; }
+
+    /// <summary>
     /// Structural parent entity kind code when the thumbnail has a parent. Used by
     /// clients to route child media through richer parent detail surfaces.
     /// </summary>

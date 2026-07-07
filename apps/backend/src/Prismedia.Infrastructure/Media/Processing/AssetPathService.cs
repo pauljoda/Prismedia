@@ -28,6 +28,10 @@ public sealed class AssetPathService {
     public string GridThumbnailPath(Guid entityId) =>
         Path.Combine(_cacheRoot, "grid-thumbs", entityId.ToString() + ".jpg");
 
+    /// <summary>Disk path for the double-density grid cover variant.</summary>
+    public string GridThumbnail2xPath(Guid entityId) =>
+        Path.Combine(_cacheRoot, "grid-thumbs", entityId.ToString() + "@2x.jpg");
+
     /// <summary>Maps a stored <c>/assets/...</c> cover URL back to its cache-relative disk path.</summary>
     public string? ResolveAssetDiskPath(string assetUrl) {
         const string prefix = "/assets/";
@@ -77,6 +81,9 @@ public sealed class AssetPathService {
 
     public static string GridThumbnailUrl(Guid entityId) =>
         $"/assets/grid-thumbs/{entityId}.jpg";
+
+    public static string GridThumbnail2xUrl(Guid entityId) =>
+        $"/assets/grid-thumbs/{entityId}@2x.jpg";
 
     public static string VideoPreviewUrl(Guid entityId) =>
         $"/assets/videos/{entityId}/preview.mp4";

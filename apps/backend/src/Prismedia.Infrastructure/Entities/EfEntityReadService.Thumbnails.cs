@@ -84,9 +84,17 @@ public sealed partial class EfEntityReadService {
                 .Where(detail => ids.Contains(detail.EntityId))
                 .ToDictionaryAsync(detail => detail.EntityId, detail => detail.BookType, cancellationToken)
             : new Dictionary<Guid, BookType>();
-        var gridThumbByEntity = await _db.EntityFiles.AsNoTracking()
-            .Where(file => ids.Contains(file.EntityId) && file.Role == EntityFileRole.GridThumbnail)
-            .ToDictionaryAsync(file => file.EntityId, file => file.Path, cancellationToken);
+        var gridThumbRows = await _db.EntityFiles.AsNoTracking()
+            .Where(file => ids.Contains(file.EntityId) &&
+                (file.Role == EntityFileRole.GridThumbnail || file.Role == EntityFileRole.GridThumbnail2x))
+            .Select(file => new { file.EntityId, file.Role, file.Path })
+            .ToArrayAsync(cancellationToken);
+        var gridThumbByEntity = gridThumbRows
+            .Where(file => file.Role == EntityFileRole.GridThumbnail)
+            .ToDictionary(file => file.EntityId, file => file.Path);
+        var gridThumb2xByEntity = gridThumbRows
+            .Where(file => file.Role == EntityFileRole.GridThumbnail2x)
+            .ToDictionary(file => file.EntityId, file => file.Path);
         var currentUserId = CurrentUserId;
         var stateByEntity = currentUserId == Guid.Empty
             ? new Dictionary<Guid, UserEntityStateRow>()
@@ -183,6 +191,7 @@ public sealed partial class EfEntityReadService {
                 ownState?.IsFavorite ?? false,
                 row.IsNsfw,
                 row.IsOrganized) {
+                CoverThumb2xUrl = gridThumb2xByEntity.GetValueOrDefault(row.Id),
                 ParentKind = row.ParentEntityId is { } parentId
                     && parentKindByEntity.TryGetValue(parentId, out var parentKindCode)
                     && parentKindCode.TryDecodeAs<EntityKind>(out var parentKind)
