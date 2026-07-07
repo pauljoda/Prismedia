@@ -311,6 +311,10 @@ public sealed class MovieAcquisitionImportEngine(
 /// the wanted series, season, and episodes by folder path and position. One engine class serves both
 /// TV acquisition units — season packs (<see cref="EntityKind.VideoSeason"/>) and single episodes
 /// (<see cref="EntityKind.Video"/>) — since placement rules are identical at either granularity.
+/// An acquisition linked to a series that already lives on disk MERGES into the existing folder tree
+/// instead: new episodes land in the real season folders, already-owned episodes follow the upgrade
+/// rules (replace strictly-better in place, drop the rest), and a payload with nothing better than the
+/// owned files fails with the release blocklisted.
 /// </summary>
 public sealed class TvAcquisitionImportEngine(
     EntityKind kind,
@@ -319,17 +323,16 @@ public sealed class TvAcquisitionImportEngine(
     ILibraryScanRootPersistence roots,
     IDownloadPayloadReader payloads,
     IImportFileMover mover,
-    ImportedTorrentRemover torrents) : IAcquisitionImportEngine {
+    ImportedTorrentRemover torrents,
+    IImportTargetIndex targets,
+    IOwnedFileReplacer replacer,
+    IAcquisitionBlocklistStore blocklist,
+    IAcquisitionHistoryStore history,
+    ILogger<TvAcquisitionImportEngine> logger) : IAcquisitionImportEngine {
     public EntityKind Kind => kind;
 
     public async Task ImportAsync(JobContext context, AcquisitionImportContext import, CancellationToken cancellationToken) {
         var profile = await profiles.GetImportProfileAsync(import.ProfileId, import.Kind, cancellationToken);
-        var root = await ImportRootResolution.ResolveAsync(
-            roots, import.TargetLibraryRootId, profile?.TargetLibraryRootId, static candidate => candidate.ScanVideos, cancellationToken);
-        if (root is null) {
-            await Fail(import.Id, "No enabled video library root exists to import the episodes into.", cancellationToken);
-            return;
-        }
 
         if (string.IsNullOrWhiteSpace(import.ContentPath) || payloads.Read(import.ContentPath) is not { } payload) {
             await Fail(import.Id, "The completed download reported no content path.", cancellationToken);
@@ -344,17 +347,29 @@ public sealed class TvAcquisitionImportEngine(
         var selected = await acquisitions.GetSelectedReleaseAsync(import.Id, cancellationToken);
         var ownedMediaQuality = selected is null ? null : MediaQualityLadder.Detect(import.Kind, selected.Title).Code;
 
-        var series = string.IsNullOrWhiteSpace(import.Series) ? import.Title : import.Series;
+        // An acquisition linked to a series already on disk merges into its existing tree — placing a
+        // template-derived parallel folder would mint a duplicate series (the scan's binds refuse
+        // entities that already own files). Everything else keeps the template placement.
+        if (import.EntityId is { } linkedEntityId
+            && await targets.GetTvLayoutAsync(linkedEntityId, cancellationToken) is { } layout
+            && Directory.Exists(layout.SeriesFolderPath)) {
+            await ImportIntoExistingSeriesAsync(context, import, payload, layout, profile, selected, ownedMediaQuality, cancellationToken);
+            return;
+        }
+
+        var root = await ImportRootResolution.ResolveAsync(
+            roots, import.TargetLibraryRootId, profile?.TargetLibraryRootId, static candidate => candidate.ScanVideos, cancellationToken);
+        if (root is null) {
+            await Fail(import.Id, "No enabled video library root exists to import the episodes into.", cancellationToken);
+            return;
+        }
+
+        var series = SeriesOf(import);
         var plan = ImportTargetResolver.Resolve(
             payload.ContentRoot, root.Path,
             TvImportPlanBuilder.Plan(payload.Files, series, import.SeasonNumber, import.EpisodeNumber, profile?.PathTemplate, ownedMediaQuality));
         if (plan.Blocked) {
-            await acquisitions.SetStatusAsync(
-                import.Id, AcquisitionStatus.ManualImportRequired,
-                plan.BlockReason == ImportBlockReason.NoSupportedPayload
-                    ? "The download contains no supported video files."
-                    : "The download's files carry no recognizable episode numbering; import manually.",
-                cancellationToken);
+            await acquisitions.SetStatusAsync(import.Id, AcquisitionStatus.ManualImportRequired, BlockMessage(plan.BlockReason), cancellationToken);
             return;
         }
 
@@ -375,19 +390,215 @@ public sealed class TvAcquisitionImportEngine(
         var hintFolder = seasonFolders.Length == 1
             ? seasonFolders[0]
             : Path.GetFullPath(Path.Combine(root.Path, TvImportPlanBuilder.SeriesFolderRelative(series, profile?.PathTemplate)));
+
+        await FinalizeImportAsync(context, import, selected, ownedMediaQuality, hintFolder, hintFolder, importMode, "Imported into the library.", cancellationToken);
+    }
+
+    /// <summary>
+    /// The merged path for an existing series: plan units against the real on-disk layout, place new
+    /// episodes into the existing folders, replace strictly-better collisions in place, and drop the
+    /// rest. A payload that produced nothing is failed (blocklisting the release) or held for manual
+    /// import when the only upgrades change the file format.
+    /// </summary>
+    private async Task ImportIntoExistingSeriesAsync(
+        JobContext context,
+        AcquisitionImportContext import,
+        DownloadPayload payload,
+        TvSeriesDiskLayout layout,
+        BookImportProfile? profile,
+        SelectedRelease? selected,
+        string? qualityCode,
+        CancellationToken cancellationToken) {
+        var series = SeriesOf(import);
+        var unitsPlan = TvImportPlanBuilder.PlanUnits(
+            payload.Files, series, import.SeasonNumber, import.EpisodeNumber, profile?.PathTemplate, qualityCode);
+        if (unitsPlan.Blocked) {
+            await acquisitions.SetStatusAsync(import.Id, AcquisitionStatus.ManualImportRequired, BlockMessage(unitsPlan.BlockReason), cancellationToken);
+            return;
+        }
+
+        // Incoming quality from the release title; a title that ranks Unknown falls back to the
+        // payload's own file tokens so a well-named pack under a bare title still gates honestly.
+        var incomingPosition = selected is null ? 0 : MediaQualityLadder.Detect(import.Kind, selected.Title).Position;
+        if (incomingPosition <= 0) {
+            incomingPosition = unitsPlan.Units
+                .Select(unit => (int)VideoQualityDetection.Detect(Path.GetFileNameWithoutExtension(unit.SourceRelativePath)))
+                .DefaultIfEmpty(0)
+                .Max();
+        }
+
+        var incomingRevision = selected is null ? 1 : ReleaseRevisionDetection.Detect(selected.Title);
+        var rules = await profiles.GetRulesAsync(import.ProfileId, import.Kind, cancellationToken);
+        var merged = TvExistingTargetMerge.Plan(
+            unitsPlan.Units, layout,
+            season => TvImportPlanBuilder.SeasonFolderSegment(series, season, profile?.PathTemplate),
+            incomingPosition, incomingRevision, rules.ProperPolicy);
+
+        // Safety net: a merged import never writes outside the existing series folder.
+        var seriesRoot = Path.GetFullPath(layout.SeriesFolderPath);
+        if (merged.Any(item => !IsUnderFolder(Path.GetFullPath(item.TargetAbsolutePath), seriesRoot))) {
+            await Fail(import.Id, "The merged import computed a target outside the series folder.", cancellationToken);
+            return;
+        }
+
+        await context.ReportProgressAsync(40, "Merging into the existing series", cancellationToken);
+        var importMode = profile?.ImportMode ?? ImportMode.Move;
+        var placed = new List<string>(merged.Count);
+        var dropped = 0;
+        var formatChanges = 0;
+        foreach (var item in merged) {
+            var sourceAbsolute = Path.GetFullPath(Path.Combine(payload.ContentRoot, item.SourceRelativePath));
+            switch (item.Action) {
+                case MergeFileAction.PlaceNew:
+                    placed.Add(await mover.PlaceAsync(
+                        new ResolvedImportItem(sourceAbsolute, Path.GetFullPath(item.TargetAbsolutePath)), importMode, cancellationToken));
+                    break;
+                case MergeFileAction.ReplaceUpgrade:
+                    if (await ReplaceOwnedAsync(item.OwnedFilePath!, sourceAbsolute, importMode, cancellationToken) is { } swapped) {
+                        placed.Add(swapped);
+                    } else {
+                        dropped++;
+                    }
+
+                    break;
+                case MergeFileAction.DropFormatChange:
+                    formatChanges++;
+                    break;
+                default:
+                    dropped++;
+                    break;
+            }
+        }
+
+        if (placed.Count == 0) {
+            await HandleNothingUsableAsync(import, selected, formatChanges > 0, cancellationToken);
+            return;
+        }
+
+        var placedFolders = placed
+            .Select(path => Path.GetDirectoryName(path) ?? layout.SeriesFolderPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var hintFolder = placedFolders.Length == 1 ? placedFolders[0] : layout.SeriesFolderPath;
+        // A single placed file records the FILE as the final source so a later upgrade replace has an
+        // unambiguous target; multi-file packs record the covering folder.
+        var finalSourcePath = placed.Count == 1 ? placed[0] : hintFolder;
+
+        var skipped = dropped + formatChanges;
+        var message = skipped == 0
+            ? "Imported into the existing series."
+            : $"Imported {placed.Count} of {merged.Count} file(s) into the existing series; {skipped} were not upgrades over the files you already have.";
+        await FinalizeImportAsync(context, import, selected, qualityCode, hintFolder, finalSourcePath, importMode, message, cancellationToken);
+    }
+
+    /// <summary>The shared success tail: hint, final source path, scan chain, torrent handling, and the imported mark.</summary>
+    private async Task FinalizeImportAsync(
+        JobContext context,
+        AcquisitionImportContext import,
+        SelectedRelease? selected,
+        string? qualityCode,
+        string hintFolder,
+        string finalSourcePath,
+        ImportMode importMode,
+        string message,
+        CancellationToken cancellationToken) {
         var ownedMediaRevision = selected is null ? 1 : ReleaseRevisionDetection.Detect(selected.Title);
         var ownedFormatScore = await OwnedFormatScore.ComputeAsync(profiles, import.ProfileId, import.Kind, selected, cancellationToken);
 
         await acquisitions.WriteImportHintAsync(import.Id, hintFolder, import, BookQualityRank.Floor, cancellationToken);
-        await acquisitions.SetFinalSourcePathAsync(import.Id, hintFolder, cancellationToken);
+        await acquisitions.SetFinalSourcePathAsync(import.Id, finalSourcePath, cancellationToken);
 
         await context.ReportProgressAsync(80, "Scanning library", cancellationToken);
         await context.EnqueueIfNeededAsync(new EnqueueJobRequest(JobType.ScanLibrary, TargetLabel: "Imported episode scan"), cancellationToken);
 
         await torrents.HandleImportedAsync(import, importMode, cancellationToken);
-        await acquisitions.MarkImportedWithQualityAsync(import.Id, BookQualityRank.Floor, "Imported into the library.", cancellationToken, ownedMediaQuality, ownedMediaRevision, ownedFormatScore);
+        await acquisitions.MarkImportedWithQualityAsync(import.Id, BookQualityRank.Floor, message, cancellationToken, qualityCode, ownedMediaRevision, ownedFormatScore);
         await context.ReportProgressAsync(100, "Imported", cancellationToken);
     }
+
+    /// <summary>
+    /// Swaps one owned episode file for its strictly-better incoming counterpart. Move imports hand the
+    /// payload file straight to the replacer; Copy/Hardlink imports stage a copy in a dot-folder scratch
+    /// beside the owned file first, so the seeding payload is never consumed. Returns the swapped path,
+    /// or null when the replace failed (the owned file is intact; the incoming file is dropped).
+    /// </summary>
+    private async Task<string?> ReplaceOwnedAsync(string ownedFilePath, string sourceAbsolute, ImportMode importMode, CancellationToken cancellationToken) {
+        var incoming = sourceAbsolute;
+        string? scratchDir = null;
+        if (importMode != ImportMode.Move) {
+            scratchDir = Path.Combine(Path.GetDirectoryName(ownedFilePath)!, ".prismedia-incoming");
+            Directory.CreateDirectory(scratchDir);
+            incoming = Path.Combine(scratchDir, Path.GetFileName(sourceAbsolute));
+            File.Copy(sourceAbsolute, incoming, overwrite: true);
+        }
+
+        try {
+            var result = await replacer.ReplaceAsync(ownedFilePath, incoming, BookFormatTier.Unknown, cancellationToken, EntityKind.Video);
+            if (!result.Succeeded) {
+                logger.LogWarning("TvImport: in-place replace of {Owned} failed: {Reason}", ownedFilePath, result.FailureReason);
+            }
+
+            return result.Succeeded ? result.SwappedPath : null;
+        } finally {
+            if (scratchDir is not null) {
+                try {
+                    Directory.Delete(scratchDir, recursive: true);
+                } catch (Exception ex) when (ex is not OperationCanceledException) {
+                    logger.LogDebug(ex, "TvImport: could not clean the replace scratch folder {Scratch}.", scratchDir);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// The all-dropped outcome: an upgrade that only changes file formats is held for manual import (the
+    /// release has real value); a payload with nothing better than the owned files is blocklisted so it
+    /// is never grabbed again, its torrent discarded, and the acquisition failed with an honest message.
+    /// </summary>
+    private async Task HandleNothingUsableAsync(
+        AcquisitionImportContext import, SelectedRelease? selected, bool hasFormatChange, CancellationToken cancellationToken) {
+        if (hasFormatChange) {
+            await acquisitions.SetStatusAsync(
+                import.Id, AcquisitionStatus.ManualImportRequired,
+                "The release upgrades existing episodes but changes the file format; import it manually.",
+                cancellationToken);
+            return;
+        }
+
+        const string message = "Nothing in the release was better than the files you already have; the release was blocklisted.";
+        if (selected is not null) {
+            await blocklist.AddAsync(
+                new BlocklistAddRequest(
+                    selected.Identity, BlocklistReason.NoImportableFiles, selected.Title, selected.IndexerName,
+                    selected.InfoHash, import.Id, message),
+                cancellationToken);
+            await history.SafeAddAsync(logger, new AcquisitionHistoryEntry(
+                import.Id, import.EntityId, import.Kind, AcquisitionHistoryEvent.Blocklisted, import.Title,
+                selected.Title, selected.IndexerName,
+                Message: $"Blocklisted ({BlocklistReason.NoImportableFiles.ToCode()})."), cancellationToken);
+        }
+
+        await torrents.RemoveAsync(import, cancellationToken);
+        await history.SafeAddAsync(logger, new AcquisitionHistoryEntry(
+            import.Id, import.EntityId, import.Kind, AcquisitionHistoryEvent.ImportFailed, import.Title,
+            selected?.Title, selected?.IndexerName, Message: message), cancellationToken);
+        await Fail(
+            import.Id,
+            selected is null ? "Nothing in the release was better than the files you already have." : message,
+            cancellationToken);
+    }
+
+    private static string SeriesOf(AcquisitionImportContext import) =>
+        string.IsNullOrWhiteSpace(import.Series) ? import.Title : import.Series;
+
+    private static bool IsUnderFolder(string candidate, string folder) {
+        var normalized = folder.EndsWith(Path.DirectorySeparatorChar) ? folder : folder + Path.DirectorySeparatorChar;
+        return candidate.StartsWith(normalized, StringComparison.Ordinal);
+    }
+
+    private static string BlockMessage(ImportBlockReason? reason) => reason == ImportBlockReason.NoSupportedPayload
+        ? "The download contains no supported video files."
+        : "The download's files carry no recognizable episode numbering; import manually.";
 
     private Task Fail(Guid acquisitionId, string message, CancellationToken cancellationToken) =>
         acquisitions.SetStatusAsync(acquisitionId, AcquisitionStatus.Failed, message, cancellationToken);
