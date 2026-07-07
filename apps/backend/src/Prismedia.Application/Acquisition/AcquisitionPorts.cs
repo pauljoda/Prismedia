@@ -203,6 +203,49 @@ public interface IAcquisitionHintApplier {
     Task<bool> BindWantedChildBySortOrderAsync(EntityKind childKind, string parentPath, int sortOrder, string childPath, CancellationToken cancellationToken);
 }
 
+/// <summary>One season of an existing on-disk series: its folder and the episode files it already owns, keyed by episode number.</summary>
+public sealed record TvSeasonDiskLayout(
+    Guid SeasonEntityId,
+    string FolderPath,
+    IReadOnlyDictionary<int, string> EpisodeFileByNumber);
+
+/// <summary>An existing on-disk series' folder layout: the series folder and its seasons keyed by season number.</summary>
+public sealed record TvSeriesDiskLayout(
+    Guid SeriesEntityId,
+    string SeriesFolderPath,
+    IReadOnlyDictionary<int, TvSeasonDiskLayout> Seasons);
+
+/// <summary>An existing on-disk movie: its folder and the owned video file when one exists.</summary>
+public sealed record MovieDiskTarget(Guid MovieEntityId, string FolderPath, string? OwnedVideoFilePath);
+
+/// <summary>
+/// An existing on-disk album target: the album folder when the album owns one, the artist folder when
+/// only the grouping exists on disk, and the album's already-owned files (relative to the album folder).
+/// </summary>
+public sealed record AlbumDiskTarget(
+    Guid AlbumEntityId,
+    string? AlbumFolderPath,
+    string? ArtistFolderPath,
+    IReadOnlySet<string> ExistingRelativeFiles);
+
+/// <summary>
+/// Resolves where an acquisition's linked library entity already lives on disk, so an import merges
+/// into the existing folder tree instead of minting a template-derived duplicate. Every method accepts
+/// the entity at any granularity the acquisition may link (an episode, a season, or the series itself;
+/// a track, an album) and normalizes to the container's layout. Null when the entity is gone or owns
+/// no on-disk folder — callers then keep the ordinary template placement.
+/// </summary>
+public interface IImportTargetIndex {
+    /// <summary>The existing series layout for a linked series/season/episode entity, or null when fileless.</summary>
+    Task<TvSeriesDiskLayout?> GetTvLayoutAsync(Guid entityId, CancellationToken cancellationToken);
+
+    /// <summary>The existing movie folder for a linked movie entity, or null when fileless.</summary>
+    Task<MovieDiskTarget?> GetMovieTargetAsync(Guid entityId, CancellationToken cancellationToken);
+
+    /// <summary>The existing album/artist folders for a linked album entity, or null when neither exists on disk.</summary>
+    Task<AlbumDiskTarget?> GetAlbumTargetAsync(Guid entityId, CancellationToken cancellationToken);
+}
+
 /// <summary>Persistence port for acquisition records and their scored release candidates.</summary>
 public interface IAcquisitionStore {
     Task<AcquisitionSummary> CreateAsync(AcquisitionMetadata metadata, CancellationToken cancellationToken);

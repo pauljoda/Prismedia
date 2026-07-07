@@ -374,6 +374,7 @@ public static class DependencyInjection {
         services.AddScoped<IImportFileMover, ImportFileMover>();
         services.AddScoped<IOwnedFileReplacer, OwnedFileReplacer>();
         services.AddScoped<IAcquisitionHintApplier, AcquisitionHintApplier>();
+        services.AddScoped<IImportTargetIndex, EfImportTargetIndex>();
         services.AddScoped<IImportedFilesReader, ImportedFilesReader>();
         services.AddScoped<IDownloadPayloadReader, DownloadPayloadReader>();
         // No auto-redirect: the resolver validates the destination host is public before fetching, and a

@@ -401,6 +401,7 @@ public sealed record ActiveTransfer(
 /// <param name="TargetLibraryRootId">The request-time import-target choice; null uses the kind's default.</param>
 /// <param name="SeasonNumber">Season number for TV units; places files under the right season folder.</param>
 /// <param name="EpisodeNumber">Episode number for a single-episode acquisition; names files that carry no episode token.</param>
+/// <param name="EntityId">The wanted/monitored library entity this acquisition fulfills; an entity that already lives on disk redirects the import into its existing folder.</param>
 public sealed record AcquisitionImportContext(
     Guid Id,
     string Title,
@@ -418,4 +419,5 @@ public sealed record AcquisitionImportContext(
     EntityKind Kind = EntityKind.Book,
     Guid? TargetLibraryRootId = null,
     int? SeasonNumber = null,
-    int? EpisodeNumber = null);
+    int? EpisodeNumber = null,
+    Guid? EntityId = null);

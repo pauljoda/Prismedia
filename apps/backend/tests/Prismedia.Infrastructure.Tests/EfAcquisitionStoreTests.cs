@@ -240,6 +240,27 @@ public sealed class EfAcquisitionStoreTests {
         return id;
     }
 
+    [Fact]
+    public async Task GetImportContextCarriesTheLinkedEntity() {
+        // The import engines redirect into an existing entity's folder — the link must survive the trip.
+        await using var db = CreateContext();
+        var acquisitionId = Guid.NewGuid();
+        var entityId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = acquisitionId, Status = AcquisitionStatus.Downloaded, Title = "Show", EntityId = entityId,
+            Kind = EntityKind.VideoSeason, SeasonNumber = 2,
+            ExternalIdsJson = "{}", SourceUrlsJson = "[]", CreatedAt = now, UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+
+        var context = await AcquisitionTestFactory.Store(db).GetImportContextAsync(acquisitionId, CancellationToken.None);
+
+        Assert.NotNull(context);
+        Assert.Equal(entityId, context!.EntityId);
+        Assert.Equal(2, context.SeasonNumber);
+    }
+
     private static void AddHintWithEntity(PrismediaDbContext db, Guid entityId, string sourcePath) {
         var now = DateTimeOffset.UtcNow;
         var acquisitionId = Guid.NewGuid();
