@@ -206,62 +206,6 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
 
-  packages/media-core:
-    devDependencies:
-      '@types/node':
-        specifier: ^22.19.19
-        version: 22.19.19
-      typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
-
-  packages/plugins:
-    dependencies:
-      '@prismedia/contracts':
-        specifier: workspace:*
-        version: link:../contracts
-      '@prismedia/stash-compat':
-        specifier: workspace:*
-        version: link:../stash-compat
-      js-yaml:
-        specifier: ^4.1.1
-        version: 4.1.1
-    devDependencies:
-      '@types/js-yaml':
-        specifier: ^4.0.9
-        version: 4.0.9
-      '@types/node':
-        specifier: ^22.19.19
-        version: 22.19.19
-      typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
-
-  packages/stash-compat:
-    dependencies:
-      '@prismedia/contracts':
-        specifier: workspace:*
-        version: link:../contracts
-      js-yaml:
-        specifier: ^4.1.1
-        version: 4.1.1
-      jsdom:
-        specifier: ^29.1.1
-        version: 29.1.1
-    devDependencies:
-      '@types/js-yaml':
-        specifier: ^4.0.9
-        version: 4.0.9
-      '@types/jsdom':
-        specifier: ^28.0.3
-        version: 28.0.3
-      '@types/node':
-        specifier: ^22.19.19
-        version: 22.19.19
-      typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
-
   packages/ui-svelte:
     dependencies:
       '@lucide/svelte':
@@ -3614,12 +3558,6 @@ packages:
   '@types/istanbul-reports@3.0.4':
     resolution: {integrity: sha512-pk2B1NWalF9toCRu6gjBzR69syFjP4Od8WRAX+0mmf9lAjCRicLOWc+ZrxZHx/0XRjotgkF9t6iaMJ+aXcOdZQ==}
 
-  '@types/js-yaml@4.0.9':
-    resolution: {integrity: sha512-k4MGaQl5TGo/iipqb2UDG2UwjXziSWkh0uysQelTlJpX1qGlpUZYm8PnO4DxG1qBomtJUdYJ6qR6xdIah10JLg==}
-
-  '@types/jsdom@28.0.3':
-    resolution: {integrity: sha512-/HQ2uFoetFTXuye8vzIcHw2z6Fwi7Hi/qcgC+RoS9NCyewiqxhVGqlG+ViGB6lkax481R6dmhf1I7lIGlzJStQ==}
-
   '@types/json-schema@7.0.15':
     resolution: {integrity: sha512-5+fP8P8MFNC+AyZCDxrB2pkZFPGzqQWUzpSeuuVLvm8VMcorNYavBqoFcxK8bQz4Qsbn4oUEEem4wDLfcysGHA==}
 
@@ -3703,9 +3641,6 @@ packages:
 
   '@types/sockjs@0.3.36':
     resolution: {integrity: sha512-MK9V6NzAS1+Ud7JV9lJLFqW85VbC9dq3LmwZCuBe4wBDgKC0Kj/jd8Xl+nSviU+Qc3+m7umHHyHg//2KSa0a0Q==}
-
-  '@types/tough-cookie@4.0.5':
-    resolution: {integrity: sha512-/Ad8+nIOV7Rl++6f1BdKxFSMgmoqEoYbHRpPcx3JEfv8VRsQe9Z4mCXeJBzxs7mbHY/XOZZuXlRNfhpVPbs6ZA==}
 
   '@types/trusted-types@2.0.7':
     resolution: {integrity: sha512-ScaPdn1dQczgbl0QFTeTOmVHFULt394XJgOQNoyVhZ6r2vLnMLJfBPd53SB52T/3G36VI1/g2MZaX0cwDuXsfw==}
@@ -7931,9 +7866,6 @@ packages:
 
   undici-types@7.24.6:
     resolution: {integrity: sha512-WRNW+sJgj5OBN4/0JpHFqtqzhpbnV0GuB+OozA9gCL7a993SmU+1JBZCzLNxYsbMfIeDL+lTsphD5jN5N+n0zg==}
-
-  undici-types@7.25.0:
-    resolution: {integrity: sha512-AXNgS1Byr27fTI+2bsPEkV9CxkT8H6xNyRI68b3TatlZo3RkzlqQBLL+w7SmGPVpokjHbcuNVQUWE7FRTg+LRA==}
 
   undici@7.25.0:
     resolution: {integrity: sha512-xXnp4kTyor2Zq+J1FfPI6Eq3ew5h6Vl0F/8d9XU5zZQf1tX9s2Su1/3PiMmUANFULpmksxkClamIZcaUqryHsQ==}
@@ -12652,15 +12584,6 @@ snapshots:
     dependencies:
       '@types/istanbul-lib-report': 3.0.3
 
-  '@types/js-yaml@4.0.9': {}
-
-  '@types/jsdom@28.0.3':
-    dependencies:
-      '@types/node': 22.19.19
-      '@types/tough-cookie': 4.0.5
-      parse5: 8.0.1
-      undici-types: 7.25.0
-
   '@types/json-schema@7.0.15': {}
 
   '@types/linkify-it@3.0.5': {}
@@ -12756,8 +12679,6 @@ snapshots:
   '@types/sockjs@0.3.36':
     dependencies:
       '@types/node': 25.9.1
-
-  '@types/tough-cookie@4.0.5': {}
 
   '@types/trusted-types@2.0.7': {}
 
@@ -17728,8 +17649,6 @@ snapshots:
   undici-types@6.21.0: {}
 
   undici-types@7.24.6: {}
-
-  undici-types@7.25.0: {}
 
   undici@7.25.0: {}
 

@@ -32,17 +32,6 @@ The backend architecture contract lives in [backend-architecture-contract.md](ba
 - long-running or restart-safe tasks
 - queue execution, retries, and progress reporting
 
-### packages/media-core
-
-- media discovery primitives
-- file fingerprint taxonomy
-- frontend/shared media helpers that are not server-owned
-
-### packages/stash-compat
-
-- one-time stash bootstrap import
-- source mapping, normalization, and audit metadata
-
 ### packages/contracts
 
 - frontend-only constants, media helpers, and plugin protocol types

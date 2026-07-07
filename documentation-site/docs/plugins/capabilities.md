@@ -8,7 +8,7 @@ description: Every action a plugin can declare, what input it gets, and what sha
 
 A plugin's `capabilities` map declares which actions it implements. Each capability key corresponds to a single `action` string the engine may dispatch.
 
-The full type lives at `packages/plugins/src/types.ts:46-94`.
+The canonical declaration is the manifest's `supports` array (see [Manifest Reference](./manifest.md#entity-support)); the capability keys below describe the identify actions the engine can dispatch.
 
 ```ts
 export interface PluginCapabilities {
@@ -143,7 +143,7 @@ Batch is an optimization. Plugins that support it can deduplicate API calls or s
 
 ## Result types
 
-These are the shapes plugins return. All are defined in `packages/plugins/src/types.ts`.
+These are the shapes plugins return. The server-side contracts live under `apps/backend/src/Prismedia.Contracts/Plugins/`; the frontend mirrors them in `packages/contracts/src/`.
 
 ### `NormalizedVideoResult`
 

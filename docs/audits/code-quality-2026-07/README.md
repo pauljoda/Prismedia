@@ -27,7 +27,7 @@ code — the deprecated `api/prismedia.ts`/`identify.ts` facades, `image-lightbo
 
 ---
 
-## Decision needed: the TypeScript packages
+## Decision needed: the TypeScript packages — RESOLVED 2026-07-07: removed (plugins are .NET; Stash scrapers run on the built-in stash-compat engine)
 
 `packages/media-core` has **zero import sites** anywhere in the repo (scan/parse logic
 now lives in C#). `packages/plugins` is consumed by nothing; `packages/stash-compat`

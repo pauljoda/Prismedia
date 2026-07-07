@@ -1,10 +1,8 @@
 /**
- * Normalized result type declarations for the video subsystem's new
- * typed results: movie, series (with optional cascade children), season,
- * episode. Lives in @prismedia/contracts so both the plugins engine and
- * the web UI / scrape-accept service can import without creating a
- * circular dependency. The matching normalizer functions live in
- * @prismedia/plugins (packages/plugins/src/normalized-video.ts).
+ * Normalized result type declarations for the video subsystem's typed
+ * results: movie, series (with optional cascade children), season,
+ * episode. Mirrors the plugin wire shapes produced by the .NET plugin
+ * runtime for the web UI and scrape-accept flows.
  */
 
 export interface ImageCandidate {

@@ -39,9 +39,6 @@ caught up yet.
 | `apps/backend` | .NET API, domain/application/infrastructure layers, EF Core persistence, migrations, and worker. |
 | `apps/web-svelte` | Static Svelte frontend and browser-side interaction. |
 | `packages/ui-svelte` | Shared Svelte design primitives. |
-| `packages/media-core` | Frontend/shared media helpers that do not own server behavior. |
-| `packages/plugins` | Plugin manifest parsing and runtime helper contracts. |
-| `packages/stash-compat` | Stash import adapters and normalizers. |
 | `packages/contracts` | Frontend-only constants, media helpers, and plugin protocol types; .NET contracts are the server source of truth. |
 
 ## Rules

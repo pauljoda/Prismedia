@@ -32,7 +32,7 @@ Stash scrapers are treated as **always NSFW**: every entity they create or touch
 
 ## Limitations
 
-The wrapper runs the standard Stash YAML scraper pipeline (HTTP + regex/xpath, including the supported scene/performer/studio/gallery/movie actions). Stash features that depend on a Stash-specific JavaScript runtime, or Stash UI integrations, do not translate. Prismedia's own cascade actions (series/folder cascades) are not part of the Stash protocol. If a scraper needs those, it has to be ported to a native [TypeScript](../plugins/typescript-plugin.md) or [Python](../plugins/python-plugin.md) plugin.
+The wrapper runs the standard Stash YAML scraper pipeline (HTTP + regex/xpath, including the supported scene/performer/studio/gallery/movie actions). Stash features that depend on a Stash-specific JavaScript runtime, or Stash UI integrations, do not translate. Prismedia's own cascade actions (series/folder cascades) are not part of the Stash protocol. If a scraper needs those, it has to be ported to a native Prismedia plugin (see [Plugins](../plugins/overview.md)).
 
 ## See also
 

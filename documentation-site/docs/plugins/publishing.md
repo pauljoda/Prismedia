@@ -88,7 +88,7 @@ The registry exposes an `index.json` listing every plugin with metadata and a do
       "name": "The Movie Database",
       "version": "0.3.1",
       "description": "Movie and TV series identification via TMDB API",
-      "runtime": "typescript",
+      "runtime": "dotnet-process",
       "isNsfw": false,
       "tags": ["movies", "tv", "series"],
       "homepage": "https://www.themoviedb.org",
@@ -189,4 +189,4 @@ If you want the canonical answer to anything in this section, the registry-side 
 
 - [`prismedia-community-plugins/`](https://github.com/pauljoda/prismedia-community-plugins) — the registry itself.
 - `apps/backend` — Prismedia-side discovery, install, runtime dispatch, and auth resolution.
-- `packages/plugins/src/manifest-parser.ts` — manifest parsing and validation.
+- `apps/backend/src/Prismedia.Contracts/Plugins/PluginManifest.cs` — the manifest contract; loading and compatibility gating live in `Prismedia.Infrastructure/Plugins/`.

@@ -56,8 +56,6 @@ the database to be reachable and migrated before it begins claiming work.
 | Infrastructure | `apps/backend/src/Prismedia.Infrastructure` | EF Core, row models, migrations, repositories/read services, media tools, plugins, requests, queue storage. |
 | Worker | `apps/backend/src/Prismedia.Worker` | Hosted process that registers worker services and runs queue/scheduler hosted services. |
 | Shared UI | `packages/ui-svelte` | Domain-free Svelte primitives, composed UI pieces, tokens, motion helpers. |
-| Shared media | `packages/media-core` | File classification, filename parsing, discovery, fingerprint and media helper primitives. |
-| Plugin tooling | `packages/plugins` | Plugin manifest parsing, execution helpers, Stash adapter helpers, normalized result helpers. |
 | Documentation site | `documentation-site` | Docusaurus docs published separately from the app shell. |
 
 Current repository scale from `rg --files`: `apps/web-svelte` has about 889 files,

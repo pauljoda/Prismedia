@@ -36,9 +36,6 @@ const packageJsons = [
   "apps/web-svelte/package.json",
   "documentation-site/package.json",
   "packages/contracts/package.json",
-  "packages/media-core/package.json",
-  "packages/plugins/package.json",
-  "packages/stash-compat/package.json",
   "packages/ui-svelte/package.json",
 ];
 

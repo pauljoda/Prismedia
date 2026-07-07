@@ -85,8 +85,6 @@ const sidebars: SidebarsConfig = {
         'plugins/overview',
         'plugins/manifest',
         'plugins/capabilities',
-        'plugins/typescript-plugin',
-        'plugins/python-plugin',
         'plugins/stash-compat',
         'plugins/publishing',
       ],

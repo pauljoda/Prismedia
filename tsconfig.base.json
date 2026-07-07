@@ -13,10 +13,6 @@
     "baseUrl": ".",
     "paths": {
       "@prismedia/contracts": ["packages/contracts/src/index.ts"],
-      "@prismedia/media-core": ["packages/media-core/src/index.ts"],
-      "@prismedia/plugins": ["packages/plugins/src/index.ts"],
-      "@prismedia/stash-compat": ["packages/stash-compat/src/index.ts"],
-      "@prismedia/stash-compat/*": ["packages/stash-compat/src/*", "packages/stash-compat/src/*/index.ts"],
       "@prismedia/ui-svelte": ["packages/ui-svelte/src/index.ts"],
       "@prismedia/ui-svelte/*": ["packages/ui-svelte/src/*"]
     }

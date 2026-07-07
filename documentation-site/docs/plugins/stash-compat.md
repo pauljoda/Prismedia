@@ -14,10 +14,10 @@ The Stash community has hundreds of YAML-defined site scrapers — battle-tested
 Stash YAML scraper definition
             │
             ▼
-   stash-compat manifest.yml  ─┐
+   synthesized stash-compat manifest ─┐
                                │
                                ▼
-   packages/stash-compat/src/stash-adapter.ts
+   Prismedia.Infrastructure/StashCompat (native engine)
                                │
                                ▼
         Plugin execution envelope (same as native plugins)

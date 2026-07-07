@@ -96,18 +96,14 @@ You install them from **Plugins → Prismedia Index** in the web app. One click 
 
 | Path | What it is |
 | --- | --- |
-| `packages/plugins/src/types.ts` | The wire-protocol types — `PrismediaPlugin`, `PluginExecutionInput`, `PluginExecutionOutput`, `PluginCapabilities`, every `Normalized*Result`. **The contract.** |
-| `packages/plugins/src/manifest-parser.ts` | YAML manifest reader and validator. |
-| `packages/plugins/src/ts-loader.ts` | TypeScript runtime loader. |
-| `packages/plugins/src/executor.ts` | Python subprocess executor. |
-| `packages/plugins/src/normalizer.ts` | Output normalizers. |
-| `packages/stash-compat/src/stash-adapter.ts` | Stash-compat YAML adapter. |
-| `apps/backend` | Prismedia-side glue: resolve manifests, credentials, execution, persistence, and accepted results. |
+| `apps/backend/src/Prismedia.Contracts/Plugins/` | The wire-protocol contracts — `PluginManifest`, execution inputs/outputs, capability shapes. **The contract.** |
+| `apps/backend/src/Prismedia.Infrastructure/Plugins/` | Manifest loading, the `dotnet-process` runner, credentials, execution, persistence, and accepted results. |
+| `apps/backend/src/Prismedia.Infrastructure/StashCompat/` | The `stash-compat` runtime — runs standard Stash YAML scrapers natively. |
 
-If you're going to read source, start with `packages/plugins/src/types.ts`. Everything else makes sense once you know the wire format.
+If you're going to read source, start with `Prismedia.Contracts/Plugins/PluginManifest.cs`. Everything else makes sense once you know the wire format.
 
 ## What to read next
 
-- **Building one yourself**: [Manifest](./manifest.md) → [Capabilities](./capabilities.md) → [TypeScript Plugin](./typescript-plugin.md) or [Python Plugin](./python-plugin.md).
+- **Building one yourself**: [Manifest](./manifest.md) → [Capabilities](./capabilities.md), then read a published plugin in [prismedia-community-plugins](https://github.com/pauljoda/prismedia-community-plugins).
 - **Bringing in a Stash YAML scraper**: [Stash Compatibility](./stash-compat.md).
 - **Publishing for others**: [Publishing](./publishing.md).
