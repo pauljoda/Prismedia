@@ -116,7 +116,7 @@
         </div>
       {:else if phase === "failed"}
         <div class="flex flex-wrap items-center justify-center gap-2">
-          <Button type="button" variant="secondary" class="gap-2" onclick={() => void goto("/settings")}>
+          <Button type="button" variant="secondary" class="gap-2" onclick={() => void goto("/settings/database-backups")}>
             <RotateCcw class="h-4 w-4" />
             Back to Settings
           </Button>

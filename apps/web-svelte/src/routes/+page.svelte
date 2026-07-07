@@ -298,7 +298,7 @@
       your library roots and start scanning.
     </p>
     <a
-      href="/settings"
+      href="/settings/libraries"
       class={cn(
         buttonVariants({ variant: "primary", size: "lg" }),
         "min-h-11 px-6 text-base font-semibold",

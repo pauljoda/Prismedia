@@ -240,7 +240,7 @@
       type="button"
       variant="secondary"
       size="sm"
-      onclick={() => void goto("/settings")}
+      onclick={() => void goto("/settings/acquisition")}
       class="no-lift gap-1.5 px-3 py-1.5 text-xs"
     >
       <Settings class="h-3.5 w-3.5" />
@@ -383,7 +383,7 @@
         {error}
       </div>
     {/if}
-    {#each providerWarnings as warning}
+    {#each providerWarnings as warning (warning)}
       <div class="surface-panel border-l-2 border-warning px-4 py-2.5 text-sm text-warning-text">
         {warning}
       </div>
