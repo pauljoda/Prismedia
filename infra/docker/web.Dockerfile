@@ -9,9 +9,6 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml package.json turbo.json ./
 COPY apps/web-svelte/package.json apps/web-svelte/package.json
 COPY packages/ui-svelte/package.json packages/ui-svelte/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
-COPY packages/media-core/package.json packages/media-core/package.json
-COPY packages/plugins/package.json packages/plugins/package.json
-COPY packages/stash-compat/package.json packages/stash-compat/package.json
 
 RUN pnpm install --frozen-lockfile
 
