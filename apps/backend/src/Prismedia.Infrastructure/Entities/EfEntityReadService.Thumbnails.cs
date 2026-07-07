@@ -84,8 +84,18 @@ public sealed partial class EfEntityReadService {
                 .Where(detail => ids.Contains(detail.EntityId))
                 .ToDictionaryAsync(detail => detail.EntityId, detail => detail.BookType, cancellationToken)
             : new Dictionary<Guid, BookType>();
+        // Grid variants are loaded for the page's entities plus every entity whose cover a
+        // row can borrow (album parents for audio tracks, representative-cover children for
+        // galleries and collections), so a card that inherits another entity's cover also
+        // inherits that entity's small variants instead of downloading the full original.
+        var borrowableCoverSourceIds = ids
+            .Concat(albumParentIds)
+            .Concat(hoverImagesByEntity.Values.SelectMany(images => images.Select(image => image.EntityId)))
+            .Concat(collectionArtworkByEntity.Values.SelectMany(artwork => artwork.HoverImages.Select(image => image.EntityId)))
+            .Distinct()
+            .ToArray();
         var gridThumbRows = await _db.EntityFiles.AsNoTracking()
-            .Where(file => ids.Contains(file.EntityId) &&
+            .Where(file => borrowableCoverSourceIds.Contains(file.EntityId) &&
                 (file.Role == EntityFileRole.GridThumbnail || file.Role == EntityFileRole.GridThumbnail2x))
             .Select(file => new { file.EntityId, file.Role, file.Path })
             .ToArrayAsync(cancellationToken);
@@ -154,10 +164,17 @@ public sealed partial class EfEntityReadService {
             var hoverImages = hoverImagesByEntity.GetValueOrDefault(row.Id) ?? [];
             var coverUrl = coverByEntity.GetValueOrDefault(row.Id);
             var bookType = bookTypeByEntity.TryGetValue(row.Id, out var value) ? value : (BookType?)null;
+            // The entity that owns the cover image this card shows. Rows that borrow another
+            // entity's cover borrow that entity's grid variants too, so the srcset pair keeps
+            // matching the picture the card actually displays.
+            var coverSourceId = row.Id;
             if (coverUrl is null &&
                 row.KindCode == EntityKindRegistry.AudioTrack.Code &&
                 row.ParentEntityId is { } albumId) {
                 coverUrl = coverByAlbumParent.GetValueOrDefault(albumId);
+                if (coverUrl is not null) {
+                    coverSourceId = albumId;
+                }
             }
 
             if (coverUrl is null &&
@@ -165,10 +182,12 @@ public sealed partial class EfEntityReadService {
                 collectionArtworkByEntity.TryGetValue(row.Id, out var collectionArtwork)) {
                 coverUrl = collectionArtwork.CoverUrl ?? collectionArtwork.HoverImages.FirstOrDefault()?.Path;
                 hoverImages = collectionArtwork.HoverImages;
+                coverSourceId = hoverImages.FirstOrDefault(image => image.Path == coverUrl)?.EntityId ?? row.Id;
             }
 
             if (coverUrl is null && UsesRepresentativeCover(row.KindCode) && hoverImages.Count > 0) {
                 coverUrl = hoverImages[0].Path;
+                coverSourceId = hoverImages[0].EntityId;
             }
 
             return new EntityThumbnail(
@@ -178,7 +197,7 @@ public sealed partial class EfEntityReadService {
                 row.ParentEntityId,
                 row.SortOrder,
                 coverUrl,
-                gridThumbByEntity.GetValueOrDefault(row.Id),
+                gridThumbByEntity.GetValueOrDefault(coverSourceId),
                 hoverUrl is null ? ThumbnailHoverKind.None : ThumbnailHoverKind.Sprite,
                 hoverUrl,
                 hoverImages,
@@ -191,7 +210,7 @@ public sealed partial class EfEntityReadService {
                 ownState?.IsFavorite ?? false,
                 row.IsNsfw,
                 row.IsOrganized) {
-                CoverThumb2xUrl = gridThumb2xByEntity.GetValueOrDefault(row.Id),
+                CoverThumb2xUrl = gridThumb2xByEntity.GetValueOrDefault(coverSourceId),
                 ParentKind = row.ParentEntityId is { } parentId
                     && parentKindByEntity.TryGetValue(parentId, out var parentKindCode)
                     && parentKindCode.TryDecodeAs<EntityKind>(out var parentKind)
