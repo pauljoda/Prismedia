@@ -206,15 +206,16 @@ public sealed class PluginRequestMetadataSource(PluginCatalogService catalog, Id
             return null;
         }
 
+        var itemCount = child.Children.Count(node => !node.TargetKind.IsRelationship());
         return new RequestChildOption(
             Id: $"{providerId}:{workId}",
             Title: child.Patch.Title ?? workId,
             Kind: childDescriptor.Kind,
             Requestable: childDescriptor.Committable,
             // Ordering position when the provider reports one. prism-vocab: external (provider positions vocabulary)
-            Number: child.Patch.Positions.TryGetValue("volumeNumber", out var volume) ? volume : null,
+            Number: RequestProposalReading.ChildNumberOf(childDescriptor.Kind, child.Patch),
             Year: RequestProposalReading.YearFromDates(child.Patch.Dates),
-            ItemCount: null,
+            ItemCount: itemCount > 0 ? itemCount : null,
             Overview: child.Patch.Description,
             PosterUrl: RequestProposalReading.BestImage(child),
             Monitored: null);
