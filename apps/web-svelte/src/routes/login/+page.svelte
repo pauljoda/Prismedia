@@ -99,4 +99,18 @@
       {/if}
     </Button>
   </form>
+
+  <!-- The no-lockout escape hatch must be discoverable from the door itself: resetting an
+       administrator requires host access (an env var + restart), so surfacing it here gives
+       away nothing while making recovery findable without reading the docs first. -->
+  <p class="mt-6 text-center font-mono text-[0.65rem] leading-relaxed text-text-disabled">
+    Locked out? Set the <span class="text-text-muted">PRISMEDIA_RECOVERY_PASSWORD</span> environment
+    variable and restart to reset an administrator —
+    <a
+      href="https://pauljoda.github.io/Prismedia/docs/deployment/authentication#password-recovery"
+      target="_blank"
+      rel="noreferrer"
+      class="underline decoration-border-subtle underline-offset-2 hover:text-text-secondary"
+    >password recovery</a>.
+  </p>
 </AuthShell>
