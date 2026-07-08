@@ -58,20 +58,20 @@ public static class VideoQualityDetection {
         Resolution.None;
 
     private static bool Has(string title, params string[] tokens) =>
-        tokens.Any(token => title.Contains(token, StringComparison.OrdinalIgnoreCase));
+        tokens.Any(token => ReleaseTitleText.ContainsTerm(title, token));
 }
 
 /// <summary>Detects a music release's codec quality tier from its title tokens.</summary>
 public static class AudioQualityDetection {
     public static AudioQuality Detect(string title) =>
-        Has(title, "24bit", "24-bit", "24/96", "24/192", "hi-res", "hires") ? AudioQuality.LosslessHiRes :
+        Has(title, "24bit", "24-bit", "24 bit", "24/96", "24/192", "hi-res", "hires") ? AudioQuality.LosslessHiRes :
         Has(title, "flac", "alac", "lossless") ? AudioQuality.Lossless :
         Has(title, "320", "v0") ? AudioQuality.LossyHigh :
         Has(title, "mp3", "aac", "opus", "ogg", "256", "192") ? AudioQuality.Lossy :
         AudioQuality.Unknown;
 
     private static bool Has(string title, params string[] tokens) =>
-        tokens.Any(token => title.Contains(token, StringComparison.OrdinalIgnoreCase));
+        tokens.Any(token => ReleaseTitleText.ContainsTerm(title, token));
 }
 
 /// <summary>

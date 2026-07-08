@@ -110,6 +110,7 @@ public sealed class MusicReleaseDecisionEngine : IAcquisitionDecisionEngine {
     private static double MusicScore(IndexerRelease release, BookAcquisitionRules rules) {
         var quality = (int)AudioQualityDetection.Detect(release.Title);
         return MediaReleaseEvaluation.PreferenceScore(release, rules) * 10_000
+            + ReleaseTitleRelevance.Score(release, rules)
             + quality * 100_000
             + MediaReleaseEvaluation.RevisionBoost(release.Title, rules)
             + Math.Min(release.Seeders ?? 0, 9_999);
@@ -320,8 +321,7 @@ internal static class MediaReleaseEvaluation {
                 }
             }
 
-            if (blocklistedIdentities is { Count: > 0 }
-                && blocklistedIdentities.Contains(ReleaseIdentity.For(release.InfoHash, indexerName, release.Title))) {
+            if (ReleaseIdentity.IsListed(blocklistedIdentities, release.InfoHash, indexerName, release.Title)) {
                 rejections.Add(ReleaseRejectionReason.Blocklisted);
             }
 
@@ -337,7 +337,7 @@ internal static class MediaReleaseEvaluation {
 
     /// <summary>Case-insensitive whole-ish token match against a release title.</summary>
     public static bool TitleHasAny(string title, params string[] tokens) =>
-        tokens.Any(token => title.Contains(token, StringComparison.OrdinalIgnoreCase));
+        tokens.Any(token => ReleaseTitleText.ContainsTerm(title, token));
 
     /// <summary>
     /// The shared video release ranking (movies and TV alike): profile preference outranks everything,
@@ -348,6 +348,7 @@ internal static class MediaReleaseEvaluation {
     public static double VideoReleaseScore(IndexerRelease release, BookAcquisitionRules rules) {
         var quality = (int)VideoQualityDetection.Detect(release.Title);
         return PreferenceScore(release, rules) * 10_000
+            + ReleaseTitleRelevance.Score(release, rules)
             + quality * 100_000
             + RevisionBoost(release.Title, rules)
             + Math.Min(release.Seeders ?? 0, 9_999);
@@ -370,7 +371,7 @@ internal static class MediaReleaseEvaluation {
 
     /// <summary>How many of the profile's preferred terms the title matches.</summary>
     public static int PreferredTermMatches(string title, BookAcquisitionRules rules) =>
-        rules.PreferredTerms.Count(term => !string.IsNullOrWhiteSpace(term) && title.Contains(term, StringComparison.OrdinalIgnoreCase));
+        rules.PreferredTerms.Count(term => ReleaseTitleText.ContainsTerm(title, term));
 
     /// <summary>
     /// The profile-preference component of a release's score, in shared preference points: each preferred
@@ -384,7 +385,7 @@ internal static class MediaReleaseEvaluation {
         var title = release.Title;
         double score = PreferredTermMatches(title, rules) * 100;
         foreach (var term in rules.WeightedTerms) {
-            if (!string.IsNullOrWhiteSpace(term.Term) && title.Contains(term.Term, StringComparison.OrdinalIgnoreCase)) {
+            if (ReleaseTitleText.ContainsTerm(title, term.Term)) {
                 score += term.Weight;
             }
         }

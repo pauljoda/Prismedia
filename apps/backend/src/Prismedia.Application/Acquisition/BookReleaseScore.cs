@@ -34,6 +34,7 @@ public static class BookReleaseScore {
         var seeders = Math.Max(release.Seeders ?? 0, 0);
         var peers = Math.Max(release.Peers ?? 0, 0);
         return (quality * QualityRankBoost)
+            + ReleaseTitleRelevance.Score(release, rules)
             + (MediaReleaseEvaluation.PreferenceScore(release, rules) * PreferenceBoost)
             + (Math.Log10(seeders + 1) * 100)
             + (Math.Min(peers, 100) * 0.25);

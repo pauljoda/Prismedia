@@ -158,6 +158,30 @@ public sealed class AcquisitionSearchRunnerTests {
         Assert.Equal("Movie 1080p BluRay", outcome.Candidates.First(c => c.Accepted).Release.Title);
     }
 
+    [Fact]
+    public async Task SearchScoringPrefersTheCloserSeriesTitleOverASubtitleMatch() {
+        var exact = new IndexerRelease("How.Its.Made.S02.720p.HDTV", 5_000_000_000, 2, 2, DownloadProtocol.Torrent, "http://dl", null, "exact", "http://i", null, null);
+        var subtitle = new IndexerRelease("How.Its.Made.Cars.S02.1080p.WEB-DL", 5_000_000_000, 900, 20, DownloadProtocol.Torrent, "http://dl", null, "subtitle", "http://i", null, null);
+
+        var runner = new AcquisitionSearchRunner(
+            new FakeIndexerConfigStore(),
+            new FakeClientFactory(new FakeIndexerSearchClient([subtitle, exact])),
+            new FakeProfileStore(),
+            new FakeBlocklistStore("unrelated"),
+            new FakeDownloadClientConfigStore(DownloadProtocol.Torrent),
+            new FakeIndexerStatusStore(),
+            new IndexerQueryWindow(),
+            new AcquisitionDecisionEngineFactory([new TvReleaseDecisionEngine(EntityKind.VideoSeason)]),
+            Settings());
+
+        var outcome = await runner.RunAsync(
+            new AcquisitionSearchInput(Guid.NewGuid(), "Season 2", null, EntityKind.VideoSeason, Series: "How it's Made", SeasonNumber: 2),
+            CancellationToken.None);
+
+        Assert.All(outcome.Candidates, candidate => Assert.True(candidate.Accepted));
+        Assert.Equal(exact.Title, outcome.Candidates[0].Release.Title);
+    }
+
     /// <summary>Builds a real SettingsService over an in-memory override map; an unset AcquisitionDownloadPropers defaults to prefer-and-upgrade.</summary>
     private static SettingsService Settings(ProperDownloadPolicy? policy = null) {
         var overrides = new Dictionary<string, string>(StringComparer.Ordinal);

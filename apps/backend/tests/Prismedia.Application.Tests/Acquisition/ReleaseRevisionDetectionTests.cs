@@ -14,6 +14,7 @@ public sealed class ReleaseRevisionDetectionTests {
     [InlineData("Show S01E05 1080p WEB-DL RERIP", 2)]
     [InlineData("Show S01E05 1080p WEB-DL REPACK2", 3)]
     [InlineData("Show S01E05 1080p WEB-DL PROPER2", 3)]
+    [InlineData("Show_S01E05_1080p_WEB_DL_PROPER", 2)]
     [InlineData("[SubGroup] Anime - 05 [1080p] v3", 3)]
     [InlineData("[SubGroup] Anime - 05.v2.1080p", 2)]
     [InlineData("Show S01E05 PROPER 1080p WEB", 2)]

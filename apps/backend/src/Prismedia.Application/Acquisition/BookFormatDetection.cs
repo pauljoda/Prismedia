@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Acquisition;
@@ -11,21 +10,12 @@ namespace Prismedia.Application.Acquisition;
 /// (<see cref="ImportPlanBuilder.SupportedExtensions"/>) and the book scanner accept — so a release the
 /// engine marks acceptable on format can actually be imported.
 /// </summary>
-public static partial class BookFormatDetection {
-    // Importable: a release naming one of these can be imported and scanned.
-    [GeneratedRegex(@"\b(cbz|zip|epub|pdf)\b", RegexOptions.IgnoreCase)]
-    private static partial Regex ImportableTokenRegex();
-
-    // Known book/comic formats Prismedia cannot currently import (no reader/scanner support).
-    [GeneratedRegex(@"\b(cbr|rar|mobi|azw3?)\b", RegexOptions.IgnoreCase)]
-    private static partial Regex UnsupportedTokenRegex();
-
-    // Provenance/edition tokens. prism-vocab: external — release-title vocabulary, matched only here.
-    [GeneratedRegex(@"\b(retail|official)\b", RegexOptions.IgnoreCase)]
-    private static partial Regex RetailTokenRegex();
-
-    [GeneratedRegex(@"\b(web|webrip|converted|calibre)\b", RegexOptions.IgnoreCase)]
-    private static partial Regex WebTokenRegex();
+public static class BookFormatDetection {
+    // prism-vocab: external — release-title vocabulary, matched only here.
+    private static readonly string[] ImportableFormatTokens = ["cbz", "zip", "epub", "pdf"];
+    private static readonly string[] UnsupportedFormatTokens = ["cbr", "rar", "mobi", "azw", "azw3"];
+    private static readonly string[] RetailSourceTokens = ["retail", "official"];
+    private static readonly string[] WebSourceTokens = ["web", "webrip", "webdl", "digital", "converted", "calibre"];
 
     /// <summary>
     /// Importable book formats named in <paramref name="title"/>, mapped onto Prismedia's
@@ -33,8 +23,12 @@ public static partial class BookFormatDetection {
     /// </summary>
     public static IReadOnlySet<BookFormat> Detect(string title) {
         var formats = new HashSet<BookFormat>();
-        foreach (Match match in ImportableTokenRegex().Matches(title)) {
-            switch (match.Value.ToLowerInvariant()) {
+        foreach (var token in ReleaseTitleText.Tokens(title)) {
+            if (!ImportableFormatTokens.Contains(token, StringComparer.Ordinal)) {
+                continue;
+            }
+
+            switch (token) {
                 case "cbz":
                 case "zip":
                     formats.Add(BookFormat.ImageArchive);
@@ -56,17 +50,18 @@ public static partial class BookFormatDetection {
     /// releases whose only declared format Prismedia cannot import, so they are never queued and downloaded
     /// only to dead-end at import.
     /// </summary>
-    public static bool NamesUnsupportedFormat(string title) => UnsupportedTokenRegex().IsMatch(title);
+    public static bool NamesUnsupportedFormat(string title) =>
+        ReleaseTitleText.ContainsToken(title, UnsupportedFormatTokens);
 
     /// <summary>
     /// Detects the provenance/edition tier named in <paramref name="title"/>: retail/official tokens map to
-    /// <see cref="BookSourceTier.Retail"/>, web/converted tokens to <see cref="BookSourceTier.Web"/>, and an
-    /// untagged title to <see cref="BookSourceTier.Unknown"/>. Retail is checked first so a title that names
-    /// both ("retail web conversion") is treated as the higher tier.
+    /// <see cref="BookSourceTier.Retail"/>, web/digital/converted tokens to <see cref="BookSourceTier.Web"/>,
+    /// and an untagged title to <see cref="BookSourceTier.Unknown"/>. Retail is checked first so a title that
+    /// names both ("retail web conversion") is treated as the higher tier.
     /// </summary>
     public static BookSourceTier DetectSource(string title) =>
-        RetailTokenRegex().IsMatch(title) ? BookSourceTier.Retail
-        : WebTokenRegex().IsMatch(title) ? BookSourceTier.Web
+        ReleaseTitleText.ContainsToken(title, RetailSourceTokens) ? BookSourceTier.Retail
+        : ReleaseTitleText.ContainsToken(title, WebSourceTokens) ? BookSourceTier.Web
         : BookSourceTier.Unknown;
 
     /// <summary>

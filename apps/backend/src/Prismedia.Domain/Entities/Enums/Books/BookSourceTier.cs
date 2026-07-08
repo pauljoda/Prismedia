@@ -12,7 +12,7 @@ public enum BookSourceTier {
     [Code("unknown")]
     Unknown = 0,
 
-    /// <summary>Web/scraped/converted edition (e.g. "web", "webrip", "converted", "calibre").</summary>
+    /// <summary>Web/digital/scraped/converted edition (e.g. "web", "digital", "webrip", "converted", "calibre").</summary>
     [Code("web")]
     Web = 10,
 

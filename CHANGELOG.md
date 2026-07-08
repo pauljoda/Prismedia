@@ -116,6 +116,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated documentation, README screenshots, branding assets, install metadata, and app copy to match the current Prismedia v1 surface.
 
 ### Fixed
+- Fixed release matching for indexer titles that use underscores, dots, or hyphens instead of spaces: acquisition scoring now recognizes those separators for quality, format, language/proper tokens, profile terms, title-only blocklists, and closer title matches so spin-offs or subtitles are less likely to beat the exact requested work.
 - Fixed detail pages showing a different cover than the library grids for the same item: when an item had both downloaded artwork and a cover extracted from its file (common for identified books), the detail poster skipped the downloaded artwork the grids show and fell back to the embedded one. All surfaces now agree on the same winning cover.
 - Fixed MangaDex request results showing the MangaDex "read at" placeholder instead of real cover art by applying the same no-referrer image loading behavior used by Identify to shared request thumbnails and detail artwork.
 - Fixed Safari showing placeholder icons instead of cover artwork across library grids and shelves: WebKit fires a spurious image error for lazy-loaded covers using the `sizes="auto"` responsive hint, so cards no longer emit it and Safari renders the same small grid variants as every other browser.

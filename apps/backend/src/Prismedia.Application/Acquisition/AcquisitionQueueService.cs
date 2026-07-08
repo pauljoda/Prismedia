@@ -37,8 +37,7 @@ public sealed class AcquisitionQueueService(
         // The blocklist is enforced at search time, but a stored candidate row can still carry a blocklisted
         // identity (e.g. the release that just failed). Refuse it here too so the manual "queue this release"
         // action can't bypass the blocklist.
-        var identity = ReleaseIdentity.For(candidate.InfoHash, candidate.IndexerName, candidate.Title);
-        if ((await blocklist.GetIdentitiesAsync(cancellationToken)).Contains(identity)) {
+        if (ReleaseIdentity.IsListed(await blocklist.GetIdentitiesAsync(cancellationToken), candidate.InfoHash, candidate.IndexerName, candidate.Title)) {
             throw new AcquisitionConfigurationException(
                 ApiProblemCodes.AcquisitionInvalid,
                 "This release is blocklisted from a previous failed attempt. Remove it from the blocklist to download it again.");

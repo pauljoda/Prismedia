@@ -114,6 +114,13 @@ public sealed record BookAcquisitionRules(
     public int OwnedFormatScore { get; init; }
 
     /// <summary>
+    /// The intended work title for this search, set per search by the runner. Scoring uses it as a soft
+    /// relevance signal so a closer title match outranks a release for a similarly named spin-off or subtitle.
+    /// Empty disables relevance scoring for callers that evaluate ad hoc releases without a target.
+    /// </summary>
+    public string? TargetTitle { get; init; }
+
+    /// <summary>
     /// Permissive defaults used when no profile is configured yet (e.g. ad-hoc verification searches).
     /// <see cref="MinQuality"/> and <see cref="OwnedQuality"/> default to <see cref="BookQualityRank.Floor"/>
     /// (<c>default(BookQualityRank)</c>) and <see cref="IsUpgradeSearch"/> to false, so the quality and

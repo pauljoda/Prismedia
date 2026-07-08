@@ -332,7 +332,7 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
         foreach (var row in rows) {
             // Mark every row that resolves to the same release identity — a duplicate from another indexer
             // (e.g. the same info hash) must not stay selectable once the release is blocklisted.
-            if (ReleaseIdentity.For(row.InfoHash, row.IndexerName, row.Title) != identity) {
+            if (!ReleaseIdentity.Matches(identity, row.InfoHash, row.IndexerName, row.Title)) {
                 continue;
             }
 

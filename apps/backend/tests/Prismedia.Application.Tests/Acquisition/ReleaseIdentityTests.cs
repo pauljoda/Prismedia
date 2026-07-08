@@ -24,6 +24,26 @@ public sealed class ReleaseIdentityTests {
     }
 
     [Fact]
+    public void TitleIdentityTreatsIndexerSeparatorsAsSpaces() {
+        var spaceTitle = ReleaseIdentity.For(null, "MyIndexer", "Absolute Batman 022 2026 Digital Shan Empire CBZ");
+        var indexerTitle = ReleaseIdentity.For(null, "myindexer", "Absolute_Batman_022__2026__Digital__Shan-Empire_CBZ");
+
+        Assert.Equal(spaceTitle, indexerTitle);
+    }
+
+    [Fact]
+    public void BlocklistLookupHonorsLegacyWhitespaceOnlyTitleIdentity() {
+        const string legacyIdentity = "title:a.b.comics|absolute_batman_022__2026__digital__shan-empire_cbz";
+        var identities = new HashSet<string>(StringComparer.Ordinal) { legacyIdentity };
+
+        Assert.True(ReleaseIdentity.IsListed(
+            identities,
+            null,
+            "a.b.comics",
+            "Absolute_Batman_022__2026__Digital__Shan-Empire_CBZ"));
+    }
+
+    [Fact]
     public void DifferentTitlesProduceDifferentIdentities() {
         var a = ReleaseIdentity.For(null, "MyIndexer", "Book One");
         var b = ReleaseIdentity.For(null, "MyIndexer", "Book Two");

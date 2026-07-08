@@ -50,6 +50,15 @@ public sealed class MediaReleaseDecisionEnginesTests {
     }
 
     [Fact]
+    public void MediaQualityDetectionTreatsIndexerSeparatorsAsSpaces() {
+        Assert.Equal(VideoQuality.Bluray1080p.ToCode(), MediaQualityLadder.Detect(EntityKind.Movie, "Movie_1080p_Blu_Ray_x264").Code);
+        Assert.Equal(VideoQuality.Webdl2160p.ToCode(), MediaQualityLadder.Detect(EntityKind.Movie, "Movie_2160p_WEB_DL_HDR").Code);
+        Assert.Equal(VideoQuality.Webrip720p.ToCode(), MediaQualityLadder.Detect(EntityKind.Movie, "Movie_720p_WEB_Rip").Code);
+        Assert.Equal(AudioQuality.Lossless.ToCode(), MediaQualityLadder.Detect(EntityKind.AudioLibrary, "Artist_Album_FLAC").Code);
+        Assert.Equal(AudioQuality.LosslessHiRes.ToCode(), MediaQualityLadder.Detect(EntityKind.AudioLibrary, "Artist_Album_24_Bit_FLAC").Code);
+    }
+
+    [Fact]
     public void TvLadderDrillsSeasonThenCompleteAndEpisodeExactly() {
         var season = new AcquisitionSearchInput(
             Guid.NewGuid(), "Season 1", null, EntityKind.VideoSeason, Series: "Andor", SeasonNumber: 1);

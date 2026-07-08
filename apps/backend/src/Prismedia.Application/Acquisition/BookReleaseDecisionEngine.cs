@@ -100,7 +100,7 @@ public sealed class RequiredTermsSpecification : IReleaseSpecification {
 
     public ReleaseRejectionReason? Evaluate(IndexerRelease release, BookAcquisitionRules rules) {
         foreach (var term in rules.RequiredTerms) {
-            if (!release.Title.Contains(term, StringComparison.OrdinalIgnoreCase)) {
+            if (!ReleaseTitleText.ContainsTerm(release.Title, term)) {
                 return Reason;
             }
         }
@@ -115,7 +115,7 @@ public sealed class IgnoredTermsSpecification : IReleaseSpecification {
 
     public ReleaseRejectionReason? Evaluate(IndexerRelease release, BookAcquisitionRules rules) {
         foreach (var term in rules.IgnoredTerms) {
-            if (release.Title.Contains(term, StringComparison.OrdinalIgnoreCase)) {
+            if (ReleaseTitleText.ContainsTerm(release.Title, term)) {
                 return Reason;
             }
         }
@@ -300,8 +300,7 @@ public sealed class BookReleaseDecisionEngine : IAcquisitionDecisionEngine {
             // The blocklist gate is the dynamic-state analog of a specification: it depends on the
             // current blocklist (not the static profile rules), so it is applied here rather than in
             // the rules-only Specifications array. Same transparent-rejection outcome.
-            if (blocklistedIdentities is { Count: > 0 }
-                && blocklistedIdentities.Contains(ReleaseIdentity.For(release.InfoHash, indexerName, release.Title))) {
+            if (ReleaseIdentity.IsListed(blocklistedIdentities, release.InfoHash, indexerName, release.Title)) {
                 rejections.Add(ReleaseRejectionReason.Blocklisted);
             }
 

@@ -36,12 +36,13 @@ public static partial class ReleaseRevisionDetection {
             return 1;
         }
 
+        var normalized = ReleaseTitleText.Normalize(title);
         var revision = 1;
 
         // PROPER / REPACK / RERIP, optionally numbered (PROPER2, REPACK2). A plain token means "a second,
         // more-correct release" → revision 2; an explicit number N means the N-th such re-release → N + 1
         // (REPACK2 is the third revision of the content: original, REPACK, REPACK2).
-        foreach (Match match in ProperRepackRegex().Matches(title)) {
+        foreach (Match match in ProperRepackRegex().Matches(normalized)) {
             var bump = match.Groups["n"].Success && int.TryParse(match.Groups["n"].Value, out var n) && n > 0
                 ? n + 1
                 : 2;
@@ -49,7 +50,7 @@ public static partial class ReleaseRevisionDetection {
         }
 
         // Anime-style version tokens: a word-bounded "vN" (" v2", ".v3.") maps directly to that version.
-        foreach (Match match in AnimeVersionRegex().Matches(title)) {
+        foreach (Match match in AnimeVersionRegex().Matches(normalized)) {
             if (int.TryParse(match.Groups["v"].Value, out var version) && version > 0) {
                 revision = Math.Max(revision, version);
             }

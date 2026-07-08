@@ -199,6 +199,28 @@ public sealed class BookReleaseDecisionEngineTests {
     }
 
     [Fact]
+    public void ProfileTermsMatchIndexerSeparatorsAsSpaces() {
+        var rules = BookAcquisitionRules.Default with {
+            RequiredTerms = ["Shan Empire"],
+            IgnoredTerms = ["Secret Usenet"],
+            PreferredTerms = ["Shan Empire"],
+            WeightedTerms = [new WeightedTerm("Digital Shan Empire", 250)]
+        };
+
+        var preferred = Release(title: "Absolute_Batman_022__2026__Digital__Shan-Empire_CBZ", seeders: 1);
+        var ignored = Release(title: "Absolute_Batman_022__2026__Digital__Secret-Usenet_CBZ", seeders: 500);
+        var missing = Release(title: "Absolute_Batman_022__2026__Digital__Other_CBZ", seeders: 500);
+
+        var result = Engine.Evaluate([(missing, null, "i"), (ignored, null, "i"), (preferred, null, "i")], rules);
+
+        Assert.Equal(preferred.Title, result[0].Release.Title);
+        Assert.True(result[0].Accepted);
+        Assert.False(result.Single(candidate => candidate.Release.Title == ignored.Title).Accepted);
+        Assert.Contains(ReleaseRejectionReason.HasIgnoredTerm, result.Single(candidate => candidate.Release.Title == ignored.Title).Rejections);
+        Assert.Contains(ReleaseRejectionReason.MissingRequiredTerm, result.Single(candidate => candidate.Release.Title == missing.Title).Rejections);
+    }
+
+    [Fact]
     public void PreferredLanguageOrderRanksEarlierLanguagesHigher() {
         var rules = BookAcquisitionRules.Default with { PreferredLanguages = ["English", "German"] };
 

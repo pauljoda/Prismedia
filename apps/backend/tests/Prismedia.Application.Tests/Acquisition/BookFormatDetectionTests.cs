@@ -9,6 +9,7 @@ public sealed class BookFormatDetectionTests {
     [InlineData("Some Comic v01 (cbz)", BookFormat.ImageArchive)]
     [InlineData("A Novel [EPUB]", BookFormat.Epub)]
     [InlineData("A Manual.pdf", BookFormat.Pdf)]
+    [InlineData("Absolute_Batman_022__2026__Digital__Shan-Empire_CBZ", BookFormat.ImageArchive)]
     public void DetectsImportableFormat(string title, BookFormat expected) {
         Assert.Contains(expected, BookFormatDetection.Detect(title));
     }
@@ -22,6 +23,7 @@ public sealed class BookFormatDetectionTests {
     [InlineData("A Novel.mobi")]
     [InlineData("A Novel (AZW3)")]
     [InlineData("Saga Vol 1 (CBR)")]
+    [InlineData("Absolute_Batman_022__2026__Digital__Shan-Empire_CBR")]
     public void DoesNotDetectUnimportableFormatsButFlagsThem(string title) {
         // The pipeline can't import mobi/azw3/cbr, so they must not be claimed as importable...
         Assert.Empty(BookFormatDetection.Detect(title));
@@ -41,6 +43,7 @@ public sealed class BookFormatDetectionTests {
     [InlineData("The Book (Retail EPUB)", BookSourceTier.Retail)]
     [InlineData("The Book [Official]", BookSourceTier.Retail)]
     [InlineData("The Book (web)", BookSourceTier.Web)]
+    [InlineData("Absolute_Batman_022__2026__Digital__Shan-Empire_", BookSourceTier.Web)]
     [InlineData("The Book (Calibre converted)", BookSourceTier.Web)]
     [InlineData("The Book 2020", BookSourceTier.Unknown)]
     public void DetectsSourceTier(string title, BookSourceTier expected) =>
