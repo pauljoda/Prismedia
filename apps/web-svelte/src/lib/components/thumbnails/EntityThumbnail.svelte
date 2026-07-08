@@ -576,6 +576,7 @@
         decoding="async"
         loading={imageLoading}
         fetchpriority={imageFetchPriority}
+        referrerpolicy="no-referrer"
         style:object-fit={imageFit}
         onload={markImageLoaded}
         onerror={() => {
@@ -591,6 +592,7 @@
         decoding="async"
         loading={imageLoading}
         fetchpriority={imageFetchPriority}
+        referrerpolicy="no-referrer"
         style:object-fit={imageFit}
         onload={markImageLoaded}
         onerror={() => { imageFailed = true; }}
@@ -604,6 +606,7 @@
         decoding="async"
         loading={imageLoading}
         fetchpriority={imageFetchPriority}
+        referrerpolicy="no-referrer"
         style:object-fit={imageFit}
         class:sprite-active={activeSpriteFrame !== null}
         onload={markImageLoaded}
@@ -618,6 +621,7 @@
         decoding="async"
         loading={imageLoading}
         fetchpriority={imageFetchPriority}
+        referrerpolicy="no-referrer"
         style:object-fit={imageFit}
         onload={markImageLoaded}
         onerror={() => {

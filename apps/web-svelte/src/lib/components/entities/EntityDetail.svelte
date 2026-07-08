@@ -1323,12 +1323,12 @@
     {#if heroMode === "image"}
       <!-- Sharp banner, mask fades bottom 10%; the page's LCP image, loaded at high priority. -->
       <div class="hero-banner">
-        <img src={displayHero!.src} alt="Banner" decoding="async" fetchpriority="high" />
+        <img src={displayHero!.src} alt="Banner" decoding="async" fetchpriority="high" referrerpolicy="no-referrer" />
       </div>
       <!-- Lower zone: reflection bg + content on top (same URL as the banner, so it reuses the fetch) -->
       <div class="hero-lower">
         <div class="hero-reflection">
-          <img src={displayHero!.src} alt="" aria-hidden="true" decoding="async" />
+          <img src={displayHero!.src} alt="" aria-hidden="true" decoding="async" referrerpolicy="no-referrer" />
         </div>
         <div class="hero-blur-overlay"></div>
         {@render heroContent()}

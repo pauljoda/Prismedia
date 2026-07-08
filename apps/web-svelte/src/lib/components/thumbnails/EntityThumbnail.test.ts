@@ -206,6 +206,26 @@ describe("EntityThumbnail", () => {
     expect(link?.getAttribute("rel")).toBe("noopener noreferrer");
   });
 
+  it("renders remote cover artwork without forwarding the app referrer", () => {
+    const coverUrl =
+      "https://uploads.mangadex.org/covers/2d3114e5-43fb-4e10-9129-ebc2014489f8/6187c6cf-8f55-4b2e-874a-3e689b000623.jpg.512.jpg";
+    const card = {
+      ...personCard(),
+      cover: {
+        alt: "MangaDex cover",
+        src: coverUrl,
+      },
+    };
+
+    const { container } = render(EntityThumbnail, {
+      props: { card },
+    });
+
+    const image = container.querySelector<HTMLImageElement>(".media > img");
+    expect(image).toHaveAttribute("src", coverUrl);
+    expect(image).toHaveAttribute("referrerpolicy", "no-referrer");
+  });
+
   it("resolves nested gallery cards to their gallery detail route", () => {
     const { container } = render(EntityThumbnail, {
       props: {
