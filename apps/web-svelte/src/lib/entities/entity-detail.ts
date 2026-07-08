@@ -333,10 +333,14 @@ function resolveHero(capabilities: EntityCapability[]): EntityDetailHero | null 
 function resolvePoster(capabilities: EntityCapability[]): EntityDetailPoster | null {
   const images = getImagesCapability(capabilities);
   if (!images) return null;
+  // items arrive priority-sorted by the server's cover selection; accepting every
+  // poster-capable role (including cover) keeps the detail poster on the same
+  // winner grid cards show instead of skipping past a winning cover-role file.
   const posterItem = images.items.find(
     (item) =>
       item.kind === ENTITY_FILE_ROLE.poster ||
       item.kind === ENTITY_FILE_ROLE.thumbnail ||
+      item.kind === ENTITY_FILE_ROLE.cover ||
       item.kind === ENTITY_FILE_ROLE.logo,
   );
   if (posterItem) return { src: posterItem.path, alt: String(posterItem.kind) };

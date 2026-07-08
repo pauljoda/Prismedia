@@ -108,6 +108,36 @@ describe("entity detail view model", () => {
     expect(detail.poster?.src).toBe("/assets/books/book-1/cover.jpg");
   });
 
+  it("keeps the poster on the first-ranked cover item instead of skipping to a lower-ranked thumbnail", () => {
+    // Mirrors a book whose identify run downloaded plugin artwork (role cover, ranked
+    // first by the server) while the scan also extracted an embedded cover (role
+    // thumbnail). The detail poster must show the same winner the grid cards show.
+    const detail = entityCardToDetailCard({
+      id: "book-1",
+      kind: "book",
+      title: "Book",
+      parentEntityId: null,
+      sortOrder: null,
+      capabilities: [
+        {
+          kind: "images",
+          supportedKinds: ["cover", "thumbnail"],
+          thumbnailUrl: "/assets/grid-thumbs/book-1.jpg",
+          thumbnail2xUrl: null,
+          coverUrl: "/assets/plugins/artwork/book-1/cover.jpg",
+          items: [
+            { kind: "cover", path: "/assets/plugins/artwork/book-1/cover.jpg", mimeType: "image/jpeg" },
+            { kind: "thumbnail", path: "/assets/book-covers/book-1/thumb.jpg", mimeType: "image/jpeg" },
+          ],
+        },
+      ],
+      childrenByKind: [],
+      relationships: [],
+    } satisfies EntityCard);
+
+    expect(detail.poster?.src).toBe("/assets/plugins/artwork/book-1/cover.jpg");
+  });
+
   it("uses logo artwork as poster fallback for entities without poster art", () => {
     const detail = entityCardToDetailCard({
       id: "studio-1",
