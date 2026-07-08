@@ -26,6 +26,7 @@ import {
   listIndexers,
   queueAcquisition as queueAcquisitionRequest,
   reSearchAcquisition as reSearchAcquisitionRequest,
+  retryAcquisitionImport as retryAcquisitionImportRequest,
   saveAcquisitionProfile as saveAcquisitionProfileRequest,
   saveDownloadClient,
   saveIndexer,
@@ -36,7 +37,6 @@ import {
   updateIndexer,
   uploadAcquisitionTorrent,
 } from "$lib/api/generated/prismedia";
-import { orvalFetch } from "$lib/api/orval-fetch";
 import type {
   AcquisitionBlocklistEntry,
   CustomFormatSaveRequest,
@@ -159,20 +159,9 @@ export async function reSearchAcquisition(id: string): Promise<AcquisitionDetail
  * Re-runs the import for a downloaded or manual-import-held acquisition. `allowFormatChange` is the
  * user's explicit consent for a genuine upgrade to replace the owned file across formats (the old
  * file is recycled/kept per the recycle-bin setting); the dangerous-file hold is never bypassed.
- *
- * TODO: switch to the generated `retryAcquisitionImport` client after the next `pnpm api:generate`
- * (the endpoint exists server-side; codegen needs the running dev API, unavailable in this session).
  */
 export async function retryAcquisitionImport(id: string, allowFormatChange: boolean): Promise<AcquisitionDetail> {
-  const response = await orvalFetch<{ data: AcquisitionDetail; status: number; headers: Headers }>(
-    `/api/acquisitions/${id}/import`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ allowFormatChange }),
-    },
-  );
-  return unwrapGenerated(response, "Failed to import");
+  return unwrapGenerated(await retryAcquisitionImportRequest(id, { allowFormatChange }), "Failed to import");
 }
 
 export async function blocklistAcquisitionCandidate(id: string, candidateId: string): Promise<AcquisitionDetail> {

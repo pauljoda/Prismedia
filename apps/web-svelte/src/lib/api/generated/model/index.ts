@@ -13,6 +13,7 @@ export * from './acquisitionFileItem';
 export * from './acquisitionFilesView';
 export * from './acquisitionHistoryEvent';
 export * from './acquisitionHistoryView';
+export * from './acquisitionImportRetryRequest';
 export * from './acquisitionQueueRequest';
 export * from './acquisitionStatus';
 export * from './acquisitionSummary';

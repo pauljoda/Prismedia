@@ -10,6 +10,7 @@ import type {
   AcquisitionDetail,
   AcquisitionFilesView,
   AcquisitionHistoryView,
+  AcquisitionImportRetryRequest,
   AcquisitionQueueRequest,
   AcquisitionSummary,
   AcquisitionTransferView,
@@ -12335,6 +12336,51 @@ export const reSearchAcquisition = async (id: string, options?: RequestInit): Pr
     method: 'POST'
 
 
+  }
+);}
+
+
+
+export type retryAcquisitionImportResponse200 = {
+  data: AcquisitionDetail
+  status: 200
+}
+
+export type retryAcquisitionImportResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type retryAcquisitionImportResponseSuccess = (retryAcquisitionImportResponse200) & {
+  headers: Headers;
+};
+export type retryAcquisitionImportResponseError = (retryAcquisitionImportResponse404) & {
+  headers: Headers;
+};
+
+export type retryAcquisitionImportResponse = (retryAcquisitionImportResponseSuccess | retryAcquisitionImportResponseError)
+
+export const getRetryAcquisitionImportUrl = (id: string,) => {
+
+
+
+
+  return `/api/acquisitions/${id}/import`
+}
+
+/**
+ * @summary Re-runs the import for a downloaded or manual-import-held acquisition; allowFormatChange consents to replacing the owned file across formats.
+ */
+export const retryAcquisitionImport = async (id: string,
+    acquisitionImportRetryRequest: AcquisitionImportRetryRequest, options?: RequestInit): Promise<retryAcquisitionImportResponse> => {
+
+  return orvalFetch<retryAcquisitionImportResponse>(getRetryAcquisitionImportUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      acquisitionImportRetryRequest,)
   }
 );}
 
