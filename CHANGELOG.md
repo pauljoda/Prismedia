@@ -113,6 +113,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated documentation, README screenshots, branding assets, install metadata, and app copy to match the current Prismedia v1 surface.
 
 ### Fixed
+- Fixed expanded acquisition history rows overflowing phones when release titles are long; the history now wraps inside the acquisition card instead of widening the page.
 - Fixed the acquisition settings and release picker not adapting to phones: indexer, download client, path mapping, custom format, profile, and blocklist rows now stack as readable cards on narrow screens instead of clipping off the edge, and the release picker shows its stacked cards whenever it actually lacks the room for the full sortable table — including on tablets and in narrow panels — rather than deciding by screen size alone.
 - Fixed one marker-less release winning multiple TV season searches: season and episode searches now rank unit precision above quality — a release naming the exact season (or episode) outranks a complete-series pack, which outranks a title with no season token at all — so the same generic DVD rip can no longer be auto-grabbed for four different seasons.
 - Fixed the misleading "torrent did not appear in the category" failure when qBittorrent silently ignored a duplicate add: the client now recognizes the already-present torrent by name and reuses it, or reports an honest duplicate error; the connection test also verifies the download category can actually be created, so real category problems surface at setup time.

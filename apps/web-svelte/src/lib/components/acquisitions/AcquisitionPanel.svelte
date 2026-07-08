@@ -423,13 +423,13 @@
 
     <!-- ── History (durable activity log for this item) ── -->
     {#if history.length > 0}
-      <details class="group rounded-sm border border-border-subtle bg-surface-1">
-        <summary class="flex cursor-pointer items-center gap-2 px-3 py-2 text-kicker text-text-primary select-none">
+      <details class="group min-w-0 overflow-hidden rounded-sm border border-border-subtle bg-surface-1">
+        <summary class="flex min-w-0 cursor-pointer items-center gap-2 px-3 py-2 text-kicker text-text-primary select-none">
           <History class="h-3.5 w-3.5 text-text-muted" />
           History
           <span class="font-mono text-[0.68rem] font-normal text-text-muted">{history.length}</span>
         </summary>
-        <div class="px-3 pb-3">
+        <div class="min-w-0 px-3 pb-3">
           <AcquisitionHistoryList entries={history} />
         </div>
       </details>
