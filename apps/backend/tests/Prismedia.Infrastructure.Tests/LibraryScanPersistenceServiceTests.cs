@@ -477,6 +477,54 @@ public sealed class LibraryScanPersistenceServiceTests {
     }
 
     [Fact]
+    public async Task UpsertVideosBatchToleratesOneFileSharedByTwoEpisodes() {
+        // A multi-episode file (S01E05-E06) is bound as the source of BOTH episodes it covers, so one
+        // path legitimately maps to two video entities. A rescan must not crash on the duplicate path
+        // and must keep each episode's provider-assigned position instead of re-deriving both from the
+        // single filename parse.
+        await using var db = CreateContext();
+        var seriesId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var seasonId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        var rootId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+        var firstEpisodeId = Guid.Parse("44444444-4444-4444-4444-444444444444");
+        var secondEpisodeId = Guid.Parse("55555555-5555-5555-5555-555555555555");
+        const string sharedPath = "/media/The Chair Company/Season 1/The Chair Company - S01E05-E06.mkv";
+        var now = DateTimeOffset.UtcNow;
+        db.Entities.AddRange(
+            new EntityRow { Id = seriesId, KindCode = EntityKindRegistry.VideoSeries.Code, Title = "The Chair Company", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = seasonId, KindCode = EntityKindRegistry.VideoSeason.Code, Title = "Season 1", ParentEntityId = seriesId, SortOrder = 1, CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = firstEpisodeId, KindCode = EntityKindRegistry.Video.Code, Title = "Episode 5", ParentEntityId = seasonId, SortOrder = 5, CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = secondEpisodeId, KindCode = EntityKindRegistry.Video.Code, Title = "Episode 6", ParentEntityId = seasonId, SortOrder = 6, CreatedAt = now.AddSeconds(1), UpdatedAt = now });
+        db.EntityFiles.AddRange(
+            new EntityFileRow { Id = Guid.NewGuid(), EntityId = firstEpisodeId, Role = EntityFileRole.Source, Path = sharedPath, CreatedAt = now, UpdatedAt = now },
+            new EntityFileRow { Id = Guid.NewGuid(), EntityId = secondEpisodeId, Role = EntityFileRole.Source, Path = sharedPath, CreatedAt = now, UpdatedAt = now });
+        await db.SaveChangesAsync();
+
+        var service = new LibraryScanPersistenceService(db);
+        var ids = await service.UpsertVideosBatchAsync([
+            new VideoUpsertItem(
+                sharedPath,
+                "The Chair Company - S01E05-E06",
+                rootId,
+                IsNsfw: false,
+                new VideoSeriesScanInfo("/media/The Chair Company", "The Chair Company"),
+                new VideoSeasonScanInfo("/media/The Chair Company/Season 1", "Season 1", 1),
+                EpisodeNumber: 5,
+                AbsoluteEpisodeNumber: null)
+        ], CancellationToken.None);
+
+        Assert.Equal(firstEpisodeId, Assert.Single(ids));
+        // No third video was minted for the already-owned path.
+        Assert.Equal(2, db.Entities.Count(entity => entity.KindCode == EntityKindRegistry.Video.Code));
+        // Both episodes keep their own positions — the second was not clobbered by the filename parse.
+        Assert.Equal(5, (await db.Entities.FindAsync([firstEpisodeId]))!.SortOrder);
+        Assert.Equal(6, (await db.Entities.FindAsync([secondEpisodeId]))!.SortOrder);
+        // Both owners were backfilled with their library-root association.
+        Assert.NotNull(await db.VideoDetails.FindAsync([firstEpisodeId]));
+        Assert.NotNull(await db.VideoDetails.FindAsync([secondEpisodeId]));
+    }
+
+    [Fact]
     public async Task UpsertVideosBatchMarksOrganizedSeriesChainUnorganizedWhenNewEpisodeIsDiscovered() {
         await using var db = CreateContext();
         var seriesId = Guid.Parse("11111111-1111-1111-1111-111111111111");

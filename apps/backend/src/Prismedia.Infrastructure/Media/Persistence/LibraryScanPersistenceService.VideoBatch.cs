@@ -24,33 +24,47 @@ public sealed partial class LibraryScanPersistenceService {
         var seriesCache = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
         var seasonCache = new Dictionary<(Guid SeriesId, int SeasonNumber), Guid>();
 
-        var existingEntities = await _db.EntityFiles.AsNoTracking()
+        // One source path can legitimately belong to SEVERAL video entities: a multi-episode file
+        // (S01E05-E06) is bound to each episode it covers, so this lookup must group rather than
+        // key a dictionary on the path — a unique-key dictionary here crashed every scan of a
+        // library containing such a file.
+        var existingEntities = (await _db.EntityFiles.AsNoTracking()
             .Where(f => f.Role == EntityFileRole.Source && filePaths.Contains(f.Path))
             .Join(_db.Entities, f => f.EntityId, e => e.Id,
                 (f, e) => new { f.Path, e.Id, Entity = e })
-            .ToDictionaryAsync(x => x.Path, x => x, cancellationToken);
+            .ToListAsync(cancellationToken))
+            .GroupBy(x => x.Path)
+            .ToDictionary(g => g.Key, g => g.OrderBy(x => x.Entity.CreatedAt).ThenBy(x => x.Id).ToList());
 
         var now = DateTimeOffset.UtcNow;
         var results = new List<Guid>(items.Count);
 
         foreach (var item in items) {
-            if (existingEntities.TryGetValue(item.FilePath, out var existing)) {
-                var tracked = await _db.Entities.FindAsync([existing.Id], cancellationToken);
-                if (tracked is not null) tracked.UpdatedAt = now;
-                // A found video may predate its detail row (a request-created wanted episode binds the
-                // file path before this upsert) — backfill so it carries its library-root association.
-                if (await _db.VideoDetails.FindAsync([existing.Id], cancellationToken) is null) {
-                    _db.VideoDetails.Add(new VideoDetailRow { EntityId = existing.Id, LibraryRootId = item.LibraryRootId });
+            if (existingEntities.TryGetValue(item.FilePath, out var owners)) {
+                foreach (var existing in owners) {
+                    var tracked = await _db.Entities.FindAsync([existing.Id], cancellationToken);
+                    if (tracked is not null) tracked.UpdatedAt = now;
+                    // A found video may predate its detail row (a request-created wanted episode binds the
+                    // file path before this upsert) — backfill so it carries its library-root association.
+                    if (await _db.VideoDetails.FindAsync([existing.Id], cancellationToken) is null) {
+                        _db.VideoDetails.Add(new VideoDetailRow { EntityId = existing.Id, LibraryRootId = item.LibraryRootId });
+                    }
                 }
-                await MaterializeVideoHierarchyAsync(
-                    existing.Id,
-                    item,
-                    now,
-                    movieCache,
-                    seriesCache,
-                    seasonCache,
-                    cancellationToken);
-                results.Add(existing.Id);
+                if (owners.Count == 1) {
+                    await MaterializeVideoHierarchyAsync(
+                        owners[0].Id,
+                        item,
+                        now,
+                        movieCache,
+                        seriesCache,
+                        seasonCache,
+                        cancellationToken);
+                }
+                // A shared file's episodes keep their provider-bound hierarchy: one filename cannot
+                // describe two episodes, so re-materializing from its parse would clobber the second
+                // episode's position and sort order with the first's.
+                // Results are positional (one id per item) — report the file under its first owner.
+                results.Add(owners[0].Id);
                 continue;
             }
 
