@@ -53,12 +53,13 @@ public sealed class PlaybackInfoService : IPlaybackInfoService {
         var playSessionId = string.IsNullOrWhiteSpace(request?.PlaySessionId)
             ? Guid.NewGuid().ToString("N")
             : request.PlaySessionId!;
-        var transcodingAllowed = request?.EnableTranscoding != false;
+        var transcodingRequested = request?.EnableTranscoding != false;
+        var supportsTranscoding = transcodingRequested && source.DurationSeconds is > 0;
         var mediaSourceId = (source.MediaSourceId ?? itemId).ToString("N");
         var videoStream = PrimaryVideoStream(source);
         var videoRange = VideoPlaybackRangePolicy.Classify(videoStream);
 
-        if (transcodingAllowed) {
+        if (supportsTranscoding) {
             _transcodes.Register(playSessionId, itemId);
         }
 
@@ -75,13 +76,13 @@ public sealed class PlaybackInfoService : IPlaybackInfoService {
             request?.SupportedVideoRangeTypes,
             directPlayAllowed: request?.EnableDirectPlay != false,
             directStreamAllowed: request?.EnableDirectStream != false,
-            transcodingAllowed: transcodingAllowed);
+            transcodingAllowed: supportsTranscoding);
 
         // A DirectPlay verdict serves the raw file; a Remux verdict serves a stream-copy fMP4 HLS
         // (video copied, audio to AAC) so a client that can decode the codec but not the container
         // avoids an expensive re-encode; anything else is a full transcode.
         var supportsDirectPlayback = decision.Method == VideoPlaybackMethod.DirectPlay;
-        var serveTranscode = transcodingAllowed && !supportsDirectPlayback;
+        var serveTranscode = supportsTranscoding && !supportsDirectPlayback;
         var isRemux = serveTranscode && decision.Method == VideoPlaybackMethod.Remux;
 
         string? transcodingUrl = null;
@@ -120,7 +121,7 @@ public sealed class PlaybackInfoService : IPlaybackInfoService {
             ToTicks(source.DurationSeconds),
             supportsDirectPlayback,
             supportsDirectPlayback,
-            transcodingAllowed,
+            supportsTranscoding,
             transcodingUrl,
             transcodingSubProtocol,
             transcodingContainer,

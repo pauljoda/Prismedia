@@ -155,6 +155,42 @@ public sealed class PlaybackInfoServiceTests {
     }
 
     [Fact]
+    public async Task PlaybackInfoDoesNotAdvertiseHlsWhenSourceDurationIsMissing() {
+        var videoId = Guid.Parse("89898989-8989-8989-8989-898989898989");
+        var service = new PlaybackInfoService(
+            new FakeVideoSourceService(new VideoSourceFile(
+                videoId,
+                "/media/new-import.mkv",
+                "video/x-matroska",
+                false,
+                DurationSeconds: null,
+                Width: 1920,
+                Height: 1080,
+                Container: "matroska",
+                VideoCodec: "h264",
+                AudioCodec: "aac",
+                Streams:
+                [
+                    new(0, "Video", "h264", null, "Video", 1920, 1080, 24, null, null, null, true, false),
+                    new(1, "Audio", "aac", "eng", "English", null, null, null, null, 48000, 2, true, false)
+                ])),
+            new TranscodeSessionService());
+
+        var info = await service.GetPlaybackInfoAsync(videoId, new PlaybackInfoQuery {
+            EnableDirectPlay = true,
+            EnableDirectStream = true,
+            EnableTranscoding = true
+        }, CancellationToken.None);
+
+        Assert.NotNull(info);
+        var source = Assert.Single(info.MediaSources);
+        Assert.False(source.SupportsDirectPlay);
+        Assert.False(source.SupportsTranscoding);
+        Assert.Null(source.TranscodingUrl);
+        Assert.Null(source.TranscodingInfo);
+    }
+
+    [Fact]
     public async Task PlaybackInfoDirectPlaysMkvWhenClientProfileDeclaresCodecSupport() {
         var videoId = Guid.Parse("67676767-6767-6767-6767-676767676767");
         var service = new PlaybackInfoService(

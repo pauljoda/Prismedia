@@ -110,8 +110,9 @@ public sealed class VideoSourceService : IVideoSourceService {
                     row.DvBlSignalCompatibilityId,
                     row.Hdr10PlusPresentFlag))
                 .ToListAsync(cancellationToken);
+        VideoProbeResult? probed = null;
         if (_mediaProbe is not null && ShouldProbeStreams(source.File.Path, mediaSource?.VideoCodec ?? source.Technical?.Codec, streams)) {
-            var probed = await _mediaProbe.ProbeVideoAsync(source.File.Path, cancellationToken);
+            probed = await _mediaProbe.ProbeVideoAsync(source.File.Path, cancellationToken);
             if (probed?.Streams is { Count: > 0 }) {
                 streams = probed.Streams
                     .Select(stream => new VideoSourceStream(
@@ -155,17 +156,17 @@ public sealed class VideoSourceService : IVideoSourceService {
             source.File.Path,
             source.File.MimeType ?? MimeForExtension(extension),
             directPlayable,
-            mediaSource?.DurationSeconds ?? source.Technical?.DurationSeconds,
-            mediaSource?.Width ?? source.Technical?.Width,
-            mediaSource?.Height ?? source.Technical?.Height,
+            mediaSource?.DurationSeconds ?? source.Technical?.DurationSeconds ?? probed?.DurationSeconds,
+            mediaSource?.Width ?? source.Technical?.Width ?? probed?.Width,
+            mediaSource?.Height ?? source.Technical?.Height ?? probed?.Height,
             mediaSource?.Id,
-            mediaSource?.Container ?? source.Technical?.Container,
-            mediaSource?.BitRate ?? source.Technical?.BitRate,
-            mediaSource?.VideoCodec ?? source.Technical?.Codec,
-            mediaSource?.AudioCodec,
-            mediaSource?.FrameRate ?? source.Technical?.FrameRate,
-            source.Technical?.SampleRate,
-            source.Technical?.Channels,
+            mediaSource?.Container ?? source.Technical?.Container ?? probed?.Container,
+            mediaSource?.BitRate ?? source.Technical?.BitRate ?? probed?.BitRate,
+            mediaSource?.VideoCodec ?? source.Technical?.Codec ?? probed?.Codec,
+            mediaSource?.AudioCodec ?? probed?.AudioCodec,
+            mediaSource?.FrameRate ?? source.Technical?.FrameRate ?? probed?.FrameRate,
+            source.Technical?.SampleRate ?? probed?.SampleRate,
+            source.Technical?.Channels ?? probed?.Channels,
             streams);
     }
 

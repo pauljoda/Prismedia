@@ -279,6 +279,43 @@ describe("extractVideoPlayerProps", () => {
     expect(props.qualityRungs[0]?.url).toContain("AudioStreamIndex=2");
   });
 
+  it("does not synthesize HLS URLs when playback negotiation disables transcoding", () => {
+    const props = extractVideoPlayerProps("video-1", [], {
+      PlaySessionId: "session-1",
+      ErrorCode: null,
+      MediaSources: [
+        {
+          Id: "source-1",
+          Path: "/media/new-import.mkv",
+          Protocol: "File",
+          Container: "mkv",
+          Size: null,
+          Name: "new-import.mkv",
+          RunTimeTicks: null,
+          SupportsDirectPlay: false,
+          SupportsDirectStream: false,
+          SupportsTranscoding: false,
+          TranscodingUrl: null,
+          TranscodingSubProtocol: null,
+          TranscodingContainer: null,
+          MediaStreams: [
+            {
+              Index: 0,
+              Type: "Video",
+              Codec: "h264",
+              DisplayTitle: "Video",
+              IsDefault: true,
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(props.src).toBe("");
+    expect(props.directSrc).toBe("");
+    expect(props.qualityRungs).toEqual([]);
+  });
+
   it("trusts playback negotiation when HDR sources must transcode", () => {
     const props = extractVideoPlayerProps("video-1", [
       {

@@ -86,6 +86,8 @@ export function extractVideoPlayerProps(
     : "";
   const hlsSrc = mediaSource?.TranscodingUrl
     ? jellyfinApiPath(mediaSource.TranscodingUrl)
+    : mediaSource?.SupportsTranscoding === false
+      ? ""
     : jellyfinApiPath(appendAudioStreamIndex(`/Videos/${videoId}/master.m3u8`, defaultAudioStreamIndex));
   const defaultAudioStream =
     audioStreams.find((stream) => stream.Index === defaultAudioStreamIndex) ?? audioStreams[0] ?? null;

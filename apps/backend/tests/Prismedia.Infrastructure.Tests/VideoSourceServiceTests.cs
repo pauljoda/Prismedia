@@ -100,6 +100,43 @@ public sealed class VideoSourceServiceTests : IDisposable {
     }
 
     [Fact]
+    public async Task UsesLazyProbeMetadataWhenSourceHasNotBeenPersistentlyProbed() {
+        await using var db = CreateContext();
+        var videoId = Guid.Parse("45454545-4545-4545-4545-454545454545");
+        var filePath = Path.Combine(_tempDir, "video.mkv");
+        await File.WriteAllTextAsync(filePath, "video-bytes");
+        SeedVideoSource(db, videoId, filePath, null);
+        await db.SaveChangesAsync();
+        var probe = new MediaProbeService(new JsonProcessExecutor("""
+            {
+              "format": {
+                "duration": "1293.444000",
+                "size": "826454433",
+                "bit_rate": "5109366",
+                "format_name": "matroska,webm"
+              },
+              "streams": [
+                { "index": 0, "codec_type": "video", "codec_name": "h264", "width": 1920, "height": 1080, "avg_frame_rate": "24000/1001", "disposition": { "default": 1, "forced": 0 } },
+                { "index": 1, "codec_type": "audio", "codec_name": "aac", "sample_rate": "48000", "channels": 2, "disposition": { "default": 1, "forced": 0 } }
+              ]
+            }
+            """));
+
+        var service = new VideoSourceService(db, probe);
+        var source = await service.GetSourceAsync(videoId, CancellationToken.None);
+
+        Assert.NotNull(source);
+        Assert.Equal(1293.444, source.DurationSeconds);
+        Assert.Equal(1920, source.Width);
+        Assert.Equal(1080, source.Height);
+        Assert.Equal("matroska", source.Container);
+        Assert.Equal("h264", source.VideoCodec);
+        Assert.Equal("aac", source.AudioCodec);
+        Assert.Equal(23.98, source.FrameRate);
+        Assert.Equal(2, source.Streams!.Count);
+    }
+
+    [Fact]
     public async Task ProbesStreamsWhenPersistedSourceOnlyHasOneSyntheticAudioTrack() {
         await using var db = CreateContext();
         var videoId = Guid.Parse("55555555-5555-5555-5555-555555555555");
