@@ -4,6 +4,7 @@
   import { page } from "$app/state";
   import {
     Captions,
+    CloudDownload,
     Info,
     MapPin,
     Play,
@@ -54,6 +55,7 @@
   import NsfwBlur from "$lib/components/nsfw/NsfwBlur.svelte";
   import { isWanted } from "$lib/api/capabilities";
   import EntityAcquisitionCard from "$lib/components/acquisitions/EntityAcquisitionCard.svelte";
+  import { useEntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
   import EntityDetail, {
     type EntityDetailActionButton,
     type EntityMetadataUpdateRequest,
@@ -127,12 +129,20 @@
     };
   });
   const identifyAction = useIdentifyDetailAction(() => card?.entity.id, () => card?.entity.kind);
-  // A phantom episode has no file to play — the acquisition card below the detail offers "Search for
-  // release" and the acquisition management surface instead of the player.
+  // A phantom episode has no file to play — the Acquisition detail tab offers "Search for release"
+  // and the acquisition management surface instead of the player.
   const entityWanted = $derived(!!video && isWanted(video.capabilities));
   const heroActions = $derived.by((): EntityDetailActionButton[] =>
     identifyAction.action ? [identifyAction.action] : []);
   const videoId = $derived(video?.id ?? "");
+
+  // Wanted/tracking state (search, releases, live download, monitoring, cancel) lives in the
+  // Acquisition detail tab; the tab only appears while the video has an acquisition story.
+  const acq = useEntityAcquisition({
+    entityId: () => video?.id,
+    capabilities: () => video?.capabilities,
+    onChanged: loadVideo,
+  });
 
   const playerProps = $derived.by(() => {
     if (!video || entityWanted) return null;
@@ -171,6 +181,7 @@
       label: "Transcript",
       count: playerProps?.subtitleTracks.length ?? 0,
     },
+    { id: "acquisition" },
   ]);
 
   const detailTabs = $derived.by((): EntityDetailTab[] => {
@@ -203,8 +214,32 @@
         count: playerProps?.subtitleTracks.length ?? 0,
         sections: ["transcript"],
       },
+      ...(acq.visible
+        ? [{ id: "acquisition", label: "Acquisition", icon: CloudDownload, sections: ["acquisition"] }]
+        : []),
     ];
   });
+
+  // The phantom-episode branch shows metadata-only tabs — no playback, markers, transcript, or
+  // series rail exist yet — plus the same Acquisition tab, which owns the actionable wanted state.
+  const wantedDetailTabs = $derived.by((): EntityDetailTab[] => [
+    {
+      id: "details",
+      label: "Details",
+      icon: Info,
+      sections: ["description", "tags", "studio", "credits"],
+    },
+    {
+      id: "metadata",
+      label: "Metadata",
+      icon: SlidersHorizontal,
+      sections: ["stats", "dates", "classification", "source", "links"],
+      layout: "grid",
+    },
+    ...(acq.visible
+      ? [{ id: "acquisition", label: "Acquisition", icon: CloudDownload, sections: ["acquisition"] }]
+      : []),
+  ]);
 
   const dates = $derived(card?.dates ?? []);
 
@@ -809,46 +844,55 @@
 
 
       {#snippet sectionContent(section)}
-        <VideoDetailSectionContent
-          {section}
-          {card}
-          seriesCards={seriesCard ? [seriesCard] : []}
-          {videoId}
-          {playbackState}
-          {durationSeconds}
-          {playbackBusy}
-          {playerProps}
-          {isTranscriptDockActive}
-          {isTranscriptDocked}
-          {hasSubtitles}
-          {activeSubtitleId}
-          {displayTime}
-          getCurrentTime={() => currentTime}
-          onSeek={handleSeek}
-          onResume={handleResume}
-          onStartOver={handleStartOver}
-          onToggleWatched={handleToggleWatched}
-          onRefresh={refreshVideo}
-          onActiveSubtitleChange={handleActiveSubtitleChange}
-          onTranscriptDockToggle={toggleTranscriptDock}
-        />
+        {#if section.id === "acquisition"}
+          <EntityAcquisitionCard {acq} onCancelled={() => void loadVideo()} />
+        {:else}
+          <VideoDetailSectionContent
+            {section}
+            {card}
+            seriesCards={seriesCard ? [seriesCard] : []}
+            {videoId}
+            {playbackState}
+            {durationSeconds}
+            {playbackBusy}
+            {playerProps}
+            {isTranscriptDockActive}
+            {isTranscriptDocked}
+            {hasSubtitles}
+            {activeSubtitleId}
+            {displayTime}
+            getCurrentTime={() => currentTime}
+            onSeek={handleSeek}
+            onResume={handleResume}
+            onStartOver={handleStartOver}
+            onToggleWatched={handleToggleWatched}
+            onRefresh={refreshVideo}
+            onActiveSubtitleChange={handleActiveSubtitleChange}
+            onTranscriptDockToggle={toggleTranscriptDock}
+          />
+        {/if}
       {/snippet}
     </EntityDetail>
   {:else if card && video && entityWanted}
-    <!-- A phantom episode: no file to play yet — metadata plus the acquisition card (search,
+    <!-- A phantom episode: no file to play yet — metadata plus the Acquisition tab (search,
          releases, live download, monitoring, cancel), exactly like a wanted movie or book. -->
-    <EntityDetail {card} posterSize="medium" actionButtons={heroActions}>
+    <EntityDetail
+      {card}
+      posterSize="medium"
+      actionButtons={heroActions}
+      tabs={wantedDetailTabs}
+      sections={detailSections}
+    >
       {#snippet heroBadges()}
         <span class="hero-badge wanted">Wanted</span>
       {/snippet}
-    </EntityDetail>
 
-    <EntityAcquisitionCard
-      entityId={video?.id}
-      capabilities={video?.capabilities}
-      onChanged={loadVideo}
-      onCancelled={() => void loadVideo()}
-    />
+      {#snippet sectionContent(section)}
+        {#if section.id === "acquisition"}
+          <EntityAcquisitionCard {acq} onCancelled={() => void loadVideo()} />
+        {/if}
+      {/snippet}
+    </EntityDetail>
   {/if}
 </div>
 

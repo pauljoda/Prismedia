@@ -3,6 +3,7 @@
   import { page } from "$app/state";
   import {
     Captions,
+    CloudDownload,
     Info,
     MapPin,
     Play,
@@ -12,6 +13,7 @@
   import { cn } from "@prismedia/ui-svelte";
   import { goto } from "$app/navigation";
   import EntityAcquisitionCard from "$lib/components/acquisitions/EntityAcquisitionCard.svelte";
+  import { useEntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import EntityDetailHeroDates from "$lib/components/entities/EntityDetailHeroDates.svelte";
   import { fetchMovie, fetchVideo, type MovieDetail, type VideoDetail } from "$lib/api/media";
@@ -124,10 +126,16 @@
     video ? entityCardToDetailCard(video) : null
   ));
   const identifyAction = useIdentifyDetailAction(() => card?.entity.id, () => card?.entity.kind);
-  // Wanted/tracking state (Search for release, releases, live download, monitoring) lives in the
-  // EntityAcquisitionCard mounted below the detail.
   const heroActions = $derived.by((): EntityDetailActionButton[] =>
     identifyAction.action ? [identifyAction.action] : []);
+
+  // Wanted/tracking state (Search for release, releases, live download, monitoring) lives in the
+  // Acquisition detail tab; the tab only appears while the movie has an acquisition story.
+  const acq = useEntityAcquisition({
+    entityId: () => movie?.id,
+    capabilities: () => movie?.capabilities,
+    onChanged: loadMovie,
+  });
   const videoId = $derived(video?.id ?? "");
 
   const playerProps = $derived.by(() => {
@@ -161,6 +169,7 @@
       label: "Transcript",
       count: playerProps?.subtitleTracks.length ?? 0,
     },
+    { id: "acquisition" },
   ]);
 
   const detailTabs = $derived.by((): EntityDetailTab[] => {
@@ -193,8 +202,32 @@
         count: playerProps?.subtitleTracks.length ?? 0,
         sections: ["transcript"],
       },
+      ...(acq.visible
+        ? [{ id: "acquisition", label: "Acquisition", icon: CloudDownload, sections: ["acquisition"] }]
+        : []),
     ];
   });
+
+  // The fileless (wanted placeholder) branch shows metadata-only tabs — no playback, markers, or
+  // transcript exist yet — plus the same Acquisition tab, which owns the actionable wanted state.
+  const wantedDetailTabs = $derived.by((): EntityDetailTab[] => [
+    {
+      id: "details",
+      label: "Details",
+      icon: Info,
+      sections: ["description", "tags", "studio", "credits"],
+    },
+    {
+      id: "metadata",
+      label: "Metadata",
+      icon: SlidersHorizontal,
+      sections: ["stats", "dates", "classification", "source", "links"],
+      layout: "grid",
+    },
+    ...(acq.visible
+      ? [{ id: "acquisition", label: "Acquisition", icon: CloudDownload, sections: ["acquisition"] }]
+      : []),
+  ]);
 
   const dates = $derived(card?.dates ?? []);
 
@@ -759,32 +792,36 @@
 
 
       {#snippet sectionContent(section)}
-        <VideoDetailSectionContent
-          {section}
-          card={detailCardForSection(section)}
-          {videoId}
-          {playbackState}
-          {durationSeconds}
-          {playbackBusy}
-          {playerProps}
-          {isTranscriptDockActive}
-          {isTranscriptDocked}
-          {hasSubtitles}
-          {activeSubtitleId}
-          {displayTime}
-          getCurrentTime={() => currentTime}
-          onSeek={handleSeek}
-          onResume={handleResume}
-          onStartOver={handleStartOver}
-          onToggleWatched={handleToggleWatched}
-          onRefresh={refreshMovie}
-          onActiveSubtitleChange={handleActiveSubtitleChange}
-          onTranscriptDockToggle={toggleTranscriptDock}
-        />
+        {#if section.id === "acquisition"}
+          <EntityAcquisitionCard {acq} onCancelled={handleAcquisitionCancelled} />
+        {:else}
+          <VideoDetailSectionContent
+            {section}
+            card={detailCardForSection(section)}
+            {videoId}
+            {playbackState}
+            {durationSeconds}
+            {playbackBusy}
+            {playerProps}
+            {isTranscriptDockActive}
+            {isTranscriptDocked}
+            {hasSubtitles}
+            {activeSubtitleId}
+            {displayTime}
+            getCurrentTime={() => currentTime}
+            onSeek={handleSeek}
+            onResume={handleResume}
+            onStartOver={handleStartOver}
+            onToggleWatched={handleToggleWatched}
+            onRefresh={refreshMovie}
+            onActiveSubtitleChange={handleActiveSubtitleChange}
+            onTranscriptDockToggle={toggleTranscriptDock}
+          />
+        {/if}
       {/snippet}
     </EntityDetail>
   {:else if card}
-    <!-- Fileless movie (a wanted request placeholder): metadata plus the inline acquisition surface —
+    <!-- Fileless movie (a wanted request placeholder): metadata plus the Acquisition tab —
          wanted/tracking state is managed on the entity itself, same as books. -->
     <EntityDetail
       {card}
@@ -796,6 +833,8 @@
       showHero
       posterSize="large"
       actionButtons={heroActions}
+      tabs={wantedDetailTabs}
+      sections={detailSections}
       defaultCreditRole={CREDIT_ROLE.actor}
     >
       {#snippet heroMeta()}
@@ -810,14 +849,13 @@
           <span class="hero-badge wanted">Wanted</span>
         {/if}
       {/snippet}
-    </EntityDetail>
 
-    <EntityAcquisitionCard
-      entityId={movie?.id}
-      capabilities={movie?.capabilities}
-      onChanged={loadMovie}
-      onCancelled={handleAcquisitionCancelled}
-    />
+      {#snippet sectionContent(section)}
+        {#if section.id === "acquisition"}
+          <EntityAcquisitionCard {acq} onCancelled={handleAcquisitionCancelled} />
+        {/if}
+      {/snippet}
+    </EntityDetail>
   {/if}
 </div>
 

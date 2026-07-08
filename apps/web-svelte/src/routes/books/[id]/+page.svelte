@@ -3,10 +3,11 @@
   import { onMount } from "svelte";
   import { afterNavigate, goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { BookOpen, Info, Play, SlidersHorizontal, Users } from "@lucide/svelte";
+  import { BookOpen, CloudDownload, Info, Play, SlidersHorizontal, Users } from "@lucide/svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import MediaProgressPanel from "$lib/components/MediaProgressPanel.svelte";
   import EntityAcquisitionCard from "$lib/components/acquisitions/EntityAcquisitionCard.svelte";
+  import { useEntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
   import { getCapability, isWanted } from "$lib/api/capabilities";
   import { updateEntityProgress } from "$lib/api/playback";
   import { fetchBook, type BookDetail } from "$lib/api/media";
@@ -89,7 +90,7 @@
   const bookId = $derived(page.params.id ?? "");
   const bookType = $derived(book?.bookType ?? null);
   // A wanted placeholder has metadata but no file yet; reading is offered only once the file lands.
-  // Its acquisition/monitoring surface is the EntityAcquisitionCard mounted below the detail.
+  // Its acquisition/monitoring surface is the Acquisition detail tab.
   const entityWanted = $derived(!!book && isWanted(book.capabilities));
   // Single-file books (EPUB/PDF) are read straight from the source file with no chapter entities.
   const isSingleFileBook = $derived(!!book && book.format !== "image-archive");
@@ -138,11 +139,20 @@
   });
 
   const identifyAction = useIdentifyDetailAction(() => card?.entity.id, () => card?.entity.kind);
+
+  // Wanted/tracking state lives on the entity itself: search, releases, live download, monitoring,
+  // cancel — one Acquisition detail tab, absent entirely for an ordinary owned book.
+  const acq = useEntityAcquisition({
+    entityId: () => book?.id,
+    capabilities: () => book?.capabilities,
+    onChanged: () => loadBook(),
+  });
+
   const heroActions = $derived.by((): EntityDetailActionButton[] => {
     const actions: EntityDetailActionButton[] = [];
     if (identifyAction.action) actions.push(identifyAction.action);
     if (entityWanted) {
-      // No file yet — the acquisition card below owns the actionable state (search for release,
+      // No file yet — the Acquisition tab owns the actionable state (search for release,
       // release picker, live download, monitoring, cancel).
       return actions;
     }
@@ -176,6 +186,7 @@
       label: peopleLabel,
       icon: Users,
     },
+    { id: "acquisition" },
   ]);
 
   const detailTabs = $derived.by((): EntityDetailTab[] => {
@@ -194,6 +205,9 @@
         sections: ["stats", "dates", "classification", "source", "links"],
         layout: "grid",
       },
+      ...(acq.visible
+        ? [{ id: "acquisition", label: "Acquisition", icon: CloudDownload, sections: ["acquisition"] }]
+        : []),
     ];
   });
 
@@ -585,16 +599,12 @@
         {/if}
       {/snippet}
 
+      {#snippet sectionContent(section)}
+        {#if section.id === "acquisition"}
+          <EntityAcquisitionCard {acq} onCancelled={handleAcquisitionCancelled} />
+        {/if}
+      {/snippet}
     </EntityDetail>
-
-    <!-- Wanted/tracking state lives on the entity itself: search, releases, live download,
-         monitoring, cancel — one card, hidden entirely for an ordinary owned book. -->
-    <EntityAcquisitionCard
-      entityId={book?.id}
-      capabilities={book?.capabilities}
-      onChanged={loadBook}
-      onCancelled={handleAcquisitionCancelled}
-    />
 
     {#if progressDisplay}
       <section class="progress-section">

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { page } from "$app/state";
-  import { BookOpen, Info, SlidersHorizontal, Users } from "@lucide/svelte";
+  import { BookOpen, CloudDownload, Info, SlidersHorizontal, Users } from "@lucide/svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import { fetchBookAuthor, type BookAuthorDetail } from "$lib/api/media";
   import {
@@ -30,6 +30,7 @@
   } from "$lib/components/entities/EntityDetail.svelte";
   import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
   import EntityAcquisitionCard from "$lib/components/acquisitions/EntityAcquisitionCard.svelte";
+  import { useEntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
   import { useIdentifyDetailAction } from "$lib/components/identify/use-identify-detail-action.svelte";
   import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
   import { useNsfw } from "$lib/nsfw/store.svelte";
@@ -59,18 +60,30 @@
   });
 
   const identifyAction = useIdentifyDetailAction(() => author?.id, () => author?.kind);
-  // Monitoring lives in the EntityAcquisitionCard below the detail. It works for scanned-in and
-  // requested authors alike; it needs a provider identity a plugin can track, which Identify supplies
-  // for on-disk authors and a request commit supplies for wanted ones.
   const heroActions = $derived.by((): EntityDetailActionButton[] =>
     identifyAction.action ? [identifyAction.action] : []);
 
+  // Monitoring lives in the Acquisition detail tab ("Check for new works" runs the discovery sync
+  // now; the page reloads to show any new phantoms). It works for scanned-in and requested authors
+  // alike; it needs a provider identity a plugin can track, which Identify supplies for on-disk
+  // authors and a request commit supplies for wanted ones. The tab hides when no plugin can track.
+  const acq = useEntityAcquisition({
+    entityId: () => author?.id,
+    capabilities: () => author?.capabilities,
+    childCards: () => bookCards,
+    onChanged: () => void loadAuthor(),
+  });
+
   const detailSections = $derived.by((): EntityDetailSection[] => [
     { id: "credits", label: "People", icon: Users },
+    { id: "acquisition" },
   ]);
   const detailTabs = $derived.by((): EntityDetailTab[] => [
     { id: "details", label: "Details", icon: Info, sections: ["description", "tags", "credits"] },
     { id: "metadata", label: "Metadata", icon: SlidersHorizontal, sections: ["stats", "dates", "classification", "links"], layout: "grid" },
+    ...(acq.visible
+      ? [{ id: "acquisition", label: "Acquisition", icon: CloudDownload, sections: ["acquisition"] }]
+      : []),
   ]);
 
   onMount(() => {
@@ -179,16 +192,13 @@
           <span class="meta-item">{bookCards.length} {bookCards.length === 1 ? "book" : "books"}</span>
         {/if}
       {/snippet}
-    </EntityDetail>
 
-    <!-- Follow the author for new works ("Check for new works" runs the discovery sync now; the page
-         reloads to show any new phantoms). Hidden when no plugin can track this author. -->
-    <EntityAcquisitionCard
-      entityId={author?.id}
-      capabilities={author?.capabilities}
-      childCards={bookCards}
-      onChanged={() => void loadAuthor()}
-    />
+      {#snippet sectionContent(section)}
+        {#if section.id === "acquisition"}
+          <EntityAcquisitionCard {acq} />
+        {/if}
+      {/snippet}
+    </EntityDetail>
 
     {#if bookCards.length > 0}
       <section class="content-section">

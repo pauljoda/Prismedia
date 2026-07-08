@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
-  import { Users, Building2, Calendar, Info, SlidersHorizontal } from "@lucide/svelte";
+  import { Users, Building2, Calendar, CloudDownload, Info, SlidersHorizontal } from "@lucide/svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import { fetchSeason, fetchSeries, type VideoSeasonDetail, type VideoSeriesDetail } from "$lib/api/media";
   import { fetchRequestDetail } from "$lib/api/requests";
@@ -17,6 +17,7 @@
     updateOptimisticEntityRating,
   } from "$lib/entities/entity-detail-state";
   import EntityAcquisitionCard from "$lib/components/acquisitions/EntityAcquisitionCard.svelte";
+  import { useEntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
   import SeasonPassEditor from "$lib/components/acquisitions/SeasonPassEditor.svelte";
   import { useIdentifyDetailAction } from "$lib/components/identify/use-identify-detail-action.svelte";
   import type { EntityDetailCredit, EntityDetailTag } from "$lib/entities/entity-detail";
@@ -73,9 +74,17 @@
   });
 
   const identifyAction = useIdentifyDetailAction(() => card?.entity.id, () => card?.entity.kind);
-  // Following the series for new seasons/episodes lives in the EntityAcquisitionCard below the detail.
   const heroActions = $derived.by((): EntityDetailActionButton[] =>
     identifyAction.action ? [identifyAction.action] : []);
+
+  // Following the series for new seasons/episodes lives in the Acquisition detail tab; the
+  // page owns the state so the tab only appears when the series has an acquisition story.
+  const acq = useEntityAcquisition({
+    entityId: () => series?.id,
+    capabilities: () => series?.capabilities,
+    childCards: () => seasonCards,
+    onChanged: refreshSeries,
+  });
 
   const dates = $derived(card?.dates ?? []);
   const seriesExternalId = $derived(series ? firstProviderQualifiedId(series.capabilities) : null);
@@ -99,6 +108,7 @@
       label: "Cast",
       icon: Users,
     },
+    { id: "acquisition" },
   ]);
   const detailTabs = $derived.by((): EntityDetailTab[] => {
     if (!card) return [];
@@ -116,6 +126,9 @@
         sections: ["stats", "dates", "classification", "source", "links"],
         layout: "grid",
       },
+      ...(acq.visible
+        ? [{ id: "acquisition", label: "Acquisition", icon: CloudDownload, sections: ["acquisition"] }]
+        : []),
     ];
   });
 
@@ -296,15 +309,12 @@
         {/if}
       {/snippet}
 
+      {#snippet sectionContent(section)}
+        {#if section.id === "acquisition"}
+          <EntityAcquisitionCard {acq} />
+        {/if}
+      {/snippet}
     </EntityDetail>
-
-    <!-- Follow the series for new seasons/episodes — the same monitor control authors and artists carry. -->
-    <EntityAcquisitionCard
-      entityId={series?.id}
-      capabilities={series?.capabilities}
-      childCards={seasonCards}
-      onChanged={refreshSeries}
-    />
 
     {#if hasSeasons || providerSeasonOptions.length > 0}
       <SeasonPassEditor

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { page } from "$app/state";
-  import { Film, Info, SlidersHorizontal, Users } from "@lucide/svelte";
+  import { CloudDownload, Film, Info, SlidersHorizontal, Users } from "@lucide/svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import EntityDetailHeroDates from "$lib/components/entities/EntityDetailHeroDates.svelte";
   import { fetchSeason, fetchSeries, type VideoSeasonDetail, type VideoSeriesDetail } from "$lib/api/media";
@@ -26,6 +26,7 @@
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
   import { ENTITY_KIND } from "$lib/entities/entity-codes";
   import EntityAcquisitionCard from "$lib/components/acquisitions/EntityAcquisitionCard.svelte";
+  import { useEntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
   import EntityDetail, {
     type EntityMetadataUpdateRequest,
     type EntityDetailSection,
@@ -74,6 +75,17 @@
 
   const dates = $derived(card?.dates ?? []);
 
+  // A phantom season's "Search for release" (a season-pack acquisition) and its acquisition
+  // management live in the Acquisition detail tab, exactly like a wanted movie. Episodes ride
+  // along so a half-imported season surfaces its missing episodes as a roll-up with a
+  // "Search N missing" action, the same way the series page rolls up its seasons.
+  const acq = useEntityAcquisition({
+    entityId: () => season?.id,
+    capabilities: () => season?.capabilities,
+    childCards: () => episodeCards,
+    onChanged: loadSeason,
+  });
+
   // Seasons are not relationship owners: tags, studio, and cast belong to the series and
   // are shown here as inherited context only. Editing them on a season would write through
   // to the series via the backend's owner resolution, so the sections are read-only.
@@ -81,6 +93,7 @@
     { id: "tags", label: "Tags", editable: false },
     { id: "studio", label: "Studio", editable: false },
     { id: "credits", label: "Cast", icon: Users, editable: false },
+    { id: "acquisition" },
   ]);
 
   const detailTabs = $derived.by((): EntityDetailTab[] => {
@@ -99,6 +112,9 @@
         sections: ["stats", "dates", "links"],
         layout: "grid",
       },
+      ...(acq.visible
+        ? [{ id: "acquisition", label: "Acquisition", icon: CloudDownload, sections: ["acquisition"] }]
+        : []),
     ];
   });
 
@@ -121,8 +137,6 @@
     ]);
   });
 
-  // A phantom season's "Search for release" (a season-pack acquisition) and its acquisition
-  // management live in the EntityAcquisitionCard below the detail, exactly like a wanted movie.
   const seasonWanted = $derived(!!season && isWanted(season.capabilities));
 
   async function loadSeason() {
@@ -242,17 +256,12 @@
         {/if}
       {/snippet}
 
+      {#snippet sectionContent(section)}
+        {#if section.id === "acquisition"}
+          <EntityAcquisitionCard {acq} onCancelled={() => void loadSeason()} />
+        {/if}
+      {/snippet}
     </EntityDetail>
-
-    <!-- Episodes ride along so a half-imported season surfaces its missing episodes as a roll-up
-         with a "Search N missing" action, the same way the series page rolls up its seasons. -->
-    <EntityAcquisitionCard
-      entityId={season?.id}
-      capabilities={season?.capabilities}
-      childCards={episodeCards}
-      onChanged={loadSeason}
-      onCancelled={() => void loadSeason()}
-    />
 
     {#if episodeCards.length > 0}
       <section class="content-section">

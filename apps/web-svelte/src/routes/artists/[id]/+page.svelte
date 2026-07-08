@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { page } from "$app/state";
-  import { Disc3, Info, Play, Shuffle, SlidersHorizontal, Users } from "@lucide/svelte";
+  import { CloudDownload, Disc3, Info, Play, Shuffle, SlidersHorizontal, Users } from "@lucide/svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import { fetchMusicArtist, type MusicArtistDetail } from "$lib/api/media";
   import {
@@ -34,6 +34,7 @@
   } from "$lib/components/entities/EntityDetail.svelte";
   import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
   import EntityAcquisitionCard from "$lib/components/acquisitions/EntityAcquisitionCard.svelte";
+  import { useEntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
   import { useIdentifyDetailAction } from "$lib/components/identify/use-identify-detail-action.svelte";
   import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
   import { useNsfw } from "$lib/nsfw/store.svelte";
@@ -71,8 +72,17 @@
   });
 
   const identifyAction = useIdentifyDetailAction(() => artist?.id, () => artist?.kind);
-  // Monitoring lives in the EntityAcquisitionCard below the detail. It works for scanned-in and
-  // requested artists alike; it needs a provider identity a plugin can track.
+
+  // Monitoring lives in the Acquisition detail tab ("Check for new works" runs the discovery sync
+  // now; the page reloads to show any new phantoms). It works for scanned-in and requested artists
+  // alike; it needs a provider identity a plugin can track. The tab hides when no plugin can.
+  const acq = useEntityAcquisition({
+    entityId: () => artist?.id,
+    capabilities: () => artist?.capabilities,
+    childCards: () => albumCards,
+    onChanged: () => void loadArtist(),
+  });
+
   const heroActions = $derived.by((): EntityDetailActionButton[] => {
     const actions: EntityDetailActionButton[] = [];
     if (albumCards.length > 0) {
@@ -104,10 +114,14 @@
   // the credits label override is declared here.
   const detailSections = $derived.by((): EntityDetailSection[] => [
     { id: "credits", label: "Members", icon: Users },
+    { id: "acquisition" },
   ]);
   const detailTabs = $derived.by((): EntityDetailTab[] => [
     { id: "details", label: "Details", icon: Info, sections: ["description", "tags", "credits"] },
     { id: "metadata", label: "Metadata", icon: SlidersHorizontal, sections: ["stats", "dates", "classification", "links"], layout: "grid" },
+    ...(acq.visible
+      ? [{ id: "acquisition", label: "Acquisition", icon: CloudDownload, sections: ["acquisition"] }]
+      : []),
   ]);
 
   function artistContext(): PlaybackContext {
@@ -243,16 +257,12 @@
         {/if}
       {/snippet}
 
+      {#snippet sectionContent(section)}
+        {#if section.id === "acquisition"}
+          <EntityAcquisitionCard {acq} />
+        {/if}
+      {/snippet}
     </EntityDetail>
-
-    <!-- Follow the artist for new works ("Check for new works" runs the discovery sync now; the page
-         reloads to show any new phantoms). Hidden when no plugin can track this artist. -->
-    <EntityAcquisitionCard
-      entityId={artist?.id}
-      capabilities={artist?.capabilities}
-      childCards={albumCards}
-      onChanged={() => void loadArtist()}
-    />
 
     {#if albumCards.length > 0}
       <section class="content-section">

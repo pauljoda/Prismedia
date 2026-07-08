@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { page } from "$app/state";
-  import { Info, MicVocal, Music, Play, Shuffle, SlidersHorizontal, Users } from "@lucide/svelte";
+  import { CloudDownload, Info, MicVocal, Music, Play, Shuffle, SlidersHorizontal, Users } from "@lucide/svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import EntityDetailHeroDates from "$lib/components/entities/EntityDetailHeroDates.svelte";
   import { fetchAudioLibrary, type AudioLibraryDetail } from "$lib/api/media";
@@ -13,6 +13,7 @@
   import { assetUrl } from "$lib/api/orval-fetch";
   import { getCapability } from "$lib/api/capabilities";
   import EntityAcquisitionCard from "$lib/components/acquisitions/EntityAcquisitionCard.svelte";
+  import { useEntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
   import {
     toggleOptimisticEntityFlag,
     updateOptimisticEntityRating,
@@ -83,8 +84,15 @@
     return assetUrl(images?.coverUrl ?? images?.thumbnailUrl) || undefined;
   });
   const identifyAction = useIdentifyDetailAction(() => library?.id, () => library?.kind);
+
   // A phantom album's "Search for release" and its acquisition management live in the
-  // EntityAcquisitionCard mounted below the detail, exactly like a wanted book or movie.
+  // Acquisition detail tab, exactly like a wanted book or movie.
+  const acq = useEntityAcquisition({
+    entityId: () => library?.id,
+    capabilities: () => library?.capabilities,
+    onChanged: () => void loadLibrary(),
+  });
+
   const heroActions = $derived.by((): EntityDetailActionButton[] => {
     const actions: EntityDetailActionButton[] = [];
     if (trackItems.length > 0) {
@@ -115,10 +123,14 @@
   const detailSections = $derived.by((): EntityDetailSection[] => [
     { id: "artists", hidden: artistCards.length === 0 },
     { id: "credits", label: "Performers", icon: Users },
+    { id: "acquisition" },
   ]);
   const detailTabs = $derived.by((): EntityDetailTab[] => [
     { id: "details", label: "Details", icon: Info, sections: ["description", "tags", "artists", "studio", "credits"] },
     { id: "metadata", label: "Metadata", icon: SlidersHorizontal, sections: ["stats", "dates", "classification", "technical", "source", "links"], layout: "grid" },
+    ...(acq.visible
+      ? [{ id: "acquisition", label: "Acquisition", icon: CloudDownload, sections: ["acquisition"] }]
+      : []),
   ]);
 
   onMount(() => {
@@ -343,16 +355,11 @@
             relatedIcon={MicVocal}
             castLabel="Performers"
           />
+        {:else if section.id === "acquisition"}
+          <EntityAcquisitionCard {acq} onCancelled={() => void loadLibrary()} />
         {/if}
       {/snippet}
     </EntityDetail>
-
-    <EntityAcquisitionCard
-      entityId={library?.id}
-      capabilities={library?.capabilities}
-      onChanged={() => void loadLibrary()}
-      onCancelled={() => void loadLibrary()}
-    />
 
     {#if subLibraryCards.length > 0}
       <section class="content-section">
