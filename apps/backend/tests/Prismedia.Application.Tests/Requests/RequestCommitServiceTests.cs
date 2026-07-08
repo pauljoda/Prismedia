@@ -234,6 +234,34 @@ public sealed class RequestCommitServiceTests {
     }
 
     [Fact]
+    public async Task RequestingAWantedSeriesRequestsItsWantedSeasons() {
+        // A container phantom has no acquirable unit of its own: its "Search for release" requests
+        // each still-wanted child instead (the series' unrequested seasons as season packs).
+        var (service, writer, acquisitions, _) = ServiceWithMonitors(Container(ProposalKind.VideoSeries, "Andor", "TV1"));
+        var seriesId = Guid.NewGuid();
+        var season1 = Guid.NewGuid();
+        var season2 = Guid.NewGuid();
+        writer.Containers[seriesId] = new MonitorableContainer(seriesId, EntityKind.VideoSeries, "Andor", [new ProviderRef(Provider, "TV1")]);
+        writer.Containers[season1] = new MonitorableContainer(
+            season1, EntityKind.VideoSeason, "Season 1", [], ParentEntityId: seriesId,
+            Positions: new Dictionary<string, int> { [EntityPositionCodes.Season] = 1 });
+        writer.Containers[season2] = new MonitorableContainer(
+            season2, EntityKind.VideoSeason, "Season 2", [], ParentEntityId: seriesId,
+            Positions: new Dictionary<string, int> { [EntityPositionCodes.Season] = 2 });
+        writer.WantedChildren[seriesId] = [season1, season2];
+
+        var response = await service.RequestEntityAsync(seriesId, hideNsfw: false, CancellationToken.None);
+
+        Assert.NotNull(response);
+        Assert.Equal(seriesId, response!.ContainerEntityId);
+        Assert.Equal(2, response.Items.Count);
+        Assert.Equal(2, acquisitions.Created.Count);
+        Assert.All(acquisitions.Created, request => Assert.Equal(EntityKind.VideoSeason, request.Kind));
+        Assert.All(acquisitions.Created, request => Assert.Equal("Andor", request.Series));
+        Assert.Equal([1, 2], acquisitions.Created.Select(request => request.SeasonNumber).ToArray());
+    }
+
+    [Fact]
     public async Task RequestMissingChildrenCountsAnInFlightEpisodeAsCoveredWithoutDuplicating() {
         var (service, writer, acquisitions, _) = ServiceWithMonitors(Container(ProposalKind.VideoSeries, "Andor", "TV1"));
         var seasonId = Guid.NewGuid();

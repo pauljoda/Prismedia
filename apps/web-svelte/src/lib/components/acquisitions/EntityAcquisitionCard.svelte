@@ -26,7 +26,7 @@
     startEntityMonitor,
     stopMonitor,
   } from "$lib/api/monitors";
-  import { commitEntityRequest, syncContainerRequest } from "$lib/api/requests";
+  import { commitEntityRequest, requestMissingChildren, syncContainerRequest } from "$lib/api/requests";
   import AcquisitionPanel from "$lib/components/acquisitions/AcquisitionPanel.svelte";
   import { labelForEntityKind } from "$lib/entities/entity-codes";
   import { resolveEntityThumbnailHref, type EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
@@ -72,6 +72,9 @@
   const childKindLabel = $derived(
     childStatuses.length > 0 ? labelForEntityKind(childStatuses[0].kind) : "",
   );
+  // Children that are plain wanted phantoms with no acquisition — a season's missing episodes after a
+  // pack import, or a series' unrequested seasons. These are what "Search missing" chases.
+  const missingChildren = $derived(childStatuses.filter((child) => child.display.tone === "wanted"));
 
   let acquisition = $state<AcquisitionDetail | null>(null);
   let monitor = $state<MonitorView | null>(null);
@@ -79,6 +82,7 @@
   let monitorBusy = $state(false);
   let syncBusy = $state(false);
   let searchBusy = $state(false);
+  let missingBusy = $state(false);
   let loadedId = $state<string | null>(null);
   let lastRequestedId = "";
 
@@ -93,6 +97,9 @@
   const showSearch = $derived(
     wanted && acquisition === null && !!capabilities && !!firstProviderQualifiedId(capabilities),
   );
+  // "Search missing" requests each unrequested wanted child individually. Hidden while the entity
+  // itself is a plain phantom — "Search for release" (the whole unit) is the primary action there.
+  const showSearchMissing = $derived(missingChildren.length > 0 && !showSearch);
   const visible = $derived(
     (loadedId !== null && (showMonitor || showSearch || acquisition !== null)) || childStatuses.length > 0,
   );
@@ -193,6 +200,22 @@
     }
   }
 
+  /** Requests each missing child (a season's absent episodes) as its own monitored acquisition. */
+  async function searchMissing() {
+    const id = entityId;
+    if (!id || missingBusy) return;
+    missingBusy = true;
+    try {
+      await requestMissingChildren(id);
+      await refresh();
+      await onChanged?.();
+    } catch {
+      // best-effort; the card reflects the last known state
+    } finally {
+      missingBusy = false;
+    }
+  }
+
   /** Requests this phantom: starts its auto-grabbing, monitored acquisition and refreshes the page. */
   async function searchForRelease() {
     const id = entityId;
@@ -264,6 +287,20 @@
           >
             <Search class="h-3.5 w-3.5" />
             {searchBusy ? "Searching…" : "Search for release"}
+          </Button>
+        {/if}
+        {#if showSearchMissing}
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            disabled={missingBusy}
+            onclick={() => void searchMissing()}
+            class="no-lift gap-1.5 px-2.5 py-1 text-xs"
+            title="Request each missing item individually — every gap gets its own monitored search"
+          >
+            <Search class="h-3.5 w-3.5" />
+            {missingBusy ? "Searching…" : `Search ${missingChildren.length} missing`}
           </Button>
         {/if}
       </div>

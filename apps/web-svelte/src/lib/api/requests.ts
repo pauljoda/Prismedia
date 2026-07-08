@@ -1,13 +1,14 @@
 import type { MonitorPresetCode, RequestMediaKindCode, RequestProviderKindCode } from "$lib/api/generated/codes";
 import {
   commitEntityRequest as commitEntityRequestRequest,
+  commitMissingChildrenRequest,
   commitRequest as commitRequestRequest,
   getRequestDetail as getRequestDetailRequest,
   removeWanted as removeWantedRequest,
   searchRequests as searchRequestsRequest,
   syncContainerRequest as syncContainerRequestRequest,
 } from "$lib/api/generated/prismedia";
-import type { RequestCommitResponse } from "$lib/api/generated/model";
+import type { MissingChildrenCommitResponse, RequestCommitResponse } from "$lib/api/generated/model";
 import type { RequestDetailResponse, RequestSearchResponse } from "$lib/requests/request-model";
 import { unwrapGenerated } from "$lib/api/generated-response";
 
@@ -67,6 +68,14 @@ export async function commitRequest(params: {
  */
 export async function commitEntityRequest(entityId: string): Promise<RequestCommitResponse> {
   return unwrapGenerated(await commitEntityRequestRequest({ entityId }), "Failed to search for a release");
+}
+
+/**
+ * Requests every still-wanted child under an entity — a season's missing episodes — each as its own
+ * monitored, auto-grabbing acquisition. Returns how many gaps are now covered and how many exist.
+ */
+export async function requestMissingChildren(entityId: string): Promise<MissingChildrenCommitResponse> {
+  return unwrapGenerated(await commitMissingChildrenRequest({ entityId }), "Failed to search for missing items");
 }
 
 /**

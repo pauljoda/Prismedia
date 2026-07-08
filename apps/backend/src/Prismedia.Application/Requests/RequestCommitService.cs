@@ -186,7 +186,9 @@ public sealed class RequestCommitService(
         var descriptor = RequestKindRegistry.All.FirstOrDefault(candidate =>
             candidate is { IsContainer: false, Committable: true } && candidate.WantedEntityKind == entity.Kind);
         if (descriptor is null) {
-            return null;
+            // A container phantom (a wanted series) has no acquirable unit of its own — requesting it
+            // means requesting each of its still-wanted children (the series' unrequested seasons).
+            return await RequestContainerChildrenAsync(entity, hideNsfw, cancellationToken);
         }
 
         // No explicit choices: inherit the nearest followed ancestor's (a phantom episode of a
@@ -212,6 +214,33 @@ public sealed class RequestCommitService(
         }
 
         return await RequestFromEntityGraphAsync(descriptor, entity, targeting, hideNsfw, cancellationToken);
+    }
+
+    /// <summary>
+    /// The container half of <see cref="RequestEntityAsync"/>: a committable container kind (series,
+    /// author, artist) is requested by requesting each of its still-wanted children, and the per-child
+    /// outcomes roll up into one response. Null when the kind has no committable child kind or nothing
+    /// under it is still wanted — the caller reports "not requestable" exactly as before.
+    /// </summary>
+    private async Task<RequestCommitResponse?> RequestContainerChildrenAsync(
+        MonitorableContainer entity, bool hideNsfw, CancellationToken cancellationToken) {
+        var descriptor = RequestKindRegistry.All.FirstOrDefault(candidate =>
+            candidate is { IsContainer: true, Committable: true } && candidate.WantedEntityKind == entity.Kind);
+        var child = descriptor is null ? null : RequestKindRegistry.ChildOf(descriptor);
+        if (child is not { Committable: true }) {
+            return null;
+        }
+
+        var missing = await wanted.ListWantedChildIdsAsync(entity.EntityId, child.WantedEntityKind, cancellationToken);
+        var items = new List<RequestCommitItem>();
+        foreach (var childId in missing) {
+            var response = await RequestEntityAsync(childId, hideNsfw, cancellationToken);
+            if (response is not null) {
+                items.AddRange(response.Items);
+            }
+        }
+
+        return items.Count == 0 ? null : new RequestCommitResponse(entity.EntityId, items);
     }
 
     /// <summary>

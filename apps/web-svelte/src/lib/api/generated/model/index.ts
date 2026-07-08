@@ -324,6 +324,8 @@ export * from './loginRequest';
 export * from './loginResponse';
 export * from './mediaSourceInfo';
 export * from './mediaStreamInfo';
+export * from './missingChildrenCommitRequest';
+export * from './missingChildrenCommitResponse';
 export * from './monitorCreateRequest';
 export * from './monitorEligibilityView';
 export * from './monitorStatus';

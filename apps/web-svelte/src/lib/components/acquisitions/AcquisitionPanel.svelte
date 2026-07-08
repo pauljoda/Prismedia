@@ -225,8 +225,14 @@
   // Monitoring is offered for any not-yet-acquired book; an imported book has nothing left to search for.
   const showMonitorToggle = $derived(status !== null && status !== ACQUISITION_STATUS.imported);
   const monitorActive = $derived(monitor?.status === MONITOR_STATUS.active);
-  // Re-search makes sense only while still seeking a release; an in-flight/imported/cancelled item is left alone.
-  const canReSearch = $derived(status === ACQUISITION_STATUS.awaitingSelection || status === ACQUISITION_STATUS.failed);
+  // Re-search is offered whenever the item is still seeking a release — including a manual-import
+  // hold, where searching for a different release is a legitimate way out. In-flight grabs and
+  // imported/cancelled items are left alone (the server enforces the same gate).
+  const canReSearch = $derived(
+    status === ACQUISITION_STATUS.awaitingSelection ||
+      status === ACQUISITION_STATUS.failed ||
+      status === ACQUISITION_STATUS.manualImportRequired,
+  );
 
   // After a manual "Search again" the status is still failed/awaiting until the worker picks the job up, so
   // bridge-poll for a bounded window to catch the search starting (and finishing) even if it completes
@@ -358,33 +364,42 @@
       </section>
 
     {:else if isDone}
-      <!-- ── Imported / downloaded files ── -->
-      <section class="space-y-2">
-        <h2 class="text-kicker text-text-primary">
-          Files
-          {#if files}<span class="ml-1.5 font-mono text-[0.68rem] font-normal text-text-muted">{files.files.length}</span>{/if}
-        </h2>
-        {#if files && files.files.length > 0}
-          <div class="overflow-hidden rounded-sm border border-border-subtle">
-            {#each files.files as f (f.name)}
-              <div class="flex items-center justify-between gap-3 border-b border-border-subtle px-3 py-2 last:border-b-0">
-                <span class="flex min-w-0 items-center gap-2 text-sm text-text-primary">
-                  <FileText class="h-3.5 w-3.5 shrink-0 text-text-muted" />
-                  <span class="truncate">{f.name}</span>
-                </span>
-                <span class="shrink-0 font-mono text-[0.72rem] text-text-muted">{formatBytes(Number(f.sizeBytes))}</span>
-              </div>
-            {/each}
+      <!-- ── Imported / downloaded files — collapsed once imported so a big pack doesn't fill the page ── -->
+      {#if files && files.files.length > 0}
+        <details
+          class="group min-w-0 overflow-hidden rounded-sm border border-border-subtle bg-surface-1"
+          open={!files.imported}
+        >
+          <summary class="flex min-w-0 cursor-pointer items-center gap-2 px-3 py-2 text-kicker text-text-primary select-none">
+            <FileText class="h-3.5 w-3.5 text-text-muted" />
+            Files
+            <span class="font-mono text-[0.68rem] font-normal text-text-muted">{files.files.length}</span>
+          </summary>
+          <div class="min-w-0 px-3 pb-3">
+            <div class="overflow-hidden rounded-sm border border-border-subtle">
+              {#each files.files as f (f.name)}
+                <div class="flex items-center justify-between gap-3 border-b border-border-subtle px-3 py-2 last:border-b-0">
+                  <span class="flex min-w-0 items-center gap-2 text-sm text-text-primary">
+                    <FileText class="h-3.5 w-3.5 shrink-0 text-text-muted" />
+                    <span class="truncate">{f.name}</span>
+                  </span>
+                  <span class="shrink-0 font-mono text-[0.72rem] text-text-muted">{formatBytes(Number(f.sizeBytes))}</span>
+                </div>
+              {/each}
+            </div>
           </div>
-        {:else}
+        </details>
+      {:else}
+        <section class="space-y-2">
+          <h2 class="text-kicker text-text-primary">Files</h2>
           <StatePlaceholder
             icon={FileText}
             title="No files yet"
             description="Files will appear here once the download produces them."
             busy={isActive}
           />
-        {/if}
-      </section>
+        </section>
+      {/if}
 
     {:else}
       <!-- ── Release review (awaiting selection / failed) ── -->

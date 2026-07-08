@@ -192,6 +192,8 @@ import type {
   ListVideosParams,
   LoginRequest,
   LoginResponse,
+  MissingChildrenCommitRequest,
+  MissingChildrenCommitResponse,
   MonitorCreateRequest,
   MonitorEligibilityView,
   MonitorView,
@@ -11613,6 +11615,43 @@ export const commitEntityRequest = async (requestEntityCommitRequest: RequestEnt
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       requestEntityCommitRequest,)
+  }
+);}
+
+
+
+export type commitMissingChildrenRequestResponse200 = {
+  data: MissingChildrenCommitResponse
+  status: 200
+}
+
+export type commitMissingChildrenRequestResponseSuccess = (commitMissingChildrenRequestResponse200) & {
+  headers: Headers;
+};
+;
+
+export type commitMissingChildrenRequestResponse = (commitMissingChildrenRequestResponseSuccess)
+
+export const getCommitMissingChildrenRequestUrl = () => {
+
+
+
+
+  return `/api/requests/commit-missing-children`
+}
+
+/**
+ * @summary Requests every still-wanted child under an entity — a season's missing episodes — each as its own monitored, auto-grabbing acquisition.
+ */
+export const commitMissingChildrenRequest = async (missingChildrenCommitRequest: MissingChildrenCommitRequest, options?: RequestInit): Promise<commitMissingChildrenRequestResponse> => {
+
+  return orvalFetch<commitMissingChildrenRequestResponse>(getCommitMissingChildrenRequestUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      missingChildrenCommitRequest,)
   }
 );}
 
