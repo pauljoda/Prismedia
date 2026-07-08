@@ -86,7 +86,7 @@ export const queueDefinitions = [
   {
     name: "library-maintenance",
     label: "Library maintenance",
-    description: "Moves video-derived assets between cache and media-adjacent storage",
+    description: "Validates generated assets and cleans up orphaned cache files",
     concurrency: 1,
   },
   {
@@ -111,6 +111,24 @@ export const queueDefinitions = [
     name: "plugin-batch-identify",
     label: "Plugin Batch Identify",
     description: "Batch metadata identification via Prismedia plugins",
+    concurrency: 1,
+  },
+  {
+    name: "acquisition",
+    label: "Acquisition",
+    description: "Searches indexers, monitors downloads, and imports completed grabs",
+    concurrency: 1,
+  },
+  {
+    name: "database-backup",
+    label: "Database Backup",
+    description: "Creates retained automatic database backups",
+    concurrency: 1,
+  },
+  {
+    name: "background",
+    label: "Background",
+    description: "Miscellaneous background jobs managed by the worker",
     concurrency: 1,
   },
 ] as const;

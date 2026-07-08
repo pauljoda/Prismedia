@@ -112,17 +112,22 @@ export function formatTargetDetail(job: JobRun): string | null {
   return targetId ? `${label} ${targetId}` : label;
 }
 
+/**
+ * Library-maintenance jobs can carry NSFW file names in their target labels and
+ * messages, so their details are hidden while the viewer's NSFW mode is off. Only
+ * the free-text fields are masked — the job keeps its real kind label.
+ */
 export function maintenanceJobLogRedacted(job: JobRun, nsfwMode: string) {
   return nsfwMode === "off" && job.queueName === "library-maintenance";
 }
 
 export function displayJobHeading(job: JobRun, nsfwMode: string): string {
-  if (maintenanceJobLogRedacted(job, nsfwMode)) return "Relocate video generated files";
+  if (maintenanceJobLogRedacted(job, nsfwMode)) return "Library maintenance";
   return jobHeading(job);
 }
 
 export function displayDescribeTrigger(job: JobRun, nsfwMode: string): string {
-  if (maintenanceJobLogRedacted(job, nsfwMode)) return "Background file layout task";
+  if (maintenanceJobLogRedacted(job, nsfwMode)) return "Background maintenance task";
   return describeTrigger(job);
 }
 
@@ -132,7 +137,7 @@ export function displayJobKind(job: JobRun, nsfwMode: string): string {
 }
 
 export function displayJobDetail(job: JobRun, nsfwMode: string): string {
-  if (maintenanceJobLogRedacted(job, nsfwMode)) return "Background file layout task";
+  if (maintenanceJobLogRedacted(job, nsfwMode)) return "Background maintenance task";
   return job.statusMessage?.trim() || describeTrigger(job);
 }
 

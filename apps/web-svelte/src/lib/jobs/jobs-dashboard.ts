@@ -1,4 +1,5 @@
 import type { JobQueueCountDto, JobRun as ApiJobRun } from "$lib/api/generated/model";
+import { JOB_TYPE, type JobTypeCode } from "$lib/api/generated/codes";
 import {
   queueDefinitions,
   type JobRun as DashboardJobRun,
@@ -10,150 +11,245 @@ import {
 } from "./models";
 
 type JobDefinition = {
-  type: string;
+  type: JobTypeCode;
   queueName: QueueName;
   label: string;
   description: string;
 };
+
+/** A definition resolved for an arbitrary runtime type string (possibly newer than this build). */
+type ResolvedJobDefinition = Omit<JobDefinition, "type"> & { type: string };
 
 const queueDefinitionByName = new Map(queueDefinitions.map((queue) => [queue.name, queue]));
 
 const _JOB_DEFINITIONS = [
   // Scanning
   {
-    type: "scan-library",
+    type: JOB_TYPE.scanLibrary,
     queueName: "library-scan",
     label: "Video Scan",
     description: "Discovers videos in configured library roots.",
   },
   {
-    type: "scan-gallery",
+    type: JOB_TYPE.scanGallery,
     queueName: "gallery-scan",
     label: "Gallery Scan",
     description: "Discovers image galleries in configured library roots.",
   },
   {
-    type: "scan-book",
+    type: JOB_TYPE.scanBook,
     queueName: "book-scan",
     label: "Book Scan",
     description: "Discovers comic books in configured library roots.",
   },
   {
-    type: "scan-audio",
+    type: JOB_TYPE.scanAudio,
     queueName: "audio-scan",
     label: "Audio Scan",
     description: "Discovers audio tracks in configured library roots.",
   },
   // Probing
   {
-    type: "probe-video",
+    type: JOB_TYPE.probeVideo,
     queueName: "media-probe",
     label: "Video Probe",
     description: "Extracts technical metadata from video files via ffprobe.",
   },
   {
-    type: "probe-audio",
+    type: JOB_TYPE.probeAudio,
     queueName: "audio-probe",
     label: "Audio Probe",
     description: "Extracts technical metadata and embedded tags from audio files.",
   },
   // Fingerprinting
   {
-    type: "fingerprint-video",
+    type: JOB_TYPE.fingerprintVideo,
     queueName: "fingerprint",
     label: "Video Fingerprint",
     description: "Computes MD5 and oshash for videos.",
   },
   {
-    type: "fingerprint-image",
+    type: JOB_TYPE.fingerprintImage,
     queueName: "image-fingerprint",
     label: "Image Fingerprint",
     description: "Computes MD5 and oshash for images.",
   },
   {
-    type: "fingerprint-audio",
+    type: JOB_TYPE.fingerprintAudio,
     queueName: "audio-fingerprint",
     label: "Audio Fingerprint",
     description: "Computes MD5 and oshash for audio tracks.",
   },
   // Preview / asset generation
   {
-    type: "generate-preview",
+    type: JOB_TYPE.generatePreview,
     queueName: "preview",
     label: "Video Preview",
     description: "Builds video thumbnails, preview clips, and trickplay sprites.",
   },
   {
-    type: "generate-image-thumbnail",
+    type: JOB_TYPE.generateImageThumbnail,
     queueName: "image-thumbnail",
     label: "Image Thumbnail",
     description: "Generates thumbnails and lightweight previews for images.",
   },
   {
-    type: "generate-book-page-thumbnail",
+    type: JOB_TYPE.generateGridThumbnail,
+    queueName: "image-thumbnail",
+    label: "Grid Thumbnail",
+    description: "Derives the small grid-card variants from an entity's cover.",
+  },
+  {
+    type: JOB_TYPE.gridThumbnailSweep,
+    queueName: "image-thumbnail",
+    label: "Grid Thumbnail Sweep",
+    description: "Backfills missing grid-card thumbnail variants across the library.",
+  },
+  {
+    type: JOB_TYPE.generateBookPageThumbnail,
     queueName: "book-page-thumbnail",
     label: "Book Page Thumbnail",
     description: "Generates thumbnails for comic book pages.",
   },
   {
-    type: "generate-audio-waveform",
+    type: JOB_TYPE.generateBookCoverThumbnail,
+    queueName: "book-page-thumbnail",
+    label: "Book Cover Thumbnail",
+    description: "Extracts and generates cover thumbnails for books and comics.",
+  },
+  {
+    type: JOB_TYPE.generateAudioWaveform,
     queueName: "audio-waveform",
     label: "Audio Waveform",
     description: "Generates waveform peak data for audio playback visualization.",
   },
   {
-    type: "extract-subtitles",
+    type: JOB_TYPE.extractSubtitles,
     queueName: "extract-subtitles",
     label: "Subtitle Extraction",
     description: "Extracts embedded subtitle tracks from video files as WebVTT.",
   },
-  // Metadata / collections / maintenance
+  // Metadata / identify
   {
-    type: "import-metadata",
+    type: JOB_TYPE.importMetadata,
     queueName: "metadata-import",
     label: "Metadata Import",
     description: "Coordinates provider imports and applies metadata to entities.",
   },
   {
-    type: "auto-identify",
+    type: JOB_TYPE.autoIdentify,
     queueName: "metadata-import",
     label: "Auto Identify",
     description: "Identifies newly scanned media through enabled plugins and applies confident matches.",
   },
   {
-    type: "bulk-identify",
+    type: JOB_TYPE.bulkIdentify,
     queueName: "metadata-import",
     label: "Bulk Identify",
     description: "Searches a provider for multiple entities and queues results for review.",
   },
   {
-    type: "refresh-collection",
+    type: JOB_TYPE.identifySearch,
+    queueName: "metadata-import",
+    label: "Identify Search",
+    description: "Searches metadata providers for identify candidates.",
+  },
+  {
+    type: JOB_TYPE.identifyCascade,
+    queueName: "metadata-import",
+    label: "Identify Cascade",
+    description: "Applies a confirmed identification to related child entities.",
+  },
+  {
+    type: JOB_TYPE.refreshEntity,
+    queueName: "metadata-import",
+    label: "Entity Refresh",
+    description: "Re-queues probing, artwork, and metadata work for an entity tree.",
+  },
+  // Collections / maintenance
+  {
+    type: JOB_TYPE.refreshCollection,
     queueName: "collection-refresh",
     label: "Collection Refresh",
     description: "Re-evaluates dynamic collection rules and updates membership.",
   },
   {
-    type: "monitored-search",
+    type: JOB_TYPE.libraryMaintenance,
+    queueName: "library-maintenance",
+    label: "Library Maintenance",
+    description: "Validates generated assets and cleans up orphaned cache files.",
+  },
+  {
+    type: JOB_TYPE.recycleBinCleanup,
+    queueName: "library-maintenance",
+    label: "Recycle Bin Cleanup",
+    description: "Purges recycle-bin entries older than the retention window.",
+  },
+  {
+    type: JOB_TYPE.databaseBackup,
+    queueName: "database-backup",
+    label: "Database Backup",
+    description: "Creates a retained automatic database backup.",
+  },
+  // Acquisition
+  {
+    type: JOB_TYPE.acquisitionSearch,
+    queueName: "acquisition",
+    label: "Acquisition Search",
+    description: "Searches configured indexers for releases of a wanted item.",
+  },
+  {
+    type: JOB_TYPE.acquisitionMonitor,
+    queueName: "acquisition",
+    label: "Acquisition Monitor",
+    description: "Tracks in-flight downloads and hands completed ones to import.",
+  },
+  {
+    type: JOB_TYPE.acquisitionImport,
+    queueName: "acquisition",
+    label: "Acquisition Import",
+    description: "Imports completed downloads into the library.",
+  },
+  {
+    type: JOB_TYPE.acquisitionFailedHandle,
+    queueName: "acquisition",
+    label: "Failed Download Handling",
+    description: "Blocklists a failed release and searches for a replacement.",
+  },
+  {
+    type: JOB_TYPE.acquisitionUpgradeReplace,
+    queueName: "acquisition",
+    label: "Upgrade Replace",
+    description: "Swaps an owned file for a higher-quality grabbed release.",
+  },
+  {
+    type: JOB_TYPE.acquisitionEnrich,
+    queueName: "acquisition",
+    label: "Acquisition Enrich",
+    description: "Fills provider metadata and artwork for request-created entities.",
+  },
+  {
+    type: JOB_TYPE.monitoredSearch,
     queueName: "monitored-search",
     label: "Monitored Search",
     description: "Re-searches monitored items and syncs followed authors/artists for new works.",
   },
-  {
-    type: "library-maintenance",
-    queueName: "library-maintenance",
-    label: "Library Maintenance",
-    description: "Moves video-derived assets between cache and media-adjacent storage.",
-  },
   // Utility
   {
-    type: "noop",
-    queueName: "library-maintenance",
+    type: JOB_TYPE.noop,
+    queueName: "background",
     label: "No-op Worker Check",
     description: "Queues a tiny worker health check job.",
   },
 ] satisfies readonly JobDefinition[];
 
-const jobDefinitionByType = new Map(
+// Compile-time parity with the backend's JobType closed set: adding a JobType (and regenerating
+// codes.ts) without cataloguing it here fails the build instead of silently falling back.
+type CoveredJobType = (typeof _JOB_DEFINITIONS)[number]["type"];
+type AssertAllJobTypesCovered<Missing extends never> = Missing;
+type _JobCatalogIsComplete = AssertAllJobTypesCovered<Exclude<JobTypeCode, CoveredJobType>>;
+
+const jobDefinitionByType = new Map<string, JobDefinition>(
   _JOB_DEFINITIONS.map((definition) => [definition.type, definition]),
 );
 
@@ -170,18 +266,18 @@ export function jobTypesForQueue(queueName: string): string[] {
   );
 }
 
-function definitionForJob(type: string): JobDefinition {
+function definitionForJob(type: string): ResolvedJobDefinition {
   return (
     jobDefinitionByType.get(type) ?? {
       type,
-      queueName: "library-maintenance",
+      queueName: "background",
       label: type,
       description: "Background job managed by the worker.",
     }
   );
 }
 
-function queueSummaryBase(definition: JobDefinition): QueueSummary {
+function queueSummaryBase(definition: ResolvedJobDefinition): QueueSummary {
   const queueDefinition = queueDefinitionByName.get(definition.queueName);
   return {
     name: definition.queueName,
