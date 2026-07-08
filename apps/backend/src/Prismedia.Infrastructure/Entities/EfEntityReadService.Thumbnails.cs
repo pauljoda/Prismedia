@@ -99,10 +99,13 @@ public sealed partial class EfEntityReadService {
                 (file.Role == EntityFileRole.GridThumbnail || file.Role == EntityFileRole.GridThumbnail2x))
             .Select(file => new { file.EntityId, file.Role, file.Path })
             .ToArrayAsync(cancellationToken);
-        var gridThumbByEntity = gridThumbRows
+        var usableGridThumbRows = gridThumbRows
+            .Where(file => HasUsableAssetPath(file.Path))
+            .ToArray();
+        var gridThumbByEntity = usableGridThumbRows
             .Where(file => file.Role == EntityFileRole.GridThumbnail)
             .ToDictionary(file => file.EntityId, file => file.Path);
-        var gridThumb2xByEntity = gridThumbRows
+        var gridThumb2xByEntity = usableGridThumbRows
             .Where(file => file.Role == EntityFileRole.GridThumbnail2x)
             .ToDictionary(file => file.EntityId, file => file.Path);
         var currentUserId = CurrentUserId;

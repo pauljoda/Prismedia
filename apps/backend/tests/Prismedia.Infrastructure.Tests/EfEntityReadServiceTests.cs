@@ -509,6 +509,45 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
+    public async Task GetThumbnailsAsyncIgnoresMissingGridVariantFilesAndFallsBackToCover() {
+        var cacheRoot = CreateCacheRoot();
+        try {
+            await using var db = CreateContext();
+            var movieId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000042");
+            var poster = "/assets/plugins/artwork/movie/poster.jpg";
+            var grid = $"/assets/grid-thumbs/{movieId}.jpg";
+            var grid2x = $"/assets/grid-thumbs/{movieId}@2x.jpg";
+            var now = DateTimeOffset.UtcNow;
+
+            db.Entities.Add(new EntityRow {
+                Id = movieId,
+                KindCode = EntityKindRegistry.Movie.Code,
+                Title = "Stale Grid Movie",
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+            db.EntityFiles.AddRange(
+                File(movieId, EntityFileRole.Poster, poster, now),
+                File(movieId, EntityFileRole.GridThumbnail, grid, now.AddSeconds(1)),
+                File(movieId, EntityFileRole.GridThumbnail2x, grid2x, now.AddSeconds(2)));
+            await db.SaveChangesAsync();
+            WriteCacheFile(cacheRoot, poster);
+
+            var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
+            var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, EntityMappers.Kinds(db), ThumbnailContributors.For(db), Assets(cacheRoot));
+
+            var response = await service.GetThumbnailsAsync([movieId], hideNsfw: false, CancellationToken.None);
+
+            var item = Assert.Single(response.Items);
+            Assert.Equal(poster, item.CoverUrl);
+            Assert.Equal(poster, item.CoverThumbUrl);
+            Assert.Equal(poster, item.CoverThumb2xUrl);
+        } finally {
+            DeleteDirectory(cacheRoot);
+        }
+    }
+
+    [Fact]
     public async Task GetThumbnailsAsyncUsesEpisodeRepresentativeWhenSeriesPosterIsMissing() {
         var cacheRoot = CreateCacheRoot();
         try {
