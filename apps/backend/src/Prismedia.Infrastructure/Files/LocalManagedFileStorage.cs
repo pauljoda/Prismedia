@@ -12,6 +12,9 @@ namespace Prismedia.Infrastructure.Files;
 /// as symlink checks before writes and deletes.
 /// </summary>
 public sealed class LocalManagedFileStorage : IManagedFileStorage {
+    /// <summary>Longest a directory detail may spend walking the tree for file count/size stats.</summary>
+    private static readonly TimeSpan DirectoryStatsBudget = TimeSpan.FromSeconds(2);
+
     /// <inheritdoc />
     public Task<IReadOnlyList<FileEntry>> ListChildrenAsync(
         ResolvedFilePath directory,
@@ -51,16 +54,30 @@ public sealed class LocalManagedFileStorage : IManagedFileStorage {
         long? dirTotalSize = null;
         if (info is DirectoryInfo dir) {
             try {
-                var files = dir.EnumerateFiles("*", SearchOption.AllDirectories);
+                // The recursive walk is time-boxed: a library root can hold hundreds of thousands of
+                // files (possibly over a network mount), and the Files page must never hang for the
+                // duration of a full tree walk. A tree too big to finish inside the budget reports
+                // null stats — the same degradation as a permission error — rather than a stale wait.
+                var budget = System.Diagnostics.Stopwatch.StartNew();
+                var budgetExceeded = false;
                 long count = 0;
                 long size = 0;
-                foreach (var f in files) {
+                foreach (var f in dir.EnumerateFiles("*", SearchOption.AllDirectories)) {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (budget.Elapsed > DirectoryStatsBudget) {
+                        budgetExceeded = true;
+                        break;
+                    }
+
                     count++;
                     size += f.Length;
                 }
-                dirFileCount = count;
-                dirTotalSize = size;
-            } catch {
+
+                if (!budgetExceeded) {
+                    dirFileCount = count;
+                    dirTotalSize = size;
+                }
+            } catch (Exception ex) when (ex is not OperationCanceledException) {
                 // Permission or I/O errors — leave nulls.
             }
         }

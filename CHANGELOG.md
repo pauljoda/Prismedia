@@ -115,6 +115,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated documentation, README screenshots, branding assets, install metadata, and app copy to match the current Prismedia v1 surface.
 
 ### Fixed
+- Fixed the Jobs dashboard costing seconds per refresh on long-lived installs: queue counts are now aggregated in the database instead of loading the entire job-run history (hundreds of thousands of rows) into memory on every poll.
+- Fixed the Files page hanging up to a minute when opening details on a huge folder: the file-count/size walk is now time-boxed, and a tree too large to measure quickly simply omits those stats instead of stalling the page.
 - Fixed a monitored series going quiet with episodes still missing: when a season pack imports incomplete, Prismedia now searches for each missing episode individually (Sonarr-style) — every gap becomes its own monitored, auto-grabbing episode acquisition — instead of marking the season done with holes.
 - Fixed "Search for release" doing nothing on a wanted series page: requesting a series now requests each of its still-wanted seasons, skipping ones already in flight.
 - Fixed entity detail pages taking seconds to open: identify, monitor-eligibility, and request lookups no longer fetch the community plugin index from the internet on every page view (that index is only consulted by the plugin browser, and is now cached), provider metadata lookups are cached for a short window so re-opening the same series is instant, and a series page paints immediately instead of waiting for the provider's season list.

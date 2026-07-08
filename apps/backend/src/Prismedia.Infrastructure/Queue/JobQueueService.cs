@@ -556,12 +556,21 @@ public sealed class JobQueueService : IJobQueueService {
     }
 
     public async Task<IReadOnlyList<JobQueueCount>> GetQueueCountsAsync(bool hideNsfw, CancellationToken cancellationToken) {
+        // Aggregated in SQL: this is polled by the jobs dashboard, and the run history can hold
+        // hundreds of thousands of rows — materializing them (the previous implementation) cost
+        // seconds per poll. The NSFW wall folds into the WHERE: a job is hidden when its target id
+        // is the text form of an NSFW entity or library-root id, mirroring the row-level filter.
         var query = _db.JobRuns.AsNoTracking();
-        var visibleRows = await FilterVisibleRowsAsync(query, hideNsfw, cancellationToken);
-        var rows = visibleRows
-            .GroupBy(r => new { r.Type, r.Status })
-            .Select(g => new { g.Key.Type, g.Key.Status, Count = g.Count() })
-            .ToList();
+        if (hideNsfw) {
+            query = query.Where(row => row.TargetEntityId == null
+                || (!_db.Entities.Any(entity => entity.IsNsfw && entity.Id.ToString() == row.TargetEntityId)
+                    && !_db.LibraryRoots.Any(root => root.IsNsfw && root.Id.ToString() == row.TargetEntityId)));
+        }
+
+        var rows = await query
+            .GroupBy(row => new { row.Type, row.Status })
+            .Select(group => new { group.Key.Type, group.Key.Status, Count = group.Count() })
+            .ToListAsync(cancellationToken);
 
         return rows
             .Select(r => new JobQueueCount(r.Type.ToCode(), r.Status.ToCode(), r.Count))
