@@ -22,7 +22,7 @@ public sealed class OwnedFileReplacer(IRecycleBin recycleBin, ILogger<OwnedFileR
     private const string BackupSuffix = ".prismedia-bak";
     private const string StagedSuffix = ".prismedia-new";
 
-    public async Task<OwnedFileReplaceResult> ReplaceAsync(string ownedFolder, string newContentPath, BookFormatTier ownedFormatTier, CancellationToken cancellationToken, EntityKind kind = EntityKind.Book) {
+    public async Task<OwnedFileReplaceResult> ReplaceAsync(string ownedFolder, string newContentPath, BookFormatTier ownedFormatTier, CancellationToken cancellationToken, EntityKind kind = EntityKind.Book, bool allowFormatChange = false) {
         var isVideo = MediaQualityLadder.IsUpgradeCapableKind(kind);
         var extensions = isVideo ? MovieImportPlanBuilder.VideoExtensions : ImportPlanBuilder.SupportedExtensions;
         var fileNoun = isVideo ? "video" : "book";
@@ -44,12 +44,18 @@ public sealed class OwnedFileReplacer(IRecycleBin recycleBin, ILogger<OwnedFileR
 
         var ownedExtension = Path.GetExtension(owned);
         var incomingExtension = Path.GetExtension(incoming);
-        if (!string.Equals(ownedExtension, incomingExtension, StringComparison.OrdinalIgnoreCase)) {
+        if (!string.Equals(ownedExtension, incomingExtension, StringComparison.OrdinalIgnoreCase) && !allowFormatChange) {
             // A format change moves the file to a different extension/path, which would orphan the library
             // entity and its playback/reader progress. Refuse it here; the caller surfaces it for manual
             // replacement. This applies to video (mkv → mp4) exactly as it does to books, for the same reason.
+            // The user's explicit "import anyway" (allowFormatChange) takes the cross-format path below instead.
             return (OwnedFileReplaceResult.Failed($"Upgrading the format ({ownedExtension} → {incomingExtension}) needs a manual replacement."));
         }
+
+        // The installed path: same basename as the owned file, with the incoming file's extension. For a
+        // same-extension swap this IS the owned path (the never-momentarily-empty atomic replace); for a
+        // consented format change it is a sibling path, and the old file is retired after the install.
+        var installPath = Path.ChangeExtension(owned, incomingExtension);
 
         // Books enforce a format-tier floor from the actual extension (a folder named "(epub)" must not make a
         // PDF look reflowable). Video has no extension-derived format tier — same-extension is already enforced
@@ -80,10 +86,17 @@ public sealed class OwnedFileReplacer(IRecycleBin recycleBin, ILogger<OwnedFileR
         }
 
         try {
-            File.Move(staged, owned, overwrite: true); // atomic same-directory replace; the owned path is never empty
-            var installed = new FileInfo(owned);
+            File.Move(staged, installPath, overwrite: true); // atomic same-directory install
+            var installed = new FileInfo(installPath);
             if (!installed.Exists || installed.Length == 0) {
                 throw new IOException("The installed file is missing or empty after the move.");
+            }
+
+            // A consented format change installs beside the old file (different extension) — retire the
+            // old file so the library never carries both. The backup copy already preserves it, so a
+            // failed delete only leaves a redundant original for the scan to re-find.
+            if (!string.Equals(installPath, owned, StringComparison.Ordinal)) {
+                TryDelete(owned);
             }
 
             // With a recycle bin configured the previous file moves there (purged after the cleanup window);
@@ -92,7 +105,7 @@ public sealed class OwnedFileReplacer(IRecycleBin recycleBin, ILogger<OwnedFileR
                 logger.LogDebug("OwnedFileReplacer: previous file recycled to {Binned}.", binned);
             }
 
-            return OwnedFileReplaceResult.Ok(owned, newFormat);
+            return OwnedFileReplaceResult.Ok(installPath, newFormat);
         } catch (Exception ex) when (ex is not OperationCanceledException) {
             logger.LogWarning(ex, "OwnedFileReplacer: swap failed for {Path}; the original is intact (or restorable from backup).", owned);
             // The atomic replace either fully succeeded or left the owned file as it was; if it somehow left the

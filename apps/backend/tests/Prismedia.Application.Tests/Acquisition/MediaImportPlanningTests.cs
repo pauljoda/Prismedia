@@ -409,6 +409,32 @@ public sealed class MediaImportMergeTests {
     }
 
     [Fact]
+    public void ConsentedFormatChangeReplacesAGenuineUpgrade() {
+        // The user's explicit "import anyway": the same cross-format upgrade becomes a replace…
+        var layout = Layout(new Dictionary<int, string> { [1] = "/media/tv/Andor (2022)/S01/e01.720p.WEB.mp4" });
+
+        var merged = TvExistingTargetMerge.Plan(
+            Units((1, 1)), layout, SeasonSegment,
+            incomingQualityPosition: (int)VideoQuality.Bluray2160p, incomingRevision: 1, ProperDownloadPolicy.PreferAndUpgrade,
+            allowFormatChange: true);
+
+        Assert.Equal(MergeFileAction.ReplaceUpgrade, Assert.Single(merged).Action);
+    }
+
+    [Fact]
+    public void ConsentedFormatChangeStillNeverReplacesANonUpgrade() {
+        // …but consent to a format change is not consent to a downgrade: quality gating is unchanged.
+        var layout = Layout(new Dictionary<int, string> { [1] = "/media/tv/Andor (2022)/S01/e01.1080p.WEB.mp4" });
+
+        var merged = TvExistingTargetMerge.Plan(
+            Units((1, 1)), layout, SeasonSegment,
+            incomingQualityPosition: (int)VideoQuality.Webdl720p, incomingRevision: 1, ProperDownloadPolicy.PreferAndUpgrade,
+            allowFormatChange: true);
+
+        Assert.Equal(MergeFileAction.DropNotUpgrade, Assert.Single(merged).Action);
+    }
+
+    [Fact]
     public void MultiSeasonPacksRoutePerFileToTheirOwnSeasons() {
         var layout = Layout(new Dictionary<int, string> { [1] = "/media/tv/Andor (2022)/S01/e01.720p.WEB.mkv" });
 

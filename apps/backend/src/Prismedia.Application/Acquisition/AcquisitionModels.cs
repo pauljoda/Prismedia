@@ -328,8 +328,11 @@ public sealed record OwnedFileReplaceResult(bool Succeeded, string? SwappedPath,
 public interface IOwnedFileReplacer {
     /// <summary>
     /// Swaps the single owned file of <paramref name="kind"/> under <paramref name="ownedFolder"/> for the
-    /// single file under <paramref name="newContentPath"/>. A different extension is always refused (it would
-    /// orphan the library entity and playback/reader progress) and surfaced for manual handling.
+    /// single file under <paramref name="newContentPath"/>. A different extension is refused by default (it
+    /// would orphan the library entity and playback/reader progress) and surfaced for manual handling;
+    /// <paramref name="allowFormatChange"/> — the user's explicit "import anyway" — installs the new file
+    /// under the owned file's basename with the incoming extension and retires the old file (recycle bin
+    /// when configured), trusting the follow-up scan to re-bind the entity to the new path.
     /// <paramref name="ownedFormatTier"/> is enforced only for book kinds (the incoming file's format tier must
     /// not regress); it is ignored for video, which re-confirms quality from the release title instead.
     /// </summary>
@@ -338,7 +341,8 @@ public interface IOwnedFileReplacer {
         string newContentPath,
         Domain.Entities.BookFormatTier ownedFormatTier,
         CancellationToken cancellationToken,
-        Domain.Entities.EntityKind kind = Domain.Entities.EntityKind.Book);
+        Domain.Entities.EntityKind kind = Domain.Entities.EntityKind.Book,
+        bool allowFormatChange = false);
 }
 
 /// <summary>Input for adding a release identity to the acquisition blocklist (idempotent on the identity).</summary>
@@ -423,4 +427,11 @@ public sealed record AcquisitionImportContext(
     Guid? TargetLibraryRootId = null,
     int? SeasonNumber = null,
     int? EpisodeNumber = null,
-    Guid? EntityId = null);
+    Guid? EntityId = null) {
+    /// <summary>
+    /// The user's explicit "import anyway": an upgrade that changes the file extension — normally held
+    /// for manual import — replaces the owned file across formats. Carried by the manual retry-import
+    /// job payload only; automatic imports never set it.
+    /// </summary>
+    public bool AllowFormatChange { get; init; }
+}

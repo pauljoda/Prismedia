@@ -51,7 +51,8 @@ public static class TvExistingTargetMerge {
         Func<int, string> seasonSegment,
         int incomingQualityPosition,
         int incomingRevision,
-        ProperDownloadPolicy properPolicy) {
+        ProperDownloadPolicy properPolicy,
+        bool allowFormatChange = false) {
         var items = new List<MergedImportItem>(units.Count);
         foreach (var unit in units) {
             var season = layout.Seasons.GetValueOrDefault(unit.Season);
@@ -66,19 +67,27 @@ public static class TvExistingTargetMerge {
             }
 
             items.Add(new MergedImportItem(
-                unit.SourceRelativePath, owned, DecideAgainstOwned(unit, owned, incomingQualityPosition, incomingRevision, properPolicy), owned));
+                unit.SourceRelativePath, owned,
+                DecideAgainstOwned(unit.FileName, owned, incomingQualityPosition, incomingRevision, properPolicy, allowFormatChange),
+                owned));
         }
 
         return items;
     }
 
-    /// <summary>The shared per-file gate, also used by the movie merged flow (a movie is one unit).</summary>
+    /// <summary>
+    /// The shared per-file gate, also used by the movie merged flow (a movie is one unit).
+    /// <paramref name="allowFormatChange"/> — the user's explicit "import anyway" — lets a genuine
+    /// upgrade replace the owned file even when the extension differs; automatic imports leave it off
+    /// and hold the format change for manual review.
+    /// </summary>
     public static MergeFileAction DecideAgainstOwned(
         string incomingFileName,
         string ownedFilePath,
         int incomingQualityPosition,
         int incomingRevision,
-        ProperDownloadPolicy properPolicy) {
+        ProperDownloadPolicy properPolicy,
+        bool allowFormatChange = false) {
         var ownedName = Path.GetFileNameWithoutExtension(ownedFilePath);
         var ownedPosition = (int)VideoQualityDetection.Detect(ownedName);
 
@@ -96,15 +105,11 @@ public static class TvExistingTargetMerge {
             return MergeFileAction.DropNotUpgrade;
         }
 
-        return string.Equals(
+        return allowFormatChange || string.Equals(
             Path.GetExtension(incomingFileName), Path.GetExtension(ownedFilePath), StringComparison.OrdinalIgnoreCase)
             ? MergeFileAction.ReplaceUpgrade
             : MergeFileAction.DropFormatChange;
     }
-
-    private static MergeFileAction DecideAgainstOwned(
-        TvPlanUnit unit, string ownedFilePath, int incomingQualityPosition, int incomingRevision, ProperDownloadPolicy properPolicy) =>
-        DecideAgainstOwned(unit.FileName, ownedFilePath, incomingQualityPosition, incomingRevision, properPolicy);
 }
 
 /// <summary>

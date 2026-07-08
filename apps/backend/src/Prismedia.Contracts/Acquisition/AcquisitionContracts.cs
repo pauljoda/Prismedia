@@ -146,6 +146,14 @@ public sealed record AcquisitionFileItem(string Name, long SizeBytes, double Pro
 public sealed record AcquisitionFilesView(bool Imported, IReadOnlyList<AcquisitionFileItem> Files);
 
 /// <summary>
+/// Re-runs the import for a downloaded or manual-import-held acquisition.
+/// <see cref="AllowFormatChange"/> is the user's explicit consent for a genuine upgrade to replace the
+/// owned file across formats (e.g. mkv → mp4); the previous file is recycled/kept per the recycle-bin
+/// setting. The dangerous-file hold is never bypassed.
+/// </summary>
+public sealed record AcquisitionImportRetryRequest(bool AllowFormatChange = false);
+
+/// <summary>
 /// One row of the global Downloads view: an active (not yet imported, not cancelled) acquisition with
 /// live download-client telemetry when a transfer is in flight. Telemetry fields are null for rows
 /// without a live transfer (still searching, awaiting selection, importing) and when the download

@@ -341,6 +341,34 @@ public sealed class AcquisitionService(
         return detail;
     }
 
+    /// <summary>
+    /// Re-runs the import for a downloaded or manual-import-held acquisition on demand — the hold's
+    /// "Import anyway". <paramref name="allowFormatChange"/> carries the user's explicit consent for a
+    /// genuine upgrade to replace the owned file across formats (e.g. mkv → mp4, recycling the old
+    /// file); without it the import re-runs under the ordinary rules. Any other status returns the
+    /// detail unchanged (nothing enqueued); null when the acquisition no longer exists. The
+    /// dangerous-file hold is enforced by the import job regardless of the flag.
+    /// </summary>
+    public async Task<AcquisitionDetail?> RetryImportAsync(Guid id, bool allowFormatChange, CancellationToken cancellationToken) {
+        var detail = await store.GetAsync(id, cancellationToken);
+        if (detail is null) {
+            return null;
+        }
+
+        if (detail.Summary.Status is not (AcquisitionStatus.Downloaded or AcquisitionStatus.ManualImportRequired)) {
+            return detail;
+        }
+
+        await queue.EnqueueAsync(
+            new EnqueueJobRequest(
+                JobType.AcquisitionImport,
+                PayloadJson: AcquisitionJobPayload.Serialize(id, allowFormatChange),
+                TargetEntityId: id.ToString(),
+                TargetLabel: detail.Summary.Title),
+            cancellationToken);
+        return detail;
+    }
+
     /// <summary>Persists a new acquisition and enqueues the background search job that fills in candidates.</summary>
     public async Task<AcquisitionSummary> CreateAndSearchAsync(AcquisitionCreateRequest request, CancellationToken cancellationToken) {
         if (string.IsNullOrWhiteSpace(request.Title)) {

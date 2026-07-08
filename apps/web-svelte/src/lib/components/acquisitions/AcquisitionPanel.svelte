@@ -20,6 +20,7 @@
     blocklistAcquisitionCandidate,
     cancelAcquisition,
     reSearchAcquisition,
+    retryAcquisitionImport,
     fetchAcquisition,
     fetchAcquisitionFiles,
     fetchAcquisitionHistory,
@@ -184,6 +185,21 @@
     }
   }
 
+  // The manual-import hold's way out: re-run the import with the user's consent to replace the owned
+  // file across formats. Genuine-upgrade gating and the dangerous-file hold still apply server-side.
+  async function importAnyway() {
+    if (busy) return;
+    busy = true;
+    try {
+      detail = await retryAcquisitionImport(acquisitionId, true);
+      reSearchPolls = 8; // bridge-poll so the importing → imported transition lands without a refresh
+    } catch (err) {
+      error = err instanceof Error ? err.message : "Failed to import";
+    } finally {
+      busy = false;
+    }
+  }
+
   // Toggle monitoring across its three states: actively monitoring → stop; auto-paused (e.g. after the
   // acquisition was cancelled) → resume; not monitored → start. When on, Prismedia keeps re-running the
   // release search until the book is acquired.
@@ -288,6 +304,19 @@
         {/if}
       </div>
       <div class="flex shrink-0 flex-wrap items-center gap-2">
+        {#if status === ACQUISITION_STATUS.manualImportRequired}
+          <Button
+            type="button"
+            variant="primary"
+            class="gap-1.5"
+            disabled={busy}
+            onclick={() => void importAnyway()}
+            title="Import the downloaded files now. A genuine upgrade may replace the existing file even when the format differs; the previous file is kept recoverable (recycle bin when configured)."
+          >
+            <CloudDownload class="h-3.5 w-3.5" />
+            Import anyway
+          </Button>
+        {/if}
         {#if canReSearch}
           <Button type="button" variant="ghost" class="gap-1.5" disabled={busy} onclick={() => void reSearch()}>
             <RefreshCw class="h-3.5 w-3.5" />

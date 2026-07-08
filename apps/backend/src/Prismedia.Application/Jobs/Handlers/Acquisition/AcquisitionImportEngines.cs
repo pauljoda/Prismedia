@@ -218,7 +218,8 @@ internal static class MergedImportExecution {
         string ownedFilePath,
         string sourceAbsolute,
         ImportMode importMode,
-        CancellationToken cancellationToken) {
+        CancellationToken cancellationToken,
+        bool allowFormatChange = false) {
         var incoming = sourceAbsolute;
         string? scratchDir = null;
         if (importMode != ImportMode.Move) {
@@ -229,7 +230,8 @@ internal static class MergedImportExecution {
         }
 
         try {
-            var result = await replacer.ReplaceAsync(ownedFilePath, incoming, BookFormatTier.Unknown, cancellationToken, EntityKind.Video);
+            var result = await replacer.ReplaceAsync(
+                ownedFilePath, incoming, BookFormatTier.Unknown, cancellationToken, EntityKind.Video, allowFormatChange);
             if (!result.Succeeded) {
                 logger.LogWarning("MergedImport: in-place replace of {Owned} failed: {Reason}", ownedFilePath, result.FailureReason);
             }
@@ -427,7 +429,8 @@ public sealed class MovieAcquisitionImportEngine(
 
             var incomingRevision = selected is null ? 1 : ReleaseRevisionDetection.Detect(selected.Title);
             var rules = await profiles.GetRulesAsync(import.ProfileId, EntityKind.Movie, cancellationToken);
-            var action = TvExistingTargetMerge.DecideAgainstOwned(fileName, owned, incomingPosition, incomingRevision, rules.ProperPolicy);
+            var action = TvExistingTargetMerge.DecideAgainstOwned(
+                fileName, owned, incomingPosition, incomingRevision, rules.ProperPolicy, import.AllowFormatChange);
             if (action != MergeFileAction.ReplaceUpgrade) {
                 await MergedImportExecution.FailNothingUsableAsync(
                     acquisitions, blocklist, history, torrents, logger, import, selected,
@@ -437,7 +440,8 @@ public sealed class MovieAcquisitionImportEngine(
                 return;
             }
 
-            placedPath = await MergedImportExecution.ReplaceOwnedAsync(replacer, logger, owned, sourceAbsolute, importMode, cancellationToken);
+            placedPath = await MergedImportExecution.ReplaceOwnedAsync(
+                replacer, logger, owned, sourceAbsolute, importMode, cancellationToken, import.AllowFormatChange);
             if (placedPath is null) {
                 await Fail(import.Id, "The in-place upgrade of the owned movie file failed; the original was kept.", cancellationToken);
                 return;
@@ -614,7 +618,7 @@ public sealed class TvAcquisitionImportEngine(
         var merged = TvExistingTargetMerge.Plan(
             unitsPlan.Units, layout,
             season => TvImportPlanBuilder.SeasonFolderSegment(series, season, profile?.PathTemplate),
-            incomingPosition, incomingRevision, rules.ProperPolicy);
+            incomingPosition, incomingRevision, rules.ProperPolicy, import.AllowFormatChange);
 
         // Safety net: a merged import never writes outside the existing series folder.
         var seriesRoot = Path.GetFullPath(layout.SeriesFolderPath);
@@ -636,7 +640,7 @@ public sealed class TvAcquisitionImportEngine(
                         new ResolvedImportItem(sourceAbsolute, Path.GetFullPath(item.TargetAbsolutePath)), importMode, cancellationToken));
                     break;
                 case MergeFileAction.ReplaceUpgrade:
-                    if (await ReplaceOwnedAsync(item.OwnedFilePath!, sourceAbsolute, importMode, cancellationToken) is { } swapped) {
+                    if (await ReplaceOwnedAsync(item.OwnedFilePath!, sourceAbsolute, importMode, import.AllowFormatChange, cancellationToken) is { } swapped) {
                         placed.Add(swapped);
                     } else {
                         dropped++;
@@ -698,8 +702,8 @@ public sealed class TvAcquisitionImportEngine(
         await context.ReportProgressAsync(100, "Imported", cancellationToken);
     }
 
-    private Task<string?> ReplaceOwnedAsync(string ownedFilePath, string sourceAbsolute, ImportMode importMode, CancellationToken cancellationToken) =>
-        MergedImportExecution.ReplaceOwnedAsync(replacer, logger, ownedFilePath, sourceAbsolute, importMode, cancellationToken);
+    private Task<string?> ReplaceOwnedAsync(string ownedFilePath, string sourceAbsolute, ImportMode importMode, bool allowFormatChange, CancellationToken cancellationToken) =>
+        MergedImportExecution.ReplaceOwnedAsync(replacer, logger, ownedFilePath, sourceAbsolute, importMode, cancellationToken, allowFormatChange);
 
     private Task HandleNothingUsableAsync(
         AcquisitionImportContext import, SelectedRelease? selected, bool hasFormatChange, CancellationToken cancellationToken) =>

@@ -99,6 +99,27 @@ public sealed class OwnedFileReplacerTests : IDisposable {
         Assert.False(File.Exists(owned + ".prismedia-bak"));
     }
 
+    [Fact]
+    public async Task ConsentedFormatChangeInstallsUnderTheOwnedBasenameAndRetiresTheOldFile() {
+        var library = Dir("library");
+        var download = Dir("download");
+        var owned = WriteFile(library, "Movie (2020).mkv", "owned mkv");
+        WriteFile(download, "Movie.2020.2160p.mp4", "incoming 2160p mp4");
+
+        // The user's explicit "import anyway": mkv → mp4 installs at the owned basename with the new
+        // extension, the old file is retired, and the previous copy stays recoverable as the backup.
+        var result = await _replacer.ReplaceAsync(
+            library, download, BookFormatTier.Unknown, CancellationToken.None, EntityKind.Video, allowFormatChange: true);
+
+        var installed = Path.Combine(library, "Movie (2020).mp4");
+        Assert.True(result.Succeeded);
+        Assert.Equal(installed, result.SwappedPath);
+        Assert.Equal("incoming 2160p mp4", File.ReadAllText(installed));
+        Assert.False(File.Exists(owned));                    // the old-format file is retired
+        Assert.True(File.Exists(owned + ".prismedia-bak"));  // and stays recoverable
+        Assert.Equal("owned mkv", File.ReadAllText(owned + ".prismedia-bak"));
+    }
+
     private string Dir(string name) {
         var path = Path.Combine(_root, name);
         Directory.CreateDirectory(path);

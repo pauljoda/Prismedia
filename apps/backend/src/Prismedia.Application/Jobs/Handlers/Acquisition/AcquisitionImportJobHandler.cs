@@ -27,6 +27,13 @@ public sealed class AcquisitionImportJobHandler(
             return;
         }
 
+        if (payload.AllowFormatChange) {
+            // The user's explicit "import anyway": genuine upgrades may replace the owned file across
+            // formats. The dangerous-file hold below still applies — consent to a format change is not
+            // consent to import an executable payload.
+            import = import with { AllowFormatChange = true };
+        }
+
         // The dangerous-file hold runs before ANY engine: a release whose payload carries an executable
         // (the classic fake-release .scr) is never imported automatically and never silently skipped —
         // it waits, visibly, for the user to review, blocklist, or import manually.

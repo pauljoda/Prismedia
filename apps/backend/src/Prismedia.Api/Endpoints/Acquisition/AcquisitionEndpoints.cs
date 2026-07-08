@@ -177,6 +177,21 @@ public static class AcquisitionEndpoints {
             .Produces<AcquisitionDetail>()
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
+        group.MapPost("/{id:guid}/import", async (
+            Guid id,
+            AcquisitionImportRetryRequest request,
+            AcquisitionService acquisitions,
+            CancellationToken cancellationToken) => {
+                var detail = await acquisitions.RetryImportAsync(id, request.AllowFormatChange, cancellationToken);
+                return detail is null
+                    ? Results.NotFound(new ApiProblem(ApiProblemCodes.AcquisitionNotFound, "Acquisition was not found."))
+                    : Results.Ok(detail);
+            })
+            .WithName("RetryAcquisitionImport")
+            .WithSummary("Re-runs the import for a downloaded or manual-import-held acquisition; allowFormatChange consents to replacing the owned file across formats.")
+            .Produces<AcquisitionDetail>()
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+
         group.MapPost("/{id:guid}/cancel", async (
             Guid id,
             AcquisitionService acquisitions,
