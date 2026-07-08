@@ -90,7 +90,7 @@ public enum JobType {
     [Code("refresh-collection")]
     RefreshCollection,
 
-    /// <summary>Moves video-derived assets between cache and media-adjacent storage.</summary>
+    /// <summary>Validates generated assets and deletes orphaned per-entity cache directories.</summary>
     [Code("library-maintenance")]
     LibraryMaintenance,
 

@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Prismedia.Application.Jobs;
 using Prismedia.Application.Jobs.Handlers;
 using Prismedia.Application.Jobs.Ports;
+using Prismedia.Application.Jobs.Scanning;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Jobs.Handlers.Scan;
@@ -28,7 +29,7 @@ public sealed class ScanGalleryJobHandler(
         AutoIdentifyScanEnqueue.EnqueueExistingRootsForUnchangedScanAsync(
             context, Roots, downstreamNeeds, root, ScanCategories, cancellationToken);
 
-    protected override async Task ScanRootCoreAsync(JobContext context, LibraryRootData root, CancellationToken cancellationToken) {
+    protected override async Task<ScanRootOutcome> ScanRootCoreAsync(JobContext context, LibraryRootData root, CancellationToken cancellationToken) {
         logger.LogInformation("ScanGallery: discovering images in {Path}", root.Path);
         var excludedPaths = await Roots.GetExcludedPathsForRootAsync(root.Id, cancellationToken);
 
@@ -183,6 +184,8 @@ public sealed class ScanGalleryJobHandler(
         await images.RemoveStaleGalleriesInRootAsync(root.Id, validGalleryPaths.ToHashSet(StringComparer.OrdinalIgnoreCase), cancellationToken);
 
         await AutoIdentifyScanEnqueue.EnqueueRootsAsync(context, settings, downstreamNeeds, autoIdentifyIds, cancellationToken);
+
+        return ScanRootOutcome.Success;
     }
 
     private static bool SamePath(string left, string right) =>

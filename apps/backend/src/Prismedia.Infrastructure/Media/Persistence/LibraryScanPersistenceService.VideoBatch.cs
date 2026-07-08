@@ -15,6 +15,13 @@ namespace Prismedia.Infrastructure.Media.Persistence;
 public sealed partial class LibraryScanPersistenceService {
     // ── Batch upsert ──
 
+    public Task DiscardPendingScanChangesAsync(CancellationToken cancellationToken) {
+        // A failed SaveChanges leaves the poisoned entries tracked; they would be re-attempted
+        // (and re-fail) on the next save in this scan's scope, so drop them entirely.
+        _db.ChangeTracker.Clear();
+        return Task.CompletedTask;
+    }
+
     public async Task<IReadOnlyList<Guid>> UpsertVideosBatchAsync(
         IReadOnlyList<VideoUpsertItem> items, CancellationToken cancellationToken) {
         if (items.Count == 0) return [];

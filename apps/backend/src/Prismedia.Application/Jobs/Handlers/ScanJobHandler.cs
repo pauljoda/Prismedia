@@ -33,9 +33,14 @@ public abstract class ScanJobHandler(
     public abstract JobType Type { get; }
 
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
+        var rootFailures = 0;
+        string? firstRootError = null;
+        var scannedRoots = 0;
+
         if (!ScanRootPayload.TryParse(context.Job.PayloadJson, out var payload)) {
             var enabledRoots = await roots.GetEnabledRootsAsync(cancellationToken);
             var eligible = enabledRoots.Where(IsEligibleRoot).ToList();
+            scannedRoots = eligible.Count;
             logger.LogInformation("{JobType}: scanning {Count} eligible roots", Type.ToCode(), eligible.Count);
 
             for (var i = 0; i < eligible.Count; i++) {
@@ -50,8 +55,18 @@ public abstract class ScanJobHandler(
                         "{JobType}: skipping library root {RootId} because it is no longer enabled for this scan",
                         Type.ToCode(), listedRoot.Id);
                 } else {
-                    await ScanRootWithSnapshotAsync(context, currentRoot, cancellationToken);
-                    await roots.UpdateRootLastScannedAsync(currentRoot.Id, cancellationToken);
+                    // One broken library must not freeze the others: record the failure, keep
+                    // scanning the remaining roots, and fail the job at the end.
+                    try {
+                        await ScanRootWithSnapshotAsync(context, currentRoot, cancellationToken);
+                        await roots.UpdateRootLastScannedAsync(currentRoot.Id, cancellationToken);
+                    } catch (OperationCanceledException) {
+                        throw;
+                    } catch (Exception ex) {
+                        logger.LogError(ex, "{JobType}: scanning library root {RootId} failed", Type.ToCode(), currentRoot.Id);
+                        rootFailures++;
+                        firstRootError ??= ex.Message;
+                    }
                 }
 
                 // Never name the individual root here: the all-roots scan job is not scoped to a
@@ -80,6 +95,11 @@ public abstract class ScanJobHandler(
         // otherwise no-op rescan.
         await RemoveEntitiesOutsideConfiguredRootsAsync(cancellationToken);
         await RemoveOrphanTagsIfEnabledAsync(cancellationToken);
+
+        if (rootFailures > 0) {
+            throw new InvalidOperationException(
+                $"{rootFailures} of {scannedRoots} libraries failed to scan (the rest completed). First error: {firstRootError}");
+        }
     }
 
     /// <summary>
@@ -90,7 +110,7 @@ public abstract class ScanJobHandler(
         JobContext context, LibraryRootData root, CancellationToken cancellationToken) {
         if (snapshots is null) {
             // No snapshot store wired (e.g. in unit tests): always run the full scan.
-            await ScanRootCoreAsync(context, root, cancellationToken);
+            ThrowIfFilesFailed(await ScanRootCoreAsync(context, root, cancellationToken));
             return;
         }
 
@@ -126,8 +146,31 @@ public abstract class ScanJobHandler(
             await processingState.ClearProbeFailuresForPathsAsync(touchedPaths, cancellationToken);
         }
 
-        await ScanRootCoreAsync(context, root, cancellationToken);
-        await snapshots.ApplyAsync(root.Id, scanKind, delta, cancellationToken);
+        var outcome = await ScanRootCoreAsync(context, root, cancellationToken);
+
+        // Files the scan could not persist are withheld from the snapshot so the next scan sees
+        // them as still added/changed and retries exactly them; everything that succeeded advances
+        // normally. The job still fails below so the skipped files stay visible.
+        await snapshots.ApplyAsync(root.Id, scanKind, WithoutFailedPaths(delta, outcome), cancellationToken);
+        ThrowIfFilesFailed(outcome);
+    }
+
+    private static ScanDelta WithoutFailedPaths(ScanDelta delta, ScanRootOutcome outcome) {
+        if (outcome.FailedPaths.Count == 0) return delta;
+
+        var failed = new HashSet<string>(outcome.FailedPaths, StringComparer.OrdinalIgnoreCase);
+        return delta with {
+            Added = delta.Added.Where(signature => !failed.Contains(signature.Path)).ToArray(),
+            Changed = delta.Changed.Where(signature => !failed.Contains(signature.Path)).ToArray()
+        };
+    }
+
+    private static void ThrowIfFilesFailed(ScanRootOutcome outcome) {
+        if (outcome.FailedPaths.Count == 0) return;
+
+        var sample = string.Join("; ", outcome.FailedPaths.Take(3));
+        throw new InvalidOperationException(
+            $"{outcome.FailedPaths.Count} file(s) could not be persisted and were skipped so the rest of the scan could finish: {sample}. They will be retried on the next scan.");
     }
 
     /// <summary>
@@ -165,8 +208,12 @@ public abstract class ScanJobHandler(
     /// </summary>
     protected abstract IReadOnlyList<MediaCategory> ScanCategories { get; }
 
-    /// <summary>Discovers files, creates/updates entities, and enqueues downstream jobs for one root.</summary>
-    protected abstract Task ScanRootCoreAsync(JobContext context, LibraryRootData root, CancellationToken cancellationToken);
+    /// <summary>
+    /// Discovers files, creates/updates entities, and enqueues downstream jobs for one root.
+    /// Returns which discovered files, if any, could not be persisted and were skipped; the base
+    /// handler keeps those out of the scan snapshot and fails the job after the rest is saved.
+    /// </summary>
+    protected abstract Task<ScanRootOutcome> ScanRootCoreAsync(JobContext context, LibraryRootData root, CancellationToken cancellationToken);
 
     /// <summary>
     /// Runs when the incremental snapshot proves no media files changed and the detailed scan is

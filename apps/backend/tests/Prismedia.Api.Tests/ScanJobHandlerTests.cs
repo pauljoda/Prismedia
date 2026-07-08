@@ -2315,6 +2315,84 @@ public sealed class ScanJobHandlerTests {
     }
 
     [Fact]
+    public async Task FailedFilesAreWithheldFromSnapshotAndRetriedNextScan() {
+        var root = new LibraryRootData(
+            Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            "/media/videos", "Videos",
+            Enabled: true, Recursive: true,
+            ScanVideos: true, ScanImages: false, ScanAudio: false, ScanBooks: false, IsNsfw: false);
+        var persistence = new FakeScanPersistence([root]);
+        var snapshots = new FakeScanSnapshotStore();
+        var job = SingleRootScanJob(root);
+
+        // First scan persists a.mkv but fails on b.mkv: the job fails, yet the snapshot advances
+        // for a.mkv and withholds b.mkv so exactly it is retried.
+        var first = new RecordingScanHandler(
+            persistence, snapshots, new RecordingFileDiscovery(["/media/videos/a.mkv", "/media/videos/b.mkv"])) {
+            Outcome = new ScanRootOutcome(["/media/videos/b.mkv"])
+        };
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            first.HandleAsync(new JobContext(job, new NoopJobQueue()), CancellationToken.None));
+        Assert.Contains("b.mkv", ex.Message);
+
+        var stored = await snapshots.LoadAsync(root.Id, JobType.ScanLibrary.ToCode(), CancellationToken.None);
+        Assert.Contains(stored, signature => signature.Path == "/media/videos/a.mkv");
+        Assert.DoesNotContain(stored, signature => signature.Path == "/media/videos/b.mkv");
+
+        // Second scan with identical files on disk: b.mkv still reads as added, so the detailed
+        // scan runs again instead of being skipped by the incremental fast path.
+        var second = new RecordingScanHandler(
+            persistence, snapshots, new RecordingFileDiscovery(["/media/videos/a.mkv", "/media/videos/b.mkv"]));
+        await second.HandleAsync(new JobContext(job, new NoopJobQueue()), CancellationToken.None);
+        Assert.Equal([root.Id], second.ScannedRootIds);
+
+        var healed = await snapshots.LoadAsync(root.Id, JobType.ScanLibrary.ToCode(), CancellationToken.None);
+        Assert.Contains(healed, signature => signature.Path == "/media/videos/b.mkv");
+    }
+
+    [Fact]
+    public async Task AllRootsScanKeepsScanningWhenOneRootFails() {
+        var brokenRoot = new LibraryRootData(
+            Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            "/media/broken", "Broken",
+            Enabled: true, Recursive: true,
+            ScanVideos: true, ScanImages: false, ScanAudio: false, ScanBooks: false, IsNsfw: false);
+        var healthyRoot = new LibraryRootData(
+            Guid.Parse("22222222-2222-2222-2222-222222222222"),
+            "/media/healthy", "Healthy",
+            Enabled: true, Recursive: true,
+            ScanVideos: true, ScanImages: false, ScanAudio: false, ScanBooks: false, IsNsfw: false);
+        var persistence = new FakeScanPersistence([brokenRoot, healthyRoot]);
+        var handler = new RecordingScanHandler(persistence) {
+            OutcomeSelector = root => root.Id == brokenRoot.Id
+                ? new ScanRootOutcome(["/media/broken/bad.mkv"])
+                : ScanRootOutcome.Success
+        };
+        var job = new JobRunSnapshot(
+            Guid.NewGuid(),
+            JobType.ScanLibrary,
+            JobRunStatus.Running,
+            Progress: 0,
+            Message: null,
+            PayloadJson: "{}",
+            TargetEntityKind: null,
+            TargetEntityId: null,
+            TargetLabel: null,
+            CreatedAt: DateTimeOffset.UtcNow,
+            StartedAt: DateTimeOffset.UtcNow,
+            FinishedAt: null);
+
+        // The broken root's failure is reported, but the healthy root still scans.
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            handler.HandleAsync(new JobContext(job, new NoopJobQueue()), CancellationToken.None));
+
+        Assert.Contains("1 of 2", ex.Message);
+        Assert.Equal([brokenRoot.Id, healthyRoot.Id], handler.ScannedRootIds);
+        Assert.Contains(healthyRoot.Id, persistence.LastScannedRootIds);
+        Assert.DoesNotContain(brokenRoot.Id, persistence.LastScannedRootIds);
+    }
+
+    [Fact]
     public async Task SnapshotNoChangeScanStillQueuesPendingAutoIdentifyRoots() {
         var root = new LibraryRootData(
             Guid.Parse("11111111-1111-1111-1111-111111111111"),
@@ -2416,12 +2494,15 @@ public sealed class ScanJobHandlerTests {
 
         protected override IReadOnlyList<MediaCategory> ScanCategories => [MediaCategory.Video];
 
-        protected override Task ScanRootCoreAsync(
+        public ScanRootOutcome Outcome { get; set; } = ScanRootOutcome.Success;
+        public Func<LibraryRootData, ScanRootOutcome>? OutcomeSelector { get; set; }
+
+        protected override Task<ScanRootOutcome> ScanRootCoreAsync(
             JobContext context,
             LibraryRootData root,
             CancellationToken cancellationToken) {
             ScannedRootIds.Add(root.Id);
-            return Task.CompletedTask;
+            return Task.FromResult(OutcomeSelector?.Invoke(root) ?? Outcome);
         }
     }
 
@@ -2823,6 +2904,8 @@ public sealed class ScanJobHandlerTests {
             UpsertedVideoItems.AddRange(items);
             return Task.FromResult(UpsertedVideoIds);
         }
+
+        public Task DiscardPendingScanChangesAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
         public Task<IReadOnlyDictionary<Guid, DownstreamNeeds>> CheckDownstreamNeedsBatchAsync(IReadOnlyList<Guid> entityIds, CancellationToken cancellationToken) =>
             Task.FromResult(DownstreamNeedsById);

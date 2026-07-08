@@ -2,6 +2,7 @@ using Prismedia.Application.Jobs.Handlers;
 using System.IO.Compression;
 using Microsoft.Extensions.Logging;
 using Prismedia.Application.Jobs.Ports;
+using Prismedia.Application.Jobs.Scanning;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Jobs.Handlers.Scan;
@@ -37,7 +38,7 @@ public sealed class ScanBookJobHandler(
         AutoIdentifyScanEnqueue.EnqueueExistingRootsForUnchangedScanAsync(
             context, Roots, downstreamNeeds, root, ScanCategories, cancellationToken);
 
-    protected override async Task ScanRootCoreAsync(JobContext context, LibraryRootData root, CancellationToken cancellationToken) {
+    protected override async Task<ScanRootOutcome> ScanRootCoreAsync(JobContext context, LibraryRootData root, CancellationToken cancellationToken) {
         logger.LogInformation("ScanBook: discovering archives in {Path}", root.Path);
         var excludedPaths = await Roots.GetExcludedPathsForRootAsync(root.Id, cancellationToken);
 
@@ -180,6 +181,8 @@ public sealed class ScanBookJobHandler(
         // Author groupings whose books were all removed (or that used to be the old "series" parents) are pruned.
         await books.RemoveEmptyBookAuthorsAsync(cancellationToken);
         await Roots.RemoveEntitiesInExcludedPathsAsync(root.Id, cancellationToken);
+
+        return ScanRootOutcome.Success;
     }
 
     /// <summary>

@@ -2,6 +2,7 @@ using Prismedia.Application.Jobs.Handlers;
 using Microsoft.Extensions.Logging;
 using Prismedia.Application.Acquisition;
 using Prismedia.Application.Jobs.Ports;
+using Prismedia.Application.Jobs.Scanning;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Jobs.Handlers.Scan;
@@ -41,7 +42,7 @@ public sealed class ScanAudioJobHandler(
         await EnqueueExistingTrackJobsAsync(context, settings, root.Id, cancellationToken);
     }
 
-    protected override async Task ScanRootCoreAsync(JobContext context, LibraryRootData root, CancellationToken cancellationToken) {
+    protected override async Task<ScanRootOutcome> ScanRootCoreAsync(JobContext context, LibraryRootData root, CancellationToken cancellationToken) {
         logger.LogInformation("ScanAudio: discovering audio files in {Path}", root.Path);
         var excludedPaths = await Roots.GetExcludedPathsForRootAsync(root.Id, cancellationToken);
 
@@ -226,6 +227,8 @@ public sealed class ScanAudioJobHandler(
                     Priority: JobPriorities.AutoIdentify), cancellationToken);
             }
         }
+
+        return ScanRootOutcome.Success;
     }
 
     /// <summary>Queues probe and fingerprint jobs for a freshly upserted track when needed.</summary>

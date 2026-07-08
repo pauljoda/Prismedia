@@ -40,6 +40,12 @@ public interface IVideoScanPersistence {
     /// </summary>
     Task<IReadOnlyList<Guid>> UpsertVideosBatchAsync(
         IReadOnlyList<VideoUpsertItem> items, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Discards any pending, unsaved persistence state a failed upsert left behind, so later
+    /// operations in the same scan start from a clean slate instead of re-attempting the failure.
+    /// </summary>
+    Task DiscardPendingScanChangesAsync(CancellationToken cancellationToken);
 }
 
 /// <summary>Image and gallery scan persistence operations for discovered files and stale cleanup.</summary>

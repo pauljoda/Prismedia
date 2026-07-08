@@ -2,6 +2,7 @@ using Prismedia.Application.Jobs.Handlers;
 using Microsoft.Extensions.Logging;
 using Prismedia.Application.Acquisition;
 using Prismedia.Application.Jobs.Ports;
+using Prismedia.Application.Jobs.Scanning;
 using Prismedia.Domain.Entities;
 using System.Text.RegularExpressions;
 
@@ -46,7 +47,7 @@ public sealed class ScanLibraryJobHandler(
         AutoIdentifyScanEnqueue.EnqueueExistingRootsForUnchangedScanAsync(
             context, Roots, downstreamNeeds, root, ScanCategories, cancellationToken);
 
-    protected override async Task ScanRootCoreAsync(
+    protected override async Task<ScanRootOutcome> ScanRootCoreAsync(
         JobContext context, LibraryRootData root, CancellationToken cancellationToken) {
         var timer = new JobPhaseTimer();
 
@@ -65,6 +66,10 @@ public sealed class ScanLibraryJobHandler(
             settings = settings with { AutoIdentifyEnabled = false };
         }
         var allEntityIds = new List<Guid>(files.Count);
+        // Parallel to allEntityIds: the source path behind each persisted entity id. Files whose
+        // persistence failed are skipped, so downstream label lookups cannot index `files` directly.
+        var scannedPaths = new List<string>(files.Count);
+        var failedPaths = new List<string>();
         var validPaths = new HashSet<string>(files.Count, StringComparer.OrdinalIgnoreCase);
         var validMovieFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -114,22 +119,23 @@ public sealed class ScanLibraryJobHandler(
                     batchItems.Add(item);
                 }
 
-                var entityIds = await videos.UpsertVideosBatchAsync(batchItems, cancellationToken);
+                var (entityIds, persistedItems) = await UpsertBatchWithIsolationAsync(batchItems, failedPaths, cancellationToken);
                 if (scanMetadata is not null) {
-                    for (var i = 0; i < batchItems.Count && i < entityIds.Count; i++) {
-                        if (batchItems[i].Metadata is not { } metadata) {
+                    for (var i = 0; i < persistedItems.Count && i < entityIds.Count; i++) {
+                        if (persistedItems[i].Metadata is not { } metadata) {
                             continue;
                         }
 
                         await scanMetadata.ApplyVideoSidecarMetadataAsync(
                             entityIds[i],
                             metadata,
-                            Path.GetFileNameWithoutExtension(batchItems[i].FilePath),
-                            batchItems[i].IsNsfw,
+                            Path.GetFileNameWithoutExtension(persistedItems[i].FilePath),
+                            persistedItems[i].IsNsfw,
                             cancellationToken);
                     }
                 }
                 allEntityIds.AddRange(entityIds);
+                scannedPaths.AddRange(persistedItems.Select(item => item.FilePath));
 
                 await context.ReportProgressAsync(
                     batchEnd * 60 / files.Count,
@@ -147,7 +153,7 @@ public sealed class ScanLibraryJobHandler(
 
                 for (var i = 0; i < batchIds.Count; i++) {
                     var entityId = batchIds[i];
-                    var label = Path.GetFileNameWithoutExtension(files[batchStart + i]);
+                    var label = Path.GetFileNameWithoutExtension(scannedPaths[batchStart + i]);
                     var entityIdStr = entityId.ToString();
 
                     if (!needs.TryGetValue(entityId, out var entityNeeds)) continue;
@@ -228,6 +234,41 @@ public sealed class ScanLibraryJobHandler(
         logger.LogInformation(
             "[METRICS] scan-library {Label} — {FileCount} files, {Removed} stale, {Orphans} orphans — {Timing}",
             root.Label, files.Count, removed, orphans, report.ToLogString());
+
+        return failedPaths.Count == 0 ? ScanRootOutcome.Success : new ScanRootOutcome(failedPaths);
+    }
+
+    /// <summary>
+    /// Upserts a batch, and when the batch as a whole fails, retries its files one by one so a
+    /// single bad file is skipped (and reported) instead of aborting the entire scan — one poison
+    /// file used to freeze entity creation for the whole library. Returns the persisted ids with
+    /// the items they belong to, position-aligned.
+    /// </summary>
+    private async Task<(IReadOnlyList<Guid> EntityIds, IReadOnlyList<VideoUpsertItem> PersistedItems)> UpsertBatchWithIsolationAsync(
+        List<VideoUpsertItem> batchItems, List<string> failedPaths, CancellationToken cancellationToken) {
+        try {
+            var ids = await videos.UpsertVideosBatchAsync(batchItems, cancellationToken);
+            return (ids, batchItems);
+        } catch (Exception ex) when (ex is not OperationCanceledException) {
+            await videos.DiscardPendingScanChangesAsync(cancellationToken);
+            logger.LogWarning(ex,
+                "ScanLibrary: batch upsert of {Count} files failed; retrying files individually", batchItems.Count);
+        }
+
+        var entityIds = new List<Guid>(batchItems.Count);
+        var persisted = new List<VideoUpsertItem>(batchItems.Count);
+        foreach (var item in batchItems) {
+            try {
+                entityIds.AddRange(await videos.UpsertVideosBatchAsync([item], cancellationToken));
+                persisted.Add(item);
+            } catch (Exception ex) when (ex is not OperationCanceledException) {
+                await videos.DiscardPendingScanChangesAsync(cancellationToken);
+                failedPaths.Add(item.FilePath);
+                logger.LogError(ex, "ScanLibrary: skipping {Path} — persistence failed", item.FilePath);
+            }
+        }
+
+        return (entityIds, persisted);
     }
 
     private static VideoUpsertItem BuildVideoUpsertItem(
