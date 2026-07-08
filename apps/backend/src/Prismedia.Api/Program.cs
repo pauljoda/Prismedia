@@ -15,6 +15,7 @@ using Prismedia.Infrastructure.Security;
 using Prismedia.Infrastructure.Serialization;
 using Prismedia.Infrastructure.Videos;
 using Microsoft.Extensions.FileProviders;
+using Microsoft.AspNetCore.StaticFiles;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -96,10 +97,15 @@ if (app.Environment.IsDevelopment()) {
 
 if (staticFileProvider is not null) {
     app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = staticFileProvider });
-    app.UseStaticFiles(new StaticFileOptions { FileProvider = staticFileProvider });
+    app.UseStaticFiles(new StaticFileOptions {
+        FileProvider = staticFileProvider,
+        OnPrepareResponse = PrepareWebStaticResponse
+    });
 } else {
     app.UseDefaultFiles();
-    app.UseStaticFiles();
+    app.UseStaticFiles(new StaticFileOptions {
+        OnPrepareResponse = PrepareWebStaticResponse
+    });
 }
 
 Directory.CreateDirectory(cacheDir);
@@ -134,8 +140,11 @@ if (File.Exists(staticIndexPath)) {
 app.MapPrismediaEndpoints();
 
 if (File.Exists(staticIndexPath)) {
-    app.MapFallback(async () =>
-        Results.Content(await File.ReadAllTextAsync(staticIndexPath), MediaContentTypes.Html));
+    app.MapFallback(async (HttpContext context) => {
+        SetSpaShellCacheHeaders(context.Response);
+        context.Response.ContentType = MediaContentTypes.Html;
+        await context.Response.SendFileAsync(staticIndexPath, context.RequestAborted);
+    });
 } else {
     app.MapFallback(() => Results.NotFound(new ApiProblem(
         ApiProblemCodes.NotFound,
@@ -168,5 +177,27 @@ static string ResolvePath(string path, string basePath) =>
     Path.GetFullPath(Path.IsPathRooted(path)
         ? path
         : Path.Combine(basePath, path));
+
+static void PrepareWebStaticResponse(StaticFileResponseContext context) {
+    var requestPath = context.Context.Request.Path.Value ?? string.Empty;
+    if (string.Equals(context.File.Name, "index.html", StringComparison.OrdinalIgnoreCase) ||
+        requestPath.EndsWith(".html", StringComparison.OrdinalIgnoreCase)) {
+        SetSpaShellCacheHeaders(context.Context.Response);
+        return;
+    }
+
+    if (requestPath.StartsWith("/_app/immutable/", StringComparison.OrdinalIgnoreCase)) {
+        context.Context.Response.Headers.CacheControl = "public, max-age=31536000, immutable";
+    }
+}
+
+static void SetSpaShellCacheHeaders(HttpResponse response) {
+    // The SPA shell points at content-hashed JS/CSS chunks. It must be revalidated on
+    // every navigation so mobile Safari/PWA sessions don't keep an older app build
+    // after an API/DTO deploy and render new entity payloads as placeholder-only cards.
+    response.Headers.CacheControl = "no-store, no-cache, must-revalidate";
+    response.Headers.Pragma = "no-cache";
+    response.Headers.Expires = "0";
+}
 
 public partial class Program;

@@ -10,6 +10,7 @@ using Prismedia.Application.Jellyfin;
 using Prismedia.Contracts.Collections;
 using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Jellyfin;
+using Prismedia.Contracts.Media;
 using Prismedia.Contracts.Security;
 using Prismedia.Domain.Entities;
 using Prismedia.Contracts.Videos;
@@ -54,6 +55,23 @@ public sealed class SecurityEndpointTests : IDisposable {
         using var response = await client.GetAsync(path);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("/")]
+    [InlineData("/series")]
+    public async Task SpaShellResponsesDisableBrowserCache(string path) {
+        using var factory = CreateFactory(cacheRoot: _cacheRoot, staticWebRoot: _webRoot);
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync(path);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(MediaContentTypes.Html, response.Content.Headers.ContentType?.MediaType);
+        var cacheControl = response.Headers.CacheControl?.ToString() ?? string.Empty;
+        Assert.Contains("no-store", cacheControl);
+        Assert.Contains("no-cache", cacheControl);
+        Assert.Contains("must-revalidate", cacheControl);
     }
 
     [Fact]
@@ -464,11 +482,15 @@ public sealed class SecurityEndpointTests : IDisposable {
     private static WebApplicationFactory<Program> CreateFactory(
         IEntityReadService? entityReadService = null,
         IJellyfinImageFileService? imageFileService = null,
-        string? cacheRoot = null) =>
+        string? cacheRoot = null,
+        string? staticWebRoot = null) =>
         new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder => {
                 if (cacheRoot is not null) {
                     builder.UseSetting("Prismedia:CacheDir", cacheRoot);
+                }
+                if (staticWebRoot is not null) {
+                    builder.UseSetting("Prismedia:StaticWebRoot", staticWebRoot);
                 }
 
                 builder.ConfigureServices(services => {
