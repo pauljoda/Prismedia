@@ -97,19 +97,26 @@
     (loadedId !== null && (showMonitor || showSearch || acquisition !== null)) || childStatuses.length > 0,
   );
 
-  async function refresh(): Promise<void> {
+  /**
+   * Eligibility (can a plugin track this entity?) only changes when plugins or provider identities
+   * change, so it loads once per entity; the poll below re-reads only the acquisition + monitor,
+   * which are the states that actually move underneath the page.
+   */
+  async function refresh(options: { includeEligibility?: boolean } = {}): Promise<void> {
     const id = entityId;
     if (!id) return;
     const [nextAcquisition, nextMonitor, nextEligibility] = await Promise.all([
       fetchAcquisitionForEntity(id).catch(() => null),
       fetchEntityMonitor(id).catch(() => null),
-      fetchMonitorEligibility(id).catch(() => null),
+      options.includeEligibility
+        ? fetchMonitorEligibility(id).catch(() => null)
+        : Promise.resolve(undefined),
     ]);
     // Ignore a stale load that resolved after the page moved to another entity.
     if (entityId !== id) return;
     acquisition = nextAcquisition;
     monitor = nextMonitor;
-    eligibility = nextEligibility;
+    if (nextEligibility !== undefined) eligibility = nextEligibility;
     loadedId = id;
   }
 
@@ -125,7 +132,7 @@
     }
     if (id === lastRequestedId) return;
     lastRequestedId = id;
-    void refresh();
+    void refresh({ includeEligibility: true });
   });
 
   // Acquisition state changes outside this page too — the Downloads table re-searches, a monitor

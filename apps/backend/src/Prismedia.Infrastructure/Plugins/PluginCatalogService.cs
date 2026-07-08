@@ -55,16 +55,29 @@ public sealed partial class PluginCatalogService : IPluginCatalogService {
     public PluginCatalogService(PrismediaDbContext db, PluginCatalogOptions options, HttpClient? http = null) {
         _db = db;
         _options = options;
-        _http = http ?? new HttpClient();
+        // A bounded timeout: the remote index and artifact downloads ride this client, and a hung
+        // remote must never stall a caller for the framework's default 100 seconds.
+        _http = http ?? new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
     }
 
     /// <summary>
-    /// Lists locally discoverable providers and overlays installed/auth state from the database.
+    /// Lists locally discoverable providers and overlays installed/auth state from the database,
+    /// including not-yet-installed entries from the remote community index (for the plugin browser).
     /// </summary>
-    public async Task<IReadOnlyList<PluginProvider>> ListProvidersAsync(CancellationToken cancellationToken) {
+    public async Task<IReadOnlyList<PluginProvider>> ListProvidersAsync(CancellationToken cancellationToken) =>
+        await ListProvidersCoreAsync(includeRemote: true, cancellationToken);
+
+    /// <summary>
+    /// Lists locally discoverable providers only — no remote community-index round-trip. Identify,
+    /// eligibility, and request reads resolve against installed plugins, so this is their listing.
+    /// </summary>
+    public async Task<IReadOnlyList<PluginProvider>> ListInstalledProvidersAsync(CancellationToken cancellationToken) =>
+        await ListProvidersCoreAsync(includeRemote: false, cancellationToken);
+
+    private async Task<IReadOnlyList<PluginProvider>> ListProvidersCoreAsync(bool includeRemote, CancellationToken cancellationToken) {
         var current = ParseVersion(_options.CurrentPrismediaVersion);
         var descriptors = await DiscoverAsync(cancellationToken);
-        var indexed = await ListRemoteIndexEntriesAsync(current, cancellationToken);
+        var indexed = includeRemote ? await ListRemoteIndexEntriesAsync(current, cancellationToken) : [];
         var indexedById = indexed.ToDictionary(entry => entry.Id, StringComparer.OrdinalIgnoreCase);
         var configs = await _db.ProviderConfigs
             .AsNoTracking()
@@ -171,7 +184,7 @@ public sealed partial class PluginCatalogService : IPluginCatalogService {
         config.UpdatedAt = now;
         await _db.SaveChangesAsync(cancellationToken);
 
-        return (await ListProvidersAsync(cancellationToken))
+        return (await ListInstalledProvidersAsync(cancellationToken))
             .FirstOrDefault(provider => provider.Id.Equals(providerId, StringComparison.OrdinalIgnoreCase));
     }
 
@@ -191,7 +204,7 @@ public sealed partial class PluginCatalogService : IPluginCatalogService {
         var currentDescriptor = await FindProviderAsync(providerId, null, cancellationToken);
         if (currentDescriptor is not null &&
             ParseVersion(currentDescriptor.Manifest.Version) >= ParseVersion(remote.Version)) {
-            return (await ListProvidersAsync(cancellationToken))
+            return (await ListInstalledProvidersAsync(cancellationToken))
                 .FirstOrDefault(provider => provider.Id.Equals(providerId, StringComparison.OrdinalIgnoreCase));
         }
 

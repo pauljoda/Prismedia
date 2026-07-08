@@ -144,14 +144,14 @@
     try {
       const nextSeries = await fetchSeries(page.params.id ?? "");
       await hydrateSeriesThumbnails(nextSeries);
-      const [nextSeasonEpisodeCounts, nextProviderSeasonOptions] = await Promise.all([
-        loadSeasonEpisodeCounts(nextSeries),
-        loadProviderSeasonOptions(nextSeries),
-      ]);
-      seasonEpisodeCounts = nextSeasonEpisodeCounts;
-      providerSeasonOptions = nextProviderSeasonOptions;
+      seasonEpisodeCounts = await loadSeasonEpisodeCounts(nextSeries);
       series = nextSeries;
       loadState = "ready";
+      // Provider season options (Season Pass enrichment) are a live plugin round-trip — they land
+      // after first paint rather than gating it; local data renders instantly either way.
+      void loadProviderSeasonOptions(nextSeries).then((options) => {
+        if (series?.id === nextSeries.id) providerSeasonOptions = options;
+      });
     } catch (err) {
       if (redirectHiddenEntityNotFound(err, nsfw.mode)) return;
       errorMessage = err instanceof Error ? err.message : String(err);

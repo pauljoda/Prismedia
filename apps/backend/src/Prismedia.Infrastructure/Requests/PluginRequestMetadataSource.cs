@@ -19,6 +19,15 @@ public sealed class PluginRequestMetadataSource(PluginCatalogService catalog, Id
     private static readonly string SearchAction = IdentifyAction.Search.ToCode();
     private static readonly string LookupIdAction = IdentifyAction.LookupId.ToCode();
 
+    // Resolved proposals are stable on the minutes scale, but every surface that reads one — request
+    // detail pages, the series page's Season Pass options, a commit right after review, container
+    // sync — used to pay a fresh plugin round-trip each time. A short process-wide TTL cache makes
+    // repeat reads instant without holding provider data long enough to go stale. The source is
+    // scoped, hence the static cache; the cap bounds memory (proposals with children can be large).
+    private static readonly TimeSpan ProposalTtl = TimeSpan.FromMinutes(15);
+    private const int ProposalCacheCap = 128;
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (DateTimeOffset At, EntityMetadataProposal Proposal)> ProposalCache = new();
+
     public async Task<IReadOnlyList<RequestSearchResult>> SearchAsync(
         RequestKindDescriptor descriptor, string query, bool hideNsfw, CancellationToken cancellationToken) {
         if (string.IsNullOrWhiteSpace(query)) {
@@ -30,7 +39,7 @@ public sealed class PluginRequestMetadataSource(PluginCatalogService catalog, Id
         var child = RequestKindRegistry.ChildOf(descriptor);
         var requiredChildLookupKind = descriptor.IsContainer && child is { Committable: true } ? child.PluginKindCode : null;
 
-        var providers = (await catalog.ListProvidersAsync(cancellationToken))
+        var providers = (await catalog.ListInstalledProvidersAsync(cancellationToken))
             .Where(provider => provider.Enabled && (!provider.IsNsfw || !hideNsfw))
             .Where(provider => provider.Supports.Any(support =>
                 PluginEntityKindCompatibility.SupportsKind(support, descriptor.PluginKindCode) && support.Actions.Contains(SearchAction)))
@@ -167,6 +176,42 @@ public sealed class PluginRequestMetadataSource(PluginCatalogService catalog, Id
             return null;
         }
 
+        var cacheKey = string.Join('|', entityKind.ToCode(), providerId, externalId, hideNsfw, includeChildren);
+        if (ProposalCache.TryGetValue(cacheKey, out var hit) && DateTimeOffset.UtcNow - hit.At < ProposalTtl) {
+            return hit.Proposal;
+        }
+
+        var proposal = await ResolveProposalUncachedAsync(entityKind, providerId, externalId, hideNsfw, includeChildren, cancellationToken);
+        // Only successful resolutions are cached: a transient provider failure should retry, and a
+        // gated/unknown id is cheap to re-answer.
+        if (proposal is not null) {
+            EvictForCapacity();
+            ProposalCache[cacheKey] = (DateTimeOffset.UtcNow, proposal);
+        }
+
+        return proposal;
+    }
+
+    private static void EvictForCapacity() {
+        if (ProposalCache.Count < ProposalCacheCap) {
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        foreach (var (key, value) in ProposalCache) {
+            if (now - value.At >= ProposalTtl) {
+                ProposalCache.TryRemove(key, out _);
+            }
+        }
+
+        while (ProposalCache.Count >= ProposalCacheCap && !ProposalCache.IsEmpty) {
+            var oldest = ProposalCache.MinBy(pair => pair.Value.At);
+            ProposalCache.TryRemove(oldest.Key, out _);
+        }
+    }
+
+    private async Task<EntityMetadataProposal?> ResolveProposalUncachedAsync(
+        EntityKind entityKind, string providerId, string externalId, bool hideNsfw, bool includeChildren, CancellationToken cancellationToken) {
         var kindCode = entityKind.ToCode();
         var descriptor = await catalog.FindProviderAsync(providerId, kindCode, cancellationToken);
         if (descriptor is null || !descriptor.Manifest.Supports.Any(support =>
@@ -176,7 +221,7 @@ public sealed class PluginRequestMetadataSource(PluginCatalogService catalog, Id
 
         // Mirror the search path's provider gating: only query a provider that is enabled, and never an
         // NSFW-flagged one when NSFW is hidden.
-        var provider = (await catalog.ListProvidersAsync(cancellationToken)).FirstOrDefault(p => p.Id == providerId);
+        var provider = (await catalog.ListInstalledProvidersAsync(cancellationToken)).FirstOrDefault(p => p.Id == providerId);
         if (provider is null || !provider.Enabled || (hideNsfw && provider.IsNsfw)) {
             return null;
         }

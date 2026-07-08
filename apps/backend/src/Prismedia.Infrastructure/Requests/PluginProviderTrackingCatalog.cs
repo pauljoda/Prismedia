@@ -18,7 +18,7 @@ public sealed class PluginProviderTrackingCatalog(PluginCatalogService catalog) 
             return [];
         }
 
-        var providers = await catalog.ListProvidersAsync(cancellationToken);
+        var providers = await catalog.ListInstalledProvidersAsync(cancellationToken);
         return providerIds
             .Select(reference => reference.Provider)
             .Distinct(StringComparer.OrdinalIgnoreCase)

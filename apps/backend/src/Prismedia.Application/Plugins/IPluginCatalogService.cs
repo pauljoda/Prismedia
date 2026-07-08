@@ -9,6 +9,13 @@ public interface IPluginCatalogService {
     /// <summary>Lists providers discovered from installed and development plugin sources.</summary>
     Task<IReadOnlyList<PluginProvider>> ListProvidersAsync(CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Lists locally installed/dev-discovered providers only, without consulting the remote community
+    /// index. This is the hot read path — identify, monitor eligibility, and request lookups only ever
+    /// act on installed providers, so they must never pay (or depend on) a network round-trip.
+    /// </summary>
+    Task<IReadOnlyList<PluginProvider>> ListInstalledProvidersAsync(CancellationToken cancellationToken);
+
     /// <summary>Installs and enables a provider, or returns null when it cannot be found.</summary>
     Task<PluginProvider?> InstallAsync(string providerId, CancellationToken cancellationToken);
 

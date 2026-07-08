@@ -100,30 +100,59 @@ public sealed partial class PluginCatalogService {
         return path;
     }
 
+    // The remote index changes rarely and is consulted from user-facing reads (the plugin browser),
+    // so results are memoized process-wide: a successful fetch is reused for a generous window and a
+    // failed one for a short backoff, keeping a GitHub hiccup from stalling or hammering anything.
+    // The service itself is scoped, hence the static cache.
+    private static readonly SemaphoreSlim RemoteIndexGate = new(1, 1);
+    private static readonly TimeSpan RemoteIndexTtl = TimeSpan.FromMinutes(15);
+    private static readonly TimeSpan RemoteIndexFailureTtl = TimeSpan.FromMinutes(2);
+    private static (string Url, DateTimeOffset FetchedAt, IReadOnlyList<PluginIndexEntry> Entries, bool Success)? _remoteIndexCache;
+
     private async Task<IReadOnlyList<PluginIndexEntry>> FetchRemoteIndexAsync(CancellationToken cancellationToken) {
         if (string.IsNullOrWhiteSpace(_options.CommunityIndexUrl)) {
             return [];
         }
 
+        var indexUrl = ResolveIndexUrl(_options.CommunityIndexUrl);
+        if (CachedRemoteIndex(indexUrl) is { } cached) {
+            return cached;
+        }
+
+        await RemoteIndexGate.WaitAsync(cancellationToken);
         try {
-            var indexUrl = ResolveIndexUrl(_options.CommunityIndexUrl);
-            using var request = new HttpRequestMessage(HttpMethod.Get, AddCacheBuster(indexUrl));
-            request.Headers.TryAddWithoutValidation("Cache-Control", "no-cache");
-            request.Headers.TryAddWithoutValidation("Pragma", "no-cache");
-            using var response = await _http.SendAsync(request, cancellationToken);
+            if (CachedRemoteIndex(indexUrl) is { } refreshed) {
+                return refreshed; // another caller fetched while we waited
+            }
+
+            var entries = await FetchRemoteIndexCoreAsync(indexUrl, cancellationToken);
+            _remoteIndexCache = (indexUrl, DateTimeOffset.UtcNow, entries.Entries, entries.Success);
+            return entries.Entries;
+        } finally {
+            RemoteIndexGate.Release();
+        }
+    }
+
+    private static IReadOnlyList<PluginIndexEntry>? CachedRemoteIndex(string indexUrl) {
+        if (_remoteIndexCache is not { } cache || !cache.Url.Equals(indexUrl, StringComparison.Ordinal)) {
+            return null;
+        }
+
+        var ttl = cache.Success ? RemoteIndexTtl : RemoteIndexFailureTtl;
+        return DateTimeOffset.UtcNow - cache.FetchedAt < ttl ? cache.Entries : null;
+    }
+
+    private async Task<(IReadOnlyList<PluginIndexEntry> Entries, bool Success)> FetchRemoteIndexCoreAsync(
+        string indexUrl, CancellationToken cancellationToken) {
+        try {
+            using var response = await _http.GetAsync(indexUrl, cancellationToken);
             response.EnsureSuccessStatusCode();
             var body = await response.Content.ReadAsStringAsync(cancellationToken);
-            return PluginIndexParser.Parse(body, indexUrl);
-        } catch (HttpRequestException) {
-            return [];
-        } catch (JsonException) {
-            return [];
-        } catch (FormatException) {
-            return [];
-        } catch (IOException) {
-            return [];
+            return (PluginIndexParser.Parse(body, indexUrl), Success: true);
+        } catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) {
+            return ([], Success: false); // HttpClient timeout, not caller cancellation
         } catch (Exception ex) when (ex is not OperationCanceledException) {
-            return [];
+            return ([], Success: false);
         }
     }
 
@@ -135,11 +164,6 @@ public sealed partial class PluginCatalogService {
         }
 
         return configured.TrimEnd('/') + "/index.yml";
-    }
-
-    private static string AddCacheBuster(string url) {
-        var separator = url.Contains('?', StringComparison.Ordinal) ? "&" : "?";
-        return $"{url}{separator}_={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}";
     }
 
     private string ResolveEntryUrl(string path) {

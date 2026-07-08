@@ -34,7 +34,7 @@ public sealed partial class IdentifyPluginService : IIdentifyProviderService {
     /// Lists enabled providers that can identify the requested entity kind.
     /// </summary>
     public async Task<IReadOnlyList<PluginProvider>> ListProvidersAsync(string? entityKind, CancellationToken cancellationToken) {
-        var providers = await _catalog.ListProvidersAsync(cancellationToken);
+        var providers = await _catalog.ListInstalledProvidersAsync(cancellationToken);
         return providers
             .Where(provider => entityKind is null || provider.Supports.Any(support =>
                 PluginEntityKindCompatibility.SupportsKind(support, entityKind)))
