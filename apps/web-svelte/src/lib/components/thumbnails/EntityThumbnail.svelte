@@ -142,10 +142,12 @@
     return cover.thumbSrc2x ? `${cover.thumbSrc} 480w, ${cover.thumbSrc2x} 960w` : `${cover.thumbSrc} 480w`;
   }
 
-  // "auto" lets srcset-aware browsers measure the rendered card (valid only on
-  // lazy-loaded images); the 240px fallback approximates a typical card width
-  // for browsers without sizes=auto so they never jump to the largest candidate.
-  const coverSizes = $derived(imageLoading === "lazy" ? "auto, 240px" : "240px");
+  // 240px approximates a typical card width so density picks the 480w/960w
+  // candidate correctly. Never emit the spec-valid `sizes="auto, 240px"` here:
+  // WebKit fires a bogus error event (no fetch ever issued) for lazy-loaded
+  // images carrying `auto` when they mount inside these card layouts, which
+  // flips imageFailed and permanently swaps every cover for its placeholder.
+  const coverSizes = "240px";
 
   const activeSequenceIndex = $derived.by(() => {
     if (!isImageSequenceHover || hoverBroken || pointerRatio === null || sequenceAssets.length === 0) return -1;

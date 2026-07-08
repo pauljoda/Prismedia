@@ -116,6 +116,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated documentation, README screenshots, branding assets, install metadata, and app copy to match the current Prismedia v1 surface.
 
 ### Fixed
+- Fixed Safari showing placeholder icons instead of cover artwork across library grids and shelves: WebKit fires a spurious image error for lazy-loaded covers using the `sizes="auto"` responsive hint, so cards no longer emit it and Safari renders the same small grid variants as every other browser.
 - Fixed library scans crashing — and never completing again — once a library contained a multi-episode file (e.g. `S01E05-E06`) bound to both episodes it covers. Every scan failed with a duplicate-key error, which also blocked freshly imported episodes from ever appearing in the library until the offending scan succeeded.
 - Fixed Jellyfin clients (Infuse and friends) taking 30+ seconds to open a series library: list rows no longer load each series' full metadata graph one by one — a 50-series page went from ~9,800 database queries to a handful of batched ones, and the Continue Watching / Latest shelves shed a redundant double-load per item. Opening a single item is unchanged and stays fully detailed.
 - Fixed a half-downloaded season page not offering the missing-episode search: seasons now roll up their wanted episodes with the same "Search N missing" action the series page has.
