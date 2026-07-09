@@ -66,6 +66,84 @@ Key rules:
 - Imported stash data is normalized into Prismedia-owned records.
 - Provider provenance must be persisted for auditability and future provider expansion.
 
+## Entity Contract
+
+`Entity` is the stable application shape, not a page-specific view model. Public
+read contracts form one additive projection ladder:
+
+```text
+IEntityRef          id + kind + title
+  └─ IEntitySummary thumbnail/list context
+       └─ IEntityDocument capabilities + children + relationships
+```
+
+- References cross aggregate and relationship boundaries.
+- Summaries feed shared thumbnail, grid, picker, and shelf surfaces.
+- Documents feed detail pages and capability-driven actions.
+- Kind-specific pages start from the Entity document and read playback,
+  description, images, positions, files, acquisition, and other behavior from
+  capabilities. They do not require a parallel movie/book/show API shape.
+- Search candidates and metadata proposals are intentionally not Entities. A
+  candidate is an upstream choice; a proposal is a potential mutation or a
+  blueprint for a Wanted Entity. UI components for those contracts render them
+  directly instead of fabricating Entity ids and capabilities.
+
+The .NET contracts are the server source of truth. The generated frontend
+client carries these shapes into Svelte; route-local copies and hand-maintained
+wire unions are not allowed.
+
+## Plugin Identity and Discovery
+
+Plugin installation identity and upstream content identity are separate:
+
+- `PluginId` selects an installed manifest/executable.
+- `ExternalIdentity(namespace, value)` identifies an upstream record.
+- `PluginIdentityRoute` pairs them only for one dispatch.
+
+Namespaces are canonical lowercase. Values are opaque, case-sensitive, and may
+contain colons. Entities store external identities without assuming the plugin
+id equals the namespace. The central router matches entity kind, action, and
+namespace against enabled manifest-v2 support declarations.
+
+```mermaid
+flowchart LR
+  K["User selects Entity kind"] --> P["Enabled plugins supporting kind + search + lookup-id"]
+  P --> S["Selected plugin supplies ordered search fields"]
+  S --> C["EntitySearchCandidate with persistent identity"]
+  C --> R["Exact plugin lookup-id"]
+  R --> Q["EntityMetadataProposal review"]
+  Q -->|Identify| E["Apply selected capabilities to existing Entity"]
+  Q -->|Request| V["Revalidate revision and selected proposal ids"]
+  V --> W["Create Wanted Entities"]
+  W --> A["Dispatch per-kind acquisition policy"]
+```
+
+Every candidate and independently selectable structural proposal must round-trip
+through a context-free lookup by the same kind and exact identity. This is the
+invariant that lets monitoring, background enrichment, and reviewed requests
+run long after the original search UI is gone.
+
+Request commits do not trust client-supplied child identities. Review returns a
+deterministic proposal revision and opaque proposal ids; commit re-runs the exact
+plugin without cache, compares the revision, validates selection depth, derives
+each identity from the fresh proposal, and only then begins writes.
+
+## Acquisition Policy Modules
+
+The acquisition core owns orchestration, persistence, queueing, and download
+clients. Media-specific behavior lives behind `IAcquisitionPolicyModule`:
+
+- supported Entity kinds;
+- contextual query ladders;
+- Torznab/Newznab category routing;
+- release acceptance, ranking, and import decisions.
+
+Book, movie, music, and TV policies register independently. Adding a new media
+kind extends the registry rather than adding conditionals to the acquisition
+service. External identities flow through acquisition/import as
+`ExternalIdentity`; the persistence columns are `identity_namespace` and
+`identity_value`, not misleading plugin-id fields.
+
 ## Queue Direction
 
 Initial queue families:
