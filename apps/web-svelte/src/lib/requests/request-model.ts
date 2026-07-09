@@ -5,5 +5,9 @@ export type {
   RequestRatingValue,
   RequestSearchResponse,
   RequestSearchResult,
+  RequestReviewResponse,
+  RequestReviewTarget,
+  ExternalIdentity,
+  ReviewedRequestCommitRequest,
   RequestServiceOptionsResponse,
 } from "$lib/api/generated/model";

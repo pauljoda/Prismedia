@@ -1,14 +1,23 @@
 import type { MonitorPresetCode, RequestMediaKindCode, RequestProviderKindCode } from "$lib/api/generated/codes";
 import {
   commitEntityRequest as commitEntityRequestRequest,
+  commitReviewedRequest as commitReviewedRequestRequest,
   commitMissingChildrenRequest,
   commitRequest as commitRequestRequest,
   getRequestDetail as getRequestDetailRequest,
   removeWanted as removeWantedRequest,
+  reviewRequest as reviewRequestRequest,
+  searchRequestsByPlugin as searchRequestsByPluginRequest,
   searchRequests as searchRequestsRequest,
   syncContainerRequest as syncContainerRequestRequest,
 } from "$lib/api/generated/prismedia";
-import type { MissingChildrenCommitResponse, RequestCommitResponse } from "$lib/api/generated/model";
+import type {
+  ExternalIdentity,
+  MissingChildrenCommitResponse,
+  RequestCommitResponse,
+  RequestReviewResponse,
+  ReviewedRequestCommitRequest,
+} from "$lib/api/generated/model";
 import type { RequestDetailResponse, RequestSearchResponse } from "$lib/requests/request-model";
 import { unwrapGenerated } from "$lib/api/generated-response";
 
@@ -26,6 +35,53 @@ export async function searchRequests(params: {
       hideNsfw: params.hideNsfw,
     }),
     "Failed to search request providers",
+  );
+}
+
+/** Runs one manifest-schema search through the exact plugin selected in Discover. */
+export async function searchRequestsByPlugin(params: {
+  kind: RequestMediaKindCode;
+  pluginId: string;
+  fields: Record<string, string>;
+  hideNsfw?: boolean;
+}): Promise<RequestSearchResponse> {
+  return unwrapGenerated(
+    await searchRequestsByPluginRequest(
+      { kind: params.kind, pluginId: params.pluginId, fields: params.fields },
+      { hideNsfw: params.hideNsfw },
+    ),
+    "Failed to search the selected plugin",
+  );
+}
+
+/** Loads the canonical, unflattened proposal through the exact plugin that produced a result. */
+export async function reviewRequest(params: {
+  kind: RequestMediaKindCode;
+  pluginId: string;
+  externalIdentity: ExternalIdentity;
+  hideNsfw?: boolean;
+}): Promise<RequestReviewResponse> {
+  return unwrapGenerated(
+    await reviewRequestRequest(
+      {
+        kind: params.kind,
+        pluginId: params.pluginId,
+        externalIdentity: params.externalIdentity,
+      },
+      { hideNsfw: params.hideNsfw },
+    ),
+    "Failed to load the request review",
+  );
+}
+
+/** Commits only proposal ids from a freshly revision-validated review. */
+export async function commitReviewedRequest(
+  request: ReviewedRequestCommitRequest,
+  hideNsfw?: boolean,
+): Promise<RequestCommitResponse> {
+  return unwrapGenerated(
+    await commitReviewedRequestRequest(request, { hideNsfw }),
+    "Failed to commit the reviewed request",
   );
 }
 
