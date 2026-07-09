@@ -1,3 +1,4 @@
+using System.Globalization;
 using Prismedia.Application.Requests;
 using Prismedia.Application.Plugins;
 using Prismedia.Contracts.Plugins;
@@ -142,6 +143,10 @@ public sealed class PluginRequestMetadataSource(
         if (provider is null || !provider.Enabled || hideNsfw && provider.IsNsfw) {
             throw new RequestSearchValidationException($"Plugin '{pluginId}' is not enabled for this search.");
         }
+        if (provider.MissingAuthKeys.Count > 0) {
+            throw new RequestSearchValidationException(
+                $"Plugin '{provider.Id}' is missing required authentication: {string.Join(", ", provider.MissingAuthKeys)}.");
+        }
 
         var supports = provider.Supports
             .Where(support => PluginEntityKindCompatibility.SupportsKind(support, descriptor.PluginKindCode))
@@ -174,12 +179,14 @@ public sealed class PluginRequestMetadataSource(
         var definitions = schema.Fields.ToDictionary(field => field.Key, StringComparer.Ordinal);
         var normalized = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var (key, value) in fields) {
-            if (!definitions.ContainsKey(key)) {
+            if (!definitions.TryGetValue(key, out var definition)) {
                 throw new RequestSearchValidationException(
                     $"Field '{key}' is not declared by plugin '{provider.Id}'.");
             }
 
-            normalized[key] = value?.Trim() ?? string.Empty;
+            var normalizedValue = value?.Trim() ?? string.Empty;
+            ValidateSearchFieldValue(provider, definition, normalizedValue);
+            normalized[key] = normalizedValue;
         }
 
         var missing = schema.Fields.FirstOrDefault(field =>
@@ -194,6 +201,31 @@ public sealed class PluginRequestMetadataSource(
             .Select(field => normalized.GetValueOrDefault(field.Key))
             .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
         return new ValidatedSearchFields(normalized, compatibilityTitle);
+    }
+
+    private static void ValidateSearchFieldValue(
+        PluginProvider provider,
+        PluginSearchField field,
+        string value) {
+        if (value.Length == 0 || field.Type == PluginSearchFieldType.Text) {
+            return;
+        }
+
+        var valid = field.Type switch {
+            PluginSearchFieldType.Number => decimal.TryParse(
+                value,
+                NumberStyles.Float,
+                CultureInfo.InvariantCulture,
+                out _),
+            PluginSearchFieldType.Year => value.Length == 4
+                && int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var year)
+                && year is >= 1000 and <= 9999,
+            _ => false
+        };
+        if (!valid) {
+            throw new RequestSearchValidationException(
+                $"Field '{field.Key}' is not a valid {field.Type.ToCode()} value for plugin '{provider.Id}'.");
+        }
     }
 
     public async Task<RequestMetadataEnrichment?> LookupByIdAsync(
@@ -275,6 +307,20 @@ public sealed class PluginRequestMetadataSource(
     public async Task<RequestReviewResponse?> ReviewAsync(
         RequestReviewRequest request,
         bool hideNsfw,
+        CancellationToken cancellationToken) =>
+        await ResolveReviewAsync(request, hideNsfw, bypassCache: false, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<RequestReviewResponse?> RevalidateAsync(
+        RequestReviewRequest request,
+        bool hideNsfw,
+        CancellationToken cancellationToken) =>
+        await ResolveReviewAsync(request, hideNsfw, bypassCache: true, cancellationToken);
+
+    private async Task<RequestReviewResponse?> ResolveReviewAsync(
+        RequestReviewRequest request,
+        bool hideNsfw,
+        bool bypassCache,
         CancellationToken cancellationToken) {
         var descriptor = RequestKindRegistry.Find(request.Kind);
         if (descriptor is null || string.IsNullOrWhiteSpace(request.PluginId) || request.ExternalIdentity is null) {
@@ -287,15 +333,33 @@ public sealed class PluginRequestMetadataSource(
             return null;
         }
 
-        var proposal = await ResolveExplicitProposalAsync(
-            descriptor.PluginEntityKind,
-            route,
-            hideNsfw,
-            includeChildren: true,
-            cancellationToken);
+        var proposal = bypassCache
+            ? await RunRouteAsync(
+                descriptor.PluginEntityKind,
+                route,
+                hideNsfw,
+                includeChildren: true,
+                cancellationToken)
+            : await ResolveExplicitProposalAsync(
+                descriptor.PluginEntityKind,
+                route,
+                hideNsfw,
+                includeChildren: true,
+                cancellationToken);
         if (proposal?.Patch is null
             || !IsCompatibleTarget(descriptor, proposal.TargetKind)
-            || !DeclaresLookupIdentity(provider, proposal.TargetKind.ToEntityKind().ToCode(), route.Identity.Namespace)) {
+            || !string.Equals(proposal.Provider, provider.Id, StringComparison.OrdinalIgnoreCase)
+            || !DeclaresLookupIdentity(provider, proposal.TargetKind.ToEntityKind().ToCode(), route.Identity.Namespace)
+            || !string.Equals(
+                RequestProposalReading.IdentityValueFor(route.Identity.Namespace, proposal),
+                route.Identity.Value,
+                StringComparison.Ordinal)
+            || !HasUniqueStructuralProposalIds(proposal)) {
+            return null;
+        }
+
+        var targets = BuildReviewTargets(provider, descriptor, route.Identity, proposal);
+        if (!HasUniqueRequestableTargetIdentities(targets)) {
             return null;
         }
 
@@ -306,7 +370,7 @@ public sealed class PluginRequestMetadataSource(
             Kind: descriptor.Kind,
             Proposal: proposal,
             Revision: RequestProposalRevision.Compute(proposal),
-            Targets: BuildReviewTargets(provider, descriptor, route.Identity, proposal));
+            Targets: targets);
     }
 
     public Task<EntityMetadataProposal?> ResolveProposalAsync(
@@ -465,7 +529,7 @@ public sealed class PluginRequestMetadataSource(
         CancellationToken cancellationToken) {
         var provider = (await catalog.ListInstalledProvidersAsync(cancellationToken))
             .FirstOrDefault(candidate => candidate.Id.Equals(route.PluginId, StringComparison.OrdinalIgnoreCase));
-        if (provider is null || !provider.Enabled || hideNsfw && provider.IsNsfw) {
+        if (provider is null || !provider.Enabled || provider.MissingAuthKeys.Count > 0 || hideNsfw && provider.IsNsfw) {
             return null;
         }
 
@@ -488,6 +552,28 @@ public sealed class PluginRequestMetadataSource(
         AddTarget(proposal, rootDescriptor, rootIdentity, targets);
         AddChildTargets(provider, proposal, rootDescriptor, targets);
         return targets;
+    }
+
+    private static bool HasUniqueStructuralProposalIds(EntityMetadataProposal proposal) {
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        return Visit(proposal);
+
+        bool Visit(EntityMetadataProposal node) {
+            if (string.IsNullOrWhiteSpace(node.ProposalId) || !ids.Add(node.ProposalId)) {
+                return false;
+            }
+
+            return node.Children
+                .Where(child => !child.TargetKind.IsRelationship())
+                .All(Visit);
+        }
+    }
+
+    private static bool HasUniqueRequestableTargetIdentities(IReadOnlyList<RequestReviewTarget> targets) {
+        var identities = new HashSet<(EntityKind Kind, ExternalIdentity Identity)>();
+        return targets
+            .Where(target => target.Requestable)
+            .All(target => identities.Add((target.EntityKind, target.ExternalIdentity)));
     }
 
     private static void AddChildTargets(

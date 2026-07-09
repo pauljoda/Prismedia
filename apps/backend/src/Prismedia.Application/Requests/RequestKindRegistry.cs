@@ -40,6 +40,10 @@ namespace Prismedia.Application.Requests;
 /// standalone. False kinds re-resolve through their provider and fall back to the graph only when no
 /// provider answers.
 /// </param>
+/// <param name="MaterializeChildPhantoms">
+/// True when acquiring this unit should hydrate its structural children as wanted phantoms. This is an
+/// explicit structural rule, distinct from sibling-option children such as a book series' other volumes.
+/// </param>
 public sealed record RequestKindDescriptor(
     RequestMediaKind Kind,
     EntityKind PluginEntityKind,
@@ -49,7 +53,8 @@ public sealed record RequestKindDescriptor(
     bool Committable,
     EntityKind AcquisitionKind,
     bool Discoverable = true,
-    bool AcquireFromEntity = false) {
+    bool AcquireFromEntity = false,
+    bool MaterializeChildPhantoms = false) {
     /// <summary>The plugin-protocol kind code for <see cref="PluginEntityKind"/>.</summary>
     public string PluginKindCode => PluginEntityKind.ToCode();
 }
@@ -79,7 +84,7 @@ public static class RequestKindRegistry {
             IsContainer: true, ChildKind: RequestMediaKind.Season, Committable: true, AcquisitionKind: EntityKind.VideoSeason),
         new(RequestMediaKind.Season, EntityKind.VideoSeason, EntityKind.VideoSeason,
             IsContainer: false, ChildKind: RequestMediaKind.Episode, Committable: true, AcquisitionKind: EntityKind.VideoSeason,
-            Discoverable: false, AcquireFromEntity: true),
+            Discoverable: false, AcquireFromEntity: true, MaterializeChildPhantoms: true),
         new(RequestMediaKind.Episode, EntityKind.Video, EntityKind.Video,
             IsContainer: false, ChildKind: null, Committable: true, AcquisitionKind: EntityKind.Video,
             Discoverable: false, AcquireFromEntity: true),

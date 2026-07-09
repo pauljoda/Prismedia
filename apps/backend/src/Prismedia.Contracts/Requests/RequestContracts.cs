@@ -203,6 +203,29 @@ public sealed record RequestCommitRequest(
     Guid? ProfileId = null,
     MonitorPreset? Preset = null);
 
+/// <summary>
+/// Commits an item from the canonical proposal review surface. Structural selections are proposal ids,
+/// never client-supplied external identities; the server re-resolves the exact plugin and derives every
+/// selected node's persistent identity from the fresh proposal before it writes anything.
+/// </summary>
+/// <param name="Kind">Request-flow kind reviewed by the user.</param>
+/// <param name="PluginId">Stable manifest id of the plugin that produced the review.</param>
+/// <param name="RootExternalIdentity">Persistent identity used to resolve the reviewed root proposal.</param>
+/// <param name="ProposalRevision">Revision returned by the review endpoint.</param>
+/// <param name="SelectedProposalIds">Case-sensitive proposal ids selected from the reviewed proposal.</param>
+/// <param name="TargetLibraryRootId">Optional import-target override.</param>
+/// <param name="ProfileId">Optional acquisition-profile override.</param>
+/// <param name="Preset">Optional container monitoring preset.</param>
+public sealed record ReviewedRequestCommitRequest(
+    RequestMediaKind Kind,
+    string PluginId,
+    ExternalIdentity RootExternalIdentity,
+    string ProposalRevision,
+    IReadOnlyList<string> SelectedProposalIds,
+    Guid? TargetLibraryRootId = null,
+    Guid? ProfileId = null,
+    MonitorPreset? Preset = null);
+
 /// <summary>Per-item outcome of a request commit, linking the created wanted entity and its acquisition.</summary>
 /// <param name="ExternalId">Provider-qualified id of the item this outcome describes.</param>
 /// <param name="EntityId">The library entity (created wanted, or pre-existing) backing the item.</param>

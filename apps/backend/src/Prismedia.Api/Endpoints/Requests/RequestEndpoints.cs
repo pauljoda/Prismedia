@@ -148,6 +148,37 @@ public static class RequestEndpoints {
             .Produces<ApiProblem>(StatusCodes.Status404NotFound)
             .Produces<ApiProblem>(StatusCodes.Status409Conflict);
 
+        group.MapPost("/commit-reviewed", async (
+            ReviewedRequestCommitRequest request,
+            bool? hideNsfw,
+            HttpContext httpContext,
+            RequestCommitService commits,
+            CancellationToken cancellationToken) => {
+                try {
+                    var response = await commits.CommitReviewedAsync(
+                        request,
+                        NsfwVisibility.ShouldHide(hideNsfw, httpContext),
+                        cancellationToken);
+                    return response is null
+                        ? Results.NotFound(new ApiProblem(
+                            ApiProblemCodes.NotFound,
+                            "The reviewed item could not be re-resolved through its selected plugin."))
+                        : Results.Ok(response);
+                } catch (RequestCommitValidationException ex) {
+                    return Results.BadRequest(new ApiProblem(ApiProblemCodes.RequestInvalid, ex.Message));
+                } catch (RequestProposalChangedException ex) {
+                    return Results.Conflict(new ApiProblem(ApiProblemCodes.RequestProposalChanged, ex.Message));
+                } catch (ExternalIdentityAmbiguityException ex) {
+                    return ExternalIdentityConflict(ex);
+                }
+            })
+            .WithName("CommitReviewedRequest")
+            .WithSummary("Commits selected proposal ids after revalidating the exact plugin and reviewed proposal revision.")
+            .Produces<RequestCommitResponse>()
+            .Produces<ApiProblem>(StatusCodes.Status400BadRequest)
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound)
+            .Produces<ApiProblem>(StatusCodes.Status409Conflict);
+
         group.MapPost("/commit-entity", async (
             RequestEntityCommitRequest request,
             bool? hideNsfw,

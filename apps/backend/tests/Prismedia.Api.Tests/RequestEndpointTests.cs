@@ -62,6 +62,73 @@ public sealed class RequestEndpointTests {
     }
 
     [Fact]
+    public async Task ReviewedCommitReturnsCanonicalConflictWhenProposalRevisionChanged() {
+        var reviews = new NestedReviewSource();
+        using var factory = CreateFactory(reviews);
+        using var client = factory.CreateAuthenticatedClient();
+        var identity = new ExternalIdentity("tmdb", "series:603");
+
+        using var response = await client.PostAsJsonAsync(
+            "/api/requests/commit-reviewed?hideNsfw=false",
+            new ReviewedRequestCommitRequest(
+                RequestMediaKind.Series,
+                "cinema-metadata",
+                identity,
+                ProposalRevision: "stale-revision",
+                SelectedProposalIds: ["season-child"]),
+            CodecJson);
+        var problem = await response.Content.ReadFromJsonAsync<ApiProblem>();
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Equal(ApiProblemCodes.RequestProposalChanged, problem!.Code);
+        Assert.True(reviews.LastHideNsfw);
+    }
+
+    [Fact]
+    public async Task ReviewedCommitRejectsDuplicateProposalIdsAsInvalidBeforeRevalidation() {
+        var reviews = new NestedReviewSource();
+        using var factory = CreateFactory(reviews);
+        using var client = factory.CreateAuthenticatedClient();
+
+        using var response = await client.PostAsJsonAsync(
+            "/api/requests/commit-reviewed",
+            new ReviewedRequestCommitRequest(
+                RequestMediaKind.Series,
+                "cinema-metadata",
+                new ExternalIdentity("tmdb", "series:603"),
+                ProposalRevision: "revision",
+                SelectedProposalIds: ["season-child", "season-child"]),
+            CodecJson);
+        var problem = await response.Content.ReadFromJsonAsync<ApiProblem>();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(ApiProblemCodes.RequestInvalid, problem!.Code);
+        Assert.Equal(0, reviews.RevalidateCount);
+    }
+
+    [Fact]
+    public async Task ReviewedCommitRejectsNestedEpisodeSelectionForSeriesRoot() {
+        var reviews = new NestedReviewSource();
+        using var factory = CreateFactory(reviews);
+        using var client = factory.CreateAuthenticatedClient();
+
+        using var response = await client.PostAsJsonAsync(
+            "/api/requests/commit-reviewed",
+            new ReviewedRequestCommitRequest(
+                RequestMediaKind.Series,
+                "cinema-metadata",
+                new ExternalIdentity("tmdb", "series:603"),
+                ProposalRevision: "revision",
+                SelectedProposalIds: ["episode-child"]),
+            CodecJson);
+        var problem = await response.Content.ReadFromJsonAsync<ApiProblem>();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(ApiProblemCodes.RequestInvalid, problem!.Code);
+        Assert.Equal(1, reviews.RevalidateCount);
+    }
+
+    [Fact]
     public async Task PluginSearchUsesTheSelectedSchemaFieldsAndSessionVisibility() {
         var searches = new EndpointPluginSearchSource();
         using var factory = CreateFactory(searchSource: searches);
@@ -180,6 +247,7 @@ public sealed class RequestEndpointTests {
 
     private sealed class NestedReviewSource : IPluginRequestReviewSource {
         public bool LastHideNsfw { get; private set; }
+        public int RevalidateCount { get; private set; }
 
         public Task<RequestReviewResponse?> ReviewAsync(
             RequestReviewRequest request,
@@ -235,6 +303,14 @@ public sealed class RequestEndpointTests {
                     new("season-child", RequestMediaKind.Season, EntityKind.VideoSeason, new ExternalIdentity("tvdb", "season:one"), true, 1),
                     new("episode-child", RequestMediaKind.Episode, EntityKind.Video, new ExternalIdentity("episode-db", "episode:one"), true, 1)
                 ]));
+        }
+
+        public Task<RequestReviewResponse?> RevalidateAsync(
+            RequestReviewRequest request,
+            bool hideNsfw,
+            CancellationToken cancellationToken) {
+            RevalidateCount++;
+            return ReviewAsync(request, hideNsfw, cancellationToken);
         }
 
         private static EntityMetadataPatch Patch(string title, string identityNamespace, string identityValue) =>

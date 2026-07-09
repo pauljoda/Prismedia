@@ -119,6 +119,69 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
         Assert.Empty(runner.Calls);
     }
 
+    [Theory]
+    [InlineData("year", "26")]
+    [InlineData("year", "20x6")]
+    [InlineData("number", "1,2")]
+    [InlineData("number", "NaN")]
+    public async Task SchemaSearchRejectsInvalidTypedFields(string key, string value) {
+        await using var db = await CreateInstalledPluginAsync("cinema-metadata");
+        var catalog = Catalog(db);
+        var runner = new CapturingRunner();
+        var source = new PluginRequestMetadataSource(
+            catalog,
+            new PluginIdentityRouter(catalog),
+            new IdentifyRunnerSelector([runner]));
+
+        await Assert.ThrowsAsync<RequestSearchValidationException>(() => source.SearchAsync(
+            RequestKindRegistry.Find(RequestMediaKind.Movie)!,
+            "cinema-metadata",
+            new Dictionary<string, string> {
+                ["workName"] = "Film",
+                [key] = value
+            },
+            hideNsfw: false,
+            CancellationToken.None));
+
+        Assert.Empty(runner.Calls);
+    }
+
+    [Fact]
+    public async Task ExactSearchAndReviewRejectAPluginWithMissingRequiredAuth() {
+        await using var db = await CreateInstalledPluginAsync("cinema-metadata");
+        var manifestPath = Path.Combine(_tempRoot, "cinema-metadata", "manifest.json");
+        var manifest = await File.ReadAllTextAsync(manifestPath);
+        await File.WriteAllTextAsync(
+            manifestPath,
+            manifest.Replace(
+                "\"auth\": []",
+                "\"auth\": [{ \"key\": \"apiKey\", \"label\": \"API key\", \"required\": true, \"url\": null }]",
+                StringComparison.Ordinal));
+        var catalog = Catalog(db);
+        var runner = new CapturingRunner();
+        var source = new PluginRequestMetadataSource(
+            catalog,
+            new PluginIdentityRouter(catalog),
+            new IdentifyRunnerSelector([runner]));
+
+        await Assert.ThrowsAsync<RequestSearchValidationException>(() => source.SearchAsync(
+            RequestKindRegistry.Find(RequestMediaKind.Movie)!,
+            "cinema-metadata",
+            new Dictionary<string, string> { ["workName"] = "Film" },
+            hideNsfw: false,
+            CancellationToken.None));
+        var review = await source.ReviewAsync(
+            new RequestReviewRequest(
+                RequestMediaKind.Movie,
+                "cinema-metadata",
+                new ExternalIdentity("tmdb", "603")),
+            hideNsfw: false,
+            CancellationToken.None);
+
+        Assert.Null(review);
+        Assert.Empty(runner.Calls);
+    }
+
     [Fact]
     public async Task SchemaSearchRejectsADisabledSelectedPlugin() {
         await using var db = await CreateInstalledPluginAsync("cinema-metadata");
@@ -195,7 +258,7 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
         Assert.Equal(identity.Value, call.Request.Query.ExternalIds!["tmdb"]);
 
         runner.Calls.Clear();
-        var failedSelectedPlugin = await source.ReviewAsync(
+        var failedSelectedPlugin = await source.RevalidateAsync(
             new RequestReviewRequest(
                 RequestMediaKind.Movie,
                 "alpha-metadata",
@@ -205,6 +268,70 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
 
         Assert.Null(failedSelectedPlugin);
         Assert.Equal("alpha-metadata", Assert.Single(runner.Calls).Descriptor.Manifest.Id);
+    }
+
+    [Fact]
+    public async Task RevalidateBypassesTheExplicitProposalCache() {
+        await using var db = await CreateInstalledPluginAsync("cinema-metadata");
+        var catalog = Catalog(db);
+        var runner = new ProposalFactoryRunner((descriptor, request, call) =>
+            MovieProposal(descriptor.Manifest.Id, Assert.Single(request.Query.ExternalIds!), $"Revision {call}"));
+        var source = new PluginRequestMetadataSource(
+            catalog,
+            new PluginIdentityRouter(catalog),
+            new IdentifyRunnerSelector([runner]));
+        var request = new RequestReviewRequest(
+            RequestMediaKind.Movie,
+            "cinema-metadata",
+            new ExternalIdentity("tmdb", $"cache:{Guid.NewGuid():N}"));
+
+        var first = await source.ReviewAsync(request, hideNsfw: false, CancellationToken.None);
+        var cached = await source.ReviewAsync(request, hideNsfw: false, CancellationToken.None);
+        var fresh = await source.RevalidateAsync(request, hideNsfw: false, CancellationToken.None);
+
+        Assert.NotNull(first);
+        Assert.Equal(first!.Revision, cached!.Revision);
+        Assert.NotEqual(first.Revision, fresh!.Revision);
+        Assert.Equal("Revision 2", fresh.Proposal.Patch.Title);
+        Assert.Equal(2, runner.Calls.Count);
+    }
+
+    [Theory]
+    [InlineData("provider")]
+    [InlineData("identity")]
+    [InlineData("proposal-id")]
+    public async Task ReviewRejectsMismatchedProviderIdentityAndDuplicateProposalIds(string invalidPart) {
+        await using var db = await CreateInstalledPluginAsync("cinema-metadata");
+        var catalog = Catalog(db);
+        var runner = new ProposalFactoryRunner((descriptor, request, _) => {
+            var identity = Assert.Single(request.Query.ExternalIds!);
+            var proposal = MovieProposal(
+                invalidPart == "provider" ? "different-plugin" : descriptor.Manifest.Id,
+                invalidPart == "identity"
+                    ? new KeyValuePair<string, string>(identity.Key, $"different:{identity.Value}")
+                    : identity,
+                "Example");
+            return invalidPart == "proposal-id"
+                ? proposal with {
+                    Children = [proposal with { Patch = proposal.Patch with { Title = "Duplicate child" } }]
+                }
+                : proposal;
+        });
+        var source = new PluginRequestMetadataSource(
+            catalog,
+            new PluginIdentityRouter(catalog),
+            new IdentifyRunnerSelector([runner]));
+
+        var review = await source.ReviewAsync(
+            new RequestReviewRequest(
+                RequestMediaKind.Movie,
+                "cinema-metadata",
+                new ExternalIdentity("tmdb", $"invalid:{Guid.NewGuid():N}")),
+            hideNsfw: false,
+            CancellationToken.None);
+
+        Assert.Null(review);
+        Assert.Single(runner.Calls);
     }
 
     [Fact]
@@ -278,6 +405,27 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
         Assert.Equal("Episode:One", review.Proposal.Children[0].Children[0].Patch.ExternalIds["episode-db"]);
     }
 
+    [Fact]
+    public async Task ReviewRejectsSameKindSiblingsWithTheSameExternalIdentity() {
+        await using var db = await CreateSeriesPluginAsync();
+        var catalog = Catalog(db);
+        var runner = new NestedSeriesRunner(duplicateSeasonIdentity: true);
+        var source = new PluginRequestMetadataSource(
+            catalog,
+            new PluginIdentityRouter(catalog),
+            new IdentifyRunnerSelector([runner]));
+
+        var review = await source.ReviewAsync(
+            new RequestReviewRequest(
+                RequestMediaKind.Series,
+                "series-metadata",
+                new ExternalIdentity("tmdb", $"duplicate:{Guid.NewGuid():N}")),
+            hideNsfw: false,
+            CancellationToken.None);
+
+        Assert.Null(review);
+    }
+
     private async Task<PrismediaDbContext> CreateInstalledPluginAsync(params string[] pluginIds) {
         var options = new DbContextOptionsBuilder<PrismediaDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
@@ -312,6 +460,7 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
                 "search": { "fields": [
                   { "key": "context", "label": "Context", "type": "text", "required": false },
                   { "key": "workName", "label": "Work name", "type": "text", "required": true },
+                  { "key": "number", "label": "Number", "type": "number", "required": false },
                   { "key": "year", "label": "Year", "type": "year", "required": false }
                 ] }
               }]
@@ -400,6 +549,49 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
         }
     }
 
+    private static EntityMetadataProposal MovieProposal(
+        string pluginId,
+        KeyValuePair<string, string> identity,
+        string title) =>
+        new(
+            $"proposal-{identity.Value}",
+            pluginId,
+            ProposalKind.Movie,
+            1,
+            "external-id",
+            new EntityMetadataPatch(
+                title,
+                null,
+                new Dictionary<string, string> { [identity.Key] = identity.Value },
+                [],
+                [],
+                null,
+                [],
+                new Dictionary<string, string>(),
+                new Dictionary<string, int>(),
+                new Dictionary<string, int>(),
+                null),
+            [],
+            [],
+            [],
+            null,
+            []);
+
+    private sealed class ProposalFactoryRunner(
+        Func<PluginDescriptor, IdentifyPluginRequest, int, EntityMetadataProposal> proposal) : IIdentifyRunner {
+        public List<(PluginDescriptor Descriptor, IdentifyPluginRequest Request)> Calls { get; } = [];
+
+        public bool CanRun(PluginDescriptor descriptor) => descriptor.Manifest.Runtime == "dotnet-process";
+
+        public Task<IdentifyPluginResponse> IdentifyAsync(
+            PluginDescriptor descriptor,
+            IdentifyPluginRequest request,
+            CancellationToken cancellationToken) {
+            Calls.Add((descriptor, request));
+            return Task.FromResult(IdentifyPluginResponse.Match(proposal(descriptor, request, Calls.Count)));
+        }
+    }
+
     private sealed class CapturingRunner(string? matchOnlyPluginId = null) : IIdentifyRunner {
         public sealed record Call(PluginDescriptor Descriptor, IdentifyPluginRequest Request);
 
@@ -462,7 +654,7 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
         }
     }
 
-    private sealed class NestedSeriesRunner : IIdentifyRunner {
+    private sealed class NestedSeriesRunner(bool duplicateSeasonIdentity = false) : IIdentifyRunner {
         public EntityMetadataProposal? Proposal { get; private set; }
 
         public bool CanRun(PluginDescriptor descriptor) => descriptor.Manifest.Runtime == "dotnet-process";
@@ -506,6 +698,12 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
                 [],
                 null,
                 []);
+            EntityMetadataProposal[] children = duplicateSeasonIdentity
+                ? [season, season with {
+                    ProposalId = "season-two",
+                    Patch = season.Patch with { Title = "Season duplicate" }
+                }]
+                : [season];
             Proposal = new EntityMetadataProposal(
                 "series-root",
                 descriptor.Manifest.Id,
@@ -517,7 +715,7 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
                     new Dictionary<string, string> { [identity.Key] = identity.Value },
                     new Dictionary<string, int>()),
                 [],
-                [season],
+                children,
                 [],
                 null,
                 []);

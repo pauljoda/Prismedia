@@ -184,6 +184,9 @@ public static class ApiProblemCodes {
     /// <summary>Problem code <c>request_invalid</c>.</summary>
     public const string RequestInvalid = "request_invalid";
 
+    /// <summary>Problem code <c>request_proposal_changed</c>.</summary>
+    public const string RequestProposalChanged = "request_proposal_changed";
+
     /// <summary>Problem code <c>request_service_invalid</c>.</summary>
     public const string RequestServiceInvalid = "request_service_invalid";
 

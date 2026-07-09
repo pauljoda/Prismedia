@@ -72,7 +72,27 @@ public sealed class MonitoredSearchJobHandlerTests {
 
     /// <summary>A commit service whose container sync never resolves (null sources), for the non-container test paths.</summary>
     private static Prismedia.Application.Requests.RequestCommitService CommitService(IMonitorStore monitors) =>
-        new(new NullProposalSource(), new NullWantedWriter(), new NullAcquisitionRequestService(), monitors, new NullSuppressionStore());
+        new(
+            new NullProposalSource(),
+            new NullReviewSource(),
+            new NullWantedWriter(),
+            new NullAcquisitionRequestService(),
+            monitors,
+            new NullSuppressionStore());
+
+    private sealed class NullReviewSource : Prismedia.Application.Requests.IPluginRequestReviewSource {
+        public Task<Prismedia.Contracts.Requests.RequestReviewResponse?> ReviewAsync(
+            Prismedia.Contracts.Requests.RequestReviewRequest request,
+            bool hideNsfw,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<Prismedia.Contracts.Requests.RequestReviewResponse?>(null);
+
+        public Task<Prismedia.Contracts.Requests.RequestReviewResponse?> RevalidateAsync(
+            Prismedia.Contracts.Requests.RequestReviewRequest request,
+            bool hideNsfw,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<Prismedia.Contracts.Requests.RequestReviewResponse?>(null);
+    }
 
     private sealed class NullSuppressionStore : Prismedia.Application.Requests.IWantedSuppressionStore {
         public Task SuppressAsync(IReadOnlyList<ExternalIdentity> identities, EntityKind kind, string title, CancellationToken cancellationToken) => Task.CompletedTask;

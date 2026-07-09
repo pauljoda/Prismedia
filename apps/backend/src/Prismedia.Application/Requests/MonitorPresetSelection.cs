@@ -4,17 +4,18 @@ namespace Prismedia.Application.Requests;
 
 /// <summary>
 /// One candidate work a container commit can select at request time, reduced to just the fields the
-/// preset mapping needs: its provider-qualified id (the selection token the commit consumes), its
+/// preset mapping needs: its opaque selection token (a legacy provider-qualified id or a canonical
+/// proposal id), its
 /// season/volume ordering number when the provider gives one, and whether the library already owns it.
 /// </summary>
-/// <param name="QualifiedId">Provider-qualified id ("provider:workId") — the token returned in the selection.</param>
+/// <param name="SelectionId">Opaque token returned in the selection.</param>
 /// <param name="Number">
 /// The work's ordering number (a season number, a volume number) when the provider declares one; null
 /// otherwise. Drives <see cref="MonitorPreset.FirstSeason"/> / <see cref="MonitorPreset.LatestSeason"/>;
 /// candidates with no number are treated as unordered and never chosen by those two presets.
 /// </param>
 /// <param name="Owned">True when the library already owns this work (it has a real file); a "missing" request skips it.</param>
-public sealed record MonitorPresetCandidate(string QualifiedId, int? Number, bool Owned);
+public sealed record MonitorPresetCandidate(string SelectionId, int? Number, bool Owned);
 
 /// <summary>
 /// The single source of truth mapping a <see cref="MonitorPreset"/> to the set of container children a
@@ -45,8 +46,8 @@ public static class MonitorPresetSelection {
     /// </summary>
     public static IReadOnlyList<string> Resolve(MonitorPreset preset, IReadOnlyList<MonitorPresetCandidate> candidates) =>
         preset switch {
-            MonitorPreset.All => candidates.Select(candidate => candidate.QualifiedId).ToArray(),
-            MonitorPreset.Missing => candidates.Where(candidate => !candidate.Owned).Select(candidate => candidate.QualifiedId).ToArray(),
+            MonitorPreset.All => candidates.Select(candidate => candidate.SelectionId).ToArray(),
+            MonitorPreset.Missing => candidates.Where(candidate => !candidate.Owned).Select(candidate => candidate.SelectionId).ToArray(),
             MonitorPreset.FirstSeason or MonitorPreset.Pilot => Extreme(candidates, lowest: true),
             MonitorPreset.LatestSeason => Extreme(candidates, lowest: false),
             // Future and None both request nothing up front; they differ only in the sync-time gate the
@@ -68,6 +69,6 @@ public static class MonitorPresetSelection {
             }
         }
 
-        return chosen is null ? [] : [chosen.QualifiedId];
+        return chosen is null ? [] : [chosen.SelectionId];
     }
 }

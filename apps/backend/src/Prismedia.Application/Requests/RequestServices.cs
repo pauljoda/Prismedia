@@ -70,7 +70,23 @@ public interface IPluginRequestReviewSource {
         RequestReviewRequest request,
         bool hideNsfw,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Re-resolves the review through the exact selected plugin without using a proposal cache. Commit
+    /// uses this path so the reviewed revision is compared with current upstream content.
+    /// </summary>
+    Task<RequestReviewResponse?> RevalidateAsync(
+        RequestReviewRequest request,
+        bool hideNsfw,
+        CancellationToken cancellationToken);
 }
+
+/// <summary>An expected reviewed-commit validation failure that maps to request_invalid.</summary>
+public sealed class RequestCommitValidationException(string message) : ArgumentException(message);
+
+/// <summary>Raised when the proposal changed after the user reviewed it and before commit.</summary>
+public sealed class RequestProposalChangedException()
+    : InvalidOperationException("The request details changed after review. Review the updated proposal before requesting it.");
 
 /// <summary>
 /// Aggregates request searches across the requestable kinds. Prismedia fulfils all requests itself

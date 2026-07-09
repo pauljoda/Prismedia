@@ -724,6 +724,481 @@ public sealed class RequestCommitServiceTests {
     }
 
     [Fact]
+    public async Task ReviewedCommitRejectsRevisionDriftBeforeAnyWrite() {
+        var identity = new ExternalIdentity("tmdb", "603");
+        var proposal = Node("movie:603", "cinema-metadata", ProposalKind.Movie, "The Matrix", identity);
+        var current = Review(
+            "cinema-metadata",
+            RequestMediaKind.Movie,
+            identity,
+            proposal,
+            [Target(proposal, RequestMediaKind.Movie, identity)]);
+        var reviews = new FakeReviewSource(_ => current);
+        var (service, writer, acquisitions, monitors, suppressions) = ReviewedService(proposal, reviews);
+
+        await Assert.ThrowsAsync<RequestProposalChangedException>(() => service.CommitReviewedAsync(
+            new ReviewedRequestCommitRequest(
+                RequestMediaKind.Movie,
+                "cinema-metadata",
+                identity,
+                ProposalRevision: new string('0', 64),
+                SelectedProposalIds: [proposal.ProposalId]),
+            hideNsfw: false,
+            CancellationToken.None));
+
+        Assert.Single(reviews.RevalidateCalls);
+        Assert.Empty(writer.Ensured);
+        Assert.Empty(writer.Applied);
+        Assert.Empty(acquisitions.Created);
+        Assert.Empty(monitors.EntityMonitors);
+        Assert.Empty(monitors.AcquisitionMonitors);
+        Assert.Empty(suppressions.Cleared);
+    }
+
+    [Fact]
+    public async Task ReviewedMovieCommitsOnlyTheReviewedRootProposal() {
+        var identity = new ExternalIdentity("tmdb", "Movie:603");
+        var proposal = Node("movie:603", "cinema-metadata", ProposalKind.Movie, "The Matrix", identity);
+        var review = Review(
+            "cinema-metadata",
+            RequestMediaKind.Movie,
+            identity,
+            proposal,
+            [Target(proposal, RequestMediaKind.Movie, identity)]);
+        var reviews = new FakeReviewSource(_ => review);
+        var (service, writer, acquisitions, _, _) = ReviewedService(proposal, reviews);
+
+        var response = await service.CommitReviewedAsync(
+            new ReviewedRequestCommitRequest(
+                RequestMediaKind.Movie,
+                "cinema-metadata",
+                identity,
+                review.Revision,
+                [proposal.ProposalId]),
+            hideNsfw: false,
+            CancellationToken.None);
+
+        var wantedMovie = Assert.Single(writer.Ensured);
+        Assert.Equal(EntityKind.Movie, wantedMovie.Kind);
+        Assert.Equal("tmdb", wantedMovie.IdentityNamespace);
+        Assert.Equal("Movie:603", wantedMovie.ItemId);
+        Assert.Equal("tmdb", Assert.Single(acquisitions.Created).IdentityNamespace);
+        Assert.Equal("tmdb:Movie:603", Assert.Single(response!.Items).ExternalId);
+    }
+
+    [Fact]
+    public async Task ReviewedAuthorMapsOpaqueProposalIdToServerDerivedChildIdentity() {
+        var rootIdentity = new ExternalIdentity("authors", "Author:A");
+        var childIdentity = new ExternalIdentity("works", "Work:AbC");
+        var unselectedIdentity = new ExternalIdentity("works", "Work:aBc");
+        var selected = Node("book:Work:AbC", "books-metadata", ProposalKind.Book, "Exact", childIdentity);
+        var unselected = Node("book:Work:aBc", "books-metadata", ProposalKind.Book, "Different case", unselectedIdentity);
+        var proposal = Node(
+            "author:Author:A",
+            "books-metadata",
+            ProposalKind.Person,
+            "Author",
+            rootIdentity,
+            selected,
+            unselected);
+        var review = Review(
+            "books-metadata",
+            RequestMediaKind.Author,
+            rootIdentity,
+            proposal,
+            [
+                Target(proposal, RequestMediaKind.Author, rootIdentity),
+                Target(selected, RequestMediaKind.Book, childIdentity),
+                Target(unselected, RequestMediaKind.Book, unselectedIdentity)
+            ]);
+        var reviews = new FakeReviewSource(_ => review);
+        var (service, writer, acquisitions, _, _) = ReviewedService(proposal, reviews);
+
+        var response = await service.CommitReviewedAsync(
+            new ReviewedRequestCommitRequest(
+                RequestMediaKind.Author,
+                "books-metadata",
+                rootIdentity,
+                review.Revision,
+                ["book:Work:AbC"]),
+            hideNsfw: false,
+            CancellationToken.None);
+
+        Assert.NotNull(response);
+        Assert.Contains(writer.Ensured, call =>
+            call.Kind == EntityKind.BookAuthor
+            && call.IdentityNamespace == "authors"
+            && call.ItemId == "Author:A");
+        var book = Assert.Single(writer.Ensured, call => call.Kind == EntityKind.Book);
+        Assert.Equal("works", book.IdentityNamespace);
+        Assert.Equal("Work:AbC", book.ItemId);
+        var acquisition = Assert.Single(acquisitions.Created);
+        Assert.Equal("works", acquisition.IdentityNamespace);
+        Assert.Equal("Work:AbC", acquisition.IdentityValue);
+        Assert.Equal("works:Work:AbC", Assert.Single(response!.Items).ExternalId);
+    }
+
+    [Theory]
+    [InlineData("episode:one")]
+    [InlineData("season:missing")]
+    [InlineData("season:ONE")]
+    public async Task ReviewedSeriesRejectsNestedUnknownAndWrongCaseSelections(string selectedProposalId) {
+        var rootIdentity = new ExternalIdentity("tmdb", "series:1");
+        var seasonIdentity = new ExternalIdentity("tvdb", "season:one");
+        var episodeIdentity = new ExternalIdentity("episode-db", "episode:one");
+        var episode = Node("episode:one", "series-metadata", ProposalKind.Video, "Pilot", episodeIdentity);
+        var season = Node("season:one", "series-metadata", ProposalKind.VideoSeason, "Season 1", seasonIdentity, episode);
+        var proposal = Node("series:one", "series-metadata", ProposalKind.VideoSeries, "Series", rootIdentity, season);
+        var review = Review(
+            "series-metadata",
+            RequestMediaKind.Series,
+            rootIdentity,
+            proposal,
+            [
+                Target(proposal, RequestMediaKind.Series, rootIdentity),
+                Target(season, RequestMediaKind.Season, seasonIdentity),
+                Target(episode, RequestMediaKind.Episode, episodeIdentity)
+            ]);
+        var reviews = new FakeReviewSource(_ => review);
+        var (service, writer, acquisitions, _, _) = ReviewedService(proposal, reviews);
+
+        await Assert.ThrowsAsync<RequestCommitValidationException>(() => service.CommitReviewedAsync(
+            new ReviewedRequestCommitRequest(
+                RequestMediaKind.Series,
+                "series-metadata",
+                rootIdentity,
+                review.Revision,
+                [selectedProposalId]),
+            hideNsfw: false,
+            CancellationToken.None));
+
+        Assert.Empty(writer.Ensured);
+        Assert.Empty(acquisitions.Created);
+    }
+
+    [Fact]
+    public async Task ReviewedCommitRejectsDuplicateSelectionBeforeRevalidation() {
+        var identity = new ExternalIdentity("tmdb", "603");
+        var proposal = Node("movie:603", "cinema-metadata", ProposalKind.Movie, "The Matrix", identity);
+        var reviews = new FakeReviewSource(_ => throw new InvalidOperationException("Must not revalidate invalid input."));
+        var (service, writer, acquisitions, _, _) = ReviewedService(proposal, reviews);
+
+        await Assert.ThrowsAsync<RequestCommitValidationException>(() => service.CommitReviewedAsync(
+            new ReviewedRequestCommitRequest(
+                RequestMediaKind.Movie,
+                "cinema-metadata",
+                identity,
+                new string('0', 64),
+                [proposal.ProposalId, proposal.ProposalId]),
+            hideNsfw: false,
+            CancellationToken.None));
+
+        Assert.Empty(reviews.RevalidateCalls);
+        Assert.Empty(writer.Ensured);
+        Assert.Empty(acquisitions.Created);
+    }
+
+    [Fact]
+    public async Task ReviewedCommitRejectsSameKindTargetsWithDuplicateExternalIdentityBeforeWrites() {
+        var rootIdentity = new ExternalIdentity("authors", "A1");
+        var sharedIdentity = new ExternalIdentity("works", "W1");
+        var first = Node("book:first", "books-metadata", ProposalKind.Book, "First", sharedIdentity);
+        var second = Node("book:second", "books-metadata", ProposalKind.Book, "Second", sharedIdentity);
+        var proposal = Node("author:one", "books-metadata", ProposalKind.Person, "Author", rootIdentity, first, second);
+        var review = Review(
+            "books-metadata",
+            RequestMediaKind.Author,
+            rootIdentity,
+            proposal,
+            [
+                Target(proposal, RequestMediaKind.Author, rootIdentity),
+                Target(first, RequestMediaKind.Book, sharedIdentity),
+                Target(second, RequestMediaKind.Book, sharedIdentity)
+            ]);
+        var reviews = new FakeReviewSource(_ => review);
+        var (service, writer, acquisitions, monitors, _) = ReviewedService(proposal, reviews);
+
+        await Assert.ThrowsAsync<RequestCommitValidationException>(() => service.CommitReviewedAsync(
+            new ReviewedRequestCommitRequest(
+                RequestMediaKind.Author,
+                "books-metadata",
+                rootIdentity,
+                review.Revision,
+                [first.ProposalId]),
+            hideNsfw: false,
+            CancellationToken.None));
+
+        Assert.Empty(writer.Ensured);
+        Assert.Empty(acquisitions.Created);
+        Assert.Empty(monitors.EntityMonitors);
+    }
+
+    [Fact]
+    public async Task ReviewedCommitAllowsSameExternalIdentityAcrossDifferentEntityKinds() {
+        var sharedIdentity = new ExternalIdentity("shared", "Item:1");
+        var book = Node("book:one", "books-metadata", ProposalKind.Book, "Book", sharedIdentity);
+        var proposal = Node("author:one", "books-metadata", ProposalKind.Person, "Author", sharedIdentity, book);
+        var review = Review(
+            "books-metadata",
+            RequestMediaKind.Author,
+            sharedIdentity,
+            proposal,
+            [
+                Target(proposal, RequestMediaKind.Author, sharedIdentity),
+                Target(book, RequestMediaKind.Book, sharedIdentity)
+            ]);
+        var reviews = new FakeReviewSource(_ => review);
+        var (service, writer, acquisitions, _, _) = ReviewedService(proposal, reviews);
+
+        var response = await service.CommitReviewedAsync(
+            new ReviewedRequestCommitRequest(
+                RequestMediaKind.Author,
+                "books-metadata",
+                sharedIdentity,
+                review.Revision,
+                [book.ProposalId]),
+            hideNsfw: false,
+            CancellationToken.None);
+
+        Assert.NotNull(response);
+        Assert.Contains(writer.Ensured, call => call.Kind == EntityKind.BookAuthor);
+        Assert.Contains(writer.Ensured, call => call.Kind == EntityKind.Book);
+        Assert.Single(acquisitions.Created);
+    }
+
+    [Fact]
+    public async Task ReviewedAuthorDoesNotNestSiblingVolumesUnderSelectedBook() {
+        var rootIdentity = new ExternalIdentity("authors", "A1");
+        var bookIdentity = new ExternalIdentity("works", "W1");
+        var volumeIdentity = new ExternalIdentity("works", "V2");
+        var volume = Node("volume:2", "books-metadata", ProposalKind.Book, "Volume Two", volumeIdentity);
+        var book = Node("book:1", "books-metadata", ProposalKind.Book, "Volume One", bookIdentity, volume);
+        var proposal = Node("author:1", "books-metadata", ProposalKind.Person, "Author", rootIdentity, book);
+        var review = Review(
+            "books-metadata",
+            RequestMediaKind.Author,
+            rootIdentity,
+            proposal,
+            [
+                Target(proposal, RequestMediaKind.Author, rootIdentity),
+                Target(book, RequestMediaKind.Book, bookIdentity),
+                Target(volume, RequestMediaKind.Book, volumeIdentity)
+            ]);
+        var reviews = new FakeReviewSource(_ => review);
+        var (service, writer, acquisitions, _, _) = ReviewedService(proposal, reviews);
+
+        await service.CommitReviewedAsync(
+            new ReviewedRequestCommitRequest(
+                RequestMediaKind.Author,
+                "books-metadata",
+                rootIdentity,
+                review.Revision,
+                [book.ProposalId]),
+            hideNsfw: false,
+            CancellationToken.None);
+
+        Assert.Single(writer.Ensured, call => call.Kind == EntityKind.Book);
+        Assert.DoesNotContain(writer.Ensured, call => call.ItemId == volumeIdentity.Value);
+        Assert.Single(acquisitions.Created);
+        Assert.Single(reviews.RevalidateCalls);
+    }
+
+    [Fact]
+    public async Task ReviewedSeriesHydratesEpisodePhantomsThroughSamePluginAndPerNodeIdentities() {
+        var pluginId = "series-metadata";
+        var seriesIdentity = new ExternalIdentity("tmdb", "Series:One");
+        var seasonIdentity = new ExternalIdentity("tvdb", "Season:One");
+        var episodeIdentity = new ExternalIdentity("episode-db", "Episode:One");
+        var seasonShell = Node(
+            "season:one",
+            pluginId,
+            ProposalKind.VideoSeason,
+            "Season 1",
+            seasonIdentity,
+            new Dictionary<string, int> { [EntityPositionCodes.Season] = 1 });
+        var series = Node("series:one", pluginId, ProposalKind.VideoSeries, "Series", seriesIdentity, seasonShell);
+        var seriesReview = Review(
+            pluginId,
+            RequestMediaKind.Series,
+            seriesIdentity,
+            series,
+            [
+                Target(series, RequestMediaKind.Series, seriesIdentity),
+                Target(seasonShell, RequestMediaKind.Season, seasonIdentity, position: 1)
+            ]);
+
+        var episode = Node(
+            "episode:one",
+            pluginId,
+            ProposalKind.Video,
+            "Pilot",
+            episodeIdentity,
+            new Dictionary<string, int> { [EntityPositionCodes.Episode] = 1 });
+        var hydratedSeason = Node(
+            seasonShell.ProposalId,
+            pluginId,
+            ProposalKind.VideoSeason,
+            "Season 1",
+            seasonIdentity,
+            new Dictionary<string, int> { [EntityPositionCodes.Season] = 1 },
+            episode);
+        var seasonReview = Review(
+            pluginId,
+            RequestMediaKind.Season,
+            seasonIdentity,
+            hydratedSeason,
+            [
+                Target(hydratedSeason, RequestMediaKind.Season, seasonIdentity),
+                Target(episode, RequestMediaKind.Episode, episodeIdentity, position: 1)
+            ]);
+        var reviews = new FakeReviewSource(request => request.Kind switch {
+            RequestMediaKind.Series when request.ExternalIdentity == seriesIdentity => seriesReview,
+            RequestMediaKind.Season when request.ExternalIdentity == seasonIdentity => seasonReview,
+            _ => null
+        });
+        var (service, writer, acquisitions, _, _) = ReviewedService(series, reviews);
+
+        await service.CommitReviewedAsync(
+            new ReviewedRequestCommitRequest(
+                RequestMediaKind.Series,
+                pluginId,
+                seriesIdentity,
+                seriesReview.Revision,
+                [seasonShell.ProposalId]),
+            hideNsfw: false,
+            CancellationToken.None);
+
+        var seasonAcquisition = Assert.Single(acquisitions.Created);
+        Assert.Equal("tvdb", seasonAcquisition.IdentityNamespace);
+        Assert.Equal("Season:One", seasonAcquisition.IdentityValue);
+        var episodeCall = Assert.Single(writer.Ensured, call => call.Kind == EntityKind.Video);
+        Assert.Equal("episode-db", episodeCall.IdentityNamespace);
+        Assert.Equal("Episode:One", episodeCall.ItemId);
+        Assert.Equal(FakeWantedEntityWriter.EntityIdFor("Season:One"), episodeCall.ParentEntityId);
+        Assert.Collection(
+            reviews.RevalidateCalls,
+            call => {
+                Assert.Equal(pluginId, call.PluginId);
+                Assert.Equal(seriesIdentity, call.ExternalIdentity);
+            },
+            call => {
+                Assert.Equal(pluginId, call.PluginId);
+                Assert.Equal(seasonIdentity, call.ExternalIdentity);
+            });
+    }
+
+    [Fact]
+    public async Task ReviewedSeriesDescendantLookupFailureLeavesNoPartialWrites() {
+        var pluginId = "series-metadata";
+        var seriesIdentity = new ExternalIdentity("tmdb", "Series:Preflight");
+        var seasonIdentity = new ExternalIdentity("tvdb", "Season:Preflight");
+        var season = Node("season:preflight", pluginId, ProposalKind.VideoSeason, "Season 1", seasonIdentity);
+        var series = Node("series:preflight", pluginId, ProposalKind.VideoSeries, "Series", seriesIdentity, season);
+        var seriesReview = Review(
+            pluginId,
+            RequestMediaKind.Series,
+            seriesIdentity,
+            series,
+            [
+                Target(series, RequestMediaKind.Series, seriesIdentity),
+                Target(season, RequestMediaKind.Season, seasonIdentity)
+            ]);
+        var reviews = new FakeReviewSource(request =>
+            request.Kind == RequestMediaKind.Series ? seriesReview : null);
+        var (service, writer, acquisitions, monitors, suppressions) = ReviewedService(series, reviews);
+
+        var response = await service.CommitReviewedAsync(
+            new ReviewedRequestCommitRequest(
+                RequestMediaKind.Series,
+                pluginId,
+                seriesIdentity,
+                seriesReview.Revision,
+                [season.ProposalId]),
+            hideNsfw: false,
+            CancellationToken.None);
+
+        Assert.Null(response);
+        Assert.Equal(2, reviews.RevalidateCalls.Count);
+        Assert.Empty(writer.Ensured);
+        Assert.Empty(writer.Applied);
+        Assert.Empty(acquisitions.Created);
+        Assert.Empty(monitors.EntityMonitors);
+        Assert.Empty(monitors.AcquisitionMonitors);
+        Assert.Empty(suppressions.Cleared);
+    }
+
+    [Fact]
+    public async Task ReviewedFuturePresetCreatesContainerMonitorWithoutAcquisitions() {
+        var rootIdentity = new ExternalIdentity("tmdb", "Series:Future");
+        var seasonIdentity = new ExternalIdentity("tmdb", "Series:Future:S1");
+        var season = Node("season:1", "series-metadata", ProposalKind.VideoSeason, "Season 1", seasonIdentity);
+        var proposal = Node("series:future", "series-metadata", ProposalKind.VideoSeries, "Series", rootIdentity, season);
+        var review = Review(
+            "series-metadata",
+            RequestMediaKind.Series,
+            rootIdentity,
+            proposal,
+            [
+                Target(proposal, RequestMediaKind.Series, rootIdentity),
+                Target(season, RequestMediaKind.Season, seasonIdentity, position: 1)
+            ]);
+        var reviews = new FakeReviewSource(_ => review);
+        var (service, writer, acquisitions, monitors, _) = ReviewedService(proposal, reviews);
+
+        var response = await service.CommitReviewedAsync(
+            new ReviewedRequestCommitRequest(
+                RequestMediaKind.Series,
+                "series-metadata",
+                rootIdentity,
+                review.Revision,
+                SelectedProposalIds: [],
+                Preset: MonitorPreset.Future),
+            hideNsfw: false,
+            CancellationToken.None);
+
+        Assert.NotNull(response!.ContainerEntityId);
+        Assert.Single(writer.Ensured, call => call.Kind == EntityKind.VideoSeries);
+        Assert.DoesNotContain(writer.Ensured, call => call.Kind == EntityKind.VideoSeason);
+        Assert.Empty(acquisitions.Created);
+        Assert.Equal(MonitorPreset.Future, Assert.Single(monitors.EntityMonitorPresets));
+    }
+
+    [Fact]
+    public async Task ReviewedBookVolumeSelectionCreatesStandaloneWantedVolume() {
+        var rootIdentity = new ExternalIdentity("openlibrary", "series:1");
+        var volumeIdentity = new ExternalIdentity("openlibrary-work", "OL:Work:2");
+        var volume = Node("volume:Two", "books-metadata", ProposalKind.Book, "Volume Two", volumeIdentity);
+        var proposal = Node("series:1", "books-metadata", ProposalKind.Book, "Series", rootIdentity, volume);
+        var review = Review(
+            "books-metadata",
+            RequestMediaKind.Book,
+            rootIdentity,
+            proposal,
+            [
+                Target(proposal, RequestMediaKind.Book, rootIdentity),
+                Target(volume, RequestMediaKind.Book, volumeIdentity)
+            ]);
+        var reviews = new FakeReviewSource(_ => review);
+        var (service, writer, acquisitions, _, _) = ReviewedService(proposal, reviews);
+
+        await service.CommitReviewedAsync(
+            new ReviewedRequestCommitRequest(
+                RequestMediaKind.Book,
+                "books-metadata",
+                rootIdentity,
+                review.Revision,
+                [volume.ProposalId]),
+            hideNsfw: false,
+            CancellationToken.None);
+
+        var wantedVolume = Assert.Single(writer.Ensured);
+        Assert.Null(wantedVolume.ParentEntityId);
+        Assert.Equal("openlibrary-work", wantedVolume.IdentityNamespace);
+        Assert.Equal("OL:Work:2", wantedVolume.ItemId);
+        Assert.Equal("openlibrary-work", Assert.Single(acquisitions.Created).IdentityNamespace);
+    }
+
+    [Fact]
     public async Task MalformedOrUnresolvableExternalIdsReturnNull() {
         var (service, _, _) = Service(Leaf(ProposalKind.Book, "Book", "W1"));
 
@@ -745,7 +1220,25 @@ public sealed class RequestCommitServiceTests {
         var acquisitions = new FakeAcquisitionRequestService();
         var monitors = new FakeMonitorStore();
         var suppressions = new FakeSuppressionStore();
-        var service = new RequestCommitService(new FakeProposalSource(proposal), writer, acquisitions, monitors, suppressions);
+        var proposals = new FakeProposalSource(proposal);
+        var service = new RequestCommitService(proposals, new NullReviewSource(), writer, acquisitions, monitors, suppressions);
+        return (service, writer, acquisitions, monitors, suppressions);
+    }
+
+    private static (RequestCommitService Service, FakeWantedEntityWriter Writer, FakeAcquisitionRequestService Acquisitions, FakeMonitorStore Monitors, FakeSuppressionStore Suppressions) ReviewedService(
+        EntityMetadataProposal proposal,
+        FakeReviewSource reviews) {
+        var writer = new FakeWantedEntityWriter();
+        var acquisitions = new FakeAcquisitionRequestService();
+        var monitors = new FakeMonitorStore();
+        var suppressions = new FakeSuppressionStore();
+        var service = new RequestCommitService(
+            new FakeProposalSource(proposal),
+            reviews,
+            writer,
+            acquisitions,
+            monitors,
+            suppressions);
         return (service, writer, acquisitions, monitors, suppressions);
     }
 
@@ -764,6 +1257,76 @@ public sealed class RequestCommitServiceTests {
     private static EntityMetadataPatch Patch(string title, string workId, IReadOnlyDictionary<string, int>? positions = null) =>
         new(title, null, new Dictionary<string, string> { [Provider] = workId }, [], [], null, [],
             new Dictionary<string, string>(), new Dictionary<string, int>(), positions ?? new Dictionary<string, int>(), null);
+
+    private static EntityMetadataProposal Node(
+        string proposalId,
+        string pluginId,
+        ProposalKind kind,
+        string title,
+        ExternalIdentity identity,
+        params EntityMetadataProposal[] children) =>
+        Node(proposalId, pluginId, kind, title, identity, new Dictionary<string, int>(), children);
+
+    private static EntityMetadataProposal Node(
+        string proposalId,
+        string pluginId,
+        ProposalKind kind,
+        string title,
+        ExternalIdentity identity,
+        IReadOnlyDictionary<string, int> positions,
+        params EntityMetadataProposal[] children) =>
+        new(
+            proposalId,
+            pluginId,
+            kind,
+            1,
+            "external-id",
+            new EntityMetadataPatch(
+                title,
+                null,
+                new Dictionary<string, string> { [identity.Namespace] = identity.Value },
+                [],
+                [],
+                null,
+                [],
+                new Dictionary<string, string>(),
+                new Dictionary<string, int>(),
+                positions,
+                null),
+            [],
+            children,
+            [],
+            null,
+            []);
+
+    private static RequestReviewTarget Target(
+        EntityMetadataProposal proposal,
+        RequestMediaKind kind,
+        ExternalIdentity identity,
+        EntityKind? entityKind = null,
+        int? position = null) =>
+        new(
+            proposal.ProposalId,
+            kind,
+            entityKind ?? proposal.TargetKind.ToEntityKind(),
+            identity,
+            Requestable: true,
+            Position: position);
+
+    private static RequestReviewResponse Review(
+        string pluginId,
+        RequestMediaKind kind,
+        ExternalIdentity rootIdentity,
+        EntityMetadataProposal proposal,
+        IReadOnlyList<RequestReviewTarget> targets) =>
+        new(
+            pluginId,
+            rootIdentity,
+            proposal.TargetKind.ToEntityKind(),
+            kind,
+            proposal,
+            RequestProposalRevision.Compute(proposal),
+            targets);
 
     private static EntityMetadataProposal Rekey(
         EntityMetadataProposal proposal,
@@ -808,8 +1371,50 @@ public sealed class RequestCommitServiceTests {
         }
     }
 
+    private sealed class NullReviewSource : IPluginRequestReviewSource {
+        public Task<RequestReviewResponse?> ReviewAsync(
+            RequestReviewRequest request,
+            bool hideNsfw,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<RequestReviewResponse?>(null);
+
+        public Task<RequestReviewResponse?> RevalidateAsync(
+            RequestReviewRequest request,
+            bool hideNsfw,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<RequestReviewResponse?>(null);
+    }
+
+    private sealed class FakeReviewSource(
+        Func<RequestReviewRequest, RequestReviewResponse?> resolve) : IPluginRequestReviewSource {
+        public List<RequestReviewRequest> ReviewCalls { get; } = [];
+        public List<RequestReviewRequest> RevalidateCalls { get; } = [];
+
+        public Task<RequestReviewResponse?> ReviewAsync(
+            RequestReviewRequest request,
+            bool hideNsfw,
+            CancellationToken cancellationToken) {
+            ReviewCalls.Add(request);
+            return Task.FromResult(resolve(request));
+        }
+
+        public Task<RequestReviewResponse?> RevalidateAsync(
+            RequestReviewRequest request,
+            bool hideNsfw,
+            CancellationToken cancellationToken) {
+            RevalidateCalls.Add(request);
+            return Task.FromResult(resolve(request));
+        }
+    }
+
     private sealed class FakeWantedEntityWriter : IWantedEntityWriter {
-        public sealed record EnsureCall(EntityKind Kind, string ItemId, string Title, Guid? ParentEntityId, bool MatchTitleKindWide);
+        public sealed record EnsureCall(
+            EntityKind Kind,
+            string IdentityNamespace,
+            string ItemId,
+            string Title,
+            Guid? ParentEntityId,
+            bool MatchTitleKindWide);
         public sealed record ApplyCall(Guid EntityId, EntityMetadataProposal Proposal);
 
         public List<EnsureCall> Ensured { get; } = [];
@@ -826,7 +1431,7 @@ public sealed class RequestCommitServiceTests {
             new(System.Security.Cryptography.MD5.HashData(System.Text.Encoding.UTF8.GetBytes(itemId)));
 
         public Task<WantedEntityResult> EnsureAsync(EntityKind kind, ExternalIdentity identity, string title, Guid? parentEntityId, bool matchTitleKindWide, CancellationToken cancellationToken) {
-            Ensured.Add(new EnsureCall(kind, identity.Value, title, parentEntityId, matchTitleKindWide));
+            Ensured.Add(new EnsureCall(kind, identity.Namespace, identity.Value, title, parentEntityId, matchTitleKindWide));
             var hasFile = ExistingWithFile.Contains(identity.Value);
             var created = !hasFile && !ExistingWanted.Contains(identity.Value);
             return Task.FromResult(new WantedEntityResult(EntityIdFor(identity.Value), created, hasFile));
