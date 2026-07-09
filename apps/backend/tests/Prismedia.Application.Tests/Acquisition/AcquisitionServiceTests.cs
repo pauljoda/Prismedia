@@ -155,6 +155,23 @@ public sealed class AcquisitionServiceTests {
     }
 
     [Fact]
+    public async Task ReacquireAsyncCloneFailureRemovesTheUnusableImportedStateAndMonitor() {
+        var harness = Harness(TransferInfo(RecordedClientId, AcquisitionStatus.Imported));
+        harness.Store.CloneResult = null;
+
+        var result = await harness.Service.ReacquireAsync(AcquisitionId, CancellationToken.None);
+
+        Assert.Null(result);
+        Assert.True(harness.Store.Deleted);
+        Assert.Equal([harness.Monitors.MonitorId], harness.Monitors.Deleted);
+        Assert.Empty(harness.Monitors.Retargets);
+        Assert.Empty(harness.Queue.Requests);
+        var history = Assert.Single(harness.History.Entries);
+        Assert.Equal(AcquisitionHistoryEvent.Removed, history.Event);
+        Assert.Equal("Files deleted; retry could not be initialized.", history.Message);
+    }
+
+    [Fact]
     public async Task DeleteAsyncUsesDefaultClientOnlyForLegacyTransfersWithoutRecordedClient() {
         var harness = Harness(TransferInfo(downloadClientConfigId: null));
 
@@ -348,7 +365,9 @@ public sealed class AcquisitionServiceTests {
 
     /// <summary>Minimal monitor-store fake recording retargets — the only member the service's delete path uses.</summary>
     private sealed class RecordingMonitorStore : IMonitorStore {
+        public Guid MonitorId { get; } = Guid.NewGuid();
         public List<(Guid From, Guid To)> Retargets { get; } = [];
+        public List<Guid> Deleted { get; } = [];
 
         public Task<bool> RetargetAsync(Guid fromAcquisitionId, Guid toAcquisitionId, CancellationToken cancellationToken) {
             Retargets.Add((fromAcquisitionId, toAcquisitionId));
@@ -360,12 +379,20 @@ public sealed class AcquisitionServiceTests {
         public Task<MonitorView?> GetByEntityAsync(Guid entityId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<AcquisitionTargeting?> GetTargetingByEntityAsync(Guid entityId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<MonitorPreset?> GetPresetByEntityAsync(Guid entityId, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<bool> DeleteAsync(Guid monitorId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> DeleteAsync(Guid monitorId, CancellationToken cancellationToken) {
+            Deleted.Add(monitorId);
+            return Task.FromResult(true);
+        }
         public Task<bool> SetStatusAsync(Guid monitorId, MonitorStatus status, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<IReadOnlyList<MonitorView>> ListAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<WantedPage> ListMissingAsync(int page, int pageSize, EntityKind? kind, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<WantedPage> ListCutoffUnmetAsync(int page, int pageSize, EntityKind? kind, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<MonitorView?> GetByAcquisitionAsync(Guid acquisitionId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<MonitorView?> GetByAcquisitionAsync(Guid acquisitionId, CancellationToken cancellationToken) =>
+            Task.FromResult<MonitorView?>(acquisitionId == AcquisitionId
+                ? new MonitorView(
+                    MonitorId, EntityKind.Book, AcquisitionId, MonitorStatus.Fulfilled, "Dune", "Frank Herbert",
+                    AcquisitionStatus.Imported, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, WantedEntityId)
+                : null);
         public Task<bool> HasActiveMonitorsAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<IReadOnlyList<DueMonitor>> ListDueMonitorsAsync(int defaultIntervalMinutes, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task MarkSearchedAsync(Guid monitorId, CancellationToken cancellationToken) => throw new NotSupportedException();

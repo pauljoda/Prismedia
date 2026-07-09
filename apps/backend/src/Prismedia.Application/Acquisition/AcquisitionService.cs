@@ -33,9 +33,11 @@ public interface IAcquisitionRequestService {
     /// <summary>
     /// Replaces an imported acquisition whose owned files were deliberately deleted with a clean retry,
     /// re-points its monitor, and starts a release search immediately. The linked entity must already be a
-    /// fileless wanted placeholder; returns the replacement acquisition id, or null when no retry can be made.
-    /// This is intentionally separate from <see cref="DeleteAsync"/> so removing a row from Downloads keeps
-    /// its normal monitor cadence instead of immediately re-grabbing it.
+    /// fileless wanted placeholder; returns the replacement acquisition id. If the clean clone cannot be
+    /// created, the now-invalid imported row and its per-item monitor are removed so callers can never retain
+    /// an Imported state for files that no longer exist, and null is returned. This is intentionally separate
+    /// from <see cref="DeleteAsync"/> so removing a row from Downloads keeps its normal monitor cadence instead
+    /// of immediately re-grabbing it.
     /// </summary>
     Task<Guid?> ReacquireAsync(Guid id, CancellationToken cancellationToken);
 }
@@ -316,6 +318,16 @@ public sealed class AcquisitionService(
         // quality behind on the row that is about to be removed.
         var replacementId = await store.CloneForRetryAsync(id, cancellationToken);
         if (replacementId is not { } freshId) {
+            // The entity is already fileless + Wanted, so preserving an Imported acquisition here would be
+            // actively false and every action against it would target a dead lifecycle. Remove its helper
+            // monitor and row; the surviving container monitor (if any) can still rediscover the wanted gap.
+            if (await monitors.GetByAcquisitionAsync(id, cancellationToken) is { } staleMonitor) {
+                await monitors.DeleteAsync(staleMonitor.Id, cancellationToken);
+            }
+
+            await RecordRemovedAsync(
+                detail.Summary, "Files deleted; retry could not be initialized.", cancellationToken);
+            await store.DeleteAsync(id, cancellationToken);
             return null;
         }
 

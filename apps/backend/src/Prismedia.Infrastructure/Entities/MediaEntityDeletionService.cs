@@ -83,11 +83,23 @@ public sealed class MediaEntityDeletionService(
         // Capture the acquisition slice before changing the entity rows. Full removal tears it down; a
         // monitored revert preserves its per-item monitors and replaces each acquisition with a clean retry
         // only AFTER the entity is durably fileless + Wanted (CloneForRetry enforces that invariant).
-        var acquisitionIds = new List<Guid>();
+        var acquisitionIdsByEntity = new Dictionary<Guid, IReadOnlyList<Guid>>();
         foreach (var entityId in ids) {
-            acquisitionIds.AddRange(await acquisitions.ListIdsForEntityAsync(entityId, cancellationToken));
+            var entityAcquisitionIds = (await acquisitions.ListIdsForEntityAsync(entityId, cancellationToken))
+                .Distinct()
+                .ToArray();
+            if (entityAcquisitionIds.Length > 0) {
+                acquisitionIdsByEntity[entityId] = entityAcquisitionIds;
+            }
         }
-        acquisitionIds = acquisitionIds.Distinct().ToList();
+        var acquisitionIds = acquisitionIdsByEntity.Values.SelectMany(value => value).Distinct().ToArray();
+        // ListIdsForEntityAsync is newest-first. A revert resumes exactly the latest intent per entity;
+        // historical rows and their monitors are stale bookkeeping, not additional downloads to launch.
+        var reacquireIds = acquisitionIdsByEntity.Values.Select(value => value[0]).Distinct().ToArray();
+        var supersededAcquisitionIds = acquisitionIdsByEntity.Values
+            .SelectMany(value => value.Skip(1))
+            .Distinct()
+            .ToArray();
 
         if (!reverting) {
             var doomedMonitors = await db.Monitors
@@ -101,6 +113,21 @@ public sealed class MediaEntityDeletionService(
             }
 
             foreach (var acquisitionId in acquisitionIds) {
+                await acquisitions.DeleteAsync(acquisitionId, cancellationToken);
+            }
+        } else if (supersededAcquisitionIds.Length > 0) {
+            // Only the newest acquisition is a live intent. Remove older helper monitors before their
+            // acquisition rows so they cannot become orphaned monitor entries after the FK is nulled.
+            var staleMonitors = await db.Monitors
+                .Where(monitor => monitor.AcquisitionId != null
+                    && supersededAcquisitionIds.Contains(monitor.AcquisitionId.Value))
+                .ToArrayAsync(cancellationToken);
+            if (staleMonitors.Length > 0) {
+                db.Monitors.RemoveRange(staleMonitors);
+                await db.SaveChangesAsync(cancellationToken);
+            }
+
+            foreach (var acquisitionId in supersededAcquisitionIds) {
                 await acquisitions.DeleteAsync(acquisitionId, cancellationToken);
             }
         }
@@ -137,10 +164,10 @@ public sealed class MediaEntityDeletionService(
             // The old Imported row cannot be searched directly. Replace it with a clean acquisition whose
             // monitor is reactivated and whose search is already queued, so clients observe Searching rather
             // than retaining a dead Imported id that can only return AcquisitionNotFound.
-            foreach (var acquisitionId in acquisitionIds) {
+            foreach (var acquisitionId in reacquireIds) {
                 if (await acquisitions.ReacquireAsync(acquisitionId, cancellationToken) is null) {
                     logger.LogWarning(
-                        "MediaEntityDeletion: could not restart acquisition {AcquisitionId} after reverting entity {EntityId} to wanted.",
+                        "MediaEntityDeletion: removed acquisition {AcquisitionId} without a replacement after reverting entity {EntityId} to wanted because a clean retry could not be created.",
                         acquisitionId, id);
                 }
             }

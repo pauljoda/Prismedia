@@ -82,11 +82,24 @@ public sealed class MediaEntityDeletionServiceTests {
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
         });
+        db.Monitors.Add(new MonitorRow {
+            Id = Guid.NewGuid(),
+            Kind = EntityKind.VideoSeason,
+            AcquisitionId = RecordingAcquisitions.OlderAcquisitionId,
+            Status = MonitorStatus.Paused,
+            Title = "Old Season 1 request",
+            CreatedAt = DateTimeOffset.UtcNow.AddDays(-1),
+            UpdatedAt = DateTimeOffset.UtcNow.AddDays(-1)
+        });
         await db.SaveChangesAsync();
 
         var storage = new RecordingStorage();
         var suppressions = new RecordingSuppressions();
         var acquisitions = new RecordingAcquisitions([seasonId], db);
+        acquisitions.AcquisitionIdsByEntity[seasonId] = [
+            RecordingAcquisitions.AcquisitionId,
+            RecordingAcquisitions.OlderAcquisitionId
+        ];
         var service = new MediaEntityDeletionService(
             db, new FakeRoots(root), storage, suppressions, acquisitions,
             new NullJobQueue(),
@@ -113,8 +126,9 @@ public sealed class MediaEntityDeletionServiceTests {
         var monitors = await db.Monitors.ToArrayAsync();
         Assert.Contains(monitors, monitor => monitor.EntityId == seriesId && monitor.Status == MonitorStatus.Active);
         Assert.Contains(monitors, monitor => monitor.AcquisitionId == RecordingAcquisitions.AcquisitionId);
+        Assert.DoesNotContain(monitors, monitor => monitor.AcquisitionId == RecordingAcquisitions.OlderAcquisitionId);
         Assert.Equal([RecordingAcquisitions.AcquisitionId], acquisitions.Reacquired);
-        Assert.Empty(acquisitions.Deleted);
+        Assert.Equal([RecordingAcquisitions.OlderAcquisitionId], acquisitions.Deleted);
         Assert.True(acquisitions.ReacquireSawWantedFileless);
         Assert.Empty(suppressions.Suppressed);
     }
@@ -226,13 +240,16 @@ public sealed class MediaEntityDeletionServiceTests {
         IReadOnlyList<Guid> entityIdsWithAcquisition,
         PrismediaDbContext? db = null) : IAcquisitionRequestService {
         public static readonly Guid AcquisitionId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000001");
+        public static readonly Guid OlderAcquisitionId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000002");
+        public Dictionary<Guid, IReadOnlyList<Guid>> AcquisitionIdsByEntity { get; } =
+            entityIdsWithAcquisition.ToDictionary(
+                entityId => entityId,
+                _ => (IReadOnlyList<Guid>)[AcquisitionId]);
         public List<Guid> Deleted { get; } = [];
         public List<Guid> Reacquired { get; } = [];
         public bool ReacquireSawWantedFileless { get; private set; }
         public Task<IReadOnlyList<Guid>> ListIdsForEntityAsync(Guid entityId, CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<Guid>>(entityIdsWithAcquisition.Contains(entityId)
-                ? [AcquisitionId]
-                : []);
+            Task.FromResult(AcquisitionIdsByEntity.GetValueOrDefault(entityId) ?? []);
 
         public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken, bool preserveWantedLoop = false) {
             Deleted.Add(id);
