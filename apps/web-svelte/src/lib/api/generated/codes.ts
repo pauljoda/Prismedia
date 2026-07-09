@@ -600,6 +600,7 @@ export const PROBLEM_CODE = {
   entityNotCreatable: "entity_not_creatable",
   entityNotDeletable: "entity_not_deletable",
   entityNotFound: "entity_not_found",
+  externalIdentityAmbiguous: "external_identity_ambiguous",
   fileConflict: "file_conflict",
   identifyApplyProgressNotFound: "identify_apply_progress_not_found",
   identifyFailed: "identify_failed",

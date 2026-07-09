@@ -11619,10 +11619,15 @@ export type commitRequestResponse404 = {
   status: 404
 }
 
+export type commitRequestResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
 export type commitRequestResponseSuccess = (commitRequestResponse200) & {
   headers: Headers;
 };
-export type commitRequestResponseError = (commitRequestResponse400 | commitRequestResponse404) & {
+export type commitRequestResponseError = (commitRequestResponse400 | commitRequestResponse404 | commitRequestResponse409) & {
   headers: Headers;
 };
 
@@ -11671,10 +11676,15 @@ export type commitEntityRequestResponse404 = {
   status: 404
 }
 
+export type commitEntityRequestResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
 export type commitEntityRequestResponseSuccess = (commitEntityRequestResponse200) & {
   headers: Headers;
 };
-export type commitEntityRequestResponseError = (commitEntityRequestResponse404) & {
+export type commitEntityRequestResponseError = (commitEntityRequestResponse404 | commitEntityRequestResponse409) & {
   headers: Headers;
 };
 
@@ -11718,12 +11728,19 @@ export type commitMissingChildrenRequestResponse200 = {
   status: 200
 }
 
+export type commitMissingChildrenRequestResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
 export type commitMissingChildrenRequestResponseSuccess = (commitMissingChildrenRequestResponse200) & {
   headers: Headers;
 };
-;
+export type commitMissingChildrenRequestResponseError = (commitMissingChildrenRequestResponse409) & {
+  headers: Headers;
+};
 
-export type commitMissingChildrenRequestResponse = (commitMissingChildrenRequestResponseSuccess)
+export type commitMissingChildrenRequestResponse = (commitMissingChildrenRequestResponseSuccess | commitMissingChildrenRequestResponseError)
 
 export const getCommitMissingChildrenRequestUrl = () => {
 
@@ -11804,10 +11821,15 @@ export type syncContainerRequestResponse404 = {
   status: 404
 }
 
+export type syncContainerRequestResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
 export type syncContainerRequestResponseSuccess = (syncContainerRequestResponse204) & {
   headers: Headers;
 };
-export type syncContainerRequestResponseError = (syncContainerRequestResponse404) & {
+export type syncContainerRequestResponseError = (syncContainerRequestResponse404 | syncContainerRequestResponse409) & {
   headers: Headers;
 };
 
