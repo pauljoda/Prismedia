@@ -33,6 +33,7 @@ public sealed class MediaEntityDeletionServiceTests {
         var acquisitions = new RecordingAcquisitions([seasonId]);
         var service = new MediaEntityDeletionService(
             db, new FakeRoots(root), storage, suppressions, acquisitions, new NullJobQueue(),
+            new Prismedia.Infrastructure.Media.Processing.AssetPathService(System.IO.Path.GetTempPath()),
             NullLogger<MediaEntityDeletionService>.Instance);
 
         var result = await service.DeleteAsync(seriesId, deleteFiles: true, CancellationToken.None);
@@ -56,7 +57,9 @@ public sealed class MediaEntityDeletionServiceTests {
         var storage = new RecordingStorage();
         var service = new MediaEntityDeletionService(
             db, new FakeRoots(root), storage, new RecordingSuppressions(), new RecordingAcquisitions([]),
-            new NullJobQueue(), NullLogger<MediaEntityDeletionService>.Instance);
+            new NullJobQueue(),
+            new Prismedia.Infrastructure.Media.Processing.AssetPathService(System.IO.Path.GetTempPath()),
+            NullLogger<MediaEntityDeletionService>.Instance);
 
         // deleteFiles false → rows gone, disk untouched.
         var result = await service.DeleteAsync(seriesId, deleteFiles: false, CancellationToken.None);
@@ -75,7 +78,9 @@ public sealed class MediaEntityDeletionServiceTests {
         var suppressions = new RecordingSuppressions();
         var service = new MediaEntityDeletionService(
             db, new FakeRoots(root), storage, suppressions, new RecordingAcquisitions([seasonId]),
-            new NullJobQueue(), NullLogger<MediaEntityDeletionService>.Instance);
+            new NullJobQueue(),
+            new Prismedia.Infrastructure.Media.Processing.AssetPathService(System.IO.Path.GetTempPath()),
+            NullLogger<MediaEntityDeletionService>.Instance);
 
         // Deleting the SEASON while the SERIES is actively monitored: disk state goes, library state
         // reverts to wanted so the monitoring loop re-acquires it. Monitoring itself is untouched.
@@ -106,7 +111,9 @@ public sealed class MediaEntityDeletionServiceTests {
 
         var service = new MediaEntityDeletionService(
             db, new FakeRoots(), new RecordingStorage(), new RecordingSuppressions(),
-            new RecordingAcquisitions([]), new NullJobQueue(), NullLogger<MediaEntityDeletionService>.Instance);
+            new RecordingAcquisitions([]), new NullJobQueue(),
+            new Prismedia.Infrastructure.Media.Processing.AssetPathService(System.IO.Path.GetTempPath()),
+            NullLogger<MediaEntityDeletionService>.Instance);
 
         Assert.False((await service.DeleteAsync(Guid.NewGuid(), true, CancellationToken.None)).Deleted);
         var tag = await service.DeleteAsync(tagId, true, CancellationToken.None);

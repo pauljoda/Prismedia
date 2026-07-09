@@ -61,6 +61,31 @@ public sealed class EfImportTargetIndex(PrismediaDbContext db) : IImportTargetIn
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<TvEpisodeTitle>> GetSeasonEpisodeTitlesAsync(
+        Guid entityId, int seasonNumber, CancellationToken cancellationToken) {
+        var seriesId = await ResolveAncestorOfKindAsync(entityId, EntityKindRegistry.VideoSeries.Code, cancellationToken);
+        if (seriesId is null) {
+            return [];
+        }
+
+        var seasonCode = EntityKindRegistry.VideoSeason.Code;
+        var seasonId = await db.Entities.AsNoTracking()
+            .Where(season => season.ParentEntityId == seriesId && season.KindCode == seasonCode && season.SortOrder == seasonNumber)
+            .Select(season => (Guid?)season.Id)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (seasonId is null) {
+            return [];
+        }
+
+        var episodeCode = EntityKindRegistry.Video.Code;
+        return await db.Entities.AsNoTracking()
+            .Where(episode => episode.ParentEntityId == seasonId && episode.KindCode == episodeCode && episode.SortOrder != null)
+            .OrderBy(episode => episode.SortOrder)
+            .Select(episode => new TvEpisodeTitle(episode.SortOrder!.Value, episode.Title))
+            .ToListAsync(cancellationToken);
+    }
+
+    /// <inheritdoc />
     public async Task<MovieDiskTarget?> GetMovieTargetAsync(Guid entityId, CancellationToken cancellationToken) {
         var movieId = await ResolveAncestorOfKindAsync(entityId, EntityKindRegistry.Movie.Code, cancellationToken);
         if (movieId is null || await SourcePathAsync(movieId.Value, cancellationToken) is not { } folder) {

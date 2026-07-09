@@ -465,3 +465,71 @@ public sealed class MediaImportMergeTests {
         Assert.Equal(Path.Combine("/media/music/Artist/Album", "Disc 1/02 track.flac"), merged[1].TargetAbsolutePath);
     }
 }
+
+/// <summary>
+/// Covers title-based multi-episode alignment: "as aired" packs bundle two provider episodes per file
+/// (the live Clifford pack: the file labeled S01E01 carries the titles of provider episodes 1 AND 2,
+/// S01E02 carries 3+4), so numeric placement would import the wrong content into almost every slot.
+/// </summary>
+public sealed class TvEpisodeTitleAlignmentTests {
+    private static readonly TvEpisodeTitle[] CliffordTitles = [
+        new(1, "My Best Friend"),
+        new(2, "Cleo's Fair Share"),
+        new(3, "Special Delivery"),
+        new(4, "Ferry Tale"),
+    ];
+
+    private static ImportCandidateFile File(string path) => new(path, 700_000_000);
+
+    [Fact]
+    public void RealignsBundledEpisodesToTheirProviderNumbersAndRecordsCoverage() {
+        var plan = TvImportPlanBuilder.PlanUnits([
+            File("Pack/Clifford the Big Red Dog_S01E01_MY BEST FRIEND_CLEO'S FAIR SHARE.mkv"),
+            File("Pack/Clifford the Big Red Dog_S01E02_SPECIAL DELIVERY_FERRY TALE.mkv"),
+        ], "Clifford the Big Red Dog", seasonNumber: 1, episodeNumber: null, episodeTitles: CliffordTitles);
+
+        Assert.False(plan.Blocked);
+        var units = plan.Units.OrderBy(unit => unit.Episode).ToArray();
+        // File "E01" anchors at provider episode 1 and covers 2…
+        Assert.Equal(1, units[0].Episode);
+        Assert.Equal([2], units[0].ExtraEpisodes);
+        // …file "E02" is REALIGNED to provider episode 3 (its numeric label lied) and covers 4.
+        Assert.Equal(3, units[1].Episode);
+        Assert.Equal([4], units[1].ExtraEpisodes);
+        Assert.Contains("S01E03", units[1].TargetRelativePath.Replace(" ", ""));
+    }
+
+    [Fact]
+    public void FilesWhoseTailsMatchNoTitleKeepNumericPlacement() {
+        var plan = TvImportPlanBuilder.PlanUnits([
+            File("Pack/Show.S01E05.720p.WEB-DL.mkv"),
+        ], "Show", seasonNumber: 1, episodeNumber: null, episodeTitles: CliffordTitles);
+
+        var unit = Assert.Single(plan.Units);
+        Assert.Equal(5, unit.Episode);
+        Assert.Empty(unit.ExtraEpisodes);
+    }
+
+    [Fact]
+    public void ConflictingRealignmentFallsBackToNumericForTheWholePayload() {
+        // Both files' tails claim episode 1 — unreliable evidence, so numeric wins everywhere.
+        var plan = TvImportPlanBuilder.PlanUnits([
+            File("Pack/Show_S01E01_MY BEST FRIEND.mkv"),
+            File("Pack/Show_S01E02_MY BEST FRIEND.mkv"),
+        ], "Show", seasonNumber: 1, episodeNumber: null, episodeTitles: CliffordTitles);
+
+        var units = plan.Units.OrderBy(unit => unit.Episode).ToArray();
+        Assert.Equal(1, units[0].Episode);
+        Assert.Equal(2, units[1].Episode);
+        Assert.All(units, unit => Assert.Empty(unit.ExtraEpisodes));
+    }
+
+    [Fact]
+    public void NoTitlesMeansNoRealignment() {
+        var plan = TvImportPlanBuilder.PlanUnits([
+            File("Pack/Show_S01E02_SPECIAL DELIVERY_FERRY TALE.mkv"),
+        ], "Show", seasonNumber: 1, episodeNumber: null);
+
+        Assert.Equal(2, Assert.Single(plan.Units).Episode);
+    }
+}

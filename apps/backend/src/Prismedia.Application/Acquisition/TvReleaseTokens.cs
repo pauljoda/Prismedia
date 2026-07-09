@@ -81,4 +81,25 @@ public static partial class TvReleaseTokens {
 
     /// <summary>True when the name declares a complete-series pack (which satisfies any season of that series).</summary>
     public static bool NamesCompleteSeries(string name) => CompleteSeriesTokenRegex().IsMatch(name);
+
+    /// <summary>
+    /// The text AFTER the first episode token — where scene naming puts the episode title(s)
+    /// ("Show_S01E01_MY BEST FRIEND_CLEO'S FAIR SHARE" → "_MY BEST FRIEND_CLEO'S FAIR SHARE").
+    /// Null when the name declares no episode token or nothing follows it.
+    /// </summary>
+    public static string? EpisodeTitleTail(string name) {
+        var match = EpisodeTokenRegex().Match(name);
+        if (!match.Success) {
+            match = AltEpisodeTokenRegex().Match(name);
+        }
+
+        if (!match.Success) {
+            return null;
+        }
+
+        // The regexes consume one trailing non-digit as the end anchor; keep it in the tail.
+        var end = match.Index + match.Length - (match.Length > 0 && !char.IsDigit(name[match.Index + match.Length - 1]) ? 1 : 0);
+        var tail = name[end..];
+        return string.IsNullOrWhiteSpace(tail) ? null : tail;
+    }
 }

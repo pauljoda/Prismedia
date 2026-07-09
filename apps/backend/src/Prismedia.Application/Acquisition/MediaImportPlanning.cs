@@ -25,7 +25,18 @@ public sealed record DownloadPayload(string ContentRoot, IReadOnlyList<ImportCan
 public sealed record TvPlanUnit(string SourceRelativePath, int Season, int Episode, string TargetRelativePath) {
     /// <summary>The template-rendered file name (the render's last segment).</summary>
     public string FileName => TargetRelativePath.Split('/')[^1];
+
+    /// <summary>
+    /// Episodes this file COVERS beyond <see cref="Episode"/> (title-aligned multi-episode files: a
+    /// single file whose name carries two provider episode titles satisfies both numbers). Empty for
+    /// ordinary single-episode files. The import binds these to the same placed file so the extra
+    /// episodes play the shared file instead of staying wanted forever.
+    /// </summary>
+    public IReadOnlyList<int> ExtraEpisodes { get; init; } = [];
 }
+
+/// <summary>One provider episode of the season being imported: its number and title, for title-based file alignment.</summary>
+public sealed record TvEpisodeTitle(int Episode, string Title);
 
 /// <summary>The unit-level TV plan: either blocked (same reasons as <see cref="ImportPlan"/>) or the placeable units.</summary>
 public sealed record TvUnitsPlan(bool Blocked, ImportBlockReason? BlockReason, IReadOnlyList<TvPlanUnit> Units) {
@@ -232,8 +243,9 @@ public static partial class TvImportPlanBuilder {
         int? seasonNumber,
         int? episodeNumber,
         string? template = null,
-        string? quality = null) {
-        var units = PlanUnits(files, series, seasonNumber, episodeNumber, template, quality);
+        string? quality = null,
+        IReadOnlyList<TvEpisodeTitle>? episodeTitles = null) {
+        var units = PlanUnits(files, series, seasonNumber, episodeNumber, template, quality, episodeTitles);
         if (units.Blocked) {
             return ImportPlan.Block(units.BlockReason!.Value);
         }
@@ -254,7 +266,8 @@ public static partial class TvImportPlanBuilder {
         int? seasonNumber,
         int? episodeNumber,
         string? template = null,
-        string? quality = null) {
+        string? quality = null,
+        IReadOnlyList<TvEpisodeTitle>? episodeTitles = null) {
         var videos = files
             .Where(file => VideoExtensions.Contains(Path.GetExtension(file.RelativePath)))
             .Where(file => !SampleTokenRegex().IsMatch(Path.GetFileNameWithoutExtension(file.RelativePath)))
@@ -279,7 +292,73 @@ public static partial class TvImportPlanBuilder {
 
         // No file declared a placeable unit — importing by guesswork would scatter episodes; stop for
         // a human instead.
-        return units.Count == 0 ? TvUnitsPlan.Block(ImportBlockReason.AmbiguousMultiplePrimaries) : TvUnitsPlan.For(units);
+        if (units.Count == 0) {
+            return TvUnitsPlan.Block(ImportBlockReason.AmbiguousMultiplePrimaries);
+        }
+
+        if (episodeTitles is { Count: > 0 }) {
+            units = RealignByEpisodeTitles(units, episodeTitles, series, template, quality);
+        }
+
+        return TvUnitsPlan.For(units);
+    }
+
+    /// <summary>
+    /// Realigns file episode numbers by the episode TITLES their names carry, for releases whose
+    /// numbering diverges from the provider's ("as aired" packs bundle two provider episodes per file:
+    /// the file labeled S01E01 carries the titles of provider episodes 1 AND 2, S01E02 carries 3+4 —
+    /// numeric placement would import the wrong content into almost every episode slot). A file whose
+    /// name-tail matches one or more provider titles is re-anchored at the LOWEST matched number and
+    /// records the rest as covered extras (the import binds them to the same placed file). Files whose
+    /// tails match nothing keep their numeric placement, and if the realignment would land two files on
+    /// the same episode, the whole payload keeps its numeric numbers — never guess against a conflict.
+    /// </summary>
+    private static List<TvPlanUnit> RealignByEpisodeTitles(
+        List<TvPlanUnit> units,
+        IReadOnlyList<TvEpisodeTitle> episodeTitles,
+        string series,
+        string? template,
+        string? quality) {
+        var realigned = new List<TvPlanUnit>(units.Count);
+        var changed = false;
+        foreach (var unit in units) {
+            var tail = TvReleaseTokens.EpisodeTitleTail(Path.GetFileNameWithoutExtension(unit.SourceRelativePath));
+            var matched = tail is null
+                ? []
+                : episodeTitles
+                    .Where(candidate => !string.IsNullOrWhiteSpace(candidate.Title) &&
+                        ReleaseTitleIdentity.ContainsRun(tail, candidate.Title))
+                    .Select(candidate => candidate.Episode)
+                    .Distinct()
+                    .OrderBy(episode => episode)
+                    .ToArray();
+            if (matched.Length == 0) {
+                realigned.Add(unit);
+                continue;
+            }
+
+            var primary = matched[0];
+            var extras = matched.Skip(1).ToArray();
+            if (primary != unit.Episode || extras.Length > 0) {
+                changed = true;
+            }
+
+            var naming = NamingContext(series, unit.Season, primary, quality, Path.GetExtension(unit.SourceRelativePath));
+            realigned.Add(unit with {
+                Episode = primary,
+                TargetRelativePath = MediaNamingTemplates.RenderTvPath(template, naming),
+                ExtraEpisodes = extras,
+            });
+        }
+
+        if (!changed) {
+            return units;
+        }
+
+        // A conflict (two files claiming one slot) means the title evidence is unreliable here —
+        // keep the numeric truth for the whole payload rather than half-applying a guess.
+        var slots = realigned.Select(unit => (unit.Season, unit.Episode)).ToArray();
+        return slots.Distinct().Count() == slots.Length ? realigned : units;
     }
 
     /// <summary>

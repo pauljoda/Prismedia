@@ -256,6 +256,14 @@ public interface IImportTargetIndex {
     /// <summary>The existing series layout for a linked series/season/episode entity, or null when fileless.</summary>
     Task<TvSeriesDiskLayout?> GetTvLayoutAsync(Guid entityId, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// The provider episode numbers and titles of one season under a linked series/season/episode
+    /// entity — the alignment reference for imports whose file numbering diverges from the provider's
+    /// ("as aired" multi-episode files). Empty when the graph or the season is missing.
+    /// </summary>
+    Task<IReadOnlyList<TvEpisodeTitle>> GetSeasonEpisodeTitlesAsync(Guid entityId, int seasonNumber, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<TvEpisodeTitle>>([]);
+
     /// <summary>The existing movie folder for a linked movie entity, or null when fileless.</summary>
     Task<MovieDiskTarget?> GetMovieTargetAsync(Guid entityId, CancellationToken cancellationToken);
 

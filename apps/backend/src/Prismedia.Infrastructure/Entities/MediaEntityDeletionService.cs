@@ -6,6 +6,7 @@ using Prismedia.Application.Files;
 using Prismedia.Application.Jobs;
 using Prismedia.Application.Requests;
 using Prismedia.Domain.Entities;
+using Prismedia.Infrastructure.Media.Processing;
 using Prismedia.Infrastructure.Persistence;
 
 namespace Prismedia.Infrastructure.Entities;
@@ -24,6 +25,7 @@ public sealed class MediaEntityDeletionService(
     IWantedSuppressionStore suppressions,
     IAcquisitionRequestService acquisitions,
     IJobQueueService jobs,
+    AssetPathService assets,
     ILogger<MediaEntityDeletionService> logger) : IMediaEntityDeletionService {
     /// <summary>How deep the descendant walk goes (a series → season → episode tree is three levels; books and audio are shallower).</summary>
     private const int MaxDescendantDepth = 6;
@@ -110,8 +112,16 @@ public sealed class MediaEntityDeletionService(
         if (reverting) {
             // Revert: the entities stay in the library as wanted placeholders (source bindings cleared),
             // and NOTHING is suppressed — the monitoring loop is supposed to re-acquire this content.
+            // Playback-derived caches (previews, trickplay, waveforms, extracted subtitles) belong to the
+            // deleted source files and go with them NOW rather than waiting for a later sweep; artwork
+            // and grid thumbnails stay — a wanted placeholder keeps its poster.
+            CleanupGeneratedAssets(ids, keepArtwork: true);
+            var playbackDerivedRoles = new[] {
+                EntityFileRole.Preview, EntityFileRole.Sprite, EntityFileRole.Trickplay, EntityFileRole.Waveform,
+            };
             var sourceRows = await db.EntityFiles
-                .Where(file => ids.Contains(file.EntityId) && file.Role == EntityFileRole.Source)
+                .Where(file => ids.Contains(file.EntityId) &&
+                    (file.Role == EntityFileRole.Source || playbackDerivedRoles.Contains(file.Role)))
                 .ToArrayAsync(cancellationToken);
             db.EntityFiles.RemoveRange(sourceRows);
             var rows = await db.Entities.Where(row => ids.Contains(row.Id)).ToArrayAsync(cancellationToken);
@@ -139,6 +149,15 @@ public sealed class MediaEntityDeletionService(
             await suppressions.SuppressAsync(providerRefs, kind, entity.Title, cancellationToken);
         }
 
+        // All generated assets (caches, grid thumbnails, downloaded artwork) go with the entities NOW —
+        // an orphaned cache folder for a deleted entity would otherwise linger until a cleanup sweep.
+        var artworkPaths = await db.EntityFiles.AsNoTracking()
+            .Where(file => ids.Contains(file.EntityId) && file.Role != EntityFileRole.Source)
+            .Select(file => file.Path)
+            .Distinct()
+            .ToArrayAsync(cancellationToken);
+        CleanupGeneratedAssets(ids, keepArtwork: false, artworkPaths);
+
         var removedRows = await db.Entities.Where(row => ids.Contains(row.Id)).ToArrayAsync(cancellationToken);
         db.Entities.RemoveRange(removedRows);
         await db.SaveChangesAsync(cancellationToken);
@@ -147,6 +166,58 @@ public sealed class MediaEntityDeletionService(
             "MediaEntityDeletion: deleted \"{Title}\" ({Kind}) — {Rows} entities, {Files} on-disk paths removed.",
             entity.Title, entity.KindCode, removedRows.Length, filesDeleted);
         return new MediaEntityDeleteResult(true, FilesDeleted: filesDeleted);
+    }
+
+    /// <summary>
+    /// Best-effort removal of the generated per-entity cache assets. Every kind's playback-derived
+    /// caches live in per-entity-id directories under the cache root, so deletion is exact by
+    /// construction. <paramref name="keepArtwork"/> (the revert path) preserves grid thumbnails and
+    /// downloaded artwork so the surviving wanted placeholder keeps its poster; full removal also
+    /// deletes those plus any row-recorded <c>/assets/</c> files. Failures are logged, never thrown —
+    /// asset cleanup must not fail the delete.
+    /// </summary>
+    private void CleanupGeneratedAssets(IReadOnlyList<Guid> ids, bool keepArtwork, IReadOnlyList<string>? recordedAssetPaths = null) {
+        foreach (var id in ids) {
+            TryDeleteDirectory(Path.Combine(assets.CacheRoot, "videos", id.ToString()));
+            TryDeleteDirectory(Path.Combine(assets.CacheRoot, "images", id.ToString()));
+            TryDeleteDirectory(Path.Combine(assets.CacheRoot, "trickplay", id.ToString()));
+            TryDeleteDirectory(Path.Combine(assets.CacheRoot, "audio-tracks", id.ToString()));
+            TryDeleteDirectory(Path.Combine(assets.CacheRoot, "book-pages", id.ToString()));
+            if (!keepArtwork) {
+                TryDeleteFile(assets.GridThumbnailPath(id));
+                TryDeleteFile(assets.GridThumbnail2xPath(id));
+            }
+        }
+
+        if (keepArtwork || recordedAssetPaths is null) {
+            return;
+        }
+
+        foreach (var path in recordedAssetPaths) {
+            if (assets.ResolveAssetDiskPath(path) is { } diskPath) {
+                TryDeleteFile(diskPath);
+            }
+        }
+    }
+
+    private void TryDeleteDirectory(string path) {
+        try {
+            if (Directory.Exists(path)) {
+                Directory.Delete(path, recursive: true);
+            }
+        } catch (Exception ex) {
+            logger.LogWarning(ex, "MediaEntityDeletion: failed to remove cache directory \"{Path}\".", path);
+        }
+    }
+
+    private void TryDeleteFile(string path) {
+        try {
+            if (File.Exists(path)) {
+                File.Delete(path);
+            }
+        } catch (Exception ex) {
+            logger.LogWarning(ex, "MediaEntityDeletion: failed to remove cache file \"{Path}\".", path);
+        }
     }
 
     /// <summary>The entity and every descendant (breadth-first over ParentEntityId, bounded).</summary>

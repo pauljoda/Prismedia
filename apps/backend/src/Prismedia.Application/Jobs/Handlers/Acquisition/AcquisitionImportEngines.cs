@@ -514,7 +514,8 @@ public sealed class TvAcquisitionImportEngine(
     IOwnedFileReplacer replacer,
     IAcquisitionBlocklistStore blocklist,
     IAcquisitionHistoryStore history,
-    ILogger<TvAcquisitionImportEngine> logger) : IAcquisitionImportEngine {
+    ILogger<TvAcquisitionImportEngine> logger,
+    IAcquisitionHintApplier? acquisitionHints = null) : IAcquisitionImportEngine {
     public EntityKind Kind => kind;
 
     public async Task ImportAsync(JobContext context, AcquisitionImportContext import, CancellationToken cancellationToken) {
@@ -553,7 +554,9 @@ public sealed class TvAcquisitionImportEngine(
         var series = SeriesOf(import);
         var plan = ImportTargetResolver.Resolve(
             payload.ContentRoot, root.Path,
-            TvImportPlanBuilder.Plan(payload.Files, series, import.SeasonNumber, import.EpisodeNumber, profile?.PathTemplate, ownedMediaQuality));
+            TvImportPlanBuilder.Plan(
+                payload.Files, series, import.SeasonNumber, import.EpisodeNumber, profile?.PathTemplate, ownedMediaQuality,
+                await EpisodeTitlesForAsync(import, cancellationToken)));
         if (plan.Blocked) {
             await acquisitions.SetStatusAsync(import.Id, AcquisitionStatus.ManualImportRequired, BlockMessage(plan.BlockReason), cancellationToken);
             return;
@@ -597,7 +600,8 @@ public sealed class TvAcquisitionImportEngine(
         CancellationToken cancellationToken) {
         var series = SeriesOf(import);
         var unitsPlan = TvImportPlanBuilder.PlanUnits(
-            payload.Files, series, import.SeasonNumber, import.EpisodeNumber, profile?.PathTemplate, qualityCode);
+            payload.Files, series, import.SeasonNumber, import.EpisodeNumber, profile?.PathTemplate, qualityCode,
+            await EpisodeTitlesForAsync(import, cancellationToken));
         if (unitsPlan.Blocked) {
             await acquisitions.SetStatusAsync(import.Id, AcquisitionStatus.ManualImportRequired, BlockMessage(unitsPlan.BlockReason), cancellationToken);
             return;
@@ -630,18 +634,22 @@ public sealed class TvAcquisitionImportEngine(
         await context.ReportProgressAsync(40, "Merging into the existing series", cancellationToken);
         var importMode = profile?.ImportMode ?? ImportMode.Move;
         var placed = new List<string>(merged.Count);
+        var placedBySource = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var dropped = 0;
         var formatChanges = 0;
         foreach (var item in merged) {
             var sourceAbsolute = Path.GetFullPath(Path.Combine(payload.ContentRoot, item.SourceRelativePath));
             switch (item.Action) {
                 case MergeFileAction.PlaceNew:
-                    placed.Add(await mover.PlaceAsync(
-                        new ResolvedImportItem(sourceAbsolute, Path.GetFullPath(item.TargetAbsolutePath)), importMode, cancellationToken));
+                    var placedPath = await mover.PlaceAsync(
+                        new ResolvedImportItem(sourceAbsolute, Path.GetFullPath(item.TargetAbsolutePath)), importMode, cancellationToken);
+                    placed.Add(placedPath);
+                    placedBySource[item.SourceRelativePath] = placedPath;
                     break;
                 case MergeFileAction.ReplaceUpgrade:
                     if (await ReplaceOwnedAsync(item.OwnedFilePath!, sourceAbsolute, importMode, import.AllowFormatChange, cancellationToken) is { } swapped) {
                         placed.Add(swapped);
+                        placedBySource[item.SourceRelativePath] = swapped;
                     } else {
                         dropped++;
                     }
@@ -661,6 +669,8 @@ public sealed class TvAcquisitionImportEngine(
             return;
         }
 
+        await BindCoveredExtrasAsync(unitsPlan.Units, placedBySource, cancellationToken);
+
         var placedFolders = placed
             .Select(path => Path.GetDirectoryName(path) ?? layout.SeriesFolderPath)
             .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -675,6 +685,56 @@ public sealed class TvAcquisitionImportEngine(
             ? "Imported into the existing series."
             : $"Imported {placed.Count} of {merged.Count} file(s) into the existing series; {skipped} were not upgrades over the files you already have.";
         await FinalizeImportAsync(context, import, selected, qualityCode, hintFolder, finalSourcePath, importMode, message, cancellationToken);
+    }
+
+    /// <summary>
+    /// The provider episode list of the season being imported (numbers + titles from the linked
+    /// entity's graph), for title-based file alignment. Empty for unlinked acquisitions or when the
+    /// season isn't materialized yet — the plan then keeps its numeric placement.
+    /// </summary>
+    private async Task<IReadOnlyList<TvEpisodeTitle>> EpisodeTitlesForAsync(
+        AcquisitionImportContext import, CancellationToken cancellationToken) =>
+        import.EntityId is { } linkedEntityId && import.SeasonNumber is { } season
+            ? await targets.GetSeasonEpisodeTitlesAsync(linkedEntityId, season, cancellationToken)
+            : [];
+
+    /// <summary>
+    /// Binds the wanted episode phantoms a title-aligned multi-episode file COVERS beyond its primary
+    /// number to the same placed file ("as aired" double episodes: the file placed as E01 also carries
+    /// provider episode 2's content) — so the covered episode plays the shared file instead of staying
+    /// wanted and being re-searched forever. Best-effort: an unbound phantom just stays wanted.
+    /// </summary>
+    private async Task BindCoveredExtrasAsync(
+        IReadOnlyList<TvPlanUnit> units,
+        IReadOnlyDictionary<string, string> placedBySource,
+        CancellationToken cancellationToken) {
+        if (acquisitionHints is null) {
+            return;
+        }
+
+        foreach (var unit in units) {
+            if (unit.ExtraEpisodes.Count == 0 ||
+                !placedBySource.TryGetValue(unit.SourceRelativePath, out var placedPath) ||
+                Path.GetDirectoryName(placedPath) is not { } seasonFolder) {
+                continue;
+            }
+
+            foreach (var extra in unit.ExtraEpisodes) {
+                try {
+                    var bound = await acquisitionHints.BindWantedChildBySortOrderAsync(
+                        EntityKind.Video, seasonFolder, extra, placedPath, cancellationToken);
+                    if (bound) {
+                        logger.LogInformation(
+                            "TvImport: bound covered episode {Episode} to the shared multi-episode file \"{File}\".",
+                            extra, Path.GetFileName(placedPath));
+                    }
+                } catch (OperationCanceledException) {
+                    throw;
+                } catch (Exception ex) {
+                    logger.LogWarning(ex, "TvImport: failed to bind covered episode {Episode} to \"{File}\".", extra, placedPath);
+                }
+            }
+        }
     }
 
     /// <summary>The shared success tail: hint, final source path, scan chain, torrent handling, and the imported mark.</summary>
