@@ -78,7 +78,8 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         bool? hasFile = null,
         bool? played = null,
         bool? orphaned = null,
-        bool? wanted = null) {
+        bool? wanted = null,
+        AcquisitionStatus? acquisitionStatus = null) {
         var pageSize = Math.Clamp(limit ?? DefaultPageSize, 1, MaxPageSize);
         var normalizedRelationshipCode = string.IsNullOrWhiteSpace(relationshipCode)
             ? null
@@ -113,7 +114,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             entityQuery = ApplyEnabledLibraryVisibility(entityQuery, kind);
         }
         entityQuery = ApplyNsfwVisibility(entityQuery, hideNsfw == true);
-        entityQuery = ApplyListFilters(entityQuery, favorite, organized, ratingMin, ratingMax, unrated, status, bookType, bookFormat, nsfw, hasFile, played, orphaned, wanted);
+        entityQuery = ApplyListFilters(entityQuery, favorite, organized, ratingMin, ratingMax, unrated, status, bookType, bookFormat, nsfw, hasFile, played, orphaned, wanted, acquisitionStatus);
 
         // Snapshot the unbounded filtered total before applying the cursor; this is what
         // drives the client's page-of-pages and seek-to-end behaviour and must stay
@@ -333,7 +334,8 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         bool? hasFile = null,
         bool? played = null,
         bool? orphaned = null,
-        bool? wanted = null) {
+        bool? wanted = null,
+        AcquisitionStatus? acquisitionStatus = null) {
         var userId = CurrentUserId;
         var states = _db.UserEntityStates;
         if (favorite == true) {
@@ -345,6 +347,16 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             query = wantsWanted
                 ? query.Where(entity => entity.IsWanted)
                 : query.Where(entity => !entity.IsWanted);
+        }
+
+        if (acquisitionStatus is { } latestStatus) {
+            var acquisitions = _db.Acquisitions;
+            query = query.Where(entity => acquisitions
+                .Where(acquisition => acquisition.EntityId == entity.Id)
+                .OrderByDescending(acquisition => acquisition.CreatedAt)
+                .ThenByDescending(acquisition => acquisition.Id)
+                .Select(acquisition => (AcquisitionStatus?)acquisition.Status)
+                .FirstOrDefault() == latestStatus);
         }
 
         if (orphaned is { } wantsOrphaned) {

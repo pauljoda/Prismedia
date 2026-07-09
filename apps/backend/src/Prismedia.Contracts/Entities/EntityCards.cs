@@ -93,6 +93,9 @@ public sealed record EntityListQuery {
     public bool? Played { get; init; }
     public bool? Orphaned { get; init; }
 
+    /// <summary>Filters by the latest acquisition lifecycle state linked to the entity.</summary>
+    public AcquisitionStatus? AcquisitionStatus { get; init; }
+
     /// <summary>Filters to wanted placeholders (true), or excludes them (false). Null includes both.</summary>
     public bool? Wanted { get; init; }
 }

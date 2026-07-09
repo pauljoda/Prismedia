@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { EntityCapability, EntityCard, EntityThumbnail, EntityKind } from "$lib/api/generated/model";
 import {
+  AVAILABILITY_FILTER_DEFS,
   ENTITY_GRID_ALL_KINDS,
   applyEntityGridState,
   buildCapabilityFilterOptions,
@@ -9,6 +10,7 @@ import {
   entityCardToThumbnailCard,
   entityGridRequestFromState,
   isServerResolvedFilterId,
+  normalizeEntityGridFilterIds,
   type EntityGridState,
 } from "./entity-grid";
 
@@ -239,6 +241,15 @@ describe("entity grid helpers", () => {
     expect(thumbnail.progress).toBeCloseTo(0.42);
   });
 
+  it("carries source-media availability from lightweight thumbnails", () => {
+    const thumbnail = entityCardToThumbnailCard({
+      ...thumbnailEntity("row-source", "video", "Stored"),
+      hasSourceMedia: true,
+    });
+
+    expect(thumbnail.hasSourceMedia).toBe(true);
+  });
+
   it("uses cover fit for entity thumbnail images by default", () => {
     const thumbnail = entityCardToThumbnailCard(card("6", "person", "Performer", [
       flags(false),
@@ -350,6 +361,7 @@ describe("server-resolved filters and sorting", () => {
     expect(isServerResolvedFilterId("rating:max:4")).toBe(true);
     expect(isServerResolvedFilterId("rating:unrated")).toBe(true);
     expect(isServerResolvedFilterId("status:watched")).toBe(true);
+    expect(isServerResolvedFilterId("availability:on-disk")).toBe(true);
     // Client-only filters stay client-resolved.
     expect(isServerResolvedFilterId("technical:codec:h264")).toBe(false);
     expect(isServerResolvedFilterId("dates:from:2026-01-01")).toBe(false);
@@ -376,6 +388,48 @@ describe("server-resolved filters and sorting", () => {
   it("maps the unrated and not-organized filters to server flags", () => {
     expect(buildServerQueryFromFilters(["rating:unrated"])).toEqual({ unrated: true });
     expect(buildServerQueryFromFilters(["flags:organized:false"])).toEqual({ organized: false });
+  });
+
+  it("serializes availability filters to canonical server parameters", () => {
+    expect(buildServerQueryFromFilters(["availability:on-disk"])).toEqual({ hasFile: true });
+    expect(buildServerQueryFromFilters(["availability:wanted"])).toEqual({ wanted: true });
+    expect(buildServerQueryFromFilters(["availability:downloaded"])).toEqual({ acquisitionStatus: "downloaded" });
+    expect(buildServerQueryFromFilters(["availability:failed"])).toEqual({ acquisitionStatus: "failed" });
+  });
+
+  it("migrates legacy file filters to availability filters", () => {
+    expect(normalizeEntityGridFilterIds(["files:has:true", "files:has:false", "flags:favorite"]))
+      .toEqual(["availability:on-disk", "availability:wanted", "flags:favorite"]);
+  });
+
+  it("filters local grids by source media, wanted state, and latest acquisition status", () => {
+    const localCards = [
+      entityCardToThumbnailCard(flaggedThumb({ id: "stored", title: "Stored", hasSourceMedia: true })),
+      entityCardToThumbnailCard(flaggedThumb({ id: "failed", title: "Failed", isWanted: true, wantedStatus: "failed", latestAcquisitionStatus: "failed" })),
+      entityCardToThumbnailCard(flaggedThumb({ id: "searching", title: "Searching", isWanted: true, wantedStatus: "searching", latestAcquisitionStatus: "searching" })),
+      entityCardToThumbnailCard(flaggedThumb({ id: "imported", title: "Imported", isWanted: false, latestAcquisitionStatus: "imported" })),
+    ];
+
+    const options = buildCapabilityFilterOptions(localCards, "video");
+    expect(AVAILABILITY_FILTER_DEFS.map((definition) => definition.id)).toContain("availability:failed");
+    expect(applyEntityGridState(
+      localCards,
+      gridState({ filterIds: ["availability:on-disk"] }),
+      options,
+      { serverResolvedFilters: false },
+    ).map((card) => card.entity.id)).toEqual(["stored"]);
+    expect(applyEntityGridState(
+      localCards,
+      gridState({ filterIds: ["availability:failed"] }),
+      options,
+      { serverResolvedFilters: false },
+    ).map((card) => card.entity.id)).toEqual(["failed"]);
+    expect(applyEntityGridState(
+      localCards,
+      gridState({ filterIds: ["availability:imported"] }),
+      options,
+      { serverResolvedFilters: false },
+    ).map((card) => card.entity.id)).toEqual(["imported"]);
   });
 
   it("maps the taxonomy reference filters to the orphaned server flag in both directions", () => {

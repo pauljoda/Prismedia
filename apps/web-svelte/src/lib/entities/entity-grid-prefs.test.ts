@@ -73,6 +73,16 @@ describe("entity-grid prefs", () => {
     });
   });
 
+  it("migrates legacy file filters to the availability family", () => {
+    const store = createEntityGridPrefs("series", DEFAULTS);
+    window.localStorage.setItem(
+      store.storageKey,
+      JSON.stringify({ filterIds: ["files:has:true", "files:has:false"] }),
+    );
+
+    expect(store.load()?.filterIds).toEqual(["availability:on-disk", "availability:wanted"]);
+  });
+
   it("treats the seeded default state as default so the entry can be cleared", () => {
     const store = createEntityGridPrefs("galleries", DEFAULTS);
     expect(store.isDefault(store.defaults())).toBe(true);

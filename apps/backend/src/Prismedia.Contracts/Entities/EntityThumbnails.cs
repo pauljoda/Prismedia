@@ -59,6 +59,20 @@ public sealed record EntityThumbnail(
     public bool IsWanted { get; init; }
 
     /// <summary>
+    /// True when the entity owns a source-media row. Artwork, thumbnails, and generated cache assets
+    /// do not count. This compact fact lets local EntityGrids apply the same availability filter as
+    /// the server-backed library index without hydrating the full files capability.
+    /// </summary>
+    public bool HasSourceMedia { get; init; }
+
+    /// <summary>
+    /// Latest linked acquisition lifecycle state, whether or not the entity is still wanted. Keeping
+    /// this distinct from <see cref="WantedStatus"/> makes imported/cancelled history and stale-state
+    /// invariant violations visible to availability filters.
+    /// </summary>
+    public AcquisitionStatus? LatestAcquisitionStatus { get; init; }
+
+    /// <summary>
     /// For a wanted placeholder, the status of its latest acquisition — so a grid can show what the
     /// item is doing (searching, downloading, failed) on its thumbnail, not just that it is wanted.
     /// Null when the entity is not wanted, or is wanted but has no acquisition yet.

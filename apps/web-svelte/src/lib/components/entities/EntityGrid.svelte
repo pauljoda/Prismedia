@@ -19,6 +19,7 @@
     buildEntityKindTabs,
     entityGridRequestFromState,
     entityGridFilterFromId,
+    normalizeEntityGridFilterIds,
     type EntityGridRequest,
     type EntityGridSort,
     type EntityGridSortDir,
@@ -268,6 +269,7 @@
   const visibleCards = $derived(
     applyEntityGridState(effectiveCards, gridState, filterOptions, {
       preserveServerResolvedSorts: Boolean(onRequestChange),
+      serverResolvedFilters: Boolean(onRequestChange),
     }),
   );
   const selectedCount = $derived(selectedIds.length);
@@ -645,8 +647,7 @@
   }
 
   function applyPreset(preset: FilterPreset) {
-    filterIds = preset.filters
-      .map((filter) => filter.value)
+    filterIds = normalizeEntityGridFilterIds(preset.filters.map((filter) => filter.value))
       .filter((id) => Boolean(entityGridFilterFromId(id, filterOptions)));
     const presetSorts: EntityGridSort[] = ["title", "kind", "rating", "position", "added", "random"];
     sortBy = (presetSorts as string[]).includes(preset.sortBy) ? (preset.sortBy as EntityGridSort) : initialSortBy;

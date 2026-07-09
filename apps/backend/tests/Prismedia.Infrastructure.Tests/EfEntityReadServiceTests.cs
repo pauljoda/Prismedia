@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Application.Entities;
 using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Media;
 using Prismedia.Contracts.Videos;
@@ -1800,6 +1801,44 @@ public sealed class EfEntityReadServiceTests {
 
         var unplayed = await service.ListAsync(kind, null, null, null, null, CancellationToken.None, played: false);
         Assert.Equal(sfwUnplayedNoFile, Assert.Single(unplayed.Items).Id);
+    }
+
+    [Fact]
+    public async Task ListAsyncProjectsSourceMediaAndFiltersByLatestAcquisitionStatus() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var downloaded = Guid.Parse("ac100000-0000-0000-0000-000000000001");
+        var failed = Guid.Parse("ac100000-0000-0000-0000-000000000002");
+
+        db.Entities.AddRange(
+            new EntityRow { Id = downloaded, KindCode = EntityKindRegistry.Book.Code, Title = "Downloaded", IsWanted = true, CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = failed, KindCode = EntityKindRegistry.Book.Code, Title = "Failed", IsWanted = false, CreatedAt = now, UpdatedAt = now });
+        db.EntityFiles.AddRange(
+            new EntityFileRow { Id = Guid.NewGuid(), EntityId = downloaded, Role = EntityFileRole.Cover, Path = "/covers/downloaded.jpg", CreatedAt = now, UpdatedAt = now },
+            new EntityFileRow { Id = Guid.NewGuid(), EntityId = failed, Role = EntityFileRole.Source, Path = "/books/failed.epub", CreatedAt = now, UpdatedAt = now });
+        db.Acquisitions.AddRange(
+            new AcquisitionRow { Id = Guid.Parse("ac200000-0000-0000-0000-000000000001"), EntityId = downloaded, Status = AcquisitionStatus.Failed, Title = "Downloaded", ExternalIdsJson = "{}", SourceUrlsJson = "[]", CreatedAt = now, UpdatedAt = now },
+            new AcquisitionRow { Id = Guid.Parse("ac200000-0000-0000-0000-000000000002"), EntityId = downloaded, Status = AcquisitionStatus.Downloaded, Title = "Downloaded", ExternalIdsJson = "{}", SourceUrlsJson = "[]", CreatedAt = now, UpdatedAt = now },
+            new AcquisitionRow { Id = Guid.NewGuid(), EntityId = failed, Status = AcquisitionStatus.Failed, Title = "Failed", ExternalIdsJson = "{}", SourceUrlsJson = "[]", CreatedAt = now, UpdatedAt = now });
+        await db.SaveChangesAsync();
+
+        var service = CreateService(db);
+        var result = await ((IEntityReadService)service).ListAsync(new EntityListQuery {
+            Kind = EntityKindRegistry.Book.Code,
+            AcquisitionStatus = AcquisitionStatus.Downloaded,
+        }, CancellationToken.None);
+
+        var item = Assert.Single(result.Items);
+        Assert.Equal(downloaded, item.Id);
+        Assert.False(item.HasSourceMedia);
+        Assert.Equal(AcquisitionStatus.Downloaded, item.LatestAcquisitionStatus);
+        Assert.Equal(AcquisitionStatus.Downloaded, item.WantedStatus);
+
+        var all = await service.ListAsync(EntityKindRegistry.Book.Code, null, null, null, null, CancellationToken.None);
+        var stored = Assert.Single(all.Items, candidate => candidate.Id == failed);
+        Assert.True(stored.HasSourceMedia);
+        Assert.Equal(AcquisitionStatus.Failed, stored.LatestAcquisitionStatus);
+        Assert.Null(stored.WantedStatus);
     }
 
     [Fact]

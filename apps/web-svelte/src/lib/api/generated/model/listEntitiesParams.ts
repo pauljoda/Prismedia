@@ -41,4 +41,5 @@ hasFile?: boolean;
 played?: boolean;
 orphaned?: boolean;
 wanted?: boolean;
+acquisitionStatus?: string;
 };

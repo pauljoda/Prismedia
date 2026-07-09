@@ -3,6 +3,7 @@
   import { cn } from "@prismedia/ui-svelte";
   import { CAPABILITY_KIND } from "$lib/entities/entity-codes";
   import {
+    AVAILABILITY_FILTER_DEFS,
     BOOK_FORMAT_FILTER_DEFS,
     BOOK_TYPE_FILTER_DEFS,
     type EntityGridFilterOption,
@@ -54,8 +55,8 @@
   const hasDateFilters = $derived(
     filterOptions.some((option) => option.capabilityKind === CAPABILITY_KIND.dates),
   );
-  const hasFileFilters = $derived(
-    filterOptions.some((option) => option.capabilityKind === CAPABILITY_KIND.files),
+  const hasAvailabilityFilters = $derived(
+    filterOptions.some((option) => AVAILABILITY_FILTER_DEFS.some((definition) => definition.id === option.id)),
   );
   const hasFlagFilters = $derived(
     filterOptions.some((option) => option.capabilityKind === CAPABILITY_KIND.flags),
@@ -87,6 +88,7 @@
     entityKind === "tag" || entityKind === "person" || entityKind === "studio",
   );
   const REFERENCE_FILTER_IDS = ["taxonomy:referenced", "taxonomy:orphaned"];
+  const AVAILABILITY_FILTER_IDS = AVAILABILITY_FILTER_DEFS.map((definition) => definition.id);
 
   const resolutions = ["4K", "1080p", "720p", "480p"];
   const durationChoices = [
@@ -275,15 +277,12 @@
       </section>
     {/if}
 
-    {#if hasFileFilters}
+    {#if hasAvailabilityFilters}
       <section>
-        <div class="mb-2 text-kicker">File</div>
+        <div class="mb-2 text-kicker">Availability</div>
         <div class="flex flex-wrap gap-1">
-          {#each [
-            { id: "files:has:true", label: "Has file" },
-            { id: "files:has:false", label: "No file" },
-          ] as item (item.id)}
-            <button type="button" class={chipClass(item.id)} onclick={() => toggleFilter(item.id)}>
+          {#each AVAILABILITY_FILTER_DEFS as item (item.id)}
+            <button type="button" class={chipClass(item.id)} onclick={() => toggleExclusive(item.id, AVAILABILITY_FILTER_IDS)}>
               {item.label}
             </button>
           {/each}

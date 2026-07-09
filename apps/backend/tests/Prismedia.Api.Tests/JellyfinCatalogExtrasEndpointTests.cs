@@ -195,7 +195,8 @@ public sealed class JellyfinCatalogExtrasEndpointTests {
             bool? hasFile = null,
             bool? played = null,
             bool? orphaned = null,
-            bool? wanted = null) =>
+            bool? wanted = null,
+            AcquisitionStatus? acquisitionStatus = null) =>
             Task.FromResult(new EntityListResponse([], null, 0));
 
         public Task<EntityCard?> GetAsync(Guid id, bool hideNsfw, CancellationToken cancellationToken) =>

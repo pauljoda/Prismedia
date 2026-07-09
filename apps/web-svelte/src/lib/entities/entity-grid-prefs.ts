@@ -22,7 +22,7 @@ import type {
   EntityGridSortDir,
   EntityGridViewMode,
 } from "./entity-grid";
-import { ENTITY_GRID_ALL_KINDS } from "./entity-grid";
+import { ENTITY_GRID_ALL_KINDS, normalizeEntityGridFilterIds } from "./entity-grid";
 
 /** The full set of EntityGrid controls that persist across reloads, per grid key. */
 export interface EntityGridPrefs {
@@ -130,7 +130,7 @@ export function createEntityGridPrefs(
   const validate = (parsed: Record<string, unknown>): EntityGridPrefs => ({
     query: typeof parsed.query === "string" ? parsed.query : "",
     activeKind: typeof parsed.activeKind === "string" ? parsed.activeKind : ENTITY_GRID_ALL_KINDS,
-    filterIds: stringArray(parsed.filterIds),
+    filterIds: normalizeEntityGridFilterIds(stringArray(parsed.filterIds)),
     includeNsfw: typeof parsed.includeNsfw === "boolean" ? parsed.includeNsfw : true,
     sortBy: oneOf(parsed.sortBy, VALID_SORTS, defaults.sortBy),
     sortDir: oneOf(parsed.sortDir, VALID_SORT_DIRS, defaults.sortDir),

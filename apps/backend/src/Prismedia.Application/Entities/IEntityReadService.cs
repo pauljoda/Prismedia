@@ -1,4 +1,5 @@
 using Prismedia.Contracts.Entities;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Entities;
 
@@ -58,6 +59,7 @@ public interface IEntityReadService {
     /// When set, keeps only wanted placeholders (true) or excludes them (false). External projections
     /// (Jellyfin, OPDS) pass false so fileless request placeholders never reach external clients.
     /// </param>
+    /// <param name="acquisitionStatus">When set, keeps entities whose latest linked acquisition has this status.</param>
     Task<EntityListResponse> ListAsync(
         string? kind,
         string? query,
@@ -82,7 +84,8 @@ public interface IEntityReadService {
         bool? hasFile = null,
         bool? played = null,
         bool? orphaned = null,
-        bool? wanted = null);
+        bool? wanted = null,
+        AcquisitionStatus? acquisitionStatus = null);
 
     /// <summary>
     /// Lists active entities using the generated query contract shared by the API and frontend.
@@ -112,7 +115,8 @@ public interface IEntityReadService {
             query.HasFile,
             query.Played,
             query.Orphaned,
-            query.Wanted);
+            query.Wanted,
+            query.AcquisitionStatus);
 
     /// <summary>
     /// Gets one active entity as the shared entity card read model.

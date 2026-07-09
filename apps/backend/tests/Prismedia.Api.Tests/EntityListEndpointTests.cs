@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Prismedia.Application.Entities;
 using Prismedia.Contracts.Entities;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Api.Tests;
 
@@ -22,6 +23,21 @@ public sealed class EntityListEndpointTests {
         Assert.Equal(wanted, entityReadService.Wanted);
     }
 
+    [Theory]
+    [InlineData("downloaded", AcquisitionStatus.Downloaded)]
+    [InlineData("awaiting-selection", AcquisitionStatus.AwaitingSelection)]
+    [InlineData("manual-import-required", AcquisitionStatus.ManualImportRequired)]
+    public async Task AcquisitionStatusQueryUsesCanonicalCode(string code, AcquisitionStatus expected) {
+        var entityReadService = new CapturingEntityReadService();
+        using var factory = CreateFactory(entityReadService);
+        using var client = factory.CreateAuthenticatedClient();
+
+        using var response = await client.GetAsync($"/api/entities?acquisitionStatus={code}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(expected, entityReadService.AcquisitionStatus);
+    }
+
     private static WebApplicationFactory<Program> CreateFactory(IEntityReadService entityReadService) =>
         new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder => {
@@ -34,6 +50,7 @@ public sealed class EntityListEndpointTests {
 
     private sealed class CapturingEntityReadService : IEntityReadService {
         public bool? Wanted { get; private set; }
+        public AcquisitionStatus? AcquisitionStatus { get; private set; }
 
         public Task<EntityListResponse> ListAsync(
             string? kind,
@@ -59,8 +76,10 @@ public sealed class EntityListEndpointTests {
             bool? hasFile = null,
             bool? played = null,
             bool? orphaned = null,
-            bool? wanted = null) {
+            bool? wanted = null,
+            AcquisitionStatus? acquisitionStatus = null) {
             Wanted = wanted;
+            AcquisitionStatus = acquisitionStatus;
             return Task.FromResult(new EntityListResponse([], null, 0));
         }
 

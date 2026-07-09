@@ -17,10 +17,15 @@ internal static class EntityListEndpoint {
                     return error;
                 }
 
+                if (!TryGetAcquisitionStatus(request.AcquisitionStatus, out var acquisitionStatus, out error)) {
+                    return error;
+                }
+
                 return Results.Ok(await entities.ListAsync(
                     request.ToQuery(
                         resolvedKind,
-                        NsfwVisibility.ShouldHide(request.HideNsfw, httpContext)),
+                        NsfwVisibility.ShouldHide(request.HideNsfw, httpContext),
+                        acquisitionStatus),
                     cancellationToken));
             })
             .WithName("ListEntities")
@@ -44,6 +49,27 @@ internal static class EntityListEndpoint {
         }
 
         error = Results.BadRequest(new ApiProblem(ApiProblemCodes.InvalidEntityKind, $"Entity kind '{value}' is not recognized."));
+        return false;
+    }
+
+    private static bool TryGetAcquisitionStatus(
+        string? value,
+        out AcquisitionStatus? status,
+        out IResult error) {
+        status = null;
+        error = Results.Empty;
+        if (string.IsNullOrWhiteSpace(value)) {
+            return true;
+        }
+
+        if (value.TryDecodeAs<AcquisitionStatus>(out var decoded)) {
+            status = decoded;
+            return true;
+        }
+
+        error = Results.BadRequest(new ApiProblem(
+            ApiProblemCodes.RequestInvalid,
+            $"Acquisition status '{value}' is not recognized."));
         return false;
     }
 }
@@ -118,7 +144,13 @@ internal sealed record EntityListParameters {
     [FromQuery(Name = "wanted")]
     public bool? Wanted { get; init; }
 
-    public EntityListQuery ToQuery(string? kind, bool? hideNsfw) => new() {
+    [FromQuery(Name = "acquisitionStatus")]
+    public string? AcquisitionStatus { get; init; }
+
+    public EntityListQuery ToQuery(
+        string? kind,
+        bool? hideNsfw,
+        AcquisitionStatus? acquisitionStatus = null) => new() {
         Kind = kind,
         Query = Query,
         Cursor = Cursor,
@@ -142,5 +174,6 @@ internal sealed record EntityListParameters {
         Played = Played,
         Orphaned = Orphaned,
         Wanted = Wanted,
+        AcquisitionStatus = acquisitionStatus,
     };
 }

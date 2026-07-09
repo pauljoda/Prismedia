@@ -122,18 +122,24 @@ public sealed partial class EfEntityReadService {
             ? new Dictionary<Guid, UserEntityStateRow>()
             : await LoadMovieChildStateAsync(movieIds, cancellationToken);
 
-        // For wanted placeholders only, the latest acquisition's status, so a grid thumbnail can show
-        // what the item is doing (searching / downloading / failed). Scoped to the wanted subset of this
-        // page — usually a handful of rows — so the acquisition slice never touches the common case.
-        var wantedIds = rows.Where(row => row.IsWanted).Select(row => row.Id).ToArray();
-        var wantedStatusByEntity = wantedIds.Length == 0
-            ? new Dictionary<Guid, AcquisitionStatus>()
-            : (await _db.Acquisitions.AsNoTracking()
-                    .Where(acquisition => acquisition.EntityId != null && wantedIds.Contains(acquisition.EntityId.Value))
-                    .Select(acquisition => new { acquisition.EntityId, acquisition.Status, acquisition.CreatedAt })
+        // Compact availability facts for this page: physical source-media truth plus the latest linked
+        // acquisition state. The latter remains visible after Wanted clears so Imported/Cancelled rows and
+        // stale-state invariant failures can still be filtered and diagnosed from any EntityGrid.
+        var sourceMediaIds = await _db.EntityFiles.AsNoTracking()
+            .Where(file => ids.Contains(file.EntityId) && file.Role == EntityFileRole.Source)
+            .Select(file => file.EntityId)
+            .ToHashSetAsync(cancellationToken);
+        var latestAcquisitionStatusByEntity = (await _db.Acquisitions.AsNoTracking()
+                    .Where(acquisition => acquisition.EntityId != null && ids.Contains(acquisition.EntityId.Value))
+                    .Select(acquisition => new { acquisition.Id, acquisition.EntityId, acquisition.Status, acquisition.CreatedAt })
                     .ToArrayAsync(cancellationToken))
                 .GroupBy(acquisition => acquisition.EntityId!.Value)
-                .ToDictionary(group => group.Key, group => group.OrderByDescending(acquisition => acquisition.CreatedAt).First().Status);
+                .ToDictionary(
+                    group => group.Key,
+                    group => group
+                        .OrderByDescending(acquisition => acquisition.CreatedAt)
+                        .ThenByDescending(acquisition => acquisition.Id)
+                        .First().Status);
 
         // Tag names per entity, resolved through the tag relationship links and their target titles,
         // so list rows can surface tags (used as genres on the Jellyfin surface) without a detail load.
@@ -223,7 +229,9 @@ public sealed partial class EfEntityReadService {
                         ? parentKind
                         : null,
                 IsWanted = row.IsWanted,
-                WantedStatus = row.IsWanted && wantedStatusByEntity.TryGetValue(row.Id, out var wantedStatus)
+                HasSourceMedia = sourceMediaIds.Contains(row.Id),
+                LatestAcquisitionStatus = latestAcquisitionStatusByEntity.GetValueOrDefault(row.Id),
+                WantedStatus = row.IsWanted && latestAcquisitionStatusByEntity.TryGetValue(row.Id, out var wantedStatus)
                     ? wantedStatus
                     : null,
                 CreatedAt = row.CreatedAt,

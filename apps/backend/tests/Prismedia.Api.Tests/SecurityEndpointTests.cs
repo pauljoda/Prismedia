@@ -562,7 +562,8 @@ public sealed class SecurityEndpointTests : IDisposable {
             bool? hasFile = null,
             bool? played = null,
             bool? orphaned = null,
-        bool? wanted = null) {
+            bool? wanted = null,
+            AcquisitionStatus? acquisitionStatus = null) {
             var items = new[] {
                     Thumbnail(SfwVideoId, "Visible Movie", isNsfw: false),
                     Thumbnail(NsfwVideoId, "Hidden Movie", isNsfw: true)
@@ -688,7 +689,8 @@ public sealed class SecurityEndpointTests : IDisposable {
             bool? hasFile = null,
             bool? played = null,
             bool? orphaned = null,
-        bool? wanted = null) =>
+            bool? wanted = null,
+            AcquisitionStatus? acquisitionStatus = null) =>
             Task.FromResult(new EntityListResponse([], null, 0));
 
         public Task<EntityCard?> GetAsync(Guid id, bool hideNsfw, CancellationToken cancellationToken) =>
@@ -778,7 +780,8 @@ public sealed class SecurityEndpointTests : IDisposable {
             bool? hasFile = null,
             bool? played = null,
             bool? orphaned = null,
-        bool? wanted = null) {
+            bool? wanted = null,
+            AcquisitionStatus? acquisitionStatus = null) {
             IReadOnlyList<EntityThumbnail> items = kind switch {
                 "video" => [Thumbnail(StandaloneId, EntityKind.Video, "Standalone Video", null, null), Thumbnail(EpisodeId, EntityKind.Video, "Pilot", SeasonId, 1)],
                 "video-series" => [Thumbnail(SeriesId, EntityKind.VideoSeries, "The Chair Company", null, null)],
@@ -905,7 +908,8 @@ public sealed class SecurityEndpointTests : IDisposable {
             bool? hasFile = null,
             bool? played = null,
             bool? orphaned = null,
-        bool? wanted = null) =>
+            bool? wanted = null,
+            AcquisitionStatus? acquisitionStatus = null) =>
             Task.FromResult(new EntityListResponse([Thumbnail(VideoId, EntityKind.Video, "Rich Movie", null, null)], null, 1));
 
         public Task<EntityCard?> GetAsync(Guid id, bool hideNsfw, CancellationToken cancellationToken) =>
