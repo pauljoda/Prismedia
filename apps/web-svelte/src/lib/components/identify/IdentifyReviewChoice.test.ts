@@ -214,6 +214,26 @@ describe("IdentifyReviewChoice", () => {
     expect(screen.getByRole("button", { name: "Provider: AniList" })).toBeInTheDocument();
   });
 
+  it("sends every field declared by the selected plugin search schema", async () => {
+    render(IdentifyReviewChoice, {
+      props: {
+        entity: entity(),
+        candidates: [searchCandidate()],
+        providerId: "tmdb",
+      },
+    });
+
+    expect(screen.getByRole("textbox", { name: "Series title" })).toHaveValue("The Chair Company");
+    await fireEvent.input(screen.getByRole("spinbutton", { name: "Year" }), { target: { value: "2025" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Search" }));
+
+    expect(store.identifyEntity).toHaveBeenCalledWith(entity(), "tmdb", {
+      title: "The Chair Company",
+      fields: { seriesTitle: "The Chair Company", year: "2025" },
+      requireChoice: true,
+    });
+  });
+
   it("seeks through review query providers until candidates are found", async () => {
     store.providers = [
       provider("tmdb", "The Movie Database"),
@@ -242,8 +262,14 @@ describe("IdentifyReviewChoice", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Seek" }));
 
     await waitFor(() => expect(screen.getByText("Provider Match")).toBeInTheDocument());
-    expect(store.identifyEntity).toHaveBeenNthCalledWith(1, entity(), "anilist", { title: "The Chair Company" });
-    expect(store.identifyEntity).toHaveBeenNthCalledWith(2, entity(), "xvideos", { title: "The Chair Company" });
+    expect(store.identifyEntity).toHaveBeenNthCalledWith(1, entity(), "anilist", {
+      title: "The Chair Company",
+      fields: { seriesTitle: "The Chair Company" },
+    });
+    expect(store.identifyEntity).toHaveBeenNthCalledWith(2, entity(), "xvideos", {
+      title: "The Chair Company",
+      fields: { seriesTitle: "The Chair Company" },
+    });
     expect(store.reviewResolvedQueueItem).not.toHaveBeenCalled();
   });
 
@@ -272,7 +298,17 @@ function provider(id = "tmdb", name = "The Movie Database"): PluginProvider {
     installed: true,
     enabled: true,
     isNsfw: false,
-    supports: [{ entityKind: "video-series", actions: ["search"] }],
+    supports: [{
+      entityKind: "video-series",
+      actions: ["search"],
+      identityNamespaces: [id],
+      search: {
+        fields: [
+          { key: "seriesTitle", label: "Series title", type: "text", required: true },
+          { key: "year", label: "Year", type: "year", required: false },
+        ],
+      },
+    }],
     auth: [],
     missingAuthKeys: [],
   };
