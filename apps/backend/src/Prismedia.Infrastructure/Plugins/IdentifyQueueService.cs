@@ -1021,7 +1021,11 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
         if (proposal.TargetKind.ToEntityKind() != entity.KindCode.DecodeAs<EntityKind>()) {
             throw new InvalidOperationException("Identify proposal kind does not match the queued entity.");
         }
-        var acceptedProposal = AcceptedProposalMarker.MarkTreeOrganized(proposal);
+        var preparedProposal = await _identify.PrepareApplyProposalAsync(
+            entityId,
+            proposal,
+            cancellationToken);
+        var acceptedProposal = AcceptedProposalMarker.MarkTreeOrganized(preparedProposal);
         IdentifyApplyProgressReporter? progressReporter = null;
         if (request.ProgressId is { } progressId) {
             _progress.Begin(progressId, entityId, CountApplySteps(acceptedProposal, request.SelectedFields));
@@ -1029,7 +1033,7 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
         }
 
         try {
-            var applied = await _identify.ApplyAsync(
+            var applied = await _identify.ApplyPreparedProposalAsync(
                 entityId,
                 acceptedProposal,
                 request.SelectedFields,

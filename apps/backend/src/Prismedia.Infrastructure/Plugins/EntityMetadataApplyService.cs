@@ -132,6 +132,7 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
                 [entity.Id],
                 [],
                 progress: null,
+                identifyEligibility: null,
                 cancellationToken);
         }
 
@@ -213,12 +214,50 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
     /// <param name="progress">Optional progress reporter for synchronous queue accepts.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>True when the entity exists and was updated.</returns>
-    public async Task<bool> ApplyAsync(
+    public Task<bool> ApplyAsync(
         Guid entityId,
         EntityMetadataProposal proposal,
         IReadOnlyCollection<string> selectedFields,
         IReadOnlyDictionary<string, string?>? selectedImages,
         IIdentifyApplyProgressReporter? progress,
+        CancellationToken cancellationToken) =>
+        ApplyAsyncCore(
+            entityId,
+            proposal,
+            selectedFields,
+            selectedImages,
+            progress,
+            identifyEligibility: null,
+            cancellationToken);
+
+    /// <summary>
+    /// Applies a prepared Identify proposal with a final persisted-child eligibility guard. Request
+    /// metadata imports use the public apply overload and intentionally do not opt into this rule.
+    /// </summary>
+    internal Task<bool> ApplyIdentifyAsync(
+        Guid entityId,
+        EntityMetadataProposal proposal,
+        IReadOnlyCollection<string> selectedFields,
+        IReadOnlyDictionary<string, string?>? selectedImages,
+        IIdentifyApplyProgressReporter? progress,
+        IIdentifyTargetEligibilityService identifyEligibility,
+        CancellationToken cancellationToken) =>
+        ApplyAsyncCore(
+            entityId,
+            proposal,
+            selectedFields,
+            selectedImages,
+            progress,
+            identifyEligibility,
+            cancellationToken);
+
+    private async Task<bool> ApplyAsyncCore(
+        Guid entityId,
+        EntityMetadataProposal proposal,
+        IReadOnlyCollection<string> selectedFields,
+        IReadOnlyDictionary<string, string?>? selectedImages,
+        IIdentifyApplyProgressReporter? progress,
+        IIdentifyTargetEligibilityService? identifyEligibility,
         CancellationToken cancellationToken) {
         ArgumentNullException.ThrowIfNull(proposal);
         ArgumentNullException.ThrowIfNull(selectedFields);
@@ -296,6 +335,7 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
             [entity.Id],
             rootPath,
             progress,
+            identifyEligibility,
             cancellationToken);
 
         entity.UpdatedAt = now;

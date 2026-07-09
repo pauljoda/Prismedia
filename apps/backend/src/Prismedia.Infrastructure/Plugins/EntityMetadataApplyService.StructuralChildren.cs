@@ -29,6 +29,7 @@ public sealed partial class EntityMetadataApplyService {
         HashSet<Guid> visited,
         IReadOnlyList<string> parentPath,
         IIdentifyApplyProgressReporter? progress,
+        IIdentifyTargetEligibilityService? identifyEligibility,
         CancellationToken cancellationToken) {
         if (relationshipFieldsApplied) {
             foreach (var relation in relationshipProposals) {
@@ -42,7 +43,16 @@ public sealed partial class EntityMetadataApplyService {
                     continue;
                 }
 
-                await ApplyNodeAsync(linked, relation, isRelationship: true, now, visited, parentPath, progress, cancellationToken);
+                await ApplyNodeAsync(
+                    linked,
+                    relation,
+                    isRelationship: true,
+                    now,
+                    visited,
+                    parentPath,
+                    progress,
+                    identifyEligibility,
+                    cancellationToken);
                 visited.Remove(linked.Id);
             }
         }
@@ -54,14 +64,29 @@ public sealed partial class EntityMetadataApplyService {
 
             var childEntity = child.TargetEntityId is { } existingId
                 ? await _db.Entities.FirstOrDefaultAsync(row => row.Id == existingId, cancellationToken)
-                : await FindStructuralChildAsync(parentEntityId, child, cancellationToken)
-                    ?? MaterializeStructuralContainer(parentEntityId, child, now);
+                : await FindStructuralChildAsync(parentEntityId, child, cancellationToken);
+            var resolvedPersistedChild = childEntity is not null;
+            if (resolvedPersistedChild && identifyEligibility is not null &&
+                !(await identifyEligibility.EvaluateAsync(childEntity!.Id, cancellationToken)).IsEligible) {
+                continue;
+            }
+
+            childEntity ??= MaterializeStructuralContainer(parentEntityId, child, now);
             if (childEntity is null || !visited.Add(childEntity.Id)) {
                 continue;
             }
 
             await AdoptUnderParentAsync(childEntity, parentEntityId, now, cancellationToken);
-            await ApplyNodeAsync(childEntity, child, isRelationship: false, now, visited, parentPath, progress, cancellationToken);
+            await ApplyNodeAsync(
+                childEntity,
+                child,
+                isRelationship: false,
+                now,
+                visited,
+                parentPath,
+                progress,
+                identifyEligibility,
+                cancellationToken);
             visited.Remove(childEntity.Id);
         }
     }
@@ -138,6 +163,7 @@ public sealed partial class EntityMetadataApplyService {
         HashSet<Guid> visited,
         IReadOnlyList<string> parentPath,
         IIdentifyApplyProgressReporter? progress,
+        IIdentifyTargetEligibilityService? identifyEligibility,
         CancellationToken cancellationToken) {
         var title = !string.IsNullOrWhiteSpace(node.Patch.Title) ? node.Patch.Title.Trim() : entity.Title;
         var path = parentPath.Count == 0 ? [title] : parentPath.Concat([title]).ToArray();
@@ -160,6 +186,7 @@ public sealed partial class EntityMetadataApplyService {
             visited,
             path,
             progress,
+            identifyEligibility,
             cancellationToken);
     }
 
@@ -183,6 +210,17 @@ public sealed partial class EntityMetadataApplyService {
             child.Patch.Title,
             parentEntityId,
             cancellationToken);
+
+    /// <summary>
+    /// Resolves an unbound structural proposal exactly as the apply walk would, without creating a
+    /// new provider container. Identify uses this to canonicalize current local targets before it
+    /// filters stale descendants and records the accepted proposal.
+    /// </summary>
+    internal async Task<Guid?> ResolveExistingStructuralChildIdAsync(
+        Guid parentEntityId,
+        EntityMetadataProposal child,
+        CancellationToken cancellationToken) =>
+        (await FindStructuralChildAsync(parentEntityId, child, cancellationToken))?.Id;
 
     private async Task ApplyPatchToEntityAsync(
         EntityRow entity,

@@ -613,11 +613,17 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
         var executor = new CapturingProcessExecutor();
         var service = CreateIdentifyService(db, executor, _tempRoot);
 
-        var response = await service.IdentifyAsync(entityId, "tmdb", null, parentExternalIds: null, hideNsfw: true, CancellationToken.None);
+        var error = await Assert.ThrowsAsync<KeyNotFoundException>(() =>
+            service.IdentifyAsync(
+                entityId,
+                "tmdb",
+                null,
+                parentExternalIds: null,
+                hideNsfw: true,
+                CancellationToken.None));
 
-        Assert.False(response.Ok);
-        Assert.Null(response.Result);
-        Assert.Contains("was not found", response.Error);
+        Assert.Equal($"Entity '{entityId}' was not found.", error.Message);
+        Assert.DoesNotContain("Hidden Video", error.Message);
         Assert.Null(executor.CapturedRequest);
     }
 

@@ -63,6 +63,33 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         Assert.Empty(executor.Actions);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TransientIdentifyThrowsNotFoundForMissingOrHiddenTargets(bool hiddenNsfwTarget) {
+        await using var db = CreateContext();
+        var entityId = Guid.NewGuid();
+        if (hiddenNsfwTarget) {
+            SeedEntity(db, entityId, "video", "Private title", isNsfw: true);
+            await db.SaveChangesAsync();
+        }
+        var executor = new LookupMissSearchHitProcessExecutor();
+        var identify = CreateIdentifyService(db, executor, _tempRoot);
+
+        var error = await Assert.ThrowsAsync<KeyNotFoundException>(() =>
+            identify.IdentifyAsync(
+                entityId,
+                "tmdb",
+                null,
+                null,
+                hideNsfw: hiddenNsfwTarget,
+                CancellationToken.None));
+
+        Assert.Equal($"Entity '{entityId}' was not found.", error.Message);
+        Assert.DoesNotContain("Private title", error.Message);
+        Assert.Empty(executor.Actions);
+    }
+
     [Fact]
     public async Task AddAsyncCreatesDurableSearchItemForEntity() {
         await using var db = CreateContext();
@@ -933,6 +960,108 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         Assert.Equal(IdentifyQueueState.Proposal, (await db.IdentifyQueueItems.SingleAsync()).State);
     }
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task ApplyAsyncSkipsDescendantsThatBecameIneligibleDuringReview(
+        bool throughQueue,
+        bool staleProposalIsBound) {
+        await using var db = CreateContext();
+        var seriesId = Guid.NewGuid();
+        var staleSeasonId = Guid.NewGuid();
+        var eligibleSeasonId = Guid.NewGuid();
+        SeedEntity(db, seriesId, "video-series", "Original Series");
+        var staleSeason = SeedEntity(db, staleSeasonId, "video-season", "Requested Season");
+        staleSeason.ParentEntityId = seriesId;
+        staleSeason.SortOrder = 1;
+        db.EntityExternalIds.Add(new EntityExternalIdRow {
+            Id = Guid.NewGuid(),
+            EntityId = staleSeasonId,
+            Provider = "tmdb",
+            Value = "season-1",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        var eligibleSeason = SeedEntity(db, eligibleSeasonId, "video-season", "Original Season 2");
+        eligibleSeason.ParentEntityId = seriesId;
+        eligibleSeason.SortOrder = 2;
+        var proposal = ApplyRaceProposal(
+            seriesId,
+            staleSeasonId,
+            eligibleSeasonId,
+            staleProposalIsBound);
+        if (throughQueue) {
+            db.IdentifyQueueItems.Add(new IdentifyQueueItemRow {
+                Id = Guid.NewGuid(),
+                EntityId = seriesId,
+                State = IdentifyQueueState.Proposal,
+                ProviderCode = "tmdb",
+                Action = IdentifyAction.LookupId,
+                ProposalJson = JsonSerializer.Serialize(proposal, JsonOptions),
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow
+            });
+        }
+        await db.SaveChangesAsync();
+
+        staleSeason.IsWanted = true;
+        db.EntityFiles.RemoveRange(db.EntityFiles.Where(file => file.EntityId == staleSeasonId));
+        await db.SaveChangesAsync();
+
+        if (throughQueue) {
+            var progressId = Guid.NewGuid();
+            var progressStore = new InMemoryIdentifyApplyProgressStore();
+            var queue = new IdentifyQueueService(
+                db,
+                CreateIdentifyService(db, new ProposalProcessExecutor(), _tempRoot),
+                progressStore,
+                new RecordingJobQueue(),
+                new EfIdentifyTargetEligibilityService(db));
+            var result = await queue.ApplyAsync(
+                seriesId,
+                new ApplyIdentifyQueueItemRequest(proposal, ["title"], null, progressId),
+                CancellationToken.None);
+            Assert.Equal("done", result.State);
+            var appliedChildren = Assert.IsType<EntityMetadataProposal>(result.Proposal).Children;
+            Assert.Equal(
+                [eligibleSeasonId],
+                appliedChildren.Select(child => child.TargetEntityId.GetValueOrDefault()).ToArray());
+            var persistedProposal = JsonSerializer.Deserialize<EntityMetadataProposal>(
+                (await db.IdentifyQueueItems.AsNoTracking().SingleAsync()).ProposalJson!,
+                JsonOptions);
+            Assert.Equal(
+                [eligibleSeasonId],
+                Assert.IsType<EntityMetadataProposal>(persistedProposal).Children
+                    .Select(child => child.TargetEntityId.GetValueOrDefault())
+                    .ToArray());
+            Assert.Equal(2, progressStore.Get(progressId)?.Total);
+        } else {
+            var identify = CreateIdentifyService(db, new ProposalProcessExecutor(), _tempRoot);
+            Assert.True(await identify.ApplyAsync(
+                seriesId,
+                proposal,
+                ["title"],
+                selectedImages: null,
+                CancellationToken.None));
+        }
+
+        var entities = await db.Entities.ToDictionaryAsync(entity => entity.Id);
+        Assert.Equal(3, entities.Count);
+        Assert.Equal("Identified Series", entities[seriesId].Title);
+        Assert.Equal("Requested Season", entities[staleSeasonId].Title);
+        Assert.True(entities[staleSeasonId].IsWanted);
+        Assert.False(entities[staleSeasonId].IsOrganized);
+        Assert.Equal("Identified Season 2", entities[eligibleSeasonId].Title);
+        var staleExternalId = Assert.Single(
+            await db.EntityExternalIds
+                .Where(externalId => externalId.EntityId == staleSeasonId)
+                .ToArrayAsync());
+        Assert.Equal("tmdb", staleExternalId.Provider);
+        Assert.Equal("season-1", staleExternalId.Value);
+    }
+
     [Fact]
     public async Task ApplyAsyncRejectsScopedChildProposalForRootQueueItem() {
         await using var db = CreateContext();
@@ -1683,6 +1812,48 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             [],
             TargetEntityId: seriesId,
             Relationships: [person, tag]);
+    }
+
+    private static EntityMetadataProposal ApplyRaceProposal(
+        Guid seriesId,
+        Guid staleSeasonId,
+        Guid eligibleSeasonId,
+        bool staleProposalIsBound) {
+        EntityMetadataProposal Season(Guid? id, int number, string title) =>
+            new(
+                $"tmdb:season:{number}",
+                "tmdb",
+                ProposalKind.VideoSeason,
+                1,
+                "cascade",
+                EmptyPatch(title) with {
+                    ExternalIds = new Dictionary<string, string> { ["tmdb"] = $"season-{number}" },
+                    Positions = new Dictionary<string, int> { ["seasonNumber"] = number }
+                },
+                [],
+                [],
+                [],
+                TargetEntityId: id,
+                Relationships: []);
+
+        return new EntityMetadataProposal(
+            "tmdb:series:apply-race",
+            "tmdb",
+            ProposalKind.VideoSeries,
+            1,
+            "external-id",
+            EmptyPatch("Identified Series"),
+            [],
+            [
+                Season(
+                    staleProposalIsBound ? staleSeasonId : null,
+                    1,
+                    "Identified Season 1"),
+                Season(eligibleSeasonId, 2, "Identified Season 2")
+            ],
+            [],
+            TargetEntityId: seriesId,
+            Relationships: []);
     }
 
     private static EntityMetadataProposal AudioAlbumProposal(Guid albumId, Guid trackId) {
