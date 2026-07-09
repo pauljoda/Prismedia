@@ -55,7 +55,14 @@ internal static class EntityRelationshipModelConfiguration {
         });
 
         modelBuilder.Entity<EntityExternalIdRow>(entity => {
-            entity.ToTable("entity_external_ids");
+            entity.ToTable("entity_external_ids", table => {
+                table.HasCheckConstraint(
+                    "ck_entity_external_ids_provider_canonical",
+                    "provider = lower(btrim(provider)) AND provider <> ''");
+                table.HasCheckConstraint(
+                    "ck_entity_external_ids_value_canonical",
+                    "value = btrim(value) AND value <> ''");
+            });
             entity.HasKey(row => row.Id);
             entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
             entity.Property(row => row.EntityId).HasColumnName("entity_id");
@@ -65,7 +72,7 @@ internal static class EntityRelationshipModelConfiguration {
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
             entity.HasIndex(row => new { row.EntityId, row.Provider }).IsUnique();
-            entity.HasIndex(row => row.Provider);
+            entity.HasIndex(row => new { row.Provider, row.Value, row.EntityId });
             entity.HasOne<EntityRow>()
                 .WithMany()
                 .HasForeignKey(row => row.EntityId)

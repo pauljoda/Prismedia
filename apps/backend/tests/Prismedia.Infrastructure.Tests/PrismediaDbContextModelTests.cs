@@ -120,6 +120,34 @@ public sealed class PrismediaDbContextModelTests {
         Assert.Equal(typeof(EntityRow), parentFk!.PrincipalEntityType.ClrType);
     }
 
+    [Fact]
+    public void EntityExternalIdsUseCanonicalConstraintsAndANonUniqueResolutionIndex() {
+        using var db = CreateContext();
+        var modelEntity = db.GetService<IDesignTimeModel>().Model.FindEntityType(typeof(EntityExternalIdRow));
+
+        Assert.NotNull(modelEntity);
+        Assert.Contains(modelEntity!.GetCheckConstraints(), constraint =>
+            constraint.Name == "ck_entity_external_ids_provider_canonical");
+        Assert.Contains(modelEntity.GetCheckConstraints(), constraint =>
+            constraint.Name == "ck_entity_external_ids_value_canonical");
+
+        var resolutionIndex = modelEntity.GetIndexes().SingleOrDefault(index =>
+            index.Properties.Select(property => property.Name).SequenceEqual([
+                nameof(EntityExternalIdRow.Provider),
+                nameof(EntityExternalIdRow.Value),
+                nameof(EntityExternalIdRow.EntityId)
+            ]));
+        Assert.NotNull(resolutionIndex);
+        Assert.False(resolutionIndex!.IsUnique);
+
+        var entityNamespaceIndex = modelEntity.GetIndexes().Single(index =>
+            index.Properties.Select(property => property.Name).SequenceEqual([
+                nameof(EntityExternalIdRow.EntityId),
+                nameof(EntityExternalIdRow.Provider)
+            ]));
+        Assert.True(entityNamespaceIndex.IsUnique);
+    }
+
     [Theory]
     [InlineData(typeof(BookChapterDetailRow), "book_entity_id")]
     [InlineData(typeof(BookChapterDetailRow), "volume_entity_id")]
