@@ -771,6 +771,9 @@ public sealed class RequestCommitServiceTests {
 
         public Task<IReadOnlyList<Guid>> ListWantedChildIdsAsync(Guid parentEntityId, EntityKind childKind, CancellationToken cancellationToken) =>
             Task.FromResult(WantedChildren.GetValueOrDefault(parentEntityId, []));
+
+        public Task<IReadOnlyList<Guid>> ListChildIdsAsync(Guid parentEntityId, EntityKind childKind, CancellationToken cancellationToken) =>
+            Task.FromResult(WantedChildren.GetValueOrDefault(parentEntityId, []));
     }
 
     private sealed class FakeMonitorStore : Prismedia.Application.Acquisition.IMonitorStore {

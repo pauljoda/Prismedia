@@ -16,6 +16,7 @@ public static class EntityEndpoints {
         group.MapEntityProgressEndpoint();
         group.MapEntityMarkerEndpoints();
         group.MapEntityRefreshEndpoint();
+        group.MapEntityDeleteEndpoint();
 
         return routes;
     }

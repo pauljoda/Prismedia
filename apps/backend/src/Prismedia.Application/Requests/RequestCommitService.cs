@@ -84,6 +84,9 @@ public interface IWantedEntityWriter {
     /// season's missing episodes. These are the gaps a season-pack import left behind.
     /// </summary>
     Task<IReadOnlyList<Guid>> ListWantedChildIdsAsync(Guid parentEntityId, EntityKind childKind, CancellationToken cancellationToken);
+
+    /// <summary>Every child of the kind under a parent, wanted or owned — the recursion set for a deep missing-children sweep.</summary>
+    Task<IReadOnlyList<Guid>> ListChildIdsAsync(Guid parentEntityId, EntityKind childKind, CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -244,12 +247,14 @@ public sealed class RequestCommitService(
     }
 
     /// <summary>
-    /// Requests every still-wanted child phantom under an entity — the season-pack completeness
+    /// Requests every still-wanted descendant phantom under an entity — the season-pack completeness
     /// fallback. A season pack that imported with episodes missing chases each gap as its own
     /// monitored, auto-grabbing acquisition through the ordinary request pipeline (Sonarr's
     /// per-episode search); the manual "search missing" action rides the same path. A child already
-    /// carrying an acquisition counts as covered rather than starting a duplicate. Returns how many
-    /// gaps are now covered and how many exist; (0, 0) when the entity is gone or its kind has no
+    /// carrying an acquisition counts as covered rather than starting a duplicate. Owned container
+    /// children are recursed into (an on-disk season under a series can still hold episode gaps), so a
+    /// series-level sweep reaches every wanted descendant, not just wholly-missing seasons. Returns how
+    /// many gaps are now covered and how many exist; (0, 0) when the entity is gone or its kind has no
     /// committable child kind.
     /// </summary>
     public async Task<(int Covered, int Missing)> RequestMissingChildrenAsync(Guid entityId, CancellationToken cancellationToken) {
@@ -276,7 +281,25 @@ public sealed class RequestCommitService(
             }
         }
 
-        return (covered, missing.Count);
+        var total = missing.Count;
+
+        // Recurse into the OWNED container children when the child kind has its own committable child
+        // (a series' on-disk seasons). Wholly-wanted children were already requested above; recursing
+        // into them too would double-request their gaps through the phantom-descendants path.
+        if (RequestKindRegistry.ChildOf(child) is { Committable: true }) {
+            var wantedSet = missing.ToHashSet();
+            foreach (var ownedChildId in await wanted.ListChildIdsAsync(entityId, child.WantedEntityKind, cancellationToken)) {
+                if (wantedSet.Contains(ownedChildId)) {
+                    continue;
+                }
+
+                var (subCovered, subMissing) = await RequestMissingChildrenAsync(ownedChildId, cancellationToken);
+                covered += subCovered;
+                total += subMissing;
+            }
+        }
+
+        return (covered, total);
     }
 
     /// <summary>The stored library/profile choices of the entity's nearest monitored ancestor, or none.</summary>

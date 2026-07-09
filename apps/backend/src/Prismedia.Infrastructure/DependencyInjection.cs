@@ -161,6 +161,7 @@ public static class DependencyInjection {
         services.AddScoped<IEntityMetadataPatchService>(provider =>
             provider.GetRequiredService<EntityMetadataApplyService>());
         services.AddScoped<IEntityManagementService, EntityManagementService>();
+        services.AddScoped<IMediaEntityDeletionService, MediaEntityDeletionService>();
         services.AddScoped<IdentifyPluginService>();
         services.AddScoped<IIdentifyProviderService>(provider =>
             provider.GetRequiredService<IdentifyPluginService>());
