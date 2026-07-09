@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { PROGRESS_UNIT, READER_MODE } from "$lib/api/generated/codes";
+  import { CAPABILITY_KIND, PROGRESS_UNIT, READER_MODE } from "$lib/api/generated/codes";
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
@@ -120,7 +120,7 @@
   }
 
   async function loadSingleFileReader(nextBook: BookDetail, nextContext: BookReaderRouteContext) {
-    const progress = getCapability(nextBook.capabilities, "progress");
+    const progress = getCapability(nextBook.capabilities, CAPABILITY_KIND.progress);
     const resume = nextContext.command !== "start-over" && !progress?.completedAt;
     singleFileBook = true;
     singleFileSource = `/entities/${nextBook.id}/files/source`;
@@ -181,7 +181,7 @@
   // ── PDF reader (dedicated pdf.js reader: continuous scroll, selectable text) ──
 
   async function loadPdfReader(nextBook: BookDetail, nextContext: BookReaderRouteContext) {
-    const progress = getCapability(nextBook.capabilities, "progress");
+    const progress = getCapability(nextBook.capabilities, CAPABILITY_KIND.progress);
     const resume = nextContext.command !== "start-over" && !progress?.completedAt;
     pdfBook = true;
     pdfSource = `/entities/${nextBook.id}/files/source`;
@@ -279,7 +279,7 @@
   }
 
   async function resolveBookReader(nextBook: BookDetail, nextContext: BookReaderRouteContext) {
-    const progressChapterId = getCapability(nextBook.capabilities, "progress")?.currentEntityId ?? null;
+    const progressChapterId = getCapability(nextBook.capabilities, CAPABILITY_KIND.progress)?.currentEntityId ?? null;
     if (nextContext.command === "resume" && progressChapterId) {
       const progressChapter = await fetchEntity(progressChapterId);
       if (progressChapter.kind === ENTITY_KIND.bookChapter) {

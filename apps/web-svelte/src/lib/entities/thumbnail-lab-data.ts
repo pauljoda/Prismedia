@@ -1,4 +1,4 @@
-import { THUMBNAIL_HOVER_KIND } from "$lib/api/generated/codes";
+import { CAPABILITY_KIND, THUMBNAIL_HOVER_KIND } from "$lib/api/generated/codes";
 import type { EntityCapability, EntityKind } from "$lib/api/generated/model";
 import type {
   EntityThumbnailAsset,
@@ -122,7 +122,7 @@ function withNsfw(card: EntityThumbnailCard): EntityThumbnailCard {
     entity: {
       ...card.entity,
       capabilities: card.entity.capabilities.map((capability) =>
-        capability.kind === "flags"
+        capability.kind === CAPABILITY_KIND.flags
           ? {
               ...capability,
               isNsfw: true,

@@ -19,7 +19,7 @@
     updateOptimisticEntityRating,
   } from "$lib/entities/entity-detail-state";
   import { entityCardToDetailCard, type EntityDetailCardFull, type EntityDetailCredit, type EntityDetailTag } from "$lib/entities/entity-detail";
-  import { CREDIT_ROLE } from "$lib/entities/entity-codes";
+  import { CAPABILITY_KIND, CREDIT_ROLE } from "$lib/entities/entity-codes";
   import { resolveEntityHref } from "$lib/entities/entity-routes";
   import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
   import {
@@ -80,7 +80,7 @@
   const subLibraryCards = $derived(childCards.filter((c) => c.entity.kind === "audio-library"));
   const coverUrl = $derived.by(() => {
     if (!library) return undefined;
-    const images = getCapability(library.capabilities, "images");
+    const images = getCapability(library.capabilities, CAPABILITY_KIND.images);
     return assetUrl(images?.coverUrl ?? images?.thumbnailUrl) || undefined;
   });
   const identifyAction = useIdentifyDetailAction(() => library?.id, () => library?.kind);

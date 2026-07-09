@@ -16,7 +16,7 @@
     updateOptimisticEntityRating,
   } from "$lib/entities/entity-detail-state";
   import { entityCardToDetailCard, type EntityDetailCardFull, type EntityDetailCredit, type EntityDetailTag } from "$lib/entities/entity-detail";
-  import { CREDIT_ROLE } from "$lib/entities/entity-codes";
+  import { CAPABILITY_KIND, CREDIT_ROLE } from "$lib/entities/entity-codes";
   import { resolveEntityHref } from "$lib/entities/entity-routes";
   import {
     fetchOrderedEntityThumbnails,
@@ -58,7 +58,7 @@
 
   const artistCoverUrl = $derived.by(() => {
     if (!artist) return undefined;
-    const images = getCapability(artist.capabilities, "images");
+    const images = getCapability(artist.capabilities, CAPABILITY_KIND.images);
     return assetUrl(images?.coverUrl ?? images?.thumbnailUrl) || undefined;
   });
 

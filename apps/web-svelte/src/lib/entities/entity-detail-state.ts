@@ -1,5 +1,6 @@
 import type { EntityCapability } from "$lib/api/generated/model";
 import { getCapability, withFlagCapability, withRatingCapability } from "$lib/api/capabilities";
+import { CAPABILITY_KIND } from "$lib/entities/entity-codes";
 
 export type EntityFlagName = "isFavorite" | "isNsfw" | "isOrganized";
 
@@ -18,7 +19,7 @@ export type EntityFlagPersist = (
 ) => Promise<unknown>;
 
 export function entityFlagValue(entity: EntityDetailStateTarget, flag: EntityFlagName): boolean {
-  return getCapability(entity.capabilities, "flags")?.[flag] === true;
+  return getCapability(entity.capabilities, CAPABILITY_KIND.flags)?.[flag] === true;
 }
 
 export async function updateOptimisticEntityRating<T extends EntityDetailStateTarget>(

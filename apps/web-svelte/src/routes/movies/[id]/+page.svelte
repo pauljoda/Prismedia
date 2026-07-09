@@ -49,7 +49,7 @@
   } from "$lib/entities/entity-relationship-thumbnails";
   import { resolveEntityHref } from "$lib/entities/entity-routes";
   import { getChildIds } from "$lib/entities/entity-children";
-  import { CREDIT_ROLE, ENTITY_KIND, type EntityKindCode } from "$lib/entities/entity-codes";
+  import { CAPABILITY_KIND, CREDIT_ROLE, ENTITY_KIND, type EntityKindCode } from "$lib/entities/entity-codes";
   import { extractVideoPlayerProps, getPlaybackState } from "$lib/entities/video-capabilities";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import { useAppChrome } from "$lib/stores/app-chrome.svelte";
@@ -233,7 +233,7 @@
 
   const flagsNsfw = $derived.by(() => {
     if (!movie) return false;
-    const cap = getCapability(movie.capabilities, "flags");
+    const cap = getCapability(movie.capabilities, CAPABILITY_KIND.flags);
     return cap?.isNsfw === true;
   });
 
@@ -244,7 +244,7 @@
 
   const durationSeconds = $derived.by(() => {
     if (!video) return 0;
-    return durationToSeconds(getCapability(video.capabilities, "technical")?.duration ?? null) ?? 0;
+    return durationToSeconds(getCapability(video.capabilities, CAPABILITY_KIND.technical)?.duration ?? null) ?? 0;
   });
 
   let playbackBusy = $state(false);

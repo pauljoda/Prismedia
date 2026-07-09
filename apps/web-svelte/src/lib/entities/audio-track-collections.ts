@@ -3,7 +3,7 @@ import { getCapability } from "$lib/api/capabilities";
 import { fetchAudioLibrary, fetchMusicArtist } from "$lib/api/media";
 import { assetUrl } from "$lib/api/orval-fetch";
 import type { CollectionItem } from "$lib/collections/models";
-import { ENTITY_KIND } from "$lib/entities/entity-codes";
+import { CAPABILITY_KIND, ENTITY_KIND } from "$lib/entities/entity-codes";
 import { entityThumbnailToTrackItem } from "$lib/entities/audio-track-items";
 import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
 
@@ -123,7 +123,7 @@ function tracksFromAudioLibraryDetail(
 }
 
 function audioLibraryCoverUrl(detail: AudioLibraryDetail): string | null {
-  const images = getCapability(detail.capabilities, "images");
+  const images = getCapability(detail.capabilities, CAPABILITY_KIND.images);
   return assetUrl(images?.coverUrl ?? images?.thumbnailUrl) || null;
 }
 

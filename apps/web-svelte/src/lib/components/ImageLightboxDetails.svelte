@@ -7,6 +7,7 @@
     updateEntityRating,
   } from "$lib/api/entity-mutations";
   import { getCapability } from "$lib/api/capabilities";
+  import { CAPABILITY_KIND } from "$lib/entities/entity-codes";
   import {
     toggleOptimisticEntityFlag,
     updateOptimisticEntityRating,
@@ -42,7 +43,7 @@
   const credits = $derived.by((): Array<{ id: string; title: string }> => []);
   const dates = $derived.by(() => {
     if (!image) return [];
-    const cap = getCapability(image.capabilities, "dates");
+    const cap = getCapability(image.capabilities, CAPABILITY_KIND.dates);
     return cap?.items ?? [];
   });
 

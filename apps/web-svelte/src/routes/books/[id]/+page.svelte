@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { PROGRESS_UNIT } from "$lib/api/generated/codes";
+  import { CAPABILITY_KIND, PROGRESS_UNIT } from "$lib/api/generated/codes";
   import { onMount } from "svelte";
   import { afterNavigate, goto } from "$app/navigation";
   import { page } from "$app/state";
@@ -94,7 +94,7 @@
   const entityWanted = $derived(!!book && isWanted(book.capabilities));
   // Single-file books (EPUB/PDF) are read straight from the source file with no chapter entities.
   const isSingleFileBook = $derived(!!book && book.format !== "image-archive");
-  const singleFileProgress = $derived(book && isSingleFileBook ? getCapability(book.capabilities, "progress") : null);
+  const singleFileProgress = $derived(book && isSingleFileBook ? getCapability(book.capabilities, CAPABILITY_KIND.progress) : null);
   // Started once a position has been saved (EPUB and PDF both set currentEntityId to the book id).
   const singleFileInProgress = $derived(!!singleFileProgress?.currentEntityId && !singleFileProgress?.completedAt);
   // Single-file books have no chapter entities, so they need their own progress-panel display.
@@ -121,7 +121,7 @@
   );
   // Started/completed come straight from the progress capability (same source the grid card uses),
   // so the label is correct even for volume-only comics whose in-progress chapter isn't a direct child.
-  const comicProgress = $derived(book && !isSingleFileBook ? getCapability(book.capabilities, "progress") : undefined);
+  const comicProgress = $derived(book && !isSingleFileBook ? getCapability(book.capabilities, CAPABILITY_KIND.progress) : undefined);
   const comicStarted = $derived(!!comicProgress?.currentEntityId);
   const comicCompleted = $derived(!!comicProgress?.completedAt);
   const primaryReadLabel = $derived(
@@ -331,7 +331,7 @@
     nextBook: BookDetail,
     chapters: ChapterDetail[],
   ): Promise<BookReaderChapter | null> {
-    const progress = getCapability(nextBook.capabilities, "progress");
+    const progress = getCapability(nextBook.capabilities, CAPABILITY_KIND.progress);
     if (!progress?.currentEntityId || chapters.some((chapter) => chapter.detail.id === progress.currentEntityId)) {
       return null;
     }

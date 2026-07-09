@@ -25,7 +25,7 @@
     thumbnailsToCards,
   } from "$lib/entities/entity-relationship-thumbnails";
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
-  import { ENTITY_KIND } from "$lib/entities/entity-codes";
+  import { CAPABILITY_KIND, ENTITY_KIND } from "$lib/entities/entity-codes";
   import EntityAcquisitionCard from "$lib/components/acquisitions/EntityAcquisitionCard.svelte";
   import { useEntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
   import EntityDetail, {
@@ -69,7 +69,7 @@
 
   const seasonNumber = $derived.by(() => {
     if (!season) return null;
-    const pos = getCapability(season.capabilities, "position");
+    const pos = getCapability(season.capabilities, CAPABILITY_KIND.position);
     const item = pos?.items.find((p) => p.code === "season");
     return item ? Number(item.value) : null;
   });

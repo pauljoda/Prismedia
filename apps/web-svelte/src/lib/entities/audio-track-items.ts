@@ -1,5 +1,6 @@
 import type { AudioTrackDetail, EntityThumbnail } from "$lib/api/generated/model";
 import { getCapability } from "$lib/api/capabilities";
+import { CAPABILITY_KIND, ENTITY_FILE_ROLE } from "$lib/entities/entity-codes";
 import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
 
 export interface EntityThumbnailTrackItemOptions {
@@ -79,14 +80,14 @@ export function entityThumbnailToTrackItem(
 }
 
 export function audioTrackDetailToListItem(detail: AudioTrackDetail): AudioTrackListItemDto {
-  const technical = getCapability(detail.capabilities, "technical");
-  const playback = getCapability(detail.capabilities, "playback");
-  const rating = getCapability(detail.capabilities, "rating");
-  const flags = getCapability(detail.capabilities, "flags");
-  const files = getCapability(detail.capabilities, "files");
+  const technical = getCapability(detail.capabilities, CAPABILITY_KIND.technical);
+  const playback = getCapability(detail.capabilities, CAPABILITY_KIND.playback);
+  const rating = getCapability(detail.capabilities, CAPABILITY_KIND.rating);
+  const flags = getCapability(detail.capabilities, CAPABILITY_KIND.flags);
+  const files = getCapability(detail.capabilities, CAPABILITY_KIND.files);
 
   const waveformFile = files?.items.find(
-    (f) => typeof f.role === "string" && f.role.toLowerCase() === "waveform",
+    (file) => file.role === ENTITY_FILE_ROLE.waveform,
   );
 
   return {
