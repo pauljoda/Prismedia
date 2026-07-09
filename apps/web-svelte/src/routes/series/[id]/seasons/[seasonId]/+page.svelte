@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import { CloudDownload, Film, Info, SlidersHorizontal, Users } from "@lucide/svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
@@ -258,7 +259,12 @@
 
       {#snippet sectionContent(section)}
         {#if section.id === "acquisition"}
-          <EntityAcquisitionCard {acq} onCancelled={() => void loadSeason()} />
+          <EntityAcquisitionCard
+            {acq}
+            onCancelled={() => void loadSeason()}
+            entity={season ? { id: season.id, kind: season.kind, title: season.title } : undefined}
+            onDeleted={() => void goto(`/series/${seriesId}`)}
+          />
         {/if}
       {/snippet}
     </EntityDetail>

@@ -52,14 +52,17 @@ import type {
   DatabaseRestoreRequest,
   DatabaseRestoreScheduledResponse,
   DatabaseRestoreStatusResponse,
+  DeleteEntityParams,
   DeleteFileParams,
   DownloadClientSaveRequest,
   DownloadClientSummary,
   DownloadClientTestRequest,
   DownloadClientTestResponse,
   DownloadQueueItemView,
+  EntityBulkDeleteRequest,
   EntityCard,
   EntityCreateRequest,
+  EntityDeleteResponse,
   EntityFlagsUpdateRequest,
   EntityListResponse,
   EntityMarkerWriteRequest,
@@ -5100,6 +5103,58 @@ export const updateEntity = async (id: string,
 
 
 
+export type deleteEntityResponse200 = {
+  data: EntityDeleteResponse
+  status: 200
+}
+
+export type deleteEntityResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type deleteEntityResponseSuccess = (deleteEntityResponse200) & {
+  headers: Headers;
+};
+export type deleteEntityResponseError = (deleteEntityResponse404) & {
+  headers: Headers;
+};
+
+export type deleteEntityResponse = (deleteEntityResponseSuccess | deleteEntityResponseError)
+
+export const getDeleteEntityUrl = (id: string,
+    params?: DeleteEntityParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/entities/${id}?${stringifiedParams}` : `/api/entities/${id}`
+}
+
+/**
+ * @summary Permanently deletes a media entity (and its descendants), optionally including its files on disk.
+ */
+export const deleteEntity = async (id: string,
+    params?: DeleteEntityParams, options?: RequestInit): Promise<deleteEntityResponse> => {
+
+  return orvalFetch<deleteEntityResponse>(getDeleteEntityUrl(id,params),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
 export type getEntityThumbnailsResponse200 = {
   data: EntityThumbnailBatchResponse
   status: 200
@@ -5731,6 +5786,43 @@ export const refreshEntity = async (id: string, options?: RequestInit): Promise<
     method: 'POST'
 
 
+  }
+);}
+
+
+
+export type bulkDeleteEntitiesResponse200 = {
+  data: EntityDeleteResponse
+  status: 200
+}
+
+export type bulkDeleteEntitiesResponseSuccess = (bulkDeleteEntitiesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type bulkDeleteEntitiesResponse = (bulkDeleteEntitiesResponseSuccess)
+
+export const getBulkDeleteEntitiesUrl = () => {
+
+
+
+
+  return `/api/entities/bulk-delete`
+}
+
+/**
+ * @summary Permanently deletes the given media entities (and their descendants), optionally including their files on disk.
+ */
+export const bulkDeleteEntities = async (entityBulkDeleteRequest: EntityBulkDeleteRequest, options?: RequestInit): Promise<bulkDeleteEntitiesResponse> => {
+
+  return orvalFetch<bulkDeleteEntitiesResponse>(getBulkDeleteEntitiesUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      entityBulkDeleteRequest,)
   }
 );}
 

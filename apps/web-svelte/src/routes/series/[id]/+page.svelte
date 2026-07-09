@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
   import { Users, Building2, Calendar, CloudDownload, Info, SlidersHorizontal } from "@lucide/svelte";
@@ -311,7 +312,11 @@
 
       {#snippet sectionContent(section)}
         {#if section.id === "acquisition"}
-          <EntityAcquisitionCard {acq} />
+          <EntityAcquisitionCard
+            {acq}
+            entity={series ? { id: series.id, kind: series.kind, title: series.title } : undefined}
+            onDeleted={() => void goto("/series")}
+          />
         {/if}
       {/snippet}
     </EntityDetail>

@@ -31,6 +31,7 @@
     deleteTaxonomyEntity,
     isManageableTaxonomyKind,
   } from "$lib/api/taxonomy";
+  import { bulkDeleteMediaEntities, isDeletableMediaKind } from "$lib/api/entity-deletion";
   import { fetchImage, fetchVideo, type ImageDetail, type VideoDetail } from "$lib/api/media";
   import type { EntityCard } from "$lib/api/entities";
 
@@ -93,6 +94,8 @@
   // Create/delete management is offered only for the user-managed taxonomy kinds and when the
   // page provides a singular noun for the labels.
   const canManage = $derived(isManageableTaxonomyKind(kind) && Boolean(itemNoun));
+  // File-backed media kinds get a permanent delete-with-files bulk action instead.
+  const canDeleteMedia = $derived(!canManage && isDeletableMediaKind(kind));
   const noun = $derived(itemNoun ?? "item");
 
   let createOpen = $state(false);
@@ -100,11 +103,11 @@
   let pendingDeleteIds = $state<string[]>([]);
 
   const bulkActions = $derived<EntityGridBulkAction[]>(
-    canManage
+    canManage || canDeleteMedia
       ? [
           {
             id: "delete",
-            label: `Delete ${noun}`,
+            label: canManage ? `Delete ${noun}` : "Delete from library",
             tone: "danger",
             onRun: (selectedIds) => {
               pendingDeleteIds = selectedIds;
@@ -127,9 +130,17 @@
   }
 
   async function handleConfirmDelete() {
-    if (!isManageableTaxonomyKind(kind)) return;
     const ids = pendingDeleteIds;
-    await Promise.all(ids.map((id) => deleteTaxonomyEntity(kind, id)));
+    if (isManageableTaxonomyKind(kind)) {
+      await Promise.all(ids.map((id) => deleteTaxonomyEntity(kind, id)));
+    } else if (isDeletableMediaKind(kind)) {
+      const result = await bulkDeleteMediaEntities(ids, true);
+      if (result.failures.length > 0) {
+        throw new Error(result.failures[0].message);
+      }
+    } else {
+      return;
+    }
     pendingDeleteIds = [];
     await page.loadInitial();
   }
@@ -347,7 +358,7 @@
       loadingMore={page.loadingMore}
       loadMoreError={page.loadMoreError}
       {remoteTotalCount}
-      bulkActions={canManage ? bulkActions : undefined}
+      bulkActions={canManage || canDeleteMedia ? bulkActions : undefined}
       onCardActivate={enableLightbox ? handleCardActivate : undefined}
       onPageSizeChange={(size) => page.setPageSize(size)}
       onLoadMore={() => page.loadMore()}
@@ -370,6 +381,16 @@
     title={`Delete ${pendingDeleteIds.length === 1 ? noun : `${pendingDeleteIds.length} ${noun}s`}?`}
     message={`This removes ${pendingDeleteIds.length === 1 ? `the ${noun}` : `these ${noun}s`} and detaches ${pendingDeleteIds.length === 1 ? "it" : "them"} from any media. This cannot be undone.`}
     confirmLabel="Delete"
+    danger
+    onConfirm={handleConfirmDelete}
+    onClose={() => (confirmDeleteOpen = false)}
+  />
+{:else if canDeleteMedia}
+  <ConfirmDialog
+    open={confirmDeleteOpen}
+    title={`Delete ${pendingDeleteIds.length === 1 ? "this item" : `${pendingDeleteIds.length} items`} from the library?`}
+    message={`This permanently deletes ${pendingDeleteIds.length === 1 ? "the item" : "these items"} — including seasons, episodes, or other contents — AND their files from disk. Any active downloads and monitoring for ${pendingDeleteIds.length === 1 ? "it are" : "them are"} removed too. This cannot be undone.`}
+    confirmLabel="Delete files"
     danger
     onConfirm={handleConfirmDelete}
     onClose={() => (confirmDeleteOpen = false)}

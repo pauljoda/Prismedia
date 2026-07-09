@@ -13,4 +13,5 @@ export const BlocklistReason = {
   stalled: 'stalled',
   'no-importable-files': 'no-importable-files',
   manual: 'manual',
+  'wrong-content': 'wrong-content',
 } as const;

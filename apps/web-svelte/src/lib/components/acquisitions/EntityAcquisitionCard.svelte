@@ -7,14 +7,18 @@
    * page-owned {@link useEntityAcquisition} composable, whose `visible` also gates the tab itself;
    * this component only renders it. Renders nothing while the state says there is no story.
    */
-  import { Bell, BellRing, RefreshCw, Search } from "@lucide/svelte";
+  import { Bell, BellRing, RefreshCw, Search, Trash2 } from "@lucide/svelte";
   import { Button } from "@prismedia/ui-svelte";
   import AcquisitionPanel from "$lib/components/acquisitions/AcquisitionPanel.svelte";
+  import ConfirmDialog from "$lib/components/entities/ConfirmDialog.svelte";
+  import { deleteMediaEntity, isDeletableMediaKind } from "$lib/api/entity-deletion";
   import type { EntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
 
   let {
     acq,
     onCancelled,
+    entity,
+    onDeleted,
   }: {
     /** The page-owned acquisition state (from {@link useEntityAcquisition}). */
     acq: EntityAcquisition;
@@ -23,11 +27,28 @@
      * cancelling a request deletes its wanted placeholder, so the page it sat on no longer exists.
      */
     onCancelled?: () => void;
+    /**
+     * The entity this card manages, enabling the destructive "Remove from library" action for
+     * file-backed media kinds (deletes the entity, its descendants, and their files from disk).
+     * Omit to hide the action.
+     */
+    entity?: { id: string; kind: string; title: string };
+    /** Called after the entity is deleted — the page must navigate away (it no longer exists). */
+    onDeleted?: () => void;
   } = $props();
 
+  let confirmDeleteOpen = $state(false);
+
+  const canDelete = $derived(Boolean(entity && onDeleted && isDeletableMediaKind(entity.kind)));
   const hasActions = $derived(
-    acq.monitorActive || acq.showMonitor || acq.showSearch || acq.showSearchMissing,
+    acq.monitorActive || acq.showMonitor || acq.showSearch || acq.showSearchMissing || canDelete,
   );
+
+  async function handleConfirmDelete() {
+    if (!entity) return;
+    await deleteMediaEntity(entity.id, true);
+    onDeleted?.();
+  }
 </script>
 
 {#if acq.visible}
@@ -90,13 +111,34 @@
             disabled={acq.missingBusy}
             onclick={() => void acq.searchMissing()}
             class="no-lift gap-1.5 px-2.5 py-1 text-xs"
-            title="Request each missing item individually — every gap gets its own monitored search"
+            title="Sweep for anything missing at any depth — every gap gets its own monitored search"
           >
             <Search class="h-3.5 w-3.5" />
-            {acq.missingBusy ? "Searching…" : `Search ${acq.missingChildren.length} missing`}
+            {acq.missingBusy
+              ? "Searching…"
+              : acq.missingChildren.length > 0
+                ? `Search ${acq.missingChildren.length} missing`
+                : "Search missing content"}
+          </Button>
+        {/if}
+        {#if canDelete && entity}
+          <Button
+            type="button"
+            variant="danger"
+            size="sm"
+            onclick={() => (confirmDeleteOpen = true)}
+            class="no-lift ml-auto gap-1.5 px-2.5 py-1 text-xs"
+            title="Permanently delete this item, everything inside it, and its files on disk"
+          >
+            <Trash2 class="h-3.5 w-3.5" />
+            Remove from library
           </Button>
         {/if}
       </div>
+    {/if}
+
+    {#if acq.missingResult}
+      <p class="text-[0.72rem] text-text-muted">{acq.missingResult}</p>
     {/if}
 
     {#if acq.showMonitor && acq.trackedVia}
@@ -138,6 +180,18 @@
       <AcquisitionPanel acquisitionId={acq.acquisition.summary.id} bind:detail={acq.acquisition} {onCancelled} />
     {/if}
   </section>
+
+  {#if canDelete && entity}
+    <ConfirmDialog
+      open={confirmDeleteOpen}
+      title={`Delete "${entity.title}" from the library?`}
+      message="This permanently deletes it — including seasons, episodes, or other contents — AND its files from disk. Any active downloads and monitoring are removed too. This cannot be undone."
+      confirmLabel="Delete files"
+      danger
+      onConfirm={handleConfirmDelete}
+      onClose={() => (confirmDeleteOpen = false)}
+    />
+  {/if}
 {/if}
 
 <style>

@@ -413,6 +413,8 @@ export const RELEASE_REJECTION_REASON = {
   wrongTvUnit: "wrong-tv-unit",
   belowMinFormatScore: "below-min-format-score",
   dangerousContent: "dangerous-content",
+  titleMismatch: "title-mismatch",
+  wrongYear: "wrong-year",
 } as const;
 
 export type ReleaseRejectionReasonCode = (typeof RELEASE_REJECTION_REASON)[keyof typeof RELEASE_REJECTION_REASON];
@@ -439,6 +441,7 @@ export const BLOCKLIST_REASON = {
   stalled: "stalled",
   noImportableFiles: "no-importable-files",
   manual: "manual",
+  wrongContent: "wrong-content",
 } as const;
 
 export type BlocklistReasonCode = (typeof BLOCKLIST_REASON)[keyof typeof BLOCKLIST_REASON];

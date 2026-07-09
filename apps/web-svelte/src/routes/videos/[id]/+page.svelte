@@ -845,7 +845,12 @@
 
       {#snippet sectionContent(section)}
         {#if section.id === "acquisition"}
-          <EntityAcquisitionCard {acq} onCancelled={() => void loadVideo()} />
+          <EntityAcquisitionCard
+            {acq}
+            onCancelled={() => void loadVideo()}
+            entity={video ? { id: video.id, kind: video.kind, title: video.title } : undefined}
+            onDeleted={() => void goto(seriesRef ? `/series/${seriesRef.id}` : "/videos")}
+          />
         {:else}
           <VideoDetailSectionContent
             {section}
@@ -889,7 +894,12 @@
 
       {#snippet sectionContent(section)}
         {#if section.id === "acquisition"}
-          <EntityAcquisitionCard {acq} onCancelled={() => void loadVideo()} />
+          <EntityAcquisitionCard
+            {acq}
+            onCancelled={() => void loadVideo()}
+            entity={video ? { id: video.id, kind: video.kind, title: video.title } : undefined}
+            onDeleted={() => void goto(seriesRef ? `/series/${seriesRef.id}` : "/videos")}
+          />
         {/if}
       {/snippet}
     </EntityDetail>

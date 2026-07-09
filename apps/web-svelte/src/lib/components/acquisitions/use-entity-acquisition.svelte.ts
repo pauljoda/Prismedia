@@ -69,6 +69,8 @@ export interface EntityAcquisition {
   readonly syncBusy: boolean;
   readonly searchBusy: boolean;
   readonly missingBusy: boolean;
+  /** Outcome line of the last "search missing" run ("Searching for 3 missing items…"), cleared after a beat. */
+  readonly missingResult: string | null;
   /** Refresh acquisition + monitor state now (the poll re-reads the same slice). */
   refresh(): Promise<void>;
   toggleMonitor(): Promise<void>;
@@ -91,6 +93,7 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
   let syncBusy = $state(false);
   let searchBusy = $state(false);
   let missingBusy = $state(false);
+  let missingResult = $state<string | null>(null);
   let loadedId = $state<string | null>(null);
   let lastRequestedId = "";
 
@@ -126,9 +129,14 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
   const showSearch = $derived(
     wanted && acquisition === null && !!capabilities && !!firstProviderQualifiedId(capabilities),
   );
-  // "Search missing" requests each unrequested wanted child individually. Hidden while the entity
-  // itself is a plain phantom — "Search for release" (the whole unit) is the primary action there.
-  const showSearchMissing = $derived(missingChildren.length > 0 && !showSearch);
+  // "Search missing" requests each unrequested wanted descendant individually. Hidden while the
+  // entity itself is a plain phantom — "Search for release" (the whole unit) is the primary action
+  // there. Beyond the visible wanted-children roll-up, a MONITORED container always offers the
+  // action: gaps can hide below the immediate children (a partially-owned season's missing episodes
+  // under a series), which the server-side sweep reaches but the child cards cannot see.
+  const showSearchMissing = $derived(
+    !showSearch && (missingChildren.length > 0 || (monitorActive && options.childCards !== undefined)),
+  );
   const visible = $derived(
     (loadedId !== null && (showMonitor || showSearch || acquisition !== null)) ||
       childStatuses.length > 0,
@@ -227,13 +235,19 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
     }
   }
 
-  /** Requests each missing child (a season's absent episodes) as its own monitored acquisition. */
+  /** Requests each missing descendant (a season's absent episodes) as its own monitored acquisition. */
   async function searchMissing(): Promise<void> {
     const id = options.entityId();
     if (!id || missingBusy) return;
     missingBusy = true;
+    missingResult = null;
     try {
-      await requestMissingChildren(id);
+      const outcome = await requestMissingChildren(id);
+      missingResult =
+        outcome.missing === 0
+          ? "Nothing is missing right now."
+          : `Searching for ${outcome.covered} of ${outcome.missing} missing item${outcome.missing === 1 ? "" : "s"}.`;
+      setTimeout(() => (missingResult = null), 8000);
       await refresh();
       await options.onChanged?.();
     } catch {
@@ -307,6 +321,9 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
     },
     get missingBusy() {
       return missingBusy;
+    },
+    get missingResult() {
+      return missingResult;
     },
     refresh: () => refresh(),
     toggleMonitor,
