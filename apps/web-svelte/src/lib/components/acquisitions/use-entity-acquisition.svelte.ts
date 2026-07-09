@@ -73,6 +73,8 @@ export interface EntityAcquisition {
   readonly missingResult: string | null;
   /** Refresh acquisition + monitor state now (the poll re-reads the same slice). */
   refresh(): Promise<void>;
+  /** Immediately forgets an acquisition that the server deleted, unmounting every stale-id surface. */
+  clearAcquisition(): void;
   toggleMonitor(): Promise<void>;
   syncNow(): Promise<void>;
   searchMissing(): Promise<void>;
@@ -257,7 +259,7 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
     }
   }
 
-  /** Requests this phantom: starts its auto-grabbing, monitored acquisition and refreshes the page. */
+  /** Requests this phantom and refreshes only its acquisition slice; the Entity itself did not change. */
   async function searchForRelease(): Promise<void> {
     const id = options.entityId();
     if (!id || searchBusy) return;
@@ -265,7 +267,6 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
     try {
       await commitEntityRequest(id);
       await refresh();
-      await options.onChanged?.();
     } catch {
       // best-effort; the page reflects the last known state
     } finally {
@@ -326,6 +327,9 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
       return missingResult;
     },
     refresh: () => refresh(),
+    clearAcquisition: () => {
+      acquisition = null;
+    },
     toggleMonitor,
     syncNow,
     searchMissing,

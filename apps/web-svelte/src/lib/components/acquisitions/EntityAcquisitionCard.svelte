@@ -38,7 +38,7 @@
     /** Called after the entity was fully removed — the page must navigate away (it no longer exists). */
     onDeleted?: () => void;
     /** Called after the entity reverted to Wanted instead (still exists) — the page should refresh. */
-    onReverted?: () => void;
+    onReverted?: () => void | Promise<void>;
   } = $props();
 
   let confirmDeleteOpen = $state(false);
@@ -52,9 +52,12 @@
     if (!entity) return;
     const result = await deleteMediaEntity(entity.id, true);
     if ((Number(result.reverted) || 0) > 0) {
-      // Reverted to Wanted: the page still exists — refresh it so the wanted state shows.
+      // A monitored revert replaces the imported acquisition with a clean search after the Entity
+      // becomes fileless and Wanted. Clear the bound old id before loading that replacement so its
+      // panel cannot issue an action against acquisition state the server has retired.
+      acq.clearAcquisition();
       await acq.refresh();
-      onReverted?.();
+      await onReverted?.();
     } else {
       onDeleted?.();
     }
@@ -187,7 +190,9 @@
     {/if}
 
     {#if acq.acquisition}
-      <AcquisitionPanel acquisitionId={acq.acquisition.summary.id} bind:detail={acq.acquisition} {onCancelled} />
+      {#key acq.acquisition.summary.id}
+        <AcquisitionPanel acquisitionId={acq.acquisition.summary.id} bind:detail={acq.acquisition} {onCancelled} />
+      {/key}
     {/if}
   </section>
 
