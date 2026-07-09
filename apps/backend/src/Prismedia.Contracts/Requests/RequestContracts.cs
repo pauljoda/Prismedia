@@ -70,6 +70,17 @@ public sealed record RequestReviewRequest(
     ExternalIdentity ExternalIdentity);
 
 /// <summary>
+/// Requests the canonical plugin proposal for an existing library entity. The server resolves the
+/// entity's persistent identities through the central plugin router; callers never select or encode a
+/// plugin-qualified identifier.
+/// </summary>
+/// <param name="EntityId">Existing local entity whose persistent identities should be reviewed.</param>
+/// <param name="Kind">Request-flow kind that determines the plugin entity kind and proposal shape.</param>
+public sealed record RequestEntityReviewRequest(
+    Guid EntityId,
+    RequestMediaKind Kind);
+
+/// <summary>
 /// Canonical, unflattened plugin proposal used by every request review surface.
 /// </summary>
 /// <param name="PluginId">Stable manifest id of the plugin that resolved the proposal.</param>

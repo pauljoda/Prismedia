@@ -110,6 +110,34 @@ public static class RequestEndpoints {
             .Produces<ApiProblem>(StatusCodes.Status400BadRequest)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
+        group.MapPost("/review-entity", async (
+            RequestEntityReviewRequest request,
+            bool? hideNsfw,
+            HttpContext httpContext,
+            RequestEntityReviewService reviews,
+            CancellationToken cancellationToken) => {
+                if (request.EntityId == Guid.Empty || RequestKindRegistry.Find(request.Kind) is null) {
+                    return Results.BadRequest(new ApiProblem(
+                        ApiProblemCodes.RequestInvalid,
+                        "A valid entity id and known request kind are required."));
+                }
+
+                var review = await reviews.ReviewAsync(
+                    request,
+                    NsfwVisibility.ShouldHide(hideNsfw, httpContext),
+                    cancellationToken);
+                return review is null
+                    ? Results.NotFound(new ApiProblem(
+                        ApiProblemCodes.NotFound,
+                        "No installed plugin could review this entity's persistent identities."))
+                    : Results.Ok(review);
+            })
+            .WithName("ReviewEntityRequest")
+            .WithSummary("Gets a canonical request proposal for an existing entity by routing its persistent identities through capable plugins.")
+            .Produces<RequestReviewResponse>()
+            .Produces<ApiProblem>(StatusCodes.Status400BadRequest)
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+
         group.MapPost("/commit", async (
             RequestCommitRequest request,
             bool? hideNsfw,

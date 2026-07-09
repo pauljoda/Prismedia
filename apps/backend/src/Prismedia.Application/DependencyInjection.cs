@@ -52,6 +52,7 @@ public static class DependencyInjection {
         services.AddScoped<RequestSearchService>();
         services.AddScoped<RequestPluginSearchService>();
         services.AddScoped<RequestDetailService>();
+        services.AddScoped<RequestEntityReviewService>();
         services.AddScoped<RequestCommitService>();
         services.AddScoped<Acquisition.IndexerConfigCommandService>();
         services.AddScoped<Acquisition.DownloadClientCommandService>();
