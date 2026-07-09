@@ -17,6 +17,7 @@
   import ReviewSection from "$lib/components/review/ReviewSection.svelte";
   import ProposalContextBar from "$lib/components/review/ProposalContextBar.svelte";
   import ProposalFieldReviewSection from "$lib/components/review/ProposalFieldReviewSection.svelte";
+  import ProposalNodeGrid from "$lib/components/review/ProposalNodeGrid.svelte";
   import IdentifyTargetPreview from "./IdentifyTargetPreview.svelte";
   import {
     currentFieldValueForReview,
@@ -37,7 +38,6 @@
     proposalTitle,
     relationshipCard,
     creditCard,
-    childCard as buildChildCard,
     isLocalUnmatchedProposal,
     tagRelationshipForTitle,
   } from "./identify-review-helpers";
@@ -85,6 +85,12 @@
   const selectedTagCount = $derived(Object.values(selectedTags).filter(Boolean).length);
   const selectedChildCount = $derived(
     children.filter((child) => store.isReviewProposalSelected(child.proposalId)).length,
+  );
+  const selectedChildIds = $derived(
+    children.filter((child) => store.isReviewProposalSelected(child.proposalId)).map((child) => child.proposalId),
+  );
+  const selectableChildIds = $derived(
+    children.filter((child) => !isLocalUnmatchedProposal(child)).map((child) => child.proposalId),
   );
   const contextTitle = $derived(proposal.patch?.title?.trim() || "Child");
   // Music artists/albums/tracks use a square cover rather than a portrait poster.
@@ -167,6 +173,23 @@
   function setImageSelected(kind: string, url: string | null) {
     selectedImages = { ...selectedImages, [kind]: url };
     store.setReviewImageSelected(proposal.proposalId, kind, url);
+  }
+
+  function childImageUrl(child: EntityMetadataProposal): string | null {
+    return selectedProposalImageUrl(
+      child,
+      ["poster", "thumbnail", "cover", "logo"],
+      selectedImages,
+      proposal.proposalId,
+      store,
+    ) ?? proposalImageUrl(child, ["poster", "thumbnail", "cover", "logo"])
+      ?? (child.targetEntityId ? localChildrenById.get(child.targetEntityId)?.coverUrl ?? null : null);
+  }
+
+  function childImageAlt(child: EntityMetadataProposal): string {
+    return child.targetEntityId
+      ? localChildrenById.get(child.targetEntityId)?.title ?? child.patch?.title ?? child.targetKind
+      : child.patch?.title ?? child.targetKind;
   }
 
   function goBackToParent() {
@@ -412,19 +435,17 @@
       {#snippet icon()}
         <Layers class="h-3.5 w-3.5 text-text-accent" />
       {/snippet}
-      <div class="identify-thumbnail-grid p-3.5">
-        {#each children as child, i (child.proposalId)}
-          {@const localUnmatched = isLocalUnmatchedProposal(child)}
-          <EntityThumbnail
-            card={buildChildCard(child, i, "Episode", "video", selectedImages, proposal.proposalId, store, child.targetEntityId ? localChildrenById.get(child.targetEntityId) : null)}
-            linkable={false}
-            onActivate={() => goToChild(child)}
-            selectable={!localUnmatched}
-            selectMode
-            selected={!localUnmatched && store.isReviewProposalSelected(child.proposalId)}
-            onSelectedChange={(selected) => !localUnmatched && store.setReviewProposalSelected(child.proposalId, selected)}
-          />
-        {/each}
+      <div class="p-3.5">
+        <ProposalNodeGrid
+          nodes={children}
+          selectedIds={selectedChildIds}
+          selectableIds={selectableChildIds}
+          onSelectedChange={(proposalId, selected) => store.setReviewProposalSelected(proposalId, selected)}
+          onActivate={goToChild}
+          imageUrl={childImageUrl}
+          imageAlt={childImageAlt}
+          statusLabel={(child) => isLocalUnmatchedProposal(child) ? "No match" : "Matched"}
+        />
       </div>
     </ReviewSection>
   {/if}
