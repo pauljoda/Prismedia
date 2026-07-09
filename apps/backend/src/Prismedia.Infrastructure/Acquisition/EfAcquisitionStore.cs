@@ -25,6 +25,7 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
             Series = metadata.Series,
             SeasonNumber = metadata.SeasonNumber,
             EpisodeNumber = metadata.EpisodeNumber,
+            VolumeNumber = metadata.VolumeNumber,
             Year = metadata.Year,
             PosterUrl = metadata.PosterUrl,
             Description = metadata.Description,
@@ -71,7 +72,7 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
         var row = await db.Acquisitions
             .AsNoTracking()
             .Where(row => row.Id == id)
-            .Select(row => new { row.Id, row.Title, row.Author, row.Kind, row.EntityId, row.Year, row.ProfileId, row.Series, row.SeasonNumber, row.EpisodeNumber })
+            .Select(row => new { row.Id, row.Title, row.Author, row.Kind, row.EntityId, row.Year, row.ProfileId, row.Series, row.SeasonNumber, row.EpisodeNumber, row.VolumeNumber })
             .FirstOrDefaultAsync(cancellationToken);
         if (row is null) {
             return null;
@@ -88,7 +89,7 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
 
         return new AcquisitionSearchInput(
             row.Id, row.Title, row.Author, row.Kind, row.EntityId, year, row.ProfileId,
-            row.Series, row.SeasonNumber, row.EpisodeNumber);
+            row.Series, row.SeasonNumber, row.EpisodeNumber, row.VolumeNumber);
     }
 
     private static bool IsVideoKind(EntityKind kind) =>
@@ -186,6 +187,7 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
             Series = source.Series,
             SeasonNumber = source.SeasonNumber,
             EpisodeNumber = source.EpisodeNumber,
+            VolumeNumber = source.VolumeNumber,
             Year = source.Year,
             PosterUrl = source.PosterUrl,
             Description = source.Description,

@@ -84,6 +84,11 @@ public sealed class AcquisitionSearchRunner(
             rules = rules with { SeasonNumber = input.SeasonNumber, EpisodeNumber = input.EpisodeNumber };
         }
 
+        // Book/comic unit context, same pattern: the sought volume gates wrong-volume releases.
+        if (input.VolumeNumber is not null) {
+            rules = rules with { VolumeNumber = input.VolumeNumber };
+        }
+
         var blocklisted = await blocklist.GetIdentitiesAsync(cancellationToken);
         var engine = decisionEngines.Get(input.Kind);
 

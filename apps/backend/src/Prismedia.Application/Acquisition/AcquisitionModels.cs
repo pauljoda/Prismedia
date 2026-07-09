@@ -42,6 +42,14 @@ public sealed record BookAcquisitionRules(
     int? SeasonNumber = null,
     int? EpisodeNumber = null) {
     /// <summary>
+    /// Book/comic unit context: the volume this acquisition seeks, set per search by the runner (like
+    /// the TV unit fields), never by a profile. Feeds <see cref="BookUnitSpecification"/> so a release
+    /// declaring a DIFFERENT volume is rejected instead of winning on quality — the book analog of the
+    /// wrong-season TV gate. Null outside volume-scoped searches.
+    /// </summary>
+    public int? VolumeNumber { get; init; }
+
+    /// <summary>
     /// The transfer protocols an enabled download client can acquire, set per search by the runner from
     /// the configured clients (never by a profile). Defaults to torrent-only so rules built without a
     /// client lookup keep the historical behavior.
@@ -185,6 +193,7 @@ public sealed record IndexerSearchError(Guid IndexerId, string IndexerName, stri
 /// <param name="TargetLibraryRootId">The request-time import-target choice; null uses the kind's default.</param>
 /// <param name="SeasonNumber">Season number for TV units (season pack or single episode); null elsewhere.</param>
 /// <param name="EpisodeNumber">Episode number for a single-episode acquisition; null elsewhere.</param>
+/// <param name="VolumeNumber">Volume number for a volume-scoped book/comic acquisition; null elsewhere.</param>
 public sealed record AcquisitionMetadata(
     string Title,
     string? Author,
@@ -199,7 +208,8 @@ public sealed record AcquisitionMetadata(
     Guid? ProfileId = null,
     Guid? TargetLibraryRootId = null,
     int? SeasonNumber = null,
-    int? EpisodeNumber = null);
+    int? EpisodeNumber = null,
+    int? VolumeNumber = null);
 
 /// <summary>The minimal input the background search job needs to query indexers for an acquisition.</summary>
 /// <param name="Kind">The media kind being acquired; picks the decision engine and the Torznab category range.</param>
@@ -209,9 +219,11 @@ public sealed record AcquisitionMetadata(
 /// <param name="Series">Series context for TV units — the query ladder leads every rung with it.</param>
 /// <param name="SeasonNumber">Season number for TV units; builds the S01 / Season 1 rungs.</param>
 /// <param name="EpisodeNumber">Episode number for a single-episode acquisition; builds the S01E05 rungs.</param>
+/// <param name="VolumeNumber">Volume number for a volume-scoped book/comic acquisition; gates wrong-volume releases.</param>
 public sealed record AcquisitionSearchInput(
     Guid Id, string Title, string? Author, EntityKind Kind = EntityKind.Book, Guid? EntityId = null,
-    int? Year = null, Guid? ProfileId = null, string? Series = null, int? SeasonNumber = null, int? EpisodeNumber = null) {
+    int? Year = null, Guid? ProfileId = null, string? Series = null, int? SeasonNumber = null, int? EpisodeNumber = null,
+    int? VolumeNumber = null) {
     /// <summary>
     /// The title of the WORK this acquisition belongs to — the series for TV units (a season or episode
     /// acquisition's own Title is "Season 1" or the episode name), the author-qualified title for music,

@@ -53,11 +53,42 @@ public sealed class ProtocolSpecification : IReleaseSpecification {
 public sealed class BookTitleIdentitySpecification : IReleaseSpecification {
     public ReleaseRejectionReason Reason => ReleaseRejectionReason.TitleMismatch;
 
-    public ReleaseRejectionReason? Evaluate(IndexerRelease release, BookAcquisitionRules rules) =>
-        ReleaseTitleIdentity.ContainsRun(release.Title, rules.TargetTitle)
-            && ReleaseTitleIdentity.ContainsAllTokens(release.Title, rules.TargetAuthor)
-                ? null
-                : Reason;
+    public ReleaseRejectionReason? Evaluate(IndexerRelease release, BookAcquisitionRules rules) {
+        if (!ReleaseTitleIdentity.ContainsAllTokens(release.Title, rules.TargetAuthor)) {
+            return Reason;
+        }
+
+        if (ReleaseTitleIdentity.ContainsRun(release.Title, rules.TargetTitle)) {
+            return null;
+        }
+
+        // A volume-scoped phantom's own title is often just a volume label ("Vol. 3"), which never
+        // strict-matches release naming that spells it differently ("v03"). When the sought volume is
+        // known, the volume gate is the real identity check — accept on volume agreement instead.
+        return rules.VolumeNumber is { } volume && BookReleaseTokens.ParseVolume(release.Title) == volume
+            ? null
+            : Reason;
+    }
+}
+
+/// <summary>
+/// Rejects book/comic releases that name a DIFFERENT volume than the acquisition seeks — the book
+/// analog of the wrong-season TV gate (a Volume 1 search must never auto-grab Volume 3 on quality or
+/// seeders). Releases naming no volume pass: they may be the whole work, an omnibus, or simply
+/// unlabeled, and the ranking boost below prefers exact-volume releases over them. No-op outside
+/// volume-scoped searches — the volume rides the rules per search, never a profile.
+/// </summary>
+public sealed class BookUnitSpecification : IReleaseSpecification {
+    public ReleaseRejectionReason Reason => ReleaseRejectionReason.WrongVolume;
+
+    public ReleaseRejectionReason? Evaluate(IndexerRelease release, BookAcquisitionRules rules) {
+        if (rules.VolumeNumber is not { } volume) {
+            return null;
+        }
+
+        var declared = BookReleaseTokens.ParseVolume(release.Title);
+        return declared is null || declared == volume ? null : Reason;
+    }
 }
 
 /// <summary>
@@ -288,6 +319,7 @@ public sealed class BookReleaseDecisionEngine : IAcquisitionDecisionEngine {
     private static readonly IReleaseSpecification[] Specifications = [
         new DangerousContentSpecification(),
         new BookTitleIdentitySpecification(),
+        new BookUnitSpecification(),
         new ProtocolSpecification(),
         new DownloadLinkSpecification(),
         new FormatSpecification(),

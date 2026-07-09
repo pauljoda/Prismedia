@@ -123,7 +123,11 @@ public enum ReleaseRejectionReason {
 
     /// <summary>The release's title-adjacent year names a different same-name work (a remake or reboot from another year).</summary>
     [Code("wrong-year")]
-    WrongYear
+    WrongYear,
+
+    /// <summary>A book search: the release names a different volume than the one sought.</summary>
+    [Code("wrong-volume")]
+    WrongVolume
 }
 
 /// <summary>

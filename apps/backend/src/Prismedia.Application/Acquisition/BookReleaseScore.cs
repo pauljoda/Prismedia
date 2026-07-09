@@ -29,11 +29,22 @@ public static class BookReleaseScore {
     /// title, so an untagged release scores at the quality floor and is ordered purely by
     /// preference/seeders — never rejected here (acceptance is the engine's job).
     /// </summary>
+    /// <summary>
+    /// Volume-scoped searches: a release that NAMES the sought volume outranks a volume-less one
+    /// (which may be an omnibus or unlabeled), mirroring the TV exact-unit tier. Sized to dominate
+    /// quality and relevance so unit precision decides the auto-grab.
+    /// </summary>
+    public const double ExactVolumeBoost = 10_000_000;
+
     public static double Of(IndexerRelease release, BookAcquisitionRules rules) {
         var quality = BookFormatDetection.DetectQuality(release.Title).Value;
         var seeders = Math.Max(release.Seeders ?? 0, 0);
         var peers = Math.Max(release.Peers ?? 0, 0);
-        return (quality * QualityRankBoost)
+        var volumeBoost = rules.VolumeNumber is { } volume && BookReleaseTokens.ParseVolume(release.Title) == volume
+            ? ExactVolumeBoost
+            : 0;
+        return volumeBoost
+            + (quality * QualityRankBoost)
             + ReleaseTitleRelevance.Score(release, rules)
             + (MediaReleaseEvaluation.PreferenceScore(release, rules) * PreferenceBoost)
             + (Math.Log10(seeders + 1) * 100)

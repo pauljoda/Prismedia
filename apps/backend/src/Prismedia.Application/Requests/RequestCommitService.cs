@@ -376,7 +376,8 @@ public sealed class RequestCommitService(
                 targeting.ProfileId,
                 targeting.TargetLibraryRootId,
                 positions.TryGetValue(EntityPositionCodes.Season, out var season) ? season : null,
-                positions.TryGetValue(EntityPositionCodes.Episode, out var episode) ? episode : null),
+                positions.TryGetValue(EntityPositionCodes.Episode, out var episode) ? episode : null,
+                positions.TryGetValue(EntityPositionCodes.Volume, out var volume) ? volume : null),
             cancellationToken);
         await monitors.StartAsync(summary.Id, descriptor.AcquisitionKind, entity.Title, creator, cancellationToken);
         if (primaryId is not null) {
@@ -693,7 +694,8 @@ public sealed class RequestCommitService(
                     targeting.ProfileId,
                     targeting.TargetLibraryRootId,
                     patch is null ? null : RequestProposalReading.SeasonNumberOf(patch),
-                    patch is null ? null : RequestProposalReading.EpisodeNumberOf(patch)),
+                    patch is null ? null : RequestProposalReading.EpisodeNumberOf(patch),
+                    patch is null ? null : RequestProposalReading.VolumeNumberOf(patch)),
                 cancellationToken);
             acquisitionId = summary.Id;
             await monitors.StartAsync(summary.Id, acquisitionKind, pick.Title, author, cancellationToken);

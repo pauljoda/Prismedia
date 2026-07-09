@@ -273,6 +273,9 @@ public sealed class AcquisitionRow {
     /// <summary>Episode number for a single-episode acquisition. Null elsewhere (a season pack has only a season).</summary>
     public int? EpisodeNumber { get; set; }
 
+    /// <summary>Volume number for a volume-scoped book/comic acquisition; null elsewhere.</summary>
+    public int? VolumeNumber { get; set; }
+
     public int? Year { get; set; }
     public string? PosterUrl { get; set; }
 
