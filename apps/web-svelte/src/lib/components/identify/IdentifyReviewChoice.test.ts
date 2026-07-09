@@ -78,7 +78,7 @@ describe("IdentifyReviewChoice", () => {
 
     const card = screen.getByRole("button", { name: "Use The Chair Company (2025)" });
     expect(card).toHaveTextContent("A family man investigates a far-reaching conspiracy.");
-    const thumbnail = container.querySelector<HTMLElement>(".identify-candidate-card > div");
+    const thumbnail = container.querySelector<HTMLElement>(".plugin-candidate-card > div");
     expect(thumbnail).not.toBeNull();
     expect(thumbnail?.getAttribute("tabindex")).toBeNull();
     expect(container.querySelector(`img[src="${candidate.posterUrl}"]`)).toHaveAttribute("referrerpolicy", "no-referrer");
