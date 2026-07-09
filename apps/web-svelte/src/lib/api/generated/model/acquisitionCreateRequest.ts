@@ -42,4 +42,9 @@ export interface AcquisitionCreateRequest {
      * @pattern ^-?(?:0|[1-9]\d*)$
      */
   episodeNumber?: number | string | null;
+  /**
+     * @nullable
+     * @pattern ^-?(?:0|[1-9]\d*)$
+     */
+  volumeNumber?: number | string | null;
 }

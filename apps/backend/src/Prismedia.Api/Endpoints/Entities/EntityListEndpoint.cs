@@ -115,6 +115,9 @@ internal sealed record EntityListParameters {
     [FromQuery(Name = "orphaned")]
     public bool? Orphaned { get; init; }
 
+    [FromQuery(Name = "wanted")]
+    public bool? Wanted { get; init; }
+
     public EntityListQuery ToQuery(string? kind, bool? hideNsfw) => new() {
         Kind = kind,
         Query = Query,
@@ -138,5 +141,6 @@ internal sealed record EntityListParameters {
         HasFile = HasFile,
         Played = Played,
         Orphaned = Orphaned,
+        Wanted = Wanted,
     };
 }

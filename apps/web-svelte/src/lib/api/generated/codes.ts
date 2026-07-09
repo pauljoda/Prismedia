@@ -415,6 +415,7 @@ export const RELEASE_REJECTION_REASON = {
   dangerousContent: "dangerous-content",
   titleMismatch: "title-mismatch",
   wrongYear: "wrong-year",
+  wrongVolume: "wrong-volume",
 } as const;
 
 export type ReleaseRejectionReasonCode = (typeof RELEASE_REJECTION_REASON)[keyof typeof RELEASE_REJECTION_REASON];

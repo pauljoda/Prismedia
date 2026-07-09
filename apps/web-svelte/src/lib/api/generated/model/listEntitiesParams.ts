@@ -40,4 +40,5 @@ nsfw?: boolean;
 hasFile?: boolean;
 played?: boolean;
 orphaned?: boolean;
+wanted?: boolean;
 };
