@@ -67,8 +67,8 @@ public sealed record IndexerTestResponse(bool Connected, string? Message);
 /// <param name="Series">Optional series name stored for the import hint.</param>
 /// <param name="Year">Optional publication year stored for the import hint.</param>
 /// <param name="PosterUrl">Optional cover URL stored for the import hint.</param>
-/// <param name="PluginId">Optional plugin manifest id that supplied the metadata.</param>
-/// <param name="PluginItemId">Optional plugin item id (external-id value) for ID-first identify.</param>
+/// <param name="IdentityNamespace">Optional external identity namespace used for ID-first identify.</param>
+/// <param name="IdentityValue">Optional opaque value in <paramref name="IdentityNamespace"/>.</param>
 /// <param name="Kind">Media kind to acquire (book, movie, …). Defaults to book for the established book flow.</param>
 /// <param name="EntityId">Optional wanted library entity this acquisition fulfils; the import attaches its file to this entity.</param>
 public sealed record AcquisitionCreateRequest(
@@ -77,8 +77,8 @@ public sealed record AcquisitionCreateRequest(
     string? Series,
     int? Year,
     string? PosterUrl,
-    string? PluginId,
-    string? PluginItemId,
+    string? IdentityNamespace,
+    string? IdentityValue,
     string? Description = null,
     EntityKind Kind = EntityKind.Book,
     Guid? EntityId = null,

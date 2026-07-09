@@ -261,6 +261,29 @@ public sealed class EfAcquisitionStoreTests {
         Assert.Equal(2, context.SeasonNumber);
     }
 
+    [Fact]
+    public async Task AcquisitionIdentityPreservesCaseSensitiveColonValueThroughTheImportHint() {
+        await using var db = CreateContext();
+        var store = AcquisitionTestFactory.Store(db);
+        var identity = new ExternalIdentity(" TMDB ", " Series:Episode:AbC ");
+        var acquisition = await store.CreateAsync(
+            new AcquisitionMetadata("Show", null, null, null, null, identity),
+            CancellationToken.None);
+
+        var context = await store.GetImportContextAsync(acquisition.Id, CancellationToken.None);
+
+        Assert.Equal(identity, context!.ExternalIdentity);
+        await store.WriteImportHintAsync(
+            acquisition.Id,
+            "/media/tv/Show/S01/Episode.mkv",
+            context,
+            BookQualityRank.Floor,
+            CancellationToken.None);
+        var hint = await db.AcquisitionImportHints.AsNoTracking().SingleAsync();
+        Assert.Equal("tmdb", hint.IdentityNamespace);
+        Assert.Equal("Series:Episode:AbC", hint.IdentityValue);
+    }
+
     private static void AddHintWithEntity(PrismediaDbContext db, Guid entityId, string sourcePath) {
         var now = DateTimeOffset.UtcNow;
         var acquisitionId = Guid.NewGuid();

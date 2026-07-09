@@ -21,7 +21,7 @@ public sealed class AcquisitionEnrichJobHandler(
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var payload = AcquisitionJobPayload.Parse(context.Job.PayloadJson);
         var import = await acquisitions.GetImportContextAsync(payload.AcquisitionId, cancellationToken);
-        if (import is null || string.IsNullOrWhiteSpace(import.PluginId) || string.IsNullOrWhiteSpace(import.PluginItemId)) {
+        if (import?.ExternalIdentity is not { } externalIdentity) {
             return; // nothing to enrich from
         }
 
@@ -32,7 +32,7 @@ public sealed class AcquisitionEnrichJobHandler(
             // results here. An NSFW-flagged provider is skipped by the enricher.
             enrichment = await enricher.LookupByIdAsync(
                 import.Kind,
-                new ExternalIdentity(import.PluginId, import.PluginItemId),
+                externalIdentity,
                 hideNsfw: true,
                 cancellationToken);
         } catch (OperationCanceledException) {

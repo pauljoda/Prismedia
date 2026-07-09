@@ -344,7 +344,7 @@ public sealed class AcquisitionHintApplier(
             }
         }
 
-        AddIfValid(ids, hint.PluginId, hint.PluginItemId);
+        AddIfValid(ids, hint.IdentityNamespace, hint.IdentityValue);
 
         return ids.Values.ToArray();
     }

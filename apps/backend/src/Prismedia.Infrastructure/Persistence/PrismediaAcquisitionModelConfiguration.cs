@@ -202,8 +202,8 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.Year).HasColumnName("year");
             entity.Property(row => row.PosterUrl).HasColumnName("poster_url").HasMaxLength(2048);
             entity.Property(row => row.Description).HasColumnName("description");
-            entity.Property(row => row.PluginId).HasColumnName("plugin_id").HasMaxLength(256);
-            entity.Property(row => row.PluginItemId).HasColumnName("plugin_item_id").HasMaxLength(256);
+            entity.Property(row => row.IdentityNamespace).HasColumnName("identity_namespace").HasMaxLength(256);
+            entity.Property(row => row.IdentityValue).HasColumnName("identity_value").HasMaxLength(256);
             entity.Property(row => row.ExternalIdsJson).HasColumnName("external_ids_json").HasColumnType("jsonb");
             entity.Property(row => row.SourceUrlsJson).HasColumnName("source_urls_json").HasColumnType("jsonb");
             entity.Property(row => row.SelectedReleaseJson).HasColumnName("selected_release_json").HasColumnType("jsonb");
@@ -298,8 +298,8 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.AcquisitionId).HasColumnName("acquisition_id");
             entity.Property(row => row.EntityId).HasColumnName("entity_id");
             entity.Property(row => row.SourcePath).HasColumnName("source_path").HasMaxLength(2048).IsRequired();
-            entity.Property(row => row.PluginId).HasColumnName("plugin_id").HasMaxLength(256);
-            entity.Property(row => row.PluginItemId).HasColumnName("plugin_item_id").HasMaxLength(256);
+            entity.Property(row => row.IdentityNamespace).HasColumnName("identity_namespace").HasMaxLength(256);
+            entity.Property(row => row.IdentityValue).HasColumnName("identity_value").HasMaxLength(256);
             entity.Property(row => row.ExternalIdsJson).HasColumnName("external_ids_json").HasColumnType("jsonb");
             entity.Property(row => row.SourceUrlsJson).HasColumnName("source_urls_json").HasColumnType("jsonb");
             entity.Property(row => row.Title).HasColumnName("title").HasMaxLength(1024);

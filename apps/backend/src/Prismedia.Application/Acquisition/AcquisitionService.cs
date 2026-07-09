@@ -391,14 +391,14 @@ public sealed class AcquisitionService(
             throw new AcquisitionConfigurationException(ApiProblemCodes.AcquisitionInvalid, "A title is required to start an acquisition.");
         }
 
+        var externalIdentity = CreateExternalIdentity(request);
         var metadata = new AcquisitionMetadata(
             request.Title.Trim(),
             string.IsNullOrWhiteSpace(request.Author) ? null : request.Author.Trim(),
             string.IsNullOrWhiteSpace(request.Series) ? null : request.Series.Trim(),
             request.Year,
             string.IsNullOrWhiteSpace(request.PosterUrl) ? null : request.PosterUrl.Trim(),
-            string.IsNullOrWhiteSpace(request.PluginId) ? null : request.PluginId.Trim(),
-            string.IsNullOrWhiteSpace(request.PluginItemId) ? null : request.PluginItemId.Trim(),
+            externalIdentity,
             string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
             request.Kind,
             request.EntityId,
@@ -417,10 +417,11 @@ public sealed class AcquisitionService(
                 TargetLabel: summary.Title),
             cancellationToken);
 
-        // When the request came from a metadata plugin, enrich the held metadata in the background from the
-        // provider (cover, fuller description, dates the lightweight search result lacked), so the acquisition
-        // surface fills in and the imported book can be seeded. Best-effort — never blocks the request.
-        if (!string.IsNullOrWhiteSpace(metadata.PluginId) && !string.IsNullOrWhiteSpace(metadata.PluginItemId)) {
+        // When the request carries a persistent external identity, enrich the held metadata in the background
+        // through the plugin registered for its namespace (cover, fuller description, dates the lightweight
+        // search result lacked), so the acquisition surface fills in and the imported book can be seeded.
+        // Best-effort — never blocks the request.
+        if (metadata.ExternalIdentity is not null) {
             await queue.EnqueueAsync(
                 new EnqueueJobRequest(
                     JobType.AcquisitionEnrich,
@@ -431,6 +432,26 @@ public sealed class AcquisitionService(
         }
 
         return summary;
+    }
+
+    private static ExternalIdentity? CreateExternalIdentity(AcquisitionCreateRequest request) {
+        var hasNamespace = !string.IsNullOrWhiteSpace(request.IdentityNamespace);
+        var hasValue = !string.IsNullOrWhiteSpace(request.IdentityValue);
+        if (!hasNamespace && !hasValue) {
+            return null;
+        }
+
+        if (!hasNamespace || !hasValue) {
+            throw new AcquisitionConfigurationException(
+                ApiProblemCodes.AcquisitionInvalid,
+                "An external identity requires both a namespace and a value.");
+        }
+
+        try {
+            return new ExternalIdentity(request.IdentityNamespace!, request.IdentityValue!);
+        } catch (ArgumentException exception) {
+            throw new AcquisitionConfigurationException(ApiProblemCodes.AcquisitionInvalid, exception.Message);
+        }
     }
 
     /// <inheritdoc />

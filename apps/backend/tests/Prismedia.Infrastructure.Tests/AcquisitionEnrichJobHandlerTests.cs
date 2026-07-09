@@ -13,14 +13,14 @@ namespace Prismedia.Infrastructure.Tests;
 
 /// <summary>
 /// Covers the request-time metadata enrichment handler: it fills the held acquisition's gaps from the
-/// provider lookup, skips when there is no plugin id to look up, and is a best-effort no-op when the provider
+/// provider lookup, skips when there is no external identity to look up, and is a best-effort no-op when the provider
 /// returns nothing.
 /// </summary>
 public sealed class AcquisitionEnrichJobHandlerTests {
     [Fact]
     public async Task FillsGapsFromTheProviderLookup() {
         await using var db = CreateContext();
-        var id = await SeedAsync(db, pluginId: "openlibrary", pluginItemId: "OL123W", posterUrl: null);
+        var id = await SeedAsync(db, identityNamespace: "openlibrary", identityValue: "OL123W", posterUrl: null);
         var enricher = new FakeEnricher(new RequestMetadataEnrichment("A fuller description from the provider.", "http://covers/OL123W.jpg", 2024));
 
         await RunAsync(db, enricher, id);
@@ -33,9 +33,9 @@ public sealed class AcquisitionEnrichJobHandlerTests {
     }
 
     [Fact]
-    public async Task SkipsWhenThereIsNoPluginToLookUp() {
+    public async Task SkipsWhenThereIsNoExternalIdentityToLookUp() {
         await using var db = CreateContext();
-        var id = await SeedAsync(db, pluginId: null, pluginItemId: null, posterUrl: null);
+        var id = await SeedAsync(db, identityNamespace: null, identityValue: null, posterUrl: null);
         var enricher = new FakeEnricher(new RequestMetadataEnrichment("x", "y", 1));
 
         await RunAsync(db, enricher, id);
@@ -47,7 +47,7 @@ public sealed class AcquisitionEnrichJobHandlerTests {
     [Fact]
     public async Task ProviderMissLeavesHeldMetadataUntouched() {
         await using var db = CreateContext();
-        var id = await SeedAsync(db, pluginId: "openlibrary", pluginItemId: "OL9W", posterUrl: "http://held");
+        var id = await SeedAsync(db, identityNamespace: "openlibrary", identityValue: "OL9W", posterUrl: "http://held");
         var enricher = new FakeEnricher(null); // provider couldn't resolve it
 
         await RunAsync(db, enricher, id);
@@ -63,12 +63,12 @@ public sealed class AcquisitionEnrichJobHandlerTests {
         await handler.HandleAsync(new JobContext(job, new NoopJobQueue()), CancellationToken.None);
     }
 
-    private static async Task<Guid> SeedAsync(PrismediaDbContext db, string? pluginId, string? pluginItemId, string? posterUrl) {
+    private static async Task<Guid> SeedAsync(PrismediaDbContext db, string? identityNamespace, string? identityValue, string? posterUrl) {
         var now = DateTimeOffset.UtcNow;
         var id = Guid.NewGuid();
         db.Acquisitions.Add(new AcquisitionRow {
             Id = id, Status = AcquisitionStatus.Pending, Title = "B", ExternalIdsJson = "{}", SourceUrlsJson = "[]",
-            PluginId = pluginId, PluginItemId = pluginItemId, PosterUrl = posterUrl, CreatedAt = now, UpdatedAt = now
+            IdentityNamespace = identityNamespace, IdentityValue = identityValue, PosterUrl = posterUrl, CreatedAt = now, UpdatedAt = now
         });
         await db.SaveChangesAsync();
         return id;

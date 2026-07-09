@@ -110,7 +110,7 @@ public sealed class MovieMusicMergedImportTests : IDisposable {
 
         var import = new AcquisitionImportContext(
             acquisitionId, "Film", Author: null, Series: null, Year: 2020, PosterUrl: null,
-            PluginId: null, PluginItemId: null, ProfileId: null, ContentPath: payloadRoot,
+            ExternalIdentity: null, ProfileId: null, ContentPath: payloadRoot,
             ClientItemId: null, DownloadClientConfigId: null, Kind: EntityKind.Movie, EntityId: movieId);
 
         return new MovieWorld(engine, JobContextFor(JobType.AcquisitionImport), import, libraryRoot, ownedFilePath);
@@ -152,7 +152,7 @@ public sealed class MovieMusicMergedImportTests : IDisposable {
 
         var import = new AcquisitionImportContext(
             acquisitionId, "Album", Author: "The Artist", Series: null, Year: null, PosterUrl: null,
-            PluginId: null, PluginItemId: null, ProfileId: null, ContentPath: payloadRoot,
+            ExternalIdentity: null, ProfileId: null, ContentPath: payloadRoot,
             ClientItemId: null, DownloadClientConfigId: null, Kind: EntityKind.AudioLibrary, EntityId: albumId);
 
         return new MusicWorld(engine, JobContextFor(JobType.AcquisitionImport), import, libraryRoot, albumFolder);

@@ -194,14 +194,14 @@ public sealed record IndexerSearchError(Guid IndexerId, string IndexerName, stri
 /// <param name="SeasonNumber">Season number for TV units (season pack or single episode); null elsewhere.</param>
 /// <param name="EpisodeNumber">Episode number for a single-episode acquisition; null elsewhere.</param>
 /// <param name="VolumeNumber">Volume number for a volume-scoped book/comic acquisition; null elsewhere.</param>
+/// <param name="ExternalIdentity">Optional persistent identity of the requested work in an external namespace.</param>
 public sealed record AcquisitionMetadata(
     string Title,
     string? Author,
     string? Series,
     int? Year,
     string? PosterUrl,
-    string? PluginId,
-    string? PluginItemId,
+    ExternalIdentity? ExternalIdentity,
     string? Description = null,
     EntityKind Kind = EntityKind.Book,
     Guid? EntityId = null,
@@ -474,6 +474,7 @@ public sealed record ActiveTransfer(
 /// <param name="SeasonNumber">Season number for TV units; places files under the right season folder.</param>
 /// <param name="EpisodeNumber">Episode number for a single-episode acquisition; names files that carry no episode token.</param>
 /// <param name="EntityId">The wanted/monitored library entity this acquisition fulfills; an entity that already lives on disk redirects the import into its existing folder.</param>
+/// <param name="ExternalIdentity">Optional persistent identity carried from request through enrichment and import.</param>
 public sealed record AcquisitionImportContext(
     Guid Id,
     string Title,
@@ -481,8 +482,7 @@ public sealed record AcquisitionImportContext(
     string? Series,
     int? Year,
     string? PosterUrl,
-    string? PluginId,
-    string? PluginItemId,
+    ExternalIdentity? ExternalIdentity,
     Guid? ProfileId,
     string? ContentPath,
     string? ClientItemId,

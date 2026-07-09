@@ -4,6 +4,7 @@ using Prismedia.Application.Jobs;
 using Prismedia.Application.Requests;
 using Prismedia.Contracts.Acquisition;
 using Prismedia.Contracts.Plugins;
+using Prismedia.Contracts.System;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Tests.Acquisition;
@@ -14,6 +15,41 @@ public sealed class AcquisitionServiceTests {
     private static readonly Guid DefaultClientId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid RecordedClientId = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private const string ClientItemId = "download-owned-by-recorded-client";
+
+    [Fact]
+    public async Task CreateNormalizesTheNamespaceAndPreservesAnOpaqueColonIdentityValue() {
+        var harness = Harness(TransferInfo(RecordedClientId));
+
+        await harness.Service.CreateAndSearchAsync(
+            new AcquisitionCreateRequest(
+                "Show", null, null, null, null,
+                " TMDB ", " Series:Episode:AbC ",
+                Kind: EntityKind.VideoSeries),
+            CancellationToken.None);
+
+        Assert.Equal(
+            new ExternalIdentity("tmdb", "Series:Episode:AbC"),
+            harness.Store.CreatedMetadata!.ExternalIdentity);
+        Assert.Equal(
+            [JobType.AcquisitionSearch, JobType.AcquisitionEnrich],
+            harness.Queue.Requests.Select(request => request.Type).ToArray());
+    }
+
+    [Fact]
+    public async Task CreateRejectsAPartialExternalIdentity() {
+        var harness = Harness(TransferInfo(RecordedClientId));
+
+        var exception = await Assert.ThrowsAsync<AcquisitionConfigurationException>(() =>
+            harness.Service.CreateAndSearchAsync(
+                new AcquisitionCreateRequest(
+                    "Show", null, null, null, null,
+                    IdentityNamespace: "tmdb", IdentityValue: null),
+                CancellationToken.None));
+
+        Assert.Equal(ApiProblemCodes.AcquisitionInvalid, exception.Code);
+        Assert.Null(harness.Store.CreatedMetadata);
+        Assert.Empty(harness.Queue.Requests);
+    }
 
     [Fact]
     public async Task CancelAsyncRemovesTransferFromTheRecordedClient() {
@@ -113,10 +149,11 @@ public sealed class AcquisitionServiceTests {
         var configs = new FakeDownloadClientConfigStore(includeRecordedClient);
         var history = new FakeAcquisitionHistoryStore();
         var monitors = new RecordingMonitorStore();
+        var queue = new RecordingJobQueue();
         var service = new AcquisitionService(
             store,
             new ThrowingBlocklistStore(),
-            new ThrowingJobQueue(),
+            queue,
             configs,
             downloads,
             new EmptyImportedFilesReader(),
@@ -124,7 +161,7 @@ public sealed class AcquisitionServiceTests {
             NullLogger<AcquisitionService>.Instance,
             monitors);
 
-        return new TestHarness(service, store, downloads, history, monitors);
+        return new TestHarness(service, store, downloads, history, monitors, queue);
     }
 
     private sealed record TestHarness(
@@ -132,7 +169,8 @@ public sealed class AcquisitionServiceTests {
         FakeAcquisitionStore Store,
         RecordingDownloadClientFactory Downloads,
         FakeAcquisitionHistoryStore History,
-        RecordingMonitorStore Monitors);
+        RecordingMonitorStore Monitors,
+        RecordingJobQueue Queue);
 
     private sealed class FakeAcquisitionStore(AcquisitionTransferInfo transfer) : IAcquisitionStore {
         private readonly AcquisitionSummary _summary = new(
@@ -152,6 +190,7 @@ public sealed class AcquisitionServiceTests {
 
         public AcquisitionStatus? Status { get; private set; } = AcquisitionStatus.Downloading;
         public bool Deleted { get; private set; }
+        public AcquisitionMetadata? CreatedMetadata { get; private set; }
 
         public Task<AcquisitionDetail?> GetAsync(Guid id, CancellationToken cancellationToken) =>
             Task.FromResult<AcquisitionDetail?>(id == AcquisitionId
@@ -181,7 +220,15 @@ public sealed class AcquisitionServiceTests {
         public Task<AcquisitionTransferInfo?> GetTransferInfoAsync(Guid acquisitionId, CancellationToken cancellationToken) =>
             Task.FromResult<AcquisitionTransferInfo?>(acquisitionId == AcquisitionId ? transfer : null);
 
-        public Task<AcquisitionSummary> CreateAsync(AcquisitionMetadata metadata, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<AcquisitionSummary> CreateAsync(AcquisitionMetadata metadata, CancellationToken cancellationToken) {
+            CreatedMetadata = metadata;
+            return Task.FromResult(_summary with {
+                Status = AcquisitionStatus.Pending,
+                Title = metadata.Title,
+                Kind = metadata.Kind,
+                EntityId = metadata.EntityId
+            });
+        }
         public Task<IReadOnlyList<Guid>> ListStaleSearchingAsync(TimeSpan olderThan, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<IReadOnlyList<AcquisitionSummary>> ListAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<AcquisitionSearchInput?> GetSearchInputAsync(Guid id, CancellationToken cancellationToken) => throw new NotSupportedException();
@@ -308,10 +355,18 @@ public sealed class AcquisitionServiceTests {
         public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
-    private sealed class ThrowingJobQueue : IJobQueueService {
+    private sealed class RecordingJobQueue : IJobQueueService {
+        public List<EnqueueJobRequest> Requests { get; } = [];
+
         public Task<IReadOnlyList<JobRunSnapshot>> ListAsync(bool hideNsfw, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<JobRunSnapshot> EnqueueAsync(JobType type, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<JobRunSnapshot> EnqueueAsync(EnqueueJobRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<JobRunSnapshot> EnqueueAsync(EnqueueJobRequest request, CancellationToken cancellationToken) {
+            Requests.Add(request);
+            return Task.FromResult(new JobRunSnapshot(
+                Guid.NewGuid(), request.Type, JobRunStatus.Queued, 0, null,
+                request.PayloadJson ?? "{}", null, request.TargetEntityId, request.TargetLabel,
+                DateTimeOffset.UtcNow, null, null));
+        }
         public Task<bool> HasPendingAsync(JobType type, string? targetEntityId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<int> EnqueueBatchAsync(IReadOnlyList<EnqueueJobRequest> requests, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<int> CancelAsync(JobType? type, CancellationToken cancellationToken) => throw new NotSupportedException();

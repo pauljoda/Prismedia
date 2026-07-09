@@ -29,8 +29,8 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
             Year = metadata.Year,
             PosterUrl = metadata.PosterUrl,
             Description = metadata.Description,
-            PluginId = metadata.PluginId,
-            PluginItemId = metadata.PluginItemId,
+            IdentityNamespace = metadata.ExternalIdentity?.Namespace,
+            IdentityValue = metadata.ExternalIdentity?.Value,
             ExternalIdsJson = "{}",
             SourceUrlsJson = "[]",
             CreatedAt = now,
@@ -191,8 +191,8 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
             Year = source.Year,
             PosterUrl = source.PosterUrl,
             Description = source.Description,
-            PluginId = source.PluginId,
-            PluginItemId = source.PluginItemId,
+            IdentityNamespace = source.IdentityNamespace,
+            IdentityValue = source.IdentityValue,
             ExternalIdsJson = source.ExternalIdsJson,
             SourceUrlsJson = source.SourceUrlsJson,
             CreatedAt = now,
@@ -602,8 +602,9 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
             .Select(transfer => new { transfer.ContentPath, transfer.ClientItemId, transfer.DownloadClientConfigId })
             .FirstOrDefaultAsync(cancellationToken);
 
+        var externalIdentity = ToExternalIdentity(row.IdentityNamespace, row.IdentityValue);
         return new AcquisitionImportContext(
-            row.Id, row.Title, row.Author, row.Series, row.Year, row.PosterUrl, row.PluginId, row.PluginItemId,
+            row.Id, row.Title, row.Author, row.Series, row.Year, row.PosterUrl, externalIdentity,
             row.ProfileId, transfer?.ContentPath, transfer?.ClientItemId, transfer?.DownloadClientConfigId, row.Description,
             row.Kind, row.TargetLibraryRootId, row.SeasonNumber, row.EpisodeNumber, row.EntityId);
     }
@@ -655,8 +656,8 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
             .FirstOrDefaultAsync(cancellationToken);
 
         var externalIds = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        if (!string.IsNullOrWhiteSpace(context.PluginId) && !string.IsNullOrWhiteSpace(context.PluginItemId)) {
-            externalIds[context.PluginId] = context.PluginItemId;
+        if (context.ExternalIdentity is { } externalIdentity) {
+            externalIds[externalIdentity.Namespace] = externalIdentity.Value;
         }
 
         db.AcquisitionImportHints.Add(new AcquisitionImportHintRow {
@@ -664,8 +665,8 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
             AcquisitionId = acquisitionId,
             EntityId = wantedEntityId,
             SourcePath = sourcePath,
-            PluginId = context.PluginId,
-            PluginItemId = context.PluginItemId,
+            IdentityNamespace = context.ExternalIdentity?.Namespace,
+            IdentityValue = context.ExternalIdentity?.Value,
             ExternalIdsJson = JsonSerializer.Serialize(externalIds),
             SourceUrlsJson = "[]",
             Title = context.Title,
@@ -681,6 +682,20 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
             UpdatedAt = now
         });
         await db.SaveChangesAsync(cancellationToken);
+    }
+
+    private static ExternalIdentity? ToExternalIdentity(string? identityNamespace, string? identityValue) {
+        if (string.IsNullOrWhiteSpace(identityNamespace) || string.IsNullOrWhiteSpace(identityValue)) {
+            return null;
+        }
+
+        try {
+            return new ExternalIdentity(identityNamespace, identityValue);
+        } catch (ArgumentException) {
+            // Legacy rows may contain a partial or transient locator from before acquisition identities
+            // were validated at the application boundary. Treat those rows as having no stable identity.
+            return null;
+        }
     }
 
     public async Task<bool> AnyForEntityAsync(Guid entityId, CancellationToken cancellationToken) =>

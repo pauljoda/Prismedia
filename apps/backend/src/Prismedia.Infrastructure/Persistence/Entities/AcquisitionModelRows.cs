@@ -282,11 +282,11 @@ public sealed class AcquisitionRow {
     /// <summary>Description/overview captured at request time, held so the acquisition surface is populated before import and used to seed the imported book.</summary>
     public string? Description { get; set; }
 
-    /// <summary>Plugin manifest id that supplied the request metadata, used to stamp the imported entity for ID-first identify.</summary>
-    public string? PluginId { get; set; }
+    /// <summary>External identity namespace captured with the request and carried through import.</summary>
+    public string? IdentityNamespace { get; set; }
 
-    /// <summary>The plugin's item id for this book (the external-id value paired with <see cref="PluginId"/>).</summary>
-    public string? PluginItemId { get; set; }
+    /// <summary>Opaque external identity value paired with <see cref="IdentityNamespace"/>.</summary>
+    public string? IdentityValue { get; set; }
 
     /// <summary>Provider → external id map captured at request time (jsonb).</summary>
     public string ExternalIdsJson { get; set; } = "{}";
@@ -414,7 +414,7 @@ public sealed class DownloadTransferRow {
 
 /// <summary>
 /// Path-keyed identity hint written just before a completed acquisition enqueues a book scan. The
-/// scan stamps these external/plugin ids onto the newly created book entity so the existing
+/// scan stamps these external identities onto the newly created book entity so the existing
 /// auto-identify pipeline resolves it ID-first instead of re-discovering what the request already knew.
 /// </summary>
 public sealed class AcquisitionImportHintRow {
@@ -431,8 +431,11 @@ public sealed class AcquisitionImportHintRow {
     /// <summary>Normalized absolute path of the imported payload; the lookup key the scan matches against.</summary>
     public string SourcePath { get; set; } = string.Empty;
 
-    public string? PluginId { get; set; }
-    public string? PluginItemId { get; set; }
+    /// <summary>External identity namespace retained for the post-scan entity write.</summary>
+    public string? IdentityNamespace { get; set; }
+
+    /// <summary>Opaque external identity value paired with <see cref="IdentityNamespace"/>.</summary>
+    public string? IdentityValue { get; set; }
     public string ExternalIdsJson { get; set; } = "{}";
     public string SourceUrlsJson { get; set; } = "[]";
     public string? Title { get; set; }

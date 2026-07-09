@@ -39,8 +39,8 @@ public sealed class AcquisitionHintFolderOwnerTests {
         var seasonId = AddEntity(db, EntityKindRegistry.VideoSeason.Code, null, "/media/tv/Show/S01");
         AddHint(db, "/media/tv/Show/S01", """{" TMDB ":" 4242 ","openlibrary":"https://openlibrary.org/works/OL1W","isbn":"   "}""");
         var hint = Assert.Single(db.AcquisitionImportHints.Local);
-        hint.PluginId = "TMDB";
-        hint.PluginItemId = " 4242 ";
+        hint.IdentityNamespace = "TMDB";
+        hint.IdentityValue = " 4242 ";
         await db.SaveChangesAsync();
         var identities = new RecordingExternalIdentityStore();
 

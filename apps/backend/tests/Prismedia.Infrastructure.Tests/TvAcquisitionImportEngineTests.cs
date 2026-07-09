@@ -158,7 +158,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
 
         var import = new AcquisitionImportContext(
             acquisitionId, "Show", Author: null, Series: "Show", Year: null, PosterUrl: null,
-            PluginId: null, PluginItemId: null, ProfileId: null, ContentPath: payloadRoot,
+            ExternalIdentity: null, ProfileId: null, ContentPath: payloadRoot,
             ClientItemId: null, DownloadClientConfigId: null, Kind: EntityKind.VideoSeason,
             SeasonNumber: 1, EntityId: linkEntity ? seasonId : null);
 
