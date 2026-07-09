@@ -15,7 +15,7 @@
     type AcquisitionBulkAction,
     type AcquisitionListItem,
   } from "$lib/requests/acquisition-list-item";
-  import { ACTIVE_ACQUISITION_STATUSES } from "$lib/requests/review-cards";
+  import { ACTIVE_ACQUISITION_STATUSES } from "$lib/requests/acquisition-status";
 
   /**
    * The global Downloads view: every active acquisition across all kinds as a shared card list, with

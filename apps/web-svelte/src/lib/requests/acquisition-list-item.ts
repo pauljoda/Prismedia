@@ -29,7 +29,7 @@ import {
   entityReferenceToThumbnailCard,
   type EntityThumbnailCard,
 } from "$lib/entities/entity-thumbnail";
-import { acquisitionStatusLabel } from "$lib/requests/review-cards";
+import { acquisitionStatusLabel } from "$lib/requests/acquisition-status";
 import { assetUrl } from "$lib/api/orval-fetch";
 import { formatBytes, formatEta, formatRelativeTime, formatSpeed } from "$lib/utils/format";
 

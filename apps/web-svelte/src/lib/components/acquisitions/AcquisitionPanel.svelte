@@ -29,7 +29,7 @@
     uploadManualTorrent,
   } from "$lib/api/acquisitions";
   import { fetchMonitors, resumeMonitor, startMonitor, stopMonitor } from "$lib/api/monitors";
-  import { ACTIVE_ACQUISITION_STATUSES, acquisitionStatusLabel } from "$lib/requests/review-cards";
+  import { ACTIVE_ACQUISITION_STATUSES, acquisitionStatusLabel } from "$lib/requests/acquisition-status";
   import { formatBytes, formatEta, formatSpeed } from "$lib/utils/format";
 
   /**
