@@ -157,7 +157,8 @@ public static class DependencyInjection {
         services.AddScoped(provider => new EntityMetadataApplyService(
             provider.GetRequiredService<PrismediaDbContext>(),
             new PluginArtworkServiceOptions(cacheDir),
-            gridThumbnails: provider.GetRequiredService<IGridThumbnailService>()));
+            gridThumbnails: provider.GetRequiredService<IGridThumbnailService>(),
+            externalIdentities: provider.GetRequiredService<IEntityExternalIdentityStore>()));
         services.AddScoped<IEntityMetadataPatchService>(provider =>
             provider.GetRequiredService<EntityMetadataApplyService>());
         services.AddScoped<IEntityManagementService, EntityManagementService>();

@@ -5,6 +5,7 @@ using Prismedia.Application.Plugins;
 using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Plugins;
 using Prismedia.Domain.Entities;
+using Prismedia.Infrastructure.Entities;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 
@@ -28,6 +29,7 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
     };
 
     private readonly PrismediaDbContext _db;
+    private readonly IEntityExternalIdentityStore _externalIdentities;
     private readonly PluginArtworkDownloader _artwork;
     private readonly IGridThumbnailService? _gridThumbnails;
 
@@ -41,12 +43,18 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
     /// Optional grid-thumbnail generator; when present, entities that receive artwork get
     /// their grid-card cover variants regenerated as part of the apply.
     /// </param>
+    /// <param name="externalIdentities">
+    /// Canonical external-identity resolver and writer. The optional fallback preserves direct
+    /// construction in older integration tests while production supplies the scoped store.
+    /// </param>
     public EntityMetadataApplyService(
         PrismediaDbContext db,
         PluginArtworkServiceOptions options,
         HttpClient? http = null,
-        IGridThumbnailService? gridThumbnails = null) {
+        IGridThumbnailService? gridThumbnails = null,
+        IEntityExternalIdentityStore? externalIdentities = null) {
         _db = db;
+        _externalIdentities = externalIdentities ?? new EfEntityExternalIdentityStore(db, TimeProvider.System);
         _artwork = new PluginArtworkDownloader(db, options, http);
         _gridThumbnails = gridThumbnails;
     }
@@ -148,7 +156,7 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
         }
 
         if (fields.Contains("externalIds")) {
-            await ReplaceExternalIdsAsync(entity.Id, patch.ExternalIds, patch.Urls, now, cancellationToken);
+            await ReplaceExternalIdsAsync(entity.Id, patch.ExternalIds, patch.Urls, cancellationToken);
         }
 
         if (fields.Contains("urls")) {
@@ -237,7 +245,7 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
         }
 
         if (selected.Contains("externalIds")) {
-            await UpsertExternalIdsAsync(entityId, patch.ExternalIds, patch.Urls, now, cancellationToken);
+            await UpsertExternalIdsAsync(entityId, patch.ExternalIds, patch.Urls, cancellationToken);
         }
 
         if (selected.Contains("urls")) {

@@ -90,6 +90,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Monitored series, seasons, and other containers now offer "Search missing content" on their Acquisition tab: one click sweeps the whole item at any depth — including episode gaps hiding inside partially-downloaded seasons — and starts a monitored search for every gap, reporting how many it covered. The existing "Search N missing" action remains when gaps are already visible.
 
 ### Changed
+- Identify metadata application now resolves and persists all provider identities through the canonical Entity identity store, so multiple IDs are evaluated together and transient URL locators cannot leak into durable identity data.
 - Requests now resolve provider identities through the same canonical entity identity system as metadata imports; ambiguous duplicate identities stop with a clear conflict instead of silently binding to an arbitrary library item.
 - External identity lookup now returns every matching local Entity and reports ambiguity explicitly; identity writes use named add, update, or replace policies without silently committing another operation's transaction.
 - Plugin protocol compatibility is now enforced for both registry and installed manifests, and every plugin request uses one canonical protocol version instead of scattered literals.

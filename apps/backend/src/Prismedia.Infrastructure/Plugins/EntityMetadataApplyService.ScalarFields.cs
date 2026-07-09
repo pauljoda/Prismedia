@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Application.Entities;
 using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Plugins;
 using Prismedia.Domain.Capabilities;
@@ -47,73 +48,27 @@ public sealed partial class EntityMetadataApplyService {
         }
     }
 
-    private async Task ReplaceExternalIdsAsync(
+    private Task ReplaceExternalIdsAsync(
         Guid entityId,
         IReadOnlyDictionary<string, string> externalIds,
         IReadOnlyList<string> urls,
-        DateTimeOffset now,
-        CancellationToken cancellationToken) {
-        var existing = await _db.EntityExternalIds
-            .Where(row => row.EntityId == entityId)
-            .ToArrayAsync(cancellationToken);
-        _db.EntityExternalIds.RemoveRange(existing);
+        CancellationToken cancellationToken) =>
+        _externalIdentities.WriteAsync(
+            entityId,
+            BuildExternalIdentityAssociations(externalIds, urls),
+            ExternalIdentityWriteMode.ReplaceAll,
+            cancellationToken);
 
-        foreach (var (provider, rawValue) in externalIds) {
-            if (string.IsNullOrWhiteSpace(provider) || string.IsNullOrWhiteSpace(rawValue)) {
-                continue;
-            }
-
-            var value = rawValue.Trim();
-            var url = urls.FirstOrDefault(candidate => candidate.Contains(value, StringComparison.OrdinalIgnoreCase));
-            _db.EntityExternalIds.Add(new EntityExternalIdRow {
-                Id = Guid.NewGuid(),
-                EntityId = entityId,
-                Provider = provider.Trim(),
-                Value = value,
-                Url = url,
-                CreatedAt = now,
-                UpdatedAt = now
-            });
-        }
-    }
-
-    private async Task UpsertExternalIdsAsync(
+    private Task UpsertExternalIdsAsync(
         Guid entityId,
         IReadOnlyDictionary<string, string> externalIds,
         IReadOnlyList<string> urls,
-        DateTimeOffset now,
-        CancellationToken cancellationToken) {
-        foreach (var (provider, rawValue) in externalIds) {
-            if (string.IsNullOrWhiteSpace(provider) || string.IsNullOrWhiteSpace(rawValue)) {
-                continue;
-            }
-
-            var providerKey = provider.Trim();
-            var value = rawValue.Trim();
-            var existing = _db.EntityExternalIds.Local.FirstOrDefault(row =>
-                row.EntityId == entityId &&
-                row.Provider == providerKey &&
-                _db.Entry(row).State != EntityState.Deleted) ??
-                await _db.EntityExternalIds
-                    .FirstOrDefaultAsync(row => row.EntityId == entityId && row.Provider == providerKey, cancellationToken);
-            var url = urls.FirstOrDefault(candidate => candidate.Contains(value, StringComparison.OrdinalIgnoreCase));
-            if (existing is null) {
-                _db.EntityExternalIds.Add(new EntityExternalIdRow {
-                    Id = Guid.NewGuid(),
-                    EntityId = entityId,
-                    Provider = providerKey,
-                    Value = value,
-                    Url = url,
-                    CreatedAt = now,
-                    UpdatedAt = now
-                });
-            } else {
-                existing.Value = value;
-                existing.Url = url ?? existing.Url;
-                existing.UpdatedAt = now;
-            }
-        }
-    }
+        CancellationToken cancellationToken) =>
+        _externalIdentities.WriteAsync(
+            entityId,
+            BuildExternalIdentityAssociations(externalIds, urls),
+            ExternalIdentityWriteMode.Upsert,
+            cancellationToken);
 
     private async Task UpsertUrlsAsync(Guid entityId, IReadOnlyList<string> urls, DateTimeOffset now, CancellationToken cancellationToken) {
         var existing = await _db.EntityUrls

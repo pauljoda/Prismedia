@@ -199,7 +199,7 @@ public sealed partial class EntityMetadataApplyService {
         }
 
         if (patch.ExternalIds.Count > 0) {
-            await UpsertExternalIdsAsync(entity.Id, patch.ExternalIds, patch.Urls, now, cancellationToken);
+            await UpsertExternalIdsAsync(entity.Id, patch.ExternalIds, patch.Urls, cancellationToken);
         }
 
         if (patch.Urls.Count > 0) {

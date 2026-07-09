@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Application.Entities;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence.Entities;
 
@@ -28,10 +29,11 @@ public sealed partial class EntityMetadataApplyService {
 
     /// <summary>
     /// Resolves an existing entity for a proposal using one consistent rule across the whole apply
-    /// walk: a provider's stable external id is the strongest match and is tried first, then a
-    /// normalized case-insensitive title match. <paramref name="parentEntityId"/> scopes the match to
-    /// one parent's children (structural children), or is null for parent-agnostic taxonomy
-    /// (people/studios/tags). Returns null when nothing matches so the caller can create the entity.
+    /// walk: the proposal's complete valid external-identity set is the strongest evidence and is
+    /// resolved in one operation, then a normalized case-insensitive title match is used only when no
+    /// identity matches. <paramref name="parentEntityId"/> scopes the match to one parent's children
+    /// (structural children), or is null for parent-agnostic taxonomy (people/studios/tags). Returns
+    /// null when nothing matches so the caller can create the entity.
     /// </summary>
     private async Task<EntityRow?> FindEntityAsync(
         string kindCode,
@@ -39,10 +41,26 @@ public sealed partial class EntityMetadataApplyService {
         string? title,
         Guid? parentEntityId,
         CancellationToken cancellationToken) {
-        if (externalIds is { Count: > 0 }) {
-            var byExternalId = await FindEntityByExternalIdsAsync(kindCode, externalIds, parentEntityId, cancellationToken);
-            if (byExternalId is not null) {
-                return byExternalId;
+        var identities = BuildExternalIdentityAssociations(externalIds, [])
+            .Select(association => association.Identity)
+            .ToArray();
+        if (identities.Length > 0) {
+            var kind = kindCode.DecodeAs<EntityKind>();
+            var resolution = await _externalIdentities.ResolveAsync(
+                kind,
+                identities,
+                parentEntityId,
+                cancellationToken);
+            if (resolution.Status == ExternalIdentityResolutionStatus.Ambiguous) {
+                throw new ExternalIdentityAmbiguityException(kind, resolution);
+            }
+
+            if (resolution.EntityId is { } matchedEntityId) {
+                return _db.Entities.Local.FirstOrDefault(row =>
+                        row.Id == matchedEntityId && _db.Entry(row).State != EntityState.Deleted)
+                    ?? await _db.Entities.FirstOrDefaultAsync(
+                        row => row.Id == matchedEntityId,
+                        cancellationToken);
             }
         }
 
@@ -51,31 +69,53 @@ public sealed partial class EntityMetadataApplyService {
             : await FindEntityByTitleAsync(kindCode, title, parentEntityId, cancellationToken);
     }
 
-    private async Task<EntityRow?> FindEntityByExternalIdsAsync(
-        string kindCode,
-        IReadOnlyDictionary<string, string> externalIds,
-        Guid? parentEntityId,
-        CancellationToken cancellationToken) {
-        foreach (var (provider, value) in externalIds) {
-            if (string.IsNullOrWhiteSpace(provider) || string.IsNullOrWhiteSpace(value)) {
+    /// <summary>
+    /// Converts plugin-provided identity maps into canonical associations once for both resolution
+    /// and persistence. Invalid and URL-shaped locator values are transient proposal hints, not
+    /// persistable identities, so they are deliberately omitted here.
+    /// </summary>
+    private static IReadOnlyList<EntityExternalId> BuildExternalIdentityAssociations(
+        IReadOnlyDictionary<string, string>? externalIds,
+        IReadOnlyList<string> urls) {
+        if (externalIds is not { Count: > 0 }) {
+            return [];
+        }
+
+        var normalizedUrls = urls
+            .Where(url => !string.IsNullOrWhiteSpace(url))
+            .Select(url => url.Trim())
+            .ToArray();
+        var associations = new List<EntityExternalId>();
+        foreach (var (identityNamespace, value) in externalIds) {
+            if (!TryCreateExternalIdentity(identityNamespace, value, out var identity)) {
                 continue;
             }
 
-            var trimmedProvider = provider.Trim();
-            var trimmedValue = value.Trim();
-            var entity = await _db.EntityExternalIds
-                .Where(row => row.Provider == trimmedProvider && row.Value == trimmedValue)
-                .Join(_db.Entities, externalId => externalId.EntityId, candidate => candidate.Id, (_, candidate) => candidate)
-                .FirstOrDefaultAsync(
-                    candidate => candidate.KindCode == kindCode &&
-                        (parentEntityId == null || candidate.ParentEntityId == parentEntityId),
-                    cancellationToken);
-            if (entity is not null) {
-                return entity;
-            }
+            var url = normalizedUrls.FirstOrDefault(candidate =>
+                candidate.Contains(identity.Value, StringComparison.OrdinalIgnoreCase));
+            associations.Add(new EntityExternalId(identity, url));
         }
 
-        return null;
+        return associations
+            .DistinctBy(association => association.Identity)
+            .ToArray();
+    }
+
+    private static bool TryCreateExternalIdentity(
+        string identityNamespace,
+        string value,
+        out ExternalIdentity identity) {
+        identity = null!;
+        if (string.IsNullOrWhiteSpace(identityNamespace) || string.IsNullOrWhiteSpace(value)) {
+            return false;
+        }
+
+        try {
+            identity = new ExternalIdentity(identityNamespace, value);
+            return true;
+        } catch (ArgumentException) {
+            return false;
+        }
     }
 
     /// <summary>
