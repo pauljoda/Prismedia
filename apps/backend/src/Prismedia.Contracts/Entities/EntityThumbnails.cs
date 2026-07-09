@@ -39,7 +39,7 @@ public sealed record EntityThumbnail(
     int? Rating,
     bool IsFavorite,
     bool IsNsfw,
-    bool IsOrganized) {
+    bool IsOrganized) : IEntitySummary {
     /// <summary>
     /// Double-density companion of <see cref="CoverThumbUrl"/> for high-DPI displays.
     /// Falls back to <see cref="CoverThumbUrl"/> when the 2x grid variant has not been generated yet.

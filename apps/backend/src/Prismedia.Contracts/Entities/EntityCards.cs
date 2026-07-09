@@ -23,35 +23,11 @@ public sealed record EntityCreditMetadata(
     IReadOnlyList<string> Characters);
 
 /// <summary>
-/// Shared shape implemented by every entity card and kind-specific detail contract.
-/// Carries the fields common to all entities so detail routes can be returned as a single
-/// strongly typed contract instead of <see cref="object"/>.
+/// Backward-compatible name for the shared entity document contract used by existing application
+/// and API consumers. New cross-cutting code should depend on <see cref="IEntityDocument"/> when it
+/// needs the full detail envelope.
 /// </summary>
-public interface IEntityCard {
-    /// <summary>Global entity identifier.</summary>
-    Guid Id { get; }
-
-    /// <summary>Entity kind.</summary>
-    EntityKind Kind { get; }
-
-    /// <summary>Primary display title.</summary>
-    string Title { get; }
-
-    /// <summary>Structural parent entity identifier, or null for root and virtual collection children.</summary>
-    Guid? ParentEntityId { get; }
-
-    /// <summary>Optional structural order under the parent entity.</summary>
-    int? SortOrder { get; }
-
-    /// <summary>Shared capabilities already projected for the card.</summary>
-    IReadOnlyList<EntityCapability> Capabilities { get; }
-
-    /// <summary>Generic child groups keyed by entity kind.</summary>
-    IReadOnlyList<EntityGroup> ChildrenByKind { get; }
-
-    /// <summary>Generic non-structural relationship groups keyed by entity kind.</summary>
-    IReadOnlyList<EntityGroup> Relationships { get; }
-}
+public interface IEntityCard : IEntityDocument;
 
 /// <summary>
 /// Abstract base for every entity detail contract. Owns the cross-cutting envelope so
