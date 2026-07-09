@@ -1,379 +1,166 @@
 ---
 sidebar_position: 3
-title: Capabilities
-description: Every action a plugin can declare, what input it gets, and what shape it returns.
+title: Identify Protocol
+description: The actions, request envelope, candidates, proposals, and identity rules shared by Prismedia plugins.
 ---
 
-# Capabilities
+# Identify Protocol
 
-A plugin's `capabilities` map declares which actions it implements. Each capability key corresponds to a single `action` string the engine may dispatch.
+Every native metadata plugin implements one protocol regardless of media kind.
+Prismedia sends an `IdentifyPluginRequest` to the plugin process and receives an
+`IdentifyPluginResponse` containing candidates, a hydrated proposal, or no
+match.
 
-The canonical declaration is the manifest's `supports` array (see [Manifest Reference](./manifest.md#entity-support)); the capability keys below describe the identify actions the engine can dispatch.
+The server-side source of truth is under
+`apps/backend/src/Prismedia.Contracts/Plugins/`.
 
-```ts
-export interface PluginCapabilities {
-  // Video
-  videoByURL?: boolean;
-  videoByFragment?: boolean;
-  videoByName?: boolean;
+## Actions
 
-  // Folder (series / season)
-  folderByName?: boolean;
-  folderByFragment?: boolean;
-  folderCascade?: boolean;
-
-  // Gallery
-  galleryByURL?: boolean;
-  galleryByFragment?: boolean;
-
-  // Image
-  imageByURL?: boolean;
-
-  // Audio
-  audioByURL?: boolean;
-  audioByFragment?: boolean;
-  audioLibraryByName?: boolean;
-
-  // People (Stash-compatible performer contract)
-  performerByURL?: boolean;
-  performerByFragment?: boolean;
-  performerByName?: boolean;
-
-  // Movie
-  movieByName?: boolean;
-  movieByURL?: boolean;
-  movieByFragment?: boolean;
-
-  // Series
-  seriesByName?: boolean;
-  seriesByURL?: boolean;
-  seriesByFragment?: boolean;
-  seriesCascade?: boolean;
-
-  // Episode
-  episodeByName?: boolean;
-  episodeByFragment?: boolean;
-
-  // Batch
-  supportsBatch?: boolean;
-}
-```
-
-Declare only what your plugin can actually answer. The engine uses the map to filter the provider picker, so an over-declared capability becomes a dead-end the user has to discover by trying it.
-
-## The capability matrix
-
-### Video lookups
-
-| Action | Input fields used | Returns | When it fires |
-| --- | --- | --- | --- |
-| `videoByURL` | `url` | `NormalizedVideoResult` | Identify on a single video, user pastes a URL. |
-| `videoByName` | `title`, `name`, `date` | `NormalizedVideoResult` | Identify on a single video, name-based fallback. |
-| `videoByFragment` | `oshash`, `checksumMd5`, `duration` | `NormalizedVideoResult` | Fingerprint-based lookup. |
-
-### Folder / series identification
-
-| Action | Input fields used | Returns | When it fires |
-| --- | --- | --- | --- |
-| `folderByName` | `name`, `title` | `NormalizedFolderResult` | A series or season is identified by its folder name. |
-| `folderByFragment` | (heuristic) | `NormalizedFolderResult` | Folder structure heuristics. |
-| `folderCascade` | `externalId` (from prior lookup), `seasonNumber` | `NormalizedFolderResult` with `episodeMap` | Map a series's child files to specific episodes. |
-
-The cascade pattern: a `folderByName` returns a `seriesExternalId`, then `folderCascade` is invoked with that ID + each season number to pull down the episode list.
-
-### Gallery & image
-
-| Action | Input | Returns |
+| Action | Input | Expected result |
 | --- | --- | --- |
-| `galleryByURL` | `url` | `NormalizedGalleryResult` |
-| `galleryByFragment` | (provider-specific) | `NormalizedGalleryResult` |
-| `imageByURL` | `url` | `NormalizedImageResult` |
+| `search` | Plugin-defined `query.fields` plus a compatibility `query.title` | A candidates-only proposal containing `EntitySearchCandidate[]`. |
+| `lookup-id` | One or more known `query.externalIds` | A hydrated `EntityMetadataProposal` for the exact identity. |
+| `lookup-url` | `query.url` or known URL hints | A hydrated proposal resolved from that URL. |
 
-### Audio
+Declare an action only when it works for that exact entity kind. Structural
+hydration is not a fourth action: Prismedia sets `includeStructuralChildren`
+on a normal lookup request.
 
-| Action | Input | Returns |
-| --- | --- | --- |
-| `audioByURL` | `url` | `NormalizedAudioTrackResult` |
-| `audioByFragment` | (provider-specific) | `NormalizedAudioTrackResult` |
-| `audioLibraryByName` | `name` | `NormalizedAudioLibraryResult` |
-
-### People compatibility
-
-| Action | Input | Returns |
-| --- | --- | --- |
-| `performerByURL` | `url` | Person result through the Stash-compatible performer shape. |
-| `performerByName` | `name` | Person result through the compatibility shape. |
-| `performerByFragment` | `name` | Person result through the compatibility shape. |
-
-### Movie
-
-| Action | Input | Returns |
-| --- | --- | --- |
-| `movieByName` | `name`, `title` | `NormalizedMovieResult` |
-| `movieByURL` | `url` | `NormalizedMovieResult` |
-| `movieByFragment` | (provider-specific) | `NormalizedMovieResult` |
-
-### Series (TMDB-style cascade)
-
-| Action | Input | Returns |
-| --- | --- | --- |
-| `seriesByName` | `name`, `title` | `NormalizedSeriesResult` or `{ candidates: NormalizedSeriesCandidate[] }` |
-| `seriesByURL` | `url` | `NormalizedSeriesResult` |
-| `seriesByFragment` | (provider-specific) | `NormalizedSeriesResult` |
-| `seriesCascade` | `externalId` (series ID from prior lookup) | `NormalizedSeriesResult` with `seasons[].episodes[]` populated |
-
-`seriesByName` may return multiple candidate matches when a query is ambiguous (e.g. a remake exists). The cascade UI shows the candidate picker, the user chooses, then `seriesCascade` re-runs with the chosen `externalId`.
-
-### Episode (rare, usually cascaded)
-
-| Action | Input | Returns |
-| --- | --- | --- |
-| `episodeByName` | `name`, `title` | `NormalizedEpisodeResult` |
-| `episodeByFragment` | (provider-specific) | `NormalizedEpisodeResult` |
-
-In most cases episodes come back as part of a `seriesCascade`. The standalone episode actions exist for providers that can identify a single episode without the series context.
-
-### Batch
-
-| Capability | Meaning |
-| --- | --- |
-| `supportsBatch` | The plugin can handle multiple items in one execution envelope. The engine sends `batch: BatchItem[]` instead of `input` and expects `results: { id, result }[]`. |
-
-Batch is an optimization. Plugins that support it can deduplicate API calls or share rate limits across items. If you don't, leave `supportsBatch: false` and the engine will dispatch one item at a time.
-
-## Result types
-
-These are the shapes plugins return. The server-side contracts live under `apps/backend/src/Prismedia.Contracts/Plugins/`; the frontend mirrors them in `packages/contracts/src/`.
-
-### `NormalizedVideoResult`
+## Request envelope
 
 ```ts
-interface NormalizedVideoResult {
-  title: string | null;
-  date: string | null;
-  details: string | null;
-  urls: string[];
-  studioName: string | null;
-  performerNames: string[];
-  tagNames: string[];
-  imageUrl: string | null;        // single poster/cover URL
-  episodeNumber: number | null;
-  series: NormalizedSeriesRef | null;
-  code: string | null;            // scene code / external ID
-  director: string | null;
+interface IdentifyPluginRequest {
+  protocolVersion: number;
+  action: 'search' | 'lookup-id' | 'lookup-url';
+  auth: Record<string, string>;
+  entity: IdentifyEntitySnapshot;
+  query: IdentifyQuery;
+  hints: IdentifyMatchHints;
+  structuralContext?: IdentifyStructuralContext | null;
+  includeNsfw: boolean;
+  includeRelationshipDetails: boolean;
+  includeStructuralChildren: boolean;
 }
 
-interface NormalizedSeriesRef {
-  name: string;
-  externalId?: string;
-  season?: number;
-  episode?: number;
+interface IdentifyQuery {
+  title?: string | null;
+  url?: string | null;
+  externalIds?: Record<string, string> | null;
+  requireChoice?: boolean | null;
+  fields?: Record<string, string> | null;
 }
 ```
 
-### `NormalizedFolderResult`
+`entity` is a minimal Prismedia Entity snapshot, not a provider-specific DTO.
+`hints` carries identities and URLs already known by the Entity.
+`structuralContext` carries ancestor snapshots and generic positions such as a
+season or episode number when the request originates inside an existing Entity
+tree.
+
+Plugins must also support context-free `lookup-id` for every identity they
+emit. Monitoring and reviewed requests intentionally cannot depend on the
+original UI session or a parent Entity still being in memory.
+
+## Search candidates
+
+Search returns lightweight choices:
 
 ```ts
-interface NormalizedFolderResult {
-  name: string | null;
-  details: string | null;
-  date: string | null;
-  imageUrl: string | null;
-  backdropUrl: string | null;
-  studioName: string | null;
-  tagNames: string[];
-  urls: string[];
-  seriesExternalId?: string;
-  seasonNumber?: number;
-  totalEpisodes?: number;
-  episodeMap?: Record<string, EpisodeMapping>;
-}
-
-interface EpisodeMapping {
-  episodeNumber: number;
-  seasonNumber: number;
-  title: string | null;
-  date: string | null;
-  details: string | null;
-}
-```
-
-`episodeMap` is a lookup keyed by episode identifier (typically the source filename). It's how `folderCascade` returns child-episode metadata in one shot.
-
-### `NormalizedGalleryResult`
-
-```ts
-interface NormalizedGalleryResult {
-  title: string | null;
-  date: string | null;
-  details: string | null;
-  urls: string[];
-  studioName: string | null;
-  performerNames: string[];
-  tagNames: string[];
-  imageUrl: string | null;
-  photographer: string | null;
-}
-```
-
-### `NormalizedImageResult`
-
-```ts
-interface NormalizedImageResult {
-  title: string | null;
-  date: string | null;
-  details: string | null;
-  urls: string[];
-  tagNames: string[];
-  imageUrl: string | null;
-}
-```
-
-### `NormalizedAudioTrackResult`
-
-```ts
-interface NormalizedAudioTrackResult {
-  title: string | null;
-  artist: string | null;
-  album: string | null;
-  trackNumber: number | null;
-  date: string | null;
-  details: string | null;
-  imageUrl: string | null;
-  urls: string[];
-  tagNames: string[];
-}
-```
-
-### `NormalizedAudioLibraryResult`
-
-```ts
-interface NormalizedAudioLibraryResult {
-  name: string | null;
-  artist: string | null;
-  details: string | null;
-  date: string | null;
-  imageUrl: string | null;
-  urls: string[];
-  tagNames: string[];
-  trackCount?: number;
-}
-```
-
-### Cascade types: movies, series, seasons, episodes
-
-For TMDB-style cascade flows the discriminated types live in `@prismedia/contracts`:
-
-```ts
-interface NormalizedMovieResult {
+interface EntitySearchCandidate {
+  externalIds: Record<string, string>;
   title: string;
-  originalTitle?: string;
-  overview?: string;
-  tagline?: string;
-  releaseDate?: string;
-  runtime?: number;
-  genres: string[];
-  studioName?: string;
-  cast: NormalizedCastMember[];
-  posterCandidates: ImageCandidate[];
-  backdropCandidates: ImageCandidate[];
-  logoCandidates: ImageCandidate[];
-  externalIds: Record<string, string>;
-  rating?: number;
-  contentRating?: string;
-}
-
-interface NormalizedSeriesResult {
-  title: string;
-  originalTitle?: string;
-  overview?: string;
-  status?: 'returning' | 'ended';
-  genres: string[];
-  studioName?: string;
-  cast: NormalizedCastMember[];
-  posterCandidates: ImageCandidate[];
-  backdropCandidates: ImageCandidate[];
-  logoCandidates: ImageCandidate[];
-  externalIds: Record<string, string>;
-  seasons: NormalizedSeasonResult[];
-  candidates?: NormalizedSeriesCandidate[];   // disambiguation
-  rating?: number;
-  contentRating?: string;
-}
-
-interface NormalizedSeasonResult {
-  seasonNumber: number;
-  title?: string;
-  overview?: string;
-  airDate?: string;
-  posterCandidates: ImageCandidate[];
-  externalIds: Record<string, string>;
-  episodes: NormalizedEpisodeResult[];
-}
-
-interface NormalizedEpisodeResult {
-  seasonNumber: number;
-  episodeNumber: number;
-  absoluteEpisodeNumber?: number;
-  title?: string;
-  overview?: string;
-  airDate?: string;
-  runtime?: number;
-  stillCandidates: ImageCandidate[];
-  guestStars: NormalizedCastMember[];
-  externalIds: Record<string, string>;
-  matched?: boolean;
-  localFilePath?: string;
-}
-
-interface ImageCandidate {
-  url: string;            // required; HTTP(S) or data:image/
-  language?: string;
-  width?: number;
-  height?: number;
-  aspectRatio?: number;
-  rank?: number;
-  source?: string;
-}
-
-interface NormalizedCastMember {
-  name: string;
-  character?: string;
-  order?: number;
-  profileUrl?: string;
+  year?: number | null;
+  overview?: string | null;
+  posterUrl?: string | null;
+  popularity?: number | null;
+  candidateId?: string | null;
+  source?: string | null;
+  confidence?: number | null;
+  matchReason?: string | null;
 }
 ```
 
-The `*Candidates` arrays let the user pick the poster/backdrop they want from multiple options. Surface as many as you have — the cascade drawer renders all of them.
+A candidate is not a Prismedia Entity. It is a provider result that carries
+enough persistent identity for an exact lookup. Do not invent Entity ids or
+capabilities for it.
 
-## Image semantics
+## Hydrated proposals
 
-- `imageUrl` (singular, on the simpler results) → downloaded to `/data/cache/metadata/` on Accept. Must be HTTP(S) or `data:image/` (inline base64).
-- `posterCandidates` / `backdropCandidates` / `logoCandidates` / `stillCandidates` → arrays of candidates with metadata. The user picks one in the cascade drawer; the chosen URL is downloaded.
-- Plugins **return URLs**, not file paths. Local paths (`imagePath`) are written by the application after download.
+```ts
+interface EntityMetadataProposal {
+  proposalId: string;
+  provider: string;
+  targetKind: ProposalKind;
+  confidence?: number | null;
+  matchReason?: string | null;
+  patch: EntityMetadataPatch;
+  images: ImageCandidate[];
+  children: EntityMetadataProposal[];
+  relationships: EntityMetadataProposal[];
+  candidates: EntitySearchCandidate[];
+  targetEntityId?: string | null;
+}
+```
 
-## Nested entity creation
+The patch uses Prismedia-owned capability vocabulary: title, description,
+external identities, URLs, tags, studio, credits, dates, stats, positions,
+classification, and optional flags. Plugins do not return database rows or
+third-party application schemas.
 
-When the user accepts a result, the .NET backend walks the tree and creates missing entities by name:
+- `children` are structural: seasons, episodes, volumes, chapters, albums, or
+  tracks.
+- `relationships` are non-structural: people, studios, tags, and related works.
+- `proposalId` is an opaque, case-sensitive selection handle. It must be unique
+  within the proposal tree.
+- `provider` is the plugin manifest id that produced the proposal.
 
-1. **People** — created from `performerNames`; **not** deduplicated against existing.
-2. **Tags** — created by name; **deduplicated case-insensitively**.
-3. **Studios** — created by name; **not** deduplicated.
-4. **Images** — chosen poster/backdrop/still URLs downloaded to local cache, paths linked to the entity.
+## Identity contract
 
-If you don't want a person to be created, omit it from `performerNames`. If you want to be sure a person matches an existing one, return the canonical spelling — name matching is exact for people and case-insensitive for tags.
+An external identity is `{ namespace, value }`:
 
-## A worked example: TMDB series cascade
+- the namespace is canonical lowercase and declared by the manifest for the
+  proposal's entity kind;
+- the value is opaque, case-sensitive, and may contain colons;
+- the plugin manifest id is not an identity namespace;
+- every candidate and independently selectable structural child must carry a
+  round-trippable identity;
+- the exact plugin must resolve that kind/identity pair without falling through
+  to another plugin that supports the same namespace.
 
-User clicks **Identify** on a series:
+When no upstream child id exists, define a plugin-owned composite namespace and
+value, then parse it only inside the plugin. For example, an episode provider
+might use `provider-episode: "series-id:season:1:episode:4"`. The core stores and
+routes the value but never splits it.
 
-1. Engine asks TMDB plugin: `seriesByName({ name: "The Wire" })`.
-2. TMDB returns `NormalizedSeriesResult` with multiple `candidates` (HBO original, BBC docu, etc.).
-3. Cascade drawer shows the candidate picker. User clicks "The Wire (2002)".
-4. Engine asks TMDB: `seriesCascade({ externalId: "1438" })`.
-5. TMDB returns `NormalizedSeriesResult` with `seasons[].episodes[]` filled in for every season.
-6. Cascade drawer renders: series header, per-season sections, per-episode rows.
-7. User picks posters / backdrops, ticks per-field checkboxes, hits **Apply cascade**.
-8. Engine writes `video_series`, `video_seasons`, `video_episodes`, links people/tags/studios, downloads chosen images, and marks every applied row as `accepted` in `scrape_results`.
+## Review and commit
 
-That's it. The plugin's only job was steps 1–5 — return the right shape.
+Identify and Discover use the same proposal UI:
+
+1. search fields produce candidates;
+2. choosing a candidate runs an exact `lookup-id`;
+3. Prismedia shows the unflattened proposal;
+4. Identify applies selected fields to an existing Entity, while Request
+   materializes selected proposal nodes as Wanted Entities.
+
+Request review computes a deterministic revision of the complete proposal.
+Commit re-runs the exact plugin lookup without the proposal cache and rejects a
+changed revision before writing anything. The client sends proposal ids, never
+child identity values; the server derives identities again from the fresh
+proposal.
+
+## Validation checklist
+
+Before publishing a plugin, test each supported kind:
+
+- every declared action executes successfully;
+- every required search field is enforced and every field reaches
+  `query.fields`;
+- `query.title` remains a compatibility fallback;
+- every emitted candidate identity round-trips through context-free
+  `lookup-id`;
+- every selectable child identity round-trips to the same kind and exact value;
+- `includeStructuralChildren: false` returns a fast root proposal;
+- `includeStructuralChildren: true` returns truthful child structure;
+- missing credentials and NSFW visibility are honored by the host;
+- malformed identities return no match rather than resolving a different
+  record.

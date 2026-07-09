@@ -18,7 +18,7 @@ kinds and identify actions it serves.
 
 ```json
 {
-  "manifestVersion": 1,
+  "manifestVersion": 2,
   "apiTags": ["prismedia"],
   "id": "openlibrary",
   "name": "Open Library",
@@ -34,8 +34,28 @@ kinds and identify actions it serves.
   "auth": [],
   "isNsfw": false,
   "supports": [
-    { "entityKind": "book", "actions": ["lookup-id", "lookup-url", "search", "cascade"] },
-    { "entityKind": "person", "actions": ["lookup-id", "lookup-url", "search"] }
+    {
+      "entityKind": "book",
+      "actions": ["lookup-id", "lookup-url", "search"],
+      "identityNamespaces": ["openlibrary", "openlibrarywork", "isbn"],
+      "search": {
+        "fields": [
+          { "key": "title", "label": "Title", "type": "text", "required": true },
+          { "key": "author", "label": "Author", "type": "text", "required": false },
+          { "key": "year", "label": "First published", "type": "year", "required": false }
+        ]
+      }
+    },
+    {
+      "entityKind": "person",
+      "actions": ["lookup-id", "lookup-url", "search"],
+      "identityNamespaces": ["openlibraryauthor"],
+      "search": {
+        "fields": [
+          { "key": "title", "label": "Author", "type": "text", "required": true }
+        ]
+      }
+    }
   ]
 }
 ```
@@ -44,7 +64,7 @@ kinds and identify actions it serves.
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| `manifestVersion` | number | Manifest schema version. Must be `1`. |
+| `manifestVersion` | number | Manifest schema version. New plugins use `2`; version 1 is read only for compatibility. |
 | `apiTags` | string[] | Generation tags; Prismedia ignores artifacts without the `prismedia` tag so older plugin systems can coexist in one index. |
 | `id` | string | Stable provider/plugin code, e.g. `tmdb`. Unique across the registry. |
 | `name` | string | Human-readable plugin name. |
@@ -80,16 +100,69 @@ server-side and injected at execution time.
 
 ## Entity support
 
-Each entry in `supports` pairs a Prismedia entity kind code with the identify
-actions the plugin implements for it:
+Each entry in `supports` is a complete routing declaration for one Prismedia
+entity kind. It tells the core which actions the plugin can execute, which
+persistent upstream identities it can resolve, and which fields its search UI
+requires:
 
 | Field | Type | Notes |
 | --- | --- | --- |
 | `entityKind` | string | Stable entity kind code, e.g. `book`, `person`, `video-series`. |
-| `actions` | string[] | Action codes: `lookup-id`, `lookup-url`, `search`, `cascade`. |
+| `actions` | string[] | Action codes: `lookup-id`, `lookup-url`, and `search`. Structural children are returned in the proposal when Prismedia sets `includeStructuralChildren`; `cascade` is not an action. |
+| `identityNamespaces` | string[] | Canonical lowercase external identity namespaces this kind can resolve, e.g. `tmdb`, `tmdbepisode`, or `openlibrarywork`. Required in manifest v2. |
+| `search` | object? | Ordered plugin-owned search form. Required exactly when `actions` includes `search`. |
 
 The identify pipeline only routes work to a plugin for kind/action pairs it
 declares here, and the provider pickers in the UI filter on the same data.
+
+### Plugin id versus external identity
+
+The manifest `id` identifies the installed executable. An identity namespace
+identifies an upstream record. They are deliberately independent: a plugin
+whose id is `cinema-metadata` may resolve `{ "namespace": "tmdb", "value":
+"83867" }`.
+
+Identity namespaces are normalized lowercase. Identity values are opaque,
+case-sensitive strings and may contain colons. Never lowercase, split, or
+reinterpret a value in the core. If a structural child does not have a native
+upstream id, the plugin must define a stable composite namespace/value that a
+context-free `lookup-id` can resolve back to the same child.
+
+The order of `identityNamespaces` is meaningful when a proposal carries more
+than one accepted identity: Prismedia selects the first declared namespace
+present on that proposal. Put the most specific round-trippable identity first.
+
+### Search schema
+
+`search.fields` is an ordered array. Prismedia renders it directly and sends
+the submitted values in `IdentifyQuery.fields`; the core does not know keys
+such as `seriesTitle`, `author`, or `album`.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `key` | string | Stable plugin-owned key. Unique within this kind's form. |
+| `label` | string | Human-readable input label. |
+| `type` | string | `text`, `number`, or `year`. |
+| `required` | boolean | Whether a non-empty value is required. |
+| `placeholder` | string? | Optional concise example. |
+| `help` | string? | Optional explanatory copy. |
+
+Plugins should read `query.fields` and continue accepting `query.title` as a
+compatibility fallback. A field used only during search must not imply that its
+value will still exist during a later identity-only review. Anything required
+to rehydrate a selected result belongs in its persistent identity.
+
+### Round-trip requirement
+
+Every identity emitted by a search candidate or structural proposal must pass
+the same test:
+
+1. take the proposal's entity kind plus chosen namespace/value;
+2. issue a context-free `lookup-id` to the same plugin;
+3. receive the same entity kind and the exact case-sensitive identity.
+
+This is what makes monitoring, request review, revision validation, and future
+background enrichment independent of the original search session.
 
 ## Compatibility gating
 

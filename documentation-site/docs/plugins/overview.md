@@ -1,7 +1,7 @@
 ---
 sidebar_position: 1
 title: Plugin System Overview
-description: What plugins are, the three runtimes, and how they fit into the identify engine.
+description: How native and Stash-compatible plugins fit into Entity identification, discovery, and monitoring.
 ---
 
 # Plugin System Overview
@@ -10,42 +10,44 @@ Prismedia's metadata is **plugin-driven**. Posters, descriptions, people, studio
 
 This page is the bird's-eye view: what kinds of plugins exist, how they relate, and what to read next.
 
-## Three runtimes
+## Runtime boundary
 
 | Runtime | What it is | When to use |
 | --- | --- | --- |
-| **TypeScript** | A compiled JS module loaded into the worker process via dynamic `import()`. | New providers when you want type safety, `npm` ecosystem, in-process speed. |
-| **Python** | A standalone script invoked as a subprocess; talks JSON over stdin/stdout. | New providers where Python libraries make life easier (some scrapers, some data formats). |
-| **Stash-compat** | A wrapper around a Stash YAML scraper. The community has hundreds of these; the adapter maps Stash actions onto Prismedia's envelope. | Pulling in existing Stash scrapers without rewriting them. |
+| **dotnet-process** | A short-lived .NET plugin executable that reads one JSON request and writes one JSON response. | Native Prismedia metadata providers. This is the first-party and community plugin contract. |
+| **stash-compat** | A wrapper around a Stash YAML scraper. | Running existing Stash community scrapers through Prismedia's adapter. |
 
-All three speak the **same protocol** at the `executePlugin()` boundary:
+Native plugins speak the versioned `IdentifyPluginRequest` /
+`IdentifyPluginResponse` protocol at a process boundary:
 
 ```text
                      ┌──────────────────────┐
-   identify request  │  PluginExecutionInput│
-   ─────────────────►│  { action, input,    │
-                     │    auth, batch }     │
+   identify request  │ IdentifyPluginRequest│
+   ─────────────────►│ { action, entity,    │
+                     │   query, hints, ... }│
                      └──────────┬───────────┘
                                 │
-                ┌───────────────┼───────────────┐
-                ▼               ▼               ▼
-         ┌────────────┐  ┌────────────┐  ┌────────────┐
-         │ TypeScript │  │   Python   │  │   Stash    │
-         │  loader    │  │ subprocess │  │  adapter   │
-         └─────┬──────┘  └─────┬──────┘  └─────┬──────┘
-               └────────┬──────┴───────┬──────┘
-                        ▼              ▼
+                ┌───────────────┴───────────────┐
+                ▼                               ▼
+         ┌────────────┐                  ┌────────────┐
+         │ .NET child │                  │   Stash    │
+         │  process   │                  │  adapter   │
+         └─────┬──────┘                  └─────┬──────┘
+               └───────────────┬───────────────┘
+                               ▼
                 ┌──────────────────────────────┐
-                │  PluginExecutionOutput<T>    │
-                │  { ok, result | results,     │
-                │    error }                   │
+                │ IdentifyPluginResponse       │
+                │ { ok, result, error }        │
                 └──────────────┬───────────────┘
                                │
                                ▼
-                  Normalizers → scrape_results row
+                   candidate or proposal
 ```
 
-Whether you write TypeScript or Python, your code answers a single question: *"given this input and these credentials, what metadata do you have?"*
+The process is isolated from Prismedia persistence. It receives a minimal Entity
+snapshot, plugin-owned query fields, known identities and structural context; it
+returns candidates or a proposal. The core owns validation, persistence,
+monitoring, acquisition, and metadata application.
 
 ## Wrapping Stash community scrapers
 
@@ -53,42 +55,53 @@ The Stash community's YAML site scrapers can be **wrapped** as Stash-compatible 
 
 ## What a plugin produces
 
-A plugin returns a **normalized result** matched to the action it ran:
+A plugin returns one of three outcomes:
 
-| Action category | Result type |
-| --- | --- |
-| `videoByURL`, `videoByName`, `videoByFragment` | `NormalizedVideoResult` |
-| `folderByName`, `folderByFragment`, `folderCascade` | `NormalizedFolderResult` (with optional `episodeMap`) |
-| `galleryByURL`, `galleryByFragment` | `NormalizedGalleryResult` |
-| `imageByURL` | `NormalizedImageResult` |
-| `audioByURL`, `audioByFragment`, `audioLibraryByName` | `NormalizedAudioTrackResult` / `NormalizedAudioLibraryResult` |
-| `performer*` | Performer result (via the Stash adapter compatibility layer) |
-| `movieByName`, `movieByURL`, `movieByFragment` | `NormalizedMovieResult` |
-| `seriesByName`, `seriesByURL`, `seriesByFragment` | `NormalizedSeriesResult` (with optional disambig `candidates[]`) |
-| `seriesCascade` | `NormalizedSeriesResult` with full `seasons[].episodes[]` tree |
-| `episodeByName`, `episodeByFragment` | `NormalizedEpisodeResult` |
+| Outcome | Contract | Meaning |
+| --- | --- | --- |
+| Candidate search | `EntitySearchCandidate[]` | Lightweight ambiguous matches for the user to choose from. |
+| Hydrated match | `EntityMetadataProposal` | A complete metadata patch with artwork, structural children, and relationships. |
+| No match / failure | `null` plus optional error | The provider could not answer this request. |
 
-These shapes are documented in detail in [Capabilities](./capabilities.md).
+The action vocabulary is deliberately small: `search`, `lookup-id`, and
+`lookup-url`. A plugin declares each supported kind/action pair, its persistent
+identity namespaces, and its search form in manifest v2. See
+[Manifest Reference](./manifest.md#entity-support).
 
-The application normalizer trims strings, validates URLs, deduplicates names case-insensitively, coerces numbers, and accepts both singular and plural field names. Returning slightly-the-wrong shape isn't fatal — the normalizer is forgiving. Returning *nothing* useful is fine too: just `null`.
+`EntityMetadataProposal.children` contains structural children such as seasons,
+episodes, volumes, chapters, albums, or tracks. `relationships` contains people,
+studios, and tags. The request envelope's `includeStructuralChildren` and
+`includeRelationshipDetails` flags let Prismedia choose a fast seed lookup or a
+fully hydrated review.
 
 ## What happens after a result lands
 
 ```text
-plugin → normalized result
-       → scrape_results row written (status = pending,
-                                     proposed_* fields populated)
-       → user reviews in the cascade drawer
-       → on Accept: missing people/tags/studios created,
-                    images downloaded to /data/cache/metadata/,
-                    entity row updated, status = accepted
+plugin → candidate search
+       → user chooses one persistent identity
+       → exact-plugin lookup-id
+       → EntityMetadataProposal review
+       → selected metadata is applied to an existing Entity
+          or selected proposal nodes become Wanted Entities
 ```
 
-The cascade drawer is what turns one TMDB series result into a fully-populated series + N seasons + M episodes in your library. The plugin returns the tree; Prismedia walks it.
+Identify and Discover/Request share this proposal review model. The difference is
+the destination: Identify applies capabilities to an Entity that already exists;
+Request materializes selected proposal nodes as Wanted Entities, then hands them
+to the acquisition policy for their kind.
+
+Monitoring starts from the same persistent identity stored on the Entity. The
+core asks the plugin registry which enabled plugin declares that kind, action,
+and namespace; plugin installation ids are never assumed to equal upstream
+identity namespaces.
 
 ## First-party plugins
 
-The CHANGELOG mentions **The Movie Database (TMDB)**, **TVDB**, **YouTube**, and **MusicBrainz**. They live in the [prismedia-community-plugins](https://github.com/pauljoda/prismedia-community-plugins) sister repo, not in the main repo. They're the easiest reference reads for "what does a real plugin look like."
+The first-party set includes **TMDB**, **AniList**, **YouTube**,
+**MusicBrainz**, **MangaDex**, and **Open Library**. They live in the
+[Prismedia-Plugins](https://github.com/pauljoda/Prismedia-Plugins) sister repo,
+not in the main application repo. They are the best reference implementations
+for the current protocol.
 
 You install them from **Plugins → Prismedia Index** in the web app. One click downloads, verifies, and registers them.
 
@@ -104,6 +117,6 @@ If you're going to read source, start with `Prismedia.Contracts/Plugins/PluginMa
 
 ## What to read next
 
-- **Building one yourself**: [Manifest](./manifest.md) → [Capabilities](./capabilities.md), then read a published plugin in [prismedia-community-plugins](https://github.com/pauljoda/prismedia-community-plugins).
+- **Building one yourself**: [Manifest](./manifest.md) → [Identify Protocol](./capabilities.md), then read a published plugin in [Prismedia-Plugins](https://github.com/pauljoda/Prismedia-Plugins).
 - **Bringing in a Stash YAML scraper**: [Stash Compatibility](./stash-compat.md).
 - **Publishing for others**: [Publishing](./publishing.md).
