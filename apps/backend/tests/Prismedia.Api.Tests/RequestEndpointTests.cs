@@ -49,21 +49,20 @@ public sealed class RequestEndpointTests {
     private sealed class MovieProposalSource : IPluginRequestProposalSource {
         public Task<EntityMetadataProposal?> ResolveProposalAsync(
             RequestKindDescriptor descriptor,
-            string providerId,
-            string itemId,
+            ExternalIdentity identity,
             bool hideNsfw,
             bool includeChildren,
             CancellationToken cancellationToken) =>
             Task.FromResult<EntityMetadataProposal?>(new EntityMetadataProposal(
                 ProposalId: "movie-603",
-                Provider: providerId,
+                Provider: "movie-plugin",
                 TargetKind: ProposalKind.Movie,
                 Confidence: 1,
                 MatchReason: "lookup-id",
                 Patch: new EntityMetadataPatch(
                     Title: "The Matrix",
                     Description: null,
-                    ExternalIds: new Dictionary<string, string> { [providerId] = itemId },
+                    ExternalIds: new Dictionary<string, string> { [identity.Namespace] = identity.Value },
                     Urls: [],
                     Tags: [],
                     Studio: null,
@@ -82,13 +81,11 @@ public sealed class RequestEndpointTests {
     private sealed class AmbiguousWantedEntityWriter : IWantedEntityWriter {
         public Task<WantedEntityResult> EnsureAsync(
             EntityKind kind,
-            string providerId,
-            string itemId,
+            ExternalIdentity identity,
             string title,
             Guid? parentEntityId,
             bool matchTitleKindWide,
             CancellationToken cancellationToken) {
-            var identity = new ExternalIdentity(providerId, itemId);
             var resolution = new ExternalIdentityResolution([
                 new ExternalIdentityMatch(Guid.Parse("11111111-1111-1111-1111-111111111111"), [identity]),
                 new ExternalIdentityMatch(Guid.Parse("22222222-2222-2222-2222-222222222222"), [identity])

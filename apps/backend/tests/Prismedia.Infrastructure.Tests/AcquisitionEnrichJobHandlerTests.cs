@@ -79,8 +79,8 @@ public sealed class AcquisitionEnrichJobHandlerTests {
 
     private sealed class FakeEnricher(RequestMetadataEnrichment? result) : IRequestMetadataEnricher {
         public string? LookedUp { get; private set; }
-        public Task<RequestMetadataEnrichment?> LookupByIdAsync(EntityKind kind, string providerId, string externalId, bool hideNsfw, CancellationToken cancellationToken) {
-            LookedUp = $"{providerId}:{externalId}";
+        public Task<RequestMetadataEnrichment?> LookupByIdAsync(EntityKind kind, ExternalIdentity identity, bool hideNsfw, CancellationToken cancellationToken) {
+            LookedUp = RequestProposalReading.FormatQualifiedIdentity(identity);
             return Task.FromResult(result);
         }
     }

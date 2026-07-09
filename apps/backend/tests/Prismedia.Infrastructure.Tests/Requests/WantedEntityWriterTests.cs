@@ -20,7 +20,7 @@ public sealed class WantedEntityWriterTests {
         await using var db = CreateContext();
         var writer = Writer(db);
 
-        var result = await writer.EnsureAsync(EntityKind.Book, "openlibrary", "W1", "Elantris", null, matchTitleKindWide: false, CancellationToken.None);
+        var result = await writer.EnsureAsync(EntityKind.Book, new ExternalIdentity("openlibrary", "W1"), "Elantris", null, matchTitleKindWide: false, CancellationToken.None);
 
         Assert.True(result.Created);
         Assert.False(result.HasFile);
@@ -42,7 +42,7 @@ public sealed class WantedEntityWriterTests {
         await db.SaveChangesAsync();
         var writer = Writer(db);
 
-        var result = await writer.EnsureAsync(EntityKind.Book, "openlibrary", "W1", "Elantris", null, matchTitleKindWide: false, CancellationToken.None);
+        var result = await writer.EnsureAsync(EntityKind.Book, new ExternalIdentity("openlibrary", "W1"), "Elantris", null, matchTitleKindWide: false, CancellationToken.None);
 
         Assert.False(result.Created);
         Assert.True(result.HasFile);
@@ -59,8 +59,7 @@ public sealed class WantedEntityWriterTests {
 
         var result = await Writer(db).EnsureAsync(
             EntityKind.Book,
-            " OpenLibrary ",
-            " W1 ",
+            new ExternalIdentity(" OpenLibrary ", " W1 "),
             "Different title",
             parentEntityId: null,
             matchTitleKindWide: false,
@@ -85,8 +84,7 @@ public sealed class WantedEntityWriterTests {
 
         var result = await Writer(db).EnsureAsync(
             EntityKind.Book,
-            "openlibrary",
-            "W1",
+            new ExternalIdentity("openlibrary", "W1"),
             "Same work",
             secondAuthorId,
             matchTitleKindWide: false,
@@ -107,8 +105,7 @@ public sealed class WantedEntityWriterTests {
 
         var exception = await Assert.ThrowsAsync<ExternalIdentityAmbiguityException>(() => Writer(db).EnsureAsync(
             EntityKind.BookAuthor,
-            "openlibraryauthor",
-            "A1",
+            new ExternalIdentity("openlibraryauthor", "A1"),
             "Matching title",
             parentEntityId: null,
             matchTitleKindWide: true,
@@ -128,7 +125,7 @@ public sealed class WantedEntityWriterTests {
         await db.SaveChangesAsync();
         var writer = Writer(db);
 
-        var result = await writer.EnsureAsync(EntityKind.BookAuthor, " OpenLibrary ", " A1 ", "brandon sanderson", null, matchTitleKindWide: true, CancellationToken.None);
+        var result = await writer.EnsureAsync(EntityKind.BookAuthor, new ExternalIdentity(" OpenLibrary ", " A1 "), "brandon sanderson", null, matchTitleKindWide: true, CancellationToken.None);
 
         Assert.False(result.Created);
         Assert.Equal(authorId, result.EntityId);
@@ -143,7 +140,7 @@ public sealed class WantedEntityWriterTests {
         await db.SaveChangesAsync();
         var writer = Writer(db);
 
-        var result = await writer.EnsureAsync(EntityKind.Book, "openlibrary", "W9", "Common Title", null, matchTitleKindWide: false, CancellationToken.None);
+        var result = await writer.EnsureAsync(EntityKind.Book, new ExternalIdentity("openlibrary", "W9"), "Common Title", null, matchTitleKindWide: false, CancellationToken.None);
 
         Assert.True(result.Created);
         Assert.Equal(2, await db.Entities.AsNoTracking().CountAsync());
@@ -154,8 +151,8 @@ public sealed class WantedEntityWriterTests {
         await using var db = CreateContext();
         var writer = Writer(db);
 
-        var artist = await writer.EnsureAsync(EntityKind.MusicArtist, "musicbrainz", "MB1", "Daft Punk", null, matchTitleKindWide: true, CancellationToken.None);
-        var album = await writer.EnsureAsync(EntityKind.AudioLibrary, "musicbrainz", "R1", "Discovery", artist.EntityId, matchTitleKindWide: false, CancellationToken.None);
+        var artist = await writer.EnsureAsync(EntityKind.MusicArtist, new ExternalIdentity("musicbrainz", "MB1"), "Daft Punk", null, matchTitleKindWide: true, CancellationToken.None);
+        var album = await writer.EnsureAsync(EntityKind.AudioLibrary, new ExternalIdentity("musicbrainz", "R1"), "Discovery", artist.EntityId, matchTitleKindWide: false, CancellationToken.None);
 
         Assert.Null((await db.MusicArtistDetails.AsNoTracking().FirstAsync(row => row.EntityId == artist.EntityId)).LibraryRootId);
         Assert.Null((await db.AudioLibraryDetails.AsNoTracking().FirstAsync(row => row.EntityId == album.EntityId)).LibraryRootId);
@@ -166,7 +163,7 @@ public sealed class WantedEntityWriterTests {
     public async Task EnsureCreatesAWantedMovieWithoutADetailRow() {
         await using var db = CreateContext();
 
-        var movie = await Writer(db).EnsureAsync(EntityKind.Movie, "tmdb", "M1", "Dune", null, matchTitleKindWide: false, CancellationToken.None);
+        var movie = await Writer(db).EnsureAsync(EntityKind.Movie, new ExternalIdentity("tmdb", "M1"), "Dune", null, matchTitleKindWide: false, CancellationToken.None);
 
         var entity = await db.Entities.AsNoTracking().FirstAsync(row => row.Id == movie.EntityId);
         Assert.True(entity.IsWanted);

@@ -30,9 +30,8 @@ public sealed class WantedEntityWriter(
         .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
     public async Task<WantedEntityResult> EnsureAsync(
-        EntityKind kind, string providerId, string itemId, string title, Guid? parentEntityId, bool matchTitleKindWide, CancellationToken cancellationToken) {
+        EntityKind kind, ExternalIdentity identity, string title, Guid? parentEntityId, bool matchTitleKindWide, CancellationToken cancellationToken) {
         var kindCode = kind.ToCode();
-        var identity = new ExternalIdentity(providerId, itemId);
         var resolution = await externalIdentities.ResolveAsync(kind, [identity], parentEntityId, cancellationToken);
         if (resolution.Status == ExternalIdentityResolutionStatus.Ambiguous) {
             throw new ExternalIdentityAmbiguityException(kind, resolution);

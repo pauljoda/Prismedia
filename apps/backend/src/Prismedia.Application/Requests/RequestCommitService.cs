@@ -6,13 +6,18 @@ using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Requests;
 
-/// <summary>Resolves full plugin metadata proposals for provider-qualified request ids (no library entity involved).</summary>
+/// <summary>Resolves full plugin metadata proposals for persistent external identities (no library entity involved).</summary>
 public interface IPluginRequestProposalSource {
     /// <summary>
-    /// Resolves the proposal for a provider work-id of the descriptor's kind; structural children are
-    /// included on request. Null when the provider is missing/disabled/NSFW-gated or can't resolve it.
+    /// Resolves the proposal for an identity of the descriptor's kind; structural children are
+    /// included on request. Null when no enabled plugin route can resolve it.
     /// </summary>
-    Task<EntityMetadataProposal?> ResolveProposalAsync(RequestKindDescriptor descriptor, string providerId, string itemId, bool hideNsfw, bool includeChildren, CancellationToken cancellationToken);
+    Task<EntityMetadataProposal?> ResolveProposalAsync(
+        RequestKindDescriptor descriptor,
+        ExternalIdentity identity,
+        bool hideNsfw,
+        bool includeChildren,
+        CancellationToken cancellationToken);
 }
 
 /// <summary>Result of ensuring a wanted entity: the entity, whether this call created it, and whether it already owns a real file.</summary>
@@ -49,14 +54,20 @@ public interface IWantedSuppressionStore {
 /// </summary>
 public interface IWantedEntityWriter {
     /// <summary>
-    /// Finds the library entity for (kind, provider external id) or creates a wanted skeleton for it
-    /// (flagged Wanted, stamped with the provider external id, parented when a parent is given).
+    /// Finds the library entity for (kind, external identity) or creates a wanted skeleton for it
+    /// (flagged Wanted, stamped with the identity, parented when a parent is given).
     /// Existing entities are matched external-id-first, mirroring the identify apply rule.
     /// <paramref name="matchTitleKindWide"/> additionally allows a kind-wide case-insensitive title
     /// match — right for container groupings (an already-scanned author or artist folder that has no
     /// provider ids yet), too weak a signal for leaves, which only title-match inside their parent.
     /// </summary>
-    Task<WantedEntityResult> EnsureAsync(EntityKind kind, string providerId, string itemId, string title, Guid? parentEntityId, bool matchTitleKindWide, CancellationToken cancellationToken);
+    Task<WantedEntityResult> EnsureAsync(
+        EntityKind kind,
+        ExternalIdentity identity,
+        string title,
+        Guid? parentEntityId,
+        bool matchTitleKindWide,
+        CancellationToken cancellationToken);
 
     /// <summary>Applies a plugin proposal to an entity through the shared metadata-apply cascade (all present fields, default artwork).</summary>
     Task ApplyProposalAsync(Guid entityId, EntityMetadataProposal proposal, CancellationToken cancellationToken);
@@ -101,8 +112,8 @@ public sealed class RequestCommitService(
     Acquisition.IMonitorStore monitors,
     IWantedSuppressionStore suppressions) {
     /// <summary>
-    /// Commits a reviewed request. Returns null when the kind isn't committable, the provider-qualified
-    /// id is malformed, or the provider can't resolve it; otherwise reports a per-item outcome (an
+    /// Commits a reviewed request. Returns null when the kind isn't committable, the identity-qualified
+    /// id is malformed, or no plugin can resolve it; otherwise reports a per-item outcome (an
     /// already-owned or already-requested pick is skipped, not an error, so partial commits stay transparent).
     /// </summary>
     public async Task<RequestCommitResponse?> CommitAsync(RequestCommitRequest request, bool hideNsfw, CancellationToken cancellationToken) {
@@ -111,14 +122,14 @@ public sealed class RequestCommitService(
             return null;
         }
 
-        var (providerId, itemId) = RequestProposalReading.SplitProviderQualifiedId(request.ExternalId);
-        if (providerId is null || itemId is null) {
+        var identity = RequestProposalReading.ParseQualifiedIdentity(request.ExternalId);
+        if (identity is null) {
             return null;
         }
 
         return descriptor.IsContainer
-            ? await CommitContainerAsync(descriptor, request, providerId, itemId, hideNsfw, cancellationToken)
-            : await CommitLeafAsync(descriptor, request, providerId, itemId, hideNsfw, cancellationToken);
+            ? await CommitContainerAsync(descriptor, request, identity, hideNsfw, cancellationToken)
+            : await CommitLeafAsync(descriptor, request, identity, hideNsfw, cancellationToken);
     }
 
     /// <summary>
@@ -127,8 +138,8 @@ public sealed class RequestCommitService(
     /// container itself is monitored so future works keep appearing.
     /// </summary>
     private async Task<RequestCommitResponse?> CommitContainerAsync(
-        RequestKindDescriptor descriptor, RequestCommitRequest request, string providerId, string itemId, bool hideNsfw, CancellationToken cancellationToken) {
-        var proposal = await proposals.ResolveProposalAsync(descriptor, providerId, itemId, hideNsfw, includeChildren: true, cancellationToken);
+        RequestKindDescriptor descriptor, RequestCommitRequest request, ExternalIdentity identity, bool hideNsfw, CancellationToken cancellationToken) {
+        var proposal = await proposals.ResolveProposalAsync(descriptor, identity, hideNsfw, includeChildren: true, cancellationToken);
         if (proposal?.Patch is null) {
             return null;
         }
@@ -139,16 +150,16 @@ public sealed class RequestCommitService(
         var preset = request.Preset ?? MonitorPreset.All;
         var selectedChildIds = request.SelectedChildIds.Count > 0
             ? request.SelectedChildIds
-            : MonitorPresetSelection.Resolve(preset, ContainerCandidates(providerId, proposal));
+            : MonitorPresetSelection.Resolve(preset, ContainerCandidates(identity.Namespace, proposal));
 
         return await CommitContainerCoreAsync(
-            descriptor, providerId, itemId, proposal, selectedChildIds,
+            descriptor, identity.Namespace, identity.Value, proposal, selectedChildIds,
             requestOwnedChildren: request.SelectedChildIds.Count > 0,
             startAcquisitions: true, TargetingOf(request), preset, hideNsfw, cancellationToken);
     }
 
     /// <summary>
-    /// The container's structural children as preset candidates: each carries its provider-qualified id,
+    /// The container's structural children as preset candidates: each carries its identity-qualified id,
     /// its season/volume number (when the provider declares one), and — at commit time — <c>Owned: false</c>
     /// (ownership dedup happens downstream in <see cref="EnsurePickAsync"/>/<see cref="StartAcquisitionAsync"/>,
     /// so All and Missing both pass every id here and differ only in the persisted preset's sync gate).
@@ -204,10 +215,10 @@ public sealed class RequestCommitService(
         if (!descriptor.AcquireFromEntity) {
             foreach (var identity in entity.ExternalIdentities) {
                 var request = new RequestCommitRequest(
-                    descriptor.Kind, QualifiedId(identity), [],
+                    descriptor.Kind, RequestProposalReading.FormatQualifiedIdentity(identity), [],
                     targeting.TargetLibraryRootId, targeting.ProfileId);
                 var response = await CommitLeafAsync(
-                    descriptor, request, identity.Namespace, identity.Value, hideNsfw, cancellationToken);
+                    descriptor, request, identity, hideNsfw, cancellationToken);
                 if (response is not null) {
                     return response;
                 }
@@ -396,7 +407,9 @@ public sealed class RequestCommitService(
 
         RequestCommitItem Item(RequestCommitOutcome outcome, Guid? acquisitionId) =>
             new(
-                primaryIdentity is null ? entity.EntityId.ToString() : QualifiedId(primaryIdentity),
+                primaryIdentity is null
+                    ? entity.EntityId.ToString()
+                    : RequestProposalReading.FormatQualifiedIdentity(primaryIdentity),
                 entity.Title, outcome, entity.EntityId, acquisitionId);
     }
 
@@ -431,7 +444,7 @@ public sealed class RequestCommitService(
         foreach (var identity in container.ExternalIdentities) {
             // Conservative SFW default: the sweep has no user session (mirrors background enrichment).
             var proposal = await proposals.ResolveProposalAsync(
-                descriptor, identity.Namespace, identity.Value, hideNsfw: true, includeChildren: true, cancellationToken);
+                descriptor, identity, hideNsfw: true, includeChildren: true, cancellationToken);
             if (proposal?.Patch is null) {
                 continue;
             }
@@ -475,7 +488,7 @@ public sealed class RequestCommitService(
             ? ((string?)null, (string?)containerTitle)
             : (containerTitle, null);
         var container = await wanted.EnsureAsync(
-            descriptor.WantedEntityKind, providerId, itemId, containerTitle,
+            descriptor.WantedEntityKind, new ExternalIdentity(providerId, itemId), containerTitle,
             parentEntityId: null, matchTitleKindWide: true, cancellationToken);
 
         var selectedChildren = SelectStructuralChildren(providerId, proposal, selectedChildIds);
@@ -483,13 +496,13 @@ public sealed class RequestCommitService(
             // Discovery honors the blacklist: a work the user removed from Wanted never reappears as a
             // phantom. An explicit pick below (startAcquisitions) instead CLEARS its suppression.
             var candidates = selectedChildren
-                .Select(node => TryIdentity(providerId, RequestProposalReading.WorkIdFor(providerId, node)))
+                .Select(node => TryIdentity(providerId, RequestProposalReading.IdentityValueFor(providerId, node)))
                 .Where(identity => identity is not null)
                 .Select(identity => identity!)
                 .ToArray();
             var suppressed = await suppressions.FilterSuppressedAsync(candidates, cancellationToken);
             selectedChildren = selectedChildren
-                .Where(node => TryIdentity(providerId, RequestProposalReading.WorkIdFor(providerId, node)) is { } identity
+                .Where(node => TryIdentity(providerId, RequestProposalReading.IdentityValueFor(providerId, node)) is { } identity
                     && !suppressed.Contains(identity))
                 .ToArray();
         }
@@ -529,7 +542,12 @@ public sealed class RequestCommitService(
         foreach (var pick in picks) {
             items.Add(startAcquisitions
                 ? await StartAcquisitionAsync(pick, providerId, child.AcquisitionKind, creatorContext, seriesContext, targeting, cancellationToken)
-                : new RequestCommitItem($"{providerId}:{pick.WorkId}", pick.Title, pick.Outcome, pick.Entity.EntityId, null));
+                : new RequestCommitItem(
+                    RequestProposalReading.FormatQualifiedIdentity(new ExternalIdentity(providerId, pick.WorkId)),
+                    pick.Title,
+                    pick.Outcome,
+                    pick.Entity.EntityId,
+                    null));
 
             // A pick that nests further (a season's episodes) materializes its own children as wanted
             // phantoms — discovery only, never acquisitions; each phantom is requested from its page.
@@ -561,7 +579,11 @@ public sealed class RequestCommitService(
         // The pick's own detail carries its children (a series proposal ships season shells only; the
         // season lookup ships the episodes), so resolve it with children included.
         var proposal = await proposals.ResolveProposalAsync(
-            pickDescriptor, providerId, itemId, hideNsfw, includeChildren: true, cancellationToken);
+            pickDescriptor,
+            new ExternalIdentity(providerId, itemId),
+            hideNsfw,
+            includeChildren: true,
+            cancellationToken);
         if (proposal?.Patch is null) {
             return;
         }
@@ -573,7 +595,7 @@ public sealed class RequestCommitService(
 
         // Discovery honors the blacklist: a phantom the user removed from Wanted never reappears.
         var candidates = childProposals
-            .Select(node => RequestProposalReading.WorkIdFor(providerId, node))
+            .Select(node => RequestProposalReading.IdentityValueFor(providerId, node))
             .Select(id => TryIdentity(providerId, id))
             .Where(identity => identity is not null)
             .Select(identity => identity!)
@@ -582,7 +604,7 @@ public sealed class RequestCommitService(
 
         var phantomPicks = new List<CommitPick>();
         foreach (var childProposal in childProposals) {
-            var workId = RequestProposalReading.WorkIdFor(providerId, childProposal);
+            var workId = RequestProposalReading.IdentityValueFor(providerId, childProposal);
             if (TryIdentity(providerId, workId) is not { } identity || suppressed.Contains(identity)) {
                 continue;
             }
@@ -608,12 +630,15 @@ public sealed class RequestCommitService(
     /// with picked children (a book's series volumes) each pick becomes its own standalone wanted leaf.
     /// </summary>
     private async Task<RequestCommitResponse?> CommitLeafAsync(
-        RequestKindDescriptor descriptor, RequestCommitRequest request, string providerId, string itemId, bool hideNsfw, CancellationToken cancellationToken) {
+        RequestKindDescriptor descriptor, RequestCommitRequest request, ExternalIdentity identity, bool hideNsfw, CancellationToken cancellationToken) {
         var includeChildren = request.SelectedChildIds.Count > 0 && descriptor.ChildKind is not null;
-        var proposal = await proposals.ResolveProposalAsync(descriptor, providerId, itemId, hideNsfw, includeChildren, cancellationToken);
+        var proposal = await proposals.ResolveProposalAsync(descriptor, identity, hideNsfw, includeChildren, cancellationToken);
         if (proposal?.Patch is null) {
             return null;
         }
+
+        var providerId = identity.Namespace;
+        var itemId = identity.Value;
 
         var creator = RequestProposalReading.AuthorFromCredits(proposal.Patch) ?? RequestProposalReading.PrimaryCredit(proposal.Patch);
         var targeting = TargetingOf(request);
@@ -659,13 +684,13 @@ public sealed class RequestCommitService(
     private async Task<CommitPick?> EnsurePickAsync(
         RequestKindDescriptor descriptor, string providerId, EntityMetadataProposal proposal, Guid? parentEntityId,
         CancellationToken cancellationToken, bool requestOwnedEntity = false) {
-        if (RequestProposalReading.WorkIdFor(providerId, proposal) is not { } workId) {
+        if (RequestProposalReading.IdentityValueFor(providerId, proposal) is not { } workId) {
             return null;
         }
 
         var title = TitleOr(proposal.Patch?.Title, workId);
         var entity = await wanted.EnsureAsync(
-            descriptor.WantedEntityKind, providerId, workId, title, parentEntityId,
+            descriptor.WantedEntityKind, new ExternalIdentity(providerId, workId), title, parentEntityId,
             matchTitleKindWide: descriptor.IsContainer, cancellationToken);
         var outcome = entity.HasFile && !requestOwnedEntity
             ? RequestCommitOutcome.AlreadyOwned
@@ -713,7 +738,12 @@ public sealed class RequestCommitService(
             await monitors.StartAsync(summary.Id, acquisitionKind, pick.Title, author, cancellationToken);
         }
 
-        return new RequestCommitItem($"{providerId}:{pick.WorkId}", pick.Title, pick.Outcome, pick.Entity.EntityId, acquisitionId);
+        return new RequestCommitItem(
+            RequestProposalReading.FormatQualifiedIdentity(new ExternalIdentity(providerId, pick.WorkId)),
+            pick.Title,
+            pick.Outcome,
+            pick.Entity.EntityId,
+            acquisitionId);
     }
 
     /// <summary>
@@ -781,16 +811,18 @@ public sealed class RequestCommitService(
         }
     }
 
-    private static string QualifiedId(ExternalIdentity identity) =>
-        $"{identity.Namespace}:{identity.Value}";
-
-    /// <summary>The structural (non-relationship) children whose provider-qualified ids were picked.</summary>
+    /// <summary>The structural children whose identity-qualified ids were picked.</summary>
     private static IReadOnlyList<EntityMetadataProposal> SelectStructuralChildren(
-        string providerId, EntityMetadataProposal proposal, IReadOnlyList<string> selectedChildIds) {
-        var picked = new HashSet<string>(selectedChildIds, StringComparer.OrdinalIgnoreCase);
+        string identityNamespace, EntityMetadataProposal proposal, IReadOnlyList<string> selectedChildIds) {
+        var picked = selectedChildIds
+            .Select(RequestProposalReading.ParseQualifiedIdentity)
+            .Where(identity => identity is not null)
+            .Select(identity => identity!)
+            .ToHashSet();
         return proposal.Children
             .Where(child => !child.TargetKind.IsRelationship())
-            .Where(child => RequestProposalReading.QualifiedIdFor(providerId, child) is { } id && picked.Contains(id))
+            .Where(child => RequestProposalReading.IdentityValueFor(identityNamespace, child) is { } value
+                && picked.Contains(new ExternalIdentity(identityNamespace, value)))
             .ToArray();
     }
 

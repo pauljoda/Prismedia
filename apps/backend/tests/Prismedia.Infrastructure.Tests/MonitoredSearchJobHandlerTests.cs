@@ -83,12 +83,12 @@ public sealed class MonitoredSearchJobHandlerTests {
 
     private sealed class NullProposalSource : Prismedia.Application.Requests.IPluginRequestProposalSource {
         public Task<Prismedia.Contracts.Plugins.EntityMetadataProposal?> ResolveProposalAsync(
-            Prismedia.Application.Requests.RequestKindDescriptor descriptor, string providerId, string itemId, bool hideNsfw, bool includeChildren, CancellationToken cancellationToken) =>
+            Prismedia.Application.Requests.RequestKindDescriptor descriptor, ExternalIdentity identity, bool hideNsfw, bool includeChildren, CancellationToken cancellationToken) =>
             Task.FromResult<Prismedia.Contracts.Plugins.EntityMetadataProposal?>(null);
     }
 
     private sealed class NullWantedWriter : Prismedia.Application.Requests.IWantedEntityWriter {
-        public Task<Prismedia.Application.Requests.WantedEntityResult> EnsureAsync(EntityKind kind, string providerId, string itemId, string title, Guid? parentEntityId, bool matchTitleKindWide, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<Prismedia.Application.Requests.WantedEntityResult> EnsureAsync(EntityKind kind, ExternalIdentity identity, string title, Guid? parentEntityId, bool matchTitleKindWide, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task ApplyProposalAsync(Guid entityId, Prismedia.Contracts.Plugins.EntityMetadataProposal proposal, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<bool> DeleteIfWantedAsync(Guid entityId, CancellationToken cancellationToken) => Task.FromResult(false);
         public Task<Prismedia.Application.Requests.MonitorableContainer?> GetContainerAsync(Guid entityId, CancellationToken cancellationToken) =>

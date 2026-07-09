@@ -153,6 +153,7 @@ public static class DependencyInjection {
             indexCache: provider.GetRequiredService<PluginIndexCache>()));
         services.AddScoped<IPluginCatalogService>(provider =>
             provider.GetRequiredService<PluginCatalogService>());
+        services.AddScoped<IPluginIdentityRouter, PluginIdentityRouter>();
         services.AddScoped<IdentifyMatchHintResolver>();
         services.AddScoped(provider => new EntityMetadataApplyService(
             provider.GetRequiredService<PrismediaDbContext>(),

@@ -5,7 +5,7 @@ namespace Prismedia.Application.Requests;
 
 /// <summary>
 /// Searches plugin-backed metadata providers for one requestable kind at request time, returning
-/// results carrying the provider id and external id so a Prismedia-direct acquisition can capture them.
+/// results carrying a persistent external identity so a Prismedia-direct acquisition can capture it.
 /// Kind behavior (which plugin kind to query, container gating) comes from the descriptor.
 /// </summary>
 public interface IRequestMetadataSearchSource {
@@ -13,17 +13,21 @@ public interface IRequestMetadataSearchSource {
     Task<IReadOnlyList<RequestSearchResult>> SearchAsync(RequestKindDescriptor descriptor, string query, bool hideNsfw, CancellationToken cancellationToken);
 }
 
-/// <summary>Full metadata a plugin can resolve for a known provider work-id, used to enrich a held request before import.</summary>
+/// <summary>Full metadata a plugin can resolve for a persistent external identity, used to enrich a held request before import.</summary>
 public sealed record RequestMetadataEnrichment(string? Description, string? PosterUrl, int? Year);
 
 /// <summary>
-/// Resolves full metadata for a known provider work-id (no library entity), so a request's held metadata
+/// Resolves full metadata for a known external identity (no library entity), so a request's held metadata
 /// can be enriched with the cover/description/dates the lightweight search result lacked. Reuses the
 /// plugin LookupId path — no new plugin-protocol message.
 /// </summary>
 public interface IRequestMetadataEnricher {
-    /// <summary>Looks up full metadata by media kind + provider + work-id, or null when the provider can't resolve it.</summary>
-    Task<RequestMetadataEnrichment?> LookupByIdAsync(EntityKind kind, string providerId, string externalId, bool hideNsfw, CancellationToken cancellationToken);
+    /// <summary>Looks up full metadata by media kind and persistent identity, or null when no plugin can resolve it.</summary>
+    Task<RequestMetadataEnrichment?> LookupByIdAsync(
+        EntityKind kind,
+        ExternalIdentity identity,
+        bool hideNsfw,
+        CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -33,7 +37,7 @@ public interface IRequestMetadataEnricher {
 /// </summary>
 public interface IPluginRequestDetailSource {
     /// <summary>
-    /// Builds the request detail for a provider-qualified id (<c>"provider:itemId"</c>) of the given
+    /// Builds the request detail for an identity-qualified id (<c>"namespace:value"</c>) of the given
     /// kind, or null when the provider can't resolve it.
     /// </summary>
     Task<RequestDetailResponse?> GetDetailAsync(RequestKindDescriptor descriptor, string externalId, bool hideNsfw, CancellationToken cancellationToken);

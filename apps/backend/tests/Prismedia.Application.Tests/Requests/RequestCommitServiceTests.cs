@@ -50,6 +50,29 @@ public sealed class RequestCommitServiceTests {
     }
 
     [Fact]
+    public async Task ChildSelectionPreservesOpaqueIdentityCaseAndColons() {
+        var proposal = Container(
+            ProposalKind.Person,
+            "Author",
+            "A1",
+            Leaf(ProposalKind.Book, "Exact", "Work:AbC"),
+            Leaf(ProposalKind.Book, "Different case", "Work:aBc"));
+        var (service, writer, acquisitions) = Service(proposal);
+
+        var response = await service.CommitAsync(
+            new RequestCommitRequest(
+                RequestMediaKind.Author,
+                $"{Provider}:A1",
+                [$"{Provider}:Work:AbC"]),
+            hideNsfw: false,
+            CancellationToken.None);
+
+        Assert.Equal("Work:AbC", Assert.Single(writer.Ensured, call => call.Kind == EntityKind.Book).ItemId);
+        Assert.Equal("Exact", Assert.Single(acquisitions.Created).Title);
+        Assert.Equal($"{Provider}:Work:AbC", Assert.Single(response!.Items).ExternalId);
+    }
+
+    [Fact]
     public async Task ArtistCommitCreatesTheWantedArtistAndAlbumAcquisitions() {
         var proposal = Container(ProposalKind.MusicArtist, "Daft Punk", "MB1",
             Leaf(ProposalKind.AudioLibrary, "Discovery", "R1"), Leaf(ProposalKind.AudioLibrary, "Homework", "R2"));
@@ -381,6 +404,27 @@ public sealed class RequestCommitServiceTests {
         Assert.Contains(writer.Ensured, call => call.ItemId == "W2");
         Assert.Empty(acquisitions.Created);
         Assert.Empty(monitors.AcquisitionMonitors);
+    }
+
+    [Fact]
+    public async Task ContainerSyncUsesPersistentIdentityNamespaceIndependentlyFromProposalPluginId() {
+        var proposal = Rekey(
+            Container(ProposalKind.Person, "Author", "A1", Leaf(ProposalKind.Book, "Brand New", "W2")),
+            identityNamespace: "tmdb",
+            pluginId: "metadata-aggregator");
+        var (service, writer, acquisitions, _) = ServiceWithMonitors(proposal);
+        var authorEntityId = FakeWantedEntityWriter.EntityIdFor("A1");
+        writer.Container = new MonitorableContainer(
+            authorEntityId,
+            EntityKind.BookAuthor,
+            "Author",
+            [new ExternalIdentity("tmdb", "A1")]);
+
+        var synced = await service.SyncContainerAsync(authorEntityId, CancellationToken.None);
+
+        Assert.True(synced);
+        Assert.Contains(writer.Ensured, call => call.ItemId == "W2");
+        Assert.Empty(acquisitions.Created);
     }
 
     [Theory]
@@ -721,11 +765,25 @@ public sealed class RequestCommitServiceTests {
         new(title, null, new Dictionary<string, string> { [Provider] = workId }, [], [], null, [],
             new Dictionary<string, string>(), new Dictionary<string, int>(), positions ?? new Dictionary<string, int>(), null);
 
+    private static EntityMetadataProposal Rekey(
+        EntityMetadataProposal proposal,
+        string identityNamespace,
+        string pluginId) {
+        var externalIds = proposal.Patch.ExternalIds.Values
+            .Take(1)
+            .ToDictionary(_ => identityNamespace, value => value, StringComparer.Ordinal);
+        return proposal with {
+            Provider = pluginId,
+            Patch = proposal.Patch with { ExternalIds = externalIds },
+            Children = proposal.Children.Select(child => Rekey(child, identityNamespace, pluginId)).ToArray()
+        };
+    }
+
     /// <summary>Resolves any node of the proposal tree by its provider item id — the shape of a plugin's per-item lookups.</summary>
     private sealed class FakeProposalSource(EntityMetadataProposal proposal) : IPluginRequestProposalSource {
         public Task<EntityMetadataProposal?> ResolveProposalAsync(
-            RequestKindDescriptor descriptor, string providerId, string itemId, bool hideNsfw, bool includeChildren, CancellationToken cancellationToken) =>
-            Task.FromResult(FindByItemId(proposal, providerId, itemId));
+            RequestKindDescriptor descriptor, ExternalIdentity identity, bool hideNsfw, bool includeChildren, CancellationToken cancellationToken) =>
+            Task.FromResult(FindByItemId(proposal, identity.Namespace, identity.Value));
 
         private static EntityMetadataProposal? FindByItemId(EntityMetadataProposal node, string providerId, string itemId) {
             if (node.Patch?.ExternalIds.GetValueOrDefault(providerId) == itemId) {
@@ -759,11 +817,11 @@ public sealed class RequestCommitServiceTests {
         public static Guid EntityIdFor(string itemId) =>
             new(System.Security.Cryptography.MD5.HashData(System.Text.Encoding.UTF8.GetBytes(itemId)));
 
-        public Task<WantedEntityResult> EnsureAsync(EntityKind kind, string providerId, string itemId, string title, Guid? parentEntityId, bool matchTitleKindWide, CancellationToken cancellationToken) {
-            Ensured.Add(new EnsureCall(kind, itemId, title, parentEntityId, matchTitleKindWide));
-            var hasFile = ExistingWithFile.Contains(itemId);
-            var created = !hasFile && !ExistingWanted.Contains(itemId);
-            return Task.FromResult(new WantedEntityResult(EntityIdFor(itemId), created, hasFile));
+        public Task<WantedEntityResult> EnsureAsync(EntityKind kind, ExternalIdentity identity, string title, Guid? parentEntityId, bool matchTitleKindWide, CancellationToken cancellationToken) {
+            Ensured.Add(new EnsureCall(kind, identity.Value, title, parentEntityId, matchTitleKindWide));
+            var hasFile = ExistingWithFile.Contains(identity.Value);
+            var created = !hasFile && !ExistingWanted.Contains(identity.Value);
+            return Task.FromResult(new WantedEntityResult(EntityIdFor(identity.Value), created, hasFile));
         }
 
         public Task ApplyProposalAsync(Guid entityId, EntityMetadataProposal proposal, CancellationToken cancellationToken) {

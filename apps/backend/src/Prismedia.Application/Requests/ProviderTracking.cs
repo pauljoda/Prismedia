@@ -3,15 +3,13 @@ using Prismedia.Domain.Entities;
 namespace Prismedia.Application.Requests;
 
 /// <summary>
-/// Answers whether installed metadata plugins can track provider identities — re-resolve an item by its
-/// provider id (the plugin lookup-id action). Standing monitors ride on this: a watch is only meaningful
-/// when some enabled plugin can notice the tracked id again on the next discovery sweep.
+/// Answers which persistent identity namespaces installed metadata plugins can track through lookup-id.
+/// Plugin manifest ids are resolved centrally and are not assumed to equal identity namespaces.
 /// </summary>
 public interface IProviderTrackingCatalog {
     /// <summary>
-    /// The subset of <paramref name="identities"/> (distinct identity namespaces) whose provider is an enabled
-    /// plugin declaring the lookup-id action for <paramref name="pluginKindCode"/> (a plugin entity-kind
-    /// wire code, see <see cref="RequestKindDescriptor.PluginKindCode"/>). Empty when nothing can track.
+    /// The subset of <paramref name="identities"/> namespaces handled by an enabled plugin declaring
+    /// lookup-id for <paramref name="pluginKindCode"/>. Empty when nothing can track.
     /// </summary>
     Task<IReadOnlyList<string>> TrackableProvidersAsync(
         string pluginKindCode,

@@ -5,35 +5,46 @@ using Prismedia.Domain.Entities;
 namespace Prismedia.Application.Requests;
 
 /// <summary>
-/// Shared readers for plugin metadata proposals in the request flow: provider-qualified id handling and
+/// Shared readers for plugin metadata proposals in the request flow: identity-qualified id handling and
 /// the small projections (work id, best image, year, author credit) the detail surface and the request
 /// commit both need. One home so the two can never drift on how they read the same proposal.
 /// </summary>
 public static class RequestProposalReading {
-    /// <summary>Splits a provider-qualified id ("provider:itemId") into its parts, or (null, null) when malformed.</summary>
-    public static (string? ProviderId, string? ItemId) SplitProviderQualifiedId(string externalId) {
+    /// <summary>Parses an identity-qualified id ("namespace:value"), or null when malformed.</summary>
+    public static ExternalIdentity? ParseQualifiedIdentity(string externalId) {
         if (string.IsNullOrWhiteSpace(externalId)) {
-            return (null, null);
+            return null;
         }
 
         var separator = externalId.IndexOf(':');
         if (separator <= 0 || separator >= externalId.Length - 1) {
-            return (null, null);
+            return null;
         }
 
-        return (externalId[..separator], externalId[(separator + 1)..]);
+        try {
+            return new ExternalIdentity(externalId[..separator], externalId[(separator + 1)..]);
+        } catch (ArgumentException) {
+            return null;
+        }
     }
 
-    /// <summary>The provider's own work id carried by a proposal (preferring the provider's key), or null.</summary>
-    public static string? WorkIdFor(string providerId, EntityMetadataProposal proposal) {
-        var workId = proposal.Patch?.ExternalIds.GetValueOrDefault(providerId)
-            ?? proposal.Patch?.ExternalIds.Values.FirstOrDefault();
+    /// <summary>The identity value a proposal carries for one canonical namespace, or null.</summary>
+    public static string? IdentityValueFor(string identityNamespace, EntityMetadataProposal proposal) {
+        var workId = proposal.Patch?.ExternalIds
+            .FirstOrDefault(pair => pair.Key.Equals(identityNamespace, StringComparison.OrdinalIgnoreCase))
+            .Value;
         return string.IsNullOrWhiteSpace(workId) ? null : workId;
     }
 
-    /// <summary>The provider-qualified id ("provider:workId") for a proposal, or null when it carries no work id.</summary>
-    public static string? QualifiedIdFor(string providerId, EntityMetadataProposal proposal) =>
-        WorkIdFor(providerId, proposal) is { } workId ? $"{providerId}:{workId}" : null;
+    /// <summary>The identity-qualified id for a proposal, or null when it carries no value in that namespace.</summary>
+    public static string? QualifiedIdFor(string identityNamespace, EntityMetadataProposal proposal) =>
+        IdentityValueFor(identityNamespace, proposal) is { } value
+            ? FormatQualifiedIdentity(new ExternalIdentity(identityNamespace, value))
+            : null;
+
+    /// <summary>Formats a canonical persistent identity as "namespace:value".</summary>
+    public static string FormatQualifiedIdentity(ExternalIdentity identity) =>
+        $"{identity.Namespace}:{identity.Value}";
 
     /// <summary>The best-ranked image url a proposal carries (books generally return cover art), or null.</summary>
     public static string? BestImage(EntityMetadataProposal proposal) =>
