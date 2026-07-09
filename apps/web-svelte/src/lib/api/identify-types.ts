@@ -1,10 +1,13 @@
 import type { EntityKind, ProposalKind } from "$lib/api/generated/model";
+import type { PluginSearchDefinition } from "$lib/api/generated/model";
 import type { IdentifyActionCode, IdentifyApplyStateCode, IdentifyQueueStateCode } from "$lib/api/generated/codes";
 import type { EntityMetadataFlagsPatch } from "$lib/api/entity-mutations";
 
 export interface PluginEntitySupport {
   entityKind: string;
   actions: string[];
+  identityNamespaces?: string[] | null;
+  search?: PluginSearchDefinition | null;
 }
 
 export interface PluginAuthField {
@@ -33,6 +36,7 @@ export interface IdentifyQuery {
   url?: string | null;
   externalIds?: Record<string, string> | null;
   requireChoice?: boolean | null;
+  fields?: Record<string, string> | null;
 }
 
 export interface ImageCandidate {

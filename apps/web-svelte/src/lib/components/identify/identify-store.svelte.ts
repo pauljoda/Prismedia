@@ -19,6 +19,7 @@ import type {
   EntityMetadataProposal,
   EntitySearchCandidate,
   IdentifyApplyProgress,
+  IdentifyQuery,
   IdentifyQueueItem as ApiIdentifyQueueItem,
   IdentifyQueueState,
   PluginProvider,
@@ -312,7 +313,7 @@ export class IdentifyStore {
   async identifyEntity(
     entity: EntityCard,
     providerId: string | null,
-    query?: { title?: string | null; url?: string | null; externalIds?: Record<string, string> | null; requireChoice?: boolean | null },
+    query?: IdentifyQuery,
   ) {
     this.error = null;
     try {
