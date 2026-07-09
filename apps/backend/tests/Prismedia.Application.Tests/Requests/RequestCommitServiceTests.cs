@@ -805,6 +805,7 @@ public sealed class RequestCommitServiceTests {
         public Task<AcquisitionTargeting?> GetTargetingByEntityAsync(Guid entityId, CancellationToken cancellationToken) => Task.FromResult(StoredTargeting);
         public Task<MonitorPreset?> GetPresetByEntityAsync(Guid entityId, CancellationToken cancellationToken) => Task.FromResult(StoredPreset);
         public Task<bool> DeleteAsync(Guid monitorId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> RetargetAsync(Guid fromAcquisitionId, Guid toAcquisitionId, CancellationToken cancellationToken) => Task.FromResult(false);
         public Task<bool> SetStatusAsync(Guid monitorId, MonitorStatus status, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<IReadOnlyList<MonitorView>> ListAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<Prismedia.Application.Acquisition.WantedPage> ListMissingAsync(int page, int pageSize, EntityKind? kind, CancellationToken cancellationToken) => throw new NotSupportedException();
@@ -837,7 +838,7 @@ public sealed class RequestCommitServiceTests {
         public Task<IReadOnlyList<Guid>> ListIdsForEntityAsync(Guid entityId, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<Guid>>(AcquisitionIdsByEntity.GetValueOrDefault(entityId) ?? []);
 
-        public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken) {
+        public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken, bool preserveWantedLoop = false) {
             Deleted.Add(id);
             return Task.FromResult(true);
         }

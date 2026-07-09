@@ -212,11 +212,14 @@ public static class AcquisitionEndpoints {
             Guid id,
             AcquisitionService acquisitions,
             CancellationToken cancellationToken) =>
-            await acquisitions.DeleteAsync(id, cancellationToken)
+            // The user-facing Downloads remove tears down the download only: a monitor watching the
+            // acquisition survives (re-pointed at a fresh pending clone) so the loop keeps chasing the
+            // still-wanted item — removing a download is never a give-up.
+            await acquisitions.DeleteAsync(id, cancellationToken, preserveWantedLoop: true)
                 ? Results.NoContent()
                 : Results.NotFound(new ApiProblem(ApiProblemCodes.AcquisitionNotFound, "Acquisition was not found.")))
             .WithName("DeleteAcquisition")
-            .WithSummary("Removes an acquisition and its torrent (and downloaded data) from the download client.")
+            .WithSummary("Removes an acquisition and its torrent (and downloaded data) from the download client; monitoring of a still-wanted item continues.")
             .Produces(StatusCodes.Status204NoContent)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 

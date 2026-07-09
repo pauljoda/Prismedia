@@ -12237,7 +12237,7 @@ export const getDeleteAcquisitionUrl = (id: string,) => {
 }
 
 /**
- * @summary Removes an acquisition and its torrent (and downloaded data) from the download client.
+ * @summary Removes an acquisition and its torrent (and downloaded data) from the download client; monitoring of a still-wanted item continues.
  */
 export const deleteAcquisition = async (id: string, options?: RequestInit): Promise<deleteAcquisitionResponse> => {
 

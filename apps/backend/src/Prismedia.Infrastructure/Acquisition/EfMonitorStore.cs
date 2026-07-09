@@ -63,6 +63,28 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
         return true;
     }
 
+    public async Task<bool> RetargetAsync(Guid fromAcquisitionId, Guid toAcquisitionId, CancellationToken cancellationToken) {
+        var rows = await db.Monitors
+            .Where(monitor => monitor.AcquisitionId == fromAcquisitionId)
+            .ToArrayAsync(cancellationToken);
+        if (rows.Length == 0) {
+            return false;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        foreach (var row in rows) {
+            row.AcquisitionId = toAcquisitionId;
+            // Re-activate a paused watch (a prior orphan-pause must not survive the retarget), but keep
+            // the search cadence: LastSearchedAt is untouched so the retargeted monitor re-searches on
+            // its normal interval rather than instantly re-grabbing what the user just removed.
+            row.Status = MonitorStatus.Active;
+            row.UpdatedAt = now;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
     public async Task<IReadOnlyList<MonitorView>> ListAsync(CancellationToken cancellationToken) {
         var rows = await (
             from monitor in db.Monitors.AsNoTracking()
@@ -309,12 +331,6 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
             }
 
             switch (row.AcquisitionStatus) {
-                case AcquisitionStatus.Cancelled:
-                    monitor.Status = MonitorStatus.Paused; // user gave up on this acquisition
-                    monitor.UpdatedAt = now;
-                    changed = true;
-                    continue;
-
                 case AcquisitionStatus.Imported:
                     // A season pack is only truly "in hand" when the season is complete. Once the import
                     // scan has reconciled the pack (its hint is consumed), any episode phantom still wanted
@@ -389,13 +405,16 @@ public sealed class EfMonitorStore(PrismediaDbContext db) : IMonitorStore {
                     continue;
             }
 
-            // Re-search ONLY when the item is genuinely still missing: a failed attempt, or a search that
-            // turned up no acceptable release. Every other state — Pending/Searching (a search is already in
-            // progress), Queued/Downloading/Downloaded/Importing (a grab is in flight), AwaitingSelection
-            // WITH candidates (found, awaiting the user or already auto-grabbed), ManualImportRequired (needs
-            // a human) — is left untouched. Re-searching an in-flight item would reset its status and, with
-            // auto-pick on, delete the live torrent and re-grab — so this gate is what keeps monitoring safe.
-            var stillMissing = row.AcquisitionStatus == AcquisitionStatus.Failed
+            // Re-search ONLY when the item is genuinely still missing: a failed attempt, a cancelled
+            // download (cancelling stops THAT transfer — it is not a give-up; monitoring is managed
+            // separately, so an active monitor keeps chasing the item on its normal cadence), or a search
+            // that turned up no acceptable release. Every other state — Pending/Searching (a search is
+            // already in progress), Queued/Downloading/Downloaded/Importing (a grab is in flight),
+            // AwaitingSelection WITH candidates (found, awaiting the user or already auto-grabbed),
+            // ManualImportRequired (needs a human) — is left untouched. Re-searching an in-flight item
+            // would reset its status and, with auto-pick on, delete the live torrent and re-grab — so this
+            // gate is what keeps monitoring safe.
+            var stillMissing = row.AcquisitionStatus is AcquisitionStatus.Failed or AcquisitionStatus.Cancelled
                 || (row.AcquisitionStatus == AcquisitionStatus.AwaitingSelection && row.AcceptedCount == 0);
             if (!stillMissing) {
                 continue;

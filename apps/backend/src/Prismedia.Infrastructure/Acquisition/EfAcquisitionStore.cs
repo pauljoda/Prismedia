@@ -157,6 +157,50 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
         return true;
     }
 
+    public async Task<Guid?> CloneForRetryAsync(Guid id, CancellationToken cancellationToken) {
+        var source = await db.Acquisitions.AsNoTracking().FirstOrDefaultAsync(row => row.Id == id, cancellationToken);
+        if (source?.EntityId is not { } entityId) {
+            return null;
+        }
+
+        // Only a still-wanted, fileless placeholder has anything left to chase — an imported or
+        // user-deleted entity means the loop is over regardless of who removes the download record.
+        var stillWanted = await db.Entities.AsNoTracking()
+            .AnyAsync(entity => entity.Id == entityId && entity.IsWanted, cancellationToken)
+            && !await db.EntityFiles.AsNoTracking()
+                .AnyAsync(file => file.EntityId == entityId && file.Role == EntityFileRole.Source, cancellationToken);
+        if (!stillWanted) {
+            return null;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var clone = new AcquisitionRow {
+            Id = Guid.NewGuid(),
+            Kind = source.Kind,
+            EntityId = source.EntityId,
+            ProfileId = source.ProfileId,
+            TargetLibraryRootId = source.TargetLibraryRootId,
+            Status = AcquisitionStatus.Pending,
+            Title = source.Title,
+            Author = source.Author,
+            Series = source.Series,
+            SeasonNumber = source.SeasonNumber,
+            EpisodeNumber = source.EpisodeNumber,
+            Year = source.Year,
+            PosterUrl = source.PosterUrl,
+            Description = source.Description,
+            PluginId = source.PluginId,
+            PluginItemId = source.PluginItemId,
+            ExternalIdsJson = source.ExternalIdsJson,
+            SourceUrlsJson = source.SourceUrlsJson,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+        db.Acquisitions.Add(clone);
+        await db.SaveChangesAsync(cancellationToken);
+        return clone.Id;
+    }
+
     public async Task SetStatusAsync(Guid id, AcquisitionStatus status, string? message, CancellationToken cancellationToken) {
         var row = await db.Acquisitions.FirstOrDefaultAsync(row => row.Id == id, cancellationToken);
         if (row is null) {

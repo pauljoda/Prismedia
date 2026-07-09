@@ -19,22 +19,26 @@
     onCancelled,
     entity,
     onDeleted,
+    onReverted,
   }: {
     /** The page-owned acquisition state (from {@link useEntityAcquisition}). */
     acq: EntityAcquisition;
     /**
-     * Called after the acquisition is cancelled. A wanted entity's page must navigate away here —
-     * cancelling a request deletes its wanted placeholder, so the page it sat on no longer exists.
+     * Called after the acquisition is cancelled, so the page can refresh. Cancel stops the download
+     * only — the wanted placeholder and any monitoring stay, and the page keeps existing.
      */
     onCancelled?: () => void;
     /**
-     * The entity this card manages, enabling the destructive "Remove from library" action for
-     * file-backed media kinds (deletes the entity, its descendants, and their files from disk).
-     * Omit to hide the action.
+     * The entity this card manages, enabling the destructive "Delete files" action for file-backed
+     * media kinds. Deleting is monitor-aware: content under active monitoring reverts to Wanted (files
+     * removed, library entry kept, monitoring untouched — it will be re-acquired); unmonitored content
+     * is removed from the library entirely. Omit to hide the action.
      */
     entity?: { id: string; kind: string; title: string };
-    /** Called after the entity is deleted — the page must navigate away (it no longer exists). */
+    /** Called after the entity was fully removed — the page must navigate away (it no longer exists). */
     onDeleted?: () => void;
+    /** Called after the entity reverted to Wanted instead (still exists) — the page should refresh. */
+    onReverted?: () => void;
   } = $props();
 
   let confirmDeleteOpen = $state(false);
@@ -46,8 +50,14 @@
 
   async function handleConfirmDelete() {
     if (!entity) return;
-    await deleteMediaEntity(entity.id, true);
-    onDeleted?.();
+    const result = await deleteMediaEntity(entity.id, true);
+    if ((Number(result.reverted) || 0) > 0) {
+      // Reverted to Wanted: the page still exists — refresh it so the wanted state shows.
+      await acq.refresh();
+      onReverted?.();
+    } else {
+      onDeleted?.();
+    }
   }
 </script>
 
@@ -128,10 +138,10 @@
             size="sm"
             onclick={() => (confirmDeleteOpen = true)}
             class="no-lift ml-auto gap-1.5 px-2.5 py-1 text-xs"
-            title="Permanently delete this item, everything inside it, and its files on disk"
+            title="Permanently delete this item's files on disk. Monitored content goes back to Wanted and will be re-acquired; unmonitored content is removed from the library."
           >
             <Trash2 class="h-3.5 w-3.5" />
-            Remove from library
+            Delete files
           </Button>
         {/if}
       </div>
@@ -184,8 +194,8 @@
   {#if canDelete && entity}
     <ConfirmDialog
       open={confirmDeleteOpen}
-      title={`Delete "${entity.title}" from the library?`}
-      message="This permanently deletes it — including seasons, episodes, or other contents — AND its files from disk. Any active downloads and monitoring are removed too. This cannot be undone."
+      title={`Delete the files for "${entity.title}"?`}
+      message="This permanently deletes its files from disk — including seasons, episodes, or other contents — and cannot be undone. While it (or its series/author) is actively monitored it goes back to Wanted and will be re-downloaded automatically; otherwise it is removed from the library. Monitoring itself is never changed by a delete — use the Monitor toggle for that."
       confirmLabel="Delete files"
       danger
       onConfirm={handleConfirmDelete}

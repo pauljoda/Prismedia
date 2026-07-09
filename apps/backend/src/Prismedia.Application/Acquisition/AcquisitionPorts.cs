@@ -272,6 +272,14 @@ public interface IAcquisitionStore {
     /// <summary>Hard-deletes an acquisition and its candidates/transfers/hints via cascade. Returns false when it no longer exists.</summary>
     Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Clones an acquisition into a fresh <see cref="AcquisitionStatus.Pending"/> record (metadata only —
+    /// no candidates, transfers, or selected release), so a monitor can outlive the original's hard
+    /// delete. Only materializes for an entity-linked acquisition whose entity is still a fileless wanted
+    /// placeholder; returns the new id, or null when there is nothing left to chase.
+    /// </summary>
+    Task<Guid?> CloneForRetryAsync(Guid id, CancellationToken cancellationToken);
+
     /// <summary>Returns the search input (title/author) for an acquisition, or null when it no longer exists.</summary>
     Task<AcquisitionSearchInput?> GetSearchInputAsync(Guid id, CancellationToken cancellationToken);
 
@@ -438,6 +446,13 @@ public interface IMonitorStore {
 
     /// <summary>Stops monitoring by hard-deleting the monitor row (the acquisition is left untouched). Returns false when it no longer exists.</summary>
     Task<bool> DeleteAsync(Guid monitorId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Re-points any monitor watching <paramref name="fromAcquisitionId"/> at
+    /// <paramref name="toAcquisitionId"/> and re-activates it, so removing a download does not
+    /// orphan-pause the monitoring loop. Returns false when no monitor watched the acquisition.
+    /// </summary>
+    Task<bool> RetargetAsync(Guid fromAcquisitionId, Guid toAcquisitionId, CancellationToken cancellationToken);
 
     /// <summary>Sets a monitor's status (pause/resume). Returns false when it no longer exists.</summary>
     Task<bool> SetStatusAsync(Guid monitorId, Domain.Entities.MonitorStatus status, CancellationToken cancellationToken);

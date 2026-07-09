@@ -21,8 +21,13 @@ public interface IAcquisitionRequestService {
     /// <summary>Every acquisition targeting this wanted library entity, for teardown when the want is removed.</summary>
     Task<IReadOnlyList<Guid>> ListIdsForEntityAsync(Guid entityId, CancellationToken cancellationToken);
 
-    /// <summary>Removes an acquisition entirely: best-effort deletes its torrent (and data) from the client, then hard-deletes the record.</summary>
-    Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken);
+    /// <summary>
+    /// Removes an acquisition entirely: best-effort deletes its torrent (and data) from the client, then
+    /// hard-deletes the record. <paramref name="preserveWantedLoop"/> (the user-facing Downloads remove)
+    /// keeps a monitor watching the acquisition alive by re-pointing it at a fresh pending clone; internal
+    /// teardown paths leave it off — they are dismantling the loop on purpose.
+    /// </summary>
+    Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken, bool preserveWantedLoop = false);
 }
 
 /// <summary>
@@ -38,7 +43,7 @@ public sealed class AcquisitionService(
     IImportedFilesReader importedFiles,
     IAcquisitionHistoryStore history,
     ILogger<AcquisitionService> logger,
-    Requests.IWantedEntityWriter wantedEntities) : IAcquisitionRequestService {
+    IMonitorStore monitors) : IAcquisitionRequestService {
     public Task<IReadOnlyList<AcquisitionSummary>> ListAsync(CancellationToken cancellationToken) =>
         store.ListAsync(cancellationToken);
 
@@ -257,24 +262,25 @@ public sealed class AcquisitionService(
         await store.SetStatusAsync(id, AcquisitionStatus.Cancelled, "Cancelled.", cancellationToken);
         await RecordRemovedAsync(detail.Summary, "Cancelled by user.", cancellationToken);
 
-        // Cancelling a request removes the wanted placeholder it created (locked decision: cancel deletes).
-        // A no-op when the entity already imported a file or the user deleted it from the library first.
-        if (detail.Summary.EntityId is { } wantedEntityId) {
-            await wantedEntities.DeleteIfWantedAsync(wantedEntityId, cancellationToken);
-        }
-
+        // Cancel stops THIS download only — the wanted placeholder and any monitor stay exactly as they
+        // are (monitoring is managed separately). An active monitor re-searches the cancelled acquisition
+        // on its normal cadence; the explicit give-up paths are the grid's "Remove wanted" and the
+        // entity's delete/unmonitor actions.
         return await store.GetAsync(id, cancellationToken);
     }
 
     /// <summary>
     /// Removes an acquisition (the download pipeline record): best-effort deletes its download (and data)
-    /// from the owning client, then hard-deletes the record. Unlike cancel, the wanted placeholder entity
-    /// is KEPT — removing a (typically failed) download from the Downloads view cleans up the transfer,
-    /// it does not un-want the item; the entity page's Cancel and the grid's "Remove wanted" are the
-    /// explicit give-up paths. The item's monitor auto-pauses via the orphan reconciliation; searching
-    /// again from the entity page restarts the loop.
+    /// from the owning client, then hard-deletes the record. The wanted placeholder entity is KEPT —
+    /// removing a download cleans up the transfer, it does not un-want the item; the grid's
+    /// "Remove wanted" and the entity's delete/unmonitor actions are the explicit give-up paths.
+    /// With <paramref name="preserveWantedLoop"/> (the user-facing Downloads remove), a monitor watching
+    /// the removed acquisition survives: the record is cloned into a fresh pending acquisition for the
+    /// same wanted entity and the monitor re-pointed at it, so the loop re-searches on its normal
+    /// cadence instead of orphan-pausing. Internal teardown paths (remove-wanted, entity deletion) leave
+    /// the flag off — they are dismantling the loop on purpose.
     /// </summary>
-    public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken) {
+    public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken, bool preserveWantedLoop = false) {
         var summary = (await store.GetAsync(id, cancellationToken))?.Summary;
         // Record the Removed event BEFORE the hard delete so the entry still carries a live acquisition id;
         // the acquisition_history FK is SetNull, so once the row is deleted the entry's acquisition id nulls
@@ -294,6 +300,16 @@ public sealed class AcquisitionService(
                 } catch (Exception) {
                     // The download may already be gone; removal should still delete the record.
                 }
+            }
+        }
+
+        if (preserveWantedLoop) {
+            // Clone-then-retarget keeps the monitor loop alive across the hard delete. The clone only
+            // materializes for an entity-linked acquisition whose entity is still a wanted placeholder;
+            // otherwise (ad-hoc acquisitions, already-imported items) nothing is preserved to chase.
+            var replacementId = await store.CloneForRetryAsync(id, cancellationToken);
+            if (replacementId is { } freshId) {
+                await monitors.RetargetAsync(id, freshId, cancellationToken);
             }
         }
 

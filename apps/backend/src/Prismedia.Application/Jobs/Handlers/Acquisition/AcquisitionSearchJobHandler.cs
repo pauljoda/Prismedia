@@ -25,13 +25,14 @@ public sealed class AcquisitionSearchJobHandler(
     /// and (with auto-pick) delete and re-grab the live torrent. This is the execution-time counterpart to
     /// the monitor's enqueue-time gate, closing the queue-latency window between them.
     /// </summary>
+    // Cancelled IS searchable: cancelling stops that download, not the want — an active monitor (or a
+    // manual re-search) revives the acquisition with a fresh search instead of finding a dead end.
     public static bool IsSearchable(AcquisitionStatus status) => status is not (
         AcquisitionStatus.Queued
         or AcquisitionStatus.Downloading
         or AcquisitionStatus.Downloaded
         or AcquisitionStatus.Importing
-        or AcquisitionStatus.Imported
-        or AcquisitionStatus.Cancelled);
+        or AcquisitionStatus.Imported);
 
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var payload = AcquisitionJobPayload.Parse(context.Job.PayloadJson);

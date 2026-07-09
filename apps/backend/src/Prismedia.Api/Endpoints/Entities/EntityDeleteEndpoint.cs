@@ -20,7 +20,7 @@ internal static class EntityDeleteEndpoint {
                 CancellationToken cancellationToken) => {
             var result = await deletion.DeleteAsync(id, deleteFiles ?? false, cancellationToken);
             return result.Deleted
-                ? Results.Ok(new EntityDeleteResponse(1, result.FilesDeleted, []))
+                ? Results.Ok(new EntityDeleteResponse(1, result.FilesDeleted, [], result.Reverted ? 1 : 0))
                 : Results.NotFound(new ApiProblem(ApiProblemCodes.EntityNotFound, result.Message ?? "The entity could not be deleted."));
         })
             .RequireAdmin()
@@ -35,18 +35,22 @@ internal static class EntityDeleteEndpoint {
                 CancellationToken cancellationToken) => {
             var deleted = 0;
             var filesDeleted = 0;
+            var reverted = 0;
             var failures = new List<EntityDeleteFailure>();
             foreach (var id in request.Ids.Distinct()) {
                 var result = await deletion.DeleteAsync(id, request.DeleteFiles, cancellationToken);
                 if (result.Deleted) {
                     deleted++;
                     filesDeleted += result.FilesDeleted;
+                    if (result.Reverted) {
+                        reverted++;
+                    }
                 } else {
                     failures.Add(new EntityDeleteFailure(id, result.Message ?? "The entity could not be deleted."));
                 }
             }
 
-            return Results.Ok(new EntityDeleteResponse(deleted, filesDeleted, failures));
+            return Results.Ok(new EntityDeleteResponse(deleted, filesDeleted, failures, reverted));
         })
             .RequireAdmin()
             .WithName("BulkDeleteEntities")
@@ -65,5 +69,10 @@ public sealed record EntityBulkDeleteRequest(IReadOnlyList<Guid> Ids, bool Delet
 /// <summary>One entity that could not be deleted, and why.</summary>
 public sealed record EntityDeleteFailure(Guid Id, string Message);
 
-/// <summary>Outcome of a delete: how many entities were removed, how many on-disk paths went with them, and any failures.</summary>
-public sealed record EntityDeleteResponse(int Deleted, int FilesDeleted, IReadOnlyList<EntityDeleteFailure> Failures);
+/// <summary>
+/// Outcome of a delete: how many entities were processed, how many on-disk paths went with them, any
+/// failures, and how many of the processed entities were REVERTED to wanted placeholders (they were
+/// under active monitoring, so their files were deleted but they stay in the library to be re-acquired)
+/// rather than removed outright.
+/// </summary>
+public sealed record EntityDeleteResponse(int Deleted, int FilesDeleted, IReadOnlyList<EntityDeleteFailure> Failures, int Reverted = 0);

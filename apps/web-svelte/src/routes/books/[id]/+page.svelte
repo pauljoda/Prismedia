@@ -382,13 +382,9 @@
   }
 
 
-  /**
-   * Cancelling a wanted book's request deletes the placeholder entity, so this page no longer exists —
-   * return to the author (or the Books grid). A cancel on an already-imported book keeps the entity.
-   */
+  /** Cancel stops the download only — the wanted placeholder stays, so refresh in place. */
   function handleAcquisitionCancelled() {
-    if (!entityWanted) return;
-    void goto((authorLink ? resolveEntityHref("book-author", authorLink.id) : null) ?? "/books");
+    void loadBook();
   }
 
   function openSelectedReader() {

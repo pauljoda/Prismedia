@@ -68,9 +68,69 @@ public sealed class MediaEntityDeletionService(
 
         var ids = await CollectTreeAsync(id, cancellationToken);
 
-        // Suppress the work's provider identities FIRST: a monitored parent container (an author, an
-        // artist, the series itself) must never re-request what the user just deleted (the "add list
-        // exclusion" analog). An explicit future request clears the suppression.
+        // Delete manages DISK state; monitoring is managed separately and decides what deletion means.
+        // An active container monitor on the entity or any ancestor says "keep chasing this content" —
+        // so the delete reverts to wanted instead of removing from the library.
+        var watchedIds = ids.Concat(await CollectAncestorsAsync(id, cancellationToken)).ToArray();
+        var reverting = await db.Monitors.AsNoTracking().AnyAsync(
+            monitor => monitor.Status == MonitorStatus.Active
+                && monitor.EntityId != null
+                && watchedIds.Contains(monitor.EntityId.Value),
+            cancellationToken);
+
+        // Tear down in-flight acquisitions either way: their downloads (and data) leave the client, and
+        // their per-item helper monitors go with them (in revert mode the surviving container monitor
+        // re-requests each gap with a fresh acquisition+monitor pair; stale ones would only linger paused).
+        var acquisitionIds = new List<Guid>();
+        foreach (var entityId in ids) {
+            acquisitionIds.AddRange(await acquisitions.ListIdsForEntityAsync(entityId, cancellationToken));
+        }
+
+        var doomedMonitors = await db.Monitors
+            .Where(monitor =>
+                (monitor.AcquisitionId != null && acquisitionIds.Contains(monitor.AcquisitionId.Value))
+                // Container monitors inside the tree are removed only on full removal — reverting keeps
+                // them, since they ARE the loop that re-acquires the reverted content.
+                || (!reverting && monitor.EntityId != null && ids.Contains(monitor.EntityId.Value)))
+            .ToArrayAsync(cancellationToken);
+        if (doomedMonitors.Length > 0) {
+            db.Monitors.RemoveRange(doomedMonitors);
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        foreach (var acquisitionId in acquisitionIds) {
+            await acquisitions.DeleteAsync(acquisitionId, cancellationToken);
+        }
+
+        var filesDeleted = 0;
+        if (deleteFiles) {
+            filesDeleted = await DeleteSourcePathsAsync(ids, cancellationToken);
+        }
+
+        if (reverting) {
+            // Revert: the entities stay in the library as wanted placeholders (source bindings cleared),
+            // and NOTHING is suppressed — the monitoring loop is supposed to re-acquire this content.
+            var sourceRows = await db.EntityFiles
+                .Where(file => ids.Contains(file.EntityId) && file.Role == EntityFileRole.Source)
+                .ToArrayAsync(cancellationToken);
+            db.EntityFiles.RemoveRange(sourceRows);
+            var rows = await db.Entities.Where(row => ids.Contains(row.Id)).ToArrayAsync(cancellationToken);
+            var now = DateTimeOffset.UtcNow;
+            foreach (var row in rows) {
+                row.IsWanted = true;
+                row.UpdatedAt = now;
+            }
+
+            await db.SaveChangesAsync(cancellationToken);
+            logger.LogInformation(
+                "MediaEntityDeletion: reverted \"{Title}\" ({Kind}) to wanted — {Rows} entities kept, {Files} on-disk paths removed.",
+                entity.Title, entity.KindCode, rows.Length, filesDeleted);
+            return new MediaEntityDeleteResult(true, FilesDeleted: filesDeleted, Reverted: true);
+        }
+
+        // Full removal: suppress the work's provider identities so a monitored parent container (an
+        // author, an artist) never re-requests what the user just deleted (the "add list exclusion"
+        // analog). An explicit future request clears the suppression.
         var providerRefs = await db.EntityExternalIds.AsNoTracking()
             .Where(row => row.EntityId == id)
             .Select(row => new ProviderRef(row.Provider, row.Value))
@@ -79,34 +139,13 @@ public sealed class MediaEntityDeletionService(
             await suppressions.SuppressAsync(providerRefs, kind, entity.Title, cancellationToken);
         }
 
-        // Tear down the acquisition pipeline for the whole tree: monitors stop re-searching, and each
-        // acquisition's delete also removes its in-flight download (and data) from the download client.
-        var monitors = await db.Monitors
-            .Where(monitor => monitor.EntityId != null && ids.Contains(monitor.EntityId.Value))
-            .ToArrayAsync(cancellationToken);
-        if (monitors.Length > 0) {
-            db.Monitors.RemoveRange(monitors);
-            await db.SaveChangesAsync(cancellationToken);
-        }
-
-        foreach (var entityId in ids) {
-            foreach (var acquisitionId in await acquisitions.ListIdsForEntityAsync(entityId, cancellationToken)) {
-                await acquisitions.DeleteAsync(acquisitionId, cancellationToken);
-            }
-        }
-
-        var filesDeleted = 0;
-        if (deleteFiles) {
-            filesDeleted = await DeleteSourcePathsAsync(ids, cancellationToken);
-        }
-
-        var rows = await db.Entities.Where(row => ids.Contains(row.Id)).ToArrayAsync(cancellationToken);
-        db.Entities.RemoveRange(rows);
+        var removedRows = await db.Entities.Where(row => ids.Contains(row.Id)).ToArrayAsync(cancellationToken);
+        db.Entities.RemoveRange(removedRows);
         await db.SaveChangesAsync(cancellationToken);
 
         logger.LogInformation(
             "MediaEntityDeletion: deleted \"{Title}\" ({Kind}) — {Rows} entities, {Files} on-disk paths removed.",
-            entity.Title, entity.KindCode, rows.Length, filesDeleted);
+            entity.Title, entity.KindCode, removedRows.Length, filesDeleted);
         return new MediaEntityDeleteResult(true, FilesDeleted: filesDeleted);
     }
 
@@ -123,6 +162,24 @@ public sealed class MediaEntityDeletionService(
         }
 
         return ids;
+    }
+
+    /// <summary>The entity's ancestor chain (bounded walk up ParentEntityId), for the monitored-ancestor check.</summary>
+    private async Task<List<Guid>> CollectAncestorsAsync(Guid id, CancellationToken cancellationToken) {
+        var ancestors = new List<Guid>();
+        var currentId = await db.Entities.AsNoTracking()
+            .Where(row => row.Id == id)
+            .Select(row => row.ParentEntityId)
+            .FirstOrDefaultAsync(cancellationToken);
+        for (var depth = 0; currentId is { } parentId && depth < MaxDescendantDepth; depth++) {
+            ancestors.Add(parentId);
+            currentId = await db.Entities.AsNoTracking()
+                .Where(row => row.Id == parentId)
+                .Select(row => row.ParentEntityId)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        return ancestors;
     }
 
     /// <summary>

@@ -126,12 +126,14 @@ public sealed class EfMonitorStoreTests {
     }
 
     [Fact]
-    public async Task MonitorWhoseAcquisitionCancelledIsPaused() {
+    public async Task MonitorWhoseAcquisitionCancelledStaysActiveAndComesDue() {
+        // Cancel stops the download, not the want: the monitor keeps chasing the item on its normal
+        // cadence instead of pausing (monitoring is managed separately from download actions).
         await using var db = CreateContext();
         var store = await SeedMonitorAsync(db, AcquisitionStatus.Cancelled);
 
-        Assert.Empty(await store.ListDueMonitorsAsync(360, CancellationToken.None));
-        Assert.Equal(MonitorStatus.Paused, (await store.ListAsync(CancellationToken.None))[0].Status);
+        Assert.Single(await store.ListDueMonitorsAsync(360, CancellationToken.None));
+        Assert.Equal(MonitorStatus.Active, (await store.ListAsync(CancellationToken.None))[0].Status);
     }
 
     [Fact]

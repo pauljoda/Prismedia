@@ -10,6 +10,9 @@ public sealed class AcquisitionSearchGateTests {
     [InlineData(AcquisitionStatus.AwaitingSelection)]
     [InlineData(AcquisitionStatus.Failed)]
     [InlineData(AcquisitionStatus.ManualImportRequired)]
+    // Cancelled is still-seeking: cancel stops that download, not the want — a monitor (or a manual
+    // re-search) revives the acquisition with a fresh search.
+    [InlineData(AcquisitionStatus.Cancelled)]
     public void StillSeekingStatesAreSearchable(AcquisitionStatus status) {
         Assert.True(AcquisitionSearchJobHandler.IsSearchable(status));
     }
@@ -20,9 +23,8 @@ public sealed class AcquisitionSearchGateTests {
     [InlineData(AcquisitionStatus.Downloaded)]
     [InlineData(AcquisitionStatus.Importing)]
     [InlineData(AcquisitionStatus.Imported)]
-    [InlineData(AcquisitionStatus.Cancelled)]
     public void InFlightOrSettledStatesAreNotSearchable(AcquisitionStatus status) {
-        // A search here would derail a grab/import or churn a finished/cancelled acquisition.
+        // A search here would derail a grab/import or churn a finished acquisition.
         Assert.False(AcquisitionSearchJobHandler.IsSearchable(status));
     }
 }

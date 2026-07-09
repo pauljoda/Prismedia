@@ -12,4 +12,6 @@ export interface EntityDeleteResponse {
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
   filesDeleted: number | string;
   failures: EntityDeleteFailure[];
+  /** @pattern ^-?(?:0|[1-9]\d*)$ */
+  reverted?: number | string;
 }

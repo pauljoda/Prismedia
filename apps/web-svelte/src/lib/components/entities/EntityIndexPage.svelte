@@ -388,8 +388,8 @@
 {:else if canDeleteMedia}
   <ConfirmDialog
     open={confirmDeleteOpen}
-    title={`Delete ${pendingDeleteIds.length === 1 ? "this item" : `${pendingDeleteIds.length} items`} from the library?`}
-    message={`This permanently deletes ${pendingDeleteIds.length === 1 ? "the item" : "these items"} — including seasons, episodes, or other contents — AND their files from disk. Any active downloads and monitoring for ${pendingDeleteIds.length === 1 ? "it are" : "them are"} removed too. This cannot be undone.`}
+    title={`Delete the files for ${pendingDeleteIds.length === 1 ? "this item" : `${pendingDeleteIds.length} items`}?`}
+    message={`This permanently deletes ${pendingDeleteIds.length === 1 ? "its" : "their"} files from disk — including seasons, episodes, or other contents — and cannot be undone. Anything under active monitoring goes back to Wanted and will be re-downloaded automatically; everything else is removed from the library. Monitoring itself is never changed by a delete.`}
     confirmLabel="Delete files"
     danger
     onConfirm={handleConfirmDelete}

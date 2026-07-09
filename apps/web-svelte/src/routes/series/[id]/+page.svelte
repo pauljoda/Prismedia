@@ -316,6 +316,7 @@
             {acq}
             entity={series ? { id: series.id, kind: series.kind, title: series.title } : undefined}
             onDeleted={() => void goto("/series")}
+            onReverted={() => void refreshSeries()}
           />
         {/if}
       {/snippet}

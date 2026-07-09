@@ -23,7 +23,8 @@ public sealed class AcquisitionServiceTests {
 
         Assert.Equal([(RecordedClientId, ClientItemId, true)], harness.Downloads.Removals);
         Assert.Equal(AcquisitionStatus.Cancelled, harness.Store.Status);
-        Assert.Equal([WantedEntityId], harness.Wanted.DeletedEntities);
+        // Cancel stops the download only — the wanted placeholder and its monitor stay untouched.
+        Assert.Empty(harness.Monitors.Retargets);
         var entry = Assert.Single(harness.History.Entries);
         Assert.Equal(AcquisitionHistoryEvent.Removed, entry.Event);
         Assert.Equal("Cancelled by user.", entry.Message);
@@ -37,8 +38,6 @@ public sealed class AcquisitionServiceTests {
 
         Assert.Equal([(RecordedClientId, ClientItemId, true)], harness.Downloads.Removals);
         Assert.True(harness.Store.Deleted);
-        // Removing a download is pipeline cleanup, not a give-up: the wanted placeholder stays.
-        Assert.Empty(harness.Wanted.DeletedEntities);
         var entry = Assert.Single(harness.History.Entries);
         Assert.Equal(AcquisitionHistoryEvent.Removed, entry.Event);
         Assert.Equal("Removed by user.", entry.Message);
@@ -52,7 +51,7 @@ public sealed class AcquisitionServiceTests {
 
         Assert.Empty(harness.Downloads.Removals);
         Assert.Equal(AcquisitionStatus.Cancelled, harness.Store.Status);
-        Assert.Equal([WantedEntityId], harness.Wanted.DeletedEntities);
+        Assert.Empty(harness.Monitors.Retargets);
         var entry = Assert.Single(harness.History.Entries);
         Assert.Equal(AcquisitionHistoryEvent.Removed, entry.Event);
         Assert.Equal("Cancelled by user.", entry.Message);
@@ -66,10 +65,33 @@ public sealed class AcquisitionServiceTests {
 
         Assert.Empty(harness.Downloads.Removals);
         Assert.True(harness.Store.Deleted);
-        Assert.Empty(harness.Wanted.DeletedEntities);
         var entry = Assert.Single(harness.History.Entries);
         Assert.Equal(AcquisitionHistoryEvent.Removed, entry.Event);
         Assert.Equal("Removed by user.", entry.Message);
+    }
+
+    [Fact]
+    public async Task DeleteAsyncWithPreserveWantedLoopRetargetsTheMonitorAtTheClone() {
+        var harness = Harness(TransferInfo(RecordedClientId));
+        var cloneId = Guid.NewGuid();
+        harness.Store.CloneResult = cloneId;
+
+        Assert.True(await harness.Service.DeleteAsync(AcquisitionId, CancellationToken.None, preserveWantedLoop: true));
+
+        // The download and record are gone, but the monitoring loop survives on the fresh clone.
+        Assert.True(harness.Store.Deleted);
+        Assert.Equal([(AcquisitionId, cloneId)], harness.Monitors.Retargets);
+    }
+
+    [Fact]
+    public async Task DeleteAsyncWithoutPreserveNeverClonesOrRetargets() {
+        var harness = Harness(TransferInfo(RecordedClientId));
+        harness.Store.CloneResult = Guid.NewGuid();
+
+        Assert.True(await harness.Service.DeleteAsync(AcquisitionId, CancellationToken.None));
+
+        Assert.True(harness.Store.Deleted);
+        Assert.Empty(harness.Monitors.Retargets);
     }
 
     [Fact]
@@ -80,7 +102,6 @@ public sealed class AcquisitionServiceTests {
 
         Assert.Equal([(DefaultClientId, ClientItemId, true)], harness.Downloads.Removals);
         Assert.True(harness.Store.Deleted);
-        Assert.Empty(harness.Wanted.DeletedEntities);
     }
 
     private static AcquisitionTransferInfo TransferInfo(Guid? downloadClientConfigId) =>
@@ -91,7 +112,7 @@ public sealed class AcquisitionServiceTests {
         var downloads = new RecordingDownloadClientFactory();
         var configs = new FakeDownloadClientConfigStore(includeRecordedClient);
         var history = new FakeAcquisitionHistoryStore();
-        var wanted = new FakeWantedEntityWriter();
+        var monitors = new RecordingMonitorStore();
         var service = new AcquisitionService(
             store,
             new ThrowingBlocklistStore(),
@@ -101,9 +122,9 @@ public sealed class AcquisitionServiceTests {
             new EmptyImportedFilesReader(),
             history,
             NullLogger<AcquisitionService>.Instance,
-            wanted);
+            monitors);
 
-        return new TestHarness(service, store, downloads, history, wanted);
+        return new TestHarness(service, store, downloads, history, monitors);
     }
 
     private sealed record TestHarness(
@@ -111,7 +132,7 @@ public sealed class AcquisitionServiceTests {
         FakeAcquisitionStore Store,
         RecordingDownloadClientFactory Downloads,
         FakeAcquisitionHistoryStore History,
-        FakeWantedEntityWriter Wanted);
+        RecordingMonitorStore Monitors);
 
     private sealed class FakeAcquisitionStore(AcquisitionTransferInfo transfer) : IAcquisitionStore {
         private readonly AcquisitionSummary _summary = new(
@@ -147,6 +168,14 @@ public sealed class AcquisitionServiceTests {
             Assert.Equal(AcquisitionId, id);
             Deleted = true;
             return Task.FromResult(true);
+        }
+
+        /// <summary>What CloneForRetryAsync returns — set by tests exercising the preserve-wanted-loop path.</summary>
+        public Guid? CloneResult { get; set; }
+
+        public Task<Guid?> CloneForRetryAsync(Guid id, CancellationToken cancellationToken) {
+            Assert.Equal(AcquisitionId, id);
+            return Task.FromResult(CloneResult);
         }
 
         public Task<AcquisitionTransferInfo?> GetTransferInfoAsync(Guid acquisitionId, CancellationToken cancellationToken) =>
@@ -241,19 +270,31 @@ public sealed class AcquisitionServiceTests {
         public Task<IReadOnlyList<AcquisitionHistoryView>> ListAsync(int limit, Guid? entityId, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
-    private sealed class FakeWantedEntityWriter : IWantedEntityWriter {
-        public List<Guid> DeletedEntities { get; } = [];
+    /// <summary>Minimal monitor-store fake recording retargets — the only member the service's delete path uses.</summary>
+    private sealed class RecordingMonitorStore : IMonitorStore {
+        public List<(Guid From, Guid To)> Retargets { get; } = [];
 
-        public Task<bool> DeleteIfWantedAsync(Guid entityId, CancellationToken cancellationToken) {
-            DeletedEntities.Add(entityId);
+        public Task<bool> RetargetAsync(Guid fromAcquisitionId, Guid toAcquisitionId, CancellationToken cancellationToken) {
+            Retargets.Add((fromAcquisitionId, toAcquisitionId));
             return Task.FromResult(true);
         }
 
-        public Task<WantedEntityResult> EnsureAsync(EntityKind kind, string providerId, string itemId, string title, Guid? parentEntityId, bool matchTitleKindWide, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task ApplyProposalAsync(Guid entityId, EntityMetadataProposal proposal, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<MonitorableContainer?> GetContainerAsync(Guid entityId, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<IReadOnlyList<Guid>> ListWantedChildIdsAsync(Guid parentEntityId, EntityKind childKind, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<Guid>>([]);
-        public Task<IReadOnlyList<Guid>> ListChildIdsAsync(Guid parentEntityId, EntityKind childKind, CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<Guid>>([]);
+        public Task<MonitorView> StartAsync(Guid acquisitionId, EntityKind kind, string title, string? author, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<MonitorView> StartForEntityAsync(Guid entityId, EntityKind kind, string title, AcquisitionTargeting? targeting, MonitorPreset? preset, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<MonitorView?> GetByEntityAsync(Guid entityId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<AcquisitionTargeting?> GetTargetingByEntityAsync(Guid entityId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<MonitorPreset?> GetPresetByEntityAsync(Guid entityId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> DeleteAsync(Guid monitorId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> SetStatusAsync(Guid monitorId, MonitorStatus status, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<MonitorView>> ListAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<WantedPage> ListMissingAsync(int page, int pageSize, EntityKind? kind, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<WantedPage> ListCutoffUnmetAsync(int page, int pageSize, EntityKind? kind, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<MonitorView?> GetByAcquisitionAsync(Guid acquisitionId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> HasActiveMonitorsAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<DueMonitor>> ListDueMonitorsAsync(int defaultIntervalMinutes, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task MarkSearchedAsync(Guid monitorId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<Guid?> CreateUpgradeChildAsync(Guid monitorId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task ResolveUpgradeChildAsync(Guid childId, bool succeeded, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
     private sealed class EmptyImportedFilesReader : IImportedFilesReader {

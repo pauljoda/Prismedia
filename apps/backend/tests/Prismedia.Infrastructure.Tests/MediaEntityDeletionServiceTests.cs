@@ -25,7 +25,8 @@ public sealed class MediaEntityDeletionServiceTests {
     public async Task DeletesTheTreeItsFilesAndTearsDownAcquisitionState() {
         await using var db = CreateContext();
         var root = new FileLibraryRoot(Guid.NewGuid(), "/media/tv", "TV", true, true, false, false, false, false);
-        var (seriesId, seasonId, episodeId) = await SeedSeriesTreeAsync(db, root.Path);
+        // The paused monitor marks an unmonitored tree: full removal, and the stale row goes with it.
+        var (seriesId, seasonId, episodeId) = await SeedSeriesTreeAsync(db, root.Path, MonitorStatus.Paused);
 
         var storage = new RecordingStorage();
         var suppressions = new RecordingSuppressions();
@@ -65,6 +66,38 @@ public sealed class MediaEntityDeletionServiceTests {
     }
 
     [Fact]
+    public async Task ActivelyMonitoredContentRevertsToWantedInsteadOfBeingRemoved() {
+        await using var db = CreateContext();
+        var root = new FileLibraryRoot(Guid.NewGuid(), "/media/tv", "TV", true, true, false, false, false, false);
+        var (seriesId, seasonId, episodeId) = await SeedSeriesTreeAsync(db, root.Path, MonitorStatus.Active);
+
+        var storage = new RecordingStorage();
+        var suppressions = new RecordingSuppressions();
+        var service = new MediaEntityDeletionService(
+            db, new FakeRoots(root), storage, suppressions, new RecordingAcquisitions([seasonId]),
+            new NullJobQueue(), NullLogger<MediaEntityDeletionService>.Instance);
+
+        // Deleting the SEASON while the SERIES is actively monitored: disk state goes, library state
+        // reverts to wanted so the monitoring loop re-acquires it. Monitoring itself is untouched.
+        var result = await service.DeleteAsync(seasonId, deleteFiles: true, CancellationToken.None);
+
+        Assert.True(result.Deleted);
+        Assert.True(result.Reverted);
+        Assert.Equal(["/media/tv/Clifford the Big Red Dog/Season 01"], storage.DeletedPaths);
+        // Season and episode rows survive as wanted placeholders with their source bindings cleared…
+        var season = await db.Entities.SingleAsync(row => row.Id == seasonId);
+        var episode = await db.Entities.SingleAsync(row => row.Id == episodeId);
+        Assert.True(season.IsWanted);
+        Assert.True(episode.IsWanted);
+        Assert.Empty(await db.EntityFiles.Where(file => file.EntityId == seasonId || file.EntityId == episodeId).ToArrayAsync());
+        // …the series and its monitor stay exactly as they were, and nothing is suppressed.
+        Assert.NotNull(await db.Entities.SingleOrDefaultAsync(row => row.Id == seriesId));
+        var monitor = await db.Monitors.SingleAsync();
+        Assert.Equal(MonitorStatus.Active, monitor.Status);
+        Assert.Empty(suppressions.Suppressed);
+    }
+
+    [Fact]
     public async Task RefusesUnknownAndNonMediaKinds() {
         await using var db = CreateContext();
         var tagId = Guid.NewGuid();
@@ -82,7 +115,8 @@ public sealed class MediaEntityDeletionServiceTests {
     }
 
     /// <summary>A series → season → episode tree with source paths under <paramref name="basePath"/>, a container monitor, and a tmdb identity.</summary>
-    private static async Task<(Guid SeriesId, Guid SeasonId, Guid EpisodeId)> SeedSeriesTreeAsync(PrismediaDbContext db, string basePath) {
+    private static async Task<(Guid SeriesId, Guid SeasonId, Guid EpisodeId)> SeedSeriesTreeAsync(
+        PrismediaDbContext db, string basePath, MonitorStatus monitorStatus = MonitorStatus.Paused) {
         var seriesId = Guid.NewGuid();
         var seasonId = Guid.NewGuid();
         var episodeId = Guid.NewGuid();
@@ -99,7 +133,7 @@ public sealed class MediaEntityDeletionServiceTests {
             CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow
         });
         db.Monitors.Add(new MonitorRow {
-            Id = Guid.NewGuid(), Kind = EntityKind.VideoSeries, EntityId = seriesId,
+            Id = Guid.NewGuid(), Kind = EntityKind.VideoSeries, EntityId = seriesId, Status = monitorStatus,
             CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow
         });
         await db.SaveChangesAsync();
@@ -169,7 +203,7 @@ public sealed class MediaEntityDeletionServiceTests {
                 ? [Guid.Parse("aaaaaaaa-0000-0000-0000-000000000001")]
                 : []);
 
-        public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken) {
+        public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken, bool preserveWantedLoop = false) {
             Deleted.Add(id);
             return Task.FromResult(true);
         }

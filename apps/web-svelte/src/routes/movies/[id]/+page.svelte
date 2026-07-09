@@ -451,8 +451,8 @@
 
   /** Cancelling a wanted movie's request deletes the placeholder entity, so this page no longer exists. */
   function handleAcquisitionCancelled() {
-    if (!entityWanted) return;
-    void goto("/movies");
+    // Cancel stops the download only — the wanted placeholder stays, so the page still exists.
+    void refreshMovie();
   }
 
   async function refreshMovie() {
@@ -798,6 +798,7 @@
             onCancelled={handleAcquisitionCancelled}
             entity={movie ? { id: movie.id, kind: movie.kind, title: movie.title } : undefined}
             onDeleted={() => void goto("/movies")}
+            onReverted={() => void refreshMovie()}
           />
         {:else}
           <VideoDetailSectionContent
@@ -862,6 +863,7 @@
             onCancelled={handleAcquisitionCancelled}
             entity={movie ? { id: movie.id, kind: movie.kind, title: movie.title } : undefined}
             onDeleted={() => void goto("/movies")}
+            onReverted={() => void refreshMovie()}
           />
         {/if}
       {/snippet}

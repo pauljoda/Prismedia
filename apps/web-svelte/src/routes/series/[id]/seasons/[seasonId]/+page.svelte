@@ -264,6 +264,7 @@
             onCancelled={() => void loadSeason()}
             entity={season ? { id: season.id, kind: season.kind, title: season.title } : undefined}
             onDeleted={() => void goto(`/series/${seriesId}`)}
+            onReverted={() => void loadSeason()}
           />
         {/if}
       {/snippet}

@@ -850,6 +850,7 @@
             onCancelled={() => void loadVideo()}
             entity={video ? { id: video.id, kind: video.kind, title: video.title } : undefined}
             onDeleted={() => void goto(seriesRef ? `/series/${seriesRef.id}` : "/videos")}
+            onReverted={() => void loadVideo()}
           />
         {:else}
           <VideoDetailSectionContent
@@ -899,6 +900,7 @@
             onCancelled={() => void loadVideo()}
             entity={video ? { id: video.id, kind: video.kind, title: video.title } : undefined}
             onDeleted={() => void goto(seriesRef ? `/series/${seriesRef.id}` : "/videos")}
+            onReverted={() => void loadVideo()}
           />
         {/if}
       {/snippet}
