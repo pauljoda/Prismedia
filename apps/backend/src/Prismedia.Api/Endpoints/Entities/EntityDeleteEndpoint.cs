@@ -6,10 +6,11 @@ namespace Prismedia.Api.Endpoints;
 
 /// <summary>
 /// DELETE /api/entities/{id} and POST /api/entities/bulk-delete — permanently removes file-backed media
-/// entities (a movie, a series with its seasons and episodes, an album, …) from the library, tearing
-/// down their monitors, acquisitions, and in-flight downloads, and — when <c>deleteFiles</c> is set —
-/// their source files and folders on disk. Destructive and irreversible; admin only. Taxonomy kinds
-/// (tags, people, studios) keep their own detach-only delete route.
+/// entities (a movie, a series with its seasons and episodes, an album, …) from the library and — when
+/// <c>deleteFiles</c> is set — their source files and folders on disk. Monitored content instead remains as
+/// wanted placeholders and immediately starts a clean reacquisition; unmonitored content tears down its
+/// monitors/acquisitions entirely. Destructive and irreversible; admin only. Taxonomy kinds (tags, people,
+/// studios) keep their own detach-only delete route.
 /// </summary>
 internal static class EntityDeleteEndpoint {
     internal static RouteGroupBuilder MapEntityDeleteEndpoint(this RouteGroupBuilder group) {

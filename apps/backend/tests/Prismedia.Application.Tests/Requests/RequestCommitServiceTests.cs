@@ -1535,6 +1535,9 @@ public sealed class RequestCommitServiceTests {
             Deleted.Add(id);
             return Task.FromResult(true);
         }
+
+        public Task<Guid?> ReacquireAsync(Guid id, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
     }
 
     private sealed class FakeSuppressionStore : IWantedSuppressionStore {

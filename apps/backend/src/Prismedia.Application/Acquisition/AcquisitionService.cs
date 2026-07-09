@@ -7,9 +7,10 @@ using Prismedia.Domain.Entities;
 namespace Prismedia.Application.Acquisition;
 
 /// <summary>
-/// The narrow acquisition seam a request commit needs: start an acquisition for a wanted entity and
-/// check whether one already targets it. Implemented by <see cref="AcquisitionService"/>; kept separate
-/// (mirroring <see cref="IAcquisitionQueueService"/>) so the commit flow doesn't couple to the full service.
+/// The narrow acquisition seam entity/request workflows need: start and inspect acquisitions for wanted
+/// entities, tear them down when the want is removed, or replace an imported row with a clean reacquisition
+/// after its files are deleted. Implemented by <see cref="AcquisitionService"/> so those workflows do not
+/// couple to the full acquisition API service.
 /// </summary>
 public interface IAcquisitionRequestService {
     /// <summary>Persists a new acquisition and enqueues the background search job that fills in candidates.</summary>
@@ -28,6 +29,15 @@ public interface IAcquisitionRequestService {
     /// teardown paths leave it off — they are dismantling the loop on purpose.
     /// </summary>
     Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken, bool preserveWantedLoop = false);
+
+    /// <summary>
+    /// Replaces an imported acquisition whose owned files were deliberately deleted with a clean retry,
+    /// re-points its monitor, and starts a release search immediately. The linked entity must already be a
+    /// fileless wanted placeholder; returns the replacement acquisition id, or null when no retry can be made.
+    /// This is intentionally separate from <see cref="DeleteAsync"/> so removing a row from Downloads keeps
+    /// its normal monitor cadence instead of immediately re-grabbing it.
+    /// </summary>
+    Task<Guid?> ReacquireAsync(Guid id, CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -245,19 +255,7 @@ public sealed class AcquisitionService(
             return null;
         }
 
-        var transfer = await store.GetTransferInfoAsync(id, cancellationToken);
-        if (!string.IsNullOrWhiteSpace(transfer?.ClientItemId)) {
-            var client = await ResolveRemovalClientAsync(transfer, cancellationToken);
-            if (client is not null) {
-                try {
-                    await clients.Get(client.Kind).RemoveAsync(ConnectionFor(client), transfer.ClientItemId, deleteData: true, cancellationToken);
-                } catch (OperationCanceledException) {
-                    throw;
-                } catch (Exception) {
-                    // The download may already be gone; cancellation should still succeed locally.
-                }
-            }
-        }
+        await RemoveTransferDataAsync(id, cancellationToken);
 
         await store.SetStatusAsync(id, AcquisitionStatus.Cancelled, "Cancelled.", cancellationToken);
         await RecordRemovedAsync(detail.Summary, "Cancelled by user.", cancellationToken);
@@ -289,19 +287,7 @@ public sealed class AcquisitionService(
             await RecordRemovedAsync(summary, "Removed by user.", cancellationToken);
         }
 
-        var transfer = await store.GetTransferInfoAsync(id, cancellationToken);
-        if (!string.IsNullOrWhiteSpace(transfer?.ClientItemId)) {
-            var client = await ResolveRemovalClientAsync(transfer, cancellationToken);
-            if (client is not null) {
-                try {
-                    await clients.Get(client.Kind).RemoveAsync(ConnectionFor(client), transfer.ClientItemId, deleteData: true, cancellationToken);
-                } catch (OperationCanceledException) {
-                    throw;
-                } catch (Exception) {
-                    // The download may already be gone; removal should still delete the record.
-                }
-            }
-        }
+        await RemoveTransferDataAsync(id, cancellationToken);
 
         if (preserveWantedLoop) {
             // Clone-then-retarget keeps the monitor loop alive across the hard delete. The clone only
@@ -314,6 +300,64 @@ public sealed class AcquisitionService(
         }
 
         return await store.DeleteAsync(id, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<Guid?> ReacquireAsync(Guid id, CancellationToken cancellationToken) {
+        var detail = await store.GetAsync(id, cancellationToken);
+        if (detail is null) {
+            return null;
+        }
+
+        await RemoveTransferDataAsync(id, cancellationToken);
+
+        // CloneForRetry is the clean transition out of Imported: it deliberately carries only the search
+        // identity/targeting metadata, leaving the old release, transfer, import hint, final path, and owned
+        // quality behind on the row that is about to be removed.
+        var replacementId = await store.CloneForRetryAsync(id, cancellationToken);
+        if (replacementId is not { } freshId) {
+            return null;
+        }
+
+        await monitors.RetargetAsync(id, freshId, cancellationToken);
+        await store.SetStatusAsync(freshId, AcquisitionStatus.Searching, null, cancellationToken);
+        await queue.EnqueueAsync(
+            new EnqueueJobRequest(
+                JobType.AcquisitionSearch,
+                PayloadJson: AcquisitionJobPayload.Serialize(freshId),
+                TargetEntityId: freshId.ToString(),
+                TargetLabel: detail.Summary.Title),
+            cancellationToken);
+
+        // Record while the old FK target still exists; the history row survives its deletion via SetNull.
+        await RecordRemovedAsync(detail.Summary, "Files deleted; searching again.", cancellationToken);
+        await store.DeleteAsync(id, cancellationToken);
+        return freshId;
+    }
+
+    /// <summary>
+    /// Best-effort removal of an acquisition's recorded download-client item and its data. A missing client
+    /// item is already the desired end state, while cancellation still propagates to the caller.
+    /// </summary>
+    private async Task RemoveTransferDataAsync(Guid id, CancellationToken cancellationToken) {
+        var transfer = await store.GetTransferInfoAsync(id, cancellationToken);
+        if (string.IsNullOrWhiteSpace(transfer?.ClientItemId)) {
+            return;
+        }
+
+        var client = await ResolveRemovalClientAsync(transfer, cancellationToken);
+        if (client is null) {
+            return;
+        }
+
+        try {
+            await clients.Get(client.Kind).RemoveAsync(
+                ConnectionFor(client), transfer.ClientItemId, deleteData: true, cancellationToken);
+        } catch (OperationCanceledException) {
+            throw;
+        } catch (Exception) {
+            // The download may already be gone; local cancellation/removal/reacquisition must still finish.
+        }
     }
 
     /// <summary>

@@ -78,6 +78,79 @@ public sealed class EfAcquisitionStoreTests {
     }
 
     [Fact]
+    public async Task CloneForRetryPreservesSearchIdentityButDropsImportedAndTransferState() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var entityId = AddWantedEntity(db, EntityKindRegistry.VideoSeason.Code, "Season 2");
+        var acquisitionId = Guid.NewGuid();
+        var profileId = Guid.NewGuid();
+        var rootId = Guid.NewGuid();
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = acquisitionId,
+            EntityId = entityId,
+            ProfileId = profileId,
+            TargetLibraryRootId = rootId,
+            Kind = EntityKind.VideoSeason,
+            Status = AcquisitionStatus.Imported,
+            StatusMessage = "Imported.",
+            Title = "Season 2",
+            Series = "Andor",
+            SeasonNumber = 2,
+            Year = 2025,
+            PosterUrl = "https://example.test/andor.jpg",
+            Description = "The second season.",
+            IdentityNamespace = "tmdb",
+            IdentityValue = "83867:season:2",
+            ExternalIdsJson = "{\"tmdb\":\"83867:season:2\"}",
+            SourceUrlsJson = "[\"https://example.test/andor\"]",
+            SelectedReleaseJson = "{\"title\":\"Andor S02\"}",
+            FinalSourcePath = "/media/tv/Andor/Season 02",
+            OwnedSourceTier = BookSourceTier.Retail,
+            OwnedFormatTier = BookFormatTier.Reflowable,
+            OwnedMediaQuality = VideoQuality.Bluray1080p.ToCode(),
+            OwnedMediaRevision = 2,
+            OwnedFormatScore = 100,
+            UpgradeQualityCaptured = true,
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        AddCandidate(db, acquisitionId, "hash", "Indexer", "Andor S02", 100);
+        db.DownloadTransfers.Add(new DownloadTransferRow {
+            Id = Guid.NewGuid(), AcquisitionId = acquisitionId, ClientItemId = "hash",
+            CreatedAt = now, UpdatedAt = now
+        });
+        db.AcquisitionImportHints.Add(new AcquisitionImportHintRow {
+            Id = Guid.NewGuid(), AcquisitionId = acquisitionId, EntityId = entityId,
+            SourcePath = "/media/tv/Andor/Season 02", ExternalIdsJson = "{}", SourceUrlsJson = "[]",
+            CreatedAt = now, UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+
+        var cloneId = await AcquisitionTestFactory.Store(db).CloneForRetryAsync(acquisitionId, CancellationToken.None);
+
+        Assert.NotNull(cloneId);
+        var clone = await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == cloneId);
+        Assert.Equal(AcquisitionStatus.Pending, clone.Status);
+        Assert.Equal((EntityKind.VideoSeason, entityId, profileId, rootId),
+            (clone.Kind, clone.EntityId, clone.ProfileId, clone.TargetLibraryRootId));
+        Assert.Equal(("Season 2", "Andor", 2, 2025),
+            (clone.Title, clone.Series, clone.SeasonNumber, clone.Year));
+        Assert.Equal(("tmdb", "83867:season:2"), (clone.IdentityNamespace, clone.IdentityValue));
+        Assert.Equal("The second season.", clone.Description);
+        Assert.Null(clone.SelectedReleaseJson);
+        Assert.Null(clone.FinalSourcePath);
+        Assert.Equal(BookSourceTier.Unknown, clone.OwnedSourceTier);
+        Assert.Equal(BookFormatTier.Unknown, clone.OwnedFormatTier);
+        Assert.Null(clone.OwnedMediaQuality);
+        Assert.Equal(1, clone.OwnedMediaRevision);
+        Assert.Equal(0, clone.OwnedFormatScore);
+        Assert.False(clone.UpgradeQualityCaptured);
+        Assert.False(await db.ReleaseCandidates.AnyAsync(row => row.AcquisitionId == cloneId));
+        Assert.False(await db.DownloadTransfers.AnyAsync(row => row.AcquisitionId == cloneId));
+        Assert.False(await db.AcquisitionImportHints.AnyAsync(row => row.AcquisitionId == cloneId));
+    }
+
+    [Fact]
     public async Task EnrichMetadataFillsGapsWithoutClobbering() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;

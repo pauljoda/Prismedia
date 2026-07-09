@@ -131,6 +131,30 @@ public sealed class AcquisitionServiceTests {
     }
 
     [Fact]
+    public async Task ReacquireAsyncReplacesImportedStateAndImmediatelySearchesTheClone() {
+        var harness = Harness(TransferInfo(RecordedClientId, AcquisitionStatus.Imported));
+        var replacementId = Guid.NewGuid();
+        harness.Store.CloneResult = replacementId;
+
+        var result = await harness.Service.ReacquireAsync(AcquisitionId, CancellationToken.None);
+
+        Assert.Equal(replacementId, result);
+        Assert.Equal([(RecordedClientId, ClientItemId, true)], harness.Downloads.Removals);
+        Assert.Equal([(AcquisitionId, replacementId)], harness.Monitors.Retargets);
+        Assert.Contains(
+            (replacementId, AcquisitionStatus.Searching, (string?)null),
+            harness.Store.StatusChanges);
+        var search = Assert.Single(harness.Queue.Requests);
+        Assert.Equal(JobType.AcquisitionSearch, search.Type);
+        Assert.Equal(replacementId.ToString(), search.TargetEntityId);
+        Assert.Equal(replacementId, AcquisitionJobPayload.Parse(search.PayloadJson!).AcquisitionId);
+        Assert.True(harness.Store.Deleted);
+        var history = Assert.Single(harness.History.Entries);
+        Assert.Equal(AcquisitionHistoryEvent.Removed, history.Event);
+        Assert.Equal("Files deleted; searching again.", history.Message);
+    }
+
+    [Fact]
     public async Task DeleteAsyncUsesDefaultClientOnlyForLegacyTransfersWithoutRecordedClient() {
         var harness = Harness(TransferInfo(downloadClientConfigId: null));
 
@@ -140,8 +164,10 @@ public sealed class AcquisitionServiceTests {
         Assert.True(harness.Store.Deleted);
     }
 
-    private static AcquisitionTransferInfo TransferInfo(Guid? downloadClientConfigId) =>
-        new(AcquisitionStatus.Downloading, FinalSourcePath: null, ClientItemId, downloadClientConfigId);
+    private static AcquisitionTransferInfo TransferInfo(
+        Guid? downloadClientConfigId,
+        AcquisitionStatus status = AcquisitionStatus.Downloading) =>
+        new(status, FinalSourcePath: null, ClientItemId, downloadClientConfigId);
 
     private static TestHarness Harness(AcquisitionTransferInfo transfer, bool includeRecordedClient = true) {
         var store = new FakeAcquisitionStore(transfer);
@@ -188,7 +214,8 @@ public sealed class AcquisitionServiceTests {
             Kind: EntityKind.Book,
             EntityId: WantedEntityId);
 
-        public AcquisitionStatus? Status { get; private set; } = AcquisitionStatus.Downloading;
+        public AcquisitionStatus? Status { get; private set; } = transfer.Status;
+        public List<(Guid Id, AcquisitionStatus Status, string? Message)> StatusChanges { get; } = [];
         public bool Deleted { get; private set; }
         public AcquisitionMetadata? CreatedMetadata { get; private set; }
 
@@ -198,8 +225,10 @@ public sealed class AcquisitionServiceTests {
                 : null);
 
         public Task SetStatusAsync(Guid id, AcquisitionStatus status, string? message, CancellationToken cancellationToken) {
-            Assert.Equal(AcquisitionId, id);
-            Status = status;
+            StatusChanges.Add((id, status, message));
+            if (id == AcquisitionId) {
+                Status = status;
+            }
             return Task.CompletedTask;
         }
 

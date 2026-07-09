@@ -130,6 +130,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated documentation, README screenshots, branding assets, install metadata, and app copy to match the current Prismedia v1 surface.
 
 ### Fixed
+- Deleting the wrong files from a monitored item now replaces its completed acquisition with a clean retry and returns it directly to Searching, instead of leaving an Imported card backed by a deleted acquisition that failed with "Acquisition was not found."
 - Updated the OpenAPI runtime to a patched release that rejects the known circular-schema denial-of-service vulnerability.
 - The shared entity API now honors the Wanted filter, and the generated web client includes the current acquisition volume field and wrong-volume rejection code.
 - Entity descriptions now render through a closed Markdown renderer that blocks raw HTML and unsafe link schemes, preventing plugin or edited metadata from injecting executable content into detail pages.

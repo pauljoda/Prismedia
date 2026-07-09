@@ -16,15 +16,16 @@ public sealed record MediaEntityDeleteResult(bool Deleted, string? Message = nul
 /// separately and is never changed by a delete:
 /// <list type="bullet">
 /// <item>An entity under ACTIVE monitoring (itself or any ancestor container) REVERTS: its files are
-/// permanently deleted and the entity tree becomes wanted placeholders again, so the monitoring loop
-/// (or a manual search) re-acquires it — the "downloaded the wrong season, delete it and let it re-find"
-/// flow. No provider identity is suppressed.</item>
+/// permanently deleted and the entity tree becomes wanted placeholders again. Any acquisition that
+/// imported those files is replaced with a clean retry and starts searching immediately — the "downloaded
+/// the wrong season, delete it and let it re-find" flow. No provider identity is suppressed.</item>
 /// <item>An unmonitored entity is REMOVED: the entity and its descendant tree leave the library, its
 /// provider identities are suppressed so a future container sweep never re-requests it, and its files
 /// are deleted when asked.</item>
 /// </list>
-/// Both paths tear down in-flight acquisitions (removing downloads from the client). Hard delete
-/// throughout: there is no soft-delete or undo; disk deletion is only guarded by the watched library roots.
+/// Both paths remove in-flight download-client data. Full removal hard-deletes acquisition state; revert
+/// replaces it with a clean search. There is no soft-delete or undo, and disk deletion is only guarded by
+/// the watched library roots.
 /// </summary>
 public interface IMediaEntityDeletionService {
     /// <summary>

@@ -73,11 +73,22 @@ public sealed class MediaEntityDeletionServiceTests {
         await using var db = CreateContext();
         var root = new FileLibraryRoot(Guid.NewGuid(), "/media/tv", "TV", true, true, false, false, false, false);
         var (seriesId, seasonId, episodeId) = await SeedSeriesTreeAsync(db, root.Path, MonitorStatus.Active);
+        db.Monitors.Add(new MonitorRow {
+            Id = Guid.NewGuid(),
+            Kind = EntityKind.VideoSeason,
+            AcquisitionId = RecordingAcquisitions.AcquisitionId,
+            Status = MonitorStatus.Fulfilled,
+            Title = "Season 1",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
 
         var storage = new RecordingStorage();
         var suppressions = new RecordingSuppressions();
+        var acquisitions = new RecordingAcquisitions([seasonId], db);
         var service = new MediaEntityDeletionService(
-            db, new FakeRoots(root), storage, suppressions, new RecordingAcquisitions([seasonId]),
+            db, new FakeRoots(root), storage, suppressions, acquisitions,
             new NullJobQueue(),
             new Prismedia.Infrastructure.Media.Processing.AssetPathService(System.IO.Path.GetTempPath()),
             NullLogger<MediaEntityDeletionService>.Instance);
@@ -95,10 +106,16 @@ public sealed class MediaEntityDeletionServiceTests {
         Assert.True(season.IsWanted);
         Assert.True(episode.IsWanted);
         Assert.Empty(await db.EntityFiles.Where(file => file.EntityId == seasonId || file.EntityId == episodeId).ToArrayAsync());
-        // …the series and its monitor stay exactly as they were, and nothing is suppressed.
+        // …the series and both its container monitor and the season's acquisition monitor stay. The
+        // acquisition is replaced only after the entity is durably Wanted + fileless, then immediately
+        // re-searched; it is never hard-deleted into an orphaned UI state.
         Assert.NotNull(await db.Entities.SingleOrDefaultAsync(row => row.Id == seriesId));
-        var monitor = await db.Monitors.SingleAsync();
-        Assert.Equal(MonitorStatus.Active, monitor.Status);
+        var monitors = await db.Monitors.ToArrayAsync();
+        Assert.Contains(monitors, monitor => monitor.EntityId == seriesId && monitor.Status == MonitorStatus.Active);
+        Assert.Contains(monitors, monitor => monitor.AcquisitionId == RecordingAcquisitions.AcquisitionId);
+        Assert.Equal([RecordingAcquisitions.AcquisitionId], acquisitions.Reacquired);
+        Assert.Empty(acquisitions.Deleted);
+        Assert.True(acquisitions.ReacquireSawWantedFileless);
         Assert.Empty(suppressions.Suppressed);
     }
 
@@ -205,16 +222,34 @@ public sealed class MediaEntityDeletionServiceTests {
         public Task ClearAsync(IReadOnlyList<ExternalIdentity> identities, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
-    private sealed class RecordingAcquisitions(IReadOnlyList<Guid> entityIdsWithAcquisition) : IAcquisitionRequestService {
+    private sealed class RecordingAcquisitions(
+        IReadOnlyList<Guid> entityIdsWithAcquisition,
+        PrismediaDbContext? db = null) : IAcquisitionRequestService {
+        public static readonly Guid AcquisitionId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000001");
         public List<Guid> Deleted { get; } = [];
+        public List<Guid> Reacquired { get; } = [];
+        public bool ReacquireSawWantedFileless { get; private set; }
         public Task<IReadOnlyList<Guid>> ListIdsForEntityAsync(Guid entityId, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<Guid>>(entityIdsWithAcquisition.Contains(entityId)
-                ? [Guid.Parse("aaaaaaaa-0000-0000-0000-000000000001")]
+                ? [AcquisitionId]
                 : []);
 
         public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken, bool preserveWantedLoop = false) {
             Deleted.Add(id);
             return Task.FromResult(true);
+        }
+
+        public async Task<Guid?> ReacquireAsync(Guid id, CancellationToken cancellationToken) {
+            Reacquired.Add(id);
+            if (db is not null) {
+                var entityId = entityIdsWithAcquisition.Single();
+                ReacquireSawWantedFileless = await db.Entities.AsNoTracking()
+                    .AnyAsync(entity => entity.Id == entityId && entity.IsWanted, cancellationToken)
+                    && !await db.EntityFiles.AsNoTracking()
+                        .AnyAsync(file => file.EntityId == entityId && file.Role == EntityFileRole.Source, cancellationToken);
+            }
+
+            return Guid.Parse("bbbbbbbb-0000-0000-0000-000000000001");
         }
 
         public Task<AcquisitionSummary> CreateAndSearchAsync(AcquisitionCreateRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();

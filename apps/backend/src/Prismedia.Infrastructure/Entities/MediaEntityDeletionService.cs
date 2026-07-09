@@ -13,10 +13,10 @@ namespace Prismedia.Infrastructure.Entities;
 
 /// <summary>
 /// EF-backed implementation of <see cref="IMediaEntityDeletionService"/>: resolves the entity's
-/// descendant tree, tears down acquisition state (monitors, downloads), suppresses provider identities
-/// against re-request, deletes source paths from disk through the managed storage (watched roots only),
-/// hard-deletes the rows (capability tables cascade), and queues the affected kinds' scans to settle
-/// bookkeeping.
+/// descendant tree and applies monitor-aware semantics: unmonitored content tears down acquisition state
+/// and is suppressed against re-request, while monitored content keeps its intent and immediately starts a
+/// clean reacquisition. Source paths are deleted through managed storage (watched roots only), generated
+/// assets are cleaned, and affected scans are queued to settle bookkeeping.
 /// </summary>
 public sealed class MediaEntityDeletionService(
     PrismediaDbContext db,
@@ -80,28 +80,29 @@ public sealed class MediaEntityDeletionService(
                 && watchedIds.Contains(monitor.EntityId.Value),
             cancellationToken);
 
-        // Tear down in-flight acquisitions either way: their downloads (and data) leave the client, and
-        // their per-item helper monitors go with them (in revert mode the surviving container monitor
-        // re-requests each gap with a fresh acquisition+monitor pair; stale ones would only linger paused).
+        // Capture the acquisition slice before changing the entity rows. Full removal tears it down; a
+        // monitored revert preserves its per-item monitors and replaces each acquisition with a clean retry
+        // only AFTER the entity is durably fileless + Wanted (CloneForRetry enforces that invariant).
         var acquisitionIds = new List<Guid>();
         foreach (var entityId in ids) {
             acquisitionIds.AddRange(await acquisitions.ListIdsForEntityAsync(entityId, cancellationToken));
         }
+        acquisitionIds = acquisitionIds.Distinct().ToList();
 
-        var doomedMonitors = await db.Monitors
-            .Where(monitor =>
-                (monitor.AcquisitionId != null && acquisitionIds.Contains(monitor.AcquisitionId.Value))
-                // Container monitors inside the tree are removed only on full removal — reverting keeps
-                // them, since they ARE the loop that re-acquires the reverted content.
-                || (!reverting && monitor.EntityId != null && ids.Contains(monitor.EntityId.Value)))
-            .ToArrayAsync(cancellationToken);
-        if (doomedMonitors.Length > 0) {
-            db.Monitors.RemoveRange(doomedMonitors);
-            await db.SaveChangesAsync(cancellationToken);
-        }
+        if (!reverting) {
+            var doomedMonitors = await db.Monitors
+                .Where(monitor =>
+                    (monitor.AcquisitionId != null && acquisitionIds.Contains(monitor.AcquisitionId.Value))
+                    || (monitor.EntityId != null && ids.Contains(monitor.EntityId.Value)))
+                .ToArrayAsync(cancellationToken);
+            if (doomedMonitors.Length > 0) {
+                db.Monitors.RemoveRange(doomedMonitors);
+                await db.SaveChangesAsync(cancellationToken);
+            }
 
-        foreach (var acquisitionId in acquisitionIds) {
-            await acquisitions.DeleteAsync(acquisitionId, cancellationToken);
+            foreach (var acquisitionId in acquisitionIds) {
+                await acquisitions.DeleteAsync(acquisitionId, cancellationToken);
+            }
         }
 
         var filesDeleted = 0;
@@ -132,6 +133,18 @@ public sealed class MediaEntityDeletionService(
             }
 
             await db.SaveChangesAsync(cancellationToken);
+
+            // The old Imported row cannot be searched directly. Replace it with a clean acquisition whose
+            // monitor is reactivated and whose search is already queued, so clients observe Searching rather
+            // than retaining a dead Imported id that can only return AcquisitionNotFound.
+            foreach (var acquisitionId in acquisitionIds) {
+                if (await acquisitions.ReacquireAsync(acquisitionId, cancellationToken) is null) {
+                    logger.LogWarning(
+                        "MediaEntityDeletion: could not restart acquisition {AcquisitionId} after reverting entity {EntityId} to wanted.",
+                        acquisitionId, id);
+                }
+            }
+
             logger.LogInformation(
                 "MediaEntityDeletion: reverted \"{Title}\" ({Kind}) to wanted — {Rows} entities kept, {Files} on-disk paths removed.",
                 entity.Title, entity.KindCode, rows.Length, filesDeleted);
