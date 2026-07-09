@@ -26,7 +26,7 @@ kinds and identify actions it serves.
   "runtime": "dotnet-process",
   "entry": "dist/Prismedia.Plugin.OpenLibrary.dll",
   "compat": {
-    "pluginApiMin": "1.0.0",
+    "pluginApiMin": "2.0.0",
     "pluginApiMax": null,
     "prismediaMin": "1.0.0",
     "prismediaMax": null
