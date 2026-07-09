@@ -46,10 +46,19 @@ listen_addresses = '127.0.0.1'
 unix_socket_directories = '/run/postgresql'
 shared_buffers = 128MB
 work_mem = 4MB
-max_connections = 40
+max_connections = 120
 logging_collector = off
 log_destination = 'stderr'
 CONF
+fi
+
+# Raise max_connections on EXISTING volumes too: the initdb block above only runs once, so
+# volumes created when the template said 40 kept it forever — and the API + worker pools
+# together could exceed that under a job burst, 500ing every request with "too many clients".
+if grep -q "^max_connections" "$PGDATA/postgresql.conf" 2>/dev/null; then
+  sed -i 's/^max_connections.*/max_connections = 120/' "$PGDATA/postgresql.conf"
+else
+  echo "max_connections = 120" >> "$PGDATA/postgresql.conf"
 fi
 
 # ── Start PostgreSQL ──────────────────────────────────────────────
