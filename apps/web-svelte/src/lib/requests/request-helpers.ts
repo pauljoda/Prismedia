@@ -25,6 +25,8 @@ export interface RequestKindInfo {
    * album result IS square album art).
    */
   entityKind: EntityKindCode;
+  /** Entity kind used at the plugin protocol boundary; authors identify as people before materializing as book-author entities. */
+  pluginEntityKind: EntityKindCode;
   /** The acquisition-profile kind this request's downloads are governed by (null while not committable). */
   profileKind: EntityKindCode | null;
   /** The library-root capability flag the acquired files need ("scanBooks" | "scanVideos" | "scanAudio"). */
@@ -34,14 +36,14 @@ export interface RequestKindInfo {
 }
 
 export const REQUEST_KINDS: RequestKindInfo[] = [
-  { kind: REQUEST_MEDIA_KIND.book, label: "Book", plural: "Books", committable: true, childNoun: "volume", entityKind: ENTITY_KIND.book, profileKind: ENTITY_KIND.book, rootFlag: "scanBooks", discoverable: true },
-  { kind: REQUEST_MEDIA_KIND.author, label: "Author", plural: "Authors", committable: true, childNoun: "book", entityKind: ENTITY_KIND.bookAuthor, profileKind: ENTITY_KIND.book, rootFlag: "scanBooks", discoverable: true },
-  { kind: REQUEST_MEDIA_KIND.movie, label: "Movie", plural: "Movies", committable: true, childNoun: null, entityKind: ENTITY_KIND.movie, profileKind: ENTITY_KIND.movie, rootFlag: "scanVideos", discoverable: true },
-  { kind: REQUEST_MEDIA_KIND.series, label: "Series", plural: "Series", committable: true, childNoun: "season", entityKind: ENTITY_KIND.videoSeries, profileKind: ENTITY_KIND.videoSeries, rootFlag: "scanVideos", discoverable: true },
-  { kind: REQUEST_MEDIA_KIND.season, label: "Season", plural: "Seasons", committable: true, childNoun: "episode", entityKind: ENTITY_KIND.videoSeason, profileKind: ENTITY_KIND.videoSeries, rootFlag: "scanVideos", discoverable: false },
-  { kind: REQUEST_MEDIA_KIND.episode, label: "Episode", plural: "Episodes", committable: true, childNoun: null, entityKind: ENTITY_KIND.video, profileKind: ENTITY_KIND.videoSeries, rootFlag: "scanVideos", discoverable: false },
-  { kind: REQUEST_MEDIA_KIND.artist, label: "Artist", plural: "Artists", committable: true, childNoun: "album", entityKind: ENTITY_KIND.musicArtist, profileKind: ENTITY_KIND.audioLibrary, rootFlag: "scanAudio", discoverable: true },
-  { kind: REQUEST_MEDIA_KIND.album, label: "Album", plural: "Albums", committable: true, childNoun: null, entityKind: ENTITY_KIND.audioLibrary, profileKind: ENTITY_KIND.audioLibrary, rootFlag: "scanAudio", discoverable: true },
+  { kind: REQUEST_MEDIA_KIND.book, label: "Book", plural: "Books", committable: true, childNoun: "volume", entityKind: ENTITY_KIND.book, pluginEntityKind: ENTITY_KIND.book, profileKind: ENTITY_KIND.book, rootFlag: "scanBooks", discoverable: true },
+  { kind: REQUEST_MEDIA_KIND.author, label: "Author", plural: "Authors", committable: true, childNoun: "book", entityKind: ENTITY_KIND.bookAuthor, pluginEntityKind: ENTITY_KIND.person, profileKind: ENTITY_KIND.book, rootFlag: "scanBooks", discoverable: true },
+  { kind: REQUEST_MEDIA_KIND.movie, label: "Movie", plural: "Movies", committable: true, childNoun: null, entityKind: ENTITY_KIND.movie, pluginEntityKind: ENTITY_KIND.movie, profileKind: ENTITY_KIND.movie, rootFlag: "scanVideos", discoverable: true },
+  { kind: REQUEST_MEDIA_KIND.series, label: "Series", plural: "Series", committable: true, childNoun: "season", entityKind: ENTITY_KIND.videoSeries, pluginEntityKind: ENTITY_KIND.videoSeries, profileKind: ENTITY_KIND.videoSeries, rootFlag: "scanVideos", discoverable: true },
+  { kind: REQUEST_MEDIA_KIND.season, label: "Season", plural: "Seasons", committable: true, childNoun: "episode", entityKind: ENTITY_KIND.videoSeason, pluginEntityKind: ENTITY_KIND.videoSeason, profileKind: ENTITY_KIND.videoSeries, rootFlag: "scanVideos", discoverable: false },
+  { kind: REQUEST_MEDIA_KIND.episode, label: "Episode", plural: "Episodes", committable: true, childNoun: null, entityKind: ENTITY_KIND.video, pluginEntityKind: ENTITY_KIND.video, profileKind: ENTITY_KIND.videoSeries, rootFlag: "scanVideos", discoverable: false },
+  { kind: REQUEST_MEDIA_KIND.artist, label: "Artist", plural: "Artists", committable: true, childNoun: "album", entityKind: ENTITY_KIND.musicArtist, pluginEntityKind: ENTITY_KIND.musicArtist, profileKind: ENTITY_KIND.audioLibrary, rootFlag: "scanAudio", discoverable: true },
+  { kind: REQUEST_MEDIA_KIND.album, label: "Album", plural: "Albums", committable: true, childNoun: null, entityKind: ENTITY_KIND.audioLibrary, pluginEntityKind: ENTITY_KIND.audioLibrary, profileKind: ENTITY_KIND.audioLibrary, rootFlag: "scanAudio", discoverable: true },
 ];
 
 /** The kinds Discover's search and its kind chips offer. */
