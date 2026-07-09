@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Application.Entities;
 using Prismedia.Application.Requests;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
@@ -15,7 +16,13 @@ namespace Prismedia.Infrastructure.Requests;
 /// the way Identify would. No library root or source file is attached until the acquisition imports.
 /// Kind-specific persistence (which detail row a kind carries) is the only per-kind branch here.
 /// </summary>
-public sealed class WantedEntityWriter(PrismediaDbContext db, EntityMetadataApplyService apply) : IWantedEntityWriter {
+/// <param name="db">Scoped Prismedia unit of work.</param>
+/// <param name="apply">Shared metadata proposal application service.</param>
+/// <param name="externalIdentities">Canonical external-identity resolver and writer.</param>
+public sealed class WantedEntityWriter(
+    PrismediaDbContext db,
+    EntityMetadataApplyService apply,
+    IEntityExternalIdentityStore externalIdentities) : IWantedEntityWriter {
     /// <summary>Wanted container kinds whose empty placeholders are pruned with their last child (from the request registry).</summary>
     private static readonly HashSet<string> ContainerKindCodes = RequestKindRegistry.All
         .Where(descriptor => descriptor.IsContainer)
@@ -25,8 +32,15 @@ public sealed class WantedEntityWriter(PrismediaDbContext db, EntityMetadataAppl
     public async Task<WantedEntityResult> EnsureAsync(
         EntityKind kind, string providerId, string itemId, string title, Guid? parentEntityId, bool matchTitleKindWide, CancellationToken cancellationToken) {
         var kindCode = kind.ToCode();
-        var entity = await FindByExternalIdAsync(kindCode, providerId, itemId, cancellationToken)
-            ?? await FindByTitleAsync(kindCode, title, parentEntityId, matchTitleKindWide, cancellationToken);
+        var identity = new ExternalIdentity(providerId, itemId);
+        var resolution = await externalIdentities.ResolveAsync(kind, [identity], parentEntityId, cancellationToken);
+        if (resolution.Status == ExternalIdentityResolutionStatus.Ambiguous) {
+            throw new ExternalIdentityAmbiguityException(kind, resolution);
+        }
+
+        var entity = resolution.EntityId is { } matchedId
+            ? await db.Entities.FindAsync([matchedId], cancellationToken)
+            : await FindByTitleAsync(kindCode, title, parentEntityId, matchTitleKindWide, cancellationToken);
 
         var now = DateTimeOffset.UtcNow;
         if (entity is not null) {
@@ -34,7 +48,7 @@ public sealed class WantedEntityWriter(PrismediaDbContext db, EntityMetadataAppl
 
             // A title-matched entity (e.g. a scanned author/artist folder with no provider ids yet) gains
             // the provider id so every later lookup — including the import bind — resolves it id-first.
-            await StampExternalIdAsync(entity.Id, providerId, itemId, now, cancellationToken);
+            await StampExternalIdAsync(entity.Id, identity, cancellationToken);
 
             // Re-requesting a still-parentless wanted leaf through its container adopts it under the container.
             if (parentEntityId is { } parent && entity.ParentEntityId is null && entity.IsWanted && !hasFile) {
@@ -58,7 +72,7 @@ public sealed class WantedEntityWriter(PrismediaDbContext db, EntityMetadataAppl
         db.Entities.Add(entity);
         AddDetailRowFor(kind, entity.Id);
 
-        await StampExternalIdAsync(entity.Id, providerId, itemId, now, cancellationToken);
+        await StampExternalIdAsync(entity.Id, identity, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         return new WantedEntityResult(entity.Id, Created: true, HasFile: false);
     }
@@ -133,11 +147,9 @@ public sealed class WantedEntityWriter(PrismediaDbContext db, EntityMetadataAppl
             return null;
         }
 
-        var providerIds = await db.EntityExternalIds.AsNoTracking()
-            .Where(row => row.EntityId == entityId)
-            .OrderBy(row => row.CreatedAt)
-            .Select(row => new ProviderRef(row.Provider, row.Value))
-            .ToArrayAsync(cancellationToken);
+        var providerIds = (await externalIdentities.ListAsync(entityId, cancellationToken))
+            .Select(identity => new ProviderRef(identity.Identity.Namespace, identity.Identity.Value))
+            .ToArray();
         var positions = await db.EntityPositions.AsNoTracking()
             .Where(row => row.EntityId == entityId)
             .ToDictionaryAsync(row => row.Code, row => row.Value, cancellationToken);
@@ -174,12 +186,6 @@ public sealed class WantedEntityWriter(PrismediaDbContext db, EntityMetadataAppl
         db.EntityFiles.AsNoTracking()
             .AnyAsync(file => file.EntityId == entityId && file.Role == EntityFileRole.Source, cancellationToken);
 
-    private Task<EntityRow?> FindByExternalIdAsync(string kindCode, string providerId, string itemId, CancellationToken cancellationToken) =>
-        db.EntityExternalIds
-            .Where(row => row.Provider == providerId && row.Value == itemId)
-            .Join(db.Entities, externalId => externalId.EntityId, candidate => candidate.Id, (_, candidate) => candidate)
-            .FirstOrDefaultAsync(candidate => candidate.KindCode == kindCode, cancellationToken);
-
     /// <summary>
     /// Title fallback, mirroring the apply cascade's scoping rules: a container grouping matches
     /// kind-wide (so a request binds to an already-scanned author/artist folder that has no provider ids
@@ -200,20 +206,13 @@ public sealed class WantedEntityWriter(PrismediaDbContext db, EntityMetadataAppl
             cancellationToken);
     }
 
-    private async Task StampExternalIdAsync(Guid entityId, string providerId, string itemId, DateTimeOffset now, CancellationToken cancellationToken) {
-        var exists = await db.EntityExternalIds
-            .AnyAsync(row => row.EntityId == entityId && row.Provider == providerId, cancellationToken);
-        if (exists) {
-            return;
-        }
-
-        db.EntityExternalIds.Add(new EntityExternalIdRow {
-            Id = Guid.NewGuid(),
-            EntityId = entityId,
-            Provider = providerId,
-            Value = itemId,
-            Url = null,
-            CreatedAt = now
-        });
-    }
+    private Task StampExternalIdAsync(
+        Guid entityId,
+        ExternalIdentity identity,
+        CancellationToken cancellationToken) =>
+        externalIdentities.WriteAsync(
+            entityId,
+            [new EntityExternalId(identity)],
+            ExternalIdentityWriteMode.AddMissing,
+            cancellationToken);
 }

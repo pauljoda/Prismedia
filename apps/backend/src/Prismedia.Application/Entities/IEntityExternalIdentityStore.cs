@@ -71,6 +71,47 @@ public sealed record ExternalIdentityResolution {
 }
 
 /// <summary>
+/// Raised when an external identity operation cannot choose safely because its evidence resolves to
+/// more than one local entity.
+/// </summary>
+public sealed class ExternalIdentityAmbiguityException : Exception {
+    /// <summary>Creates an ambiguity failure from a completed resolver result.</summary>
+    /// <param name="kind">Entity kind used to scope resolution.</param>
+    /// <param name="resolution">Ambiguous resolution containing every local match.</param>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <paramref name="resolution"/> is not ambiguous.
+    /// </exception>
+    public ExternalIdentityAmbiguityException(
+        EntityKind kind,
+        ExternalIdentityResolution resolution)
+        : base(MessageFor(kind, resolution)) {
+        Kind = kind;
+        Matches = resolution.Matches.ToArray();
+    }
+
+    /// <summary>Entity kind used to scope the failed resolution.</summary>
+    public EntityKind Kind { get; }
+
+    /// <summary>Every local entity and external-identity evidence involved in the ambiguity.</summary>
+    public IReadOnlyList<ExternalIdentityMatch> Matches { get; }
+
+    private static string MessageFor(EntityKind kind, ExternalIdentityResolution resolution) {
+        ArgumentNullException.ThrowIfNull(resolution);
+        if (resolution.Status != ExternalIdentityResolutionStatus.Ambiguous) {
+            throw new ArgumentException("External identity resolution must be ambiguous.", nameof(resolution));
+        }
+
+        var identities = string.Join(", ", resolution.Matches
+            .SelectMany(match => match.MatchedIdentities)
+            .Distinct()
+            .OrderBy(identity => identity.Namespace, StringComparer.Ordinal)
+            .ThenBy(identity => identity.Value, StringComparer.Ordinal)
+            .Select(identity => $"'{identity.Namespace}:{identity.Value}'"));
+        return $"External identity {identities} matches {resolution.Matches.Count} local {kind.ToCode()} entities. Resolve the duplicate identity before retrying.";
+    }
+}
+
+/// <summary>
 /// Application persistence port for canonical external identities attached to local entities. The
 /// implementation participates in the caller's unit of work and never commits it.
 /// </summary>

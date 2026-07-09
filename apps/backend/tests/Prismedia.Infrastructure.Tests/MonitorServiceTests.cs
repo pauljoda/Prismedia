@@ -3,6 +3,7 @@ using Prismedia.Application.Acquisition;
 using Prismedia.Application.Requests;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Acquisition;
+using Prismedia.Infrastructure.Entities;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 
@@ -125,7 +126,12 @@ public sealed class MonitorServiceTests {
         new(
             new EfMonitorStore(db),
             AcquisitionTestFactory.Store(db),
-            new Prismedia.Infrastructure.Requests.WantedEntityWriter(db, new Prismedia.Infrastructure.Plugins.EntityMetadataApplyService(db, new Prismedia.Infrastructure.Plugins.PluginArtworkServiceOptions(Path.GetTempPath()))),
+            new Prismedia.Infrastructure.Requests.WantedEntityWriter(
+                db,
+                new Prismedia.Infrastructure.Plugins.EntityMetadataApplyService(
+                    db,
+                    new Prismedia.Infrastructure.Plugins.PluginArtworkServiceOptions(Path.GetTempPath())),
+                new EfEntityExternalIdentityStore(db, TimeProvider.System)),
             new FakeTrackingCatalog(trackableProviders ?? []));
 
     /// <summary>Stands in for the plugin catalog: only the given provider ids count as trackable.</summary>

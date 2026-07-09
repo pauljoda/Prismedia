@@ -76,6 +76,9 @@ public static class ApiProblemCodes {
     /// <summary>Problem code <c>entity_not_found</c>.</summary>
     public const string EntityNotFound = "entity_not_found";
 
+    /// <summary>Problem code <c>external_identity_ambiguous</c>.</summary>
+    public const string ExternalIdentityAmbiguous = "external_identity_ambiguous";
+
     /// <summary>Problem code <c>file_conflict</c>.</summary>
     public const string FileConflict = "file_conflict";
 

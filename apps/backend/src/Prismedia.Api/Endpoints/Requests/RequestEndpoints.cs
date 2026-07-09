@@ -1,4 +1,5 @@
 using Prismedia.Application.Acquisition;
+using Prismedia.Application.Entities;
 using Prismedia.Application.Requests;
 using Prismedia.Contracts.Requests;
 using Prismedia.Contracts.System;
@@ -83,16 +84,21 @@ public static class RequestEndpoints {
                     return Results.BadRequest(new ApiProblem(ApiProblemCodes.RequestInvalid, "Select at least one item to request, or choose a monitoring preset."));
                 }
 
-                var response = await commits.CommitAsync(request, NsfwVisibility.ShouldHide(hideNsfw, httpContext), cancellationToken);
-                return response is null
-                    ? Results.NotFound(new ApiProblem(ApiProblemCodes.NotFound, "The requested item could not be resolved from its provider."))
-                    : Results.Ok(response);
+                try {
+                    var response = await commits.CommitAsync(request, NsfwVisibility.ShouldHide(hideNsfw, httpContext), cancellationToken);
+                    return response is null
+                        ? Results.NotFound(new ApiProblem(ApiProblemCodes.NotFound, "The requested item could not be resolved from its provider."))
+                        : Results.Ok(response);
+                } catch (ExternalIdentityAmbiguityException ex) {
+                    return ExternalIdentityConflict(ex);
+                }
             })
             .WithName("CommitRequest")
             .WithSummary("Commits a reviewed request: creates the wanted library entities for the picked items up front and starts one acquisition per requested book.")
             .Produces<RequestCommitResponse>()
             .Produces<ApiProblem>(StatusCodes.Status400BadRequest)
-            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound)
+            .Produces<ApiProblem>(StatusCodes.Status409Conflict);
 
         group.MapPost("/commit-entity", async (
             RequestEntityCommitRequest request,
@@ -100,30 +106,40 @@ public static class RequestEndpoints {
             HttpContext httpContext,
             RequestCommitService commits,
             CancellationToken cancellationToken) => {
-                var response = await commits.RequestEntityAsync(
-                    request.EntityId,
-                    NsfwVisibility.ShouldHide(hideNsfw, httpContext),
-                    cancellationToken,
-                    new Prismedia.Application.Acquisition.AcquisitionTargeting(request.TargetLibraryRootId, request.ProfileId));
-                return response is null
-                    ? Results.NotFound(new ApiProblem(ApiProblemCodes.NotFound, "The entity could not be requested — it may be gone, not a requestable kind, or unresolvable from its providers."))
-                    : Results.Ok(response);
+                try {
+                    var response = await commits.RequestEntityAsync(
+                        request.EntityId,
+                        NsfwVisibility.ShouldHide(hideNsfw, httpContext),
+                        cancellationToken,
+                        new Prismedia.Application.Acquisition.AcquisitionTargeting(request.TargetLibraryRootId, request.ProfileId));
+                    return response is null
+                        ? Results.NotFound(new ApiProblem(ApiProblemCodes.NotFound, "The entity could not be requested — it may be gone, not a requestable kind, or unresolvable from its providers."))
+                        : Results.Ok(response);
+                } catch (ExternalIdentityAmbiguityException ex) {
+                    return ExternalIdentityConflict(ex);
+                }
             })
             .WithName("CommitEntityRequest")
             .WithSummary("Requests an existing library entity (a wanted placeholder's Search-for-release): the server resolves its provider identity and starts the auto-grabbing acquisition.")
             .Produces<RequestCommitResponse>()
-            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound)
+            .Produces<ApiProblem>(StatusCodes.Status409Conflict);
 
         group.MapPost("/commit-missing-children", async (
             MissingChildrenCommitRequest request,
             RequestCommitService commits,
             CancellationToken cancellationToken) => {
-                var (covered, missing) = await commits.RequestMissingChildrenAsync(request.EntityId, cancellationToken);
-                return Results.Ok(new MissingChildrenCommitResponse(covered, missing));
+                try {
+                    var (covered, missing) = await commits.RequestMissingChildrenAsync(request.EntityId, cancellationToken);
+                    return Results.Ok(new MissingChildrenCommitResponse(covered, missing));
+                } catch (ExternalIdentityAmbiguityException ex) {
+                    return ExternalIdentityConflict(ex);
+                }
             })
             .WithName("CommitMissingChildrenRequest")
             .WithSummary("Requests every still-wanted child under an entity — a season's missing episodes — each as its own monitored, auto-grabbing acquisition.")
-            .Produces<MissingChildrenCommitResponse>();
+            .Produces<MissingChildrenCommitResponse>()
+            .Produces<ApiProblem>(StatusCodes.Status409Conflict);
 
         group.MapPost("/remove-wanted", async (
             WantedRemovalRequest request,
@@ -147,18 +163,23 @@ public static class RequestEndpoints {
             MonitorService monitors,
             CancellationToken cancellationToken) => {
                 // The manual counterpart to the daily sweep for one container: discover new works now.
-                var synced = await commits.SyncContainerAsync(request.EntityId, cancellationToken);
-                if (!synced) {
-                    return Results.NotFound(new ApiProblem(ApiProblemCodes.NotFound, "The container could not be synced — it may be gone, not a followable kind, or unresolvable from its providers."));
-                }
+                try {
+                    var synced = await commits.SyncContainerAsync(request.EntityId, cancellationToken);
+                    if (!synced) {
+                        return Results.NotFound(new ApiProblem(ApiProblemCodes.NotFound, "The container could not be synced — it may be gone, not a followable kind, or unresolvable from its providers."));
+                    }
 
-                await monitors.MarkEntitySearchedAsync(request.EntityId, cancellationToken);
-                return Results.NoContent();
+                    await monitors.MarkEntitySearchedAsync(request.EntityId, cancellationToken);
+                    return Results.NoContent();
+                } catch (ExternalIdentityAmbiguityException ex) {
+                    return ExternalIdentityConflict(ex);
+                }
             })
             .WithName("SyncContainerRequest")
             .WithSummary("Immediately re-syncs a followed author/artist from its provider, surfacing newly discovered works as wanted placeholders.")
             .Produces(StatusCodes.Status204NoContent)
-            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound)
+            .Produces<ApiProblem>(StatusCodes.Status409Conflict);
 
         return group;
     }
@@ -171,4 +192,7 @@ public static class RequestEndpoints {
                 .SelectMany(value => value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
                 .Select(value => value.DecodeAs<TEnum>())
                 .ToArray();
+
+    private static IResult ExternalIdentityConflict(ExternalIdentityAmbiguityException exception) =>
+        Results.Conflict(new ApiProblem(ApiProblemCodes.ExternalIdentityAmbiguous, exception.Message));
 }

@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Application.Entities;
 using Prismedia.Domain.Entities;
+using Prismedia.Infrastructure.Entities;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 using Prismedia.Infrastructure.Plugins;
@@ -49,6 +51,75 @@ public sealed class WantedEntityWriterTests {
     }
 
     [Fact]
+    public async Task EnsureNormalizesTheExternalIdentityBeforeResolvingAndStamping() {
+        await using var db = CreateContext();
+        var entityId = AddEntity(db, EntityKindRegistry.Book.Code, "Stored title", isWanted: false);
+        AddExternalId(db, entityId, "openlibrary", "W1");
+        await db.SaveChangesAsync();
+
+        var result = await Writer(db).EnsureAsync(
+            EntityKind.Book,
+            " OpenLibrary ",
+            " W1 ",
+            "Different title",
+            parentEntityId: null,
+            matchTitleKindWide: false,
+            CancellationToken.None);
+
+        Assert.False(result.Created);
+        Assert.Equal(entityId, result.EntityId);
+        var identity = Assert.Single(await db.EntityExternalIds.AsNoTracking().ToArrayAsync());
+        Assert.Equal(("openlibrary", "W1"), (identity.Provider, identity.Value));
+    }
+
+    [Fact]
+    public async Task EnsureScopesAnExternalIdentityMatchToTheRequestedParent() {
+        await using var db = CreateContext();
+        var firstAuthorId = AddEntity(db, EntityKindRegistry.BookAuthor.Code, "First author", isWanted: false);
+        var secondAuthorId = AddEntity(db, EntityKindRegistry.BookAuthor.Code, "Second author", isWanted: false);
+        var firstBookId = AddEntity(db, EntityKindRegistry.Book.Code, "Same work", isWanted: false, parentEntityId: firstAuthorId);
+        var secondBookId = AddEntity(db, EntityKindRegistry.Book.Code, "Same work", isWanted: false, parentEntityId: secondAuthorId);
+        AddExternalId(db, firstBookId, "openlibrary", "W1");
+        AddExternalId(db, secondBookId, "openlibrary", "W1");
+        await db.SaveChangesAsync();
+
+        var result = await Writer(db).EnsureAsync(
+            EntityKind.Book,
+            "openlibrary",
+            "W1",
+            "Same work",
+            secondAuthorId,
+            matchTitleKindWide: false,
+            CancellationToken.None);
+
+        Assert.False(result.Created);
+        Assert.Equal(secondBookId, result.EntityId);
+    }
+
+    [Fact]
+    public async Task EnsureReportsAmbiguousIdentityWithoutFallingBackToTitleOrCreating() {
+        await using var db = CreateContext();
+        var firstId = AddEntity(db, EntityKindRegistry.BookAuthor.Code, "Matching title", isWanted: false);
+        var secondId = AddEntity(db, EntityKindRegistry.BookAuthor.Code, "Other title", isWanted: false);
+        AddExternalId(db, firstId, "openlibraryauthor", "A1");
+        AddExternalId(db, secondId, "openlibraryauthor", "A1");
+        await db.SaveChangesAsync();
+
+        var exception = await Assert.ThrowsAsync<ExternalIdentityAmbiguityException>(() => Writer(db).EnsureAsync(
+            EntityKind.BookAuthor,
+            "openlibraryauthor",
+            "A1",
+            "Matching title",
+            parentEntityId: null,
+            matchTitleKindWide: true,
+            CancellationToken.None));
+
+        Assert.Equal(EntityKind.BookAuthor, exception.Kind);
+        Assert.Equal(new HashSet<Guid> { firstId, secondId }, exception.Matches.Select(match => match.EntityId).ToHashSet());
+        Assert.Equal(2, await db.Entities.AsNoTracking().CountAsync());
+    }
+
+    [Fact]
     public async Task EnsureBindsAnAuthorByTitleAndStampsTheProviderId() {
         // A scanned author folder has no provider ids yet; requesting that author must reuse the
         // existing entity (title match, authors only) and stamp the id for future id-first lookups.
@@ -57,12 +128,12 @@ public sealed class WantedEntityWriterTests {
         await db.SaveChangesAsync();
         var writer = Writer(db);
 
-        var result = await writer.EnsureAsync(EntityKind.BookAuthor, "openlibrary", "A1", "brandon sanderson", null, matchTitleKindWide: true, CancellationToken.None);
+        var result = await writer.EnsureAsync(EntityKind.BookAuthor, " OpenLibrary ", " A1 ", "brandon sanderson", null, matchTitleKindWide: true, CancellationToken.None);
 
         Assert.False(result.Created);
         Assert.Equal(authorId, result.EntityId);
         var externalId = Assert.Single(await db.EntityExternalIds.AsNoTracking().Where(row => row.EntityId == authorId).ToArrayAsync());
-        Assert.Equal("A1", externalId.Value);
+        Assert.Equal(("openlibrary", "A1"), (externalId.Provider, externalId.Value));
     }
 
     [Fact]
@@ -100,6 +171,19 @@ public sealed class WantedEntityWriterTests {
         var entity = await db.Entities.AsNoTracking().FirstAsync(row => row.Id == movie.EntityId);
         Assert.True(entity.IsWanted);
         Assert.Equal(EntityKindRegistry.Movie.Code, entity.KindCode);
+    }
+
+    [Fact]
+    public async Task GetContainerReturnsCanonicalMonitorableIdentities() {
+        await using var db = CreateContext();
+        var authorId = AddEntity(db, EntityKindRegistry.BookAuthor.Code, "Author", isWanted: false);
+        AddExternalId(db, authorId, "OpenLibraryWork", " W1 ");
+        await db.SaveChangesAsync();
+
+        var container = await Writer(db).GetContainerAsync(authorId, CancellationToken.None);
+
+        var identity = Assert.Single(container!.ProviderIds);
+        Assert.Equal(("openlibrarywork", "W1"), (identity.Provider, identity.ItemId));
     }
 
     [Fact]
@@ -154,7 +238,10 @@ public sealed class WantedEntityWriterTests {
     }
 
     private static WantedEntityWriter Writer(PrismediaDbContext db) =>
-        new(db, new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath())));
+        new(
+            db,
+            new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath())),
+            new EfEntityExternalIdentityStore(db, TimeProvider.System));
 
     private static Guid AddEntity(PrismediaDbContext db, string kindCode, string title, bool isWanted, Guid? parentEntityId = null) {
         var now = DateTimeOffset.UtcNow;
