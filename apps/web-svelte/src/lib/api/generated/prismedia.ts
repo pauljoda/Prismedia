@@ -231,12 +231,14 @@ import type {
   RequestCommitResponse,
   RequestDetailResponse,
   RequestEntityCommitRequest,
+  RequestEntityReviewRequest,
   RequestPluginSearchRequest,
   RequestReviewRequest,
   RequestReviewResponse,
   RequestSearchResponse,
   RescanFileRootParams,
   ResolveIdentifyQueueCandidateParams,
+  ReviewEntityRequestParams,
   ReviewRequestParams,
   ReviewedRequestCommitRequest,
   SaveIdentifyQueueProposalRequest,
@@ -11715,6 +11717,63 @@ export const reviewRequest = async (requestReviewRequest: RequestReviewRequest,
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       requestReviewRequest,)
+  }
+);}
+
+
+
+export type reviewEntityRequestResponse200 = {
+  data: RequestReviewResponse
+  status: 200
+}
+
+export type reviewEntityRequestResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type reviewEntityRequestResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type reviewEntityRequestResponseSuccess = (reviewEntityRequestResponse200) & {
+  headers: Headers;
+};
+export type reviewEntityRequestResponseError = (reviewEntityRequestResponse400 | reviewEntityRequestResponse404) & {
+  headers: Headers;
+};
+
+export type reviewEntityRequestResponse = (reviewEntityRequestResponseSuccess | reviewEntityRequestResponseError)
+
+export const getReviewEntityRequestUrl = (params?: ReviewEntityRequestParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/requests/review-entity?${stringifiedParams}` : `/api/requests/review-entity`
+}
+
+/**
+ * @summary Gets a canonical request proposal for an existing entity by routing its persistent identities through capable plugins.
+ */
+export const reviewEntityRequest = async (requestEntityReviewRequest: RequestEntityReviewRequest,
+    params?: ReviewEntityRequestParams, options?: RequestInit): Promise<reviewEntityRequestResponse> => {
+
+  return orvalFetch<reviewEntityRequestResponse>(getReviewEntityRequestUrl(params),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      requestEntityReviewRequest,)
   }
 );}
 
