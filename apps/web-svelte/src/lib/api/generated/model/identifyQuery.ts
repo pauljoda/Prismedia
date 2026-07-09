@@ -5,6 +5,7 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { IdentifyQueryExternalIds } from './identifyQueryExternalIds';
+import type { IdentifyQueryFields } from './identifyQueryFields';
 
 export interface IdentifyQuery {
   /** @nullable */
@@ -15,4 +16,6 @@ export interface IdentifyQuery {
   externalIds: IdentifyQueryExternalIds;
   /** @nullable */
   requireChoice?: boolean | null;
+  /** @nullable */
+  fields?: IdentifyQueryFields;
 }

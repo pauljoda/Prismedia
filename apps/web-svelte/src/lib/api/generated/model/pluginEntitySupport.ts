@@ -4,8 +4,12 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { PluginSearchDefinition } from './pluginSearchDefinition';
 
 export interface PluginEntitySupport {
   entityKind: string;
   actions: string[];
+  /** @nullable */
+  identityNamespaces?: string[] | null;
+  search?: null | PluginSearchDefinition;
 }

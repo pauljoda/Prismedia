@@ -267,6 +267,14 @@ export const IDENTIFY_APPLY_STATE = {
 
 export type IdentifyApplyStateCode = (typeof IDENTIFY_APPLY_STATE)[keyof typeof IDENTIFY_APPLY_STATE];
 
+export const PLUGIN_SEARCH_FIELD_TYPE = {
+  text: "text",
+  number: "number",
+  year: "year",
+} as const;
+
+export type PluginSearchFieldTypeCode = (typeof PLUGIN_SEARCH_FIELD_TYPE)[keyof typeof PLUGIN_SEARCH_FIELD_TYPE];
+
 export const FILE_SOURCE_KIND = {
   scan: "scan",
   custom: "custom",
