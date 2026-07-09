@@ -185,6 +185,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Fixed dynamic collection rules, previews, saved edits, smart collection queries, random sorting, page-level grids, tag/person/studio references, and orphan cleanup controls.
 
 ### Removed
+- Removed the obsolete frontend scraper/package-manager, execution-result, and StashBox panels; the Plugins page now uses only the current generated provider catalog, install/update/remove, Stash community, and credential contracts.
 - Removed the unused TypeScript plugin SDK packages and the TypeScript/Python plugin authoring guides; plugins run on the .NET runtime, and Stash YAML scrapers remain fully supported through the built-in Stash-compat engine.
 - Removed the app-level API key and the API Access settings panel. All access — web, Jellyfin-compatible, OPDS, and future native apps — is per-user with usernames, passwords, and session tokens. On upgrade the old key lives on only as the migrated accounts' initial password.
 - Removed LAN auto-login: browsers on the private network no longer receive an authentication cookie automatically, and the LAN visibility auto-enable setting is gone. Sign in once per browser instead.

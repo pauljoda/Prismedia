@@ -1,12 +1,13 @@
 <script lang="ts">
   import { Loader2, Save } from "@lucide/svelte";
-  import { Button } from "@prismedia/ui-svelte";
-  import { authLinkLabel, type PluginCredentialField } from "./plugin-auth-format";
+  import { Button, TextInput } from "@prismedia/ui-svelte";
+  import type { PluginAuthField } from "$lib/api/generated/model";
+  import { authLinkLabel } from "./plugin-auth-format";
 
   interface Props {
-    fields: PluginCredentialField[];
-    getPlaceholder: (field: PluginCredentialField) => string;
-    getValueKey: (field: PluginCredentialField) => string;
+    fields: PluginAuthField[];
+    getPlaceholder: (field: PluginAuthField) => string;
+    getValueKey: (field: PluginAuthField) => string;
     inputIdPrefix: string;
     onCancel: () => void;
     onSave: () => void;
@@ -27,7 +28,7 @@
 
   const canSave = $derived(fields.some((field) => values[getValueKey(field)]?.trim()));
 
-  function updateValue(field: PluginCredentialField, value: string) {
+  function updateValue(field: PluginAuthField, value: string) {
     values = {
       ...values,
       [getValueKey(field)]: value,
@@ -48,22 +49,25 @@
           {/if}
         </label>
         {#if field.url}
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
             onclick={() => window.open(field.url ?? "", "_blank", "noopener,noreferrer")}
-            class="text-[0.6rem] text-text-accent hover:underline"
+            class="h-auto p-0 text-[0.6rem] text-text-accent hover:bg-transparent hover:underline"
           >
             {authLinkLabel(field)}
-          </button>
+          </Button>
         {/if}
       </div>
-      <input
+      <TextInput
         id="{inputIdPrefix}-{field.key}"
         type="password"
+        size="sm"
         value={values[valueKey] ?? ""}
         oninput={(event) => updateValue(field, event.currentTarget.value)}
         placeholder={getPlaceholder(field)}
-        class="control-input py-1.5 font-mono"
+        class="font-mono"
       />
     </div>
   {/each}

@@ -7,7 +7,7 @@ type PluginCredentialFormProps = ComponentProps<typeof PluginCredentialForm>;
 
 function baseProps(overrides: Partial<PluginCredentialFormProps> = {}): PluginCredentialFormProps {
   const props: PluginCredentialFormProps = {
-    fields: [{ key: "api_key", label: "API Key", required: true }],
+    fields: [{ key: "api_key", label: "API Key", required: true, url: null }],
     getPlaceholder: () => "Paste your API key",
     getValueKey: (field) => field.key,
     inputIdPrefix: "auth-test",
