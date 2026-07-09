@@ -379,7 +379,9 @@ public static class DependencyInjection {
         services.AddScoped<IAcquisitionImportPlanner, AcquisitionImportPlanner>();
         services.AddScoped<IImportFileMover, ImportFileMover>();
         services.AddScoped<IOwnedFileReplacer, OwnedFileReplacer>();
-        services.AddScoped<IAcquisitionHintApplier, AcquisitionHintApplier>();
+        services.AddScoped<IAcquisitionHintApplier>(provider => new AcquisitionHintApplier(
+            provider.GetRequiredService<PrismediaDbContext>(),
+            provider.GetRequiredService<IEntityExternalIdentityStore>()));
         services.AddScoped<IImportTargetIndex, EfImportTargetIndex>();
         services.AddScoped<IImportedFilesReader, ImportedFilesReader>();
         services.AddScoped<IDownloadPayloadReader, DownloadPayloadReader>();

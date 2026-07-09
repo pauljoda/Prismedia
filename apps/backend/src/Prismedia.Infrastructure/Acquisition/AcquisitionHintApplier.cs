@@ -1,8 +1,10 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Acquisition;
+using Prismedia.Application.Entities;
 using Prismedia.Contracts.Media;
 using Prismedia.Domain.Entities;
+using Prismedia.Infrastructure.Entities;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 
@@ -18,7 +20,17 @@ namespace Prismedia.Infrastructure.Acquisition;
 /// calls the bind methods before its path-keyed upserts so the imported path attaches to that entity —
 /// the "no duplicate on import" half of the request-builds-a-wanted-entity flow.
 /// </summary>
-public sealed class AcquisitionHintApplier(PrismediaDbContext db) : IAcquisitionHintApplier {
+/// <param name="db">Scoped Prismedia unit of work.</param>
+/// <param name="externalIdentities">
+/// Canonical identity store. Direct test construction may omit it to use the EF implementation over
+/// <paramref name="db"/>.
+/// </param>
+public sealed class AcquisitionHintApplier(
+    PrismediaDbContext db,
+    IEntityExternalIdentityStore? externalIdentities = null) : IAcquisitionHintApplier {
+    private readonly IEntityExternalIdentityStore _externalIdentities =
+        externalIdentities ?? new EfEntityExternalIdentityStore(db, TimeProvider.System);
+
     public async Task<bool> ApplyAsync(Guid entityId, string sourcePath, CancellationToken cancellationToken) {
         if (string.IsNullOrWhiteSpace(sourcePath)) {
             return false;
@@ -276,27 +288,11 @@ public sealed class AcquisitionHintApplier(PrismediaDbContext db) : IAcquisition
             return;
         }
 
-        var existing = await db.EntityExternalIds
-            .Where(row => row.EntityId == entityId)
-            .Select(row => row.Provider)
-            .ToArrayAsync(cancellationToken);
-        var existingProviders = new HashSet<string>(existing, StringComparer.OrdinalIgnoreCase);
-
-        var now = DateTimeOffset.UtcNow;
-        foreach (var (provider, value) in externalIds) {
-            if (existingProviders.Contains(provider)) {
-                continue;
-            }
-
-            db.EntityExternalIds.Add(new EntityExternalIdRow {
-                Id = Guid.NewGuid(),
-                EntityId = entityId,
-                Provider = provider,
-                Value = value,
-                Url = null,
-                CreatedAt = now
-            });
-        }
+        await _externalIdentities.WriteAsync(
+            entityId,
+            externalIds,
+            ExternalIdentityWriteMode.AddMissing,
+            cancellationToken);
     }
 
     /// <summary>The stamped entity's top-level ancestor (a series, an artist, the movie itself) for the identify kick.</summary>
@@ -337,24 +333,37 @@ public sealed class AcquisitionHintApplier(PrismediaDbContext db) : IAcquisition
         try { return File.Exists(path) ? new FileInfo(path).Length : null; } catch { return null; }
     }
 
-    private static Dictionary<string, string> DecodeExternalIds(AcquisitionImportHintRow hint) {
-        var ids = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    private static IReadOnlyCollection<EntityExternalId> DecodeExternalIds(AcquisitionImportHintRow hint) {
+        var ids = new Dictionary<string, EntityExternalId>(StringComparer.Ordinal);
         if (!string.IsNullOrWhiteSpace(hint.ExternalIdsJson)) {
             var decoded = JsonSerializer.Deserialize<Dictionary<string, string>>(hint.ExternalIdsJson);
             if (decoded is not null) {
                 foreach (var (provider, value) in decoded) {
-                    if (!string.IsNullOrWhiteSpace(provider) && !string.IsNullOrWhiteSpace(value)) {
-                        ids[provider] = value;
-                    }
+                    AddIfValid(ids, provider, value);
                 }
             }
         }
 
-        if (!string.IsNullOrWhiteSpace(hint.PluginId) && !string.IsNullOrWhiteSpace(hint.PluginItemId)) {
-            ids[hint.PluginId] = hint.PluginItemId;
+        AddIfValid(ids, hint.PluginId, hint.PluginItemId);
+
+        return ids.Values.ToArray();
+    }
+
+    private static void AddIfValid(
+        IDictionary<string, EntityExternalId> identities,
+        string? identityNamespace,
+        string? value) {
+        if (string.IsNullOrWhiteSpace(identityNamespace) || string.IsNullOrWhiteSpace(value)) {
+            return;
         }
 
-        return ids;
+        try {
+            var association = new EntityExternalId(new ExternalIdentity(identityNamespace, value));
+            identities[association.Identity.Namespace] = association;
+        } catch (ArgumentException) {
+            // Acquisition hints can carry transient search URLs alongside persistent ids. Invalid
+            // identity-shaped values are intentionally ignored instead of aborting the import scan.
+        }
     }
 
     private static bool PathsOverlap(string a, string b) =>
