@@ -74,7 +74,7 @@ describe("FilmStrip", () => {
     });
   });
 
-  it("commits wheel scrubbing after scrolling idles", async () => {
+  it("commits horizontal wheel scrubbing after scrolling idles", async () => {
     matchMediaMatches = true;
     const onSeek = vi.fn();
 
@@ -91,13 +91,45 @@ describe("FilmStrip", () => {
     await screen.findByRole("button", { name: "Previous frame" });
     const scrubber = container.querySelector(".touch-none") as HTMLElement;
 
-    await fireEvent.wheel(scrubber, { deltaY: 92 });
+    await fireEvent.wheel(scrubber, { deltaX: 92 });
 
     expect(onSeek).not.toHaveBeenCalled();
 
     await waitFor(() => {
       expect(onSeek).toHaveBeenCalledWith(60);
     });
+  });
+
+  it("leaves vertical wheel input for the page to scroll", async () => {
+    matchMediaMatches = true;
+    const onSeek = vi.fn();
+    const onStripInteractionChange = vi.fn();
+
+    const { container } = render(FilmStrip, {
+      props: {
+        playlistUrl: "/trickplay.m3u8",
+        videoEl: null,
+        currentTime: 10,
+        duration: 100,
+        onSeek,
+        onStripInteractionChange,
+      },
+    });
+
+    await screen.findByRole("button", { name: "Previous frame" });
+    const scrubber = container.querySelector(".touch-none") as HTMLElement;
+    const verticalWheel = new WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      deltaX: 4,
+      deltaY: 92,
+    });
+
+    scrubber.dispatchEvent(verticalWheel);
+
+    expect(verticalWheel.defaultPrevented).toBe(false);
+    expect(onStripInteractionChange).not.toHaveBeenCalled();
+    expect(onSeek).not.toHaveBeenCalled();
   });
 
   it("lets marker labels seek directly without starting a strip drag", async () => {

@@ -131,6 +131,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated documentation, README screenshots, branding assets, install metadata, and app copy to match the current Prismedia v1 surface.
 
 ### Fixed
+- The video film strip now responds only to horizontal wheel or trackpad movement, so ordinary vertical page scrolling passes through instead of scrubbing playback.
 - Identify now operates only on Entities with real source media on disk: Wanted and fileless metadata placeholders no longer show Identify actions, cannot enter manual or automatic queues, and stale queue work is retired without duplicating matching Wanted children during a parent cascade.
 - Deleting the wrong files from a monitored item now replaces its completed acquisition with a clean retry and returns it directly to Searching, instead of leaving an Imported card backed by a deleted acquisition that failed with "Acquisition was not found."
 - Updated the OpenAPI runtime to a patched release that rejects the known circular-schema denial-of-service vulnerability.
