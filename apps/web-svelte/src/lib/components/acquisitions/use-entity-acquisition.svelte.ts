@@ -5,7 +5,7 @@ import type {
   MonitorEligibilityView,
   MonitorView,
 } from "$lib/api/generated/model";
-import { firstProviderQualifiedId, isWanted } from "$lib/api/capabilities";
+import { firstExternalIdentity, isWanted } from "$lib/api/capabilities";
 import { fetchAcquisitionForEntity } from "$lib/api/acquisitions";
 import {
   fetchEntityMonitor,
@@ -127,7 +127,7 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
   // only for a wanted phantom whose provider identity the server can resolve or degrade from.
   const showMonitor = $derived(monitor !== null || !!eligibility?.canMonitor);
   const showSearch = $derived(
-    wanted && acquisition === null && !!capabilities && !!firstProviderQualifiedId(capabilities),
+    wanted && acquisition === null && !!capabilities && !!firstExternalIdentity(capabilities),
   );
   // "Search missing" requests each unrequested wanted descendant individually. Hidden while the
   // entity itself is a plain phantom — "Search for release" (the whole unit) is the primary action

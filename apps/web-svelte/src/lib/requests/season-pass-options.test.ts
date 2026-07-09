@@ -1,23 +1,33 @@
 import { describe, expect, it } from "vitest";
-import type { RequestChildOption } from "$lib/api/generated/model";
+import {
+  CAPABILITY_KIND,
+  ENTITY_KIND,
+  EXTERNAL_ID_PROVIDER,
+  PROPOSAL_KIND,
+  REQUEST_MEDIA_KIND,
+} from "$lib/api/generated/codes";
+import type { EntityMetadataProposal, ExternalIdentity, RequestReviewResponse } from "$lib/api/generated/model";
 import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
 import { buildSeasonPassRows } from "./season-pass-options";
 
-function seasonCard(id: string, title: string, number: number, externalId: string): EntityThumbnailCard {
+function seasonCard(
+  id: string,
+  title: string,
+  number: number,
+  identity: ExternalIdentity,
+): EntityThumbnailCard {
   return {
     entity: {
       id,
-      kind: "video-season",
+      kind: ENTITY_KIND.videoSeason,
       title,
       parentEntityId: "series-1",
       sortOrder: number,
-      capabilities: [
-        {
-          kind: "links",
-          externalIds: [{ provider: "tmdb", value: externalId, url: null }],
-          urls: [],
-        } as never,
-      ],
+      capabilities: [{
+        kind: CAPABILITY_KIND.links,
+        externalIds: [{ provider: identity.namespace, value: identity.value, url: null }],
+        urls: [],
+      } as never],
       childrenByKind: [],
       relationships: [],
     },
@@ -27,55 +37,128 @@ function seasonCard(id: string, title: string, number: number, externalId: strin
   };
 }
 
-function providerSeason(id: string, title: string, number: number | null): RequestChildOption {
+describe("season pass options", () => {
+  it("combines local Entities with direct reviewed season proposals without flattening opaque identities", () => {
+    const seasonFiveIdentity = { namespace: "tmdbseason", value: "Show:AbC:01:5" };
+    const review = seriesReview([
+      seasonProposal("specials", "Specials"),
+      seasonProposal("season-5", "Season 5"),
+      seasonProposal("season-6", "Season 6"),
+    ], [
+      seasonTarget("specials", { namespace: "tmdbseason", value: "Show:AbC:01:0" }, 0),
+      seasonTarget("season-5", seasonFiveIdentity, 5),
+      seasonTarget("season-6", { namespace: "tmdbseason", value: "Show:AbC:01:6" }, 6),
+    ]);
+
+    const rows = buildSeasonPassRows({
+      localSeasons: [seasonCard("local-s5", "Season 5", 5, seasonFiveIdentity)],
+      episodeCounts: { "local-s5": 20 },
+      providerReview: review,
+    });
+
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({
+      entityId: "local-s5",
+      proposalId: "season-5",
+      externalIdentity: seasonFiveIdentity,
+      episodes: 20,
+    });
+    expect(rows[1]).toMatchObject({
+      entityId: null,
+      proposalId: "season-6",
+      externalIdentity: { namespace: "tmdbseason", value: "Show:AbC:01:6" },
+      number: 6,
+    });
+  });
+
+  it("keeps local-only seasons actionable when provider review is unavailable", () => {
+    const identity = { namespace: EXTERNAL_ID_PROVIDER.tmdb, value: "Case:Sensitive:Value" };
+    const rows = buildSeasonPassRows({
+      localSeasons: [seasonCard("local-s2", "Season 2", 2, identity)],
+      episodeCounts: { "local-s2": 8 },
+      providerReview: null,
+    });
+
+    expect(rows).toEqual([expect.objectContaining({
+      key: "local-s2",
+      entityId: "local-s2",
+      proposalId: null,
+      externalIdentity: identity,
+      episodes: 8,
+    })]);
+  });
+});
+
+function seriesReview(
+  children: EntityMetadataProposal[],
+  childTargets: RequestReviewResponse["targets"],
+): RequestReviewResponse {
+  const rootIdentity = { namespace: EXTERNAL_ID_PROVIDER.tmdb, value: "Show:AbC:01" };
+  const root = proposal("series-root", PROPOSAL_KIND.videoSeries, "Series", children);
   return {
-    id: `tmdb:${id}`,
-    title,
-    kind: "season",
-    requestable: true,
-    number,
-    year: null,
-    itemCount: null,
-    overview: null,
-    posterUrl: null,
-    monitored: null,
+    pluginId: "cinema-metadata",
+    externalIdentity: rootIdentity,
+    entityKind: ENTITY_KIND.videoSeries,
+    kind: REQUEST_MEDIA_KIND.series,
+    proposal: root,
+    revision: "review-revision",
+    targets: [{
+      proposalId: root.proposalId,
+      kind: REQUEST_MEDIA_KIND.series,
+      entityKind: ENTITY_KIND.videoSeries,
+      externalIdentity: rootIdentity,
+      requestable: true,
+    }, ...childTargets],
   };
 }
 
-describe("season pass options", () => {
-  it("lists provider-available regular seasons even when the local library only has some of them", () => {
-    const rows = buildSeasonPassRows({
-      localSeasons: [
-        seasonCard("local-s1", "Season 1", 1, "51145"),
-        seasonCard("local-s2", "Season 2", 2, "78300"),
-        seasonCard("local-s3", "Season 3", 3, "86118"),
-        seasonCard("local-s4", "Season 4", 4, "106225"),
-        seasonCard("local-s5", "Season 5", 5, "123879"),
-      ],
-      episodeCounts: { "local-s5": 20 },
-      providerChildren: [
-        providerSeason("110159", "Specials", null),
-        providerSeason("51145", "Season 1", 1),
-        providerSeason("78300", "Season 2", 2),
-        providerSeason("86118", "Season 3", 3),
-        providerSeason("106225", "Season 4", 4),
-        providerSeason("123879", "Season 5", 5),
-        providerSeason("308651", "Season 6", 6),
-        providerSeason("400177", "Season 7", 7),
-      ],
-    });
+function seasonTarget(
+  proposalId: string,
+  externalIdentity: ExternalIdentity,
+  position: number,
+): RequestReviewResponse["targets"][number] {
+  return {
+    proposalId,
+    kind: REQUEST_MEDIA_KIND.season,
+    entityKind: ENTITY_KIND.videoSeason,
+    externalIdentity,
+    requestable: true,
+    position,
+  };
+}
 
-    expect(rows.map((row) => row.title)).toEqual([
-      "Season 1",
-      "Season 2",
-      "Season 3",
-      "Season 4",
-      "Season 5",
-      "Season 6",
-      "Season 7",
-    ]);
-    expect(rows[4]).toMatchObject({ entityId: "local-s5", externalId: "tmdb:123879", episodes: 20 });
-    expect(rows[5]).toMatchObject({ entityId: null, externalId: "tmdb:308651", number: 6 });
-    expect(rows[6]).toMatchObject({ entityId: null, externalId: "tmdb:400177", number: 7 });
-  });
-});
+function seasonProposal(proposalId: string, title: string): EntityMetadataProposal {
+  return proposal(proposalId, PROPOSAL_KIND.videoSeason, title);
+}
+
+function proposal(
+  proposalId: string,
+  targetKind: EntityMetadataProposal["targetKind"],
+  title: string,
+  children: EntityMetadataProposal[] = [],
+): EntityMetadataProposal {
+  return {
+    proposalId,
+    provider: "cinema-metadata",
+    targetKind,
+    confidence: 1,
+    matchReason: "external-id",
+    patch: {
+      title,
+      description: null,
+      externalIds: {},
+      urls: [],
+      tags: [],
+      studio: null,
+      credits: [],
+      dates: {},
+      stats: {},
+      positions: {},
+      classification: null,
+    },
+    images: [],
+    children,
+    relationships: [],
+    candidates: [],
+  };
+}

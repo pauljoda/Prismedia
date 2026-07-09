@@ -5,7 +5,9 @@ import type {
   EntityCapabilityImagesCapability,
   EntityCapabilityRatingCapability,
   EntityCapabilityTechnicalCapability,
+  ExternalIdentity,
 } from "$lib/api/generated/model";
+import { CAPABILITY_KIND } from "$lib/api/generated/codes";
 
 export type EntityCapabilityKind = EntityCapability["kind"];
 
@@ -24,31 +26,31 @@ export function getCapability<K extends EntityCapabilityKind>(
 export function getRatingCapability(
   capabilities: EntityCapability[],
 ): EntityCapabilityRatingCapability | undefined {
-  return getCapability(capabilities, "rating");
+  return getCapability(capabilities, CAPABILITY_KIND.rating);
 }
 
 export function getImagesCapability(
   capabilities: EntityCapability[],
 ): EntityCapabilityImagesCapability | undefined {
-  return getCapability(capabilities, "images");
+  return getCapability(capabilities, CAPABILITY_KIND.images);
 }
 
 export function getDescriptionCapability(
   capabilities: EntityCapability[],
 ): EntityCapabilityDescriptionCapability | undefined {
-  return getCapability(capabilities, "description");
+  return getCapability(capabilities, CAPABILITY_KIND.description);
 }
 
 export function getTechnicalCapability(
   capabilities: EntityCapability[],
 ): EntityCapabilityTechnicalCapability | undefined {
-  return getCapability(capabilities, "technical");
+  return getCapability(capabilities, CAPABILITY_KIND.technical);
 }
 
 export function getFlagsCapability(
   capabilities: EntityCapability[],
 ): EntityCapabilityFlagsCapability | undefined {
-  return getCapability(capabilities, "flags");
+  return getCapability(capabilities, CAPABILITY_KIND.flags);
 }
 
 export function getRatingValue(capabilities: EntityCapability[]): number {
@@ -78,29 +80,35 @@ export function isWanted(capabilities: EntityCapability[]): boolean {
 }
 
 /**
- * The entity's first provider identity as a provider-qualified id ("provider:itemId"), or null when
- * the entity has none yet. This is what request commits and monitoring re-resolve the entity from.
+ * Canonical external identities carried by the Entity's links capability. Values remain opaque and
+ * are never joined into delimiter-sensitive strings.
  */
-export function firstProviderQualifiedId(capabilities: EntityCapability[]): string | null {
-  const links = getCapability(capabilities, "links");
-  const first = links?.externalIds?.find((id) => id.provider && id.value);
-  return first ? `${first.provider}:${first.value}` : null;
+export function externalIdentities(capabilities: EntityCapability[]): ExternalIdentity[] {
+  const links = getCapability(capabilities, CAPABILITY_KIND.links);
+  return (links?.externalIds ?? [])
+    .filter((identity) => identity.provider.trim().length > 0 && identity.value.length > 0)
+    .map((identity) => ({ namespace: identity.provider, value: identity.value }));
+}
+
+/** The first canonical external identity carried by an Entity, or null when it has none. */
+export function firstExternalIdentity(capabilities: EntityCapability[]): ExternalIdentity | null {
+  return externalIdentities(capabilities)[0] ?? null;
 }
 
 export function withRatingCapability(
   capabilities: EntityCapability[],
   value: number | null,
 ): EntityCapability[] {
-  const hasRating = capabilities.some((capability) => capability.kind === "rating");
+  const hasRating = capabilities.some((capability) => capability.kind === CAPABILITY_KIND.rating);
   if (!hasRating) {
     return [
       ...capabilities,
-      { kind: "rating", value } as EntityCapabilityRatingCapability,
+      { kind: CAPABILITY_KIND.rating, value } as EntityCapabilityRatingCapability,
     ];
   }
 
   return capabilities.map((capability) =>
-    capability.kind === "rating"
+    capability.kind === CAPABILITY_KIND.rating
       ? {
           ...capability,
           value,
@@ -114,15 +122,15 @@ export function withFlagCapability(
   flag: "isFavorite" | "isNsfw" | "isOrganized",
   value: boolean,
 ): EntityCapability[] {
-  const hasFlags = capabilities.some((c) => c.kind === "flags");
+  const hasFlags = capabilities.some((capability) => capability.kind === CAPABILITY_KIND.flags);
   if (!hasFlags) {
     return [
       ...capabilities,
-      { kind: "flags" as const, isFavorite: null, isNsfw: null, isOrganized: null, [flag]: value } as EntityCapabilityFlagsCapability,
+      { kind: CAPABILITY_KIND.flags, isFavorite: null, isNsfw: null, isOrganized: null, [flag]: value } as EntityCapabilityFlagsCapability,
     ];
   }
   return capabilities.map((capability) =>
-    capability.kind === "flags"
+    capability.kind === CAPABILITY_KIND.flags
       ? { ...capability, [flag]: value }
       : capability,
   );

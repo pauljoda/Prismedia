@@ -1,10 +1,11 @@
 <script lang="ts">
   import { ChevronDown, Layers, Loader2 } from "@lucide/svelte";
   import { Button, Toggle, cn } from "@prismedia/ui-svelte";
-  import { MONITOR_STATUS, REQUEST_MEDIA_KIND } from "$lib/api/generated/codes";
+  import { MONITOR_STATUS } from "$lib/api/generated/codes";
   import { fetchMonitors, stopMonitor } from "$lib/api/monitors";
-  import { commitEntityRequest, commitRequest } from "$lib/api/requests";
-  import type { RequestChildOption } from "$lib/api/generated/model";
+  import { commitEntityRequest, commitReviewedRequest } from "$lib/api/requests";
+  import type { RequestReviewResponse } from "$lib/api/generated/model";
+  import { ApiError } from "$lib/api/orval-fetch";
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
   import {
     buildSeasonPassRows,
@@ -16,28 +17,28 @@
   /**
    * The Season Pass bulk monitoring editor for a series detail page. One row per season — season number,
    * episode count, and a monitor toggle — plus preset shortcut buttons that apply in bulk. Each toggle
-   * drives the EXISTING per-entity endpoints for that season's entity (request-to-monitor on, stop-monitor
-   * off), run sequentially like WantedList's bulk actions — no new backend bulk endpoint. Monitor state
-   * comes from a single /api/monitors fetch, indexed by the entity id each monitor now surfaces.
+   * requests local seasons by Entity id and provider-only seasons by revision-bound proposal id. Bulk
+   * shortcuts run those same actions sequentially. Monitor state comes from one /api/monitors fetch,
+   * indexed by the Entity id each monitor surfaces.
    */
   let {
     seasonCards,
     seasonEpisodeCounts,
-    providerChildren = [],
+    providerReview = null,
     seriesEntityId = null,
-    seriesExternalId = null,
+    hideNsfw = true,
     onChanged,
   }: {
     /** The series' local season thumbnail cards (entity id, title, season number in sortOrder). */
     seasonCards: EntityThumbnailCard[];
     /** Episode counts per local season entity id, when the page has them. */
     seasonEpisodeCounts: Record<string, number>;
-    /** Provider-side season options, including seasons not materialized locally yet. */
-    providerChildren?: RequestChildOption[];
+    /** Canonical plugin proposal, including seasons not materialized locally yet. */
+    providerReview?: RequestReviewResponse | null;
     /** The series entity id, used to preserve its current monitor preset when requesting provider-only seasons. */
     seriesEntityId?: string | null;
-    /** Provider-qualified series id used to request provider-only seasons. */
-    seriesExternalId?: string | null;
+    /** Visibility ceiling used for both review and commit revalidation. */
+    hideNsfw?: boolean;
     /** Refreshes the parent detail without remounting the whole page. */
     onChanged?: () => void | Promise<void>;
   } = $props();
@@ -57,7 +58,7 @@
     buildSeasonPassRows({
       localSeasons: seasonCards,
       episodeCounts: seasonEpisodeCounts,
-      providerChildren,
+      providerReview,
     }),
   );
   const presetChildren = $derived<MonitorPresetChild[]>(
@@ -136,6 +137,13 @@
     optimisticMonitoredKeys = remaining;
   }
 
+  function actionError(error: unknown, fallback: string): string {
+    if (error instanceof ApiError && error.status === 409) {
+      return "The provider's season list changed. Refresh this series before trying again.";
+    }
+    return error instanceof Error ? error.message : fallback;
+  }
+
   /** Monitor a season by requesting it (creates its acquisition + per-item monitor), or stop its monitor. */
   async function setSeasonMonitored(season: SeasonPassRow, monitored: boolean) {
     if (monitored) {
@@ -144,16 +152,21 @@
         return;
       }
 
-      if (!seriesExternalId || !season.externalId) {
-        throw new Error("This provider season cannot be requested from the current series.");
+      if (!providerReview || !season.proposalId) {
+        throw new Error("This provider season is missing its reviewed proposal identity.");
       }
 
-      await commitRequest({
-        kind: REQUEST_MEDIA_KIND.series,
-        externalId: seriesExternalId,
-        selectedChildIds: [season.externalId],
-        preset: seriesMonitorPreset,
-      });
+      await commitReviewedRequest(
+        {
+          kind: providerReview.kind,
+          pluginId: providerReview.pluginId,
+          rootExternalIdentity: providerReview.externalIdentity,
+          proposalRevision: providerReview.revision,
+          selectedProposalIds: [season.proposalId],
+          ...(seriesMonitorPreset ? { preset: seriesMonitorPreset } : {}),
+        },
+        hideNsfw,
+      );
       return;
     }
 
@@ -184,7 +197,7 @@
     } catch (err) {
       optimisticMonitoredKeys = previousOptimistic;
       monitoredIds = previousMonitored;
-      error = err instanceof Error ? err.message : "Failed to update monitoring";
+      error = actionError(err, "Failed to update monitoring");
     } finally {
       acting = false;
     }
@@ -214,7 +227,7 @@
     } catch (err) {
       optimisticMonitoredKeys = previousOptimistic;
       monitoredIds = previousMonitored;
-      error = err instanceof Error ? err.message : "Failed to apply preset";
+      error = actionError(err, "Failed to apply preset");
     } finally {
       acting = false;
     }

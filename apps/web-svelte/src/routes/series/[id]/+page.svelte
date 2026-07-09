@@ -6,13 +6,12 @@
   import { Users, Building2, Calendar, CloudDownload, Info, SlidersHorizontal } from "@lucide/svelte";
   import EntityDetailSkeleton from "$lib/components/entities/EntityDetailSkeleton.svelte";
   import { fetchSeason, fetchSeries, type VideoSeasonDetail, type VideoSeriesDetail } from "$lib/api/media";
-  import { fetchRequestDetail } from "$lib/api/requests";
+  import { reviewEntityRequest } from "$lib/api/requests";
   import {
     updateEntityRating,
     updateEntityFlags,
     updateEntityMetadata,
   } from "$lib/api/entity-mutations";
-  import { firstProviderQualifiedId } from "$lib/api/capabilities";
   import {
     toggleOptimisticEntityFlag,
     updateOptimisticEntityRating,
@@ -30,8 +29,8 @@
     thumbnailsToCards,
   } from "$lib/entities/entity-relationship-thumbnails";
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
-  import { REQUEST_MEDIA_KIND, REQUEST_PROVIDER_KIND } from "$lib/api/generated/codes";
-  import type { RequestChildOption } from "$lib/api/generated/model";
+  import { REQUEST_MEDIA_KIND } from "$lib/api/generated/codes";
+  import type { RequestReviewResponse } from "$lib/api/generated/model";
   import { CREDIT_ROLE, ENTITY_KIND } from "$lib/entities/entity-codes";
   import EntityDetail, {
     type EntityDetailActionButton,
@@ -57,7 +56,7 @@
   let lastNsfwMode = $state(nsfw.mode);
   let ratingBusy = $state(false);
   let seasonCards = $state<EntityThumbnailCard[]>([]);
-  let providerSeasonOptions = $state<RequestChildOption[]>([]);
+  let providerSeasonReview = $state.raw<RequestReviewResponse | null>(null);
   let childSeriesCards = $state<EntityThumbnailCard[]>([]);
   let videoCards = $state<EntityThumbnailCard[]>([]);
   let relationshipCredits = $state<EntityDetailCredit[]>([]);
@@ -88,13 +87,16 @@
   });
 
   const dates = $derived(card?.dates ?? []);
-  const seriesExternalId = $derived(series ? firstProviderQualifiedId(series.capabilities) : null);
-
   const airedDate = $derived(
     dates.find((item) => item.code.toLowerCase().replaceAll("-", "") === "firstair") ?? dates[0] ?? null,
   );
 
   const hasSeasons = $derived(seasonCards.length > 0);
+  const hasProviderSeasons = $derived(
+    providerSeasonReview?.targets.some(
+      (target) => target.kind === REQUEST_MEDIA_KIND.season && target.requestable,
+    ) ?? false,
+  );
   const hasChildSeries = $derived(childSeriesCards.length > 0);
   const hasVideos = $derived(videoCards.length > 0);
   const seasonCount = $derived(seasonCards.length);
@@ -159,12 +161,13 @@
       const nextSeries = await fetchSeries(page.params.id ?? "");
       await hydrateSeriesThumbnails(nextSeries);
       seasonEpisodeCounts = await loadSeasonEpisodeCounts(nextSeries);
+      providerSeasonReview = null;
       series = nextSeries;
       loadState = "ready";
-      // Provider season options (Season Pass enrichment) are a live plugin round-trip — they land
-      // after first paint rather than gating it; local data renders instantly either way.
-      void loadProviderSeasonOptions(nextSeries).then((options) => {
-        if (series?.id === nextSeries.id) providerSeasonOptions = options;
+      // The canonical provider proposal is live enrichment for Season Pass. It lands after first
+      // paint so local Entity seasons render immediately even when a plugin is slow or unavailable.
+      void loadProviderSeasonReview(nextSeries).then((review) => {
+        if (series?.id === nextSeries.id) providerSeasonReview = review;
       });
     } catch (err) {
       if (redirectHiddenEntityNotFound(err, nsfw.mode)) return;
@@ -217,20 +220,16 @@
     ]));
   }
 
-  async function loadProviderSeasonOptions(nextSeries: VideoSeriesDetail): Promise<RequestChildOption[]> {
-    const externalId = firstProviderQualifiedId(nextSeries.capabilities);
-    if (!externalId) return [];
-
+  async function loadProviderSeasonReview(nextSeries: VideoSeriesDetail): Promise<RequestReviewResponse | null> {
     try {
-      const detail = await fetchRequestDetail({
-        source: REQUEST_PROVIDER_KIND.plugin,
-        kind: REQUEST_MEDIA_KIND.series,
-        externalId,
-      });
-      return detail.children ?? [];
+      return await reviewEntityRequest(
+        nextSeries.id,
+        REQUEST_MEDIA_KIND.series,
+        nsfw.mode !== "show",
+      );
     } catch {
-      // Provider lookup is enrichment for the Season Pass; local seasons still render when it is down.
-      return [];
+      // Provider review is enrichment; local seasons stay actionable when it is unavailable.
+      return null;
     }
   }
 
@@ -322,13 +321,13 @@
       {/snippet}
     </EntityDetail>
 
-    {#if hasSeasons || providerSeasonOptions.length > 0}
+    {#if hasSeasons || hasProviderSeasons}
       <SeasonPassEditor
         {seasonCards}
         {seasonEpisodeCounts}
-        providerChildren={providerSeasonOptions}
+        providerReview={providerSeasonReview}
         seriesEntityId={series.id}
-        {seriesExternalId}
+        hideNsfw={nsfw.mode !== "show"}
         onChanged={refreshSeries}
       />
 
@@ -382,7 +381,7 @@
       </EntityGridSection>
     {/if}
 
-    {#if !hasSeasons && providerSeasonOptions.length === 0 && !hasChildSeries && !hasVideos}
+    {#if !hasSeasons && !hasProviderSeasons && !hasChildSeries && !hasVideos}
       <div class="empty-children">
         <p>No seasons, episodes, or sub-series linked to this series yet.</p>
       </div>

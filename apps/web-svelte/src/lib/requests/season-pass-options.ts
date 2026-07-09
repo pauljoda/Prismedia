@@ -1,15 +1,19 @@
-import type { RequestChildOption } from "$lib/api/generated/model";
-import { firstProviderQualifiedId } from "$lib/api/capabilities";
+import { REQUEST_MEDIA_KIND } from "$lib/api/generated/codes";
+import type { ExternalIdentity, RequestReviewResponse } from "$lib/api/generated/model";
+import { externalIdentities, firstExternalIdentity } from "$lib/api/capabilities";
+import { isRelationshipKind } from "$lib/components/identify-review";
 import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
 import { numericValue } from "$lib/requests/request-helpers";
 
 export interface SeasonPassRow {
-  /** Stable list key: the local entity id when known, otherwise the provider-qualified id. */
+  /** Stable list key: the local Entity id when known, otherwise the plugin proposal id. */
   key: string;
-  /** Existing Prismedia season entity id; null for provider-only seasons not materialized locally yet. */
+  /** Existing Prismedia season Entity id; null for provider-only seasons. */
   entityId: string | null;
-  /** Provider-qualified id ("provider:itemId") used to request provider-only seasons. */
-  externalId: string | null;
+  /** Direct structural proposal selected by a reviewed commit; null for local-only seasons. */
+  proposalId: string | null;
+  /** Persistent provider identity kept as a structured, opaque value. */
+  externalIdentity: ExternalIdentity | null;
   title: string;
   /** Regular season number. Provider specials/season 0 are intentionally not listed. */
   number: number;
@@ -19,59 +23,63 @@ export interface SeasonPassRow {
 export interface BuildSeasonPassRowsInput {
   localSeasons: EntityThumbnailCard[];
   episodeCounts: Record<string, number>;
-  providerChildren?: RequestChildOption[] | null;
+  providerReview?: RequestReviewResponse | null;
 }
 
 /**
- * Builds the Season Pass rows from both sides of the world:
- * - local season entities already in Prismedia (owned/wanted/imported)
- * - provider season options that may not be materialized locally yet
- *
- * Provider-only regular seasons must still be listed so the user can request gaps like "Daniel Tiger"
- * seasons 6/7 even when the live library only has seasons 1-5. Specials/season 0 are left out of this
- * bulk season-pass editor; they remain discoverable from the broader request/detail flow.
+ * Combines local season Entities with direct, independently identifiable season proposals from the
+ * canonical provider review. Matching compares namespace/value objects and never parses a qualified
+ * string, so opaque values may contain colons and mixed case safely.
  */
 export function buildSeasonPassRows({
   localSeasons,
   episodeCounts,
-  providerChildren,
+  providerReview,
 }: BuildSeasonPassRowsInput): SeasonPassRow[] {
-  const localByExternal = new Map<string, EntityThumbnailCard>();
-  const localByNumber = new Map<number, EntityThumbnailCard>();
   const usedLocalIds = new Set<string>();
-
+  const localByNumber = new Map<number, EntityThumbnailCard>();
   for (const card of localSeasons) {
-    const externalId = firstProviderQualifiedId(card.entity.capabilities);
-    if (externalId) localByExternal.set(externalId, card);
     const number = numericValue(card.entity.sortOrder);
     if (number !== null && number > 0 && !localByNumber.has(number)) {
       localByNumber.set(number, card);
     }
   }
 
+  const targets = new Map(
+    (providerReview?.targets ?? [])
+      .filter((target) => target.kind === REQUEST_MEDIA_KIND.season && target.requestable)
+      .map((target) => [target.proposalId, target] as const),
+  );
   const rows: SeasonPassRow[] = [];
-  for (const child of providerChildren ?? []) {
-    if (child.kind !== "season" || !child.requestable) continue;
-    const number = numericValue(child.number);
-    // TMDB-style specials are season 0; the backend exposes them as unnumbered for preset safety.
+  for (const proposal of providerReview?.proposal.children ?? []) {
+    if (isRelationshipKind(proposal.targetKind)) continue;
+    const target = targets.get(proposal.proposalId);
+    if (!target) continue;
+    const number = numericValue(target.position);
     if (number === null || number <= 0) continue;
 
-    const seasonNumber = number;
-    const local = localByExternal.get(child.id) ?? localByNumber.get(seasonNumber) ?? null;
+    const local = localSeasons.find((card) =>
+      externalIdentities(card.entity.capabilities).some((identity) =>
+        sameIdentity(identity, target.externalIdentity),
+      ),
+    ) ?? localByNumber.get(number) ?? null;
     if (local) usedLocalIds.add(local.entity.id);
-    const itemCount = numericValue(child.itemCount);
+    const structuralChildren = proposal.children.filter((child) => !isRelationshipKind(child.targetKind));
+    const providerEpisodeCount = structuralChildren.length > 0 ? structuralChildren.length : null;
+
     rows.push({
-      key: local?.entity.id ?? child.id,
+      key: local?.entity.id ?? proposal.proposalId,
       entityId: local?.entity.id ?? null,
-      externalId: child.id,
-      title: local?.entity.title ?? child.title,
-      number: seasonNumber,
-      episodes: local ? episodeCounts[local.entity.id] ?? itemCount : itemCount,
+      proposalId: proposal.proposalId,
+      externalIdentity: target.externalIdentity,
+      title: local?.entity.title ?? (proposal.patch.title?.trim() || target.externalIdentity.value),
+      number,
+      episodes: local ? episodeCounts[local.entity.id] ?? providerEpisodeCount : providerEpisodeCount,
     });
   }
 
-  // Keep local-only seasons too (for providers with partial metadata or if a season was scanned but no
-  // longer appears upstream). They are still actionable by entity id.
+  // Local-only seasons remain actionable through their Entity ids even if the provider is down or no
+  // longer returns them.
   for (const card of localSeasons) {
     if (usedLocalIds.has(card.entity.id)) continue;
     const number = numericValue(card.entity.sortOrder);
@@ -79,12 +87,17 @@ export function buildSeasonPassRows({
     rows.push({
       key: card.entity.id,
       entityId: card.entity.id,
-      externalId: firstProviderQualifiedId(card.entity.capabilities),
+      proposalId: null,
+      externalIdentity: firstExternalIdentity(card.entity.capabilities),
       title: card.entity.title,
       number,
       episodes: episodeCounts[card.entity.id] ?? null,
     });
   }
 
-  return rows.sort((a, b) => a.number - b.number || a.title.localeCompare(b.title));
+  return rows.sort((left, right) => left.number - right.number || left.title.localeCompare(right.title));
+}
+
+function sameIdentity(left: ExternalIdentity, right: ExternalIdentity): boolean {
+  return left.namespace === right.namespace && left.value === right.value;
 }
