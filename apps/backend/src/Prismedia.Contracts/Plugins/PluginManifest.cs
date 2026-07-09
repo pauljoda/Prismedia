@@ -1,3 +1,5 @@
+using Prismedia.Domain.Entities;
+
 namespace Prismedia.Contracts.Plugins;
 
 /// <summary>
@@ -27,18 +29,47 @@ public sealed record PluginAuthField(
     string? Url);
 
 /// <summary>
-/// Entity kind and identify actions supported by a plugin artifact.
+/// One schema-driven field a plugin accepts when searching an entity kind.
+/// </summary>
+/// <param name="Key">Stable plugin-owned key written to <see cref="IdentifyQuery.Fields"/>.</param>
+/// <param name="Label">Human-readable field label.</param>
+/// <param name="Type">Control and validation type.</param>
+/// <param name="Required">Whether a search requires a non-empty value.</param>
+/// <param name="Placeholder">Optional concise example shown inside the input.</param>
+/// <param name="Help">Optional explanatory copy shown alongside the input.</param>
+public sealed record PluginSearchField(
+    string Key,
+    string Label,
+    PluginSearchFieldType Type,
+    bool Required,
+    string? Placeholder = null,
+    string? Help = null);
+
+/// <summary>Schema for the fields a plugin accepts when searching one entity kind.</summary>
+/// <param name="Fields">Ordered search fields rendered and sent by Prismedia.</param>
+public sealed record PluginSearchDefinition(IReadOnlyList<PluginSearchField> Fields);
+
+/// <summary>
+/// Entity kind, identify actions, external identity namespaces, and optional search schema
+/// supported by a plugin artifact.
 /// </summary>
 /// <param name="EntityKind">Stable Prismedia entity kind code.</param>
-/// <param name="Actions">Supported action codes such as lookup-id, lookup-url, search, and cascade.</param>
+/// <param name="Actions">Canonical identify action codes such as lookup-id, lookup-url, and search.</param>
+/// <param name="IdentityNamespaces">
+/// External identity namespaces this support can resolve. These identify upstream records and are
+/// intentionally independent from the plugin's own installation id.
+/// </param>
+/// <param name="Search">Plugin-defined search form when <paramref name="Actions"/> includes search.</param>
 public sealed record PluginEntitySupport(
     string EntityKind,
-    IReadOnlyList<string> Actions);
+    IReadOnlyList<string> Actions,
+    IReadOnlyList<string>? IdentityNamespaces = null,
+    PluginSearchDefinition? Search = null);
 
 /// <summary>
 /// Manifest embedded in a community plugin artifact.
 /// </summary>
-/// <param name="ManifestVersion">Manifest schema version; requires 1.</param>
+/// <param name="ManifestVersion">Manifest schema version; supports 1 and 2.</param>
 /// <param name="ApiTags">Generation tags used by Prismedia to ignore older plugin systems.</param>
 /// <param name="Id">Stable provider/plugin code such as tmdb.</param>
 /// <param name="Name">Human-readable plugin name.</param>
@@ -73,7 +104,7 @@ public sealed record PluginManifest(
 /// <param name="Sha256">SHA-256 checksum for packaged artifacts.</param>
 /// <param name="Runtime">Runtime code; supports dotnet-process.</param>
 /// <param name="IsNsfw">Whether this plugin can return NSFW metadata by default.</param>
-/// <param name="ManifestVersion">Manifest schema version; requires 1.</param>
+/// <param name="ManifestVersion">Manifest schema version; supports 1 and 2.</param>
 /// <param name="ApiTags">Tags used to gate plugin generations, including Prismedia.</param>
 /// <param name="Compat">Declared compatibility bounds.</param>
 /// <param name="Supports">Entity kind/action support declarations.</param>

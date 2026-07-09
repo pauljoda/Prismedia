@@ -46,11 +46,16 @@ public sealed record IdentifyStructuralContext(
 /// <param name="Url">Optional provider URL override.</param>
 /// <param name="ExternalIds">Optional explicit provider IDs, usually from candidate picks.</param>
 /// <param name="RequireChoice">When true, keep the queue in candidate-pick mode even if a provider returns a confident proposal.</param>
+/// <param name="Fields">
+/// Optional plugin-defined search form values keyed by <see cref="PluginSearchField.Key"/>. Values
+/// remain strings on the wire and are interpreted according to the selected support's field schema.
+/// </param>
 public sealed record IdentifyQuery(
     string? Title,
     string? Url,
     IReadOnlyDictionary<string, string>? ExternalIds,
-    bool? RequireChoice = null);
+    bool? RequireChoice = null,
+    IReadOnlyDictionary<string, string>? Fields = null);
 
 /// <summary>
 /// Request envelope sent to short-lived plugin processes.

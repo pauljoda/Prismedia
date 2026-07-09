@@ -8,6 +8,7 @@ using Prismedia.Contracts.Plugins;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
+using Prismedia.Infrastructure.Serialization;
 using Prismedia.Infrastructure.StashCompat;
 
 namespace Prismedia.Infrastructure.Plugins;
@@ -45,7 +46,8 @@ public sealed record PluginDescriptor(
 public sealed partial class PluginCatalogService : IPluginCatalogService {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) {
         PropertyNameCaseInsensitive = true,
-        WriteIndented = false
+        WriteIndented = false,
+        Converters = { new CodecJsonConverterFactory() }
     };
 
     private readonly PrismediaDbContext _db;
@@ -312,10 +314,12 @@ public sealed partial class PluginCatalogService : IPluginCatalogService {
         foreach (var root in EnumerateDiscoveryRoots().Where(Directory.Exists).Distinct(StringComparer.OrdinalIgnoreCase)) {
             foreach (var manifestPath in EnumerateManifestPaths(root)) {
                 cancellationToken.ThrowIfCancellationRequested();
-                var manifest = await ReadManifestAsync(manifestPath, cancellationToken);
-                if (manifest is null || !IsCompatible(manifest, current)) {
+                var discoveredManifest = await ReadManifestAsync(manifestPath, cancellationToken);
+                if (discoveredManifest is null || !IsCompatible(discoveredManifest, current)) {
                     continue;
                 }
+
+                var manifest = PluginManifestContract.Normalize(discoveredManifest);
 
                 var directory = Path.GetDirectoryName(manifestPath) ?? root;
                 var entryPath = Path.GetFullPath(Path.IsPathRooted(manifest.Entry)
@@ -350,10 +354,12 @@ public sealed partial class PluginCatalogService : IPluginCatalogService {
                     continue;
                 }
 
-                var manifest = StashScraperManifestFactory.TryCreate(yaml, yamlPath);
-                if (manifest is null) {
+                var discoveredManifest = StashScraperManifestFactory.TryCreate(yaml, yamlPath);
+                if (discoveredManifest is null) {
                     continue;
                 }
+
+                var manifest = PluginManifestContract.Normalize(discoveredManifest);
 
                 var directory = Path.GetDirectoryName(yamlPath) ?? root;
                 descriptors.Add(new PluginDescriptor(manifest, yamlPath, directory, yamlPath));

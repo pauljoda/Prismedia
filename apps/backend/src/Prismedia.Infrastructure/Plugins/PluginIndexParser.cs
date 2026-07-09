@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Prismedia.Contracts.Plugins;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Infrastructure.Plugins;
 
@@ -25,8 +26,9 @@ internal static class PluginIndexParser {
             .ToArray();
     }
 
-    private static PluginIndexEntry ParseJsonEntry(JsonElement entry) =>
-        new(
+    private static PluginIndexEntry ParseJsonEntry(JsonElement entry) {
+        var manifestVersion = GetInt(entry, "manifestVersion", 1);
+        return new PluginIndexEntry(
             Id: GetString(entry, "id"),
             Name: GetString(entry, "name"),
             Version: GetString(entry, "version"),
@@ -35,10 +37,11 @@ internal static class PluginIndexParser {
             Sha256: GetString(entry, "sha256"),
             Runtime: GetString(entry, "runtime", fallback: "dotnet-process"),
             IsNsfw: GetBool(entry, "isNsfw"),
-            ManifestVersion: GetInt(entry, "manifestVersion", 1),
+            ManifestVersion: manifestVersion,
             ApiTags: GetStringArray(entry, "apiTags", ["prismedia"]),
             Compat: ParseJsonCompatibility(entry),
-            Supports: ParseJsonSupports(entry));
+            Supports: ParseJsonSupports(entry, manifestVersion));
+    }
 
     private static PluginCompatibility ParseJsonCompatibility(JsonElement entry) {
         if (!entry.TryGetProperty("compat", out var compat) || compat.ValueKind != JsonValueKind.Object) {
@@ -52,26 +55,62 @@ internal static class PluginIndexParser {
             GetNullableString(compat, "prismediaMax"));
     }
 
-    private static IReadOnlyList<PluginEntitySupport> ParseJsonSupports(JsonElement entry) {
+    private static IReadOnlyList<PluginEntitySupport> ParseJsonSupports(JsonElement entry, int manifestVersion) {
         if (!entry.TryGetProperty("supports", out var supports) || supports.ValueKind != JsonValueKind.Array) {
             return [];
         }
 
-        return supports
+        var parsed = supports
             .EnumerateArray()
-            .Where(support => support.ValueKind == JsonValueKind.Object)
-            .Select(support => new PluginEntitySupport(
-                GetString(support, "entityKind"),
-                GetStringArray(support, "actions")))
-            .Where(support => !string.IsNullOrWhiteSpace(support.EntityKind) && support.Actions.Count > 0)
+            .Select(support => support.ValueKind == JsonValueKind.Object
+                ? new PluginEntitySupport(
+                    GetString(support, "entityKind"),
+                    manifestVersion == 2
+                        ? GetDeclaredStringArray(support, "actions") ?? []
+                        : GetStringArray(support, "actions"),
+                    GetDeclaredStringArray(support, "identityNamespaces"),
+                    ParseJsonSearch(support))
+                : new PluginEntitySupport(string.Empty, []))
             .ToArray();
+        return manifestVersion == 2
+            ? parsed
+            : parsed.Where(support =>
+                !string.IsNullOrWhiteSpace(support.EntityKind) && support.Actions.Count > 0).ToArray();
+    }
+
+    private static PluginSearchDefinition? ParseJsonSearch(JsonElement support) {
+        if (!support.TryGetProperty("search", out var search) ||
+            search.ValueKind != JsonValueKind.Object ||
+            !search.TryGetProperty("fields", out var fields) ||
+            fields.ValueKind != JsonValueKind.Array) {
+            return null;
+        }
+
+        return new PluginSearchDefinition(fields
+            .EnumerateArray()
+            .Select(field => field.ValueKind == JsonValueKind.Object
+                ? new PluginSearchField(
+                    GetString(field, "key"),
+                    GetString(field, "label"),
+                    ParseSearchFieldType(GetString(field, "type")),
+                    GetBool(field, "required"),
+                    GetNullableString(field, "placeholder"),
+                    GetNullableString(field, "help"))
+                : new PluginSearchField(
+                    string.Empty,
+                    string.Empty,
+                    (PluginSearchFieldType)(-1),
+                    Required: false))
+            .ToArray());
     }
 
     private static IReadOnlyList<PluginIndexEntry> ParseYaml(string yaml) {
         var entries = new List<YamlEntry>();
         YamlEntry? entry = null;
         PluginEntitySupportBuilder? support = null;
+        PluginSearchFieldBuilder? searchField = null;
         string? section = null;
+        string? supportSection = null;
 
         foreach (var rawLine in yaml.Split('\n')) {
             var line = rawLine.TrimEnd('\r');
@@ -89,7 +128,9 @@ internal static class PluginIndexParser {
 
                 entry = new YamlEntry();
                 support = null;
+                searchField = null;
                 section = null;
+                supportSection = null;
                 SetYamlScalar(entry, trimmed[2..]);
                 continue;
             }
@@ -100,6 +141,8 @@ internal static class PluginIndexParser {
 
             if (indent == 2) {
                 support = null;
+                searchField = null;
+                supportSection = null;
                 if (trimmed.EndsWith(':') && !trimmed.Contains(": ", StringComparison.Ordinal)) {
                     section = trimmed.TrimEnd(':');
                     continue;
@@ -126,6 +169,8 @@ internal static class PluginIndexParser {
 
             if (indent == 4 && trimmed.StartsWith("- ", StringComparison.Ordinal)) {
                 support = new PluginEntitySupportBuilder();
+                searchField = null;
+                supportSection = null;
                 entry.Supports.Add(support);
                 SetYamlSupportScalar(support, trimmed[2..]);
                 continue;
@@ -135,16 +180,42 @@ internal static class PluginIndexParser {
                 continue;
             }
 
-            if (indent == 6 && trimmed.EndsWith(':') && trimmed.TrimEnd(':') == "actions") {
+            if (indent == 6 && trimmed.EndsWith(':')) {
+                supportSection = trimmed.TrimEnd(':');
+                searchField = null;
                 continue;
             }
 
             if (indent == 8 && trimmed.StartsWith("- ", StringComparison.Ordinal)) {
-                support.Actions.Add(Unquote(trimmed[2..]));
+                if (supportSection == "actions") {
+                    support.Actions.Add(Unquote(trimmed[2..]));
+                } else if (supportSection == "identityNamespaces") {
+                    support.IdentityNamespaces.Add(Unquote(trimmed[2..]));
+                }
+
+                continue;
+            }
+
+            if (indent == 8 && supportSection == "search" && trimmed == "fields:") {
+                supportSection = "searchFields";
+                continue;
+            }
+
+            if (indent == 10 && supportSection == "searchFields" && trimmed.StartsWith("- ", StringComparison.Ordinal)) {
+                searchField = new PluginSearchFieldBuilder();
+                support.SearchFields.Add(searchField);
+                SetYamlSearchFieldScalar(searchField, trimmed[2..]);
+                continue;
+            }
+
+            if (indent == 12 && supportSection == "searchFields" && searchField is not null) {
+                SetYamlSearchFieldScalar(searchField, trimmed);
                 continue;
             }
 
             if (indent == 6) {
+                supportSection = null;
+                searchField = null;
                 SetYamlSupportScalar(support, trimmed);
             }
         }
@@ -218,6 +289,30 @@ internal static class PluginIndexParser {
         }
     }
 
+    private static void SetYamlSearchFieldScalar(PluginSearchFieldBuilder field, string line) {
+        var (key, value) = SplitYamlPair(line);
+        switch (key) {
+            case "key":
+                field.Key = value;
+                break;
+            case "label":
+                field.Label = value;
+                break;
+            case "type":
+                field.Type = ParseSearchFieldType(value);
+                break;
+            case "required":
+                field.Required = value.Equals("true", StringComparison.OrdinalIgnoreCase);
+                break;
+            case "placeholder":
+                field.Placeholder = NullIfYamlNull(value);
+                break;
+            case "help":
+                field.Help = NullIfYamlNull(value);
+                break;
+        }
+    }
+
     private static (string Key, string Value) SplitYamlPair(string line) {
         var separator = line.IndexOf(':', StringComparison.Ordinal);
         if (separator < 0) {
@@ -288,6 +383,20 @@ internal static class PluginIndexParser {
                 .ToArray()
             : fallback ?? [];
 
+    private static IReadOnlyList<string>? GetDeclaredStringArray(JsonElement element, string name) =>
+        element.TryGetProperty(name, out var property) && property.ValueKind == JsonValueKind.Array
+            ? property.EnumerateArray()
+                .Select(item => item.ValueKind == JsonValueKind.String
+                    ? item.GetString() ?? string.Empty
+                    : string.Empty)
+                .ToArray()
+            : null;
+
+    private static PluginSearchFieldType ParseSearchFieldType(string code) =>
+        code.TryDecodeAs<PluginSearchFieldType>(out var type)
+            ? type
+            : (PluginSearchFieldType)(-1);
+
     private sealed class YamlEntry {
         public string Id { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
@@ -318,14 +427,36 @@ internal static class PluginIndexParser {
                 ManifestVersion,
                 ApiTags.Count > 0 ? ApiTags : ["prismedia"],
                 new PluginCompatibility(PluginApiMin, PluginApiMax, PrismediaMin, PrismediaMax),
-                Supports
-                    .Where(support => !string.IsNullOrWhiteSpace(support.EntityKind) && support.Actions.Count > 0)
-                    .Select(support => new PluginEntitySupport(support.EntityKind, support.Actions))
+                (ManifestVersion == 2
+                    ? Supports
+                    : Supports.Where(support =>
+                        !string.IsNullOrWhiteSpace(support.EntityKind) && support.Actions.Count > 0))
+                    .Select(support => new PluginEntitySupport(
+                        support.EntityKind,
+                        support.Actions,
+                        support.IdentityNamespaces.Count > 0 ? support.IdentityNamespaces : null,
+                        support.SearchFields.Count > 0
+                            ? new PluginSearchDefinition(support.SearchFields.Select(field => field.ToContract()).ToArray())
+                            : null))
                     .ToArray());
     }
 
     private sealed class PluginEntitySupportBuilder {
         public string EntityKind { get; set; } = string.Empty;
         public List<string> Actions { get; } = [];
+        public List<string> IdentityNamespaces { get; } = [];
+        public List<PluginSearchFieldBuilder> SearchFields { get; } = [];
+    }
+
+    private sealed class PluginSearchFieldBuilder {
+        public string Key { get; set; } = string.Empty;
+        public string Label { get; set; } = string.Empty;
+        public PluginSearchFieldType Type { get; set; } = (PluginSearchFieldType)(-1);
+        public bool Required { get; set; }
+        public string? Placeholder { get; set; }
+        public string? Help { get; set; }
+
+        public PluginSearchField ToContract() =>
+            new(Key, Label, Type, Required, Placeholder, Help);
     }
 }

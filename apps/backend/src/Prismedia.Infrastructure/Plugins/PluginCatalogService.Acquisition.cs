@@ -54,6 +54,7 @@ public sealed partial class PluginCatalogService {
         var entries = await FetchRemoteIndexAsync(cancellationToken);
         return entries
             .Where(entry => PluginCompatibilityResolver.IsCompatible(entry, current))
+            .Select(PluginManifestContract.Normalize)
             .GroupBy(entry => entry.Id, StringComparer.OrdinalIgnoreCase)
             .Select(group => group.OrderByDescending(entry => ParseVersion(entry.Version)).First())
             .ToArray();
@@ -297,6 +298,9 @@ public sealed partial class PluginCatalogService {
             await using var stream = File.OpenRead(path);
             return await JsonSerializer.DeserializeAsync<PluginManifest>(stream, JsonOptions, cancellationToken);
         } catch (JsonException) {
+            return null;
+        } catch (ArgumentOutOfRangeException) {
+            // A code-bearing enum in an untrusted manifest used an unknown wire value.
             return null;
         } catch (IOException) {
             return null;

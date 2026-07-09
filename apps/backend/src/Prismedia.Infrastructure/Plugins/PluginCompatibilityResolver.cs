@@ -49,12 +49,12 @@ public static class PluginCompatibilityResolver {
         SupportsAppVersion(manifest.Compat, currentAppVersion);
 
     private static bool IsDotnetProcess(PluginIndexEntry entry) =>
-        entry.ManifestVersion == 1 &&
+        PluginManifestContract.IsValid(entry) &&
         string.Equals(entry.Runtime, "dotnet-process", StringComparison.OrdinalIgnoreCase) &&
         entry.ApiTags.Any(tag => string.Equals(tag, "prismedia", StringComparison.OrdinalIgnoreCase));
 
     private static bool IsDotnetProcess(PluginManifest manifest) =>
-        manifest.ManifestVersion == 1 &&
+        PluginManifestContract.IsValid(manifest) &&
         string.Equals(manifest.Runtime, "dotnet-process", StringComparison.OrdinalIgnoreCase) &&
         manifest.ApiTags.Any(tag => string.Equals(tag, "prismedia", StringComparison.OrdinalIgnoreCase));
 

@@ -1,4 +1,5 @@
 using Prismedia.Contracts.Plugins;
+using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Plugins;
 
 namespace Prismedia.Infrastructure.Tests;
@@ -83,6 +84,239 @@ public sealed class PluginManifestCompatibilityTests {
             PluginProtocol.CurrentVersion,
             Version.Parse(PluginProtocol.CurrentSemanticVersion).Major);
 
+    [Theory]
+    [InlineData(PluginSearchFieldType.Text, "text")]
+    [InlineData(PluginSearchFieldType.Number, "number")]
+    [InlineData(PluginSearchFieldType.Year, "year")]
+    public void SearchFieldTypesUseCanonicalCodeRegistryValues(PluginSearchFieldType type, string code) =>
+        Assert.Equal(code, type.ToCode());
+
+    [Fact]
+    public void AcceptsManifestVersionTwoWithDistinctIdentityNamespacesAndSearchSchema() {
+        var compatibility = new PluginCompatibility("1.0.0", null, "1.0.0", null);
+        PluginEntitySupport[] supports =
+        [
+            new PluginEntitySupport(
+                "video-series",
+                [IdentifyAction.Search.ToCode(), IdentifyAction.LookupId.ToCode()],
+                ["tmdb", "imdb"],
+                new PluginSearchDefinition(
+                [
+                    new PluginSearchField("seriesTitle", "Series title", PluginSearchFieldType.Text, true, "Title", null),
+                    new PluginSearchField("year", "Year", PluginSearchFieldType.Year, false, "2024", "Original premiere year")
+                ]))
+        ];
+        var manifest = Manifest(
+            compatibility,
+            manifestVersion: 2,
+            supports: supports);
+        var entry = Entry(
+            "tmdb-plugin",
+            "2.0.0",
+            ["prismedia"],
+            "dotnet-process",
+            "1.0.0",
+            null,
+            compatibility,
+            manifestVersion: 2,
+            supports: supports);
+
+        Assert.True(PluginCompatibilityResolver.IsCompatible(manifest, new Version(1, 0, 0)));
+        Assert.True(PluginCompatibilityResolver.IsCompatible(entry, new Version(1, 0, 0)));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(3)]
+    public void RejectsUnsupportedManifestSchemaVersions(int manifestVersion) {
+        var compatibility = new PluginCompatibility("1.0.0", null, "1.0.0", null);
+
+        Assert.False(PluginCompatibilityResolver.IsCompatible(
+            Entry("tmdb", "1.0.0", ["prismedia"], "dotnet-process", "1.0.0", null, compatibility, manifestVersion),
+            new Version(1, 0, 0)));
+        Assert.False(PluginCompatibilityResolver.IsCompatible(
+            Manifest(compatibility, manifestVersion),
+            new Version(1, 0, 0)));
+    }
+
+    [Theory]
+    [InlineData("TMDB")]
+    [InlineData(" tmdb")]
+    [InlineData("tmdb/television")]
+    public void VersionTwoRejectsNonCanonicalExternalIdentityNamespaces(string identityNamespace) {
+        var manifest = Manifest(
+            new PluginCompatibility("1.0.0", null, "1.0.0", null),
+            manifestVersion: 2,
+            supports:
+            [
+                new PluginEntitySupport(
+                    "video",
+                    [IdentifyAction.LookupId.ToCode()],
+                    [identityNamespace])
+            ]);
+
+        Assert.False(PluginCompatibilityResolver.IsCompatible(manifest, new Version(1, 0, 0)));
+    }
+
+    [Fact]
+    public void VersionTwoRejectsDuplicateExternalIdentityNamespaces() {
+        var manifest = Manifest(
+            new PluginCompatibility("1.0.0", null, "1.0.0", null),
+            manifestVersion: 2,
+            supports:
+            [
+                new PluginEntitySupport(
+                    "video",
+                    [IdentifyAction.LookupId.ToCode()],
+                    ["tmdb", "tmdb"])
+            ]);
+
+        Assert.False(PluginCompatibilityResolver.IsCompatible(manifest, new Version(1, 0, 0)));
+    }
+
+    [Fact]
+    public void VersionTwoRequiresSearchSchemaWhenSearchActionIsDeclared() {
+        var manifest = Manifest(
+            new PluginCompatibility("1.0.0", null, "1.0.0", null),
+            manifestVersion: 2,
+            supports:
+            [
+                new PluginEntitySupport(
+                    "book",
+                    [IdentifyAction.Search.ToCode()],
+                    ["openlibrary"])
+            ]);
+
+        Assert.False(PluginCompatibilityResolver.IsCompatible(manifest, new Version(1, 0, 0)));
+    }
+
+    [Fact]
+    public void VersionTwoRejectsEmptySupports() {
+        var manifest = Manifest(
+            new PluginCompatibility("1.0.0", null, "1.0.0", null),
+            manifestVersion: 2,
+            supports: []);
+
+        Assert.False(PluginCompatibilityResolver.IsCompatible(manifest, new Version(1, 0, 0)));
+    }
+
+    [Theory]
+    [InlineData("unknown-kind")]
+    [InlineData("Video")]
+    [InlineData(" video")]
+    public void VersionTwoRejectsUnknownOrNonCanonicalEntityKinds(string entityKind) {
+        var manifest = Manifest(
+            new PluginCompatibility("1.0.0", null, "1.0.0", null),
+            manifestVersion: 2,
+            supports:
+            [
+                new PluginEntitySupport(
+                    entityKind,
+                    [IdentifyAction.LookupId.ToCode()],
+                    ["tmdb"])
+            ]);
+
+        Assert.False(PluginCompatibilityResolver.IsCompatible(manifest, new Version(1, 0, 0)));
+    }
+
+    [Theory]
+    [InlineData()]
+    [InlineData("cascade")]
+    [InlineData("SEARCH")]
+    [InlineData(" search")]
+    public void VersionTwoRejectsMissingUnknownOrNonCanonicalIdentifyActions(params string[] actions) {
+        var manifest = Manifest(
+            new PluginCompatibility("1.0.0", null, "1.0.0", null),
+            manifestVersion: 2,
+            supports:
+            [
+                new PluginEntitySupport(
+                    "video",
+                    actions,
+                    ["tmdb"],
+                    actions.Contains(IdentifyAction.Search.ToCode(), StringComparer.Ordinal)
+                        ? new PluginSearchDefinition(
+                        [
+                            new PluginSearchField("title", "Title", PluginSearchFieldType.Text, true)
+                        ])
+                        : null)
+            ]);
+
+        Assert.False(PluginCompatibilityResolver.IsCompatible(manifest, new Version(1, 0, 0)));
+    }
+
+    [Fact]
+    public void VersionTwoRejectsDuplicateIdentifyActionsAndEntityKindSupports() {
+        var duplicateActions = Manifest(
+            new PluginCompatibility("1.0.0", null, "1.0.0", null),
+            manifestVersion: 2,
+            supports:
+            [
+                new PluginEntitySupport(
+                    "video",
+                    [IdentifyAction.LookupId.ToCode(), IdentifyAction.LookupId.ToCode()],
+                    ["tmdb"])
+            ]);
+        var duplicateSupports = Manifest(
+            new PluginCompatibility("1.0.0", null, "1.0.0", null),
+            manifestVersion: 2,
+            supports:
+            [
+                new PluginEntitySupport("video", [IdentifyAction.LookupId.ToCode()], ["tmdb"]),
+                new PluginEntitySupport("video", [IdentifyAction.LookupUrl.ToCode()], ["tmdb"])
+            ]);
+
+        Assert.False(PluginCompatibilityResolver.IsCompatible(duplicateActions, new Version(1, 0, 0)));
+        Assert.False(PluginCompatibilityResolver.IsCompatible(duplicateSupports, new Version(1, 0, 0)));
+    }
+
+    [Fact]
+    public void VersionTwoRejectsSearchSchemaWithoutSearchAction() {
+        var manifest = Manifest(
+            new PluginCompatibility("1.0.0", null, "1.0.0", null),
+            manifestVersion: 2,
+            supports:
+            [
+                new PluginEntitySupport(
+                    "video",
+                    [IdentifyAction.LookupId.ToCode()],
+                    ["tmdb"],
+                    new PluginSearchDefinition(
+                    [
+                        new PluginSearchField("title", "Title", PluginSearchFieldType.Text, true)
+                    ]))
+            ]);
+
+        Assert.False(PluginCompatibilityResolver.IsCompatible(manifest, new Version(1, 0, 0)));
+    }
+
+    [Theory]
+    [InlineData("", "Title", "year")]
+    [InlineData("title", "", "year")]
+    [InlineData("title", "Title", "TITLE")]
+    public void VersionTwoRejectsUnusableOrDuplicateSearchFields(
+        string firstKey,
+        string firstLabel,
+        string secondKey) {
+        var manifest = Manifest(
+            new PluginCompatibility("1.0.0", null, "1.0.0", null),
+            manifestVersion: 2,
+            supports:
+            [
+                new PluginEntitySupport(
+                    "book",
+                    [IdentifyAction.Search.ToCode()],
+                    ["openlibrary"],
+                    new PluginSearchDefinition(
+                    [
+                        new PluginSearchField(firstKey, firstLabel, PluginSearchFieldType.Text, true),
+                        new PluginSearchField(secondKey, "Year", PluginSearchFieldType.Year, false)
+                    ]))
+            ]);
+
+        Assert.False(PluginCompatibilityResolver.IsCompatible(manifest, new Version(1, 0, 0)));
+    }
+
     private static PluginIndexEntry Entry(
         string id,
         string version,
@@ -90,7 +324,9 @@ public sealed class PluginManifestCompatibilityTests {
         string runtime,
         string appMin,
         string? appMax,
-        PluginCompatibility? compatibility = null) =>
+        PluginCompatibility? compatibility = null,
+        int manifestVersion = 1,
+        IReadOnlyList<PluginEntitySupport>? supports = null) =>
         new(
             Id: id,
             Name: id,
@@ -100,14 +336,17 @@ public sealed class PluginManifestCompatibilityTests {
             Sha256: "abc",
             Runtime: runtime,
             IsNsfw: false,
-            ManifestVersion: 1,
+            ManifestVersion: manifestVersion,
             ApiTags: apiTags,
             Compat: compatibility ?? new PluginCompatibility("1.0.0", null, appMin, appMax),
-            Supports: []);
+            Supports: supports ?? []);
 
-    private static PluginManifest Manifest(PluginCompatibility compatibility) =>
+    private static PluginManifest Manifest(
+        PluginCompatibility compatibility,
+        int manifestVersion = 1,
+        IReadOnlyList<PluginEntitySupport>? supports = null) =>
         new(
-            ManifestVersion: 1,
+            ManifestVersion: manifestVersion,
             ApiTags: ["prismedia"],
             Id: "tmdb",
             Name: "TMDB",
@@ -117,5 +356,5 @@ public sealed class PluginManifestCompatibilityTests {
             Compat: compatibility,
             Auth: [],
             IsNsfw: false,
-            Supports: []);
+            Supports: supports ?? []);
 }

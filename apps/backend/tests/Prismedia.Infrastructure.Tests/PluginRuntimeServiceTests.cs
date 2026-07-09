@@ -489,7 +489,14 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             IdentifyAction.LookupId,
             new Dictionary<string, string> { ["apiKey"] = "secret" },
             new IdentifyEntitySnapshot(entityId, EntityKind.Video, "Example"),
-            new IdentifyQuery(null, null, null),
+            new IdentifyQuery(
+                null,
+                null,
+                null,
+                Fields: new Dictionary<string, string> {
+                    ["seriesTitle"] = "Example",
+                    ["year"] = "2026"
+                }),
             new IdentifyMatchHints(
                 new Dictionary<string, string> { ["tmdb"] = "123" },
                 [],
@@ -504,6 +511,8 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
         Assert.Equal(descriptor.EntryPath, executor.Arguments[0]);
         Assert.Equal(entityId, executor.CapturedRequest?.Entity.Id);
         Assert.Equal(IdentifyAction.LookupId, executor.CapturedRequest?.Action);
+        Assert.Equal("Example", executor.CapturedRequest?.Query.Fields?["seriesTitle"]);
+        Assert.Equal("2026", executor.CapturedRequest?.Query.Fields?["year"]);
     }
 
     [Fact]

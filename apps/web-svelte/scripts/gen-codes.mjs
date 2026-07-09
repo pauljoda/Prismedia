@@ -38,6 +38,7 @@ const ENUM_EXPORTS = [
   ["IdentifyQueueState", "IDENTIFY_QUEUE_STATE", "IdentifyQueueStateCode"],
   ["IdentifyResultStatus", "IDENTIFY_RESULT_STATUS", "IdentifyResultStatusCode"],
   ["IdentifyApplyState", "IDENTIFY_APPLY_STATE", "IdentifyApplyStateCode"],
+  ["PluginSearchFieldType", "PLUGIN_SEARCH_FIELD_TYPE", "PluginSearchFieldTypeCode"],
   ["FileSourceKind", "FILE_SOURCE_KIND", "FileSourceKindCode"],
   ["FileEntryKind", "FILE_ENTRY_KIND", "FileEntryKindCode"],
   ["ThumbnailHoverKind", "THUMBNAIL_HOVER_KIND", "ThumbnailHoverKindCode"],
