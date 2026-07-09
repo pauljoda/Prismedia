@@ -7,7 +7,6 @@
     ChevronDown,
     ChevronUp,
     Images,
-    Info,
     Layers,
     Tag,
     Users,
@@ -17,6 +16,7 @@
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
   import ReviewSection from "$lib/components/review/ReviewSection.svelte";
   import ProposalContextBar from "$lib/components/review/ProposalContextBar.svelte";
+  import ProposalFieldReviewSection from "$lib/components/review/ProposalFieldReviewSection.svelte";
   import IdentifyTargetPreview from "./IdentifyTargetPreview.svelte";
   import {
     currentFieldValueForReview,
@@ -24,14 +24,12 @@
     defaultFieldSelectionForReview,
     groupReviewImages,
     isNewRelationshipTitle,
-    proposalFieldValue,
     proposalHasField,
     reviewImagePreviewUrl,
     structuralChildProposals,
     relationshipProposals,
     relationshipTitlesForDetail,
     reviewDiffFieldKeys,
-    reviewFieldLabels,
   } from "$lib/components/identify-review";
   import {
     proposalImageUrl,
@@ -60,7 +58,6 @@
   const store = useIdentifyStore();
 
   const DIFF_FIELD_KEYS = reviewDiffFieldKeys;
-  const FIELD_LABELS = reviewFieldLabels;
 
   let selectedFields = $state<Record<string, boolean>>({});
   let selectedImages = $state<Record<string, string | null>>({});
@@ -241,63 +238,14 @@
     imageShape={coverIsSquare ? "square" : "portrait"}
   />
 
-  <!-- Base fields -->
-  <ReviewSection
-    panelId={`base-fields-${proposal.proposalId}`}
+  <ProposalFieldReviewSection
+    {proposal}
+    {selectedFields}
     title={proposal.patch?.title ? `Base fields · ${proposal.patch.title}` : "Base fields"}
-    meta={`${DIFF_FIELD_KEYS.filter((k) => selectedFields[k]).length}/${DIFF_FIELD_KEYS.filter((k) => proposalHasField(proposal, k)).length} accepted`}
-  >
-    {#snippet icon()}
-      <Info class="h-3.5 w-3.5 text-text-accent" />
-    {/snippet}
-    {#snippet actions()}
-      <button
-        type="button"
-        class="text-[0.72rem] text-text-muted transition-colors hover:text-text-primary"
-        onclick={() => setAllFields(true)}
-      >
-        All
-      </button>
-      <button
-        type="button"
-        class="text-[0.72rem] text-text-muted transition-colors hover:text-text-primary"
-        onclick={() => setAllFields(false)}
-      >
-        None
-      </button>
-    {/snippet}
-
-    <div class="hidden grid-cols-[auto_110px_1fr_1fr] items-center gap-3 border-b border-border-default bg-surface-2 px-3.5 py-1.5 md:grid">
-      <span class="w-5"></span>
-      <span class="text-kicker">Field</span>
-      <span class="text-kicker">Current</span>
-      <span class="text-kicker text-text-accent">Proposed</span>
-    </div>
-
-    {#each DIFF_FIELD_KEYS as field (field)}
-      {#if proposalHasField(proposal, field)}
-        {@const current = currentFieldValueForReview(currentEntityFallback(), currentDetail, field)}
-        <div class="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 border-b border-border-subtle px-3.5 py-3 last:border-b-0 md:grid-cols-[auto_110px_1fr_1fr]">
-          <label class="flex items-center">
-            <input
-              type="checkbox"
-              class="h-4 w-4 accent-accent-500"
-              checked={selectedFields[field]}
-              onchange={(event) => setFieldSelected(field, event.currentTarget.checked)}
-            />
-          </label>
-          <div class="md:contents">
-            <div>
-              <span class="font-heading text-[0.76rem] font-semibold text-text-secondary">{FIELD_LABELS[field]}</span>
-              <span class="ml-2 font-mono text-[0.62rem] text-text-disabled md:ml-0 md:block">{field}</span>
-            </div>
-            <div class="hidden text-[0.76rem] leading-snug text-text-muted md:block">{current || "—"}</div>
-            <div class="mt-1 text-[0.82rem] leading-snug text-text-primary md:mt-0">{proposalFieldValue(proposal, field)}</div>
-          </div>
-        </div>
-      {/if}
-    {/each}
-  </ReviewSection>
+    currentValue={(field) => currentFieldValueForReview(currentEntityFallback(), currentDetail, field)}
+    onFieldChange={setFieldSelected}
+    onAllFields={setAllFields}
+  />
 
   <!-- Credits (inherited) -->
   {#if credits.length > 0}
