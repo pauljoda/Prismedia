@@ -18,15 +18,12 @@ public interface IPluginRequestProposalSource {
 /// <summary>Result of ensuring a wanted entity: the entity, whether this call created it, and whether it already owns a real file.</summary>
 public sealed record WantedEntityResult(Guid EntityId, bool Created, bool HasFile);
 
-/// <summary>One provider identity an entity carries (from a request commit or from Identify).</summary>
-public sealed record ProviderRef(string Provider, string ItemId);
-
 /// <summary>
-/// A library entity read for monitoring/removal: its kind, display title, the provider identities a
+/// A library entity read for monitoring/removal: its kind, display title, the external identities a
 /// discovery sync can re-resolve it from, and whether it owns a real source file.
 /// </summary>
 public sealed record MonitorableContainer(
-    Guid EntityId, EntityKind Kind, string Title, IReadOnlyList<ProviderRef> ProviderIds,
+    Guid EntityId, EntityKind Kind, string Title, IReadOnlyList<ExternalIdentity> ExternalIdentities,
     bool HasSourceFile = false, Guid? ParentEntityId = null,
     IReadOnlyDictionary<string, int>? Positions = null);
 
@@ -36,13 +33,13 @@ public sealed record MonitorableContainer(
 /// </summary>
 public interface IWantedSuppressionStore {
     /// <summary>Suppresses every given identity (idempotent per identity).</summary>
-    Task SuppressAsync(IReadOnlyList<ProviderRef> identities, EntityKind kind, string title, CancellationToken cancellationToken);
+    Task SuppressAsync(IReadOnlyList<ExternalIdentity> identities, EntityKind kind, string title, CancellationToken cancellationToken);
 
-    /// <summary>The subset of the given identities that are suppressed, as "provider:itemId" strings.</summary>
-    Task<IReadOnlySet<string>> FilterSuppressedAsync(IReadOnlyList<ProviderRef> identities, CancellationToken cancellationToken);
+    /// <summary>The subset of the given canonical identities that are suppressed.</summary>
+    Task<IReadOnlySet<ExternalIdentity>> FilterSuppressedAsync(IReadOnlyList<ExternalIdentity> identities, CancellationToken cancellationToken);
 
     /// <summary>Clears the suppression for every given identity — a direct request un-blacklists the work.</summary>
-    Task ClearAsync(IReadOnlyList<ProviderRef> identities, CancellationToken cancellationToken);
+    Task ClearAsync(IReadOnlyList<ExternalIdentity> identities, CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -173,7 +170,7 @@ public sealed class RequestCommitService(
 
     /// <summary>
     /// Requests an existing library entity by id — the phantom's "Search for release": resolves the
-    /// entity's registry kind and tries each of its provider identities until one resolves (an entity
+    /// entity's registry kind and tries each of its external identities until one resolves (an entity
     /// carries non-plugin identifiers like ISBNs too, so the caller can't just pick the first), then
     /// runs the ordinary leaf commit — which dedupes onto this same entity and starts its auto-grabbing,
     /// monitored acquisition. Null when the entity is gone, isn't a committable leaf kind, or no
@@ -205,11 +202,12 @@ public sealed class RequestCommitService(
         // directly. Every other kind re-resolves through its provider, degrading to the graph only
         // when no provider answers, so a work whose provider vanished can still be fetched.
         if (!descriptor.AcquireFromEntity) {
-            foreach (var providerRef in entity.ProviderIds) {
+            foreach (var identity in entity.ExternalIdentities) {
                 var request = new RequestCommitRequest(
-                    descriptor.Kind, $"{providerRef.Provider}:{providerRef.ItemId}", [],
+                    descriptor.Kind, QualifiedId(identity), [],
                     targeting.TargetLibraryRootId, targeting.ProfileId);
-                var response = await CommitLeafAsync(descriptor, request, providerRef.Provider, providerRef.ItemId, hideNsfw, cancellationToken);
+                var response = await CommitLeafAsync(
+                    descriptor, request, identity.Namespace, identity.Value, hideNsfw, cancellationToken);
                 if (response is not null) {
                     return response;
                 }
@@ -324,7 +322,7 @@ public sealed class RequestCommitService(
     /// </summary>
     private async Task<RequestCommitResponse?> RequestFromEntityGraphAsync(
         RequestKindDescriptor descriptor, MonitorableContainer entity, AcquisitionTargeting targeting, bool hideNsfw, CancellationToken cancellationToken) {
-        var primaryId = entity.ProviderIds.FirstOrDefault();
+        var primaryIdentity = entity.ExternalIdentities.FirstOrDefault();
         // Ordinary owned leaves are already satisfied. TV units are different: an existing season/episode
         // can still be explicitly monitored so the acquisition loop searches for missing files or cutoff
         // upgrades. That is the Season Pass toggle path for already-scanned series.
@@ -334,9 +332,14 @@ public sealed class RequestCommitService(
         }
 
         if (await acquisitions.AnyForEntityAsync(entity.EntityId, cancellationToken)) {
-            if (primaryId is not null) {
+            if (primaryIdentity is not null) {
                 await EnsurePhantomDescendantsAsync(
-                    descriptor, primaryId.Provider, primaryId.ItemId, entity.EntityId, hideNsfw, cancellationToken);
+                    descriptor,
+                    primaryIdentity.Namespace,
+                    primaryIdentity.Value,
+                    entity.EntityId,
+                    hideNsfw,
+                    cancellationToken);
             }
             return new RequestCommitResponse(null, [Item(RequestCommitOutcome.AlreadyRequested, null)]);
         }
@@ -358,7 +361,7 @@ public sealed class RequestCommitService(
         }
 
         // A direct request un-blacklists the work, exactly like the provider path.
-        await suppressions.ClearAsync(entity.ProviderIds, cancellationToken);
+        await suppressions.ClearAsync(entity.ExternalIdentities, cancellationToken);
 
         var positions = entity.Positions ?? new Dictionary<string, int>();
         var summary = await acquisitions.CreateAndSearchAsync(
@@ -368,8 +371,8 @@ public sealed class RequestCommitService(
                 series,
                 Year: null,
                 PosterUrl: null,
-                primaryId?.Provider,
-                primaryId?.ItemId,
+                primaryIdentity?.Namespace,
+                primaryIdentity?.Value,
                 Description: null,
                 descriptor.AcquisitionKind,
                 entity.EntityId,
@@ -380,15 +383,20 @@ public sealed class RequestCommitService(
                 positions.TryGetValue(EntityPositionCodes.Volume, out var volume) ? volume : null),
             cancellationToken);
         await monitors.StartAsync(summary.Id, descriptor.AcquisitionKind, entity.Title, creator, cancellationToken);
-        if (primaryId is not null) {
+        if (primaryIdentity is not null) {
             await EnsurePhantomDescendantsAsync(
-                descriptor, primaryId.Provider, primaryId.ItemId, entity.EntityId, hideNsfw, cancellationToken);
+                descriptor,
+                primaryIdentity.Namespace,
+                primaryIdentity.Value,
+                entity.EntityId,
+                hideNsfw,
+                cancellationToken);
         }
         return new RequestCommitResponse(null, [Item(RequestCommitOutcome.Requested, summary.Id)]);
 
         RequestCommitItem Item(RequestCommitOutcome outcome, Guid? acquisitionId) =>
             new(
-                primaryId is null ? entity.EntityId.ToString() : $"{primaryId.Provider}:{primaryId.ItemId}",
+                primaryIdentity is null ? entity.EntityId.ToString() : QualifiedId(primaryIdentity),
                 entity.Title, outcome, entity.EntityId, acquisitionId);
     }
 
@@ -402,7 +410,7 @@ public sealed class RequestCommitService(
     /// </summary>
     public async Task<bool> SyncContainerAsync(Guid entityId, CancellationToken cancellationToken) {
         var container = await wanted.GetContainerAsync(entityId, cancellationToken);
-        if (container is null || container.ProviderIds.Count == 0) {
+        if (container is null || container.ExternalIdentities.Count == 0) {
             return false;
         }
 
@@ -420,10 +428,10 @@ public sealed class RequestCommitService(
         var preset = await monitors.GetPresetByEntityAsync(entityId, cancellationToken) ?? MonitorPreset.All;
         var autoMonitorsNewWorks = preset is MonitorPreset.All or MonitorPreset.Future;
 
-        foreach (var providerRef in container.ProviderIds) {
+        foreach (var identity in container.ExternalIdentities) {
             // Conservative SFW default: the sweep has no user session (mirrors background enrichment).
             var proposal = await proposals.ResolveProposalAsync(
-                descriptor, providerRef.Provider, providerRef.ItemId, hideNsfw: true, includeChildren: true, cancellationToken);
+                descriptor, identity.Namespace, identity.Value, hideNsfw: true, includeChildren: true, cancellationToken);
             if (proposal?.Patch is null) {
                 continue;
             }
@@ -433,13 +441,13 @@ public sealed class RequestCommitService(
             var childIds = autoMonitorsNewWorks
                 ? proposal.Children
                     .Where(child => !child.TargetKind.IsRelationship())
-                    .Select(child => RequestProposalReading.QualifiedIdFor(providerRef.Provider, child))
+                    .Select(child => RequestProposalReading.QualifiedIdFor(identity.Namespace, child))
                     .Where(id => id is not null)
                     .Select(id => id!)
                     .ToArray()
                 : [];
             await CommitContainerCoreAsync(
-                descriptor, providerRef.Provider, providerRef.ItemId, proposal, childIds,
+                descriptor, identity.Namespace, identity.Value, proposal, childIds,
                 requestOwnedChildren: false,
                 startAcquisitions: false, AcquisitionTargeting.None, preset: null, hideNsfw: true, cancellationToken);
             return true;
@@ -475,11 +483,14 @@ public sealed class RequestCommitService(
             // Discovery honors the blacklist: a work the user removed from Wanted never reappears as a
             // phantom. An explicit pick below (startAcquisitions) instead CLEARS its suppression.
             var candidates = selectedChildren
-                .Select(node => new ProviderRef(providerId, RequestProposalReading.WorkIdFor(providerId, node)!))
+                .Select(node => TryIdentity(providerId, RequestProposalReading.WorkIdFor(providerId, node)))
+                .Where(identity => identity is not null)
+                .Select(identity => identity!)
                 .ToArray();
             var suppressed = await suppressions.FilterSuppressedAsync(candidates, cancellationToken);
             selectedChildren = selectedChildren
-                .Where(node => !suppressed.Contains($"{providerId}:{RequestProposalReading.WorkIdFor(providerId, node)}"))
+                .Where(node => TryIdentity(providerId, RequestProposalReading.WorkIdFor(providerId, node)) is { } identity
+                    && !suppressed.Contains(identity))
                 .ToArray();
         }
 
@@ -563,15 +574,16 @@ public sealed class RequestCommitService(
         // Discovery honors the blacklist: a phantom the user removed from Wanted never reappears.
         var candidates = childProposals
             .Select(node => RequestProposalReading.WorkIdFor(providerId, node))
-            .Where(id => id is not null)
-            .Select(id => new ProviderRef(providerId, id!))
+            .Select(id => TryIdentity(providerId, id))
+            .Where(identity => identity is not null)
+            .Select(identity => identity!)
             .ToArray();
         var suppressed = await suppressions.FilterSuppressedAsync(candidates, cancellationToken);
 
         var phantomPicks = new List<CommitPick>();
         foreach (var childProposal in childProposals) {
             var workId = RequestProposalReading.WorkIdFor(providerId, childProposal);
-            if (workId is null || suppressed.Contains($"{providerId}:{workId}")) {
+            if (TryIdentity(providerId, workId) is not { } identity || suppressed.Contains(identity)) {
                 continue;
             }
 
@@ -719,7 +731,7 @@ public sealed class RequestCommitService(
                 continue;
             }
 
-            await suppressions.SuppressAsync(entity.ProviderIds, entity.Kind, entity.Title, cancellationToken);
+            await suppressions.SuppressAsync(entity.ExternalIdentities, entity.Kind, entity.Title, cancellationToken);
 
             // Deleting an acquisition removes its torrent/data but deliberately keeps the wanted entity
             // (a Downloads-view remove is not a give-up); this bulk remove IS the give-up, so the direct
@@ -735,17 +747,42 @@ public sealed class RequestCommitService(
         return removed;
     }
 
-    /// <summary>Every provider identity a pick carries: the resolving provider's pair plus the proposal's external ids.</summary>
-    private static IReadOnlyList<ProviderRef> IdentitiesOf(CommitPick pick, string providerId) {
-        var identities = new List<ProviderRef> { new(providerId, pick.WorkId) };
+    /// <summary>Every persistent identity a pick carries: the resolving provider's identity plus the proposal's external ids.</summary>
+    private static IReadOnlyList<ExternalIdentity> IdentitiesOf(CommitPick pick, string providerId) {
+        var identities = new Dictionary<string, ExternalIdentity>(StringComparer.Ordinal);
+        AddIdentity(identities, providerId, pick.WorkId);
         foreach (var (provider, value) in pick.Proposal.Patch?.ExternalIds ?? new Dictionary<string, string>()) {
-            if (!string.IsNullOrWhiteSpace(provider) && !string.IsNullOrWhiteSpace(value)) {
-                identities.Add(new ProviderRef(provider, value));
-            }
+            AddIdentity(identities, provider, value);
         }
 
-        return identities;
+        return identities.Values.ToArray();
     }
+
+    private static void AddIdentity(
+        IDictionary<string, ExternalIdentity> identities,
+        string? identityNamespace,
+        string? value) {
+        if (TryIdentity(identityNamespace, value) is { } identity) {
+            identities.TryAdd(identity.Namespace, identity);
+        }
+    }
+
+    private static ExternalIdentity? TryIdentity(string? identityNamespace, string? value) {
+        if (string.IsNullOrWhiteSpace(identityNamespace) || string.IsNullOrWhiteSpace(value)) {
+            return null;
+        }
+
+        try {
+            return new ExternalIdentity(identityNamespace, value);
+        } catch (ArgumentException) {
+            // Plugin proposals can carry transient lookup URLs in their external-id bag. They are
+            // useful while resolving the proposal but are not stable persisted identities.
+            return null;
+        }
+    }
+
+    private static string QualifiedId(ExternalIdentity identity) =>
+        $"{identity.Namespace}:{identity.Value}";
 
     /// <summary>The structural (non-relationship) children whose provider-qualified ids were picked.</summary>
     private static IReadOnlyList<EntityMetadataProposal> SelectStructuralChildren(

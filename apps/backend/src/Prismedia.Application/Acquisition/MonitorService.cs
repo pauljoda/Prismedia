@@ -94,7 +94,7 @@ public sealed class MonitorService(IMonitorStore monitors, IAcquisitionStore acq
     private async Task<(MonitorableContainer? Container, IReadOnlyList<string> Trackable)> ResolveEligibilityAsync(
         Guid entityId, CancellationToken cancellationToken) {
         var container = await entities.GetContainerAsync(entityId, cancellationToken);
-        if (container is null || container.ProviderIds.Count == 0) {
+        if (container is null || container.ExternalIdentities.Count == 0) {
             return (null, []);
         }
 
@@ -104,7 +104,10 @@ public sealed class MonitorService(IMonitorStore monitors, IAcquisitionStore acq
             return (null, []);
         }
 
-        var trackable = await tracking.TrackableProvidersAsync(descriptor.PluginKindCode, container.ProviderIds, cancellationToken);
+        var trackable = await tracking.TrackableProvidersAsync(
+            descriptor.PluginKindCode,
+            container.ExternalIdentities,
+            cancellationToken);
         return (container, trackable);
     }
 

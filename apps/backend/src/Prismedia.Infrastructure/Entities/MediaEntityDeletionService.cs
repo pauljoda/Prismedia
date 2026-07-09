@@ -141,12 +141,15 @@ public sealed class MediaEntityDeletionService(
         // Full removal: suppress the work's provider identities so a monitored parent container (an
         // author, an artist) never re-requests what the user just deleted (the "add list exclusion"
         // analog). An explicit future request clears the suppression.
-        var providerRefs = await db.EntityExternalIds.AsNoTracking()
+        var identityRows = await db.EntityExternalIds.AsNoTracking()
             .Where(row => row.EntityId == id)
-            .Select(row => new ProviderRef(row.Provider, row.Value))
+            .Select(row => new { row.Provider, row.Value })
             .ToArrayAsync(cancellationToken);
-        if (providerRefs.Length > 0 && EntityKindRegistry.TryGet(entity.KindCode, out var kind)) {
-            await suppressions.SuppressAsync(providerRefs, kind, entity.Title, cancellationToken);
+        var identities = identityRows
+            .Select(row => new ExternalIdentity(row.Provider, row.Value))
+            .ToArray();
+        if (identities.Length > 0 && EntityKindRegistry.TryGet(entity.KindCode, out var kind)) {
+            await suppressions.SuppressAsync(identities, kind, entity.Title, cancellationToken);
         }
 
         // All generated assets (caches, grid thumbnails, downloaded artwork) go with the entities NOW —

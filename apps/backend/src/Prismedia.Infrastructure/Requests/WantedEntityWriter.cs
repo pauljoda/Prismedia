@@ -147,15 +147,15 @@ public sealed class WantedEntityWriter(
             return null;
         }
 
-        var providerIds = (await externalIdentities.ListAsync(entityId, cancellationToken))
-            .Select(identity => new ProviderRef(identity.Identity.Namespace, identity.Identity.Value))
+        var identities = (await externalIdentities.ListAsync(entityId, cancellationToken))
+            .Select(association => association.Identity)
             .ToArray();
         var positions = await db.EntityPositions.AsNoTracking()
             .Where(row => row.EntityId == entityId)
             .ToDictionaryAsync(row => row.Code, row => row.Value, cancellationToken);
         var hasSource = await HasSourceFileAsync(entityId, cancellationToken);
         return new MonitorableContainer(
-            entity.Id, entity.KindCode.DecodeAs<EntityKind>(), entity.Title, providerIds, hasSource,
+            entity.Id, entity.KindCode.DecodeAs<EntityKind>(), entity.Title, identities, hasSource,
             entity.ParentEntityId, positions);
     }
 

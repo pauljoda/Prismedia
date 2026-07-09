@@ -182,8 +182,8 @@ public sealed class WantedEntityWriterTests {
 
         var container = await Writer(db).GetContainerAsync(authorId, CancellationToken.None);
 
-        var identity = Assert.Single(container!.ProviderIds);
-        Assert.Equal(("openlibrarywork", "W1"), (identity.Provider, identity.ItemId));
+        var identity = Assert.Single(container!.ExternalIdentities);
+        Assert.Equal(("openlibrarywork", "W1"), (identity.Namespace, identity.Value));
     }
 
     [Fact]

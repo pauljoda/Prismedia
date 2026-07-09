@@ -1,3 +1,5 @@
+using Prismedia.Domain.Entities;
+
 namespace Prismedia.Application.Requests;
 
 /// <summary>
@@ -7,9 +9,12 @@ namespace Prismedia.Application.Requests;
 /// </summary>
 public interface IProviderTrackingCatalog {
     /// <summary>
-    /// The subset of <paramref name="providerIds"/> (distinct provider keys) whose provider is an enabled
+    /// The subset of <paramref name="identities"/> (distinct identity namespaces) whose provider is an enabled
     /// plugin declaring the lookup-id action for <paramref name="pluginKindCode"/> (a plugin entity-kind
     /// wire code, see <see cref="RequestKindDescriptor.PluginKindCode"/>). Empty when nothing can track.
     /// </summary>
-    Task<IReadOnlyList<string>> TrackableProvidersAsync(string pluginKindCode, IReadOnlyList<ProviderRef> providerIds, CancellationToken cancellationToken);
+    Task<IReadOnlyList<string>> TrackableProvidersAsync(
+        string pluginKindCode,
+        IReadOnlyList<ExternalIdentity> identities,
+        CancellationToken cancellationToken);
 }

@@ -136,7 +136,7 @@ public sealed class MediaEntityDeletionServiceTests {
             NewSourceFile(seasonId, $"{basePath}/Clifford the Big Red Dog/Season 01"),
             NewSourceFile(episodeId, $"{basePath}/Clifford the Big Red Dog/Season 01/Clifford S01E01.mkv"));
         db.EntityExternalIds.Add(new EntityExternalIdRow {
-            Id = Guid.NewGuid(), EntityId = seriesId, Provider = "tmdb", Value = "8379",
+            Id = Guid.NewGuid(), EntityId = seriesId, Provider = " TMDB ", Value = " 8379 ",
             CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow
         });
         db.Monitors.Add(new MonitorRow {
@@ -193,14 +193,16 @@ public sealed class MediaEntityDeletionServiceTests {
 
     private sealed class RecordingSuppressions : IWantedSuppressionStore {
         public List<string> Suppressed { get; } = [];
-        public Task SuppressAsync(IReadOnlyList<ProviderRef> identities, EntityKind kind, string title, CancellationToken cancellationToken) {
-            Suppressed.AddRange(identities.Select(identity => $"{identity.Provider}:{identity.ItemId}"));
+        public Task SuppressAsync(IReadOnlyList<ExternalIdentity> identities, EntityKind kind, string title, CancellationToken cancellationToken) {
+            Suppressed.AddRange(identities.Select(identity => $"{identity.Namespace}:{identity.Value}"));
             return Task.CompletedTask;
         }
 
-        public Task<IReadOnlySet<string>> FilterSuppressedAsync(IReadOnlyList<ProviderRef> identities, CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlySet<string>>(new HashSet<string>());
-        public Task ClearAsync(IReadOnlyList<ProviderRef> identities, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task<IReadOnlySet<ExternalIdentity>> FilterSuppressedAsync(
+            IReadOnlyList<ExternalIdentity> identities,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlySet<ExternalIdentity>>(new HashSet<ExternalIdentity>());
+        public Task ClearAsync(IReadOnlyList<ExternalIdentity> identities, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     private sealed class RecordingAcquisitions(IReadOnlyList<Guid> entityIdsWithAcquisition) : IAcquisitionRequestService {

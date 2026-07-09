@@ -179,9 +179,9 @@ public sealed class RequestCommitServiceTests {
             Container(ProposalKind.VideoSeries, "Andor", "TV1", season));
         var seriesId = FakeWantedEntityWriter.EntityIdFor("TV1");
         var seasonId = FakeWantedEntityWriter.EntityIdFor("S1");
-        writer.Containers[seriesId] = new MonitorableContainer(seriesId, EntityKind.VideoSeries, "Andor", [new ProviderRef(Provider, "TV1")]);
+        writer.Containers[seriesId] = new MonitorableContainer(seriesId, EntityKind.VideoSeries, "Andor", [new ExternalIdentity(Provider, "TV1")]);
         writer.Containers[seasonId] = new MonitorableContainer(
-            seasonId, EntityKind.VideoSeason, "Season 1", [new ProviderRef(Provider, "S1")],
+            seasonId, EntityKind.VideoSeason, "Season 1", [new ExternalIdentity(Provider, "S1")],
             HasSourceFile: true, ParentEntityId: seriesId,
             Positions: new Dictionary<string, int> { [EntityPositionCodes.Season] = 1 });
         writer.ExistingWithFile.Add("E1");
@@ -210,7 +210,7 @@ public sealed class RequestCommitServiceTests {
         var episode3 = Guid.NewGuid();
         writer.Containers[seriesId] = new MonitorableContainer(seriesId, EntityKind.VideoSeries, "Andor", []);
         writer.Containers[seasonId] = new MonitorableContainer(
-            seasonId, EntityKind.VideoSeason, "Season 1", [new ProviderRef(Provider, "S1")],
+            seasonId, EntityKind.VideoSeason, "Season 1", [new ExternalIdentity(Provider, "S1")],
             HasSourceFile: true, ParentEntityId: seriesId,
             Positions: new Dictionary<string, int> { [EntityPositionCodes.Season] = 1 });
         writer.Containers[episode2] = new MonitorableContainer(
@@ -241,7 +241,7 @@ public sealed class RequestCommitServiceTests {
         var seriesId = Guid.NewGuid();
         var season1 = Guid.NewGuid();
         var season2 = Guid.NewGuid();
-        writer.Containers[seriesId] = new MonitorableContainer(seriesId, EntityKind.VideoSeries, "Andor", [new ProviderRef(Provider, "TV1")]);
+        writer.Containers[seriesId] = new MonitorableContainer(seriesId, EntityKind.VideoSeries, "Andor", [new ExternalIdentity(Provider, "TV1")]);
         writer.Containers[season1] = new MonitorableContainer(
             season1, EntityKind.VideoSeason, "Season 1", [], ParentEntityId: seriesId,
             Positions: new Dictionary<string, int> { [EntityPositionCodes.Season] = 1 });
@@ -268,7 +268,7 @@ public sealed class RequestCommitServiceTests {
         var episode2 = Guid.NewGuid();
         var episode3 = Guid.NewGuid();
         writer.Containers[seasonId] = new MonitorableContainer(
-            seasonId, EntityKind.VideoSeason, "Season 1", [new ProviderRef(Provider, "S1")],
+            seasonId, EntityKind.VideoSeason, "Season 1", [new ExternalIdentity(Provider, "S1")],
             HasSourceFile: true,
             Positions: new Dictionary<string, int> { [EntityPositionCodes.Season] = 1 });
         writer.Containers[episode2] = new MonitorableContainer(
@@ -370,7 +370,7 @@ public sealed class RequestCommitServiceTests {
         var (service, writer, acquisitions, monitors) = ServiceWithMonitors(proposal);
         var authorEntityId = FakeWantedEntityWriter.EntityIdFor("A1");
         writer.Container = new MonitorableContainer(
-            authorEntityId, EntityKind.BookAuthor, "Author", [new ProviderRef(Provider, "A1")]);
+            authorEntityId, EntityKind.BookAuthor, "Author", [new ExternalIdentity(Provider, "A1")]);
         writer.ExistingWanted.Add("W1"); // already tracked from an earlier request
         acquisitions.EntitiesWithAcquisitions.Add(FakeWantedEntityWriter.EntityIdFor("W1"));
 
@@ -390,7 +390,7 @@ public sealed class RequestCommitServiceTests {
         var proposal = Container(ProposalKind.Person, "Author", "A1", Leaf(ProposalKind.Book, "Brand New", "W2"));
         var (service, writer, acquisitions, monitors) = ServiceWithMonitors(proposal);
         var authorEntityId = FakeWantedEntityWriter.EntityIdFor("A1");
-        writer.Container = new MonitorableContainer(authorEntityId, EntityKind.BookAuthor, "Author", [new ProviderRef(Provider, "A1")]);
+        writer.Container = new MonitorableContainer(authorEntityId, EntityKind.BookAuthor, "Author", [new ExternalIdentity(Provider, "A1")]);
         monitors.StoredPreset = preset;
 
         var synced = await service.SyncContainerAsync(authorEntityId, CancellationToken.None);
@@ -410,7 +410,7 @@ public sealed class RequestCommitServiceTests {
         var proposal = Container(ProposalKind.Person, "Author", "A1", Leaf(ProposalKind.Book, "Brand New", "W2"));
         var (service, writer, acquisitions, monitors) = ServiceWithMonitors(proposal);
         var authorEntityId = FakeWantedEntityWriter.EntityIdFor("A1");
-        writer.Container = new MonitorableContainer(authorEntityId, EntityKind.BookAuthor, "Author", [new ProviderRef(Provider, "A1")]);
+        writer.Container = new MonitorableContainer(authorEntityId, EntityKind.BookAuthor, "Author", [new ExternalIdentity(Provider, "A1")]);
         monitors.StoredPreset = preset;
 
         var synced = await service.SyncContainerAsync(authorEntityId, CancellationToken.None);
@@ -427,7 +427,7 @@ public sealed class RequestCommitServiceTests {
         var proposal = Container(ProposalKind.Person, "Author", "A1", Leaf(ProposalKind.Book, "Brand New", "W2"));
         var (service, writer, _, monitors) = ServiceWithMonitors(proposal);
         var authorEntityId = FakeWantedEntityWriter.EntityIdFor("A1");
-        writer.Container = new MonitorableContainer(authorEntityId, EntityKind.BookAuthor, "Author", [new ProviderRef(Provider, "A1")]);
+        writer.Container = new MonitorableContainer(authorEntityId, EntityKind.BookAuthor, "Author", [new ExternalIdentity(Provider, "A1")]);
         monitors.StoredPreset = MonitorPreset.All;
 
         await service.SyncContainerAsync(authorEntityId, CancellationToken.None);
@@ -510,7 +510,7 @@ public sealed class RequestCommitServiceTests {
         var phantomId = Guid.NewGuid();
         // The cascade stamps every provider identity, plugin or not — the isbn must be tried and skipped.
         writer.Container = new MonitorableContainer(
-            phantomId, EntityKind.Book, "The Martian", [new ProviderRef("isbn13", "9780000000000"), new ProviderRef(Provider, "W1")]);
+            phantomId, EntityKind.Book, "The Martian", [new ExternalIdentity("isbn13", "9780000000000"), new ExternalIdentity(Provider, "W1")]);
 
         var response = await service.RequestEntityAsync(phantomId, hideNsfw: true, CancellationToken.None);
 
@@ -547,7 +547,7 @@ public sealed class RequestCommitServiceTests {
         var parentId = Guid.NewGuid();
         var phantomId = Guid.NewGuid();
         writer.Container = new MonitorableContainer(
-            phantomId, EntityKind.Book, "New Work", [new ProviderRef(Provider, "W9")], ParentEntityId: parentId);
+            phantomId, EntityKind.Book, "New Work", [new ExternalIdentity(Provider, "W9")], ParentEntityId: parentId);
         monitors.StoredTargeting = new AcquisitionTargeting(Guid.NewGuid(), Guid.NewGuid());
 
         var response = await service.RequestEntityAsync(phantomId, hideNsfw: true, CancellationToken.None);
@@ -564,7 +564,7 @@ public sealed class RequestCommitServiceTests {
         var (service, writer, _, monitors) = ServiceWithMonitors(proposal);
         var authorEntityId = FakeWantedEntityWriter.EntityIdFor("A1");
         writer.Container = new MonitorableContainer(
-            authorEntityId, EntityKind.BookAuthor, "Author", [new ProviderRef(Provider, "A1")]);
+            authorEntityId, EntityKind.BookAuthor, "Author", [new ExternalIdentity(Provider, "A1")]);
 
         await service.SyncContainerAsync(authorEntityId, CancellationToken.None);
 
@@ -581,7 +581,7 @@ public sealed class RequestCommitServiceTests {
 
         // Containers are monitored/synced, not leaf-requested.
         var authorId = Guid.NewGuid();
-        writer.Container = new MonitorableContainer(authorId, EntityKind.BookAuthor, "Author", [new ProviderRef(Provider, "A1")]);
+        writer.Container = new MonitorableContainer(authorId, EntityKind.BookAuthor, "Author", [new ExternalIdentity(Provider, "A1")]);
         Assert.Null(await service.RequestEntityAsync(authorId, hideNsfw: true, CancellationToken.None));
     }
 
@@ -604,7 +604,7 @@ public sealed class RequestCommitServiceTests {
         var phantomId = Guid.NewGuid();
         var acquisitionId = Guid.NewGuid();
         writer.Container = new MonitorableContainer(
-            phantomId, EntityKind.Book, "The Martian", [new ProviderRef(Provider, "W1"), new ProviderRef("isbn13", "978")]);
+            phantomId, EntityKind.Book, "The Martian", [new ExternalIdentity(Provider, "W1"), new ExternalIdentity("isbn13", "978")]);
         acquisitions.AcquisitionIdsByEntity[phantomId] = [acquisitionId];
 
         var removed = await service.RemoveWantedAsync([phantomId], CancellationToken.None);
@@ -621,7 +621,7 @@ public sealed class RequestCommitServiceTests {
         var (service, writer, acquisitions, _, suppressions) = ServiceWithSuppressions(Leaf(ProposalKind.Book, "Book", "W1"));
         var ownedId = Guid.NewGuid();
         writer.Container = new MonitorableContainer(
-            ownedId, EntityKind.Book, "Owned", [new ProviderRef(Provider, "W1")], HasSourceFile: true);
+            ownedId, EntityKind.Book, "Owned", [new ExternalIdentity(Provider, "W1")], HasSourceFile: true);
 
         Assert.Equal(0, await service.RemoveWantedAsync([ownedId], CancellationToken.None));
         Assert.Empty(suppressions.Suppressed);
@@ -634,7 +634,7 @@ public sealed class RequestCommitServiceTests {
             Leaf(ProposalKind.Book, "Removed", "W1"), Leaf(ProposalKind.Book, "Kept", "W2"));
         var (service, writer, _, _, suppressions) = ServiceWithSuppressions(proposal);
         var authorEntityId = FakeWantedEntityWriter.EntityIdFor("A1");
-        writer.Container = new MonitorableContainer(authorEntityId, EntityKind.BookAuthor, "Author", [new ProviderRef(Provider, "A1")]);
+        writer.Container = new MonitorableContainer(authorEntityId, EntityKind.BookAuthor, "Author", [new ExternalIdentity(Provider, "A1")]);
         suppressions.Suppressed.Add($"{Provider}:W1"); // the user removed this work earlier
 
         Assert.True(await service.SyncContainerAsync(authorEntityId, CancellationToken.None));
@@ -655,6 +655,28 @@ public sealed class RequestCommitServiceTests {
         Assert.Equal(RequestCommitOutcome.Requested, Assert.Single(response!.Items).Outcome);
         Assert.Contains($"{Provider}:W1", suppressions.Cleared);
         Assert.Single(acquisitions.Created);
+    }
+
+    [Fact]
+    public async Task ExplicitRequestClearsOnlyCanonicalPersistentIdentities() {
+        var proposal = Leaf(ProposalKind.Book, "The Martian", "W1") with {
+            Patch = Patch("The Martian", "W1") with {
+                ExternalIds = new Dictionary<string, string> {
+                    [Provider] = "W1",
+                    [" TMDB "] = " 603 ",
+                    ["transient_locator"] = "https://example.test/items/603"
+                }
+            }
+        };
+        var (service, _, _, _, suppressions) = ServiceWithSuppressions(proposal);
+
+        var response = await service.CommitAsync(
+            new RequestCommitRequest(RequestMediaKind.Book, $"{Provider}:W1", []),
+            hideNsfw: false,
+            CancellationToken.None);
+
+        Assert.Equal(RequestCommitOutcome.Requested, Assert.Single(response!.Items).Outcome);
+        Assert.Equal([$"{Provider}:W1", "tmdb:603"], suppressions.Cleared);
     }
 
     [Fact]
@@ -848,25 +870,29 @@ public sealed class RequestCommitServiceTests {
         public List<string> Suppressed { get; } = [];
         public List<string> Cleared { get; } = [];
 
-        public Task SuppressAsync(IReadOnlyList<ProviderRef> identities, EntityKind kind, string title, CancellationToken cancellationToken) {
-            Suppressed.AddRange(identities.Select(identity => $"{identity.Provider}:{identity.ItemId}"));
+        public Task SuppressAsync(IReadOnlyList<ExternalIdentity> identities, EntityKind kind, string title, CancellationToken cancellationToken) {
+            Suppressed.AddRange(identities.Select(Key));
             return Task.CompletedTask;
         }
 
-        public Task<IReadOnlySet<string>> FilterSuppressedAsync(IReadOnlyList<ProviderRef> identities, CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlySet<string>>(identities
-                .Select(identity => $"{identity.Provider}:{identity.ItemId}")
-                .Where(key => Suppressed.Contains(key))
-                .ToHashSet(StringComparer.OrdinalIgnoreCase));
+        public Task<IReadOnlySet<ExternalIdentity>> FilterSuppressedAsync(
+            IReadOnlyList<ExternalIdentity> identities,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlySet<ExternalIdentity>>(identities
+                .Where(identity => Suppressed.Contains(Key(identity)))
+                .ToHashSet());
 
-        public Task ClearAsync(IReadOnlyList<ProviderRef> identities, CancellationToken cancellationToken) {
+        public Task ClearAsync(IReadOnlyList<ExternalIdentity> identities, CancellationToken cancellationToken) {
             foreach (var identity in identities) {
-                var key = $"{identity.Provider}:{identity.ItemId}";
+                var key = Key(identity);
                 Cleared.Add(key);
                 Suppressed.Remove(key);
             }
 
             return Task.CompletedTask;
         }
+
+        private static string Key(ExternalIdentity identity) =>
+            $"{identity.Namespace}:{identity.Value}";
     }
 }

@@ -70,7 +70,7 @@ public sealed class MonitorServiceTests {
     [Fact]
     public async Task EligibilityRequiresATrackableProvider() {
         await using var db = CreateContext();
-        var trackedId = SeedContainerEntity(db, "Brandon Sanderson", provider: "openlibrary");
+        var trackedId = SeedContainerEntity(db, "Brandon Sanderson", provider: " OpenLibrary ");
         var orphanId = SeedContainerEntity(db, "Unknown Author", provider: "dead-provider");
         await db.SaveChangesAsync();
         var service = Service(db, trackableProviders: ["openlibrary"]);
@@ -136,11 +136,14 @@ public sealed class MonitorServiceTests {
 
     /// <summary>Stands in for the plugin catalog: only the given provider ids count as trackable.</summary>
     private sealed class FakeTrackingCatalog(string[] trackable) : IProviderTrackingCatalog {
-        public Task<IReadOnlyList<string>> TrackableProvidersAsync(string pluginKindCode, IReadOnlyList<ProviderRef> providerIds, CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<string>>(providerIds
-                .Select(reference => reference.Provider)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Where(provider => trackable.Contains(provider, StringComparer.OrdinalIgnoreCase))
+        public Task<IReadOnlyList<string>> TrackableProvidersAsync(
+            string pluginKindCode,
+            IReadOnlyList<ExternalIdentity> identities,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<string>>(identities
+                .Select(identity => identity.Namespace)
+                .Distinct(StringComparer.Ordinal)
+                .Where(identityNamespace => trackable.Contains(identityNamespace, StringComparer.OrdinalIgnoreCase))
                 .ToArray());
     }
 

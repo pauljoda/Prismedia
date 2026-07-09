@@ -8,8 +8,12 @@ namespace Prismedia.Infrastructure.Requests;
 
 /// <summary>EF-backed discovery blacklist of provider work identities the user removed from Wanted.</summary>
 public sealed class EfWantedSuppressionStore(PrismediaDbContext db) : IWantedSuppressionStore {
-    public async Task SuppressAsync(IReadOnlyList<ProviderRef> identities, EntityKind kind, string title, CancellationToken cancellationToken) {
-        var valid = Normalize(identities);
+    public async Task SuppressAsync(
+        IReadOnlyList<ExternalIdentity> identities,
+        EntityKind kind,
+        string title,
+        CancellationToken cancellationToken) {
+        var valid = DistinctIdentities(identities);
         if (valid.Count == 0) {
             return;
         }
@@ -17,14 +21,14 @@ public sealed class EfWantedSuppressionStore(PrismediaDbContext db) : IWantedSup
         var existing = await FilterSuppressedAsync(valid, cancellationToken);
         var now = DateTimeOffset.UtcNow;
         foreach (var identity in valid) {
-            if (existing.Contains(Key(identity))) {
+            if (existing.Contains(identity)) {
                 continue;
             }
 
             db.WantedSuppressions.Add(new WantedSuppressionRow {
                 Id = Guid.NewGuid(),
-                Provider = identity.Provider,
-                ItemId = identity.ItemId,
+                Provider = identity.Namespace,
+                ItemId = identity.Value,
                 Kind = kind,
                 Title = title,
                 CreatedAt = now
@@ -34,34 +38,46 @@ public sealed class EfWantedSuppressionStore(PrismediaDbContext db) : IWantedSup
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlySet<string>> FilterSuppressedAsync(IReadOnlyList<ProviderRef> identities, CancellationToken cancellationToken) {
-        var valid = Normalize(identities);
+    public async Task<IReadOnlySet<ExternalIdentity>> FilterSuppressedAsync(
+        IReadOnlyList<ExternalIdentity> identities,
+        CancellationToken cancellationToken) {
+        var valid = DistinctIdentities(identities);
         if (valid.Count == 0) {
-            return new HashSet<string>();
+            return new HashSet<ExternalIdentity>();
         }
 
-        // Providers repeat across the set, so narrow by provider and finish the pair match in memory.
-        var providers = valid.Select(identity => identity.Provider).Distinct().ToArray();
+        // Namespaces repeat across the set, so narrow by canonical namespace and finish the identity
+        // match in memory. Trim/lower keeps suppressions written before ExternalIdentity canonicalization
+        // discoverable without weakening the opaque value's case-sensitive semantics.
+        var namespaces = valid.Select(identity => identity.Namespace).Distinct().ToArray();
         var rows = await db.WantedSuppressions.AsNoTracking()
-            .Where(row => providers.Contains(row.Provider))
+            .Where(row => namespaces.Contains(row.Provider.Trim().ToLower()))
             .Select(row => new { row.Provider, row.ItemId })
             .ToArrayAsync(cancellationToken);
-        var suppressed = rows.Select(row => $"{row.Provider}:{row.ItemId}").ToHashSet(StringComparer.OrdinalIgnoreCase);
-        return valid.Select(Key).Where(suppressed.Contains).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var suppressed = rows
+            .Select(row => TryIdentity(row.Provider, row.ItemId))
+            .Where(identity => identity is not null)
+            .Select(identity => identity!)
+            .ToHashSet();
+        return valid.Where(suppressed.Contains).ToHashSet();
     }
 
-    public async Task ClearAsync(IReadOnlyList<ProviderRef> identities, CancellationToken cancellationToken) {
-        var valid = Normalize(identities);
+    public async Task ClearAsync(
+        IReadOnlyList<ExternalIdentity> identities,
+        CancellationToken cancellationToken) {
+        var valid = DistinctIdentities(identities);
         if (valid.Count == 0) {
             return;
         }
 
-        var providers = valid.Select(identity => identity.Provider).Distinct().ToArray();
+        var namespaces = valid.Select(identity => identity.Namespace).Distinct().ToArray();
         var rows = await db.WantedSuppressions
-            .Where(row => providers.Contains(row.Provider))
+            .Where(row => namespaces.Contains(row.Provider.Trim().ToLower()))
             .ToArrayAsync(cancellationToken);
-        var keys = valid.Select(Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var matches = rows.Where(row => keys.Contains($"{row.Provider}:{row.ItemId}")).ToArray();
+        var wanted = valid.ToHashSet();
+        var matches = rows
+            .Where(row => TryIdentity(row.Provider, row.ItemId) is { } identity && wanted.Contains(identity))
+            .ToArray();
         if (matches.Length == 0) {
             return;
         }
@@ -70,11 +86,20 @@ public sealed class EfWantedSuppressionStore(PrismediaDbContext db) : IWantedSup
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    private static string Key(ProviderRef identity) => $"{identity.Provider}:{identity.ItemId}";
+    private static IReadOnlyList<ExternalIdentity> DistinctIdentities(IReadOnlyList<ExternalIdentity> identities) {
+        ArgumentNullException.ThrowIfNull(identities);
+        if (identities.Any(identity => identity is null)) {
+            throw new ArgumentException("Wanted suppression identity sets cannot contain null values.", nameof(identities));
+        }
 
-    private static IReadOnlyList<ProviderRef> Normalize(IReadOnlyList<ProviderRef> identities) =>
-        identities
-            .Where(identity => !string.IsNullOrWhiteSpace(identity.Provider) && !string.IsNullOrWhiteSpace(identity.ItemId))
-            .Distinct()
-            .ToArray();
+        return identities.Distinct().ToArray();
+    }
+
+    private static ExternalIdentity? TryIdentity(string identityNamespace, string value) {
+        try {
+            return new ExternalIdentity(identityNamespace, value);
+        } catch (ArgumentException) {
+            return null;
+        }
+    }
 }

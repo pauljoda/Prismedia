@@ -75,10 +75,10 @@ public sealed class MonitoredSearchJobHandlerTests {
         new(new NullProposalSource(), new NullWantedWriter(), new NullAcquisitionRequestService(), monitors, new NullSuppressionStore());
 
     private sealed class NullSuppressionStore : Prismedia.Application.Requests.IWantedSuppressionStore {
-        public Task SuppressAsync(IReadOnlyList<Prismedia.Application.Requests.ProviderRef> identities, EntityKind kind, string title, CancellationToken cancellationToken) => Task.CompletedTask;
-        public Task<IReadOnlySet<string>> FilterSuppressedAsync(IReadOnlyList<Prismedia.Application.Requests.ProviderRef> identities, CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlySet<string>>(new HashSet<string>());
-        public Task ClearAsync(IReadOnlyList<Prismedia.Application.Requests.ProviderRef> identities, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task SuppressAsync(IReadOnlyList<ExternalIdentity> identities, EntityKind kind, string title, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task<IReadOnlySet<ExternalIdentity>> FilterSuppressedAsync(IReadOnlyList<ExternalIdentity> identities, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlySet<ExternalIdentity>>(new HashSet<ExternalIdentity>());
+        public Task ClearAsync(IReadOnlyList<ExternalIdentity> identities, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 
     private sealed class NullProposalSource : Prismedia.Application.Requests.IPluginRequestProposalSource {

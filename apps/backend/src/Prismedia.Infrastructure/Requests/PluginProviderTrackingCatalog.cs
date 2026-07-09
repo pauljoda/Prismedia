@@ -13,15 +13,15 @@ public sealed class PluginProviderTrackingCatalog(PluginCatalogService catalog) 
     private static readonly string LookupIdAction = IdentifyAction.LookupId.ToCode();
 
     public async Task<IReadOnlyList<string>> TrackableProvidersAsync(
-        string pluginKindCode, IReadOnlyList<ProviderRef> providerIds, CancellationToken cancellationToken) {
-        if (providerIds.Count == 0) {
+        string pluginKindCode, IReadOnlyList<ExternalIdentity> identities, CancellationToken cancellationToken) {
+        if (identities.Count == 0) {
             return [];
         }
 
         var providers = await catalog.ListInstalledProvidersAsync(cancellationToken);
-        return providerIds
-            .Select(reference => reference.Provider)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+        return identities
+            .Select(identity => identity.Namespace)
+            .Distinct(StringComparer.Ordinal)
             .Where(providerId => providers.Any(provider =>
                 provider.Enabled
                 && string.Equals(provider.Id, providerId, StringComparison.OrdinalIgnoreCase)
