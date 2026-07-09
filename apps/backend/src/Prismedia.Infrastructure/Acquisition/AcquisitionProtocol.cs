@@ -190,6 +190,14 @@ public static class QBittorrentProtocol {
     public const string UrlsField = "urls";
     public const string TorrentsField = "torrents";
     public const string HashesField = "hashes";
+
+    /// <summary>
+    /// The SINGULAR hash parameter used by the per-torrent endpoints (files, properties, pieceStates).
+    /// qBittorrent rejects <c>hashes=</c> on those with 400 — which silently blanked live transfer
+    /// telemetry (speed/seeds/size), the torrent file listing, and the piece map for every download.
+    /// Only the multi-torrent endpoints (info's filter, delete) take <see cref="HashesField"/>.
+    /// </summary>
+    public const string HashField = "hash";
     public const string DeleteFilesField = "deleteFiles";
 
     // ── torrent info / files / properties JSON fields ───────────

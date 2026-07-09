@@ -208,7 +208,7 @@ public sealed class QBittorrentDownloadClient(HttpClient http) : IDownloadClient
 
     public async Task<IReadOnlyList<DownloadItemFile>> GetFilesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) {
         var session = await LoginAsync(connection, cancellationToken);
-        var path = $"{QBittorrentProtocol.FilesEndpoint}?{QBittorrentProtocol.HashesField}={Uri.EscapeDataString(clientItemId.ToLowerInvariant())}";
+        var path = $"{QBittorrentProtocol.FilesEndpoint}?{QBittorrentProtocol.HashField}={Uri.EscapeDataString(clientItemId.ToLowerInvariant())}";
         using var request = BuildRequest(connection, session, HttpMethod.Get, path, content: null);
         using var response = await http.SendAsync(request, cancellationToken);
         // A freshly added magnet has no file list until metadata resolves; qBittorrent answers 400 in that
@@ -236,7 +236,7 @@ public sealed class QBittorrentDownloadClient(HttpClient http) : IDownloadClient
 
     public async Task<DownloadItemProperties?> GetPropertiesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) {
         var session = await LoginAsync(connection, cancellationToken);
-        var path = $"{QBittorrentProtocol.PropertiesEndpoint}?{QBittorrentProtocol.HashesField}={Uri.EscapeDataString(clientItemId.ToLowerInvariant())}";
+        var path = $"{QBittorrentProtocol.PropertiesEndpoint}?{QBittorrentProtocol.HashField}={Uri.EscapeDataString(clientItemId.ToLowerInvariant())}";
         using var request = BuildRequest(connection, session, HttpMethod.Get, path, content: null);
         using var response = await http.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode) {
@@ -264,7 +264,7 @@ public sealed class QBittorrentDownloadClient(HttpClient http) : IDownloadClient
 
     public async Task<byte[]> GetPieceStatesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) {
         var session = await LoginAsync(connection, cancellationToken);
-        var path = $"{QBittorrentProtocol.PieceStatesEndpoint}?{QBittorrentProtocol.HashesField}={Uri.EscapeDataString(clientItemId.ToLowerInvariant())}";
+        var path = $"{QBittorrentProtocol.PieceStatesEndpoint}?{QBittorrentProtocol.HashField}={Uri.EscapeDataString(clientItemId.ToLowerInvariant())}";
         using var request = BuildRequest(connection, session, HttpMethod.Get, path, content: null);
         using var response = await http.SendAsync(request, cancellationToken);
         if (!response.IsSuccessStatusCode) {
