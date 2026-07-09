@@ -25,6 +25,23 @@ describe("ProposalFieldReviewSection", () => {
     await fireEvent.click(screen.getByRole("button", { name: "None" }));
     expect(onAllFields).toHaveBeenCalledWith(false);
   });
+
+  it("renders proposal metadata without fake current values or selection controls", () => {
+    render(ProposalFieldReviewSection, {
+      props: {
+        proposal: proposal(),
+        variant: "summary",
+        selectable: false,
+        title: "Metadata",
+      },
+    });
+
+    expect(screen.getByText("Metadata")).toBeInTheDocument();
+    expect(screen.getByText("3 fields")).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(screen.queryByText("Current")).not.toBeInTheDocument();
+    expect(screen.getByText("Proposed")).toBeInTheDocument();
+  });
 });
 
 function proposal(): EntityMetadataProposal {
