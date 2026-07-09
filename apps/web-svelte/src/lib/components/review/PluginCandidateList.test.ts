@@ -40,6 +40,18 @@ describe("PluginCandidateList", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Use Andor (2022)" }));
     expect(onActivate).not.toHaveBeenCalled();
   });
+
+  it("omits the artwork action when the host does not provide a preview flow", () => {
+    render(PluginCandidateList, {
+      props: {
+        candidates: [result()],
+        entityKind: "video-series",
+        onActivate: vi.fn(),
+      },
+    });
+
+    expect(screen.queryByRole("button", { name: "Preview Andor artwork" })).not.toBeInTheDocument();
+  });
 });
 
 function result(): EntitySearchCandidate {

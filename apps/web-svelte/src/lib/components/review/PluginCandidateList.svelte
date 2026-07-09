@@ -20,7 +20,7 @@
     candidates,
     entityKind,
     onActivate,
-    onPreview = () => undefined,
+    onPreview,
     activeCandidateKey = null,
     disabled = false,
     markFirstAsBest = true,
@@ -54,7 +54,7 @@
   ) {
     event.preventDefault();
     event.stopPropagation();
-    if (!disabled && candidate.posterUrl) onPreview(candidate, candidateKey);
+    if (!disabled && candidate.posterUrl) onPreview?.(candidate, candidateKey);
   }
 </script>
 
@@ -97,7 +97,7 @@
             />
           {/if}
         </div>
-        {#if hasCover}
+        {#if hasCover && onPreview}
           <button
             type="button"
             class="mt-1.5 inline-flex h-7 w-full items-center justify-center rounded-xs border border-border-default bg-surface-2 text-text-muted transition-colors hover:border-border-accent hover:bg-surface-3 hover:text-text-accent focus-visible:border-border-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent-500/60 disabled:cursor-not-allowed disabled:opacity-40"
