@@ -16,6 +16,7 @@
   import { cn } from "@prismedia/ui-svelte";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
   import ReviewSection from "$lib/components/review/ReviewSection.svelte";
+  import ProposalContextBar from "$lib/components/review/ProposalContextBar.svelte";
   import IdentifyTargetPreview from "./IdentifyTargetPreview.svelte";
   import {
     currentFieldValueForReview,
@@ -233,34 +234,12 @@
     {/if}
   </div>
 
-  <!-- Context bar -->
-  <div class="grid grid-cols-[auto_1fr_auto_auto] items-center gap-4 rounded-sm border border-border-subtle bg-surface-1 p-3.5 shadow-well">
-    {#if contextPosterUrl}
-      <img src={contextPosterUrl} alt="" class={cn("rounded-xs object-cover", coverIsSquare ? "h-14 w-14" : "h-16 w-11")} decoding="async" referrerpolicy="no-referrer" />
-    {:else}
-      <div class={cn("grid place-items-center rounded-xs bg-surface-3", coverIsSquare ? "h-14 w-14" : "h-16 w-11")}>
-        <Layers class="h-5 w-5 text-text-disabled" />
-      </div>
-    {/if}
-    <div class="min-w-0">
-      <h2 class="truncate">{contextTitle}</h2>
-      <div class="mt-1 flex min-w-0 flex-wrap items-center gap-1.5">
-        <span class="rounded-xs border border-phosphor-600/20 bg-surface-3 px-1.5 py-0.5 font-mono text-[0.6rem] leading-none text-phosphor-600">
-          {proposal.targetKind}
-        </span>
-      </div>
-    </div>
-    <div class="hidden flex-col items-end gap-0.5 md:flex">
-      <span class="text-kicker">Match</span>
-      <span class="font-mono font-semibold text-text-accent">
-        {proposal.confidence ? `${Math.round(proposal.confidence * 100)}%` : "—"}
-      </span>
-    </div>
-    <div class="hidden flex-col items-end gap-0.5 md:flex">
-      <span class="text-kicker">Provider</span>
-      <span class="text-[0.82rem] text-text-primary">{proposal.provider}</span>
-    </div>
-  </div>
+  <ProposalContextBar
+    {proposal}
+    title={contextTitle}
+    posterUrl={contextPosterUrl}
+    imageShape={coverIsSquare ? "square" : "portrait"}
+  />
 
   <!-- Base fields -->
   <ReviewSection
