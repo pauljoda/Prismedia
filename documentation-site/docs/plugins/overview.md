@@ -95,6 +95,12 @@ core asks the plugin registry which enabled plugin declares that kind, action,
 and namespace; plugin installation ids are never assumed to equal upstream
 identity namespaces.
 
+Existing-Entity request tools use that route too. For example, Season Pass sends
+the local series Entity id; the server resolves its stored identities through the
+plugin registry and returns the same canonical proposal review used by Discover.
+Opaque identity values remain structured values throughout and may safely contain
+colons or mixed case.
+
 ## First-party plugins
 
 The first-party set includes **TMDB**, **AniList**, **YouTube**,

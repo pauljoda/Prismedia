@@ -111,6 +111,9 @@ flowchart LR
   P --> S["Selected plugin supplies ordered search fields"]
   S --> C["EntitySearchCandidate with persistent identity"]
   C --> R["Exact plugin lookup-id"]
+  X["Existing Entity"] --> I["Stored ExternalIdentity set"]
+  I --> D["Central identity router"]
+  D --> R
   R --> Q["EntityMetadataProposal review"]
   Q -->|Identify| E["Apply selected capabilities to existing Entity"]
   Q -->|Request| V["Revalidate revision and selected proposal ids"]
@@ -127,6 +130,11 @@ Request commits do not trust client-supplied child identities. Review returns a
 deterministic proposal revision and opaque proposal ids; commit re-runs the exact
 plugin without cache, compares the revision, validates selection depth, derives
 each identity from the fresh proposal, and only then begins writes.
+
+Existing-Entity actions such as Season Pass enter the same review path by local
+Entity id. The server loads that Entity's identity set and selects a capable
+plugin route centrally; the frontend never chooses a plugin by convention or
+flattens an identity into a delimiter-sensitive string.
 
 ## Acquisition Policy Modules
 
