@@ -20,9 +20,9 @@ export interface AcquisitionCreateRequest {
   /** @nullable */
   posterUrl: string | null;
   /** @nullable */
-  pluginId: string | null;
+  identityNamespace: string | null;
   /** @nullable */
-  pluginItemId: string | null;
+  identityValue: string | null;
   /** @nullable */
   description?: string | null;
   kind?: AcquisitionCreateRequestKind;

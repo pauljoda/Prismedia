@@ -43,6 +43,7 @@ import type {
   CollectionWriteRequest,
   CommitEntityRequestParams,
   CommitRequestParams,
+  CommitReviewedRequestParams,
   CreateFileFolderParams,
   CreateFirstAdminRequest,
   CustomFormatSaveRequest,
@@ -230,12 +231,18 @@ import type {
   RequestCommitResponse,
   RequestDetailResponse,
   RequestEntityCommitRequest,
+  RequestPluginSearchRequest,
+  RequestReviewRequest,
+  RequestReviewResponse,
   RequestSearchResponse,
   RescanFileRootParams,
   ResolveIdentifyQueueCandidateParams,
+  ReviewRequestParams,
+  ReviewedRequestCommitRequest,
   SaveIdentifyQueueProposalRequest,
   SearchIdentifyQueueItemParams,
   SearchOpdsBooksParams,
+  SearchRequestsByPluginParams,
   SearchRequestsParams,
   SettingDescriptor,
   SettingUpdateRequest,
@@ -11548,6 +11555,58 @@ export const searchRequests = async (params: SearchRequestsParams, options?: Req
 
 
 
+export type searchRequestsByPluginResponse200 = {
+  data: RequestSearchResponse
+  status: 200
+}
+
+export type searchRequestsByPluginResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type searchRequestsByPluginResponseSuccess = (searchRequestsByPluginResponse200) & {
+  headers: Headers;
+};
+export type searchRequestsByPluginResponseError = (searchRequestsByPluginResponse400) & {
+  headers: Headers;
+};
+
+export type searchRequestsByPluginResponse = (searchRequestsByPluginResponseSuccess | searchRequestsByPluginResponseError)
+
+export const getSearchRequestsByPluginUrl = (params?: SearchRequestsByPluginParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/requests/search?${stringifiedParams}` : `/api/requests/search`
+}
+
+/**
+ * @summary Searches one selected metadata plugin using the fields declared by its manifest schema.
+ */
+export const searchRequestsByPlugin = async (requestPluginSearchRequest: RequestPluginSearchRequest,
+    params?: SearchRequestsByPluginParams, options?: RequestInit): Promise<searchRequestsByPluginResponse> => {
+
+  return orvalFetch<searchRequestsByPluginResponse>(getSearchRequestsByPluginUrl(params),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      requestPluginSearchRequest,)
+  }
+);}
+
+
+
 export type getRequestDetailResponse200 = {
   data: RequestDetailResponse
   status: 200
@@ -11599,6 +11658,63 @@ export const getRequestDetail = async (source: string,
     method: 'GET'
 
 
+  }
+);}
+
+
+
+export type reviewRequestResponse200 = {
+  data: RequestReviewResponse
+  status: 200
+}
+
+export type reviewRequestResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type reviewRequestResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type reviewRequestResponseSuccess = (reviewRequestResponse200) & {
+  headers: Headers;
+};
+export type reviewRequestResponseError = (reviewRequestResponse400 | reviewRequestResponse404) & {
+  headers: Headers;
+};
+
+export type reviewRequestResponse = (reviewRequestResponseSuccess | reviewRequestResponseError)
+
+export const getReviewRequestUrl = (params?: ReviewRequestParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/requests/review?${stringifiedParams}` : `/api/requests/review`
+}
+
+/**
+ * @summary Gets the complete plugin proposal and independently identifiable targets for request review.
+ */
+export const reviewRequest = async (requestReviewRequest: RequestReviewRequest,
+    params?: ReviewRequestParams, options?: RequestInit): Promise<reviewRequestResponse> => {
+
+  return orvalFetch<reviewRequestResponse>(getReviewRequestUrl(params),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      requestReviewRequest,)
   }
 );}
 
@@ -11661,6 +11777,68 @@ export const commitRequest = async (requestCommitRequest: RequestCommitRequest,
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       requestCommitRequest,)
+  }
+);}
+
+
+
+export type commitReviewedRequestResponse200 = {
+  data: RequestCommitResponse
+  status: 200
+}
+
+export type commitReviewedRequestResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type commitReviewedRequestResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type commitReviewedRequestResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type commitReviewedRequestResponseSuccess = (commitReviewedRequestResponse200) & {
+  headers: Headers;
+};
+export type commitReviewedRequestResponseError = (commitReviewedRequestResponse400 | commitReviewedRequestResponse404 | commitReviewedRequestResponse409) & {
+  headers: Headers;
+};
+
+export type commitReviewedRequestResponse = (commitReviewedRequestResponseSuccess | commitReviewedRequestResponseError)
+
+export const getCommitReviewedRequestUrl = (params?: CommitReviewedRequestParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/requests/commit-reviewed?${stringifiedParams}` : `/api/requests/commit-reviewed`
+}
+
+/**
+ * @summary Commits selected proposal ids after revalidating the exact plugin and reviewed proposal revision.
+ */
+export const commitReviewedRequest = async (reviewedRequestCommitRequest: ReviewedRequestCommitRequest,
+    params?: CommitReviewedRequestParams, options?: RequestInit): Promise<commitReviewedRequestResponse> => {
+
+  return orvalFetch<commitReviewedRequestResponse>(getCommitReviewedRequestUrl(params),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      reviewedRequestCommitRequest,)
   }
 );}
 

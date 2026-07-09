@@ -4,6 +4,7 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { ExternalIdentity } from './externalIdentity';
 import type { RequestMediaKind } from './requestMediaKind';
 import type { RequestProviderKind } from './requestProviderKind';
 
@@ -52,4 +53,7 @@ export interface RequestSearchResult {
   requestable: boolean;
   /** @nullable */
   providerName?: string | null;
+  /** @nullable */
+  pluginId?: string | null;
+  externalIdentity?: null | ExternalIdentity;
 }

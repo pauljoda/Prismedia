@@ -646,6 +646,7 @@ export const PROBLEM_CODE = {
   pluginNotFound: "plugin_not_found",
   pluginUpdateNotFound: "plugin_update_not_found",
   requestInvalid: "request_invalid",
+  requestProposalChanged: "request_proposal_changed",
   requestServiceInvalid: "request_service_invalid",
   rootNotFound: "root_not_found",
   sessionNotFound: "session_not_found",
