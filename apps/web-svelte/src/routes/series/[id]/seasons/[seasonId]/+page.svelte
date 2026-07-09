@@ -28,7 +28,9 @@
   import { CAPABILITY_KIND, ENTITY_KIND } from "$lib/entities/entity-codes";
   import EntityAcquisitionCard from "$lib/components/acquisitions/EntityAcquisitionCard.svelte";
   import { useEntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
+  import { useIdentifyDetailAction } from "$lib/components/identify/use-identify-detail-action.svelte";
   import EntityDetail, {
+    type EntityDetailActionButton,
     type EntityMetadataUpdateRequest,
     type EntityDetailSection,
     type EntityDetailTab,
@@ -75,6 +77,13 @@
   });
 
   const dates = $derived(card?.dates ?? []);
+  const identifyAction = useIdentifyDetailAction(
+    () => season?.id,
+    () => season?.kind,
+    () => season?.capabilities,
+  );
+  const heroActions = $derived.by((): EntityDetailActionButton[] =>
+    identifyAction.action ? [identifyAction.action] : []);
 
   // A phantom season's "Search for release" (a season-pack acquisition) and its acquisition
   // management live in the Acquisition detail tab, exactly like a wanted movie. Episodes ride
@@ -237,7 +246,7 @@
       posterSize="large"
       tabs={detailTabs}
       sections={detailSections}
-      actionButtons={[]}
+      actionButtons={heroActions}
     >
       {#snippet heroMeta()}
         {#if parentSeries}

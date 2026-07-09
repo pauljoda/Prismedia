@@ -265,7 +265,7 @@ export function fetchIdentifyEntities(
   search?: string,
   options?: RequestOptions,
 ): Promise<EntityListResponse> {
-  return fetchEntities({ kind, query: search }, options);
+  return fetchEntities({ kind, query: search, hasFile: true, wanted: false }, options);
 }
 
 export function startBulkIdentify(

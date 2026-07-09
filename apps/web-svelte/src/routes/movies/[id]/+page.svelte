@@ -125,7 +125,11 @@
   const videoCard = $derived.by((): EntityDetailCardFull | null => (
     video ? entityCardToDetailCard(video) : null
   ));
-  const identifyAction = useIdentifyDetailAction(() => card?.entity.id, () => card?.entity.kind);
+  const identifyAction = useIdentifyDetailAction(
+    () => card?.entity.id,
+    () => card?.entity.kind,
+    () => movie?.capabilities,
+  );
   const heroActions = $derived.by((): EntityDetailActionButton[] =>
     identifyAction.action ? [identifyAction.action] : []);
 

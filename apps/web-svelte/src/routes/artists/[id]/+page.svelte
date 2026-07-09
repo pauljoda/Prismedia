@@ -71,7 +71,11 @@
     };
   });
 
-  const identifyAction = useIdentifyDetailAction(() => artist?.id, () => artist?.kind);
+  const identifyAction = useIdentifyDetailAction(
+    () => artist?.id,
+    () => artist?.kind,
+    () => artist?.capabilities,
+  );
 
   // Monitoring lives in the Acquisition detail tab ("Check for new works" runs the discovery sync
   // now; the page reloads to show any new phantoms). It works for scanned-in and requested artists

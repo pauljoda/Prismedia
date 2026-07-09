@@ -128,7 +128,11 @@
       studio: relationshipStudio,
     };
   });
-  const identifyAction = useIdentifyDetailAction(() => card?.entity.id, () => card?.entity.kind);
+  const identifyAction = useIdentifyDetailAction(
+    () => card?.entity.id,
+    () => card?.entity.kind,
+    () => video?.capabilities,
+  );
   // A phantom episode has no file to play — the Acquisition detail tab offers "Search for release"
   // and the acquisition management surface instead of the player.
   const entityWanted = $derived(!!video && isWanted(video.capabilities));

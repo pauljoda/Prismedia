@@ -83,7 +83,11 @@
     const images = getCapability(library.capabilities, CAPABILITY_KIND.images);
     return assetUrl(images?.coverUrl ?? images?.thumbnailUrl) || undefined;
   });
-  const identifyAction = useIdentifyDetailAction(() => library?.id, () => library?.kind);
+  const identifyAction = useIdentifyDetailAction(
+    () => library?.id,
+    () => library?.kind,
+    () => library?.capabilities,
+  );
 
   // A phantom album's "Search for release" and its acquisition management live in the
   // Acquisition detail tab, exactly like a wanted book or movie.

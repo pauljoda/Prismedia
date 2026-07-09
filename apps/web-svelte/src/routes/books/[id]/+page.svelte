@@ -138,7 +138,11 @@
     };
   });
 
-  const identifyAction = useIdentifyDetailAction(() => card?.entity.id, () => card?.entity.kind);
+  const identifyAction = useIdentifyDetailAction(
+    () => card?.entity.id,
+    () => card?.entity.kind,
+    () => book?.capabilities,
+  );
 
   // Wanted/tracking state lives on the entity itself: search, releases, live download, monitoring,
   // cancel — one Acquisition detail tab, absent entirely for an ordinary owned book.

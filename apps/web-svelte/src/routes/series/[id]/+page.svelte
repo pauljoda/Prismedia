@@ -73,7 +73,11 @@
     };
   });
 
-  const identifyAction = useIdentifyDetailAction(() => card?.entity.id, () => card?.entity.kind);
+  const identifyAction = useIdentifyDetailAction(
+    () => card?.entity.id,
+    () => card?.entity.kind,
+    () => series?.capabilities,
+  );
   const heroActions = $derived.by((): EntityDetailActionButton[] =>
     identifyAction.action ? [identifyAction.action] : []);
 

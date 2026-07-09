@@ -1,5 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { CAPABILITY_KIND, ENTITY_FILE_ROLE } from "$lib/api/generated/codes";
+import type { EntityCapability } from "$lib/api/generated/model";
 import type { IdentifyQueueItem, PluginProvider } from "$lib/api/identify-types";
 import UseIdentifyDetailActionHarness from "./use-identify-detail-action.test-harness.svelte";
 
@@ -40,6 +42,7 @@ describe("useIdentifyDetailAction", () => {
       props: {
         entityId: "person-1",
         entityKind: "person",
+        capabilities: eligibleCapabilities(),
       },
     });
 
@@ -58,6 +61,7 @@ describe("useIdentifyDetailAction", () => {
       props: {
         entityId: "person-1",
         entityKind: "person",
+        capabilities: eligibleCapabilities(),
       },
     });
 
@@ -74,6 +78,7 @@ describe("useIdentifyDetailAction", () => {
       props: {
         entityId: "person-1",
         entityKind: "person",
+        capabilities: eligibleCapabilities(),
       },
     });
 
@@ -92,12 +97,14 @@ describe("useIdentifyDetailAction", () => {
       props: {
         entityId: "",
         entityKind: "",
+        capabilities: [],
       },
     });
 
     await rerender({
       entityId: "video-1",
       entityKind: "video",
+      capabilities: eligibleCapabilities(),
     });
 
     await waitFor(() => expect(fetchIdentifyProviders).toHaveBeenCalledWith("video"));
@@ -113,6 +120,7 @@ describe("useIdentifyDetailAction", () => {
       props: {
         entityId: "video-1",
         entityKind: "video",
+        capabilities: eligibleCapabilities(),
       },
     });
 
@@ -125,7 +133,56 @@ describe("useIdentifyDetailAction", () => {
 
     expect(await screen.findByRole("button", { name: "Identify" })).toBeInTheDocument();
   });
+
+  it("returns no action and makes no identify calls for an Entity without a direct Source file", async () => {
+    render(UseIdentifyDetailActionHarness, {
+      props: {
+        entityId: "video-1",
+        entityKind: "video",
+        capabilities: [{
+          kind: CAPABILITY_KIND.files,
+          items: [{ role: ENTITY_FILE_ROLE.thumbnail, path: "/cache/thumb.webp", mimeType: "image/webp" }],
+        }],
+      },
+    });
+
+    await waitFor(() => expect(screen.queryByRole("button")).not.toBeInTheDocument());
+    expect(fetchOptionalIdentifyQueueItem).not.toHaveBeenCalled();
+    expect(fetchIdentifyProviders).not.toHaveBeenCalled();
+    expect(requestIdentifySearch).not.toHaveBeenCalled();
+  });
+
+  it("returns no action and makes no identify calls for a Wanted Entity", async () => {
+    render(UseIdentifyDetailActionHarness, {
+      props: {
+        entityId: "wanted-video",
+        entityKind: "video",
+        capabilities: [
+          ...eligibleCapabilities(),
+          {
+            kind: CAPABILITY_KIND.flags,
+            isFavorite: false,
+            isNsfw: false,
+            isOrganized: false,
+            isWanted: true,
+          },
+        ],
+      },
+    });
+
+    await waitFor(() => expect(screen.queryByRole("button")).not.toBeInTheDocument());
+    expect(fetchOptionalIdentifyQueueItem).not.toHaveBeenCalled();
+    expect(fetchIdentifyProviders).not.toHaveBeenCalled();
+    expect(requestIdentifySearch).not.toHaveBeenCalled();
+  });
 });
+
+function eligibleCapabilities(): EntityCapability[] {
+  return [{
+    kind: CAPABILITY_KIND.files,
+    items: [{ role: ENTITY_FILE_ROLE.source, path: "/media/source.mkv", mimeType: "video/x-matroska" }],
+  }];
+}
 
 function provider(entityKind: string, options: Partial<PluginProvider> = {}): PluginProvider {
   return {

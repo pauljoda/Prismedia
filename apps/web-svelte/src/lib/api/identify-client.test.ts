@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   applyIdentifyQueueItem,
+  fetchIdentifyEntities,
   fetchIdentifyQueue,
   fetchOptionalIdentifyQueueItem,
   requestIdentifySearch,
@@ -9,6 +10,17 @@ import {
 } from "./identify-client";
 
 describe("identify client", () => {
+  it("lists only acquired Entities backed by local files", async () => {
+    const fetchMock = mockFetch({ items: [], nextCursor: null });
+
+    await fetchIdentifyEntities("video-series");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/entities?kind=video-series&hasFile=true&wanted=false",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
   it("passes NSFW visibility through the generated queue params", async () => {
     const fetchMock = mockFetch([]);
 

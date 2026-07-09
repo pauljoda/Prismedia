@@ -7,7 +7,7 @@ import type {
   EntityCapabilityTechnicalCapability,
   ExternalIdentity,
 } from "$lib/api/generated/model";
-import { CAPABILITY_KIND } from "$lib/api/generated/codes";
+import { CAPABILITY_KIND, ENTITY_FILE_ROLE } from "$lib/api/generated/codes";
 
 export type EntityCapabilityKind = EntityCapability["kind"];
 
@@ -77,6 +77,12 @@ export function isNsfw(capabilities: EntityCapability[]): boolean {
 /** True for a request-created Wanted placeholder: a library entity with metadata but no file yet. */
 export function isWanted(capabilities: EntityCapability[]): boolean {
   return getFlagsCapability(capabilities)?.isWanted === true;
+}
+
+/** True when the Entity owns a direct source file, excluding generated previews and cache assets. */
+export function hasSourceMedia(capabilities: EntityCapability[]): boolean {
+  const files = getCapability(capabilities, CAPABILITY_KIND.files);
+  return files?.items.some((file) => file.role === ENTITY_FILE_ROLE.source) === true;
 }
 
 /**

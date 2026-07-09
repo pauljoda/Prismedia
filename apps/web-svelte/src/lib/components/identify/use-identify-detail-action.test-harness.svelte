@@ -1,14 +1,20 @@
 <script lang="ts">
+  import type { EntityCapability } from "$lib/api/generated/model";
   import { useIdentifyDetailAction } from "./use-identify-detail-action.svelte";
 
   interface Props {
     entityId: string;
     entityKind: string;
+    capabilities: EntityCapability[];
   }
 
-  let { entityId, entityKind }: Props = $props();
+  let { entityId, entityKind, capabilities }: Props = $props();
 
-  const identifyAction = useIdentifyDetailAction(() => entityId, () => entityKind);
+  const identifyAction = useIdentifyDetailAction(
+    () => entityId,
+    () => entityKind,
+    () => capabilities,
+  );
 </script>
 
 {#if identifyAction.action}

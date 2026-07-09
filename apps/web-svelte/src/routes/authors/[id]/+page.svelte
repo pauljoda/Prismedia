@@ -59,7 +59,11 @@
     };
   });
 
-  const identifyAction = useIdentifyDetailAction(() => author?.id, () => author?.kind);
+  const identifyAction = useIdentifyDetailAction(
+    () => author?.id,
+    () => author?.kind,
+    () => author?.capabilities,
+  );
   const heroActions = $derived.by((): EntityDetailActionButton[] =>
     identifyAction.action ? [identifyAction.action] : []);
 

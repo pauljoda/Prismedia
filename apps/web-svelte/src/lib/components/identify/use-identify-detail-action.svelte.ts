@@ -6,6 +6,8 @@ import {
   providerCanIdentifyKind,
   requestIdentifySearch,
 } from "$lib/api/identify-client";
+import { hasSourceMedia, isWanted } from "$lib/api/capabilities";
+import type { EntityCapability } from "$lib/api/generated/model";
 import type { IdentifyQueueItem } from "$lib/api/identify-types";
 import type { EntityDetailActionButton } from "$lib/components/entities/EntityDetail.svelte";
 
@@ -16,12 +18,18 @@ import type { EntityDetailActionButton } from "$lib/components/entities/EntityDe
 export function useIdentifyDetailAction(
   entityId: () => string | null | undefined,
   entityKind: () => string | null | undefined,
+  capabilities: () => EntityCapability[] | null | undefined,
 ): { readonly action: EntityDetailActionButton | null } {
   let queuedItem: IdentifyQueueItem | null = $state(null);
   let hasReadyProvider = $state(false);
   let loading = $state(false);
   let lastLoadKey = "";
   let loadVersion = 0;
+
+  const eligible = $derived.by(() => {
+    const current = capabilities();
+    return current !== null && current !== undefined && hasSourceMedia(current) && !isWanted(current);
+  });
 
   const isQueued = $derived.by(() => queuedItem !== null && isActiveQueueState(queuedItem.state));
   const label = $derived(isQueued ? "Pending Review" : "Identify");
@@ -34,7 +42,7 @@ export function useIdentifyDetailAction(
   $effect(() => {
     const id = entityId();
     const kind = entityKind();
-    if (!id) {
+    if (!id || !eligible) {
       queuedItem = null;
       hasReadyProvider = false;
       loading = false;
@@ -53,11 +61,11 @@ export function useIdentifyDetailAction(
 
   $effect(() => {
     const id = entityId();
-    if (!id || typeof window === "undefined") return;
+    if (!id || !eligible || typeof window === "undefined") return;
 
     const refresh = () => {
       const currentId = entityId();
-      if (!currentId) return;
+      if (!currentId || !eligible) return;
       void loadStatus(currentId, entityKind(), false);
     };
     const refreshWhenVisible = () => {
@@ -74,7 +82,7 @@ export function useIdentifyDetailAction(
 
   const action = $derived.by((): EntityDetailActionButton | null => {
     const id = entityId();
-    if (!id) return null;
+    if (!id || !eligible) return null;
 
     // The button always renders so the hero action row never reflows.
     if (loading) {
@@ -135,7 +143,7 @@ export function useIdentifyDetailAction(
   }
 
   async function navigate(id: string) {
-    if (!isQueued && !hasReadyProvider) return;
+    if (!eligible || (!isQueued && !hasReadyProvider)) return;
     // A fresh identify requests the search up front (the server walks enabled providers);
     // the review page then just renders the item's queued → searching → result states.
     if (!isQueued) {
