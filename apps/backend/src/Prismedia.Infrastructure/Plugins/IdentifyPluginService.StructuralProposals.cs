@@ -884,7 +884,12 @@ public sealed partial class IdentifyPluginService {
             .ThenBy(row => row.Id)
             .ToArrayAsync(cancellationToken);
 
+        var eligibility = await _eligibility.EvaluateManyAsync(
+            children.Select(row => row.Id).ToArray(),
+            cancellationToken);
+
         return children
+            .Where(row => eligibility[row.Id].IsEligible)
             .Select(row => new StructuralChild(row.SortOrder, row))
             .ToArray();
     }

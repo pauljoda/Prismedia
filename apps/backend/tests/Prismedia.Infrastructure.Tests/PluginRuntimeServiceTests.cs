@@ -3,6 +3,7 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Application.Plugins;
 using Prismedia.Contracts.Plugins;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
@@ -1374,7 +1375,21 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             new PluginCatalogService(db, new PluginCatalogOptions([pluginDir], _tempRoot, "1.0.0")),
             new IdentifyMatchHintResolver(db),
             new IdentifyRunnerSelector([new DotnetPluginProcessRunner(executor, new PluginCatalogOptions([], _tempRoot, "1.0.0"))]),
-            new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(_tempRoot)));
+            new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(_tempRoot)),
+            new AlwaysEligibleIdentifyTargetEligibilityService());
+
+    private sealed class AlwaysEligibleIdentifyTargetEligibilityService : IIdentifyTargetEligibilityService {
+        public Task<IdentifyTargetEligibility> EvaluateAsync(Guid entityId, CancellationToken cancellationToken) =>
+            Task.FromResult(new IdentifyTargetEligibility(entityId, IdentifyTargetEligibilityStatus.Eligible));
+
+        public Task<IReadOnlyDictionary<Guid, IdentifyTargetEligibility>> EvaluateManyAsync(
+            IReadOnlyCollection<Guid> entityIds,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyDictionary<Guid, IdentifyTargetEligibility>>(
+                entityIds.Distinct().ToDictionary(
+                    entityId => entityId,
+                    entityId => new IdentifyTargetEligibility(entityId, IdentifyTargetEligibilityStatus.Eligible)));
+    }
 
     private sealed class CapturingProcessExecutor : ProcessExecutor {
         public string? FileName { get; private set; }

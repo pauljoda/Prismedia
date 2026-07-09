@@ -26,6 +26,8 @@ internal static class IdentifyQueueEndpoints {
             CancellationToken cancellationToken) => {
                 try {
                     return Results.Ok(await queue.AddAsync(entityId, cancellationToken));
+                } catch (IdentifyTargetNotEligibleException ex) {
+                    return IdentifyTargetConflict(ex);
                 } catch (KeyNotFoundException ex) {
                     return Results.NotFound(new ApiProblem(ApiProblemCodes.EntityNotFound, ex.Message));
                 }
@@ -33,6 +35,7 @@ internal static class IdentifyQueueEndpoints {
             .WithName("AddIdentifyQueueItem")
             .WithSummary("Adds an entity to the durable identify queue.")
             .Produces<IdentifyQueueItem>()
+            .Produces<ApiProblem>(StatusCodes.Status409Conflict)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
         group.MapGet("/queue/entities/{entityId:guid}", async (
@@ -62,6 +65,8 @@ internal static class IdentifyQueueEndpoints {
                         request,
                         NsfwVisibility.ShouldHide(hideNsfw, httpContext),
                         cancellationToken));
+                } catch (IdentifyTargetNotEligibleException ex) {
+                    return IdentifyTargetConflict(ex);
                 } catch (KeyNotFoundException ex) {
                     return Results.NotFound(new ApiProblem(ApiProblemCodes.EntityNotFound, ex.Message));
                 }
@@ -69,6 +74,7 @@ internal static class IdentifyQueueEndpoints {
             .WithName("SearchIdentifyQueueItem")
             .WithSummary("Requests a provider search; a background identify-search job runs it and the item reports progress through its state.")
             .Produces<IdentifyQueueItem>()
+            .Produces<ApiProblem>(StatusCodes.Status409Conflict)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
         group.MapPost("/queue/entities/{entityId:guid}/candidate", async (
@@ -84,6 +90,8 @@ internal static class IdentifyQueueEndpoints {
                         request,
                         NsfwVisibility.ShouldHide(hideNsfw, httpContext),
                         cancellationToken));
+                } catch (IdentifyTargetNotEligibleException ex) {
+                    return IdentifyTargetConflict(ex);
                 } catch (ArgumentException ex) {
                     return Results.BadRequest(new ApiProblem(ApiProblemCodes.IdentifyFailed, ex.Message));
                 } catch (InvalidOperationException ex) {
@@ -96,6 +104,7 @@ internal static class IdentifyQueueEndpoints {
             .WithSummary("Resolves one selected search candidate into the queue item's proposal without enqueueing a new search.")
             .Produces<IdentifyQueueItem>()
             .Produces<ApiProblem>(StatusCodes.Status400BadRequest)
+            .Produces<ApiProblem>(StatusCodes.Status409Conflict)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
         group.MapPost("/queue/entities/{entityId:guid}/apply", async (
@@ -105,6 +114,8 @@ internal static class IdentifyQueueEndpoints {
             CancellationToken cancellationToken) => {
                 try {
                     return Results.Ok(await queue.ApplyAsync(entityId, request, cancellationToken));
+                } catch (IdentifyTargetNotEligibleException ex) {
+                    return IdentifyTargetConflict(ex);
                 } catch (InvalidOperationException ex) {
                     return Results.BadRequest(new ApiProblem(ApiProblemCodes.IdentifyQueueApplyInvalid, ex.Message));
                 } catch (ArgumentException ex) {
@@ -117,6 +128,7 @@ internal static class IdentifyQueueEndpoints {
             .WithSummary("Applies a reviewed identify queue proposal and marks the item done.")
             .Produces<IdentifyQueueItem>()
             .Produces<ApiProblem>(StatusCodes.Status400BadRequest)
+            .Produces<ApiProblem>(StatusCodes.Status409Conflict)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
         group.MapPut("/queue/entities/{entityId:guid}/proposal", async (
@@ -126,6 +138,8 @@ internal static class IdentifyQueueEndpoints {
             CancellationToken cancellationToken) => {
                 try {
                     return Results.Ok(await queue.SaveProposalAsync(entityId, request.Proposal, cancellationToken));
+                } catch (IdentifyTargetNotEligibleException ex) {
+                    return IdentifyTargetConflict(ex);
                 } catch (InvalidOperationException ex) {
                     return Results.BadRequest(new ApiProblem(ApiProblemCodes.IdentifyQueueProposalInvalid, ex.Message));
                 } catch (KeyNotFoundException ex) {
@@ -136,6 +150,7 @@ internal static class IdentifyQueueEndpoints {
             .WithSummary("Persists an in-progress identify proposal (e.g. resolved children) without applying it.")
             .Produces<IdentifyQueueItem>()
             .Produces<ApiProblem>(StatusCodes.Status400BadRequest)
+            .Produces<ApiProblem>(StatusCodes.Status409Conflict)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
         group.MapGet("/queue/entities/{entityId:guid}/apply-progress/{progressId:guid}", (
@@ -174,4 +189,7 @@ internal static class IdentifyQueueEndpoints {
 
         return group;
     }
+
+    private static IResult IdentifyTargetConflict(IdentifyTargetNotEligibleException exception) =>
+        Results.Conflict(new ApiProblem(ApiProblemCodes.IdentifyTargetNotEligible, exception.Message));
 }

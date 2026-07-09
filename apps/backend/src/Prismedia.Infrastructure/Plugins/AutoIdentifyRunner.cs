@@ -22,8 +22,11 @@ public sealed class AutoIdentifyRunner(
     SettingsService settings,
     IIdentifyProviderService identify,
     PrismediaDbContext db,
+    IIdentifyTargetEligibilityService eligibility,
     ILogger<AutoIdentifyRunner> logger,
     AutoIdentifyConcurrencyGate? gate = null) : IAutoIdentifyRunner {
+    private readonly IIdentifyTargetEligibilityService _eligibility = eligibility;
+
     public Task<AutoIdentifyResult> RunAsync(Guid entityId, CancellationToken cancellationToken) =>
         RunAsync(entityId, AutoIdentifyRunOptions.Default, cancellationToken);
 
@@ -44,6 +47,15 @@ public sealed class AutoIdentifyRunner(
             .FirstOrDefaultAsync(row => row.Id == entityId, cancellationToken);
         if (entity is null) {
             return new AutoIdentifyResult(false, SkipReason: "entity not found");
+        }
+
+        var targetEligibility = await _eligibility.EvaluateAsync(entityId, cancellationToken);
+        if (!targetEligibility.IsEligible) {
+            return new AutoIdentifyResult(false, SkipReason: targetEligibility.Status switch {
+                IdentifyTargetEligibilityStatus.Wanted => "wanted entity; source media is not on disk",
+                IdentifyTargetEligibilityStatus.NoSourceMedia => "no source media on disk",
+                _ => "entity not found"
+            });
         }
 
         // Only identify scan roots. A child (an episode in a series, an image in a gallery,

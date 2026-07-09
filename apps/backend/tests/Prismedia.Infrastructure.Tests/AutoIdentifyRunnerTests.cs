@@ -26,7 +26,12 @@ public sealed class AutoIdentifyRunnerTests {
                 ["p2"] = Proposal("p2", confidence: 0.95m, title: "The Matrix"),
             },
         };
-        var runner = new AutoIdentifyRunner(settings, identify, db, NullLogger<AutoIdentifyRunner>.Instance);
+        var runner = new AutoIdentifyRunner(
+            settings,
+            identify,
+            db,
+            new EfIdentifyTargetEligibilityService(db),
+            NullLogger<AutoIdentifyRunner>.Instance);
 
         var result = await runner.RunAsync(entityId, CancellationToken.None);
 
@@ -50,7 +55,12 @@ public sealed class AutoIdentifyRunnerTests {
                 ["p1"] = Proposal("p1", confidence: 0.5m, title: "Maybe Match"),
             },
         };
-        var runner = new AutoIdentifyRunner(settings, identify, db, NullLogger<AutoIdentifyRunner>.Instance);
+        var runner = new AutoIdentifyRunner(
+            settings,
+            identify,
+            db,
+            new EfIdentifyTargetEligibilityService(db),
+            NullLogger<AutoIdentifyRunner>.Instance);
 
         var result = await runner.RunAsync(entityId, CancellationToken.None);
 
@@ -69,7 +79,12 @@ public sealed class AutoIdentifyRunnerTests {
                 ["p1"] = Proposal("p1", confidence: null, title: "Exact Lookup"),
             },
         };
-        var runner = new AutoIdentifyRunner(settings, identify, db, NullLogger<AutoIdentifyRunner>.Instance);
+        var runner = new AutoIdentifyRunner(
+            settings,
+            identify,
+            db,
+            new EfIdentifyTargetEligibilityService(db),
+            NullLogger<AutoIdentifyRunner>.Instance);
 
         var result = await runner.RunAsync(entityId, CancellationToken.None);
 
@@ -90,7 +105,12 @@ public sealed class AutoIdentifyRunnerTests {
                 ["tmdb:271267"] = Proposal("tmdb", confidence: 1m, title: "The Chair Company", targetKind: ProposalKind.VideoSeries),
             },
         };
-        var runner = new AutoIdentifyRunner(settings, identify, db, NullLogger<AutoIdentifyRunner>.Instance);
+        var runner = new AutoIdentifyRunner(
+            settings,
+            identify,
+            db,
+            new EfIdentifyTargetEligibilityService(db),
+            NullLogger<AutoIdentifyRunner>.Instance);
 
         var result = await runner.RunAsync(entityId, CancellationToken.None);
 
@@ -131,7 +151,12 @@ public sealed class AutoIdentifyRunnerTests {
                 ["musicbrainz"] = [EntityKindRegistry.MusicArtist.Code],
             },
         };
-        var runner = new AutoIdentifyRunner(settings, identify, db, NullLogger<AutoIdentifyRunner>.Instance);
+        var runner = new AutoIdentifyRunner(
+            settings,
+            identify,
+            db,
+            new EfIdentifyTargetEligibilityService(db),
+            NullLogger<AutoIdentifyRunner>.Instance);
 
         var result = await runner.RunAsync(entityId, CancellationToken.None);
 
@@ -171,7 +196,12 @@ public sealed class AutoIdentifyRunnerTests {
                 ["musicbrainz"] = [EntityKindRegistry.AudioLibrary.Code],
             },
         };
-        var runner = new AutoIdentifyRunner(settings, identify, db, NullLogger<AutoIdentifyRunner>.Instance);
+        var runner = new AutoIdentifyRunner(
+            settings,
+            identify,
+            db,
+            new EfIdentifyTargetEligibilityService(db),
+            NullLogger<AutoIdentifyRunner>.Instance);
 
         var result = await runner.RunAsync(entityId, CancellationToken.None);
 
@@ -200,7 +230,12 @@ public sealed class AutoIdentifyRunnerTests {
                 ["musicbrainz"] = [EntityKindRegistry.MusicArtist.Code],
             },
         };
-        var runner = new AutoIdentifyRunner(settings, identify, db, NullLogger<AutoIdentifyRunner>.Instance);
+        var runner = new AutoIdentifyRunner(
+            settings,
+            identify,
+            db,
+            new EfIdentifyTargetEligibilityService(db),
+            NullLogger<AutoIdentifyRunner>.Instance);
 
         var result = await runner.RunAsync(entityId, CancellationToken.None);
 
@@ -238,7 +273,12 @@ public sealed class AutoIdentifyRunnerTests {
                     null);
             }
         };
-        var runner = new AutoIdentifyRunner(settings, identify, db, NullLogger<AutoIdentifyRunner>.Instance);
+        var runner = new AutoIdentifyRunner(
+            settings,
+            identify,
+            db,
+            new EfIdentifyTargetEligibilityService(db),
+            NullLogger<AutoIdentifyRunner>.Instance);
 
         var result = await runner.RunAsync(
             entityId,
@@ -278,7 +318,12 @@ public sealed class AutoIdentifyRunnerTests {
                     null);
             }
         };
-        var runner = new AutoIdentifyRunner(settings, identify, db, NullLogger<AutoIdentifyRunner>.Instance);
+        var runner = new AutoIdentifyRunner(
+            settings,
+            identify,
+            db,
+            new EfIdentifyTargetEligibilityService(db),
+            NullLogger<AutoIdentifyRunner>.Instance);
 
         var result = await runner.RunAsync(
             entityId,
@@ -313,7 +358,12 @@ public sealed class AutoIdentifyRunnerTests {
                 return true;
             }
         };
-        var runner = new AutoIdentifyRunner(settings, identify, db, NullLogger<AutoIdentifyRunner>.Instance);
+        var runner = new AutoIdentifyRunner(
+            settings,
+            identify,
+            db,
+            new EfIdentifyTargetEligibilityService(db),
+            NullLogger<AutoIdentifyRunner>.Instance);
 
         var result = await runner.RunAsync(
             entityId,
@@ -349,7 +399,12 @@ public sealed class AutoIdentifyRunnerTests {
                     null);
             }
         };
-        var runner = new AutoIdentifyRunner(settings, identify, db, NullLogger<AutoIdentifyRunner>.Instance);
+        var runner = new AutoIdentifyRunner(
+            settings,
+            identify,
+            db,
+            new EfIdentifyTargetEligibilityService(db),
+            NullLogger<AutoIdentifyRunner>.Instance);
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => runner.RunAsync(
             entityId,
@@ -372,7 +427,12 @@ public sealed class AutoIdentifyRunnerTests {
                 ["tmdb:271267"] = Proposal("tmdb", confidence: 1m, title: "The Chair Company", targetKind: ProposalKind.VideoSeries),
             },
         };
-        var runner = new AutoIdentifyRunner(settings, identify, db, NullLogger<AutoIdentifyRunner>.Instance);
+        var runner = new AutoIdentifyRunner(
+            settings,
+            identify,
+            db,
+            new EfIdentifyTargetEligibilityService(db),
+            NullLogger<AutoIdentifyRunner>.Instance);
 
         var result = await runner.RunAsync(entityId, CancellationToken.None);
 
@@ -389,7 +449,12 @@ public sealed class AutoIdentifyRunnerTests {
         var identify = new FakeIdentifyProvider {
             ProposalsByProvider = { ["p1"] = Proposal("p1", confidence: 0.99m, title: "Anything") },
         };
-        var runner = new AutoIdentifyRunner(settings, identify, db, NullLogger<AutoIdentifyRunner>.Instance);
+        var runner = new AutoIdentifyRunner(
+            settings,
+            identify,
+            db,
+            new EfIdentifyTargetEligibilityService(db),
+            NullLogger<AutoIdentifyRunner>.Instance);
 
         var result = await runner.RunAsync(entityId, CancellationToken.None);
 
@@ -409,7 +474,13 @@ public sealed class AutoIdentifyRunnerTests {
         var gate = new AutoIdentifyConcurrencyGate();
         using var heldSlot = gate.TryEnterBackground();
         Assert.NotNull(heldSlot);
-        var runner = new AutoIdentifyRunner(settings, identify, db, NullLogger<AutoIdentifyRunner>.Instance, gate);
+        var runner = new AutoIdentifyRunner(
+            settings,
+            identify,
+            db,
+            new EfIdentifyTargetEligibilityService(db),
+            NullLogger<AutoIdentifyRunner>.Instance,
+            gate);
 
         var result = await runner.RunAsync(entityId, CancellationToken.None);
 
@@ -429,7 +500,13 @@ public sealed class AutoIdentifyRunnerTests {
         var gate = new AutoIdentifyConcurrencyGate();
         using var heldSlot = gate.TryEnterBackground();
         Assert.NotNull(heldSlot);
-        var runner = new AutoIdentifyRunner(settings, identify, db, NullLogger<AutoIdentifyRunner>.Instance, gate);
+        var runner = new AutoIdentifyRunner(
+            settings,
+            identify,
+            db,
+            new EfIdentifyTargetEligibilityService(db),
+            NullLogger<AutoIdentifyRunner>.Instance,
+            gate);
 
         var retry = await Assert.ThrowsAsync<JobRetryLaterException>(() => runner.RunAsync(entityId, CancellationToken.None));
 
@@ -468,7 +545,12 @@ public sealed class AutoIdentifyRunnerTests {
             Candidates: [],
             Relationships: null!);
         var identify = new FakeIdentifyProvider { ProposalsByProvider = { ["p1"] = proposal } };
-        var runner = new AutoIdentifyRunner(settings, identify, db, NullLogger<AutoIdentifyRunner>.Instance);
+        var runner = new AutoIdentifyRunner(
+            settings,
+            identify,
+            db,
+            new EfIdentifyTargetEligibilityService(db),
+            NullLogger<AutoIdentifyRunner>.Instance);
 
         var result = await runner.RunAsync(seriesId, CancellationToken.None);
 
@@ -485,13 +567,68 @@ public sealed class AutoIdentifyRunnerTests {
         var identify = new FakeIdentifyProvider {
             ProposalsByProvider = { ["p1"] = Proposal("p1", confidence: 0.99m, title: "Episode") },
         };
-        var runner = new AutoIdentifyRunner(settings, identify, db, NullLogger<AutoIdentifyRunner>.Instance);
+        var runner = new AutoIdentifyRunner(
+            settings,
+            identify,
+            db,
+            new EfIdentifyTargetEligibilityService(db),
+            NullLogger<AutoIdentifyRunner>.Instance);
 
         var result = await runner.RunAsync(episodeId, CancellationToken.None);
 
         Assert.False(result.Applied);
         Assert.Equal("child entity; its parent is identified instead", result.SkipReason);
         Assert.Empty(identify.IdentifyCalls);
+    }
+
+    [Fact]
+    public async Task SkipsWantedTargetsWithoutQueryingProvidersOrConsumingAnAttempt() {
+        await using var db = CreateContext();
+        var entityId = await SeedVideoAsync(
+            db,
+            organized: false,
+            isWanted: true,
+            attachSource: false);
+        var settings = await ConfigureAsync(db, enabled: true, providers: ["p1"], confidencePercent: 90m);
+        var identify = new FakeIdentifyProvider {
+            ProposalsByProvider = { ["p1"] = Proposal("p1", confidence: 0.99m, title: "Anything") },
+        };
+        var runner = new AutoIdentifyRunner(
+            settings,
+            identify,
+            db,
+            new EfIdentifyTargetEligibilityService(db),
+            NullLogger<AutoIdentifyRunner>.Instance);
+
+        var result = await runner.RunAsync(entityId, CancellationToken.None);
+
+        Assert.False(result.Applied);
+        Assert.Equal("wanted entity; source media is not on disk", result.SkipReason);
+        Assert.Empty(identify.IdentifyCalls);
+        Assert.Equal(0, (await db.Entities.SingleAsync()).AutoIdentifyAttempts);
+    }
+
+    [Fact]
+    public async Task SkipsFilelessTargetsWithoutQueryingProvidersOrConsumingAnAttempt() {
+        await using var db = CreateContext();
+        var entityId = await SeedVideoAsync(db, organized: false, attachSource: false);
+        var settings = await ConfigureAsync(db, enabled: true, providers: ["p1"], confidencePercent: 90m);
+        var identify = new FakeIdentifyProvider {
+            ProposalsByProvider = { ["p1"] = Proposal("p1", confidence: 0.99m, title: "Anything") },
+        };
+        var runner = new AutoIdentifyRunner(
+            settings,
+            identify,
+            db,
+            new EfIdentifyTargetEligibilityService(db),
+            NullLogger<AutoIdentifyRunner>.Instance);
+
+        var result = await runner.RunAsync(entityId, CancellationToken.None);
+
+        Assert.False(result.Applied);
+        Assert.Equal("no source media on disk", result.SkipReason);
+        Assert.Empty(identify.IdentifyCalls);
+        Assert.Equal(0, (await db.Entities.SingleAsync()).AutoIdentifyAttempts);
     }
 
     [Fact]
@@ -513,7 +650,12 @@ public sealed class AutoIdentifyRunnerTests {
                 ],
             },
         };
-        var runner = new AutoIdentifyRunner(settings, identify, db, NullLogger<AutoIdentifyRunner>.Instance);
+        var runner = new AutoIdentifyRunner(
+            settings,
+            identify,
+            db,
+            new EfIdentifyTargetEligibilityService(db),
+            NullLogger<AutoIdentifyRunner>.Instance);
 
         var result = await runner.RunAsync(albumId, CancellationToken.None);
 
@@ -549,7 +691,12 @@ public sealed class AutoIdentifyRunnerTests {
                 ],
             },
         };
-        var runner = new AutoIdentifyRunner(settings, identify, db, NullLogger<AutoIdentifyRunner>.Instance);
+        var runner = new AutoIdentifyRunner(
+            settings,
+            identify,
+            db,
+            new EfIdentifyTargetEligibilityService(db),
+            NullLogger<AutoIdentifyRunner>.Instance);
 
         var result = await runner.RunAsync(albumId, CancellationToken.None);
 
@@ -590,7 +737,12 @@ public sealed class AutoIdentifyRunnerTests {
                 ["musicbrainz"] = [EntityKindRegistry.AudioLibrary.Code],
             },
         };
-        var runner = new AutoIdentifyRunner(settings, identify, db, NullLogger<AutoIdentifyRunner>.Instance);
+        var runner = new AutoIdentifyRunner(
+            settings,
+            identify,
+            db,
+            new EfIdentifyTargetEligibilityService(db),
+            NullLogger<AutoIdentifyRunner>.Instance);
 
         var result = await runner.RunAsync(albumId, CancellationToken.None);
 
@@ -621,7 +773,12 @@ public sealed class AutoIdentifyRunnerTests {
                 ],
             },
         };
-        var runner = new AutoIdentifyRunner(settings, identify, db, NullLogger<AutoIdentifyRunner>.Instance);
+        var runner = new AutoIdentifyRunner(
+            settings,
+            identify,
+            db,
+            new EfIdentifyTargetEligibilityService(db),
+            NullLogger<AutoIdentifyRunner>.Instance);
 
         var result = await runner.RunAsync(artistId, CancellationToken.None);
 
@@ -652,7 +809,12 @@ public sealed class AutoIdentifyRunnerTests {
             ProposalsByProvider = { ["musicbrainz"] = proposal },
             SupportedKindsByProvider = { ["musicbrainz"] = [EntityKindRegistry.AudioLibrary.Code] },
         };
-        var runner = new AutoIdentifyRunner(settings, identify, db, NullLogger<AutoIdentifyRunner>.Instance);
+        var runner = new AutoIdentifyRunner(
+            settings,
+            identify,
+            db,
+            new EfIdentifyTargetEligibilityService(db),
+            NullLogger<AutoIdentifyRunner>.Instance);
 
         var result = await runner.RunAsync(albumId, CancellationToken.None);
 
@@ -677,7 +839,12 @@ public sealed class AutoIdentifyRunnerTests {
                 ["musicbrainz"] = [EntityKindRegistry.AudioLibrary.Code],
             },
         };
-        var runner = new AutoIdentifyRunner(settings, identify, db, NullLogger<AutoIdentifyRunner>.Instance);
+        var runner = new AutoIdentifyRunner(
+            settings,
+            identify,
+            db,
+            new EfIdentifyTargetEligibilityService(db),
+            NullLogger<AutoIdentifyRunner>.Instance);
 
         var retry = await Assert.ThrowsAsync<JobRetryLaterException>(() => runner.RunAsync(albumId, CancellationToken.None));
 
@@ -697,7 +864,12 @@ public sealed class AutoIdentifyRunnerTests {
                 ["p1"] = Proposal("p1", confidence: 0.5m, title: "Maybe Match"),
             },
         };
-        var runner = new AutoIdentifyRunner(settings, identify, db, NullLogger<AutoIdentifyRunner>.Instance);
+        var runner = new AutoIdentifyRunner(
+            settings,
+            identify,
+            db,
+            new EfIdentifyTargetEligibilityService(db),
+            NullLogger<AutoIdentifyRunner>.Instance);
 
         var result = await runner.RunAsync(entityId, CancellationToken.None);
 
@@ -714,7 +886,12 @@ public sealed class AutoIdentifyRunnerTests {
         var identify = new FakeIdentifyProvider {
             ProposalsByProvider = { ["p1"] = Proposal("p1", confidence: 0.99m, title: "Anything") },
         };
-        var runner = new AutoIdentifyRunner(settings, identify, db, NullLogger<AutoIdentifyRunner>.Instance);
+        var runner = new AutoIdentifyRunner(
+            settings,
+            identify,
+            db,
+            new EfIdentifyTargetEligibilityService(db),
+            NullLogger<AutoIdentifyRunner>.Instance);
 
         var result = await runner.RunAsync(entityId, CancellationToken.None);
 
@@ -729,7 +906,12 @@ public sealed class AutoIdentifyRunnerTests {
         var entityId = await SeedVideoAsync(db, organized: false);
         var settings = await ConfigureAsync(db, enabled: true, providers: ["p1"], confidencePercent: 90m);
         var identify = new FakeIdentifyProvider();
-        var runner = new AutoIdentifyRunner(settings, identify, db, NullLogger<AutoIdentifyRunner>.Instance);
+        var runner = new AutoIdentifyRunner(
+            settings,
+            identify,
+            db,
+            new EfIdentifyTargetEligibilityService(db),
+            NullLogger<AutoIdentifyRunner>.Instance);
 
         var result = await runner.RunAsync(entityId, CancellationToken.None);
 
@@ -744,7 +926,12 @@ public sealed class AutoIdentifyRunnerTests {
         var entityId = await SeedVideoAsync(db, organized: false);
         var settings = await ConfigureAsync(db, enabled: false, providers: ["p1"], confidencePercent: 90m);
         var identify = new FakeIdentifyProvider();
-        var runner = new AutoIdentifyRunner(settings, identify, db, NullLogger<AutoIdentifyRunner>.Instance);
+        var runner = new AutoIdentifyRunner(
+            settings,
+            identify,
+            db,
+            new EfIdentifyTargetEligibilityService(db),
+            NullLogger<AutoIdentifyRunner>.Instance);
 
         var result = await runner.RunAsync(entityId, CancellationToken.None);
 
@@ -826,18 +1013,32 @@ public sealed class AutoIdentifyRunnerTests {
         Guid? parentId = null,
         string kind = "video",
         string title = "video.mkv",
-        int autoIdentifyAttempts = 0) {
+        int autoIdentifyAttempts = 0,
+        bool isWanted = false,
+        bool attachSource = true) {
         var id = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
         db.Entities.Add(new EntityRow {
             Id = id,
             KindCode = kind,
             Title = title,
             IsOrganized = organized,
+            IsWanted = isWanted,
             ParentEntityId = parentId,
             AutoIdentifyAttempts = autoIdentifyAttempts,
-            CreatedAt = DateTimeOffset.UtcNow,
-            UpdatedAt = DateTimeOffset.UtcNow,
+            CreatedAt = now,
+            UpdatedAt = now,
         });
+        if (attachSource) {
+            db.EntityFiles.Add(new EntityFileRow {
+                Id = Guid.NewGuid(),
+                EntityId = id,
+                Role = EntityFileRole.Source,
+                Path = $"/media/{id}",
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+        }
         await db.SaveChangesAsync();
         return id;
     }

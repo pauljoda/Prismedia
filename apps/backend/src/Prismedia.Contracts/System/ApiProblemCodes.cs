@@ -88,6 +88,9 @@ public static class ApiProblemCodes {
     /// <summary>Problem code <c>identify_failed</c>.</summary>
     public const string IdentifyFailed = "identify_failed";
 
+    /// <summary>Problem code <c>identify_target_not_eligible</c>.</summary>
+    public const string IdentifyTargetNotEligible = "identify_target_not_eligible";
+
     /// <summary>Problem code <c>identify_queue_apply_invalid</c>.</summary>
     public const string IdentifyQueueApplyInvalid = "identify_queue_apply_invalid";
 

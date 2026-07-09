@@ -27,16 +27,19 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
     private readonly IdentifyPluginService _identify;
     private readonly IIdentifyApplyProgressStore _progress;
     private readonly IJobQueueService _jobs;
+    private readonly IIdentifyTargetEligibilityService _eligibility;
 
     public IdentifyQueueService(
         PrismediaDbContext db,
         IdentifyPluginService identify,
         IIdentifyApplyProgressStore progress,
-        IJobQueueService jobs) {
+        IJobQueueService jobs,
+        IIdentifyTargetEligibilityService eligibility) {
         _db = db;
         _identify = identify;
         _progress = progress;
         _jobs = jobs;
+        _eligibility = eligibility;
     }
 
     /// <summary>
@@ -59,8 +62,12 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
             .ThenBy(row => row.Id)
             .ToArrayAsync(cancellationToken);
 
+        await ReconcileIneligibleTargetsAsync(rows, cancellationToken);
         await ReconcileOrphanedSearchesAsync(rows, cancellationToken);
-        return await MapRowsAsync(rows, cancellationToken);
+        var visibleRows = includeCompleted
+            ? rows
+            : rows.Where(row => row.State != IdentifyQueueState.Done && row.State != IdentifyQueueState.Deleted).ToArray();
+        return await MapRowsAsync(visibleRows, cancellationToken);
     }
 
     /// <summary>
@@ -74,8 +81,53 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
             return null;
         }
 
+        await ReconcileIneligibleTargetsAsync([row], cancellationToken);
         await ReconcileOrphanedSearchesAsync([row], cancellationToken);
         return await MapRowAsync(row, cancellationToken);
+    }
+
+    /// <summary>
+    /// Retires active queue rows whose entity became Wanted or lost its Source binding after it was
+    /// queued. This is the queue-side race boundary for file deletion and stale scan cleanup.
+    /// </summary>
+    private async Task ReconcileIneligibleTargetsAsync(
+        IReadOnlyList<IdentifyQueueItemRow> rows,
+        CancellationToken cancellationToken) {
+        var active = rows
+            .Where(row => row.State is not (IdentifyQueueState.Done or IdentifyQueueState.Deleted))
+            .ToArray();
+        if (active.Length == 0) {
+            return;
+        }
+
+        var eligibility = await _eligibility.EvaluateManyAsync(
+            active.Select(row => row.EntityId).ToArray(),
+            cancellationToken);
+        var changed = false;
+        foreach (var snapshot in active) {
+            if (eligibility[snapshot.EntityId].IsEligible) {
+                continue;
+            }
+
+            var tracked = await _db.IdentifyQueueItems
+                .FirstOrDefaultAsync(item => item.Id == snapshot.Id, cancellationToken);
+            if (tracked is null || tracked.State is IdentifyQueueState.Done or IdentifyQueueState.Deleted) {
+                continue;
+            }
+
+            await RetireRowAsync(tracked, cancellationToken);
+            snapshot.State = tracked.State;
+            snapshot.SearchJobId = null;
+            snapshot.CascadeJobId = null;
+            snapshot.Error = null;
+            snapshot.UpdatedAt = tracked.UpdatedAt;
+            snapshot.CompletedAt = tracked.CompletedAt;
+            changed = true;
+        }
+
+        if (changed) {
+            await _db.SaveChangesAsync(cancellationToken);
+        }
     }
 
     /// <summary>
@@ -122,6 +174,7 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
     /// Adds an entity to the identify queue, preserving active work and resetting terminal items.
     /// </summary>
     public async Task<IdentifyQueueItem> AddAsync(Guid entityId, CancellationToken cancellationToken) {
+        (await _eligibility.EvaluateAsync(entityId, cancellationToken)).EnsureEligible();
         var entity = await LoadEntityAsync(entityId, cancellationToken)
             ?? throw new KeyNotFoundException($"Entity '{entityId}' was not found.");
         var now = DateTimeOffset.UtcNow;
@@ -159,6 +212,8 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
         CancellationToken cancellationToken) {
         ArgumentNullException.ThrowIfNull(request);
 
+        (await _eligibility.EvaluateAsync(entityId, cancellationToken)).EnsureEligible();
+
         var row = await EnsureMutableRowAsync(entityId, cancellationToken);
         var entity = await LoadEntityAsync(entityId, cancellationToken)
             ?? throw new KeyNotFoundException($"Entity '{entityId}' was not found.");
@@ -181,7 +236,13 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
         ArgumentNullException.ThrowIfNull(request);
 
         var enqueued = 0;
-        foreach (var entityId in entityIds.Distinct()) {
+        var distinctIds = entityIds.Distinct().ToArray();
+        var eligibility = await _eligibility.EvaluateManyAsync(distinctIds, cancellationToken);
+        foreach (var entityId in distinctIds) {
+            if (!eligibility[entityId].IsEligible) {
+                continue;
+            }
+
             try {
                 var row = await EnsureMutableRowAsync(entityId, cancellationToken);
                 var entity = await LoadEntityAsync(entityId, cancellationToken)
@@ -210,6 +271,8 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
         CancellationToken cancellationToken) {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(request.Candidate);
+
+        (await _eligibility.EvaluateAsync(entityId, cancellationToken)).EnsureEligible();
 
         var provider = request.Provider.Trim();
         if (string.IsNullOrWhiteSpace(provider)) {
@@ -349,6 +412,10 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
             .FirstOrDefaultAsync(item => item.EntityId == payload.EntityId, cancellationToken);
         if (row is null || row.SearchJobId != searchJobId ||
             row.State is not (IdentifyQueueState.Queued or IdentifyQueueState.Searching)) {
+            return;
+        }
+
+        if (await RetireIfIneligibleAsync(row, cancellationToken)) {
             return;
         }
 
@@ -775,6 +842,10 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
     /// </summary>
     public async Task RunCascadeAsync(IdentifyCascadePayload payload, Guid cascadeJobId, bool isFinalAttempt, CancellationToken cancellationToken) {
         try {
+            if (await RetireActiveTargetIfIneligibleAsync(payload.EntityId, cancellationToken)) {
+                return;
+            }
+
             var sink = new QueueProposalSink(
                 this,
                 payload.EntityId,
@@ -909,6 +980,8 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
         CancellationToken cancellationToken) {
         ArgumentNullException.ThrowIfNull(request);
 
+        (await _eligibility.EvaluateAsync(entityId, cancellationToken)).EnsureEligible();
+
         var row = await _db.IdentifyQueueItems
             .FirstOrDefaultAsync(item => item.EntityId == entityId, cancellationToken)
             ?? throw new KeyNotFoundException($"Identify queue item for entity '{entityId}' was not found.");
@@ -1003,6 +1076,8 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
         CancellationToken cancellationToken) {
         ArgumentNullException.ThrowIfNull(proposal);
 
+        (await _eligibility.EvaluateAsync(entityId, cancellationToken)).EnsureEligible();
+
         var row = await _db.IdentifyQueueItems
             .FirstOrDefaultAsync(item => item.EntityId == entityId, cancellationToken)
             ?? throw new KeyNotFoundException($"Identify queue item for entity '{entityId}' was not found.");
@@ -1032,6 +1107,43 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
 
         var entity = await LoadEntityAsync(entityId, cancellationToken)
             ?? throw new KeyNotFoundException($"Entity '{entityId}' was not found.");
+        await RetireRowAsync(row, cancellationToken);
+        await _db.SaveChangesAsync(cancellationToken);
+        return MapRow(row, entity);
+    }
+
+    private async Task<bool> RetireActiveTargetIfIneligibleAsync(
+        Guid entityId,
+        CancellationToken cancellationToken) {
+        var eligibility = await _eligibility.EvaluateAsync(entityId, cancellationToken);
+        if (eligibility.IsEligible) {
+            return false;
+        }
+
+        var row = await _db.IdentifyQueueItems
+            .FirstOrDefaultAsync(item => item.EntityId == entityId, cancellationToken);
+        if (row is not null && row.State is not (IdentifyQueueState.Done or IdentifyQueueState.Deleted)) {
+            await RetireRowAsync(row, cancellationToken);
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+
+        return true;
+    }
+
+    private async Task<bool> RetireIfIneligibleAsync(
+        IdentifyQueueItemRow row,
+        CancellationToken cancellationToken) {
+        var eligibility = await _eligibility.EvaluateAsync(row.EntityId, cancellationToken);
+        if (eligibility.IsEligible) {
+            return false;
+        }
+
+        await RetireRowAsync(row, cancellationToken);
+        await _db.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    private async Task RetireRowAsync(IdentifyQueueItemRow row, CancellationToken cancellationToken) {
         var now = DateTimeOffset.UtcNow;
         await CancelCascadeAsync(row, cancellationToken);
         await CancelSearchJobAsync(row, cancellationToken);
@@ -1039,8 +1151,6 @@ public sealed class IdentifyQueueService : IIdentifyQueueService {
         row.Error = null;
         row.UpdatedAt = now;
         row.CompletedAt = now;
-        await _db.SaveChangesAsync(cancellationToken);
-        return MapRow(row, entity);
     }
 
     private async Task<IdentifyQueueItemRow> EnsureMutableRowAsync(Guid entityId, CancellationToken cancellationToken) {

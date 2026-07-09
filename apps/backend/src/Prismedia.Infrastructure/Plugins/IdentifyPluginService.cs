@@ -16,18 +16,21 @@ public sealed partial class IdentifyPluginService : IIdentifyProviderService {
     private readonly IdentifyMatchHintResolver _hints;
     private readonly IdentifyRunnerSelector _runners;
     private readonly EntityMetadataApplyService _apply;
+    private readonly IIdentifyTargetEligibilityService _eligibility;
 
     public IdentifyPluginService(
         PrismediaDbContext db,
         PluginCatalogService catalog,
         IdentifyMatchHintResolver hints,
         IdentifyRunnerSelector runners,
-        EntityMetadataApplyService apply) {
+        EntityMetadataApplyService apply,
+        IIdentifyTargetEligibilityService eligibility) {
         _db = db;
         _catalog = catalog;
         _hints = hints;
         _runners = runners;
         _apply = apply;
+        _eligibility = eligibility;
     }
 
     /// <summary>
@@ -65,6 +68,8 @@ public sealed partial class IdentifyPluginService : IIdentifyProviderService {
         if (entity is null) {
             return new IdentifyPluginResponse(false, null, $"Entity '{entityId}' was not found.");
         }
+
+        (await _eligibility.EvaluateAsync(entityId, cancellationToken)).EnsureEligible();
 
         var descriptor = await _catalog.FindProviderAsync(providerId, entity.KindCode, cancellationToken);
         if (descriptor is null) {
@@ -220,6 +225,11 @@ public sealed partial class IdentifyPluginService : IIdentifyProviderService {
         IReadOnlyDictionary<string, string> auth,
         bool includeNsfw,
         CancellationToken cancellationToken) {
+        var eligibility = await _eligibility.EvaluateAsync(parent.Id, cancellationToken);
+        if (!eligibility.IsEligible) {
+            return new IdentifyPluginResponse(false, null, $"Entity '{parent.Id}' has no source media on disk to identify.");
+        }
+
         var resolvedHints = await _hints.ResolveAsync(parent.Id, descriptor.Manifest.Id, cancellationToken);
         var ancestors = await LoadAncestorSnapshotsAsync(parent, descriptor.Manifest.Id, cancellationToken);
         var positions = await ResolveStructuralPositionsAsync(parent.Id, parent.SortOrder, cancellationToken);
@@ -265,7 +275,7 @@ public sealed partial class IdentifyPluginService : IIdentifyProviderService {
         IReadOnlyDictionary<string, string?>? selectedImages,
         CancellationToken cancellationToken,
         IIdentifyApplyProgressReporter? progress = null) =>
-        _apply.ApplyAsync(entityId, proposal, selectedFields, selectedImages, progress, cancellationToken);
+        ApplyEligibleAsync(entityId, proposal, selectedFields, selectedImages, progress, cancellationToken);
 
     /// <summary>
     /// Applies selected metadata proposal fields to an entity while publishing live progress.
@@ -277,7 +287,24 @@ public sealed partial class IdentifyPluginService : IIdentifyProviderService {
         IReadOnlyDictionary<string, string?>? selectedImages,
         IIdentifyApplyProgressReporter? progress,
         CancellationToken cancellationToken) =>
-        _apply.ApplyAsync(entityId, proposal, selectedFields, selectedImages, progress, cancellationToken);
+        ApplyEligibleAsync(entityId, proposal, selectedFields, selectedImages, progress, cancellationToken);
+
+    private async Task<bool> ApplyEligibleAsync(
+        Guid entityId,
+        EntityMetadataProposal proposal,
+        IReadOnlyCollection<string> selectedFields,
+        IReadOnlyDictionary<string, string?>? selectedImages,
+        IIdentifyApplyProgressReporter? progress,
+        CancellationToken cancellationToken) {
+        (await _eligibility.EvaluateAsync(entityId, cancellationToken)).EnsureEligible();
+        return await _apply.ApplyAsync(
+            entityId,
+            proposal,
+            selectedFields,
+            selectedImages,
+            progress,
+            cancellationToken);
+    }
 
     private static IdentifyAction ResolveAction(
         PluginManifest manifest,
@@ -345,6 +372,12 @@ public sealed partial class IdentifyPluginService : IIdentifyProviderService {
         bool hydrateRelationships = true) {
         if (!visited.Add(entity.Id)) {
             return new IdentifyPluginResponse(false, null, $"Cycle detected while identifying entity '{entity.Id}'.");
+        }
+
+        var eligibility = await _eligibility.EvaluateAsync(entity.Id, cancellationToken);
+        if (!eligibility.IsEligible) {
+            visited.Remove(entity.Id);
+            return new IdentifyPluginResponse(false, null, $"Entity '{entity.Id}' has no source media on disk to identify.");
         }
 
         var resolvedHints = await _hints.ResolveAsync(entity.Id, descriptor.Manifest.Id, cancellationToken);

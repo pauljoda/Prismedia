@@ -47,6 +47,23 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
     }
 
     [Fact]
+    public async Task TransientIdentifyRejectsWantedTargetsBeforeStartingAPlugin() {
+        await using var db = CreateContext();
+        var entityId = Guid.NewGuid();
+        SeedProvider(db);
+        SeedEntity(db, entityId, "video-series", "Requested Series", isWanted: true, attachSource: false);
+        await db.SaveChangesAsync();
+        var executor = new LookupMissSearchHitProcessExecutor();
+        var identify = CreateIdentifyService(db, executor, _tempRoot);
+
+        var error = await Assert.ThrowsAsync<IdentifyTargetNotEligibleException>(() =>
+            identify.IdentifyAsync(entityId, "tmdb", null, null, hideNsfw: false, CancellationToken.None));
+
+        Assert.Equal(IdentifyTargetEligibilityStatus.Wanted, error.Eligibility.Status);
+        Assert.Empty(executor.Actions);
+    }
+
+    [Fact]
     public async Task AddAsyncCreatesDurableSearchItemForEntity() {
         await using var db = CreateContext();
         var entityId = Guid.Parse("11111111-1111-1111-1111-111111111111");
@@ -64,6 +81,25 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         Assert.Empty(item.Candidates);
         Assert.Null(item.Proposal);
         Assert.Single(await db.IdentifyQueueItems.ToArrayAsync());
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AddAsyncRejectsWantedAndFilelessTargetsWithoutCreatingQueueState(bool isWanted) {
+        await using var db = CreateContext();
+        var entityId = Guid.NewGuid();
+        SeedEntity(db, entityId, "video-series", "Metadata Only", isWanted: isWanted, attachSource: false);
+        await db.SaveChangesAsync();
+        var service = CreateQueueService(db, new CandidateProcessExecutor(), _tempRoot);
+
+        var error = await Assert.ThrowsAsync<IdentifyTargetNotEligibleException>(() =>
+            service.AddAsync(entityId, CancellationToken.None));
+
+        Assert.Equal(
+            isWanted ? IdentifyTargetEligibilityStatus.Wanted : IdentifyTargetEligibilityStatus.NoSourceMedia,
+            error.Eligibility.Status);
+        Assert.Empty(await db.IdentifyQueueItems.ToArrayAsync());
     }
 
     [Fact]
@@ -143,7 +179,8 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             db,
             CreateIdentifyService(db, new CandidateThenProposalProcessExecutor(), _tempRoot),
             new InMemoryIdentifyApplyProgressStore(),
-            queue);
+            queue,
+            new EfIdentifyTargetEligibilityService(db));
         await service.AddAsync(entityId, CancellationToken.None);
         var search = await SearchToCompletionAsync(
             service,
@@ -186,7 +223,8 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             db,
             CreateIdentifyService(db, executor, _tempRoot),
             new InMemoryIdentifyApplyProgressStore(),
-            queue);
+            queue,
+            new EfIdentifyTargetEligibilityService(db));
         await service.AddAsync(entityId, CancellationToken.None);
         var search = await SearchToCompletionAsync(
             service,
@@ -251,7 +289,8 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             db,
             CreateIdentifyService(db, executor, _tempRoot),
             new InMemoryIdentifyApplyProgressStore(),
-            queue);
+            queue,
+            new EfIdentifyTargetEligibilityService(db));
         await service.AddAsync(entityId, CancellationToken.None);
         var search = await SearchToCompletionAsync(
             service,
@@ -293,7 +332,8 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             db,
             CreateIdentifyService(db, executor, _tempRoot),
             new InMemoryIdentifyApplyProgressStore(),
-            queue);
+            queue,
+            new EfIdentifyTargetEligibilityService(db));
         await service.AddAsync(entityId, CancellationToken.None);
         var search = await SearchToCompletionAsync(
             service,
@@ -335,6 +375,15 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         var episode2 = SeedEntity(db, episode2Id, "video", "Local Episode 2");
         episode2.ParentEntityId = seriesId;
         episode2.SortOrder = 2;
+        var wantedEpisode = SeedEntity(
+            db,
+            Guid.NewGuid(),
+            "video",
+            "Wanted Episode 3",
+            isWanted: true,
+            attachSource: false);
+        wantedEpisode.ParentEntityId = seriesId;
+        wantedEpisode.SortOrder = 3;
         await db.SaveChangesAsync();
         var executor = new StructuralChildrenProcessExecutor();
         var service = CreateQueueService(db, executor, _tempRoot);
@@ -388,7 +437,8 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             db,
             CreateIdentifyService(db, new StructuralChildrenProcessExecutor(), _tempRoot),
             new InMemoryIdentifyApplyProgressStore(),
-            queue);
+            queue,
+            new EfIdentifyTargetEligibilityService(db));
         await service.AddAsync(seriesId, CancellationToken.None);
 
         var query = new IdentifyQuery(null, null, new Dictionary<string, string> { ["tmdb"] = "series-1" });
@@ -807,6 +857,38 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
     }
 
     [Fact]
+    public async Task ApplyAsyncRejectsAProposalWhenSourceMediaWasRemovedDuringReview() {
+        await using var db = CreateContext();
+        var entityId = Guid.NewGuid();
+        SeedEntity(db, entityId, "video", "Old Title");
+        var proposal = Proposal(entityId, "Reviewed Title");
+        db.IdentifyQueueItems.Add(new IdentifyQueueItemRow {
+            Id = Guid.NewGuid(),
+            EntityId = entityId,
+            State = IdentifyQueueState.Proposal,
+            ProviderCode = "tmdb",
+            Action = IdentifyAction.LookupId,
+            ProposalJson = JsonSerializer.Serialize(proposal, JsonOptions),
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+        db.EntityFiles.RemoveRange(db.EntityFiles.Where(file => file.EntityId == entityId));
+        await db.SaveChangesAsync();
+        var service = CreateQueueService(db, new ProposalProcessExecutor(), _tempRoot);
+
+        var error = await Assert.ThrowsAsync<IdentifyTargetNotEligibleException>(() =>
+            service.ApplyAsync(
+                entityId,
+                new ApplyIdentifyQueueItemRequest(proposal, ["title"], null),
+                CancellationToken.None));
+
+        Assert.Equal(IdentifyTargetEligibilityStatus.NoSourceMedia, error.Eligibility.Status);
+        Assert.Equal("Old Title", (await db.Entities.SingleAsync()).Title);
+        Assert.Equal(IdentifyQueueState.Proposal, (await db.IdentifyQueueItems.SingleAsync()).State);
+    }
+
+    [Fact]
     public async Task ApplyAsyncRejectsScopedChildProposalForRootQueueItem() {
         await using var db = CreateContext();
         var seriesId = Guid.Parse("55555555-5555-5555-5555-555555555555");
@@ -900,7 +982,12 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         var trackId = Guid.Parse("88888888-8888-8888-8888-888888888888");
         const string scannedFilePath = "/media/audio/album/01 scanned file.flac";
         SeedEntity(db, albumId, EntityKindRegistry.AudioLibrary.Code, "Scanned Album");
-        var track = SeedEntity(db, trackId, EntityKindRegistry.AudioTrack.Code, "01 scanned file");
+        var track = SeedEntity(
+            db,
+            trackId,
+            EntityKindRegistry.AudioTrack.Code,
+            "01 scanned file",
+            attachSource: false);
         track.ParentEntityId = albumId;
         track.SortOrder = 1;
         db.EntityFiles.Add(new EntityFileRow {
@@ -1024,7 +1111,8 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             db,
             CreateIdentifyService(db, new ProposalProcessExecutor(), _tempRoot),
             new InMemoryIdentifyApplyProgressStore(),
-            queue);
+            queue,
+            new EfIdentifyTargetEligibilityService(db));
 
         var item = await service.RequestSearchAsync(
             entityId, new IdentifyQueueSearchRequest("tmdb", null), hideNsfw: false, CancellationToken.None);
@@ -1043,6 +1131,39 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
     }
 
     [Fact]
+    public async Task ListAsyncRetiresActiveQueueWorkWhenItsTargetBecomesWantedAndFileless() {
+        await using var db = CreateContext();
+        var entityId = Guid.NewGuid();
+        SeedProvider(db);
+        var entity = SeedEntity(db, entityId, "video", "Movie");
+        await db.SaveChangesAsync();
+        var queue = new RecordingJobQueue();
+        var service = new IdentifyQueueService(
+            db,
+            CreateIdentifyService(db, new ProposalProcessExecutor(), _tempRoot),
+            new InMemoryIdentifyApplyProgressStore(),
+            queue,
+            new EfIdentifyTargetEligibilityService(db));
+        await service.RequestSearchAsync(
+            entityId,
+            new IdentifyQueueSearchRequest("tmdb", null),
+            hideNsfw: false,
+            CancellationToken.None);
+
+        db.EntityFiles.RemoveRange(db.EntityFiles.Where(file => file.EntityId == entityId));
+        entity.IsWanted = true;
+        await db.SaveChangesAsync();
+
+        var items = await service.ListAsync(includeCompleted: false, hideNsfw: false, CancellationToken.None);
+
+        Assert.Empty(items);
+        var row = await db.IdentifyQueueItems.AsNoTracking().SingleAsync();
+        Assert.Equal(IdentifyQueueState.Deleted, row.State);
+        Assert.Null(row.SearchJobId);
+        Assert.Empty(queue.Pending);
+    }
+
+    [Fact]
     public async Task RequestSearchBatchAsyncDoesNotUseForegroundIdentifyLane() {
         await using var db = CreateContext();
         var firstId = Guid.Parse("66666666-6666-6666-6666-6666666666a1");
@@ -1056,7 +1177,8 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             db,
             CreateIdentifyService(db, new ProposalProcessExecutor(), _tempRoot),
             new InMemoryIdentifyApplyProgressStore(),
-            queue);
+            queue,
+            new EfIdentifyTargetEligibilityService(db));
 
         var response = await service.RequestSearchBatchAsync(
             [firstId, secondId],
@@ -1074,6 +1196,37 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
     }
 
     [Fact]
+    public async Task RequestSearchBatchAsyncSkipsWantedAndFilelessTargets() {
+        await using var db = CreateContext();
+        var eligibleId = Guid.NewGuid();
+        var wantedId = Guid.NewGuid();
+        var filelessId = Guid.NewGuid();
+        SeedProvider(db);
+        SeedEntity(db, eligibleId, "video", "Scanned Movie");
+        SeedEntity(db, wantedId, "video", "Wanted Movie", isWanted: true, attachSource: false);
+        SeedEntity(db, filelessId, "video", "Metadata Movie", attachSource: false);
+        await db.SaveChangesAsync();
+        var queue = new RecordingJobQueue();
+        var service = new IdentifyQueueService(
+            db,
+            CreateIdentifyService(db, new ProposalProcessExecutor(), _tempRoot),
+            new InMemoryIdentifyApplyProgressStore(),
+            queue,
+            new EfIdentifyTargetEligibilityService(db));
+
+        var response = await service.RequestSearchBatchAsync(
+            [eligibleId, wantedId, filelessId],
+            new IdentifyQueueSearchRequest("tmdb", null),
+            hideNsfw: false,
+            CancellationToken.None);
+
+        Assert.Equal(3, response.Requested);
+        Assert.Equal(1, response.Enqueued);
+        Assert.Equal(eligibleId.ToString(), Assert.Single(queue.Enqueued).TargetEntityId);
+        Assert.Equal(eligibleId, Assert.Single(await db.IdentifyQueueItems.ToArrayAsync()).EntityId);
+    }
+
+    [Fact]
     public async Task RequestSearchAsyncSupersedesAPendingSearch() {
         await using var db = CreateContext();
         var entityId = Guid.Parse("66666666-6666-6666-6666-666666666662");
@@ -1085,7 +1238,8 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             db,
             CreateIdentifyService(db, new ProposalProcessExecutor(), _tempRoot),
             new InMemoryIdentifyApplyProgressStore(),
-            queue);
+            queue,
+            new EfIdentifyTargetEligibilityService(db));
 
         await service.RequestSearchAsync(entityId, new IdentifyQueueSearchRequest("tmdb", null), false, CancellationToken.None);
         var firstJobId = (await db.IdentifyQueueItems.AsNoTracking().SingleAsync()).SearchJobId!.Value;
@@ -1115,7 +1269,8 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             db,
             CreateIdentifyService(db, new ProposalProcessExecutor(), _tempRoot),
             new InMemoryIdentifyApplyProgressStore(),
-            queue);
+            queue,
+            new EfIdentifyTargetEligibilityService(db));
         await service.RequestSearchAsync(entityId, new IdentifyQueueSearchRequest("tmdb", null), false, CancellationToken.None);
 
         var staleJobId = Guid.NewGuid();
@@ -1139,7 +1294,8 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             db,
             CreateIdentifyService(db, new RateLimitedProcessExecutor(), _tempRoot),
             new InMemoryIdentifyApplyProgressStore(),
-            queue);
+            queue,
+            new EfIdentifyTargetEligibilityService(db));
         await service.RequestSearchAsync(entityId, new IdentifyQueueSearchRequest("tmdb", null), false, CancellationToken.None);
         var searchJobId = (await db.IdentifyQueueItems.AsNoTracking().SingleAsync()).SearchJobId!.Value;
 
@@ -1166,7 +1322,8 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             db,
             CreateIdentifyService(db, new ProposalProcessExecutor(), _tempRoot),
             new InMemoryIdentifyApplyProgressStore(),
-            queue);
+            queue,
+            new EfIdentifyTargetEligibilityService(db));
         await service.RequestSearchAsync(entityId, new IdentifyQueueSearchRequest(null, null), false, CancellationToken.None);
         var searchJobId = (await db.IdentifyQueueItems.AsNoTracking().SingleAsync()).SearchJobId!.Value;
 
@@ -1192,7 +1349,8 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             db,
             CreateIdentifyService(db, new ProposalProcessExecutor(), _tempRoot),
             new InMemoryIdentifyApplyProgressStore(),
-            queue);
+            queue,
+            new EfIdentifyTargetEligibilityService(db));
         await service.RequestSearchAsync(entityId, new IdentifyQueueSearchRequest("tmdb", null), false, CancellationToken.None);
 
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -1213,7 +1371,8 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             db,
             CreateIdentifyService(db, new ProposalProcessExecutor(), _tempRoot),
             new InMemoryIdentifyApplyProgressStore(),
-            queue);
+            queue,
+            new EfIdentifyTargetEligibilityService(db));
         await service.RequestSearchAsync(entityId, new IdentifyQueueSearchRequest("tmdb", null), false, CancellationToken.None);
 
         var item = await service.DeleteAsync(entityId, CancellationToken.None);
@@ -1253,7 +1412,12 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         PrismediaDbContext db,
         ProcessExecutor executor,
         string tempRoot) =>
-        new(db, CreateIdentifyService(db, executor, tempRoot), new InMemoryIdentifyApplyProgressStore(), new RecordingJobQueue());
+        new(
+            db,
+            CreateIdentifyService(db, executor, tempRoot),
+            new InMemoryIdentifyApplyProgressStore(),
+            new RecordingJobQueue(),
+            new EfIdentifyTargetEligibilityService(db));
 
     private static IdentifyPluginService CreateIdentifyService(
         PrismediaDbContext db,
@@ -1265,7 +1429,8 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             new PluginCatalogService(db, new PluginCatalogOptions([tempRoot], tempRoot, "1.0.0")),
             new IdentifyMatchHintResolver(db),
             new IdentifyRunnerSelector([new DotnetPluginProcessRunner(executor, new PluginCatalogOptions([], tempRoot, "1.0.0"))]),
-            new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(tempRoot)));
+            new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(tempRoot)),
+            new EfIdentifyTargetEligibilityService(db));
     }
 
     /// <summary>Minimal in-memory job queue for tests: records enqueues, no worker runs the cascade.</summary>
@@ -1362,16 +1527,36 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         });
     }
 
-    private static EntityRow SeedEntity(PrismediaDbContext db, Guid id, string kind, string title, bool isNsfw = false) {
+    private static EntityRow SeedEntity(
+        PrismediaDbContext db,
+        Guid id,
+        string kind,
+        string title,
+        bool isNsfw = false,
+        bool isWanted = false,
+        bool attachSource = true) {
+        var now = DateTimeOffset.UtcNow;
         var entity = new EntityRow {
             Id = id,
             KindCode = kind,
             Title = title,
-            CreatedAt = DateTimeOffset.UtcNow,
-            UpdatedAt = DateTimeOffset.UtcNow
+            IsNsfw = isNsfw,
+            IsWanted = isWanted,
+            CreatedAt = now,
+            UpdatedAt = now
         };
-        entity.IsNsfw = isNsfw;
         db.Entities.Add(entity);
+
+        if (attachSource) {
+            db.EntityFiles.Add(new EntityFileRow {
+                Id = Guid.NewGuid(),
+                EntityId = id,
+                Role = EntityFileRole.Source,
+                Path = $"/media/{id}",
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+        }
 
         return entity;
     }

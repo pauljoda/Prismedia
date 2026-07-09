@@ -6,6 +6,8 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Prismedia.Application.Plugins;
 using Prismedia.Contracts.Plugins;
+using Prismedia.Contracts.System;
+using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Serialization;
 
 namespace Prismedia.Api.Tests;
@@ -54,6 +56,55 @@ public sealed class IdentifyBulkEndpointTests {
         Assert.Empty(factory.Services.GetRequiredService<RecordingIdentifyQueueService>().BatchRequests);
     }
 
+    [Fact]
+    public async Task AddIdentifyQueueItemReturnsConflictForAFilelessTarget() {
+        using var factory = CreateFactory();
+        using var client = factory.CreateAuthenticatedClient();
+        var entityId = Guid.NewGuid();
+        factory.Services.GetRequiredService<RecordingIdentifyQueueService>().EligibilityFailure =
+            new IdentifyTargetNotEligibleException(new IdentifyTargetEligibility(
+                entityId,
+                IdentifyTargetEligibilityStatus.NoSourceMedia));
+
+        using var response = await client.PostAsync($"/api/identify/queue/entities/{entityId}", null);
+        var problem = await response.Content.ReadFromJsonAsync<ApiProblem>();
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Equal(ApiProblemCodes.IdentifyTargetNotEligible, problem?.Code);
+    }
+
+    [Fact]
+    public async Task IdentifyEntityReturnsNotFoundWhenTargetDisappears() {
+        using var factory = CreateFactory();
+        using var client = factory.CreateAuthenticatedClient();
+        var entityId = Guid.NewGuid();
+
+        using var response = await client.PostAsJsonAsync(
+            $"/api/identify/entities/{entityId}",
+            new IdentifyEntityRequest("tmdb", null),
+            CodecJson);
+        var problem = await response.Content.ReadFromJsonAsync<ApiProblem>();
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal(ApiProblemCodes.EntityNotFound, problem?.Code);
+    }
+
+    [Fact]
+    public async Task ApplyIdentifyProposalReturnsNotFoundWhenTargetDisappears() {
+        using var factory = CreateFactory();
+        using var client = factory.CreateAuthenticatedClient();
+        var entityId = Guid.NewGuid();
+
+        using var response = await client.PostAsJsonAsync(
+            $"/api/identify/entities/{entityId}/apply",
+            new ApplyIdentifyProposalRequest(CreateProposal(entityId), [], null),
+            CodecJson);
+        var problem = await response.Content.ReadFromJsonAsync<ApiProblem>();
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal(ApiProblemCodes.EntityNotFound, problem?.Code);
+    }
+
     private static WebApplicationFactory<Program> CreateFactory() =>
         new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder => {
@@ -61,12 +112,70 @@ public sealed class IdentifyBulkEndpointTests {
                     services.AddSingleton<RecordingIdentifyQueueService>();
                     services.AddScoped<IIdentifyQueueService>(provider =>
                         provider.GetRequiredService<RecordingIdentifyQueueService>());
+                    services.AddSingleton<MissingIdentifyTargetService>();
+                    services.AddScoped<IIdentifyProviderService>(provider =>
+                        provider.GetRequiredService<MissingIdentifyTargetService>());
                 });
             })
             .WithTestAuth();
 
+    private static EntityMetadataProposal CreateProposal(Guid entityId) =>
+        new(
+            ProposalId: "missing-target",
+            Provider: "tmdb",
+            TargetKind: ProposalKind.Video,
+            Confidence: 1m,
+            MatchReason: "test",
+            Patch: new EntityMetadataPatch(
+                Title: "Missing target",
+                Description: null,
+                ExternalIds: new Dictionary<string, string>(),
+                Urls: [],
+                Tags: [],
+                Studio: null,
+                Credits: [],
+                Dates: new Dictionary<string, string>(),
+                Stats: new Dictionary<string, int>(),
+                Positions: new Dictionary<string, int>(),
+                Classification: null),
+            Images: [],
+            Children: [],
+            Candidates: [],
+            TargetEntityId: entityId,
+            Relationships: []);
+
+    private sealed class MissingIdentifyTargetService : IIdentifyProviderService {
+        public Task<IReadOnlyList<PluginProvider>> ListProvidersAsync(
+            string? entityKind,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<IdentifyPluginResponse> IdentifyAsync(
+            Guid entityId,
+            string providerId,
+            IdentifyQuery? query,
+            IReadOnlyDictionary<string, string>? parentExternalIds,
+            bool hideNsfw,
+            CancellationToken cancellationToken,
+            bool cascadeChildren = true,
+            IIdentifyCascadeSink? sink = null,
+            bool hydrateRelationships = true) =>
+            Task.FromException<IdentifyPluginResponse>(
+                new KeyNotFoundException($"Entity '{entityId}' was not found."));
+
+        public Task<bool> ApplyAsync(
+            Guid entityId,
+            EntityMetadataProposal proposal,
+            IReadOnlyCollection<string> selectedFields,
+            IReadOnlyDictionary<string, string?>? selectedImages,
+            CancellationToken cancellationToken,
+            IIdentifyApplyProgressReporter? progress = null) =>
+            Task.FromException<bool>(new KeyNotFoundException($"Entity '{entityId}' was not found."));
+    }
+
     private sealed class RecordingIdentifyQueueService : IIdentifyQueueService {
         public List<(IReadOnlyList<Guid> EntityIds, IdentifyQueueSearchRequest Request, bool HideNsfw)> BatchRequests { get; } = [];
+        public IdentifyTargetNotEligibleException? EligibilityFailure { get; set; }
 
         public Task<IdentifyBulkAcceptedResponse> RequestSearchBatchAsync(
             IReadOnlyList<Guid> entityIds,
@@ -81,7 +190,9 @@ public sealed class IdentifyBulkEndpointTests {
             throw new NotSupportedException();
 
         public Task<IdentifyQueueItem> AddAsync(Guid entityId, CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
+            EligibilityFailure is not null
+                ? Task.FromException<IdentifyQueueItem>(EligibilityFailure)
+                : throw new NotSupportedException();
 
         public Task<IdentifyQueueItem?> GetAsync(Guid entityId, CancellationToken cancellationToken) =>
             throw new NotSupportedException();
