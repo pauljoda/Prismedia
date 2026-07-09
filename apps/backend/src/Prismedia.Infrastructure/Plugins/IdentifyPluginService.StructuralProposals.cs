@@ -111,8 +111,16 @@ public sealed partial class IdentifyPluginService {
         // streams; each child's full subtree is resolved before it is merged into the root.
         var structuralChildren = new List<EntityMetadataProposal>();
         if (cascadeChildren && EntityKindRegistry.EnumeratesIdentifyChildren(entity.KindCode)) {
-            var existingChildren = await LoadStructuralChildrenAsync(entity.Id, cancellationToken);
-            var providerStructuralChildren = EntityMetadataProposalTraversal.StructuralChildren(boundProviderProposal);
+            var persistedChildren = await LoadStructuralChildrenAsync(entity.Id, cancellationToken);
+            var existingChildren = persistedChildren
+                .Where(child => child.IsIdentifyEligible)
+                .ToArray();
+            var eligibleChildIds = existingChildren
+                .Select(child => child.Entity.Id)
+                .ToHashSet();
+            var providerStructuralChildren = EntityMetadataProposalTraversal.StructuralChildren(boundProviderProposal)
+                .Where(child => child.TargetEntityId is not { } localId || eligibleChildIds.Contains(localId))
+                .ToArray();
             var cautiousStructuralMatching = ShouldUseCautiousStructuralMatching(existingChildren, providerStructuralChildren);
             var usedProviderIndexes = new HashSet<int>();
             foreach (var child in existingChildren) {
@@ -480,14 +488,12 @@ public sealed partial class IdentifyPluginService {
         Guid parentEntityId,
         PluginManifest manifest,
         CancellationToken cancellationToken) {
-        var childKinds = await _db.Entities
-            .AsNoTracking()
-            .Where(row => row.ParentEntityId == parentEntityId)
-            .Select(row => row.KindCode)
-            .ToArrayAsync(cancellationToken);
-        return childKinds.Any(kind => manifest.Supports.Any(support =>
-            support.EntityKind.TryDecodeAs<ProposalKind>(out var supportKind) &&
-            IsCompatibleStructuralKind(kind, supportKind)));
+        var localChildren = await LoadStructuralChildrenAsync(parentEntityId, cancellationToken);
+        return localChildren
+            .Where(child => child.IsIdentifyEligible)
+            .Any(child => manifest.Supports.Any(support =>
+                support.EntityKind.TryDecodeAs<ProposalKind>(out var supportKind) &&
+                IsCompatibleStructuralKind(child.Entity.KindCode, supportKind)));
     }
 
     private async Task<bool> HasMissingSupportedStructuralChildrenAsync(
@@ -497,6 +503,7 @@ public sealed partial class IdentifyPluginService {
         CancellationToken cancellationToken) {
         var localChildren = await LoadStructuralChildrenAsync(parentEntityId, cancellationToken);
         return localChildren
+            .Where(child => child.IsIdentifyEligible)
             .Where(child => manifest.Supports.Any(support =>
                 support.EntityKind.TryDecodeAs<ProposalKind>(out var supportKind) &&
                 IsCompatibleStructuralKind(child.Entity.KindCode, supportKind)))
@@ -875,7 +882,15 @@ public sealed partial class IdentifyPluginService {
         };
     }
 
-    private async Task<IReadOnlyList<StructuralChild>> LoadStructuralChildrenAsync(Guid parentEntityId, CancellationToken cancellationToken) {
+    /// <summary>
+    /// Loads every persisted structural child for provider binding and duplicate suppression. Wanted
+    /// and fileless children remain matchable here so an equivalent provider container never becomes
+    /// an unbound materialization candidate; callers that recurse must select
+    /// <see cref="StructuralChild.IsIdentifyEligible"/>.
+    /// </summary>
+    private async Task<IReadOnlyList<StructuralChild>> LoadStructuralChildrenAsync(
+        Guid parentEntityId,
+        CancellationToken cancellationToken) {
         var children = await _db.Entities
             .AsNoTracking()
             .Where(row => row.ParentEntityId == parentEntityId)
@@ -889,8 +904,7 @@ public sealed partial class IdentifyPluginService {
             cancellationToken);
 
         return children
-            .Where(row => eligibility[row.Id].IsEligible)
-            .Select(row => new StructuralChild(row.SortOrder, row))
+            .Select(row => new StructuralChild(row.SortOrder, row, eligibility[row.Id].IsEligible))
             .ToArray();
     }
 
@@ -926,7 +940,7 @@ public sealed partial class IdentifyPluginService {
     private static bool SupportsKind(PluginManifest manifest, string kind) =>
         manifest.Supports.Any(support => PluginEntityKindCompatibility.SupportsKind(support, kind));
 
-    private sealed record StructuralChild(int? SortOrder, EntityRow Entity);
+    private sealed record StructuralChild(int? SortOrder, EntityRow Entity, bool IsIdentifyEligible);
 
     private sealed record RelocatableLocalChild(Guid EntityId, string KindCode, string Title, int? SortOrder);
 

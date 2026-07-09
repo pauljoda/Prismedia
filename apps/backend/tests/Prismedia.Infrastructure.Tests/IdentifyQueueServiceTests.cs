@@ -422,6 +422,51 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
     }
 
     [Fact]
+    public async Task IdentifyAsyncUsesWantedStructuralChildrenForBindingWithoutIdentifyingOrMaterializingThem() {
+        await using var db = CreateContext();
+        var seriesId = Guid.Parse("33333333-3333-3333-3333-33333333333c");
+        var wantedSeasonId = Guid.Parse("33333333-3333-3333-3333-33333333333d");
+        SeedProvider(db);
+        SeedEntity(db, seriesId, "video-series", "Known Series");
+        var wantedSeason = SeedEntity(
+            db,
+            wantedSeasonId,
+            "video-season",
+            "Season 1",
+            isWanted: true,
+            attachSource: false);
+        wantedSeason.ParentEntityId = seriesId;
+        wantedSeason.SortOrder = 1;
+        await db.SaveChangesAsync();
+        var executor = new WantedStructuralContainerProcessExecutor();
+        var service = CreateIdentifyService(db, executor, _tempRoot);
+
+        var response = await service.IdentifyAsync(
+            seriesId,
+            "tmdb",
+            new IdentifyQuery(null, null, new Dictionary<string, string> { ["tmdb"] = "series-1" }),
+            parentExternalIds: null,
+            hideNsfw: false,
+            CancellationToken.None);
+
+        Assert.True(response.Ok);
+        var proposal = Assert.IsType<EntityMetadataProposal>(response.Result);
+        Assert.Empty(proposal.Children);
+        Assert.Single(executor.Requests);
+
+        Assert.True(await service.ApplyAsync(
+            seriesId,
+            proposal,
+            ["title"],
+            selectedImages: null,
+            CancellationToken.None));
+        Assert.Equal(2, await db.Entities.CountAsync());
+        var existingSeason = await db.Entities.SingleAsync(entity => entity.Id == wantedSeasonId);
+        Assert.True(existingSeason.IsWanted);
+        Assert.Equal(seriesId, existingSeason.ParentEntityId);
+    }
+
+    [Fact]
     public async Task SearchAsyncEnqueuesInteractiveCascadeAboveScanBacklogs() {
         await using var db = CreateContext();
         var seriesId = Guid.Parse("33333333-3333-3333-3333-333333333338");
@@ -2003,6 +2048,56 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
                 [],
                 [],
                 Relationships: []);
+    }
+
+    private sealed class WantedStructuralContainerProcessExecutor : ProcessExecutor {
+        public List<IdentifyPluginRequest> Requests { get; } = [];
+
+        public override async Task<ProcessExecutionResult> RunAsync(
+            string fileName,
+            IReadOnlyList<string> arguments,
+            IReadOnlyDictionary<string, string>? environment,
+            CancellationToken cancellationToken,
+            bool lowPriority = false) {
+            var requestJson = await File.ReadAllTextAsync(arguments[1], cancellationToken);
+            var request = JsonSerializer.Deserialize<IdentifyPluginRequest>(requestJson, JsonOptions)!;
+            Requests.Add(request);
+            var season = new EntityMetadataProposal(
+                "tmdb:series:1:season:1",
+                "tmdb",
+                ProposalKind.VideoSeason,
+                1,
+                "provider-tree",
+                EmptyPatch("Season 1") with {
+                    Positions = new Dictionary<string, int> { ["seasonNumber"] = 1 }
+                },
+                [],
+                [],
+                [],
+                Relationships: []);
+            var proposal = new EntityMetadataProposal(
+                "tmdb:series:1",
+                "tmdb",
+                ProposalKind.VideoSeries,
+                1,
+                "external-id",
+                EmptyPatch("Known Series identified"),
+                [],
+                [season],
+                [],
+                TargetEntityId: request.Entity.Id,
+                Relationships: []);
+            var wire = new {
+                ok = true,
+                result = new {
+                    type = "proposal",
+                    proposal,
+                    candidates = Array.Empty<object>()
+                },
+                error = (string?)null
+            };
+            return new ProcessExecutionResult(0, JsonSerializer.Serialize(wire, JsonOptions), string.Empty);
+        }
     }
 
     private sealed class CanonicalCandidateProcessExecutor : ProcessExecutor {
