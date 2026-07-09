@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Application.Entities;
 using Prismedia.Domain.Capabilities;
 using Prismedia.Domain.Entities;
 using Prismedia.Domain.Media;
@@ -11,6 +12,11 @@ using Prismedia.Infrastructure.Persistence.Entities;
 namespace Prismedia.Infrastructure.Tests;
 
 public sealed class EfEntityRepositoryTests {
+    private static readonly DateTimeOffset IdentityCreatedAt =
+        DateTimeOffset.Parse("2026-01-02T03:04:05Z");
+    private static readonly DateTimeOffset IdentityWriteTime =
+        DateTimeOffset.Parse("2026-07-09T18:30:00Z");
+
     [Fact]
     public async Task FindAsyncHydratesConcreteEntityRelationshipMapsAndCredits() {
         await using var db = CreateContext();
@@ -170,6 +176,76 @@ public sealed class EfEntityRepositoryTests {
     }
 
     [Fact]
+    public async Task FindAsyncHydratesExternalIdentitiesThroughTheCanonicalStore() {
+        await using var db = CreateContext();
+        var id = Guid.Parse("aaaaaaaa-1111-2222-3333-bbbbbbbbbbbb");
+        SeedEntity(db, id, EntityKind.Video, "Canonical identity");
+        await db.SaveChangesAsync();
+        var identities = new RecordingExternalIdentityStore(
+            listedIdentities: [new EntityExternalId(" TMDB ", " 603 ", "https://www.themoviedb.org/movie/603")]);
+        var repository = new EfEntityRepository(
+            db,
+            TestUserContext.Admin(),
+            EntityMappers.Kinds(db),
+            EntityMappers.Capabilities(db, TestUserContext.Admin()),
+            identities);
+
+        var loaded = await repository.RequireAsync<Video>(id, CancellationToken.None);
+
+        Assert.Equal([id], identities.ListedEntityIds);
+        var externalId = Assert.Single(loaded.ExternalIds);
+        Assert.Equal(new ExternalIdentity("tmdb", "603"), externalId.Identity);
+        Assert.Equal("https://www.themoviedb.org/movie/603", externalId.Url);
+    }
+
+    [Fact]
+    public async Task SaveAsyncReplacesTheCompleteIdentitySetWithoutChurningUnchangedRows() {
+        await using var db = CreateContext();
+        var id = Guid.Parse("cccccccc-1111-2222-3333-dddddddddddd");
+        SeedEntity(db, id, EntityKind.Video, "Stable identity");
+        var unchanged = AddExternalIdentity(
+            db,
+            id,
+            "tmdb",
+            "603",
+            "https://www.themoviedb.org/movie/603",
+            IdentityCreatedAt);
+        var removed = AddExternalIdentity(
+            db,
+            id,
+            "imdb",
+            "tt0133093",
+            "https://www.imdb.com/title/tt0133093",
+            IdentityCreatedAt.AddMinutes(1));
+        await db.SaveChangesAsync();
+        var unchangedRowId = unchanged.Id;
+        var unchangedCreatedAt = unchanged.CreatedAt;
+        var unchangedUpdatedAt = unchanged.UpdatedAt;
+        var identities = new RecordingExternalIdentityStore(
+            inner: new EfEntityExternalIdentityStore(db, new FixedTimeProvider(IdentityWriteTime)));
+        var repository = new EfEntityRepository(
+            db,
+            TestUserContext.Admin(),
+            EntityMappers.Kinds(db),
+            EntityMappers.Capabilities(db, TestUserContext.Admin()),
+            identities);
+        var video = new Video(id, "Stable identity");
+        video.SetExternalId(" TMDB ", " 603 ", "https://www.themoviedb.org/movie/603");
+
+        await repository.SaveAsync(video, CancellationToken.None);
+
+        var persisted = Assert.Single(await db.EntityExternalIds.AsNoTracking().ToArrayAsync());
+        Assert.Equal(ExternalIdentityWriteMode.ReplaceAll, Assert.Single(identities.WriteModes));
+        Assert.Equal(id, Assert.Single(identities.WrittenEntityIds));
+        Assert.Equal(unchangedRowId, persisted.Id);
+        Assert.Equal(unchangedCreatedAt, persisted.CreatedAt);
+        Assert.Equal(unchangedUpdatedAt, persisted.UpdatedAt);
+        Assert.Equal("tmdb", persisted.Provider);
+        Assert.Equal("603", persisted.Value);
+        Assert.DoesNotContain(db.EntityExternalIds, row => row.Id == removed.Id);
+    }
+
+    [Fact]
     public async Task SavingTheSameEntityTwiceDoesNotDuplicateCapabilityRows() {
         // A retried job re-runs its handler from scratch and re-saves the entity. The save must be
         // idempotent so retries cannot accumulate duplicate capability rows.
@@ -303,5 +379,66 @@ public sealed class EfEntityRepositoryTests {
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
         });
+    }
+
+    private static EntityExternalIdRow AddExternalIdentity(
+        PrismediaDbContext db,
+        Guid entityId,
+        string provider,
+        string value,
+        string? url,
+        DateTimeOffset timestamp) {
+        var row = new EntityExternalIdRow {
+            Id = Guid.NewGuid(),
+            EntityId = entityId,
+            Provider = provider,
+            Value = value,
+            Url = url,
+            CreatedAt = timestamp,
+            UpdatedAt = timestamp
+        };
+        db.EntityExternalIds.Add(row);
+        return row;
+    }
+
+    private sealed class RecordingExternalIdentityStore(
+        IEntityExternalIdentityStore? inner = null,
+        IReadOnlyList<EntityExternalId>? listedIdentities = null) : IEntityExternalIdentityStore {
+        public List<Guid> ListedEntityIds { get; } = [];
+        public List<Guid> WrittenEntityIds { get; } = [];
+        public List<ExternalIdentityWriteMode> WriteModes { get; } = [];
+
+        public async Task<IReadOnlyList<EntityExternalId>> ListAsync(
+            Guid entityId,
+            CancellationToken cancellationToken) {
+            ListedEntityIds.Add(entityId);
+            return inner is null
+                ? listedIdentities ?? []
+                : await inner.ListAsync(entityId, cancellationToken);
+        }
+
+        public Task<ExternalIdentityResolution> ResolveAsync(
+            EntityKind kind,
+            IReadOnlyCollection<ExternalIdentity> identities,
+            Guid? parentEntityId,
+            CancellationToken cancellationToken) =>
+            inner?.ResolveAsync(kind, identities, parentEntityId, cancellationToken)
+            ?? Task.FromResult(new ExternalIdentityResolution([]));
+
+        public async Task WriteAsync(
+            Guid entityId,
+            IReadOnlyCollection<EntityExternalId> identities,
+            ExternalIdentityWriteMode mode,
+            CancellationToken cancellationToken) {
+            WrittenEntityIds.Add(entityId);
+            WriteModes.Add(mode);
+            if (inner is not null) {
+                await inner.WriteAsync(entityId, identities, mode, cancellationToken);
+            }
+        }
+    }
+
+    private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider {
+        public override DateTimeOffset GetUtcNow() => utcNow;
     }
 }
