@@ -3,48 +3,6 @@ using Prismedia.Domain.Entities;
 namespace Prismedia.Application.Acquisition;
 
 /// <summary>
-/// Torznab category routing per media kind. Indexer configs carry a global category list; a search
-/// narrows it to the acquisition kind's category range (falling back to the range's top-level category
-/// when the config declares none in range), so a movie search never queries book categories just
-/// because the indexer was configured for books first.
-/// </summary>
-public static class TorznabCategories {
-    // Torznab top-level numeric category ranges. prism-vocab: external (Torznab category standard).
-    private const int Movies = 2000;
-    private const int Audio = 3000;
-    private const int Tv = 5000;
-    private const int Books = 7000;
-    private const int Other = 8000;
-    private const int RangeSize = 1000;
-
-    /// <summary>The top of the Torznab category range for a media kind, or null for kinds with no mapping.</summary>
-    private static int? RangeStartFor(EntityKind kind) => kind switch {
-        EntityKind.Book => Books,
-        EntityKind.Movie => Movies,
-        EntityKind.AudioLibrary or EntityKind.AudioTrack or EntityKind.MusicArtist => Audio,
-        EntityKind.VideoSeries or EntityKind.VideoSeason or EntityKind.Video => Tv,
-        _ => null
-    };
-
-    /// <summary>
-    /// The effective search categories for a kind: the configured categories that fall inside the
-    /// kind's range (preserving the user's narrower picks, e.g. 7030 comics), else the range's
-    /// top-level category. Configured categories in the kind-neutral Other range (8000s) always
-    /// pass through — indexers file e-books and misc payloads there. Kinds with no mapping keep
-    /// the configured list unchanged.
-    /// </summary>
-    public static IReadOnlyList<int> ForKind(EntityKind kind, IReadOnlyList<int> configured) {
-        if (RangeStartFor(kind) is not { } start) {
-            return configured;
-        }
-
-        var kindPicks = configured.Where(category => category >= start && category < start + RangeSize).ToArray();
-        var otherPicks = configured.Where(category => category >= Other && category < Other + RangeSize);
-        return (kindPicks.Length > 0 ? kindPicks : [start]).Concat(otherPicks).ToArray();
-    }
-}
-
-/// <summary>
 /// Movie decision engine: the generic acceptance gates (protocol, link, seeders, size, terms,
 /// language, blocklist) plus a resolution/source-aware ranking parsed from the release title. Runs on
 /// the shared rules record — the format/quality gates are book vocabulary and don't apply here; a
@@ -82,13 +40,13 @@ public sealed class MovieReleaseDecisionEngine : IAcquisitionDecisionEngine {
 
 /// <summary>
 /// Music decision engine: the generic acceptance gates plus a codec-quality ranking parsed from the
-/// release title (lossless above high-bitrate lossy above the rest). Album-level; per-kind music
-/// profiles (bitrate floors, format cutoffs) land with the music import workstream.
+/// release title (lossless above high-bitrate lossy above the rest). The music policy binds one engine
+/// to each supported music kind while sharing this release vocabulary.
 /// </summary>
-public sealed class MusicReleaseDecisionEngine : IAcquisitionDecisionEngine {
-    public EntityKind Kind => EntityKind.AudioLibrary;
+public sealed class MusicReleaseDecisionEngine(EntityKind kind = EntityKind.AudioLibrary) : IAcquisitionDecisionEngine {
+    public EntityKind Kind => kind;
 
-    private static readonly IReleaseSpecification[] Specifications = [
+    private readonly IReleaseSpecification[] _specifications = [
         new DangerousContentSpecification(),
         // The same leading-title identity gate the video kinds use: music scene naming leads
         // "Artist - Album (Year) [FLAC]" and the music target is "Artist Album", so the strict
@@ -102,16 +60,16 @@ public sealed class MusicReleaseDecisionEngine : IAcquisitionDecisionEngine {
         new RequiredTermsSpecification(),
         new IgnoredTermsSpecification(),
         new LanguageSpecification(),
-        new MediaQualityAllowedSpecification(EntityKind.AudioLibrary),
+        new MediaQualityAllowedSpecification(kind),
         new MinFormatScoreSpecification(),
-        new MediaUpgradeSpecification(EntityKind.AudioLibrary)
+        new MediaUpgradeSpecification(kind)
     ];
 
     public IReadOnlyList<ScoredRelease> Evaluate(
         IReadOnlyList<(IndexerRelease Release, Guid? IndexerConfigId, string IndexerName)> releases,
         BookAcquisitionRules rules,
         IReadOnlySet<string>? blocklistedIdentities = null) =>
-        MediaReleaseEvaluation.Evaluate(releases, rules, blocklistedIdentities, Specifications, MusicScore);
+        MediaReleaseEvaluation.Evaluate(releases, rules, blocklistedIdentities, _specifications, MusicScore);
 
     /// <summary>Profile preference (terms, custom weights, language) outranks everything; then the codec-quality ladder (hi-res and lossless first), then the revision boost (a proper/repack at the same quality outranks a plain release unless propers are not preferred), then seeders.</summary>
     private static double MusicScore(IndexerRelease release, BookAcquisitionRules rules) {
@@ -285,9 +243,8 @@ public sealed class MinFormatScoreSpecification : IReleaseSpecification {
 /// TV decision engine: the generic acceptance gates plus the unit-match rule, ranked like movies
 /// (resolution, then source provenance) with a dominant unit-precision tier on top — a release that
 /// NAMES the sought season/episode outranks a complete-series pack, which outranks a marker-less
-/// title, regardless of their detected qualities. One engine class serves both TV acquisition units —
-/// season packs (<see cref="EntityKind.VideoSeason"/>) and single episodes (<see cref="EntityKind.Video"/>) —
-/// registered once per kind, since the vocabulary of a TV release is the same at either granularity.
+/// title, regardless of their detected qualities. One engine class serves series, season packs, and
+/// single episodes, bound once per kind by the TV policy because the release vocabulary is shared.
 /// </summary>
 public sealed class TvReleaseDecisionEngine(EntityKind kind) : IAcquisitionDecisionEngine {
     /// <summary>

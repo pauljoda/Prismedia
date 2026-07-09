@@ -15,7 +15,7 @@ public sealed class AcquisitionSearchRunner(
     IDownloadClientConfigStore downloadClients,
     IIndexerStatusStore indexerStatuses,
     IndexerQueryWindow queryWindow,
-    IAcquisitionDecisionEngineFactory decisionEngines,
+    IAcquisitionPolicyRegistry policies,
     SettingsService settings) {
     /// <summary>
     /// The per-priority-step score adjustment that breaks exact score ties in favor of the preferred
@@ -29,10 +29,12 @@ public sealed class AcquisitionSearchRunner(
     /// format. Null for an ordinary first-grab search.
     /// </param>
     public async Task<AcquisitionSearchOutcome> RunAsync(AcquisitionSearchInput input, CancellationToken cancellationToken, UpgradeOwnedQuality? upgradeOwnedQuality = null) {
-        var queries = ReleaseQueryLadder.For(input);
-        if (queries.Count == 0) {
+        if (string.IsNullOrWhiteSpace(input.Title)) {
             return new AcquisitionSearchOutcome([], []);
         }
+
+        var policy = policies.Get(input.Kind);
+        var queries = policy.BuildQueries(input);
 
         // An indexer inside its failure-backoff window is skipped for this search rather than
         // contributing the same error to every pass; it rejoins automatically when the window closes.
@@ -90,7 +92,7 @@ public sealed class AcquisitionSearchRunner(
         }
 
         var blocklisted = await blocklist.GetIdentitiesAsync(cancellationToken);
-        var engine = decisionEngines.Get(input.Kind);
+        var engine = policy.DecisionEngineFor(input.Kind);
 
         // Walk the query ladder: the first rung whose results include an acceptable release wins. A
         // rung that found only rejects falls through to the next, broader phrasing; the last rung's
@@ -98,7 +100,7 @@ public sealed class AcquisitionSearchRunner(
         // transparent to show.
         AcquisitionSearchOutcome outcome = new([], []);
         foreach (var text in queries) {
-            var searches = await Task.WhenAll(configs.Select(config => SearchIndexerAsync(config, text, input.Kind, cancellationToken)));
+            var searches = await Task.WhenAll(configs.Select(config => SearchIndexerAsync(config, text, policy, cancellationToken)));
             await RecordHealthAsync(searches, cancellationToken);
 
             var releases = new List<(IndexerRelease Release, Guid? IndexerConfigId, string IndexerName)>();
@@ -150,7 +152,7 @@ public sealed class AcquisitionSearchRunner(
     private async Task<IndexerSearchResult> SearchIndexerAsync(
         Contracts.Acquisition.IndexerConfigDetail config,
         string text,
-        Domain.Entities.EntityKind kind,
+        IAcquisitionPolicyModule policy,
         CancellationToken cancellationToken) {
         // A rate-limited skip is surfaced (so a thin result set is explainable) but is NOT a failure —
         // it must not climb the backoff ladder.
@@ -161,7 +163,7 @@ public sealed class AcquisitionSearchRunner(
         try {
             // Narrow the indexer's configured categories to the acquisition kind's Torznab range, so a
             // movie or album search never queries the book categories the indexer was set up with.
-            var categories = TorznabCategories.ForKind(kind, config.Categories);
+            var categories = policy.RouteCategories(config.Categories);
             var connection = new IndexerConnection(config.Id, config.Kind, config.BaseUrl, config.ApiKey, categories);
             var found = await clients.Get(config.Kind).SearchAsync(connection, new IndexerQuery(text, categories), cancellationToken);
             return new IndexerSearchResult(config, found, null);

@@ -288,10 +288,9 @@ public sealed class FormatFloorSpecification : IReleaseSpecification {
 }
 
 /// <summary>
-/// Scores and filters indexer releases for one media kind. Resolved per <see cref="Kind"/> through
-/// <see cref="IAcquisitionDecisionEngineFactory"/> so additional kinds (video, audio) register their own
-/// engine without the search runner changing. (The rules type is still book-specific; generalizing it is
-/// a later step — this slice only establishes the kind-dispatch seam.)
+/// Scores and filters indexer releases for one media kind. Its owning
+/// <see cref="IAcquisitionPolicyModule"/> supplies it to the search runner together with that kind's query
+/// and category policies. (The rules type is still book-specific; generalizing it is a later step.)
 /// </summary>
 public interface IAcquisitionDecisionEngine {
     /// <summary>The media kind this engine scores releases for.</summary>
@@ -372,21 +371,4 @@ public sealed class BookReleaseDecisionEngine : IAcquisitionDecisionEngine {
             .ThenByDescending(candidate => candidate.Score)
             .ToArray();
     }
-}
-
-/// <summary>Resolves the decision engine for a media kind, mirroring the indexer/download-client factories.</summary>
-public interface IAcquisitionDecisionEngineFactory {
-    /// <summary>Returns the engine registered for <paramref name="kind"/>, or throws when none is registered.</summary>
-    IAcquisitionDecisionEngine Get(EntityKind kind);
-}
-
-/// <summary>Dispatches to the registered <see cref="IAcquisitionDecisionEngine"/> for a kind (one engine per kind).</summary>
-public sealed class AcquisitionDecisionEngineFactory(IEnumerable<IAcquisitionDecisionEngine> engines) : IAcquisitionDecisionEngineFactory {
-    private readonly IReadOnlyDictionary<EntityKind, IAcquisitionDecisionEngine> _byKind =
-        engines.ToDictionary(engine => engine.Kind);
-
-    public IAcquisitionDecisionEngine Get(EntityKind kind) =>
-        _byKind.TryGetValue(kind, out var engine)
-            ? engine
-            : throw new InvalidOperationException($"No acquisition decision engine is registered for kind '{kind}'.");
 }

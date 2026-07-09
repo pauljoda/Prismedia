@@ -25,7 +25,7 @@ public sealed class AcquisitionSearchRunnerTests {
             new FakeDownloadClientConfigStore(DownloadProtocol.Torrent),
             new FakeIndexerStatusStore(),
             new IndexerQueryWindow(),
-            new AcquisitionDecisionEngineFactory([new BookReleaseDecisionEngine()]),
+            Policies(new BookAcquisitionPolicyModule()),
             Settings());
 
         var outcome = await runner.RunAsync(new AcquisitionSearchInput(Guid.NewGuid(), "Book", null), CancellationToken.None);
@@ -50,7 +50,7 @@ public sealed class AcquisitionSearchRunnerTests {
                 new FakeDownloadClientConfigStore(protocols),
                 new FakeIndexerStatusStore(),
                 new IndexerQueryWindow(),
-                new AcquisitionDecisionEngineFactory([new BookReleaseDecisionEngine()]),
+                Policies(new BookAcquisitionPolicyModule()),
                 Settings());
             var outcome = await runner.RunAsync(new AcquisitionSearchInput(Guid.NewGuid(), "Book", null), CancellationToken.None);
             return outcome.Candidates.Single();
@@ -86,7 +86,7 @@ public sealed class AcquisitionSearchRunnerTests {
             new FakeDownloadClientConfigStore(DownloadProtocol.Torrent),
             new FakeIndexerStatusStore(),
             new IndexerQueryWindow(),
-            new AcquisitionDecisionEngineFactory([new BookReleaseDecisionEngine()]),
+            Policies(new BookAcquisitionPolicyModule()),
             Settings());
 
         var outcome = await runner.RunAsync(new AcquisitionSearchInput(Guid.NewGuid(), "Book", "Author"), CancellationToken.None);
@@ -110,7 +110,7 @@ public sealed class AcquisitionSearchRunnerTests {
             new FakeDownloadClientConfigStore(DownloadProtocol.Torrent),
             new FakeIndexerStatusStore(),
             new IndexerQueryWindow(),
-            new AcquisitionDecisionEngineFactory([new BookReleaseDecisionEngine()]),
+            Policies(new BookAcquisitionPolicyModule()),
             Settings());
 
         await runner.RunAsync(new AcquisitionSearchInput(Guid.NewGuid(), "Book", "Author"), CancellationToken.None);
@@ -120,17 +120,28 @@ public sealed class AcquisitionSearchRunnerTests {
 
     [Fact]
     public void QueryLadderBuildsContextRichRungsPerKind() {
+        var policies = Policies(
+            new BookAcquisitionPolicyModule(),
+            new MovieAcquisitionPolicyModule(),
+            new MusicAcquisitionPolicyModule(),
+            new TvAcquisitionPolicyModule());
+        var book = new AcquisitionSearchInput(Guid.NewGuid(), "Book", "Author");
+        var album = new AcquisitionSearchInput(Guid.NewGuid(), "Discovery", "Daft Punk", EntityKind.AudioLibrary);
+        var series = new AcquisitionSearchInput(Guid.NewGuid(), "Game of Thrones", null, EntityKind.VideoSeries);
+        var movie = new AcquisitionSearchInput(Guid.NewGuid(), "Dune", null, EntityKind.Movie, Year: 2021);
+        var movieWithoutYear = new AcquisitionSearchInput(Guid.NewGuid(), "Dune", null, EntityKind.Movie);
+
         Assert.Equal(["Book Author", "Book"],
-            ReleaseQueryLadder.For(new AcquisitionSearchInput(Guid.NewGuid(), "Book", "Author")).ToArray());
+            policies.Get(book.Kind).BuildQueries(book).ToArray());
         Assert.Equal(["Daft Punk Discovery", "Discovery"],
-            ReleaseQueryLadder.For(new AcquisitionSearchInput(Guid.NewGuid(), "Discovery", "Daft Punk", EntityKind.AudioLibrary)).ToArray());
+            policies.Get(album.Kind).BuildQueries(album).ToArray());
         Assert.Equal(["Game of Thrones complete", "Game of Thrones"],
-            ReleaseQueryLadder.For(new AcquisitionSearchInput(Guid.NewGuid(), "Game of Thrones", null, EntityKind.VideoSeries)).ToArray());
+            policies.Get(series.Kind).BuildQueries(series).ToArray());
         // Movies lead with the year when it is known, and collapse to one rung when it isn't.
         Assert.Equal(["Dune 2021", "Dune"],
-            ReleaseQueryLadder.For(new AcquisitionSearchInput(Guid.NewGuid(), "Dune", null, EntityKind.Movie, Year: 2021)).ToArray());
+            policies.Get(movie.Kind).BuildQueries(movie).ToArray());
         Assert.Equal(["Dune"],
-            ReleaseQueryLadder.For(new AcquisitionSearchInput(Guid.NewGuid(), "Dune", null, EntityKind.Movie)).ToArray());
+            policies.Get(movieWithoutYear.Kind).BuildQueries(movieWithoutYear).ToArray());
     }
 
     [Fact]
@@ -149,7 +160,7 @@ public sealed class AcquisitionSearchRunnerTests {
             new FakeDownloadClientConfigStore(DownloadProtocol.Torrent),
             new FakeIndexerStatusStore(),
             new IndexerQueryWindow(),
-            new AcquisitionDecisionEngineFactory([new MovieReleaseDecisionEngine()]),
+            Policies(new MovieAcquisitionPolicyModule()),
             Settings(ProperDownloadPolicy.DoNotPrefer));
 
         var outcome = await runner.RunAsync(new AcquisitionSearchInput(Guid.NewGuid(), "Movie", null, EntityKind.Movie), CancellationToken.None);
@@ -171,7 +182,7 @@ public sealed class AcquisitionSearchRunnerTests {
             new FakeDownloadClientConfigStore(DownloadProtocol.Torrent),
             new FakeIndexerStatusStore(),
             new IndexerQueryWindow(),
-            new AcquisitionDecisionEngineFactory([new TvReleaseDecisionEngine(EntityKind.VideoSeason)]),
+            Policies(new TvAcquisitionPolicyModule()),
             Settings());
 
         var outcome = await runner.RunAsync(
@@ -196,6 +207,9 @@ public sealed class AcquisitionSearchRunnerTests {
 
         return new SettingsService(new FakeSettingsPersistence(overrides));
     }
+
+    private static AcquisitionPolicyRegistry Policies(params IAcquisitionPolicyModule[] modules) =>
+        new(modules);
 
     private sealed class FakeSettingsPersistence(IReadOnlyDictionary<string, string> overrides) : ISettingsPersistence {
         public Task<IReadOnlyDictionary<string, string>> LoadSettingOverridesAsync(CancellationToken cancellationToken) =>

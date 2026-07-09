@@ -11,26 +11,33 @@ namespace Prismedia.Application.Tests.Acquisition;
 public sealed class MediaReleaseDecisionEnginesTests {
     [Fact]
     public void CategoriesNarrowToTheKindRangeAndFallBackToItsTopLevel() {
+        var book = new BookAcquisitionPolicyModule();
+        var movie = new MovieAcquisitionPolicyModule();
+        var music = new MusicAcquisitionPolicyModule();
+        var tv = new TvAcquisitionPolicyModule();
+
         // A book-configured indexer (7000s) searching movies falls back to the movie top-level category…
-        Assert.Equal([2000], TorznabCategories.ForKind(EntityKind.Movie, [7000, 7030]));
+        Assert.Equal([2000], movie.RouteCategories([7000, 7030]));
         // …while the user's narrower in-range picks are preserved for the matching kind.
-        Assert.Equal([7000, 7030], TorznabCategories.ForKind(EntityKind.Book, [7000, 7030, 2000]).Where(c => c is 7000 or 7030).ToArray());
-        Assert.Equal([3000], TorznabCategories.ForKind(EntityKind.AudioLibrary, []));
-        Assert.Equal([5000], TorznabCategories.ForKind(EntityKind.VideoSeries, [7000]));
-        // Kinds with no mapping keep the configured list unchanged.
-        Assert.Equal([7000], TorznabCategories.ForKind(EntityKind.Person, [7000]));
+        Assert.Equal([7000, 7030], book.RouteCategories([7000, 7030, 2000]));
+        Assert.Equal([3000], music.RouteCategories([]));
+        Assert.Equal([5000], tv.RouteCategories([7000]));
     }
 
     [Fact]
     public void ConfiguredOtherRangeCategoriesPassThroughForEveryKind() {
+        var book = new BookAcquisitionPolicyModule();
+        var movie = new MovieAcquisitionPolicyModule();
+        var tv = new TvAcquisitionPolicyModule();
+
         // The default book config (7000,8000) keeps its Other pick — this was silently dropped before.
-        Assert.Equal([7000, 8000], TorznabCategories.ForKind(EntityKind.Book, [7000, 8000]));
+        Assert.Equal([7000, 8000], book.RouteCategories([7000, 8000]));
         // Other-range picks ride along with the kind narrowing for any kind…
-        Assert.Equal([2000, 8010], TorznabCategories.ForKind(EntityKind.Movie, [2000, 7000, 8010]));
+        Assert.Equal([2000, 8010], movie.RouteCategories([2000, 7000, 8010]));
         // …and with the top-level fallback when nothing kind-specific is configured.
-        Assert.Equal([7000, 8000], TorznabCategories.ForKind(EntityKind.Book, [8000]));
+        Assert.Equal([7000, 8000], book.RouteCategories([8000]));
         // No Other picks configured → behavior unchanged.
-        Assert.Equal([5000, 5040], TorznabCategories.ForKind(EntityKind.Video, [5000, 5040]));
+        Assert.Equal([5000, 5040], tv.RouteCategories([5000, 5040]));
     }
 
     [Fact]
@@ -60,17 +67,18 @@ public sealed class MediaReleaseDecisionEnginesTests {
 
     [Fact]
     public void TvLadderDrillsSeasonThenCompleteAndEpisodeExactly() {
+        var policy = new TvAcquisitionPolicyModule();
         var season = new AcquisitionSearchInput(
             Guid.NewGuid(), "Season 1", null, EntityKind.VideoSeason, Series: "Andor", SeasonNumber: 1);
-        Assert.Equal(["Andor S01", "Andor Season 1", "Andor complete"], ReleaseQueryLadder.For(season));
+        Assert.Equal(["Andor S01", "Andor Season 1", "Andor complete"], policy.BuildQueries(season));
 
         var episode = new AcquisitionSearchInput(
             Guid.NewGuid(), "Pilot", null, EntityKind.Video, Series: "Andor", SeasonNumber: 1, EpisodeNumber: 5);
-        Assert.Equal(["Andor S01E05", "Andor 1x05"], ReleaseQueryLadder.For(episode));
+        Assert.Equal(["Andor S01E05", "Andor 1x05"], policy.BuildQueries(episode));
 
         // A plain video with no unit context keeps the movie-style year ladder.
         var video = new AcquisitionSearchInput(Guid.NewGuid(), "Some Video", null, EntityKind.Video, Year: 2020);
-        Assert.Equal(["Some Video 2020", "Some Video"], ReleaseQueryLadder.For(video));
+        Assert.Equal(["Some Video 2020", "Some Video"], policy.BuildQueries(video));
     }
 
     [Fact]

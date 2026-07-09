@@ -61,13 +61,11 @@ public static class DependencyInjection {
         services.AddScoped<Acquisition.AcquisitionQueueService>();
         services.AddScoped<Acquisition.IAcquisitionQueueService>(sp => sp.GetRequiredService<Acquisition.AcquisitionQueueService>());
         services.AddScoped<Acquisition.MonitorService>();
-        services.AddSingleton<Acquisition.IAcquisitionDecisionEngine, Acquisition.BookReleaseDecisionEngine>();
-        services.AddSingleton<Acquisition.IAcquisitionDecisionEngine, Acquisition.MovieReleaseDecisionEngine>();
-        services.AddSingleton<Acquisition.IAcquisitionDecisionEngine, Acquisition.MusicReleaseDecisionEngine>();
-        // One TV engine class serves both acquisition units: season packs and single episodes.
-        services.AddSingleton<Acquisition.IAcquisitionDecisionEngine>(new Acquisition.TvReleaseDecisionEngine(EntityKind.VideoSeason));
-        services.AddSingleton<Acquisition.IAcquisitionDecisionEngine>(new Acquisition.TvReleaseDecisionEngine(EntityKind.Video));
-        services.AddSingleton<Acquisition.IAcquisitionDecisionEngineFactory, Acquisition.AcquisitionDecisionEngineFactory>();
+        services.AddSingleton<Acquisition.IAcquisitionPolicyModule, Acquisition.BookAcquisitionPolicyModule>();
+        services.AddSingleton<Acquisition.IAcquisitionPolicyModule, Acquisition.MovieAcquisitionPolicyModule>();
+        services.AddSingleton<Acquisition.IAcquisitionPolicyModule, Acquisition.MusicAcquisitionPolicyModule>();
+        services.AddSingleton<Acquisition.IAcquisitionPolicyModule, Acquisition.TvAcquisitionPolicyModule>();
+        services.AddSingleton<Acquisition.IAcquisitionPolicyRegistry, Acquisition.AcquisitionPolicyRegistry>();
         services.AddScoped<ImportedTorrentRemover>();
         services.AddScoped<IAcquisitionImportEngine, BookAcquisitionImportEngine>();
         services.AddScoped<IAcquisitionImportEngine, MovieAcquisitionImportEngine>();
