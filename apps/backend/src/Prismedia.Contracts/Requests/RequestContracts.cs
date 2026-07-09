@@ -1,3 +1,4 @@
+using Prismedia.Contracts.Plugins;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Contracts.Requests;
@@ -22,6 +23,8 @@ public sealed record RequestProviderHealth(Guid ServiceId, RequestProviderKind K
 /// <param name="Subtitle">Short secondary line for review context (e.g. the author for a book, work count for an author).</param>
 /// <param name="Requestable">True when the item can be requested.</param>
 /// <param name="ProviderName">Display name of the plugin/provider that sourced this result (e.g. "OpenLibrary"), for attribution in the results grid.</param>
+/// <param name="PluginId">Stable manifest id of the plugin that produced this result.</param>
+/// <param name="ExternalIdentity">Persistent identity selected from the plugin's declared namespaces.</param>
 public sealed record RequestSearchResult(
     Guid ServiceId,
     RequestProviderKind Source,
@@ -42,7 +45,58 @@ public sealed record RequestSearchResult(
     string? UpstreamId,
     bool? Monitored,
     bool Requestable,
-    string? ProviderName = null);
+    string? ProviderName = null,
+    string? PluginId = null,
+    ExternalIdentity? ExternalIdentity = null);
+
+/// <summary>
+/// Requests the canonical plugin proposal used to review one discovery result before committing it.
+/// </summary>
+/// <param name="Kind">Request-flow kind selected by the user.</param>
+/// <param name="PluginId">Stable manifest id of the plugin that produced the search result.</param>
+/// <param name="ExternalIdentity">Persistent upstream identity selected from the search result.</param>
+public sealed record RequestReviewRequest(
+    RequestMediaKind Kind,
+    string PluginId,
+    ExternalIdentity ExternalIdentity);
+
+/// <summary>
+/// Canonical, unflattened plugin proposal used by every request review surface.
+/// </summary>
+/// <param name="PluginId">Stable manifest id of the plugin that resolved the proposal.</param>
+/// <param name="ExternalIdentity">Primary persistent identity used for the lookup.</param>
+/// <param name="EntityKind">Actual entity kind targeted by the root proposal.</param>
+/// <param name="Kind">Request-flow kind selected by the user.</param>
+/// <param name="Proposal">Complete proposal, including nested structural children and relationships.</param>
+/// <param name="Revision">Deterministic SHA-256 digest of the canonical proposal content.</param>
+/// <param name="Targets">Requestable root and structural child targets represented by the proposal.</param>
+public sealed record RequestReviewResponse(
+    string PluginId,
+    ExternalIdentity ExternalIdentity,
+    EntityKind EntityKind,
+    RequestMediaKind Kind,
+    EntityMetadataProposal Proposal,
+    string Revision,
+    IReadOnlyList<RequestReviewTarget> Targets);
+
+/// <summary>One independently identifiable root or structural child in a request review proposal.</summary>
+/// <param name="ProposalId">Plugin-owned proposal id used by the review UI.</param>
+/// <param name="Kind">Request-flow kind for this target.</param>
+/// <param name="EntityKind">Actual Prismedia entity kind targeted by the proposal node.</param>
+/// <param name="ExternalIdentity">Persistent identity declared by the selected plugin for this target kind.</param>
+/// <param name="Requestable">Whether the request flow currently supports committing this target kind.</param>
+/// <param name="Position">Provider-reported structural position, when available.</param>
+/// <param name="Year">Provider-reported year, when available.</param>
+/// <param name="Monitored">Monitoring state, when supplied by a future provider contract.</param>
+public sealed record RequestReviewTarget(
+    string ProposalId,
+    RequestMediaKind Kind,
+    EntityKind EntityKind,
+    ExternalIdentity ExternalIdentity,
+    bool Requestable,
+    int? Position = null,
+    int? Year = null,
+    bool? Monitored = null);
 
 /// <summary>Normalized external detail record for a requestable item.</summary>
 /// <param name="Subtitle">Short secondary line for review context (e.g. the author for a book, the book count for an author).</param>

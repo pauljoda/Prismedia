@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Plugins;
 using Prismedia.Application.Requests;
 using Prismedia.Contracts.Plugins;
+using Prismedia.Contracts.Requests;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
@@ -54,7 +55,46 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
 
         var result = Assert.Single(results);
         Assert.Equal("tmdb:123", result.ExternalId);
+        Assert.Equal("cinema-metadata", result.PluginId);
+        Assert.Equal(new ExternalIdentity("tmdb", "123"), result.ExternalIdentity);
         Assert.Equal("cinema-metadata", Assert.Single(runner.Calls).Descriptor.Manifest.Id);
+    }
+
+    [Fact]
+    public async Task ExplicitReviewKeepsTheSearchPluginWhenNamespaceIsShared() {
+        await using var db = await CreateInstalledPluginAsync("zeta-metadata", "alpha-metadata");
+        var catalog = Catalog(db);
+        var runner = new CapturingRunner(matchOnlyPluginId: "zeta-metadata");
+        var source = new PluginRequestMetadataSource(
+            catalog,
+            new PluginIdentityRouter(catalog),
+            new IdentifyRunnerSelector([runner]));
+        var identity = new ExternalIdentity("tmdb", $"selected:{Guid.NewGuid():N}");
+
+        var review = await source.ReviewAsync(
+            new RequestReviewRequest(RequestMediaKind.Movie, "zeta-metadata", identity),
+            hideNsfw: false,
+            CancellationToken.None);
+
+        Assert.NotNull(review);
+        Assert.Equal("zeta-metadata", review.PluginId);
+        Assert.Equal(identity, review.ExternalIdentity);
+        Assert.Equal(identity, Assert.Single(review.Targets).ExternalIdentity);
+        var call = Assert.Single(runner.Calls);
+        Assert.Equal("zeta-metadata", call.Descriptor.Manifest.Id);
+        Assert.Equal(identity.Value, call.Request.Query.ExternalIds!["tmdb"]);
+
+        runner.Calls.Clear();
+        var failedSelectedPlugin = await source.ReviewAsync(
+            new RequestReviewRequest(
+                RequestMediaKind.Movie,
+                "alpha-metadata",
+                new ExternalIdentity("tmdb", $"unresolved:{Guid.NewGuid():N}")),
+            hideNsfw: false,
+            CancellationToken.None);
+
+        Assert.Null(failedSelectedPlugin);
+        Assert.Equal("alpha-metadata", Assert.Single(runner.Calls).Descriptor.Manifest.Id);
     }
 
     [Fact]
@@ -78,6 +118,54 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
         Assert.Equal(
             ["alpha-metadata", "zeta-metadata"],
             runner.Calls.Select(call => call.Descriptor.Manifest.Id).ToArray());
+    }
+
+    [Fact]
+    public async Task ReviewKeepsNestedProposalAndBuildsTargetsFromEachKindsDeclaredNamespace() {
+        await using var db = await CreateSeriesPluginAsync();
+        var catalog = Catalog(db);
+        var runner = new NestedSeriesRunner();
+        var source = new PluginRequestMetadataSource(
+            catalog,
+            new PluginIdentityRouter(catalog),
+            new IdentifyRunnerSelector([runner]));
+        var identity = new ExternalIdentity("tmdb", $"Series:{Guid.NewGuid():N}");
+
+        var review = await source.ReviewAsync(
+            new RequestReviewRequest(RequestMediaKind.Series, "series-metadata", identity),
+            hideNsfw: false,
+            CancellationToken.None);
+
+        Assert.NotNull(review);
+        Assert.Same(runner.Proposal, review.Proposal);
+        Assert.Equal(EntityKind.VideoSeries, review.EntityKind);
+        Assert.Equal(64, review.Revision.Length);
+        Assert.Equal(review.Revision.ToLowerInvariant(), review.Revision);
+        Assert.Collection(
+            review.Targets,
+            target => {
+                Assert.Equal("series-root", target.ProposalId);
+                Assert.Equal(RequestMediaKind.Series, target.Kind);
+                Assert.Equal(EntityKind.VideoSeries, target.EntityKind);
+                Assert.Equal(identity, target.ExternalIdentity);
+            },
+            target => {
+                Assert.Equal("season-one", target.ProposalId);
+                Assert.Equal(RequestMediaKind.Season, target.Kind);
+                Assert.Equal(EntityKind.VideoSeason, target.EntityKind);
+                Assert.Equal(new ExternalIdentity("tvdb", "Season:One"), target.ExternalIdentity);
+                Assert.Equal(1, target.Position);
+                Assert.Equal(2025, target.Year);
+            },
+            target => {
+                Assert.Equal("episode-one", target.ProposalId);
+                Assert.Equal(RequestMediaKind.Episode, target.Kind);
+                Assert.Equal(EntityKind.Video, target.EntityKind);
+                Assert.Equal(new ExternalIdentity("episode-db", "Episode:One"), target.ExternalIdentity);
+                Assert.Equal(1, target.Position);
+            });
+        Assert.DoesNotContain(review.Targets, target => target.ExternalIdentity.Namespace == "series-metadata");
+        Assert.Equal("Episode:One", review.Proposal.Children[0].Children[0].Patch.ExternalIds["episode-db"]);
     }
 
     private async Task<PrismediaDbContext> CreateInstalledPluginAsync(params string[] pluginIds) {
@@ -129,6 +217,64 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
             });
         }
 
+        await db.SaveChangesAsync();
+        return db;
+    }
+
+    private async Task<PrismediaDbContext> CreateSeriesPluginAsync() {
+        var options = new DbContextOptionsBuilder<PrismediaDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
+            .Options;
+        var db = new PrismediaDbContext(options);
+        var directory = Path.Combine(_tempRoot, "series-metadata");
+        Directory.CreateDirectory(directory);
+        await File.WriteAllTextAsync(
+            Path.Combine(directory, "manifest.json"),
+            """
+            {
+              "manifestVersion": 2,
+              "apiTags": ["prismedia"],
+              "id": "series-metadata",
+              "name": "Series Metadata",
+              "version": "2.0.0",
+              "runtime": "dotnet-process",
+              "entry": "Series.Metadata.dll",
+              "compat": {
+                "pluginApiMin": "2.0.0",
+                "pluginApiMax": null,
+                "prismediaMin": "1.0.0",
+                "prismediaMax": null
+              },
+              "auth": [],
+              "supports": [
+                {
+                  "entityKind": "video-series",
+                  "actions": ["lookup-id"],
+                  "identityNamespaces": ["tmdb"]
+                },
+                {
+                  "entityKind": "video-season",
+                  "actions": ["lookup-id"],
+                  "identityNamespaces": ["tvdb"]
+                },
+                {
+                  "entityKind": "video",
+                  "actions": ["lookup-id"],
+                  "identityNamespaces": ["episode-db"]
+                }
+              ]
+            }
+            """);
+        db.ProviderConfigs.Add(new ProviderConfigRow {
+            Id = Guid.NewGuid(),
+            ProviderCode = "series-metadata",
+            DisplayName = "Series Metadata",
+            ProviderType = ProviderType.ExternalProcess,
+            Enabled = true,
+            SettingsJson = "{}",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
         await db.SaveChangesAsync();
         return db;
     }
@@ -201,5 +347,86 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
                 null,
                 [])));
         }
+    }
+
+    private sealed class NestedSeriesRunner : IIdentifyRunner {
+        public EntityMetadataProposal? Proposal { get; private set; }
+
+        public bool CanRun(PluginDescriptor descriptor) => descriptor.Manifest.Runtime == "dotnet-process";
+
+        public Task<IdentifyPluginResponse> IdentifyAsync(
+            PluginDescriptor descriptor,
+            IdentifyPluginRequest request,
+            CancellationToken cancellationToken) {
+            var identity = Assert.Single(request.Query.ExternalIds!);
+            var episode = new EntityMetadataProposal(
+                "episode-one",
+                descriptor.Manifest.Id,
+                ProposalKind.VideoEpisode,
+                1,
+                "cascade",
+                Patch(
+                    "Episode 1",
+                    new Dictionary<string, string> {
+                        ["tmdb"] = "Wrong:RootNamespace",
+                        ["episode-db"] = "Episode:One"
+                    },
+                    new Dictionary<string, int> { [EntityPositionCodes.Episode] = 1 }),
+                [],
+                [],
+                [],
+                null,
+                []);
+            var season = new EntityMetadataProposal(
+                "season-one",
+                descriptor.Manifest.Id,
+                ProposalKind.VideoSeason,
+                1,
+                "cascade",
+                Patch(
+                    "Season 1",
+                    new Dictionary<string, string> { ["tvdb"] = "Season:One" },
+                    new Dictionary<string, int> { [EntityPositionCodes.Season] = 1 },
+                    new Dictionary<string, string> { ["release"] = "2025-01-01" }),
+                [],
+                [episode],
+                [],
+                null,
+                []);
+            Proposal = new EntityMetadataProposal(
+                "series-root",
+                descriptor.Manifest.Id,
+                ProposalKind.VideoSeries,
+                1,
+                "external-id",
+                Patch(
+                    "Series",
+                    new Dictionary<string, string> { [identity.Key] = identity.Value },
+                    new Dictionary<string, int>()),
+                [],
+                [season],
+                [],
+                null,
+                []);
+            return Task.FromResult(IdentifyPluginResponse.Match(Proposal));
+        }
+
+        private static EntityMetadataPatch Patch(
+            string title,
+            IReadOnlyDictionary<string, string> externalIds,
+            IReadOnlyDictionary<string, int> positions,
+            IReadOnlyDictionary<string, string>? dates = null) =>
+            new(
+                title,
+                null,
+                externalIds,
+                [],
+                [],
+                null,
+                [],
+                dates ?? new Dictionary<string, string>(),
+                new Dictionary<string, int>(),
+                positions,
+                null);
     }
 }

@@ -44,6 +44,20 @@ public interface IPluginRequestDetailSource {
 }
 
 /// <summary>
+/// Resolves a complete request-review proposal through the exact plugin selected during search.
+/// </summary>
+public interface IPluginRequestReviewSource {
+    /// <summary>
+    /// Returns a canonical, unflattened review or null when the selected plugin is disabled, gated,
+    /// does not declare the identity for the requested kind, or cannot resolve the item.
+    /// </summary>
+    Task<RequestReviewResponse?> ReviewAsync(
+        RequestReviewRequest request,
+        bool hideNsfw,
+        CancellationToken cancellationToken);
+}
+
+/// <summary>
 /// Aggregates request searches across the requestable kinds. Prismedia fulfils all requests itself
 /// through its plugin-backed acquisition pipeline, so results come from plugin metadata providers.
 /// </summary>

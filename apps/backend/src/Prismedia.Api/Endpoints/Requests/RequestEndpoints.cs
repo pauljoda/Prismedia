@@ -62,6 +62,34 @@ public static class RequestEndpoints {
             .Produces<RequestDetailResponse>()
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
+        group.MapPost("/review", async (
+            RequestReviewRequest request,
+            bool? hideNsfw,
+            HttpContext httpContext,
+            IPluginRequestReviewSource reviews,
+            CancellationToken cancellationToken) => {
+                if (string.IsNullOrWhiteSpace(request.PluginId)
+                    || request.ExternalIdentity is null
+                    || RequestKindRegistry.Find(request.Kind) is null) {
+                    return Results.BadRequest(new ApiProblem(
+                        ApiProblemCodes.RequestInvalid,
+                        "A known request kind and plugin id are required."));
+                }
+
+                var review = await reviews.ReviewAsync(
+                    request,
+                    NsfwVisibility.ShouldHide(hideNsfw, httpContext),
+                    cancellationToken);
+                return review is null
+                    ? Results.NotFound(new ApiProblem(ApiProblemCodes.NotFound, "Request review was not found."))
+                    : Results.Ok(review);
+            })
+            .WithName("ReviewRequest")
+            .WithSummary("Gets the complete plugin proposal and independently identifiable targets for request review.")
+            .Produces<RequestReviewResponse>()
+            .Produces<ApiProblem>(StatusCodes.Status400BadRequest)
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+
         group.MapPost("/commit", async (
             RequestCommitRequest request,
             bool? hideNsfw,

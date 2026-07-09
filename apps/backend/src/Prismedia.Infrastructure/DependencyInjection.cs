@@ -338,6 +338,7 @@ public static class DependencyInjection {
         services.AddScoped<IRequestMetadataSearchSource, PluginRequestMetadataSource>();
         services.AddScoped<IRequestMetadataEnricher, PluginRequestMetadataSource>();
         services.AddScoped<IPluginRequestDetailSource, PluginRequestMetadataSource>();
+        services.AddScoped<IPluginRequestReviewSource, PluginRequestMetadataSource>();
         services.AddScoped<IPluginRequestProposalSource, PluginRequestMetadataSource>();
         services.AddScoped<IWantedEntityWriter, WantedEntityWriter>();
         services.AddScoped<IWantedSuppressionStore, EfWantedSuppressionStore>();

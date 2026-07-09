@@ -782,6 +782,14 @@ public sealed class RequestCommitServiceTests {
     /// <summary>Resolves any node of the proposal tree by its provider item id — the shape of a plugin's per-item lookups.</summary>
     private sealed class FakeProposalSource(EntityMetadataProposal proposal) : IPluginRequestProposalSource {
         public Task<EntityMetadataProposal?> ResolveProposalAsync(
+            RequestKindDescriptor descriptor,
+            Prismedia.Application.Plugins.PluginIdentityRoute route,
+            bool hideNsfw,
+            bool includeChildren,
+            CancellationToken cancellationToken) =>
+            ResolveProposalAsync(descriptor, route.Identity, hideNsfw, includeChildren, cancellationToken);
+
+        public Task<EntityMetadataProposal?> ResolveProposalAsync(
             RequestKindDescriptor descriptor, ExternalIdentity identity, bool hideNsfw, bool includeChildren, CancellationToken cancellationToken) =>
             Task.FromResult(FindByItemId(proposal, identity.Namespace, identity.Value));
 

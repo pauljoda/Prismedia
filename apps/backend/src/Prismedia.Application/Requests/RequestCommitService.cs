@@ -1,4 +1,5 @@
 using Prismedia.Application.Acquisition;
+using Prismedia.Application.Plugins;
 using Prismedia.Contracts.Acquisition;
 using Prismedia.Contracts.Plugins;
 using Prismedia.Contracts.Requests;
@@ -15,6 +16,17 @@ public interface IPluginRequestProposalSource {
     Task<EntityMetadataProposal?> ResolveProposalAsync(
         RequestKindDescriptor descriptor,
         ExternalIdentity identity,
+        bool hideNsfw,
+        bool includeChildren,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Resolves through the explicitly selected plugin and identity route. Implementations must
+    /// validate the route and must not substitute another plugin that shares the namespace.
+    /// </summary>
+    Task<EntityMetadataProposal?> ResolveProposalAsync(
+        RequestKindDescriptor descriptor,
+        PluginIdentityRoute route,
         bool hideNsfw,
         bool includeChildren,
         CancellationToken cancellationToken);

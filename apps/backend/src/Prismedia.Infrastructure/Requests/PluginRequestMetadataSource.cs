@@ -11,14 +11,15 @@ namespace Prismedia.Infrastructure.Requests;
 /// Runs request-time searches and lookups against enabled plugin metadata providers for every
 /// requestable kind, with no library entity involved. Behavior is driven entirely by
 /// <see cref="RequestKindDescriptor"/>s: the descriptor says which plugin kind to query and how
-/// children behave, so adding a media kind never adds another source class. Request ids are qualified
-/// by persistent identity namespace; the central router independently selects the plugin that handles it.
+/// children behave, so adding a media kind never adds another source class. Identity-only background
+/// reads use the central router; interactive review keeps the exact plugin selected during search.
 /// </summary>
 public sealed class PluginRequestMetadataSource(
     PluginCatalogService catalog,
     IPluginIdentityRouter identityRouter,
     IdentifyRunnerSelector runners)
-    : IRequestMetadataSearchSource, IRequestMetadataEnricher, IPluginRequestDetailSource, IPluginRequestProposalSource {
+    : IRequestMetadataSearchSource, IRequestMetadataEnricher, IPluginRequestDetailSource,
+      IPluginRequestReviewSource, IPluginRequestProposalSource {
     private static readonly string SearchAction = IdentifyAction.Search.ToCode();
     private static readonly string LookupIdAction = IdentifyAction.LookupId.ToCode();
 
@@ -29,7 +30,7 @@ public sealed class PluginRequestMetadataSource(
     // scoped, hence the static cache; the cap bounds memory (proposals with children can be large).
     private static readonly TimeSpan ProposalTtl = TimeSpan.FromMinutes(15);
     private const int ProposalCacheCap = 128;
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (DateTimeOffset At, EntityMetadataProposal Proposal)> ProposalCache = new();
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<ProposalCacheKey, (DateTimeOffset At, EntityMetadataProposal Proposal)> ProposalCache = new();
 
     public async Task<IReadOnlyList<RequestSearchResult>> SearchAsync(
         RequestKindDescriptor descriptor, string query, bool hideNsfw, CancellationToken cancellationToken) {
@@ -164,9 +165,67 @@ public sealed class PluginRequestMetadataSource(
             ServiceOptions: new RequestServiceOptionsResponse([], [], [], []));
     }
 
+    /// <inheritdoc />
+    public async Task<RequestReviewResponse?> ReviewAsync(
+        RequestReviewRequest request,
+        bool hideNsfw,
+        CancellationToken cancellationToken) {
+        var descriptor = RequestKindRegistry.Find(request.Kind);
+        if (descriptor is null || string.IsNullOrWhiteSpace(request.PluginId) || request.ExternalIdentity is null) {
+            return null;
+        }
+
+        var route = new PluginIdentityRoute(request.PluginId, request.ExternalIdentity);
+        var provider = await ValidateExplicitRouteAsync(descriptor.PluginEntityKind, route, hideNsfw, cancellationToken);
+        if (provider is null) {
+            return null;
+        }
+
+        var proposal = await ResolveExplicitProposalAsync(
+            descriptor.PluginEntityKind,
+            route,
+            hideNsfw,
+            includeChildren: true,
+            cancellationToken);
+        if (proposal?.Patch is null
+            || !IsCompatibleTarget(descriptor, proposal.TargetKind)
+            || !DeclaresLookupIdentity(provider, proposal.TargetKind.ToEntityKind().ToCode(), route.Identity.Namespace)) {
+            return null;
+        }
+
+        return new RequestReviewResponse(
+            PluginId: provider.Id,
+            ExternalIdentity: route.Identity,
+            EntityKind: proposal.TargetKind.ToEntityKind(),
+            Kind: descriptor.Kind,
+            Proposal: proposal,
+            Revision: RequestProposalRevision.Compute(proposal),
+            Targets: BuildReviewTargets(provider, descriptor, route.Identity, proposal));
+    }
+
     public Task<EntityMetadataProposal?> ResolveProposalAsync(
         RequestKindDescriptor descriptor, ExternalIdentity identity, bool hideNsfw, bool includeChildren, CancellationToken cancellationToken) =>
         ResolveProposalCoreAsync(descriptor.PluginEntityKind, identity, hideNsfw, includeChildren, cancellationToken);
+
+    /// <summary>
+    /// Resolves through one explicit plugin route after validating that the installed, enabled plugin
+    /// declares LookupId support for both the entity kind and identity namespace. Unlike identity-only
+    /// fallback, this never substitutes another plugin that handles the same namespace.
+    /// </summary>
+    public async Task<EntityMetadataProposal?> ResolveProposalAsync(
+        RequestKindDescriptor descriptor,
+        PluginIdentityRoute route,
+        bool hideNsfw,
+        bool includeChildren,
+        CancellationToken cancellationToken) =>
+        await ValidateExplicitRouteAsync(descriptor.PluginEntityKind, route, hideNsfw, cancellationToken) is null
+            ? null
+            : await ResolveExplicitProposalAsync(
+                descriptor.PluginEntityKind,
+                route,
+                hideNsfw,
+                includeChildren,
+                cancellationToken);
 
     /// <summary>
     /// Routes a persistent identity to every capable LookupId plugin for the given media kind, gating
@@ -174,7 +233,7 @@ public sealed class PluginRequestMetadataSource(
     /// </summary>
     private async Task<EntityMetadataProposal?> ResolveProposalCoreAsync(
         EntityKind entityKind, ExternalIdentity identity, bool hideNsfw, bool includeChildren, CancellationToken cancellationToken) {
-        var cacheKey = string.Join('|', entityKind.ToCode(), identity.Namespace, identity.Value, hideNsfw, includeChildren);
+        var cacheKey = new ProposalCacheKey(entityKind, PluginId: null, identity, hideNsfw, includeChildren);
         if (ProposalCache.TryGetValue(cacheKey, out var hit) && DateTimeOffset.UtcNow - hit.At < ProposalTtl) {
             return hit.Proposal;
         }
@@ -182,6 +241,31 @@ public sealed class PluginRequestMetadataSource(
         var proposal = await ResolveProposalUncachedAsync(entityKind, identity, hideNsfw, includeChildren, cancellationToken);
         // Only successful resolutions are cached: a transient provider failure should retry, and a
         // gated/unknown id is cheap to re-answer.
+        if (proposal is not null) {
+            EvictForCapacity();
+            ProposalCache[cacheKey] = (DateTimeOffset.UtcNow, proposal);
+        }
+
+        return proposal;
+    }
+
+    private async Task<EntityMetadataProposal?> ResolveExplicitProposalAsync(
+        EntityKind entityKind,
+        PluginIdentityRoute route,
+        bool hideNsfw,
+        bool includeChildren,
+        CancellationToken cancellationToken) {
+        var cacheKey = new ProposalCacheKey(
+            entityKind,
+            route.PluginId.ToLowerInvariant(),
+            route.Identity,
+            hideNsfw,
+            includeChildren);
+        if (ProposalCache.TryGetValue(cacheKey, out var hit) && DateTimeOffset.UtcNow - hit.At < ProposalTtl) {
+            return hit.Proposal;
+        }
+
+        var proposal = await RunRouteAsync(entityKind, route, hideNsfw, includeChildren, cancellationToken);
         if (proposal is not null) {
             EvictForCapacity();
             ProposalCache[cacheKey] = (DateTimeOffset.UtcNow, proposal);
@@ -228,36 +312,165 @@ public sealed class PluginRequestMetadataSource(
                 continue;
             }
 
-            var descriptor = await catalog.FindProviderAsync(route.PluginId, kindCode, cancellationToken);
-            if (descriptor is null) {
-                continue;
-            }
-
-            var ids = new Dictionary<string, string> {
-                [route.Identity.Namespace] = route.Identity.Value
-            };
-            var auth = await catalog.GetAuthAsync(descriptor.Manifest, cancellationToken);
-            var request = new IdentifyPluginRequest(
-                ProtocolVersion: PluginProtocol.CurrentVersion,
-                Action: IdentifyAction.LookupId,
-                Auth: auth,
-                // No library entity: a synthetic snapshot carrying the known identity is enough for an id lookup.
-                Entity: new IdentifyEntitySnapshot(Guid.NewGuid(), entityKind, string.Empty, ids, []),
-                Query: new IdentifyQuery(null, null, ids),
-                Hints: new IdentifyMatchHints(ids, [], null, null),
-                StructuralContext: null,
-                IncludeNsfw: !hideNsfw,
-                IncludeRelationshipDetails: false,
-                IncludeStructuralChildren: includeChildren);
-
-            var response = await runners.Resolve(descriptor).IdentifyAsync(descriptor, request, cancellationToken);
-            if (response.Result is not null) {
-                return response.Result;
+            if (await RunRouteAsync(entityKind, route, hideNsfw, includeChildren, cancellationToken) is { } proposal) {
+                return proposal;
             }
         }
 
         return null;
     }
+
+    private async Task<EntityMetadataProposal?> RunRouteAsync(
+        EntityKind entityKind,
+        PluginIdentityRoute route,
+        bool hideNsfw,
+        bool includeChildren,
+        CancellationToken cancellationToken) {
+        var descriptor = await catalog.FindProviderAsync(route.PluginId, entityKind.ToCode(), cancellationToken);
+        if (descriptor is null) {
+            return null;
+        }
+
+        var ids = new Dictionary<string, string> {
+            [route.Identity.Namespace] = route.Identity.Value
+        };
+        var auth = await catalog.GetAuthAsync(descriptor.Manifest, cancellationToken);
+        var request = new IdentifyPluginRequest(
+            ProtocolVersion: PluginProtocol.CurrentVersion,
+            Action: IdentifyAction.LookupId,
+            Auth: auth,
+            // No library entity: a synthetic snapshot carrying the known identity is enough for an id lookup.
+            Entity: new IdentifyEntitySnapshot(Guid.NewGuid(), entityKind, string.Empty, ids, []),
+            Query: new IdentifyQuery(null, null, ids),
+            Hints: new IdentifyMatchHints(ids, [], null, null),
+            StructuralContext: null,
+            IncludeNsfw: !hideNsfw,
+            IncludeRelationshipDetails: false,
+            IncludeStructuralChildren: includeChildren);
+
+        var response = await runners.Resolve(descriptor).IdentifyAsync(descriptor, request, cancellationToken);
+        return response.Result;
+    }
+
+    private async Task<PluginProvider?> ValidateExplicitRouteAsync(
+        EntityKind entityKind,
+        PluginIdentityRoute route,
+        bool hideNsfw,
+        CancellationToken cancellationToken) {
+        var provider = (await catalog.ListInstalledProvidersAsync(cancellationToken))
+            .FirstOrDefault(candidate => candidate.Id.Equals(route.PluginId, StringComparison.OrdinalIgnoreCase));
+        if (provider is null || !provider.Enabled || hideNsfw && provider.IsNsfw) {
+            return null;
+        }
+
+        var kindCode = entityKind.ToCode();
+        if (!DeclaresLookupIdentity(provider, kindCode, route.Identity.Namespace)) {
+            return null;
+        }
+
+        return await catalog.FindProviderAsync(provider.Id, kindCode, cancellationToken) is null
+            ? null
+            : provider;
+    }
+
+    private static IReadOnlyList<RequestReviewTarget> BuildReviewTargets(
+        PluginProvider provider,
+        RequestKindDescriptor rootDescriptor,
+        ExternalIdentity rootIdentity,
+        EntityMetadataProposal proposal) {
+        var targets = new List<RequestReviewTarget>();
+        AddTarget(proposal, rootDescriptor, rootIdentity, targets);
+        AddChildTargets(provider, proposal, rootDescriptor, targets);
+        return targets;
+    }
+
+    private static void AddChildTargets(
+        PluginProvider provider,
+        EntityMetadataProposal parent,
+        RequestKindDescriptor parentDescriptor,
+        ICollection<RequestReviewTarget> targets) {
+        var childDescriptor = RequestKindRegistry.ChildOf(parentDescriptor);
+        if (childDescriptor is null) {
+            return;
+        }
+
+        foreach (var child in parent.Children.Where(node => !node.TargetKind.IsRelationship())) {
+            if (!IsCompatibleTarget(childDescriptor, child.TargetKind)) {
+                continue;
+            }
+
+            if (DeclaredIdentityFor(provider, child) is { } identity) {
+                AddTarget(child, childDescriptor, identity, targets);
+            }
+
+            AddChildTargets(provider, child, childDescriptor, targets);
+        }
+    }
+
+    private static void AddTarget(
+        EntityMetadataProposal proposal,
+        RequestKindDescriptor descriptor,
+        ExternalIdentity identity,
+        ICollection<RequestReviewTarget> targets) {
+        if (proposal.Patch is null || string.IsNullOrWhiteSpace(proposal.ProposalId)) {
+            return;
+        }
+
+        targets.Add(new RequestReviewTarget(
+            ProposalId: proposal.ProposalId,
+            Kind: descriptor.Kind,
+            EntityKind: proposal.TargetKind.ToEntityKind(),
+            ExternalIdentity: identity,
+            Requestable: descriptor.Committable,
+            Position: RequestProposalReading.ChildNumberOf(descriptor.Kind, proposal.Patch),
+            Year: RequestProposalReading.YearFromDates(proposal.Patch.Dates),
+            Monitored: null));
+    }
+
+    private static ExternalIdentity? DeclaredIdentityFor(
+        PluginProvider provider,
+        EntityMetadataProposal proposal) {
+        if (proposal.Patch is null) {
+            return null;
+        }
+
+        var kindCode = proposal.TargetKind.ToEntityKind().ToCode();
+        var namespaces = DeclaredLookupNamespaces(provider, kindCode);
+        foreach (var identityNamespace in namespaces) {
+            var value = proposal.Patch.ExternalIds
+                .FirstOrDefault(pair => pair.Key.Equals(identityNamespace, StringComparison.OrdinalIgnoreCase))
+                .Value;
+            if (string.IsNullOrWhiteSpace(value)) {
+                continue;
+            }
+
+            try {
+                return new ExternalIdentity(identityNamespace, value);
+            } catch (ArgumentException) {
+                // Invalid or URL-shaped provider values are metadata, not persistent target identities.
+            }
+        }
+
+        return null;
+    }
+
+    private static bool DeclaresLookupIdentity(PluginProvider provider, string kindCode, string identityNamespace) =>
+        DeclaredLookupNamespaces(provider, kindCode).Contains(identityNamespace, StringComparer.Ordinal);
+
+    private static bool IsCompatibleTarget(RequestKindDescriptor descriptor, ProposalKind proposalKind) {
+        var actualKind = proposalKind.ToEntityKind();
+        return actualKind == descriptor.PluginEntityKind
+            || descriptor.PluginEntityKind == EntityKind.Movie && actualKind == EntityKind.Video;
+    }
+
+    private static IReadOnlyList<string> DeclaredLookupNamespaces(PluginProvider provider, string kindCode) =>
+        provider.Supports
+            .Where(support =>
+                PluginEntityKindCompatibility.SupportsKind(support, kindCode)
+                && support.Actions.Contains(LookupIdAction, StringComparer.OrdinalIgnoreCase))
+            .SelectMany(support => support.IdentityNamespaces ?? [])
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
 
     /// <summary>Maps a child proposal to a toggleable option with its persistent identity.</summary>
     private static RequestChildOption? MapChild(string identityNamespace, EntityMetadataProposal child, RequestKindDescriptor childDescriptor) {
@@ -299,7 +512,7 @@ public sealed class PluginRequestMetadataSource(
             ServiceId: Guid.Empty,
             Source: RequestProviderKind.Plugin,
             Kind: descriptor.Kind,
-            // Identity-qualified; plugin selection remains a server-side routing concern.
+            // Retained for legacy detail/commit clients; canonical callers use PluginId + ExternalIdentity.
             ExternalId: RequestProposalReading.FormatQualifiedIdentity(identity),
             Title: candidate.Title,
             Subtitle: candidate.Source,
@@ -316,7 +529,9 @@ public sealed class PluginRequestMetadataSource(
             UpstreamId: null,
             Monitored: null,
             Requestable: descriptor.Committable,
-            ProviderName: provider.Name);
+            ProviderName: provider.Name,
+            PluginId: provider.Id,
+            ExternalIdentity: identity);
     }
 
     private static ExternalIdentity? CandidateIdentity(
@@ -348,4 +563,11 @@ public sealed class PluginRequestMetadataSource(
 
         return null;
     }
+
+    private readonly record struct ProposalCacheKey(
+        EntityKind EntityKind,
+        string? PluginId,
+        ExternalIdentity Identity,
+        bool HideNsfw,
+        bool IncludeChildren);
 }
