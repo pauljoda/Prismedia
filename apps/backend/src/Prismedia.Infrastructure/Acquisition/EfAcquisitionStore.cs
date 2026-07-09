@@ -73,11 +73,67 @@ public sealed class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistor
             .Where(row => row.Id == id)
             .Select(row => new { row.Id, row.Title, row.Author, row.Kind, row.EntityId, row.Year, row.ProfileId, row.Series, row.SeasonNumber, row.EpisodeNumber })
             .FirstOrDefaultAsync(cancellationToken);
-        return row is null
-            ? null
-            : new AcquisitionSearchInput(
-                row.Id, row.Title, row.Author, row.Kind, row.EntityId, row.Year, row.ProfileId,
-                row.Series, row.SeasonNumber, row.EpisodeNumber);
+        if (row is null) {
+            return null;
+        }
+
+        // The row's Year is request-time provider metadata and is unreliable for TV children (episode
+        // re-air years, or nothing at all for season packs). For entity-linked video acquisitions the
+        // library itself knows the work's year identity — the containing series' premiere year or the
+        // movie's release year — which is what scene naming appends to disambiguate same-name works,
+        // so the search gates compare against that instead.
+        var year = row.EntityId is { } entityId && IsVideoKind(row.Kind)
+            ? await ResolveWorkYearAsync(entityId, cancellationToken) ?? row.Year
+            : row.Year;
+
+        return new AcquisitionSearchInput(
+            row.Id, row.Title, row.Author, row.Kind, row.EntityId, year, row.ProfileId,
+            row.Series, row.SeasonNumber, row.EpisodeNumber);
+    }
+
+    private static bool IsVideoKind(EntityKind kind) =>
+        kind is EntityKind.Movie or EntityKind.Video or EntityKind.VideoSeason or EntityKind.VideoSeries;
+
+    /// <summary>
+    /// The year identity of the work an entity belongs to: the topmost video container's (series or
+    /// movie, within a bounded ancestor walk) first premiere/release date year. Null when the graph or
+    /// dates are missing, so callers keep their request-time fallback.
+    /// </summary>
+    private async Task<int?> ResolveWorkYearAsync(Guid entityId, CancellationToken cancellationToken) {
+        var seriesCode = EntityKindRegistry.VideoSeries.Code;
+        var movieCode = EntityKindRegistry.Movie.Code;
+        var currentId = (Guid?)entityId;
+        var workId = entityId;
+        for (var depth = 0; currentId is { } id && depth < 4; depth++) {
+            var current = await db.Entities.AsNoTracking()
+                .Where(row => row.Id == id)
+                .Select(row => new { row.KindCode, row.ParentEntityId })
+                .FirstOrDefaultAsync(cancellationToken);
+            if (current is null) {
+                break;
+            }
+
+            if (current.KindCode == seriesCode || current.KindCode == movieCode) {
+                workId = id;
+                break;
+            }
+
+            currentId = current.ParentEntityId;
+        }
+
+        // Provider date vocabulary ladder (same order identify uses): the work's première/release date.
+        var dates = await db.EntityDates.AsNoTracking()
+            .Where(date => date.EntityId == workId && date.SortableValue != null)
+            .Select(date => new { date.Code, date.SortableValue })
+            .ToArrayAsync(cancellationToken);
+        foreach (var code in (string[])["firstAir", "release", "airDate", "date"]) {
+            var match = dates.FirstOrDefault(date => date.Code == code);
+            if (match?.SortableValue is { } sortable) {
+                return sortable.Year;
+            }
+        }
+
+        return null;
     }
 
     public async Task<AcquisitionStatus?> GetStatusAsync(Guid id, CancellationToken cancellationToken) {

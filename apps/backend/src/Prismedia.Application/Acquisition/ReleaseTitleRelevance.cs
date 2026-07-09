@@ -14,19 +14,6 @@ public static partial class ReleaseTitleRelevance {
     private const double ExtraTokenPenalty = 750_000;
     private const double MissingTokenPenalty = 1_000_000;
 
-    // prism-vocab: external — release-title vocabulary, matched only here.
-    private static readonly IReadOnlySet<string> MetadataTokens = new HashSet<string>(StringComparer.Ordinal) {
-        "480p", "480i", "540p", "576p", "720p", "1080p", "1080i", "1440p", "2160p", "4k", "uhd", "sdtv",
-        "hdtv", "pdtv", "web", "dl", "webdl", "rip", "webrip", "dvd", "dvdrip", "bluray", "blu", "ray",
-        "bdrip", "brrip", "bd25", "bd50", "remux", "hdr", "sdr", "dv", "x264", "x265", "h264", "h265",
-        "hevc", "avc", "aac", "dts", "ddp", "atmos", "mp3", "flac", "alac", "opus", "ogg", "lossless",
-        "hi", "res", "hires", "24", "bit", "24bit", "320", "256", "192", "v0",
-        "proper", "repack", "rerip", "retail", "official", "digital", "converted", "calibre",
-        "cbz", "zip", "epub", "pdf", "cbr", "rar", "mobi", "azw", "azw3",
-        "english", "eng", "french", "fre", "fra", "german", "ger", "deu", "spanish", "spa", "ita", "multi",
-        "complete", "season", "seasons", "pack"
-    };
-
     /// <summary>
     /// Returns a signed relevance contribution. Exact title-content matches are strongly positive; releases
     /// that include all target words plus extra content words are still positive, but lower; missing target
@@ -73,7 +60,7 @@ public static partial class ReleaseTitleRelevance {
     }
 
     private static bool IsMetadataToken(string token, BookAcquisitionRules rules, IReadOnlySet<string> releaseGroupTokens) =>
-        MetadataTokens.Contains(token)
+        ReleaseTitleVocabulary.MetadataTokens.Contains(token)
         || releaseGroupTokens.Contains(token)
         || YearTokenRegex().IsMatch(token)
         || ResolutionTokenRegex().IsMatch(token)

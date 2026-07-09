@@ -115,10 +115,20 @@ public sealed record BookAcquisitionRules(
 
     /// <summary>
     /// The intended work title for this search, set per search by the runner. Scoring uses it as a soft
-    /// relevance signal so a closer title match outranks a release for a similarly named spin-off or subtitle.
-    /// Empty disables relevance scoring for callers that evaluate ad hoc releases without a target.
+    /// relevance signal so a closer title match outranks a release for a similarly named spin-off or subtitle,
+    /// and the media engines' <see cref="TitleIdentitySpecification"/> uses it as an acceptance gate.
+    /// Empty disables relevance scoring and the identity gates for callers that evaluate ad hoc releases
+    /// without a target.
     /// </summary>
     public string? TargetTitle { get; init; }
+
+    /// <summary>
+    /// The sought work's year identity, set per search by the runner (a movie's release year; a series'
+    /// premiere year — the year scene naming appends to disambiguate same-name works). Feeds
+    /// <see cref="MediaYearSpecification"/> so a release naming a conflicting title-adjacent year is
+    /// rejected instead of winning on quality. Null disables the year gate.
+    /// </summary>
+    public int? TargetYear { get; init; }
 
     /// <summary>
     /// Permissive defaults used when no profile is configured yet (e.g. ad-hoc verification searches).

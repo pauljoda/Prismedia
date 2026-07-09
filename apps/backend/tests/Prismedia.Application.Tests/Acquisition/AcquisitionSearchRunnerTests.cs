@@ -159,7 +159,7 @@ public sealed class AcquisitionSearchRunnerTests {
     }
 
     [Fact]
-    public async Task SearchScoringPrefersTheCloserSeriesTitleOverASubtitleMatch() {
+    public async Task SearchRejectsASubtitledSpinOffAndPicksTheExactSeriesTitle() {
         var exact = new IndexerRelease("How.Its.Made.S02.720p.HDTV", 5_000_000_000, 2, 2, DownloadProtocol.Torrent, "http://dl", null, "exact", "http://i", null, null);
         var subtitle = new IndexerRelease("How.Its.Made.Cars.S02.1080p.WEB-DL", 5_000_000_000, 900, 20, DownloadProtocol.Torrent, "http://dl", null, "subtitle", "http://i", null, null);
 
@@ -178,8 +178,13 @@ public sealed class AcquisitionSearchRunnerTests {
             new AcquisitionSearchInput(Guid.NewGuid(), "Season 2", null, EntityKind.VideoSeason, Series: "How it's Made", SeasonNumber: 2),
             CancellationToken.None);
 
-        Assert.All(outcome.Candidates, candidate => Assert.True(candidate.Accepted));
+        // The spin-off names a DIFFERENT work, so it is rejected outright (not merely outranked) —
+        // otherwise it would win the auto-pick whenever the exact title is absent or lower quality.
         Assert.Equal(exact.Title, outcome.Candidates[0].Release.Title);
+        Assert.True(outcome.Candidates[0].Accepted);
+        var spinOff = outcome.Candidates.Single(candidate => candidate.Release.Title == subtitle.Title);
+        Assert.False(spinOff.Accepted);
+        Assert.Contains(ReleaseRejectionReason.TitleMismatch, spinOff.Rejections);
     }
 
     /// <summary>Builds a real SettingsService over an in-memory override map; an unset AcquisitionDownloadPropers defaults to prefer-and-upgrade.</summary>

@@ -115,7 +115,15 @@ public enum ReleaseRejectionReason {
 
     /// <summary>The release title names an executable/dangerous file (e.g. ends in .exe or .scr) — the classic fake-release payload.</summary>
     [Code("dangerous-content")]
-    DangerousContent
+    DangerousContent,
+
+    /// <summary>The release's leading title tokens do not name exactly the sought work (a sequel, spin-off, or different title sharing a prefix).</summary>
+    [Code("title-mismatch")]
+    TitleMismatch,
+
+    /// <summary>The release's title-adjacent year names a different same-name work (a remake or reboot from another year).</summary>
+    [Code("wrong-year")]
+    WrongYear
 }
 
 /// <summary>

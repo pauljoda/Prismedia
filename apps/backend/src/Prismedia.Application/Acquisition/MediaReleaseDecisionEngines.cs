@@ -55,6 +55,8 @@ public sealed class MovieReleaseDecisionEngine : IAcquisitionDecisionEngine {
 
     private static readonly IReleaseSpecification[] Specifications = [
         new DangerousContentSpecification(),
+        new TitleIdentitySpecification(),
+        new MediaYearSpecification(),
         new ProtocolSpecification(),
         new DownloadLinkSpecification(),
         new MinSeedersSpecification(),
@@ -114,6 +116,42 @@ public sealed class MusicReleaseDecisionEngine : IAcquisitionDecisionEngine {
             + quality * 100_000
             + MediaReleaseEvaluation.RevisionBoost(release.Title, rules)
             + Math.Min(release.Seeders ?? 0, 9_999);
+    }
+}
+
+/// <summary>
+/// Rejects releases whose leading title tokens do not name exactly the sought work — the automatic-pick
+/// guard against sequels, spin-offs, and different titles sharing a prefix ("Dune Part Two" against
+/// "Dune", "Clifford's Puppy Days" against "Clifford the Big Red Dog"). Digit-preserving comparison per
+/// <see cref="ReleaseTitleIdentity"/>, so a year inside a title is significant. No-op without a target
+/// title (ad-hoc evaluations); manual picks bypass rejection by design.
+/// </summary>
+public sealed class TitleIdentitySpecification : IReleaseSpecification {
+    public ReleaseRejectionReason Reason => ReleaseRejectionReason.TitleMismatch;
+
+    public ReleaseRejectionReason? Evaluate(IndexerRelease release, BookAcquisitionRules rules) =>
+        ReleaseTitleIdentity.Match(release.Title, rules.TargetTitle).TitleMatched ? null : Reason;
+}
+
+/// <summary>
+/// Rejects releases whose title-adjacent year conflicts with the sought work's year — THE guard against
+/// same-name remakes and reboots ("Clifford.the.Big.Red.Dog.2019.S01" against the 2000 series, whose
+/// 1080p reboot packs would otherwise outrank the 480p original on quality alone). A ±1 tolerance
+/// absorbs regional release-date offsets; releases naming no year pass this gate (the title gate and
+/// import-time validation carry those). No-op without a known target year.
+/// </summary>
+public sealed class MediaYearSpecification : IReleaseSpecification {
+    private const int ToleranceYears = 1;
+
+    public ReleaseRejectionReason Reason => ReleaseRejectionReason.WrongYear;
+
+    public ReleaseRejectionReason? Evaluate(IndexerRelease release, BookAcquisitionRules rules) {
+        if (rules.TargetYear is not { } targetYear) {
+            return null;
+        }
+
+        var identity = ReleaseTitleIdentity.Match(release.Title, rules.TargetTitle);
+        return identity.TitleYear is { } year && Math.Abs(year - targetYear) > ToleranceYears ? Reason : null;
     }
 }
 
@@ -259,6 +297,8 @@ public sealed class TvReleaseDecisionEngine(EntityKind kind) : IAcquisitionDecis
 
     private readonly IReleaseSpecification[] _specifications = [
         new DangerousContentSpecification(),
+        new TitleIdentitySpecification(),
+        new MediaYearSpecification(),
         new ProtocolSpecification(),
         new DownloadLinkSpecification(),
         new MinSeedersSpecification(),

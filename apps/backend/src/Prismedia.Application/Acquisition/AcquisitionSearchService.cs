@@ -46,7 +46,8 @@ public sealed class AcquisitionSearchRunner(
         }
 
         var rules = (await profiles.GetRulesAsync(input.ProfileId, input.Kind, cancellationToken)) with {
-            TargetTitle = TargetTitleFor(input)
+            TargetTitle = TargetTitleFor(input),
+            TargetYear = input.Year
         };
 
         // The proper/repack policy is an app-global fact set per search (never by a profile), the same way
