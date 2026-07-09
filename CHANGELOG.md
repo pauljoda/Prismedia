@@ -120,6 +120,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated documentation, README screenshots, branding assets, install metadata, and app copy to match the current Prismedia v1 surface.
 
 ### Fixed
+- Updated the OpenAPI runtime to a patched release that rejects the known circular-schema denial-of-service vulnerability.
 - The shared entity API now honors the Wanted filter, and the generated web client includes the current acquisition volume field and wrong-volume rejection code.
 - Entity descriptions now render through a closed Markdown renderer that blocks raw HTML and unsafe link schemes, preventing plugin or edited metadata from injecting executable content into detail pages.
 - Fixed the whole app intermittently failing with server errors (500) under background-job bursts: the bundled PostgreSQL allowed only 40 connections while the API and worker connection pools could together demand far more. The pools are now capped conservatively and the bundled database accepts 120 connections (existing installations are upgraded automatically on restart).
