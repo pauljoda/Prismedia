@@ -16,6 +16,7 @@
     imageUrl?: (proposal: EntityMetadataProposal) => string | null;
     imageAlt?: (proposal: EntityMetadataProposal) => string;
     statusLabel?: (proposal: EntityMetadataProposal) => string | null;
+    selectionMode?: boolean;
   }
 
   let {
@@ -27,6 +28,7 @@
     imageUrl = (proposal) => proposalImageUrl(proposal, ["poster", "thumbnail", "cover", "logo"]),
     imageAlt = (proposal) => proposalTitle(proposal),
     statusLabel = () => null,
+    selectionMode = true,
   }: Props = $props();
 
   const selected = $derived(new Set(selectedIds));
@@ -40,10 +42,10 @@
     {@const NodeIcon = entityKindIcon(entityKind)}
     {@const coverUrl = imageUrl(node)}
     {@const meta = childMeta(node) ?? []}
-    {@const canSelect = selectable.has(node.proposalId)}
+    {@const canSelect = selectionMode && selectable.has(node.proposalId)}
     {@const isSelected = canSelect && selected.has(node.proposalId)}
     {@const status = statusLabel(node)}
-    <article class={cn("proposal-node", isSelected && "is-selected", !canSelect && "is-disabled")}>
+    <article class={cn("proposal-node", isSelected && "is-selected", selectionMode && !canSelect && "is-disabled")}>
       <button
         type="button"
         class="proposal-node-open"
@@ -78,15 +80,17 @@
         </span>
       </button>
 
-      <label class="proposal-node-toggle" class:is-disabled={!canSelect}>
-        <Checkbox
-          checked={isSelected}
-          disabled={!canSelect}
-          aria-label={`${isSelected ? "Deselect" : "Select"} ${title}`}
-          onchange={(event) => canSelect && onSelectedChange(node.proposalId, event.currentTarget.checked)}
-        />
-        <span>{canSelect ? (isSelected ? "Selected" : "Select") : status ?? "Unavailable"}</span>
-      </label>
+      {#if selectionMode}
+        <label class="proposal-node-toggle" class:is-disabled={!canSelect}>
+          <Checkbox
+            checked={isSelected}
+            disabled={!canSelect}
+            aria-label={`${isSelected ? "Deselect" : "Select"} ${title}`}
+            onchange={(event) => canSelect && onSelectedChange(node.proposalId, event.currentTarget.checked)}
+          />
+          <span>{canSelect ? (isSelected ? "Selected" : "Select") : status ?? "Unavailable"}</span>
+        </label>
+      {/if}
     </article>
   {/each}
 </div>

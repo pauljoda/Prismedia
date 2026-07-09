@@ -24,6 +24,22 @@ describe("ProposalNodeGrid", () => {
     expect(onActivate).toHaveBeenCalledWith(node);
     expect(screen.getByText("S01")).toBeInTheDocument();
   });
+
+  it("renders proposal context without fake disabled selection controls", () => {
+    render(ProposalNodeGrid, {
+      props: {
+        nodes: [proposal()],
+        selectedIds: [],
+        selectableIds: [],
+        onSelectedChange: vi.fn(),
+        selectionMode: false,
+      },
+    });
+
+    expect(screen.getByRole("button", { name: "Review Season 1" })).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(screen.queryByText("Unavailable")).not.toBeInTheDocument();
+  });
 });
 
 function proposal(): EntityMetadataProposal {
