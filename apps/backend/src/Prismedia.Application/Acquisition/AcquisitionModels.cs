@@ -212,7 +212,7 @@ public sealed record AcquisitionMetadata(
     int? VolumeNumber = null);
 
 /// <summary>The minimal input the background search job needs to query indexers for an acquisition.</summary>
-/// <param name="Kind">The media kind being acquired; picks the decision engine and the Torznab category range.</param>
+/// <param name="Kind">The media kind being acquired; selects its query, category, and decision policy module.</param>
 /// <param name="EntityId">The wanted library entity this acquisition fulfils; a wanted-linked search auto-grabs its best accepted release.</param>
 /// <param name="Year">Release year context for the query ladder (year-disambiguated movie searches).</param>
 /// <param name="ProfileId">The acquisition's chosen profile; its rules score the search (null = the kind's default).</param>
