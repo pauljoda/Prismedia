@@ -18,7 +18,7 @@ public sealed class PluginRequestMetadataSource(
     PluginCatalogService catalog,
     IPluginIdentityRouter identityRouter,
     IdentifyRunnerSelector runners)
-    : IRequestMetadataSearchSource, IRequestMetadataEnricher, IPluginRequestDetailSource,
+    : IRequestMetadataSearchSource, IPluginRequestSearchSource, IRequestMetadataEnricher, IPluginRequestDetailSource,
       IPluginRequestReviewSource, IPluginRequestProposalSource {
     private static readonly string SearchAction = IdentifyAction.Search.ToCode();
     private static readonly string LookupIdAction = IdentifyAction.LookupId.ToCode();
@@ -66,28 +66,134 @@ public sealed class PluginRequestMetadataSource(
                 continue;
             }
 
-            var auth = await catalog.GetAuthAsync(descriptorForProvider.Manifest, cancellationToken);
-            var request = new IdentifyPluginRequest(
-                ProtocolVersion: PluginProtocol.CurrentVersion,
-                Action: IdentifyAction.Search,
-                Auth: auth,
-                Entity: new IdentifyEntitySnapshot(Guid.NewGuid(), descriptor.PluginEntityKind, query, new Dictionary<string, string>(), []),
-                Query: new IdentifyQuery(query, null, null),
-                Hints: new IdentifyMatchHints(new Dictionary<string, string>(), [], query, null),
-                StructuralContext: null,
-                IncludeNsfw: !hideNsfw,
-                IncludeRelationshipDetails: false,
-                IncludeStructuralChildren: false);
-
-            var response = await runners.Resolve(descriptorForProvider).IdentifyAsync(descriptorForProvider, request, cancellationToken);
-            foreach (var candidate in response.Result?.Candidates ?? []) {
-                if (MapCandidate(provider, candidate, descriptor) is { } result) {
-                    results.Add(result);
-                }
-            }
+            results.AddRange(await RunSearchAsync(
+                descriptor,
+                provider,
+                descriptorForProvider,
+                query,
+                fields: null,
+                hideNsfw,
+                cancellationToken));
         }
 
         return results;
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<RequestSearchResult>> SearchAsync(
+        RequestKindDescriptor descriptor,
+        string pluginId,
+        IReadOnlyDictionary<string, string> fields,
+        bool hideNsfw,
+        CancellationToken cancellationToken) {
+        var selected = await SelectSearchProviderAsync(descriptor, pluginId, hideNsfw, cancellationToken);
+        var validated = ValidateSearchFields(selected.Provider, selected.Schema, fields);
+        return await RunSearchAsync(
+            descriptor,
+            selected.Provider,
+            selected.Descriptor,
+            validated.CompatibilityTitle,
+            validated.Fields,
+            hideNsfw,
+            cancellationToken);
+    }
+
+    private async Task<IReadOnlyList<RequestSearchResult>> RunSearchAsync(
+        RequestKindDescriptor requestKind,
+        PluginProvider provider,
+        PluginDescriptor descriptor,
+        string? compatibilityTitle,
+        IReadOnlyDictionary<string, string>? fields,
+        bool hideNsfw,
+        CancellationToken cancellationToken) {
+        var auth = await catalog.GetAuthAsync(descriptor.Manifest, cancellationToken);
+        var request = new IdentifyPluginRequest(
+            ProtocolVersion: PluginProtocol.CurrentVersion,
+            Action: IdentifyAction.Search,
+            Auth: auth,
+            Entity: new IdentifyEntitySnapshot(
+                Guid.NewGuid(),
+                requestKind.PluginEntityKind,
+                compatibilityTitle ?? string.Empty,
+                new Dictionary<string, string>(),
+                []),
+            Query: new IdentifyQuery(compatibilityTitle, null, null, Fields: fields),
+            Hints: new IdentifyMatchHints(new Dictionary<string, string>(), [], compatibilityTitle, null),
+            StructuralContext: null,
+            IncludeNsfw: !hideNsfw,
+            IncludeRelationshipDetails: false,
+            IncludeStructuralChildren: false);
+
+        var response = await runners.Resolve(descriptor).IdentifyAsync(descriptor, request, cancellationToken);
+        return (response.Result?.Candidates ?? [])
+            .Select(candidate => MapCandidate(provider, candidate, requestKind))
+            .Where(result => result is not null)
+            .Select(result => result!)
+            .ToArray();
+    }
+
+    private async Task<SelectedSearchProvider> SelectSearchProviderAsync(
+        RequestKindDescriptor descriptor,
+        string pluginId,
+        bool hideNsfw,
+        CancellationToken cancellationToken) {
+        var provider = (await catalog.ListInstalledProvidersAsync(cancellationToken))
+            .FirstOrDefault(candidate => candidate.Id.Equals(pluginId, StringComparison.OrdinalIgnoreCase));
+        if (provider is null || !provider.Enabled || hideNsfw && provider.IsNsfw) {
+            throw new RequestSearchValidationException($"Plugin '{pluginId}' is not enabled for this search.");
+        }
+
+        var supports = provider.Supports
+            .Where(support => PluginEntityKindCompatibility.SupportsKind(support, descriptor.PluginKindCode))
+            .ToArray();
+        var searchSupport = supports.FirstOrDefault(support =>
+            support.Actions.Contains(SearchAction, StringComparer.OrdinalIgnoreCase));
+        var supportsLookup = supports.Any(support =>
+            support.Actions.Contains(LookupIdAction, StringComparer.OrdinalIgnoreCase));
+        if (searchSupport?.Search is null || !supportsLookup) {
+            throw new RequestSearchValidationException(
+                $"Plugin '{provider.Id}' does not declare Search and LookupId support for '{descriptor.Kind.ToCode()}'.");
+        }
+
+        var pluginDescriptor = await catalog.FindProviderAsync(provider.Id, descriptor.PluginKindCode, cancellationToken);
+        if (pluginDescriptor is null) {
+            throw new RequestSearchValidationException($"Plugin '{provider.Id}' is not available for this search.");
+        }
+
+        return new SelectedSearchProvider(provider, pluginDescriptor, searchSupport.Search);
+    }
+
+    private static ValidatedSearchFields ValidateSearchFields(
+        PluginProvider provider,
+        PluginSearchDefinition schema,
+        IReadOnlyDictionary<string, string> fields) {
+        if (fields is null) {
+            throw new RequestSearchValidationException("Plugin search fields are required.");
+        }
+
+        var definitions = schema.Fields.ToDictionary(field => field.Key, StringComparer.Ordinal);
+        var normalized = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (key, value) in fields) {
+            if (!definitions.ContainsKey(key)) {
+                throw new RequestSearchValidationException(
+                    $"Field '{key}' is not declared by plugin '{provider.Id}'.");
+            }
+
+            normalized[key] = value?.Trim() ?? string.Empty;
+        }
+
+        var missing = schema.Fields.FirstOrDefault(field =>
+            field.Required && (!normalized.TryGetValue(field.Key, out var value) || value.Length == 0));
+        if (missing is not null) {
+            throw new RequestSearchValidationException(
+                $"Field '{missing.Key}' is required by plugin '{provider.Id}'.");
+        }
+
+        var compatibilityTitle = schema.Fields
+            .Where(field => field.Type == PluginSearchFieldType.Text)
+            .Select(field => normalized.GetValueOrDefault(field.Key))
+            .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
+        return new ValidatedSearchFields(normalized, compatibilityTitle);
     }
 
     public async Task<RequestMetadataEnrichment?> LookupByIdAsync(
@@ -570,4 +676,13 @@ public sealed class PluginRequestMetadataSource(
         ExternalIdentity Identity,
         bool HideNsfw,
         bool IncludeChildren);
+
+    private readonly record struct SelectedSearchProvider(
+        PluginProvider Provider,
+        PluginDescriptor Descriptor,
+        PluginSearchDefinition Schema);
+
+    private readonly record struct ValidatedSearchFields(
+        IReadOnlyDictionary<string, string> Fields,
+        string? CompatibilityTitle);
 }

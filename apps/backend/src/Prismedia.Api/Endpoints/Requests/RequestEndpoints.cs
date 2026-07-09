@@ -32,6 +32,26 @@ public static class RequestEndpoints {
             .WithSummary("Searches Prismedia's plugin metadata providers for requestable books and authors. Adults-only results are filtered out when hideNsfw is set.")
             .Produces<RequestSearchResponse>();
 
+        group.MapPost("/search", async (
+            RequestPluginSearchRequest request,
+            bool? hideNsfw,
+            HttpContext httpContext,
+            RequestPluginSearchService search,
+            CancellationToken cancellationToken) => {
+                try {
+                    return Results.Ok(await search.SearchAsync(
+                        request,
+                        NsfwVisibility.ShouldHide(hideNsfw, httpContext),
+                        cancellationToken));
+                } catch (RequestSearchValidationException ex) {
+                    return Results.BadRequest(new ApiProblem(ApiProblemCodes.RequestInvalid, ex.Message));
+                }
+            })
+            .WithName("SearchRequestsByPlugin")
+            .WithSummary("Searches one selected metadata plugin using the fields declared by its manifest schema.")
+            .Produces<RequestSearchResponse>()
+            .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
+
         group.MapGet("/details/{source}/{kind}/{externalId}", async (
             string source,
             string kind,

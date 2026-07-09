@@ -61,7 +61,57 @@ public sealed class RequestEndpointTests {
         Assert.True(reviews.LastHideNsfw);
     }
 
-    private static WebApplicationFactory<Program> CreateFactory(IPluginRequestReviewSource? reviewSource = null) =>
+    [Fact]
+    public async Task PluginSearchUsesTheSelectedSchemaFieldsAndSessionVisibility() {
+        var searches = new EndpointPluginSearchSource();
+        using var factory = CreateFactory(searchSource: searches);
+        using var client = factory.CreateAuthenticatedClient();
+
+        using var response = await client.PostAsJsonAsync(
+            "/api/requests/search?hideNsfw=false",
+            new RequestPluginSearchRequest(
+                RequestMediaKind.Movie,
+                "cinema-metadata",
+                new Dictionary<string, string> { ["title"] = "Film:CaseSensitive" }),
+            CodecJson);
+        var body = await response.Content.ReadFromJsonAsync<RequestSearchResponse>(CodecJson);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var result = Assert.Single(body!.Results);
+        Assert.Equal("cinema-metadata", result.PluginId);
+        Assert.Equal(new ExternalIdentity("tmdb", "Movie:CaseSensitive"), result.ExternalIdentity);
+        Assert.Equal("cinema-metadata", searches.LastPluginId);
+        Assert.True(searches.LastHideNsfw);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    public async Task PluginSearchRejectsMissingRequiredAndUnknownFields(bool includeTitle, bool includeUnknown) {
+        var searches = new EndpointPluginSearchSource();
+        using var factory = CreateFactory(searchSource: searches);
+        using var client = factory.CreateAuthenticatedClient();
+        var fields = new Dictionary<string, string>();
+        if (includeTitle) {
+            fields["title"] = "Known title";
+        }
+        if (includeUnknown) {
+            fields["unknown"] = "value";
+        }
+
+        using var response = await client.PostAsJsonAsync(
+            "/api/requests/search",
+            new RequestPluginSearchRequest(RequestMediaKind.Movie, "cinema-metadata", fields),
+            CodecJson);
+        var problem = await response.Content.ReadFromJsonAsync<ApiProblem>(CodecJson);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(ApiProblemCodes.RequestInvalid, problem!.Code);
+    }
+
+    private static WebApplicationFactory<Program> CreateFactory(
+        IPluginRequestReviewSource? reviewSource = null,
+        IPluginRequestSearchSource? searchSource = null) =>
         new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder => {
                 builder.ConfigureServices(services => {
@@ -73,9 +123,60 @@ public sealed class RequestEndpointTests {
                         services.RemoveAll<IPluginRequestReviewSource>();
                         services.AddSingleton(reviewSource);
                     }
+                    if (searchSource is not null) {
+                        services.RemoveAll<IPluginRequestSearchSource>();
+                        services.AddSingleton(searchSource);
+                    }
                 });
             })
             .WithTestAuth();
+
+    private sealed class EndpointPluginSearchSource : IPluginRequestSearchSource {
+        public string? LastPluginId { get; private set; }
+        public bool LastHideNsfw { get; private set; }
+
+        public Task<IReadOnlyList<RequestSearchResult>> SearchAsync(
+            RequestKindDescriptor descriptor,
+            string pluginId,
+            IReadOnlyDictionary<string, string> fields,
+            bool hideNsfw,
+            CancellationToken cancellationToken) {
+            if (!fields.TryGetValue("title", out var title) || string.IsNullOrWhiteSpace(title)) {
+                throw new RequestSearchValidationException("The required title field is missing.");
+            }
+            if (fields.Keys.Any(key => key != "title")) {
+                throw new RequestSearchValidationException("The search contains an unknown field.");
+            }
+
+            LastPluginId = pluginId;
+            LastHideNsfw = hideNsfw;
+            return Task.FromResult<IReadOnlyList<RequestSearchResult>>([
+                new(
+                    Guid.Empty,
+                    RequestProviderKind.Plugin,
+                    descriptor.Kind,
+                    "tmdb:Movie:CaseSensitive",
+                    title,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    [],
+                    false,
+                    null,
+                    null,
+                    true,
+                    "Cinema Metadata",
+                    pluginId,
+                    new ExternalIdentity("tmdb", "Movie:CaseSensitive"))
+            ]);
+        }
+    }
 
     private sealed class NestedReviewSource : IPluginRequestReviewSource {
         public bool LastHideNsfw { get; private set; }

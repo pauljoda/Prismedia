@@ -59,6 +59,42 @@ public sealed class RequestServicesTests {
     }
 
     [Fact]
+    public async Task PluginSearchRoutesOneDiscoverableKindAndExactPluginFields() {
+        var source = new FakePluginSearchSource();
+        var service = new RequestPluginSearchService(source);
+        var fields = new Dictionary<string, string> {
+            ["seriesTitle"] = "The Expanse: Origins",
+            ["year"] = "2015"
+        };
+
+        var response = await service.SearchAsync(
+            new RequestPluginSearchRequest(RequestMediaKind.Series, "zeta-metadata", fields),
+            hideNsfw: true,
+            CancellationToken.None);
+
+        Assert.Empty(response.ProviderErrors);
+        Assert.Equal(RequestMediaKind.Series, source.LastDescriptor?.Kind);
+        Assert.Equal("zeta-metadata", source.LastPluginId);
+        Assert.Same(fields, source.LastFields);
+        Assert.True(source.LastHideNsfw);
+    }
+
+    [Fact]
+    public async Task PluginSearchPropagatesSchemaValidationFailures() {
+        var source = new FakePluginSearchSource {
+            Failure = new RequestSearchValidationException("The required title field is missing.")
+        };
+        var service = new RequestPluginSearchService(source);
+
+        var error = await Assert.ThrowsAsync<RequestSearchValidationException>(() => service.SearchAsync(
+            new RequestPluginSearchRequest(RequestMediaKind.Movie, "cinema-metadata", new Dictionary<string, string>()),
+            hideNsfw: false,
+            CancellationToken.None));
+
+        Assert.Contains("required", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task DetailRoutesThroughTheRegistryDescriptor() {
         var source = new FakeDetailSource();
         var service = new RequestDetailService(source);
@@ -117,6 +153,29 @@ public sealed class RequestServicesTests {
             }
 
             return Task.FromResult<IReadOnlyList<RequestSearchResult>>([Result(descriptor.Kind, $"p:{descriptor.Kind.ToCode()}")]);
+        }
+    }
+
+    private sealed class FakePluginSearchSource : IPluginRequestSearchSource {
+        public RequestKindDescriptor? LastDescriptor { get; private set; }
+        public string? LastPluginId { get; private set; }
+        public IReadOnlyDictionary<string, string>? LastFields { get; private set; }
+        public bool LastHideNsfw { get; private set; }
+        public Exception? Failure { get; init; }
+
+        public Task<IReadOnlyList<RequestSearchResult>> SearchAsync(
+            RequestKindDescriptor descriptor,
+            string pluginId,
+            IReadOnlyDictionary<string, string> fields,
+            bool hideNsfw,
+            CancellationToken cancellationToken) {
+            LastDescriptor = descriptor;
+            LastPluginId = pluginId;
+            LastFields = fields;
+            LastHideNsfw = hideNsfw;
+            return Failure is null
+                ? Task.FromResult<IReadOnlyList<RequestSearchResult>>([])
+                : Task.FromException<IReadOnlyList<RequestSearchResult>>(Failure);
         }
     }
 

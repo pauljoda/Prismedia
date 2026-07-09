@@ -61,6 +61,116 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
     }
 
     [Fact]
+    public async Task SchemaSearchCallsOnlySelectedPluginAndPreservesTrimmedOpaqueFieldsAndIdentity() {
+        await using var db = await CreateInstalledPluginAsync("alpha-metadata", "zeta-metadata");
+        var catalog = Catalog(db);
+        var runner = new CapturingRunner();
+        var source = new PluginRequestMetadataSource(
+            catalog,
+            new PluginIdentityRouter(catalog),
+            new IdentifyRunnerSelector([runner]));
+
+        var results = await source.SearchAsync(
+            RequestKindRegistry.Find(RequestMediaKind.Movie)!,
+            "zeta-metadata",
+            new Dictionary<string, string> {
+                ["context"] = "   ",
+                ["workName"] = "  Film:CaseSensitive  ",
+                ["year"] = " 2026 "
+            },
+            hideNsfw: false,
+            CancellationToken.None);
+
+        var call = Assert.Single(runner.Calls);
+        Assert.Equal("zeta-metadata", call.Descriptor.Manifest.Id);
+        Assert.Equal("Film:CaseSensitive", call.Request.Query.Title);
+        Assert.Equal(string.Empty, call.Request.Query.Fields!["context"]);
+        Assert.Equal("Film:CaseSensitive", call.Request.Query.Fields["workName"]);
+        Assert.Equal("2026", call.Request.Query.Fields["year"]);
+        Assert.DoesNotContain("title", call.Request.Query.Fields.Keys);
+        var result = Assert.Single(results);
+        Assert.Equal("zeta-metadata", result.PluginId);
+        Assert.Equal(new ExternalIdentity("tmdb", "Movie:CaseSensitive"), result.ExternalIdentity);
+    }
+
+    [Theory]
+    [InlineData(false, "year")]
+    [InlineData(true, "mysteryField")]
+    public async Task SchemaSearchRejectsMissingRequiredAndUnknownFields(bool includeRequired, string extraField) {
+        await using var db = await CreateInstalledPluginAsync("cinema-metadata");
+        var catalog = Catalog(db);
+        var runner = new CapturingRunner();
+        var source = new PluginRequestMetadataSource(
+            catalog,
+            new PluginIdentityRouter(catalog),
+            new IdentifyRunnerSelector([runner]));
+        var fields = new Dictionary<string, string> { [extraField] = "value" };
+        if (includeRequired) {
+            fields["workName"] = "Known title";
+        }
+
+        await Assert.ThrowsAsync<RequestSearchValidationException>(() => source.SearchAsync(
+            RequestKindRegistry.Find(RequestMediaKind.Movie)!,
+            "cinema-metadata",
+            fields,
+            hideNsfw: false,
+            CancellationToken.None));
+
+        Assert.Empty(runner.Calls);
+    }
+
+    [Fact]
+    public async Task SchemaSearchRejectsADisabledSelectedPlugin() {
+        await using var db = await CreateInstalledPluginAsync("cinema-metadata");
+        var config = await db.ProviderConfigs.SingleAsync();
+        config.Enabled = false;
+        await db.SaveChangesAsync();
+        var catalog = Catalog(db);
+        var runner = new CapturingRunner();
+        var source = new PluginRequestMetadataSource(
+            catalog,
+            new PluginIdentityRouter(catalog),
+            new IdentifyRunnerSelector([runner]));
+
+        await Assert.ThrowsAsync<RequestSearchValidationException>(() => source.SearchAsync(
+            RequestKindRegistry.Find(RequestMediaKind.Movie)!,
+            "cinema-metadata",
+            new Dictionary<string, string> { ["workName"] = "Film" },
+            hideNsfw: false,
+            CancellationToken.None));
+
+        Assert.Empty(runner.Calls);
+    }
+
+    [Fact]
+    public async Task SchemaSearchRequiresLookupIdAlongsideSearchSupport() {
+        await using var db = await CreateInstalledPluginAsync("cinema-metadata");
+        var manifestPath = Path.Combine(_tempRoot, "cinema-metadata", "manifest.json");
+        var manifest = await File.ReadAllTextAsync(manifestPath);
+        await File.WriteAllTextAsync(
+            manifestPath,
+            manifest.Replace(
+                "\"actions\": [\"search\", \"lookup-id\"]",
+                "\"actions\": [\"search\"]",
+                StringComparison.Ordinal));
+        var catalog = Catalog(db);
+        var runner = new CapturingRunner();
+        var source = new PluginRequestMetadataSource(
+            catalog,
+            new PluginIdentityRouter(catalog),
+            new IdentifyRunnerSelector([runner]));
+
+        await Assert.ThrowsAsync<RequestSearchValidationException>(() => source.SearchAsync(
+            RequestKindRegistry.Find(RequestMediaKind.Movie)!,
+            "cinema-metadata",
+            new Dictionary<string, string> { ["workName"] = "Film" },
+            hideNsfw: false,
+            CancellationToken.None));
+
+        Assert.Empty(runner.Calls);
+    }
+
+    [Fact]
     public async Task ExplicitReviewKeepsTheSearchPluginWhenNamespaceIsShared() {
         await using var db = await CreateInstalledPluginAsync("zeta-metadata", "alpha-metadata");
         var catalog = Catalog(db);
@@ -200,7 +310,9 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
                 "actions": ["search", "lookup-id"],
                 "identityNamespaces": ["tmdb", "imdb"],
                 "search": { "fields": [
-                  { "key": "title", "label": "Title", "type": "text", "required": true }
+                  { "key": "context", "label": "Context", "type": "text", "required": false },
+                  { "key": "workName", "label": "Work name", "type": "text", "required": true },
+                  { "key": "year", "label": "Year", "type": "year", "required": false }
                 ] }
               }]
             }
@@ -301,13 +413,14 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
             CancellationToken cancellationToken) {
             Calls.Add(new Call(descriptor, request));
             if (request.Action == IdentifyAction.Search) {
+                var candidateIdentity = request.Query.Fields is null ? "123" : "Movie:CaseSensitive";
                 return Task.FromResult(IdentifyPluginResponse.Candidates(
                     ProposalKind.Movie,
                     [
                         new EntitySearchCandidate(
                             new Dictionary<string, string> {
                                 ["imdb"] = "tt123",
-                                ["tmdb"] = "123"
+                                ["tmdb"] = candidateIdentity
                             },
                             "Example",
                             2026,

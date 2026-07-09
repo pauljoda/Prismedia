@@ -11,6 +11,15 @@ public sealed record RequestSearchRequest(
     IReadOnlyList<RequestProviderKind> Sources,
     bool HideNsfw);
 
+/// <summary>Schema-driven search against one explicitly selected metadata plugin and media kind.</summary>
+/// <param name="Kind">The single discoverable request kind being searched.</param>
+/// <param name="PluginId">Stable manifest id of the plugin selected by the user.</param>
+/// <param name="Fields">Plugin-owned search values keyed by its declared search schema.</param>
+public sealed record RequestPluginSearchRequest(
+    RequestMediaKind Kind,
+    string PluginId,
+    IReadOnlyDictionary<string, string> Fields);
+
 /// <summary>Aggregated request search response.</summary>
 public sealed record RequestSearchResponse(
     IReadOnlyList<RequestSearchResult> Results,

@@ -336,6 +336,7 @@ public static class DependencyInjection {
         // request layer is the kind-registry-driven metadata search + detail surface that feeds
         // acquisitions. One source class serves every requestable kind.
         services.AddScoped<IRequestMetadataSearchSource, PluginRequestMetadataSource>();
+        services.AddScoped<IPluginRequestSearchSource, PluginRequestMetadataSource>();
         services.AddScoped<IRequestMetadataEnricher, PluginRequestMetadataSource>();
         services.AddScoped<IPluginRequestDetailSource, PluginRequestMetadataSource>();
         services.AddScoped<IPluginRequestReviewSource, PluginRequestMetadataSource>();
