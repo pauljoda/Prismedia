@@ -12,7 +12,7 @@
     selectedIds: string[];
     selectableIds: string[];
     onSelectedChange: (proposalId: string, selected: boolean) => void;
-    onActivate?: (proposal: EntityMetadataProposal) => void;
+    onActivate?: ((proposal: EntityMetadataProposal) => void) | null;
     imageUrl?: (proposal: EntityMetadataProposal) => string | null;
     imageAlt?: (proposal: EntityMetadataProposal) => string;
     statusLabel?: (proposal: EntityMetadataProposal) => string | null;
@@ -24,7 +24,7 @@
     selectedIds,
     selectableIds,
     onSelectedChange,
-    onActivate = () => undefined,
+    onActivate = null,
     imageUrl = (proposal) => proposalImageUrl(proposal, ["poster", "thumbnail", "cover", "logo"]),
     imageAlt = (proposal) => proposalTitle(proposal),
     statusLabel = () => null,
@@ -45,40 +45,47 @@
     {@const canSelect = selectionMode && selectable.has(node.proposalId)}
     {@const isSelected = canSelect && selected.has(node.proposalId)}
     {@const status = statusLabel(node)}
-    <article class={cn("proposal-node", isSelected && "is-selected", selectionMode && !canSelect && "is-disabled")}>
-      <button
-        type="button"
-        class="proposal-node-open"
-        aria-label={`Review ${title}`}
-        onclick={() => onActivate(node)}
-      >
-        <div class="proposal-node-cover" style={`aspect-ratio: ${toAspectRatioValue(aspectRatioForKind(entityKind))};`}>
-          <div class="grid h-full w-full place-items-center">
-            <NodeIcon class="h-6 w-6 text-text-disabled" />
-          </div>
-          {#if coverUrl}
-            <img
-              src={coverUrl}
-              alt={imageAlt(node)}
-              loading="lazy"
-              decoding="async"
-              referrerpolicy="no-referrer"
-              class="absolute inset-0 h-full w-full object-cover"
-            />
-          {/if}
-          {#if isSelected}
-            <span class="proposal-node-selected" aria-hidden="true"><Check class="h-3 w-3" /></span>
-          {/if}
+    {#snippet nodeContent()}
+      <div class="proposal-node-cover" style={`aspect-ratio: ${toAspectRatioValue(aspectRatioForKind(entityKind))};`}>
+        <div class="grid h-full w-full place-items-center">
+          <NodeIcon class="h-6 w-6 text-text-disabled" />
         </div>
-        <span class="proposal-node-title">{title}</span>
-        <span class="proposal-node-meta">
-          {#each meta as item, index (`${item.icon}-${item.label}-${index}`)}
-            <span>{item.label}</span>
-          {/each}
-          {#if status}<span>{status}</span>{/if}
-          {#if meta.length === 0 && !status}<span>{node.targetKind}</span>{/if}
-        </span>
-      </button>
+        {#if coverUrl}
+          <img
+            src={coverUrl}
+            alt={imageAlt(node)}
+            loading="lazy"
+            decoding="async"
+            referrerpolicy="no-referrer"
+            class="absolute inset-0 h-full w-full object-cover"
+          />
+        {/if}
+        {#if isSelected}
+          <span class="proposal-node-selected" aria-hidden="true"><Check class="h-3 w-3" /></span>
+        {/if}
+      </div>
+      <span class="proposal-node-title">{title}</span>
+      <span class="proposal-node-meta">
+        {#each meta as item, index (`${item.icon}-${item.label}-${index}`)}
+          <span>{item.label}</span>
+        {/each}
+        {#if status}<span>{status}</span>{/if}
+        {#if meta.length === 0 && !status}<span>{node.targetKind}</span>{/if}
+      </span>
+    {/snippet}
+    <article class={cn("proposal-node", isSelected && "is-selected", selectionMode && !canSelect && "is-disabled")}>
+      {#if onActivate}
+        <button
+          type="button"
+          class="proposal-node-open"
+          aria-label={`Review ${title}`}
+          onclick={() => onActivate(node)}
+        >
+          {@render nodeContent()}
+        </button>
+      {:else}
+        <div class="proposal-node-open">{@render nodeContent()}</div>
+      {/if}
 
       {#if selectionMode}
         <label class="proposal-node-toggle" class:is-disabled={!canSelect}>

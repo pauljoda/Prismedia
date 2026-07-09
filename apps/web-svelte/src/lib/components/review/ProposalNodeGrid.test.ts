@@ -25,7 +25,7 @@ describe("ProposalNodeGrid", () => {
     expect(screen.getByText("S01")).toBeInTheDocument();
   });
 
-  it("renders proposal context without fake disabled selection controls", () => {
+  it("renders inert proposal context without fake actions or disabled selection controls", () => {
     render(ProposalNodeGrid, {
       props: {
         nodes: [proposal()],
@@ -36,7 +36,8 @@ describe("ProposalNodeGrid", () => {
       },
     });
 
-    expect(screen.getByRole("button", { name: "Review Season 1" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Review Season 1" })).not.toBeInTheDocument();
+    expect(screen.getByText("Season 1")).toBeInTheDocument();
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
     expect(screen.queryByText("Unavailable")).not.toBeInTheDocument();
   });

@@ -14,7 +14,7 @@
     selectedIds?: string[];
     selectableIds?: string[];
     onSelectedChange?: (proposalId: string, selected: boolean) => void;
-    onActivate?: (proposal: EntityMetadataProposal) => void;
+    onActivate?: ((proposal: EntityMetadataProposal) => void) | null;
     childrenTitle?: string;
     subtitle?: string | null;
   }
@@ -24,7 +24,7 @@
     selectedIds = [],
     selectableIds = [],
     onSelectedChange = () => undefined,
-    onActivate = () => undefined,
+    onActivate = null,
     childrenTitle = "Items",
     subtitle = null,
   }: Props = $props();
