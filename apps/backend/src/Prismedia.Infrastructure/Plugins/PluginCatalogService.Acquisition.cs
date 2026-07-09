@@ -303,19 +303,8 @@ public sealed partial class PluginCatalogService {
         }
     }
 
-    private static bool IsCompatible(PluginManifest manifest, Version current) {
-        if (manifest.ManifestVersion != 1 ||
-            !manifest.Runtime.Equals("dotnet-process", StringComparison.OrdinalIgnoreCase) ||
-            !manifest.ApiTags.Contains("prismedia", StringComparer.OrdinalIgnoreCase)) {
-            return false;
-        }
-
-        var min = ParseVersion(manifest.Compat.PrismediaMin);
-        var max = string.IsNullOrWhiteSpace(manifest.Compat.PrismediaMax)
-            ? null
-            : ParseVersion(manifest.Compat.PrismediaMax);
-        return current >= min && (max is null || current <= max);
-    }
+    private static bool IsCompatible(PluginManifest manifest, Version current) =>
+        PluginCompatibilityResolver.IsCompatible(manifest, current);
 
     private static Version ParseVersion(string version) {
         var normalized = version.Split('-', 2)[0];

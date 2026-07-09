@@ -680,6 +680,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
         Assert.True(response.Ok);
         Assert.Equal(EntityKind.Video, executor.CapturedRequest?.Entity.Kind);
         Assert.Equal(IdentifyAction.Search, executor.CapturedRequest?.Action);
+        Assert.Equal(PluginProtocol.CurrentVersion, executor.CapturedRequest?.ProtocolVersion);
         Assert.Equal(ProposalKind.Movie, response.Result?.TargetKind);
         Assert.Equal(movieId, response.Result?.TargetEntityId);
     }

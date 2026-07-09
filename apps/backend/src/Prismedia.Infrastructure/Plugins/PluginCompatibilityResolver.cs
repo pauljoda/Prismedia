@@ -6,6 +6,8 @@ namespace Prismedia.Infrastructure.Plugins;
 /// Selects plugin artifacts that are safe for the current Prismedia build.
 /// </summary>
 public static class PluginCompatibilityResolver {
+    private static readonly Version CurrentProtocolVersion = Version.Parse(PluginProtocol.CurrentSemanticVersion);
+
     /// <summary>
     /// Finds the newest dotnet-process artifact for a plugin that supports the current app version.
     /// </summary>
@@ -34,12 +36,41 @@ public static class PluginCompatibilityResolver {
     /// <param name="entry">Community index entry to inspect.</param>
     /// <param name="currentAppVersion">Current Prismedia version with any dev suffix already removed.</param>
     public static bool IsCompatible(PluginIndexEntry entry, Version currentAppVersion) =>
-        IsDotnetProcess(entry) && SupportsAppVersion(entry.Compat, currentAppVersion);
+        IsDotnetProcess(entry) &&
+        SupportsProtocolVersion(entry.Compat) &&
+        SupportsAppVersion(entry.Compat, currentAppVersion);
+
+    /// <summary>Returns whether a locally discovered manifest can run in the current app and plugin protocol.</summary>
+    /// <param name="manifest">Installed plugin manifest to inspect.</param>
+    /// <param name="currentAppVersion">Current Prismedia version with any dev suffix already removed.</param>
+    public static bool IsCompatible(PluginManifest manifest, Version currentAppVersion) =>
+        IsDotnetProcess(manifest) &&
+        SupportsProtocolVersion(manifest.Compat) &&
+        SupportsAppVersion(manifest.Compat, currentAppVersion);
 
     private static bool IsDotnetProcess(PluginIndexEntry entry) =>
         entry.ManifestVersion == 1 &&
         string.Equals(entry.Runtime, "dotnet-process", StringComparison.OrdinalIgnoreCase) &&
         entry.ApiTags.Any(tag => string.Equals(tag, "prismedia", StringComparison.OrdinalIgnoreCase));
+
+    private static bool IsDotnetProcess(PluginManifest manifest) =>
+        manifest.ManifestVersion == 1 &&
+        string.Equals(manifest.Runtime, "dotnet-process", StringComparison.OrdinalIgnoreCase) &&
+        manifest.ApiTags.Any(tag => string.Equals(tag, "prismedia", StringComparison.OrdinalIgnoreCase));
+
+    private static bool SupportsProtocolVersion(PluginCompatibility compatibility) {
+        if (!TryParseSemanticVersion(compatibility.PluginApiMin, out var min) ||
+            CurrentProtocolVersion < min) {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(compatibility.PluginApiMax)) {
+            return true;
+        }
+
+        return TryParseSemanticVersion(compatibility.PluginApiMax, out var max) &&
+            CurrentProtocolVersion <= max;
+    }
 
     private static bool SupportsAppVersion(PluginCompatibility compatibility, Version current) {
         var min = ParseVersion(compatibility.PrismediaMin);
@@ -60,5 +91,20 @@ public static class PluginCompatibilityResolver {
         return Version.TryParse(normalized, out var version)
             ? version
             : new Version(0, 0, 0);
+    }
+
+    private static bool TryParseSemanticVersion(string? value, out Version version) {
+        version = new Version(0, 0, 0);
+        if (string.IsNullOrWhiteSpace(value)) {
+            return false;
+        }
+
+        var normalized = value.Split('-', 2)[0];
+        if (!Version.TryParse(normalized, out var parsed) || parsed.Build < 0) {
+            return false;
+        }
+
+        version = parsed;
+        return true;
     }
 }

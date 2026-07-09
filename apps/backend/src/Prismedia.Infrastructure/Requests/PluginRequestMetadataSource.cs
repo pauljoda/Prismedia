@@ -64,7 +64,7 @@ public sealed class PluginRequestMetadataSource(PluginCatalogService catalog, Id
 
             var auth = await catalog.GetAuthAsync(descriptorForProvider.Manifest, cancellationToken);
             var request = new IdentifyPluginRequest(
-                ProtocolVersion: 2,
+                ProtocolVersion: PluginProtocol.CurrentVersion,
                 Action: IdentifyAction.Search,
                 Auth: auth,
                 Entity: new IdentifyEntitySnapshot(Guid.NewGuid(), descriptor.PluginEntityKind, query, new Dictionary<string, string>(), []),
@@ -229,7 +229,7 @@ public sealed class PluginRequestMetadataSource(PluginCatalogService catalog, Id
         var ids = new Dictionary<string, string> { [providerId] = externalId };
         var auth = await catalog.GetAuthAsync(descriptor.Manifest, cancellationToken);
         var request = new IdentifyPluginRequest(
-            ProtocolVersion: 2,
+            ProtocolVersion: PluginProtocol.CurrentVersion,
             Action: IdentifyAction.LookupId,
             Auth: auth,
             // No library entity: a synthetic snapshot carrying the known id is enough for an id lookup.

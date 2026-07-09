@@ -256,7 +256,7 @@ public sealed partial class IdentifyPluginService {
         CancellationToken cancellationToken) {
         var kind = container.TargetKind.ToEntityKind();
         var request = new IdentifyPluginRequest(
-            ProtocolVersion: 2,
+            ProtocolVersion: PluginProtocol.CurrentVersion,
             Action: IdentifyAction.LookupId,
             Auth: auth,
             Entity: new IdentifyEntitySnapshot(
@@ -301,7 +301,7 @@ public sealed partial class IdentifyPluginService {
             _ => new IdentifyQuery(title, null, null)
         };
         var request = new IdentifyPluginRequest(
-            ProtocolVersion: 2,
+            ProtocolVersion: PluginProtocol.CurrentVersion,
             Action: action,
             Auth: auth,
             Entity: new IdentifyEntitySnapshot(

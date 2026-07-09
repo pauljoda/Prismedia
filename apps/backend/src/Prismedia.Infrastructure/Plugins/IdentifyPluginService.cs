@@ -230,7 +230,7 @@ public sealed partial class IdentifyPluginService : IIdentifyProviderService {
         var query = new IdentifyQuery(null, null, null);
         var resolvedAction = ResolveAction(descriptor.Manifest, parent.KindCode, query, resolvedHints);
         var request = new IdentifyPluginRequest(
-            ProtocolVersion: 2,
+            ProtocolVersion: PluginProtocol.CurrentVersion,
             Action: resolvedAction,
             Auth: auth,
             Entity: await SnapshotAsync(parent, descriptor.Manifest.Id, cancellationToken, pluginRequestKind),
@@ -369,7 +369,7 @@ public sealed partial class IdentifyPluginService : IIdentifyProviderService {
         }
 
         var request = new IdentifyPluginRequest(
-            ProtocolVersion: 2,
+            ProtocolVersion: PluginProtocol.CurrentVersion,
             Action: resolvedAction,
             Auth: auth,
             Entity: entitySnapshot,
