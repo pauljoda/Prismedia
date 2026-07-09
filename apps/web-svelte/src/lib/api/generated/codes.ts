@@ -615,6 +615,7 @@ export const PROBLEM_CODE = {
   identifyQueueApplyInvalid: "identify_queue_apply_invalid",
   identifyQueueItemNotFound: "identify_queue_item_not_found",
   identifyQueueProposalInvalid: "identify_queue_proposal_invalid",
+  identifyTargetNotEligible: "identify_target_not_eligible",
   indexerInvalid: "indexer_invalid",
   indexerUnreachable: "indexer_unreachable",
   invalidCollection: "invalid_collection",

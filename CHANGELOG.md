@@ -90,6 +90,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Monitored series, seasons, and other containers now offer "Search missing content" on their Acquisition tab: one click sweeps the whole item at any depth — including episode gaps hiding inside partially-downloaded seasons — and starts a monitored search for every gap, reporting how many it covered. The existing "Search N missing" action remains when gaps are already visible.
 
 ### Changed
+- Library grids now filter by shared Availability states instead of the ambiguous Has file toggle: On disk uses real source-media ownership, Wanted uses request state, and every acquisition stage from Pending through Imported, Failed, Cancelled, and Needs attention is available consistently on library and detail-page grids.
 - Stored external identity namespaces are normalized during upgrade and protected by database constraints and a provider/value lookup index, while intentionally allowing the same upstream item to represent more than one local copy.
 - Identify metadata application now resolves and persists all provider identities through the canonical Entity identity store, so multiple IDs are evaluated together and transient URL locators cannot leak into durable identity data.
 - Requests now resolve provider identities through the same canonical entity identity system as metadata imports; ambiguous duplicate identities stop with a clear conflict instead of silently binding to an arbitrary library item.
@@ -130,6 +131,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Updated documentation, README screenshots, branding assets, install metadata, and app copy to match the current Prismedia v1 surface.
 
 ### Fixed
+- Identify now operates only on Entities with real source media on disk: Wanted and fileless metadata placeholders no longer show Identify actions, cannot enter manual or automatic queues, and stale queue work is retired without duplicating matching Wanted children during a parent cascade.
 - Deleting the wrong files from a monitored item now replaces its completed acquisition with a clean retry and returns it directly to Searching, instead of leaving an Imported card backed by a deleted acquisition that failed with "Acquisition was not found."
 - Updated the OpenAPI runtime to a patched release that rejects the known circular-schema denial-of-service vulnerability.
 - The shared entity API now honors the Wanted filter, and the generated web client includes the current acquisition volume field and wrong-volume rejection code.

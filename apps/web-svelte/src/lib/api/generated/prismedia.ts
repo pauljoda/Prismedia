@@ -10863,10 +10863,20 @@ export type identifyEntityResponse400 = {
   status: 400
 }
 
+export type identifyEntityResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type identifyEntityResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
 export type identifyEntityResponseSuccess = (identifyEntityResponse200) & {
   headers: Headers;
 };
-export type identifyEntityResponseError = (identifyEntityResponse400) & {
+export type identifyEntityResponseError = (identifyEntityResponse400 | identifyEntityResponse404 | identifyEntityResponse409) & {
   headers: Headers;
 };
 
@@ -10917,10 +10927,15 @@ export type applyIdentifyProposalResponse404 = {
   status: 404
 }
 
+export type applyIdentifyProposalResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
 export type applyIdentifyProposalResponseSuccess = (applyIdentifyProposalResponse204) & {
   headers: Headers;
 };
-export type applyIdentifyProposalResponseError = (applyIdentifyProposalResponse404) & {
+export type applyIdentifyProposalResponseError = (applyIdentifyProposalResponse404 | applyIdentifyProposalResponse409) & {
   headers: Headers;
 };
 
@@ -11005,10 +11020,15 @@ export type addIdentifyQueueItemResponse404 = {
   status: 404
 }
 
+export type addIdentifyQueueItemResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
 export type addIdentifyQueueItemResponseSuccess = (addIdentifyQueueItemResponse200) & {
   headers: Headers;
 };
-export type addIdentifyQueueItemResponseError = (addIdentifyQueueItemResponse404) & {
+export type addIdentifyQueueItemResponseError = (addIdentifyQueueItemResponse404 | addIdentifyQueueItemResponse409) & {
   headers: Headers;
 };
 
@@ -11134,10 +11154,15 @@ export type searchIdentifyQueueItemResponse404 = {
   status: 404
 }
 
+export type searchIdentifyQueueItemResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
 export type searchIdentifyQueueItemResponseSuccess = (searchIdentifyQueueItemResponse200) & {
   headers: Headers;
 };
-export type searchIdentifyQueueItemResponseError = (searchIdentifyQueueItemResponse404) & {
+export type searchIdentifyQueueItemResponseError = (searchIdentifyQueueItemResponse404 | searchIdentifyQueueItemResponse409) & {
   headers: Headers;
 };
 
@@ -11193,10 +11218,15 @@ export type resolveIdentifyQueueCandidateResponse404 = {
   status: 404
 }
 
+export type resolveIdentifyQueueCandidateResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
 export type resolveIdentifyQueueCandidateResponseSuccess = (resolveIdentifyQueueCandidateResponse200) & {
   headers: Headers;
 };
-export type resolveIdentifyQueueCandidateResponseError = (resolveIdentifyQueueCandidateResponse400 | resolveIdentifyQueueCandidateResponse404) & {
+export type resolveIdentifyQueueCandidateResponseError = (resolveIdentifyQueueCandidateResponse400 | resolveIdentifyQueueCandidateResponse404 | resolveIdentifyQueueCandidateResponse409) & {
   headers: Headers;
 };
 
@@ -11252,10 +11282,15 @@ export type applyIdentifyQueueItemResponse404 = {
   status: 404
 }
 
+export type applyIdentifyQueueItemResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
 export type applyIdentifyQueueItemResponseSuccess = (applyIdentifyQueueItemResponse200) & {
   headers: Headers;
 };
-export type applyIdentifyQueueItemResponseError = (applyIdentifyQueueItemResponse400 | applyIdentifyQueueItemResponse404) & {
+export type applyIdentifyQueueItemResponseError = (applyIdentifyQueueItemResponse400 | applyIdentifyQueueItemResponse404 | applyIdentifyQueueItemResponse409) & {
   headers: Headers;
 };
 
@@ -11302,10 +11337,15 @@ export type saveIdentifyQueueProposalResponse404 = {
   status: 404
 }
 
+export type saveIdentifyQueueProposalResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
 export type saveIdentifyQueueProposalResponseSuccess = (saveIdentifyQueueProposalResponse200) & {
   headers: Headers;
 };
-export type saveIdentifyQueueProposalResponseError = (saveIdentifyQueueProposalResponse400 | saveIdentifyQueueProposalResponse404) & {
+export type saveIdentifyQueueProposalResponseError = (saveIdentifyQueueProposalResponse400 | saveIdentifyQueueProposalResponse404 | saveIdentifyQueueProposalResponse409) & {
   headers: Headers;
 };
 
