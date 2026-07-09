@@ -219,6 +219,7 @@ public static class DependencyInjection {
     private static void RegisterEntities(IServiceCollection services, string cacheDir) {
         RegisterEntityMappers(services);
         RegisterThumbnailContributors(services);
+        services.AddScoped<IEntityExternalIdentityStore, EfEntityExternalIdentityStore>();
         services.AddScoped<EfEntityRepository>();
         services.AddScoped<IEntityWriteRepository>(provider => provider.GetRequiredService<EfEntityRepository>());
         // Concrete registration shared by the interface alias and the visibility checker so all

@@ -90,6 +90,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Monitored series, seasons, and other containers now offer "Search missing content" on their Acquisition tab: one click sweeps the whole item at any depth — including episode gaps hiding inside partially-downloaded seasons — and starts a monitored search for every gap, reporting how many it covered. The existing "Search N missing" action remains when gaps are already visible.
 
 ### Changed
+- External identity lookup now returns every matching local Entity and reports ambiguity explicitly; identity writes use named add, update, or replace policies without silently committing another operation's transaction.
 - Plugin protocol compatibility is now enforced for both registry and installed manifests, and every plugin request uses one canonical protocol version instead of scattered literals.
 - External provider identities now use one validated, normalized namespace/value model across the Entity domain, laying the foundation for plugin-independent identify, discovery, and monitoring dispatch.
 - A download held for manual import is now actionable in place: an "Import anyway" button re-runs the import with your consent to replace the existing file even when the format differs (e.g. an mkv upgrading an mp4) — the previous file moves to the recycle bin when configured (or stays as a recoverable backup), quality gating still applies (a format change never lets a downgrade through), and the dangerous-file hold is never bypassed.
