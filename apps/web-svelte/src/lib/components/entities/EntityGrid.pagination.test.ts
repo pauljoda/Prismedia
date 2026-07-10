@@ -54,7 +54,7 @@ describe("EntityGrid pagination", () => {
     vi.restoreAllMocks();
   });
 
-  it("defaults desktop thumbnail grids near the smallest card size when no saved size exists", async () => {
+  it("defaults desktop thumbnail grids to the preferred mid-range card size when no saved size exists", async () => {
     vi.stubGlobal("matchMedia", createMatchMedia(false));
     const cards = Array.from({ length: 6 }, (_, index) => card(index));
     const { container } = render(EntityGrid, {
@@ -65,7 +65,7 @@ describe("EntityGrid pagination", () => {
     });
 
     await waitFor(() => {
-      expect(container.querySelector<HTMLElement>(".entity-grid")?.style.getPropertyValue("--col-count")).toBe("11");
+      expect(container.querySelector<HTMLElement>(".entity-grid")?.style.getPropertyValue("--col-count")).toBe("6");
     });
   });
 
